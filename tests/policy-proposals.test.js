@@ -134,6 +134,22 @@ describe('proposePolicy', () => {
     ])
   })
 
+  it('joins a policy model name to a run model name by its letters and digits', () => {
+    const answer = proposePolicy({
+      policy: policyOf([choice('agy', 'Gemini 3.8 Flash (High)')]),
+      rows: [row('agy', 'gemini-3.8-flash-high', 4, 0, 0.03)],
+    })
+    expect(answer.joins).toContain('small: agy on Gemini 3.8 Flash (High) joined the row agy on gemini-3.8-flash-high with 4 decided runs.')
+  })
+
+  it('does not join two model names that differ in a letter or digit', () => {
+    const answer = proposePolicy({
+      policy: policyOf([choice('agy', 'Gemini 3.8 Flash (High)')]),
+      rows: [row('agy', 'gemini-3.9-flash-high', 4, 0, 0.03)],
+    })
+    expect(answer.joins).toContain('small: agy on Gemini 3.8 Flash (High) joined no row, 0 decided runs.')
+  })
+
   it('never moves the owner choice', () => {
     const rows = [row('agy', 'Gemini 4 Argon (Medium)', 11, 1, 0.03)]
     const after = proposePolicy({ policy: policyOf([choice('agy', 'Gemini 4 Argon (Medium)'), OWNER]), rows })

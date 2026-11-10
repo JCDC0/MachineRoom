@@ -19,8 +19,14 @@ function countOf(value) {
   return Number.isInteger(value) && value > 0 ? value : 0
 }
 
+function modelKey(model) {
+  return String(model ?? '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '')
+}
+
 function keyOf(lane, model) {
-  return `${lane}\u0000${model}`
+  return `${lane}\u0000${modelKey(model)}`
 }
 
 function rowMap(rows) {
@@ -77,6 +83,14 @@ function fewRunsNote(tier, choice, stats, minRuns) {
   return `The ${tier} tier keeps its order: ${choice.lane} on ${choice.model} has ${stats.decided} decided runs, fewer than ${minRuns}.`
 }
 
+function joinLine(tier, choice, row) {
+  if (!row) return `${tier}: ${choice.lane} on ${choice.model} joined no row, 0 decided runs.`
+  const stats = statsOf(row)
+  const lane = typeof row.lane === 'string' && row.lane.trim() !== '' ? row.lane.trim() : choice.lane
+  const model = typeof row.model === 'string' && row.model.trim() !== '' ? row.model.trim() : 'model unknown'
+  return `${tier}: ${choice.lane} on ${choice.model} joined the row ${lane} on ${model} with ${stats.decided} decided runs.`
+}
+
 function marginNote(tier, earlier, later, earlyStats, lateStats, margin) {
   return `The ${tier} tier keeps its order: ${later.lane} on ${later.model} merges ${percent(lateStats.rate)}% against ${percent(earlyStats.rate)}% for ${earlier.lane} on ${earlier.model}, less than ${points(margin)} points ahead.`
 }
@@ -97,9 +111,14 @@ export function proposePolicy({ policy, rows, minDecided = 10, margin = 0.15 } =
   const tiers = {}
   const changes = []
   const notes = []
+  const joins = []
   for (const tier of TIERS) {
     const list = clean.tiers[tier]
     tiers[tier] = list
+    for (const choice of list) {
+      if (choice.lane === OWNER) continue
+      joins.push(joinLine(tier, choice, table.get(keyOf(choice.lane, choice.model))))
+    }
     for (let index = 0; index + 1 < list.length; index += 1) {
       const earlier = list[index]
       const later = list[index + 1]
@@ -134,6 +153,7 @@ export function proposePolicy({ policy, rows, minDecided = 10, margin = 0.15 } =
     policy: { tiers, limits: clean.limits, quotaSkipPercent: clean.quotaSkipPercent },
     changes,
     notes,
+    joins,
   }
 }
 
