@@ -1,7 +1,7 @@
 import { AGENT_ORDER } from '../harnesses/index.js'
 import { indexFor } from './fileIndex.js'
 import { createParser } from './parsers/index.js'
-import { shorten } from './parsers/common.js'
+import { dirSetFor, shorten } from './parsers/common.js'
 import { ancestors } from './paths.js'
 
 export { AGENT_ORDER }
@@ -26,8 +26,6 @@ export const RUN_IDLE_MS = 30 * 60000
 
 export function createPipeline({ agents, tree }) {
   const ctx = makeContext({ ...tree, files: [...tree.files], dirs: [...(tree.dirs ?? [])] })
-  indexFor(ctx.files)
-  indexFor(ctx.dirs)
   const byId = new Map(agents.map((agent) => [agent.id, agent]))
   const parsers = new Map()
   const lastRunTime = new Map()
@@ -152,23 +150,24 @@ export function createPipeline({ agents, tree }) {
     return finalise(out)
   }
 
-  const knownFiles = new Set(ctx.files)
-  const knownDirs = new Set(ctx.dirs)
-
   function learn(paths) {
     for (const path of paths) {
-      if (knownFiles.has(path)) continue
-      knownFiles.add(path)
+      if (indexFor(ctx.files).has(path)) continue
       ctx.files.push(path)
       for (const dir of ancestors(path)) {
-        if (knownDirs.has(dir)) continue
-        knownDirs.add(dir)
+        if (indexFor(ctx.dirs).has(dir)) continue
         ctx.dirs.push(dir)
       }
     }
   }
 
-  return { push, flush, learn, context: ctx, remembered: () => ({ keys: seen.size, runs: lastRunTime.size, parsers: parsers.size }) }
+  function warm() {
+    indexFor(ctx.files)
+    indexFor(ctx.dirs)
+    dirSetFor(ctx.dirs)
+  }
+
+  return { push, flush, learn, warm, context: ctx, remembered: () => ({ keys: seen.size, runs: lastRunTime.size, parsers: parsers.size }) }
 }
 
 export function buildActivities(frames, { agents, tree }) {

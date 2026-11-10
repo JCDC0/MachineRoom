@@ -250,6 +250,8 @@ export default function Assistant({
 
     const isSecret = containsSecret(raw)
     const commandText = formatCommandLine(raw, isSecret)
+    const contextNow = () =>
+      typeof context?.paths === 'function' ? { ...context, paths: context.paths() } : context
 
     setInput('')
     setDraft('')
@@ -264,7 +266,7 @@ export default function Assistant({
     }
 
     if (isSecret) {
-      const blockedResult = interpret(raw, context)
+      const blockedResult = interpret(raw, contextNow())
       const say = getBlockedSay(blockedResult)
       const blockedEntry = {
         id: `entry-${nextEntryId++}`,
@@ -278,7 +280,7 @@ export default function Assistant({
       return
     }
 
-    const result = interpret(raw, context)
+    const result = interpret(raw, contextNow())
 
     if (result.kind === 'action') {
       const actionEntry = {
