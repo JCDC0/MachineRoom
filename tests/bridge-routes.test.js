@@ -353,6 +353,9 @@ const EMPTY_STATS = {
     minutesMedian: 0,
     costTotal: 0,
     costRuns: 0,
+    peakMedian: 0,
+    peakMax: 0,
+    peakOver450: 0,
   },
 }
 
@@ -455,6 +458,9 @@ describe('run routes', () => {
         minutesMedian: 2,
         costTotal: 10,
         costRuns: 20,
+        peakMedian: 0,
+        peakMax: 0,
+        peakOver450: 0,
       },
       {
         lane: 'opencode',
@@ -467,6 +473,9 @@ describe('run routes', () => {
         minutesMedian: 2,
         costTotal: 2,
         costRuns: 4,
+        peakMedian: 0,
+        peakMax: 0,
+        peakOver450: 0,
       },
     ])
     expect(stats.total).toEqual({
@@ -480,6 +489,9 @@ describe('run routes', () => {
       minutesMedian: 2,
       costTotal: 12,
       costRuns: 24,
+      peakMedian: 0,
+      peakMax: 0,
+      peakOver450: 0,
     })
   })
 
@@ -549,6 +561,9 @@ describe('run routes', () => {
         minutesMedian: 5,
         costTotal: 3,
         costRuns: 2,
+        peakMedian: 0,
+        peakMax: 0,
+        peakOver450: 0,
       },
     ])
     expect(stats.total.runs).toBe(2)
@@ -579,6 +594,9 @@ describe('run routes', () => {
         minutesMedian: 3,
         costTotal: 0.75,
         costRuns: 1,
+        peakMedian: 0,
+        peakMax: 0,
+        peakOver450: 0,
       },
     ])
 
