@@ -92,37 +92,61 @@ export function createClaudeSessionsReader(options = {}) {
   const idleMs = Number.isFinite(Number(options.idleMs)) ? Number(options.idleMs) : DEFAULT_IDLE_MS
   const idlePollMs = Number.isFinite(Number(options.idlePollMs)) ? Number(options.idlePollMs) : Math.min(idleMs, DEFAULT_IDLE_POLL_MS)
   const emit = options.emit ?? (() => {})
+  const listFolder = typeof options.listFolder === 'function' ? options.listFolder : (dir) => readdirSync(dir, { withFileTypes: true })
   const projectsFolder = join(home, '.claude', 'projects', claudeProjectSlug(projectRoot))
   const sessions = new Map()
   const evicted = new Map()
   const metaFiles = new Map()
+  let metaNames = null
+  let metaFolderStamp = null
   let lastEvictedCheck = 0
   let primed = false
   let stopped = false
   let ticking = false
 
+  function runsFolderStamp() {
+    try {
+      const stat = statSync(runsFolder, { bigint: true })
+      return String(stat.mtimeNs ?? stat.mtimeMs)
+    } catch {
+      return null
+    }
+  }
+
+  function listMetaNames() {
+    let entries
+    try {
+      entries = listFolder(runsFolder)
+    } catch {
+      return []
+    }
+    const names = []
+    for (const entry of entries) {
+      if (!entry.isFile() || !entry.name.endsWith('.meta.json')) continue
+      names.push(entry.name)
+    }
+    return names
+  }
+
   function skippedSessions() {
     const skipped = new Set()
     if (!runsFolder) return skipped
-    let entries
-    try {
-      entries = readdirSync(runsFolder, { withFileTypes: true })
-    } catch {
-      return skipped
+    const stamp = runsFolderStamp()
+    if (metaNames === null || stamp === null || stamp !== metaFolderStamp) {
+      metaNames = listMetaNames()
+      metaFolderStamp = stamp
     }
-    const seen = new Set()
-    for (const entry of entries) {
-      if (!entry.isFile() || !entry.name.endsWith('.meta.json')) continue
-      seen.add(entry.name)
-      const path = join(runsFolder, entry.name)
+    const seen = new Set(metaNames)
+    for (const name of metaNames) {
+      const path = join(runsFolder, name)
       let mtimeMs
       try {
         mtimeMs = statSync(path).mtimeMs
       } catch {
-        metaFiles.delete(entry.name)
+        metaFiles.delete(name)
         continue
       }
-      const cached = metaFiles.get(entry.name)
+      const cached = metaFiles.get(name)
       if (cached && cached.mtimeMs === mtimeMs) {
         if (cached.sessionId) skipped.add(cached.sessionId)
         continue
@@ -130,10 +154,10 @@ export function createClaudeSessionsReader(options = {}) {
       try {
         const meta = JSON.parse(readFileSync(path, 'utf8'))
         const sessionId = typeof meta?.sessionId === 'string' && meta.sessionId !== '' ? meta.sessionId : null
-        metaFiles.set(entry.name, { mtimeMs, sessionId })
+        metaFiles.set(name, { mtimeMs, sessionId })
         if (sessionId) skipped.add(sessionId)
       } catch {
-        metaFiles.delete(entry.name)
+        metaFiles.delete(name)
       }
     }
     for (const name of metaFiles.keys()) {
@@ -454,6 +478,8 @@ export function createClaudeSessionsReader(options = {}) {
     sessions.clear()
     evicted.clear()
     metaFiles.clear()
+    metaNames = null
+    metaFolderStamp = null
   }
 
   return { agent: AGENT, agents: [AGENT], tick, stop, sessions: () => sessions, evicted: () => evicted, metaFiles: () => metaFiles }
