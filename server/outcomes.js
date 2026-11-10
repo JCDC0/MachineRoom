@@ -47,7 +47,7 @@ function newestOutcomes(outcomes) {
 }
 
 function emptyRow(lane, model) {
-  return { lane, model, runs: 0, merged: 0, rejected: 0, pending: 0, ungraded: 0, fixes: [], cost: 0, decidedCost: 0 }
+  return { lane, model, runs: 0, merged: 0, rejected: 0, pending: 0, ungraded: 0, fixes: [], cost: 0, decidedCost: 0, costSeen: false }
 }
 
 function rowOf(row) {
@@ -64,7 +64,7 @@ function rowOf(row) {
     averageFixes: row.fixes.length === 0 ? null : row.fixes.reduce((sum, value) => sum + value, 0) / row.fixes.length,
     costUsd: row.cost,
     decidedCostUsd: row.decidedCost,
-    costPerMerge: row.merged === 0 ? null : row.decidedCost / row.merged,
+    costPerMerge: row.merged === 0 || !row.costSeen ? null : row.decidedCost / row.merged,
   }
 }
 
@@ -104,7 +104,8 @@ export function outcomeTable(runs, outcomes, subjects = []) {
       rows.set(key, row)
     }
     row.runs += 1
-    const cost = typeof run.costUsd === 'number' && Number.isFinite(run.costUsd) ? run.costUsd : 0
+    const reported = typeof run.costUsd === 'number' && Number.isFinite(run.costUsd)
+    const cost = reported ? run.costUsd : 0
     row.cost += cost
     const branch = branchOf(run)
     const decision = branch ? settled.get(branch) : null
@@ -114,6 +115,7 @@ export function outcomeTable(runs, outcomes, subjects = []) {
     }
     if (newestRun.get(branch) !== index) continue
     row.decidedCost += cost
+    if (reported) row.costSeen = true
     if (decision.merged) {
       row.merged += 1
       if (decision.ungraded) row.ungraded += 1

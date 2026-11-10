@@ -333,6 +333,23 @@ describe('outcomeTable', () => {
     ])
   })
 
+  it('reports no cost per merge when every decided run reports none, and keeps a reported zero', () => {
+    const runs = [
+      { lane: 'agy', model: 'g', branch: 'feat/a', costUsd: null },
+      { lane: 'agy', model: 'g', branch: 'feat/b', costUsd: null },
+      { lane: 'opencode6', model: 'free', branch: 'feat/c', costUsd: 0 },
+    ]
+    const outcomes = [
+      { branch: 'feat/a', outcome: 'merged', fixes: 1 },
+      { branch: 'feat/b', outcome: 'merged', fixes: 0 },
+      { branch: 'feat/c', outcome: 'merged', fixes: 0 },
+    ]
+    expect(outcomeTable(runs, outcomes).map(({ lane, merged, costPerMerge }) => ({ lane, merged, costPerMerge }))).toEqual([
+      { lane: 'agy', merged: 2, costPerMerge: null },
+      { lane: 'opencode6', merged: 1, costPerMerge: 0 },
+    ])
+  })
+
   it('answers no rows for no runs and null rates for no merged runs', () => {
     expect(outcomeTable([], [])).toEqual([])
     expect(outcomeTable([{ lane: 'hermes', branch: 'feat/x', costUsd: 1 }], [{ branch: 'feat/x', outcome: 'rejected', fixes: 2 }])).toEqual([

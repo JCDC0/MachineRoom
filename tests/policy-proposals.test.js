@@ -123,14 +123,14 @@ describe('proposePolicy', () => {
     ])
   })
 
-  it('treats a null cost as the highest cost', () => {
+  it('treats a null cost as not known', () => {
     const answer = proposePolicy({
       policy: policyOf([A, B]),
       rows: [row(A.lane, A.model, 10, 10, 0.03), row(B.lane, B.model, 11, 1, null)],
     })
     expect(answer.changes).toEqual([])
     expect(smallNotes(answer)).toEqual([
-      'The small tier keeps its order: hermes on minimax/minimax-m3.1-flash:free costs no cost a merge against $0.03 for hermes on deepseek/deepseek-v4.1-flash-1017.',
+      'The small tier keeps its order: hermes on minimax/minimax-m3.1-flash:free costs not reported against $0.03 for hermes on deepseek/deepseek-v4.1-flash-1017.',
     ])
   })
 

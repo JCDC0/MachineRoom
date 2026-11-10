@@ -1083,7 +1083,7 @@ describe('formatOutcomes', () => {
 
     expect(formatOutcomes(rows)).toEqual([
       'hermes  deepseek/x  runs 5, merged 4 (0 not graded), rejected 1, pending 0, merge rate 80%, fixes 0.5, $0.06 a merge',
-      'opencode  model unknown  runs 1, merged 0 (0 not graded), rejected 1, pending 0, merge rate 0%, fixes -, - a merge',
+      'opencode  model unknown  runs 1, merged 0 (0 not graded), rejected 1, pending 0, merge rate 0%, fixes -, not reported',
     ])
   })
 

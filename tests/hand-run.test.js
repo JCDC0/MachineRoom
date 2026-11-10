@@ -227,7 +227,7 @@ describe('hand-run record', () => {
         averageFixes: null,
         costUsd: 0,
         decidedCostUsd: 0,
-        costPerMerge: 0,
+        costPerMerge: null,
       },
     ])
   })

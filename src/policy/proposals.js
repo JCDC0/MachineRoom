@@ -62,11 +62,11 @@ function points(margin) {
 }
 
 function costPhrase(cost) {
-  return cost === null ? 'no cost a merge' : `$${cost.toFixed(2)} a merge`
+  return cost === null ? 'not reported' : `$${cost.toFixed(2)} a merge`
 }
 
 function costOnly(cost) {
-  return cost === null ? 'no cost' : `$${cost.toFixed(2)}`
+  return cost === null ? 'not reported' : `$${cost.toFixed(2)}`
 }
 
 function ownerNote(tier) {
