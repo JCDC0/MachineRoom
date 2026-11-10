@@ -452,6 +452,7 @@ describe('summarizeRun', () => {
       costUsd: 0,
       inputTokens: 8427,
       outputTokens: 107,
+      peakTokens: 8427,
     })
     expect(formatSummary(summary)).toEqual([
       'summary: 2 tool calls, 0 failed',
@@ -491,7 +492,7 @@ describe('summarizeRun', () => {
     ].map((item) => JSON.stringify(item)).join('\n')
     const summary = summarizeRun({ harness: 'claude', log, worktree: 'C:\\GitHub\\MachineRoom-claude' })
     expect(summary).toEqual({
-      harness: 'claude', toolCalls: 3, failed: 1, written: [], read: ['src/math.js'], head: [], costUsd: null, inputTokens: null, outputTokens: null,
+      harness: 'claude', toolCalls: 3, failed: 1, written: [], read: ['src/math.js'], head: [], costUsd: null, inputTokens: null, outputTokens: null, peakTokens: null,
     })
   })
 
@@ -614,7 +615,7 @@ describe('summarizeRun', () => {
 
   it('handles an empty AGY log', () => {
     expect(summarizeRun({ harness: 'agy', log: '', worktree: 'C:\\scratch' })).toEqual({
-      harness: 'agy', toolCalls: 0, failed: 0, written: [], read: [], head: [], costUsd: null, inputTokens: null, outputTokens: null,
+      harness: 'agy', toolCalls: 0, failed: 0, written: [], read: [], head: [], costUsd: null, inputTokens: null, outputTokens: null, peakTokens: null,
     })
   })
 
@@ -631,6 +632,7 @@ describe('summarizeRun', () => {
       costUsd: null,
       inputTokens: null,
       outputTokens: null,
+      peakTokens: null,
     })
     expect(formatSummary(summary)).toEqual([
       'summary: 1 tool calls, 0 failed',
@@ -717,7 +719,7 @@ describe('summarizeRun', () => {
 
   it('handles an empty log for both harnesses', () => {
     expect(summarizeRun({ harness: 'opencode', log: '', worktree: 'C:\\scratch' })).toEqual({
-      harness: 'opencode', toolCalls: 0, failed: 0, written: [], read: [], head: [], costUsd: null, inputTokens: null, outputTokens: null,
+      harness: 'opencode', toolCalls: 0, failed: 0, written: [], read: [], head: [], costUsd: null, inputTokens: null, outputTokens: null, peakTokens: null,
     })
     expect(summarizeRun({ harness: 'hermes', log: '', worktree: 'C:\\scratch' }).head).toEqual([])
     expect(formatSummary(summarizeRun({ harness: 'hermes', log: '', worktree: '' }))).toEqual([

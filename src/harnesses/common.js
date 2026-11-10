@@ -67,7 +67,7 @@ function unique(values) {
 }
 
 export function summaryOf(harness, activities, head, usage = {}) {
-  const { costUsd = null, inputTokens = null, outputTokens = null } = usage ?? {}
+  const { costUsd = null, inputTokens = null, outputTokens = null, peakTokens = null } = usage ?? {}
   const calls = activities.filter((activity) => activity.type === 'tool.start')
   const written = []
   const read = []
@@ -88,5 +88,6 @@ export function summaryOf(harness, activities, head, usage = {}) {
     costUsd,
     inputTokens,
     outputTokens,
+    peakTokens,
   }
 }
