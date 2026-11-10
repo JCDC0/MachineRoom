@@ -17,7 +17,9 @@ import { formatRows } from './scale-probe.mjs'
 export const LIVE_BUDGET = {
   firstRead: 5000,
   folderGzip: 1000,
+  secondFolderGzip: 100,
   rssBytes: 500 * 1024 * 1024,
+  heapBytes: 500 * 1024 * 1024,
   newFile: 2000,
   cpuShare: 50,
   lastFile: 3000,
@@ -445,6 +447,7 @@ async function runBridgeChild(dir) {
         id: message.id,
         cpu: process.cpuUsage(),
         rss: process.memoryUsage().rss,
+        heap: process.memoryUsage().heapUsed,
         reads,
         at: performance.now(),
       })
@@ -546,6 +549,18 @@ export async function runScaleLive(options = {}) {
       `${folder.bytes.length} bytes, ${folderTree.folders.length} folders`
     )
 
+    const secondFolder = await httpGet(port, '/api/tree', {
+      Accept: 'application/json; shape=folders',
+      'Accept-Encoding': 'gzip',
+    })
+    if (secondFolder.status !== 200) throw new Error(`The second folder GET answered ${secondFolder.status}.`)
+    row(
+      'second GET /api/tree, folder shape, gzip',
+      secondFolder.ms,
+      LIVE_BUDGET.secondFolderGzip,
+      `${secondFolder.bytes.length} bytes`
+    )
+
     const cleanGit = await httpGet(port, '/api/git')
     if (cleanGit.status !== 200) throw new Error(`GET /api/git answered ${cleanGit.status}.`)
     const cleanGitState = JSON.parse(cleanGit.bytes.toString('utf8'))
@@ -619,6 +634,18 @@ export async function runScaleLive(options = {}) {
     row('burst dist/, tree events naming it', distEvents.length, LIVE_BUDGET.ignoredEvents, `${settings.burst} files over ${Math.round(settings.burstMs)} ms`)
     row('burst dist/, bridge CPU share', distShare, LIVE_BUDGET.cpuShare, `${distCpuMs.toFixed(0)} ms over ${Math.round(distWallMs)} ms`)
 
+    const afterBursts = await child.ask('metrics')
+    const heapEntry = {
+      stage: 'bridge used heap after the bursts',
+      runsAt: 'live',
+      ms: null,
+      budget: LIVE_BUDGET.heapBytes,
+      size: `${(afterBursts.heap / 1024 / 1024).toFixed(1)} MB`,
+      bytes: afterBursts.heap,
+    }
+    rows.push(heapEntry)
+    log(formatRows([heapEntry]).split('\n')[1])
+
     cleanBurstFolders(dir)
     await sleep(1200)
     const trackedFiles = build.scale.files.slice(0, 1000)
@@ -685,6 +712,8 @@ export async function runScaleLive(options = {}) {
         firstReadMs,
         folderMs: folder.ms,
         folderBytes: folder.bytes.length,
+        secondFolderMs: secondFolder.ms,
+        heapBytes: afterBursts.heap,
         rssBytes: afterRead.rss,
         newFileMs: newEvent.at - writeAt,
         outReadsDuring,

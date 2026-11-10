@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The bridge lists the project once at start: up hands it the list the doctor read, it listens before its first read ends, a folder answer comes from the last read with its packed and gzipped body built once per version, a page at the current version gets no tree event, and the bridge keeps one file list plus the paths each of its last 4 versions added (task P25).
 - A folder card holds at most 2,000 items, the touched ones first and a + N more row for the rest, and a folder's plan is keyed by its version, not by a walk of its content, so a touch beside a folder of 50,000 files plans in 0.08 ms where it took 16 ms; a card no longer joins every path into a key on each change (task P24).
 - A replay keeps its speed when frames are slow: the player gets the real time since the last frame, up to 1 second, while the room's own animations keep their 0.1 second cap. A dust layer that is hidden or empty does no work, and dust colours are written only while Pulse is on (task P27).
 - An OpenCode lane hunted how lanes are given work in AUDIT-2026-11-LANES.md: a lane waits a median of 33 to 88 minutes for its next brief and runs for 13, five lanes at once make a run 27 percent longer, 166 merged runs show as pending because no outcome was recorded, and nothing in the room calls the routing policy (task P28).

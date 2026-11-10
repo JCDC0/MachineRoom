@@ -466,15 +466,89 @@ describe('the file tree', () => {
     expect(JSON.parse(event.data)).toEqual(packTree({ root: basename(dir), files: ['a.js', 'b.js'] }))
   })
 
+  it('sends no tree event to a page already at the current version', async () => {
+    const dir = tempDir()
+    writeFileSync(join(dir, 'a.js'), '1\n')
+    const { url } = await laneBridge({ projectRoot: dir, bridge: { debounceMs: 50 } })
+    const read = await getJson(`${url}/api/tree`, { headers: { Accept: `application/json; shape=${FOLDER_SHAPE}` } })
+    const sse = await openSse(url, {}, `?tree=1&since=${read.body.version}`)
+    cleanups.push(() => sse.close())
+
+    await expect(sse.next((e) => e.event === 'tree', 300)).rejects.toThrow('timed out waiting for SSE event')
+
+    writeFileSync(join(dir, 'b.js'), '2\n')
+    const event = await sse.next((e) => e.event === 'tree')
+    expect(JSON.parse(event.data)).toEqual({ root: basename(dir), files: ['b.js'] })
+  })
+
+  it('sends a page two versions behind exactly the files added since', async () => {
+    const dir = tempDir()
+    writeFileSync(join(dir, 'a.js'), '1\n')
+    const { url } = await laneBridge({ projectRoot: dir, bridge: { debounceMs: 50 } })
+    const accept = { Accept: `application/json; shape=${FOLDER_SHAPE}` }
+    const first = await getJson(`${url}/api/tree`, { headers: accept })
+
+    writeFileSync(join(dir, 'b.js'), '2\n')
+    const second = await waitFor(
+      async () => {
+        const body = (await getJson(`${url}/api/tree`, { headers: accept })).body
+        return body.version > first.body.version ? body : null
+      },
+      { what: 'the second tree version' }
+    )
+    writeFileSync(join(dir, 'c.js'), '3\n')
+    await waitFor(
+      async () => {
+        const body = (await getJson(`${url}/api/tree`, { headers: accept })).body
+        return body.version > second.version ? body : null
+      },
+      { what: 'the third tree version' }
+    )
+
+    const sse = await openSse(url, {}, `?tree=${FOLDER_SHAPE}&since=${first.body.version}`)
+    cleanups.push(() => sse.close())
+    const event = await sse.next((e) => e.event === 'tree')
+    expect(JSON.parse(event.data)).toEqual({ root: basename(dir), files: ['b.js', 'c.js'] })
+  })
+
+  it('sends the whole list to a page whose version is no longer kept', async () => {
+    const dir = tempDir()
+    writeFileSync(join(dir, 'a.js'), '1\n')
+    const { url } = await laneBridge({ projectRoot: dir, bridge: { debounceMs: 50 } })
+    const accept = { Accept: `application/json; shape=${FOLDER_SHAPE}` }
+    const first = await getJson(`${url}/api/tree`, { headers: accept })
+    let version = first.body.version
+    const added = []
+    for (let index = 0; index < 5; index += 1) {
+      const name = `change-${index}.js`
+      added.push(name)
+      writeFileSync(join(dir, name), 'x\n')
+      const next = await waitFor(
+        async () => {
+          const body = (await getJson(`${url}/api/tree`, { headers: accept })).body
+          return body.version > version ? body : null
+        },
+        { what: `tree version ${index + 2}` }
+      )
+      version = next.version
+    }
+
+    const sse = await openSse(url, {}, `?tree=1&since=${first.body.version}`)
+    cleanups.push(() => sse.close())
+    writeFileSync(join(dir, 'later.js'), 'x\n')
+    const event = await sse.next((e) => e.event === 'tree')
+    expect(JSON.parse(event.data).files).toEqual(['a.js', ...added, 'later.js'].sort())
+  })
+
   it('emits a tree SSE event only to a stream that asks for one', async () => {
     const dir = tempDir()
     writeFileSync(join(dir, 'a.js'), '1\n')
     const { url } = await laneBridge({ projectRoot: dir, bridge: { debounceMs: 50 } })
+    await getJson(`${url}/api/tree`)
     const withTree = await openSse(url, {}, '?tree=1')
     cleanups.push(() => withTree.close())
     const withoutTree = await openSse(url)
     cleanups.push(() => withoutTree.close())
-    await waitFor(async () => (await getJson(`${url}/api/tree`)).status === 200)
 
     writeFileSync(join(dir, 'b.js'), '2\n')
     const event = await withTree.next((e) => e.event === 'tree')

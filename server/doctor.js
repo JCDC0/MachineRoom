@@ -226,12 +226,12 @@ export async function readProjectLine(projectRoot, { read = readTree, limit = PR
       }),
     ])
     if (!tree || !Array.isArray(tree.files)) {
-      return { ok: false, text: `The project could not be read: ${PROJECT_READ_EMPTY}` }
+      return { ok: false, text: `The project could not be read: ${PROJECT_READ_EMPTY}`, tree: null }
     }
-    return projectLine(tree.files)
+    return { ...projectLine(tree.files), tree }
   } catch (error) {
     const reason = error instanceof Error && error.message === PROJECT_READ_TIMEOUT ? PROJECT_READ_TIMEOUT : PROJECT_READ_FAILED
-    return { ok: false, text: `The project could not be read: ${reason}` }
+    return { ok: false, text: `The project could not be read: ${reason}`, tree: null }
   } finally {
     if (timer !== null) clearTimeout(timer)
   }
@@ -240,14 +240,20 @@ export async function readProjectLine(projectRoot, { read = readTree, limit = PR
 export async function runDoctorWithProject(options = {}) {
   const env = options.env ?? process.env
   const result = runDoctor(options)
-  if (!result.folderOk) return { ...result, project: null }
+  if (!result.folderOk) return { ...result, project: null, tree: null }
   const project = await readProjectLine(doctorSettings(options, env).projectRoot, {
     read: options.readProject ?? readTree,
     limit: options.projectReadLimitMs ?? PROJECT_READ_LIMIT_MS,
   })
   const lines = [...result.lines]
   lines.splice(1, 0, `${project.ok ? 'ok' : 'FAIL'} ${project.text}`)
-  return { ...result, lines, project, exitCode: project.ok ? result.exitCode : 1 }
+  return {
+    ...result,
+    lines,
+    project: { ok: project.ok, text: project.text },
+    tree: project.ok ? project.tree : null,
+    exitCode: project.ok ? result.exitCode : 1,
+  }
 }
 
 export function openProgramName(platform = process.platform) {

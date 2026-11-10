@@ -4,7 +4,7 @@ import { afterEach, beforeAll, describe, expect, it } from 'vitest'
 import { readTree, treeEvent } from '../server/index.js'
 import { planFolderView } from '../src/model/folderView.js'
 import { BUDGET, DEFAULTS, fakeListDir, makeScaleTree, parseProbeArgs, replayDigest, replaySources, runProbe } from '../scripts/scale-probe.mjs'
-import { startLaneBridge, waitForBridge } from './helpers/bridge.js'
+import { getJson, startLaneBridge, waitForBridge } from './helpers/bridge.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 
 const MEASURED_MS = {
@@ -183,6 +183,7 @@ describe('the bridge tree event', () => {
     const loop = await startLaneBridge({ projectRoot: root, bridge: { debounceMs: 50 } })
     loops.push(loop)
     await waitForBridge(loop.url)
+    await getJson(`${loop.url}/api/tree`)
     const trees = await readTrees(loop.url, 2, (seen) => {
       if (!seen) writeFileSync(join(root, 'b.js'), '2\n')
       else setTimeout(() => writeFileSync(join(root, 'c.js'), '3\n'), 200)
