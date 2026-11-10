@@ -1,4 +1,38 @@
 const MODEL_UNKNOWN = 'model unknown'
+const MERGE_WORD = /\bMerge\b/
+
+function escapeText(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+function briefIds(run) {
+  if (!Array.isArray(run?.briefs)) return []
+  return run.briefs
+    .filter((id) => typeof id === 'string' && id.trim() !== '')
+    .map((id) => id.trim())
+}
+
+function mergedBySubject(run, subjects) {
+  const ids = briefIds(run)
+  if (ids.length === 0) return false
+  for (const subject of Array.isArray(subjects) ? subjects : []) {
+    if (typeof subject !== 'string') continue
+    const found = MERGE_WORD.exec(subject)
+    if (!found) continue
+    const tail = subject.slice(found.index + found[0].length)
+    for (const id of ids) {
+      if (new RegExp(`(^|[^A-Za-z0-9])${escapeText(id)}(?![A-Za-z0-9])`).test(tail)) return true
+    }
+  }
+  return false
+}
+
+export function subjectsFromLog(text) {
+  return String(text ?? '')
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+}
 
 function newestOutcomes(outcomes) {
   const latest = new Map()
@@ -13,7 +47,7 @@ function newestOutcomes(outcomes) {
 }
 
 function emptyRow(lane, model) {
-  return { lane, model, runs: 0, merged: 0, rejected: 0, pending: 0, fixes: [], cost: 0, decidedCost: 0 }
+  return { lane, model, runs: 0, merged: 0, rejected: 0, pending: 0, ungraded: 0, fixes: [], cost: 0, decidedCost: 0 }
 }
 
 function rowOf(row) {
@@ -25,6 +59,7 @@ function rowOf(row) {
     merged: row.merged,
     rejected: row.rejected,
     pending: row.pending,
+    ungraded: row.ungraded,
     mergeRate: decided === 0 ? null : row.merged / decided,
     averageFixes: row.fixes.length === 0 ? null : row.fixes.reduce((sum, value) => sum + value, 0) / row.fixes.length,
     costUsd: row.cost,
@@ -41,13 +76,22 @@ function usable(run) {
   return Boolean(run) && typeof run === 'object' && !Array.isArray(run) && typeof run.lane === 'string' && run.lane.trim() !== ''
 }
 
-export function outcomeTable(runs, outcomes) {
+export function outcomeTable(runs, outcomes, subjects = []) {
   const latest = newestOutcomes(outcomes)
   const list = Array.isArray(runs) ? runs : []
   const newestRun = new Map()
   list.forEach((run, index) => {
     if (usable(run) && branchOf(run)) newestRun.set(branchOf(run), index)
   })
+  const settled = new Map()
+  for (const [branch, index] of newestRun) {
+    const outcome = latest.get(branch)
+    if (outcome) {
+      settled.set(branch, { merged: outcome.outcome === 'merged', ungraded: false, fixes: outcome.fixes })
+    } else if (mergedBySubject(list[index], subjects)) {
+      settled.set(branch, { merged: true, ungraded: true, fixes: null })
+    }
+  }
   const rows = new Map()
   for (const [index, run] of list.entries()) {
     if (!usable(run)) continue
@@ -63,16 +107,17 @@ export function outcomeTable(runs, outcomes) {
     const cost = typeof run.costUsd === 'number' && Number.isFinite(run.costUsd) ? run.costUsd : 0
     row.cost += cost
     const branch = branchOf(run)
-    const outcome = branch ? latest.get(branch) : null
-    if (!outcome) {
+    const decision = branch ? settled.get(branch) : null
+    if (!decision) {
       row.pending += 1
       continue
     }
     row.decidedCost += cost
     if (newestRun.get(branch) !== index) continue
-    if (outcome.outcome === 'merged') {
+    if (decision.merged) {
       row.merged += 1
-      if (typeof outcome.fixes === 'number' && Number.isFinite(outcome.fixes)) row.fixes.push(outcome.fixes)
+      if (decision.ungraded) row.ungraded += 1
+      else if (typeof decision.fixes === 'number' && Number.isFinite(decision.fixes)) row.fixes.push(decision.fixes)
     } else {
       row.rejected += 1
     }

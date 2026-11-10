@@ -1082,17 +1082,23 @@ describe('formatOutcomes', () => {
     ]
 
     expect(formatOutcomes(rows)).toEqual([
-      'hermes  deepseek/x  runs 5, merged 4, rejected 1, pending 0, merge rate 80%, fixes 0.5, $0.06 a merge',
-      'opencode  model unknown  runs 1, merged 0, rejected 1, pending 0, merge rate 0%, fixes -, - a merge',
+      'hermes  deepseek/x  runs 5, merged 4 (0 not graded), rejected 1, pending 0, merge rate 80%, fixes 0.5, $0.06 a merge',
+      'opencode  model unknown  runs 1, merged 0 (0 not graded), rejected 1, pending 0, merge rate 0%, fixes -, - a merge',
     ])
   })
 
   it('prints a dash for a null rate and says so with no rows', () => {
     expect(formatOutcomes([
       { lane: 'hermes', model: 'm', runs: 1, merged: 1, rejected: 0, pending: 0, mergeRate: null, averageFixes: 1, costPerMerge: 1 },
-    ])).toEqual(['hermes  m  runs 1, merged 1, rejected 0, pending 0, merge rate -, fixes 1, $1.00 a merge'])
+    ])).toEqual(['hermes  m  runs 1, merged 1 (0 not graded), rejected 0, pending 0, merge rate -, fixes 1, $1.00 a merge'])
     expect(formatOutcomes([])).toEqual(['No runs yet.'])
     expect(formatOutcomes(null)).toEqual(['No runs yet.'])
+  })
+
+  it('says how many merges were read from main and not graded', () => {
+    expect(formatOutcomes([
+      { lane: 'opencode', model: 'm', runs: 2, merged: 2, rejected: 0, pending: 0, ungraded: 1, mergeRate: 1, averageFixes: null, costPerMerge: 0.1 },
+    ])).toEqual(['opencode  m  runs 2, merged 2 (1 not graded), rejected 0, pending 0, merge rate 100%, fixes -, $0.10 a merge'])
   })
 })
 
@@ -1299,11 +1305,11 @@ describe('scripts/run-lane.mjs', () => {
 
       const all = await runLane(['--outcomes'], { TEMP: folder, MACHINEROOM_RUNS: runsFolder })
       expect(all.code).toBe(0)
-      expect(all.stdout.trim()).toBe('hermes  deepseek/x  runs 3, merged 1, rejected 0, pending 2, merge rate 100%, fixes 1, $0.50 a merge')
+      expect(all.stdout.trim()).toBe('hermes  deepseek/x  runs 3, merged 1 (0 not graded), rejected 0, pending 2, merge rate 100%, fixes 1, $0.50 a merge')
 
       const since = await runLane(['--outcomes', '--since', '2026-10-19'], { TEMP: folder, MACHINEROOM_RUNS: runsFolder })
       expect(since.code).toBe(0)
-      expect(since.stdout.trim()).toBe('hermes  deepseek/x  runs 2, merged 1, rejected 0, pending 1, merge rate 100%, fixes 1, $0.50 a merge')
+      expect(since.stdout.trim()).toBe('hermes  deepseek/x  runs 2, merged 1 (0 not graded), rejected 0, pending 1, merge rate 100%, fixes 1, $0.50 a merge')
 
       const emptyTemp = join(folder, 'empty')
       mkdirSync(emptyTemp, { recursive: true })
@@ -1330,7 +1336,7 @@ describe('scripts/run-lane.mjs', () => {
 
       const result = await runLane(['--outcomes'], { TEMP: emptyTemp, MACHINEROOM_RUNS: runsFolder })
       expect(result.code).toBe(0)
-      expect(result.stdout.trim()).toContain('hermes  deepseek/x  runs 1, merged 1, rejected 0, pending 0, merge rate 100%')
+      expect(result.stdout.trim()).toContain('hermes  deepseek/x  runs 1, merged 1 (0 not graded), rejected 0, pending 0, merge rate 100%')
     } finally {
       rmSync(folder, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
     }
