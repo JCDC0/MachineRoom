@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs'
+import { readFileSync, statSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { parseBriefs } from '../src/briefs/briefs.js'
@@ -10,6 +10,8 @@ export const LANE_TASK_REFUSAL = 'Lane runs start from Dispatch, not from a task
 const REPO_ROOT = resolve(fileURLToPath(import.meta.url), '..', '..')
 const BRIEF_ID = /^[A-Z]\d+[a-z]?$/
 const RUN_NAME_TAIL = /-\d{8}-\d{6}$/
+const ARCHIVE_PATH = ['docs', 'agents', 'history', 'TASKS-ARCHIVE.md']
+const archiveCache = new Map()
 
 function text(value) {
   return typeof value === 'string' ? value.trim() : ''
@@ -167,9 +169,55 @@ export function laneLiveRuns({ openRuns = [], agents = [] } = {}) {
   return runs.sort((a, b) => timeValue(b.startedAt) - timeValue(a.startedAt))
 }
 
+function wantedBriefIds({ openRuns = [], records = [] } = {}) {
+  const ids = new Set()
+  for (const record of Array.isArray(records) ? records : []) {
+    for (const id of Array.isArray(record?.briefs) ? record.briefs : []) {
+      const value = text(id)
+      if (value) ids.add(value)
+    }
+    for (const id of runIdentity(runNameOf(record), record?.lane).ids) ids.add(id)
+  }
+  for (const run of Array.isArray(openRuns) ? openRuns : []) {
+    for (const id of runIdentity(text(run?.name), run?.lane).ids) ids.add(id)
+  }
+  return [...ids]
+}
+
+export function readArchivedBriefs(folder = REPO_ROOT) {
+  const file = join(folder, ...ARCHIVE_PATH)
+  let stamp = ''
+  try {
+    const stat = statSync(file)
+    stamp = `${stat.mtimeMs}:${stat.size}`
+  } catch {
+    return []
+  }
+  const cached = archiveCache.get(file)
+  if (cached && cached.stamp === stamp) return cached.briefs
+  try {
+    const briefs = parseBriefs(readFileSync(file, 'utf8'))
+    archiveCache.set(file, { stamp, briefs })
+    return briefs
+  } catch {
+    return []
+  }
+}
+
+function withArchivedBriefs(briefs, ids, folder) {
+  const list = Array.isArray(briefs) ? briefs : []
+  const known = new Set(list.map((brief) => text(brief?.id).toLowerCase()).filter(Boolean))
+  const missing = ids.filter((id) => !known.has(id.toLowerCase()))
+  if (missing.length === 0) return list
+  const wanted = new Set(missing.map((id) => id.toLowerCase()))
+  const archived = readArchivedBriefs(folder).filter((brief) => wanted.has(text(brief?.id).toLowerCase()))
+  return archived.length > 0 ? [...list, ...archived] : list
+}
+
 export function laneTaskState(options = {}) {
+  const briefs = withArchivedBriefs(options.briefs, wantedBriefIds(options), options.folder ?? REPO_ROOT)
   return {
-    issues: laneTaskIssues(options),
+    issues: laneTaskIssues({ ...options, briefs }),
     liveRuns: laneLiveRuns(options),
   }
 }

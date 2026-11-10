@@ -1241,11 +1241,23 @@ describe('scripts/test.mjs', () => {
 const RUN_LANE_SCRIPT = fileURLToPath(new URL('../scripts/run-lane.mjs', import.meta.url))
 const REPO_ROOT = fileURLToPath(new URL('..', import.meta.url))
 const TASKS_MARKDOWN = readFileSync(new URL('../docs/agents/TASKS.md', import.meta.url), 'utf8')
+const ARCHIVE_MARKDOWN = readFileSync(new URL('../docs/agents/history/TASKS-ARCHIVE.md', import.meta.url), 'utf8')
 
 function checkoutRoot() {
   const found = spawnSync(gitPath(), ['rev-parse', '--git-common-dir'], { cwd: REPO_ROOT, encoding: 'utf8', windowsHide: true })
   if (found.status !== 0) throw new Error(String(found.stderr ?? '').trim() || 'git rev-parse failed.')
   return realpathSync.native(dirname(resolve(REPO_ROOT, String(found.stdout ?? '').trim())))
+}
+
+function briefWithFreeBranch() {
+  const root = checkoutRoot()
+  return parseBriefs(TASKS_MARKDOWN).find((brief) => {
+    const found = spawnSync(gitPath(), ['rev-parse', '--verify', '--quiet', `refs/heads/${branchFor(brief)}`], {
+      cwd: root,
+      windowsHide: true,
+    })
+    return found.status !== 0
+  })
 }
 
 function lanesFileUnderWorktrees(folder) {
@@ -1342,19 +1354,19 @@ describe('scripts/run-lane.mjs', () => {
     }
   })
 
-  it('refuses a merged brief before it prints the dry run', async () => {
-    const merged = parseBriefs(TASKS_MARKDOWN).find(
+  it('refuses a brief that has left TASKS.md before it prints the dry run', async () => {
+    const archived = parseBriefs(ARCHIVE_MARKDOWN).find(
       (brief) => brief.done && Array.isArray(brief.owners) && brief.owners.includes('opencode')
     )
-    expect(merged).toBeTruthy()
-    const folder = makeTempDir('machine-room-merged-brief-')
+    expect(archived).toBeTruthy()
+    const folder = makeTempDir('machine-room-archived-brief-')
     try {
-      const result = await runLane(['opencode', merged.id, '--dry-run'], {
+      const result = await runLane(['opencode', archived.id, '--dry-run'], {
         MACHINEROOM_LANES_FILE: lanesFileUnderWorktrees(folder),
         MACHINEROOM_RUNS: join(folder, 'runs'),
       })
       expect(result.code).toBe(1)
-      expect(result.stdout).toContain(`Brief ${merged.id} is marked ${merged.ownerText}.`)
+      expect(result.stdout).toContain(`There is no brief named ${archived.id}.`)
       expect(result.stdout).not.toContain('args:')
       expect(result.stdout).not.toContain('cwd:')
     } finally {
@@ -1362,21 +1374,26 @@ describe('scripts/run-lane.mjs', () => {
     }
   })
 
-  it('refuses a retired lane before anything starts, and runs it with --force', async () => {
+  it('refuses a retired lane before anything starts, and runs it with --force', async (context) => {
     const folder = makeTempDir('machine-room-retired-lane-')
+    const brief = briefWithFreeBranch()
+    if (!brief) {
+      context.skip()
+      return
+    }
     try {
       const runEnv = {
         MACHINEROOM_LANES_FILE: lanesFileUnderWorktrees(folder),
         MACHINEROOM_RUNS: join(folder, 'runs'),
         LOCALAPPDATA: process.env.LOCALAPPDATA ?? folder,
       }
-      const refused = await runLane(['hermes', 'S2a', '--dry-run'], runEnv)
+      const refused = await runLane(['hermes', brief.id, '--dry-run'], runEnv)
       expect(refused.code).toBe(1)
       expect(refused.stdout).toContain('The hermes lane is retired.')
       expect(refused.stdout).not.toContain('args:')
       expect(refused.stdout).not.toContain('cwd:')
 
-      const forced = await runLane(['hermes', 'S2a', '--dry-run', '--force'], runEnv)
+      const forced = await runLane(['hermes', brief.id, '--dry-run', '--force'], runEnv)
       expect(forced.code).toBe(0)
       expect(forced.stdout).toContain('file:')
       expect(forced.stdout).toContain('args:')
@@ -1411,14 +1428,19 @@ describe('scripts/run-lane.mjs', () => {
     }
   })
 
-  it('prints MCP config and servers on dry run without exposing env values, and omits them when none are enabled', async () => {
+  it('prints MCP config and servers on dry run without exposing env values, and omits them when none are enabled', async (context) => {
     const folder = makeTempDir('machine-room-mcp-dry-')
+    const brief = briefWithFreeBranch()
+    if (!brief) {
+      context.skip()
+      return
+    }
     try {
       const runs = join(folder, 'runs')
       mkdirSync(runs, { recursive: true })
       const lanesFile = lanesFileUnderWorktrees(folder)
 
-      const noMcp = await runLane(['opencode', 'S2a', '--dry-run', '--force'], {
+      const noMcp = await runLane(['opencode', brief.id, '--dry-run', '--force'], {
         MACHINEROOM_LANES_FILE: lanesFile,
         MACHINEROOM_RUNS: runs,
         APPDATA: process.env.APPDATA ?? folder,
@@ -1435,7 +1457,7 @@ describe('scripts/run-lane.mjs', () => {
         ],
       }))
 
-      const withMcp = await runLane(['opencode', 'S2a', '--dry-run', '--force'], {
+      const withMcp = await runLane(['opencode', brief.id, '--dry-run', '--force'], {
         MACHINEROOM_LANES_FILE: lanesFile,
         MACHINEROOM_RUNS: runs,
         APPDATA: process.env.APPDATA ?? folder,

@@ -60,7 +60,7 @@ At the start of a session, before anything else:
 3. Each lane worktree: `git -C .worktrees/LANE status --short` is empty, and its branch is merged or waits for review.
 4. Read `Where things stand` above, the newest section of `TASKS.md` and the top of the changelog. Then tell the owner what runs, what waits for review and what you will do next.
 
-Reading. `ARCHITECTURE.md` is about 200 KB and `TASKS.md` over 1 MB. Never read either whole. Search for the name you need and read around it: `grep -n '^\*\*P24\.' docs/agents/TASKS.md` finds a brief, and the last `## ` heading of `TASKS.md` is the newest section.
+Reading. `ARCHITECTURE.md` is about 200 KB: never read it whole, search for the name you need and read around it. `TASKS.md` holds the briefs since 2026-11-09 and the older ones are in `history/TASKS-ARCHIVE.md`, over 1 MB, which you only search. `grep -n '^\*\*P24\.' docs/agents/TASKS.md` finds a brief, and the last `## ` heading of `TASKS.md` is the newest section. Before you name a new brief, search both files for its id. When `TASKS.md` grows past 150 KB, move its oldest sections to the archive, unchanged, and run `tests/briefs.test.js`.
 
 Briefs:
 

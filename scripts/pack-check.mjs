@@ -39,6 +39,7 @@ export const RUNTIME_READS = [
   'docs/agents/HOUSE-RULES.md',
   'docs/agents/ORCHESTRATOR-AGENT.md',
   'docs/agents/TASKS.md',
+  'docs/agents/history/TASKS-ARCHIVE.md',
   'docs/agents/lanes.json',
   'docs/agents/policy.json',
 ]

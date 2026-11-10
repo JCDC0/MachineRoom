@@ -105,6 +105,7 @@ describe('runtime reads', () => {
   it('lists the files the bridge reads at run time', () => {
     expect(RUNTIME_READS).toContain('docs/agents/lanes.json')
     expect(RUNTIME_READS).toContain('docs/agents/ORCHESTRATOR-AGENT.md')
+    expect(RUNTIME_READS).toContain('docs/agents/history/TASKS-ARCHIVE.md')
   })
 
   it('names a spawned script the pack leaves out', () => {

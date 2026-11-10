@@ -3,16 +3,24 @@ import { describe, expect, it } from 'vitest'
 import { branchFor, briefFileList, buildPrompt, modelFor, nextVersion, parseBriefs, parseRules } from '../src/briefs/briefs.js'
 
 const read = (name) => readFileSync(new URL(`../docs/agents/${name}`, import.meta.url), 'utf8')
-const briefs = parseBriefs(read('TASKS.md'))
+const taskBriefs = parseBriefs(read('TASKS.md'))
+const archiveBriefs = parseBriefs(read('history/TASKS-ARCHIVE.md'))
+const briefs = [...taskBriefs, ...archiveBriefs]
 const lanes = JSON.parse(read('lanes.json'))
 const rules = parseRules(read('HOUSE-RULES.md'))
 const byId = (id) => briefs.find((brief) => brief.id === id)
 
 describe('parseBriefs', () => {
-  it('reads the real task file', () => {
-    expect(briefs.length).toBeGreaterThan(30)
+  it('reads the real task file and its archive', () => {
+    expect(taskBriefs.length).toBeGreaterThan(5)
+    expect(archiveBriefs.length).toBeGreaterThan(300)
     expect(new Set(briefs.map((brief) => brief.id)).size).toBe(briefs.length)
     for (const id of ['C2', 'C3e', 'T1a', 'T1b', 'P5', 'P6', 'G5', 'U4', 'M1', 'D1', 'A3']) expect(byId(id), id).toBeTruthy()
+  })
+
+  it('keeps every id in one file only', () => {
+    const taskIds = new Set(taskBriefs.map((brief) => brief.id))
+    expect(archiveBriefs.filter((brief) => taskIds.has(brief.id)).map((brief) => brief.id)).toEqual([])
   })
 
   it('reads owner, done and section', () => {

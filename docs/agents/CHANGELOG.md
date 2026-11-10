@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The briefs from before 2026-11-09 moved unchanged to docs/agents/history/TASKS-ARCHIVE.md, so TASKS.md is 60 KB where it was 1.1 MB; an id stays unique across both files, and the Tasks tab still finds an older run's title (task P35).
 - The outcome table counts a run as merged, not graded, when main has its merge commit and no outcome was recorded, so the lane opencode reads 49 merged of 50 where it read 13 of 48; a lane that reports no cost reads not reported, an older run on a branch no longer raises the cost of a merge, and npm run policy-propose joins Gemini 3.8 Flash (High) to gemini-3.8-flash-high and prints each join (task P29).
 - A live page builds its file indexes after the first frame, not before it (273 ms and 25 MB less before the first draw at 200,000 files), learns only the paths a frame touched, keeps only created paths for the sound check, and builds the assistant's path list when a command is first read (task P26).
 - The bridge lists the project once at start: up hands it the list the doctor read, it listens before its first read ends, a folder answer comes from the last read with its packed and gzipped body built once per version, a page at the current version gets no tree event, and the bridge keeps one file list plus the paths each of its last 4 versions added (task P25).

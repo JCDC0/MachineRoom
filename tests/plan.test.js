@@ -8,7 +8,9 @@ import { tierFor } from '../src/policy/route.js'
 const read = (name) => readFileSync(new URL(`../docs/agents/${name}`, import.meta.url), 'utf8')
 const lanes = JSON.parse(read('lanes.json'))
 const rules = parseRules(read('HOUSE-RULES.md'))
-const realIds = parseBriefs(read('TASKS.md')).map((brief) => brief.id)
+const realIds = ['TASKS.md', 'history/TASKS-ARCHIVE.md'].flatMap((name) =>
+  parseBriefs(read(name)).map((brief) => brief.id)
+)
 
 const good = (over = {}) => ({
   id: 'C7a',
