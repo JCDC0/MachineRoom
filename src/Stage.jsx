@@ -1237,8 +1237,12 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
     if (!live) return undefined
     const pipeline = createPipeline({ agents, tree: data.tree })
     const entryFor = createLogger(agents)
-    const learned = (activities) => {
-      const paths = touchedFiles(activities)
+    const noteNewFiles = (paths) => {
+      for (const path of paths) {
+        if (!player.state.files.has(path)) knownSoundRef.current?.add(path)
+      }
+    }
+    const learned = (paths) => {
       if (paths.length > 0) pipeline.learn(paths)
     }
     const handlers = {
@@ -1246,11 +1250,13 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
       onFrame: (frame) => {
         recorder?.push(frame)
         const activities = pipeline.push(frame)
+        const paths = touchedFiles(activities)
+        noteNewFiles(paths)
         player.push(activities)
         if (activities.length > 0) {
           setFailures((current) => addFailureActivities(current, activities))
         }
-        learned(activities)
+        learned(paths)
         const added = activities
           .map((activity) => {
             const entry = entryFor(activity)
