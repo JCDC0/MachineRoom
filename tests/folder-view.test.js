@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
 import { viewInput } from '../src/engine/cards.js'
-import { BULK_FOLDERS, MAX_CHILD_CARDS, isBulkFolder, planFolderView } from '../src/model/folderView.js'
+import { BULK_FOLDERS, MAX_CHILD_CARDS, MAX_FOLDER_ITEMS, isBulkFolder, planFolderView } from '../src/model/folderView.js'
 import { apply, createState } from '../src/model/state.js'
 import { loadRecording, loadScenario } from './helpers.js'
 
@@ -156,7 +156,7 @@ describe('planFolderView', () => {
     for (const view of full) expect(view.hiddenItems).toBe(0)
   })
 
-  it('lists a folder of 200,000 files without a spread and keeps every one', () => {
+  it('caps a folder of 200,000 files at 2,000 items', () => {
     const count = 200000
     const files = new Array(count)
     for (let index = 0; index < count; index += 1) files[index] = `src/f${index}.js`
@@ -164,10 +164,69 @@ describe('planFolderView', () => {
     const plan = planFolderView({ files, alwaysDepth: 2, limitItems: false })
     const src = byPath(plan).get('src')
 
-    expect(src.items).toHaveLength(count)
-    expect(src.hiddenItems).toBe(0)
+    expect(MAX_FOLDER_ITEMS).toBe(2000)
+    expect(src.items).toHaveLength(MAX_FOLDER_ITEMS)
+    expect(src.hiddenItems).toBe(count - MAX_FOLDER_ITEMS)
     expect(src.items[0]).toEqual({ path: 'src/f0.js', kind: 'file' })
-    expect(src.items.some((item) => item.path === `src/f${count - 1}.js`)).toBe(true)
+    expect(src.items.some((item) => item.path === `src/f${count - 1}.js`)).toBe(false)
+  })
+
+  it('keeps the touched file first in a capped 50,000 file folder', () => {
+    const count = 50000
+    const files = new Array(count)
+    for (let index = 0; index < count; index += 1) files[index] = `heavy/f${String(index).padStart(5, '0')}.js`
+    const touched = `heavy/f${String(count - 1).padStart(5, '0')}.js`
+
+    const plan = planFolderView({ files, focus: [touched], touched: [touched], alwaysDepth: 2, limitItems: false })
+    const heavy = byPath(plan).get('heavy')
+
+    expect(heavy.items).toHaveLength(MAX_FOLDER_ITEMS)
+    expect(heavy.items[0]).toEqual({ path: touched, kind: 'file' })
+    expect(heavy.items.filter((item) => item.path === touched)).toHaveLength(1)
+    expect(heavy.hiddenItems).toBe(count - MAX_FOLDER_ITEMS)
+  })
+
+  it('caps a bulk folder too, with the touched file first', () => {
+    const files = ['node_modules/pkg/index.js']
+    for (let index = 0; index < 3000; index += 1) files.push(`node_modules/f${String(index).padStart(4, '0')}.js`)
+
+    const plan = planFolderView({ files, focus: ['node_modules/f2999.js'], touched: ['node_modules/f2999.js'], alwaysDepth: 1, limitItems: false })
+    const node = byPath(plan).get('node_modules')
+
+    expect(node.items).toHaveLength(MAX_FOLDER_ITEMS)
+    expect(node.items[0]).toEqual({ path: 'node_modules/f2999.js', kind: 'file' })
+    expect(node.hiddenItems).toBe(1000)
+  })
+
+  it('returns the same capped view object for the same focus', () => {
+    const files = Array.from({ length: 5000 }, (_, index) => `heavy/f${String(index).padStart(4, '0')}.js`)
+    const input = { files, focus: ['heavy/f0000.js'], touched: ['heavy/f0000.js'], alwaysDepth: 2, limitItems: false }
+
+    const first = byPath(planFolderView(input)).get('heavy')
+    const second = byPath(planFolderView(input)).get('heavy')
+
+    expect(second).toBe(first)
+  })
+
+  it('keeps every focused and touched item, even past the item limit', () => {
+    const files = Array.from({ length: 20 }, (_, index) => `docs/d${String(index).padStart(2, '0')}.md`)
+    const focus = files.slice(0, 6)
+    const touched = files.slice(6, 12)
+
+    const docs = byPath(planFolderView({ files, focus, touched, maxItems: 10 })).get('docs')
+    const kept = new Set(docs.items.map((item) => item.path))
+
+    for (const path of [...focus, ...touched]) expect(kept.has(path)).toBe(true)
+    expect(docs.items.length).toBeGreaterThanOrEqual(12)
+  })
+
+  it('keeps a touched child folder even past the folder limit', () => {
+    const files = ['lib/a/x.js', 'lib/b/x.js', 'lib/c/x.js', 'lib/d/x.js']
+
+    const lib = byPath(planFolderView({ files, focus: ['lib'], touched: ['lib/d'], maxFolders: 0 })).get('lib')
+
+    expect(lib.items).toEqual([{ path: 'lib/d', kind: 'dir' }])
+    expect(lib.hiddenItems).toBe(3)
   })
 
   it('opens both branches when two agents work on two files', () => {

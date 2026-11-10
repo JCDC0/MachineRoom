@@ -63,7 +63,7 @@ describe('the probe options and replays', () => {
 
 describe('the probe tree stage', () => {
   it('reads a fresh folder and leaves none behind', async () => {
-    const result = await runProbe({ files: 40, folders: 4, seed: 424242, activities: 20 })
+    const result = await runProbe({ files: 40, folders: 4, seed: 424242, activities: 20, heavyFiles: 0 })
     expect(result.treeRoot).toContain('machineroom-scale-probe-424242-')
     expect(existsSync(result.treeRoot)).toBe(false)
   })
@@ -96,6 +96,11 @@ describe('each fixed stage at 40000 files', () => {
 
   it('sends only the new file in a later tree event', () => {
     expect(rows.get('tree event, one new file').bytes).toBeLessThan(BUDGET.event)
+  })
+
+  it('times a plan with a 50,000 file folder drawn, inside it and elsewhere', () => {
+    expect(rows.get('planFolderView, touch inside a 50000 file folder').ms).toBeGreaterThan(0)
+    expect(rows.get('planFolderView, touch elsewhere with a 50000 file folder drawn').ms).toBeGreaterThan(0)
   })
 })
 
