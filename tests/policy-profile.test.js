@@ -5,7 +5,8 @@ import { profileFromBrief } from '../src/policy/profile.js'
 import { tierFor } from '../src/policy/route.js'
 
 const TASKS_TEXT = readFileSync(new URL('../docs/agents/TASKS.md', import.meta.url), 'utf8')
-const REAL_BRIEFS = parseBriefs(TASKS_TEXT)
+const ARCHIVE_TEXT = readFileSync(new URL('../docs/agents/history/TASKS-ARCHIVE.md', import.meta.url), 'utf8')
+const REAL_BRIEFS = [...parseBriefs(TASKS_TEXT), ...parseBriefs(ARCHIVE_TEXT)]
 
 const EMPTY = {
   files: 0,
@@ -24,7 +25,7 @@ const read = (text, owner) => profileFromBrief(briefFor(text, owner))
 
 const real = (id) => {
   const brief = REAL_BRIEFS.find((entry) => entry.id === id)
-  expect(brief, `the real brief ${id} is in TASKS.md`).toBeTruthy()
+  expect(brief, `the real brief ${id} is in TASKS.md or its archive`).toBeTruthy()
   return brief
 }
 

@@ -9,6 +9,9 @@ import {
   LANE_TASK_REFUSAL,
   laneLiveRuns,
   laneTaskIssues,
+  laneTaskState,
+  readArchivedBriefs,
+  readLaneBriefs,
   readRecentLaneRecords,
   runNameOf,
 } from '../server/lane-tasks.js'
@@ -204,6 +207,32 @@ describe('lane tasks', () => {
 
     const project = issues[4]
     expect(project).toMatchObject({ identifier: 'project', title: longTask.slice(0, 80), status: 'done', assigneeAgentId: 'agent-agy' })
+  })
+
+  it('takes a title from the archive when the brief has left TASKS.md', () => {
+    const dir = tempDir()
+    const agents = join(dir, 'docs', 'agents')
+    const archive = join(agents, 'history', 'TASKS-ARCHIVE.md')
+    mkdirSync(join(agents, 'history'), { recursive: true })
+    writeFileSync(join(agents, 'TASKS.md'), '## Open\n\n**N1. The new brief.** Text here.\n')
+    writeFileSync(archive, '# Archive.\n\n## Done\n\n**A1. The archived brief.** Text here.\n')
+    const records = [
+      record({ lane: 'opencode', briefs: ['A1'], log: '/tmp/runs/opencode-A1-20261024-100000.log', startedAt: iso(10) }),
+      record({ lane: 'opencode', briefs: ['N1'], log: '/tmp/runs/opencode-N1-20261024-090000.log', startedAt: iso(20) }),
+    ]
+
+    const first = readArchivedBriefs(dir)
+    expect(readArchivedBriefs(dir)).toBe(first)
+    const state = laneTaskState({ records, briefs: readLaneBriefs(dir), folder: dir })
+    expect(state.issues.map((issue) => [issue.identifier, issue.title])).toEqual([
+      ['A1', 'The archived brief'],
+      ['N1', 'The new brief'],
+    ])
+
+    writeFileSync(archive, '# Archive.\n\n## Done\n\n**A1. The changed archived brief.** Text here.\n')
+    const changed = readArchivedBriefs(dir)
+    expect(changed).not.toBe(first)
+    expect(changed.find((brief) => brief.id === 'A1').title).toBe('The changed archived brief')
   })
 
   it('leaves out records with no lane and keeps the newest 30', () => {
