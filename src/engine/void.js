@@ -162,10 +162,11 @@ function resetLayerColor(layer) {
 }
 
 export function setFineDust(options = {}) {
+  const wasPulsing = Boolean(fineDustOptions.pulse)
   fineDustOptions = { ...fineDustOptions, ...options }
   for (const geometry of fineDustGeometries) {
     geometry.setDrawRange(0, moteCount(fineDustOptions, geometry.userData.total))
-    if (!fineDustOptions.pulse) resetLayerColor(geometry)
+    if (wasPulsing && !fineDustOptions.pulse) resetLayerColor(geometry)
   }
   applyDustOpacity()
 }
@@ -227,6 +228,7 @@ export function createVoid(scene, texture) {
     dustGeometry,
     new THREE.PointsMaterial({ color: WHITE, size: 10, map: texture, transparent: true, opacity: 0.45, depthWrite: false })
   )
+  dustGeometry.userData.drawn = dust.material.visible
   group.add(dust)
 
   const fineDust = new THREE.Group()
@@ -258,6 +260,7 @@ export function createVoid(scene, texture) {
     geometry.userData.colorAttr = new THREE.Float32BufferAttribute(new Float32Array(points.length * 3).fill(1), 3)
     geometry.setAttribute('color', geometry.userData.colorAttr)
     geometry.setDrawRange(0, moteCount(fineDustOptions, points.length))
+    geometry.userData.drawn = material.visible && geometry.drawRange.count > 0
     fineDustGeometries.add(geometry)
     fineGeometries.push(geometry)
     fineDust.add(new THREE.Points(geometry, material))
@@ -267,7 +270,12 @@ export function createVoid(scene, texture) {
 
   scene.add(group)
 
-  function driftLayer(layer, seconds = driftSeconds) {
+  function driftLayer(layer, material, seconds = driftSeconds) {
+    if (!material?.visible || !(layer.drawRange.count > 0)) {
+      layer.userData.drawn = false
+      return false
+    }
+    layer.userData.drawn = true
     const attribute = layer.attributes.position
     const values = attribute.array
     const base = layer.userData.base
@@ -279,16 +287,19 @@ export function createVoid(scene, texture) {
     for (let index = 0; index < drawn; index += 1) {
       const speck = drift[index]
       driftPoint(base, index * 3, speck, seconds, values, index * 3)
-      if (colors) {
-        const b = pulsing ? speckPulse(seconds, speck.pulsePhase, speck.pulseRate) : 1
+      if (pulsing) {
+        const b = speckPulse(seconds, speck.pulsePhase, speck.pulseRate)
         colors[index * 3] = b
         colors[index * 3 + 1] = b
         colors[index * 3 + 2] = b
       }
     }
     attribute.needsUpdate = true
-    if (colorAttr) colorAttr.needsUpdate = true
-    if (colors) colorsPulsed = pulsing
+    if (pulsing) {
+      colorAttr.needsUpdate = true
+      colorsPulsed = true
+    }
+    return true
   }
 
   function update(delta) {
@@ -301,9 +312,11 @@ export function createVoid(scene, texture) {
     }
     driftSeconds += delta
     frame += 1
-    if (frame % DRIFT_FRAMES === 0) {
-      driftLayer(dustGeometry, driftSeconds)
-      for (const geometry of fineGeometries) driftLayer(geometry, driftSeconds)
+    const pass = frame % DRIFT_FRAMES === 0
+    if (pass || !dustGeometry.userData.drawn) driftLayer(dustGeometry, dust.material, driftSeconds)
+    for (let index = 0; index < fineGeometries.length; index += 1) {
+      const geometry = fineGeometries[index]
+      if (pass || !geometry.userData.drawn) driftLayer(geometry, fineMaterials[index], driftSeconds)
     }
   }
 
