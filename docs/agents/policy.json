@@ -8,8 +8,14 @@
         "provider": "opencode"
       },
       {
+        "lane": "opencode3",
+        "model": "opencode-go/deepseek-v4.1-flash",
+        "reasoning": "max",
+        "provider": "opencode"
+      },
+      {
         "lane": "agy",
-        "model": "Gemini 3.8 Flash (High)",
+        "model": "gemini-3.8-flash-high",
         "reasoning": "high",
         "provider": "antigravity"
       }
@@ -22,18 +28,30 @@
         "provider": "opencode"
       },
       {
-        "lane": "agy",
-        "model": "Gemini 3.8 Flash (High)",
+        "lane": "opencode4",
+        "model": "opencode-go/deepseek-v4.1-flash",
+        "reasoning": "max",
+        "provider": "opencode"
+      },
+      {
+        "lane": "agy2",
+        "model": "gemini-3.8-flash-high",
         "reasoning": "high",
         "provider": "antigravity"
       }
     ],
     "large": [
       {
-        "lane": "agy",
-        "model": "Gemini 4 Argon (Medium)",
-        "reasoning": "medium",
-        "provider": "antigravity"
+        "lane": "opencode5",
+        "model": "opencode-go/deepseek-v4.1-flash",
+        "reasoning": "max",
+        "provider": "opencode"
+      },
+      {
+        "lane": "opencode",
+        "model": "opencode-go/deepseek-v4.1-flash",
+        "reasoning": "max",
+        "provider": "opencode"
       },
       {
         "lane": "owner",

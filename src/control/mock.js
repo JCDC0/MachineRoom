@@ -284,14 +284,17 @@ export const MOCK_POLICY = {
   tiers: {
     small: [
       { lane: 'opencode2', model: 'opencode-go/deepseek-v4.1-flash', reasoning: 'max', provider: 'opencode' },
-      { lane: 'agy', model: 'Gemini 3.8 Flash (High)', reasoning: 'high', provider: 'antigravity' },
+      { lane: 'opencode3', model: 'opencode-go/deepseek-v4.1-flash', reasoning: 'max', provider: 'opencode' },
+      { lane: 'agy', model: 'gemini-3.8-flash-high', reasoning: 'high', provider: 'antigravity' },
     ],
     medium: [
       { lane: 'opencode', model: 'opencode-go/deepseek-v4.1-flash', reasoning: 'max', provider: 'opencode' },
-      { lane: 'agy', model: 'Gemini 3.8 Flash (High)', reasoning: 'high', provider: 'antigravity' },
+      { lane: 'opencode4', model: 'opencode-go/deepseek-v4.1-flash', reasoning: 'max', provider: 'opencode' },
+      { lane: 'agy2', model: 'gemini-3.8-flash-high', reasoning: 'high', provider: 'antigravity' },
     ],
     large: [
-      { lane: 'agy', model: 'Gemini 4 Argon (Medium)', reasoning: 'medium', provider: 'antigravity' },
+      { lane: 'opencode5', model: 'opencode-go/deepseek-v4.1-flash', reasoning: 'max', provider: 'opencode' },
+      { lane: 'opencode', model: 'opencode-go/deepseek-v4.1-flash', reasoning: 'max', provider: 'opencode' },
       { lane: 'owner', model: null, reasoning: null, provider: null },
     ],
   },

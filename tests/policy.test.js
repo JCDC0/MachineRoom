@@ -109,8 +109,8 @@ describe('chooseRoute', () => {
   it('skips a provider above its quota and takes the next choice', () => {
     const route = chooseRoute({ policy: policyFile(), profile: MEDIUM, quotas: [over('opencode', 91)] })
     expect(route.tier).toBe('medium')
-    expect(route.choice.lane).toBe('agy')
-    expect(route.choice.model).toBe('Gemini 3.8 Flash (High)')
+    expect(route.choice.lane).toBe('agy2')
+    expect(route.choice.model).toBe('gemini-3.8-flash-high')
   })
 
   it('does not skip a provider at exactly the skip percent', () => {
@@ -138,7 +138,7 @@ describe('chooseRoute', () => {
   })
 
   it('falls back to the owner when the large provider is over', () => {
-    const route = chooseRoute({ policy: policyFile(), profile: { ...SMALL, touchesDeploy: true }, quotas: [over('antigravity', 99)] })
+    const route = chooseRoute({ policy: policyFile(), profile: { ...SMALL, touchesDeploy: true }, quotas: [over('opencode', 99)] })
     expect(route.tier).toBe('large')
     expect(route.choice).toEqual({ lane: 'owner', model: null, reasoning: null, provider: null })
     expect(route.reason).toBe('The large tier asks the owner.')
@@ -205,9 +205,9 @@ describe('readPolicy', () => {
   it('reads the real policy file', () => {
     const policy = readPolicy(POLICY_TEXT)
     expect(Object.keys(policy.tiers)).toEqual(TIERS)
-    expect(policy.tiers.small).toHaveLength(2)
-    expect(policy.tiers.medium).toHaveLength(2)
-    expect(policy.tiers.large).toHaveLength(2)
+    expect(policy.tiers.small).toHaveLength(3)
+    expect(policy.tiers.medium).toHaveLength(3)
+    expect(policy.tiers.large).toHaveLength(3)
     expect(policy.limits).toEqual({ runUsd: 0.25, issueUsd: 1, agentMonthlyUsd: 10, companyMonthlyUsd: 30, maxTurnsPerRun: 200, timeoutSec: 3600 })
     expect(policy.quotaSkipPercent).toBe(90)
   })
@@ -218,7 +218,7 @@ describe('readPolicy', () => {
 
   it('keeps the owner choice with no model, reasoning or provider', () => {
     const policy = readPolicy(policyFile())
-    expect(policy.tiers.large[1]).toEqual({ lane: 'owner', model: null, reasoning: null, provider: null })
+    expect(policy.tiers.large[2]).toEqual({ lane: 'owner', model: null, reasoning: null, provider: null })
   })
 
   it('reads a policy that readPolicy already read', () => {
