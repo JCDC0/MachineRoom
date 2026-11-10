@@ -6,6 +6,7 @@ const DEFAULT_MAX_ALWAYS = 300
 const MAX_ALWAYS_DEPTH = 3
 
 export const MAX_CHILD_CARDS = 10
+export const MAX_FOLDER_ITEMS = 2000
 
 export const BULK_FOLDERS = new Set(['node_modules', 'dist', 'build', 'coverage', 'vendor', '.next', 'target', 'out', '__pycache__'])
 
@@ -49,7 +50,7 @@ function bumpFolder(index, path) {
   index.folderVersion.set(path, (index.folderVersion.get(path) ?? 0) + 1)
 }
 
-function addFolder(path, has, add, kids, bump = null) {
+function addFolder(path, has, add, kids, bump = null, dirty = null) {
   const missing = []
   for (let at = path; !has(at); at = parentOf(at)) missing.push(at)
   missing.forEach(add)
@@ -59,6 +60,7 @@ function addFolder(path, has, add, kids, bump = null) {
     if (list) list.push(at)
     else kids.set(parent, [at])
     if (bump) bump(parent)
+    if (dirty) dirty.add(parent)
   })
 }
 
@@ -67,7 +69,7 @@ function addFile(index, raw) {
   if (!path || index.fileSet.has(path)) return
   index.fileSet.add(path)
   const parent = parentOf(path)
-  addFolder(parent, (at) => index.folders.has(at), (at) => index.folders.add(at), index.children, (at) => bumpFolder(index, at))
+  addFolder(parent, (at) => index.folders.has(at), (at) => index.folders.add(at), index.children, (at) => bumpFolder(index, at), index.dirty)
   for (let at = parent; ; at = parentOf(at)) {
     index.fileCount.set(at, (index.fileCount.get(at) ?? 0) + 1)
     if (at === '') break
@@ -75,7 +77,18 @@ function addFile(index, raw) {
   const list = index.filesIn.get(parent)
   if (list) list.push(path)
   else index.filesIn.set(parent, [path])
+  index.dirty.add(parent)
   bumpFolder(index, parent)
+}
+
+function sortLists(index) {
+  for (const path of index.dirty) {
+    const files = index.filesIn.get(path)
+    if (files && files.length > 1) files.sort(byName)
+    const kids = index.children.get(path)
+    if (kids && kids.length > 1) kids.sort(byName)
+  }
+  index.dirty.clear()
 }
 
 function extendIndex(index, files) {
@@ -83,6 +96,7 @@ function extendIndex(index, files) {
     if (files.length < index.length) return false
     for (let at = index.length; at < files.length; at += 1) addFile(index, files[at])
     index.length = files.length
+    sortLists(index)
     return true
   }
   const before = index.source
@@ -97,6 +111,7 @@ function extendIndex(index, files) {
   added.forEach((raw) => addFile(index, raw))
   index.source = files
   index.length = files.length
+  sortLists(index)
   return true
 }
 
@@ -114,8 +129,10 @@ function indexFiles(files) {
     fileCount: new Map([['', 0]]),
     folderVersion: new Map(),
     views: new Map(),
+    dirty: new Set(),
   }
   files.forEach((raw) => addFile(index, raw))
+  sortLists(index)
   lastIndex = index
   return index
 }
@@ -192,6 +209,9 @@ export function planFolderView({
   focusPaths.forEach(addPath)
   touchedPaths.forEach(addPath)
   expandedPaths.forEach(addPath)
+  extraChildren.forEach((list) => {
+    if (list.length > 1) list.sort(byName)
+  })
 
   const focusSet = new Set(focusPaths)
   const touchedSet = new Set(touchedPaths)
@@ -221,8 +241,22 @@ export function planFolderView({
     }
   })
 
-  const children = {
-    get: (path) => [...(fileChildren.get(path) ?? []), ...(extraChildren.get(path) ?? [])],
+  const EMPTY = []
+  const kidsFor = (path) => {
+    const base = fileChildren.get(path)
+    const extra = extraChildren.get(path)
+    if (!extra || extra.length === 0) return base ?? EMPTY
+    if (!base || base.length === 0) return extra
+    const out = []
+    let i = 0
+    let j = 0
+    while (i < base.length && j < extra.length) {
+      if (base[i] <= extra[j]) out.push(base[i++])
+      else out.push(extra[j++])
+    }
+    while (i < base.length) out.push(base[i++])
+    while (j < extra.length) out.push(extra[j++])
+    return out
   }
 
   const childOrder = (a, b) =>
@@ -231,7 +265,7 @@ export function planFolderView({
     (index.fileCount.get(b) ?? 0) - (index.fileCount.get(a) ?? 0) ||
     byName(a, b)
 
-  const sortedChildren = (path) => [...children.get(path)].sort(childOrder)
+  const sortedChildren = (path) => [...kidsFor(path)].sort(childOrder)
 
   const drawn = new Set([''])
   focusFolders.forEach((path) => drawn.add(path))
@@ -243,21 +277,52 @@ export function planFolderView({
     sortedChildren(path).slice(0, limit).forEach((child) => drawn.add(child))
   })
 
+  const itemCap = limitItems ? Math.min(itemLimit, MAX_FOLDER_ITEMS) : MAX_FOLDER_ITEMS
+  const folderCap = limitItems ? folderLimit : Number.POSITIVE_INFINITY
+
   const itemsFor = (path) => {
-    const entries = []
-    for (const child of children.get(path)) {
-      if (drawn.has(child)) continue
-      entries.push({ path: child, kind: 'dir' })
+    const total =
+      (fileChildren.get(path)?.length ?? 0) +
+      (extraChildren.get(path)?.length ?? 0) -
+      (drawnKids.get(path)?.length ?? 0) +
+      (filesIn.get(path)?.length ?? 0)
+    const items = []
+    let folderCount = 0
+    const marks = rankMarks.get(path)
+    if (marks) {
+      const ranked = [...marks.entries()].sort((a, b) => a[1].rank - b[1].rank || byName(a[0], b[0]))
+      for (const [item, mark] of ranked) {
+        if (mark.kind === 'dir' && drawn.has(item)) continue
+        items.push({ path: item, kind: mark.kind })
+        if (mark.kind === 'dir') folderCount += 1
+      }
     }
-    for (const file of filesIn.get(path) ?? []) entries.push({ path: file, kind: 'file' })
-    const rank = (item) => {
-      if (focusSet.has(item.path)) return 0
-      if (item.kind === 'dir' && focusFolders.has(item.path)) return 0
-      if (touchedSet.has(item.path)) return 1
-      if (item.kind === 'dir' && touchedFolders.has(item.path)) return 1
-      return 2
+    let remaining = Math.max(0, itemCap - items.length)
+    if (remaining > 0) {
+      const kids = kidsFor(path)
+      const files = filesIn.get(path) ?? EMPTY
+      let i = 0
+      let j = 0
+      while (remaining > 0 && (i < kids.length || j < files.length)) {
+        let item = ''
+        let isDir = false
+        if (j >= files.length || (i < kids.length && kids[i] <= files[j])) {
+          item = kids[i]
+          i += 1
+          isDir = true
+        } else {
+          item = files[j]
+          j += 1
+        }
+        if (isDir && drawn.has(item)) continue
+        if (marks && marks.has(item)) continue
+        if (isDir && folderCount >= folderCap) continue
+        items.push({ path: item, kind: isDir ? 'dir' : 'file' })
+        if (isDir) folderCount += 1
+        remaining -= 1
+      }
     }
-    return entries.sort((a, b) => rank(a) - rank(b) || byName(a.path, b.path))
+    return { items, hiddenItems: Math.max(0, total - items.length) }
   }
 
   const optionKey = `${alwaysLevel}|${alwaysLimit}|${folderLimit}|${itemLimit}|${limitItems ? 1 : 0}`
@@ -306,30 +371,17 @@ export function planFolderView({
     const key = folderKey(path)
     const cached = index.views.get(path)
     if (cached && cached.key === key) return cached.view
-    const all = itemsFor(path)
-    let items = []
-    if (!limitItems) items = all.slice()
-    else {
-      let folderCount = 0
-      all.forEach((item) => {
-        if (items.length >= itemLimit) return
-        if (item.kind === 'dir') {
-          if (folderCount >= folderLimit) return
-          folderCount += 1
-        }
-        items.push(item)
-      })
-    }
-    const hiddenKids = children.get(path).filter((child) => !drawn.has(child))
+    const made = itemsFor(path)
+    const hiddenKids = (fileChildren.get(path)?.length ?? 0) + (extraChildren.get(path)?.length ?? 0) - (drawnKids.get(path)?.length ?? 0)
     const isPinned = pinned.has(path)
     const view = {
       path,
       state: 'files',
       folders: [],
-      back: path === '' ? 0 : Math.min(3, hiddenKids.length),
-      hiddenFolders: hiddenKids.length,
-      items,
-      hiddenItems: limitItems ? all.length - items.length : 0,
+      back: path === '' ? 0 : Math.min(3, hiddenKids),
+      hiddenFolders: hiddenKids,
+      items: made.items,
+      hiddenItems: made.hiddenItems,
     }
     if (isPinned) view.pinned = true
     index.views.set(path, { key, view })

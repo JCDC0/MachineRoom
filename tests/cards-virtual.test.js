@@ -128,6 +128,19 @@ describe('a card with 60 items or fewer', () => {
   })
 })
 
+describe('a card with more than 2,000 items', () => {
+  it('draws the focused row first and a + N more row', () => {
+    const { cards, card } = setup(2500)
+    expect(card.view.items).toHaveLength(2000)
+    expect(card.view.hiddenItems).toBe(500)
+    expect(card.view.items[0].path).toBe('src/f70.js')
+    const more = card.items.children.find((node) => node.className === 'mr-card-more')
+    expect(more).toBeTruthy()
+    expect(more.textContent).toBe('+ 500 more')
+    cards.dispose()
+  })
+})
+
 describe('a card with 61 items', () => {
   it('draws only the rows in the window, with a spacer at each end', () => {
     const { cards, state, card } = setup(61)
