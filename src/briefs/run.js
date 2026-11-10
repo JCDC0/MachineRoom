@@ -93,7 +93,7 @@ function medianOf(values) {
 }
 
 function emptyBucket(lane, model) {
-  return { lane, model, runs: 0, finished: 0, killed: 0, failed: 0, minutes: [], costTotal: 0, costRuns: 0 }
+  return { lane, model, runs: 0, finished: 0, killed: 0, failed: 0, minutes: [], costTotal: 0, costRuns: 0, peaks: [] }
 }
 
 function addToBucket(bucket, record) {
@@ -108,10 +108,15 @@ function addToBucket(bucket, record) {
     bucket.costTotal += cost
     bucket.costRuns += 1
   }
+  const peak = finiteNumber(record.peakTokens ?? record.peak)
+  if (peak !== null && peak >= 0) bucket.peaks.push(peak)
 }
 
 function bucketRow(bucket) {
   const minutesTotal = bucket.minutes.reduce((sum, value) => sum + value, 0)
+  const peakMedian = Math.round(medianOf(bucket.peaks))
+  const peakMax = bucket.peaks.length === 0 ? 0 : Math.max(...bucket.peaks)
+  const peakOver450 = bucket.peaks.filter((value) => value >= 450000).length
   return {
     lane: bucket.lane,
     model: bucket.model,
@@ -123,6 +128,9 @@ function bucketRow(bucket) {
     minutesMedian: roundTo(medianOf(bucket.minutes), 1),
     costTotal: roundTo(bucket.costTotal, 4),
     costRuns: bucket.costRuns,
+    peakMedian,
+    peakMax,
+    peakOver450,
   }
 }
 
@@ -169,7 +177,10 @@ function statsLine(row) {
   const median = Number.isFinite(row.minutesMedian) ? row.minutesMedian : 0
   const cost = Number.isFinite(row.costTotal) ? row.costTotal : 0
   const runs = (count) => `${count} ${count === 1 ? 'run' : 'runs'}`
-  return `${row.lane} | ${row.model} | ${runs(row.runs)} | ${row.finished} finished, ${row.killed} killed, ${row.failed} failed | ${minutes.toFixed(1)} min, median ${median.toFixed(1)} | ${cost.toFixed(4)} USD over ${runs(row.costRuns)}`
+  const peakMedian = Number.isFinite(row.peakMedian) ? row.peakMedian : 0
+  const peakMax = Number.isFinite(row.peakMax) ? row.peakMax : 0
+  const peakOver = Number.isFinite(row.peakOver450) ? row.peakOver450 : 0
+  return `${row.lane} | ${row.model} | ${runs(row.runs)} | ${row.finished} finished, ${row.killed} killed, ${row.failed} failed | ${minutes.toFixed(1)} min, median ${median.toFixed(1)} | ${cost.toFixed(4)} USD over ${runs(row.costRuns)} | peak median ${peakMedian}, max ${peakMax}, ${peakOver} at or over 450,000`
 }
 
 export function formatStats(stats) {
@@ -976,7 +987,9 @@ export function runListLine(record) {
   const killed = record.killed ? ' (killed)' : ''
   const cost = typeof record.costUsd === 'number' ? `${record.costUsd.toFixed(4)} USD` : 'not reported'
   const branch = record.branch || 'no branch'
-  return `${when} | ${record.lane} | ${model} | ${briefs} | ${minutes} | ${exit}${killed} | ${cost} | ${branch}`
+  const peakTokens = record.peakTokens ?? record.peak
+  const peak = typeof peakTokens === 'number' && Number.isFinite(peakTokens) ? ` | peak ${peakTokens}` : ''
+  return `${when} | ${record.lane} | ${model} | ${briefs} | ${minutes} | ${exit}${killed} | ${cost} | ${branch}${peak}`
 }
 
 const CRASH_STATUSES = [3221226505, -1073740791]

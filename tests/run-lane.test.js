@@ -933,6 +933,14 @@ describe('runListLine', () => {
     const record = runRecord({ lane: 'hermes', briefs: ['T9'], model: 'minimax/minimax-m3.1-flash:free', startedAt: '2026-10-19T12:00:00.000Z', minutes: 3, exitCode: 0, branch: 'feat/t9' })
     expect(runListLine(record)).toBe('2026-10-19T12:00:00.000Z | hermes | minimax/minimax-m3.1-flash:free | T9 | 3 min | exit 0 | not reported | feat/t9')
   })
+
+  it('shows peak N when the record has one and omits it when not reported', () => {
+    const withoutPeak = runRecord({ lane: 'hermes', briefs: ['T3'], startedAt: '2026-10-19T12:00:00.000Z', minutes: 12.4, exitCode: 0, costUsd: 0.0421, branch: 'feat/t3' })
+    expect(runListLine(withoutPeak)).toBe('2026-10-19T12:00:00.000Z | hermes | model unknown | T3 | 12.4 min | exit 0 | 0.0421 USD | feat/t3')
+
+    const withPeak = runRecord({ lane: 'hermes', briefs: ['T3'], startedAt: '2026-10-19T12:00:00.000Z', minutes: 12.4, exitCode: 0, costUsd: 0.0421, peakTokens: 125000, branch: 'feat/t3' })
+    expect(runListLine(withPeak)).toBe('2026-10-19T12:00:00.000Z | hermes | model unknown | T3 | 12.4 min | exit 0 | 0.0421 USD | feat/t3 | peak 125000')
+  })
 })
 
 const record = (over = {}) => ({
@@ -1070,7 +1078,20 @@ describe('laneStats', () => {
       minutesMedian: 4.9,
       costTotal: 0.512,
       costRuns: 2,
+      peakMedian: 0,
+      peakMax: 0,
+      peakOver450: 0,
     })
+  })
+
+  it('computes peak median, max and runs at or over 450,000', () => {
+    const stats = laneStats([
+      record({ lane: 'opencode', model: 'opencode-go/deepseek-v4.1-flash', peakTokens: 100000 }),
+      record({ lane: 'opencode', model: 'opencode-go/deepseek-v4.1-flash', peakTokens: 500000 }),
+      record({ lane: 'opencode', model: 'opencode-go/deepseek-v4.1-flash', peakTokens: 450000 }),
+    ])
+    expect(stats.rows[0]).toMatchObject({ peakMedian: 450000, peakMax: 500000, peakOver450: 2 })
+    expect(formatStats(stats)[0]).toBe('opencode | opencode-go/deepseek-v4.1-flash | 3 runs | 3 finished, 0 killed, 0 failed | 15.0 min, median 5.0 | 0.0300 USD over 3 runs | peak median 450000, max 500000, 2 at or over 450,000')
   })
 })
 
@@ -1083,9 +1104,9 @@ describe('formatStats', () => {
 
   it('prints one line per row and then the total', () => {
     expect(formatStats(stats)).toEqual([
-      'hermes | deepseek/x | 2 runs | 1 finished, 0 killed, 1 failed | 11.0 min, median 5.5 | 0.5120 USD over 2 runs',
-      'opencode | model unknown | 1 run | 0 finished, 1 killed, 0 failed | 2.0 min, median 2.0 | 0.0000 USD over 0 runs',
-      'all | all | 3 runs | 1 finished, 1 killed, 1 failed | 13.0 min, median 4.9 | 0.5120 USD over 2 runs',
+      'hermes | deepseek/x | 2 runs | 1 finished, 0 killed, 1 failed | 11.0 min, median 5.5 | 0.5120 USD over 2 runs | peak median 0, max 0, 0 at or over 450,000',
+      'opencode | model unknown | 1 run | 0 finished, 1 killed, 0 failed | 2.0 min, median 2.0 | 0.0000 USD over 0 runs | peak median 0, max 0, 0 at or over 450,000',
+      'all | all | 3 runs | 1 finished, 1 killed, 1 failed | 13.0 min, median 4.9 | 0.5120 USD over 2 runs | peak median 0, max 0, 0 at or over 450,000',
     ])
   })
 
