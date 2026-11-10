@@ -711,6 +711,49 @@ describe('the control client orchestrator routes', () => {
   })
 })
 
+describe('the control client lane route', () => {
+  const MEDIUM_TASK = 'Fix it. Files: `a.js`, `b.js`, `c.js`, `tests/a.test.js`.'
+
+  function recorder(answer = { lane: 'opencode' }) {
+    const calls = []
+    const fetchImpl = async (url, options = {}) => {
+      calls.push({ url, method: options.method, body: options.body })
+      return { ok: true, json: async () => answer }
+    }
+    return { calls, client: createClient({ baseUrl: 'http://127.0.0.1:9', fetchImpl }) }
+  }
+
+  it('sends a brief, a task and failures to the lane route', async () => {
+    const { calls, client } = recorder()
+    await client.routeLane({ task: 'Fix it.' })
+    await client.routeLane({ brief: 'B6', failures: 1 })
+    await client.routeLane()
+    expect(calls).toEqual([
+      {
+        url: 'http://127.0.0.1:9/api/control/route/lane',
+        method: 'POST',
+        body: JSON.stringify({ task: 'Fix it.' }),
+      },
+      {
+        url: 'http://127.0.0.1:9/api/control/route/lane',
+        method: 'POST',
+        body: JSON.stringify({ brief: 'B6', failures: 1 }),
+      },
+      { url: 'http://127.0.0.1:9/api/control/route/lane', method: 'POST', body: '{}' },
+    ])
+  })
+
+  it('answers a lane from the mock policy and refuses an empty name', async () => {
+    const mock = createMockClient({ latencyMs: 0 })
+    const answer = await mock.routeLane({ task: MEDIUM_TASK })
+    expect(answer).toMatchObject({ lane: 'opencode', tier: 'medium', model: 'opencode-go/deepseek-v4.1-flash', reasoning: 'max' })
+    expect(answer.reason).toBe('The medium tier runs opencode on opencode-go/deepseek-v4.1-flash at max.')
+    await expect(mock.routeLane()).rejects.toThrow('Name a brief or a task.')
+    await expect(mock.routeLane({ brief: 'B6', task: 'Fix it.' })).rejects.toThrow('Send a brief or a task, not both.')
+    await expect(mock.routeLane({ brief: 'ZZ9' })).rejects.toThrow('Choose a brief from the list.')
+  })
+})
+
 describe('the control client MCP routes', () => {
   function recorder(answer = {}) {
     const calls = []
