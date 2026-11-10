@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { appendEntries, MAX_ENTRIES } from '../src/ui/Assistant.jsx'
+import { appendEntries, contextWithPaths, MAX_ENTRIES } from '../src/ui/Assistant.jsx'
 import {
   addToHistory,
   BLOCKED_MASK,
@@ -193,5 +193,22 @@ describe('blocked result helpers', () => {
   it('masks command text only when blocked', () => {
     expect(formatCommandLine('what is agy doing', false)).toBe('what is agy doing')
     expect(formatCommandLine('secret-token-1234567890', true)).toBe('[hidden]')
+  })
+})
+
+describe('assistant context paths', () => {
+  it('asks for the paths when a command is read, and keeps a plain list as it is', () => {
+    const paths = ['src/a.js', 'src/b.js']
+    let calls = 0
+    const context = {
+      agents: [{ key: 'claude', name: 'Claude' }],
+      paths() {
+        calls += 1
+        return paths
+      },
+    }
+    expect(contextWithPaths(context)).toEqual({ agents: context.agents, paths })
+    expect(calls).toBe(1)
+    expect(contextWithPaths({ agents: [], paths })).toEqual({ agents: [], paths })
   })
 })

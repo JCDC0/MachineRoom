@@ -16,6 +16,10 @@ let nextEntryId = 1
 
 export const MAX_ENTRIES = 200
 
+export function contextWithPaths(context) {
+  return typeof context?.paths === 'function' ? { ...context, paths: context.paths() } : context
+}
+
 export function appendEntries(list, ...items) {
   const next = [...(Array.isArray(list) ? list : []), ...items]
   return next.length > MAX_ENTRIES ? next.slice(next.length - MAX_ENTRIES) : next
@@ -250,8 +254,6 @@ export default function Assistant({
 
     const isSecret = containsSecret(raw)
     const commandText = formatCommandLine(raw, isSecret)
-    const contextNow = () =>
-      typeof context?.paths === 'function' ? { ...context, paths: context.paths() } : context
 
     setInput('')
     setDraft('')
@@ -266,7 +268,7 @@ export default function Assistant({
     }
 
     if (isSecret) {
-      const blockedResult = interpret(raw, contextNow())
+      const blockedResult = interpret(raw, contextWithPaths(context))
       const say = getBlockedSay(blockedResult)
       const blockedEntry = {
         id: `entry-${nextEntryId++}`,
@@ -280,7 +282,7 @@ export default function Assistant({
       return
     }
 
-    const result = interpret(raw, contextNow())
+    const result = interpret(raw, contextWithPaths(context))
 
     if (result.kind === 'action') {
       const actionEntry = {
