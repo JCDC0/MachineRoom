@@ -2,11 +2,6 @@
 
 ## Unreleased
 
-- The routing policy sends small briefs to opencode2, opencode3 then agy, medium to opencode, opencode4 then agy2, and large to opencode5, opencode then the owner, with each model named as its lane's command line names it (task P31).
-- Dispatch offers Auto first when the bridge can route, shows `Auto: LANE. REASON` under the picker 400 ms after the task changes, names the policy reason in the confirm card, sends auto with the run, and plans one lane per task in the route's order (task P31).
-- POST /api/control/runs with no lane or with lane auto picks the lane from the routing policy, starts the run there, answers the lane with routed tier and reason, answers 409 when no lane is free, and a sub orchestrator's token routes only among its own lanes (task P31).
-- The bridge answers POST /api/control/route/lane for a brief or a task, with the lane states the run start checks and a reason for each skipped lane, and the client and the mock answer it (task P31).
-- The routing policy answers a lane for a brief or a task: it walks the tier's choices and skips a lane that is not in the room, retired, turned off or busy with a reason for each, falls to the first free lane, and answers no lane when every lane is busy or turned off (task P31).
 - The outcome table counts a run as merged, not graded, when main has its merge commit and no outcome was recorded, so the lane opencode reads 49 merged of 50 where it read 13 of 48; a lane that reports no cost reads not reported, an older run on a branch no longer raises the cost of a merge, and npm run policy-propose joins Gemini 3.8 Flash (High) to gemini-3.8-flash-high and prints each join (task P29).
 - A live page builds its file indexes after the first frame, not before it (273 ms and 25 MB less before the first draw at 200,000 files), learns only the paths a frame touched, keeps only created paths for the sound check, and builds the assistant's path list when a command is first read (task P26).
 - The bridge lists the project once at start: up hands it the list the doctor read, it listens before its first read ends, a folder answer comes from the last read with its packed and gzipped body built once per version, a page at the current version gets no tree event, and the bridge keeps one file list plus the paths each of its last 4 versions added (task P25).
