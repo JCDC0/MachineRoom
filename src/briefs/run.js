@@ -922,7 +922,7 @@ function tokenField(value) {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? Math.round(value) : null
 }
 
-export function runRecord({ lane, briefs, model, reasoning, startedAt, minutes, exitCode, killed, costUsd, inputTokens, outputTokens, log, branch, commits, base, project, task, startedBy, stoppedLeftovers, queue, startFailed, note, retried } = {}) {
+export function runRecord({ lane, briefs, model, reasoning, startedAt, minutes, exitCode, killed, costUsd, inputTokens, outputTokens, peakTokens, log, branch, commits, base, project, task, startedBy, stoppedLeftovers, queue, startFailed, note, retried } = {}) {
   const record = {
     lane: String(lane ?? ''),
     briefs: Array.isArray(briefs) ? briefs.map(String) : [],
@@ -935,6 +935,7 @@ export function runRecord({ lane, briefs, model, reasoning, startedAt, minutes, 
     costUsd: typeof costUsd === 'number' && Number.isFinite(costUsd) ? costUsd : null,
     inputTokens: tokenField(inputTokens),
     outputTokens: tokenField(outputTokens),
+    peakTokens: tokenField(peakTokens),
     log: log ? String(log) : null,
     branch: branch ? String(branch) : '',
     commits: Array.isArray(commits) ? commits.map(String) : [],

@@ -829,6 +829,7 @@ describe('runRecord', () => {
       costUsd: 0.0421,
       inputTokens: 1500,
       outputTokens: 300,
+      peakTokens: 1200,
       log: 'C:\\Temp\\machineroom-runs\\hermes-T3.log',
       branch: 'feat/t3-run-records-and',
       commits: ['abc1234 0.1.44: Record each lane run'],
@@ -845,12 +846,13 @@ describe('runRecord', () => {
       costUsd: 0.0421,
       inputTokens: 1500,
       outputTokens: 300,
+      peakTokens: 1200,
       log: 'C:\\Temp\\machineroom-runs\\hermes-T3.log',
       branch: 'feat/t3-run-records-and',
       commits: ['abc1234 0.1.44: Record each lane run'],
     })
     expect(Object.keys(record)).toEqual([
-      'lane', 'briefs', 'model', 'reasoning', 'startedAt', 'minutes', 'exitCode', 'killed', 'costUsd', 'inputTokens', 'outputTokens', 'log', 'branch', 'commits',
+      'lane', 'briefs', 'model', 'reasoning', 'startedAt', 'minutes', 'exitCode', 'killed', 'costUsd', 'inputTokens', 'outputTokens', 'peakTokens', 'log', 'branch', 'commits',
     ])
   })
 
@@ -886,8 +888,26 @@ describe('runRecord', () => {
     expect(record.costUsd).toBeNull()
     expect(record.inputTokens).toBeNull()
     expect(record.outputTokens).toBeNull()
+    expect(record.peakTokens).toBeNull()
     expect(record.killed).toBe(false)
     expect(record.startedAt).toBe('2025-10-09T08:53:20.000Z')
+  })
+
+  it('reads a record of the older shape without peakTokens', () => {
+    const older = {
+      lane: 'opencode',
+      briefs: ['T3'],
+      model: 'opencode-go/deepseek-v4.1-flash',
+      startedAt: '2026-10-19T12:00:00.000Z',
+      minutes: 10,
+      exitCode: 0,
+      costUsd: 0.05,
+      inputTokens: 5000,
+      outputTokens: 100,
+      branch: 'feat/t3',
+    }
+    expect(older.peakTokens).toBeUndefined()
+    expect(runRecord(older).peakTokens).toBeNull()
   })
 })
 
