@@ -50,7 +50,8 @@ export default function DispatchPanel({
   const [runsError, setRunsError] = useState(null)
   const [projectName, setProjectName] = useState('')
   const [lanesMode, setLanesMode] = useState(false)
-  const [projectLane, setProjectLane] = useState('')
+  const [projectLane, setProjectLane] = useState(() => (typeof client?.routeLane === 'function' ? 'auto' : ''))
+  const [autoRoute, setAutoRoute] = useState({ text: '', answer: null, error: null })
   const [projectTask, setProjectTask] = useState('')
   const [projectOwnWorktree, setProjectOwnWorktree] = useState(true)
   const [projectOneLanePerTask, setProjectOneLanePerTask] = useState(false)
@@ -68,16 +69,22 @@ export default function DispatchPanel({
   const splitDoneRef = useRef(false)
   const splitProjectRef = useRef('')
   const promptReqRef = useRef(0)
+  const routeReqRef = useRef(0)
   const promptBoxRef = useRef(null)
 
   const hasBriefs = typeof client?.briefs === 'function'
   const hasRuns = typeof client?.runs === 'function'
+  const hasRouteLane = typeof client?.routeLane === 'function'
 
   const selectedBrief = briefs.find((item) => item.id === selectedBriefId)
   const runLane = selectedBrief ? runLaneFor(selectedBrief, runsState.running, VALID_LANES) : null
   const canRunBrief = typeof client?.startRun === 'function' && Boolean(runLane)
   const projectLanes = projectRunLanes(agents, runsState.running)
-  const projectLaneRunning = projectLanes.some((lane) => lane.key === projectLane && lane.running)
+  const routeTask = (splitTasks(projectTask)[0] ?? '').trim()
+  const routeAnswer = hasRouteLane && projectLane === 'auto' && autoRoute.text === routeTask ? autoRoute.answer : null
+  const routeError = hasRouteLane && projectLane === 'auto' && autoRoute.text === routeTask ? autoRoute.error : null
+  const effectiveLane = projectLane === 'auto' ? routeAnswer?.lane ?? '' : projectLane
+  const projectLaneRunning = projectLanes.some((lane) => lane.key === effectiveLane && lane.running)
 
   async function loadData() {
     if (!client || Array.isArray(initialAgents)) return
@@ -194,6 +201,29 @@ export default function DispatchPanel({
       loadRuns()
     })
   }, [client])
+
+  useEffect(() => {
+    if (!hasRouteLane || projectLane !== 'auto') return
+    const first = splitTasks(projectTask)[0] ?? ''
+    const text = first.trim()
+    if (text === '') {
+      routeReqRef.current += 1
+      setAutoRoute({ text: '', answer: null, error: null })
+      return
+    }
+    const reqId = ++routeReqRef.current
+    const timer = setTimeout(async () => {
+      try {
+        const answer = await client.routeLane({ task: text })
+        if (routeReqRef.current !== reqId) return
+        setAutoRoute({ text, answer, error: null })
+      } catch (err) {
+        if (routeReqRef.current !== reqId) return
+        setAutoRoute({ text, answer: null, error: err.message || 'Could not route the task.' })
+      }
+    }, 400)
+    return () => clearTimeout(timer)
+  }, [client, hasRouteLane, projectLane, projectTask])
 
   useEffect(() => {
     let alive = true
@@ -359,8 +389,8 @@ export default function DispatchPanel({
     const tasks = splitTasks(projectTask)
     if (projectTaskProblem(tasks)) return
     const split = projectOneLanePerTask && tasks.length > 1
-    if (!split && (!projectLane || projectLaneRunning)) return
-    const plan = split ? planLaneTasks(tasks, projectLanes) : null
+    if (!split && (!effectiveLane || projectLaneRunning)) return
+    const plan = split ? planLaneTasks(tasks, projectLanes, routeAnswer) : null
     clearSplitRun()
     setProjectSplitPlan(plan)
     setProjectShowConfirm(true)
@@ -452,12 +482,12 @@ export default function DispatchPanel({
   const projectTasks = splitTasks(projectTask)
   const projectQueue = projectTasks.length > 1
   const projectConfirm = projectRunConfirm({
-    lane: projectLane,
+    lane: effectiveLane,
     project: projectName,
     task: projectTask,
     tasks: projectTasks,
   })
-  const ownWorktreeName = projectOwnWorktree ? projectWorktreeName(projectName, projectLane) : ''
+  const ownWorktreeName = projectOwnWorktree ? projectWorktreeName(projectName, effectiveLane) : ''
   const projectProblem = projectTaskProblem(projectTasks)
   const projectSplitRun = projectOneLanePerTask && projectTasks.length > 1
   const projectSplitTaskCount = projectSplitPlan?.pairs.length || projectTasks.length
@@ -470,7 +500,7 @@ export default function DispatchPanel({
     typeof client?.startRun === 'function' &&
     !projectProblem &&
     !splitActive &&
-    (projectSplitRun || (Boolean(projectLane) && !projectLaneRunning))
+    (projectSplitRun || (Boolean(effectiveLane) && !projectLaneRunning))
   const splitProgress = splitRun.pairs.length === 0 ? '' : splitRunProgress(splitRun)
   const splitStopped = splitRun.done && splitRun.cancelled
 
@@ -493,6 +523,7 @@ export default function DispatchPanel({
                 dismissProjectConfirm()
               }}
             >
+              {hasRouteLane && <option value="auto">Auto</option>}
               <option value="">Select a lane</option>
               {projectLanes.map((lane) => (
                 <option key={lane.key} value={lane.key} disabled={lane.running}>
@@ -500,6 +531,16 @@ export default function DispatchPanel({
                 </option>
               ))}
             </select>
+            {projectLane === 'auto' && routeAnswer && (
+              <div className="brief-state is-dim mono" role="status">
+                {`Auto: ${routeAnswer.lane ?? 'no lane'}. ${routeAnswer.reason}`}
+              </div>
+            )}
+            {projectLane === 'auto' && routeError && (
+              <div className="brief-state is-dim mono" role="status">
+                {`Auto: ${routeError}`}
+              </div>
+            )}
             {projectLaneRunning && !projectSplitRun && (
               <div className="brief-state is-dim mono">That lane is already running.</div>
             )}
@@ -731,6 +772,11 @@ export default function DispatchPanel({
                   <span className="brief-confirm-task">Task: {projectConfirm.task}</span>
                 )}
               </div>
+              {projectLane === 'auto' && routeAnswer && (
+                <div className="brief-confirm-warning">
+                  {`Picked by the routing policy: ${routeAnswer.reason}`}
+                </div>
+              )}
               {projectOwnWorktree && (
                 <div className="brief-confirm-warning">
                   {ownWorktreeName

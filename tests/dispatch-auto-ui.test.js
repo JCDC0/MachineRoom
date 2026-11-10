@@ -1,0 +1,136 @@
+import { act, createElement } from 'react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import DispatchPanel from '../src/ui/panels/DispatchPanel.jsx'
+import { clearSplitRun } from '../src/ui/panels/runs.js'
+import { buttonWithText, withDom } from './helpers/uiDom.js'
+
+const AGENTS = [
+  { id: 'agent-opencode', key: 'opencode', name: 'OpenCode', adapterType: 'opencode_local', role: null },
+  { id: 'agent-opencode2', key: 'opencode2', name: 'OpenCode 2', adapterType: 'opencode_local', role: null },
+]
+
+const REASON = 'The small tier runs opencode2 on opencode-go/deepseek-v4.1-flash at max.'
+
+function makeClient({ route = true } = {}) {
+  const calls = { route: [], start: [] }
+  const client = {
+    health: async () => ({ lanes: true }),
+    agents: async () => AGENTS,
+    runs: async () => ({ running: [], recent: [], project: 'demo' }),
+    startRun: async (lane, body) => {
+      calls.start.push({ lane, body })
+      return { lane, queue: true, tasks: 1 }
+    },
+  }
+  if (route) {
+    client.routeLane = async (body) => {
+      calls.route.push(body)
+      return { lane: 'opencode2', model: 'opencode-go/deepseek-v4.1-flash', reasoning: 'max', tier: 'small', reason: REASON, skipped: [] }
+    }
+  }
+  return { client, calls }
+}
+
+async function settleTimers() {
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(0)
+  })
+}
+
+async function typeInto(node, text) {
+  await act(async () => {
+    node.focus()
+    node.dispatchEvent({ type: 'focusin', bubbles: true, cancelable: true })
+    node.value = text
+    node.dispatchEvent({ type: 'keyup', bubbles: true, cancelable: true })
+  })
+}
+
+describe('DispatchPanel auto lane', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+    clearSplitRun()
+  })
+
+  it('starts on Auto, asks the route after 400 ms and shows the answer', async () => {
+    vi.useFakeTimers()
+    const { client, calls } = makeClient()
+    await withDom(async ({ container, root }) => {
+      await act(async () => {
+        root.render(createElement(DispatchPanel, { client, initialAgents: AGENTS }))
+      })
+      await settleTimers()
+
+      const picker = container.querySelector('#project-run-lane')
+      expect(picker.querySelectorAll('option')[0].textContent).toBe('Auto')
+      expect(picker.querySelectorAll('option')[0].getAttribute('value')).toBe('auto')
+
+      await typeInto(container.querySelector('#project-run-task'), 'One.')
+      expect(calls.route).toEqual([])
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(399)
+      })
+      expect(calls.route).toEqual([])
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1)
+      })
+      expect(calls.route).toEqual([{ task: 'One.' }])
+      expect(container.textContent).toContain(`Auto: opencode2. ${REASON}`)
+
+      await act(async () => {
+        buttonWithText(container, 'Run').click()
+      })
+      expect(container.textContent).toContain('Lane: opencode2')
+      expect(container.textContent).toContain(`Picked by the routing policy: ${REASON}`)
+
+      await act(async () => {
+        buttonWithText(container, 'Confirm').click()
+      })
+      await settleTimers()
+      expect(calls.start).toEqual([{ lane: 'auto', body: { tasks: ['One.'], worktree: true } }])
+    })
+  })
+
+  it('asks again when the task changes and drops the old answer', async () => {
+    vi.useFakeTimers()
+    const { client, calls } = makeClient()
+    await withDom(async ({ container, root }) => {
+      await act(async () => {
+        root.render(createElement(DispatchPanel, { client, initialAgents: AGENTS }))
+      })
+      await settleTimers()
+      const task = container.querySelector('#project-run-task')
+      await typeInto(task, 'One.')
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(400)
+      })
+      expect(container.textContent).toContain('Auto: opencode2.')
+
+      client.routeLane = async (body) => {
+        calls.route.push(body)
+        return { lane: 'opencode', tier: 'medium', reason: 'The medium tier runs opencode at max.', skipped: [] }
+      }
+      await typeInto(task, 'Two.')
+      expect(container.textContent).not.toContain('Auto: opencode2.')
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(400)
+      })
+      expect(calls.route).toEqual([{ task: 'One.' }, { task: 'Two.' }])
+      expect(container.textContent).toContain('Auto: opencode. The medium tier runs opencode at max.')
+    })
+  })
+
+  it('shows no Auto when the bridge has no routeLane', async () => {
+    vi.useFakeTimers()
+    const { client } = makeClient({ route: false })
+    await withDom(async ({ container, root }) => {
+      await act(async () => {
+        root.render(createElement(DispatchPanel, { client, initialAgents: AGENTS }))
+      })
+      await settleTimers()
+      const picker = container.querySelector('#project-run-lane')
+      expect(picker.querySelectorAll('option').some((option) => option.getAttribute('value') === 'auto')).toBe(false)
+      expect(picker.querySelectorAll('option')[0].textContent).toBe('Select a lane')
+    })
+  })
+})

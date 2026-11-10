@@ -220,6 +220,29 @@ describe('planLaneTasks', () => {
     })
   })
 
+  it("pairs tasks in the route's order, then the roster's", () => {
+    const route = {
+      lane: 'claude',
+      skipped: [
+        { lane: 'hermes', why: 'The lane hermes is busy.' },
+        { lane: 'opencode2', why: 'The lane opencode2 is turned off.' },
+      ],
+    }
+    expect(planLaneTasks(['One.', 'Two.', 'Three.'], lanes, route)).toEqual({
+      pairs: [
+        { task: 'One.', lane: 'claude', name: 'Claude' },
+        { task: 'Two.', lane: 'opencode2', name: 'opencode2' },
+        { task: 'Three.', lane: 'opencode', name: 'OpenCode' },
+      ],
+      problem: null,
+    })
+  })
+
+  it('keeps the roster order with no route', () => {
+    const plan = planLaneTasks(['One.', 'Two.'], lanes, null)
+    expect(plan.pairs.map((pair) => pair.lane)).toEqual(['opencode', 'claude'])
+  })
+
   it('takes one task on one idle lane and trims the task', () => {
     expect(planLaneTasks(['  One.  '], lanes)).toEqual({
       pairs: [{ task: 'One.', lane: 'opencode', name: 'OpenCode' }],
