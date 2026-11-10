@@ -164,9 +164,37 @@ describe('a card with 61 items', () => {
   })
 })
 
+describe('a view the card already holds', () => {
+  it('keeps its rows and builds the row index only at the first lookup', () => {
+    const tree = makeTree({ root: 'demo', files: [...files(80), 'docs/a.md', 'docs/b.md'] })
+    const state = createState(tree, [{ key: 'hermes', name: 'Hermes' }])
+    state.agents.get('hermes').focus = ['docs/a.md']
+    const cards = createCards(fakeScene(), { glScene: fakeScene(), alwaysDepth: 1, maxFiles: 4 })
+    cards.sync(state)
+    cards.update(state, 0.016, camera())
+    const card = cards.cards.get('src')
+    const wanted = card.wanted
+    const rows = card.rows
+    const names = rowNames(card)
+    expect(card.rowIndex).toBeNull()
+
+    state.agents.get('hermes').focus = ['docs/b.md']
+    cards.update(state, 0.016, camera())
+
+    expect(card.view.items).toBe(wanted)
+    expect(card.wanted).toBe(wanted)
+    expect(card.rows).toBe(rows)
+    expect(rowNames(card)).toEqual(names)
+    expect(card.rowIndex).toBeNull()
+    cards.dispose()
+  })
+})
+
 describe('the row index of a card', () => {
   it('maps every path to its place in one pass', () => {
     const { cards, card } = setup(80)
+    expect(card.rowIndex).toBeNull()
+    cards.slotPosition('src', 'src/f71.js', new THREE.Vector3())
     expect(card.rowIndex).toBeInstanceOf(Map)
     expect(card.rowIndex.size).toBe(card.rowPaths.length)
     for (const path of ['src/f0.js', 'src/f70.js', 'src/f71.js', 'src/f79.js']) {
@@ -203,7 +231,7 @@ describe('a row that scrolls out of view', () => {
   }
 
   function scrollTo(card, path) {
-    const index = card.rowPaths.indexOf(path)
+    const index = card.wanted.findIndex((item) => item.path === path)
     card.items.scrollTop = Math.max(0, index) * ROW_H
     card.items.fire('scroll')
   }

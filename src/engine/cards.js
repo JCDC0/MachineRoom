@@ -559,8 +559,10 @@ export function createCards(cssScene, options = {}) {
       scale,
       rootName,
       rows: [],
-      rowPaths: [],
+      rowPaths: null,
       rowIndex: null,
+      rowItems: null,
+      rowHidden: -1,
       wanted: [],
       drawn: new Map(),
       virtual: false,
@@ -727,6 +729,14 @@ export function createCards(cssScene, options = {}) {
     return true
   }
 
+  function rowIndexOf(card) {
+    if (!card.rowIndex) {
+      card.rowPaths = card.wanted.map((item) => item.path)
+      card.rowIndex = new Map(card.rowPaths.map((path, index) => [path, index]))
+    }
+    return card.rowIndex
+  }
+
   function paintRows(card, view) {
     const wanted = view.state === 'files' ? view.items : []
     const limit = clampFileLimit(view.maxFiles ?? maxFilesLevel)
@@ -736,18 +746,17 @@ export function createCards(cssScene, options = {}) {
       card.itemsClass = itemsClass
       card.items.className = itemsClass
     }
-    const paths = wanted.map((item) => item.path)
     const hidden = view.state === 'files' ? view.hiddenItems : 0
-    const key = `${paths.join('\n')}|${hidden}`
     const limitChanged = card.limitRows !== limit
     card.limitRows = limit
-    if (key === card.rowKey) {
+    if (card.rowItems === wanted && card.rowHidden === hidden) {
       if (card.virtual && limitChanged) paintWindow(card, lastState, true)
       return
     }
-    card.rowKey = key
-    card.rowPaths = paths
-    card.rowIndex = new Map(paths.map((path, index) => [path, index]))
+    card.rowItems = wanted
+    card.rowHidden = hidden
+    card.rowPaths = null
+    card.rowIndex = null
     card.wanted = wanted
     card.hiddenRows = hidden
     card.window = null
@@ -968,7 +977,7 @@ export function createCards(cssScene, options = {}) {
   function slotPosition(dir, file, out) {
     const card = cards.get(dir)
     out.copy(center(dir))
-    const index = card?.rowIndex ? card.rowIndex.get(file) ?? -1 : -1
+    const index = card ? rowIndexOf(card).get(file) ?? -1 : -1
     if (index === -1) return out
     if (card.virtual && !card.drawn.has(file)) return out
     const rows = cardRows(card.view)
