@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { childOrbit, stripPoints } from '../src/engine/agents.js'
 import { cardPlan } from '../src/engine/cards.js'
 import { HUB_CENTER, ORCHESTRATOR_HOME, slotPoint } from '../src/engine/hub.js'
-import { nearestDrawnPath } from '../src/engine/room.js'
+import { frameTimes, nearestDrawnPath } from '../src/engine/room.js'
 import { isOrchestrator } from '../src/engine/shapes.js'
 import { RING_CENTER, RING_FRONT, RING_MAX_TOP, ROOT_AHEAD, ROOT_DROP, ringOf, ringRadius, shotgunOffset } from '../src/engine/ring.js'
 import { dirname, makeTree } from '../src/model/paths.js'
@@ -236,6 +236,7 @@ async function makeRoom(files, agents, handlers = {}) {
     rootName: 'demo',
     agents: roster,
     getState: () => current,
+    beforeFrame: handlers.beforeFrame ?? (() => {}),
     onInspect: handlers.onInspect ?? (() => {}),
     onDismiss: handlers.onDismiss ?? (() => {}),
     onPick: handlers.onPick ?? (() => {}),
@@ -515,6 +516,30 @@ describe('the room, played from a recorded lane run', () => {
     })
     expect(kids.map((_, index) => shotgunOffset(index, kids.length).cols)).toEqual([2, 2, 2, 2])
     expect(kids.map((_, index) => shotgunOffset(index, kids.length).rows)).toEqual([2, 2, 2, 2])
+  })
+})
+
+describe('the room frame clock', () => {
+  it('passes the real time since the last frame, capped at one second', async () => {
+    const seen = []
+    const { room } = await makeRoom(['src/a.js'], ['claude'], { beforeFrame: (ms) => seen.push(ms) })
+    try {
+      roomFrame?.(10_000)
+      seen.length = 0
+      roomFrame?.(10_250)
+      expect(seen).toEqual([250])
+      roomFrame?.(15_250)
+      expect(seen).toEqual([250, 1000])
+    } finally {
+      room.dispose()
+    }
+  })
+
+  it('keeps the room animations at a tenth of a second at most', () => {
+    expect(frameTimes(1000, 1250)).toEqual({ elapsed: 250, delta: 0.1 })
+    expect(frameTimes(1000, 6000)).toEqual({ elapsed: 1000, delta: 0.1 })
+    expect(frameTimes(1000, 1016)).toEqual({ elapsed: 16, delta: 0.016 })
+    expect(frameTimes(1000, 900)).toEqual({ elapsed: 0, delta: 0 })
   })
 })
 
