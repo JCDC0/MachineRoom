@@ -178,6 +178,20 @@ export function treeEvent(tree, sent = null, shape = null) {
   return `event: tree\ndata: ${JSON.stringify({ root: tree.root, files })}\n\n`
 }
 
+function addedPaths(previous, next) {
+  const added = []
+  let at = 0
+  for (const file of next) {
+    while (at < previous.length && previous[at] < file) at += 1
+    if (at >= previous.length || previous[at] !== file) added.push(file)
+  }
+  return added
+}
+
+function treeDeltaEvent(root, files) {
+  return `event: tree\ndata: ${JSON.stringify({ root, files })}\n\n`
+}
+
 function corsHeaders(req, isAllowed) {
   const origin = req.headers.origin
   if (origin && !isAllowed(origin)) return {}
@@ -291,6 +305,7 @@ export function trimHistory(history, now = Date.now) {
 export function createBridge(options = {}) {
   const projectRoot = options.projectRoot ?? process.env.PROJECT_ROOT ?? process.cwd()
   const treeReader = options.readTree ?? readTree
+  const packFolderTree = options.packTree ?? packTree
   const port = Number(options.port ?? process.env.PORT ?? 5174)
   const heartbeatMs = Number(options.heartbeatMs ?? 15000)
   const debounceMs = Number(options.debounceMs ?? 300)
@@ -572,7 +587,7 @@ export function createBridge(options = {}) {
       for (const client of clients) writeSseChange(client, event)
     },
   })
-  const treeSent = new WeakMap()
+  const treeClientVersion = new WeakMap()
   const folderClients = new WeakSet()
   const treeClients = new WeakSet()
   const history = []
@@ -594,6 +609,8 @@ export function createBridge(options = {}) {
   const treeVersions = new Map()
   let treeReading = null
   let treeDirty = false
+  let folderAnswer = null
+  let folderBuild = null
   const unreadable = createUnreadableCounter()
   const unparsedSince = new Date().toISOString()
   const masker = createSplitMasker()
@@ -613,12 +630,54 @@ export function createBridge(options = {}) {
     for (const client of clients) writeSseChange(client, event)
   }
 
-  function rememberTreeVersion(files) {
+  function rememberTreeVersion(added) {
     treeVersion += 1
-    treeVersions.set(treeVersion, files)
+    treeVersions.set(treeVersion, added)
     while (treeVersions.size > TREE_VERSIONS_KEPT) {
       treeVersions.delete(treeVersions.keys().next().value)
     }
+    folderAnswer = null
+  }
+
+  function treeFilesSince(sinceVersion) {
+    if (sinceVersion === treeVersion) return []
+    if (sinceVersion > treeVersion || sinceVersion < 1) return null
+    if (treeVersions.size > 0) {
+      const oldest = treeVersions.keys().next().value
+      if (sinceVersion < oldest - 1) return null
+    }
+    const files = []
+    for (const [version, added] of treeVersions) {
+      if (version <= sinceVersion) continue
+      for (const file of added) files.push(file)
+    }
+    return files
+  }
+
+  function folderAnswerFor(tree) {
+    const version = treeVersion
+    if (folderAnswer && folderAnswer.version === version) return Promise.resolve(folderAnswer)
+    if (folderBuild && folderBuild.version === version) return folderBuild.promise
+    const build = (async () => {
+      const body = { ...packFolderTree(tree), created: tree.created, version }
+      const payload = Buffer.from(JSON.stringify(body), 'utf8')
+      const gzipped = await gzipAsync(payload)
+      const answer = { version, body, payload, gzipped }
+      if (!stopped && answer.version === treeVersion) folderAnswer = answer
+      return answer
+    })()
+    const entry = { version, promise: build }
+    folderBuild = entry
+    const clear = () => {
+      if (folderBuild === entry) folderBuild = null
+    }
+    build.then(clear, clear)
+    return build
+  }
+
+  function writeWholeTree(client, tree) {
+    client.write(treeEvent(tree, null, folderClients.has(client) ? FOLDER_SHAPE : null))
+    treeClientVersion.set(client, treeVersion)
   }
 
   function publishTree(current) {
@@ -627,27 +686,30 @@ export function createBridge(options = {}) {
     lastTreeAt = Date.now()
     if (!treePrimed) {
       treePrimed = true
+      treeVersion = 1
       treeChangedAt = lastTreeAt
       lastFiles = current.files
-      rememberTreeVersion(current.files)
+      for (const client of clients) {
+        if (treeClients.has(client)) writeWholeTree(client, current)
+      }
       return false
     }
-    const changed =
-      current.files.length !== lastFiles.length ||
-      current.files.some((file, index) => file !== lastFiles[index])
+    const added = addedPaths(lastFiles, current.files)
+    const changed = added.length > 0 || current.files.length !== lastFiles.length
     if (!changed) return false
     treeChangedAt = lastTreeAt
     lastFiles = current.files
-    rememberTreeVersion(current.files)
-    const events = new Map()
+    rememberTreeVersion(added)
     for (const client of clients) {
       if (!treeClients.has(client)) continue
-      const sent = treeSent.get(client) ?? null
-      const shape = folderClients.has(client) ? FOLDER_SHAPE : null
-      const key = sent ?? shape
-      if (!events.has(key)) events.set(key, treeEvent(current, sent, shape))
-      treeSent.set(client, current.files)
-      if (events.get(key)) client.write(events.get(key))
+      const known = treeClientVersion.get(client)
+      const files = known === undefined ? null : treeFilesSince(known)
+      if (files === null) {
+        writeWholeTree(client, current)
+        continue
+      }
+      treeClientVersion.set(client, treeVersion)
+      if (files.length > 0) client.write(treeDeltaEvent(current.root, files))
     }
     return true
   }
@@ -703,15 +765,24 @@ export function createBridge(options = {}) {
     startTreeRead().catch(() => {})
   }
 
+  function adoptInitialTree(tree) {
+    if (!tree || !Array.isArray(tree.files)) return false
+    const root = typeof tree.root === 'string' && tree.root ? tree.root : basename(resolve(projectRoot))
+    publishTree({
+      root,
+      files: tree.files,
+      created: Array.isArray(tree.created) ? tree.created : [],
+    })
+    return true
+  }
+
   function startWatcher() {
-    if (!projectRoot) {
+    if (!projectRoot || stopped) {
       treePrimed = true
       return
     }
-    if (stopped) return
-    const read = startTreeRead().catch(() => {})
+    if (!adoptInitialTree(options.initialTree)) startTreeRead().catch(() => {})
     if (!armWatcher()) beginPolling(false)
-    return read
   }
 
   function armWatcher() {
@@ -1007,22 +1078,35 @@ export function createBridge(options = {}) {
 
     if (req.method === 'GET' && url.pathname === '/api/tree') {
       const wantsFolders = String(req.headers.accept ?? '').includes(`shape=${FOLDER_SHAPE}`)
-      const recent = lastTree && Date.now() - lastTreeAt <= TREE_REUSE_MS
-      const tree = wantsFolders && recent ? lastTree : await startTreeRead()
+      let tree
+      if (wantsFolders) {
+        tree = lastTree ?? (await startTreeRead())
+      } else {
+        const recent = lastTree && Date.now() - lastTreeAt <= TREE_REUSE_MS
+        tree = recent ? lastTree : await startTreeRead()
+      }
       if (stopped || !tree) {
         res.destroy()
         return
       }
-      const body = wantsFolders ? { ...packTree(tree), created: tree.created, version: treeVersion } : tree
-      const payload = Buffer.from(JSON.stringify(body), 'utf8')
-      const wantsGzip = /(^|,)\s*gzip\b/i.test(String(req.headers['accept-encoding'] ?? ''))
-      if (!wantsGzip) {
-        sendJson(req, res, 200, body)
+      if (!wantsFolders) {
+        sendJson(req, res, 200, tree)
         return
       }
-      const compressed = await gzipAsync(payload)
+      const answer = await folderAnswerFor(tree)
       if (stopped) {
         res.destroy()
+        return
+      }
+      const wantsGzip = /(^|,)\s*gzip\b/i.test(String(req.headers['accept-encoding'] ?? ''))
+      if (!wantsGzip) {
+        res.writeHead(200, {
+          ...corsHeaders(req, isAllowed),
+          'Content-Type': 'application/json; charset=utf-8',
+          Vary: 'Origin',
+          'Content-Length': answer.payload.length,
+        })
+        res.end(answer.payload)
         return
       }
       res.writeHead(200, {
@@ -1030,9 +1114,9 @@ export function createBridge(options = {}) {
         'Content-Type': 'application/json; charset=utf-8',
         'Content-Encoding': 'gzip',
         Vary: 'Origin, Accept-Encoding',
-        'Content-Length': compressed.length,
+        'Content-Length': answer.gzipped.length,
       })
-      res.end(compressed)
+      res.end(answer.gzipped)
       return
     }
 
@@ -1074,14 +1158,11 @@ export function createBridge(options = {}) {
         if (url.searchParams.get('tree') === FOLDER_SHAPE) folderClients.add(res)
         const sinceText = url.searchParams.get('since')
         const sinceVersion = sinceText && /^\d+$/.test(sinceText) ? Number(sinceText) : null
-        const sinceFiles = sinceVersion === null ? null : treeVersions.get(sinceVersion)
-        if (sinceFiles) {
-          treeSent.set(res, sinceFiles)
-          if (lastTree) {
-            const shape = url.searchParams.get('tree') === FOLDER_SHAPE ? FOLDER_SHAPE : null
-            const event = treeEvent(lastTree, sinceFiles, shape)
-            if (event) res.write(event)
-            treeSent.set(res, lastTree.files)
+        if (sinceVersion !== null) {
+          const files = treeFilesSince(sinceVersion)
+          if (files !== null) {
+            treeClientVersion.set(res, treeVersion)
+            if (files.length > 0 && lastTree) res.write(treeDeltaEvent(lastTree.root, files))
           }
         }
       }
@@ -1111,7 +1192,7 @@ export function createBridge(options = {}) {
     rememberSessionsParsers()
     lanesSource?.start()
     sessionsSource?.start()
-    await startWatcher()
+    startWatcher()
     projects.recordCurrent()
     if (stopped) throw new Error('The bridge stopped before it started.')
     return new Promise((resolveStart, rejectStart) => {

@@ -1,7 +1,7 @@
 import { rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { createBridge, treeReadDue } from '../server/index.js'
+import { FOLDER_SHAPE, createBridge, packTree, treeReadDue } from '../server/index.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
@@ -141,6 +141,7 @@ describe('a tree read in flight', () => {
     const { started } = startBridge({ readTree: queued.readTree, root: makeRoot() })
     queued.reads[0].resolve({ root: 'project', files: ['old.js'], created: [] })
     const { url } = await started
+    await wait(1100)
 
     const pending = fetch(`${url}/api/tree`, { signal: AbortSignal.timeout(5000) })
     await waitFor(() => queued.reads.length === 2)
@@ -149,6 +150,126 @@ describe('a tree read in flight', () => {
     const response = await pending
     expect(response.status).toBe(200)
     expect(await response.json()).toEqual({ root: 'project', files: ['src/a.js'], created: [] })
+  })
+})
+
+const FOLDER_ACCEPT = `application/json; shape=${FOLDER_SHAPE}`
+
+async function folderTree(url) {
+  const response = await fetch(`${url}/api/tree`, {
+    headers: { Accept: FOLDER_ACCEPT },
+    signal: AbortSignal.timeout(10000),
+  })
+  return { status: response.status, body: await response.json() }
+}
+
+describe('the folder tree answer', () => {
+  it('packs once and reuses the answer while the version holds', async () => {
+    const root = makeRoot()
+    writeFileSync(join(root, 'a.js'), '1\n')
+    let packs = 0
+    const bridge = createBridge({
+      projectRoot: root,
+      port: 0,
+      env: {},
+      readTree: async () => ({ root: 'project', files: ['a.js'], created: [] }),
+      packTree: (tree) => {
+        packs += 1
+        return packTree(tree)
+      },
+    })
+    bridges.push(bridge)
+    const { url } = await bridge.start()
+
+    const [first, second] = await Promise.all([folderTree(url), folderTree(url)])
+    expect(first.status).toBe(200)
+    expect(first.body.version).toBe(1)
+    expect(second.body).toEqual(first.body)
+    expect(packs).toBe(1)
+
+    const third = await folderTree(url)
+    expect(third.body).toEqual(first.body)
+    expect(packs).toBe(1)
+  })
+
+  it('answers a folder ask from the last tree at any age and starts no read', async () => {
+    const root = makeRoot()
+    writeFileSync(join(root, 'a.js'), '1\n')
+    let reads = 0
+    const bridge = createBridge({
+      projectRoot: root,
+      port: 0,
+      env: {},
+      debounceMs: 1000,
+      pollMs: 1000,
+      quietMs: 60000,
+      readTree: async () => {
+        reads += 1
+        return { root: 'project', files: ['a.js'], created: [] }
+      },
+    })
+    bridges.push(bridge)
+    const { url } = await bridge.start()
+    await waitFor(() => reads === 1)
+
+    await wait(1100)
+    const answer = await folderTree(url)
+    expect(answer.body.version).toBe(1)
+    expect(reads).toBe(1)
+  })
+
+  it('waits for the read in flight and starts no other', async () => {
+    const queued = queuedReads()
+    const { started } = startBridge({ readTree: queued.readTree, root: makeRoot() })
+    const { url } = await started
+
+    const pending = folderTree(url)
+    await wait(50)
+    expect(queued.reads).toHaveLength(1)
+    queued.reads[0].resolve({ root: 'project', files: ['a.js'], created: [] })
+    const answer = await pending
+    expect(answer.body.version).toBe(1)
+    expect(queued.reads).toHaveLength(1)
+  })
+})
+
+describe('the bridge before its first tree', () => {
+  it('answers health while the first read is open and tree waits for it', async () => {
+    const queued = queuedReads()
+    const { started } = startBridge({ readTree: queued.readTree, root: makeRoot() })
+    const { url } = await started
+
+    const health = await fetch(`${url}/api/health`, { signal: AbortSignal.timeout(2000) })
+    expect(health.status).toBe(200)
+    expect((await health.json()).ok).toBe(true)
+
+    const pending = fetch(`${url}/api/tree`, { signal: AbortSignal.timeout(5000) })
+    await wait(50)
+    queued.reads[0].resolve({ root: 'project', files: ['a.js'], created: [] })
+    const tree = await (await pending).json()
+    expect(tree.files).toEqual(['a.js'])
+    expect(queued.reads).toHaveLength(1)
+  })
+
+  it('takes an initial tree as its first one and starts no read', async () => {
+    let reads = 0
+    const bridge = createBridge({
+      projectRoot: makeRoot(),
+      port: 0,
+      env: {},
+      initialTree: { root: 'project', files: ['a.js', 'src/b.js'], created: [] },
+      readTree: async () => {
+        reads += 1
+        return { root: 'project', files: [], created: [] }
+      },
+    })
+    bridges.push(bridge)
+    const { url } = await bridge.start()
+
+    const folder = await folderTree(url)
+    expect(folder.body.version).toBe(1)
+    expect(folder.body.shape).toBe(FOLDER_SHAPE)
+    expect(reads).toBe(0)
   })
 })
 

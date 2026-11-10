@@ -15,6 +15,7 @@ import {
   upArgs,
   upBlock,
 } from '../server/doctor.js'
+import { createBridge, FOLDER_SHAPE } from '../server/index.js'
 import { withLanePrograms } from './helpers/lanePrograms.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 
@@ -365,6 +366,39 @@ describe('the doctor project read', () => {
     expect(result.lines.join('\n')).not.toContain('The project holds')
     expect(result.project).toBeNull()
     expect(result.exitCode).toBe(1)
+  })
+
+  it('hands its tree to the bridge so the project read happens once', async () => {
+    const options = doctorOptions()
+    let reads = 0
+    const tree = { root: 'project', files: ['src/a.js'], created: [] }
+    const result = await runDoctorWithProject({
+      ...options,
+      readProject: async () => {
+        reads += 1
+        return tree
+      },
+    })
+    expect(reads).toBe(1)
+    expect(result.tree).toEqual(tree)
+
+    let bridgeReads = 0
+    const bridge = createBridge({
+      projectRoot: options.projectRoot,
+      port: 0,
+      env: {},
+      initialTree: result.tree,
+      readTree: async () => {
+        bridgeReads += 1
+        return { root: 'project', files: [], created: [] }
+      },
+    })
+    cleanups.push(() => bridge.stop())
+    const { url } = await bridge.start()
+    const answer = await fetch(`${url}/api/tree`, { headers: { Accept: `application/json; shape=${FOLDER_SHAPE}` } })
+    expect(answer.status).toBe(200)
+    expect((await answer.json()).version).toBe(1)
+    expect(bridgeReads).toBe(0)
   })
 })
 

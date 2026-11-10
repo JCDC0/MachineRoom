@@ -154,6 +154,7 @@ async function startRoom(options, dist, { block = false } = {}) {
       staticDir: dist,
       lanesSource: options.lanes === true,
       sessionsSource: options.sessions === true,
+      initialTree: options.initialTree,
       onOpenProject,
     })
     info = await bridge.start()
@@ -209,6 +210,7 @@ async function up(options) {
   if (!result.folderOk) process.exit(1)
   if (result.exitCode !== 0) console.log(SOME_CHECKS_FAILED)
   else console.log(ALL_CHECKS_PASSED)
+  options.initialTree = result.tree ?? undefined
   await startRoom(options, dist, { block: true })
 }
 

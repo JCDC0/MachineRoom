@@ -219,6 +219,7 @@ describe('the bridge', () => {
     const loop = await startLaneBridge({ projectRoot: root, bridge: { debounceMs: 50 } })
     loops.push(loop)
     await waitForBridge(loop.url)
+    await getJson(`${loop.url}/api/tree`)
     let opened
     const ready = new Promise((resolve) => {
       opened = resolve
