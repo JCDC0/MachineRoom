@@ -291,6 +291,7 @@ describe('mr-agent MCP tools', () => {
       'edit_file',
       'list_dir',
       'search',
+      'glob_files',
       'run_shell',
       'web_search',
       'web_fetch',

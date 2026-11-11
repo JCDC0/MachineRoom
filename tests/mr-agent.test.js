@@ -1,6 +1,6 @@
-import { spawn } from 'node:child_process'
+import { execFileSync, spawn } from 'node:child_process'
 import { createServer } from 'node:http'
-import { existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -8,6 +8,8 @@ import { summarizeRun } from '../src/briefs/run.js'
 import { createRunLineReader } from '../src/briefs/recording.js'
 import { harnessByKey } from '../src/harnesses/index.js'
 import { killTree } from '../server/processTree.js'
+import { gitPath } from '../server/programPath.js'
+import { shellFor } from '../scripts/mr-agent.mjs'
 import { makeTempDir, removeTempDir } from './helpers/tempRoot.js'
 
 const SCRIPT = fileURLToPath(new URL('../scripts/mr-agent.mjs', import.meta.url))
@@ -165,6 +167,17 @@ function jsonLines(text) {
     .map((line) => JSON.parse(line))
 }
 
+async function runCalls({ folder, calls, env = {} }) {
+  const api = await startFakeApi((_body, index) =>
+    index < calls.length ? chatAnswer({ calls: [calls[index]] }) : chatAnswer({ text: 'Done.' }),
+  )
+  const result = await runAgent({ folder, api, env })
+  const users = jsonLines(result.stdout)
+    .filter((line) => line.type === 'user')
+    .map((line) => line.message.content[0])
+  return { api, result, users }
+}
+
 describe('mr-agent', () => {
   it('runs the file and shell tools and prints stream-json lines', async () => {
     const folder = tempDir()
@@ -211,7 +224,7 @@ describe('mr-agent', () => {
     const users = lines.filter((line) => line.type === 'user').map((line) => line.message.content[0])
     expect(users).toHaveLength(7)
     expect(users[0]).toMatchObject({ type: 'tool_result', tool_use_id: 'call_read', is_error: false })
-    expect(users[0].content).toBe('hello\n')
+    expect(users[0].content).toBe('1\thello')
     expect(users[1].is_error).toBe(false)
     expect(users[2].is_error).toBe(false)
     expect(users[3]).toMatchObject({ type: 'tool_result', tool_use_id: 'call_outside', is_error: true })
@@ -242,6 +255,7 @@ describe('mr-agent', () => {
       'edit_file',
       'list_dir',
       'search',
+      'glob_files',
       'run_shell',
       'web_search',
       'web_fetch',
@@ -254,8 +268,8 @@ describe('mr-agent', () => {
   it('offers only the tools each permission mode allows', async () => {
     const folder = tempDir()
     const cases = [
-      ['plan', ['read_file', 'list_dir', 'search', 'web_search', 'web_fetch', 'mcp_list_tools']],
-      ['edits', ['read_file', 'write_file', 'edit_file', 'list_dir', 'search', 'web_search', 'web_fetch', 'mcp_list_tools']],
+      ['plan', ['read_file', 'list_dir', 'search', 'glob_files', 'web_search', 'web_fetch', 'mcp_list_tools']],
+      ['edits', ['read_file', 'write_file', 'edit_file', 'list_dir', 'search', 'glob_files', 'web_search', 'web_fetch', 'mcp_list_tools']],
       ['ask', null],
       ['auto', null],
       ['bypass', null],
@@ -266,7 +280,7 @@ describe('mr-agent', () => {
       expect(result.code, mode).toBe(0)
       const offered = api.calls[0].body.tools.map((tool) => tool.function.name)
       if (names) expect(offered, mode).toEqual(names)
-      else expect(offered, mode).toHaveLength(10)
+      else expect(offered, mode).toHaveLength(11)
     }
   })
 
@@ -322,7 +336,7 @@ describe('mr-agent', () => {
     })
     expect(result.code).toBe(0)
     expect(readFileSync(join(folder, 'a.txt'), 'utf8')).toBe('made\n')
-    expect(api.calls[0].body.tools).toHaveLength(10)
+    expect(api.calls[0].body.tools).toHaveLength(11)
     expect(bridge.requests).toHaveLength(1)
     expect(bridge.requests[0].body).toEqual({
       id: 'orchestrator',
@@ -527,7 +541,7 @@ describe('mr-agent', () => {
     expect(existsSync(leftover)).toBe(false)
   })
 
-  it('cuts long shell output to 8000 characters', async () => {
+  it('keeps the head and tail of long shell output', async () => {
     const folder = tempDir()
     const command = `"${process.execPath}" -e "process.stdout.write('x'.repeat(9000))"`
     const api = await startFakeApi((_body, index) =>
@@ -539,8 +553,10 @@ describe('mr-agent', () => {
     expect(result.code).toBe(0)
     const users = jsonLines(result.stdout).filter((line) => line.type === 'user')
     expect(users).toHaveLength(1)
-    expect(users[0].message.content[0].content).toHaveLength(8000)
-    expect(users[0].message.content[0].content).toBe('x'.repeat(8000))
+    const content = users[0].message.content[0].content
+    expect(content.startsWith('x'.repeat(2000))).toBe(true)
+    expect(content.endsWith('x'.repeat(6000))).toBe(true)
+    expect(content).toContain('[1000 characters cut]')
   })
 
   it('does not pass the key to shell commands', async () => {
@@ -690,5 +706,167 @@ describe('mr-agent files', () => {
     expect(users[0].is_error).toBe(false)
     expect(users[1].is_error).toBe(true)
     expect(users[1].content).toContain('outside the working folder')
+  })
+})
+
+describe('mr-agent tools', () => {
+  it('reads numbered pages and says how many lines are left', async () => {
+    const folder = tempDir()
+    writeFileSync(join(folder, 'lines.txt'), ['one', 'two', 'three', 'four', 'five'].join('\n') + '\n')
+    writeFileSync(join(folder, 'big.txt'), Array.from({ length: 2005 }, (_, index) => `line ${index + 1}`).join('\n'))
+    const { users } = await runCalls({
+      folder,
+      calls: [
+        { name: 'read_file', arguments: { path: 'lines.txt', offset: 2, limit: 2 } },
+        { name: 'read_file', arguments: { path: 'big.txt' } },
+      ],
+    })
+    expect(users[0].content).toBe('2\ttwo\n3\tthree\n[2 more lines. Read again with offset to see them.]')
+    expect(users[0].is_error).toBe(false)
+    const big = users[1].content
+    const bigLines = big.split('\n')
+    expect(bigLines).toHaveLength(2001)
+    expect(bigLines[0]).toBe('1\tline 1')
+    expect(bigLines[1999]).toBe('2000\tline 2000')
+    expect(bigLines[2000]).toBe('[5 more lines. Read again with offset to see them.]')
+    expect(big).not.toContain('2001\tline 2001')
+  })
+
+  it('cuts a line longer than 2000 characters', async () => {
+    const folder = tempDir()
+    writeFileSync(join(folder, 'long.txt'), 'a'.repeat(3000))
+    const { users } = await runCalls({ folder, calls: [{ name: 'read_file', arguments: { path: 'long.txt' } }] })
+    expect(users[0].content).toBe(`1\t${'a'.repeat(2000)}`)
+    expect(users[0].is_error).toBe(false)
+  })
+
+  it('answers that a binary file is binary', async () => {
+    const folder = tempDir()
+    writeFileSync(join(folder, 'bin.dat'), Buffer.from([65, 0, 66]))
+    const { users } = await runCalls({ folder, calls: [{ name: 'read_file', arguments: { path: 'bin.dat' } }] })
+    expect(users[0].content).toContain('binary')
+    expect(users[0].is_error).toBe(false)
+  })
+
+  it('keeps the last line and the exit code of a failing command', async () => {
+    const folder = tempDir()
+    const command = `"${process.execPath}" -e "console.log('first');console.log('last-marker');process.exit(1)"`
+    const { users } = await runCalls({ folder, calls: [{ name: 'run_shell', arguments: { command } }] })
+    expect(users[0].is_error).toBe(true)
+    expect(users[0].content).toContain('last-marker')
+    expect(users[0].content.endsWith('exit 1')).toBe(true)
+  })
+
+  it('stops a command when the timeout in seconds runs out', async () => {
+    const folder = tempDir()
+    const { users } = await runCalls({ folder, calls: [{ name: 'run_shell', arguments: { command: 'sleep 5', timeout: 1 } }] })
+    expect(users[0].is_error).toBe(true)
+    expect(users[0].content).toContain('ran past 1 seconds')
+  })
+
+  it('chooses Git Bash, a PATH bash or PowerShell on Windows', () => {
+    const beside = 'C:\\Program Files\\Git\\bin\\bash.exe'
+    const gitExe = 'C:\\Program Files\\Git\\cmd\\git.exe'
+    expect(
+      shellFor('ls -la', {
+        platform: 'win32',
+        git: () => gitExe,
+        exists: (path) => path === beside,
+        onPath: () => null,
+      }),
+    ).toEqual({ file: beside, args: ['-c', 'ls -la'] })
+    const onPathBash = 'D:\\tools\\bash.exe'
+    expect(
+      shellFor('ls', {
+        platform: 'win32',
+        git: () => gitExe,
+        exists: (path) => path === onPathBash,
+        onPath: () => onPathBash,
+      }),
+    ).toEqual({ file: onPathBash, args: ['-c', 'ls'] })
+    expect(
+      shellFor('dir', {
+        platform: 'win32',
+        git: () => null,
+        exists: () => false,
+        onPath: () => null,
+      }),
+    ).toEqual({ file: 'powershell.exe', args: ['-NoProfile', '-Command', 'dir'] })
+    expect(shellFor('ls', { platform: 'linux' })).toEqual({ file: '/bin/sh', args: ['-c', 'ls'] })
+  })
+
+  it('skips folders git ignores when it searches', async () => {
+    const folder = tempDir()
+    mkdirSync(join(folder, 'ignored'), { recursive: true })
+    writeFileSync(join(folder, '.gitignore'), 'ignored/\n')
+    writeFileSync(join(folder, 'kept.txt'), 'needle here\n')
+    writeFileSync(join(folder, 'ignored', 'hidden.txt'), 'needle here\n')
+    execFileSync(gitPath(), ['init'], { cwd: folder, stdio: 'ignore' })
+    const { users } = await runCalls({ folder, calls: [{ name: 'search', arguments: { pattern: 'needle' } }] })
+    expect(users[0].content).toContain('kept.txt:1: needle here')
+    expect(users[0].content).not.toContain('hidden.txt')
+  })
+
+  it('filters a search by glob and ignores case when asked', async () => {
+    const folder = tempDir()
+    mkdirSync(join(folder, 'sub'), { recursive: true })
+    writeFileSync(join(folder, 'a.js'), 'Hello World\n')
+    writeFileSync(join(folder, 'b.txt'), 'Hello World\n')
+    writeFileSync(join(folder, 'sub', 'c.js'), 'hello there\n')
+    writeFileSync(join(folder, 'long.txt'), `needle ${'z'.repeat(400)}\n`)
+    const { users } = await runCalls({
+      folder,
+      calls: [
+        { name: 'search', arguments: { pattern: 'hello', glob: '*.js', ignore_case: true } },
+        { name: 'search', arguments: { pattern: 'hello', glob: '*.js' } },
+        { name: 'search', arguments: { pattern: 'needle' } },
+      ],
+    })
+    expect(users[0].content).toContain('a.js:1: Hello World')
+    expect(users[0].content).toContain('sub/c.js:1: hello there')
+    expect(users[0].content).not.toContain('b.txt')
+    expect(users[1].content).toContain('sub/c.js:1: hello there')
+    expect(users[1].content).not.toContain('a.js')
+    expect(users[2].content.startsWith('long.txt:1: needle')).toBe(true)
+    for (const line of users[2].content.split('\n')) expect(line.length).toBeLessThanOrEqual(300)
+  })
+
+  it('lists the files that match a glob', async () => {
+    const folder = tempDir()
+    mkdirSync(join(folder, 'src', 'nested'), { recursive: true })
+    writeFileSync(join(folder, 'src', 'a.js'), 'a\n')
+    writeFileSync(join(folder, 'src', 'b.js'), 'b\n')
+    writeFileSync(join(folder, 'src', 'c.txt'), 'c\n')
+    writeFileSync(join(folder, 'src', 'nested', 'd.js'), 'd\n')
+    writeFileSync(join(folder, 'root.js'), 'r\n')
+    const { users } = await runCalls({
+      folder,
+      calls: [
+        { name: 'glob_files', arguments: { pattern: '*.js', path: 'src' } },
+        { name: 'glob_files', arguments: { pattern: '**/*.js', path: '.' } },
+      ],
+    })
+    expect(users[0].content).toBe('src/a.js\nsrc/b.js\nsrc/nested/d.js')
+    expect(users[1].content).toBe('root.js\nsrc/a.js\nsrc/b.js\nsrc/nested/d.js')
+  })
+
+  it('replaces every match and answers with the line count', async () => {
+    const folder = tempDir()
+    writeFileSync(join(folder, 'a.txt'), 'x x x\n')
+    const { users } = await runCalls({
+      folder,
+      calls: [
+        { name: 'edit_file', arguments: { path: 'a.txt', old_string: 'x', new_string: 'y', replace_all: true } },
+        { name: 'write_file', arguments: { path: 'w.txt', content: 'a\nb\nc\n' } },
+        { name: 'edit_file', arguments: { path: 'a.txt', old_string: 'y', new_string: 'z' } },
+      ],
+    })
+    expect(users[0]).toMatchObject({ content: 'Edited a.txt. 1 line.', is_error: false })
+    expect(readFileSync(join(folder, 'a.txt'), 'utf8')).toBe('y y y\n')
+    expect(users[1]).toMatchObject({ content: 'Wrote w.txt. 3 lines.', is_error: false })
+    expect(readFileSync(join(folder, 'w.txt'), 'utf8')).toBe('a\nb\nc\n')
+    expect(users[2].is_error).toBe(true)
+    expect(users[2].content).toContain('more than once')
+    expect(readFileSync(join(folder, 'a.txt'), 'utf8')).toBe('y y y\n')
   })
 })
