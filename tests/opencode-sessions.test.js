@@ -219,6 +219,34 @@ describe('the OpenCode session reader', () => {
     expect(statusFrames(frames).at(-1).payload.runId).toBe('ses-1:3')
   })
 
+  it('drops a session the database deleted on the full read and does not read it again', () => {
+    const { dir, dbPath } = makeDatabase()
+    const projectRoot = join(dir, 'project')
+    const clock = { value: 5000 }
+    const { reader, frames } = startReader({ dbPath, projectRoot, runsFolder: join(dir, 'runs'), clock })
+
+    reader.tick()
+    addSession(dbPath, { id: 'ses-gone', directory: projectRoot, time: 1000 })
+    addMessage(dbPath, { id: 'm-user', sessionId: 'ses-gone', type: 'user', seq: 1, time: 1000 })
+    addMessage(dbPath, { id: 'm-idle', sessionId: 'ses-gone', type: 'idle', seq: 2, time: 1001, data: { outcome: 'succeeded' } })
+    reader.tick()
+    expect(reader.sessions().has('ses-gone')).toBe(true)
+
+    withDb(dbPath, (db) => {
+      db.prepare('DELETE FROM session_message WHERE session_id = ?').run('ses-gone')
+      db.prepare('DELETE FROM session_v2 WHERE id = ?').run('ses-gone')
+    })
+    clock.value += 60 * 1000
+    reader.tick()
+    expect(reader.sessions().has('ses-gone')).toBe(false)
+
+    const before = frames.length
+    clock.value += 5000
+    reader.tick()
+    expect(reader.sessions().has('ses-gone')).toBe(false)
+    expect(frames).toHaveLength(before)
+  })
+
   it('reads a turn with a read and an edit, then ends it on idle', () => {
     const { dir, dbPath } = makeDatabase()
     const projectRoot = join(dir, 'project')

@@ -9,6 +9,7 @@ const DEFAULT_SESSION_POLL_MS = 1000
 const DEFAULT_IDLE_SESSION_POLL_MS = 5000
 const TEXT_LIMIT = 2000
 const MAX_FORGOTTEN = 200
+const FULL_READ_MS = 60 * 1000
 
 export const OPENCODE_SESSION_AGENT = {
   id: 'agent-opencode-session',
@@ -100,6 +101,7 @@ export function createOpencodeSessionsReader(options = {}) {
   let hasTimeUpdated = false
   let fallbackNote = ''
   let highWater = -1
+  let lastFullReadAt = null
   let lastSessionScanAt = null
   let primed = false
   let stopped = false
@@ -155,15 +157,39 @@ export function createOpencodeSessionsReader(options = {}) {
     return true
   }
 
+  function reconcileRows(rows) {
+    const present = new Set()
+    let changed = 0
+    for (const row of rows) {
+      if (!row || typeof row.id !== 'string') continue
+      present.add(row.id)
+      if (takeRow(row)) changed += 1
+    }
+    for (const id of [...knownRows.keys()]) {
+      if (present.has(id)) continue
+      knownRows.delete(id)
+      sessions.delete(id)
+      sent.delete(id)
+      forgotten.delete(id)
+    }
+    return changed
+  }
+
   function sessionRows() {
     if (!sessionStmt) prepareStatements()
     if (!sessionStmt) return []
-    const incremental = hasTimeUpdated && highWater >= 0
-    const since = incremental ? highWater : null
-    const rows = incremental ? sessionSinceStmt.all(highWater) : sessionStmt.all()
+    const at = now()
+    const full = !hasTimeUpdated || highWater < 0 || lastFullReadAt === null || at - lastFullReadAt >= FULL_READ_MS
+    const since = full ? null : highWater
+    const rows = full ? sessionStmt.all() : sessionSinceStmt.all(highWater)
     let changed = 0
-    for (const row of rows) {
-      if (takeRow(row)) changed += 1
+    if (full) {
+      changed = reconcileRows(rows)
+      lastFullReadAt = at
+    } else {
+      for (const row of rows) {
+        if (takeRow(row)) changed += 1
+      }
     }
     let highest = highWater
     for (const row of rows) {
