@@ -1374,7 +1374,11 @@ export function createBridge(options = {}) {
   })
 
   async function start() {
-    moveRemovedLanesToProject({ projectRoot, runsFolder: bridgeRunsFolder })
+    try {
+      moveRemovedLanesToProject({ projectRoot, runsFolder: bridgeRunsFolder })
+    } catch (error) {
+      console.log(`Could not move the old removed lanes: ${error?.message ?? error}`)
+    }
     rememberLaneParsers()
     rememberSessionsParsers()
     lanesSource?.start()

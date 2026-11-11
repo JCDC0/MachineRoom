@@ -549,6 +549,30 @@ describe('POST /api/lanes/:key/delete', () => {
     }
   })
 
+  it('keeps starting when this project hidden lane file cannot be written', async () => {
+    const runs = tempDir('mr-move-blocked-')
+    saveAgentsConfig(runs, {
+      agents: [],
+      removed: ['claude', 'opencode2'],
+    })
+    const projectRoot = gitProject('mr-proj-blocked-')
+    mkdirSync(projectLanesFileFor(projectRoot, runs), { recursive: true })
+    const lines = []
+    const log = vi.spyOn(console, 'log').mockImplementation((line) => lines.push(String(line)))
+    try {
+      const { url } = await startBridgeRig({ projectRoot, runsFolder: runs })
+      const health = await getJson(`${url}/api/health`)
+      expect(health.status).toBe(200)
+
+      const failed = lines.filter((line) => line.startsWith('Could not move the old removed lanes: '))
+      expect(failed).toHaveLength(1)
+      expect(failed[0]).toContain('EISDIR')
+      expect(readAgentsConfig(runs).removed).toEqual(['claude', 'opencode2'])
+    } finally {
+      log.mockRestore()
+    }
+  })
+
   it('refuses delete for running lane with 409', async () => {
     const runs = tempDir('mr-running-')
     saveAgentsConfig(runs, {
