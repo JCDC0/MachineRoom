@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- An agent's beat ring reads as white: it draws at up to 0.8 opacity, and at least 0.35 of that on a weak beat, where it used the hub's 0.32 times the beat and showed as a faint grey loop under the agent (task P46).
 - The native agent works like Claude Code over a whole run: it reads the project's AGENTS.md or CLAUDE.md and knows its system, shell and date, retries a rate limit or a server error up to 4 times, keeps a long run under 400,000 characters by clearing old tool output, runs up to 200 steps and reports its peak context; on DeepSeek V4.1 Flash it fixed two bugs and added a coupon, a formatter and their tests in 23 seconds for under a cent (task P45).
 - The native agent's tools work like Claude Code's: it reads a file 2000 numbered lines at a time, runs commands in Git Bash on Windows instead of cmd.exe, keeps the end of a long command's output and its exit code, skips gitignored files when it searches, and gains glob_files and replace_all; on a scripted run the request after reading a 1.36 MB file fell from 1.4 MB to 85 KB (task P44).
 - A file deleted from the project leaves the room: the bridge's tree events name the paths that left the list, the page drops the file's row and a folder card left with no file, and a file an agent is working on stays until its run ends; a whole list from the bridge drops only files no agent touched, so a written file git does not list stays (task P43).

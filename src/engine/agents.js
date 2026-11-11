@@ -6,7 +6,7 @@ import { CSS3DObject } from 'three/addons/renderers/CSS3DRenderer.js'
 import { ownerOf, sectorArcs } from '../model/hierarchy.js'
 import { dirname } from '../model/paths.js'
 import { CHILD_LIFE_MS } from '../model/state.js'
-import { AGENT_RING_BASE, AGENT_RING_GROW, AGENT_RING_MS, AGENT_RING_POOL, HUB_RADIUS, HUB_Y, ORCHESTRATOR_HOME, ORCHESTRATOR_LIFT, PARK_LIFT, RING_MAX_OPACITY, SWAY_LIFT, SWAY_RATE, SWAY_SCALE, danceEnvelope, hasSubs, isSessionReader, parkedKeysFor, readerPoint, ringPulse, sectorSlotAngles, slotAngle, startDanceEnvelope, subRingPlace, writeColor, writeOpacity } from './hub.js'
+import { AGENT_RING_BASE, AGENT_RING_GROW, AGENT_RING_MAX_OPACITY, AGENT_RING_MS, AGENT_RING_OPACITY_FLOOR, AGENT_RING_POOL, HUB_RADIUS, HUB_Y, ORCHESTRATOR_HOME, ORCHESTRATOR_LIFT, PARK_LIFT, SWAY_LIFT, SWAY_RATE, SWAY_SCALE, danceEnvelope, hasSubs, isSessionReader, parkedKeysFor, readerPoint, ringPulse, sectorSlotAngles, slotAngle, startDanceEnvelope, subRingPlace, writeColor, writeOpacity } from './hub.js'
 import { INTERNET_RADIUS } from './internet.js'
 import { ORCHESTRATOR_PULSE_SCALE, ORCHESTRATOR_SHAPE, PREFERRED, PULSE_BANDS, PULSE_SCALE, SUB_PULSE_SCALE, bandForPoint, isOrchestrator, isSubOrchestrator, nextSpareShape, shapeGeometry, shapesFor, vertexOffset } from './shapes.js'
 import { GREEN, RED, TUNNEL_GREY, WEB, WHITE, agentColor, agentColors, cssColor, easeRate, lineMaterial, paintAgentColor, still, textSprite } from './sprites.js'
@@ -1325,7 +1325,7 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
         continue
       }
       const age = now - slot.start
-      ringPulse(AGENT_RING_BASE, AGENT_RING_GROW, age, AGENT_RING_MS, slot.strength, RING_MAX_OPACITY, slot.pulse)
+      ringPulse(AGENT_RING_BASE, AGENT_RING_GROW, age, AGENT_RING_MS, slot.strength, AGENT_RING_MAX_OPACITY, slot.pulse, AGENT_RING_OPACITY_FLOOR)
       if (age >= AGENT_RING_MS) {
         slot.line.visible = false
         continue
