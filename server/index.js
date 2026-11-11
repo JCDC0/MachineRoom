@@ -100,14 +100,11 @@ function walkFiles(listDir, currentDir, prefix = '', out = []) {
   return out
 }
 
-export function readTree(projectRoot, { listDir = readdirSync } = {}) {
-  if (!projectRoot) return Promise.resolve({ root: '', files: [], created: [] })
-  const resolved = resolve(projectRoot)
-  const root = basename(resolved)
-  return new Promise((resolveTree) => {
+function gitListPaths(resolved, args) {
+  return new Promise((resolveList) => {
     execFile(
       gitPath(),
-      ['-C', resolved, 'ls-files', '-z', '--cached', '--others', '--exclude-standard'],
+      ['-C', resolved, 'ls-files', '-z', ...args],
       {
         encoding: 'utf8',
         env: { ...process.env, GIT_CEILING_DIRECTORIES: dirname(resolved) },
@@ -117,51 +114,48 @@ export function readTree(projectRoot, { listDir = readdirSync } = {}) {
       },
       (error, stdout) => {
         if (error) {
-          const files = walkFiles(listDir, resolved).sort()
-          resolveTree({ root, files, created: [] })
+          resolveList(null)
           return
         }
-        const files = stdout
-          .split('\0')
-          .filter(Boolean)
-          .map((line) => line.replace(/\\/g, '/'))
-          .sort()
-        resolveTree({ root, files, created: [] })
+        resolveList(
+          stdout
+            .split('\0')
+            .filter(Boolean)
+            .map((line) => line.replace(/\\/g, '/'))
+        )
       }
     )
   })
 }
 
-export function readTreePartial(projectRoot, names) {
-  const wanted = Array.isArray(names) ? names.filter((name) => typeof name === 'string' && name !== '') : []
-  if (!projectRoot || wanted.length === 0) return Promise.resolve(null)
+function dropDeleted(files, deleted) {
+  if (deleted === null) return files
+  const gone = new Set(deleted)
+  return files.filter((file) => !gone.has(file))
+}
+
+export async function readTree(projectRoot, { listDir = readdirSync } = {}) {
+  if (!projectRoot) return { root: '', files: [], created: [] }
   const resolved = resolve(projectRoot)
   const root = basename(resolved)
-  return new Promise((resolveTree) => {
-    execFile(
-      gitPath(),
-      ['-C', resolved, 'ls-files', '-z', '--cached', '--others', '--exclude-standard', '--', ...wanted],
-      {
-        encoding: 'utf8',
-        env: { ...process.env, GIT_CEILING_DIRECTORIES: dirname(resolved) },
-        maxBuffer: TREE_MAX_BUFFER,
-        timeout: TREE_TIMEOUT_MS,
-        windowsHide: true,
-      },
-      (error, stdout) => {
-        if (error) {
-          resolveTree(null)
-          return
-        }
-        const files = stdout
-          .split('\0')
-          .filter(Boolean)
-          .map((line) => line.replace(/\\/g, '/'))
-          .sort()
-        resolveTree({ root, files, created: [] })
-      }
-    )
-  })
+  const listed = await gitListPaths(resolved, ['--cached', '--others', '--exclude-standard'])
+  if (listed === null) {
+    const files = walkFiles(listDir, resolved).sort()
+    return { root, files, created: [] }
+  }
+  const deleted = await gitListPaths(resolved, ['--deleted'])
+  return { root, files: dropDeleted(listed, deleted).sort(), created: [] }
+}
+
+export async function readTreePartial(projectRoot, names) {
+  const wanted = Array.isArray(names) ? names.filter((name) => typeof name === 'string' && name !== '') : []
+  if (!projectRoot || wanted.length === 0) return null
+  const resolved = resolve(projectRoot)
+  const root = basename(resolved)
+  const listed = await gitListPaths(resolved, ['--cached', '--others', '--exclude-standard', '--', ...wanted])
+  if (listed === null) return null
+  const deleted = await gitListPaths(resolved, ['--deleted', '--', ...wanted])
+  return { root, files: dropDeleted(listed, deleted).sort(), created: [] }
 }
 
 export function mergeNamedFiles(current, names, listed) {

@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process'
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { createBridge, mergeNamedFiles, readTreePartial } from '../server/index.js'
+import { createBridge, mergeNamedFiles, readTree, readTreePartial } from '../server/index.js'
 import { gitPath } from '../server/programPath.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 
@@ -155,6 +155,25 @@ describe('readTreePartial', () => {
     const dir = makeRoot()
     writeFileSync(join(dir, 'a.js'), 'x')
     expect(await readTreePartial(dir, ['a.js'])).toBeNull()
+  })
+})
+
+describe('an unstaged delete', () => {
+  it('leaves the list after a full read and after a partial read', async () => {
+    const dir = makeRoot()
+    execFileSync(gitPath(), ['init', '--quiet', '--initial-branch=main'], { cwd: dir, stdio: 'ignore' })
+    writeFileSync(join(dir, 'a.js'), 'x')
+    writeFileSync(join(dir, 'b.js'), 'x')
+    mkdirSync(join(dir, 'dir'))
+    writeFileSync(join(dir, 'dir', 'a.js'), 'x')
+    writeFileSync(join(dir, 'dir', 'b.js'), 'x')
+    execFileSync(gitPath(), ['add', '--', '.'], { cwd: dir, stdio: 'ignore' })
+    rmSync(join(dir, 'b.js'))
+    rmSync(join(dir, 'dir', 'b.js'))
+
+    expect((await readTree(dir)).files).toEqual(['a.js', 'dir/a.js'])
+    expect((await readTreePartial(dir, ['b.js'])).files).toEqual([])
+    expect((await readTreePartial(dir, ['dir'])).files).toEqual(['dir/a.js'])
   })
 })
 
