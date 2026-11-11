@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The native agent trims old assistant text and old write_file and edit_file arguments, then the newest six messages, so a request stays under MR_AGENT_CONTEXT_CHARS (P50).
 - Review 10 (AUDIT-2026-11-REVIEW-10.md) reads P44 to P47 and P36b: 7 findings, 4 proved, fixed by P50 to P52 (P48).
 - Removing a lanes.json lane hides it in this project only, the bridge moves an old removed list into the project's hidden lanes, and Settings says Remove from project or Delete everywhere (P47).
 - A new file reaches the room six to ten times sooner on a large project: when the watcher names at most 50 paths, the bridge lists only those with git ls-files instead of the whole project, so one new file takes about 160 ms at 200,000 files where it took 1.6 seconds; a burst still runs full reads as before (task P36b).
