@@ -17,7 +17,16 @@ const SHELL_TIMEOUT_MS = 120000
 const SHELL_TIMEOUT_MAX_S = 600
 const SHELL_HEAD_LIMIT = 2000
 const SHELL_TAIL_LIMIT = 6000
-const MAX_STEPS = 60
+const DEFAULT_MAX_STEPS = 200
+const MAX_TOKENS = 32000
+const DEFAULT_CONTEXT_CHARS = 400000
+const KEEP_TOOL_RESULTS = 6
+const TOOL_RESULT_REMOVED = '[Output removed to save room. Run the tool again if it is needed.]'
+const INSTRUCTIONS_LIMIT = 20000
+const RETRY_LIMIT = 4
+const RETRY_BASE_MS = 2000
+const RETRY_MAX_MS = 60000
+const RETRY_STATUS = new Set([429, 500, 502, 503, 529])
 const SEARCH_MATCH_LIMIT = 200
 const SEARCH_LINE_LIMIT = 300
 const SEARCH_FILE_LIMIT = 2000000
@@ -30,8 +39,49 @@ const MISSING_KEY = 'Set MACHINEROOM_API_KEY or OPENROUTER_API_KEY.'
 const MCP_TEXT_LIMIT = 20000
 const MCP_EMPTY = 'No MCP servers are configured.'
 
-const SYSTEM_PROMPT =
-  'You are MachineRoom, a coding agent. Work only inside the working folder. Use the tools to read, write, edit, list, search and run commands. When the work is done, reply with plain text and no tool call.'
+function envNumber(env, name, fallback) {
+  const value = Number(env?.[name])
+  return Number.isFinite(value) && value > 0 ? Math.trunc(value) : fallback
+}
+
+function platformName(platform) {
+  if (platform === 'win32') return 'Windows'
+  if (platform === 'darwin') return 'macOS'
+  if (platform === 'linux') return 'Linux'
+  return String(platform)
+}
+
+function instructionDocs(cwd) {
+  for (const name of ['AGENTS.md', 'CLAUDE.md']) {
+    const full = join(cwd, name)
+    let info
+    try {
+      info = statSync(full)
+    } catch {
+      continue
+    }
+    if (!info.isFile()) continue
+    try {
+      return { name, text: readFileSync(full, 'utf8').slice(0, INSTRUCTIONS_LIMIT) }
+    } catch {}
+  }
+  return null
+}
+
+export function systemPrompt({ cwd, shell, platform = process.platform, date = new Date() } = {}) {
+  const file = typeof shell?.file === 'string' && shell.file !== '' ? shell.file : '/bin/sh'
+  const lines = [
+    `You are MachineRoom, a coding agent. Work only inside the working folder ${cwd}.`,
+    `The system is ${platformName(platform)}. run_shell runs commands with ${file}.`,
+    `Today is ${date.toISOString().slice(0, 10)}.`,
+    'Use the tools to read, write, edit, list, search and run commands.',
+    "Read a file before you edit it. Keep changes small. Run the project's tests when you change code.",
+    'When the work is done, reply with plain text and no tool call, ending with a short report of what you changed and what you could not check.',
+  ]
+  const docs = instructionDocs(cwd)
+  if (docs) lines.push(`Project instructions from ${docs.name}:`, docs.text)
+  return lines.join('\n')
+}
 
 const CORE_TOOLS = [
   {
@@ -271,11 +321,11 @@ function sanitize(text, key) {
 }
 
 function parseArgs(argv) {
-  const options = { model: '', cwd: process.cwd(), endpoint: '', prompt: '' }
+  const options = { model: '', cwd: process.cwd(), endpoint: '', prompt: '', reasoning: '' }
   const words = []
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index]
-    if (arg === '--model' || arg === '--cwd' || arg === '--endpoint') {
+    if (arg === '--model' || arg === '--cwd' || arg === '--endpoint' || arg === '--reasoning') {
       const value = argv[index + 1]
       if (value === undefined) throw new Error(`${arg} needs a value.`)
       options[arg.slice(2)] = value
@@ -283,7 +333,7 @@ function parseArgs(argv) {
       continue
     }
     if (arg === '--help' || arg === '-h') {
-      process.stdout.write('Usage: node scripts/mr-agent.mjs --model ID [--endpoint NAME] [--cwd FOLDER] PROMPT\n')
+      process.stdout.write('Usage: node scripts/mr-agent.mjs --model ID [--endpoint NAME] [--cwd FOLDER] [--reasoning EFFORT] PROMPT\n')
       return null
     }
     if (arg.startsWith('--')) throw new Error(`Unknown option ${arg}.`)
@@ -764,11 +814,19 @@ function shellTimeoutMs(args) {
   return SHELL_TIMEOUT_MS
 }
 
+function underFolder(file, folder) {
+  if (typeof folder !== 'string' || folder.trim() === '') return false
+  const root = win32.resolve(folder).toLowerCase().replace(/[\\/]+$/, '')
+  const target = win32.resolve(file).toLowerCase()
+  return target === root || target.startsWith(`${root}\\`)
+}
+
 export function shellFor(command, {
   platform = process.platform,
   git = gitPath,
   onPath = programPath,
   exists = existsSync,
+  systemRoot = process.env.SystemRoot || process.env.SYSTEMROOT || process.env.WINDIR || '',
 } = {}) {
   if (platform !== 'win32') return { file: '/bin/sh', args: ['-c', command] }
   let bash = ''
@@ -776,13 +834,13 @@ export function shellFor(command, {
     const gitExe = git()
     if (gitExe) {
       const beside = win32.resolve(win32.dirname(gitExe), '..', 'bin', 'bash.exe')
-      if (exists(beside)) bash = beside
+      if (exists(beside) && !underFolder(beside, systemRoot)) bash = beside
     }
   } catch {}
   if (bash === '') {
     try {
       const found = onPath('bash')
-      if (found && exists(found)) bash = found
+      if (found && exists(found) && !underFolder(found, systemRoot)) bash = found
     } catch {}
   }
   if (bash !== '') return { file: bash, args: ['-c', command] }
@@ -949,32 +1007,90 @@ async function runTool(name, args, cwd, web) {
   }
 }
 
+function retryBaseMs() {
+  const value = Number(process.env.MR_AGENT_RETRY_BASE_MS)
+  return Number.isFinite(value) && value >= 0 ? value : RETRY_BASE_MS
+}
+
+function retryDelayMs(attempt, response) {
+  const header = response?.headers?.get?.('retry-after')
+  let delay = null
+  if (typeof header === 'string' && header.trim() !== '') {
+    const seconds = Number(header)
+    if (Number.isFinite(seconds) && seconds >= 0) delay = seconds * 1000
+    else {
+      const when = Date.parse(header)
+      if (Number.isFinite(when)) delay = Math.max(0, when - Date.now())
+    }
+  }
+  if (delay === null) delay = retryBaseMs() * 2 ** attempt
+  return Math.min(delay, RETRY_MAX_MS)
+}
+
+function sleep(ms) {
+  return new Promise((done) => setTimeout(done, ms))
+}
+
 async function post(url, key, payload) {
   const headers = { 'content-type': 'application/json' }
   if (key) headers.authorization = `Bearer ${key}`
-  let response
-  try {
-    response = await fetch(`${url}/chat/completions`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(payload),
-      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-    })
-  } catch (error) {
-    throw new Error(`The API request failed: ${error?.message ?? String(error)}`)
-  }
-  if (!response.ok) {
-    let detail = ''
+  for (let attempt = 0; attempt <= RETRY_LIMIT; attempt += 1) {
+    let response
     try {
-      detail = await response.text()
-    } catch {}
-    detail = sanitize(detail.slice(0, 500), key)
-    throw new Error(`The API answered ${response.status}${detail ? `: ${detail}` : ''}.`)
+      response = await fetch(`${url}/chat/completions`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+      })
+    } catch (error) {
+      const failure = new Error(`The API request failed: ${sanitize(error?.message ?? String(error), key)}`)
+      if (attempt === RETRY_LIMIT) throw failure
+      await sleep(retryDelayMs(attempt, null))
+      continue
+    }
+    if (!response.ok) {
+      let detail = ''
+      try {
+        detail = await response.text()
+      } catch {}
+      detail = sanitize(detail.slice(0, 500), key)
+      const failure = new Error(`The API answered ${response.status}${detail ? `: ${detail}` : ''}.`)
+      if (!RETRY_STATUS.has(response.status) || attempt === RETRY_LIMIT) throw failure
+      await sleep(retryDelayMs(attempt, response))
+      continue
+    }
+    try {
+      return await response.json()
+    } catch {
+      throw new Error('The API answer was not JSON.')
+    }
   }
-  try {
-    return await response.json()
-  } catch {
-    throw new Error('The API answer was not JSON.')
+  throw new Error('The API request failed.')
+}
+
+function contextLimit(env) {
+  return envNumber(env, 'MR_AGENT_CONTEXT_CHARS', DEFAULT_CONTEXT_CHARS)
+}
+
+function maxSteps(env) {
+  return envNumber(env, 'MR_AGENT_MAX_STEPS', DEFAULT_MAX_STEPS)
+}
+
+function messageChars(messages) {
+  return JSON.stringify(messages).length
+}
+
+function boundMessages(messages, limit) {
+  if (messageChars(messages) <= limit) return
+  const toolIndexes = []
+  messages.forEach((message, index) => {
+    if (message?.role === 'tool') toolIndexes.push(index)
+  })
+  const editable = toolIndexes.slice(0, Math.max(0, toolIndexes.length - KEEP_TOOL_RESULTS))
+  for (const index of editable) {
+    if (messageChars(messages) <= limit) break
+    messages[index] = { ...messages[index], content: TOOL_RESULT_REMOVED }
   }
 }
 
@@ -1015,10 +1131,13 @@ async function main() {
     url = baseUrl(process.env)
   }
   const web = { runsFolder: runsFolder() }
+  const shell = shellFor('')
   const messages = [
-    { role: 'system', content: SYSTEM_PROMPT },
+    { role: 'system', content: systemPrompt({ cwd: options.cwd, shell }) },
     { role: 'user', content: options.prompt },
   ]
+  const limit = contextLimit(process.env)
+  const stepLimit = maxSteps(process.env)
   let inputTokens = 0
   let outputTokens = 0
   let cost = null
@@ -1038,8 +1157,17 @@ async function main() {
   }
 
   try {
-    for (step = 0; step < MAX_STEPS; step += 1) {
-      const data = await post(url, key, { model: options.model, messages, tools: toolsForMode(PERMISSION_MODE), tool_choice: 'auto' })
+    for (step = 0; step < stepLimit; step += 1) {
+      boundMessages(messages, limit)
+      const payload = {
+        model: options.model,
+        messages,
+        tools: toolsForMode(PERMISSION_MODE),
+        tool_choice: 'auto',
+        max_tokens: MAX_TOKENS,
+      }
+      if (options.reasoning !== '') payload.reasoning = { effort: options.reasoning }
+      const data = await post(url, key, payload)
       const message = replyOf(data)
       const usage = usageOf(data)
       inputTokens += usage.input
@@ -1060,7 +1188,16 @@ async function main() {
       calls.forEach((call, index) => {
         items.push({ type: 'tool_use', id: call.id, name: STREAM_NAMES[call.name] ?? call.name, input: streamInput(call.name, inputs[index].args) })
       })
-      if (items.length > 0) writeJson({ type: 'assistant', message: { role: 'assistant', content: items } })
+      if (items.length > 0) {
+        writeJson({
+          type: 'assistant',
+          message: {
+            role: 'assistant',
+            content: items,
+            usage: { input_tokens: usage.input, output_tokens: usage.output },
+          },
+        })
+      }
       if (calls.length === 0) {
         finish(false, lastText)
         return
@@ -1089,7 +1226,7 @@ async function main() {
         })
       }
     }
-    finish(true, lastText !== '' ? lastText : `Stopped after ${MAX_STEPS} steps.`)
+    finish(true, lastText !== '' ? lastText : `Stopped after ${stepLimit} steps.`)
   } catch (error) {
     finish(true, String(error?.message ?? error))
   }
