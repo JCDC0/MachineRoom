@@ -1,4 +1,3 @@
-import lanes from '../../../docs/agents/lanes.json'
 import { harnessByKey } from '../../harnesses/index.js'
 
 function laneHarness(lane) {
@@ -10,14 +9,8 @@ function laneHarness(lane) {
   return Object.hasOwn(harnessByKey, match[1]) ? harnessByKey[match[1]] : null
 }
 
-export const VALID_LANES = Object.freeze(
-  Object.entries(lanes)
-    .filter(([key, entry]) => key !== 'orchestrator' && entry && typeof entry === 'object' && entry.cli)
-    .map(([key]) => key)
-)
-
 export function validLanes(agents) {
-  if (!Array.isArray(agents)) return [...VALID_LANES]
+  if (!Array.isArray(agents)) return []
   const names = []
   const seen = new Set()
   for (const agent of agents) {
@@ -70,7 +63,7 @@ export function formatBriefTitle(brief) {
 export function ownerToLane(briefOrOwner, lanes) {
   const first = getFirstOwner(briefOrOwner)
   if (!first) return null
-  const names = lanes === undefined ? VALID_LANES : laneNames(lanes)
+  const names = laneNames(lanes)
   return names.some((name) => String(name).toLowerCase() === first) ? first : null
 }
 
@@ -95,7 +88,7 @@ function laneNames(lanes) {
     if (Array.isArray(lanes.agents)) return validLanes(lanes.agents)
     return Object.keys(lanes)
   }
-  return [...VALID_LANES]
+  return []
 }
 
 function harnessName(lane) {
@@ -103,7 +96,7 @@ function harnessName(lane) {
 }
 
 export function runLaneFor(brief, running, lanes) {
-  const owner = ownerToLane(brief)
+  const owner = ownerToLane(brief, lanes)
   if (!owner) return null
   const busy = new Set(runningLaneNames(running))
   if (!busy.has(owner)) return owner
