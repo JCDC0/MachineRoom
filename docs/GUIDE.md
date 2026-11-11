@@ -301,7 +301,7 @@ A lane started with `npm run run-lane` sees only a short allow-list of the shell
 
 The doctor prints `FAIL The OpenCode lane program was not found: <path>.` or the same for another lane. The room still opens, but that lane cannot start.
 
-Install the program, sign in, and check that it starts in the same shell (`opencode --version`, `claude --version`). If it is installed somewhere else, put its full path in `cli.bin` for that lane in the room's `lanes.json` (`config/lanes.json`, or the folder `MACHINEROOM_LANES_DIR` names), then run the doctor again.
+Install the program, sign in, and check that it starts in the same shell (`opencode --version`, `claude --version`). A lane you make starts the program its harness names by default (OpenCode and AGY at their usual install folders, the others by name on `PATH`). If it is installed somewhere else, put its full path in `cli.bin` for that lane in the room's `lanes.json` (`config/lanes.json`, or the folder `MACHINEROOM_LANES_DIR` names), then run the doctor again.
 
 ### The doctor prints FAIL lines
 

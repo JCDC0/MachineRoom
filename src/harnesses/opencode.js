@@ -80,6 +80,8 @@ function opencodeUsage(log) {
 export const opencodeHarness = {
   key: 'opencode',
   name: 'OpenCode',
+  laneName: 'OpenCode',
+  defaultProgram: '%APPDATA%\\npm\\node_modules\\@opencode\\cli\\bin\\opencode.exe',
   adapterType: 'opencode_local',
   createParser: createOpencodeParser,
   command({ cli, prompt, env = {}, folder, title, reasoning, mcpConfig } = {}) {

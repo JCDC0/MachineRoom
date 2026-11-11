@@ -315,6 +315,8 @@ function acpLineReader() {
 export const acpHarness = {
   key: 'acp',
   name: 'ACP',
+  laneName: 'ACP',
+  defaultProgram: 'acp',
   adapterType: 'acp_local',
   transport: 'acp',
   createParser: createAcpParser,

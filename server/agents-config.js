@@ -5,6 +5,7 @@ import { readEndpoints } from './endpoints.js'
 import { MODELS, modelsFor } from './models.js'
 import { programPath } from './programPath.js'
 import { readLanes, runsFolder } from './lanes-source.js'
+import { harnessByKey } from '../src/harnesses/index.js'
 import { harnessUnavailableProblem, modelUnavailableProblem } from './model-list.js'
 import { machineroomModels, modelAllowed, readHarnessModelsCache } from './harness-models.js'
 
@@ -93,6 +94,10 @@ export function isHarnessAvailable(harnessKey, { lanes = {}, env = process.env, 
       laneBin = lane.cli.bin
       break
     }
+  }
+  const descriptor = Object.hasOwn(harnessByKey, harnessKey) ? harnessByKey[harnessKey] : null
+  if (!laneBin && typeof descriptor?.defaultProgram === 'string' && descriptor.defaultProgram !== '') {
+    laneBin = descriptor.defaultProgram
   }
 
   if (laneBin) {
@@ -261,17 +266,22 @@ export function buildMadeLane(agent, lanesJson = {}) {
   if (!template && lanesJson?.orchestrator?.cli?.harness === agent.harness) {
     template = lanesJson.orchestrator
   }
+  const descriptor = Object.hasOwn(harnessByKey, agent.harness) ? harnessByKey[agent.harness] : null
 
   const cli = template?.cli
     ? { ...template.cli, model: agent.model }
-    : { harness: agent.harness, bin: agent.harness, model: agent.model }
+    : {
+        harness: agent.harness,
+        bin: descriptor?.defaultProgram ?? agent.harness,
+        model: agent.model,
+      }
   if (agent.endpoint) cli.endpoint = agent.endpoint
   else delete cli.endpoint
 
   return {
     key: agent.key,
     name: agent.name,
-    harness: template?.harness ?? agent.harness,
+    harness: template?.harness ?? descriptor?.laneName ?? agent.harness,
     custom: true,
     model: agent.model,
     effort: agent.effort ?? null,

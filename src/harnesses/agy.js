@@ -32,6 +32,8 @@ function agyUsage(log) {
 export const agyHarness = {
   key: 'agy',
   name: 'AGY',
+  laneName: 'agy',
+  defaultProgram: '%LOCALAPPDATA%\\agy\\bin\\agy.exe',
   adapterType: 'process',
   parserByAdapter: false,
   createParser: createAgyParser,

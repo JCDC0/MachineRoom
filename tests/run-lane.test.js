@@ -1462,6 +1462,7 @@ describe('scripts/run-lane.mjs', () => {
         MACHINEROOM_LANES_FILE: lanesFileUnderWorktrees(folder),
         MACHINEROOM_RUNS: runs,
         LOCALAPPDATA: process.env.LOCALAPPDATA ?? folder,
+        APPDATA: process.env.APPDATA ?? folder,
       })
       expect(result.code).toBe(0)
       expect(result.stdout).toContain('args:')
