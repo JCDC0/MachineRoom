@@ -1,5 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
+import { projectLanesFileFor, readHiddenLanes, writeHiddenLanes } from './active-lanes.js'
 import { readEndpoints } from './endpoints.js'
 import { MODELS, modelsFor } from './models.js'
 import { programPath } from './programPath.js'
@@ -302,11 +303,9 @@ export function readAllLanes(options = {}) {
   const base = lanesJson ?? readLanes(folder)
   const config = readAgentsConfig(runsDir)
   const agents = agentsList ?? config.agents
-  const removed = new Set(config.removed)
 
   const all = {}
   for (const [key, lane] of Object.entries(base ?? {})) {
-    if (key !== 'orchestrator' && removed.has(key)) continue
     all[key] = lane
   }
   for (const agent of agents) {
@@ -315,6 +314,23 @@ export function readAllLanes(options = {}) {
     }
   }
   return all
+}
+
+export function moveRemovedLanesToProject({ projectRoot, runsFolder: folder = runsFolder(), print = console.log } = {}) {
+  const config = readAgentsConfig(folder)
+  const moved = config.removed
+  if (moved.length === 0) return { moved: [], hidden: [] }
+  const file = projectLanesFileFor(projectRoot ?? process.cwd(), folder)
+  const hidden = readHiddenLanes(file)
+  for (const key of moved) {
+    if (!hidden.includes(key)) hidden.push(key)
+  }
+  writeHiddenLanes(file, hidden)
+  saveAgentsConfig(folder, { agents: config.agents, removed: [] })
+  if (typeof print === 'function') {
+    print(`Moved ${moved.join(', ')} from the removed list to this project's hidden lanes.`)
+  }
+  return { moved, hidden }
 }
 
 export function createAgentLane(body, {
@@ -405,6 +421,7 @@ export function createAgentLane(body, {
 
 export function createAgentsConfigApi(options = {}) {
   const runsDir = options.runsFolder ?? runsFolder()
+  const projectRoot = options.projectRoot ?? process.cwd()
   const sendJson = options.sendJson
   const readJsonBody = options.readJsonBody
   const notify = options.notify
@@ -580,7 +597,9 @@ export function createAgentsConfigApi(options = {}) {
 
       const baseLanes = getBaseLanes()
       const config = readAgentsConfig(runsDir)
-      const fromBase = Object.hasOwn(baseLanes, key) && !config.removed.includes(key)
+      const hiddenFile = projectLanesFileFor(projectRoot, runsDir)
+      const hidden = readHiddenLanes(hiddenFile)
+      const fromBase = Object.hasOwn(baseLanes, key) && !hidden.includes(key)
       const agentIndex = config.agents.findIndex((a) => a.key === key)
       if (!fromBase && agentIndex === -1) {
         sendJson(req, res, 404, { error: laneNotFoundProblem(key) })
@@ -601,13 +620,15 @@ export function createAgentsConfigApi(options = {}) {
       }
 
       const agents = config.agents
-      let removed = config.removed
       if (fromBase) {
-        removed = [...removed, key]
+        writeHiddenLanes(hiddenFile, [...hidden, key])
       } else {
         agents.splice(agentIndex, 1)
+        if (hidden.includes(key)) {
+          writeHiddenLanes(hiddenFile, hidden.filter((entry) => entry !== key))
+        }
       }
-      saveAgentsConfig(runsDir, { agents, removed })
+      saveAgentsConfig(runsDir, { agents, removed: config.removed })
 
       const active = typeof activeLanes === 'function' ? activeLanes() : activeLanes
       if (active && typeof active.isChosen === 'function' && active.isChosen()) {

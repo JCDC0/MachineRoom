@@ -8,7 +8,7 @@ import { gzip as gzipCallback } from 'node:zlib'
 import { createSplitMasker } from '../src/briefs/audit.js'
 import { createUnreadableCounter } from '../src/model/parsers/unreadable.js'
 import { createActiveLanesApi } from './active-lanes.js'
-import { createAgentsConfigApi } from './agents-config.js'
+import { createAgentsConfigApi, moveRemovedLanesToProject } from './agents-config.js'
 import { createAssistantApi } from './assistant.js'
 import { createBriefsApi } from './briefs.js'
 import { changeEvents, createControlApi } from './control.js'
@@ -1211,6 +1211,7 @@ export function createBridge(options = {}) {
   })
 
   async function start() {
+    moveRemovedLanesToProject({ projectRoot, runsFolder: bridgeRunsFolder })
     rememberLaneParsers()
     rememberSessionsParsers()
     lanesSource?.start()

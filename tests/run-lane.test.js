@@ -4,6 +4,8 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { gitPath } from '../server/programPath.js'
+import { saveAgentsConfig } from '../server/agents-config.js'
+import { projectLanesFileFor, writeHiddenLanes } from '../server/active-lanes.js'
 import { briefProblems, briefWorktreeProblems, commandFor, DEFAULT_MINUTES, filterRunsSince, laneCommandProblem, readinessLine, retryStartProblem, SINCE_PROBLEM, startFailureText, worktreeFor, formatOutcomes, formatStats, formatSummary, laneLockPids, laneLockText, laneStats, laneStopProblem, laneWithOverrides, nextTestStep, parseRunArgs, projectRunGit, runListLine, runRecord, sessionToolLines, summarizeRun, UNATTENDED_NOTE, unattendedPrompt } from '../src/briefs/run.js'
 import { branchFor, parseBriefs } from '../src/briefs/briefs.js'
 import { harnessByKey } from '../src/harnesses/index.js'
@@ -1441,6 +1443,28 @@ describe('scripts/run-lane.mjs', () => {
       expect(forced.stdout).toContain('file:')
       expect(forced.stdout).toContain('args:')
       expect(forced.stdout).toContain('cwd:')
+    } finally {
+      rmSync(folder, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+    }
+  })
+
+  it('runs a dry run for a lane hidden in a project and left in an old removed list', async () => {
+    const folder = makeTempDir('machine-room-hidden-lane-')
+    try {
+      const project = join(folder, 'Other')
+      mkdirSync(project, { recursive: true })
+      const init = spawnSync(gitPath(), ['init'], { cwd: project, encoding: 'utf8', windowsHide: true })
+      expect(init.status).toBe(0)
+      const runs = join(folder, 'runs')
+      writeHiddenLanes(projectLanesFileFor(project, runs), ['opencode'])
+      saveAgentsConfig(runs, { agents: [], removed: ['opencode'] })
+      const result = await runLane(['opencode', '--project', project, '--task', 'Fix it.', '--dry-run'], {
+        MACHINEROOM_LANES_FILE: lanesFileUnderWorktrees(folder),
+        MACHINEROOM_RUNS: runs,
+        LOCALAPPDATA: process.env.LOCALAPPDATA ?? folder,
+      })
+      expect(result.code).toBe(0)
+      expect(result.stdout).toContain('args:')
     } finally {
       rmSync(folder, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
     }
