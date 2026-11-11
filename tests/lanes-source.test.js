@@ -857,6 +857,93 @@ describe('the idle lane source', () => {
     expect(lists).toBe(listed)
   })
 
+  it('makes no stat call on a quiet log at rest and checks it on the two second scan', () => {
+    const base = tempDir()
+    const runs = join(base, 'runs')
+    mkdirSync(runs, { recursive: true })
+    const worktree = join(base, 'MachineRoom-opencode3')
+    const lanes = lanesFor({ opencode: worktree })
+    let current = 1_000_000
+    const stats = []
+    const frames = []
+    const source = createLanesSource({
+      folder: runs,
+      lanes,
+      quietMs: 100,
+      pollMs: 20,
+      scanMs: 2000,
+      now: () => current,
+      statFile: (path) => {
+        stats.push(path)
+        return statSync(path)
+      },
+      watchFolder: quietWatch(() => {}),
+      onFrame: (frame) => frames.push(frame),
+    })
+    cleanups.push(() => source.stop())
+    writeFileSync(join(runs, 'opencode-S6a-20261024-160000.log'), `${toolLine(`${worktree}\\src\\a.js`)}\n`)
+    source.start()
+
+    current += 200
+    source.tick()
+    expect(endFrame(frames).payload).toMatchObject({ status: 'failed', error: 'no record' })
+    expect(stats).toEqual([])
+
+    for (let index = 0; index < 5; index += 1) {
+      current += 200
+      source.tick()
+    }
+    expect(stats).toEqual([])
+
+    current += 800
+    source.tick()
+    expect(stats).toHaveLength(1)
+  })
+
+  it('reopens a quiet log that grew on the two second scan', () => {
+    const base = tempDir()
+    const runs = join(base, 'runs')
+    mkdirSync(runs, { recursive: true })
+    const worktree = join(base, 'MachineRoom-opencode3')
+    const lanes = lanesFor({ opencode: worktree })
+    let current = 1_000_000
+    const frames = []
+    const source = createLanesSource({
+      folder: runs,
+      lanes,
+      quietMs: 100,
+      pollMs: 20,
+      scanMs: 2000,
+      now: () => current,
+      watchFolder: quietWatch(() => {}),
+      onFrame: (frame) => frames.push(frame),
+    })
+    cleanups.push(() => source.stop())
+    const logPath = join(runs, 'opencode-S6a-20261024-160500.log')
+    writeFileSync(logPath, `${toolLine(`${worktree}\\src\\one.js`, { id: 'one' })}\n`)
+    source.start()
+
+    current += 200
+    source.tick()
+    const ended = endFrame(frames)
+    expect(ended.payload).toMatchObject({ status: 'failed', error: 'no record' })
+    expect(logFrames(frames)).toHaveLength(1)
+
+    appendFileSync(logPath, `${toolLine(`${worktree}\\src\\two.js`, { id: 'two' })}\n`)
+    current += 200
+    source.tick()
+    const running = () =>
+      frames.filter((frame) => frame.type === 'heartbeat.run.status' && frame.payload.status === 'running')
+    expect(running()).toHaveLength(1)
+
+    current += 1800
+    source.tick()
+    expect(running()).toHaveLength(2)
+    expect(running()[1].payload.runId).toBe(ended.payload.runId)
+    expect(logFrames(frames)).toHaveLength(2)
+    expect(logFrames(frames)[1].payload.seq).toBe(2)
+  })
+
   it('parses the lanes once across 100 ticks and again after the file changes', () => {
     const base = tempDir('mr-lanes-cache-')
     const runs = join(base, 'runs')

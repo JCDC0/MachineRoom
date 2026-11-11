@@ -292,6 +292,7 @@ export function createLanesSource(options = {}) {
   const onFrame = options.onFrame ?? (() => {})
   const listFolder = typeof options.listFolder === 'function' ? options.listFolder : (dir) => readdirSync(dir, { withFileTypes: true })
   const watchFolder = typeof options.watchFolder === 'function' ? options.watchFolder : watch
+  const statFile = typeof options.statFile === 'function' ? options.statFile : statSync
   const active = new Map()
   const quiet = new Map()
   const seen = new Set()
@@ -614,23 +615,31 @@ export function createLanesSource(options = {}) {
     return now() - lastScanAt >= scanMs
   }
 
+  function checkQuietRun(run) {
+    let size
+    try {
+      size = statFile(run.path).size
+    } catch {
+      return
+    }
+    if (size > run.offset) reopenRun(run)
+  }
+
   function tick() {
     if (stopped || ticking) return
     ticking = true
     try {
-      if (scanDue()) {
+      const scanning = scanDue()
+      if (scanning) {
         scan()
         lastScanAt = now()
         scanWanted = false
       }
       for (const run of [...quiet.values()]) {
-        let size
-        try {
-          size = statSync(run.path).size
-        } catch {
-          continue
-        }
-        if (size > run.offset) reopenRun(run)
+        const named = pendingChecks.has(run.key)
+        if (!scanning && !named) continue
+        pendingChecks.delete(run.key)
+        checkQuietRun(run)
       }
       if (active.size === 0) return
       const records = recordsCache.read()
