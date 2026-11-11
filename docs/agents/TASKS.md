@@ -550,3 +550,38 @@ Files: README.md.
 `tests/run-lane-stop.test.js` failed once on a merge on 2026-11-11 and passed on a retry, while other lanes ran their suites. Run the file 20 times alone and 10 times with `node scripts/test.mjs` running beside it, find which test fails and why (a fixed wait, a port, a process not yet started or a shared temp folder), and make it wait for the state it needs instead of a time. Do not raise a timeout to hide it. Give the runs and failures before and after in your report.
 
 Files: tests/run-lane-stop.test.js, tests/helpers/, scripts/run-lane.mjs.
+
+## The fixes from review 11 (2026-11-12)
+
+Each brief fixes findings of `docs/agents/AUDIT-2026-11-REVIEW-11.md`. Read only the findings it names. Work on a temporary runs folder and project, never on `%TEMP%\machineroom-runs`.
+
+**P60. Reviews, Auto and the doctor see the room's own lanes (AGY).** Read no part of TASKS.md beyond this brief, and of the review only findings 2, 4, 7 and 8. Use no subagents. Commit each step as you finish it, and stop starting new work at minute 50. Edit only the files listed below.
+
+1. `server/reviews.js` builds its lane map from the room's lanes: `readAllLanes` over `lanesFolder()`, so the lanes the owner made in `<runs>/agents.json` can be reviewed and merged, and a project's own `docs/agents/lanes.json` is used only when the room was started with that folder as `MACHINEROOM_LANES_DIR`. The fleet's `ROOM_BRIEFS` fallback is gone.
+2. Auto reads the policy from the same folder as the lanes (`server/policy.js`, `server/runs.js`), so on MachineRoom's own checkout without `MACHINEROOM_LANES_DIR` it reads `config/policy.json` and says `There is no lane for the TIER tier. Make one in the room.` when no lane fits.
+3. `server/doctor.js` checks the program of every lane `readAllLanes` returns, the made lanes included.
+4. `scripts/merge-lane.mjs` and `scripts/review-lane.mjs` name the lane file they read in their error, not `docs/agents/lanes.json`.
+5. Tests with a temp runs folder holding one made lane and `config/` lanes: its review diff answers 200 and not 404; Auto on MachineRoom's checkout reads `config/policy.json`; the doctor lists the made lane's program; the error names the file read. With `MACHINEROOM_LANES_DIR=docs/agents` the fleet works as now.
+
+Run `npx vitest related --run` on every file you changed, `npm run build` and `npm run pack-check`; all must pass.
+
+Files: server/reviews.js, server/policy.js, server/runs.js, server/doctor.js, scripts/merge-lane.mjs, scripts/review-lane.mjs, tests/.
+
+**P61. The native agent keeps the results of the turn it is in (OpenCode).** Read no part of TASKS.md beyond this brief, and of the review only finding 3. Use no subagents. Commit each step as you finish it, and stop starting new work at minute 35. Edit only the files listed below.
+
+1. `boundMessages` in `scripts/mr-agent.mjs` never replaces a tool result that answers a call of the newest assistant message with `tool_calls`. It trims older turns first, and when the current turn's results alone are over the bound it cuts each one's text to the 2,000 characters P50 keeps, with the marker, instead of removing it.
+2. Tests with a fake endpoint: seven parallel `list_dir` calls with `MR_AGENT_CONTEXT_CHARS=500` keep all seven results readable in the next request; an older turn is trimmed before the current one; the P50 tests stay as they are.
+
+Run `npx vitest related --run` on every file you changed; it must pass.
+
+Files: scripts/mr-agent.mjs, tests/mr-agent.test.js.
+
+**P62. A tree read starts no git it does not need (OpenCode).** Starts after P57 is merged. Read no part of TASKS.md beyond this brief, and of the review only findings 5 and 6. Use no subagents. Commit each step as you finish it, and stop starting new work at minute 40. In `server/index.js` change only the tree read and the watcher code.
+
+1. When the list call fails, `readTree` and `readTreePartial` skip the `--deleted` call, and the bridge keeps that the folder is not a git work tree until it restarts, so a plain folder walks with no git process and a watcher event on it goes straight to the walk.
+2. The 30 second quiet full read is armed only after a partial read, and is cleared when a full read starts or polling takes over, as the docs say.
+3. Tests: a plain folder's read starts no git process after the first; a watcher event on a plain folder starts none; a full read after an event arms no quiet read; a partial read still arms one.
+
+Run `npx vitest related --run` on every file you changed and `npm run build`; both must pass.
+
+Files: server/index.js, tests/.
