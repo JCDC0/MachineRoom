@@ -276,3 +276,39 @@ Files: docs/agents/ARCHITECTURE.md, docs/agents/architecture/, src/briefs/briefs
 Run `npx vitest related --run` on every file you changed, the tests of step 4, `npm run build` and `npm run pack-check`; all must pass. Give the size of `TASKS.md` before and after, and the time of `npm run run-lane -- opencode P35 --dry-run` before and after.
 
 Files: docs/agents/TASKS.md, docs/agents/history/TASKS-ARCHIVE.md, server/lane-tasks.js, tests/.
+
+## A lighter watcher, a lighter frame and a batch review (2026-11-11)
+
+The hunts of 2026-11-10 left two costs open: the bridge lists the whole project again each time a file appears, and the room's frame does work for every drawn card whether it moved or not. P36 and P37 cut them with no change to what the owner sees. P38 reviews what was merged since the last push. Other lanes measure at the same time, so time each number three times and give the median.
+
+**P36. A new file is listed by its path, not by a read of the whole project (OpenCode).** Read no part of TASKS.md beyond this brief, and of `docs/agents/AUDIT-2026-11-LIGHT-BRIDGE.md` only its finding table. Use no subagents. Commit each step as you finish it, and stop starting new work at minute 50. Do not edit any file under `docs/`, `src/` or `scripts/` but `scripts/scale-live.mjs`.
+
+On a checkout of 200,000 files each `git ls-files` keeps a core busy for 3.7 seconds, and a burst of new files starts three or four of them. The watcher in `server/index.js` already gets the name of what changed.
+
+1. While the watcher is armed, collect the names its events carry. After the quiet time the bridge already waits, when it holds at most 200 distinct names and every event carried one, list only those: `git ls-files -z --cached --others --exclude-standard -- NAMES` through `gitPath()` with an argument array and the limits `readTree` has, so the ignore rules stay git's own and a named folder lists what is under it. Add the paths it answers that the bridge does not hold yet, and publish them through `publishTree` as a full read does, so the version, the kept added paths and the page events stay as they are. A name under `.git` or `.worktrees` is skipped as now.
+2. Fall back to the full read, as now, when an event carries no name, when more than 200 names wait, when the partial list fails or times out, when the folder is not a git checkout, and when the watcher cannot be armed. Every tenth partial read in a row is followed by one full read, so a missed event cannot hide a file for long.
+3. Tests with an injected lister and watcher: one new file costs one partial list and no full read; a new folder's files arrive; an ignored file does not; 201 names fall back; a failed partial list falls back; an event with no name falls back; the tenth partial read is followed by a full one; a page still gets only the paths it has not had.
+4. Add to `npm run scale-live` how many full and partial lists a burst starts. Run it at 40,000 and 200,000 files with `--seed 36` and give, in your report, the burst's reads, the bridge's CPU share and the time from a file's write to the page, before and after.
+
+Run `npx vitest related --run` on every file you changed, `npm run build` and `npm run pack-check`; all must pass.
+
+Files: server/index.js, scripts/scale-live.mjs, tests/.
+
+**P37. A card that did not move costs the frame nothing (OpenCode).** Read no part of TASKS.md beyond this brief, and of `docs/agents/AUDIT-2026-11-LIGHT-BROWSER.md` only its finding table and the orchestrator's corrections. Use no subagents. Commit each step as you finish it, and stop starting new work at minute 50. Do not edit any file under `docs/`, `server/` or `src/ui/`, nor `src/Stage.jsx`. Nothing the owner sees may change: no place, size, colour, timing or class of any card, string, strand or tunnel.
+
+A profile of `?replay&scale=200000` at play (P26) put the room's `frame` at 3.9 seconds of a 20 second window, and what grows with the room is the work done for each drawn card on every frame: `update` and `build` in `src/engine/strings.js`, and `anchor`, `cardBaseWidth`, `cardAnchorOf` and `recompute` in `src/engine/cards.js`. That room draws 171 cards.
+
+1. Give each card a move stamp that changes only when its place, lift, pop, scale or size changes. `cards.anchor` answers from a value kept per card and stamp, and computes `cardBaseWidth` and its size once per size change, not per call.
+2. `strings.js` reads a string's two ends only when either card's stamp changed since its last write, and skips the string otherwise. The tunnel waypoints in `src/engine/agents.js` use the same kept anchors.
+3. Keep every pure helper's answer the same. Add tests with a counter: a frame over 171 resting cards computes no anchor and writes no string; moving one card recomputes that card's anchor and only the strings that end on it; a size change recomputes its width once.
+4. Measure in Node with a small fake for what the code needs of the DOM and three.js, 171 cards and their strings: the time of 1,000 frames at rest and of 1,000 frames with one card moving, before and after. Give the numbers in your report. Do not start a browser.
+
+Run `npx vitest related --run` on every file you changed and `npm run build`; both must pass. The orchestrator checks the room by eye at 1280 by 800.
+
+Files: src/engine/cards.js, src/engine/strings.js, src/engine/agents.js, tests/.
+
+**P38. Review the merges since the last push (OpenCode).** Read no part of TASKS.md beyond this brief. Use no subagents. Change no code. Commit the file by minute 45.
+
+Read `git log --first-parent origin/main..refs/heads/main` and review the code each merge of P19, P24 to P27, P29 to P33 and P35 brought, with `git show -m --first-parent SHA`, against the code around it. Hunt for what a test would not show: a cache that can answer stale data and what makes it fresh again, a refusal or an origin check that a refactor dropped or reordered (`server/runs.js` moved the checks of `POST /api/control/runs` into helpers in P31), a file read or a program started with a path a page can name, a list that grows without a bound, work that still runs on every tick, and a number in `docs/agents/ARCHITECTURE.md` or `docs/agents/CHANGELOG.md` that the code does not match. Run a finding's test or a short script when one would settle it, and say which findings you proved and which you only read. Write `docs/agents/AUDIT-2026-11-REVIEW-9.md`: a table of at most 12 findings, the one that would hurt the owner most first, each with `file:line`, what goes wrong and when, and the smallest fix; then at most three proposed briefs. Write no finding you cannot point to in the code.
+
+Files: docs/agents/AUDIT-2026-11-REVIEW-9.md.
