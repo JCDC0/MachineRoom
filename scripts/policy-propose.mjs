@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import { SINCE_PROBLEM, dayStart, filterRunsSince } from '../src/briefs/run.js'
 import { readPolicy } from '../src/policy/route.js'
 import { policyDiff, policyText, proposePolicy } from '../src/policy/proposals.js'
 import { outcomeTable } from '../server/outcomes.js'
-import { outcomesFile, readAllRunRecords, readOutcomeRecords, runsFile } from '../server/runs.js'
+import { outcomesFile, readAllRunRecords, readMainSubjectsSync, readOutcomeRecords, runsFile } from '../server/runs.js'
 
 const USAGE = 'Use: npm run policy-propose -- [--since YYYY-MM-DD] [--min N]'
 const MIN_PROBLEM = '--min needs a whole number from 1 to 1000.'
@@ -48,6 +48,10 @@ function patchStamp(date) {
   return `${day}-${time}`
 }
 
+export function buildTable(runs, outcomes, subjects = readMainSubjectsSync()) {
+  return outcomeTable(runs, outcomes, subjects)
+}
+
 function main(argv) {
   const parsed = parseArgs(argv)
   if (parsed.error) {
@@ -80,7 +84,7 @@ function main(argv) {
   }
 
   const runs = filterRunsSince(readAllRunRecords(runsFile()), parsed.since)
-  const rows = outcomeTable(runs, readOutcomeRecords(outcomesFile()))
+  const rows = outcomeTable(runs, readOutcomeRecords(outcomesFile()), readMainSubjectsSync())
   const minDecided = parsed.min === null ? MIN_DEFAULT : Number(parsed.min)
   const answer = proposePolicy({ policy, rows, minDecided })
 
@@ -101,4 +105,6 @@ function main(argv) {
   return 0
 }
 
-process.exitCode = main(process.argv.slice(2))
+if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.meta.url) {
+  process.exitCode = main(process.argv.slice(2))
+}
