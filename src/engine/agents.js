@@ -300,16 +300,6 @@ export function litChain(dir, links, mask, out = [], cache = null) {
 export function speckPolyline(start, chain, anchorOf, end, out = []) {
   const points = out ?? []
   let count = 0
-  let routed = Array.isArray(chain) && chain.length > 0
-  if (routed) {
-    for (let index = 0; index < chain.length; index += 1) {
-      const spot = typeof anchorOf === 'function' ? anchorOf(chain[index]) : null
-      if (!spot || !Number.isFinite(Number(spot.x)) || !Number.isFinite(Number(spot.y)) || !Number.isFinite(Number(spot.z))) {
-        routed = false
-        break
-      }
-    }
-  }
   const write = (source) => {
     const point = points[count] ?? { x: 0, y: 0, z: 0 }
     point.x = source.x
@@ -319,11 +309,26 @@ export function speckPolyline(start, chain, anchorOf, end, out = []) {
     count += 1
   }
   write(start)
+  let routed = Array.isArray(chain) && chain.length > 0
   if (routed) {
-    for (let index = 0; index < chain.length; index += 1) write(anchorOf(chain[index]))
+    for (let index = 0; index < chain.length; index += 1) {
+      const spot = typeof anchorOf === 'function' ? anchorOf(chain[index]) : null
+      if (!spot || !Number.isFinite(Number(spot.x)) || !Number.isFinite(Number(spot.y)) || !Number.isFinite(Number(spot.z))) {
+        routed = false
+        break
+      }
+      write(spot)
+    }
+  }
+  if (!routed) {
+    count = 0
+    write(start)
+    write(end)
+    points.length = count
+    return points
   }
   const last = points[count - 1]
-  if (!(routed && last.x === end.x && last.y === end.y && last.z === end.z)) write(end)
+  if (!(last.x === end.x && last.y === end.y && last.z === end.z)) write(end)
   points.length = count
   return points
 }

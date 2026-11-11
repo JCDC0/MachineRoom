@@ -197,18 +197,15 @@ export function createStrings(scene) {
     } else if (dimLevel > dimGoal) {
       dimLevel = Math.max(dimGoal, dimLevel - delta)
     }
-    if (!line) return
+    if (!line) return 0
     const array = line.geometry.attributes.position.array
     const colors = line.geometry.attributes.color.array
     let lineChanged = false
     let colorChanged = false
+    let written = 0
     for (let i = 0; i < ends.length; i += 1) {
       const link = ends[i]
       const strand = strands[i]
-      const fromValue = anchorOf(link.from ?? '', from)
-      if (fromValue && fromValue !== from) from.copy(fromValue)
-      const toValue = anchorOf(link.to ?? '', to)
-      if (toValue && toValue !== to) to.copy(toValue)
 
       const onPath = linkOnPath(link, mask)
       const level = LINE_LEVEL + ((onPath ? 1 : LINE_LEVEL * DIM_FACTOR) - LINE_LEVEL) * dimLevel
@@ -218,11 +215,43 @@ export function createStrings(scene) {
         colorChanged = true
       }
 
+      const fromValue = anchorOf(link.from ?? '', from)
+      if (fromValue && fromValue !== from) {
+        from.copy(fromValue)
+        from.anchorStamp = undefined
+        from.anchorBasis = undefined
+      }
+      const toValue = anchorOf(link.to ?? '', to)
+      if (toValue && toValue !== to) {
+        to.copy(toValue)
+        to.anchorStamp = undefined
+        to.anchorBasis = undefined
+      }
+
+      const fromStamp = from.anchorStamp
+      const toStamp = to.anchorStamp
+      const stampBasis = from.anchorBasis
+      if (
+        strand &&
+        fromStamp !== undefined &&
+        strand.fromStamp === fromStamp &&
+        strand.toStamp === toStamp &&
+        strand.stampBasis === stampBasis
+      ) {
+        continue
+      }
+      if (strand) {
+        strand.fromStamp = fromStamp
+        strand.toStamp = toStamp
+        strand.stampBasis = stampBasis
+      }
+
       const moved = !strand || Number.isNaN(strand.from.x) || Number.isNaN(strand.to.x) ||
         strand.from.distanceToSquared(from) > 0.01 ||
         strand.to.distanceToSquared(to) > 0.01
 
       if (moved) {
+        written += 1
         lineChanged = true
         const ax = from.x, ay = from.y, az = from.z
         const dx = to.x - ax, dy = to.y - ay, dz = to.z - az
@@ -250,6 +279,7 @@ export function createStrings(scene) {
     if (colorChanged) {
       line.geometry.attributes.color.needsUpdate = true
     }
+    return written
   }
 
   function build(links, anchorOf) {
@@ -298,6 +328,9 @@ export function createStrings(scene) {
         paintedDim: -1,
         from: new THREE.Vector3(NaN, NaN, NaN),
         to: new THREE.Vector3(NaN, NaN, NaN),
+        fromStamp: undefined,
+        toStamp: undefined,
+        stampBasis: undefined,
         fractions: null,
         fractionsCount: 0,
       }
