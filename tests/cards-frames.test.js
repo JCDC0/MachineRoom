@@ -683,3 +683,106 @@ describe('idle frames', () => {
     expect(Number(root.element.style.opacity)).toBeLessThan(1)
   })
 })
+
+function makeWideState(folders) {
+  const files = []
+  for (let index = 0; index < folders; index += 1) files.push(`d${index}/a.js`)
+  const tree = makeTree({ root: 'demo', files })
+  return createState(tree, [{ key: 'hermes', name: 'Hermes' }])
+}
+
+function settle(cards, state, cam, frames = 400) {
+  for (let step = 0; step < frames; step += 1) cards.update(state, 0.016, cam)
+}
+
+describe('the frame cost of a card that did not move', () => {
+  it('computes no anchor and writes no string over 171 resting cards', () => {
+    const state = makeWideState(170)
+    const { cards } = makeCards()
+    const strings = createStrings(fakeScene())
+    const cam = camera()
+    cards.sync(state)
+    cards.update(state, 0.016, cam)
+    const anchorOf = (path, out) => cards.anchor(path ?? '', out)
+    strings.build(cards.visibleLinks(), anchorOf)
+    settle(cards, state, cam)
+    strings.update(anchorOf)
+    expect(cards.cards.size).toBe(171)
+
+    const before = cards.stats()
+    let written = 0
+    for (let frame = 0; frame < 10; frame += 1) {
+      cards.update(state, 0.016, cam)
+      written += strings.update(anchorOf)
+    }
+    expect(cards.stats().anchors).toBe(before.anchors)
+    expect(written).toBe(0)
+    strings.dispose()
+    cards.dispose()
+  })
+
+  it('recomputes the moved card and writes only the strings that end on it', () => {
+    const state = makeWideState(170)
+    const { cards } = makeCards()
+    const strings = createStrings(fakeScene())
+    const cam = camera()
+    cards.sync(state)
+    cards.update(state, 0.016, cam)
+    const anchorOf = (path, out) => cards.anchor(path ?? '', out)
+    strings.build(cards.visibleLinks(), anchorOf)
+    settle(cards, state, cam)
+    strings.update(anchorOf)
+
+    const before = cards.stats()
+    const moving = cards.cards.get('d5')
+    let written = 0
+    for (let frame = 0; frame < 4; frame += 1) {
+      moving.home.x += 50
+      cards.update(state, 0.016, cam)
+      written += strings.update(anchorOf)
+    }
+    expect(cards.stats().anchors - before.anchors).toBe(4)
+    expect(written).toBe(4)
+    strings.dispose()
+    cards.dispose()
+  })
+
+  it('computes a card width once and its offset once per size change', () => {
+    const state = makeState(Array.from({ length: 8 }, (_, index) => `d0/f${index}.js`), [])
+    const { cards } = makeCards()
+    const cam = camera()
+    cards.sync(state)
+    cards.update(state, 0.016, cam)
+    for (const path of cards.cards.keys()) cards.anchor(path, new THREE.Vector3())
+    const before = cards.stats()
+    expect(before.widths).toBe(cards.cards.size)
+
+    cards.setOptions({ maxFiles: 8 })
+    cards.update(state, 0.016, cam)
+    cards.anchor('d0', new THREE.Vector3())
+    const after = cards.stats()
+    expect(after.widths).toBe(before.widths)
+    expect(after.offsets).toBe(before.offsets + 1)
+
+    for (let step = 0; step < 4; step += 1) cards.anchor('d0', new THREE.Vector3())
+    expect(cards.stats().offsets).toBe(after.offsets)
+    expect(cards.stats().widths).toBe(before.widths)
+    cards.dispose()
+  })
+
+  it('moves the kept anchor when the camera turns', () => {
+    const state = makeWideState(4)
+    const { cards } = makeCards()
+    const first = camera()
+    cards.sync(state)
+    cards.update(state, 0.016, first)
+    const at = cards.anchor('d1', new THREE.Vector3()).clone()
+
+    const turned = camera()
+    turned.rotation.set(0.4, 0.7, 0)
+    cards.update(state, 0.016, turned)
+    const after = cards.anchor('d1', new THREE.Vector3())
+    expect(after.distanceTo(at)).toBeGreaterThan(1)
+    cards.dispose()
+  })
+})

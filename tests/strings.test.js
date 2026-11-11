@@ -274,4 +274,20 @@ describe('link endpoints', () => {
       strings.dispose()
     }
   })
+
+  it('answers how many strings it wrote, and none when the ends stay put', () => {
+    const scene = fakeScene()
+    const a = new THREE.Vector3(0, 0, 0)
+    const b = new THREE.Vector3(100, 0, 0)
+    const centreOf = (key) => (key === 'a' ? a : b)
+    const strings = createStrings(scene)
+    try {
+      strings.build([{ from: 'a', to: 'b' }], centreOf)
+      expect(strings.update(centreOf)).toBe(0)
+      b.set(200, 0, 0)
+      expect(strings.update(centreOf)).toBe(1)
+    } finally {
+      strings.dispose()
+    }
+  })
 })

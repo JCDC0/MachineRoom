@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- A resting card costs the frame nothing: each card keeps a move stamp, its tab anchor is computed once per move and a string is rewritten only when one of its ends moved; in Node, 1,000 frames over 171 cards took 38 ms where they took 335 (task P37).
 - ARCHITECTURE.md is a 12 KB core where it was 204 KB: the room, the commands, the code layout, live mode, the activity schema, the known limits and the Documents list moved unchanged into docs/agents/architecture/, the core says when to read each, and a lane's prompt tells it to read the core and then only the detail file its work touches; the pack lists src/policy/profile.js, which the bridge has needed since P31 (task P34).
 - A task typed in Dispatch gets its tier from its text: small at 300 characters and 2 named paths or fewer, medium at 1500 characters and 6 paths or fewer, large beyond that or when it names a secrets, deploy or data path or says it needs the owner's yes; a queue takes the largest tier among its tasks (task P39).
 - Dispatch picks the lane: the lane picker has Auto first, the route walks the policy's tier and skips a lane that is retired, turned off or busy, the line under the picker and the confirm card say which lane and why, a run started with no lane is routed and answers 409 when none is free, and policy.json names the lanes that exist; a project with no policy file uses MachineRoom's own (task P31).
