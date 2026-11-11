@@ -55,6 +55,7 @@
     "src/model/parsers/unreadable.js",
     "src/model/pipeline.js",
     "src/model/source.js",
+    "src/policy/profile.js",
     "src/policy/route.js",
     "src/startup.js",
     "dist/",
