@@ -15,7 +15,8 @@ const ROWS = [
   'second GET /api/tree, folder shape, gzip',
   'GET /api/git, clean',
   'one new file, write to tree event',
-  'burst out/, tree reads started',
+  'burst out/, full tree lists',
+  'burst out/, partial tree lists',
   'burst out/, last write to tree event',
   'burst out/, bridge CPU share',
   'GET /api/git, 2000 untracked',
@@ -60,6 +61,9 @@ describe('the live scale probe', () => {
       expect(result.tree.files.length).toBe(2001)
       expect(result.folderTree.shape).toBe('folders')
       expect(result.stats.doctorOk).toBe(true)
+      expect(result.stats.outReadsDuring).toBeGreaterThanOrEqual(0)
+      expect(result.stats.outPartialReads).toBeGreaterThanOrEqual(0)
+      expect(result.stats.outReadsDuring + result.stats.outPartialReads).toBeGreaterThan(0)
       expect(result.stats.doctorLine).toMatch(/^The project holds 2001 files/)
       expect(result.stats.gitCleanChanges).toBe(0)
       expect(result.stats.gitUntrackedChanges).toBeGreaterThanOrEqual(1)
