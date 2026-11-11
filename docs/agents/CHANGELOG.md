@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- A plain folder is walked with no git process once a read finds it is not a git work tree, and the 30 second quiet full read follows only a partial read (P62).
 - AUDIT-2026-11-OWNER-ROOM.md walks the owner's room with config lanes and one made lane: 10 findings, 8 proved; P54 fixed the first, P60, P63 and P64 fix the rest (P56).
 - Each harness descriptor names the lane name and default program a made lane takes when the room has no lane of that harness, so an OpenCode or AGY lane made in the owner's room starts its real program (P54).
 - The native agent never removes a result of its newest turn when it trims: older turns go first, and the newest results are only cut to 2,000 characters (P61).

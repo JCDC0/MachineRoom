@@ -60,6 +60,16 @@ async function folderTree(url) {
   return { status: response.status, body: await response.json() }
 }
 
+async function waitForTreePath(url, name, timeoutMs = 5000) {
+  const deadline = Date.now() + timeoutMs
+  for (;;) {
+    const folder = await folderTree(url)
+    if (treePaths(folder.body).includes(name)) return
+    if (Date.now() > deadline) throw new Error(`Timed out waiting for ${name}.`)
+    await wait(10)
+  }
+}
+
 async function openEvents(url, query = '') {
   const controller = new AbortController()
   const response = await fetch(`${url}/events${query}`, { signal: controller.signal })
@@ -133,6 +143,35 @@ afterEach(async () => {
   while (roots.length > 0) rmSync(roots.pop(), { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
 })
 
+describe('a read whose list call fails', () => {
+  it('walks when the list fails', async () => {
+    const dir = makeRoot()
+    writeFileSync(join(dir, 'a.js'), 'x')
+    const calls = []
+    const { files } = await readTree(dir, {
+      gitList: async (_root, args) => {
+        calls.push(args)
+        return null
+      },
+    })
+    expect(calls).toEqual([['--cached', '--others', '--exclude-standard'], ['--deleted']])
+    expect(files).toEqual(['a.js'])
+  })
+
+  it('answers null and never asks for deleted paths', async () => {
+    const dir = makeRoot()
+    const calls = []
+    const result = await readTreePartial(dir, ['a.js'], {
+      gitList: async (_root, args) => {
+        calls.push(args)
+        return null
+      },
+    })
+    expect(result).toBeNull()
+    expect(calls).toEqual([['--cached', '--others', '--exclude-standard', '--', 'a.js']])
+  })
+})
+
 describe('readTreePartial', () => {
   it('lists a named file and folder and keeps an ignored folder out', async () => {
     const dir = makeRoot()
@@ -189,6 +228,67 @@ describe('mergeNamedFiles', () => {
       'dir/b.js',
       'new.js',
     ])
+  })
+})
+
+describe('a plain folder', () => {
+  it('starts one git list for the first read and walks the next watcher event', async () => {
+    const root = makeRoot()
+    writeFileSync(join(root, 'a.js'), 'x')
+    const watcher = fakeWatch()
+    const calls = []
+    let reads = 0
+    const bridge = createBridge({
+      projectRoot: root,
+      port: 0,
+      env: {},
+      debounceMs: 5,
+      pollMs: 60000,
+      quietMs: 60000,
+      quietFullMs: 60000,
+      watchProject: watcher.projectWatch,
+      readTree: async (folder) => {
+        reads += 1
+        return readTree(folder, {
+          gitList: async (_folder, args) => {
+            calls.push(args)
+            return null
+          },
+        })
+      },
+    })
+    bridges.push(bridge)
+    const { url } = await bridge.start()
+    await waitFor(() => reads === 1)
+    expect(calls).toHaveLength(2)
+
+    writeFileSync(join(root, 'b.js'), 'x')
+    watcher.emit('b.js')
+    await waitForTreePath(url, 'b.js')
+    expect(reads).toBe(1)
+    expect(calls).toHaveLength(2)
+  })
+})
+
+describe('the quiet full read', () => {
+  it('arms none for a watcher event after a full read', async () => {
+    const watcher = fakeWatch()
+    const { bridge, counts } = startBridge({
+      root: makeRoot(),
+      files: ['a.js'],
+      watcher,
+      quietFullMs: 20,
+      readTree: async () => ({ root: 'project', files: ['a.js'], created: [] }),
+      readTreePartial: async () => null,
+    })
+    await bridge.start()
+
+    watcher.emit('b.js')
+    await waitFor(() => counts.full === 1)
+    watcher.emit('c.js')
+    await wait(60)
+    expect(counts.full).toBe(1)
+    expect(counts.partial).toHaveLength(1)
   })
 })
 

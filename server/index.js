@@ -81,6 +81,7 @@ const PARTIAL_FULL_EVERY = 10
 const IGNORED_WATCH = /(^|[/\\])(\.git|node_modules|\.worktrees)([/\\]|$)/
 const RUN_END_STATUSES = new Set(['succeeded', 'failed', 'cancelled', 'timed_out'])
 const AGENT_MESSAGE_KINDS = new Set(['order', 'report', 'dispatch', 'wake'])
+const PLAIN_TREE = Symbol('plainTree')
 const gzipAsync = promisify(gzipCallback)
 
 function walkFiles(listDir, currentDir, prefix = '', out = []) {
@@ -99,6 +100,11 @@ function walkFiles(listDir, currentDir, prefix = '', out = []) {
     }
   }
   return out
+}
+
+function walkTree(projectRoot, listDir = readdirSync) {
+  const resolved = resolve(projectRoot)
+  return { root: basename(resolved), files: walkFiles(listDir, resolved).sort(), created: [] }
 }
 
 function gitListPaths(resolved, args) {
@@ -135,31 +141,26 @@ function dropDeleted(files, deleted) {
   return files.filter((file) => !gone.has(file))
 }
 
-export async function readTree(projectRoot, { listDir = readdirSync } = {}) {
+export async function readTree(projectRoot, { listDir = readdirSync, gitList = gitListPaths } = {}) {
   if (!projectRoot) return { root: '', files: [], created: [] }
   const resolved = resolve(projectRoot)
   const root = basename(resolved)
   const [listed, deleted] = await Promise.all([
-    gitListPaths(resolved, ['--cached', '--others', '--exclude-standard']),
-    gitListPaths(resolved, ['--deleted']),
+    gitList(resolved, ['--cached', '--others', '--exclude-standard']),
+    gitList(resolved, ['--deleted']),
   ])
-  if (listed === null) {
-    const files = walkFiles(listDir, resolved).sort()
-    return { root, files, created: [] }
-  }
+  if (listed === null) return { ...walkTree(resolved, listDir), [PLAIN_TREE]: true }
   return { root, files: dropDeleted(listed, deleted).sort(), created: [] }
 }
 
-export async function readTreePartial(projectRoot, names) {
+export async function readTreePartial(projectRoot, names, { gitList = gitListPaths } = {}) {
   const wanted = Array.isArray(names) ? names.filter((name) => typeof name === 'string' && name !== '') : []
   if (!projectRoot || wanted.length === 0) return null
   const resolved = resolve(projectRoot)
   const root = basename(resolved)
-  const [listed, deleted] = await Promise.all([
-    gitListPaths(resolved, ['--cached', '--others', '--exclude-standard', '--', ...wanted]),
-    gitListPaths(resolved, ['--deleted', '--', ...wanted]),
-  ])
+  const listed = await gitList(resolved, ['--cached', '--others', '--exclude-standard', '--', ...wanted])
   if (listed === null) return null
+  const deleted = await gitList(resolved, ['--deleted', '--', ...wanted])
   return { root, files: dropDeleted(listed, deleted).sort(), created: [] }
 }
 
@@ -696,6 +697,7 @@ export function createBridge(options = {}) {
   let lastReadEndAt = 0
   let lastReadChanged = false
   let watchFallback = false
+  let treeNotGit = false
   let treePrimed = false
   let treeVersion = 0
   const treeVersions = new Map()
@@ -820,7 +822,12 @@ export function createBridge(options = {}) {
   async function readWholeTree() {
     let tree
     try {
-      tree = await treeReader(projectRoot)
+      if (treeNotGit) {
+        tree = walkTree(projectRoot)
+      } else {
+        tree = await treeReader(projectRoot)
+        if (tree?.[PLAIN_TREE]) treeNotGit = true
+      }
       lastTreeError = ''
     } catch (error) {
       lastTreeError = error instanceof Error ? error.message : String(error)
@@ -871,6 +878,7 @@ export function createBridge(options = {}) {
       let tree = null
       if (
         !forceFull &&
+        !treeNotGit &&
         names.length > 0 &&
         allNamed &&
         names.length <= PARTIAL_NAME_LIMIT &&
@@ -951,7 +959,6 @@ export function createBridge(options = {}) {
   }
 
   function noteWatchName(filename) {
-    scheduleQuietRead()
     const name = filename ? String(filename).replace(/\\/g, '/') : ''
     if (!name) {
       pendingAllNamed = false
@@ -1000,6 +1007,7 @@ export function createBridge(options = {}) {
 
   function beginPolling(readNow = true) {
     if (stopped) return
+    clearQuietRead()
     if (watcher) {
       try {
         watcher.close()
