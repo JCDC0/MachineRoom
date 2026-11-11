@@ -312,3 +312,15 @@ Files: src/engine/cards.js, src/engine/strings.js, src/engine/agents.js, tests/.
 Read `git log --first-parent origin/main..refs/heads/main` and review the code each merge of P19, P24 to P27, P29 to P33 and P35 brought, with `git show -m --first-parent SHA`, against the code around it. Hunt for what a test would not show: a cache that can answer stale data and what makes it fresh again, a refusal or an origin check that a refactor dropped or reordered (`server/runs.js` moved the checks of `POST /api/control/runs` into helpers in P31), a file read or a program started with a path a page can name, a list that grows without a bound, work that still runs on every tick, and a number in `docs/agents/ARCHITECTURE.md` or `docs/agents/CHANGELOG.md` that the code does not match. Run a finding's test or a short script when one would settle it, and say which findings you proved and which you only read. Write `docs/agents/AUDIT-2026-11-REVIEW-9.md`: a table of at most 12 findings, the one that would hurt the owner most first, each with `file:line`, what goes wrong and when, and the smallest fix; then at most three proposed briefs. Write no finding you cannot point to in the code.
 
 Files: docs/agents/AUDIT-2026-11-REVIEW-9.md.
+
+**P39. A task typed in Dispatch gets its tier from its text (OpenCode).** Read no part of TASKS.md beyond this brief. Use no subagents. Commit each step as you finish it, and stop starting new work at minute 35. Do not edit any file under `docs/`, `src/ui/` or `src/engine/`, nor `server/index.js` and `tierFor` in `src/policy/route.js`.
+
+A task typed in Dispatch names no `Files:` list and no tests, so `profileFromBrief` calls it unclear and `tierFor` puts every task in the large tier, a one line typo fix included.
+
+1. Add the pure `profileFromTask(text)` to `src/policy/profile.js`. It counts the distinct paths the text names, in backticks or bare, by the rule `isPath` has. It answers a profile that `tierFor` reads as small when the text is at most 300 characters and names at most 2 paths, as medium when it is at most 1500 characters and names at most 6 paths, and as large otherwise. A text that names a path `profileFromBrief` treats as secrets, deploy or data, or that says `needs the owner's yes` or `spends`, is large whatever its length. An empty text is large.
+2. `POST /api/control/route/lane` in `server/policy.js` and the routed start of `POST /api/control/runs` in `server/runs.js` use it wherever they now build a task's profile with `profileFromBrief({ text })`. A queue of several tasks takes the largest tier among its tasks. A brief's profile stays as it is.
+3. Tests: each boundary (300 and 301 characters, 2 and 3 paths, 1500 and 1501 characters, 6 and 7 paths), a bare path and a backticked one counted once, `package.json` and a path under `public/fixtures/` as large, the two phrases as large, the route answer for a short task naming the small tier, and a queue taking its largest task's tier.
+
+Run `npx vitest related --run` on every file you changed and `npm run build`; both must pass.
+
+Files: src/policy/profile.js, server/policy.js, server/runs.js, tests/.
