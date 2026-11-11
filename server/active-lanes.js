@@ -256,7 +256,10 @@ export function createActiveLanesApi(options = {}) {
   function addActiveLane(key) {
     const file = choiceFile()
     const saved = readActiveLanesChoice(file)
-    if (saved === null) return
+    if (saved === null) {
+      writeActiveLanes(file, [key])
+      return
+    }
     if (!saved.includes(key)) {
       saved.push(key)
       writeActiveLanes(file, saved)

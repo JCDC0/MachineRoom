@@ -480,6 +480,14 @@ describe('projectRunLanes', () => {
       { key: 'opencode', name: 'OpenCode', running: true },
     ])
   })
+
+  it('leaves out the orchestrator', () => {
+    const agents = [
+      { key: 'orchestrator', name: 'Orchestrator', adapterType: 'claude_local', role: null },
+      { key: 'claude-2', name: 'Coder', adapterType: 'claude_local', role: null },
+    ]
+    expect(projectRunLanes(agents, [])).toEqual([{ key: 'claude-2', name: 'Coder', running: false }])
+  })
 })
 
 describe('projectRunConfirm with a task list', () => {

@@ -413,10 +413,8 @@ export function createAgentLane(body, {
   saveAgentsConfig(runs, { agents, removed })
 
   const active = typeof activeLanes === 'function' ? activeLanes() : activeLanes
-  if (active && typeof active.isChosen === 'function' && active.isChosen()) {
-    if (typeof active.addActiveLane === 'function') {
-      active.addActiveLane(key)
-    }
+  if (active && typeof active.addActiveLane === 'function') {
+    active.addActiveLane(key)
   }
 
   if (typeof notify === 'function') {

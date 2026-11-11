@@ -14,7 +14,8 @@ const SAMPLE_AGENT = {
 }
 
 describe('AgentBuilder Team panel', () => {
-  it('lists the lanes and says where a new lane is added', () => {
+  it('lists the lanes and says where a new lane is made', () => {
+    expect(NEW_LANES_TEXT).toBe('New lanes are made in the family tree.')
     const client = createMockClient({ latencyMs: 0 })
     const html = renderToString(
       createElement(AgentBuilder, {

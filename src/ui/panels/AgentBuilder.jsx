@@ -3,7 +3,7 @@ import { visibleText } from '../../model/paths.js'
 import { statusLabel } from './format.js'
 import { subscribeToNotices } from './notices.js'
 
-export const NEW_LANES_TEXT = 'New lanes are added in docs/agents/lanes.json.'
+export const NEW_LANES_TEXT = 'New lanes are made in the family tree.'
 export const AGENTS_UNAVAILABLE = 'The lanes need a newer bridge.'
 
 export default function AgentBuilder({

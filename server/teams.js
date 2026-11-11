@@ -114,6 +114,33 @@ export function createTeamsApi(options = {}) {
     return readAllLanes({ folder: projectRoot, runsFolder: runsDir, lanesJson: getBaseLanes() })
   }
 
+  function hiddenKeys() {
+    const activeHelper = getActiveLanes()
+    if (activeHelper && typeof activeHelper.hiddenKeySet === 'function') {
+      return activeHelper.hiddenKeySet()
+    }
+    return new Set(readHiddenLanes(projectLanesFileFor(projectRoot, runsDir)))
+  }
+
+  function visibleEligibleLaneKeys() {
+    const hidden = hiddenKeys()
+    return eligibleLanes(getAllLanes())
+      .filter((lane) => !hidden.has(lane.key))
+      .map((lane) => lane.key)
+  }
+
+  function savedTeamLaneKeys() {
+    const activeHelper = getActiveLanes()
+    const chosen = activeHelper && typeof activeHelper.isChosen === 'function'
+      ? activeHelper.isChosen()
+      : readActiveLanesChoice(activeLanesFileFor(projectRoot, runsDir)) !== null
+    if (!chosen) return visibleEligibleLaneKeys()
+    if (activeHelper && typeof activeHelper.activeEligibleLaneKeys === 'function') {
+      return activeHelper.activeEligibleLaneKeys()
+    }
+    return readActiveLanesChoice(activeLanesFileFor(projectRoot, runsDir)) || []
+  }
+
   function isBusy() {
     const orchs = getOrchs()
     const turnRunning = Boolean(orchs?.list?.().some((item) => item.state === 'working'))
@@ -156,18 +183,7 @@ export function createTeamsApi(options = {}) {
         return true
       }
 
-      const activeHelper = getActiveLanes()
-      let lanesList = null
-      if (activeHelper) {
-        if (typeof activeHelper.activeEligibleLaneKeys === 'function') {
-          lanesList = activeHelper.activeEligibleLaneKeys()
-        } else if (typeof activeHelper.isChosen === 'function' && activeHelper.isChosen()) {
-          lanesList = readActiveLanesChoice(activeLanesFileFor(projectRoot, runsDir)) || []
-        }
-      }
-      if (lanesList === null) {
-        lanesList = readActiveLanesChoice(activeLanesFileFor(projectRoot, runsDir)) || []
-      }
+      const lanesList = savedTeamLaneKeys()
 
       const labels = readLabels(labelsFileFor(projectRoot, runsDir))
       const orchs = getOrchs()

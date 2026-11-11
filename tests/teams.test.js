@@ -272,6 +272,20 @@ describe('teams routes and validation', () => {
     expect(listAfterReplace.body.teams[0].lanes).toEqual(['opencode', 'claude'])
   })
 
+  it('saves the visible eligible lanes when no active choice exists', async () => {
+    const { url, projectRoot, runsFolder } = await startTestBridge()
+    writeHiddenLanes(projectLanesFileFor(projectRoot, runsFolder), ['opencode2'])
+
+    const saveRes = await getJson(`${url}/api/teams`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', origin: url },
+      body: JSON.stringify({ name: 'Fresh', confirmed: true }),
+    })
+    expect(saveRes.status).toBe(200)
+    expect(saveRes.body.team.lanes).toEqual(['opencode', 'claude'])
+    expect(readActiveLanesChoice(activeLanesFileFor(projectRoot, runsFolder))).toBeNull()
+  })
+
   it('applies a saved team, hides non-team lanes, and reports drops', async () => {
     const { url, projectRoot, runsFolder } = await startTestBridge()
 
