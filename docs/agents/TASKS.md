@@ -385,3 +385,32 @@ Tests with an injected lister and watcher: one new file costs one partial list; 
 Run `npx vitest related --run` on every file you changed, `npm run build` and `npm run pack-check`; all must pass.
 
 Files: server/index.js, scripts/scale-live.mjs, tests/.
+
+## The native agent up to the standard of Claude Code and OpenCode (2026-11-11, the owner's request)
+
+The owner asked whether the native harness (`scripts/mr-agent.mjs`, the Direct API) works like Claude Code or OpenCode on DeepSeek. The orchestrator ran it against a scripted OpenAI-compatible server on a small project, since this computer has no key for it: on Windows `run_shell` runs `cmd.exe`, so the model's `ls -la` failed; `read_file` sent a 1.36 MB file whole, with no line numbers, and every later request carried it, so five steps cost 705,000 input tokens; `run_shell` kept the first 8,000 characters of a failing script and lost its error line at the end and its exit code; one 429 answer ended the run; the system prompt is two sentences and never names `AGENTS.md`, the system, the shell or the date; `search` reads gitignored folders; and nothing trims or compacts the conversation, which stops at 60 steps. P44 fixes the tools and P45 the loop. P45 starts after P44 is merged, since both change `scripts/mr-agent.mjs`.
+
+**P44. The native agent's tools work like Claude Code's (OpenCode).** Read no part of TASKS.md beyond this brief and the section above it. Use no subagents. Commit each step as you finish it, and stop starting new work at minute 60. Edit only the files listed below. Keep the tool names, the stream-json lines the room reads, the permission modes, the Auto deny list, the approval path and the working folder check as they are.
+
+1. `read_file` takes `offset` and `limit` (lines, 1-based), reads at most 2000 lines by default, prefixes each line with its number and a tab as Claude Code's Read does, cuts a line longer than 2000 characters, and ends a cut read with `[N more lines. Read again with offset to see them.]`. A binary file (a zero byte in its first 8 KB) answers that it is binary.
+2. `run_shell` on Windows runs Git Bash when it finds it, `bash.exe` next to `gitPath()`'s `git.exe` (`..\bin\bash.exe` from its `cmd` folder) or `bash` on PATH through `programPath`, else `powershell.exe -NoProfile -Command`, never `cmd.exe`. Elsewhere it runs `/bin/sh -c` as now. It takes an optional `timeout` in seconds up to 600. Its answer keeps the first 2,000 and the last 6,000 characters with `[N characters cut]` between them, and ends with `exit N` when the exit code is not 0.
+3. `search` takes `glob` (such as `*.js`) and `ignore_case`, and lists files with `git ls-files -z --cached --others --exclude-standard` through `gitPath()` when the folder is a git checkout, so gitignored folders are skipped, else walks as now. A match line is cut at 300 characters. Add `glob_files` (`pattern` and `path`): the files that match a glob, from the same list, at most 500, sorted by name.
+4. `edit_file` takes `replace_all`. A write or an edit answers with the line count of the file it left.
+5. Tests in `tests/mr-agent.test.js` with temporary folders: a paged read and its end line; a long line cut; a binary file; a failing command keeps its last line and `exit 1`; the head and tail cut; the shell chosen on Windows when bash is and is not found (injected); a search that skips a gitignored folder; `glob` and `ignore_case`; `glob_files`; `replace_all`.
+
+Run `npx vitest related --run` on every file you changed, `npm run build` and `npm run pack-check`; all must pass.
+
+Files: scripts/mr-agent.mjs, tests/mr-agent.test.js.
+
+**P45. The native agent's loop: project instructions, retries and a bounded conversation (OpenCode).** Starts after P44 is merged. Read no part of TASKS.md beyond this brief and the section above P44. Use no subagents. Commit each step as you finish it, and stop starting new work at minute 60. Edit only the files listed below, and keep what P44 kept.
+
+1. The system prompt says, in plain sentences: the working folder, the system and the shell `run_shell` uses, today's date, that it reads a file before it edits it, keeps changes small, runs the project's tests when it changed code, and ends with a short report of what it changed and what it could not check. It then adds the project's `AGENTS.md`, else `CLAUDE.md`, from the working folder, at most 20,000 characters, under a line naming the file.
+2. A request that answers 429, 500, 502, 503 or 529, or fails on the network or the time limit, is tried again up to 4 times, waiting 2, 4, 8 and 16 seconds or the `retry-after` the answer gives, at most 60 seconds. A 400 or 401 is not tried again. The final error keeps its key masking.
+3. Each `assistant` line carries `message.usage` with the request's input and output tokens, so `peakTokens` (P32) reads a native run as it reads Claude Code.
+4. The conversation stays bounded. Before a request whose messages hold more than `MR_AGENT_CONTEXT_CHARS` (400,000 characters by default), replace the text of the oldest tool results, the newest 6 kept whole, with `[Output removed to save room. Run the tool again if it is needed.]` until it fits. Count characters, not tokens. The step limit becomes 200, and `MR_AGENT_MAX_STEPS` sets it.
+5. Pass `--reasoning EFFORT` through as `reasoning: { effort }` when the run-lane command line or the orchestrator gives one, and `max_tokens` 32000.
+6. Tests with a scripted OpenAI-compatible server on port 0, as the existing tests start one: the system prompt holds `AGENTS.md` and the shell name; a 429 then a good answer finishes well after one wait (injected clock or a short wait); a 401 is not retried; the usage on an assistant line; old tool results are replaced and the newest 6 kept; the step limit from the environment.
+
+Run `npx vitest related --run` on every file you changed, `npm run build` and `npm run pack-check`; all must pass.
+
+Files: scripts/mr-agent.mjs, src/harnesses/machineroom.js, tests/mr-agent.test.js.
