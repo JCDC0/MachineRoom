@@ -144,6 +144,7 @@ describe('a lane runner with the allow-list', () => {
         APPDATA: 'C:\\Users\\me\\AppData\\Roaming',
         LOCALAPPDATA: 'C:\\Users\\me\\AppData\\Local',
         MACHINEROOM_RUNS: join(base, 'runs'),
+        MACHINEROOM_LANES_DIR: fileURLToPath(new URL('../docs/agents', import.meta.url)),
       },
       encoding: 'utf8',
       timeout: 30000,
