@@ -341,7 +341,7 @@ export async function runChecks({
 
   checks.push({
     name: 'vitest related',
-    command: [execPath, actualVitest, 'related', '--run', ...changedFiles],
+    command: [execPath, actualVitest, 'related', '--run', '--', ...changedFiles],
     timeoutMs: TEST_TIMEOUT_MS,
   })
 

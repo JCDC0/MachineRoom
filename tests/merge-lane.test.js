@@ -345,6 +345,25 @@ describe('failing check aborts merge', () => {
   })
 })
 
+describe('runChecks', () => {
+  it('holds -- right before the first file in the vitest related command', async () => {
+    const executed = []
+    await runChecks({
+      root: templateRoot,
+      changedFiles: ['src/feature.js', 'src/other.js'],
+      runCommand: async (command) => {
+        executed.push(command)
+        return { ok: true, output: '' }
+      },
+    })
+    const vitestCheck = executed.find((cmd) => cmd.includes('related'))
+    expect(vitestCheck).toBeDefined()
+    const firstFileIndex = vitestCheck.indexOf('src/feature.js')
+    expect(firstFileIndex).toBeGreaterThan(0)
+    expect(vitestCheck[firstFileIndex - 1]).toBe('--')
+  })
+})
+
 describe('--finish command', () => {
   it('refuses when no merge is in progress', () => {
     const { mainDir } = setupFixture()
