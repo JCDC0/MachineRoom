@@ -1,0 +1,76 @@
+# The files in docs/agents
+
+Every file in this folder, and what it is for:
+
+- `ARCHITECTURE.md`: current. The bible: what the room shows, its commands, the code layout, the data flow and live mode.
+- `architecture/ACTIVITIES.md`: current. The activity schema, how each agent reports tool calls and the DOM contract.
+- `architecture/CODE.md`: current. The layout of the code, one line per file.
+- `architecture/COMMANDS.md`: current. Every command, its flags and what it prints.
+- `architecture/LIMITS.md`: current. The known limits, with the measurement behind each one.
+- `architecture/LIVE.md`: current. Live mode: the connect screen, the bridge, the sources and the query parameters.
+- `architecture/ROOM.md`: current. What the room shows and how it behaves.
+- `AUDIT-2026-10.md`: history. The October 2026 audit of the bridge and the pure logic, with each finding and its fix.
+- `AUDIT-2026-10-DELTA.md`: history. The delta review from 0.1.121 to 0.1.152.
+- `AUDIT-2026-10-HARNESS.md`: history. The audit of the lane runner, the bridge and the MCP routes for a first deployment.
+- `AUDIT-2026-10-UI.md`: history. The October 2026 audit of the code that runs in the browser.
+- `AUDIT-2026-10-V3.md`: history. The audit of the room, version 3, and the fixes that followed.
+- `AUDIT-2026-10-V4.md`: history. The audit of the room, version 4, and what followed version 3.
+- `AUDIT-2026-10-V5.md`: history. The audit of what changed on 2026-10-24.
+- `AUDIT-2026-10-V6.md`: history. The audit of the orchestrator and the worktree runs.
+- `AUDIT-2026-10-V7.md`: history. The audit of the ladder, the dock and the harness registry.
+- `AUDIT-2026-10-V8.md`: history. The audit of the folder blocks and the camera hold.
+- `AUDIT-2026-10-V9.md`: history. The audit of the Direct API keys and the orchestrator wake rules, with Q15a and Q15b as its fixes.
+- `AUDIT-2026-10-V10.md`: history. The audit of the page's handlers and effects, and the faults a click shows that a render test does not.
+- `AUDIT-2026-10-V11.md`: history. The backend audit from version 9 to 0.1.401, covering process lifecycle, locks, wakes and test seams.
+- `AUDIT-2026-11.md`: history. The November 2026 co-orchestrator review of the unpushed work from U96 to U105 and `server/git.js`, with three proposed backend briefs.
+- `AUDIT-2026-11-BACKEND.md`: history. The November 2026 audit of the bridge and the runner, with the orchestrator's corrections.
+- `AUDIT-2026-11-CORE.md`: history. The November 2026 audit of the pure logic and the tests, with the orchestrator's corrections.
+- `AUDIT-2026-11-CONTRACT.md`: history. The November 2026 hunt of the page and the bridge against each other, with a table of every write route and its guard.
+- `AUDIT-2026-11-DESIGN.md`: history. The November 2026 design review of how the room shows its work, with features and a full design.
+- `AUDIT-2026-11-ENGINE.md`: history. The November 2026 audit of the engine.
+- `AUDIT-2026-11-LOGS.md`: history. The November 2026 hunt that ran 464 real run logs through the parsers.
+- `AUDIT-2026-11-ORCHESTRATOR.md`: history. The November 2026 hunt of the orchestrator's turns, wakes and ladder.
+- `AUDIT-2026-11-GROWTH.md`: history. The November 2026 hunt of what grows without a bound in a day-long live room.
+- `AUDIT-2026-11-LIGHT-START.md`: history. The November 2026 hunt of the page's start and memory on a 200,000 file project, with three proposed briefs.
+- `AUDIT-2026-11-LIGHT-BRIDGE.md`: history. The November 2026 hunt of what the bridge holds and repeats on a 200,000 file project, at start and at rest, with three proposed briefs.
+- `AUDIT-2026-11-LIGHT-FOLDERS.md`: history. The November 2026 hunt of folders that hold tens of thousands of items, at the lowest folder depth and under a touch, with three proposed briefs.
+- `AUDIT-2026-11-LIGHT-BROWSER.md`: history. The November 2026 hunt of the room's script, style, layout, heap and DOM cost in a headless Chromium at 40,000 and 200,000 files, at load, at rest and at work, with three proposed briefs.
+- `AUDIT-2026-11-LANES.md`: history. The November 2026 hunt of how lanes are given work, from the run and outcome records and the routing code, with twelve findings and the orchestrator's corrections.
+- `AUDIT-2026-11-FIRSTRUN.md`: history. The November 2026 hunt of a first run on a new project, with features.
+- `AUDIT-2026-11-FRAME.md`: history. The November 2026 audit of the frame cost of music, bloom and light trails.
+- `AUDIT-2026-11-PANELS.md`: history. The November 2026 hunt of the page's panels.
+- `AUDIT-2026-11-PANELS-2.md`: history. The second November 2026 hunt of the page's panels, with features.
+- `AUDIT-2026-11-REVIEW.md`: history. The November 2026 review of the merges that answered the five audits, with the orchestrator's corrections.
+- `AUDIT-2026-11-REVIEW-2.md`: history. The review of the merges of 2026-11-03, with the orchestrator's corrections.
+- `AUDIT-2026-11-REVIEW-3.md`: history. The review of the merges since the second review, with findings ranked by owner impact.
+- `AUDIT-2026-11-REVIEW-4.md`: history. The review of the merges since the third review, with findings ranked by owner impact.
+- `AUDIT-2026-11-STARS.md`: history. The November 2026 review of the stars, the agent colours and the replay from U152 and U153.
+- `AUDIT-2026-11-REVIEW-5.md`: history. The co-orchestrator's review of U156, U157 and T37, with nine findings and the briefs T38 and U163 that fix them.
+- `AUDIT-2026-11-REVIEW-6.md`: history. The co-orchestrator's review of U158 to U163, S44, S45 and T38, with twelve findings, the orchestrator's corrections and the briefs S46, U164 and U165.
+- `AUDIT-2026-11-REVIEW-7.md`: history. The co-orchestrator's review of S46, U164 and U165, with five findings, the orchestrator's corrections and the brief U166.
+- `AUDIT-2026-11-REVIEW-8.md`: history. The review of U166, U167, S47 and S48, the permission modes batch, with three findings, the orchestrator's corrections and the briefs U168 and U169.
+- `AUDIT-2026-11-RUNNER.md`: history. The November 2026 hunt of the runner, worktrees, reviews and merges.
+- `AUDIT-2026-11-SUMMARY.md`: plan. The five November 2026 audits ranked and checked, with the features, the design changes that need the owner and the proposed briefs.
+- `AUDIT-2026-11-UI.md`: history. The November 2026 audit of the page.
+- `CANDIDATE.md`: current. How to build and serve one lane's worktree beside the stable room.
+- `CHANGELOG.md`: history. One line per change under the version it shipped in.
+- `CONTROL-PLANE.md`: plan. The control plane design from the Paperclip era; parts are replaced by the lane records.
+- `DECIDER-EVAL.md`: current. How to compare decision models with `npm run decide-eval`.
+- `FLAKY-2026-11.md`: history. The November 2026 hunt of the flaky tests on main, with each cause and its fix.
+- `HARNESSES.md`: plan. The harness registry and the steps H1 to H15, with what is built.
+- `HIERARCHY.md`: plan. The sub-orchestrator ladder and its sectors, with what is built.
+- `HOUSE-RULES.md`: prompt the code reads. The rules in every lane prompt.
+- `lanes.json`: config the code reads. Each lane's harness, model, worktree, forbidden paths and retirement.
+- `ORCHESTRATOR-AGENT.md`: prompt the code reads. The instructions added to every orchestrator turn.
+- `ORCHESTRATOR.md`: current. The orchestrator's guide: standing rules, the review and merge loop, ownership and lessons.
+- `PLAN.md`: plan. Where the work stands and what comes next.
+- `policy.json`: config the code reads. The routing policy that `src/policy/route.js` parses.
+- `SLASH-COMMANDS.md`: current. What Claude Code and OpenCode do with a slash command in a headless turn, and the room's design for them.
+- `RECORDING.md`: current. How a run becomes a recording and how to replay it.
+- `TASKS.md`: prompt the code reads. The briefs since 2026-11-09; the code reads them and the planner adds to them.
+- `history/TASKS-ARCHIVE.md`: history. Every older brief, moved out of `TASKS.md` unchanged on 2026-11-10 (P35); the Tasks tab reads a run's title from it when the brief is not in `TASKS.md`, and an id stays unique across both files.
+- `history/BACKUPS.md`: history. Paperclip's backup routes, from before 2026-10-24.
+- `history/CONTROL-CLIENT.md`: history. The control client contract: the MCP methods added at 0.1.388, then the older Paperclip-era methods.
+- `history/PAPERCLIP-API.md`: history. Paperclip's routes and shapes, from before 2026-10-24.
+- `history/PLUGIN-PAGE.md`: history. The study of shipping the room as a Paperclip plugin page.
+- `history/SOURCES.md`: history. What Paperclip cost the room and the plan for a direct source.
