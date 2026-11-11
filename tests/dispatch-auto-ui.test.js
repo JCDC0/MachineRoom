@@ -120,6 +120,25 @@ describe('DispatchPanel auto lane', () => {
     })
   })
 
+  it('shows the manual sentence after Auto when no lane choice is saved', async () => {
+    vi.useFakeTimers()
+    const { client } = makeClient()
+    client.routeLane = async () => {
+      throw new Error('Pick the lanes for this project first.')
+    }
+    await withDom(async ({ container, root }) => {
+      await act(async () => {
+        root.render(createElement(DispatchPanel, { client, initialAgents: AGENTS }))
+      })
+      await settleTimers()
+      await typeInto(container.querySelector('#project-run-task'), 'One.')
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(400)
+      })
+      expect(container.textContent).toContain('Auto: Pick the lanes for this project first.')
+    })
+  })
+
   it('shows no Auto when the bridge has no routeLane', async () => {
     vi.useFakeTimers()
     const { client } = makeClient({ route: false })

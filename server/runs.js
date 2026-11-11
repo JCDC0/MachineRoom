@@ -13,7 +13,7 @@ import { outcomeTable, subjectsFromLog } from './outcomes.js'
 import { gitPath } from './programPath.js'
 import { killTree, treeSpawnOptions } from './processTree.js'
 import { laneAgents, readAllLanes, runsFolder as defaultRunsFolder } from './lanes-source.js'
-import { activeLanesFileFor, hiddenLaneProblem, projectLanesFileFor, readActiveLanesChoice, readHiddenLanes } from './active-lanes.js'
+import { NO_ACTIVE_CHOICE_PROBLEM, activeLanesFileFor, hiddenLaneProblem, projectLanesFileFor, readActiveLanesChoice, readHiddenLanes } from './active-lanes.js'
 
 export const RECENT_LIMIT = 20
 export const LAST_LINE_LIMIT = 5
@@ -57,6 +57,21 @@ function processAlive(pid) {
   } catch (error) {
     return error?.code === 'EPERM'
   }
+}
+
+function readTextAt(path) {
+  if (!path) return null
+  try {
+    return readFileSync(path, 'utf8')
+  } catch {
+    return null
+  }
+}
+
+function laneLockAlive(folder, key) {
+  if (!folder) return false
+  const holder = laneLockPids(readTextAt(join(folder, `${key}.lock`)))
+  return processAlive(holder.pid) || processAlive(holder.child)
 }
 
 function git(folder, args) {
@@ -194,6 +209,54 @@ export function runsFile() {
 
 export function outcomesFile() {
   return join(defaultRunsFolder(), 'outcomes.jsonl')
+}
+
+export function readStartLanes({ lanesFile = '', runsFolder: folder = '' } = {}) {
+  const text = readTextAt(lanesFile ? resolve(lanesFile) : REPO_LANES)
+  if (text === null) return null
+  let base
+  try {
+    base = JSON.parse(text)
+  } catch {
+    return null
+  }
+  if (!base || typeof base !== 'object' || Array.isArray(base)) return null
+  return readAllLanes({ lanesJson: base, runsFolder: folder || defaultRunsFolder() })
+}
+
+export function laneStatesFor({
+  lanesConfig,
+  projectRoot = '',
+  runsFolder: folder = '',
+  activeLanes = null,
+  isLaneActive = null,
+  running = null,
+} = {}) {
+  const helper = typeof activeLanes === 'function' ? activeLanes() : activeLanes
+  const hiddenSet = helper && typeof helper.hiddenKeySet === 'function'
+    ? helper.hiddenKeySet()
+    : folder
+      ? new Set(readHiddenLanes(projectLanesFileFor(projectRoot, folder)))
+      : new Set()
+  const saved = folder ? readActiveLanesChoice(activeLanesFileFor(projectRoot, folder)) : null
+  const chosen = helper && typeof helper.isChosen === 'function' ? helper.isChosen() : saved !== null
+  const lanes = []
+  for (const [key, entry] of Object.entries(lanesConfig ?? {})) {
+    if (key === 'orchestrator') continue
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue
+    const active = typeof isLaneActive === 'function'
+      ? isLaneActive(key)
+      : helper && typeof helper.isLaneActive === 'function'
+        ? helper.isLaneActive(key)
+        : saved !== null && saved.includes(key)
+    lanes.push({
+      key,
+      eligible: entry.retired !== true && entry.cli !== null && typeof entry.cli === 'object',
+      active: active === true && !hiddenSet.has(key),
+      busy: (running !== null && typeof running.has === 'function' && running.has(key)) || laneLockAlive(folder, key),
+    })
+  }
+  return { lanes, chosen }
 }
 
 const runRecordCaches = new Map()
@@ -352,40 +415,6 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
     return readPath(join(resolvedBriefs, name))
   }
 
-  function laneLockAlive(key) {
-    const holder = laneLockPids(readPath(join(recordsDir(), `${key}.lock`)) ?? '')
-    return processAlive(holder.pid) || processAlive(holder.child)
-  }
-
-  function laneStates(lanesConfig) {
-    const helper = typeof activeLanes === 'function' ? activeLanes() : activeLanes
-    const hiddenSet = helper && typeof helper.hiddenKeySet === 'function'
-      ? helper.hiddenKeySet()
-      : runsFolder
-        ? new Set(readHiddenLanes(projectLanesFileFor(projectRoot, runsFolder)))
-        : new Set()
-    const saved = !helper && runsFolder ? readActiveLanesChoice(activeLanesFileFor(projectRoot, runsFolder)) : null
-    const list = []
-    for (const [key, entry] of Object.entries(lanesConfig ?? {})) {
-      if (key === 'orchestrator') continue
-      if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue
-      const active = typeof isLaneActive === 'function'
-        ? isLaneActive(key)
-        : helper && typeof helper.isLaneActive === 'function'
-          ? helper.isLaneActive(key)
-          : runsFolder
-            ? saved !== null && saved.includes(key)
-            : true
-      list.push({
-        key,
-        eligible: entry.retired !== true && entry.cli !== null && typeof entry.cli === 'object',
-        active: active && !hiddenSet.has(key),
-        busy: running.has(key) || laneLockAlive(key),
-      })
-    }
-    return list
-  }
-
   function profileForTasks(tasks) {
     let best = null
     let rank = -1
@@ -410,7 +439,9 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
       return { status: 400, error: error.message }
     }
     const costs = readLaneCosts({ agents: laneAgents(lanesConfig), records: readAllRunRecords(recordsPath()) })
-    const states = laneStates(lanesConfig).filter((lane) => only === null || only.includes(lane.key))
+    const state = laneStatesFor({ lanesConfig, projectRoot, runsFolder: recordsDir(), activeLanes, isLaneActive, running })
+    if (!state.chosen) return { status: 400, error: NO_ACTIVE_CHOICE_PROBLEM }
+    const states = state.lanes.filter((lane) => only === null || only.includes(lane.key))
     const answer = routeLane({
       policy,
       profile,
@@ -708,12 +739,7 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
         sendJson(req, res, 404, { error: 'The brief files are missing.' })
         return true
       }
-      try {
-        const base = JSON.parse(lanesText)
-        lanes = readAllLanes({ lanesJson: base, runsFolder: recordsDir() })
-      } catch {
-        lanes = null
-      }
+      lanes = readStartLanes({ lanesFile: laneFile, runsFolder: recordsDir() })
     } else {
       const lanesText = readText('lanes.json')
       tasksText = readText('TASKS.md')

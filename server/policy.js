@@ -1,16 +1,14 @@
 import { readFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { parseBriefs } from '../src/briefs/briefs.js'
-import { laneLockPids } from '../src/briefs/run.js'
 import { profileFromBrief, profileFromTask } from '../src/policy/profile.js'
 import { chooseRoute, readPolicy, routeLane } from '../src/policy/route.js'
-import { activeLanesFileFor, projectLanesFileFor, readActiveLanesChoice, readHiddenLanes } from './active-lanes.js'
+import { NO_ACTIVE_CHOICE_PROBLEM } from './active-lanes.js'
 import { readLaneCosts } from './lane-costs.js'
 import { laneAgents, readLanes, runsFolder as defaultRunsFolder } from './lanes-source.js'
-import { REPO_POLICY, TASK_LIMIT, TASK_PROBLEM } from './runs.js'
+import { REPO_POLICY, TASK_LIMIT, TASK_PROBLEM, laneStatesFor, readStartLanes } from './runs.js'
 
 const POLICY_FILE = 'policy.json'
-const LANES_FILE = 'lanes.json'
 const TASKS_FILE = 'TASKS.md'
 const FAILURES_PROBLEM = 'Failures must be a whole number from 0 to 5.'
 const NO_BRIEF_OR_TASK_PROBLEM = 'Name a brief or a task.'
@@ -36,40 +34,6 @@ function failuresProblem(failures) {
   if (failures === undefined) return null
   if (!Number.isInteger(failures) || failures < 0 || failures > 5) return FAILURES_PROBLEM
   return null
-}
-
-function processAlive(pid) {
-  if (!Number.isInteger(pid) || pid <= 0) return false
-  try {
-    process.kill(pid, 0)
-    return true
-  } catch (error) {
-    return error?.code === 'EPERM'
-  }
-}
-
-function laneLockAlive(folder, key) {
-  if (!folder) return false
-  const holder = laneLockPids(readText(join(folder, `${key}.lock`)))
-  return processAlive(holder.pid) || processAlive(holder.child)
-}
-
-export function laneStatesFor({ lanesConfig, projectRoot = '', runsFolder = '' } = {}) {
-  const saved = readActiveLanesChoice(activeLanesFileFor(projectRoot, runsFolder))
-  const activeSet = saved === null ? new Set() : new Set(saved)
-  const hiddenSet = new Set(readHiddenLanes(projectLanesFileFor(projectRoot, runsFolder)))
-  const states = []
-  for (const [key, entry] of Object.entries(lanesConfig ?? {})) {
-    if (key === 'orchestrator') continue
-    if (!isPlainObject(entry)) continue
-    states.push({
-      key,
-      eligible: entry.retired !== true && isPlainObject(entry.cli),
-      active: activeSet.has(key) && !hiddenSet.has(key),
-      busy: laneLockAlive(runsFolder, key),
-    })
-  }
-  return states
 }
 
 export function createPolicyApi(options) {
@@ -104,22 +68,9 @@ export function createPolicyApi(options) {
   }
 
   function readLaneConfig() {
-    const text = readText(resolvedBriefs ? join(resolvedBriefs, LANES_FILE) : null)
-    if (text === null) {
-      try {
-        const fallback = readLanes()
-        return isPlainObject(fallback) ? { lanes: fallback } : { status: 400, error: LANE_FILE_PROBLEM }
-      } catch {
-        return { status: 400, error: LANE_FILE_PROBLEM }
-      }
-    }
-    try {
-      const parsed = JSON.parse(text)
-      if (!isPlainObject(parsed)) return { status: 400, error: LANE_FILE_PROBLEM }
-      return { lanes: parsed }
-    } catch {
-      return { status: 400, error: LANE_FILE_PROBLEM }
-    }
+    const config = readStartLanes({ lanesFile: options.lanesFile, runsFolder: resolvedRuns })
+    if (config === null) return { status: 400, error: LANE_FILE_PROBLEM }
+    return { lanes: config }
   }
 
   function profileFor(body) {
@@ -164,13 +115,18 @@ export function createPolicyApi(options) {
     }
 
     const meters = readMeters()
+    const state = laneStatesFor({ lanesConfig: config.lanes, projectRoot: resolvedRoot, runsFolder: resolvedRuns })
+    if (!state.chosen) {
+      sendJson(req, res, 400, { error: NO_ACTIVE_CHOICE_PROBLEM })
+      return
+    }
     const answer = routeLane({
       policy: read.policy,
       profile: source.profile,
       failures: body.failures,
       quotas: meters.quotas,
       spent: meters.spent,
-      lanes: laneStatesFor({ lanesConfig: config.lanes, projectRoot: resolvedRoot, runsFolder: resolvedRuns }),
+      lanes: state.lanes,
     })
     sendJson(req, res, 200, answer)
   }
