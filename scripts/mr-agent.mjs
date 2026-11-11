@@ -488,6 +488,10 @@ function realPathOrParent(path) {
     try {
       return realpathSync.native(probe)
     } catch {
+      try {
+        lstatSync(probe)
+        return null
+      } catch {}
       const parent = dirname(probe)
       if (parent === probe) return probe
       probe = parent
@@ -502,7 +506,8 @@ function realInside(cwd, path) {
   } catch {
     root = cwd
   }
-  return !leavesRoot(root, realPathOrParent(path))
+  const real = realPathOrParent(path)
+  return real !== null && !leavesRoot(root, real)
 }
 
 function inside(cwd, raw) {

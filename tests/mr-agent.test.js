@@ -924,6 +924,25 @@ describe('mr-agent files', () => {
     expect(existsSync(join(outside, 'new.txt'))).toBe(false)
   })
 
+  it('refuses a write through a link whose target is missing', async () => {
+    const folder = tempDir()
+    const outside = tempDir()
+    const missing = join(outside, 'missing')
+    symlinkSync(missing, join(folder, 'link'), process.platform === 'win32' ? 'junction' : 'dir')
+    const { users } = await runCalls({
+      folder,
+      calls: [
+        { name: 'write_file', arguments: { path: 'link/new.txt', content: 'escaped\n' } },
+        { name: 'write_file', arguments: { path: 'link', content: 'escaped\n' } },
+      ],
+    })
+    for (const user of users) {
+      expect(user.is_error).toBe(true)
+      expect(user.content).toContain('outside the working folder')
+    }
+    expect(existsSync(missing)).toBe(false)
+  })
+
   it('skips a junction in a git file list', async () => {
     const folder = tempDir()
     const outside = tempDir()
