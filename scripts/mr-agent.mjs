@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 import { execFileSync, spawn } from 'node:child_process'
-import { closeSync, existsSync, mkdirSync, openSync, readFileSync, readdirSync, readSync, statSync, writeFileSync } from 'node:fs'
+import { closeSync, existsSync, lstatSync, mkdirSync, openSync, readFileSync, readdirSync, readSync, realpathSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { basename, dirname, isAbsolute, join, relative, resolve, sep, win32 } from 'node:path'
+import { StringDecoder } from 'node:string_decoder'
 import { fileURLToPath } from 'node:url'
 import { keyFromFile } from '../server/family.js'
 import { killTree } from '../server/processTree.js'
@@ -38,6 +39,9 @@ const GIT_LIST_BUFFER = 64 * 1024 * 1024
 const READ_LINE_LIMIT = 2000
 const READ_LINE_WIDTH = 2000
 const READ_BINARY_BYTES = 8192
+const READ_SIZE_LIMIT = 50 * 1024 * 1024
+const READ_CHUNK_BYTES = 64 * 1024
+const READ_MORE = '[more lines. Read again with offset to see them.]'
 const MISSING_KEY = 'Set MACHINEROOM_API_KEY or OPENROUTER_API_KEY.'
 const MCP_TEXT_LIMIT = 20000
 const MCP_EMPTY = 'No MCP servers are configured.'
@@ -473,11 +477,38 @@ function pathFrom(args, fallback = '') {
   return fallback
 }
 
+function leavesRoot(root, path) {
+  const seen = relative(root, path)
+  return seen !== '' && (seen.startsWith(`..${sep}`) || seen === '..' || isAbsolute(seen))
+}
+
+function realPathOrParent(path) {
+  let probe = path
+  for (;;) {
+    try {
+      return realpathSync.native(probe)
+    } catch {
+      const parent = dirname(probe)
+      if (parent === probe) return probe
+      probe = parent
+    }
+  }
+}
+
+function realInside(cwd, path) {
+  let root
+  try {
+    root = realpathSync.native(cwd)
+  } catch {
+    root = cwd
+  }
+  return !leavesRoot(root, realPathOrParent(path))
+}
+
 function inside(cwd, raw) {
   const value = String(raw)
   const full = resolve(cwd, value)
-  const seen = relative(cwd, full)
-  if (seen !== '' && (seen.startsWith(`..${sep}`) || seen === '..' || isAbsolute(seen))) {
+  if (leavesRoot(cwd, full) || !realInside(cwd, full)) {
     throw new Error(`The path ${value} is outside the working folder.`)
   }
   return full
@@ -550,11 +581,53 @@ function countText(lines) {
   return `${lines} ${lines === 1 ? 'line' : 'lines'}`
 }
 
-function fileLines(text) {
-  if (text === '') return []
-  const lines = text.split('\n').map((line) => (line.endsWith('\r') ? line.slice(0, -1) : line))
-  if (lines[lines.length - 1] === '') lines.pop()
-  return lines
+function readWindow(full, offset, limit) {
+  const handle = openSync(full, 'r')
+  const decoder = new StringDecoder('utf8')
+  const chunk = Buffer.alloc(READ_CHUNK_BYTES)
+  const lines = []
+  let position = 0
+  let number = 1
+  let carry = ''
+  let done = false
+  let more = false
+  try {
+    while (!done) {
+      const got = readSync(handle, chunk, 0, chunk.length, position)
+      if (got === 0) {
+        carry += decoder.end()
+        break
+      }
+      position += got
+      const text = carry + decoder.write(chunk.subarray(0, got))
+      const parts = text.split('\n')
+      carry = parts.pop()
+      if (carry.length > READ_LINE_WIDTH + 1) carry = carry.slice(0, READ_LINE_WIDTH + 1)
+      for (let index = 0; index < parts.length; index += 1) {
+        if (number >= offset && lines.length < limit) {
+          const raw = parts[index]
+          lines.push(raw.endsWith('\r') ? raw.slice(0, -1) : raw)
+        }
+        number += 1
+        if (lines.length >= limit) {
+          more = index < parts.length - 1 || carry !== ''
+          if (!more) {
+            const probe = Buffer.alloc(1)
+            more = readSync(handle, probe, 0, 1, position) > 0
+          }
+          done = true
+          break
+        }
+      }
+    }
+    const total = number - 1 + (carry === '' ? 0 : 1)
+    if (!done && carry !== '' && number >= offset && lines.length < limit) {
+      lines.push(carry.endsWith('\r') ? carry.slice(0, -1) : carry)
+    }
+    return { lines, total, more }
+  } finally {
+    closeSync(handle)
+  }
 }
 
 function readTool(args, cwd) {
@@ -568,6 +641,14 @@ function readTool(args, cwd) {
     throw new Error(`The file ${path} was not found.`)
   }
   if (!info.isFile()) throw new Error(`The path ${path} is not a file.`)
+  const askedOffset = Math.trunc(Number(args.offset))
+  const offset = Number.isFinite(askedOffset) && askedOffset > 1 ? askedOffset : 1
+  const askedLimit = Math.trunc(Number(args.limit))
+  const hasLimit = Number.isFinite(askedLimit) && askedLimit > 0
+  const limit = hasLimit ? Math.min(askedLimit, READ_LINE_LIMIT) : READ_LINE_LIMIT
+  if (info.size > READ_SIZE_LIMIT && !hasLimit) {
+    throw new Error(`The file ${path} is over 50 MB, so read it with offset and limit.`)
+  }
   const probe = Buffer.alloc(Math.min(READ_BINARY_BYTES, info.size))
   let read = 0
   if (probe.length > 0) {
@@ -583,26 +664,21 @@ function readTool(args, cwd) {
     }
   }
   if (probe.subarray(0, read).includes(0)) return { text: `The file ${path} is binary, so it was not read.`, isError: false }
-  let text
+  let window
   try {
-    text = readFileSync(full, 'utf8')
+    window = readWindow(full, offset, limit)
   } catch {
     throw new Error(`The file ${path} could not be read.`)
   }
-  const lines = fileLines(text)
-  const askedOffset = Math.trunc(Number(args.offset))
-  const offset = Number.isFinite(askedOffset) && askedOffset > 1 ? askedOffset : 1
-  const askedLimit = Math.trunc(Number(args.limit))
-  const limit = Number.isFinite(askedLimit) && askedLimit > 0 ? Math.min(askedLimit, READ_LINE_LIMIT) : READ_LINE_LIMIT
-  if (offset > lines.length) return { text: `The file ${path} has ${countText(lines.length)}.`, isError: false }
-  const shown = lines.slice(offset - 1, offset - 1 + limit)
-  const numbered = shown.map((line, index) => {
+  if (window.lines.length === 0 && offset > window.total) {
+    return { text: `The file ${path} has ${countText(window.total)}.`, isError: false }
+  }
+  const numbered = window.lines.map((line, index) => {
     const cut = line.length > READ_LINE_WIDTH ? line.slice(0, READ_LINE_WIDTH) : line
     return `${offset + index}\t${cut}`
   })
-  const more = lines.length - (offset - 1 + shown.length)
   const body = numbered.join('\n')
-  const answer = more > 0 ? `${body}\n[${more} more lines. Read again with offset to see them.]` : body
+  const answer = window.more ? `${body}\n${READ_MORE}` : body
   return { text: answer === '' ? '(empty file)' : answer, isError: false }
 }
 
@@ -664,11 +740,12 @@ function listTool(args, cwd) {
   return { text: entries.length > 0 ? entries.join('\n') : '(empty folder)', isError: false }
 }
 
-function gitFileList(cwd) {
+function gitFileList(cwd, start) {
   if (!existsSync(join(cwd, '.git'))) return null
+  const base = relative(cwd, start).split(sep).join('/') || '.'
   let listed
   try {
-    listed = execFileSync(gitPath(), ['-C', cwd, 'ls-files', '-z', '--cached', '--others', '--exclude-standard'], {
+    listed = execFileSync(gitPath(), ['--literal-pathspecs', '-C', cwd, 'ls-files', '-z', '--cached', '--others', '--exclude-standard', '--', base], {
       encoding: 'utf8',
       maxBuffer: GIT_LIST_BUFFER,
       timeout: 30000,
@@ -685,16 +762,33 @@ function gitFileList(cwd) {
 
 function walkFiles(start, cwd) {
   const files = []
+  const visited = new Set()
   const visit = (path) => {
     let info
     try {
-      info = statSync(path)
+      info = lstatSync(path)
     } catch {
       return
+    }
+    if (info.isSymbolicLink()) {
+      if (!realInside(cwd, path)) return
+      try {
+        info = statSync(path)
+      } catch {
+        return
+      }
     }
     if (info.isDirectory()) {
       const name = basename(path)
       if (name === '.git' || name === 'node_modules') return
+      let real
+      try {
+        real = realpathSync.native(path)
+      } catch {
+        return
+      }
+      if (visited.has(real)) return
+      visited.add(real)
       let entries
       try {
         entries = readdirSync(path, { withFileTypes: true })
@@ -721,11 +815,9 @@ function filesUnder(cwd, start) {
   }
   if (info.isFile()) return [relative(cwd, start).split(sep).join('/')]
   if (!info.isDirectory()) return []
-  const listed = gitFileList(cwd)
+  const listed = gitFileList(cwd, start)
   if (listed === null) return walkFiles(start, cwd)
-  const base = relative(cwd, start).split(sep).join('/')
-  if (base === '' || base === '.') return listed
-  return listed.filter((name) => name === base || name.startsWith(`${base}/`))
+  return listed
 }
 
 function globPattern(glob) {
@@ -774,6 +866,7 @@ function searchTool(args, cwd) {
     if (found.length >= SEARCH_MATCH_LIMIT) break
     if (matchGlob && !matchGlob(name)) continue
     const full = join(cwd, name)
+    if (!realInside(cwd, full)) continue
     let info
     try {
       info = statSync(full)
@@ -803,7 +896,7 @@ function globFilesTool(args, cwd) {
   if (!matchGlob) throw new Error('glob_files needs a pattern.')
   const start = inside(cwd, pathFrom(args, '.'))
   const names = filesUnder(cwd, start)
-    .filter((name) => matchGlob(name))
+    .filter((name) => matchGlob(name) && realInside(cwd, join(cwd, name)))
     .sort((left, right) => left.localeCompare(right))
     .slice(0, GLOB_FILE_LIMIT)
   return { text: names.length > 0 ? names.join('\n') : 'No files.', isError: false }

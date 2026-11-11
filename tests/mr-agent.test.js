@@ -1,6 +1,6 @@
 import { execFileSync, spawn } from 'node:child_process'
 import { createServer } from 'node:http'
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { closeSync, existsSync, mkdirSync, openSync, readFileSync, symlinkSync, writeFileSync, writeSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -179,6 +179,14 @@ async function runCalls({ folder, calls, env = {} }) {
     .filter((line) => line.type === 'user')
     .map((line) => line.message.content[0])
   return { api, result, users }
+}
+
+function makeJunction(link, target) {
+  if (process.platform === 'win32') {
+    execFileSync('cmd.exe', ['/d', '/c', 'mklink', '/J', link, target], { stdio: 'ignore' })
+    return
+  }
+  symlinkSync(target, link, 'dir')
 }
 
 describe('mr-agent', () => {
@@ -890,6 +898,49 @@ describe('mr-agent files', () => {
     expect(users[1].is_error).toBe(true)
     expect(users[1].content).toContain('outside the working folder')
   })
+
+  it('refuses a junction that leads out of the working folder', async () => {
+    const folder = tempDir()
+    const outside = tempDir()
+    writeFileSync(join(outside, 'secret.txt'), 'OUTSIDE-THE-PROJECT\n')
+    makeJunction(join(folder, 'link'), outside)
+    const { users } = await runCalls({
+      folder,
+      calls: [
+        { name: 'read_file', arguments: { path: 'link/secret.txt' } },
+        { name: 'write_file', arguments: { path: 'link/new.txt', content: 'inside\n' } },
+        { name: 'edit_file', arguments: { path: 'link/secret.txt', old_string: 'OUTSIDE', new_string: 'INSIDE' } },
+        { name: 'search', arguments: { pattern: 'OUTSIDE-THE-PROJECT', path: 'link' } },
+        { name: 'glob_files', arguments: { pattern: '*.txt', path: 'link' } },
+        { name: 'search', arguments: { pattern: 'OUTSIDE-THE-PROJECT' } },
+      ],
+    })
+    for (const user of users.slice(0, 5)) {
+      expect(user.is_error).toBe(true)
+      expect(user.content).toContain('outside the working folder')
+    }
+    expect(users[5]).toMatchObject({ content: 'No matches.', is_error: false })
+    expect(readFileSync(join(outside, 'secret.txt'), 'utf8')).toBe('OUTSIDE-THE-PROJECT\n')
+    expect(existsSync(join(outside, 'new.txt'))).toBe(false)
+  })
+
+  it('skips a junction in a git file list', async () => {
+    const folder = tempDir()
+    const outside = tempDir()
+    writeFileSync(join(outside, 'secret.txt'), 'OUTSIDE-THE-PROJECT\n')
+    writeFileSync(join(folder, 'kept.txt'), 'kept\n')
+    makeJunction(join(folder, 'link'), outside)
+    execFileSync(gitPath(), ['init'], { cwd: folder, stdio: 'ignore' })
+    const { users } = await runCalls({
+      folder,
+      calls: [
+        { name: 'search', arguments: { pattern: 'OUTSIDE-THE-PROJECT' } },
+        { name: 'glob_files', arguments: { pattern: '*.txt' } },
+      ],
+    })
+    expect(users[0]).toMatchObject({ content: 'No matches.', is_error: false })
+    expect(users[1].content).toBe('kept.txt')
+  })
 })
 
 describe('mr-agent tools', () => {
@@ -904,14 +955,14 @@ describe('mr-agent tools', () => {
         { name: 'read_file', arguments: { path: 'big.txt' } },
       ],
     })
-    expect(users[0].content).toBe('2\ttwo\n3\tthree\n[2 more lines. Read again with offset to see them.]')
+    expect(users[0].content).toBe('2\ttwo\n3\tthree\n[more lines. Read again with offset to see them.]')
     expect(users[0].is_error).toBe(false)
     const big = users[1].content
     const bigLines = big.split('\n')
     expect(bigLines).toHaveLength(2001)
     expect(bigLines[0]).toBe('1\tline 1')
     expect(bigLines[1999]).toBe('2000\tline 2000')
-    expect(bigLines[2000]).toBe('[5 more lines. Read again with offset to see them.]')
+    expect(bigLines[2000]).toBe('[more lines. Read again with offset to see them.]')
     expect(big).not.toContain('2001\tline 2001')
   })
 
@@ -929,6 +980,32 @@ describe('mr-agent tools', () => {
     const { users } = await runCalls({ folder, calls: [{ name: 'read_file', arguments: { path: 'bin.dat' } }] })
     expect(users[0].content).toContain('binary')
     expect(users[0].is_error).toBe(false)
+  })
+
+  it('reads a window of a large file and refuses one with no limit', async () => {
+    const folder = tempDir()
+    const handle = openSync(join(folder, 'large.txt'), 'w')
+    const line = `${'x'.repeat(1023)}\n`
+    const block = line.repeat(1024)
+    try {
+      for (let index = 0; index < 60; index += 1) writeSync(handle, block)
+    } finally {
+      closeSync(handle)
+    }
+    const { users } = await runCalls({
+      folder,
+      calls: [
+        { name: 'read_file', arguments: { path: 'large.txt', limit: 5 } },
+        { name: 'read_file', arguments: { path: 'large.txt' } },
+      ],
+    })
+    const window = users[0].content.split('\n')
+    expect(window).toHaveLength(6)
+    expect(window[0]).toBe(`1\t${'x'.repeat(1023)}`)
+    expect(window[5]).toBe('[more lines. Read again with offset to see them.]')
+    expect(users[0].is_error).toBe(false)
+    expect(users[1].is_error).toBe(true)
+    expect(users[1].content).toContain('offset and limit')
   })
 
   it('keeps the last line and the exit code of a failing command', async () => {
@@ -1042,6 +1119,24 @@ describe('mr-agent tools', () => {
     expect(users[1].content).not.toContain('a.js')
     expect(users[2].content.startsWith('long.txt:1: needle')).toBe(true)
     for (const line of users[2].content.split('\n')) expect(line.length).toBeLessThanOrEqual(300)
+  })
+
+  it('searches and lists under one folder only', async () => {
+    const folder = tempDir()
+    mkdirSync(join(folder, 'one'), { recursive: true })
+    mkdirSync(join(folder, 'two'), { recursive: true })
+    writeFileSync(join(folder, 'one', 'a.txt'), 'needle in one\n')
+    writeFileSync(join(folder, 'two', 'b.txt'), 'needle in two\n')
+    execFileSync(gitPath(), ['init'], { cwd: folder, stdio: 'ignore' })
+    const { users } = await runCalls({
+      folder,
+      calls: [
+        { name: 'search', arguments: { pattern: 'needle', path: 'one' } },
+        { name: 'glob_files', arguments: { pattern: '*.txt', path: 'one' } },
+      ],
+    })
+    expect(users[0].content).toBe('one/a.txt:1: needle in one')
+    expect(users[1].content).toBe('one/a.txt')
   })
 
   it('lists the files that match a glob', async () => {
