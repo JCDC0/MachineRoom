@@ -67,8 +67,10 @@ function startFakeApi(handler) {
         const parsed = body === '' ? null : JSON.parse(body)
         calls.push({ method: req.method, url: req.url, headers: req.headers, body: parsed })
         const answer = await handler(parsed, calls.length - 1, calls)
-        res.writeHead(200, { 'content-type': 'application/json' })
-        res.end(JSON.stringify(answer))
+        const status = Number.isInteger(answer?.status) ? answer.status : 200
+        const headers = { 'content-type': 'application/json', ...(answer?.headers ?? {}) }
+        res.writeHead(status, headers)
+        res.end(JSON.stringify(answer?.body ?? answer))
       } catch (error) {
         res.writeHead(500, { 'content-type': 'application/json' })
         res.end(JSON.stringify({ error: String(error?.message ?? error) }))
@@ -121,7 +123,7 @@ function startApprovalBridge(handler) {
   })
 }
 
-function runAgent({ folder, api = null, env = {}, model = 'test/model', endpoint = '', prompt = 'Do the task.', seconds = 40 }) {
+function runAgent({ folder, api = null, env = {}, model = 'test/model', endpoint = '', prompt = 'Do the task.', seconds = 40, reasoning = '' }) {
   return new Promise((done, fail) => {
     const childEnv = { ...baseEnvironment(), ...env }
     if (api) {
@@ -129,6 +131,7 @@ function runAgent({ folder, api = null, env = {}, model = 'test/model', endpoint
       childEnv.MACHINEROOM_API_KEY = 'test-key'
     }
     const args = [SCRIPT, '--model', model, '--cwd', folder]
+    if (reasoning) args.push('--reasoning', reasoning)
     if (endpoint) args.push('--endpoint', endpoint)
     args.push(prompt)
     const child = spawn(process.execPath, args, {
@@ -211,6 +214,7 @@ describe('mr-agent', () => {
     const assistants = lines.filter((line) => line.type === 'assistant')
     expect(assistants).toHaveLength(2)
     expect(assistants[0].message.content[0]).toEqual({ type: 'text', text: 'Working.' })
+    expect(assistants[0].message.usage).toEqual({ input_tokens: 10, output_tokens: 5 })
     const tools = assistants[0].message.content.filter((item) => item.type === 'tool_use')
     expect(tools.map((item) => item.name)).toEqual(['Read', 'Write', 'Edit', 'Read', 'Bash', 'LS', 'Grep'])
     expect(tools[0].input).toEqual({ file_path: 'a.txt' })
@@ -220,6 +224,7 @@ describe('mr-agent', () => {
     expect(tools[5].input).toEqual({ path: '.' })
     expect(tools[6].input).toEqual({ pattern: 'goodbye', path: '.' })
     expect(assistants[1].message.content).toEqual([{ type: 'text', text: 'All done.' }])
+    expect(assistants[1].message.usage).toEqual({ input_tokens: 100, output_tokens: 20 })
 
     const users = lines.filter((line) => line.type === 'user').map((line) => line.message.content[0])
     expect(users).toHaveLength(7)
@@ -248,6 +253,8 @@ describe('mr-agent', () => {
     expect(api.calls).toHaveLength(2)
     expect(api.calls[0].headers.authorization).toBe('Bearer test-key')
     expect(api.calls[0].body.model).toBe('test/model')
+    expect(api.calls[0].body.max_tokens).toBe(32000)
+    expect(api.calls[0].body.reasoning).toBeUndefined()
     expect(api.calls[0].body.messages.at(-1)).toEqual({ role: 'user', content: 'Do the task.' })
     expect(api.calls[0].body.tools.map((tool) => tool.function.name)).toEqual([
       'read_file',
@@ -263,6 +270,69 @@ describe('mr-agent', () => {
       'mcp_call_tool',
     ])
     expect(api.calls[1].body.messages.some((message) => message.role === 'tool' && message.tool_call_id === 'call_read')).toBe(true)
+  })
+
+  it('writes the project instructions and the shell into the system prompt', async () => {
+    const folder = tempDir()
+    writeFileSync(join(folder, 'AGENTS.md'), 'Use tabs. Run the tests.\n')
+    writeFileSync(join(folder, 'CLAUDE.md'), 'This file loses.\n')
+    const api = await startFakeApi(() => chatAnswer({ text: 'Done.' }))
+    const result = await runAgent({ folder, api })
+    expect(result.code).toBe(0)
+    const system = api.calls[0].body.messages[0]
+    expect(system.role).toBe('system')
+    expect(system.content).toContain(`working folder ${folder}`)
+    expect(system.content).toContain('Project instructions from AGENTS.md:')
+    expect(system.content).toContain('Use tabs. Run the tests.')
+    expect(system.content).not.toContain('This file loses.')
+    expect(system.content).toContain(shellFor('').file)
+    expect(system.content).toMatch(/Today is \d{4}-\d{2}-\d{2}\./)
+  })
+
+  it('falls back to CLAUDE.md and cuts the instructions at 20000 characters', async () => {
+    const folder = tempDir()
+    writeFileSync(join(folder, 'CLAUDE.md'), 'x'.repeat(25000))
+    const api = await startFakeApi(() => chatAnswer({ text: 'Done.' }))
+    const result = await runAgent({ folder, api })
+    expect(result.code).toBe(0)
+    const system = api.calls[0].body.messages[0].content
+    expect(system).toContain('Project instructions from CLAUDE.md:')
+    expect(system.endsWith('x'.repeat(20000))).toBe(true)
+    expect(system).not.toContain('x'.repeat(20001))
+  })
+
+  it('tries a 429 answer again and finishes', async () => {
+    const folder = tempDir()
+    const api = await startFakeApi((_body, index) =>
+      index === 0
+        ? { status: 429, headers: { 'retry-after': '0' }, body: { error: 'slow down' } }
+        : chatAnswer({ text: 'Done.' }),
+    )
+    const result = await runAgent({ folder, api })
+    expect(result.code).toBe(0)
+    expect(api.calls).toHaveLength(2)
+    expect(jsonLines(result.stdout).at(-1)).toMatchObject({ type: 'result', is_error: false, result: 'Done.' })
+  })
+
+  it('does not try a 401 answer again and masks the key', async () => {
+    const folder = tempDir()
+    const api = await startFakeApi(() => ({ status: 401, body: { error: 'The key test-key is not allowed.' } }))
+    const result = await runAgent({ folder, api })
+    expect(result.code).toBe(1)
+    expect(api.calls).toHaveLength(1)
+    const final = jsonLines(result.stdout).at(-1)
+    expect(final.is_error).toBe(true)
+    expect(final.result).toContain('401')
+    expect(final.result).not.toContain('test-key')
+  })
+
+  it('passes the reasoning effort and the token limit to the API', async () => {
+    const folder = tempDir()
+    const api = await startFakeApi(() => chatAnswer({ text: 'Done.' }))
+    const result = await runAgent({ folder, api, reasoning: 'high' })
+    expect(result.code).toBe(0)
+    expect(api.calls[0].body.reasoning).toEqual({ effort: 'high' })
+    expect(api.calls[0].body.max_tokens).toBe(32000)
   })
 
   it('offers only the tools each permission mode allows', async () => {
@@ -582,22 +652,47 @@ describe('mr-agent', () => {
     expect(result.stdout).toBe('')
   })
 
-  it('stops after 60 steps with an error result', async () => {
+  it('stops after 200 steps with an error result', async () => {
     const folder = tempDir()
     const api = await startFakeApi(() => chatAnswer({ calls: [{ name: 'list_dir', arguments: { path: '.' } }], usage: { prompt_tokens: 1, completion_tokens: 1 } }))
     const result = await runAgent({ folder, api })
     expect(result.code).toBe(1)
-    expect(api.calls).toHaveLength(60)
+    expect(api.calls).toHaveLength(200)
     const lines = jsonLines(result.stdout)
-    expect(lines.filter((line) => line.type === 'assistant')).toHaveLength(60)
-    expect(lines.filter((line) => line.type === 'user')).toHaveLength(60)
+    expect(lines.filter((line) => line.type === 'assistant')).toHaveLength(200)
+    expect(lines.filter((line) => line.type === 'user')).toHaveLength(200)
     expect(lines.at(-1)).toEqual({
       type: 'result',
       subtype: 'error',
       is_error: true,
-      result: 'Stopped after 60 steps.',
-      usage: { input_tokens: 60, output_tokens: 60 },
+      result: 'Stopped after 200 steps.',
+      usage: { input_tokens: 200, output_tokens: 200 },
     })
+  })
+
+  it('replaces the oldest tool results and keeps the newest six', async () => {
+    const folder = tempDir()
+    writeFileSync(join(folder, 'notes.txt'), `${'n'.repeat(600)}\n`)
+    const calls = Array.from({ length: 8 }, (_, index) => ({ id: `call_${index}`, name: 'read_file', arguments: { path: 'notes.txt' } }))
+    const api = await startFakeApi((_body, index) => (index === 0 ? chatAnswer({ calls }) : chatAnswer({ text: 'Done.' })))
+    const result = await runAgent({ folder, api, env: { MR_AGENT_CONTEXT_CHARS: '2000' } })
+    expect(result.code).toBe(0)
+    const results = api.calls[1].body.messages.filter((message) => message.role === 'tool')
+    expect(results).toHaveLength(8)
+    const removed = '[Output removed to save room. Run the tool again if it is needed.]'
+    expect(results.slice(0, 2).map((message) => message.content)).toEqual([removed, removed])
+    for (const message of results.slice(2)) expect(message.content).toContain('1\t')
+  })
+
+  it('takes the step limit from the environment', async () => {
+    const folder = tempDir()
+    const api = await startFakeApi(() => chatAnswer({ calls: [{ name: 'list_dir', arguments: { path: '.' } }], usage: { prompt_tokens: 1, completion_tokens: 1 } }))
+    const result = await runAgent({ folder, api, env: { MR_AGENT_MAX_STEPS: '3' } })
+    expect(result.code).toBe(1)
+    expect(api.calls).toHaveLength(3)
+    const lines = jsonLines(result.stdout)
+    expect(lines.filter((line) => line.type === 'assistant')).toHaveLength(3)
+    expect(lines.at(-1)).toMatchObject({ is_error: true, result: 'Stopped after 3 steps.' })
   })
 
   it('stops on a fetch error with an error result', async () => {
@@ -609,7 +704,7 @@ describe('mr-agent', () => {
       server.close(() => done())
       server.closeAllConnections?.()
     })
-    const result = await runAgent({ folder, api: { url: `http://127.0.0.1:${port}/v1` } })
+    const result = await runAgent({ folder, api: { url: `http://127.0.0.1:${port}/v1` }, env: { MR_AGENT_RETRY_BASE_MS: '1' } })
     expect(result.code).toBe(1)
     const final = jsonLines(result.stdout).at(-1)
     expect(final).toMatchObject({ type: 'result', is_error: true })
@@ -657,6 +752,8 @@ describe('machineroom harness', () => {
     expect(command.cwd).toBe('C:\\work')
     expect(command.args.slice(1)).toEqual(['--model', 'deepseek/test', '--cwd', 'C:\\work', 'Do it.'])
     expect(command.args[0].replaceAll('\\', '/')).toMatch(/\/scripts\/mr-agent\.mjs$/)
+    const reasoned = harness.command({ cli: { model: 'deepseek/test' }, prompt: 'Do it.', folder: 'C:\\work', reasoning: 'xhigh' })
+    expect(reasoned.args.slice(1)).toEqual(['--model', 'deepseek/test', '--cwd', 'C:\\work', '--reasoning', 'xhigh', 'Do it.'])
   })
 
   it('reads a stream-json line and summarizes a run', () => {
@@ -792,6 +889,36 @@ describe('mr-agent tools', () => {
         onPath: () => null,
       }),
     ).toEqual({ file: 'powershell.exe', args: ['-NoProfile', '-Command', 'dir'] })
+    const windowsBash = 'C:\\Windows\\System32\\bash.exe'
+    expect(
+      shellFor('ls', {
+        platform: 'win32',
+        git: () => gitExe,
+        exists: (path) => path === windowsBash,
+        onPath: () => windowsBash,
+        systemRoot: 'C:\\Windows',
+      }),
+    ).toEqual({ file: 'powershell.exe', args: ['-NoProfile', '-Command', 'ls'] })
+    const windowsGit = 'C:\\Windows\\cmd\\git.exe'
+    const windowsBeside = 'C:\\Windows\\bin\\bash.exe'
+    expect(
+      shellFor('ls', {
+        platform: 'win32',
+        git: () => windowsGit,
+        exists: (path) => path === windowsBeside,
+        onPath: () => null,
+        systemRoot: 'C:\\WINDOWS',
+      }),
+    ).toEqual({ file: 'powershell.exe', args: ['-NoProfile', '-Command', 'ls'] })
+    expect(
+      shellFor('ls', {
+        platform: 'win32',
+        git: () => null,
+        exists: (path) => path === onPathBash,
+        onPath: () => onPathBash,
+        systemRoot: 'C:\\Windows',
+      }),
+    ).toEqual({ file: onPathBash, args: ['-c', 'ls'] })
     expect(shellFor('ls', { platform: 'linux' })).toEqual({ file: '/bin/sh', args: ['-c', 'ls'] })
   })
 

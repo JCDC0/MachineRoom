@@ -37,7 +37,7 @@ export const machineroomHarness = {
   name: 'MachineRoom',
   adapterType: 'machineroom_local',
   createParser: createClaudeParser,
-  command({ cli, prompt = '', folder, mode, bridgeUrl, orchestratorId, token } = {}) {
+  command({ cli, prompt = '', folder, mode, bridgeUrl, orchestratorId, token, reasoning } = {}) {
     const cwd = typeof folder === 'string' && folder !== '' ? folder : '.'
     const env = {}
     if (typeof mode === 'string' && mode !== '') env.MACHINEROOM_PERMISSION_MODE = mode
@@ -46,9 +46,12 @@ export const machineroomHarness = {
       if (typeof orchestratorId === 'string' && orchestratorId !== '') env.MACHINEROOM_ORCHESTRATOR_ID = orchestratorId
       if (typeof token === 'string' && token !== '') env.MACHINEROOM_ORCHESTRATOR_TOKEN = token
     }
+    const args = [scriptFile(), '--model', String(cli?.model ?? ''), '--cwd', cwd]
+    if (typeof reasoning === 'string' && reasoning !== '') args.push('--reasoning', reasoning)
+    args.push(String(prompt))
     return {
       file: nodeFile(),
-      args: [scriptFile(), '--model', String(cli?.model ?? ''), '--cwd', cwd, String(prompt)],
+      args,
       cwd,
       ...(Object.keys(env).length > 0 ? { env } : {}),
     }
