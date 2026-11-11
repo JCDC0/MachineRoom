@@ -15,6 +15,7 @@ export { readAllLanes }
 const DEFAULT_QUIET_MS = 10 * 60 * 1000
 const DEFAULT_POLL_MS = 200
 const DEFAULT_PRIME_MS = 60 * 1000
+const DEFAULT_SCAN_MS = 2000
 const READ_CHUNK = 64 * 1024
 const MAX_PARTIAL = 8 * 1024 * 1024
 const QUIET_KEPT = 50
@@ -255,10 +256,25 @@ export function createLanesSource(options = {}) {
   const recordsFile = resolve(options.recordsFile ?? join(folder, 'runs.jsonl'))
   const repoRoot = resolve(options.repoRoot ?? REPO_ROOT)
   const roomRoot = options.projectRoot ? resolve(options.projectRoot) : ''
+  const readAllLanesFn = typeof options.readAllLanes === 'function' ? options.readAllLanes : readAllLanes
+  let lanesCache = null
+  let agentsCache = null
+  function laneFileStamp(file) {
+    try {
+      const stat = statSync(file)
+      return `${stat.size}:${stat.mtimeMs}`
+    } catch {
+      return '-'
+    }
+  }
   function currentLanes() {
     if (typeof options.lanes === 'function') return options.lanes()
     if (options.lanes) return options.lanes
-    return readAllLanes({ folder: repoRoot, runsFolder: folder })
+    const stamp = `${laneFileStamp(join(repoRoot, 'docs', 'agents', 'lanes.json'))}|${laneFileStamp(join(folder, 'agents.json'))}`
+    if (lanesCache && lanesCache.stamp === stamp) return lanesCache.lanes
+    const lanes = readAllLanesFn({ folder: repoRoot, runsFolder: folder })
+    lanesCache = { stamp, lanes }
+    return lanes
   }
   const subOrchestrators = typeof options.subOrchestrators === 'function' ? options.subOrchestrators : () => []
   const worktreeRoots = new Set([pathKey(repoRoot)])
@@ -269,10 +285,13 @@ export function createLanesSource(options = {}) {
   const sameRepo = new Map()
   const quietMs = Number(options.quietMs ?? DEFAULT_QUIET_MS)
   const pollMs = Number(options.pollMs ?? DEFAULT_POLL_MS)
+  const scanMs = Number(options.scanMs ?? DEFAULT_SCAN_MS)
   const primeMs = Number(options.primeMs ?? DEFAULT_PRIME_MS)
   const laggingPollMs = Number(options.laggingPollMs ?? 10000)
   const now = options.now ?? Date.now
   const onFrame = options.onFrame ?? (() => {})
+  const listFolder = typeof options.listFolder === 'function' ? options.listFolder : (dir) => readdirSync(dir, { withFileTypes: true })
+  const watchFolder = typeof options.watchFolder === 'function' ? options.watchFolder : watch
   const active = new Map()
   const quiet = new Map()
   const seen = new Set()
@@ -281,6 +300,9 @@ export function createLanesSource(options = {}) {
   const recordsCache = createRecordsCache(recordsFile)
   let watcher = null
   let timer = null
+  let scanTimer = null
+  let lastScanAt = 0
+  let scanWanted = false
   let stopped = false
   let ticking = false
   let primed = false
@@ -292,18 +314,23 @@ export function createLanesSource(options = {}) {
   }
 
   function allAgents() {
-    const list = laneAgents(currentLanes())
+    const lanes = currentLanes()
     let subs = []
     try {
       subs = subOrchestrators() ?? []
     } catch {
       subs = []
     }
-    for (const sub of Array.isArray(subs) ? subs : []) {
-      const agent = subOrchestratorAgent(sub, currentLanes())
-      if (agent && !list.some((item) => item.key === agent.key)) list.push(agent)
+    const list = Array.isArray(subs) ? subs : []
+    const key = list.map((sub) => `${sub?.id ?? ''}:${sub?.name ?? ''}:${sub?.harness ?? ''}:${sub?.model ?? ''}`).join('|')
+    if (agentsCache && agentsCache.lanes === lanes && agentsCache.key === key) return agentsCache.agents
+    const agents = laneAgents(lanes)
+    for (const sub of list) {
+      const agent = subOrchestratorAgent(sub, lanes)
+      if (agent && !agents.some((item) => item.key === agent.key)) agents.push(agent)
     }
-    return list
+    agentsCache = { lanes, key, agents }
+    return agents
   }
 
   function agentsNow() {
@@ -366,7 +393,7 @@ export function createLanesSource(options = {}) {
   function scan() {
     let entries
     try {
-      entries = readdirSync(folder, { withFileTypes: true })
+      entries = listFolder(folder)
     } catch {
       return
     }
@@ -581,11 +608,21 @@ export function createLanesSource(options = {}) {
     finish(run, ok ? 'succeeded' : 'failed', ok ? null : failureText(record))
   }
 
+  function scanDue() {
+    if (scanWanted) return true
+    if (lastScanAt === 0) return true
+    return now() - lastScanAt >= scanMs
+  }
+
   function tick() {
     if (stopped || ticking) return
     ticking = true
     try {
-      scan()
+      if (scanDue()) {
+        scan()
+        lastScanAt = now()
+        scanWanted = false
+      }
       for (const run of [...quiet.values()]) {
         let size
         try {
@@ -620,8 +657,11 @@ export function createLanesSource(options = {}) {
     } catch {}
     scan()
     primed = true
+    lastScanAt = now()
+    scanWanted = false
     try {
-      watcher = watch(folder, (_eventType, filename) => {
+      watcher = watchFolder(folder, (_eventType, filename) => {
+        scanWanted = true
         if (filename) pendingChecks.add(pathKey(join(folder, String(filename))))
         tick()
       })
@@ -634,6 +674,10 @@ export function createLanesSource(options = {}) {
     } catch {
       watcher = null
     }
+    scanTimer = setInterval(() => {
+      scanWanted = true
+      tick()
+    }, scanMs)
     timer = setInterval(tick, pollMs)
   }
 
@@ -645,6 +689,10 @@ export function createLanesSource(options = {}) {
     seen.clear()
     sameRepo.clear()
     pendingChecks.clear()
+    if (scanTimer) {
+      clearInterval(scanTimer)
+      scanTimer = null
+    }
     if (timer) {
       clearInterval(timer)
       timer = null

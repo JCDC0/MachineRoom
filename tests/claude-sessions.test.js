@@ -1,4 +1,4 @@
-import { appendFileSync, mkdirSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
+import { appendFileSync, mkdirSync, readdirSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { claudeProjectSlug, createClaudeSessionsReader } from '../server/claude-sessions.js'
@@ -70,7 +70,7 @@ function jsonLines(items) {
   return items.map((item) => `${JSON.stringify(item)}\n`).join('')
 }
 
-function makeReader({ projectRoot, home, runs, frames, now, quietMs, idleMs, idlePollMs }) {
+function makeReader({ projectRoot, home, runs, frames, now, quietMs, idleMs, idlePollMs, listFolder }) {
   const reader = createClaudeSessionsReader({
     projectRoot,
     home,
@@ -79,6 +79,7 @@ function makeReader({ projectRoot, home, runs, frames, now, quietMs, idleMs, idl
     quietMs,
     idleMs,
     idlePollMs,
+    listFolder,
     emit: (frame) => frames.push(frame),
   })
   cleanups.push(() => reader.stop())
@@ -366,6 +367,39 @@ describe('claude sessions reader', () => {
     reader.tick()
 
     expect(reader.metaFiles().has('claude-test.meta.json')).toBe(false)
+  })
+
+  it('lists the runs folder only when its change time moves', () => {
+    const { projectRoot, home, runs, sessionsFolder } = setup()
+    writeFileSync(join(runs, 'claude-a.meta.json'), `${JSON.stringify({ sessionId: 'sess-a' })}\n`)
+    let lists = 0
+    const reader = makeReader({
+      projectRoot,
+      home,
+      runs,
+      frames: [],
+      listFolder: (dir) => {
+        lists += 1
+        return readdirSync(dir, { withFileTypes: true })
+      },
+    })
+
+    reader.tick()
+    expect(lists).toBe(1)
+    reader.tick()
+    reader.tick()
+    expect(lists).toBe(1)
+
+    writeFileSync(join(runs, 'claude-b.meta.json'), `${JSON.stringify({ sessionId: 'sess-b' })}\n`)
+    reader.tick()
+    expect(lists).toBe(2)
+
+    writeFileSync(
+      join(sessionsFolder, 'sess-b.jsonl'),
+      jsonLines([sessionLine('user', { role: 'user', content: 'Go.' }, { sessionId: 'sess-b' }, projectRoot)])
+    )
+    reader.tick()
+    expect(reader.sessions().get('sess-b')?.skipped).toBe(true)
   })
 
   it('reads only the lines whose cwd is the project or inside it', () => {

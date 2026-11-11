@@ -5,6 +5,8 @@ import { runsFolder as defaultRunsFolder } from './lanes-source.js'
 
 const DEFAULT_QUIET_MS = 30000
 const DEFAULT_QUIET_POLL_MS = 10000
+const DEFAULT_SESSION_POLL_MS = 1000
+const DEFAULT_IDLE_SESSION_POLL_MS = 5000
 const TEXT_LIMIT = 2000
 const MAX_FORGOTTEN = 200
 
@@ -77,6 +79,11 @@ export function createOpencodeSessionsReader(options = {}) {
   const quietMs = Number.isFinite(rawQuiet) ? rawQuiet : DEFAULT_QUIET_MS
   const rawQuietPoll = Number(options.quietPollMs)
   const quietPollMs = Number.isFinite(rawQuietPoll) ? rawQuietPoll : DEFAULT_QUIET_POLL_MS
+  const rawSessionPoll = Number(options.sessionPollMs)
+  const sessionPollMs = Number.isFinite(rawSessionPoll) ? rawSessionPoll : DEFAULT_SESSION_POLL_MS
+  const rawIdleSessionPoll = Number(options.idleSessionPollMs)
+  const idleSessionPollMs = Number.isFinite(rawIdleSessionPoll) ? rawIdleSessionPoll : DEFAULT_IDLE_SESSION_POLL_MS
+  const onQuery = typeof options.onQuery === 'function' ? options.onQuery : () => {}
   const now = typeof options.now === 'function' ? options.now : Date.now
   const emit = typeof options.emit === 'function' ? options.emit : () => {}
   const rawRetention = Number(options.retentionMs)
@@ -85,9 +92,15 @@ export function createOpencodeSessionsReader(options = {}) {
   const open = new Map()
   const sent = new Map()
   const forgotten = new Map()
+  const knownRows = new Map()
   let db = null
   let sessionStmt = null
+  let sessionSinceStmt = null
   let messageStmt = null
+  let hasTimeUpdated = false
+  let fallbackNote = ''
+  let highWater = -1
+  let lastSessionScanAt = null
   let primed = false
   let stopped = false
   let lastError = ''
@@ -115,7 +128,17 @@ export function createOpencodeSessionsReader(options = {}) {
   function prepareStatements() {
     if (!db) return
     if (!sessionStmt) {
-      sessionStmt = db.prepare('SELECT id, parent_id, directory, title, time_updated FROM session_v2')
+      const columns = []
+      try {
+        for (const row of db.prepare("SELECT name FROM pragma_table_info('session_v2')").all()) {
+          if (row && typeof row.name === 'string') columns.push(row.name)
+        }
+      } catch {}
+      hasTimeUpdated = columns.includes('time_updated')
+      fallbackNote = columns.length > 0 && !hasTimeUpdated ? 'session_v2 has no time_updated column, so every session is read on each poll.' : ''
+      const timeColumn = hasTimeUpdated ? 'time_updated' : 'NULL AS time_updated'
+      sessionStmt = db.prepare(`SELECT id, parent_id, directory, title, ${timeColumn} FROM session_v2`)
+      sessionSinceStmt = hasTimeUpdated ? db.prepare('SELECT id, parent_id, directory, title, time_updated FROM session_v2 WHERE time_updated > ?') : null
     }
     if (!messageStmt) {
       messageStmt = db.prepare(
@@ -126,7 +149,21 @@ export function createOpencodeSessionsReader(options = {}) {
 
   function sessionRows() {
     if (!sessionStmt) prepareStatements()
-    return sessionStmt.all()
+    if (!sessionStmt) return []
+    const incremental = hasTimeUpdated && highWater >= 0
+    const since = incremental ? highWater : null
+    const rows = incremental ? sessionSinceStmt.all(highWater) : sessionStmt.all()
+    let highest = highWater
+    for (const row of rows) {
+      if (!row || typeof row.id !== 'string') continue
+      knownRows.set(row.id, row)
+      if (Number.isFinite(row.time_updated) && row.time_updated > highest) highest = row.time_updated
+    }
+    highWater = highest
+    try {
+      onQuery({ rows: rows.length, since })
+    } catch {}
+    return rows
   }
 
   function messageRows(sessionId, since) {
@@ -164,12 +201,9 @@ export function createOpencodeSessionsReader(options = {}) {
   }
 
   function prime() {
-    const rows = sessionRows()
+    sessionRows()
+    const rows = [...knownRows.values()]
     const included = includedSessions(rows)
-    const rowMap = new Map()
-    for (const row of rows) {
-      if (row && typeof row.id === 'string') rowMap.set(row.id, row)
-    }
     const at = now()
     for (const [id, rootId] of included) {
       const handled = new Map()
@@ -184,9 +218,10 @@ export function createOpencodeSessionsReader(options = {}) {
         rootId,
         lastSeen: at,
         lastPolled: at,
-        lastSessionUpdated: rowMap.get(id)?.time_updated ?? null,
+        lastSessionUpdated: knownRows.get(id)?.time_updated ?? null,
       })
     }
+    lastSessionScanAt = at
     primed = true
   }
 
@@ -363,15 +398,15 @@ export function createOpencodeSessionsReader(options = {}) {
   }
 
   function scan() {
-    const rows = sessionRows()
-    const included = includedSessions(rows)
-    const rowMap = new Map()
-    for (const row of rows) {
-      if (row && typeof row.id === 'string') rowMap.set(row.id, row)
-    }
     const at = now()
+    const gap = open.size > 0 ? sessionPollMs : idleSessionPollMs
+    if (lastSessionScanAt !== null && at - lastSessionScanAt < gap) return
+    lastSessionScanAt = at
+    sessionRows()
+    const rows = [...knownRows.values()]
+    const included = includedSessions(rows)
     for (const [id, rootId] of included) {
-      const sessionRow = rowMap.get(id)
+      const sessionRow = knownRows.get(id)
       const forgottenEntry = forgotten.get(id)
       if (forgottenEntry) {
         const timeUpdated = sessionRow?.time_updated ?? 0
@@ -449,6 +484,7 @@ export function createOpencodeSessionsReader(options = {}) {
     sessions.clear()
     sent.clear()
     forgotten.clear()
+    knownRows.clear()
     if (db) {
       try {
         db.close()
@@ -457,5 +493,13 @@ export function createOpencodeSessionsReader(options = {}) {
     }
   }
 
-  return { agent: { ...OPENCODE_SESSION_AGENT }, tick, stop, problem: () => lastError, sessions: () => sessions, forgotten: () => forgotten }
+  return {
+    agent: { ...OPENCODE_SESSION_AGENT },
+    tick,
+    stop,
+    problem: () => lastError,
+    note: () => fallbackNote,
+    sessions: () => sessions,
+    forgotten: () => forgotten,
+  }
 }

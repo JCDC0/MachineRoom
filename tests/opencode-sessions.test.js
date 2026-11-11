@@ -73,19 +73,23 @@ function updateMessage(dbPath, id, time, data) {
   })
 }
 
-function startReader({ dbPath, projectRoot, runsFolder, quietMs = 30000, retentionMs, clock = { value: 5000 } }) {
+function startReader({ dbPath, projectRoot, runsFolder, quietMs = 30000, retentionMs, clock = { value: 5000 }, idleSessionPollMs = 0, sessionPollMs = 0 }) {
   const frames = []
+  const queries = []
   const reader = createOpencodeSessionsReader({
     projectRoot,
     runsFolder,
     dbPath,
     quietMs,
     retentionMs,
+    idleSessionPollMs,
+    sessionPollMs,
     now: () => clock.value,
     emit: (frame) => frames.push(frame),
+    onQuery: (entry) => queries.push(entry),
   })
   cleanups.push(() => reader.stop())
-  return { reader, frames, clock }
+  return { reader, frames, clock, queries }
 }
 
 function toolItem({ id, name, status = 'completed', input = {}, text = '', content }) {
@@ -504,6 +508,7 @@ describe('the OpenCode session reader', () => {
       const reader = createOpencodeSessionsReader({
         projectRoot,
         runsFolder: join(base, 'runs'),
+        idleSessionPollMs: 0,
         now: () => 5000,
         emit: (frame) => frames.push(frame),
       })
@@ -694,5 +699,113 @@ describe('the OpenCode session reader', () => {
     expect(reader.forgotten().has('ses-drop')).toBe(false)
     expect(frames.length).toBeGreaterThan(before)
     expect(frames[before].payload.runId).toBe('ses-drop:3')
+  })
+
+  it('asks session_v2 only for rows past the highest update time', () => {
+    const { dir, dbPath } = makeDatabase()
+    const projectRoot = join(dir, 'project')
+    const clock = { value: 5000 }
+    const { reader, frames, queries } = startReader({
+      dbPath,
+      projectRoot,
+      runsFolder: join(dir, 'runs'),
+      clock,
+      idleSessionPollMs: 5000,
+    })
+    addSession(dbPath, { id: 'ses-1', directory: projectRoot, time: 1000 })
+    addMessage(dbPath, { id: 'm-user-1', sessionId: 'ses-1', type: 'user', seq: 1, time: 1000 })
+
+    reader.tick()
+    expect(queries).toHaveLength(1)
+    expect(queries[0]).toMatchObject({ rows: 1, since: null })
+    expect(frames).toEqual([])
+
+    clock.value += 5000
+    reader.tick()
+    expect(queries.at(-1)).toMatchObject({ rows: 0, since: 1000 })
+
+    const before = frames.length
+    addMessage(dbPath, { id: 'm-user-2', sessionId: 'ses-1', type: 'user', seq: 2, time: 9000 })
+    withDb(dbPath, (db) => {
+      db.prepare('UPDATE session_v2 SET time_updated = ? WHERE id = ?').run(9000, 'ses-1')
+    })
+    clock.value += 5000
+    reader.tick()
+
+    expect(queries.at(-1)).toMatchObject({ rows: 1, since: 1000 })
+    expect(frames.length).toBeGreaterThan(before)
+    expect(frames[before].payload.runId).toBe('ses-1:2')
+  })
+
+  it('asks every 5 seconds while no run is open and every second while one is', () => {
+    const { dir, dbPath } = makeDatabase()
+    const projectRoot = join(dir, 'project')
+    const clock = { value: 1000 }
+    const { reader, queries } = startReader({
+      dbPath,
+      projectRoot,
+      runsFolder: join(dir, 'runs'),
+      clock,
+      idleSessionPollMs: 5000,
+      sessionPollMs: 1000,
+    })
+    addSession(dbPath, { id: 'ses-1', directory: projectRoot, time: 1000 })
+    addMessage(dbPath, { id: 'm-user-1', sessionId: 'ses-1', type: 'user', seq: 1, time: 1000 })
+    reader.tick()
+    const afterPrime = queries.length
+
+    for (let index = 0; index < 4; index += 1) {
+      clock.value += 1000
+      reader.tick()
+    }
+    expect(queries).toHaveLength(afterPrime)
+
+    clock.value += 1000
+    reader.tick()
+    expect(queries).toHaveLength(afterPrime + 1)
+
+    addMessage(dbPath, { id: 'm-user-2', sessionId: 'ses-1', type: 'user', seq: 2, time: 11000 })
+    withDb(dbPath, (db) => {
+      db.prepare('UPDATE session_v2 SET time_updated = ? WHERE id = ?').run(11000, 'ses-1')
+    })
+    clock.value = 11000
+    reader.tick()
+    const afterOpen = queries.length
+    expect(afterOpen).toBe(afterPrime + 2)
+
+    for (let index = 0; index < 3; index += 1) {
+      clock.value += 1000
+      reader.tick()
+    }
+    expect(queries).toHaveLength(afterOpen + 3)
+  })
+
+  it('leaves the full query and says so when session_v2 has no time_updated column', () => {
+    const dir = tempDir()
+    const dbPath = join(dir, 'opencode.db')
+    withDb(dbPath, (db) => {
+      db.exec('CREATE TABLE session_v2 (id TEXT PRIMARY KEY, parent_id TEXT, directory TEXT, title TEXT)')
+      db.exec(
+        'CREATE TABLE session_message (id TEXT PRIMARY KEY, session_id TEXT, type TEXT, seq INTEGER, time_created INTEGER, time_updated INTEGER, data TEXT)'
+      )
+    })
+    const projectRoot = join(dir, 'project')
+    const clock = { value: 5000 }
+    const { reader, queries } = startReader({
+      dbPath,
+      projectRoot,
+      runsFolder: join(dir, 'runs'),
+      clock,
+      idleSessionPollMs: 5000,
+    })
+
+    reader.tick()
+    expect(reader.note()).toContain('time_updated')
+    expect(queries[0]).toMatchObject({ rows: 0, since: null })
+
+    clock.value += 5000
+    reader.tick()
+    expect(queries).toHaveLength(2)
+    expect(queries[1]).toMatchObject({ rows: 0, since: null })
   })
 })

@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- A bridge at rest does less: the lane source lists the runs folder on a watcher event and every 2 seconds where it listed it five times a second, reads the lanes only when lanes.json or agents.json changes, the Claude session reader lists the meta files only when the runs folder changes, and the OpenCode reader asks only for the session rows that moved, every 5 seconds at rest (task P30).
 - npm run merge-lane does the mechanical part of a lane merge: it refuses a dirty checkout, a live lane or a branch with nothing ahead, merges the branch's sha without a commit, runs the related tests, the build and the pack check, aborts when one fails, and with --finish writes the changelog line, the commit and the outcome row; it never pushes and never deletes a branch (task P33).
 - The briefs from before 2026-11-09 moved unchanged to docs/agents/history/TASKS-ARCHIVE.md, so TASKS.md is 60 KB where it was 1.1 MB; an id stays unique across both files, and the Tasks tab still finds an older run's title (task P35).
 - The outcome table counts a run as merged, not graded, when main has its merge commit and no outcome was recorded, so the lane opencode reads 49 merged of 50 where it read 13 of 48; a lane that reports no cost reads not reported, an older run on a branch no longer raises the cost of a merge, and npm run policy-propose joins Gemini 3.8 Flash (High) to gemini-3.8-flash-high and prints each join (task P29).

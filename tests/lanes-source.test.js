@@ -1,9 +1,10 @@
 import { execFileSync } from 'node:child_process'
-import { appendFileSync, mkdirSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs'
+import { appendFileSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs'
 import { basename, join, resolve } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { createBridge } from '../server/index.js'
-import { createLanesSource, createRecordsCache, laneAgents, mainCheckoutOf, readLanes, runsFolder, subOrchestratorAgent } from '../server/lanes-source.js'
+import { activeLanesFileFor, writeActiveLanes } from '../server/active-lanes.js'
+import { createLanesSource, createRecordsCache, laneAgents, mainCheckoutOf, readAllLanes, readLanes, runsFolder, subOrchestratorAgent } from '../server/lanes-source.js'
 import { gitPath } from '../server/programPath.js'
 import { buildActivities } from '../src/model/pipeline.js'
 import { makeTree } from '../src/model/paths.js'
@@ -732,6 +733,175 @@ describe('the V5 audit fixes in the lane source', () => {
     writeFileSync(join(runs, 'opencode-S6a-20261024-134000.log'), `${toolLine(`${worktree}\\src\\a.js`)}\n`)
     const frames = await readFrames(url, (list) => list.some((frame) => frame.type === 'heartbeat.run.log'))
     expect(frames).toHaveLength(3)
+  })
+})
+
+describe('the idle lane source', () => {
+  function quietWatch(register) {
+    return (_folder, callback) => {
+      register(callback)
+      return {
+        on() {
+          return this
+        },
+        close() {},
+      }
+    }
+  }
+
+  it('lists the runs folder on a watcher event and the fallback, not on every tick', () => {
+    const base = tempDir()
+    const runs = join(base, 'runs')
+    const worktree = join(base, 'MachineRoom-opencode3')
+    const lanes = lanesFor({ opencode: worktree })
+    let lists = 0
+    let current = 1_000_000
+    let fire = null
+    const source = createLanesSource({
+      folder: runs,
+      lanes,
+      quietMs: 600000,
+      pollMs: 20,
+      scanMs: 2000,
+      now: () => current,
+      listFolder: (dir) => {
+        lists += 1
+        return readdirSync(dir, { withFileTypes: true })
+      },
+      watchFolder: quietWatch((callback) => {
+        fire = callback
+      }),
+    })
+    cleanups.push(() => source.stop())
+    source.start()
+    expect(lists).toBe(1)
+
+    for (let index = 0; index < 100; index += 1) {
+      current += 5
+      source.tick()
+    }
+    expect(lists).toBe(1)
+
+    fire(null, null)
+    expect(lists).toBe(2)
+  })
+
+  it('shows a log made with no watcher event within the fallback', () => {
+    const base = tempDir()
+    const runs = join(base, 'runs')
+    mkdirSync(runs, { recursive: true })
+    const worktree = join(base, 'MachineRoom-opencode3')
+    const lanes = lanesFor({ opencode: worktree })
+    let current = 1_000_000
+    const frames = []
+    const source = createLanesSource({
+      folder: runs,
+      lanes,
+      quietMs: 600000,
+      pollMs: 20,
+      scanMs: 2000,
+      now: () => current,
+      watchFolder: quietWatch(() => {}),
+      onFrame: (frame) => frames.push(frame),
+    })
+    cleanups.push(() => source.stop())
+    source.start()
+
+    writeFileSync(join(runs, 'opencode-S6a-20261024-150000.log'), `${toolLine(`${worktree}\\src\\a.js`)}\n`)
+    current += 1990
+    source.tick()
+    expect(logFrames(frames)).toHaveLength(0)
+
+    current += 10
+    source.tick()
+    expect(logFrames(frames)).toHaveLength(1)
+  })
+
+  it('reads an open log new line on the next tick without listing again', () => {
+    const base = tempDir()
+    const runs = join(base, 'runs')
+    mkdirSync(runs, { recursive: true })
+    const worktree = join(base, 'MachineRoom-opencode3')
+    const lanes = lanesFor({ opencode: worktree })
+    let lists = 0
+    let current = 1_000_000
+    const frames = []
+    const source = createLanesSource({
+      folder: runs,
+      lanes,
+      quietMs: 600000,
+      pollMs: 20,
+      scanMs: 2000,
+      now: () => current,
+      listFolder: (dir) => {
+        lists += 1
+        return readdirSync(dir, { withFileTypes: true })
+      },
+      watchFolder: quietWatch(() => {}),
+      onFrame: (frame) => frames.push(frame),
+    })
+    cleanups.push(() => source.stop())
+    source.start()
+
+    const logPath = join(runs, 'opencode-S6a-20261024-150500.log')
+    writeFileSync(logPath, `${toolLine(`${worktree}\\src\\a.js`, { id: 'first' })}\n`)
+    current += 2000
+    source.tick()
+    expect(logFrames(frames)).toHaveLength(1)
+    const listed = lists
+
+    appendFileSync(logPath, `${toolLine(`${worktree}\\src\\b.js`, { id: 'second' })}\n`)
+    current += 200
+    source.tick()
+    expect(logFrames(frames)).toHaveLength(2)
+    expect(lists).toBe(listed)
+  })
+
+  it('parses the lanes once across 100 ticks and again after the file changes', () => {
+    const base = tempDir('mr-lanes-cache-')
+    const runs = join(base, 'runs')
+    mkdirSync(join(base, 'docs', 'agents'), { recursive: true })
+    mkdirSync(runs, { recursive: true })
+    const lanesFile = join(base, 'docs', 'agents', 'lanes.json')
+    const lanesText = JSON.stringify({
+      opencode: { name: 'OpenCode', cli: { harness: 'opencode', model: 'opencode-go/deepseek-v4.1-flash' } },
+    })
+    writeFileSync(lanesFile, lanesText)
+    writeActiveLanes(activeLanesFileFor(base, runs), ['opencode', 'opencode2'])
+    let reads = 0
+    let current = 1_000_000
+    const source = createLanesSource({
+      folder: runs,
+      repoRoot: base,
+      projectRoot: base,
+      quietMs: 600000,
+      pollMs: 20,
+      now: () => current,
+      readAllLanes: (options) => {
+        reads += 1
+        return readAllLanes(options)
+      },
+      watchFolder: quietWatch(() => {}),
+    })
+    cleanups.push(() => source.stop())
+    source.start()
+
+    for (let index = 0; index < 100; index += 1) {
+      current += 5
+      source.tick()
+      source.agents
+    }
+    expect(reads).toBe(1)
+
+    writeFileSync(
+      lanesFile,
+      JSON.stringify({
+        opencode: { name: 'OpenCode', cli: { harness: 'opencode', model: 'opencode-go/deepseek-v4.1-flash' } },
+        opencode2: { name: 'OpenCode 2', cli: { harness: 'opencode', model: 'opencode-go/other' } },
+      })
+    )
+    expect(source.agents.map((agent) => agent.key)).toContain('opencode2')
+    expect(reads).toBe(2)
   })
 })
 

@@ -185,10 +185,10 @@ server/           the bridge: frames from the lane runs and the sessions, the ag
   orchestrator.js   one orchestrator: chat file, session, turn, stop, restart, room wake, context use, autocompact, and the slash command scan and expansion behind `GET /api/orchestrator/commands`
   orchestrators.js  the ladder: the main orchestrator and one per sub, the routes (including `/api/orchestrator/commands`), the ladder save, the restricted scope check (it diffs the base commit the newest run record for the lane names, and the project's current branch only when no record names one), and startedBy routing
   harnesses/        claude.js and opencode.js: the Node half of each descriptor, with createSessionsReader; index.js joins them to the browser descriptors and lists SESSION_HARNESSES
-  claude-sessions.js   the Claude Code session reader: session files, subagent files, kept tool items
-  opencode-sessions.js  the OpenCode session reader: the two session tables in opencode.db, read only
+  claude-sessions.js   the Claude Code session reader: session files, subagent files, kept tool items; it lists the runs folder for meta files only when that folder's change time moves (P30)
+  opencode-sessions.js  the OpenCode session reader: the two session tables in opencode.db, read only; after its first read it asks only for the session rows whose time_updated passed the highest it has seen, once a second while a run is open and every 5 seconds at rest, so a new OpenCode session can show up to 5 seconds late (P30)
   sessions-source.js  ticks every registered session reader once a second
-  lanes-source.js   watches the run-lane and orchestrator logs, turns them into frames, and lists the lane and sub orchestrator agents
+  lanes-source.js   watches the run-lane and orchestrator logs, turns them into frames, and lists the lane and sub orchestrator agents; it lists the runs folder on a watcher event and every 2 seconds, not on every 200 ms tick, and reads the lanes again only when lanes.json or agents.json changes (P30)
   control.js        /api/control routes: agents, issues, comments, approvals, live runs, costs and models
   lane-costs.js     this month's and today's cost per lane from the run records, and the tokens they carry
   lane-tasks.js     the lane runs as tasks for the drawer, with the live run and the brief title
