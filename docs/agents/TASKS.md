@@ -409,7 +409,8 @@ Files: scripts/mr-agent.mjs, tests/mr-agent.test.js.
 3. Each `assistant` line carries `message.usage` with the request's input and output tokens, so `peakTokens` (P32) reads a native run as it reads Claude Code.
 4. The conversation stays bounded. Before a request whose messages hold more than `MR_AGENT_CONTEXT_CHARS` (400,000 characters by default), replace the text of the oldest tool results, the newest 6 kept whole, with `[Output removed to save room. Run the tool again if it is needed.]` until it fits. Count characters, not tokens. The step limit becomes 200, and `MR_AGENT_MAX_STEPS` sets it.
 5. Pass `--reasoning EFFORT` through as `reasoning: { effort }` when the run-lane command line or the orchestrator gives one, and `max_tokens` 32000.
-6. Tests with a scripted OpenAI-compatible server on port 0, as the existing tests start one: the system prompt holds `AGENTS.md` and the shell name; a 429 then a good answer finishes well after one wait (injected clock or a short wait); a 401 is not retried; the usage on an assistant line; old tool results are replaced and the newest 6 kept; the step limit from the environment.
+6. On Windows, `run_shell` never takes a `bash.exe` under the Windows folder (`%SystemRoot%`), since that one starts WSL in another file system; it falls to PowerShell instead. Add a test with the paths injected.
+7. Tests with a scripted OpenAI-compatible server on port 0, as the existing tests start one: the system prompt holds `AGENTS.md` and the shell name; a 429 then a good answer finishes well after one wait (injected clock or a short wait); a 401 is not retried; the usage on an assistant line; old tool results are replaced and the newest 6 kept; the step limit from the environment.
 
 Run `npx vitest related --run` on every file you changed, `npm run build` and `npm run pack-check`; all must pass.
 
