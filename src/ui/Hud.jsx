@@ -918,6 +918,7 @@ export default function Hud({
               onChange={onSettingsChange}
               onClose={() => setSettingsOpen(false)}
               client={client}
+              project={project}
               focusDirectApi={settingsDirectApi}
             />
           )}
@@ -967,6 +968,7 @@ export default function Hud({
             onChange={onSettingsChange}
             onClose={() => setSettingsOpen(false)}
             client={client}
+            project={project}
             focusDirectApi={settingsDirectApi}
           />
         </div>

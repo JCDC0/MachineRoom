@@ -19,7 +19,7 @@ export const EFFECTS = [
   { key: 'bloom', label: 'Bloom', costly: false },
 ]
 
-export default function Settings({ open = true, effects, onChange, onSettingsChange, onClose, client = null, focusDirectApi = 0 }) {
+export default function Settings({ open = true, effects, onChange, onSettingsChange, onClose, client = null, project = '', focusDirectApi = 0 }) {
   const current = effectSettings(effects)
   const [soundState, setSoundState] = useState(() => loadSoundSettings(store()))
   const [recordDraft, setRecordDraft] = useState(() => String(loadSettings(store()).recordMinutes))
@@ -296,7 +296,7 @@ export default function Settings({ open = true, effects, onChange, onSettingsCha
         </div>
 
         <AgentDepthSettings client={client} />
-        <LanesSettings client={client} />
+        <LanesSettings client={client} project={project} />
         <EndpointsPanel client={client} />
         <KeysSettings client={client} />
         <McpSettings client={client} />

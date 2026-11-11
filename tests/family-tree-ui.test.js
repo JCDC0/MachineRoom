@@ -141,6 +141,7 @@ function makeClient() {
         parent: 'orchestrator',
         active: true,
         working: false,
+        custom: true,
       })
       return { key: id }
     },
@@ -479,7 +480,7 @@ describe('FamilyTree rows', () => {
     })
   })
 
-  it('hides a lane in this project from its trash button behind a confirm', async () => {
+  it('removes a lanes.json lane from this project from its trash button behind a confirm', async () => {
     const { client, calls } = makeClient()
     await withDom(async ({ container, root }) => {
       await mount(root, client, { project: '/work/machine-room' })
@@ -487,17 +488,36 @@ describe('FamilyTree rows', () => {
       expect(rowByLabel(container, 'Orchestrator').querySelector('.mr-family-trash')).toBeNull()
 
       const trash = rowByLabel(container, 'OpenCode').querySelector('.mr-family-trash')
-      expect(trash.getAttribute('aria-label')).toBe('Hide OpenCode')
+      expect(trash.getAttribute('aria-label')).toBe('Remove OpenCode')
       await click(root, container.querySelector('.mr-family-more-head'))
       expect(rowByLabel(container, 'OpenCode 2').querySelector('.mr-family-trash')).not.toBeNull()
 
       await click(root, trash)
       const card = container.querySelector('.mr-side-confirm-card')
       expect(card.textContent).toContain(
-        'Hide OpenCode in machine-room? It stays in your other projects.'
+        'Remove OpenCode from machine-room? It stays in your other projects.'
+      )
+      await click(root, buttonWithText(card, 'Remove'))
+      expect(calls.hideLane).toEqual([{ key: 'opencode', confirmed: true }])
+      expect(calls.deleteLane).toEqual([])
+    })
+  })
+
+  it('keeps the hide card for an owner-made lane', async () => {
+    const { client, calls } = makeClient()
+    await client.createLane({ name: 'Writer', harness: 'opencode', model: 'opencode-go/deepseek-v4.1-flash', confirmed: true })
+    await withDom(async ({ container, root }) => {
+      await mount(root, client, { project: '/work/machine-room' })
+      const trash = rowByLabel(container, 'Writer').querySelector('.mr-family-trash')
+      expect(trash.getAttribute('aria-label')).toBe('Hide Writer')
+
+      await click(root, trash)
+      const card = container.querySelector('.mr-side-confirm-card')
+      expect(card.textContent).toContain(
+        'Hide Writer in machine-room? It stays in your other projects.'
       )
       await click(root, buttonWithText(card, 'Hide'))
-      expect(calls.hideLane).toEqual([{ key: 'opencode', confirmed: true }])
+      expect(calls.hideLane).toEqual([{ key: 'lane-2', confirmed: true }])
       expect(calls.deleteLane).toEqual([])
     })
   })

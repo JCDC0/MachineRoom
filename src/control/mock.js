@@ -1797,6 +1797,13 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
         if (idx === -1) throw new Error(`The lane ${key} was not found.`)
         const lane = state.lanes[idx]
         if (lane.working === true) throw new Error(`The lane ${key} is running.`)
+        if (lane.custom !== true) {
+          lane.hidden = true
+          lane.active = false
+          emit({ topic: 'agents' })
+          emit({ topic: 'family' })
+          return { ok: true, deleted: key }
+        }
         state.lanes.splice(idx, 1)
         for (const sub of ladder.subs) {
           sub.lanes = sub.lanes.filter((laneKey) => laneKey !== key)
@@ -2162,7 +2169,9 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
 
     family: () =>
       call('family', () => {
-        const directLanes = state.lanes.filter((l) => !ladder.subs.some((s) => s.lanes.includes(l.key))).map((l) => l.key)
+        const directLanes = state.lanes
+          .filter((l) => !l.hidden && !ladder.subs.some((s) => s.lanes.includes(l.key)))
+          .map((l) => l.key)
         const mainNode = {
           id: 'orchestrator',
           kind: 'orchestrator',
@@ -2184,12 +2193,12 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
           model: sub.model,
           effort: null,
           parent: 'orchestrator',
-          children: sub.lanes.filter((key) => state.lanes.some((l) => l.key === key)),
+          children: sub.lanes.filter((key) => state.lanes.some((l) => l.key === key && !l.hidden)),
           active: true,
           working: false,
           custom: false,
         }))
-        const laneNodes = state.lanes.map((lane) => {
+        const laneNodes = state.lanes.filter((lane) => !lane.hidden).map((lane) => {
           const sub = ladder.subs.find((s) => s.lanes.includes(lane.key))
           return {
             id: lane.key,

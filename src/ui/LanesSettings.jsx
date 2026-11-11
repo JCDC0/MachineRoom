@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import { useDialogFocus } from './dialogFocus.js'
-import { deleteLaneText } from './family.js'
-import { cleanText, laneSummary } from './sidebar.js'
+import { deleteLaneText, removeLaneText } from './family.js'
+import { cleanText, laneSummary, projectName } from './sidebar.js'
 
 function messageOf(error) {
   return error instanceof Error && error.message ? error.message : 'The bridge refused the change.'
 }
 
-export default function LanesSettings({ client = null }) {
+export default function LanesSettings({ client = null, project = '' }) {
   const canList = typeof client?.lanes === 'function'
   const canShow = typeof client?.showLane === 'function'
   const canDelete = typeof client?.deleteLane === 'function'
@@ -115,11 +115,14 @@ export default function LanesSettings({ client = null }) {
 
   function askDelete(lane) {
     if (!canDelete || busy) return
+    const made = lane.custom === true
     ask({
-      text: deleteLaneText(lane.name || lane.key),
-      label: 'Delete everywhere',
+      text: made
+        ? deleteLaneText(lane.name || lane.key)
+        : removeLaneText(lane.name || lane.key, projectName({ path: project })),
+      label: made ? 'Delete everywhere' : 'Remove from project',
       tone: 'danger',
-      busyText: 'Deleting the lane...',
+      busyText: made ? 'Deleting the lane...' : 'Removing the lane...',
       run: async () => {
         await client.deleteLane({ key: lane.key, confirmed: true })
         await readLanes()
@@ -164,10 +167,14 @@ export default function LanesSettings({ client = null }) {
                       type="button"
                       className="mr-lanes-delete"
                       disabled={busy}
-                      aria-label={`Delete ${label} everywhere`}
+                      aria-label={
+                        lane.custom === true
+                          ? `Delete ${label} everywhere`
+                          : `Remove ${label} from this project`
+                      }
                       onClick={() => askDelete(lane)}
                     >
-                      Delete everywhere
+                      {lane.custom === true ? 'Delete everywhere' : 'Remove from project'}
                     </button>
                   ) : null}
                 </span>

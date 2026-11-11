@@ -181,6 +181,12 @@ export function hideLaneText(label, project = '') {
   return `Hide ${name} in ${where}? It stays in your other projects.`
 }
 
+export function removeLaneText(label, project = '') {
+  const name = cleanText(label, AGENT_NAME_MAX) || 'this agent'
+  const where = cleanText(project, 80) || 'this project'
+  return `Remove ${name} from ${where}? It stays in your other projects.`
+}
+
 export function deleteLaneText(label) {
   const name = cleanText(label, AGENT_NAME_MAX) || 'this agent'
   return `Delete ${name} in every project? Its runs stay in the records.`
