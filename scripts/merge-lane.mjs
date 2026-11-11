@@ -360,7 +360,7 @@ export async function runChecks({
   }
 
   const touchesPack = changedFiles.some(
-    (file) => file.startsWith('scripts/') || file.startsWith('bin/') || file === 'package.json'
+    (file) => file.startsWith('scripts/') || file.startsWith('bin/') || file.startsWith('server/') || file.startsWith('src/') || file === 'package.json'
   )
   if (touchesPack) {
     checks.push({
