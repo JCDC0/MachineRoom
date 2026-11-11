@@ -493,3 +493,11 @@ Files: server/index.js, tests/.
 Run `npx vitest related --run` on every file you changed; it must pass.
 
 Files: scripts/mr-agent.mjs, tests/mr-agent.test.js.
+
+## Review 11 (2026-11-12, before the push)
+
+**P53. Review the merges of P49 to P52 (OpenCode).** Read no part of TASKS.md beyond this brief. Use no subagents. Change no code. Commit the file by minute 35.
+
+Read `git log --first-parent 103edc8b..refs/heads/main` and review the code the merges of P50, P51, P52 and P49 brought, with `git show -m --first-parent SHA`, against the code around it. Hunt for what a test would not show: a reader of the lanes or the policy still on a fixed `docs/agents` path, so the owner's room shows or routes to a fleet lane, or the testbench loses one; a route or script that now refuses a lane the owner made; a git read that starts a process per event or doubles the work of a full read more than once; a quiet timer that can keep running after the bridge stops; a path check in `scripts/mr-agent.mjs` that a link or a name can still pass; and a conversation trim that drops a tool result its call needs. Run a finding's test or a short script when one would settle it, and say which findings you proved and which you only read. Write `docs/agents/AUDIT-2026-11-REVIEW-11.md`: a table of at most 8 findings, the one that would hurt the owner most first, each with `file:line`, what goes wrong and when, and the smallest fix; mark each one as a push blocker or not. Write no finding you cannot point to in the code.
+
+Files: docs/agents/AUDIT-2026-11-REVIEW-11.md.
