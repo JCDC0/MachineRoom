@@ -5,6 +5,7 @@ import { basename, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { extractReplyText } from '../server/assistant.js'
+import { activeLanesFileFor, writeActiveLanes } from '../server/active-lanes.js'
 import { SINCE_PROBLEM } from '../src/briefs/run.js'
 import { createClient } from '../src/control/client.js'
 import { choice } from '../src/decider/wire.js'
@@ -419,10 +420,12 @@ describe('run routes', () => {
       runsDir: tempDir(),
       bridge: {
         briefsDir: join(dir, 'docs', 'agents'),
+        lanesFile: join(REPO_ROOT, 'docs', 'agents', 'lanes.json'),
         runnerCommand: { file: process.execPath, args: [runnerPath] },
         env: {},
       },
     })
+    writeActiveLanes(activeLanesFileFor(started.projectRoot, started.runsDir), ['opencode', 'opencode2'])
     const token = started.bridge.orchestrators()?.token('orchestrator') ?? ''
     return { url: started.url, dir, bridge: started.bridge, token }
   }

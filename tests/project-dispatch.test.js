@@ -96,6 +96,7 @@ async function startBridge({ projectRoot, runnerPath }) {
   const bridge = createBridge({
     projectRoot,
     port: 0,
+    lanesFile: join(REPO_ROOT, 'docs', 'agents', 'lanes.json'),
     runnerCommand: { file: process.execPath, args: [runnerPath] },
   })
   cleanups.push(() => bridge.stop())
@@ -143,6 +144,7 @@ describe('the runs route with a task', () => {
       sendJson: (req, res, status, body) => { answer = { status, body } },
       readJsonBody: async () => ({ lane: 'opencode', task: 'Spawn failure.', confirmed: true }),
       runsFolder: runs,
+      lanesFile: join(REPO_ROOT, 'docs', 'agents', 'lanes.json'),
       activeLanes: { isChosen: () => true, isLaneActive: () => true },
     })
     cleanups.push(() => api.stopAll())
@@ -345,6 +347,7 @@ describe('the runs route with a starter', () => {
         answer = { status, body }
       },
       readJsonBody: async () => ({ lane: 'opencode', task: 'Fix it.', startedBy: 'frontend', confirmed: true }),
+      lanesFile: join(REPO_ROOT, 'docs', 'agents', 'lanes.json'),
       orchestrators: () => ({
         idForToken: () => null,
         sector: (id) => (id === 'frontend' ? { id, name: 'Frontend', lanes: ['opencode'] } : null),

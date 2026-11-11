@@ -11,6 +11,7 @@ import { withLanePrograms } from './helpers/lanePrograms.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 
 const RUN_LANE_SCRIPT = fileURLToPath(new URL('../scripts/run-lane.mjs', import.meta.url))
+const FLEET_DIR = fileURLToPath(new URL('../docs/agents', import.meta.url))
 const FAKE_LANE = fileURLToPath(new URL('fixtures/fake-lane.cjs', import.meta.url))
 const cleanups = []
 let repoTemplate = ''
@@ -67,7 +68,7 @@ function runLane(args, extra = {}) {
   return new Promise((done, fail) => {
     const child = spawn(process.execPath, [RUN_LANE_SCRIPT, ...args], {
       stdio: ['ignore', 'pipe', 'pipe'],
-      env: { ...withLanePrograms(process.env, tempDir('mr-lane-programs-')), ...extra },
+      env: { ...withLanePrograms(process.env, tempDir('mr-lane-programs-')), MACHINEROOM_LANES_DIR: FLEET_DIR, ...extra },
     })
     let stdout = ''
     let stderr = ''

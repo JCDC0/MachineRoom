@@ -10,6 +10,8 @@ import {
   validLanes,
 } from '../src/ui/panels/briefs.js'
 
+const OWNER_LANES = ['hermes', 'opencode', 'agy', 'claude']
+
 describe('formatBriefTitle', () => {
   it('formats a brief as ID title', () => {
     expect(formatBriefTitle({ id: 'C3e', title: 'HUD polish' })).toBe('C3e HUD polish')
@@ -29,26 +31,31 @@ describe('formatBriefTitle', () => {
 
 describe('ownerToLane', () => {
   it('maps the first owner in lower case to hermes, opencode, or agy', () => {
-    expect(ownerToLane({ owners: ['hermes'] })).toBe('hermes')
-    expect(ownerToLane({ owners: ['opencode'] })).toBe('opencode')
-    expect(ownerToLane({ owners: ['agy'] })).toBe('agy')
-    expect(ownerToLane({ owners: ['OpenCode', 'AGY'] })).toBe('opencode')
+    expect(ownerToLane({ owners: ['hermes'] }, OWNER_LANES)).toBe('hermes')
+    expect(ownerToLane({ owners: ['opencode'] }, OWNER_LANES)).toBe('opencode')
+    expect(ownerToLane({ owners: ['agy'] }, OWNER_LANES)).toBe('agy')
+    expect(ownerToLane({ owners: ['OpenCode', 'AGY'] }, OWNER_LANES)).toBe('opencode')
   })
 
   it('returns a lane for Claude and null for the owner or no valid lane', () => {
-    expect(ownerToLane({ owners: ['claude'] })).toBe('claude')
-    expect(ownerToLane({ owners: [] })).toBeNull()
-    expect(ownerToLane('claude')).toBe('claude')
-    expect(ownerToLane('Claude')).toBe('claude')
-    expect(ownerToLane('owner')).toBeNull()
-    expect(ownerToLane('')).toBeNull()
-    expect(ownerToLane(null)).toBeNull()
-    expect(ownerToLane(undefined)).toBeNull()
+    expect(ownerToLane({ owners: ['claude'] }, OWNER_LANES)).toBe('claude')
+    expect(ownerToLane({ owners: [] }, OWNER_LANES)).toBeNull()
+    expect(ownerToLane('claude', OWNER_LANES)).toBe('claude')
+    expect(ownerToLane('Claude', OWNER_LANES)).toBe('claude')
+    expect(ownerToLane('owner', OWNER_LANES)).toBeNull()
+    expect(ownerToLane('', OWNER_LANES)).toBeNull()
+    expect(ownerToLane(null, OWNER_LANES)).toBeNull()
+    expect(ownerToLane(undefined, OWNER_LANES)).toBeNull()
   })
 
   it('uses only the first owner even when another owner follows', () => {
-    expect(ownerToLane({ owners: ['claude', 'agy'] })).toBe('claude')
-    expect(ownerToLane({ owners: ['agy', 'claude'] })).toBe('agy')
+    expect(ownerToLane({ owners: ['claude', 'agy'] }, OWNER_LANES)).toBe('claude')
+    expect(ownerToLane({ owners: ['agy', 'claude'] }, OWNER_LANES)).toBe('agy')
+  })
+
+  it('answers no lane when no lanes are passed', () => {
+    expect(ownerToLane({ owners: ['opencode'] })).toBeNull()
+    expect(runLaneFor({ owners: ['opencode'] }, [])).toBeNull()
   })
 })
 
@@ -71,15 +78,14 @@ describe('validLanes', () => {
     expect(ownerToLane({ owners: ['opencode3'] }, AGENTS)).toBeNull()
   })
 
-  it('falls back to the lane list with no agents', () => {
-    expect(validLanes(null)).toContain('opencode')
-    expect(validLanes(null)).toContain('claude')
+  it('answers no lane with no agents', () => {
+    expect(validLanes(null)).toEqual([])
     expect(validLanes([])).toEqual([])
   })
 })
 
 describe('runLaneFor', () => {
-  const LANES = ['hermes', 'opencode', 'opencode2', 'agy']
+  const LANES = ['hermes', 'opencode', 'opencode2', 'agy', 'claude']
 
   it('keeps the owner lane when it is free', () => {
     expect(runLaneFor({ owners: ['opencode'] }, [], LANES)).toBe('opencode')

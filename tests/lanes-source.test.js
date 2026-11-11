@@ -1,6 +1,7 @@
 import { execFileSync } from 'node:child_process'
 import { appendFileSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs'
 import { basename, join, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
 import { createBridge } from '../server/index.js'
 import { activeLanesFileFor, writeActiveLanes } from '../server/active-lanes.js'
@@ -101,9 +102,8 @@ describe('lane agents', () => {
 
   it('names each agent its harness and model from a lane file', () => {
     const folder = tempDir('mr-lane-file-')
-    mkdirSync(join(folder, 'docs', 'agents'), { recursive: true })
     writeFileSync(
-      join(folder, 'docs', 'agents', 'lanes.json'),
+      join(folder, 'lanes.json'),
       JSON.stringify({
         orchestrator: { name: 'Orchestrator', cli: { harness: 'claude', model: 'opus' } },
         opencode: { name: 'OpenCode', cli: { harness: 'opencode', model: 'opencode-go/deepseek-v4.1-flash' } },
@@ -736,6 +736,44 @@ describe('the V5 audit fixes in the lane source', () => {
   })
 })
 
+describe('the lanes folder', () => {
+  it('reads the room lanes by default and the fleet from the dir', () => {
+    const lanes = readLanes()
+    expect(Object.keys(lanes)).toEqual(['orchestrator'])
+
+    const previous = process.env.MACHINEROOM_LANES_DIR
+    try {
+      process.env.MACHINEROOM_LANES_DIR = fileURLToPath(new URL('../docs/agents', import.meta.url))
+      const fleet = readLanes()
+      expect(Object.keys(fleet)).toContain('opencode')
+      expect(Object.keys(fleet)).toContain('orchestrator')
+    } finally {
+      if (previous === undefined) delete process.env.MACHINEROOM_LANES_DIR
+      else process.env.MACHINEROOM_LANES_DIR = previous
+    }
+  })
+
+  it('lists only the orchestrator and the owner-made lanes without the dir', () => {
+    const base = tempDir('mr-room-lanes-')
+    const runs = join(base, 'runs')
+    mkdirSync(join(base, 'docs', 'agents'), { recursive: true })
+    mkdirSync(runs, { recursive: true })
+    writeFileSync(
+      join(base, 'docs', 'agents', 'lanes.json'),
+      JSON.stringify({ orchestrator: { name: 'Orchestrator' }, opencode: { name: 'OpenCode', cli: { harness: 'opencode', bin: 'opencode', model: 'model' } } })
+    )
+    writeFileSync(
+      join(runs, 'agents.json'),
+      JSON.stringify({ agents: [{ key: 'opencode-1', name: 'Owner lane', harness: 'opencode', model: 'model' }] })
+    )
+    writeActiveLanes(activeLanesFileFor(base, runs), ['opencode-1'])
+
+    const source = createLanesSource({ folder: runs, projectRoot: base, repoRoot: base, pollMs: 20 })
+    cleanups.push(() => source.stop())
+    expect(source.agents.map((agent) => agent.key)).toEqual(['orchestrator', 'opencode-1'])
+  })
+})
+
 describe('the idle lane source', () => {
   function quietWatch(register) {
     return (_folder, callback) => {
@@ -947,9 +985,15 @@ describe('the idle lane source', () => {
   it('parses the lanes once across 100 ticks and again after the file changes', () => {
     const base = tempDir('mr-lanes-cache-')
     const runs = join(base, 'runs')
-    mkdirSync(join(base, 'docs', 'agents'), { recursive: true })
+    mkdirSync(join(base, 'config'), { recursive: true })
     mkdirSync(runs, { recursive: true })
-    const lanesFile = join(base, 'docs', 'agents', 'lanes.json')
+    const previousLanesDir = process.env.MACHINEROOM_LANES_DIR
+    process.env.MACHINEROOM_LANES_DIR = join(base, 'config')
+    cleanups.push(() => {
+      if (previousLanesDir === undefined) delete process.env.MACHINEROOM_LANES_DIR
+      else process.env.MACHINEROOM_LANES_DIR = previousLanesDir
+    })
+    const lanesFile = join(base, 'config', 'lanes.json')
     const lanesText = JSON.stringify({
       opencode: { name: 'OpenCode', cli: { harness: 'opencode', model: 'opencode-go/deepseek-v4.1-flash' } },
     })

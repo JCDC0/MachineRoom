@@ -29,6 +29,7 @@ import { waitFor } from './helpers/bridge.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 
 const realLanes = JSON.parse(readFileSync(new URL('../docs/agents/lanes.json', import.meta.url), 'utf8'))
+const FLEET_DIR = fileURLToPath(new URL('../docs/agents', import.meta.url))
 const RUN_LANE_SCRIPT = fileURLToPath(new URL('../scripts/run-lane.mjs', import.meta.url))
 const REPO_ROOT = fileURLToPath(new URL('..', import.meta.url))
 const env = { LOCALAPPDATA: 'C:\\Users\\me\\AppData\\Local', APPDATA: 'C:\\Users\\me\\AppData\\Roaming' }
@@ -62,7 +63,7 @@ function runLane(args, extra = {}) {
   return new Promise((done, fail) => {
     const child = spawn(process.execPath, [RUN_LANE_SCRIPT, ...args], {
       stdio: ['ignore', 'pipe', 'pipe'],
-      env: { ...env, ...process.env, ...extra },
+      env: { ...env, ...process.env, MACHINEROOM_LANES_DIR: FLEET_DIR, ...extra },
     })
     let stdout = ''
     let stderr = ''
@@ -335,6 +336,19 @@ describe('scripts/run-lane.mjs on another project', () => {
     expect(atRuns.code).toBe(1)
     expect(atRuns.stdout).toContain('is the runs folder or inside it')
     expect(atRuns.stdout).not.toContain('cwd:')
+  })
+
+  it('refuses the fleet lane without the lanes folder and accepts it with it', async () => {
+    const base = tempDir()
+    const project = scratchRepo(base)
+
+    const refused = await runLane(['opencode', '--project', project, '--task', 'Fix it.', '--dry-run'], { MACHINEROOM_LANES_DIR: '' })
+    expect(refused.code).toBe(1)
+    expect(refused.stderr).toContain('There is no lane named opencode.')
+
+    const accepted = await runLane(['opencode', '--project', project, '--task', 'Fix it.', '--dry-run'])
+    expect(accepted.code).toBe(0)
+    expect(accepted.stdout).toContain('cwd:')
   })
 
   it('refuses a dirty git folder and runs it with --allow-dirty', async () => {
@@ -635,7 +649,7 @@ describe('the lane source on another project', () => {
     const base = tempDir()
     const runs = folderIn(base, 'runs')
     const projectRoot = folderIn(base, 'NoLanes')
-    const source = createLanesSource({ folder: runs, projectRoot, pollMs: 20 })
+    const source = createLanesSource({ folder: runs, projectRoot, lanes: realLanes, pollMs: 20 })
     cleanups.push(() => source.stop())
     expect(source.agents.map((agent) => agent.key)).toEqual(['orchestrator'])
     writeFileSync(
