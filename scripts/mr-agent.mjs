@@ -22,6 +22,9 @@ const MAX_TOKENS = 32000
 const DEFAULT_CONTEXT_CHARS = 400000
 const KEEP_TOOL_RESULTS = 6
 const TOOL_RESULT_REMOVED = '[Output removed to save room. Run the tool again if it is needed.]'
+const ASSISTANT_TEXT_REMOVED = '[Text removed to save room.]'
+const TOOL_ARGUMENTS_REMOVED = '[Arguments removed to save room.]'
+const NEWEST_READABLE_CHARS = 2000
 const INSTRUCTIONS_LIMIT = 20000
 const RETRY_LIMIT = 4
 const RETRY_BASE_MS = 2000
@@ -1081,6 +1084,33 @@ function messageChars(messages) {
   return JSON.stringify(messages).length
 }
 
+function shortArguments(text) {
+  let path = ''
+  try {
+    const parsed = JSON.parse(text)
+    if (typeof parsed?.path === 'string') path = parsed.path
+  } catch {}
+  return JSON.stringify(path === ''
+    ? { note: TOOL_ARGUMENTS_REMOVED }
+    : { path, note: TOOL_ARGUMENTS_REMOVED })
+}
+
+function trimAssistant(message) {
+  const content = typeof message.content === 'string' && message.content !== ''
+    ? ASSISTANT_TEXT_REMOVED
+    : message.content
+  const toolCalls = Array.isArray(message.tool_calls)
+    ? message.tool_calls.map((call) => {
+        const name = call?.function?.name
+        if (name !== 'write_file' && name !== 'edit_file') return call
+        return { ...call, function: { ...call.function, arguments: shortArguments(call.function.arguments) } }
+      })
+    : message.tool_calls
+  const trimmed = { ...message, content }
+  if (toolCalls !== undefined) trimmed.tool_calls = toolCalls
+  return JSON.stringify(trimmed).length < JSON.stringify(message).length ? trimmed : message
+}
+
 function boundMessages(messages, limit) {
   if (messageChars(messages) <= limit) return
   const toolIndexes = []
@@ -1091,6 +1121,29 @@ function boundMessages(messages, limit) {
   for (const index of editable) {
     if (messageChars(messages) <= limit) break
     messages[index] = { ...messages[index], content: TOOL_RESULT_REMOVED }
+  }
+  if (messageChars(messages) <= limit) return
+  const newestStart = Math.max(2, messages.length - KEEP_TOOL_RESULTS)
+  for (let index = 2; index < newestStart; index += 1) {
+    if (messageChars(messages) <= limit) return
+    if (messages[index]?.role === 'assistant') messages[index] = trimAssistant(messages[index])
+  }
+  if (messageChars(messages) <= limit) return
+  const newest = []
+  for (let index = newestStart; index < messages.length; index += 1) {
+    if (index >= 2) newest.push(index)
+  }
+  newest.sort((left, right) => JSON.stringify(messages[right]).length - JSON.stringify(messages[left]).length)
+  for (const index of newest) {
+    if (messageChars(messages) <= limit) return
+    const message = messages[index]
+    if (message?.role === 'assistant') {
+      messages[index] = trimAssistant(message)
+      continue
+    }
+    if (message?.role !== 'tool' && message?.role !== 'user') continue
+    const content = String(message.content ?? '')
+    messages[index] = { ...message, content: content.slice(0, NEWEST_READABLE_CHARS) }
   }
 }
 

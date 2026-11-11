@@ -684,6 +684,78 @@ describe('mr-agent', () => {
     for (const message of results.slice(2)) expect(message.content).toContain('1\t')
   })
 
+  it('keeps a long write call under the context bound', async () => {
+    const folder = tempDir()
+    const content = 'x'.repeat(500 * 1024)
+    const api = await startFakeApi((_body, index) =>
+      index === 0
+        ? chatAnswer({
+            calls: [
+              { id: 'call_write', name: 'write_file', arguments: { path: 'big.txt', content } },
+              { id: 'call_list', name: 'list_dir', arguments: { path: '.' } },
+            ],
+          })
+        : chatAnswer({ text: 'Done.' }),
+    )
+    const result = await runAgent({ folder, api, env: { MR_AGENT_CONTEXT_CHARS: '2000' } })
+    expect(result.code).toBe(0)
+    expect(api.calls).toHaveLength(2)
+    const messages = api.calls[1].body.messages
+    expect(JSON.stringify(messages).length).toBeLessThan(2000)
+    const callIndex = messages.findIndex((message) => message.role === 'assistant' && Array.isArray(message.tool_calls))
+    expect(callIndex).toBeGreaterThan(-1)
+    const calls = messages[callIndex].tool_calls
+    expect(calls.map((call) => call.id)).toEqual(['call_write', 'call_list'])
+    expect(calls.map((call) => call.function.name)).toEqual(['write_file', 'list_dir'])
+    expect(JSON.parse(calls[0].function.arguments).path).toBe('big.txt')
+    expect(messages.slice(callIndex + 1, callIndex + 3)).toMatchObject([
+      { role: 'tool', tool_call_id: 'call_write' },
+      { role: 'tool', tool_call_id: 'call_list' },
+    ])
+  })
+
+  it('cuts the newest tool result to 2000 characters when the newest six hold the bound', async () => {
+    const folder = tempDir()
+    const command = `"${process.execPath}" -e "process.stdout.write('x'.repeat(9000))"`
+    const api = await startFakeApi((_body, index) =>
+      index === 0
+        ? chatAnswer({ calls: [{ id: 'call_shell', name: 'run_shell', arguments: { command } }] })
+        : chatAnswer({ text: 'Done.' }),
+    )
+    const result = await runAgent({ folder, api, env: { MR_AGENT_CONTEXT_CHARS: '4000' } })
+    expect(result.code).toBe(0)
+    const messages = api.calls[1].body.messages
+    expect(JSON.stringify(messages).length).toBeLessThan(4000)
+    const tool = messages.at(-1)
+    expect(tool).toMatchObject({ role: 'tool', tool_call_id: 'call_shell' })
+    expect(tool.content).toBe('x'.repeat(2000))
+  })
+
+  it('replaces old assistant text and write arguments and keeps the call', async () => {
+    const folder = tempDir()
+    const api = await startFakeApi((_body, index) => {
+      if (index === 0) {
+        return chatAnswer({
+          text: 'Starting the long write.',
+          calls: [{ id: 'call_write', name: 'write_file', arguments: { path: 'big.txt', content: 'z'.repeat(4000) } }],
+        })
+      }
+      if (index < 6) {
+        return chatAnswer({ text: `Step ${index}.`, calls: [{ id: `call_${index}`, name: 'list_dir', arguments: { path: '.' } }] })
+      }
+      return chatAnswer({ text: 'Done.' })
+    })
+    const result = await runAgent({ folder, api, env: { MR_AGENT_CONTEXT_CHARS: '1000' } })
+    expect(result.code).toBe(0)
+    const messages = api.calls[6].body.messages
+    const assistant = messages[2]
+    expect(assistant).toMatchObject({ role: 'assistant', content: '[Text removed to save room.]' })
+    expect(assistant.tool_calls[0].id).toBe('call_write')
+    expect(assistant.tool_calls[0].function.name).toBe('write_file')
+    expect(JSON.parse(assistant.tool_calls[0].function.arguments).path).toBe('big.txt')
+    expect(messages[3]).toMatchObject({ role: 'tool', tool_call_id: 'call_write' })
+  })
+
   it('takes the step limit from the environment', async () => {
     const folder = tempDir()
     const api = await startFakeApi(() => chatAnswer({ calls: [{ name: 'list_dir', arguments: { path: '.' } }], usage: { prompt_tokens: 1, completion_tokens: 1 } }))
