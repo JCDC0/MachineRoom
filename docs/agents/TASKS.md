@@ -434,3 +434,11 @@ On 2026-11-11 the owner removed lanes in a room open on another project, and sin
 Run `npx vitest related --run` on every file you changed and `npm run build`; both must pass. The orchestrator checks the confirm card and Settings by eye at 1280 by 800.
 
 Files: server/agents-config.js, server/active-lanes.js, server/lanes-source.js, server/family.js, src/ui/FamilyTree.jsx, src/ui/LanesSettings.jsx, src/ui/family.js, src/control/client.js, src/control/mock.js, tests/.
+
+## Review 10 (2026-11-11)
+
+**P48. Review the merges since the last push (OpenCode).** Read no part of TASKS.md beyond this brief. Use no subagents. Change no code. Commit the file by minute 45.
+
+Read `git log --first-parent 796ff863..refs/heads/main` and review the code each merge of P44, P45, P46, P36b and P47 brought, with `git show -m --first-parent SHA`, against the code around it. Hunt for what a test would not show: in `scripts/mr-agent.mjs`, a shell or path the model can steer outside the working folder, a retry that can loop or double a write, output or a conversation that can still grow without a bound, and a project instruction file read from outside the project; in `server/index.js`, a partial list that can miss a file or keep a deleted one for good, and a name from a watcher event that reaches git as an option; in `server/agents-config.js`, a hidden list written for the wrong project, a lane that `run-lane` still refuses or still starts against the owner's choice, and the startup move run twice. Run a finding's test or a short script when one would settle it, and say which findings you proved and which you only read. Write `docs/agents/AUDIT-2026-11-REVIEW-10.md`: a table of at most 10 findings, the one that would hurt the owner most first, each with `file:line`, what goes wrong and when, and the smallest fix; then at most three proposed briefs. Write no finding you cannot point to in the code.
+
+Files: docs/agents/AUDIT-2026-11-REVIEW-10.md.
