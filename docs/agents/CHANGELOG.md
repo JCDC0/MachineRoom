@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Review 11 (AUDIT-2026-11-REVIEW-11.md) reads P49 to P52: 8 findings, 2 proved; the broken link escape is fixed, the rest go to P60 to P62 (P53).
 - The README says a new room has the orchestrator and the owner makes one lane per subscription, and the guide no longer names the development lanes (P58).
 - A room reads its lanes and policy from the lanes folder: MACHINEROOM_LANES_DIR when set, else config/, which holds only the orchestrator and routes every tier to the owner; the orchestrator's fleet in docs/agents loads only in its testbench (P49).
 - The native agent checks real paths so a junction or link that leads out is refused, reads only the asked line window, refuses a file over 50 MB with no limit, and lists only the start folder for search and glob_files (P52).
