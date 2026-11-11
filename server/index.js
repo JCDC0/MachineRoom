@@ -70,6 +70,7 @@ const TREE_VERSIONS_KEPT = 4
 const TREE_REUSE_MS = 1000
 const WATCH_QUIET_MS = 2000
 const WATCH_BURST_QUIET_MS = 300
+const QUIET_FULL_READ_MS = 30000
 const TREE_LAST_FILE_BUDGET_MS = 3000
 const POLL_READ_GAP = 3
 const SKIP_DIRS = new Set(['.git', 'node_modules', 'dist', '.worktrees'])
@@ -100,14 +101,11 @@ function walkFiles(listDir, currentDir, prefix = '', out = []) {
   return out
 }
 
-export function readTree(projectRoot, { listDir = readdirSync } = {}) {
-  if (!projectRoot) return Promise.resolve({ root: '', files: [], created: [] })
-  const resolved = resolve(projectRoot)
-  const root = basename(resolved)
-  return new Promise((resolveTree) => {
+function gitListPaths(resolved, args) {
+  return new Promise((resolveList) => {
     execFile(
       gitPath(),
-      ['-C', resolved, 'ls-files', '-z', '--cached', '--others', '--exclude-standard'],
+      ['-C', resolved, 'ls-files', '-z', ...args],
       {
         encoding: 'utf8',
         env: { ...process.env, GIT_CEILING_DIRECTORIES: dirname(resolved) },
@@ -117,51 +115,52 @@ export function readTree(projectRoot, { listDir = readdirSync } = {}) {
       },
       (error, stdout) => {
         if (error) {
-          const files = walkFiles(listDir, resolved).sort()
-          resolveTree({ root, files, created: [] })
+          resolveList(null)
           return
         }
-        const files = stdout
-          .split('\0')
-          .filter(Boolean)
-          .map((line) => line.replace(/\\/g, '/'))
-          .sort()
-        resolveTree({ root, files, created: [] })
+        resolveList(
+          stdout
+            .split('\0')
+            .filter(Boolean)
+            .map((line) => line.replace(/\\/g, '/'))
+        )
       }
     )
   })
 }
 
-export function readTreePartial(projectRoot, names) {
-  const wanted = Array.isArray(names) ? names.filter((name) => typeof name === 'string' && name !== '') : []
-  if (!projectRoot || wanted.length === 0) return Promise.resolve(null)
+function dropDeleted(files, deleted) {
+  if (deleted === null) return files
+  const gone = new Set(deleted)
+  return files.filter((file) => !gone.has(file))
+}
+
+export async function readTree(projectRoot, { listDir = readdirSync } = {}) {
+  if (!projectRoot) return { root: '', files: [], created: [] }
   const resolved = resolve(projectRoot)
   const root = basename(resolved)
-  return new Promise((resolveTree) => {
-    execFile(
-      gitPath(),
-      ['-C', resolved, 'ls-files', '-z', '--cached', '--others', '--exclude-standard', '--', ...wanted],
-      {
-        encoding: 'utf8',
-        env: { ...process.env, GIT_CEILING_DIRECTORIES: dirname(resolved) },
-        maxBuffer: TREE_MAX_BUFFER,
-        timeout: TREE_TIMEOUT_MS,
-        windowsHide: true,
-      },
-      (error, stdout) => {
-        if (error) {
-          resolveTree(null)
-          return
-        }
-        const files = stdout
-          .split('\0')
-          .filter(Boolean)
-          .map((line) => line.replace(/\\/g, '/'))
-          .sort()
-        resolveTree({ root, files, created: [] })
-      }
-    )
-  })
+  const [listed, deleted] = await Promise.all([
+    gitListPaths(resolved, ['--cached', '--others', '--exclude-standard']),
+    gitListPaths(resolved, ['--deleted']),
+  ])
+  if (listed === null) {
+    const files = walkFiles(listDir, resolved).sort()
+    return { root, files, created: [] }
+  }
+  return { root, files: dropDeleted(listed, deleted).sort(), created: [] }
+}
+
+export async function readTreePartial(projectRoot, names) {
+  const wanted = Array.isArray(names) ? names.filter((name) => typeof name === 'string' && name !== '') : []
+  if (!projectRoot || wanted.length === 0) return null
+  const resolved = resolve(projectRoot)
+  const root = basename(resolved)
+  const [listed, deleted] = await Promise.all([
+    gitListPaths(resolved, ['--cached', '--others', '--exclude-standard', '--', ...wanted]),
+    gitListPaths(resolved, ['--deleted', '--', ...wanted]),
+  ])
+  if (listed === null) return null
+  return { root, files: dropDeleted(listed, deleted).sort(), created: [] }
 }
 
 export function mergeNamedFiles(current, names, listed) {
@@ -396,6 +395,7 @@ export function createBridge(options = {}) {
   const debounceMs = Number(options.debounceMs ?? 300)
   const pollMs = Number(options.pollMs ?? Math.min(debounceMs, 200))
   const quietMs = Number(options.quietMs ?? WATCH_QUIET_MS)
+  const quietFullMs = Number(options.quietFullMs ?? QUIET_FULL_READ_MS)
   const treeBudgetMs = Number(options.treeBudgetMs ?? TREE_LAST_FILE_BUDGET_MS)
   const now = typeof options.now === 'function' ? options.now : Date.now
   const env = options.env ?? process.env
@@ -701,6 +701,8 @@ export function createBridge(options = {}) {
   const treeVersions = new Map()
   let treeReading = null
   let treeDirty = false
+  let quietReadTimer = null
+  let quietFullDue = false
   let folderAnswer = null
   let folderBuild = null
   const unreadable = createUnreadableCounter()
@@ -831,11 +833,33 @@ export function createBridge(options = {}) {
     return tree
   }
 
+  function clearQuietRead() {
+    if (quietReadTimer) {
+      clearTimeout(quietReadTimer)
+      quietReadTimer = null
+    }
+  }
+
+  function scheduleQuietRead() {
+    if (stopped || watchFallback) return
+    clearQuietRead()
+    quietReadTimer = setTimeout(() => {
+      quietReadTimer = null
+      if (stopped || watchFallback) return
+      quietFullDue = true
+      if (!treeReading) startTreeRead().catch(() => {})
+    }, quietFullMs)
+  }
+
   function startTreeRead() {
     if (stopped) return Promise.resolve(null)
     if (treeReading) return treeReading
+    clearQuietRead()
     let changed = false
+    let usedPartial = false
     const read = (async () => {
+      const forceFull = quietFullDue
+      quietFullDue = false
       if (pendingNames.size > 0 || !pendingAllNamed) {
         await new Promise((resolveTurn) => setImmediate(resolveTurn))
       }
@@ -846,6 +870,7 @@ export function createBridge(options = {}) {
       pendingOverflow = false
       let tree = null
       if (
+        !forceFull &&
         names.length > 0 &&
         allNamed &&
         names.length <= PARTIAL_NAME_LIMIT &&
@@ -863,6 +888,7 @@ export function createBridge(options = {}) {
       if (tree) {
         lastTreeError = ''
         partialStreak += 1
+        usedPartial = true
       } else {
         partialStreak = 0
         tree = await readWholeTree()
@@ -887,6 +913,9 @@ export function createBridge(options = {}) {
         startTreeRead().catch(() => {})
       }
       if (treeDirty && !pollTimer && !watchFallback) beginPolling(false)
+      if (usedPartial) scheduleQuietRead()
+      else clearQuietRead()
+      if (quietFullDue && !stopped) startTreeRead().catch(() => {})
     }
     read.then(done, done)
     return read
@@ -922,6 +951,7 @@ export function createBridge(options = {}) {
   }
 
   function noteWatchName(filename) {
+    scheduleQuietRead()
     const name = filename ? String(filename).replace(/\\/g, '/') : ''
     if (!name) {
       pendingAllNamed = false
@@ -954,6 +984,7 @@ export function createBridge(options = {}) {
         } catch {}
         watcher = null
         watchFallback = true
+        clearQuietRead()
         beginPolling(false)
       })
       watcher = current
@@ -962,6 +993,7 @@ export function createBridge(options = {}) {
     } catch {
       watcher = null
       watchFallback = true
+      clearQuietRead()
       return false
     }
   }
@@ -1381,6 +1413,8 @@ export function createBridge(options = {}) {
       clearInterval(pollTimer)
       pollTimer = null
     }
+    clearQuietRead()
+    quietFullDue = false
     if (watcher) {
       try {
         watcher.close()

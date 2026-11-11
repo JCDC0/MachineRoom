@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The bridge leaves out files deleted from the disk, listed beside the read, and runs one full read 30 seconds after the last partial read so a missed watcher event is corrected (P51).
 - The native agent trims old assistant text and old write_file and edit_file arguments, then the newest six messages, so a request stays under MR_AGENT_CONTEXT_CHARS (P50).
 - Review 10 (AUDIT-2026-11-REVIEW-10.md) reads P44 to P47 and P36b: 7 findings, 4 proved, fixed by P50 to P52 (P48).
 - Removing a lanes.json lane hides it in this project only, the bridge moves an old removed list into the project's hidden lanes, and Settings says Remove from project or Delete everywhere (P47).

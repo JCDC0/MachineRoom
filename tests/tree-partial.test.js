@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process'
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { createBridge, mergeNamedFiles, readTreePartial } from '../server/index.js'
+import { createBridge, mergeNamedFiles, readTree, readTreePartial } from '../server/index.js'
 import { gitPath } from '../server/programPath.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 
@@ -99,7 +99,7 @@ function makeRoot() {
   return root
 }
 
-function startBridge({ root, files, watcher, readTree, readTreePartial, treeBudgetMs = 3000 }) {
+function startBridge({ root, files, watcher, readTree, readTreePartial, treeBudgetMs = 3000, quietMs = 60000, quietFullMs = 60000 }) {
   const counts = { full: 0, partial: [] }
   const bridge = createBridge({
     projectRoot: root,
@@ -108,7 +108,8 @@ function startBridge({ root, files, watcher, readTree, readTreePartial, treeBudg
     initialTree: { root: 'project', files, created: [] },
     debounceMs: 5,
     pollMs: 5,
-    quietMs: 10,
+    quietMs,
+    quietFullMs,
     treeBudgetMs,
     watchProject: watcher.projectWatch,
     readTree: async (projectRoot) => {
@@ -158,6 +159,25 @@ describe('readTreePartial', () => {
   })
 })
 
+describe('an unstaged delete', () => {
+  it('leaves the list after a full read and after a partial read', async () => {
+    const dir = makeRoot()
+    execFileSync(gitPath(), ['init', '--quiet', '--initial-branch=main'], { cwd: dir, stdio: 'ignore' })
+    writeFileSync(join(dir, 'a.js'), 'x')
+    writeFileSync(join(dir, 'b.js'), 'x')
+    mkdirSync(join(dir, 'dir'))
+    writeFileSync(join(dir, 'dir', 'a.js'), 'x')
+    writeFileSync(join(dir, 'dir', 'b.js'), 'x')
+    execFileSync(gitPath(), ['add', '--', '.'], { cwd: dir, stdio: 'ignore' })
+    rmSync(join(dir, 'b.js'))
+    rmSync(join(dir, 'dir', 'b.js'))
+
+    expect((await readTree(dir)).files).toEqual(['a.js', 'dir/a.js'])
+    expect((await readTreePartial(dir, ['b.js'])).files).toEqual([])
+    expect((await readTreePartial(dir, ['dir'])).files).toEqual(['dir/a.js'])
+  })
+})
+
 describe('mergeNamedFiles', () => {
   it('drops a held file the list does not answer and keeps the other paths', () => {
     const current = { root: 'project', files: ['a.js', 'dir/a.js', 'dir/b.js'], created: [] }
@@ -192,6 +212,28 @@ describe('a watcher event with names', () => {
     const folder = await folderTree(url)
     expect(folder.body.version).toBe(2)
     expect(treePaths(folder.body)).toContain('b.js')
+  })
+
+  it('runs one full read after a partial read goes quiet', async () => {
+    const watcher = fakeWatch()
+    const { bridge, counts } = startBridge({
+      root: makeRoot(),
+      files: ['a.js'],
+      watcher,
+      quietFullMs: 20,
+      readTree: async () => ({ root: 'project', files: ['a.js', 'b.js', 'c.js'], created: [] }),
+      readTreePartial: async () => ({ root: 'project', files: ['b.js'], created: [] }),
+    })
+    const { url } = await bridge.start()
+
+    watcher.emit('b.js')
+    await waitFor(() => counts.partial.length === 1)
+    expect(counts.full).toBe(0)
+    await waitFor(() => counts.full === 1)
+    expect(counts.partial).toEqual([['b.js']])
+
+    const folder = await folderTree(url)
+    expect(treePaths(folder.body)).toContain('c.js')
   })
 
   it('runs one full read and no partial list for 51 names', async () => {

@@ -71,7 +71,7 @@ describe('readTree without git', () => {
 })
 
 describe('readTree with git', () => {
-  it('keeps ignored files out of a list longer than one megabyte', async () => {
+  it('reads lists longer than one megabyte and leaves missing index files out', async () => {
     const dir = makeTempDir('mr-tree-')
     try {
       git(dir, ['init', '-b', 'main'])
@@ -84,9 +84,14 @@ describe('readTree with git', () => {
       const lines = []
       for (let index = 0; index < count; index += 1) lines.push(`100644 ${blob}\t${stem}${String(index).padStart(5, '0')}.txt`)
       execFileSync('git', ['update-index', '--index-info'], { cwd: dir, input: `${lines.join('\n')}\n` })
-      const { files } = await readTree(dir)
-      expect(files).toHaveLength(count + 1)
-      expect(files).toContain('.gitignore')
+      let walked = false
+      const listDir = (folder, options) => {
+        walked = true
+        return readdirSync(folder, options)
+      }
+      const { files } = await readTree(dir, { listDir })
+      expect(walked).toBe(false)
+      expect(files).toEqual(['.gitignore'])
       expect(files).not.toContain('ignored/skip.txt')
     } finally {
       rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
