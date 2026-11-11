@@ -228,6 +228,14 @@ describe('POST /api/control/route/lane', () => {
     expect(brief.body.reason).toBe('The small tier runs opencode2 on opencode-go/deepseek-v4.1-flash at max.')
   })
 
+  it('routes a short task to the small tier by its text', async () => {
+    const { url } = await startRouteBridge({ lanes: LANES, tasks: TASKS, active: ALL })
+    const answer = await postLaneRoute(url, { task: 'Fix the typo in `src/a.js`.' })
+    expect(answer.status).toBe(200)
+    expect(answer.body).toMatchObject({ lane: 'opencode2', tier: 'small' })
+    expect(answer.body.reason).toBe('The small tier runs opencode2 on opencode-go/deepseek-v4.1-flash at max.')
+  })
+
   it('skips a lane that is turned off, busy or not in the room and gives each reason', async () => {
     const { url } = await startRouteBridge({ lanes: LANES, tasks: TASKS, active: ['opencode2', 'opencode3', 'opencode'], lock: 'opencode2' })
     const answer = await postLaneRoute(url, { brief: 'P31' })

@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { parseBriefs } from '../src/briefs/briefs.js'
 import { laneLockPids } from '../src/briefs/run.js'
-import { profileFromBrief } from '../src/policy/profile.js'
+import { profileFromBrief, profileFromTask } from '../src/policy/profile.js'
 import { chooseRoute, readPolicy, routeLane } from '../src/policy/route.js'
 import { activeLanesFileFor, projectLanesFileFor, readActiveLanesChoice, readHiddenLanes } from './active-lanes.js'
 import { readLaneCosts } from './lane-costs.js'
@@ -129,7 +129,7 @@ export function createPolicyApi(options) {
     if (brief === '' && task === '') return { status: 400, error: NO_BRIEF_OR_TASK_PROBLEM }
     if (task !== '') {
       if (task.length > TASK_LIMIT) return { status: 400, error: TASK_PROBLEM }
-      return { profile: profileFromBrief({ text: task }) }
+      return { profile: profileFromTask(task) }
     }
     const text = readText(resolvedBriefs ? join(resolvedBriefs, TASKS_FILE) : null)
     if (text === null) return { status: 404, error: BRIEF_FILES_PROBLEM }

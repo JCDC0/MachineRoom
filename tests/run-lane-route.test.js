@@ -1,9 +1,11 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { execFileSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { join, resolve } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { createBridge } from '../server/index.js'
 import { activeLanesFileFor, writeActiveLanes } from '../server/active-lanes.js'
+import { gitPath } from '../server/programPath.js'
 import { postJson, waitFor } from './helpers/bridge.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 
@@ -54,6 +56,7 @@ const TASKS = [
 ].join('\n')
 
 const MEDIUM_TASK = 'Fix it. Files: `a.js`, `b.js`, `c.js`, `tests/a.test.js`.'
+const SMALL_TASK = 'Fix the typo in `src/a.js`.'
 const SMALL_REASON = 'The small tier runs opencode2 on opencode-go/deepseek-v4.1-flash at max.'
 const cleanups = []
 
@@ -142,6 +145,24 @@ describe('a run started with no lane', () => {
   it('routes a task when the lane is auto and skips a busy lane', async () => {
     const rig = await startRig({ project: true, active: ['opencode2', 'opencode3', 'opencode'], lock: 'opencode2' })
     const answer = await postJson(`${rig.url}/api/control/runs`, { lane: 'auto', task: MEDIUM_TASK, confirmed: true })
+    expect(answer.status).toBe(202)
+    expect(answer.body.lane).toBe('opencode')
+    expect(answer.body.routed).toEqual({
+      tier: 'medium',
+      reason: 'The medium tier runs opencode on opencode-go/deepseek-v4.1-flash at max.',
+    })
+    await waitFor(() => readCalls(rig.calls).length === 1, { what: 'the runner' })
+    expect(readCalls(rig.calls)[0][0]).toBe('opencode')
+  })
+
+  it('routes a queue by the largest tier among its tasks', async () => {
+    const rig = await startRig({ project: true, active: ['opencode2', 'opencode'] })
+    execFileSync(gitPath(), ['init'], { cwd: rig.root, stdio: 'ignore' })
+    const answer = await postJson(`${rig.url}/api/control/runs`, {
+      lane: 'auto',
+      tasks: [SMALL_TASK, MEDIUM_TASK],
+      confirmed: true,
+    })
     expect(answer.status).toBe(202)
     expect(answer.body.lane).toBe('opencode')
     expect(answer.body.routed).toEqual({

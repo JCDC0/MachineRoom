@@ -6,8 +6,8 @@ import { StringDecoder } from 'node:string_decoder'
 import { fileURLToPath } from 'node:url'
 import { parseBriefs } from '../src/briefs/briefs.js'
 import { SINCE_PROBLEM, dayStart, laneLockPids, laneStats, pathInside, projectProblems, runRecord } from '../src/briefs/run.js'
-import { profileFromBrief } from '../src/policy/profile.js'
-import { readPolicy, routeLane } from '../src/policy/route.js'
+import { profileFromBrief, profileFromTask } from '../src/policy/profile.js'
+import { readPolicy, routeLane, tierFor, TIERS } from '../src/policy/route.js'
 import { readLaneCosts } from './lane-costs.js'
 import { outcomeTable, subjectsFromLog } from './outcomes.js'
 import { gitPath } from './programPath.js'
@@ -384,6 +384,20 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
       })
     }
     return list
+  }
+
+  function profileForTasks(tasks) {
+    let best = null
+    let rank = -1
+    for (const text of tasks) {
+      const profile = profileFromTask(text)
+      const next = TIERS.indexOf(tierFor(profile))
+      if (next > rank) {
+        best = profile
+        rank = next
+      }
+    }
+    return best ?? profileFromTask('')
   }
 
   function routeStart({ lanesConfig, profile, only }) {
@@ -837,7 +851,7 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
     let routedAnswer = null
     if (wantsAuto) {
       const profile = projectRun
-        ? profileFromBrief({ text: hasTasks ? body.tasks[0] : task })
+        ? profileForTasks(hasTasks ? body.tasks : [task])
         : profileFromBrief(parsedBriefs.find((brief) => brief.id === briefs[0]) ?? { text: '' })
       const routed = routeStart({ lanesConfig: lanes, profile, only: laneRestriction(startInfo) })
       if (routed.error) {
