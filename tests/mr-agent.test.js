@@ -678,7 +678,7 @@ describe('mr-agent', () => {
     })
   })
 
-  it('replaces the oldest tool results and keeps the newest six', async () => {
+  it('keeps every result of the newest turn readable', async () => {
     const folder = tempDir()
     writeFileSync(join(folder, 'notes.txt'), `${'n'.repeat(600)}\n`)
     const calls = Array.from({ length: 8 }, (_, index) => ({ id: `call_${index}`, name: 'read_file', arguments: { path: 'notes.txt' } }))
@@ -687,9 +687,42 @@ describe('mr-agent', () => {
     expect(result.code).toBe(0)
     const results = api.calls[1].body.messages.filter((message) => message.role === 'tool')
     expect(results).toHaveLength(8)
-    const removed = '[Output removed to save room. Run the tool again if it is needed.]'
-    expect(results.slice(0, 2).map((message) => message.content)).toEqual([removed, removed])
-    for (const message of results.slice(2)) expect(message.content).toContain('1\t')
+    for (const message of results) expect(message.content).toContain('1\t')
+  })
+
+  it('keeps seven parallel results readable when the bound is tight', async () => {
+    const folder = tempDir()
+    writeFileSync(join(folder, 'note.txt'), 'text\n')
+    const calls = Array.from({ length: 7 }, (_, index) => ({ id: `call_${index}`, name: 'list_dir', arguments: { path: '.' } }))
+    const api = await startFakeApi((_body, index) => (index === 0 ? chatAnswer({ calls }) : chatAnswer({ text: 'Done.' })))
+    const result = await runAgent({ folder, api, env: { MR_AGENT_CONTEXT_CHARS: '500' } })
+    expect(result.code).toBe(0)
+    const results = api.calls[1].body.messages.filter((message) => message.role === 'tool')
+    expect(results).toHaveLength(7)
+    for (const message of results) expect(message.content).toContain('note.txt')
+  })
+
+  it('trims an older turn before the newest one', async () => {
+    const folder = tempDir()
+    writeFileSync(join(folder, 'old.txt'), `${'o'.repeat(1500)}\n`.repeat(4))
+    writeFileSync(join(folder, 'new.txt'), `${'n'.repeat(1500)}\n`.repeat(4))
+    const api = await startFakeApi((_body, index) => {
+      if (index === 0) return chatAnswer({ calls: [{ id: 'call_old', name: 'read_file', arguments: { path: 'old.txt' } }] })
+      if (index === 1) return chatAnswer({ calls: [{ id: 'call_new', name: 'read_file', arguments: { path: 'new.txt' } }] })
+      return chatAnswer({ text: 'Done.' })
+    })
+    const result = await runAgent({ folder, api, env: { MR_AGENT_CONTEXT_CHARS: '500' } })
+    expect(result.code).toBe(0)
+    const results = api.calls[2].body.messages.filter((message) => message.role === 'tool')
+    expect(results).toHaveLength(2)
+    expect(results[0]).toMatchObject({
+      role: 'tool',
+      tool_call_id: 'call_old',
+      content: '[Output removed to save room. Run the tool again if it is needed.]',
+    })
+    expect(results[1].tool_call_id).toBe('call_new')
+    expect(results[1].content).toContain('1\tnnn')
+    expect(results[1].content).toContain('[Output cut to save room.]')
   })
 
   it('keeps a long write call under the context bound', async () => {
@@ -722,7 +755,7 @@ describe('mr-agent', () => {
     ])
   })
 
-  it('cuts the newest tool result to 2000 characters when the newest six hold the bound', async () => {
+  it('cuts the newest tool result to 2000 characters when the newest turn holds the bound', async () => {
     const folder = tempDir()
     const command = `"${process.execPath}" -e "process.stdout.write('x'.repeat(9000))"`
     const api = await startFakeApi((_body, index) =>
@@ -736,7 +769,7 @@ describe('mr-agent', () => {
     expect(JSON.stringify(messages).length).toBeLessThan(4000)
     const tool = messages.at(-1)
     expect(tool).toMatchObject({ role: 'tool', tool_call_id: 'call_shell' })
-    expect(tool.content).toBe('x'.repeat(2000))
+    expect(tool.content).toBe(`${'x'.repeat(2000)}\n[Output cut to save room.]`)
   })
 
   it('replaces old assistant text and write arguments and keeps the call', async () => {

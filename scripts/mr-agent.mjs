@@ -21,8 +21,8 @@ const SHELL_TAIL_LIMIT = 6000
 const DEFAULT_MAX_STEPS = 200
 const MAX_TOKENS = 32000
 const DEFAULT_CONTEXT_CHARS = 400000
-const KEEP_TOOL_RESULTS = 6
 const TOOL_RESULT_REMOVED = '[Output removed to save room. Run the tool again if it is needed.]'
+const TOOL_RESULT_CUT = '\n[Output cut to save room.]'
 const ASSISTANT_TEXT_REMOVED = '[Text removed to save room.]'
 const TOOL_ARGUMENTS_REMOVED = '[Arguments removed to save room.]'
 const NEWEST_READABLE_CHARS = 2000
@@ -1209,37 +1209,67 @@ function trimAssistant(message) {
   return JSON.stringify(trimmed).length < JSON.stringify(message).length ? trimmed : message
 }
 
+function newestToolTurn(messages) {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index]
+    if (message?.role === 'assistant' && Array.isArray(message.tool_calls) && message.tool_calls.length > 0) {
+      return index
+    }
+  }
+  return messages.length
+}
+
+function cutToolResult(message) {
+  const content = String(message.content ?? '')
+  if (content.length <= NEWEST_READABLE_CHARS) return message
+  return { ...message, content: `${content.slice(0, NEWEST_READABLE_CHARS)}${TOOL_RESULT_CUT}` }
+}
+
 function boundMessages(messages, limit) {
   if (messageChars(messages) <= limit) return
-  const toolIndexes = []
+  const newestTurn = newestToolTurn(messages)
+  const oldTools = []
+  const newestTools = []
   messages.forEach((message, index) => {
-    if (message?.role === 'tool') toolIndexes.push(index)
+    if (message?.role !== 'tool') return
+    if (index < newestTurn) oldTools.push(index)
+    else newestTools.push(index)
   })
-  const editable = toolIndexes.slice(0, Math.max(0, toolIndexes.length - KEEP_TOOL_RESULTS))
-  for (const index of editable) {
+  for (const index of oldTools) {
     if (messageChars(messages) <= limit) break
     messages[index] = { ...messages[index], content: TOOL_RESULT_REMOVED }
   }
   if (messageChars(messages) <= limit) return
-  const newestStart = Math.max(2, messages.length - KEEP_TOOL_RESULTS)
-  for (let index = 2; index < newestStart; index += 1) {
+  for (let index = 2; index < newestTurn; index += 1) {
     if (messageChars(messages) <= limit) return
     if (messages[index]?.role === 'assistant') messages[index] = trimAssistant(messages[index])
   }
   if (messageChars(messages) <= limit) return
-  const newest = []
-  for (let index = newestStart; index < messages.length; index += 1) {
-    if (index >= 2) newest.push(index)
+  const newestChars = newestTools.reduce((total, index) => total + JSON.stringify(messages[index]).length, 0)
+  if (newestChars > limit) {
+    for (const index of newestTools) messages[index] = cutToolResult(messages[index])
   }
-  newest.sort((left, right) => JSON.stringify(messages[right]).length - JSON.stringify(messages[left]).length)
-  for (const index of newest) {
+  if (messageChars(messages) <= limit) return
+  for (let index = newestTurn; index < messages.length; index += 1) {
+    if (messageChars(messages) <= limit) return
+    if (messages[index]?.role === 'assistant') messages[index] = trimAssistant(messages[index])
+  }
+  if (messageChars(messages) <= limit) return
+  const rest = []
+  for (let index = 2; index < messages.length; index += 1) rest.push(index)
+  rest.sort((left, right) => JSON.stringify(messages[right]).length - JSON.stringify(messages[left]).length)
+  for (const index of rest) {
     if (messageChars(messages) <= limit) return
     const message = messages[index]
     if (message?.role === 'assistant') {
       messages[index] = trimAssistant(message)
       continue
     }
-    if (message?.role !== 'tool' && message?.role !== 'user') continue
+    if (message?.role === 'tool') {
+      messages[index] = cutToolResult(message)
+      continue
+    }
+    if (message?.role !== 'user') continue
     const content = String(message.content ?? '')
     messages[index] = { ...message, content: content.slice(0, NEWEST_READABLE_CHARS) }
   }
