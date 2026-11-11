@@ -369,6 +369,8 @@ export function createBridge(options = {}) {
   const policy = createPolicyApi({
     projectRoot,
     briefsDir: options.briefsDir ?? process.env.BRIEFS_DIR,
+    runsFolder: options.runsFolder ?? options.orchestratorFolder ?? (options.lanesSource && typeof options.lanesSource === 'object' ? options.lanesSource.folder : null),
+    lanesFile: options.lanesFile,
     sendJson,
     readJsonBody,
     lanes: () => lanesSource,

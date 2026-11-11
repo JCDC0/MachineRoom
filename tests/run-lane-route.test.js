@@ -107,7 +107,7 @@ async function startRig({ project = false, active = ['opencode', 'opencode2', 'o
     runner,
     ["import { appendFileSync } from 'node:fs'", 'appendFileSync(process.argv[2], `${JSON.stringify(process.argv.slice(3))}\\n`)'].join('\n')
   )
-  writeActiveLanes(activeLanesFileFor(root, runs), active)
+  if (active !== null) writeActiveLanes(activeLanesFileFor(root, runs), active)
   const bridge = createBridge({
     projectRoot: root,
     briefsDir: briefs,
@@ -192,6 +192,14 @@ describe('a run started with no lane', () => {
     const answer = await postJson(`${rig.url}/api/control/runs`, { briefs: ['P31'], confirmed: true })
     expect(answer.status).toBe(409)
     expect(answer.body).toEqual({ error: 'Every lane is busy or turned off.' })
+    expect(readCalls(rig.calls)).toEqual([])
+  })
+
+  it('answers the manual sentence when no lane choice is saved', async () => {
+    const rig = await startRig({ project: true, active: null })
+    const answer = await postJson(`${rig.url}/api/control/runs`, { lane: 'auto', task: MEDIUM_TASK, confirmed: true })
+    expect(answer.status).toBe(400)
+    expect(answer.body).toEqual({ error: 'Pick the lanes for this project first.' })
     expect(readCalls(rig.calls)).toEqual([])
   })
 

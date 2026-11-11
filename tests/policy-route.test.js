@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { createBridge } from '../server/index.js'
 import { activeLanesFileFor, writeActiveLanes } from '../server/active-lanes.js'
+import { saveAgentsConfig } from '../server/agents-config.js'
 import { MOCK_POLICY } from '../src/control/mock.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 
@@ -50,33 +51,44 @@ function tempDir(prefix = 'mr-policy-') {
   return dir
 }
 
-function writeRuns(base, costs) {
-  const folder = join(base, 'machineroom-runs')
+function writeRuns(folder, costs) {
   mkdirSync(folder, { recursive: true })
   const startedAt = new Date().toISOString()
   const lines = costs.map((costUsd) => JSON.stringify({ lane: 'opencode', startedAt, costUsd }))
   writeFileSync(join(folder, 'runs.jsonl'), `${lines.join('\n')}\n`)
 }
 
-async function startRouteBridge({ policy = JSON.stringify(POLICY), costs = [], lanes = null, tasks = null, active = null, lock = '' } = {}) {
+async function startRouteBridge({
+  policy = JSON.stringify(POLICY),
+  costs = [],
+  lanes = null,
+  projectLanes = null,
+  tasks = null,
+  active = null,
+  lock = '',
+  runsFolder = null,
+  agents = null,
+  removed = [],
+} = {}) {
   const briefsDir = tempDir()
   if (policy !== null) writeFileSync(join(briefsDir, 'policy.json'), policy)
-  if (lanes !== null) writeFileSync(join(briefsDir, 'lanes.json'), JSON.stringify(lanes))
+  if (projectLanes !== null) {
+    writeFileSync(join(briefsDir, 'lanes.json'), typeof projectLanes === 'string' ? projectLanes : JSON.stringify(projectLanes))
+  }
   if (tasks !== null) writeFileSync(join(briefsDir, 'TASKS.md'), tasks)
   const base = tempDir()
-  if (costs.length > 0) writeRuns(base, costs)
+  const lanesFile = join(base, 'lanes.json')
+  if (lanes !== null) writeFileSync(lanesFile, typeof lanes === 'string' ? lanes : JSON.stringify(lanes))
+  const runs = runsFolder ?? join(base, 'machineroom-runs')
+  mkdirSync(runs, { recursive: true })
+  if (costs.length > 0) writeRuns(runs, costs)
+  if (agents !== null || removed.length > 0) saveAgentsConfig(runs, { agents: agents ?? [], removed })
   const previousTemp = process.env.TEMP
   const previousRuns = process.env.MACHINEROOM_RUNS
   process.env.TEMP = base
   process.env.MACHINEROOM_RUNS = join(base, 'machineroom-runs')
-  if (active !== null) {
-    mkdirSync(join(base, 'machineroom-runs'), { recursive: true })
-    writeActiveLanes(activeLanesFileFor('', join(base, 'machineroom-runs')), active)
-  }
-  if (lock !== '') {
-    mkdirSync(join(base, 'machineroom-runs'), { recursive: true })
-    writeFileSync(join(base, 'machineroom-runs', `${lock}.lock`), `${JSON.stringify({ pid: process.pid })}\n`)
-  }
+  if (active !== null) writeActiveLanes(activeLanesFileFor('', runs), active)
+  if (lock !== '') writeFileSync(join(runs, `${lock}.lock`), `${JSON.stringify({ pid: process.pid })}\n`)
   cleanups.push(() => {
     process.env.TEMP = previousTemp
     if (previousRuns === undefined) delete process.env.MACHINEROOM_RUNS
@@ -85,6 +97,8 @@ async function startRouteBridge({ policy = JSON.stringify(POLICY), costs = [], l
   const bridge = createBridge({
     projectRoot: '',
     briefsDir,
+    lanesFile,
+    ...(runsFolder ? { runsFolder } : {}),
     port: 0,
     env: {},
     reconnectMinMs: 60000,
@@ -92,7 +106,7 @@ async function startRouteBridge({ policy = JSON.stringify(POLICY), costs = [], l
   })
   cleanups.push(() => bridge.stop())
   const { url } = await bridge.start()
-  return { url, briefsDir, base }
+  return { url, briefsDir, base, runs }
 }
 
 async function postRoute(url, body) {
@@ -206,6 +220,12 @@ const TASKS = [
 
 const MEDIUM_TASK = 'Fix the typo. Files: `a.js`, `b.js`, `c.js`, `tests/a.test.js`.'
 
+const SMALL_TASK = 'Fix the typo in `src/a.js`.'
+
+function policyWithSmall(choices) {
+  return JSON.stringify({ ...POLICY, tiers: { ...POLICY.tiers, small: choices } })
+}
+
 const ALL = ['opencode2', 'opencode3', 'opencode']
 
 describe('POST /api/control/route/lane', () => {
@@ -283,6 +303,73 @@ describe('POST /api/control/route/lane', () => {
         { lane: 'claude', why: 'The lane claude is not in this room.' },
       ],
     })
+  })
+
+  it('picks an owner-made lane from the bridge lane records', async () => {
+    const made = {
+      key: 'opencode-7',
+      name: 'Made OpenCode',
+      harness: 'opencode',
+      model: 'opencode-go/deepseek-v4.1-flash',
+      effort: 'max',
+      createdAt: '2026-11-11T10:00:00.000Z',
+    }
+    const policy = policyWithSmall([{ lane: 'opencode-7', model: made.model, reasoning: 'max', provider: 'opencode' }])
+    const { url } = await startRouteBridge({ policy, lanes: LANES, tasks: TASKS, active: ['opencode-7'], agents: [made] })
+    const answer = await postLaneRoute(url, { task: SMALL_TASK })
+    expect(answer.status).toBe(200)
+    expect(answer.body.lane).toBe('opencode-7')
+    expect(answer.body.reason).toBe('The small tier runs opencode-7 on opencode-go/deepseek-v4.1-flash at max.')
+  })
+
+  it('leaves a removed lane out of the route', async () => {
+    const policy = policyWithSmall([{ lane: 'opencode2', model: 'opencode-go/deepseek-v4.1-flash', reasoning: 'max', provider: 'opencode' }])
+    const { url } = await startRouteBridge({ policy, lanes: LANES, tasks: TASKS, active: ['opencode2'], removed: ['opencode2'] })
+    const answer = await postLaneRoute(url, { task: SMALL_TASK })
+    expect(answer.status).toBe(200)
+    expect(answer.body.lane).toBeNull()
+    expect(answer.body.skipped).toEqual([{ lane: 'opencode2', why: 'The lane opencode2 is not in this room.' }])
+  })
+
+  it('does not read a lanes.json inside the project', async () => {
+    const projectLanes = {
+      orchestrator: { name: 'Orchestrator', cli: { harness: 'claude', model: 'opus' } },
+      projectlane: { name: 'Project lane', cli: { harness: 'opencode', model: 'opencode-go/deepseek-v4.1-flash' } },
+    }
+    const policy = policyWithSmall([
+      { lane: 'projectlane', model: 'opencode-go/deepseek-v4.1-flash', reasoning: 'max', provider: 'opencode' },
+      { lane: 'opencode2', model: 'opencode-go/deepseek-v4.1-flash', reasoning: 'max', provider: 'opencode' },
+    ])
+    const { url } = await startRouteBridge({
+      policy,
+      lanes: LANES,
+      projectLanes,
+      tasks: TASKS,
+      active: ['projectlane', 'opencode2'],
+    })
+    const answer = await postLaneRoute(url, { task: SMALL_TASK })
+    expect(answer.status).toBe(200)
+    expect(answer.body.lane).toBe('opencode2')
+    expect(answer.body.skipped).toEqual([{ lane: 'projectlane', why: 'The lane projectlane is not in this room.' }])
+  })
+
+  it('reads the lane lock and the spend from the bridge runs folder', async () => {
+    const own = join(tempDir(), 'own-runs')
+    const { url, base } = await startRouteBridge({ lanes: LANES, tasks: TASKS, active: ALL, runsFolder: own })
+    const other = join(base, 'machineroom-runs')
+    mkdirSync(other, { recursive: true })
+    writeFileSync(join(other, 'runs.jsonl'), `${JSON.stringify({ lane: 'opencode', startedAt: new Date().toISOString(), costUsd: 30 })}\n`)
+    writeFileSync(join(other, 'opencode2.lock'), `${JSON.stringify({ pid: process.pid })}\n`)
+    const answer = await postLaneRoute(url, { task: SMALL_TASK })
+    expect(answer.status).toBe(200)
+    expect(answer.body.lane).toBe('opencode2')
+  })
+
+  it('answers the manual sentence when no lane choice is saved', async () => {
+    const { url } = await startRouteBridge({ lanes: LANES, tasks: TASKS })
+    const answer = await postLaneRoute(url, { task: SMALL_TASK })
+    expect(answer.status).toBe(400)
+    expect(answer.body).toEqual({ error: 'Pick the lanes for this project first.' })
   })
 
   it('refuses a request with no name, two names, a bad brief and a long task', async () => {
