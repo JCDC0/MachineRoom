@@ -75,6 +75,8 @@ const POLL_READ_GAP = 3
 const SKIP_DIRS = new Set(['.git', 'node_modules', 'dist', '.worktrees'])
 const TREE_MAX_BUFFER = 64 * 1024 * 1024
 const TREE_TIMEOUT_MS = 20000
+const PARTIAL_NAME_LIMIT = 50
+const PARTIAL_FULL_EVERY = 10
 const IGNORED_WATCH = /(^|[/\\])(\.git|node_modules|\.worktrees)([/\\]|$)/
 const RUN_END_STATUSES = new Set(['succeeded', 'failed', 'cancelled', 'timed_out'])
 const AGENT_MESSAGE_KINDS = new Set(['order', 'report', 'dispatch', 'wake'])
@@ -128,6 +130,77 @@ export function readTree(projectRoot, { listDir = readdirSync } = {}) {
       }
     )
   })
+}
+
+export function readTreePartial(projectRoot, names) {
+  const wanted = Array.isArray(names) ? names.filter((name) => typeof name === 'string' && name !== '') : []
+  if (!projectRoot || wanted.length === 0) return Promise.resolve(null)
+  const resolved = resolve(projectRoot)
+  const root = basename(resolved)
+  return new Promise((resolveTree) => {
+    execFile(
+      gitPath(),
+      ['-C', resolved, 'ls-files', '-z', '--cached', '--others', '--exclude-standard', '--', ...wanted],
+      {
+        encoding: 'utf8',
+        env: { ...process.env, GIT_CEILING_DIRECTORIES: dirname(resolved) },
+        maxBuffer: TREE_MAX_BUFFER,
+        timeout: TREE_TIMEOUT_MS,
+        windowsHide: true,
+      },
+      (error, stdout) => {
+        if (error) {
+          resolveTree(null)
+          return
+        }
+        const files = stdout
+          .split('\0')
+          .filter(Boolean)
+          .map((line) => line.replace(/\\/g, '/'))
+          .sort()
+        resolveTree({ root, files, created: [] })
+      }
+    )
+  })
+}
+
+export function mergeNamedFiles(current, names, listed) {
+  const base = current && Array.isArray(current.files) ? current.files : []
+  const root = current && typeof current.root === 'string' ? current.root : ''
+  const clean = []
+  for (const name of names) {
+    if (typeof name !== 'string') continue
+    const path = name.replace(/\\/g, '/').replace(/^\.\//, '').replace(/\/+$/, '')
+    if (!path || path === '..' || path.startsWith('../') || path.startsWith('/') || /^[A-Za-z]:\//.test(path)) continue
+    clean.push(path)
+  }
+  const seen = new Set()
+  const wanted = []
+  for (const file of Array.isArray(listed) ? listed : []) {
+    if (typeof file !== 'string' || seen.has(file)) continue
+    seen.add(file)
+    wanted.push(file)
+  }
+  wanted.sort()
+  const covered = (file) => clean.some((name) => file === name || file.startsWith(`${name}/`))
+  const kept = []
+  for (const file of base) {
+    if (!covered(file)) kept.push(file)
+  }
+  const files = []
+  let held = 0
+  let add = 0
+  while (held < kept.length && add < wanted.length) {
+    if (kept[held] < wanted[add]) files.push(kept[held++])
+    else if (kept[held] > wanted[add]) files.push(wanted[add++])
+    else {
+      files.push(kept[held++])
+      add += 1
+    }
+  }
+  while (held < kept.length) files.push(kept[held++])
+  while (add < wanted.length) files.push(wanted[add++])
+  return { root, files, created: Array.isArray(current?.created) ? current.created : [] }
 }
 
 export const FOLDER_SHAPE = 'folders'
@@ -315,12 +388,15 @@ export function trimHistory(history, now = Date.now) {
 export function createBridge(options = {}) {
   const projectRoot = options.projectRoot ?? process.env.PROJECT_ROOT ?? process.cwd()
   const treeReader = options.readTree ?? readTree
+  const partialTreeReader = options.readTreePartial ?? readTreePartial
+  const watchProject = options.watchProject ?? watch
   const packFolderTree = options.packTree ?? packTree
   const port = Number(options.port ?? process.env.PORT ?? 5174)
   const heartbeatMs = Number(options.heartbeatMs ?? 15000)
   const debounceMs = Number(options.debounceMs ?? 300)
   const pollMs = Number(options.pollMs ?? Math.min(debounceMs, 200))
   const quietMs = Number(options.quietMs ?? WATCH_QUIET_MS)
+  const treeBudgetMs = Number(options.treeBudgetMs ?? TREE_LAST_FILE_BUDGET_MS)
   const now = typeof options.now === 'function' ? options.now : Date.now
   const env = options.env ?? process.env
   const origins = namedOrigins(env.MACHINEROOM_ORIGINS)
@@ -607,6 +683,10 @@ export function createBridge(options = {}) {
   let stopped = false
   let watcher = null
   let pollTimer = null
+  let pendingNames = new Set()
+  let pendingAllNamed = true
+  let pendingOverflow = false
+  let partialStreak = 0
   let lastFiles = []
   let lastTree = null
   let lastTreeAt = 0
@@ -735,22 +815,57 @@ export function createBridge(options = {}) {
     return true
   }
 
+  async function readWholeTree() {
+    let tree
+    try {
+      tree = await treeReader(projectRoot)
+      lastTreeError = ''
+    } catch (error) {
+      lastTreeError = error instanceof Error ? error.message : String(error)
+      tree = { root: '', files: [], created: [] }
+    }
+    if (!tree || !Array.isArray(tree.files)) {
+      if (!lastTreeError) lastTreeError = 'The tree read returned no file list.'
+      tree = { root: '', files: [], created: [] }
+    }
+    return tree
+  }
+
   function startTreeRead() {
     if (stopped) return Promise.resolve(null)
     if (treeReading) return treeReading
     let changed = false
     const read = (async () => {
-      let tree
-      try {
-        tree = await treeReader(projectRoot)
-        lastTreeError = ''
-      } catch (error) {
-        lastTreeError = error instanceof Error ? error.message : String(error)
-        tree = { root: '', files: [], created: [] }
+      if (pendingNames.size > 0 || !pendingAllNamed) {
+        await new Promise((resolveTurn) => setImmediate(resolveTurn))
       }
-      if (!tree || !Array.isArray(tree.files)) {
-        if (!lastTreeError) lastTreeError = 'The tree read returned no file list.'
-        tree = { root: '', files: [], created: [] }
+      const names = [...pendingNames]
+      const allNamed = pendingAllNamed && !pendingOverflow
+      pendingNames = new Set()
+      pendingAllNamed = true
+      pendingOverflow = false
+      let tree = null
+      if (
+        names.length > 0 &&
+        allNamed &&
+        names.length <= PARTIAL_NAME_LIMIT &&
+        partialStreak < PARTIAL_FULL_EVERY &&
+        !watchFallback
+      ) {
+        let listed = null
+        try {
+          listed = await partialTreeReader(projectRoot, names)
+        } catch {
+          listed = null
+        }
+        if (listed && Array.isArray(listed.files)) tree = mergeNamedFiles(lastTree, names, listed.files)
+      }
+      if (tree) {
+        lastTreeError = ''
+        partialStreak += 1
+      } else {
+        partialStreak = 0
+        tree = await readWholeTree()
       }
       if (stopped) return tree
       changed = publishTree(tree)
@@ -806,14 +921,30 @@ export function createBridge(options = {}) {
     if (!armWatcher()) beginPolling(false)
   }
 
+  function noteWatchName(filename) {
+    const name = filename ? String(filename).replace(/\\/g, '/') : ''
+    if (!name) {
+      pendingAllNamed = false
+      return
+    }
+    if (pendingOverflow || pendingNames.has(name)) return
+    if (pendingNames.size >= PARTIAL_NAME_LIMIT) {
+      pendingOverflow = true
+      pendingNames.clear()
+      return
+    }
+    pendingNames.add(name)
+  }
+
   function armWatcher() {
     if (stopped || !projectRoot) return false
     if (watcher) return true
     try {
       if (!statSync(resolve(projectRoot)).isDirectory()) return false
-      const current = watch(resolve(projectRoot), { recursive: true }, (_eventType, filename) => {
+      const current = watchProject(resolve(projectRoot), { recursive: true }, (_eventType, filename) => {
         if (stopped) return
         if (filename && IGNORED_WATCH.test(String(filename))) return
+        noteWatchName(filename)
         beginPolling()
       })
       current.on('error', () => {
@@ -861,7 +992,7 @@ export function createBridge(options = {}) {
         lastTreeAt,
         quietMs: WATCH_BURST_QUIET_MS,
         pollMs,
-        budgetMs: TREE_LAST_FILE_BUDGET_MS,
+        budgetMs: treeBudgetMs,
       })
       if (!due) return
       if (!lastReadChanged && armWatcher()) {

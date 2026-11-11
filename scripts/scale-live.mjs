@@ -8,7 +8,7 @@ import { performance } from 'node:perf_hooks'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { gunzipSync } from 'node:zlib'
 import { readProjectLine } from '../server/doctor.js'
-import { createBridge, readTree } from '../server/index.js'
+import { createBridge, readTree, readTreePartial } from '../server/index.js'
 import { gitPath } from '../server/programPath.js'
 import { DEFAULTS, makeScaleTree } from '../src/model/scaleTree.js'
 import { prepareWorktree } from './run-lane.mjs'
@@ -431,6 +431,7 @@ function openBridgeChild(dir) {
 
 async function runBridgeChild(dir) {
   let reads = 0
+  let partialReads = 0
   process.on('disconnect', () => process.exit(0))
   const bridge = createBridge({
     projectRoot: dir,
@@ -438,6 +439,10 @@ async function runBridgeChild(dir) {
     readTree: (root) => {
       reads += 1
       return readTree(root)
+    },
+    readTreePartial: (root, names) => {
+      partialReads += 1
+      return readTreePartial(root, names)
     },
   })
   process.on('message', (message) => {
@@ -449,6 +454,7 @@ async function runBridgeChild(dir) {
         rss: process.memoryUsage().rss,
         heap: process.memoryUsage().heapUsed,
         reads,
+        partialReads,
         at: performance.now(),
       })
       return
@@ -575,7 +581,9 @@ export async function runScaleLive(options = {}) {
     const newEvent = await stream.waitFor((entry) => entry.paths.includes(newPath), 8000)
     row('one new file, write to tree event', newEvent.at - writeAt, LIVE_BUDGET.newFile, newPath)
 
-    const outReadsBefore = (await child.ask('metrics')).reads
+    const outBefore = await child.ask('metrics')
+    const outReadsBefore = outBefore.reads
+    const outPartialBefore = outBefore.partialReads
     const outCpuBefore = await child.ask('metrics')
     const outStartAt = performance.now()
     const ticks = Math.max(1, Math.round(settings.burstMs / BURST_TICK_MS))
@@ -592,11 +600,13 @@ export async function runScaleLive(options = {}) {
       lastWriteAt = performance.now()
       await sleepUntil(outStartAt + ((tick + 1) * settings.burstMs) / ticks)
     }
-    const outAtLastWrite = await child.ask('metrics')
-    const outReadsDuring = outAtLastWrite.reads - outReadsBefore
     const lastPath = `out/f-${settings.burst - 1}.js`
     const lastEvent = await stream.waitFor((entry) => entry.paths.includes(lastPath), 8000)
-    row('burst out/, tree reads started', outReadsDuring, null, `${settings.burst} files over ${Math.round(settings.burstMs)} ms`)
+    const outAfter = await child.ask('metrics')
+    const outReadsDuring = outAfter.reads - outReadsBefore
+    const outPartialDuring = outAfter.partialReads - outPartialBefore
+    row('burst out/, full tree lists', outReadsDuring, null, `${settings.burst} files over ${Math.round(settings.burstMs)} ms`)
+    row('burst out/, partial tree lists', outPartialDuring, null, `${settings.burst} files over ${Math.round(settings.burstMs)} ms`)
     row('burst out/, last write to tree event', lastEvent.at - lastWriteAt, LIVE_BUDGET.lastFile, lastPath)
     await sleepUntil(Math.max(performance.now(), lastWriteAt + settings.cpuWindowMs))
     const outCpuAfter = await child.ask('metrics')
@@ -717,6 +727,7 @@ export async function runScaleLive(options = {}) {
         rssBytes: afterRead.rss,
         newFileMs: newEvent.at - writeAt,
         outReadsDuring,
+        outPartialReads: outPartialDuring,
         outShare,
         lastFileMs: lastEvent.at - lastWriteAt,
         distEvents: distEvents.length,
