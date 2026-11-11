@@ -1,5 +1,5 @@
 import { createClaudeParser } from '../model/parsers/claude.js'
-import { finiteNumber, headLines, jsonLineReader, lastJsonLine, tokenCount } from './common.js'
+import { finiteNumber, headLines, jsonLineReader, lastJsonLine, sumTokens, tokenCount } from './common.js'
 
 function resultLine(log) {
   return lastJsonLine(log, (item) => item?.type === 'result' && !item.parent_tool_use_id)
@@ -10,14 +10,36 @@ function machineroomReply(log) {
   return typeof text === 'string' ? text : ''
 }
 
+function machineroomPeak(log) {
+  let peakTokens = null
+  for (const line of String(log ?? '').split(/\r?\n/)) {
+    if (!line.trim()) continue
+    let item
+    try {
+      item = JSON.parse(line)
+    } catch {
+      continue
+    }
+    if (item?.type !== 'assistant') continue
+    const usage = item.message?.usage
+    if (!usage || typeof usage !== 'object' || Array.isArray(usage)) continue
+    const stepTokens = sumTokens([usage.input_tokens, usage.cache_creation_input_tokens, usage.cache_read_input_tokens])
+    if (stepTokens !== null) peakTokens = peakTokens === null ? stepTokens : Math.max(peakTokens, stepTokens)
+  }
+  return peakTokens
+}
+
 function machineroomUsage(log) {
   const line = resultLine(log)
-  if (!line) return { costUsd: null, inputTokens: null, outputTokens: null }
+  const peakTokens = machineroomPeak(log)
+  const peak = peakTokens === null ? {} : { peakTokens }
+  if (!line) return { costUsd: null, inputTokens: null, outputTokens: null, ...peak }
   const usage = line.usage && typeof line.usage === 'object' ? line.usage : {}
   return {
     costUsd: finiteNumber(line.total_cost_usd),
     inputTokens: tokenCount(usage.input_tokens),
     outputTokens: tokenCount(usage.output_tokens),
+    ...peak,
   }
 }
 

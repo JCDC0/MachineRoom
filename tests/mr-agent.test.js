@@ -756,6 +756,20 @@ describe('machineroom harness', () => {
     expect(reasoned.args.slice(1)).toEqual(['--model', 'deepseek/test', '--cwd', 'C:\\work', '--reasoning', 'xhigh', 'Do it.'])
   })
 
+  it('reads peakTokens from the assistant usage lines', () => {
+    const log = [
+      JSON.stringify({ type: 'assistant', message: { content: [], usage: { input_tokens: 100, output_tokens: 5 } } }),
+      JSON.stringify({ type: 'assistant', message: { content: [], usage: { input_tokens: 250, output_tokens: 8 } } }),
+      JSON.stringify({ type: 'result', result: 'Done.', usage: { input_tokens: 350, output_tokens: 13 } }),
+    ].join('\n')
+    expect(harnessByKey.machineroom.usage(log)).toEqual({
+      costUsd: null,
+      inputTokens: 350,
+      outputTokens: 13,
+      peakTokens: 250,
+    })
+  })
+
   it('reads a stream-json line and summarizes a run', () => {
     const reader = createRunLineReader('machineroom')
     const assistant = JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', id: 't1', name: 'Read', input: { file_path: 'src/a.js' } }] } })
