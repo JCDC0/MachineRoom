@@ -10,6 +10,8 @@ function hermesReply(log) {
 export const hermesHarness = {
   key: 'hermes',
   name: 'Hermes',
+  laneName: 'Hermes',
+  defaultProgram: '%LOCALAPPDATA%\\hermes\\bin\\hermes.exe',
   adapterType: 'hermes_local',
   createParser: createHermesParser,
   command({ cli, prompt, env = {}, folder, usageFile, reasoning } = {}) {

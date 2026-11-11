@@ -33,6 +33,8 @@ function codexUsage(log) {
 export const codexHarness = {
   key: 'codex',
   name: 'Codex',
+  laneName: 'Codex',
+  defaultProgram: 'codex',
   adapterType: 'codex_local',
   createParser: createCodexParser,
   command({ cli, prompt, env = {}, folder, reasoning } = {}) {

@@ -96,6 +96,8 @@ function claudeUsage(log) {
 export const claudeHarness = {
   key: 'claude',
   name: 'Claude Code',
+  laneName: 'Claude Code',
+  defaultProgram: 'claude',
   adapterType: 'claude_local',
   createParser: createClaudeParser,
   command({ cli, prompt, env = {}, folder, sessionId, mcpConfig } = {}) {

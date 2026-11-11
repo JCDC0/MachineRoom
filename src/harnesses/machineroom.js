@@ -57,6 +57,8 @@ function nodeFile() {
 export const machineroomHarness = {
   key: 'machineroom',
   name: 'MachineRoom',
+  laneName: 'MachineRoom',
+  defaultProgram: 'node',
   adapterType: 'machineroom_local',
   createParser: createClaudeParser,
   command({ cli, prompt = '', folder, mode, bridgeUrl, orchestratorId, token, reasoning } = {}) {

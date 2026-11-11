@@ -40,6 +40,8 @@ function copilotUsage(log) {
 export const copilotHarness = {
   key: 'copilot',
   name: 'GitHub Copilot',
+  laneName: 'GitHub Copilot',
+  defaultProgram: 'copilot',
   adapterType: 'copilot_local',
   createParser: createCopilotParser,
   command({ cli, prompt, env = {}, folder, reasoning } = {}) {
