@@ -501,3 +501,52 @@ Files: scripts/mr-agent.mjs, tests/mr-agent.test.js.
 Read `git log --first-parent 103edc8b..refs/heads/main` and review the code the merges of P50, P51, P52 and P49 brought, with `git show -m --first-parent SHA`, against the code around it. Hunt for what a test would not show: a reader of the lanes or the policy still on a fixed `docs/agents` path, so the owner's room shows or routes to a fleet lane, or the testbench loses one; a route or script that now refuses a lane the owner made; a git read that starts a process per event or doubles the work of a full read more than once; a quiet timer that can keep running after the bridge stops; a path check in `scripts/mr-agent.mjs` that a link or a name can still pass; and a conversation trim that drops a tool result its call needs. Run a finding's test or a short script when one would settle it, and say which findings you proved and which you only read. Write `docs/agents/AUDIT-2026-11-REVIEW-11.md`: a table of at most 8 findings, the one that would hurt the owner most first, each with `file:line`, what goes wrong and when, and the smallest fix; mark each one as a push blocker or not. Write no finding you cannot point to in the code.
 
 Files: docs/agents/AUDIT-2026-11-REVIEW-11.md.
+
+## The owner's room on its own, before the OpenCode subscription ends (2026-11-12, the owner's yes)
+
+Since P49 the owner's room reads `config/lanes.json`, which holds only the orchestrator, and the owner makes one lane per subscription in the room. Every brief here works on a temporary runs folder and a temporary project: never read or write `%TEMP%\machineroom-runs`, the owner's room.
+
+**P54. A lane the owner makes for any harness starts without the fleet (OpenCode).** Read no part of TASKS.md beyond this brief and the paragraph above it. Use no subagents. Commit each step as you finish it, and stop starting new work at minute 55. Do not edit any file under `docs/` or `src/engine/`.
+
+`buildMadeLane` in `server/agents-config.js` copies a made lane's `harness` name and `cli.bin` from the first lane of that harness in the room's `lanes.json`. With `config/` there is no such lane but the orchestrator, so a made OpenCode or AGY lane gets `bin` set to the bare harness key and the key as its harness name.
+
+1. Give each harness descriptor in `src/harnesses/` that `buildMadeLane` can be asked for a display name (the one `docs/agents/lanes.json` uses: `OpenCode`, `agy`, `Claude Code`, and the name each other harness already shows) and a default program: the same `%APPDATA%` or `%LOCALAPPDATA%` path the fleet uses on Windows where the fleet names one, else the name the harness uses now. Keep `docs/agents/lanes.json` as it is.
+2. `buildMadeLane` uses a template lane when the room has one, as now, and the descriptor's name and program when it has none. A lane made before this change keeps working: its stored `cli` is not rewritten.
+3. Tests with only `config/lanes.json` and a temp runs folder: a made lane for each of `opencode`, `agy`, `claude`, `codex`, `copilot` and `machineroom` has its display name and a program that is not a bare key where the fleet names a path; `run-lane --dry-run` on a made OpenCode lane prints the expanded program path; with `MACHINEROOM_LANES_DIR=docs/agents` a made lane still copies the fleet lane as now.
+
+Run `npx vitest related --run` on every file you changed, `npm run build` and `npm run pack-check`; all must pass.
+
+Files: src/harnesses/, server/agents-config.js, tests/.
+
+**P55. What a deleted-file list costs on a large project (OpenCode).** Read no part of TASKS.md beyond this brief. Use no subagents. Change no code but `scripts/scale-live.mjs`. Commit by minute 60.
+
+Since P51 every tree read runs `git ls-files --deleted` beside the list, and 30 seconds after the last partial read the bridge runs one full read. Run `npm run scale-live -- --seed 36` at 40,000 and 200,000 files on `refs/heads/main` and on a temp worktree of the commit before the P51 merge (removed after), three times each, and give the median: a full read's time and CPU, a burst's reads and CPU, one new file's time to the page, and the bridge's CPU over two quiet minutes after one new file. Add to `scale-live` whatever it needs to print these. Write `docs/agents/AUDIT-2026-11-TREE-COST.md`: the table, what grew and by how much, and at most two ways to cut it if a full read costs more than 30 percent more than before.
+
+Files: scripts/scale-live.mjs, docs/agents/AUDIT-2026-11-TREE-COST.md.
+
+**P56. The owner's room with only its own lanes (OpenCode).** Read no part of TASKS.md beyond this brief and the paragraph above P54. Use no subagents. Change no code. Commit by minute 50.
+
+Start a bridge with `npm run serve -- up --lanes --sessions` on a temp git project, with `MACHINEROOM_RUNS` set to a temp folder and `MACHINEROOM_LANES_DIR` unset, make one lane through `POST /api/lanes/create` as the page would, and walk every route and panel that names lanes: the agents list, the family tree, Settings' lanes, the active lane choice, Dispatch with a brief and with a typed task, Auto routing at each tier, the Team panel, the cost board, policy proposals, reviews and the doctor. Read the code behind each, and run what a script can settle. Write `docs/agents/AUDIT-2026-11-OWNER-ROOM.md`: a table of at most 10 places that still assume the fleet, refuse a made lane, show an empty or wrong state, or read a fixed `docs/agents` path, the one that would hurt the owner most first, each with `file:line`, what the owner sees and the smallest fix; then at most three proposed briefs. Say which you proved and which you only read.
+
+Files: docs/agents/AUDIT-2026-11-OWNER-ROOM.md.
+
+**P57. A startup move that cannot write does not stop the room (OpenCode).** Read no part of TASKS.md beyond this brief, and of `docs/agents/AUDIT-2026-11-REVIEW-10.md` only finding 7. Use no subagents. Commit each step as you finish it, and stop starting new work at minute 25. Edit only `server/index.js` and tests.
+
+1. In `start()`, the call to `moveRemovedLanesToProject` runs in a `try`; when it throws, the bridge prints `Could not move the old removed lanes: REASON` once and keeps starting.
+2. A test with a runs folder whose `agents.json` holds a removed list and a project lanes file that cannot be written: `start()` resolves, the bridge answers `/api/health`, and the line is printed once.
+
+Run `npx vitest related --run` on every file you changed; it must pass.
+
+Files: server/index.js, tests/.
+
+**P58. The README tells the owner how their room gets its lanes (AGY).** Read no part of TASKS.md beyond this brief and the paragraph above P54. Use no subagents. Commit by minute 35. Edit only `README.md`.
+
+Read `README.md`, `config/lanes.json`, `src/ui/LanesSettings.jsx` and the lane create route in `server/agents-config.js`. Rewrite only the README's parts about lanes so they say: a new room has the orchestrator and no lane; the owner makes one lane per subscription in Settings (name, harness, model, effort), each runs in its own harness on the owner's account; Remove from project and Delete everywhere; and `MACHINEROOM_LANES_DIR` points a room at another lane list, which is how MachineRoom's own development runs its lanes. Plain words, short sentences, no em dashes, no bold. Name no lane of the development fleet, no user name and no home path.
+
+Files: README.md.
+
+**P59. The run-lane stop test passes under load (AGY).** Read no part of TASKS.md beyond this brief. Use no subagents. Commit each step as you finish it, and stop starting new work at minute 45. Edit only files under `tests/`, and `scripts/run-lane.mjs` only if a test proves a real fault there.
+
+`tests/run-lane-stop.test.js` failed once on a merge on 2026-11-11 and passed on a retry, while other lanes ran their suites. Run the file 20 times alone and 10 times with `node scripts/test.mjs` running beside it, find which test fails and why (a fixed wait, a port, a process not yet started or a shared temp folder), and make it wait for the state it needs instead of a time. Do not raise a timeout to hide it. Give the runs and failures before and after in your report.
+
+Files: tests/run-lane-stop.test.js, tests/helpers/, scripts/run-lane.mjs.
