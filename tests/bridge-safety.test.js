@@ -25,6 +25,16 @@ async function startBridge(lanes) {
   writeFileSync(join(briefsDir, 'lanes.json'), JSON.stringify(lanes))
   const runs = join(dir, 'runs')
   mkdirSync(runs, { recursive: true })
+  const previousLanesDir = process.env.MACHINEROOM_LANES_DIR
+  const previousRuns = process.env.MACHINEROOM_RUNS
+  process.env.MACHINEROOM_LANES_DIR = briefsDir
+  process.env.MACHINEROOM_RUNS = runs
+  cleanups.push(() => {
+    if (previousLanesDir === undefined) delete process.env.MACHINEROOM_LANES_DIR
+    else process.env.MACHINEROOM_LANES_DIR = previousLanesDir
+    if (previousRuns === undefined) delete process.env.MACHINEROOM_RUNS
+    else process.env.MACHINEROOM_RUNS = previousRuns
+  })
   const bridge = createBridge({
     port: 0,
     projectRoot: dir,
@@ -44,7 +54,7 @@ describe('briefs route with hostile or broken input', () => {
     for (const lane of ['__proto__', 'constructor', 'toString', 'hasOwnProperty']) {
       const response = await fetch(`${url}/api/control/brief-prompt?ids=X1&lane=${lane}`)
       expect(response.status, lane).toBe(400)
-      expect(await response.json()).toEqual({ error: 'Choose hermes, opencode or agy.' })
+      expect(await response.json()).toEqual({ error: 'Choose one of the lanes: agy.' })
     }
     expect((await fetch(`${url}/api/health`)).status).toBe(200)
   })

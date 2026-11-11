@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- A brief runs on a lane the owner made with its harness, the brief prompt route reads the room's lanes and names them when it refuses, a policy patch names the file the room reads, and Auto says when the policy sends a tier to the owner (P64).
 - A lane made on a project with no active choice becomes its first active lane, Dispatch no longer offers the orchestrator, a team saved before any choice keeps the visible lanes, and the Team tab says lanes are made in the family tree (P63).
 - A plain folder is walked with no git process once a read finds it is not a git work tree, and the 30 second quiet full read follows only a partial read (P62).
 - AUDIT-2026-11-OWNER-ROOM.md walks the owner's room with config lanes and one made lane: 10 findings, 8 proved; P54 fixed the first, P60, P63 and P64 fix the rest (P56).

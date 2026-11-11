@@ -190,6 +190,12 @@ async function makeHarness({ records = [] } = {}) {
   const runnerPath = join(runnerDir, 'tiny-runner.mjs')
   writeFileSync(runnerPath, TINY_RUNNER)
   useTemp(base)
+  const previousLanesDir = process.env.MACHINEROOM_LANES_DIR
+  process.env.MACHINEROOM_LANES_DIR = join(shared.repo, 'docs', 'agents')
+  cleanups.push(() => {
+    if (previousLanesDir === undefined) delete process.env.MACHINEROOM_LANES_DIR
+    else process.env.MACHINEROOM_LANES_DIR = previousLanesDir
+  })
   const lanes = JSON.parse(readFileSync(join(shared.repo, 'docs', 'agents', 'lanes.json'), 'utf8'))
   writeActiveLanes(activeLanesFileFor(RUN_ROOM, runs), Object.keys(lanes).filter((k) => k !== 'orchestrator'))
   const bridge = createBridge({

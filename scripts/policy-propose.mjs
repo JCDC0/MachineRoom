@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
-import { dirname, join, resolve } from 'node:path'
+import { dirname, join, relative, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { SINCE_PROBLEM, dayStart, filterRunsSince } from '../src/briefs/run.js'
 import { readPolicy } from '../src/policy/route.js'
@@ -16,6 +16,7 @@ const MIN_DEFAULT = 10
 
 const root = resolve(fileURLToPath(import.meta.url), '..', '..')
 const policyPath = join(lanesFolder(), 'policy.json')
+const policyRelative = relative(root, policyPath).split('\\').join('/')
 
 function parseArgs(argv) {
   const values = { since: null, min: null }
@@ -98,7 +99,7 @@ function main(argv) {
     return 0
   }
 
-  const diff = policyDiff(text, policyText(answer.policy))
+  const diff = policyDiff(text, policyText(answer.policy), policyRelative)
   const file = join(dirname(runsFile()), `policy-${patchStamp(new Date())}.patch`)
   mkdirSync(dirname(file), { recursive: true })
   writeFileSync(file, diff)

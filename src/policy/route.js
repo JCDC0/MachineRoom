@@ -236,12 +236,15 @@ export function routeLane({ policy, profile, failures, quotas, spent, lanes } = 
   }
   const free = freeLane(list)
   if (free !== null) {
+    const ownerOnly = clean.tiers[tier].every((choice) => choice.lane === OWNER)
     return {
       lane: free,
       model: null,
       reasoning: null,
       tier,
-      reason: `No lane of the ${tier} tier is free, so the first free lane was taken.`,
+      reason: ownerOnly
+        ? `The policy sends the ${tier} tier to you, so the first free lane was taken.`
+        : `No lane of the ${tier} tier is free, so the first free lane was taken.`,
       skipped,
     }
   }

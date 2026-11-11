@@ -3,9 +3,16 @@ import { readPolicy, TIERS } from './route.js'
 const OWNER = 'owner'
 const CONTEXT = 3
 const EPSILON = 1e-9
-const OLD_HEADER = '--- a/docs/agents/policy.json'
-const NEW_HEADER = '+++ b/docs/agents/policy.json'
+const DEFAULT_POLICY_PATH = 'config/policy.json'
 const NO_NEWLINE = '\\ No newline at end of file'
+
+function policyPathText(policyPath) {
+  const text = String(policyPath ?? '')
+    .trim()
+    .replace(/\\/g, '/')
+    .replace(/^\/+/, '')
+  return text || DEFAULT_POLICY_PATH
+}
 
 function isPlainObject(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
@@ -262,13 +269,14 @@ function endsWithoutNewline(entry, before, after) {
   return oldLast || newLast
 }
 
-export function policyDiff(beforeText, afterText) {
+export function policyDiff(beforeText, afterText, policyPath = DEFAULT_POLICY_PATH) {
   if (beforeText === afterText) return ''
   const before = splitText(beforeText)
   const after = splitText(afterText)
   const groups = groupsOf(editScript(before.lines, after.lines))
   if (groups.length === 0) return ''
-  const output = [OLD_HEADER, NEW_HEADER]
+  const name = policyPathText(policyPath)
+  const output = [`--- a/${name}`, `+++ b/${name}`]
   let oldDone = 0
   let newDone = 0
   for (const group of groups) {

@@ -125,6 +125,17 @@ describe('routeLane', () => {
     })
   })
 
+  it('says the policy sends the tier to the owner when only the owner is chosen', () => {
+    const answer = routeLane({
+      policy: policyOf([OWNER]),
+      profile: SMALL,
+      lanes: [lane('a')],
+    })
+    expect(answer.lane).toBe('a')
+    expect(answer.reason).toBe('The policy sends the small tier to you, so the first free lane was taken.')
+    expect(answer.skipped).toEqual([{ lane: 'owner', why: 'The owner is not a lane.' }])
+  })
+
   it('answers no lane over a spend limit with the limit sentence', () => {
     const answer = routeLane({
       policy: policyOf([choice('a', 'm-a')]),

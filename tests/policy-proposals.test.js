@@ -231,17 +231,26 @@ describe('policyDiff', () => {
     const after = policyText(proposePolicy({ policy: POLICY_TEXT, rows }).policy)
     const diff = policyDiff(before, after)
     const lines = diff.split('\n')
-    expect(lines[0]).toBe('--- a/docs/agents/policy.json')
-    expect(lines[1]).toBe('+++ b/docs/agents/policy.json')
+    expect(lines[0]).toBe('--- a/config/policy.json')
+    expect(lines[1]).toBe('+++ b/config/policy.json')
     expect(lines[2].startsWith('@@ ')).toBe(true)
     expect(lines.slice(3, 6).every((line) => line.startsWith(' '))).toBe(true)
     expect(lines).toContain('-        "lane": "opencode2",')
     expect(lines).toContain('+        "lane": "opencode2",')
   })
 
+  it('writes the policy path it is given in both headers', () => {
+    const before = policyText(readPolicy(POLICY_TEXT))
+    const after = policyText({ ...readPolicy(POLICY_TEXT), quotaSkipPercent: 91 })
+    const diff = policyDiff(before, after, 'lanes/policy.json')
+    const lines = diff.split('\n')
+    expect(lines[0]).toBe('--- a/lanes/policy.json')
+    expect(lines[1]).toBe('+++ b/lanes/policy.json')
+  })
+
   it('writes a diff that git apply takes', () => {
     const dir = makeTempDir()
-    const file = join(dir, 'docs', 'agents', 'policy.json')
+    const file = join(dir, 'config', 'policy.json')
     mkdirSync(dirname(file), { recursive: true })
     const rows = [
       row('opencode2', 'opencode-go/deepseek-v4.1-flash', 10, 10, 0.05),
