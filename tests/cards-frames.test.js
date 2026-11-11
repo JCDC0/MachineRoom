@@ -769,4 +769,20 @@ describe('the frame cost of a card that did not move', () => {
     expect(cards.stats().widths).toBe(before.widths)
     cards.dispose()
   })
+
+  it('moves the kept anchor when the camera turns', () => {
+    const state = makeWideState(4)
+    const { cards } = makeCards()
+    const first = camera()
+    cards.sync(state)
+    cards.update(state, 0.016, first)
+    const at = cards.anchor('d1', new THREE.Vector3()).clone()
+
+    const turned = camera()
+    turned.rotation.set(0.4, 0.7, 0)
+    cards.update(state, 0.016, turned)
+    const after = cards.anchor('d1', new THREE.Vector3())
+    expect(after.distanceTo(at)).toBeGreaterThan(1)
+    cards.dispose()
+  })
 })
