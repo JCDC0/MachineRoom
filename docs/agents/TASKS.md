@@ -324,3 +324,39 @@ A task typed in Dispatch names no `Files:` list and no tests, so `profileFromBri
 Run `npx vitest related --run` on every file you changed and `npm run build`; both must pass.
 
 Files: src/policy/profile.js, server/policy.js, server/runs.js, tests/.
+
+## The fixes from review 9 (2026-11-11)
+
+`docs/agents/AUDIT-2026-11-REVIEW-9.md` reviewed the merges since the last push. These three briefs fix the findings the orchestrator's corrections say hold. Other lanes run at the same time.
+
+**P40. The policy proposer reads the merges on main, and the merge helper checks what it is given (AGY).** Read no part of TASKS.md beyond this brief, and of `docs/agents/AUDIT-2026-11-REVIEW-9.md` findings 1, 9 and 10. Use no subagents. Commit each step as you finish it, and stop starting new work at minute 35. Do not edit any file under `docs/`, `server/` or `src/`.
+
+1. In `scripts/policy-propose.mjs`, pass `readMainSubjectsSync()` from `server/runs.js` as the third argument of `outcomeTable`, as `scripts/run-lane.mjs` does for `--outcomes`. Test: a run with a branch and a brief, no outcome row and a `Merge ID` subject on main counts as merged and not graded in the table the proposer builds.
+2. In `scripts/merge-lane.mjs`, put `--` before the changed files in the `vitest related --run` command. Test: the command the check builds holds `--` right before the first file.
+3. In `finishMerge`, refuse a `--subject` or a `--trailer` that holds an em dash or a line break, with one sentence each, before anything is written. Test each refusal, and that the changelog and the checkout are unchanged after it.
+
+Run `npx vitest related --run` on every file you changed, `npm run build` and `npm run pack-check`; all must pass.
+
+Files: scripts/policy-propose.mjs, scripts/merge-lane.mjs, tests/.
+
+**P41. The lane route reads the lanes, the runs folder and the lane choice the run it starts reads (OpenCode).** Read no part of TASKS.md beyond this brief, and of `docs/agents/AUDIT-2026-11-REVIEW-9.md` findings 5, 6 and 8. Use no subagents. Commit each step as you finish it, and stop starting new work at minute 40. Do not edit any file under `docs/`, `src/engine/` or `scripts/`, and in `server/index.js` change only the options given to `createPolicyApi`.
+
+1. `POST /api/control/route/lane` in `server/policy.js` takes its lanes from the same source `POST /api/control/runs` in `server/runs.js` takes them from, owner-made lanes included and the lanes the owner removed left out, never from a `lanes.json` inside the room's project. Share one function for the lane states between the two files, so the preview and the start cannot disagree.
+2. `server/index.js` gives `createPolicyApi` the runs folder the bridge gives its other parts, so the lane locks and the spend are read from one folder.
+3. On a project with no saved lane choice, the route and a routed start answer what a named lane answers there, 400 with `Pick the lanes for this project first.`, not 409. Dispatch shows that sentence after `Auto:`.
+4. Tests: an owner-made lane can be picked by the route; a removed lane cannot; a `lanes.json` in the project is not read; a bridge with its own runs folder reads the lock and the spend there; no saved choice answers 400 with that sentence on both routes.
+
+Run `npx vitest related --run` on every file you changed and `npm run build`; both must pass.
+
+Files: server/policy.js, server/runs.js, server/index.js, src/ui/panels/DispatchPanel.jsx, tests/.
+
+**P42. The session and lane readers at rest: a bounded row map, no missed row and no stat per tick (OpenCode).** Read no part of TASKS.md beyond this brief, and of `docs/agents/AUDIT-2026-11-REVIEW-9.md` findings 3, 11 and 12. Use no subagents. Commit each step as you finish it, and stop starting new work at minute 40. Do not edit any file under `docs/`, `src/` or `scripts/`, nor `server/index.js`.
+
+1. In `server/opencode-sessions.js`, ask for the moved rows with `time_updated >= ?` and take a row only when it is new or its `time_updated` changed, so a row written in the same millisecond as the highest one seen is not lost. Change the tests that count the rows of a poll to match.
+2. Once a minute, read every row as the first read does and drop from `knownRows`, and from what the reader holds for them, the ids the database no longer has.
+3. In `server/lanes-source.js`, check the size of a quiet run only when a watcher event named its log or on the 2 second scan, not on every 200 ms tick. A log that grows after a quiet end still reopens its run within 2 seconds.
+4. Tests with the injected clock, database and lister: a same-millisecond child is seen; a deleted session leaves the map after the full read and does not come back; a tick at rest makes no `statSync` call on a quiet log; a quiet log that grows reopens its run.
+
+Run `npx vitest related --run` on every file you changed and `npm run build`; both must pass.
+
+Files: server/opencode-sessions.js, server/lanes-source.js, tests/.
