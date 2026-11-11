@@ -585,3 +585,31 @@ Files: scripts/mr-agent.mjs, tests/mr-agent.test.js.
 Run `npx vitest related --run` on every file you changed and `npm run build`; both must pass.
 
 Files: server/index.js, tests/.
+
+## The fixes from the owner's room audit (2026-11-12)
+
+Each brief fixes findings of `docs/agents/AUDIT-2026-11-OWNER-ROOM.md`. Read only the findings it names. Work on a temporary runs folder and project, never on `%TEMP%\machineroom-runs`.
+
+**P63. A lane the owner makes is on at once, and Dispatch offers only lanes that run (OpenCode).** Read no part of TASKS.md beyond this brief, and of the audit only findings 2, 3, 9 and 10. Use no subagents. Commit each step as you finish it, and stop starting new work at minute 35. Do not edit any file under `docs/`, `src/engine/`, nor `server/reviews.js`, `server/policy.js`, `server/runs.js` or `server/doctor.js`.
+
+1. When `POST /api/lanes/create` makes a lane and this project has no active lane choice yet, the new lane becomes the choice (`[key]`), so `/api/agents`, `/api/control/agents`, Team, Dispatch and Auto see it at once. An existing choice is left as it is.
+2. `projectRunLanes` in `src/ui/panels/runs.js` leaves out `orchestrator`.
+3. Saving a team with no active choice uses the lanes the family tree shows as eligible and not hidden, instead of `[]`.
+4. The Team tab sentence `New lanes are added in docs/agents/lanes.json.` becomes `New lanes are made in the family tree.`
+5. Tests: after create on a project with no choice, `/api/control/agents` holds the key and Auto does not answer `Pick the lanes for this project first.`; a project with a choice keeps it; `projectRunLanes` has no orchestrator; a team saved with no choice holds the eligible lanes; the Team tab text.
+
+Run `npx vitest related --run` on every file you changed and `npm run build`; both must pass.
+
+Files: server/agents-config.js, server/active-lanes.js, server/teams.js, src/ui/panels/runs.js, src/ui/panels/AgentBuilder.jsx, tests/.
+
+**P64. Briefs and policy patches read the owner's lanes (OpenCode).** Read no part of TASKS.md beyond this brief, and of the audit only findings 4, 5 and 8 and its "Also seen" paragraph. Use no subagents. Commit each step as you finish it, and stop starting new work at minute 35. Do not edit any file under `docs/` or `src/engine/`, nor `server/reviews.js`, `server/policy.js`, `server/runs.js` or `server/doctor.js`.
+
+1. `src/ui/panels/briefs.js` matches a lane to a brief's owner by the agent's `harness` field when the caller passes agents, so a made key such as `claude-1` or `opencode-1` runs a brief owned by `claude` or `opencode`; a key with no harness field still uses the key as now.
+2. `server/briefs.js` builds its lane map with `readAllLanes`, so `GET /api/control/brief-prompt` finds a made lane, and its refusal names the lanes the room has instead of `Choose hermes, opencode or agy.`
+3. `src/policy/proposals.js` writes the patch headers with the policy file's path relative to the checkout, so a patch of `config/policy.json` names `config/policy.json`.
+4. In `src/policy/route.js`, when the policy sends a tier only to the owner and the first free lane is taken, the reason says `The policy sends the TIER tier to you, so the first free lane was taken.`
+5. Tests for each: `claude-1` runs a `claude` brief; the prompt route answers 200 for a made lane and its refusal names no fleet lane; the patch header; the reason sentence.
+
+Run `npx vitest related --run` on every file you changed and `npm run build`; both must pass.
+
+Files: src/ui/panels/briefs.js, server/briefs.js, src/policy/proposals.js, src/policy/route.js, tests/.
