@@ -77,6 +77,17 @@ describe('readFileList', () => {
     expect(readFileList({ files: [] })).toEqual({ root: '', files: [] })
   })
 
+  it('reads the removed paths and the whole list mark', () => {
+    expect(readFileList({ root: 'p', files: ['b.js'], removed: ['a.js'] })).toEqual({ root: 'p', files: ['b.js'], removed: ['a.js'] })
+    expect(readFileList({ root: 'p', files: ['a.js'], full: true })).toEqual({ root: 'p', files: ['a.js'], full: true })
+    expect(readFileList({ ...packTree({ root: 'p', files: ['a.js'] }), removed: ['b.js'] })).toEqual({
+      root: 'p',
+      files: ['a.js'],
+      removed: ['b.js'],
+    })
+    expect(readFileList({ root: 'p', files: ['a.js'], full: false })).toEqual({ root: 'p', files: ['a.js'] })
+  })
+
   it('refuses junk with a sentence and never throws', () => {
     const junk = [
       null,
@@ -102,6 +113,8 @@ describe('readFileList', () => {
       { shape: FOLDER_SHAPE, folders: [], files: [[0.5, 'a.js']] },
       { shape: FOLDER_SHAPE, folders: [], files: [[0, 'a.js', null]] },
       { shape: FOLDER_SHAPE, folders: [], files: ['a.js'] },
+      { files: [], removed: 'a.js' },
+      { files: [], removed: [7] },
     ]
     for (const value of junk) {
       const read = readFileList(value)
@@ -228,7 +241,7 @@ describe('the bridge', () => {
     await ready
     const plain = readFirstTree(loop.url, '?tree=1', () => writeFileSync(join(root, 'src', 'c.js'), 'x\n'))
     const [packed, paths] = await Promise.all([asking, plain])
-    expect(paths).toEqual({ root: 'project', files: ['a.js', 'src/b.js', 'src/c.js'] })
+    expect(paths).toEqual({ root: 'project', files: ['a.js', 'src/b.js', 'src/c.js'], full: true })
     expect(packed.shape).toBe(FOLDER_SHAPE)
     expect(readFileList(packed)).toEqual(paths)
   })
