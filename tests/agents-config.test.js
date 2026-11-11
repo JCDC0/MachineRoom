@@ -24,7 +24,7 @@ import {
   saveAgentsConfig,
 } from '../server/agents-config.js'
 import { createBridge } from '../server/index.js'
-import { activeLanesFileFor, projectLanesFileFor, readHiddenLanes, writeActiveLanes } from '../server/active-lanes.js'
+import { activeLanesFileFor, projectLanesFileFor, readActiveLanesChoice, readHiddenLanes, writeActiveLanes } from '../server/active-lanes.js'
 import { gitPath } from '../server/programPath.js'
 import { createClient } from '../src/control/client.js'
 import { createMockClient } from '../src/control/mock.js'
@@ -122,10 +122,20 @@ async function startBridgeRig({
   runsFolder = tempDir('mr-runs-'),
   lanes = SAMPLE_LANES,
   runnerPath,
+  active = true,
+  dynamicLanes = false,
 } = {}) {
   mkdirSync(runsFolder, { recursive: true })
-  writeActiveLanes(activeLanesFileFor(projectRoot, runsFolder), Object.keys(lanes))
+  if (active) writeActiveLanes(activeLanesFileFor(projectRoot, runsFolder), Object.keys(lanes))
   const lanesFile = join(projectRoot, 'docs', 'agents', 'lanes.json')
+  if (dynamicLanes) {
+    const previousLanesDir = process.env.MACHINEROOM_LANES_DIR
+    process.env.MACHINEROOM_LANES_DIR = join(projectRoot, 'docs', 'agents')
+    cleanups.push(() => {
+      if (previousLanesDir === undefined) delete process.env.MACHINEROOM_LANES_DIR
+      else process.env.MACHINEROOM_LANES_DIR = previousLanesDir
+    })
+  }
 
   const runnerCommand = runnerPath
     ? { file: process.execPath, args: [runnerPath] }
@@ -138,7 +148,7 @@ async function startBridgeRig({
     lanesFile,
     lanesSource: {
       folder: runsFolder,
-      lanes,
+      ...(dynamicLanes ? {} : { lanes }),
       repoRoot: projectRoot,
       pollMs: 20,
       quietMs: 60000,
@@ -389,6 +399,68 @@ describe('POST /api/lanes/create', () => {
     expect(customRow.custom).toBe(true)
     expect(customRow.effort).toBe('medium')
     expect(customRow.active).toBe(true)
+  })
+
+  it('makes the first made lane the active choice so the room and Auto see it', async () => {
+    const projectRoot = gitProject('mr-proj-choice-')
+    writeFileSync(
+      join(projectRoot, 'docs', 'agents', 'policy.json'),
+      JSON.stringify({
+        tiers: {
+          small: [{ lane: 'owner', model: null, reasoning: null, provider: null }],
+          medium: [{ lane: 'owner', model: null, reasoning: null, provider: null }],
+          large: [{ lane: 'owner', model: null, reasoning: null, provider: null }],
+        },
+        limits: {
+          runUsd: 0.25,
+          issueUsd: 1,
+          agentMonthlyUsd: 10,
+          companyMonthlyUsd: 30,
+          maxTurnsPerRun: 200,
+          timeoutSec: 3600,
+        },
+        quotaSkipPercent: 90,
+      })
+    )
+    const { url, runsFolder, client } = await startBridgeRig({ projectRoot, active: false, dynamicLanes: true })
+    expect(readActiveLanesChoice(activeLanesFileFor(projectRoot, runsFolder))).toBeNull()
+
+    const created = await client.createLane({
+      name: 'Coder',
+      harness: 'claude',
+      model: 'claude-haiku-5-5',
+      confirmed: true,
+    })
+    expect(created.key).toBe('claude-2')
+    expect(readActiveLanesChoice(activeLanesFileFor(projectRoot, runsFolder))).toEqual(['claude-2'])
+
+    const agentsRes = await getJson(`${url}/api/control/agents`)
+    expect(agentsRes.status).toBe(200)
+    expect(agentsRes.body.some((agent) => agent.key === 'claude-2')).toBe(true)
+
+    const autoRes = await getJson(`${url}/api/control/route/lane`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ task: 'Fix the typo in src/a.js.' }),
+    })
+    expect(autoRes.status).toBe(200)
+    expect(autoRes.body.error).toBeUndefined()
+  })
+
+  it('keeps the existing active choice when it makes another lane', async () => {
+    const { projectRoot, runsFolder, client } = await startBridgeRig()
+    await client.setActiveLanes(['opencode', 'claude'])
+
+    await client.createLane({
+      name: 'Coder',
+      harness: 'claude',
+      model: 'claude-haiku-5-5',
+      confirmed: true,
+    })
+
+    const choice = readActiveLanesChoice(activeLanesFileFor(projectRoot, runsFolder))
+    expect(choice).toContain('opencode')
+    expect(choice).toContain('claude')
   })
 })
 

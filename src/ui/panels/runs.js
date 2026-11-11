@@ -203,6 +203,7 @@ export function projectRunLanes(agents, running) {
     if (!runsOnProject(agent)) continue
     const key = typeof agent.key === 'string' ? agent.key.trim() : ''
     if (!key || seen.has(key)) continue
+    if (key === 'orchestrator') continue
     seen.add(key)
     const name = typeof agent.name === 'string' && agent.name.trim() ? agent.name.trim() : key
     lanes.push({ key, name, running: active.has(key) })
