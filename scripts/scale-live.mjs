@@ -65,13 +65,24 @@ async function eachLimit(items, limit, fn) {
 
 export function parseLiveArgs(argv) {
   const out = {}
-  const names = { '--files': 'files', '--folders': 'folders', '--seed': 'seed' }
+  const names = { '--files': 'files', '--folders': 'folders', '--seed': 'seed', '--quiet-ms': 'quietMs' }
   for (let i = 0; i < argv.length; i += 1) {
     if (argv[i] === '--keep') {
       out.keep = true
       continue
     }
-    if (!Object.hasOwn(names, argv[i])) throw new Error(`Unknown option ${argv[i]}. Use --files N, --folders N, --seed N or --keep.`)
+    if (argv[i] === '--tree-only') {
+      out.treeOnly = true
+      continue
+    }
+    if (argv[i] === '--server') {
+      const server = argv[i + 1]
+      if (!server) throw new Error('--server needs a folder.')
+      out.server = server
+      i += 1
+      continue
+    }
+    if (!Object.hasOwn(names, argv[i])) throw new Error(`Unknown option ${argv[i]}. Use --files N, --folders N, --seed N, --quiet-ms N, --server FOLDER, --tree-only or --keep.`)
     const value = Number(argv[i + 1])
     if (!Number.isInteger(value) || value < 0) throw new Error(`${argv[i]} needs a whole number.`)
     out[names[argv[i]]] = value
@@ -348,8 +359,8 @@ function openTreeStream(port, path) {
   return { events, waitFor, close, opened }
 }
 
-function openBridgeChild(dir) {
-  const child = fork(fileURLToPath(import.meta.url), ['--bridge-child', dir], {
+function openBridgeChild(dir, serverDir = '') {
+  const child = fork(fileURLToPath(import.meta.url), ['--bridge-child', dir, serverDir], {
     stdio: ['ignore', 'ignore', 'ignore', 'ipc'],
   })
   const pending = new Map()
@@ -429,20 +440,49 @@ function openBridgeChild(dir) {
   return { child, ready, ask, stop }
 }
 
-async function runBridgeChild(dir) {
+async function runBridgeChild(dir, serverDir = '') {
   let reads = 0
   let partialReads = 0
+  let readMs = 0
+  let partialMs = 0
+  let readCpuMicros = 0
+  let partialCpuMicros = 0
   process.on('disconnect', () => process.exit(0))
-  const bridge = createBridge({
+  let server = { createBridge, readTree, readTreePartial }
+  if (serverDir) {
+    const module = await import(pathToFileURL(join(resolve(serverDir), 'server', 'index.js')).href)
+    server = {
+      createBridge: module.createBridge,
+      readTree: module.readTree,
+      readTreePartial: module.readTreePartial,
+    }
+  }
+  const bridge = server.createBridge({
     projectRoot: dir,
     port: 0,
-    readTree: (root) => {
-      reads += 1
-      return readTree(root)
+    readTree: async (root) => {
+      const cpu = process.cpuUsage()
+      const started = performance.now()
+      try {
+        return await server.readTree(root)
+      } finally {
+        const used = process.cpuUsage(cpu)
+        reads += 1
+        readMs += performance.now() - started
+        readCpuMicros += cpuMicros(used)
+      }
     },
-    readTreePartial: (root, names) => {
-      partialReads += 1
-      return readTreePartial(root, names)
+    readTreePartial: async (root, names) => {
+      const cpu = process.cpuUsage()
+      const started = performance.now()
+      try {
+        return await server.readTreePartial(root, names)
+      } finally {
+        const used = process.cpuUsage(cpu)
+        partialReads += 1
+        partialMs += performance.now() - started
+        partialCpuMicros += cpuMicros(used)
+      }
     },
   })
   process.on('message', (message) => {
@@ -455,6 +495,10 @@ async function runBridgeChild(dir) {
         heap: process.memoryUsage().heapUsed,
         reads,
         partialReads,
+        readMs,
+        partialMs,
+        readCpuMicros,
+        partialCpuMicros,
         at: performance.now(),
       })
       return
@@ -487,6 +531,10 @@ export async function runScaleLive(options = {}) {
     burst: options.burst ?? 2000,
     burstMs: options.burstMs ?? 10000,
     cpuWindowMs: options.cpuWindowMs ?? 3000,
+    quietMs: options.quietMs ?? 0,
+    server: options.server ?? '',
+    treeOnly: options.treeOnly ?? false,
+    eventWaitMs: options.eventWaitMs ?? 30000,
     minFreeBytes: options.minFreeBytes ?? MIN_FREE_BYTES,
   }
   const log = options.log ?? console.log
@@ -520,16 +568,23 @@ export async function runScaleLive(options = {}) {
     await mkdir(join(dir, 'dist'), { recursive: true })
 
     const forkAt = performance.now()
-    child = openBridgeChild(dir)
+    child = openBridgeChild(dir, settings.server)
     const ready = await child.ready
     const port = Number(new URL(ready.url).port)
     const plain = await httpGet(port, '/api/tree')
     const firstReadMs = performance.now() - forkAt
     if (plain.status !== 200) throw new Error(`GET /api/tree answered ${plain.status}.`)
     const plainTree = JSON.parse(plain.bytes.toString('utf8'))
-    row('first tree read', firstReadMs, LIVE_BUDGET.firstRead, `${plainTree.files.length} files`)
-
     const afterRead = await child.ask('metrics')
+    const firstFullReadMs = afterRead.readMs
+    const firstFullReadCpuMs = afterRead.readCpuMicros / 1000
+    row(
+      'first tree read',
+      firstReadMs,
+      LIVE_BUDGET.firstRead,
+      `${plainTree.files.length} files, read ${firstFullReadMs.toFixed(0)} ms and ${firstFullReadCpuMs.toFixed(0)} ms CPU`
+    )
+
     const rssEntry = {
       stage: 'bridge RSS after first read',
       runsAt: 'live',
@@ -567,10 +622,13 @@ export async function runScaleLive(options = {}) {
       `${secondFolder.bytes.length} bytes`
     )
 
-    const cleanGit = await httpGet(port, '/api/git')
-    if (cleanGit.status !== 200) throw new Error(`GET /api/git answered ${cleanGit.status}.`)
-    const cleanGitState = JSON.parse(cleanGit.bytes.toString('utf8'))
-    row('GET /api/git, clean', cleanGit.ms, LIVE_BUDGET.gitClean, cleanGitState.dirty ? `${cleanGitState.changeCount} changes` : 'clean')
+    let cleanGitState = { dirty: false, changeCount: 0 }
+    if (!settings.treeOnly) {
+      const cleanGit = await httpGet(port, '/api/git')
+      if (cleanGit.status !== 200) throw new Error(`GET /api/git answered ${cleanGit.status}.`)
+      cleanGitState = JSON.parse(cleanGit.bytes.toString('utf8'))
+      row('GET /api/git, clean', cleanGit.ms, LIVE_BUDGET.gitClean, cleanGitState.dirty ? `${cleanGitState.changeCount} changes` : 'clean')
+    }
 
 
     stream = openTreeStream(port, `/events?tree=folders&since=${folderTree.version}`)
@@ -578,13 +636,29 @@ export async function runScaleLive(options = {}) {
     const newPath = 'new-file.js'
     const writeAt = performance.now()
     await writeFile(join(dir, newPath), 'scale\n')
-    const newEvent = await stream.waitFor((entry) => entry.paths.includes(newPath), 8000)
+    const newEvent = await stream.waitFor((entry) => entry.paths.includes(newPath), settings.eventWaitMs)
     row('one new file, write to tree event', newEvent.at - writeAt, LIVE_BUDGET.newFile, newPath)
+
+    let quietCpuMs = 0
+    let quietFullReads = 0
+    let quietPartialReads = 0
+    let quietWallMs = 0
+    let quietShare = 0
+    if (settings.quietMs > 0) {
+      const quietBefore = await child.ask('metrics')
+      await sleepUntil(newEvent.at + settings.quietMs)
+      const quietAfter = await child.ask('metrics')
+      quietCpuMs = (cpuMicros(quietAfter.cpu) - cpuMicros(quietBefore.cpu)) / 1000
+      quietFullReads = quietAfter.reads - quietBefore.reads
+      quietPartialReads = quietAfter.partialReads - quietBefore.partialReads
+      quietWallMs = Math.max(1, quietAfter.at - quietBefore.at)
+      quietShare = (quietCpuMs / quietWallMs) * 100
+    }
 
     const outBefore = await child.ask('metrics')
     const outReadsBefore = outBefore.reads
     const outPartialBefore = outBefore.partialReads
-    const outCpuBefore = await child.ask('metrics')
+    const outCpuBefore = outBefore
     const outStartAt = performance.now()
     const ticks = Math.max(1, Math.round(settings.burstMs / BURST_TICK_MS))
     const perTick = Math.max(1, Math.ceil(settings.burst / ticks))
@@ -601,7 +675,7 @@ export async function runScaleLive(options = {}) {
       await sleepUntil(outStartAt + ((tick + 1) * settings.burstMs) / ticks)
     }
     const lastPath = `out/f-${settings.burst - 1}.js`
-    const lastEvent = await stream.waitFor((entry) => entry.paths.includes(lastPath), 8000)
+    const lastEvent = await stream.waitFor((entry) => entry.paths.includes(lastPath), settings.eventWaitMs)
     const outAfter = await child.ask('metrics')
     const outReadsDuring = outAfter.reads - outReadsBefore
     const outPartialDuring = outAfter.partialReads - outPartialBefore
@@ -615,10 +689,13 @@ export async function runScaleLive(options = {}) {
     const outShare = (outCpuMs / outWallMs) * 100
     row('burst out/, bridge CPU share', outShare, LIVE_BUDGET.cpuShare, `${outCpuMs.toFixed(0)} ms over ${Math.round(outWallMs)} ms`)
 
-    const untrackedGit = await httpGet(port, '/api/git')
-    if (untrackedGit.status !== 200) throw new Error(`GET /api/git after the out/ burst answered ${untrackedGit.status}.`)
-    const untrackedGitState = JSON.parse(untrackedGit.bytes.toString('utf8'))
-    row('GET /api/git, 2000 untracked', untrackedGit.ms, LIVE_BUDGET.gitUntracked, `${settings.burst} files, ${untrackedGitState.changeCount} changes`)
+    let untrackedGitState = { changeCount: 0 }
+    if (!settings.treeOnly) {
+      const untrackedGit = await httpGet(port, '/api/git')
+      if (untrackedGit.status !== 200) throw new Error(`GET /api/git after the out/ burst answered ${untrackedGit.status}.`)
+      untrackedGitState = JSON.parse(untrackedGit.bytes.toString('utf8'))
+      row('GET /api/git, 2000 untracked', untrackedGit.ms, LIVE_BUDGET.gitUntracked, `${settings.burst} files, ${untrackedGitState.changeCount} changes`)
+    }
 
     const distFirstAt = stream.events.length
     const distCpuBefore = await child.ask('metrics')
@@ -656,47 +733,61 @@ export async function runScaleLive(options = {}) {
     rows.push(heapEntry)
     log(formatRows([heapEntry]).split('\n')[1])
 
-    cleanBurstFolders(dir)
-    await sleep(1200)
-    const trackedFiles = build.scale.files.slice(0, 1000)
-    await eachLimit(trackedFiles, 16, (file) => appendFile(join(dir, file), 'scale\n'))
-    const trackedGit = await httpGet(port, '/api/git')
-    if (trackedGit.status !== 200) throw new Error(`GET /api/git after the tracked change answered ${trackedGit.status}.`)
-    const trackedGitState = JSON.parse(trackedGit.bytes.toString('utf8'))
-    row('GET /api/git, 1000 tracked files changed', trackedGit.ms, LIVE_BUDGET.gitTracked, `${trackedFiles.length} files, ${trackedGitState.changeCount} changes`)
-    for (let at = 0; at < trackedFiles.length; at += 200) {
-      git(dir, ['checkout', '--', ...trackedFiles.slice(at, at + 200)])
+    let trackedRestored = true
+    let gitTrackedChanges = 0
+    let addSize = { bytes: 0, files: 0 }
+    let reviewsAhead = 0
+    let reviewsFiles = 0
+    let diffBytes = 0
+    if (!settings.treeOnly) {
+      cleanBurstFolders(dir)
+      await sleep(1200)
+      const trackedFiles = build.scale.files.slice(0, 1000)
+      await eachLimit(trackedFiles, 16, (file) => appendFile(join(dir, file), 'scale\n'))
+      const trackedGit = await httpGet(port, '/api/git')
+      if (trackedGit.status !== 200) throw new Error(`GET /api/git after the tracked change answered ${trackedGit.status}.`)
+      const trackedGitState = JSON.parse(trackedGit.bytes.toString('utf8'))
+      gitTrackedChanges = trackedGitState.changeCount
+      row('GET /api/git, 1000 tracked files changed', trackedGit.ms, LIVE_BUDGET.gitTracked, `${trackedFiles.length} files, ${trackedGitState.changeCount} changes`)
+      for (let at = 0; at < trackedFiles.length; at += 200) {
+        git(dir, ['checkout', '--', ...trackedFiles.slice(at, at + 200)])
+      }
+      trackedRestored = git(dir, ['status', '--porcelain', '--untracked-files=no']).stdout.trim() === ''
+
+      removeScaleWorktree(dir, worktreePath)
+      const worktreeAt = performance.now()
+      const made = prepareWorktree(dir, REVIEW_LANE)
+      const worktreeMs = performance.now() - worktreeAt
+      addSize = folderSize(made.path)
+      row('worktree add', worktreeMs, LIVE_BUDGET.worktreeAdd, `${(addSize.bytes / 1024 / 1024).toFixed(1)} MB in ${addSize.files} files`)
+
+      const reuseAt = performance.now()
+      const reused = prepareWorktree(dir, REVIEW_LANE)
+      row('worktree reuse', performance.now() - reuseAt, LIVE_BUDGET.worktreeReuse, reused.made ? 'made' : 'reused')
+
+      git(worktreePath, ['switch', '-c', REVIEW_BRANCH])
+      await appendFile(join(worktreePath, build.scale.files[0]), 'p19 review\n')
+      git(worktreePath, ['add', '--', build.scale.files[0]])
+      git(worktreePath, ['commit', '--quiet', '--no-verify', '-m', 'p19 review commit'])
+
+      const reviews = await httpGet(port, '/api/control/reviews')
+      if (reviews.status !== 200) throw new Error(`GET /api/control/reviews answered ${reviews.status}.`)
+      const reviewsBody = JSON.parse(reviews.bytes.toString('utf8'))
+      const lane = Array.isArray(reviewsBody.lanes) ? reviewsBody.lanes.find((entry) => entry.lane === REVIEW_LANE) : null
+      if (!lane) throw new Error(`GET /api/control/reviews did not list the ${REVIEW_LANE} lane.`)
+      reviewsAhead = lane.ahead
+      reviewsFiles = lane.files
+      row('GET /api/control/reviews, one lane ahead', reviews.ms, LIVE_BUDGET.reviews, `${lane.ahead} ahead, ${lane.files} files`)
+
+      const diff = await httpGet(port, `/api/control/reviews/${REVIEW_LANE}/diff`)
+      if (diff.status !== 200) throw new Error(`GET /api/control/reviews/${REVIEW_LANE}/diff answered ${diff.status}.`)
+      const diffBody = JSON.parse(diff.bytes.toString('utf8'))
+      const diffFiles = Array.isArray(diffBody.files) ? diffBody.files.length : Number(diffBody.files) || 0
+      diffBytes = diffBody.patch.length
+      row(`GET /api/control/reviews/${REVIEW_LANE}/diff`, diff.ms, LIVE_BUDGET.reviewDiff, `${diffFiles} files, ${diffBody.patch.length} bytes`)
+    } else {
+      cleanBurstFolders(dir)
     }
-    const trackedRestored = git(dir, ['status', '--porcelain', '--untracked-files=no']).stdout.trim() === ''
-
-    removeScaleWorktree(dir, worktreePath)
-    const worktreeAt = performance.now()
-    const made = prepareWorktree(dir, REVIEW_LANE)
-    const worktreeMs = performance.now() - worktreeAt
-    const addSize = folderSize(made.path)
-    row('worktree add', worktreeMs, LIVE_BUDGET.worktreeAdd, `${(addSize.bytes / 1024 / 1024).toFixed(1)} MB in ${addSize.files} files`)
-
-    const reuseAt = performance.now()
-    const reused = prepareWorktree(dir, REVIEW_LANE)
-    row('worktree reuse', performance.now() - reuseAt, LIVE_BUDGET.worktreeReuse, reused.made ? 'made' : 'reused')
-
-    git(worktreePath, ['switch', '-c', REVIEW_BRANCH])
-    await appendFile(join(worktreePath, build.scale.files[0]), 'p19 review\n')
-    git(worktreePath, ['add', '--', build.scale.files[0]])
-    git(worktreePath, ['commit', '--quiet', '--no-verify', '-m', 'p19 review commit'])
-
-    const reviews = await httpGet(port, '/api/control/reviews')
-    if (reviews.status !== 200) throw new Error(`GET /api/control/reviews answered ${reviews.status}.`)
-    const reviewsBody = JSON.parse(reviews.bytes.toString('utf8'))
-    const lane = Array.isArray(reviewsBody.lanes) ? reviewsBody.lanes.find((entry) => entry.lane === REVIEW_LANE) : null
-    if (!lane) throw new Error(`GET /api/control/reviews did not list the ${REVIEW_LANE} lane.`)
-    row('GET /api/control/reviews, one lane ahead', reviews.ms, LIVE_BUDGET.reviews, `${lane.ahead} ahead, ${lane.files} files`)
-
-    const diff = await httpGet(port, `/api/control/reviews/${REVIEW_LANE}/diff`)
-    if (diff.status !== 200) throw new Error(`GET /api/control/reviews/${REVIEW_LANE}/diff answered ${diff.status}.`)
-    const diffBody = JSON.parse(diff.bytes.toString('utf8'))
-    const diffFiles = Array.isArray(diffBody.files) ? diffBody.files.length : Number(diffBody.files) || 0
-    row(`GET /api/control/reviews/${REVIEW_LANE}/diff`, diff.ms, LIVE_BUDGET.reviewDiff, `${diffFiles} files, ${diffBody.patch.length} bytes`)
 
     removeScaleWorktree(dir, worktreePath)
     if (child) {
@@ -720,6 +811,8 @@ export async function runScaleLive(options = {}) {
       ignoredSeen: [...allPaths].filter((path) => path === 'dist' || path.startsWith('dist/')),
       stats: {
         firstReadMs,
+        firstFullReadMs,
+        firstFullReadCpuMs,
         folderMs: folder.ms,
         folderBytes: folder.bytes.length,
         secondFolderMs: secondFolder.ms,
@@ -728,7 +821,15 @@ export async function runScaleLive(options = {}) {
         newFileMs: newEvent.at - writeAt,
         outReadsDuring,
         outPartialReads: outPartialDuring,
+        outCpuMs,
+        outWallMs,
         outShare,
+        quietMs: settings.quietMs,
+        quietCpuMs,
+        quietFullReads,
+        quietPartialReads,
+        quietWallMs,
+        quietShare,
         lastFileMs: lastEvent.at - lastWriteAt,
         distEvents: distEvents.length,
         distShare,
@@ -736,13 +837,13 @@ export async function runScaleLive(options = {}) {
         doctorOk: doctorLine.ok,
         gitCleanChanges: cleanGitState.changeCount,
         gitUntrackedChanges: untrackedGitState.changeCount,
-        gitTrackedChanges: trackedGitState.changeCount,
+        gitTrackedChanges,
         trackedRestored,
         worktreeBytes: addSize.bytes,
         worktreeFiles: addSize.files,
-        reviewsAhead: lane.ahead,
-        reviewsFiles: lane.files,
-        diffBytes: diffBody.patch.length,
+        reviewsAhead,
+        reviewsFiles,
+        diffBytes,
         plainReadFiles: plainFolder.files.length,
         plainReadMs: plainFolder.ms,
       },
@@ -763,7 +864,18 @@ export async function runScaleLive(options = {}) {
 
 export function formatLiveResult(result) {
   const head = `scale live: ${result.settings.files} files in ${result.settings.folders} folders, seed ${result.settings.seed}, checkout ${result.checkout}`
-  return `${head}\n${formatRows(result.rows)}`
+  const stats = result.stats
+  const cost = [
+    `full tree read: ${stats.firstFullReadMs.toFixed(0)} ms and ${stats.firstFullReadCpuMs.toFixed(0)} ms CPU`,
+    `one new file: ${stats.newFileMs.toFixed(0)} ms to the page`,
+    `burst: ${stats.outReadsDuring} full reads, ${stats.outPartialReads} partial reads, ${stats.outCpuMs.toFixed(0)} ms CPU`,
+  ]
+  if (stats.quietMs > 0) {
+    cost.push(
+      `quiet ${stats.quietMs} ms after one new file: ${stats.quietFullReads} full reads, ${stats.quietPartialReads} partial reads, ${stats.quietCpuMs.toFixed(0)} ms CPU`
+    )
+  }
+  return [head, formatRows(result.rows), ...cost].join('\n')
 }
 
 const isMain = process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href
@@ -773,6 +885,7 @@ if (isMain) {
   } else {
     try {
       const options = parseLiveArgs(process.argv.slice(2))
+      if (options.quietMs === undefined) options.quietMs = 120000
       const result = await runScaleLive(options)
       console.log(formatLiveResult(result))
     } catch (error) {
