@@ -138,7 +138,7 @@ export function createOpencodeSessionsReader(options = {}) {
       fallbackNote = columns.length > 0 && !hasTimeUpdated ? 'session_v2 has no time_updated column, so every session is read on each poll.' : ''
       const timeColumn = hasTimeUpdated ? 'time_updated' : 'NULL AS time_updated'
       sessionStmt = db.prepare(`SELECT id, parent_id, directory, title, ${timeColumn} FROM session_v2`)
-      sessionSinceStmt = hasTimeUpdated ? db.prepare('SELECT id, parent_id, directory, title, time_updated FROM session_v2 WHERE time_updated > ?') : null
+      sessionSinceStmt = hasTimeUpdated ? db.prepare('SELECT id, parent_id, directory, title, time_updated FROM session_v2 WHERE time_updated >= ?') : null
     }
     if (!messageStmt) {
       messageStmt = db.prepare(
@@ -147,21 +147,31 @@ export function createOpencodeSessionsReader(options = {}) {
     }
   }
 
+  function takeRow(row) {
+    if (!row || typeof row.id !== 'string') return false
+    const previous = knownRows.get(row.id)
+    if (hasTimeUpdated && previous && previous.time_updated === row.time_updated) return false
+    knownRows.set(row.id, row)
+    return true
+  }
+
   function sessionRows() {
     if (!sessionStmt) prepareStatements()
     if (!sessionStmt) return []
     const incremental = hasTimeUpdated && highWater >= 0
     const since = incremental ? highWater : null
     const rows = incremental ? sessionSinceStmt.all(highWater) : sessionStmt.all()
+    let changed = 0
+    for (const row of rows) {
+      if (takeRow(row)) changed += 1
+    }
     let highest = highWater
     for (const row of rows) {
-      if (!row || typeof row.id !== 'string') continue
-      knownRows.set(row.id, row)
-      if (Number.isFinite(row.time_updated) && row.time_updated > highest) highest = row.time_updated
+      if (row && Number.isFinite(row.time_updated) && row.time_updated > highest) highest = row.time_updated
     }
     highWater = highest
     try {
-      onQuery({ rows: rows.length, since })
+      onQuery({ rows: rows.length, changed, since })
     } catch {}
     return rows
   }

@@ -391,6 +391,35 @@ describe('the OpenCode session reader', () => {
     expect(statusFrames(frames)).toHaveLength(1)
   })
 
+  it('sees a child session written in the same millisecond as the highest row it saw', () => {
+    const { dir, dbPath } = makeDatabase()
+    const projectRoot = join(dir, 'project')
+    const { reader, frames, queries } = startReader({ dbPath, projectRoot, runsFolder: join(dir, 'runs') })
+
+    reader.tick()
+    addSession(dbPath, { id: 'ses-root', directory: projectRoot, time: 1000 })
+    addMessage(dbPath, { id: 'm-user', sessionId: 'ses-root', type: 'user', seq: 1, time: 1000 })
+    reader.tick()
+    expect(statusFrames(frames)[0].payload.runId).toBe('ses-root:1')
+
+    addSession(dbPath, { id: 'ses-child', parent: 'ses-root', directory: projectRoot, title: 'Explore', time: 1000 })
+    addMessage(dbPath, {
+      id: 'm-child',
+      sessionId: 'ses-child',
+      type: 'assistant',
+      seq: 1,
+      time: 1001,
+      data: { content: [toolItem({ id: 'call-child', name: 'read', input: { path: 'src/a.js' } })] },
+    })
+    reader.tick()
+
+    expect(queries.at(-1)).toMatchObject({ rows: 2, since: 1000 })
+    const logs = logFrames(frames)
+    expect(logs).toHaveLength(1)
+    expect(chunkOf(logs[0]).sessionID).toBe('ses-child')
+    expect(chunkOf(logs[0]).part.id).toBe('call-child')
+  })
+
   it('skips a session whose title names a run-lane log', () => {
     const { dir, dbPath } = makeDatabase()
     const projectRoot = join(dir, 'project')
@@ -722,7 +751,7 @@ describe('the OpenCode session reader', () => {
 
     clock.value += 5000
     reader.tick()
-    expect(queries.at(-1)).toMatchObject({ rows: 0, since: 1000 })
+    expect(queries.at(-1)).toMatchObject({ rows: 1, since: 1000 })
 
     const before = frames.length
     addMessage(dbPath, { id: 'm-user-2', sessionId: 'ses-1', type: 'user', seq: 2, time: 9000 })
