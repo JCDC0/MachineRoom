@@ -226,6 +226,17 @@ describe('briefs routes', () => {
   function writeBriefFixture(rootDir, briefsSubdir = join(rootDir, 'docs', 'agents')) {
     mkdirSync(briefsSubdir, { recursive: true })
     writeFileSync(join(rootDir, 'package.json'), JSON.stringify({ name: 'sample', version: '0.1.36' }))
+    const runsDir = tempDir('mr-brief-runs-')
+    const previousLanesDir = process.env.MACHINEROOM_LANES_DIR
+    const previousRuns = process.env.MACHINEROOM_RUNS
+    process.env.MACHINEROOM_LANES_DIR = briefsSubdir
+    process.env.MACHINEROOM_RUNS = runsDir
+    cleanups.push(() => {
+      if (previousLanesDir === undefined) delete process.env.MACHINEROOM_LANES_DIR
+      else process.env.MACHINEROOM_LANES_DIR = previousLanesDir
+      if (previousRuns === undefined) delete process.env.MACHINEROOM_RUNS
+      else process.env.MACHINEROOM_RUNS = previousRuns
+    })
     writeFileSync(
       join(briefsSubdir, 'TASKS.md'),
       [
@@ -255,6 +266,7 @@ describe('briefs routes', () => {
         },
       })
     )
+    return { briefsDir: briefsSubdir, runsDir }
   }
 
   it('serves briefs and builds a prompt for multiple ids from the project briefs folder', async () => {
@@ -276,6 +288,40 @@ describe('briefs routes', () => {
     expect(built.prompt).toContain('Task C3e: HUD polish.')
     expect(built.prompt).toContain('Task T1b: Briefs menu in the dispatch panel.')
     expect(built.prompt).toContain('with the prefix 0.1.37 and one plain sentence')
+  })
+
+  it('answers a prompt for a made lane and names the room lanes in a refusal', async () => {
+    const dir = tempDir()
+    const { briefsDir, runsDir } = writeBriefFixture(dir)
+    writeFileSync(join(briefsDir, 'lanes.json'), JSON.stringify({}))
+    writeFileSync(
+      join(runsDir, 'agents.json'),
+      JSON.stringify({
+        agents: [
+          {
+            key: 'claude-1',
+            name: 'Coder',
+            harness: 'claude',
+            model: 'claude-haiku-5-5',
+            createdAt: '2026-11-12T10:00:00.000Z',
+          },
+        ],
+      })
+    )
+    const { url } = await laneBridge({ projectRoot: dir })
+
+    const promptRes = await fetch(`${url}/api/control/brief-prompt?ids=C3e&lane=claude-1`)
+    expect(promptRes.status).toBe(200)
+    const built = await promptRes.json()
+    expect(built.lane).toBe('claude-1')
+    expect(built.model).toBe('claude-haiku-5-5')
+    expect(built.prompt).toContain('Task C3e: HUD polish.')
+
+    const badLane = await fetch(`${url}/api/control/brief-prompt?ids=C3e&lane=nobody`)
+    expect(badLane.status).toBe(400)
+    const body = await badLane.json()
+    expect(body.error).toBe('Choose one of the lanes: claude-1.')
+    expect(body.error).not.toMatch(/hermes|opencode|agy/)
   })
 
   it('answers an empty list or 404 with no path when files are missing, and 400 for an unknown lane or id', async () => {

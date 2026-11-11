@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { readAgentDepth } from './agent-depth.js'
+import { readAllLanes } from './agents-config.js'
 import { runsFolder } from './lanes-source.js'
 import { branchFor, buildPrompt, modelFor, nextVersion, parseBriefs, parseRules } from '../src/briefs/briefs.js'
 
@@ -11,6 +12,23 @@ function readText(path) {
   } catch {
     return null
   }
+}
+
+function promptLane(lane) {
+  if (!lane || typeof lane !== 'object' || lane.custom !== true) return lane
+  return {
+    ...lane,
+    worktree: typeof lane.worktree === 'string' ? lane.worktree : '',
+    role: typeof lane.role === 'string' ? lane.role : '',
+    forbidden: Array.isArray(lane.forbidden) ? lane.forbidden : [],
+    notes: Array.isArray(lane.notes) ? lane.notes : [],
+  }
+}
+
+function laneProblem(lanes) {
+  const names = Object.keys(lanes)
+  if (names.length === 0) return 'The room has no lanes to run.'
+  return `Choose one of the lanes: ${names.join(', ')}.`
 }
 
 export function createBriefsApi({ projectRoot = '', briefsDir = '', sendJson }) {
@@ -42,12 +60,11 @@ export function createBriefsApi({ projectRoot = '', briefsDir = '', sendJson }) 
 
     const tasksText = resolvedBriefs ? readText(join(resolvedBriefs, 'TASKS.md')) : null
     const rulesText = resolvedBriefs ? readText(join(resolvedBriefs, 'HOUSE-RULES.md')) : null
-    const lanesText = resolvedBriefs ? readText(join(resolvedBriefs, 'lanes.json')) : null
     const pkgText =
       (resolvedRoot ? readText(join(resolvedRoot, 'package.json')) : null) ??
       (resolvedBriefs ? readText(join(resolvedBriefs, 'package.json')) : null)
 
-    if (tasksText === null || rulesText === null || lanesText === null || pkgText === null) {
+    if (tasksText === null || rulesText === null || pkgText === null) {
       sendJson(req, res, 404, { error: 'The brief files are missing.' })
       return true
     }
@@ -55,7 +72,7 @@ export function createBriefsApi({ projectRoot = '', briefsDir = '', sendJson }) 
     let lanes
     let version
     try {
-      lanes = JSON.parse(lanesText)
+      lanes = readAllLanes()
       version = JSON.parse(pkgText)?.version
       nextVersion(version)
     } catch {
@@ -81,17 +98,25 @@ export function createBriefsApi({ projectRoot = '', briefsDir = '', sendJson }) 
       return true
     }
 
-    if (!Object.hasOwn(lanes, lane)) {
-      sendJson(req, res, 400, { error: 'Choose hermes, opencode or agy.' })
+    if (!Object.hasOwn(lanes, lane) || !lanes[lane] || typeof lanes[lane] !== 'object') {
+      sendJson(req, res, 400, { error: laneProblem(lanes) })
       return true
     }
 
+    const chosen = promptLane(lanes[lane])
     const rules = parseRules(rulesText)
-    const prompt = buildPrompt({ briefs: picked, laneKey: lane, lanes, rules, version, agentDepth: readAgentDepth(runsFolder()).limit })
+    const prompt = buildPrompt({
+      briefs: picked,
+      laneKey: lane,
+      lanes: { ...lanes, [lane]: chosen },
+      rules,
+      version,
+      agentDepth: readAgentDepth(runsFolder()).limit,
+    })
     sendJson(req, res, 200, {
       prompt,
       lane,
-      model: modelFor(lanes[lane], picked[0].id),
+      model: modelFor(chosen, picked[0].id),
       branch: branchFor(picked[0]),
     })
     return true
