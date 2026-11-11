@@ -996,7 +996,7 @@ export function runListLine(record) {
 const CRASH_STATUSES = [3221226505, -1073740791]
 const TEST_TRIES = 3
 const CRASH_NOTE = 'The test worker crashed inside Node (0xC0000409), not in a test.'
-const CRASH_GAVE_UP = 'The test worker crashed inside Node three times. See Known limits in docs/agents/ARCHITECTURE.md.'
+const CRASH_GAVE_UP = 'The test worker crashed inside Node three times. See Known limits in docs/agents/architecture/LIMITS.md.'
 
 export function nextTestStep(status, tries) {
   const attempts = Number.isInteger(tries) && tries > 0 ? tries : 0
