@@ -458,3 +458,38 @@ The owner's room is for the owner's own subscriptions, one lane each, which they
 Run `npx vitest related --run` on every file you changed, `npm run build` and `npm run pack-check`; all must pass. In your report list every reader you changed and any you left on a fixed path, with the reason.
 
 Files: config/, server/, scripts/, src/ui/panels/briefs.js and its callers in src/ui/, tests/.
+
+## The fixes from review 10 (2026-11-11)
+
+Each brief fixes findings of `docs/agents/AUDIT-2026-11-REVIEW-10.md`. Read only the findings it names.
+
+**P50. The native agent's conversation stays under its bound (OpenCode).** Read no part of TASKS.md beyond this brief, and of the review only finding 2. Use no subagents. Commit each step as you finish it, and stop starting new work at minute 40. Edit only the files listed below.
+
+1. In `scripts/mr-agent.mjs`, `boundMessages` keeps the system message and the first user message whole. Over the bound it first shortens old tool results as now, then replaces the text of old assistant messages and the `arguments` of old `write_file` and `edit_file` calls with a short note that names the path, oldest first, until the request fits. Keep each tool call's id and name so every tool result still answers a call.
+2. If the newest six messages alone hold the request over the bound, shorten them too, the largest first, and keep the newest user or tool message readable to its first 2,000 characters.
+3. Tests with a fake endpoint: after one 500 KB `write_file` with `MR_AGENT_CONTEXT_CHARS=2000` the next request is under 2,000 characters of message text plus the system prompt; every tool result still follows its call; the existing tests stay as they are.
+
+Run `npx vitest related --run` on every file you changed; it must pass.
+
+Files: scripts/mr-agent.mjs, tests/mr-agent.test.js.
+
+**P51. The file list stays true after an unstaged delete and a missed event (OpenCode).** Read no part of TASKS.md beyond this brief, and of the review only findings 3 and 4. Use no subagents. Commit each step as you finish it, and stop starting new work at minute 45. Edit only the files listed below, and in `server/index.js` only the tree read and the watcher code.
+
+1. `readTree` and `readTreePartial` leave out the paths `git ls-files -z --deleted` answers (with the same names after `--` for a partial read), through `gitPath()` with an argument array and the limits the reads have now, so a file deleted from the disk leaves the list and the page gets it as `removed` without a commit. If that list fails, keep the read as it is now.
+2. After a partial read, when the watcher stays quiet for the quiet time the bridge already waits, run one full read, so a change the watcher missed is corrected with no further event. A burst still costs no more full reads than now.
+3. Tests: an unstaged delete leaves the list after a full read and after a partial read; one watcher event and a second file only a full read knows reach the tree with no further event; a burst of 51 names starts the same reads as before.
+
+Run `npx vitest related --run` on every file you changed and `npm run build`; both must pass. In your report give the full and partial reads of `npm run scale-live -- --seed 36` at 40,000 files, before and after.
+
+Files: server/index.js, tests/.
+
+**P52. The native agent stays inside the working folder and reads only the window (OpenCode).** Starts after P50 is merged. Read no part of TASKS.md beyond this brief, and of the review only findings 1, 5 and 6. Use no subagents. Commit each step as you finish it, and stop starting new work at minute 45. Edit only the files listed below.
+
+1. `inside` compares real paths: the real path of the working folder against the real path of the target when it exists, else of its nearest existing parent. A junction or link that leads out is refused with the sentence a path outside gets now. `walkFiles` does not follow a link out of the working folder.
+2. `read_file` reads only the bytes its window needs, line by line from the start of the file, and stops at the window's end; a file over 50 MB read with no `limit` is refused with one sentence that asks for `offset` and `limit`.
+3. `search` and `glob_files` under a folder pass that folder to `git ls-files` as a pathspec after `--`, and `search` stops reading files at its match limit.
+4. Tests: a junction from the working folder to a second temp folder is refused by `read_file`, `write_file`, `edit_file`, `search` and `glob_files`; a 60 MB file read at `limit: 5` returns five lines; a search under one folder lists only that folder.
+
+Run `npx vitest related --run` on every file you changed; it must pass.
+
+Files: scripts/mr-agent.mjs, tests/mr-agent.test.js.
