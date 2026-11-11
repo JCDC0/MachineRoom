@@ -6,7 +6,7 @@ import { buildPrompt, parseBriefs, parseRules } from '../src/briefs/briefs.js'
 import { briefProblems } from '../src/briefs/run.js'
 import { gitPath } from '../server/programPath.js'
 import { readAgentDepth } from '../server/agent-depth.js'
-import { runsFolder } from '../server/lanes-source.js'
+import { runsFolder, lanesFolder } from '../server/lanes-source.js'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const docs = join(root, 'docs', 'agents')
@@ -19,7 +19,7 @@ if (!id) {
 }
 
 const briefs = parseBriefs(read('TASKS.md'))
-const lanes = JSON.parse(read('lanes.json'))
+const lanes = JSON.parse(readFileSync(join(lanesFolder(), 'lanes.json'), 'utf8'))
 const branchExists = (name) =>
   spawnSync(gitPath(), ['rev-parse', '--verify', '--quiet', `refs/heads/${name}`], { cwd: root, windowsHide: true }).status === 0
 const problems = briefProblems({ briefs, ids: [id], laneKey: 'agy', branchExists, force: false })

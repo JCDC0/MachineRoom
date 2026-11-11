@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url'
 import { modelFor, parseBriefs } from '../src/briefs/briefs.js'
 import { briefProblems, runRecord } from '../src/briefs/run.js'
 import { readAllRunRecords, runsFile } from '../server/runs.js'
+import { lanesFolder } from '../server/lanes-source.js'
 import { gitPath } from '../server/programPath.js'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
@@ -157,7 +158,7 @@ function main(argv) {
   let lanes
   let briefs
   try {
-    lanes = JSON.parse(readFileSync(join(docs, 'lanes.json'), 'utf8'))
+    lanes = JSON.parse(readFileSync(join(lanesFolder(), 'lanes.json'), 'utf8'))
     briefs = parseBriefs(readFileSync(join(docs, 'TASKS.md'), 'utf8'))
   } catch {
     console.log('The lane file or the briefs file could not be read.')

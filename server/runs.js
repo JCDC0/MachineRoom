@@ -12,7 +12,7 @@ import { readLaneCosts } from './lane-costs.js'
 import { outcomeTable, subjectsFromLog } from './outcomes.js'
 import { gitPath } from './programPath.js'
 import { killTree, treeSpawnOptions } from './processTree.js'
-import { laneAgents, readAllLanes, runsFolder as defaultRunsFolder } from './lanes-source.js'
+import { laneAgents, lanesFolder, readAllLanes, runsFolder as defaultRunsFolder } from './lanes-source.js'
 import { NO_ACTIVE_CHOICE_PROBLEM, activeLanesFileFor, hiddenLaneProblem, projectLanesFileFor, readActiveLanesChoice, readHiddenLanes } from './active-lanes.js'
 
 export const RECENT_LIMIT = 20
@@ -34,8 +34,6 @@ export function notGitProblem(project, { queue = false } = {}) {
 }
 const NO_PROJECT = 'The bridge has no project folder.'
 const REPO_ROOT = resolve(fileURLToPath(import.meta.url), '..', '..')
-export const REPO_POLICY = join(REPO_ROOT, 'docs', 'agents', 'policy.json')
-const REPO_LANES = join(REPO_ROOT, 'docs', 'agents', 'lanes.json')
 const GIT_TIMEOUT_MS = 10 * 1000
 const GIT_MAX_BUFFER = 8 * 1024 * 1024
 const RUNS_BODY_LIMIT = 256 * 1024
@@ -212,7 +210,7 @@ export function outcomesFile() {
 }
 
 export function readStartLanes({ lanesFile = '', runsFolder: folder = '' } = {}) {
-  const text = readTextAt(lanesFile ? resolve(lanesFile) : REPO_LANES)
+  const text = readTextAt(lanesFile ? resolve(lanesFile) : join(lanesFolder(), 'lanes.json'))
   if (text === null) return null
   let base
   try {
@@ -385,7 +383,7 @@ export function readOutcomeRecords(file) {
 export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand, sendJson, readJsonBody, notify = () => {}, orchestrators = () => null, lanesFile = '', runsFolder = '', activeLanes = null, isLaneActive = null, onMessage = () => {} }) {
   const resolvedRoot = projectRoot ? realPath(projectRoot) : ''
   const resolvedBriefs = briefsDir ? resolve(briefsDir) : resolvedRoot ? join(resolvedRoot, 'docs', 'agents') : ''
-  const laneFile = lanesFile ? resolve(lanesFile) : REPO_LANES
+  const laneFile = lanesFile ? resolve(lanesFile) : join(lanesFolder(), 'lanes.json')
   const recordsDir = () => (runsFolder ? resolve(runsFolder) : dirname(runsFile()))
   const recordsPath = () => join(recordsDir(), 'runs.jsonl')
   const outcomesPath = () => join(recordsDir(), 'outcomes.jsonl')
@@ -430,7 +428,7 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
   }
 
   function routeStart({ lanesConfig, profile, only }) {
-    const policyText = readText('policy.json') ?? readPath(REPO_POLICY)
+    const policyText = readText('policy.json') ?? readPath(join(lanesFolder(), 'policy.json'))
     if (policyText === null) return { status: 404, error: 'The policy file is missing.' }
     let policy
     try {

@@ -1,8 +1,7 @@
 import { createHash } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
-import { readAllLanes } from './lanes-source.js'
+import { readAllLanes, readLanes } from './lanes-source.js'
 
 export const OWNER_ACTIVE_LANES_PROBLEM = 'A request with no Origin cannot set the active lanes.'
 export const CONFIRM_ACTIVE_LANES_PROBLEM = 'Confirm the active lanes first.'
@@ -32,8 +31,6 @@ export function laneRunningProblem(lane) {
 export function hiddenLaneProblem(lane) {
   return `${lane} is hidden in this project. Show it in Settings first.`
 }
-
-const REPO_ROOT = resolve(fileURLToPath(import.meta.url), '..', '..')
 
 function pathKey(value) {
   try {
@@ -235,11 +232,7 @@ export function createActiveLanesApi(options = {}) {
         base = {}
       }
     } else {
-      try {
-        base = JSON.parse(readFileSync(join(REPO_ROOT, 'docs', 'agents', 'lanes.json'), 'utf8'))
-      } catch {
-        base = {}
-      }
+      base = readLanes()
     }
     return readAllLanes({ lanesJson: base, runsFolder })
   }

@@ -23,6 +23,7 @@ import {
   worst,
 } from '../src/briefs/review.js'
 import { readAllRunRecords, runsFile } from '../server/runs.js'
+import { lanesFolder } from '../server/lanes-source.js'
 import { killTree, treeSpawnOptions } from '../server/processTree.js'
 import { gitPath } from '../server/programPath.js'
 import { laneEnv } from './candidate.mjs'
@@ -256,11 +257,11 @@ export function branchMovedProblem(branch, expected, actual) {
   return `The branch ${branch} moved from ${expected} to ${actual} while the review ran, so the merge tested a head that the checks did not read. Read the lane again.`
 }
 
-export async function reviewLane({ root, lane, keep = false, env = process.env, runsPath = runsFile(), execPath = process.execPath, onStep = () => {}, tempRoot = null }) {
+export async function reviewLane({ root, lane, keep = false, env = process.env, lanesPath = '', runsPath = runsFile(), execPath = process.execPath, onStep = () => {}, tempRoot = null }) {
   const docs = join(root, 'docs', 'agents')
   let lanes
   try {
-    lanes = JSON.parse(readFileSync(join(docs, 'lanes.json'), 'utf8'))
+    lanes = JSON.parse(readFileSync(lanesPath ? resolve(lanesPath) : join(lanesFolder(), 'lanes.json'), 'utf8'))
   } catch {
     return { error: 'docs/agents/lanes.json could not be read.' }
   }

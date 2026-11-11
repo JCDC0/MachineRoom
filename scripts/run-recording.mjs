@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { writeRecording } from './recording-files.mjs'
+import { lanesFolder } from '../server/lanes-source.js'
 
 const root = resolve(fileURLToPath(import.meta.url), '..', '..')
 
@@ -42,7 +43,7 @@ function main() {
   if (list.length === 0) throw refusal('No runs are recorded yet.')
   if (index > list.length) throw refusal(`There is no run at position ${index}. The list holds ${list.length}.`)
   const record = list[list.length - index]
-  const lanes = JSON.parse(readFileSync(join(root, 'docs', 'agents', 'lanes.json'), 'utf8'))
+  const lanes = JSON.parse(readFileSync(join(lanesFolder(), 'lanes.json'), 'utf8'))
   const written = writeRecording({ record, lanes, root, env: process.env })
   console.log(`recording: ${written.runPath}`)
   console.log(`agents: ${written.agentsPath}`)

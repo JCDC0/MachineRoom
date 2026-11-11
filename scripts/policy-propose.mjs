@@ -7,6 +7,7 @@ import { readPolicy } from '../src/policy/route.js'
 import { policyDiff, policyText, proposePolicy } from '../src/policy/proposals.js'
 import { outcomeTable } from '../server/outcomes.js'
 import { outcomesFile, readAllRunRecords, readMainSubjectsSync, readOutcomeRecords, runsFile } from '../server/runs.js'
+import { lanesFolder } from '../server/lanes-source.js'
 
 const USAGE = 'Use: npm run policy-propose -- [--since YYYY-MM-DD] [--min N]'
 const MIN_PROBLEM = '--min needs a whole number from 1 to 1000.'
@@ -14,7 +15,7 @@ const MIN_LIMIT = 1000
 const MIN_DEFAULT = 10
 
 const root = resolve(fileURLToPath(import.meta.url), '..', '..')
-const policyPath = join(root, 'docs', 'agents', 'policy.json')
+const policyPath = join(lanesFolder(), 'policy.json')
 
 function parseArgs(argv) {
   const values = { since: null, min: null }

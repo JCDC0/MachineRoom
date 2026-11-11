@@ -5,8 +5,8 @@ import { profileFromBrief, profileFromTask } from '../src/policy/profile.js'
 import { chooseRoute, readPolicy, routeLane } from '../src/policy/route.js'
 import { NO_ACTIVE_CHOICE_PROBLEM } from './active-lanes.js'
 import { readLaneCosts } from './lane-costs.js'
-import { laneAgents, readLanes, runsFolder as defaultRunsFolder } from './lanes-source.js'
-import { REPO_POLICY, TASK_LIMIT, TASK_PROBLEM, laneStatesFor, readStartLanes } from './runs.js'
+import { laneAgents, lanesFolder, runsFolder as defaultRunsFolder } from './lanes-source.js'
+import { TASK_LIMIT, TASK_PROBLEM, laneStatesFor, readStartLanes } from './runs.js'
 
 const POLICY_FILE = 'policy.json'
 const TASKS_FILE = 'TASKS.md'
@@ -49,7 +49,9 @@ export function createPolicyApi(options) {
     let agents = []
     try {
       const source = lanes()
-      agents = source && Array.isArray(source.agents) ? source.agents : laneAgents(readLanes())
+      agents = source && Array.isArray(source.agents)
+        ? source.agents
+        : laneAgents(readStartLanes({ lanesFile: options.lanesFile, runsFolder: resolvedRuns }) ?? {})
     } catch {
       agents = []
     }
@@ -58,7 +60,7 @@ export function createPolicyApi(options) {
   }
 
   function readPolicyFile({ fallback = false } = {}) {
-    const text = readText(resolvedBriefs ? join(resolvedBriefs, POLICY_FILE) : null) ?? (fallback ? readText(REPO_POLICY) : null)
+    const text = readText(resolvedBriefs ? join(resolvedBriefs, POLICY_FILE) : null) ?? (fallback ? readText(join(lanesFolder(), POLICY_FILE)) : null)
     if (text === null) return { status: 404, error: 'The policy file is missing.' }
     try {
       return { policy: readPolicy(text) }
@@ -128,6 +130,11 @@ export function createPolicyApi(options) {
       spent: meters.spent,
       lanes: state.lanes,
     })
+    const anyLane = state.lanes.some((lane) => lane.eligible && lane.active)
+    const ownerOnly = read.policy.tiers[answer.tier].every((choice) => choice.lane === 'owner')
+    if (answer.lane === null && !anyLane && ownerOnly) {
+      answer.reason = `There is no lane for the ${answer.tier} tier. Make one in the room.`
+    }
     sendJson(req, res, 200, answer)
   }
 
