@@ -99,7 +99,7 @@ function makeRoot() {
   return root
 }
 
-function startBridge({ root, files, watcher, readTree, readTreePartial, treeBudgetMs = 3000 }) {
+function startBridge({ root, files, watcher, readTree, readTreePartial, treeBudgetMs = 3000, quietMs = 60000 }) {
   const counts = { full: 0, partial: [] }
   const bridge = createBridge({
     projectRoot: root,
@@ -108,7 +108,7 @@ function startBridge({ root, files, watcher, readTree, readTreePartial, treeBudg
     initialTree: { root: 'project', files, created: [] },
     debounceMs: 5,
     pollMs: 5,
-    quietMs: 10,
+    quietMs,
     treeBudgetMs,
     watchProject: watcher.projectWatch,
     readTree: async (projectRoot) => {
@@ -211,6 +211,28 @@ describe('a watcher event with names', () => {
     const folder = await folderTree(url)
     expect(folder.body.version).toBe(2)
     expect(treePaths(folder.body)).toContain('b.js')
+  })
+
+  it('runs one full read after a partial read goes quiet', async () => {
+    const watcher = fakeWatch()
+    const { bridge, counts } = startBridge({
+      root: makeRoot(),
+      files: ['a.js'],
+      watcher,
+      quietMs: 20,
+      readTree: async () => ({ root: 'project', files: ['a.js', 'b.js', 'c.js'], created: [] }),
+      readTreePartial: async () => ({ root: 'project', files: ['b.js'], created: [] }),
+    })
+    const { url } = await bridge.start()
+
+    watcher.emit('b.js')
+    await waitFor(() => counts.partial.length === 1)
+    expect(counts.full).toBe(0)
+    await waitFor(() => counts.full === 1)
+    expect(counts.partial).toEqual([['b.js']])
+
+    const folder = await folderTree(url)
+    expect(treePaths(folder.body)).toContain('c.js')
   })
 
   it('runs one full read and no partial list for 51 names', async () => {

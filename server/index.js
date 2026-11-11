@@ -695,6 +695,8 @@ export function createBridge(options = {}) {
   const treeVersions = new Map()
   let treeReading = null
   let treeDirty = false
+  let quietReadTimer = null
+  let quietFullDue = false
   let folderAnswer = null
   let folderBuild = null
   const unreadable = createUnreadableCounter()
@@ -825,11 +827,33 @@ export function createBridge(options = {}) {
     return tree
   }
 
+  function clearQuietRead() {
+    if (quietReadTimer) {
+      clearTimeout(quietReadTimer)
+      quietReadTimer = null
+    }
+  }
+
+  function scheduleQuietRead() {
+    if (stopped || watchFallback) return
+    clearQuietRead()
+    quietReadTimer = setTimeout(() => {
+      quietReadTimer = null
+      if (stopped || watchFallback) return
+      quietFullDue = true
+      if (!treeReading) startTreeRead().catch(() => {})
+    }, quietMs)
+  }
+
   function startTreeRead() {
     if (stopped) return Promise.resolve(null)
     if (treeReading) return treeReading
+    clearQuietRead()
     let changed = false
+    let usedPartial = false
     const read = (async () => {
+      const forceFull = quietFullDue
+      quietFullDue = false
       if (pendingNames.size > 0 || !pendingAllNamed) {
         await new Promise((resolveTurn) => setImmediate(resolveTurn))
       }
@@ -840,6 +864,7 @@ export function createBridge(options = {}) {
       pendingOverflow = false
       let tree = null
       if (
+        !forceFull &&
         names.length > 0 &&
         allNamed &&
         names.length <= PARTIAL_NAME_LIMIT &&
@@ -857,6 +882,7 @@ export function createBridge(options = {}) {
       if (tree) {
         lastTreeError = ''
         partialStreak += 1
+        usedPartial = true
       } else {
         partialStreak = 0
         tree = await readWholeTree()
@@ -881,6 +907,9 @@ export function createBridge(options = {}) {
         startTreeRead().catch(() => {})
       }
       if (treeDirty && !pollTimer && !watchFallback) beginPolling(false)
+      if (usedPartial) scheduleQuietRead()
+      else clearQuietRead()
+      if (quietFullDue && !stopped) startTreeRead().catch(() => {})
     }
     read.then(done, done)
     return read
@@ -916,6 +945,7 @@ export function createBridge(options = {}) {
   }
 
   function noteWatchName(filename) {
+    scheduleQuietRead()
     const name = filename ? String(filename).replace(/\\/g, '/') : ''
     if (!name) {
       pendingAllNamed = false
@@ -948,6 +978,7 @@ export function createBridge(options = {}) {
         } catch {}
         watcher = null
         watchFallback = true
+        clearQuietRead()
         beginPolling(false)
       })
       watcher = current
@@ -956,6 +987,7 @@ export function createBridge(options = {}) {
     } catch {
       watcher = null
       watchFallback = true
+      clearQuietRead()
       return false
     }
   }
@@ -1375,6 +1407,8 @@ export function createBridge(options = {}) {
       clearInterval(pollTimer)
       pollTimer = null
     }
+    clearQuietRead()
+    quietFullDue = false
     if (watcher) {
       try {
         watcher.close()
