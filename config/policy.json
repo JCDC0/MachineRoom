@@ -1,0 +1,37 @@
+{
+  "tiers": {
+    "small": [
+      {
+        "lane": "owner",
+        "model": null,
+        "reasoning": null,
+        "provider": null
+      }
+    ],
+    "medium": [
+      {
+        "lane": "owner",
+        "model": null,
+        "reasoning": null,
+        "provider": null
+      }
+    ],
+    "large": [
+      {
+        "lane": "owner",
+        "model": null,
+        "reasoning": null,
+        "provider": null
+      }
+    ]
+  },
+  "limits": {
+    "runUsd": 0.25,
+    "issueUsd": 1,
+    "agentMonthlyUsd": 10,
+    "companyMonthlyUsd": 30,
+    "maxTurnsPerRun": 200,
+    "timeoutSec": 3600
+  },
+  "quotaSkipPercent": 90
+}

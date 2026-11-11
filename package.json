@@ -13,6 +13,7 @@
   },
   "files": [
     "bin/",
+    "config/",
     "server/",
     "scripts/acp-run.mjs",
     "scripts/lane-lock.mjs",

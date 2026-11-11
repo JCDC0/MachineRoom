@@ -42,6 +42,8 @@ export const RUNTIME_READS = [
   'docs/agents/history/TASKS-ARCHIVE.md',
   'docs/agents/lanes.json',
   'docs/agents/policy.json',
+  'config/lanes.json',
+  'config/policy.json',
 ]
 
 export const SPAWNED_SCRIPTS = [
