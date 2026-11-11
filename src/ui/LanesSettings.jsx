@@ -162,7 +162,7 @@ export default function LanesSettings({ client = null, project = '' }) {
                       Show
                     </button>
                   ) : null}
-                  {canDelete ? (
+                  {canDelete && (lane.custom === true || !hidden) ? (
                     <button
                       type="button"
                       className="mr-lanes-delete"

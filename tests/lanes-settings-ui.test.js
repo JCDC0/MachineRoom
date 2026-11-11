@@ -58,6 +58,7 @@ describe('the Lanes section in Settings', () => {
       expect(buttonWithText(rows[1], 'Show')).not.toBeNull()
       expect(buttonWithText(rows[0], 'Show')).toBeNull()
       expect(buttonWithText(rows[0], 'Remove from project')).not.toBeNull()
+      expect(buttonWithText(rows[1], 'Remove from project')).toBeNull()
       expect(buttonWithText(rows[2], 'Delete everywhere')).not.toBeNull()
     })
   })
