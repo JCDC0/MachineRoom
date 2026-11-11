@@ -114,7 +114,7 @@ export function buildPrompt({ briefs, laneKey, lanes, rules, version, agentDepth
   lines.push('')
   lines.push(agentDepthLine(agentDepth))
   lines.push('')
-  lines.push('Read first, in this order: AGENTS.md (it points to the real guide), docs/agents/ARCHITECTURE.md, then the brief below in docs/agents/TASKS.md.')
+  lines.push('Read first, in this order: AGENTS.md (it points to the real guide), docs/agents/ARCHITECTURE.md, then the brief below in docs/agents/TASKS.md. ARCHITECTURE.md is the short core; after it, read only the detail file under docs/agents/architecture/ that your work touches.')
   for (const brief of briefs) {
     const model = modelFor(lane, brief.id)
     lines.push('')

@@ -1163,7 +1163,7 @@ describe('filterRunsSince', () => {
 const CRASH = 3221226505
 const CRASH_SIGNED = -1073740791
 const CRASH_RETRY = 'The test worker crashed inside Node (0xC0000409), not in a test. Running the tests again'
-const CRASH_GAVE_UP = 'The test worker crashed inside Node three times. See Known limits in docs/agents/ARCHITECTURE.md.'
+const CRASH_GAVE_UP = 'The test worker crashed inside Node three times. See Known limits in docs/agents/architecture/LIMITS.md.'
 
 describe('nextTestStep', () => {
   it('ends with the code of a run that did not crash', () => {

@@ -1,6 +1,6 @@
 # Agent guide
 
-Read `docs/agents/ARCHITECTURE.md` first, then `docs/agents/HOUSE-RULES.md`, then your brief in `docs/agents/TASKS.md`.
+Read `docs/agents/ARCHITECTURE.md` first, then `docs/agents/HOUSE-RULES.md`, then your brief in `docs/agents/TASKS.md`. ARCHITECTURE.md is the short core. After it, read only the detail file under `docs/agents/architecture/` that your work touches.
 
 The code is the first authority, then `docs/agents/ARCHITECTURE.md`, then every other doc.
 

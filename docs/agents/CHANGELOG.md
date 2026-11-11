@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- ARCHITECTURE.md is a 12 KB core where it was 204 KB: the room, the commands, the code layout, live mode, the activity schema, the known limits and the Documents list moved unchanged into docs/agents/architecture/, the core says when to read each, and a lane's prompt tells it to read the core and then only the detail file its work touches; the pack lists src/policy/profile.js, which the bridge has needed since P31 (task P34).
 - A task typed in Dispatch gets its tier from its text: small at 300 characters and 2 named paths or fewer, medium at 1500 characters and 6 paths or fewer, large beyond that or when it names a secrets, deploy or data path or says it needs the owner's yes; a queue takes the largest tier among its tasks (task P39).
 - Dispatch picks the lane: the lane picker has Auto first, the route walks the policy's tier and skips a lane that is retired, turned off or busy, the line under the picker and the confirm card say which lane and why, a run started with no lane is routed and answers 409 when none is free, and policy.json names the lanes that exist; a project with no policy file uses MachineRoom's own (task P31).
 - A run record carries peakTokens, the largest context one step of a Claude Code or OpenCode run held; run-lane --list prints it and --stats prints each lane's median, largest and the count at or over 450,000, so the 500,000 autocompact rule can be checked against real runs (task P32).
