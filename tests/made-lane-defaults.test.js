@@ -119,7 +119,7 @@ describe('made lane defaults', () => {
       agents: [{ key: 'opencode-1', name: 'Made OpenCode', harness: 'opencode', model: 'opencode-go/deepseek-v4.1-flash' }],
     })
     const appData = join(folder, 'AppData', 'Roaming')
-    const expected = join(appData, 'npm', 'node_modules', '@opencode', 'cli', 'bin', 'opencode.exe')
+    const expected = harnessByKey.opencode.defaultProgram.replace('%APPDATA%', appData)
 
     const result = await runLane(
       ['opencode-1', '--project', project, '--task', 'Fix it.', '--dry-run'],
