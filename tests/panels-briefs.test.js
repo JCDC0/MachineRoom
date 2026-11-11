@@ -78,6 +78,29 @@ describe('validLanes', () => {
     expect(ownerToLane({ owners: ['opencode3'] }, AGENTS)).toBeNull()
   })
 
+  it('matches a made lane by its harness field', () => {
+    const MADE = [
+      { key: 'claude-1', name: 'Coder', harness: 'claude' },
+      { key: 'opencode-1', name: 'Builder', harness: 'opencode' },
+      { key: 'orchestrator', name: 'Orchestrator', harness: 'claude' },
+      { key: 'claude-session', name: 'Claude Code session', parser: 'claude' },
+      { key: 'custom', name: 'Custom', parser: 'custom' },
+    ]
+    expect(validLanes(MADE)).toEqual(['claude-1', 'opencode-1'])
+    expect(ownerToLane({ owners: ['claude'] }, MADE)).toBe('claude-1')
+    expect(ownerToLane({ owners: ['opencode'] }, MADE)).toBe('opencode-1')
+    expect(runLaneFor({ owners: ['claude'] }, [], MADE)).toBe('claude-1')
+  })
+
+  it('takes a free made lane of the same harness when the first one runs', () => {
+    const MADE = [
+      { key: 'claude-1', name: 'Coder', harness: 'claude' },
+      { key: 'claude-2', name: 'Coder two', harness: 'claude' },
+    ]
+    expect(runLaneFor({ owners: ['claude'] }, ['claude-1'], MADE)).toBe('claude-2')
+    expect(runLaneFor({ owners: ['claude'] }, ['claude-1', 'claude-2'], MADE)).toBe('claude-1')
+  })
+
   it('answers no lane with no agents', () => {
     expect(validLanes(null)).toEqual([])
     expect(validLanes([])).toEqual([])

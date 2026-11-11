@@ -9,16 +9,47 @@ function laneHarness(lane) {
   return Object.hasOwn(harnessByKey, match[1]) ? harnessByKey[match[1]] : null
 }
 
+function agentHarness(agent) {
+  const key = typeof agent?.key === 'string' ? agent.key.trim() : ''
+  if (!key || key === 'orchestrator' || key.startsWith('sub-') || key.endsWith('-session')) return null
+  const harness = typeof agent?.harness === 'string' ? agent.harness.trim().toLowerCase() : ''
+  return harness && Object.hasOwn(harnessByKey, harness) ? harness : null
+}
+
+function laneRecord(agent) {
+  const key = typeof agent?.key === 'string' ? agent.key.trim() : ''
+  if (!key) return null
+  const harness = agentHarness(agent) ?? laneHarness(key)?.key ?? null
+  return harness ? { key, harness } : null
+}
+
+function laneRecords(lanes) {
+  if (Array.isArray(lanes)) {
+    if (lanes.some((item) => item && typeof item === 'object')) {
+      return lanes.map(laneRecord).filter(Boolean)
+    }
+    return lanes
+      .filter((name) => typeof name === 'string' && name.trim())
+      .map((name) => laneRecord({ key: name }))
+      .filter(Boolean)
+  }
+  if (lanes && typeof lanes === 'object') {
+    if (Array.isArray(lanes.agents)) return lanes.agents.map(laneRecord).filter(Boolean)
+    return Object.keys(lanes).map((key) => laneRecord({ key })).filter(Boolean)
+  }
+  return []
+}
+
 export function validLanes(agents) {
   if (!Array.isArray(agents)) return []
   const names = []
   const seen = new Set()
   for (const agent of agents) {
     if (!agent || typeof agent !== 'object') continue
-    const key = typeof agent.key === 'string' ? agent.key.trim() : ''
-    if (!key || seen.has(key) || !laneHarness(key)) continue
-    seen.add(key)
-    names.push(key)
+    const record = laneRecord(agent)
+    if (!record || seen.has(record.key)) continue
+    seen.add(record.key)
+    names.push(record.key)
   }
   return names
 }
@@ -63,8 +94,11 @@ export function formatBriefTitle(brief) {
 export function ownerToLane(briefOrOwner, lanes) {
   const first = getFirstOwner(briefOrOwner)
   if (!first) return null
-  const names = laneNames(lanes)
-  return names.some((name) => String(name).toLowerCase() === first) ? first : null
+  const records = laneRecords(lanes)
+  const exact = records.find((record) => record.key.toLowerCase() === first)
+  if (exact) return exact.key
+  const byHarness = records.find((record) => record.harness === first)
+  return byHarness ? byHarness.key : null
 }
 
 function runningLaneNames(running) {
@@ -77,20 +111,6 @@ function runningLaneNames(running) {
   return names
 }
 
-function laneNames(lanes) {
-  if (Array.isArray(lanes)) {
-    if (lanes.some((item) => item && typeof item === 'object')) return validLanes(lanes)
-    return lanes
-      .filter((name) => typeof name === 'string' && name.trim())
-      .map((name) => name.trim())
-  }
-  if (lanes && typeof lanes === 'object') {
-    if (Array.isArray(lanes.agents)) return validLanes(lanes.agents)
-    return Object.keys(lanes)
-  }
-  return []
-}
-
 function harnessName(lane) {
   return String(lane).replace(/\d+$/, '')
 }
@@ -100,11 +120,12 @@ export function runLaneFor(brief, running, lanes) {
   if (!owner) return null
   const busy = new Set(runningLaneNames(running))
   if (!busy.has(owner)) return owner
-  const harness = harnessName(owner)
-  const free = laneNames(lanes).find(
-    (name) => name !== owner && harnessName(name) === harness && !busy.has(name)
+  const records = laneRecords(lanes)
+  const ownerHarness = records.find((record) => record.key === owner)?.harness ?? harnessName(owner)
+  const free = records.find(
+    (record) => record.key !== owner && record.harness === ownerHarness && !busy.has(record.key)
   )
-  return free || owner
+  return free ? free.key : owner
 }
 
 export function groupBriefsByOwner(briefs) {
