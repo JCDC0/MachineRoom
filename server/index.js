@@ -169,7 +169,7 @@ export function packTree(tree) {
 
 export function treeEvent(tree, sent = null, shape = null) {
   if (!sent) {
-    const body = shape === FOLDER_SHAPE ? packTree(tree) : { root: tree.root, files: tree.files }
+    const body = shape === FOLDER_SHAPE ? { ...packTree(tree), full: true } : { root: tree.root, files: tree.files, full: true }
     return `event: tree\ndata: ${JSON.stringify(body)}\n\n`
   }
   const known = new Set(sent)
@@ -178,18 +178,28 @@ export function treeEvent(tree, sent = null, shape = null) {
   return `event: tree\ndata: ${JSON.stringify({ root: tree.root, files })}\n\n`
 }
 
-function addedPaths(previous, next) {
+function pathChanges(previous, next) {
   const added = []
-  let at = 0
-  for (const file of next) {
-    while (at < previous.length && previous[at] < file) at += 1
-    if (at >= previous.length || previous[at] !== file) added.push(file)
+  const removed = []
+  let before = 0
+  let after = 0
+  while (before < previous.length || after < next.length) {
+    if (after >= next.length || (before < previous.length && previous[before] < next[after])) {
+      removed.push(previous[before])
+      before += 1
+    } else if (before >= previous.length || next[after] < previous[before]) {
+      added.push(next[after])
+      after += 1
+    } else {
+      before += 1
+      after += 1
+    }
   }
-  return added
+  return { added, removed }
 }
 
-function treeDeltaEvent(root, files) {
-  return `event: tree\ndata: ${JSON.stringify({ root, files })}\n\n`
+function treeDeltaEvent(root, files, removed = []) {
+  return `event: tree\ndata: ${JSON.stringify({ root, files, removed })}\n\n`
 }
 
 function corsHeaders(req, isAllowed) {
@@ -632,9 +642,9 @@ export function createBridge(options = {}) {
     for (const client of clients) writeSseChange(client, event)
   }
 
-  function rememberTreeVersion(added) {
+  function rememberTreeVersion(added, removed) {
     treeVersion += 1
-    treeVersions.set(treeVersion, added)
+    treeVersions.set(treeVersion, { added, removed })
     while (treeVersions.size > TREE_VERSIONS_KEPT) {
       treeVersions.delete(treeVersions.keys().next().value)
     }
@@ -642,18 +652,25 @@ export function createBridge(options = {}) {
   }
 
   function treeFilesSince(sinceVersion) {
-    if (sinceVersion === treeVersion) return []
+    if (sinceVersion === treeVersion) return { added: [], removed: [] }
     if (sinceVersion > treeVersion || sinceVersion < 1) return null
     if (treeVersions.size > 0) {
       const oldest = treeVersions.keys().next().value
       if (sinceVersion < oldest - 1) return null
     }
-    const files = []
-    for (const [version, added] of treeVersions) {
+    const last = new Map()
+    for (const [version, change] of treeVersions) {
       if (version <= sinceVersion) continue
-      for (const file of added) files.push(file)
+      for (const file of change.added) last.set(file, 'add')
+      for (const file of change.removed) last.set(file, 'remove')
     }
-    return files
+    const added = []
+    const removed = []
+    for (const [file, kind] of last) {
+      if (kind === 'add') added.push(file)
+      else removed.push(file)
+    }
+    return { added, removed }
   }
 
   function folderAnswerFor(tree) {
@@ -696,22 +713,24 @@ export function createBridge(options = {}) {
       }
       return false
     }
-    const added = addedPaths(lastFiles, current.files)
-    const changed = added.length > 0 || current.files.length !== lastFiles.length
+    const changes = pathChanges(lastFiles, current.files)
+    const changed = changes.added.length > 0 || changes.removed.length > 0 || current.files.length !== lastFiles.length
     if (!changed) return false
     treeChangedAt = lastTreeAt
     lastFiles = current.files
-    rememberTreeVersion(added)
+    rememberTreeVersion(changes.added, changes.removed)
     for (const client of clients) {
       if (!treeClients.has(client)) continue
       const known = treeClientVersion.get(client)
-      const files = known === undefined ? null : treeFilesSince(known)
-      if (files === null) {
+      const changesSince = known === undefined ? null : treeFilesSince(known)
+      if (changesSince === null) {
         writeWholeTree(client, current)
         continue
       }
       treeClientVersion.set(client, treeVersion)
-      if (files.length > 0) client.write(treeDeltaEvent(current.root, files))
+      if (changesSince.added.length > 0 || changesSince.removed.length > 0) {
+        client.write(treeDeltaEvent(current.root, changesSince.added, changesSince.removed))
+      }
     }
     return true
   }
@@ -1161,10 +1180,12 @@ export function createBridge(options = {}) {
         const sinceText = url.searchParams.get('since')
         const sinceVersion = sinceText && /^\d+$/.test(sinceText) ? Number(sinceText) : null
         if (sinceVersion !== null) {
-          const files = treeFilesSince(sinceVersion)
-          if (files !== null) {
+          const changes = treeFilesSince(sinceVersion)
+          if (changes !== null) {
             treeClientVersion.set(res, treeVersion)
-            if (files.length > 0 && lastTree) res.write(treeDeltaEvent(lastTree.root, files))
+            if ((changes.added.length > 0 || changes.removed.length > 0) && lastTree) {
+              res.write(treeDeltaEvent(lastTree.root, changes.added, changes.removed))
+            }
           }
         }
       }
