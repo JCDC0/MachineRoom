@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { parseBriefs } from '../src/briefs/briefs.js'
-import { profileFromBrief } from '../src/policy/profile.js'
+import { profileFromBrief, profileFromTask } from '../src/policy/profile.js'
 import { tierFor } from '../src/policy/route.js'
 
 const TASKS_TEXT = readFileSync(new URL('../docs/agents/TASKS.md', import.meta.url), 'utf8')
@@ -139,6 +139,73 @@ describe('profileFromBrief', () => {
   it('gives the same answer for the same brief', () => {
     const brief = real('C6b')
     expect(profileFromBrief(brief)).toEqual(profileFromBrief(brief))
+  })
+})
+
+describe('profileFromTask', () => {
+  const tier = (text) => tierFor(profileFromTask(text))
+  const sized = (length, paths = 0) => {
+    const names = Array.from({ length: paths }, (_, index) => `p${index}.js`)
+    const filler = 'x'.repeat(Math.max(0, length - names.join(' ').length - (names.length > 0 ? 1 : 0)))
+    return `${filler}${names.length > 0 ? ` ${names.join(' ')}` : ''}`
+  }
+
+  it('keeps a task of 300 characters small and sends 301 to medium', () => {
+    expect(tier(sized(300))).toBe('small')
+    expect(tier(sized(301))).toBe('medium')
+  })
+
+  it('keeps a task with 2 paths small and sends 3 to medium', () => {
+    expect(tier('Fix a.js and b.js.')).toBe('small')
+    expect(tier('Fix a.js, b.js and c.js.')).toBe('medium')
+  })
+
+  it('keeps a task of 1500 characters medium and sends 1501 to large', () => {
+    expect(tier(sized(1500))).toBe('medium')
+    expect(tier(sized(1501))).toBe('large')
+  })
+
+  it('keeps a task with 6 paths medium and sends 7 to large', () => {
+    expect(tier('a.js b.js c.js d.js e.js f.js')).toBe('medium')
+    expect(tier('a.js b.js c.js d.js e.js f.js g.js')).toBe('large')
+  })
+
+  it('counts a bare path and a backticked path once', () => {
+    const profile = profileFromTask('Change `src/a.js` and src/a.js.')
+    expect(profile.files).toBe(1)
+    expect(tierFor(profile)).toBe('small')
+  })
+
+  it('counts paths in backticks and bare paths together', () => {
+    expect(profileFromTask('Change `src/a.js` and src/b.js.').files).toBe(2)
+  })
+
+  it('sends a task naming package.json to large', () => {
+    expect(tier('Bump `package.json`.')).toBe('large')
+    expect(tier('Bump package.json.')).toBe('large')
+  })
+
+  it('sends a task naming a path under public/fixtures/ to large', () => {
+    expect(tier('Add a case under `public/fixtures/run.jsonl`.')).toBe('large')
+    expect(tier('Add a case under public/fixtures/run.jsonl.')).toBe('large')
+  })
+
+  it('sends the two hard to undo phrases to large', () => {
+    expect(tier("Fix a.js. This needs the owner's yes.")).toBe('large')
+    expect(tier('Fix a.js. This spends money.')).toBe('large')
+  })
+
+  it('sends an empty task to large', () => {
+    expect(tier('')).toBe('large')
+    expect(tier('   ')).toBe('large')
+    expect(tier(null)).toBe('large')
+    expect(tier(42)).toBe('large')
+  })
+
+  it('names no test for a task that is not small, so tierFor never reads it as small', () => {
+    expect(profileFromTask('x'.repeat(301)).hasTests).toBe(false)
+    expect(profileFromTask('a.js b.js c.js').hasTests).toBe(false)
+    expect(profileFromTask('Fix a.js.').hasTests).toBe(true)
   })
 })
 
