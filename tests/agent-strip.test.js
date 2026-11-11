@@ -382,6 +382,17 @@ describe('speckPolyline', () => {
     expect(second[0]).toBe(first[0])
     expect(second[3]).toEqual(end)
   })
+
+  it('asks each waypoint anchor once', () => {
+    const asked = []
+    const anchorOf = (path) => {
+      asked.push(path)
+      return centres[path]
+    }
+    const points = speckPolyline(start, ['', 'src', 'src/ui'], anchorOf, end)
+    expect(asked).toEqual(['', 'src', 'src/ui'])
+    expect(points).toHaveLength(5)
+  })
 })
 
 function offPolyline(points, point) {
