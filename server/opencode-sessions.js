@@ -9,6 +9,7 @@ const DEFAULT_SESSION_POLL_MS = 1000
 const DEFAULT_IDLE_SESSION_POLL_MS = 5000
 const TEXT_LIMIT = 2000
 const MAX_FORGOTTEN = 200
+const FULL_READ_MS = 60 * 1000
 
 export const OPENCODE_SESSION_AGENT = {
   id: 'agent-opencode-session',
@@ -100,6 +101,7 @@ export function createOpencodeSessionsReader(options = {}) {
   let hasTimeUpdated = false
   let fallbackNote = ''
   let highWater = -1
+  let lastFullReadAt = null
   let lastSessionScanAt = null
   let primed = false
   let stopped = false
@@ -138,7 +140,7 @@ export function createOpencodeSessionsReader(options = {}) {
       fallbackNote = columns.length > 0 && !hasTimeUpdated ? 'session_v2 has no time_updated column, so every session is read on each poll.' : ''
       const timeColumn = hasTimeUpdated ? 'time_updated' : 'NULL AS time_updated'
       sessionStmt = db.prepare(`SELECT id, parent_id, directory, title, ${timeColumn} FROM session_v2`)
-      sessionSinceStmt = hasTimeUpdated ? db.prepare('SELECT id, parent_id, directory, title, time_updated FROM session_v2 WHERE time_updated > ?') : null
+      sessionSinceStmt = hasTimeUpdated ? db.prepare('SELECT id, parent_id, directory, title, time_updated FROM session_v2 WHERE time_updated >= ?') : null
     }
     if (!messageStmt) {
       messageStmt = db.prepare(
@@ -147,21 +149,55 @@ export function createOpencodeSessionsReader(options = {}) {
     }
   }
 
+  function takeRow(row) {
+    if (!row || typeof row.id !== 'string') return false
+    const previous = knownRows.get(row.id)
+    if (hasTimeUpdated && previous && previous.time_updated === row.time_updated) return false
+    knownRows.set(row.id, row)
+    return true
+  }
+
+  function reconcileRows(rows) {
+    const present = new Set()
+    let changed = 0
+    for (const row of rows) {
+      if (!row || typeof row.id !== 'string') continue
+      present.add(row.id)
+      if (takeRow(row)) changed += 1
+    }
+    for (const id of [...knownRows.keys()]) {
+      if (present.has(id)) continue
+      knownRows.delete(id)
+      sessions.delete(id)
+      sent.delete(id)
+      forgotten.delete(id)
+    }
+    return changed
+  }
+
   function sessionRows() {
     if (!sessionStmt) prepareStatements()
     if (!sessionStmt) return []
-    const incremental = hasTimeUpdated && highWater >= 0
-    const since = incremental ? highWater : null
-    const rows = incremental ? sessionSinceStmt.all(highWater) : sessionStmt.all()
+    const at = now()
+    const full = !hasTimeUpdated || highWater < 0 || lastFullReadAt === null || at - lastFullReadAt >= FULL_READ_MS
+    const since = full ? null : highWater
+    const rows = full ? sessionStmt.all() : sessionSinceStmt.all(highWater)
+    let changed = 0
+    if (full) {
+      changed = reconcileRows(rows)
+      lastFullReadAt = at
+    } else {
+      for (const row of rows) {
+        if (takeRow(row)) changed += 1
+      }
+    }
     let highest = highWater
     for (const row of rows) {
-      if (!row || typeof row.id !== 'string') continue
-      knownRows.set(row.id, row)
-      if (Number.isFinite(row.time_updated) && row.time_updated > highest) highest = row.time_updated
+      if (row && Number.isFinite(row.time_updated) && row.time_updated > highest) highest = row.time_updated
     }
     highWater = highest
     try {
-      onQuery({ rows: rows.length, since })
+      onQuery({ rows: rows.length, changed, since })
     } catch {}
     return rows
   }

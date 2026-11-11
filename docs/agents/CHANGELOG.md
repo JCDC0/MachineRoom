@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The readers at rest: the OpenCode reader no longer misses a session row written in the same millisecond as the newest one, reads every row once a minute and forgets the sessions the database dropped, and the lane source checks a finished log's size on a watcher event or the 2 second scan, not five times a second (task P42).
 - npm run policy-propose counts a run that main merged with no outcome row as merged, as run-lane --outcomes does, and npm run merge-lane passes the changed files after -- and refuses a subject or trailer with an em dash or a line break (task P40).
 - An OpenCode lane reviewed the merges from P24 to P35 in AUDIT-2026-11-REVIEW-9.md: the policy proposer still reads the outcome table without the merges on main, the lane route can read another lanes file and runs folder than the run it starts, the OpenCode reader's row map only grows, and a deleted file never leaves the room; the orchestrator's corrections say which hold (task P38).
 - A resting card costs the frame nothing: each card keeps a move stamp, its tab anchor is computed once per move and a string is rewritten only when one of its ends moved; in Node, 1,000 frames over 171 cards took 38 ms where they took 335 (task P37).
