@@ -205,17 +205,22 @@ export const AGENT_RING_GROW = 130
 export const AGENT_RING_MS = 900
 export const AGENT_RING_POOL = 3
 export const RING_MAX_OPACITY = 0.32
+export const AGENT_RING_MAX_OPACITY = 0.8
+export const AGENT_RING_OPACITY_FLOOR = 0.35
+export const AGENT_RING_FLOOR = 0.35
 
-export function ringPulse(base, grow, age, duration, strength, opacity = RING_MAX_OPACITY, out = null) {
+export function ringPulse(base, grow, age, duration, strength, opacity = RING_MAX_OPACITY, out = null, floor = 0) {
   const target = out ?? {}
   const from = Math.max(0, Number(base) || 0)
   const extra = Math.max(0, Number(grow) || 0)
   const span = Math.max(1, Number(duration) || 1)
   const level = Math.min(1, Math.max(0, Number(strength) || 0))
+  const minLevel = Math.min(1, Math.max(0, Number(floor) || 0))
+  const effectiveLevel = Math.max(minLevel, level)
   const elapsed = Number(age)
   const t = Number.isFinite(elapsed) ? Math.min(1, Math.max(0, elapsed / span)) : 1
   target.radius = from + extra * (1 - (1 - t) ** 2)
-  target.opacity = Math.min(1, Math.max(0, Number(opacity) || 0)) * level * (1 - t)
+  target.opacity = Math.min(1, Math.max(0, Number(opacity) || 0)) * effectiveLevel * (1 - t)
   return target
 }
 

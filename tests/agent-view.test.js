@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { createAgents } from '../src/engine/agents.js'
-import { AGENT_RING_BASE, AGENT_RING_GROW, AGENT_RING_MS, AGENT_RING_POOL, SWAY_LIFT, SWAY_SCALE } from '../src/engine/hub.js'
+import { AGENT_RING_BASE, AGENT_RING_GROW, AGENT_RING_MAX_OPACITY, AGENT_RING_MS, AGENT_RING_OPACITY_FLOOR, AGENT_RING_POOL, SWAY_LIFT, SWAY_SCALE } from '../src/engine/hub.js'
 import { RED, TUNNEL_GREY } from '../src/engine/sprites.js'
 import { createTerminals } from '../src/engine/terminals.js'
 import { apply, createState } from '../src/model/state.js'
@@ -256,6 +256,34 @@ describe('the beat rings around an agent', () => {
       expect(lit[0].line.scale.x).toBeGreaterThan(AGENT_RING_BASE)
       expect(lit[0].line.scale.x).toBeLessThan(AGENT_RING_BASE + AGENT_RING_GROW)
       expect(lit[0].line.material.opacity).toBeGreaterThan(0)
+      clock += AGENT_RING_MS
+      agents.update(state, 0.016, clock, world, terminals)
+      expect(view.beatRings.some((slot) => slot.line.visible)).toBe(false)
+      agents.dispose()
+    } finally {
+      spy.mockRestore()
+    }
+  })
+
+  it('sets ring opacity at start and end for a weak and a strong beat', () => {
+    let clock = 1000
+    const spy = vi.spyOn(performance, 'now').mockImplementation(() => clock)
+    try {
+      const { agents, state, terminals, world } = harness()
+      const view = agents.views.get('a')
+      agents.beat(0.1)
+      agents.update(state, 0.016, clock, world, terminals)
+      let lit = view.beatRings.filter((slot) => slot.line.visible)
+      expect(lit).toHaveLength(1)
+      expect(lit[0].line.material.opacity).toBeCloseTo(AGENT_RING_MAX_OPACITY * AGENT_RING_OPACITY_FLOOR, 6)
+      clock += AGENT_RING_MS
+      agents.update(state, 0.016, clock, world, terminals)
+      expect(view.beatRings.some((slot) => slot.line.visible)).toBe(false)
+      agents.beat(1)
+      agents.update(state, 0.016, clock, world, terminals)
+      lit = view.beatRings.filter((slot) => slot.line.visible)
+      expect(lit).toHaveLength(1)
+      expect(lit[0].line.material.opacity).toBeCloseTo(AGENT_RING_MAX_OPACITY, 6)
       clock += AGENT_RING_MS
       agents.update(state, 0.016, clock, world, terminals)
       expect(view.beatRings.some((slot) => slot.line.visible)).toBe(false)

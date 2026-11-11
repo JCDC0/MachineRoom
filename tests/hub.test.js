@@ -1,6 +1,11 @@
 import * as THREE from 'three'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import {
+  AGENT_RING_BASE,
+  AGENT_RING_GROW,
+  AGENT_RING_MAX_OPACITY,
+  AGENT_RING_MS,
+  AGENT_RING_OPACITY_FLOOR,
   DANCE_RISE_MS,
   DANCE_SETTLE_MS,
   HUB_RADIUS,
@@ -415,6 +420,17 @@ describe('the ring a beat sends out', () => {
     expect(soft.opacity).toBeCloseTo(RING_MAX_OPACITY * 0.25, 10)
     const out = {}
     expect(ringPulse(130, 130, 450, 900, 1, 0.32, out)).toBe(out)
+  })
+
+  it('gives an agent ring an opacity floor for a weak beat and fades to 0', () => {
+    const weakStart = ringPulse(AGENT_RING_BASE, AGENT_RING_GROW, 0, AGENT_RING_MS, 0.1, AGENT_RING_MAX_OPACITY, null, AGENT_RING_OPACITY_FLOOR)
+    expect(weakStart.opacity).toBeCloseTo(AGENT_RING_MAX_OPACITY * AGENT_RING_OPACITY_FLOOR, 10)
+    const weakEnd = ringPulse(AGENT_RING_BASE, AGENT_RING_GROW, AGENT_RING_MS, AGENT_RING_MS, 0.1, AGENT_RING_MAX_OPACITY, null, AGENT_RING_OPACITY_FLOOR)
+    expect(weakEnd.opacity).toBe(0)
+    const strongStart = ringPulse(AGENT_RING_BASE, AGENT_RING_GROW, 0, AGENT_RING_MS, 1, AGENT_RING_MAX_OPACITY, null, AGENT_RING_OPACITY_FLOOR)
+    expect(strongStart.opacity).toBeCloseTo(AGENT_RING_MAX_OPACITY, 10)
+    const strongEnd = ringPulse(AGENT_RING_BASE, AGENT_RING_GROW, AGENT_RING_MS, AGENT_RING_MS, 1, AGENT_RING_MAX_OPACITY, null, AGENT_RING_OPACITY_FLOOR)
+    expect(strongEnd.opacity).toBe(0)
   })
 
   it('takes one ring from a fixed pool on each beat', () => {
