@@ -162,7 +162,7 @@ describe('harness reports and usage', () => {
     const log = lines({ type: 'result', result: 'First.\nSecond.', total_cost_usd: 0.25, usage: { input_tokens: 10, output_tokens: 5 } })
     expect(harnessByKey.claude.report(log)).toEqual(['First.', 'Second.'])
     expect(harnessByKey.claude.reply(log)).toBe('First.\nSecond.')
-    expect(harnessByKey.claude.usage(log)).toEqual({ costUsd: 0.25, inputTokens: 10, outputTokens: 5 })
+    expect(harnessByKey.claude.usage(log)).toEqual({ costUsd: 0.25, inputTokens: 10, outputTokens: 5, peakTokens: null })
   })
 
   it('reads the OpenCode text and step_finish lines', () => {
@@ -172,7 +172,32 @@ describe('harness reports and usage', () => {
     )
     expect(harnessByKey.opencode.reply(log)).toBe('All done.\nAgain.')
     expect(harnessByKey.opencode.report(log)).toEqual(['All done.', 'Again.'])
-    expect(harnessByKey.opencode.usage(log)).toEqual({ costUsd: 0.5, inputTokens: 112, outputTokens: 25 })
+    expect(harnessByKey.opencode.usage(log)).toEqual({ costUsd: 0.5, inputTokens: 112, outputTokens: 25, peakTokens: 112 })
+  })
+
+  it('reads peakTokens from an OpenCode log with two steps of different sizes', () => {
+    const log = lines(
+      { type: 'step_finish', part: { tokens: { input: 100, output: 20, cache: { read: 10, write: 2 } } } },
+      { type: 'step_finish', part: { tokens: { input: 300, output: 40, cache: { read: 50, write: 10 } } } },
+    )
+    expect(harnessByKey.opencode.usage(log).peakTokens).toBe(360)
+  })
+
+  it('reads peakTokens from a Claude Code log with two messages and ignores subagent messages', () => {
+    const log = lines(
+      { type: 'assistant', message: { usage: { input_tokens: 100, cache_creation_input_tokens: 10, cache_read_input_tokens: 5 } } },
+      { type: 'assistant', parent_tool_use_id: 'tool-sub', message: { usage: { input_tokens: 999999 } } },
+      { type: 'assistant', message: { usage: { input_tokens: 200, cache_creation_input_tokens: 20, cache_read_input_tokens: 30 } } },
+      { type: 'result', total_cost_usd: 0.1, usage: { input_tokens: 300, output_tokens: 50 } },
+    )
+    expect(harnessByKey.claude.usage(log).peakTokens).toBe(250)
+  })
+
+  it('answers null peakTokens on a log with no usage and for other harnesses', () => {
+    expect(harnessByKey.opencode.usage('').peakTokens).toBeNull()
+    expect(harnessByKey.claude.usage('').peakTokens).toBeNull()
+    const log = lines({ type: 'text', part: { text: 'Hello' } })
+    expect(harnessByKey.opencode.usage(log).peakTokens).toBeNull()
   })
 
   it('reads the OpenCode error line and answers null on a log with none', () => {

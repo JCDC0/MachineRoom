@@ -452,6 +452,7 @@ describe('summarizeRun', () => {
       costUsd: 0,
       inputTokens: 8427,
       outputTokens: 107,
+      peakTokens: 8427,
     })
     expect(formatSummary(summary)).toEqual([
       'summary: 2 tool calls, 0 failed',
@@ -491,7 +492,7 @@ describe('summarizeRun', () => {
     ].map((item) => JSON.stringify(item)).join('\n')
     const summary = summarizeRun({ harness: 'claude', log, worktree: 'C:\\GitHub\\MachineRoom-claude' })
     expect(summary).toEqual({
-      harness: 'claude', toolCalls: 3, failed: 1, written: [], read: ['src/math.js'], head: [], costUsd: null, inputTokens: null, outputTokens: null,
+      harness: 'claude', toolCalls: 3, failed: 1, written: [], read: ['src/math.js'], head: [], costUsd: null, inputTokens: null, outputTokens: null, peakTokens: null,
     })
   })
 
@@ -614,7 +615,7 @@ describe('summarizeRun', () => {
 
   it('handles an empty AGY log', () => {
     expect(summarizeRun({ harness: 'agy', log: '', worktree: 'C:\\scratch' })).toEqual({
-      harness: 'agy', toolCalls: 0, failed: 0, written: [], read: [], head: [], costUsd: null, inputTokens: null, outputTokens: null,
+      harness: 'agy', toolCalls: 0, failed: 0, written: [], read: [], head: [], costUsd: null, inputTokens: null, outputTokens: null, peakTokens: null,
     })
   })
 
@@ -631,6 +632,7 @@ describe('summarizeRun', () => {
       costUsd: null,
       inputTokens: null,
       outputTokens: null,
+      peakTokens: null,
     })
     expect(formatSummary(summary)).toEqual([
       'summary: 1 tool calls, 0 failed',
@@ -717,7 +719,7 @@ describe('summarizeRun', () => {
 
   it('handles an empty log for both harnesses', () => {
     expect(summarizeRun({ harness: 'opencode', log: '', worktree: 'C:\\scratch' })).toEqual({
-      harness: 'opencode', toolCalls: 0, failed: 0, written: [], read: [], head: [], costUsd: null, inputTokens: null, outputTokens: null,
+      harness: 'opencode', toolCalls: 0, failed: 0, written: [], read: [], head: [], costUsd: null, inputTokens: null, outputTokens: null, peakTokens: null,
     })
     expect(summarizeRun({ harness: 'hermes', log: '', worktree: 'C:\\scratch' }).head).toEqual([])
     expect(formatSummary(summarizeRun({ harness: 'hermes', log: '', worktree: '' }))).toEqual([
@@ -827,6 +829,7 @@ describe('runRecord', () => {
       costUsd: 0.0421,
       inputTokens: 1500,
       outputTokens: 300,
+      peakTokens: 1200,
       log: 'C:\\Temp\\machineroom-runs\\hermes-T3.log',
       branch: 'feat/t3-run-records-and',
       commits: ['abc1234 0.1.44: Record each lane run'],
@@ -843,12 +846,13 @@ describe('runRecord', () => {
       costUsd: 0.0421,
       inputTokens: 1500,
       outputTokens: 300,
+      peakTokens: 1200,
       log: 'C:\\Temp\\machineroom-runs\\hermes-T3.log',
       branch: 'feat/t3-run-records-and',
       commits: ['abc1234 0.1.44: Record each lane run'],
     })
     expect(Object.keys(record)).toEqual([
-      'lane', 'briefs', 'model', 'reasoning', 'startedAt', 'minutes', 'exitCode', 'killed', 'costUsd', 'inputTokens', 'outputTokens', 'log', 'branch', 'commits',
+      'lane', 'briefs', 'model', 'reasoning', 'startedAt', 'minutes', 'exitCode', 'killed', 'costUsd', 'inputTokens', 'outputTokens', 'peakTokens', 'log', 'branch', 'commits',
     ])
   })
 
@@ -884,8 +888,26 @@ describe('runRecord', () => {
     expect(record.costUsd).toBeNull()
     expect(record.inputTokens).toBeNull()
     expect(record.outputTokens).toBeNull()
+    expect(record.peakTokens).toBeNull()
     expect(record.killed).toBe(false)
     expect(record.startedAt).toBe('2025-10-09T08:53:20.000Z')
+  })
+
+  it('reads a record of the older shape without peakTokens', () => {
+    const older = {
+      lane: 'opencode',
+      briefs: ['T3'],
+      model: 'opencode-go/deepseek-v4.1-flash',
+      startedAt: '2026-10-19T12:00:00.000Z',
+      minutes: 10,
+      exitCode: 0,
+      costUsd: 0.05,
+      inputTokens: 5000,
+      outputTokens: 100,
+      branch: 'feat/t3',
+    }
+    expect(older.peakTokens).toBeUndefined()
+    expect(runRecord(older).peakTokens).toBeNull()
   })
 })
 
@@ -910,6 +932,14 @@ describe('runListLine', () => {
   it('names the model right after the lane', () => {
     const record = runRecord({ lane: 'hermes', briefs: ['T9'], model: 'minimax/minimax-m3.1-flash:free', startedAt: '2026-10-19T12:00:00.000Z', minutes: 3, exitCode: 0, branch: 'feat/t9' })
     expect(runListLine(record)).toBe('2026-10-19T12:00:00.000Z | hermes | minimax/minimax-m3.1-flash:free | T9 | 3 min | exit 0 | not reported | feat/t9')
+  })
+
+  it('shows peak N when the record has one and omits it when not reported', () => {
+    const withoutPeak = runRecord({ lane: 'hermes', briefs: ['T3'], startedAt: '2026-10-19T12:00:00.000Z', minutes: 12.4, exitCode: 0, costUsd: 0.0421, branch: 'feat/t3' })
+    expect(runListLine(withoutPeak)).toBe('2026-10-19T12:00:00.000Z | hermes | model unknown | T3 | 12.4 min | exit 0 | 0.0421 USD | feat/t3')
+
+    const withPeak = runRecord({ lane: 'hermes', briefs: ['T3'], startedAt: '2026-10-19T12:00:00.000Z', minutes: 12.4, exitCode: 0, costUsd: 0.0421, peakTokens: 125000, branch: 'feat/t3' })
+    expect(runListLine(withPeak)).toBe('2026-10-19T12:00:00.000Z | hermes | model unknown | T3 | 12.4 min | exit 0 | 0.0421 USD | feat/t3 | peak 125000')
   })
 })
 
@@ -1048,7 +1078,20 @@ describe('laneStats', () => {
       minutesMedian: 4.9,
       costTotal: 0.512,
       costRuns: 2,
+      peakMedian: 0,
+      peakMax: 0,
+      peakOver450: 0,
     })
+  })
+
+  it('computes peak median, max and runs at or over 450,000', () => {
+    const stats = laneStats([
+      record({ lane: 'opencode', model: 'opencode-go/deepseek-v4.1-flash', peakTokens: 100000 }),
+      record({ lane: 'opencode', model: 'opencode-go/deepseek-v4.1-flash', peakTokens: 500000 }),
+      record({ lane: 'opencode', model: 'opencode-go/deepseek-v4.1-flash', peakTokens: 450000 }),
+    ])
+    expect(stats.rows[0]).toMatchObject({ peakMedian: 450000, peakMax: 500000, peakOver450: 2 })
+    expect(formatStats(stats)[0]).toBe('opencode | opencode-go/deepseek-v4.1-flash | 3 runs | 3 finished, 0 killed, 0 failed | 15.0 min, median 5.0 | 0.0300 USD over 3 runs | peak median 450000, max 500000, 2 at or over 450,000')
   })
 })
 
@@ -1061,9 +1104,9 @@ describe('formatStats', () => {
 
   it('prints one line per row and then the total', () => {
     expect(formatStats(stats)).toEqual([
-      'hermes | deepseek/x | 2 runs | 1 finished, 0 killed, 1 failed | 11.0 min, median 5.5 | 0.5120 USD over 2 runs',
-      'opencode | model unknown | 1 run | 0 finished, 1 killed, 0 failed | 2.0 min, median 2.0 | 0.0000 USD over 0 runs',
-      'all | all | 3 runs | 1 finished, 1 killed, 1 failed | 13.0 min, median 4.9 | 0.5120 USD over 2 runs',
+      'hermes | deepseek/x | 2 runs | 1 finished, 0 killed, 1 failed | 11.0 min, median 5.5 | 0.5120 USD over 2 runs | peak median 0, max 0, 0 at or over 450,000',
+      'opencode | model unknown | 1 run | 0 finished, 1 killed, 0 failed | 2.0 min, median 2.0 | 0.0000 USD over 0 runs | peak median 0, max 0, 0 at or over 450,000',
+      'all | all | 3 runs | 1 finished, 1 killed, 1 failed | 13.0 min, median 4.9 | 0.5120 USD over 2 runs | peak median 0, max 0, 0 at or over 450,000',
     ])
   })
 

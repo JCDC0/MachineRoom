@@ -46,14 +46,42 @@ function claudeFailure(log) {
 }
 
 function claudeUsage(log) {
+  let peakTokens = null
+  for (const line of String(log ?? '').split(/\r?\n/)) {
+    if (!line.trim()) continue
+    let item
+    try {
+      item = JSON.parse(line)
+    } catch {
+      continue
+    }
+    if (item?.type !== 'assistant' || item.parent_tool_use_id) continue
+    const usage =
+      item.message?.usage && typeof item.message.usage === 'object' && !Array.isArray(item.message.usage)
+        ? item.message.usage
+        : item.usage && typeof item.usage === 'object' && !Array.isArray(item.usage)
+          ? item.usage
+          : null
+    if (!usage) continue
+    const stepTokens = sumTokens([
+      usage.input_tokens ?? usage.inputTokens,
+      usage.cache_creation_input_tokens ?? usage.cacheCreationInputTokens,
+      usage.cache_read_input_tokens ?? usage.cacheReadInputTokens,
+    ])
+    if (stepTokens !== null) {
+      peakTokens = peakTokens === null ? stepTokens : Math.max(peakTokens, stepTokens)
+    }
+  }
+
   const line = lastJsonLine(log, (item) => item?.type === 'result')
-  if (!line) return { costUsd: null, inputTokens: null, outputTokens: null }
+  if (!line) return { costUsd: null, inputTokens: null, outputTokens: null, peakTokens }
   const models = line.modelUsage && typeof line.modelUsage === 'object' ? Object.values(line.modelUsage).filter((item) => item && typeof item === 'object') : []
   if (models.length > 0) {
     return {
       costUsd: finiteNumber(line.total_cost_usd),
       inputTokens: sumTokens(models.flatMap((item) => [item.inputTokens, item.cacheCreationInputTokens, item.cacheReadInputTokens])),
       outputTokens: sumTokens(models.map((item) => item.outputTokens)),
+      peakTokens,
     }
   }
   const usage = line.usage && typeof line.usage === 'object' ? line.usage : {}
@@ -61,6 +89,7 @@ function claudeUsage(log) {
     costUsd: finiteNumber(line.total_cost_usd),
     inputTokens: sumTokens([usage.input_tokens, usage.cache_creation_input_tokens, usage.cache_read_input_tokens]),
     outputTokens: tokenCount(usage.output_tokens),
+    peakTokens,
   }
 }
 

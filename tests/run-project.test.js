@@ -445,7 +445,7 @@ describe('the record of a project run', () => {
     })
     expect(written.task).toHaveLength(200)
     expect(Object.keys(written)).toEqual([
-      'lane', 'briefs', 'model', 'reasoning', 'startedAt', 'minutes', 'exitCode', 'killed', 'costUsd', 'inputTokens', 'outputTokens', 'log', 'branch', 'commits', 'project', 'task',
+      'lane', 'briefs', 'model', 'reasoning', 'startedAt', 'minutes', 'exitCode', 'killed', 'costUsd', 'inputTokens', 'outputTokens', 'peakTokens', 'log', 'branch', 'commits', 'project', 'task',
     ])
     expect(runListLine(written)).toContain('none')
     expect(laneStats([written]).rows[0]).toMatchObject({ lane: 'opencode', runs: 1 })

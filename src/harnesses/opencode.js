@@ -45,6 +45,7 @@ function opencodeFailure(log) {
 
 function opencodeUsage(log) {
   let cost = null
+  let peakTokens = null
   const inputs = []
   const outputs = []
   for (const line of String(log ?? '').split(/\r?\n/)) {
@@ -61,6 +62,10 @@ function opencodeUsage(log) {
     const tokens = item?.part?.tokens
     if (!tokens || typeof tokens !== 'object' || Array.isArray(tokens)) continue
     const cache = tokens.cache && typeof tokens.cache === 'object' ? tokens.cache : {}
+    const stepTokens = sumTokens([tokens.input, cache.read, cache.write])
+    if (stepTokens !== null) {
+      peakTokens = peakTokens === null ? stepTokens : Math.max(peakTokens, stepTokens)
+    }
     inputs.push(tokens.input, cache.read, cache.write)
     outputs.push(tokens.output, tokens.reasoning)
   }
@@ -68,6 +73,7 @@ function opencodeUsage(log) {
     costUsd: cost === null ? null : Math.round(cost * 1e6) / 1e6,
     inputTokens: sumTokens(inputs),
     outputTokens: sumTokens(outputs),
+    peakTokens,
   }
 }
 
