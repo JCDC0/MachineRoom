@@ -75,9 +75,15 @@ function makeLaneRepo() {
 }
 
 function writeLanes(base, worktree) {
-  const dir = join(base, 'docs', 'agents')
+  const dir = join(base, 'config')
   mkdirSync(dir, { recursive: true })
   writeFileSync(join(dir, 'lanes.json'), JSON.stringify({ lane: { worktree } }))
+  const previousLanesDir = process.env.MACHINEROOM_LANES_DIR
+  process.env.MACHINEROOM_LANES_DIR = dir
+  cleanups.push(() => {
+    if (previousLanesDir === undefined) delete process.env.MACHINEROOM_LANES_DIR
+    else process.env.MACHINEROOM_LANES_DIR = previousLanesDir
+  })
 }
 
 function buildEnv(command) {

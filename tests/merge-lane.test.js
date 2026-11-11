@@ -86,8 +86,12 @@ function setupFixture() {
   }, null, 2))
   commitAll(mainDir, '0.1.401: Update lanes config')
   gitCmd(mainDir, ['worktree', 'add', '-q', '-b', 'feat/hermes-task', laneDir, 'refs/heads/main'])
+  const previousLanesDir = process.env.MACHINEROOM_LANES_DIR
+  process.env.MACHINEROOM_LANES_DIR = join(mainDir, 'docs', 'agents')
 
   cleanups.push(() => {
+    if (previousLanesDir === undefined) delete process.env.MACHINEROOM_LANES_DIR
+    else process.env.MACHINEROOM_LANES_DIR = previousLanesDir
     rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
   })
 

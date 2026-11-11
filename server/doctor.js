@@ -3,7 +3,7 @@ import { accessSync, constants, mkdirSync, readFileSync, statSync } from 'node:f
 import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { readTree } from './index.js'
-import { runsFolder } from './lanes-source.js'
+import { lanesFolder, runsFolder } from './lanes-source.js'
 import { programPath } from './programPath.js'
 
 const REPO_ROOT = resolve(fileURLToPath(import.meta.url), '..', '..')
@@ -20,7 +20,7 @@ export function doctorSettings(options = {}, env = process.env, cwd = process.cw
   return {
     projectRoot: options.projectRoot ?? env.PROJECT_ROOT ?? cwd,
     runsFolder: options.runsFolder ?? runsFolder(env),
-    lanesFile: options.lanesFile ?? join(REPO_ROOT, 'docs', 'agents', 'lanes.json'),
+    lanesFile: options.lanesFile ?? join(lanesFolder(env), 'lanes.json'),
     dist: resolve(options.dist ?? join(REPO_ROOT, 'dist')),
   }
 }

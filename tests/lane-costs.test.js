@@ -1,5 +1,6 @@
 import { appendFileSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
 import { createBridge } from '../server/index.js'
 import { activeLanesFileFor, writeActiveLanes } from '../server/active-lanes.js'
@@ -183,6 +184,12 @@ describe('the lane costs routes', () => {
     const base = tempDir()
     const runs = join(base, 'machineroom-runs')
     useTemp(base)
+    const previousLanesDir = process.env.MACHINEROOM_LANES_DIR
+    process.env.MACHINEROOM_LANES_DIR = fileURLToPath(new URL('../docs/agents', import.meta.url))
+    cleanups.push(() => {
+      if (previousLanesDir === undefined) delete process.env.MACHINEROOM_LANES_DIR
+      else process.env.MACHINEROOM_LANES_DIR = previousLanesDir
+    })
     writeActiveLanes(activeLanesFileFor(base, runs), Object.keys(LANES))
     writeRuns(join(runs, 'runs.jsonl'), [
       record('opencode', new Date().toISOString(), 0.5, { inputTokens: 1200, outputTokens: 300 }),

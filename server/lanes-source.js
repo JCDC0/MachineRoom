@@ -21,14 +21,19 @@ const MAX_PARTIAL = 8 * 1024 * 1024
 const QUIET_KEPT = 50
 const REPO_ROOT = resolve(fileURLToPath(import.meta.url), '..', '..')
 
+export function lanesFolder(env = process.env) {
+  const given = env.MACHINEROOM_LANES_DIR
+  return given ? resolve(given) : join(REPO_ROOT, 'config')
+}
+
 export function runsFolder(env = process.env) {
   const given = env.MACHINEROOM_RUNS
   return given ? resolve(given) : join(env.TEMP || tmpdir(), 'machineroom-runs')
 }
 
-export function readLanes(folder = REPO_ROOT) {
+export function readLanes(folder = lanesFolder()) {
   try {
-    return JSON.parse(readFileSync(join(folder, 'docs', 'agents', 'lanes.json'), 'utf8'))
+    return JSON.parse(readFileSync(join(folder, 'lanes.json'), 'utf8'))
   } catch {
     return {}
   }
@@ -270,7 +275,7 @@ export function createLanesSource(options = {}) {
   function currentLanes() {
     if (typeof options.lanes === 'function') return options.lanes()
     if (options.lanes) return options.lanes
-    const stamp = `${laneFileStamp(join(repoRoot, 'docs', 'agents', 'lanes.json'))}|${laneFileStamp(join(folder, 'agents.json'))}`
+    const stamp = `${laneFileStamp(join(lanesFolder(), 'lanes.json'))}|${laneFileStamp(join(folder, 'agents.json'))}`
     if (lanesCache && lanesCache.stamp === stamp) return lanesCache.lanes
     const lanes = readAllLanesFn({ folder: repoRoot, runsFolder: folder })
     lanesCache = { stamp, lanes }

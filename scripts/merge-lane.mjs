@@ -7,7 +7,7 @@ import { newestRunFor, parseDiff, unreleasedRange } from '../src/briefs/review.j
 import { readAllRunRecords, runsFile } from '../server/runs.js'
 import { killTree, treeSpawnOptions } from '../server/processTree.js'
 import { gitPath } from '../server/programPath.js'
-import { runsFolder } from '../server/lanes-source.js'
+import { lanesFolder, runsFolder } from '../server/lanes-source.js'
 import { processAlive, readLaneLock } from './lane-lock.mjs'
 import { GRADES, recordOutcome } from './outcome.mjs'
 
@@ -230,7 +230,7 @@ export function checkPrerequisites({
     return { error: 'The main checkout has uncommitted changes.' }
   }
 
-  const lanesFile = lanesPath ?? join(root, 'docs', 'agents', 'lanes.json')
+  const lanesFile = lanesPath ?? join(lanesFolder(), 'lanes.json')
   let lanes = {}
   try {
     lanes = JSON.parse(readFileSync(lanesFile, 'utf8'))
@@ -465,7 +465,7 @@ export function finishMerge({
   }
   const mergeHead = mergeHeadRes.stdout.trim()
 
-  const lanesFile = lanesPath ?? join(root, 'docs', 'agents', 'lanes.json')
+  const lanesFile = lanesPath ?? join(lanesFolder(), 'lanes.json')
   let lanes = {}
   try {
     lanes = JSON.parse(readFileSync(lanesFile, 'utf8'))

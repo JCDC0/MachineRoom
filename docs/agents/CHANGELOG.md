@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- A room reads its lanes and policy from the lanes folder: MACHINEROOM_LANES_DIR when set, else config/, which holds only the orchestrator and routes every tier to the owner; the orchestrator's fleet in docs/agents loads only in its testbench (P49).
 - The native agent checks real paths so a junction or link that leads out is refused, reads only the asked line window, refuses a file over 50 MB with no limit, and lists only the start folder for search and glob_files (P52).
 - The bridge leaves out files deleted from the disk, listed beside the read, and runs one full read 30 seconds after the last partial read so a missed watcher event is corrected (P51).
 - The native agent trims old assistant text and old write_file and edit_file arguments, then the newest six messages, so a request stays under MR_AGENT_CONTEXT_CHARS (P50).

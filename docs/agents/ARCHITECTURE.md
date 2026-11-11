@@ -77,6 +77,7 @@ The page is one menu row, the lens and the lower half in a window-high frame, so
 - `server/` the bridge: the routes, the sources, the orchestrators, the git and review routes and the doctor.
 - `scripts/` the commands behind `npm run`.
 - `bin/` `machine-room`, the one-port command, and `machineroom`, the short linked command.
+- `config/` the owner's room defaults: `lanes.json` with only the orchestrator and `policy.json` that routes to the owner. The orchestrator's fleet is in `docs/agents/` and loads only with `MACHINEROOM_LANES_DIR=docs/agents`.
 - `public/fixtures/` the recorded run, agent list and file tree.
 - `tests/` vitest and its helpers.
 

@@ -44,7 +44,7 @@ function runPolicy(temp, args) {
   return spawnSync(process.execPath, [SCRIPT, ...args], {
     cwd: ROOT,
     encoding: 'utf8',
-    env: { ...process.env, TEMP: temp, MACHINEROOM_RUNS: join(temp, 'machineroom-runs') },
+    env: { ...process.env, TEMP: temp, MACHINEROOM_RUNS: join(temp, 'machineroom-runs'), MACHINEROOM_LANES_DIR: join(ROOT, 'docs', 'agents') },
     windowsHide: true,
   })
 }

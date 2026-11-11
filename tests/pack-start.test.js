@@ -141,6 +141,7 @@ describe('a pack starts the room', () => {
       return
     }
     const env = childEnv(runsDir)
+    env.MACHINEROOM_LANES_DIR = join(packageDir, 'docs', 'agents')
     // A project run needs no git link back to this checkout, so the live lane worktrees cannot change the answer.
     const project = join(dirname(packageDir), 'project')
     mkdirSync(project, { recursive: true })

@@ -1,0 +1,12 @@
+{
+  "orchestrator": {
+    "name": "Orchestrator",
+    "harness": "Claude Code",
+    "cli": {
+      "harness": "claude",
+      "bin": "claude",
+      "model": "opus",
+      "contextWindow": 200000
+    }
+  }
+}

@@ -246,6 +246,7 @@ function bridgeOptions(files, extra = {}) {
     port: 0,
     env: {},
     briefsDir: join(REPO_ROOT, 'docs', 'agents'),
+    lanesFile: join(REPO_ROOT, 'docs', 'agents', 'lanes.json'),
     orchestratorPrompt: files.promptFile,
     lanesSource: { folder: files.runs, lanes: LANES, pollMs: 20, quietMs: 60000 },
     orchestratorSpawn: files.spawnFake,

@@ -183,7 +183,7 @@ describe('POST /api/control/route', () => {
   })
 
   it('routes without a choice when the lane records reach the company limit', async () => {
-    const { url } = await startRouteBridge({ costs: [20, 10] })
+    const { url } = await startRouteBridge({ costs: [20, 10], lanes: LANES })
     const answer = await postRoute(url, { profile: MEDIUM })
     expect(answer.status).toBe(200)
     expect(answer.body).toEqual({
@@ -351,6 +351,14 @@ describe('POST /api/control/route/lane', () => {
     expect(answer.status).toBe(200)
     expect(answer.body.lane).toBe('opencode2')
     expect(answer.body.skipped).toEqual([{ lane: 'projectlane', why: 'The lane projectlane is not in this room.' }])
+  })
+
+  it('says in one sentence that there is no lane for the tier in the room', async () => {
+    const { url } = await startRouteBridge({ policy: null, lanes: {}, tasks: TASKS, active: ['owner'] })
+    const answer = await postLaneRoute(url, { task: SMALL_TASK })
+    expect(answer.status).toBe(200)
+    expect(answer.body.lane).toBeNull()
+    expect(answer.body.reason).toBe('There is no lane for the small tier. Make one in the room.')
   })
 
   it('reads the lane lock and the spend from the bridge runs folder', async () => {

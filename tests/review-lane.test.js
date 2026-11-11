@@ -385,6 +385,12 @@ function setup() {
   write(repo, 'docs/agents/lanes.json', JSON.stringify({ hermes: { name: 'Hermes', worktree: lane, forbidden: ['server/**', 'src/styles.css'] } }, null, 2))
   write(repo, 'node_modules/marker.txt', 'kept')
   git(repo, ['worktree', 'add', '-q', '-b', 'feat/t9-a-task', lane, 'refs/heads/main'])
+  const previousLanesDir = process.env.MACHINEROOM_LANES_DIR
+  process.env.MACHINEROOM_LANES_DIR = join(repo, 'docs', 'agents')
+  cleanups.push(() => {
+    if (previousLanesDir === undefined) delete process.env.MACHINEROOM_LANES_DIR
+    else process.env.MACHINEROOM_LANES_DIR = previousLanesDir
+  })
   const runsPath = join(runs, 'runs.jsonl')
   writeFileSync(runsPath, `${JSON.stringify({ lane: 'hermes', briefs: ['T9'], branch: 'feat/t9-a-task' })}\n`)
   return { repo, lane, runsPath, tempRoot }

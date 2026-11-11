@@ -283,16 +283,13 @@ export function buildMadeLane(agent, lanesJson = {}) {
 }
 
 export function readAllLanes(options = {}) {
-  let folder
   let runsDir
   let lanesJson
   let agentsList
 
   if (typeof options === 'string') {
-    folder = options
     runsDir = runsFolder()
   } else if (options && typeof options === 'object') {
-    folder = options.folder
     runsDir = options.runsFolder ?? runsFolder()
     lanesJson = options.lanesJson
     agentsList = options.agents
@@ -300,7 +297,7 @@ export function readAllLanes(options = {}) {
     runsDir = runsFolder()
   }
 
-  const base = lanesJson ?? readLanes(folder)
+  const base = lanesJson ?? readLanes()
   const config = readAgentsConfig(runsDir)
   const agents = agentsList ?? config.agents
 

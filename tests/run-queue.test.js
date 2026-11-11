@@ -12,6 +12,7 @@ import { killTree } from '../server/processTree.js'
 import { makeTempDir, processTempRoot, removeTempDir } from './helpers/tempRoot.js'
 
 const RUN_LANE_SCRIPT = fileURLToPath(new URL('../scripts/run-lane.mjs', import.meta.url))
+const FLEET_DIR = fileURLToPath(new URL('../docs/agents', import.meta.url))
 const QUEUE_BRANCH = 'machineroom/queue-opencode-20261024-120000'
 const NO_GIT_CONFIG = join(processTempRoot(), 'no-git-config')
 let templateCleanup = null
@@ -109,7 +110,7 @@ function runLane(args, extra = {}) {
     const child = spawn(process.execPath, [RUN_LANE_SCRIPT, ...args], {
       stdio: ['ignore', 'pipe', 'pipe'],
       windowsHide: true,
-      env: { ...process.env, ...GIT_ENV, ...extra },
+      env: { ...process.env, ...GIT_ENV, MACHINEROOM_LANES_DIR: FLEET_DIR, ...extra },
     })
     let stdout = ''
     let stderr = ''

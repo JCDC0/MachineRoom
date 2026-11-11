@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import { tmpdir } from 'node:os'
-import { fileURLToPath } from 'node:url'
+import { lanesFolder } from './lanes-source.js'
 import { projectHash } from './orchestrator.js'
 
 export const MAX_RECENT = 20
@@ -21,7 +21,6 @@ export const TURN_RUNNING_PROBLEM = 'An orchestrator turn is running. Stop it or
 export const LANES_RUNNING_PROBLEM = 'A lane run is open. Stop it or wait, then open the project.'
 export const NOT_SUPPORTED_PROBLEM = 'Open another project with machineroom FOLDER.'
 
-const REPO_ROOT = resolve(fileURLToPath(import.meta.url), '..', '..')
 const lastPruneByFile = new Map()
 
 export function resetPruneCache() {
@@ -74,7 +73,7 @@ export function hasWorktreesFolder(projectPath) {
 export function isConfiguredLaneWorktree(projectPath) {
   if (!projectPath) return false
   try {
-    const lanesFile = join(REPO_ROOT, 'docs', 'agents', 'lanes.json')
+    const lanesFile = join(lanesFolder(), 'lanes.json')
     if (!existsSync(lanesFile)) return false
     const raw = JSON.parse(readFileSync(lanesFile, 'utf8'))
     if (!raw || typeof raw !== 'object') return false

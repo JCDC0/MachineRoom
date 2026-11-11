@@ -5,7 +5,6 @@ import {
   groupBriefsByOwner,
   ownerToLane,
   runLaneFor,
-  VALID_LANES,
 } from './briefs.js'
 import { subscribeToNotices } from './notices.js'
 import { laneNeedsNetwork } from '../../model/online.js'
@@ -77,7 +76,7 @@ export default function DispatchPanel({
   const hasRouteLane = typeof client?.routeLane === 'function'
 
   const selectedBrief = briefs.find((item) => item.id === selectedBriefId)
-  const runLane = selectedBrief ? runLaneFor(selectedBrief, runsState.running, VALID_LANES) : null
+  const runLane = selectedBrief ? runLaneFor(selectedBrief, runsState.running, agents) : null
   const canRunBrief = typeof client?.startRun === 'function' && Boolean(runLane)
   const projectLanes = projectRunLanes(agents, runsState.running)
   const routeTask = (splitTasks(projectTask)[0] ?? '').trim()
@@ -279,7 +278,7 @@ export default function DispatchPanel({
   async function loadPromptForBrief(briefId, briefObj) {
     const brief = briefObj ?? briefs.find((item) => item.id === briefId)
     if (!brief) return
-    const lane = ownerToLane(brief)
+    const lane = ownerToLane(brief, agents)
     if (!lane) {
       promptReqRef.current += 1
       setNotForAgent(true)

@@ -5,6 +5,7 @@ import { createServer } from 'node:net'
 import { dirname, join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { killTree as killProcessTree, treeSpawnOptions } from '../server/processTree.js'
+import { lanesFolder } from '../server/lanes-source.js'
 import { gitPath } from '../server/programPath.js'
 
 export const DEFAULT_PORT = 5175
@@ -230,10 +231,10 @@ export function portIsFree(port) {
   })
 }
 
-export function readLanes(cwd = process.cwd()) {
+export function readLanes(folder = lanesFolder()) {
   let text
   try {
-    text = readFileSync(join(cwd, 'docs', 'agents', 'lanes.json'), 'utf8')
+    text = readFileSync(join(folder, 'lanes.json'), 'utf8')
   } catch {
     throw new Error('The lane file is missing.')
   }
@@ -277,7 +278,6 @@ function waitForChild(child) {
 
 export async function runCandidate({
   argv = process.argv.slice(2),
-  cwd = process.cwd(),
   env = process.env,
   log = console.log,
   error = console.error,
@@ -290,7 +290,7 @@ export async function runCandidate({
     return 0
   }
   if (!(await portIsFree(options.port))) throw new Error(portProblem(options.port))
-  const lanes = readLanes(cwd)
+  const lanes = readLanes()
   const plan = candidatePlan({ lanes, lane: options.lane, port: options.port })
   const state = await worktreeState(plan.worktree, env)
   if (state.dirty) throw new Error('The lane has uncommitted changes. Commit them first.')

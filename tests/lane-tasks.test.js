@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { AGENT_REFUSAL } from '../server/control.js'
 import { activeLanesFileFor, writeActiveLanes } from '../server/active-lanes.js'
 import { createBridge } from '../server/index.js'
-import { createLanesSource, readLanes } from '../server/lanes-source.js'
+import { createLanesSource } from '../server/lanes-source.js'
 import {
   LANE_TASK_REFUSAL,
   laneLiveRuns,
@@ -278,7 +278,7 @@ describe('lane tasks', () => {
     mkdirSync(project, { recursive: true })
     const source = createLanesSource({
       folder: runs,
-      lanes: readLanes(),
+      lanes: LANES,
       projectRoot: project,
       repoRoot: project,
       pollMs: 20,

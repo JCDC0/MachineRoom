@@ -12,7 +12,7 @@ import { outcomeTable } from '../server/outcomes.js'
 import { readMainSubjectsSync } from '../server/runs.js'
 import { isLockHolderStale, killTree, descendantProcesses, leftoverProcesses, listProcesses } from '../server/processTree.js'
 import { gitPath } from '../server/programPath.js'
-import { readAllLanes, runsFolder } from '../server/lanes-source.js'
+import { lanesFolder, readAllLanes, runsFolder } from '../server/lanes-source.js'
 import { readEndpoints } from '../server/endpoints.js'
 import { readAgentDepth } from '../server/agent-depth.js'
 import { acpRunCommand } from './acp-run.mjs'
@@ -41,7 +41,7 @@ function outcomesFile() {
 function lanesFile() {
   return process.env.MACHINEROOM_LANES_FILE
     ? resolve(process.env.MACHINEROOM_LANES_FILE)
-    : join(docs, 'lanes.json')
+    : join(lanesFolder(), 'lanes.json')
 }
 
 function stopLeftovers({ worktree, childPid = 0, label = 'leftover', excludePids = [], list = listProcesses, kill = killTree } = {}) {
