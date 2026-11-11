@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- A startup move of the old removed lanes that cannot write prints one line and the bridge keeps starting, and tests always use their own runs folder, never the one the shell names (P57).
 - Review 11 (AUDIT-2026-11-REVIEW-11.md) reads P49 to P52: 8 findings, 2 proved; the broken link escape is fixed, the rest go to P60 to P62 (P53).
 - The README says a new room has the orchestrator and the owner makes one lane per subscription, and the guide no longer names the development lanes (P58).
 - A room reads its lanes and policy from the lanes folder: MACHINEROOM_LANES_DIR when set, else config/, which holds only the orchestrator and routes every tier to the owner; the orchestrator's fleet in docs/agents loads only in its testbench (P49).
