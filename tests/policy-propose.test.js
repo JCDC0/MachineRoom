@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { SINCE_PROBLEM } from '../src/briefs/run.js'
+import { buildTable } from '../scripts/policy-propose.mjs'
 import { makeTempDir } from './helpers/tempRoot.js'
 
 const ROOT = process.cwd()
@@ -197,5 +198,31 @@ describe('policy-propose command', () => {
     expect(runPolicy(quiet, []).status).toBe(0)
 
     expect(readFileSync(POLICY, 'utf8')).toBe(before)
+  })
+
+  it('counts a run with a branch and a brief, no outcome row and a Merge ID subject on main as merged and ungraded in the proposer table', () => {
+    const runCustom = { lane: OPENCODE2, model: A, branch: 'feat/p1', briefs: ['P1'], costUsd: 0.05 }
+    const rowsCustom = buildTable([runCustom], [], ['0.1.401: Merge P1, initial'])
+    expect(rowsCustom).toHaveLength(1)
+    expect(rowsCustom[0].merged).toBe(1)
+    expect(rowsCustom[0].ungraded).toBe(1)
+    expect(rowsCustom[0].pending).toBe(0)
+
+    const run = { lane: OPENCODE2, model: A, branch: 'feat/p38', briefs: ['P38'], costUsd: 0.05 }
+    const rows = buildTable([run], [])
+    expect(rows).toHaveLength(1)
+    expect(rows[0].merged).toBe(1)
+    expect(rows[0].ungraded).toBe(1)
+    expect(rows[0].pending).toBe(0)
+  })
+
+  it('counts an ungraded merge on main in policy-propose run output', () => {
+    const temp = useTemp()
+    const runs = [{ lane: OPENCODE2, model: A, branch: 'feat/p38', briefs: ['P38'], costUsd: 0.05 }]
+    writeRecords(temp, runs, [])
+
+    const result = runPolicy(temp, [])
+    expect(result.status).toBe(0)
+    expect(result.stdout).toContain('small: opencode2 on opencode-go/deepseek-v4.1-flash joined the row opencode2 on opencode-go/deepseek-v4.1-flash with 1 decided runs.')
   })
 })

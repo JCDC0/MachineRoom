@@ -341,7 +341,7 @@ export async function runChecks({
 
   checks.push({
     name: 'vitest related',
-    command: [execPath, actualVitest, 'related', '--run', ...changedFiles],
+    command: [execPath, actualVitest, 'related', '--run', '--', ...changedFiles],
     timeoutMs: TEST_TIMEOUT_MS,
   })
 
@@ -492,6 +492,14 @@ export function finishMerge({
 
   if (!subject || !subject.trim()) {
     return { ok: false, error: 'A subject is required.' }
+  }
+
+  if (subject.includes('\u2014') || /[\r\n]/.test(subject)) {
+    return { ok: false, error: 'The subject cannot contain an em dash or a line break.' }
+  }
+
+  if (trailer && (trailer.includes('\u2014') || /[\r\n]/.test(trailer))) {
+    return { ok: false, error: 'The trailer cannot contain an em dash or a line break.' }
   }
 
   if (!GRADES.has(grade)) {

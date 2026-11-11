@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- npm run policy-propose counts a run that main merged with no outcome row as merged, as run-lane --outcomes does, and npm run merge-lane passes the changed files after -- and refuses a subject or trailer with an em dash or a line break (task P40).
 - An OpenCode lane reviewed the merges from P24 to P35 in AUDIT-2026-11-REVIEW-9.md: the policy proposer still reads the outcome table without the merges on main, the lane route can read another lanes file and runs folder than the run it starts, the OpenCode reader's row map only grows, and a deleted file never leaves the room; the orchestrator's corrections say which hold (task P38).
 - A resting card costs the frame nothing: each card keeps a move stamp, its tab anchor is computed once per move and a string is rewritten only when one of its ends moved; in Node, 1,000 frames over 171 cards took 38 ms where they took 335 (task P37).
 - ARCHITECTURE.md is a 12 KB core where it was 204 KB: the room, the commands, the code layout, live mode, the activity schema, the known limits and the Documents list moved unchanged into docs/agents/architecture/, the core says when to read each, and a lane's prompt tells it to read the core and then only the detail file its work touches; the pack lists src/policy/profile.js, which the bridge has needed since P31 (task P34).
