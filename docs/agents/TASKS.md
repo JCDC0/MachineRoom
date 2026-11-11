@@ -415,3 +415,9 @@ Files: scripts/mr-agent.mjs, tests/mr-agent.test.js.
 Run `npx vitest related --run` on every file you changed, `npm run build` and `npm run pack-check`; all must pass.
 
 Files: scripts/mr-agent.mjs, src/harnesses/machineroom.js, tests/mr-agent.test.js.
+
+**P46. An agent's beat ring reads as white, like the hub's (OpenCode).** The owner's choice on 2026-11-11. Read no part of TASKS.md beyond this brief. Use no subagents. Commit each step as you finish it, and stop starting new work at minute 30. Edit only the files listed below.
+
+While music plays and Dance is on, each agent sends a ring from its status ring on a beat (`updateBeatRings` in `src/engine/agents.js`). It uses the hub's `RING_MAX_OPACITY` 0.32 times the beat's strength, and a small thin ring at that opacity reads as a faint grey loop under the agent, which the owner took for a stray line. Give the agent ring its own `AGENT_RING_MAX_OPACITY` in `src/engine/hub.js`, 0.8, and an opacity floor so a weak beat still draws at least 0.35 of it at its start, still fading to 0 at its end as `ringPulse` fades it now. The hub's ring, the pool size, the timing, the radius and reduced motion stay as they are. Add a test of the new opacity at the start and at the end of a ring for a weak and a strong beat. Run `npx vitest related --run` on every file you changed and `npm run build`; both must pass. The orchestrator checks it by eye with music playing.
+
+Files: src/engine/hub.js, src/engine/agents.js, tests/.
