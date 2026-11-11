@@ -866,6 +866,7 @@ function searchTool(args, cwd) {
     if (found.length >= SEARCH_MATCH_LIMIT) break
     if (matchGlob && !matchGlob(name)) continue
     const full = join(cwd, name)
+    if (!realInside(cwd, full)) continue
     let info
     try {
       info = statSync(full)
@@ -895,7 +896,7 @@ function globFilesTool(args, cwd) {
   if (!matchGlob) throw new Error('glob_files needs a pattern.')
   const start = inside(cwd, pathFrom(args, '.'))
   const names = filesUnder(cwd, start)
-    .filter((name) => matchGlob(name))
+    .filter((name) => realInside(cwd, join(cwd, name)) && matchGlob(name))
     .sort((left, right) => left.localeCompare(right))
     .slice(0, GLOB_FILE_LIMIT)
   return { text: names.length > 0 ? names.join('\n') : 'No files.', isError: false }

@@ -923,6 +923,24 @@ describe('mr-agent files', () => {
     expect(readFileSync(join(outside, 'secret.txt'), 'utf8')).toBe('OUTSIDE-THE-PROJECT\n')
     expect(existsSync(join(outside, 'new.txt'))).toBe(false)
   })
+
+  it('skips a junction in a git file list', async () => {
+    const folder = tempDir()
+    const outside = tempDir()
+    writeFileSync(join(outside, 'secret.txt'), 'OUTSIDE-THE-PROJECT\n')
+    writeFileSync(join(folder, 'kept.txt'), 'kept\n')
+    makeJunction(join(folder, 'link'), outside)
+    execFileSync(gitPath(), ['init'], { cwd: folder, stdio: 'ignore' })
+    const { users } = await runCalls({
+      folder,
+      calls: [
+        { name: 'search', arguments: { pattern: 'OUTSIDE-THE-PROJECT' } },
+        { name: 'glob_files', arguments: { pattern: '*.txt' } },
+      ],
+    })
+    expect(users[0]).toMatchObject({ content: 'No matches.', is_error: false })
+    expect(users[1].content).toBe('kept.txt')
+  })
 })
 
 describe('mr-agent tools', () => {
