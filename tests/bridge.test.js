@@ -431,7 +431,7 @@ describe('the file tree', () => {
 
     writeFileSync(join(dir, 'b.js'), '2\n')
     const event = await sse.next((e) => e.event === 'tree')
-    expect(JSON.parse(event.data)).toEqual({ root: basename(dir), files: ['b.js'] })
+    expect(JSON.parse(event.data)).toEqual({ root: basename(dir), files: ['b.js'], removed: [] })
   })
 
   it('sends a file added between the tree read and the stream connect', async () => {
@@ -450,7 +450,7 @@ describe('the file tree', () => {
     const sse = await openSse(url, {}, `?history=1&tree=${FOLDER_SHAPE}&since=${read.body.version}`)
     cleanups.push(() => sse.close())
     const event = await sse.next((e) => e.event === 'tree')
-    expect(JSON.parse(event.data)).toEqual({ root: basename(dir), files: ['b.js'] })
+    expect(JSON.parse(event.data)).toEqual({ root: basename(dir), files: ['b.js'], removed: [] })
   })
 
   it('sends the whole list to a stream whose since is unknown', async () => {
@@ -463,7 +463,7 @@ describe('the file tree', () => {
 
     writeFileSync(join(dir, 'b.js'), '2\n')
     const event = await sse.next((e) => e.event === 'tree')
-    expect(JSON.parse(event.data)).toEqual(packTree({ root: basename(dir), files: ['a.js', 'b.js'] }))
+    expect(JSON.parse(event.data)).toEqual({ ...packTree({ root: basename(dir), files: ['a.js', 'b.js'] }), full: true })
   })
 
   it('sends no tree event to a page already at the current version', async () => {
@@ -478,7 +478,7 @@ describe('the file tree', () => {
 
     writeFileSync(join(dir, 'b.js'), '2\n')
     const event = await sse.next((e) => e.event === 'tree')
-    expect(JSON.parse(event.data)).toEqual({ root: basename(dir), files: ['b.js'] })
+    expect(JSON.parse(event.data)).toEqual({ root: basename(dir), files: ['b.js'], removed: [] })
   })
 
   it('sends a page two versions behind exactly the files added since', async () => {
@@ -508,7 +508,7 @@ describe('the file tree', () => {
     const sse = await openSse(url, {}, `?tree=${FOLDER_SHAPE}&since=${first.body.version}`)
     cleanups.push(() => sse.close())
     const event = await sse.next((e) => e.event === 'tree')
-    expect(JSON.parse(event.data)).toEqual({ root: basename(dir), files: ['b.js', 'c.js'] })
+    expect(JSON.parse(event.data)).toEqual({ root: basename(dir), files: ['b.js', 'c.js'], removed: [] })
   })
 
   it('sends the whole list to a page whose version is no longer kept', async () => {

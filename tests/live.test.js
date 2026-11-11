@@ -449,6 +449,63 @@ describe('live player', () => {
     expect(player.state.dirs.has('a')).toBe(true)
   })
 
+  it('drops a removed file and the folder it emptied, but not the root', () => {
+    const tree = makeTree({ root: 'project', files: ['src/a.js', 'src/b.js', 'top.js'], created: [] })
+    const player = createLivePlayer({ tree, agents: recording.agents })
+    player.removeFiles(['src/a.js'])
+    expect(player.state.files.has('src/a.js')).toBe(false)
+    expect(player.state.files.has('src/b.js')).toBe(true)
+    expect(player.state.dirs.has('src')).toBe(true)
+    player.removeFiles(['src/b.js'])
+    expect(player.state.dirs.has('src')).toBe(false)
+    expect(player.state.dirs.has('')).toBe(true)
+    expect(player.state.files.has('top.js')).toBe(true)
+  })
+
+  it('keeps a removed file while a run touches it and drops it when the run ends', () => {
+    const tree = makeTree({ root: 'project', files: ['src/a.js'], created: [] })
+    const player = createLivePlayer({ tree, agents: recording.agents })
+    player.push([{ type: 'run.start', agent: 'claude', runId: 'r1', time: 1 }])
+    player.push([
+      {
+        type: 'tool.start',
+        agent: 'claude',
+        id: 't1',
+        label: 'write src/a.js',
+        touches: [{ kind: 'file', path: 'src/a.js', mode: 'write' }],
+        time: 2,
+      },
+    ])
+    player.removeFiles(['src/a.js'])
+    expect(player.state.files.has('src/a.js')).toBe(true)
+
+    player.push([{ type: 'run.end', agent: 'claude', runId: 'r1', ok: true, time: 3 }])
+    expect(player.state.files.has('src/a.js')).toBe(false)
+    expect(player.state.dirs.has('src')).toBe(false)
+  })
+
+  it('replaces the page list with a whole list from the bridge', () => {
+    const tree = makeTree({ root: 'project', files: ['a.js', 'gone/b.js'], created: [] })
+    const player = createLivePlayer({ tree, agents: recording.agents })
+    player.replaceFiles(['a.js', 'new/c.js'])
+    expect([...player.state.files.keys()].sort()).toEqual(['a.js', 'new/c.js'])
+    expect(player.state.dirs.has('gone')).toBe(false)
+    expect(player.state.dirs.has('new')).toBe(true)
+  })
+
+  it('keeps a file an agent touched when a whole list leaves it out', () => {
+    const tree = makeTree({ root: 'project', files: ['a.js'], created: [] })
+    const player = createLivePlayer({ tree, agents: recording.agents })
+    player.push([
+      { type: 'run.start', agent: 'claude', runId: 'r1', time: 1 },
+      { type: 'tool.start', agent: 'claude', runId: 'r1', id: 't1', tool: 'write', label: 'dist/app.js', touches: [{ path: 'dist/app.js', mode: 'write', kind: 'file' }], time: 2 },
+      { type: 'tool.end', agent: 'claude', runId: 'r1', id: 't1', ok: true, time: 3 },
+      { type: 'run.end', agent: 'claude', runId: 'r1', ok: true, time: 4 },
+    ])
+    player.replaceFiles(['a.js'])
+    expect(player.state.files.has('dist/app.js')).toBe(true)
+  })
+
   it('ignores seek and pause', () => {
     const player = createLivePlayer({ tree: empty, agents: recording.agents })
     player.pause()

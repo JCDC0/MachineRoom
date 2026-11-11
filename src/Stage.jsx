@@ -1266,7 +1266,9 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
         if (added.length > 0) setLiveLog((previous) => appendLiveLog(previous, added))
       },
       onTree: (tree) => {
-        player.addFiles(tree.files)
+        if (tree.full) player.replaceFiles(tree.files)
+        else player.addFiles(tree.files)
+        player.removeFiles(tree.removed ?? [])
         pipeline.learn(tree.files)
       },
     }

@@ -110,7 +110,7 @@ describe('treeEvent', () => {
   it('sends the whole list first, then only what the page has not had', () => {
     const first = { root: 'project', files: ['a.js', 'src/b.js'] }
     const next = { root: 'project', files: ['a.js', 'src/b.js', 'src/c.js', 'z.md'] }
-    expect(data(treeEvent(first))).toEqual(first)
+    expect(data(treeEvent(first))).toEqual({ ...first, full: true })
     expect(data(treeEvent(next, first.files))).toEqual({ root: 'project', files: ['src/c.js', 'z.md'] })
     expect(treeEvent({ root: 'project', files: ['a.js'] }, first.files)).toBe('')
   })

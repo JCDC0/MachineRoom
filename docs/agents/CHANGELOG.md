@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- A file deleted from the project leaves the room: the bridge's tree events name the paths that left the list, the page drops the file's row and a folder card left with no file, and a file an agent is working on stays until its run ends; a whole list from the bridge drops only files no agent touched, so a written file git does not list stays (task P43).
 - The Auto lane route and a routed start read the same lanes, owner-made ones included, the same runs folder for the locks and the spend, and the same lane choice, so the preview cannot name a lane the start refuses; a project with no lane choice answers Pick the lanes for this project first. on both (task P41).
 - The readers at rest: the OpenCode reader no longer misses a session row written in the same millisecond as the newest one, reads every row once a minute and forgets the sessions the database dropped, and the lane source checks a finished log's size on a watcher event or the 2 second scan, not five times a second (task P42).
 - npm run policy-propose counts a run that main merged with no outcome row as merged, as run-lane --outcomes does, and npm run merge-lane passes the changed files after -- and refuses a subject or trailer with an em dash or a line break (task P40).

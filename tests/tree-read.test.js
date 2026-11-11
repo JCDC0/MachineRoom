@@ -361,3 +361,101 @@ describe('the watcher when it cannot be armed', () => {
     }
   })
 })
+
+function readTreeEvents(text) {
+  const events = []
+  for (const block of text.split('\n\n')) {
+    const lines = block.split('\n')
+    if (!lines.includes('event: tree')) continue
+    const data = lines.find((line) => line.startsWith('data: '))
+    if (data) events.push(JSON.parse(data.slice(6)))
+  }
+  return events
+}
+
+function changingReads(files) {
+  let current = files
+  let count = 0
+  const readTree = async () => {
+    count += 1
+    return { root: 'project', files: [...current], created: [] }
+  }
+  return { readTree, count: () => count, set: (next) => { current = next } }
+}
+
+async function waitForVersion(url, version, timeoutMs = 5000) {
+  const deadline = Date.now() + timeoutMs
+  for (;;) {
+    const answer = await folderTree(url)
+    if (answer.body.version === version) return answer
+    if (Date.now() > deadline) throw new Error(`Timed out waiting for tree version ${version}.`)
+    await wait(20)
+  }
+}
+
+describe('a file that leaves the project', () => {
+  it('sends the removed path to a plain stream and a folder stream', async () => {
+    const root = makeRoot()
+    writeFileSync(join(root, 'a.js'), '1\n')
+    const reads = changingReads(['a.js', 'b.js'])
+    const { started } = startBridge({ readTree: reads.readTree, root, debounceMs: 10, pollMs: 10, quietMs: 20 })
+    const { url } = await started
+    expect((await waitForVersion(url, 1)).body.files.length).toBeGreaterThan(0)
+    const plain = await openEvents(url, '?tree=1&since=1')
+    const folder = await openEvents(url, `?tree=${FOLDER_SHAPE}&since=1`)
+    try {
+      reads.set(['a.js'])
+      writeFileSync(join(root, 'tick.js'), '1\n')
+      await waitFor(() => reads.count() >= 2)
+      await waitFor(() => readTreeEvents(plain.text()).length > 0 && readTreeEvents(folder.text()).length > 0)
+      expect(readTreeEvents(plain.text())).toEqual([{ root: 'project', files: [], removed: ['b.js'] }])
+      expect(readTreeEvents(folder.text())).toEqual([{ root: 'project', files: [], removed: ['b.js'] }])
+    } finally {
+      await plain.close()
+      await folder.close()
+    }
+  })
+
+  it('sends the old path removed and the new path added for a rename', async () => {
+    const root = makeRoot()
+    writeFileSync(join(root, 'a.js'), '1\n')
+    const reads = changingReads(['a.js', 'old.js'])
+    const { started } = startBridge({ readTree: reads.readTree, root, debounceMs: 10, pollMs: 10, quietMs: 20 })
+    const { url } = await started
+    await waitForVersion(url, 1)
+    const events = await openEvents(url, '?tree=1&since=1')
+    try {
+      reads.set(['a.js', 'new.js'])
+      writeFileSync(join(root, 'tick.js'), '1\n')
+      await waitFor(() => readTreeEvents(events.text()).length > 0)
+      expect(readTreeEvents(events.text())).toEqual([{ root: 'project', files: ['new.js'], removed: ['old.js'] }])
+    } finally {
+      await events.close()
+    }
+  })
+
+  it('sends a page at an old version both the added and the removed paths', async () => {
+    const root = makeRoot()
+    writeFileSync(join(root, 'a.js'), '1\n')
+    const reads = changingReads(['a.js', 'b.js'])
+    const { started } = startBridge({ readTree: reads.readTree, root, debounceMs: 10, pollMs: 10, quietMs: 20 })
+    const { url } = await started
+    await waitForVersion(url, 1)
+
+    reads.set(['a.js'])
+    writeFileSync(join(root, 'tick-1.js'), '1\n')
+    await waitForVersion(url, 2)
+
+    reads.set(['a.js', 'c.js'])
+    writeFileSync(join(root, 'tick-2.js'), '1\n')
+    await waitForVersion(url, 3)
+
+    const events = await openEvents(url, '?tree=1&since=1')
+    try {
+      await waitFor(() => readTreeEvents(events.text()).length > 0)
+      expect(readTreeEvents(events.text())).toEqual([{ root: 'project', files: ['c.js'], removed: ['b.js'] }])
+    } finally {
+      await events.close()
+    }
+  })
+})
