@@ -866,13 +866,20 @@ describe('turned-off lanes in the family tree', () => {
     expect((await mock.agents()).length).toBe(0)
   })
 
-  it('deletes any lane except the orchestrator on the mock', async () => {
+  it('removes a lanes.json lane from the mock project and can show it again', async () => {
     const mock = createMockClient({ latencyMs: 0 })
     await mock.deleteLane({ key: 'opencode3', confirmed: true })
     const family = await mock.family()
     expect(family.nodes.some((node) => node.id === 'opencode3')).toBe(false)
     const sub = family.nodes.find((node) => node.id === 'frontend')
     expect(sub.children).not.toContain('opencode3')
+    const hidden = (await mock.lanes()).lanes.find((lane) => lane.key === 'opencode3')
+    expect(hidden.hidden).toBe(true)
+    expect(hidden.active).toBe(false)
+
+    await mock.showLane({ key: 'opencode3', confirmed: true })
+    expect((await mock.family()).nodes.some((node) => node.id === 'opencode3')).toBe(true)
+
     await expect(mock.deleteLane({ key: 'orchestrator', confirmed: true })).rejects.toThrow(
       'A lane from lanes.json cannot be deleted; make it inactive instead.'
     )

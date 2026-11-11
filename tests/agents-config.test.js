@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node
 import { join, resolve } from 'node:path'
 import { tmpdir } from 'node:os'
 import { fileURLToPath } from 'node:url'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   CONFIRM_CREATE_PROBLEM,
   HARNESS_EFFORTS,
@@ -24,7 +24,7 @@ import {
   saveAgentsConfig,
 } from '../server/agents-config.js'
 import { createBridge } from '../server/index.js'
-import { activeLanesFileFor, writeActiveLanes } from '../server/active-lanes.js'
+import { activeLanesFileFor, projectLanesFileFor, readHiddenLanes, writeActiveLanes } from '../server/active-lanes.js'
 import { gitPath } from '../server/programPath.js'
 import { createClient } from '../src/control/client.js'
 import { createMockClient } from '../src/control/mock.js'
@@ -225,13 +225,13 @@ describe('merged list and template copying', () => {
     expect(all['claude-2'].cli.model).toBe('claude-haiku-5-5')
   })
 
-  it('reads and saves a removed list and leaves those lanes out of readAllLanes', () => {
+  it('reads a saved removed list and still keeps those lanes in readAllLanes', () => {
     const runs = tempDir('mr-removed-')
     saveAgentsConfig(runs, { agents: [], removed: ['claude', '', 'orchestrator', 'claude'] })
     expect(readAgentsConfig(runs)).toEqual({ agents: [], removed: ['claude'] })
 
     const all = readAllLanes({ lanesJson: SAMPLE_LANES, runsFolder: runs })
-    expect(Object.hasOwn(all, 'claude')).toBe(false)
+    expect(Object.hasOwn(all, 'claude')).toBe(true)
     expect(Object.hasOwn(all, 'opencode')).toBe(true)
     expect(Object.hasOwn(all, 'orchestrator')).toBe(true)
   })
@@ -456,8 +456,8 @@ describe('POST /api/lanes/:key/delete', () => {
     expect(res.body.error).toBe(LANES_JSON_DELETE_PROBLEM)
   })
 
-  it('deletes a lane from lanes.json by adding it to removed and dropping it from active lanes', async () => {
-    const { url, client, runsFolder } = await startBridgeRig()
+  it('removes a lane from lanes.json in this project only and drops it from active lanes', async () => {
+    const { url, client, runsFolder, projectRoot } = await startBridgeRig()
     await client.setActiveLanes(['opencode', 'claude'])
 
     const res = await getJson(`${url}/api/lanes/claude/delete`, {
@@ -470,11 +470,20 @@ describe('POST /api/lanes/:key/delete', () => {
 
     const file = readAgentsConfig(runsFolder)
     expect(file.agents).toEqual([])
-    expect(file.removed).toEqual(['claude'])
+    expect(file.removed).toEqual([])
+    expect(readHiddenLanes(projectLanesFileFor(projectRoot, runsFolder))).toEqual(['claude'])
+
+    const otherProject = tempDir('mr-other-project-')
+    expect(readHiddenLanes(projectLanesFileFor(otherProject, runsFolder))).toEqual([])
+    expect(Object.hasOwn(readAllLanes({ lanesJson: SAMPLE_LANES, runsFolder }), 'claude')).toBe(true)
 
     const lanesRes = await client.lanes()
-    expect(lanesRes.lanes.some((l) => l.key === 'claude')).toBe(false)
-    expect(lanesRes.lanes.some((l) => l.key === 'opencode')).toBe(true)
+    const claudeLane = lanesRes.lanes.find((l) => l.key === 'claude')
+    expect(claudeLane.hidden).toBe(true)
+    expect(claudeLane.active).toBe(false)
+    const opencodeLane = lanesRes.lanes.find((l) => l.key === 'opencode')
+    expect(opencodeLane.hidden).toBe(false)
+    expect(opencodeLane.active).toBe(true)
 
     const family = await client.family()
     expect(family.nodes.some((node) => node.id === 'claude')).toBe(false)
@@ -486,10 +495,15 @@ describe('POST /api/lanes/:key/delete', () => {
       body: JSON.stringify({ confirmed: true }),
     })
     expect(again.status).toBe(404)
+
+    await client.showLane({ key: 'claude', confirmed: true })
+    expect(readHiddenLanes(projectLanesFileFor(projectRoot, runsFolder))).toEqual([])
+    const shownLanes = await client.lanes()
+    expect(shownLanes.lanes.find((l) => l.key === 'claude').hidden).toBe(false)
   })
 
-  it('keeps a removed lane out of readAllLanes and keeps the removed list when a lane is created', async () => {
-    const { client, runsFolder } = await startBridgeRig()
+  it('creates a lane after a project remove and leaves the project hidden list alone', async () => {
+    const { client, runsFolder, projectRoot } = await startBridgeRig()
     await client.deleteLane({ key: 'claude', confirmed: true })
 
     const created = await client.createLane({
@@ -500,8 +514,39 @@ describe('POST /api/lanes/:key/delete', () => {
     })
     expect(created.key).toBe('claude-2')
     const file = readAgentsConfig(runsFolder)
-    expect(file.removed).toEqual(['claude'])
+    expect(file.removed).toEqual([])
     expect(file.agents.map((agent) => agent.key)).toEqual(['claude-2'])
+    expect(readHiddenLanes(projectLanesFileFor(projectRoot, runsFolder))).toEqual(['claude'])
+  })
+
+  it('moves an old removed list into this project hidden list when the bridge starts', async () => {
+    const runs = tempDir('mr-move-removed-')
+    saveAgentsConfig(runs, {
+      agents: [
+        {
+          key: 'claude-2',
+          name: 'Helper Claude',
+          harness: 'claude',
+          model: 'claude-haiku-5-5',
+          createdAt: '2026-10-25T10:00:00.000Z',
+        },
+      ],
+      removed: ['claude', 'opencode2'],
+    })
+    const lines = []
+    const log = vi.spyOn(console, 'log').mockImplementation((line) => lines.push(String(line)))
+    try {
+      const { projectRoot } = await startBridgeRig({ runsFolder: runs })
+      expect(readAgentsConfig(runs).removed).toEqual([])
+      expect(readAgentsConfig(runs).agents.map((agent) => agent.key)).toEqual(['claude-2'])
+      expect(readHiddenLanes(projectLanesFileFor(projectRoot, runs))).toEqual(['claude', 'opencode2'])
+
+      const moved = lines.filter((line) => line.startsWith('Moved '))
+      expect(moved).toHaveLength(1)
+      expect(moved[0]).toContain('claude, opencode2')
+    } finally {
+      log.mockRestore()
+    }
   })
 
   it('refuses delete for running lane with 409', async () => {
@@ -540,8 +585,8 @@ describe('POST /api/lanes/:key/delete', () => {
     expect(bodySent.error).toBe(laneRunningProblem('claude-2'))
   })
 
-  it('deletes owner-made lane from config and active lanes', async () => {
-    const { client, runsFolder } = await startBridgeRig()
+  it('deletes an owner-made lane for every project', async () => {
+    const { client, runsFolder, projectRoot } = await startBridgeRig()
     await client.setActiveLanes(['opencode', 'claude'])
 
     const created = await client.createLane({
@@ -557,6 +602,11 @@ describe('POST /api/lanes/:key/delete', () => {
     const file = readAgentsConfig(runsFolder)
     expect(file.agents.some((a) => a.key === created.key)).toBe(false)
     expect(file.removed).toEqual([])
+    expect(readHiddenLanes(projectLanesFileFor(projectRoot, runsFolder))).toEqual([])
+
+    const otherProject = tempDir('mr-other-project-')
+    expect(readHiddenLanes(projectLanesFileFor(otherProject, runsFolder))).toEqual([])
+    expect(Object.hasOwn(readAllLanes({ lanesJson: SAMPLE_LANES, runsFolder }), created.key)).toBe(false)
 
     const lanesRes = await client.lanes()
     expect(lanesRes.lanes.some((l) => l.key === created.key)).toBe(false)

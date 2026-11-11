@@ -322,13 +322,13 @@ describe('POST /api/control/route/lane', () => {
     expect(answer.body.reason).toBe('The small tier runs opencode-7 on opencode-go/deepseek-v4.1-flash at max.')
   })
 
-  it('leaves a removed lane out of the route', async () => {
+  it('turns off a lane moved from an old removed list', async () => {
     const policy = policyWithSmall([{ lane: 'opencode2', model: 'opencode-go/deepseek-v4.1-flash', reasoning: 'max', provider: 'opencode' }])
     const { url } = await startRouteBridge({ policy, lanes: LANES, tasks: TASKS, active: ['opencode2'], removed: ['opencode2'] })
     const answer = await postLaneRoute(url, { task: SMALL_TASK })
     expect(answer.status).toBe(200)
     expect(answer.body.lane).toBeNull()
-    expect(answer.body.skipped).toEqual([{ lane: 'opencode2', why: 'The lane opencode2 is not in this room.' }])
+    expect(answer.body.skipped).toEqual([{ lane: 'opencode2', why: 'The lane opencode2 is turned off.' }])
   })
 
   it('does not read a lanes.json inside the project', async () => {

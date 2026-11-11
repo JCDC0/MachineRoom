@@ -25,6 +25,7 @@ import {
   laneCountLine,
   moreLanesLabel,
   proposalRows,
+  removeLaneText,
   rowText,
   splitMoreLanes,
   stateWord,
@@ -530,11 +531,15 @@ describe('the saved teams and the lane cards', () => {
     expect(pool.map((row) => row.key)).toEqual(['a', 'b'])
   })
 
-  it('gives the hide and delete cards their sentence', () => {
+  it('gives the hide, remove and delete cards their sentence', () => {
     expect(hideLaneText('OpenCode', 'machine-room')).toBe(
       'Hide OpenCode in machine-room? It stays in your other projects.'
     )
     expect(hideLaneText('', '')).toBe('Hide this agent in this project? It stays in your other projects.')
+    expect(removeLaneText('OpenCode', 'machine-room')).toBe(
+      'Remove OpenCode from machine-room? It stays in your other projects.'
+    )
+    expect(removeLaneText('', '')).toBe('Remove this agent from this project? It stays in your other projects.')
     expect(deleteLaneText('OpenCode')).toBe(
       'Delete OpenCode in every project? Its runs stay in the records.'
     )

@@ -26,6 +26,7 @@ import {
   labelProblem,
   laneCountLine,
   moreLanesLabel,
+  removeLaneText,
   rowText,
   splitMoreLanes,
   stateWord,
@@ -1088,10 +1089,12 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
       setActionError('This bridge cannot hide an agent.')
       return
     }
+    const made = node.custom === true
+    const where = projectName({ path: project })
     ask({
-      text: hideLaneText(node.label, projectName({ path: project })),
-      label: 'Hide',
-      busyText: 'Hiding the agent...',
+      text: made ? hideLaneText(node.label, where) : removeLaneText(node.label, where),
+      label: made ? 'Hide' : 'Remove',
+      busyText: made ? 'Hiding the agent...' : 'Removing the agent...',
       run: async () => {
         await client.hideLane({ key: node.id, confirmed: true })
         if (editing === node.id) closeEditor()
@@ -1622,7 +1625,7 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
                 disabled={busy || typeof client?.hideLane !== 'function'}
                 onClick={() => askHide(node)}
               >
-                Hide
+                {node.custom === true ? 'Hide' : 'Remove'}
               </button>
             </div>
             {node.custom !== true ? (
@@ -2079,8 +2082,8 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
                   <button
                     type="button"
                     className="mr-family-trash"
-                    aria-label={sub ? `Delete ${node.label}` : `Hide ${node.label}`}
-                    title={sub ? `Delete ${node.label}` : `Hide ${node.label}`}
+                    aria-label={sub ? `Delete ${node.label}` : node.custom === true ? `Hide ${node.label}` : `Remove ${node.label}`}
+                    title={sub ? `Delete ${node.label}` : node.custom === true ? `Hide ${node.label}` : `Remove ${node.label}`}
                     disabled={
                       busy ||
                       (sub
