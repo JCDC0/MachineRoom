@@ -250,7 +250,7 @@ Press C or click CONTROL at the top right to open the drawer. It has five tabs: 
 - Dispatch: pick an open brief to see its prompt, or run tasks on your project when `--lanes` is on. The Runs list shows running and recent lane runs with their status and output.
 - Tasks: open and finished tasks from lane runs. A task with an active run shows `running AGENT` or `queued AGENT`. Click a task to read its thread. Writes are refused.
 - Meters: this month spend per lane from run records, with token counts and a read-only month total. Budgets are not set here.
-- Team: the lanes from `docs/agents/lanes.json`, read only. To turn lanes on or off, use the sidebar Agents tab.
+- Team: the room's lanes, read only. To turn lanes on or off, use the sidebar Agents tab.
 - Reviews: shows each lane branch, commits ahead, changed files and last run. Click a row to see its diff. Merge opens a confirm card with a one-line message and merges the inspected head into the current branch.
 
 ## Where the logs and records are
@@ -293,7 +293,7 @@ A lane started with `npm run run-lane` sees only a short allow-list of the shell
 - It never pushes to a remote repository.
 - The Reviews panel merges a lane only after its confirm card. The bridge also refuses a merge without an explicit confirm and the lane exact head.
 - The room starts a lane run from a button only after a confirm card that says it spends money. The orchestrator starts the runs you asked it for after you confirm your first message.
-- A run on a project refuses the MachineRoom checkout, the lane worktrees in `docs/agents/lanes.json`, the user profile folder itself, the OS temp folder and the runs folder.
+- A run on a project refuses the MachineRoom checkout, the lane worktrees in the room's lane list, the user profile folder itself, the OS temp folder and the runs folder.
 
 ## Five common problems
 
@@ -301,7 +301,7 @@ A lane started with `npm run run-lane` sees only a short allow-list of the shell
 
 The doctor prints `FAIL The OpenCode lane program was not found: <path>.` or the same for another lane. The room still opens, but that lane cannot start.
 
-Install the program, sign in, and check that it starts in the same shell (`opencode --version`, `claude --version`). If it is installed somewhere else, put its full path in `cli.bin` for that lane in `docs/agents/lanes.json`, then run the doctor again.
+Install the program, sign in, and check that it starts in the same shell (`opencode --version`, `claude --version`). If it is installed somewhere else, put its full path in `cli.bin` for that lane in the room's `lanes.json` (`config/lanes.json`, or the folder `MACHINEROOM_LANES_DIR` names), then run the doctor again.
 
 ### The doctor prints FAIL lines
 
@@ -333,7 +333,7 @@ If another room is already running on the same project, the message names that r
 
 ### No agents are shown
 
-When `--lanes` is on, the room lists one agent for each active lane in `docs/agents/lanes.json` that is not retired and has a `cli` block. If the list is empty:
+When `--lanes` is on, the room lists one agent for each active lane in the room's `lanes.json` that is not retired and has a `cli` block, and for each lane you made. If the list is empty:
 
 - You started `npm run serve` without `--lanes` or without `up`. Start with `up`, or add `--lanes`.
 - Every lane is turned off. Open Agents in the sidebar and turn one on.
@@ -344,13 +344,13 @@ When `--lanes` is on, the room lists one agent for each active lane in `docs/age
 
 | Harness | State | What the room reads |
 | --- | --- | --- |
-| OpenCode | In use: lanes `opencode` to `opencode5`, experiment lanes `opencode6` and `opencode7` | `tool_use` lines, with the tool, its file or command and its result |
-| Claude Code | In use: lane `claude` and the orchestrator | stream-json `tool_use` and `tool_result` lines, and a `Task` or `Agent` child while it works |
-| Direct API | In use when the owner adds a lane on the `machineroom` harness with a saved endpoint | Claude Code stream-json lines from `scripts/mr-agent.mjs` over an OpenAI-compatible endpoint |
+| OpenCode | Supported: a lane you make | `tool_use` lines, with the tool, its file or command and its result |
+| Claude Code | The orchestrator, and a lane you make | stream-json `tool_use` and `tool_result` lines, and a `Task` or `Agent` child while it works |
+| Direct API | Supported: a lane you make on the `machineroom` harness with a saved endpoint | Claude Code stream-json lines from `scripts/mr-agent.mjs` over an OpenAI-compatible endpoint |
 | Hermes | Supported, retired | plain `read` and `delegate` lines |
-| AGY | In use: backend lanes `agy`, `agy2` and `agy3` on Gemini 3.8 Flash (High) | `step_update` lines, and `invoke_subagent` for a subagent |
+| AGY | Supported: a lane you make | `step_update` lines, and `invoke_subagent` for a subagent |
 | ACP | Supported: no lane yet | `tool_call` updates, with each kind and location mapped to a touch |
 | Codex | Supported: no lane yet | `exec --json` item lines |
 | GitHub Copilot | Supported: no lane yet | `-p --output-format json` lines, or plain tool lines |
 
-Lanes `opencode8` to `opencode10` and `hermes` are retired in `docs/agents/lanes.json`. Remove `"retired": true` from an entry to bring it back, then check its `cli` block and model. AGY is supported, and `agy`, `agy2` and `agy3` are live backend lanes on Gemini 3.8 Flash (High). A Direct API lane names a saved endpoint in its `cli.endpoint` and runs on the `machineroom` harness. Add its key and endpoint in Settings, Direct API, then pick its model in the family tree. Any Agent Client Protocol agent can be added as a lane with its own `cli.bin` and args; it runs through `scripts/acp-run.mjs`.
+A new room's `config/lanes.json` holds only the orchestrator, and the lanes you make in Settings are kept in `<runs>/agents.json`. A lane marked `"retired": true` in a lane list does not start. A Direct API lane names a saved endpoint in its `cli.endpoint` and runs on the `machineroom` harness. Add its key and endpoint in Settings, Direct API, then pick its model in the family tree. Any Agent Client Protocol agent can be added as a lane with its own `cli.bin` and args; it runs through `scripts/acp-run.mjs`.
