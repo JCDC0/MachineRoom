@@ -5,6 +5,13 @@ const DEPLOY_FOLDERS = ['.github/']
 const DATA_FOLDERS = ['public/fixtures/', 'public/recordings/']
 const FILES_MARKER = /\bFiles:/
 const PATH_END = /\.(js|mjs|jsx|json|css|md|txt|yml|yaml|html)$/
+const BARE_SPLIT = /[\s,;()[\]{}<>"']+/
+const BARE_START = /^[()[\]{}<>"']+/
+const BARE_END = /[.,;:!?()[\]{}<>"']+$/
+const SMALL_TEXT = 300
+const MEDIUM_TEXT = 1500
+const SMALL_PATHS = 2
+const MEDIUM_PATHS = 6
 
 function textOf(brief) {
   return brief !== null && typeof brief === 'object' && typeof brief.text === 'string' ? brief.text : ''
@@ -28,6 +35,20 @@ function backticked(text) {
 
 function pathsIn(text) {
   return [...new Set(backticked(text).filter(isPath))]
+}
+
+function bareIn(text) {
+  const plain = text.replace(/`[^`\n]*`/g, ' ')
+  const found = []
+  for (const token of plain.split(BARE_SPLIT)) {
+    const bare = token.replace(BARE_START, '').replace(BARE_END, '')
+    if (isPath(bare)) found.push(bare)
+  }
+  return found
+}
+
+function namedIn(text) {
+  return [...new Set([...pathsIn(text), ...bareIn(text)])]
 }
 
 function listedIn(text) {
@@ -67,5 +88,23 @@ export function profileFromBrief(brief) {
     touchesDeploy: touchesAny(listed, DEPLOY_PATHS, DEPLOY_FOLDERS),
     touchesData: touchesAny(listed, [], DATA_FOLDERS),
     kind: design ? 'design' : 'change',
+  }
+}
+
+export function profileFromTask(text) {
+  const clean = typeof text === 'string' ? text.trim() : ''
+  const paths = namedIn(clean)
+  const large = clean === '' || clean.length > MEDIUM_TEXT || paths.length > MEDIUM_PATHS
+  const small = clean !== '' && clean.length <= SMALL_TEXT && paths.length <= SMALL_PATHS
+  return {
+    files: paths.length,
+    hasTests: small,
+    newTest: false,
+    clarity: large ? 'unclear' : 'clear',
+    reversible: isReversible(clean),
+    touchesSecrets: touchesAny(paths, SECRET_PATHS, []),
+    touchesDeploy: touchesAny(paths, DEPLOY_PATHS, DEPLOY_FOLDERS),
+    touchesData: touchesAny(paths, [], DATA_FOLDERS),
+    kind: 'change',
   }
 }
