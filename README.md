@@ -50,6 +50,14 @@ Follow mode close up on the card an agent is touching.
 
 The control drawer open on Dispatch.
 
+## Lanes
+
+A new room has the orchestrator and no lane. The owner makes one lane per subscription in Settings (name, harness, model, effort), each runs in its own harness on the owner's account.
+
+Settings offers Remove from project and Delete everywhere. Remove from project hides a lane in that project. Delete everywhere removes a lane you made across all projects.
+
+`MACHINEROOM_LANES_DIR` points a room at another lane list, which is how MachineRoom's own development runs its lanes.
+
 ## Learn more
 
 - [Using the room](docs/GUIDE.md): settings, the orchestrator, lanes, replay, keys and common problems.
