@@ -524,7 +524,11 @@ export function finishMerge({
 
   const pkgFile = packageJsonPath ?? join(root, 'package.json')
   const version = JSON.parse(readFileSync(pkgFile, 'utf8')).version
-  const idsList = Array.isArray(ids) ? ids : String(ids).split(',').map((s) => s.trim()).filter(Boolean)
+  let idsList = Array.isArray(ids) ? ids : String(ids).split(',').map((s) => s.trim()).filter(Boolean)
+  if (idsList.length === 0) {
+    const record = newestRunFor(readAllRunRecords(runsPath ?? runsFile()), branch)
+    idsList = Array.isArray(record?.briefs) ? record.briefs.map(String) : []
+  }
   const idsText = idsList.join(', ')
   const commitSubject = idsText ? `${version}: Merge ${idsText}, ${subject.trim()}` : `${version}: Merge ${subject.trim()}`
   const commitMessage = trailer && trailer.trim() ? `${commitSubject}\n\n${trailer.trim()}\n` : `${commitSubject}\n`
