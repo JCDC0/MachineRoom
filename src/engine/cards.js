@@ -428,6 +428,12 @@ export function createCards(cssScene, options = {}) {
   let movingNow = false
   let lastState = null
   let linksCache = null
+  let stampSeq = 0
+  let basisVersion = 0
+  const counters = { anchors: 0, offsets: 0, widths: 0 }
+  const previousRight = new THREE.Vector3(1, 0, 0)
+  const previousUp = new THREE.Vector3(0, 1, 0)
+  const previousBack = new THREE.Vector3(0, 0, 1)
 
   let lastExistingFiles = -1
   let lastLatest = -1
@@ -490,6 +496,7 @@ export function createCards(cssScene, options = {}) {
   function makeCard(path) {
     linksCache = null
     const width = cardBaseWidth(path, rootName)
+    counters.widths += 1
     const title = cardTitle(path, rootName)
     const element = el('div', 'mr-card is-closed')
     element.dataset.path = path
@@ -592,6 +599,14 @@ export function createCards(cssScene, options = {}) {
       leaving: false,
       fresh: true,
       ghosts: [],
+      stamp: ++stampSeq,
+      anchorWidth: width + CARD_FACE_BORDER,
+      anchorHeight: -1,
+      anchorScale: -1,
+      anchorOffset: { x: 0, y: 0 },
+      tab: new THREE.Vector3(),
+      tabStamp: -1,
+      tabBasis: -1,
     }
     cards.set(path, card)
     return card
@@ -909,7 +924,11 @@ export function createCards(cssScene, options = {}) {
       }
       card.view = view
       card.baseClass = `mr-card is-${view.state}`
-      card.height = cardHeight(cardRows(view))
+      const nextHeight = cardHeight(cardRows(view))
+      if (nextHeight !== card.height) {
+        card.height = nextHeight
+        card.stamp = ++stampSeq
+      }
       paintBacks(card, view.back)
       if (card.occluderKey !== `${card.height}|${backLayers(view.back)}`) paintOccluder(card, view)
       paintRows(card, view)
@@ -945,15 +964,34 @@ export function createCards(cssScene, options = {}) {
     return (nearestCard(path) ?? cards.get(''))?.base ?? rootHome
   }
 
+  function anchorOffsetOf(card) {
+    const faceHeight = (card.height || cardHeight(card.view ? cardRows(card.view) : 0)) + CARD_FACE_BORDER
+    if (card.anchorHeight !== faceHeight || card.anchorScale !== card.scale) {
+      card.anchorHeight = faceHeight
+      card.anchorScale = card.scale
+      const offset = tabAnchorOffset(card.anchorWidth, faceHeight, card.scale)
+      card.anchorOffset.x = offset.x
+      card.anchorOffset.y = offset.y
+      counters.offsets += 1
+    }
+    return card.anchorOffset
+  }
+
   function anchor(path, out = new THREE.Vector3(), includeLeaving = false) {
     const card = nearestCard(path, includeLeaving)
     if (!card) return null
-    const width = cardBaseWidth(card.path, card.rootName) + CARD_FACE_BORDER
-    const height = (card.height || cardHeight(card.view ? cardRows(card.view) : 0)) + CARD_FACE_BORDER
-    const offset = tabAnchorOffset(width, height, card.scale)
-    out.copy(card.object.position)
-    out.addScaledVector(right, offset.x)
-    out.addScaledVector(up, offset.y)
+    if (card.tabStamp !== card.stamp || card.tabBasis !== basisVersion) {
+      const offset = anchorOffsetOf(card)
+      card.tab.copy(card.object.position)
+      card.tab.addScaledVector(right, offset.x)
+      card.tab.addScaledVector(up, offset.y)
+      card.tabStamp = card.stamp
+      card.tabBasis = basisVersion
+      counters.anchors += 1
+    }
+    out.copy(card.tab)
+    out.anchorStamp = card.stamp
+    out.anchorBasis = basisVersion
     return out
   }
 
@@ -1135,9 +1173,13 @@ export function createCards(cssScene, options = {}) {
   function update(state, delta, camera, mask = null, speed = 1) {
     lastState = state
     movingNow = false
+    previousRight.copy(right)
+    previousUp.copy(up)
+    previousBack.copy(back)
     right.set(1, 0, 0).applyQuaternion(camera.quaternion)
     up.set(0, 1, 0).applyQuaternion(camera.quaternion)
     back.set(0, 0, 1).applyQuaternion(camera.quaternion)
+    if (!previousRight.equals(right) || !previousUp.equals(up) || !previousBack.equals(back)) basisVersion += 1
     targetDirColors = mask?.dirColors ?? null
     targetFileColors = mask?.fileColors ?? null
     const targetVersion = mask?.targetVersion ?? -1
@@ -1220,15 +1262,18 @@ export function createCards(cssScene, options = {}) {
         position.copy(base)
         position.y += lift
         card.occluder.position.copy(position)
+        card.stamp = ++stampSeq
       }
       if (posChanged) movingNow = true
       const view = card.view
       const goal = CARD_SCALES[view.state] ?? 1
+      const previousScale = card.scale
       if (Math.abs(card.scale - goal) > 0.002) {
         card.scale += (goal - card.scale) * ease
       } else {
         card.scale = goal
       }
+      if (card.scale !== previousScale) card.stamp = ++stampSeq
       const swayScale = isStill ? 1 : 1 + swayLevel * SWAY_SCALE * wave
       if (card.lastScale !== card.scale || card.lastHeight !== card.height || card.lastSwayScale !== swayScale) {
         card.lastScale = card.scale
@@ -1475,6 +1520,7 @@ export function createCards(cssScene, options = {}) {
     beat,
     setSway,
     moving: () => movingNow,
+    stats: () => ({ anchors: counters.anchors, offsets: counters.offsets, widths: counters.widths }),
     visibleLinks,
     homes: () => homes,
     overviewSpheres: overview,
