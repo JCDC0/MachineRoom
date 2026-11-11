@@ -408,6 +408,70 @@ describe('--finish command', () => {
     expect(resultNl.error).toBe('The changelog line cannot contain an em dash or a line break.')
   })
 
+  it('refuses subject or trailer with em dash or newline leaving changelog and checkout unchanged', () => {
+    const { mainDir, laneDir, runsDir } = setupFixture()
+    write(laneDir, 'src/item.js', 'item\n')
+    commitAll(laneDir, '0.1.401: Item')
+    prepareMerge({ root: mainDir, lane: 'hermes', runsDir })
+
+    const changelogBefore = readFileSync(join(mainDir, 'docs/agents/CHANGELOG.md'), 'utf8')
+    const statusBefore = gitCmd(mainDir, ['status', '--porcelain'])
+
+    const resultSubjectDash = finishMerge({
+      root: mainDir,
+      lane: 'hermes',
+      subject: 'Subject with \u2014 em dash',
+      line: 'Valid line.',
+      grade: 'A',
+      fixes: '0',
+    })
+    expect(resultSubjectDash.ok).toBe(false)
+    expect(resultSubjectDash.error).toBe('The subject cannot contain an em dash or a line break.')
+    expect(readFileSync(join(mainDir, 'docs/agents/CHANGELOG.md'), 'utf8')).toBe(changelogBefore)
+    expect(gitCmd(mainDir, ['status', '--porcelain'])).toBe(statusBefore)
+
+    const resultSubjectNl = finishMerge({
+      root: mainDir,
+      lane: 'hermes',
+      subject: 'Subject with\nnewline',
+      line: 'Valid line.',
+      grade: 'A',
+      fixes: '0',
+    })
+    expect(resultSubjectNl.ok).toBe(false)
+    expect(resultSubjectNl.error).toBe('The subject cannot contain an em dash or a line break.')
+    expect(readFileSync(join(mainDir, 'docs/agents/CHANGELOG.md'), 'utf8')).toBe(changelogBefore)
+    expect(gitCmd(mainDir, ['status', '--porcelain'])).toBe(statusBefore)
+
+    const resultTrailerDash = finishMerge({
+      root: mainDir,
+      lane: 'hermes',
+      subject: 'Valid subject',
+      line: 'Valid line.',
+      grade: 'A',
+      fixes: '0',
+      trailer: 'Reviewed-by: tester \u2014 tag',
+    })
+    expect(resultTrailerDash.ok).toBe(false)
+    expect(resultTrailerDash.error).toBe('The trailer cannot contain an em dash or a line break.')
+    expect(readFileSync(join(mainDir, 'docs/agents/CHANGELOG.md'), 'utf8')).toBe(changelogBefore)
+    expect(gitCmd(mainDir, ['status', '--porcelain'])).toBe(statusBefore)
+
+    const resultTrailerNl = finishMerge({
+      root: mainDir,
+      lane: 'hermes',
+      subject: 'Valid subject',
+      line: 'Valid line.',
+      grade: 'A',
+      fixes: '0',
+      trailer: 'Reviewed-by: tester\nExtra line',
+    })
+    expect(resultTrailerNl.ok).toBe(false)
+    expect(resultTrailerNl.error).toBe('The trailer cannot contain an em dash or a line break.')
+    expect(readFileSync(join(mainDir, 'docs/agents/CHANGELOG.md'), 'utf8')).toBe(changelogBefore)
+    expect(gitCmd(mainDir, ['status', '--porcelain'])).toBe(statusBefore)
+  })
+
   it('writes changelog keeping CRLF line ends, commits, and records outcome', () => {
     const { mainDir, laneDir, runsDir } = setupFixture()
     write(laneDir, 'src/finished.js', 'finished\n')

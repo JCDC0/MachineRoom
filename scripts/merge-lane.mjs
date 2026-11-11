@@ -494,6 +494,14 @@ export function finishMerge({
     return { ok: false, error: 'A subject is required.' }
   }
 
+  if (subject.includes('\u2014') || /[\r\n]/.test(subject)) {
+    return { ok: false, error: 'The subject cannot contain an em dash or a line break.' }
+  }
+
+  if (trailer && (trailer.includes('\u2014') || /[\r\n]/.test(trailer))) {
+    return { ok: false, error: 'The trailer cannot contain an em dash or a line break.' }
+  }
+
   if (!GRADES.has(grade)) {
     return { ok: false, error: 'The grade must be A+, A, A-, B+, B, B-, C, D or F.' }
   }
