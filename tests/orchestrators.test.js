@@ -1985,6 +1985,28 @@ describe('a run the main starts on a sub lane', () => {
     expect(readLines(rig.runnerCalls)[0].slice(-2)).toEqual(['--started-by', 'frontend'])
   })
 
+  it('routes a run with no lane only among the lanes of the sub the token names', async () => {
+    const rig = await laneRig()
+    const frontendToken = rig.bridge.orchestrators().token('frontend')
+    const backendToken = rig.bridge.orchestrators().token('backend')
+    const task = 'Fix it. Files: `a.js`, `b.js`, `c.js`, `tests/a.test.js`.'
+
+    const frontend = await tokenPost(`${rig.url}/api/control/runs`, { task, confirmed: true }, frontendToken)
+    expect(frontend.status).toBe(202)
+    expect(frontend.body.lane).toBe('opencode')
+    expect(frontend.body.routed.tier).toBe('medium')
+    expect(frontend.body.routed.reason).toContain('The medium tier runs opencode')
+
+    const backend = await tokenPost(`${rig.url}/api/control/runs`, { task, confirmed: true }, backendToken)
+    expect(backend.status).toBe(202)
+    expect(backend.body.lane).toBe('opencode2')
+    expect(backend.body.routed.reason).toBe('No lane of the medium tier is free, so the first free lane was taken.')
+
+    await waitFor(() => readLines(rig.runnerCalls).length === 2)
+    expect(readLines(rig.runnerCalls).map((call) => call[0])).toEqual(['opencode', 'opencode2'])
+  })
+
+
   it('refuses a sub that does not hold the lane and a sub that names another id', async () => {
     const rig = await laneRig()
     const mainToken = rig.bridge.orchestrators().token('orchestrator')

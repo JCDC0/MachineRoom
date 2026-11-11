@@ -226,11 +226,29 @@ function idleProjectLanes(lanes) {
   return idle
 }
 
-export function planLaneTasks(tasks, lanes) {
+export function routeLaneOrder(lanes, route) {
+  const list = Array.isArray(lanes) ? lanes : []
+  if (!route || typeof route !== 'object') return list
+  const rank = new Map()
+  const add = (key) => {
+    const name = typeof key === 'string' ? key.trim() : ''
+    if (name === '' || rank.has(name)) return
+    rank.set(name, rank.size)
+  }
+  add(route.lane)
+  for (const skip of Array.isArray(route.skipped) ? route.skipped : []) add(skip?.lane)
+  if (rank.size === 0) return list
+  return list
+    .map((lane, index) => ({ lane, index, rank: rank.has(lane.key) ? rank.get(lane.key) : rank.size + index }))
+    .sort((one, two) => one.rank - two.rank || one.index - two.index)
+    .map((entry) => entry.lane)
+}
+
+export function planLaneTasks(tasks, lanes, route = null) {
   const list = Array.isArray(tasks) ? tasks : []
   const taskProblem = projectTaskProblem(list)
   if (taskProblem) return { pairs: [], problem: taskProblem }
-  const idle = idleProjectLanes(lanes)
+  const idle = routeLaneOrder(idleProjectLanes(lanes), route)
   if (idle.length === 0) return { pairs: [], problem: NO_IDLE_LANE_PROBLEM }
   if (idle.length < list.length) {
     const lanesWord = idle.length === 1 ? 'lane is' : 'lanes are'

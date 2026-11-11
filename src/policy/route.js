@@ -171,3 +171,79 @@ export function chooseRoute({ policy, profile, failures, quotas, spent } = {}) {
   }
   return { tier, choice: null, reason: `Every choice for the ${tier} tier is above its quota.` }
 }
+
+function readLanes(lanes) {
+  const map = new Map()
+  for (const lane of Array.isArray(lanes) ? lanes : []) {
+    if (!isPlainObject(lane) || !isText(lane.key)) continue
+    const key = lane.key.trim()
+    if (map.has(key)) continue
+    map.set(key, {
+      key,
+      eligible: lane.eligible === true,
+      active: lane.active === true,
+      busy: lane.busy === true,
+    })
+  }
+  return map
+}
+
+function laneSkip(choice, lanes) {
+  const lane = lanes.get(choice.lane)
+  if (!lane) {
+    if (choice.lane === OWNER) return 'The owner is not a lane.'
+    return `The lane ${choice.lane} is not in this room.`
+  }
+  if (!lane.eligible) return `The lane ${choice.lane} is retired or has no command line.`
+  if (!lane.active) return `The lane ${choice.lane} is turned off.`
+  if (lane.busy) return `The lane ${choice.lane} is busy.`
+  return ''
+}
+
+function freeLane(lanes) {
+  for (const lane of lanes.values()) {
+    if (lane.eligible && lane.active && !lane.busy) return lane.key
+  }
+  return null
+}
+
+export function routeLane({ policy, profile, failures, quotas, spent, lanes } = {}) {
+  const clean = readPolicy(policy)
+  const base = tierFor(profile)
+  const tier = escalate(base, failures)
+  const list = readLanes(lanes)
+  const skipped = []
+  const problem = spendProblem(spent, clean.limits)
+  if (problem) return { lane: null, model: null, reasoning: null, tier, reason: problem, skipped }
+  for (const choice of clean.tiers[tier]) {
+    if (providerOver(choice.provider, quotas, clean.quotaSkipPercent)) {
+      skipped.push({ lane: choice.lane, why: `The ${choice.provider} provider is over its quota.` })
+      continue
+    }
+    const why = laneSkip(choice, list)
+    if (why !== '') {
+      skipped.push({ lane: choice.lane, why })
+      continue
+    }
+    return {
+      lane: choice.lane,
+      model: choice.model,
+      reasoning: choice.reasoning,
+      tier,
+      reason: `${describe(tier, choice)}${escalationNote(base, tier, failures)}`,
+      skipped,
+    }
+  }
+  const free = freeLane(list)
+  if (free !== null) {
+    return {
+      lane: free,
+      model: null,
+      reasoning: null,
+      tier,
+      reason: `No lane of the ${tier} tier is free, so the first free lane was taken.`,
+      skipped,
+    }
+  }
+  return { lane: null, model: null, reasoning: null, tier, reason: 'Every lane is busy or turned off.', skipped }
+}

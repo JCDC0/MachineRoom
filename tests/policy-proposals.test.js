@@ -183,8 +183,8 @@ describe('proposePolicy', () => {
 
   it('leaves limits and quotaSkipPercent alone and changes no choice', () => {
     const rows = [
-      row('opencode2', 'opencode-go/deepseek-v4.1-flash', 10, 0, 0.05),
-      row('agy', 'Gemini 3.8 Flash (High)', 11, 1, 0.03),
+      row('opencode2', 'opencode-go/deepseek-v4.1-flash', 10, 10, 0.05),
+      row('opencode3', 'opencode-go/deepseek-v4.1-flash', 11, 1, 0.03),
       row('opencode', 'opencode-go/deepseek-v4.1-flash', 10, 10, 0.04),
     ]
     const answer = proposePolicy({ policy: POLICY_TEXT, rows })
@@ -225,7 +225,7 @@ describe('policyDiff', () => {
   it('writes a diff with the policy headers and three lines of context', () => {
     const rows = [
       row('opencode2', 'opencode-go/deepseek-v4.1-flash', 10, 10, 0.05),
-      row('agy', 'Gemini 3.8 Flash (High)', 11, 1, 0.03),
+      row('opencode3', 'opencode-go/deepseek-v4.1-flash', 11, 1, 0.03),
     ]
     const before = policyText(readPolicy(POLICY_TEXT))
     const after = policyText(proposePolicy({ policy: POLICY_TEXT, rows }).policy)
@@ -245,7 +245,7 @@ describe('policyDiff', () => {
     mkdirSync(dirname(file), { recursive: true })
     const rows = [
       row('opencode2', 'opencode-go/deepseek-v4.1-flash', 10, 10, 0.05),
-      row('agy', 'Gemini 3.8 Flash (High)', 11, 1, 0.03),
+      row('opencode3', 'opencode-go/deepseek-v4.1-flash', 11, 1, 0.03),
     ]
     const before = policyText(readPolicy(POLICY_TEXT))
     const after = policyText(proposePolicy({ policy: POLICY_TEXT, rows }).policy)
@@ -260,7 +260,7 @@ describe('policyDiff', () => {
   it('writes a second hunk when the change is far from the first', () => {
     const rows = [
       row('opencode2', 'opencode-go/deepseek-v4.1-flash', 10, 10, 0.05),
-      row('agy', 'Gemini 3.8 Flash (High)', 11, 1, 0.03),
+      row('opencode3', 'opencode-go/deepseek-v4.1-flash', 11, 1, 0.03),
     ]
     const before = policyText(readPolicy(POLICY_TEXT))
     const swapped = policyText(proposePolicy({ policy: POLICY_TEXT, rows }).policy)

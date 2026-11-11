@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Dispatch picks the lane: the lane picker has Auto first, the route walks the policy's tier and skips a lane that is retired, turned off or busy, the line under the picker and the confirm card say which lane and why, a run started with no lane is routed and answers 409 when none is free, and policy.json names the lanes that exist; a project with no policy file uses MachineRoom's own (task P31).
 - A run record carries peakTokens, the largest context one step of a Claude Code or OpenCode run held; run-lane --list prints it and --stats prints each lane's median, largest and the count at or over 450,000, so the 500,000 autocompact rule can be checked against real runs (task P32).
 - A bridge at rest does less: the lane source lists the runs folder on a watcher event and every 2 seconds where it listed it five times a second, reads the lanes only when lanes.json or agents.json changes, the Claude session reader lists the meta files only when the runs folder changes, and the OpenCode reader asks only for the session rows that moved, every 5 seconds at rest (task P30).
 - npm run merge-lane does the mechanical part of a lane merge: it refuses a dirty checkout, a live lane or a branch with nothing ahead, merges the branch's sha without a commit, runs the related tests, the build and the pack check, aborts when one fails, and with --finish writes the changelog line, the commit and the outcome row; it never pushes and never deletes a branch (task P33).

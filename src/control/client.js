@@ -169,6 +169,14 @@ export function createClient({
     suggestRoute: (profile, { failures } = {}) =>
       request('POST', '/api/control/route', failures === undefined ? { profile } : { profile, failures }),
 
+    routeLane: ({ brief, task, failures } = {}) => {
+      const body = {}
+      if (brief !== undefined) body.brief = brief
+      if (task !== undefined) body.task = task
+      if (failures !== undefined) body.failures = failures
+      return request('POST', '/api/control/route/lane', body)
+    },
+
     briefs: async () => {
       const data = await request('GET', '/api/control/briefs')
       return Array.isArray(data) ? data : data?.briefs ?? []

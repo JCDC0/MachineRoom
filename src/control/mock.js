@@ -5,7 +5,8 @@ import { briefMarkdown, planPrompt } from '../briefs/plan.js'
 import { SINCE_PROBLEM, dayStart, laneStats } from '../briefs/run.js'
 import { defaultMode, legacyMode, modesFor } from './modes.js'
 import { readLadder } from '../model/hierarchy.js'
-import { chooseRoute } from '../policy/route.js'
+import { chooseRoute, routeLane } from '../policy/route.js'
+import { profileFromBrief } from '../policy/profile.js'
 
 export const AGENT_REFUSAL = 'Agents come from docs/agents/lanes.json.'
 export const LANE_TASK_REFUSAL = 'Lane runs start from Dispatch, not from a task.'
@@ -27,6 +28,7 @@ export const CLIENT_METHODS = [
   'searchProvider',
   'setSearchProvider',
   'suggestRoute',
+  'routeLane',
   'briefs',
   'briefPrompt',
   'runs',
@@ -282,14 +284,17 @@ export const MOCK_POLICY = {
   tiers: {
     small: [
       { lane: 'opencode2', model: 'opencode-go/deepseek-v4.1-flash', reasoning: 'max', provider: 'opencode' },
-      { lane: 'agy', model: 'Gemini 3.8 Flash (High)', reasoning: 'high', provider: 'antigravity' },
+      { lane: 'opencode3', model: 'opencode-go/deepseek-v4.1-flash', reasoning: 'max', provider: 'opencode' },
+      { lane: 'agy', model: 'gemini-3.8-flash-high', reasoning: 'high', provider: 'antigravity' },
     ],
     medium: [
       { lane: 'opencode', model: 'opencode-go/deepseek-v4.1-flash', reasoning: 'max', provider: 'opencode' },
-      { lane: 'agy', model: 'Gemini 3.8 Flash (High)', reasoning: 'high', provider: 'antigravity' },
+      { lane: 'opencode4', model: 'opencode-go/deepseek-v4.1-flash', reasoning: 'max', provider: 'opencode' },
+      { lane: 'agy2', model: 'gemini-3.8-flash-high', reasoning: 'high', provider: 'antigravity' },
     ],
     large: [
-      { lane: 'agy', model: 'Gemini 4 Argon (Medium)', reasoning: 'medium', provider: 'antigravity' },
+      { lane: 'opencode5', model: 'opencode-go/deepseek-v4.1-flash', reasoning: 'max', provider: 'opencode' },
+      { lane: 'opencode', model: 'opencode-go/deepseek-v4.1-flash', reasoning: 'max', provider: 'opencode' },
       { lane: 'owner', model: null, reasoning: null, provider: null },
     ],
   },
@@ -962,6 +967,32 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
           failures,
           quotas: state.costs.quota,
           spent: { companyMonthlyUsd: state.costs.summary.spendCents / 100 },
+        })
+      }),
+
+    routeLane: ({ brief, task, failures } = {}) =>
+      call('routeLane', () => {
+        if (failures !== undefined && (!Number.isInteger(failures) || failures < 0 || failures > 5)) {
+          throw new Error('Failures must be a whole number from 0 to 5.')
+        }
+        const wanted = typeof brief === 'string' ? brief.trim() : ''
+        const text = typeof task === 'string' ? task.trim() : ''
+        if (wanted !== '' && text !== '') throw new Error('Send a brief or a task, not both.')
+        if (wanted === '' && text === '') throw new Error('Name a brief or a task.')
+        let source = { text }
+        if (wanted !== '') {
+          const found = parseBriefs(briefsText).find((entry) => entry.id === wanted)
+          if (!found) throw new Error('Choose a brief from the list.')
+          source = found
+        }
+        const busy = new Set((runsState.running ?? []).map((entry) => entry.lane))
+        return routeLane({
+          policy: MOCK_POLICY,
+          profile: profileFromBrief(source),
+          failures,
+          quotas: state.costs.quota,
+          spent: { companyMonthlyUsd: state.costs.summary.spendCents / 100 },
+          lanes: Object.keys(SAMPLE_LANES).map((key) => ({ key, eligible: true, active: true, busy: busy.has(key) })),
         })
       }),
 

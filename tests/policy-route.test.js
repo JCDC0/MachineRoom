@@ -2,6 +2,7 @@ import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { createBridge } from '../server/index.js'
+import { activeLanesFileFor, writeActiveLanes } from '../server/active-lanes.js'
 import { MOCK_POLICY } from '../src/control/mock.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 
@@ -57,15 +58,25 @@ function writeRuns(base, costs) {
   writeFileSync(join(folder, 'runs.jsonl'), `${lines.join('\n')}\n`)
 }
 
-async function startRouteBridge({ policy = JSON.stringify(POLICY), costs = [] } = {}) {
+async function startRouteBridge({ policy = JSON.stringify(POLICY), costs = [], lanes = null, tasks = null, active = null, lock = '' } = {}) {
   const briefsDir = tempDir()
   if (policy !== null) writeFileSync(join(briefsDir, 'policy.json'), policy)
+  if (lanes !== null) writeFileSync(join(briefsDir, 'lanes.json'), JSON.stringify(lanes))
+  if (tasks !== null) writeFileSync(join(briefsDir, 'TASKS.md'), tasks)
   const base = tempDir()
   if (costs.length > 0) writeRuns(base, costs)
   const previousTemp = process.env.TEMP
   const previousRuns = process.env.MACHINEROOM_RUNS
   process.env.TEMP = base
   process.env.MACHINEROOM_RUNS = join(base, 'machineroom-runs')
+  if (active !== null) {
+    mkdirSync(join(base, 'machineroom-runs'), { recursive: true })
+    writeActiveLanes(activeLanesFileFor('', join(base, 'machineroom-runs')), active)
+  }
+  if (lock !== '') {
+    mkdirSync(join(base, 'machineroom-runs'), { recursive: true })
+    writeFileSync(join(base, 'machineroom-runs', `${lock}.lock`), `${JSON.stringify({ pid: process.pid })}\n`)
+  }
   cleanups.push(() => {
     process.env.TEMP = previousTemp
     if (previousRuns === undefined) delete process.env.MACHINEROOM_RUNS
@@ -86,6 +97,15 @@ async function startRouteBridge({ policy = JSON.stringify(POLICY), costs = [] } 
 
 async function postRoute(url, body) {
   const response = await fetch(`${url}/api/control/route`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  return { status: response.status, body: await response.json() }
+}
+
+async function postLaneRoute(url, body) {
+  const response = await fetch(`${url}/api/control/route/lane`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(body),
@@ -168,6 +188,145 @@ describe('POST /api/control/route', () => {
       reasoning: 'max',
       provider: 'opencode',
     })
+  })
+})
+
+const LANES = {
+  orchestrator: { name: 'Orchestrator', cli: { harness: 'claude', model: 'opus' } },
+  opencode2: { name: 'OpenCode 2', cli: { harness: 'opencode', model: 'opencode-go/deepseek-v4.1-flash' } },
+  opencode3: { name: 'OpenCode 3', cli: { harness: 'opencode', model: 'opencode-go/deepseek-v4.1-flash' } },
+  opencode: { name: 'OpenCode', cli: { harness: 'opencode', model: 'opencode-go/deepseek-v4.1-flash' } },
+  hermes: { name: 'Hermes', retired: true, cli: { harness: 'hermes', model: 'deepseek/deepseek-v4.1-flash-1017' } },
+  agy: { name: 'agy', harness: 'agy' },
+}
+
+const TASKS = [
+  '**P31. The room picks a lane (OpenCode).** Add the route in `src/policy/route.js`. Files: `src/policy/route.js`, `tests/policy-lane.test.js`.',
+].join('\n')
+
+const MEDIUM_TASK = 'Fix the typo. Files: `a.js`, `b.js`, `c.js`, `tests/a.test.js`.'
+
+const ALL = ['opencode2', 'opencode3', 'opencode']
+
+describe('POST /api/control/route/lane', () => {
+  it('routes a task and a brief by their profile', async () => {
+    const { url } = await startRouteBridge({ lanes: LANES, tasks: TASKS, active: ALL })
+    const task = await postLaneRoute(url, { task: MEDIUM_TASK })
+    expect(task.status).toBe(200)
+    expect(task.body).toEqual({
+      lane: 'opencode',
+      model: 'opencode-go/deepseek-v4.1-flash',
+      reasoning: 'max',
+      tier: 'medium',
+      reason: 'The medium tier runs opencode on opencode-go/deepseek-v4.1-flash at max.',
+      skipped: [],
+    })
+
+    const brief = await postLaneRoute(url, { brief: 'P31' })
+    expect(brief.status).toBe(200)
+    expect(brief.body).toMatchObject({ lane: 'opencode2', tier: 'small' })
+    expect(brief.body.reason).toBe('The small tier runs opencode2 on opencode-go/deepseek-v4.1-flash at max.')
+  })
+
+  it('skips a lane that is turned off, busy or not in the room and gives each reason', async () => {
+    const { url } = await startRouteBridge({ lanes: LANES, tasks: TASKS, active: ['opencode2', 'opencode3', 'opencode'], lock: 'opencode2' })
+    const answer = await postLaneRoute(url, { brief: 'P31' })
+    expect(answer.status).toBe(200)
+    expect(answer.body.lane).toBe('opencode')
+    expect(answer.body.skipped).toEqual([{ lane: 'opencode2', why: 'The lane opencode2 is busy.' }])
+
+    const off = await startRouteBridge({ lanes: LANES, tasks: TASKS, active: ['opencode3'] })
+    const medium = await postLaneRoute(off.url, { task: MEDIUM_TASK })
+    expect(medium.body.lane).toBe('opencode3')
+    expect(medium.body.reason).toBe('No lane of the medium tier is free, so the first free lane was taken.')
+    expect(medium.body.skipped).toEqual([
+      { lane: 'opencode', why: 'The lane opencode is turned off.' },
+      { lane: 'claude', why: 'The lane claude is not in this room.' },
+    ])
+  })
+
+  it('leaves a retired lane out of the fall', async () => {
+    const { url } = await startRouteBridge({ lanes: LANES, tasks: TASKS, active: ['hermes'] })
+    const answer = await postLaneRoute(url, { task: MEDIUM_TASK })
+    expect(answer.body.lane).toBeNull()
+    expect(answer.body.reason).toBe('Every lane is busy or turned off.')
+  })
+
+  it('falls to the first free lane of the list when no choice is free', async () => {
+    const { url } = await startRouteBridge({ lanes: LANES, tasks: TASKS, active: ['opencode3'], lock: 'opencode2' })
+    const answer = await postLaneRoute(url, { task: MEDIUM_TASK })
+    expect(answer.status).toBe(200)
+    expect(answer.body).toMatchObject({ lane: 'opencode3', model: null, reasoning: null, tier: 'medium' })
+    expect(answer.body.reason).toBe('No lane of the medium tier is free, so the first free lane was taken.')
+  })
+
+  it('answers no lane when every lane is busy or turned off', async () => {
+    const { url } = await startRouteBridge({ lanes: LANES, tasks: TASKS, active: [] })
+    const answer = await postLaneRoute(url, { task: MEDIUM_TASK })
+    expect(answer.status).toBe(200)
+    expect(answer.body).toEqual({
+      lane: null,
+      model: null,
+      reasoning: null,
+      tier: 'medium',
+      reason: 'Every lane is busy or turned off.',
+      skipped: [
+        { lane: 'opencode', why: 'The lane opencode is turned off.' },
+        { lane: 'claude', why: 'The lane claude is not in this room.' },
+      ],
+    })
+  })
+
+  it('refuses a request with no name, two names, a bad brief and a long task', async () => {
+    const { url } = await startRouteBridge({ lanes: LANES, tasks: TASKS, active: ALL })
+    for (const body of [{}, { brief: '' }, { task: '  ' }]) {
+      const answer = await postLaneRoute(url, body)
+      expect(answer.status).toBe(400)
+      expect(answer.body).toEqual({ error: 'Name a brief or a task.' })
+    }
+    const both = await postLaneRoute(url, { brief: 'P31', task: 'Fix it.' })
+    expect(both.status).toBe(400)
+    expect(both.body).toEqual({ error: 'Send a brief or a task, not both.' })
+    const missing = await postLaneRoute(url, { brief: 'Z99' })
+    expect(missing.status).toBe(400)
+    expect(missing.body).toEqual({ error: 'Choose a brief from the list.' })
+    const long = await postLaneRoute(url, { task: 'x'.repeat(4001) })
+    expect(long.status).toBe(400)
+    expect(long.body).toEqual({ error: 'Write the task in 1 to 4000 characters.' })
+    const failures = await postLaneRoute(url, { task: 'Fix it.', failures: 9 })
+    expect(failures.status).toBe(400)
+    expect(failures.body).toEqual({ error: 'Failures must be a whole number from 0 to 5.' })
+  })
+
+  it('refuses a missing policy, a broken policy and a broken lane file', async () => {
+    const missing = await startRouteBridge({ policy: null, lanes: LANES, tasks: TASKS, active: ALL })
+    const noPolicy = await postLaneRoute(missing.url, { task: MEDIUM_TASK })
+    expect(noPolicy.status).toBe(200)
+    expect(noPolicy.body.tier).toBe('medium')
+
+    const broken = await startRouteBridge({ policy: '{', lanes: LANES, tasks: TASKS, active: ALL })
+    const badPolicy = await postLaneRoute(broken.url, { task: MEDIUM_TASK })
+    expect(badPolicy.status).toBe(400)
+    expect(badPolicy.body).toEqual({ error: 'The policy file is not JSON.' })
+
+    const badLanes = await startRouteBridge({ lanes: '{', tasks: TASKS, active: ALL })
+    const noLanes = await postLaneRoute(badLanes.url, { task: MEDIUM_TASK })
+    expect(noLanes.status).toBe(400)
+    expect(noLanes.body).toEqual({ error: 'The lane file is not valid.' })
+  })
+
+  it('refuses a brief when the brief file is missing', async () => {
+    const { url } = await startRouteBridge({ lanes: LANES, tasks: null, active: ALL })
+    const answer = await postLaneRoute(url, { brief: 'P31' })
+    expect(answer.status).toBe(404)
+    expect(answer.body).toEqual({ error: 'The brief files are missing.' })
+  })
+
+  it('answers only POST', async () => {
+    const { url } = await startRouteBridge({ lanes: LANES, tasks: TASKS, active: ALL })
+    const answer = await fetch(`${url}/api/control/route/lane`)
+    expect(answer.status).toBe(405)
+    expect(await answer.json()).toEqual({ error: 'Method not allowed.' })
   })
 })
 
