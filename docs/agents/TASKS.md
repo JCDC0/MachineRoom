@@ -360,3 +360,28 @@ Files: server/policy.js, server/runs.js, server/index.js, src/ui/panels/Dispatch
 Run `npx vitest related --run` on every file you changed and `npm run build`; both must pass.
 
 Files: server/opencode-sessions.js, server/lanes-source.js, tests/.
+
+## A deleted file leaves the room, and a narrower partial list (2026-11-11, the owner's yes)
+
+The owner said yes to a room that drops a file deleted from the project (review 9, finding 2). P36's partial list was rejected: one new file reached the page in 0.5 seconds where it took 1.9 at 200,000 files, but a burst of 2000 files took the bridge's CPU share from 6 to 37 percent and the last file from 2.6 to 3.9 seconds. P36b tries again, narrower, after P43 is merged, since both change the tree path in `server/index.js`.
+
+**P43. A file deleted from the project leaves the room (OpenCode).** Read no part of TASKS.md beyond this brief, and of `docs/agents/AUDIT-2026-11-REVIEW-9.md` finding 2 and the orchestrator's corrections. Use no subagents. Commit each step as you finish it, and stop starting new work at minute 55. Do not edit any file under `docs/` or `scripts/`, nor `src/engine/`.
+
+1. In `server/index.js`, `publishTree` also finds the paths that left the list, by the sorted merge walk the lists already allow, not by a set of the whole list. A version keeps its added and its removed paths, and `treeFilesSince` answers both. The `tree` event carries `removed` beside the added files, in the plain and the folder shape. A page that names a version the bridge no longer has gets the whole list, as now, and a page at the current version gets no event. `src/live/tree.js` reads `removed`, and a page and a bridge of different versions still agree: an older page ignores `removed`, and a newer page reads an event without it as no removals.
+2. `src/live/livePlayer.js` gets `removeFiles(paths)`: it drops each path from `state.files`, drops a folder from `state.dirs` when no file is left under it, and leaves the root. `src/Stage.jsx` calls it with the event's `removed` beside `addFiles`, and the room rebuilds its plan as it does when files are added. A removed file an agent is touching or that a run wrote stays until that run ends, so its green or red mark is not lost mid-run.
+3. A whole list from the bridge replaces the page's list: paths the page holds that the list does not are removed the same way.
+4. Tests: a bridge whose second read drops `b.js` sends `removed: ['b.js']` on the stream in both shapes; a rename sends the old path removed and the new one added; a page at an old kept version gets both; the live player drops the file and an emptied folder but not the root; a file a running agent touches stays until the run ends; an event with no `removed` changes nothing.
+
+Run `npx vitest related --run` on every file you changed and `npm run build`; both must pass. The orchestrator checks by eye that a deleted file's row and an emptied folder's card leave a live room at 1280 by 800.
+
+Files: server/index.js, src/live/tree.js, src/live/livePlayer.js, src/Stage.jsx, src/model/state.js, tests/.
+
+**P36b. A few new files are listed by their names, and a burst costs no more than before (OpenCode).** Starts after P43 is merged. Read no part of TASKS.md beyond this brief and P36 above it. Use no subagents. Commit each step as you finish it, and stop starting new work at minute 55. Do not edit any file under `docs/` or `src/`, nor any file under `scripts/` but `scripts/scale-live.mjs`.
+
+Keep the watcher, the quiet times, the poll and every full read path of `server/index.js` exactly as they are on `main`. Change one thing: when a read is due and every watcher event since the last read carried a name, at most 50 distinct names, replace that one full read with `git ls-files -z --cached --others --exclude-standard -- NAMES` as P36 did. A name the list does not answer that the bridge held, or a folder name whose held files the list no longer answers, is a removal, published as P43 publishes one. Every other case, more than 50 names included, runs the full read as now. Every tenth partial read in a row is followed by a full read.
+
+Tests with an injected lister and watcher: one new file costs one partial list; 51 names cost one full read and no partial one; a deleted named file is removed; a failed partial list falls back to a full read. Run `npm run scale-live` at 40,000 and 200,000 files with `--seed 36` on `main` and on your branch, and give in your report one new file's time to the page, the burst's reads, the bridge's CPU share and the last write's time to the page, for both. A burst must cost no more CPU and no more time than on `main`, within 10 percent; if it does, say so and stop.
+
+Run `npx vitest related --run` on every file you changed, `npm run build` and `npm run pack-check`; all must pass.
+
+Files: server/index.js, scripts/scale-live.mjs, tests/.
