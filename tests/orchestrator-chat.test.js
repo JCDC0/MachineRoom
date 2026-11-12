@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from 'vitest'
 import Hud from '../src/ui/Hud.jsx'
 import OrchestratorChat, { pruneOrchestratorRecord } from '../src/ui/OrchestratorChat.jsx'
 import Waiting from '../src/ui/Waiting.jsx'
-import { buttonWithText, click, withDom } from './helpers/uiDom.js'
+import { buttonWithText, click, type, withDom } from './helpers/uiDom.js'
 import {
   ORCH_STOP_CONFIRM,
   OrchestratorActivity,
@@ -22,6 +22,7 @@ import {
   listsOrchestrator,
   modeClass,
   modeLabel,
+  nearChatBottom,
   needsStartConfirm,
   normalizeApprovals,
   normalizeChat,
@@ -35,6 +36,8 @@ import {
   statusText,
   statusTone,
   teamLines,
+  workRows,
+  workText,
 } from '../src/ui/orchestratorChat.js'
 
 function textOf(spans) {
@@ -794,6 +797,172 @@ describe('message actions', () => {
       vi.useRealTimers()
       vi.unstubAllGlobals()
     }
+  })
+
+  it('writes the work line, its step rows and the bottom test', () => {
+    const steps = [
+      { tool: 'read', target: 'src/a.js' },
+      { tool: 'edit', target: 'src/b.js' },
+      { tool: 'shell', target: 'npm test' },
+      { tool: 'read', target: 'src/c.js' },
+      { tool: 'read', target: 'src/d.js' },
+    ]
+    expect(workText({ state: 'working', steps: [steps[0]], seconds: 3 })).toBe(
+      'Working: read src/a.js'
+    )
+    expect(workText({ state: 'working', steps: [], seconds: 3 })).toBe('Working')
+    expect(workText({ steps, seconds: 12 })).toBe('Worked: 5 steps, 12 s')
+    expect(workText({ steps: [steps[0]], seconds: 1 })).toBe('Worked: 1 step, 1 s')
+    expect(workRows({ steps })[2]).toEqual({
+      tool: 'shell',
+      target: 'npm test',
+      text: 'shell npm test',
+    })
+    expect(nearChatBottom({ scrollTop: 700, scrollHeight: 1000, clientHeight: 300 })).toBe(true)
+    expect(nearChatBottom({ scrollTop: 100, scrollHeight: 1000, clientHeight: 300 })).toBe(false)
+  })
+
+  it('keeps the work on its message and leaves an old message without one', () => {
+    const lines = chatLines({
+      messages: [
+        { id: 'old', from: 'owner', text: 'Old.' },
+        {
+          id: 'new',
+          from: 'owner',
+          text: 'New.',
+          work: { steps: [{ tool: 'read', target: 'src/a.js' }], seconds: 4 },
+        },
+      ],
+    })
+    expect(lines[0].work).toBeUndefined()
+    expect(lines[1].work).toEqual({
+      state: 'done',
+      steps: [{ tool: 'read', target: 'src/a.js' }],
+      seconds: 4,
+    })
+  })
+
+  it('opens the work to its steps and closes them again', async () => {
+    const chat = {
+      state: 'idle',
+      messages: [
+        {
+          id: 'm1',
+          from: 'owner',
+          text: 'Build it.',
+          work: {
+            steps: [
+              { tool: 'read', target: 'src/a.js' },
+              { tool: 'edit', target: 'src/b.js' },
+            ],
+            seconds: 8,
+          },
+        },
+        { id: 'm2', from: 'orchestrator', text: 'Done.' },
+      ],
+    }
+    await withDom(async ({ container, root }) => {
+      await act(async () => {
+        root.render(createElement(OrchestratorChat, { client: fakeClient(chat), inline: true, initialChat: chat }))
+      })
+      await act(async () => {})
+      const line = container.querySelectorAll('.mr-orch-line')[0]
+      const fold = buttonWithText(line, 'Worked: 2 steps, 8 s')
+      expect(fold).not.toBeNull()
+      expect(fold.getAttribute('aria-expanded')).toBe('false')
+      expect(line.querySelector('.mr-orch-work-steps')).toBeNull()
+      await click(root, fold)
+      expect(fold.getAttribute('aria-expanded')).toBe('true')
+      const steps = line.querySelector('.mr-orch-work-steps').querySelectorAll('li')
+      expect(steps.map((step) => step.textContent)).toEqual(['read src/a.js', 'edit src/b.js'])
+      await click(root, fold)
+      expect(line.querySelector('.mr-orch-work-steps')).toBeNull()
+    })
+  })
+
+  it('stays where the owner scrolled and offers Jump to newest', async () => {
+    vi.useFakeTimers()
+    let chat = { state: 'working', messages: [{ id: 'm1', from: 'owner', text: 'Build it.' }] }
+    const client = {
+      ...fakeClient(chat),
+      orchestrator: async () => chat,
+      subscribe: () => () => {},
+    }
+    try {
+      await withDom(async ({ container, root }) => {
+        await act(async () => {
+          root.render(createElement(OrchestratorChat, { client, inline: true, initialChat: chat }))
+        })
+        await act(async () => {})
+        const log = container.querySelector('.mr-orch-log')
+        Object.defineProperty(log, 'scrollHeight', { value: 1000, configurable: true })
+        Object.defineProperty(log, 'clientHeight', { value: 300, configurable: true })
+        log.scrollTop = 0
+        await act(async () => {
+          log.dispatchEvent({ type: 'scroll', bubbles: false })
+        })
+        expect(buttonWithText(container, 'Jump to newest')).not.toBeNull()
+
+        chat = {
+          state: 'working',
+          messages: [
+            { id: 'm1', from: 'owner', text: 'Build it.' },
+            { id: 'm2', from: 'orchestrator', text: 'Working on it.' },
+          ],
+        }
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(10000)
+        })
+        expect(container.querySelectorAll('.mr-orch-line')).toHaveLength(2)
+        expect(log.scrollTop).toBe(0)
+
+        await click(root, buttonWithText(container, 'Jump to newest'))
+        expect(log.scrollTop).toBe(1000)
+        expect(buttonWithText(container, 'Jump to newest')).toBeNull()
+      })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('scrolls to the bottom when the owner sends a message', async () => {
+    let chat = { state: 'idle', messages: [{ id: 'm1', from: 'owner', text: 'First.' }] }
+    const client = {
+      ...fakeClient(chat),
+      sendToOrchestrator: async (text) => {
+        chat = {
+          state: 'working',
+          messages: [...chat.messages, { id: 'm2', from: 'owner', text }],
+        }
+        return { id: 'm2' }
+      },
+      orchestrator: async () => chat,
+    }
+    await withDom(async ({ container, root }) => {
+      await act(async () => {
+        root.render(createElement(OrchestratorChat, { client, inline: true, initialChat: chat }))
+      })
+      await act(async () => {})
+      const log = container.querySelector('.mr-orch-log')
+      Object.defineProperty(log, 'scrollHeight', { value: 1000, configurable: true })
+      Object.defineProperty(log, 'clientHeight', { value: 300, configurable: true })
+      log.scrollTop = 0
+      await act(async () => {
+        log.dispatchEvent({ type: 'scroll', bubbles: false })
+      })
+      expect(buttonWithText(container, 'Jump to newest')).not.toBeNull()
+      await type(root, container.querySelector('.mr-orch-input'), 'Build it.')
+      await act(async () => {
+        container.querySelector('.mr-orch-form').dispatchEvent({
+          type: 'submit',
+          bubbles: true,
+          cancelable: true,
+        })
+      })
+      expect(log.scrollTop).toBe(1000)
+      expect(buttonWithText(container, 'Jump to newest')).toBeNull()
+      expect(container.querySelectorAll('.mr-orch-line')).toHaveLength(2)
+    })
   })
 })
 

@@ -227,6 +227,7 @@ export function chatLines(chat, limit = ORCH_MAX_LINES, options = {}) {
     const source = typeof message.from === 'string' ? message.from : ''
     const label = source.startsWith('sub:') ? subLabel(source.slice(4)) : ''
     const from = label ? 'sub' : FROM_VALUES.has(source) ? source : 'orchestrator'
+    const work = normalizeWork(message.work)
     lines.push({
       id: String(message.id ?? `${from}-${lines.length}`),
       index,
@@ -234,10 +235,60 @@ export function chatLines(chat, limit = ORCH_MAX_LINES, options = {}) {
       fromMain: id !== 'orchestrator' && (source === 'orchestrator' || source === 'main'),
       text: label ? `${label}\n\n${text}` : text,
       at: message.at ?? null,
+      ...(work ? { work } : {}),
     })
   }
   const cap = Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : ORCH_MAX_LINES
   return lines.slice(-cap)
+}
+
+export function normalizeWork(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const steps = []
+  for (const entry of Array.isArray(value.steps) ? value.steps : []) {
+    if (!entry || typeof entry !== 'object') continue
+    const tool = cleanLabel(entry.tool).slice(0, 40) || 'tool'
+    const target = cleanLabel(entry.target).slice(0, 300)
+    steps.push({ tool, target })
+  }
+  const seconds = Number.isFinite(value.seconds) && value.seconds >= 0 ? Math.round(value.seconds) : 0
+  const state = value.state === 'working' ? 'working' : 'done'
+  if (steps.length === 0 && seconds === 0 && state !== 'working') return null
+  return { state, steps, seconds }
+}
+
+export function workStepText(step) {
+  if (!step || typeof step !== 'object') return ''
+  const tool = cleanLabel(step.tool) || 'tool'
+  const target = cleanLabel(step.target)
+  if (!target) return tool
+  return target.toLowerCase().startsWith(`${tool.toLowerCase()} `) ? target : `${tool} ${target}`
+}
+
+export function workRows(work) {
+  const clean = normalizeWork(work)
+  if (!clean) return []
+  return clean.steps.map((step) => ({ ...step, text: workStepText(step) }))
+}
+
+export function workText(work) {
+  const clean = normalizeWork(work)
+  if (!clean) return ''
+  if (clean.state === 'working') {
+    const newest = clean.steps[clean.steps.length - 1]
+    const line = newest ? workStepText(newest) : ''
+    return line ? `Working: ${line}` : 'Working'
+  }
+  const count = clean.steps.length === 1 ? '1 step' : `${clean.steps.length} steps`
+  return `Worked: ${count}, ${clean.seconds} s`
+}
+
+export function nearChatBottom(metrics, slack = 24) {
+  const top = Number(metrics?.scrollTop)
+  const height = Number(metrics?.scrollHeight)
+  const size = Number(metrics?.clientHeight)
+  if (!Number.isFinite(top) || !Number.isFinite(height) || !Number.isFinite(size) || size === 0) return true
+  return height - (top + size) <= slack
 }
 
 export function retryTarget(lines, at) {
