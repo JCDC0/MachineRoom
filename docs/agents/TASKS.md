@@ -713,7 +713,7 @@ Files: server/index.js, src/live/bridge.js, src/live/tree.js, tests/.
 
 The owner gave the fleet a Codex lane. Codex here is the owner's Codex app: its `codex.exe` lives in `%LOCALAPPDATA%\OpenAI\Codex\bin\HASH\codex.exe`, where HASH changes when the app updates, and `codex` is not on PATH. `codex exec` waits for more input when its stdin is open; the runner already starts a harness with stdin closed.
 
-**P73. A Codex lane finds the Codex app's program (Codex).** Read no part of TASKS.md beyond this brief. Commit each step as you finish it, and stop starting new work at minute 35. Run every command in the foreground and wait for it. `src/harnesses/` stays browser safe: no `fs`, no `process` there.
+**P73. A Codex lane finds the Codex app's program (Codex).** Read no part of TASKS.md beyond this brief. Do not commit: your sandbox keeps git read-only, so leave your work uncommitted in your worktree and the orchestrator commits it. Stop starting new work at minute 35. Run every command in the foreground and wait for it. `src/harnesses/` stays browser safe: no `fs`, no `process` there.
 
 1. One function in `server/agents-config.js`, `codexAppProgram({ env, platform, listDir, statFile })`: on Windows, the newest `codex.exe` under `%LOCALAPPDATA%\OpenAI\Codex\bin\*\`, by the file's modified time; null on other systems, when the variable is not set, or when there is none.
 2. `isHarnessAvailable('codex', ...)` answers true when the lane's program is not found but `codexAppProgram` finds one.

@@ -364,10 +364,7 @@
     "modelHint": "no --model is passed, so Codex uses the model set in the owner's Codex app",
     "cli": {
       "harness": "codex",
-      "bin": "%LOCALAPPDATA%\\OpenAI\\Codex\\bin\\9e1da79431da526b\\codex.exe",
-      "addDirs": [
-        "C:\\GitHub\\MachineRoom\\.git"
-      ]
+      "bin": "%LOCALAPPDATA%\\OpenAI\\Codex\\bin\\9e1da79431da526b\\codex.exe"
     },
     "worktree": "C:\\GitHub\\MachineRoom\\.worktrees\\codex",
     "role": "You work on the brief in your own worktree and report back.",
@@ -376,6 +373,7 @@
       "src/App.jsx"
     ],
     "notes": [
+      "Your sandbox keeps git read-only, so never run a git command that writes: no switch, add, commit, stash or reset. Edit the files in your worktree and leave them uncommitted; the orchestrator puts them on a branch and commits them after your run. Reading git (status, diff, log, show) is fine.",
       "Codex runs from the owner's Codex app, whose codex.exe sits in a folder named by a hash that changes when the app updates. If the lane cannot start, the orchestrator updates cli.bin.",
       "You cannot see the screen. When a brief asks for a check by eye, say in your report that it is left to the orchestrator.",
       "Touch only the files your brief names. Other lanes work at the same time in their own worktrees."
