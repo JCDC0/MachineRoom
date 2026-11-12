@@ -3,7 +3,7 @@ import { existsSync, rmSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { pathsInTreeEvent, runScaleLive } from '../scripts/scale-live.mjs'
+import { pathsInTreeEvent, parseLiveArgs, runScaleLive } from '../scripts/scale-live.mjs'
 import { gitPath } from '../server/programPath.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 
@@ -33,6 +33,13 @@ const ROWS = [
   'GET /api/control/reviews/opencode/diff',
   'plain folder read',
 ]
+
+describe('parseLiveArgs', () => {
+  it('refuses --server with no folder or with a flag', () => {
+    expect(() => parseLiveArgs(['--server'])).toThrow('--server needs a folder.')
+    expect(() => parseLiveArgs(['--server', '--tree-only'])).toThrow('--server needs a folder.')
+  })
+})
 
 describe('the live scale probe', () => {
   it('runs the bridge on a real checkout and sends no ignored file', async () => {
