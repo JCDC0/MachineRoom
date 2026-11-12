@@ -1021,3 +1021,25 @@ Files: scripts/mr-agent.mjs, tests/.
 Review `git show -m --first-parent 4a3eebce` against the code around it. Hunt for what a test would not show: a caller that still builds `TEMP\machineroom-runs` itself; a copy from the old folder that can run twice, overwrite a newer folder, follow a link out of the folder, or copy `keys.json` anywhere but the new runs folder; a printed line or error that shows the real profile folder; a Linux or macOS answer that differs between the bridge and `scripts/mr-agent.mjs`. Write `docs/agents/AUDIT-2026-11-REVIEW-14.md`: a table of at most 6 findings, the most harmful first, each with `file:line`, what goes wrong and when, the smallest fix, and whether it blocks a push. Write no finding you cannot point to in the code. An empty table with what you checked is a good answer.
 
 Files: docs/agents/AUDIT-2026-11-REVIEW-14.md.
+
+
+## From the Codex plan (2026-11-12, night)
+
+`docs/agents/PLAN-CODEX-2026-11-12.md` ranks ten next briefs, C1 to C10. These take C8 and C3.
+
+**P98. The development fleet stays out of the owner's room (Codex, C8).** Read `docs/agents/OWNER.md` and this brief only. Change no code. Do not commit: the runner commits your file.
+
+The owner's room must hold only the orchestrator and the lanes the owner made; the twelve development lanes belong to the testbench. Read every path that decides which lanes a bridge shows and runs: `lanesFolder` and `runsFolder` in `server/lanes-source.js`, the bridge's start in `bin/machine-room.mjs` and `server/index.js`, `server/agents-config.js`, and anything that reads `MACHINEROOM_LANES_DIR` or `docs/agents/lanes.json`. Find any way a bridge started the owner's way (`npm run serve -- up`, `machineroom FOLDER`, no variables set) can show, start or write a lane from `docs/agents/lanes.json`, read the testbench runs folder, or write into it. Write `docs/agents/AUDIT-2026-11-FLEET-ROOM.md`: each path with `file:line`, safe or not and why, and the smallest fix for any that is not. A short file that says every path is safe, with what you read, is a good answer.
+
+Files: docs/agents/AUDIT-2026-11-FLEET-ROOM.md.
+
+**P99. A lane's git hooks never run in the owner's merge (OpenCode, C3).** Read no part of TASKS.md beyond this brief and the paragraph above P98. Use no subagents. Run every command in the foreground. Commit each step as you finish it, and stop starting new work at minute 40. Work on temporary repositories, never the real ones.
+
+The review git runner passes the whole process environment (`server/reviews.js`, near line 103), and the merge runs in the main checkout (near line 417). A lane branch could carry a `core.hooksPath` or a hook script that the merge then runs.
+
+1. Every git command the review and merge routes run passes `-c core.hooksPath=` pointing at an empty folder the bridge owns, and drops `GIT_DIR`, `GIT_WORK_TREE` and `GIT_INDEX_FILE` from the environment it inherits. A merge that the owner starts from the room runs no hook from the project or the lane.
+2. Tests with a temp repository, by what they prove: a `pre-merge-commit` and a `post-merge` hook set in the repository, and a `core.hooksPath` set in its config, do not run during the room's merge; the merge still lands; `GIT_DIR` set in the bridge's environment does not move the merge to another repository.
+
+Run `npx vitest related --run server/reviews.js` and `npm run build`; both must pass.
+
+Files: server/reviews.js, tests/.
