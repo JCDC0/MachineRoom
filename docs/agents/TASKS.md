@@ -1382,3 +1382,27 @@ Review, with `git show -m --first-parent SHA` for each, against the code around 
 1. For each finding marked as not blocking a push, check the code: is it still there, or did a later brief fix it? List each with its state in your report.
 2. Fix at most three that are still there, the smallest and safest first, each with a test that proves it. Skip any that needs a design choice or touches a held file, and say why.
 3. Run `node node_modules/vitest/vitest.mjs related --run` on every file you changed and `npm run build`. Report what passed.
+
+## The fixes from review 20 (2026-11-13)
+
+Review 20 (`docs/agents/AUDIT-2026-11-REVIEW-20.md`, P135, the first review on Gemini 4 Hydrogen) found two findings that block a push and four that do not. These three briefs touch separate places. Stop starting new work at minute 25: the machine shuts down at 4 am.
+
+**P138. Every lane lock check uses the runner's stale test (AGY).** Read review 20 findings 2, 4 and 5, and this brief only. Use no subagents. Run every command in the foreground. Commit each step as you finish it. Files: server/lanes-source.js, server/runs.js, tests/lanes-source.test.js, tests/runs-folder.test.js, docs/agents/CHANGELOG.md.
+
+1. `laneLockAlive` in `server/lanes-source.js` and in `server/runs.js` use `isHolderAlive(holder.pid, path) || isHolderAlive(holder.child, path)` from `scripts/lane-lock.mjs`, as `server/projects.js` does since P125.
+2. Do not change `scripts/run-lane.mjs`; finding 4 there goes to P140.
+3. Tests, by what they prove: a stale lock whose pid was reused on Windows does not keep an orphan run open or mark a lane busy; a live child keeps it open.
+4. Run `node node_modules/vitest/vitest.mjs related --run server/lanes-source.js server/runs.js` and `npm run build`. Report what passed.
+
+**P139. The file-index test checks write modes on its own (OpenCode).** Read review 20 finding 1 and this brief only. Use no subagents. Run every command in the foreground. Commit each step as you finish it. Files: tests/file-index.test.js, docs/agents/CHANGELOG.md.
+
+1. P128 made the test's reference walk call `touchesForCommand` for write modes, so a write-mode bug in `src/model/commands.js` shows on both sides and the test cannot catch it. Give the reference walk its own small write-target helper again (redirect operands, the file a writer such as `tee` or `Set-Content` names, `sed -i` outside quotes, and the mutators), with the P110 rule that `cat >> name~` reads. Strip heredocs as `commands.js` does.
+2. Prove the test can fail: break one write rule in a scratch copy of the logic inside the test (not in `src/`), see the test fail, and leave a short test that keeps that proof.
+3. Run `node node_modules/vitest/vitest.mjs run tests/file-index.test.js`. Report what passed.
+
+**P140. Dry runs and lock refusals print no profile folder (Codex).** Read review 20 findings 3, 4 and 6, and this brief only. Change only the files listed; the runner commits them. Files: scripts/run-lane.mjs, scripts/lane-lock.mjs, tests/run-lane.test.js, tests/lane-lock.test.js.
+
+1. Finding 3: `printCommand` in `scripts/run-lane.mjs` passes every path it prints (the program, the MCP config, the usage file and any runs-folder path inside `args`) through `printedRunsFolder`, and masks `APPDATA` as `%APPDATA%` too. Keep the `%TEMP%` paths the existing tests assert.
+2. Finding 4: `refuseRunningLane` checks the child with `isHolderAlive(holder.child, lock)`.
+3. Finding 6: the lock refusal sentences in `takeProjectLock` and in `running()` of `scripts/lane-lock.mjs` print the lock path through `printedRunsFolder`; update the test that builds that sentence.
+4. You cannot run vitest here. Say in your report which tests you added or changed and what each asserts.
