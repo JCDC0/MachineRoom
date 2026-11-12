@@ -13,29 +13,46 @@ function pathLike(value) {
 export function parseBriefs(markdown) {
   const briefs = []
   let section = ''
+  let open = null
+  const close = () => {
+    if (open === null) return
+    const { lines, ...brief } = open
+    briefs.push({ ...brief, text: lines.join('\n').trim() })
+    open = null
+  }
   for (const line of String(markdown).replace(/\r\n/g, '\n').split('\n')) {
     const heading = /^##\s+(.*)$/.exec(line)
     if (heading) {
+      close()
       section = heading[1].trim()
       continue
     }
     const found = BRIEF_LINE.exec(line)
-    if (!found) continue
-    const [, id, head, text] = found
-    const split = OWNER_TAIL.exec(head)
-    const title = split ? split[1] : head
-    const ownerText = split ? split[2] : ''
-    const lower = ownerText.toLowerCase()
-    briefs.push({
-      id,
-      title,
-      ownerText,
-      owners: OWNER_ORDER.filter((name) => new RegExp(`\\b${name}\\b`).test(lower)),
-      done: DONE_MARKER.test(ownerText),
-      section,
-      text: text.trim(),
-    })
+    if (found) {
+      close()
+      const [, id, head, text] = found
+      const split = OWNER_TAIL.exec(head)
+      const title = split ? split[1] : head
+      const ownerText = split ? split[2] : ''
+      const lower = ownerText.toLowerCase()
+      open = {
+        id,
+        title,
+        ownerText,
+        owners: OWNER_ORDER.filter((name) => new RegExp(`\\b${name}\\b`).test(lower)),
+        done: DONE_MARKER.test(ownerText),
+        section,
+        lines: [text],
+      }
+      continue
+    }
+    if (/^#{1,6}\s/.test(line)) {
+      close()
+      continue
+    }
+    if (open !== null) open.lines.push(line)
   }
+  close()
   return briefs
 }
 

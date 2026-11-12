@@ -42,8 +42,29 @@ describe('parseBriefs', () => {
     const text = '## Open\r\n\r\n**X1. Do the thing (AGY, merged as 0.1.2).** Text here.\r\n\r\n**Y2b. No owner.** Plain text.\r\nnot a brief\r\n'
     expect(parseBriefs(text)).toEqual([
       { id: 'X1', title: 'Do the thing', ownerText: 'AGY, merged as 0.1.2', owners: ['agy'], done: true, section: 'Open', text: 'Text here.' },
-      { id: 'Y2b', title: 'No owner', ownerText: '', owners: [], done: false, section: 'Open', text: 'Plain text.' },
+      { id: 'Y2b', title: 'No owner', ownerText: '', owners: [], done: false, section: 'Open', text: 'Plain text.\nnot a brief' },
     ])
+  })
+
+  it('keeps the body down to the next brief or section heading', () => {
+    const text = [
+      '## Fixes',
+      '',
+      '**P114. Review the merges (Codex).** Read this brief only.',
+      '',
+      'Review what these merges brought.',
+      '',
+      'Files: docs/agents/AUDIT-2026-11-REVIEW-17.md.',
+      '',
+      '**P115. Finish the menu (OpenCode).** Do the work.',
+      '',
+      '### A later section',
+      'Prose that belongs to no brief.',
+    ].join('\n')
+    const [first, second] = parseBriefs(text)
+    expect(first.text).toBe('Read this brief only.\n\nReview what these merges brought.\n\nFiles: docs/agents/AUDIT-2026-11-REVIEW-17.md.')
+    expect(briefFileList(first.text)).toEqual(['docs/agents/AUDIT-2026-11-REVIEW-17.md'])
+    expect(second.text).toBe('Do the work.')
   })
 
   it('finds two owners in one brief', () => {
@@ -78,6 +99,10 @@ describe('briefFileList', () => {
     expect(briefFileList(byId('U77').text)).toEqual([
       'src/briefs/run.js', 'src/briefs/briefs.js', 'scripts/run-lane.mjs', 'docs/agents/CHANGELOG.md',
     ])
+  })
+
+  it('reads a Files: line two paragraphs below the real P114 heading', () => {
+    expect(briefFileList(byId('P114').text)).toEqual(['docs/agents/AUDIT-2026-11-REVIEW-17.md'])
   })
 
   it('answers an empty list for no marker, none or a reference to another brief', () => {
@@ -227,7 +252,7 @@ describe('buildPrompt', () => {
       const namesUndefined = `${brief.title}\n${brief.text}`.includes('undefined')
       if (!namesUndefined) expect(prompt, brief.id).not.toContain('undefined')
       expect(prompt, brief.id).toContain(`Task ${brief.id}:`)
-      expect(prompt.length, brief.id).toBeLessThan(9000)
+      expect(prompt.length, brief.id).toBeLessThan(12000)
     }
   })
 })

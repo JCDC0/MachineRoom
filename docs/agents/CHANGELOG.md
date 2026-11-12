@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- P116: the runner commits only the brief's selected paths, so a file the lane staged itself stays out, a brief keeps every line down to the next heading, and a run of several briefs commits every brief's allowed files.
 - P112: run-lane passes a native lane its minute limit as MR_AGENT_MINUTES, and each tool result tells the agent the minutes used, with one warning to write its file at 60 percent.
 - P105: a branched conversation saves and restores its quoted transcript and clears it only once a turn that carried it starts; an endpoint edit or refresh keeps the model details of the ids it keeps.
 - P108: a model named ENDPOINT/ID takes its window only from that endpoint's details, a suffix match counts only when it is the only one, and a sub orchestrator resolves its window again on a model change.
