@@ -70,7 +70,8 @@ function startFakeApi(handler) {
         const status = Number.isInteger(answer?.status) ? answer.status : 200
         const headers = { 'content-type': 'application/json', ...(answer?.headers ?? {}) }
         res.writeHead(status, headers)
-        res.end(JSON.stringify(answer?.body ?? answer))
+        const payload = answer?.raw !== undefined ? answer.raw : JSON.stringify(answer?.body ?? answer)
+        res.end(payload)
       } catch (error) {
         res.writeHead(500, { 'content-type': 'application/json' })
         res.end(JSON.stringify({ error: String(error?.message ?? error) }))
@@ -331,6 +332,60 @@ describe('mr-agent', () => {
     const final = jsonLines(result.stdout).at(-1)
     expect(final.is_error).toBe(true)
     expect(final.result).toContain('401')
+    expect(final.result).not.toContain('test-key')
+  })
+
+  it('tries a non-JSON 200 answer again and finishes', async () => {
+    const folder = tempDir()
+    const api = await startFakeApi((_body, index) =>
+      index === 0
+        ? { status: 200, headers: { 'retry-after': '0' }, raw: '<html>Service Unavailable</html>' }
+        : chatAnswer({ text: 'Done.' }),
+    )
+    const result = await runAgent({ folder, api, env: { MR_AGENT_RETRY_BASE_MS: '1' } })
+    expect(result.code).toBe(0)
+    expect(api.calls).toHaveLength(2)
+    expect(jsonLines(result.stdout).at(-1)).toMatchObject({ type: 'result', is_error: false, result: 'Done.' })
+  })
+
+  it('tries a 200 answer without choices again and finishes', async () => {
+    const folder = tempDir()
+    const api = await startFakeApi((_body, index) =>
+      index === 0
+        ? { status: 200, headers: { 'retry-after': '0' }, body: { error: 'please retry' } }
+        : chatAnswer({ text: 'Done.' }),
+    )
+    const result = await runAgent({ folder, api, env: { MR_AGENT_RETRY_BASE_MS: '1' } })
+    expect(result.code).toBe(0)
+    expect(api.calls).toHaveLength(2)
+    expect(jsonLines(result.stdout).at(-1)).toMatchObject({ type: 'result', is_error: false, result: 'Done.' })
+  })
+
+  it('fails with the sentence and the body start when non-JSON on every try', async () => {
+    const folder = tempDir()
+    const bodyStart = '<html>' + 'x'.repeat(194)
+    const raw = `${bodyStart}EXTRA_THAT_EXCEEDS_200_CHARS`
+    const api = await startFakeApi(() => ({ status: 200, headers: { 'retry-after': '0' }, raw }))
+    const result = await runAgent({ folder, api, env: { MR_AGENT_RETRY_BASE_MS: '1' } })
+    expect(result.code).toBe(1)
+    expect(api.calls).toHaveLength(5)
+    const final = jsonLines(result.stdout).at(-1)
+    expect(final.is_error).toBe(true)
+    expect(final.result).toBe(`The API answer was not JSON (200): ${bodyStart}.`)
+  })
+
+  it('masks a key in the body so it never reaches the error', async () => {
+    const folder = tempDir()
+    const api = await startFakeApi(() => ({
+      status: 200,
+      headers: { 'retry-after': '0' },
+      raw: '<html>Error with token test-key in the body</html>',
+    }))
+    const result = await runAgent({ folder, api, env: { MR_AGENT_RETRY_BASE_MS: '1' } })
+    expect(result.code).toBe(1)
+    const final = jsonLines(result.stdout).at(-1)
+    expect(final.is_error).toBe(true)
+    expect(final.result).toContain('[key]')
     expect(final.result).not.toContain('test-key')
   })
 

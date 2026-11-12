@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- P96: the native agent retries an answer whose body is not JSON or has no choices, like a 502, and names the status and the start of the body after the last try.
 - P85: run-lane records the Claude Code or OpenCode session that started it, and the room puts that session in the orchestrator's place at the top and in the Agents tab, with lane-start stars leaving from it.
 - P86: the command parser drops bash heredoc bodies, marks only a redirect's target as written, and counts files inside inline programs as reads, so a brief written with cat and a heredoc no longer lights the files it names.
 - P80: review 13 of the P70 to P75 merges finds two push blockers (a made lane cannot start through run-lane, and the runner commit stages every file) and six smaller findings.
