@@ -178,6 +178,7 @@ Step 8. Push, only at the owner's yes for that push.
 - An AGY run is far past its size: it has likely stalled on a subagent. Stop it and give the brief to OpenCode.
 - An OpenCode session keeps writing after its run stopped: it was started without `--standalone` and lives in the OpenCode service. Stop it with `opencode api POST /api/session/SESSION/interrupt` using the id in its log, or stop the service. Then check `git status` in every folder it could reach.
 - A file named `nul`, or any stray file, in the main checkout after a lane run: a lane's command lost its `cd`. Delete the file and check `git status`.
+- A prepared merge is gone and the reflog shows `reset: moving to HEAD`: a room's own orchestrator woke on a lane's end and ran `git merge --abort` in the main checkout (2026-11-12, P79). Any bridge started with `--lanes` on the testbench wakes its orchestrator that way, so start none of your own while lanes run; check a page by eye on `npm run dev` with `?replay`, or on a bridge with a temporary runs folder. Finish a merge right after preparing it. merge-lane reads the branch from the lane's worktree, so switch the worktree to main only after the merge.
 
 ## Review checker
 

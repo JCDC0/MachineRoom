@@ -971,3 +971,18 @@ The list is `renderSessionRow` in `src/ui/Sidebar.jsx` with helpers in `src/ui/s
 Run `npx vitest related --run` on every file you changed and `npm run build`; both must pass. Name the by-eye checks for the orchestrator at 1280 by 800: the menu open on a row, an archived list, a search.
 
 Files: src/ui/Sidebar.jsx, src/ui/sidebar.js, src/styles.css, server/orchestrator.js, server/orchestrators.js, tests/.
+
+
+## A woken orchestrator leaves another's merge alone (2026-11-12, night)
+
+At 22:02 a room's orchestrator woke on a lane's end, found a merge the Claude orchestrator had prepared in the main checkout, and ran `git merge --abort`, undoing it. A room turn (one no owner asked for) starts from `maybeStartTurn` in `server/orchestrator.js` after `addMessage('room', ...)`; nothing checks the project's git state first.
+
+**P94. A room turn waits while a merge is in progress (OpenCode).** Read no part of TASKS.md beyond this brief and the paragraph above it. Use no subagents. Run every command in the foreground. Commit each step as you finish it, and stop starting new work at minute 35. Work on temporary repositories and runs folders, never the real ones. P81 also changes `server/orchestrator.js`: keep your change to the few lines it needs.
+
+1. Before a room turn starts, the bridge asks git for the project's `MERGE_HEAD`, `REBASE_HEAD` and `CHERRY_PICK_HEAD` (`git rev-parse --git-path NAME`, then whether the file exists). If any exists, the turn waits and tries again on the next room timer, and the room message stays pending. An owner's message still starts a turn at once.
+2. The orchestrator's own instructions (find where its system prompt is built) gain one sentence: `Never abort, reset or finish a merge, rebase or cherry-pick you did not start; if one is in progress, say so and wait.`
+3. Tests, by what they prove: a pending room message does not start a turn while `MERGE_HEAD` exists in a temp repository, and starts once it is gone; an owner's message starts at once; the sentence is in the prompt.
+
+Run `npx vitest related --run` on every file you changed and `npm run build`; both must pass.
+
+Files: server/orchestrator.js, the file that builds the orchestrator's prompt, tests/.
