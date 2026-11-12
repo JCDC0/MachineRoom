@@ -656,3 +656,12 @@ Since P51 a tree read asks `git ls-files --deleted` for the tracked files missin
 Run `npx vitest related --run` on every file you changed and `npm run build`; both must pass.
 
 Files: server/index.js, tests/.
+
+
+## Review 12 (2026-11-12, before the push)
+
+**P69. Review the merges of P65 to P68 (OpenCode).** Read no part of TASKS.md beyond this brief. Use no subagents. Change no code. Run every command in the foreground. Commit the file by minute 35.
+
+Read `git log --first-parent ab673388..refs/heads/main` and review the code the merges of P65, P66, P67 and P68 brought, with `git show -m --first-parent SHA`, against the code around it. Skip the commits that touch only `docs/`. Hunt for what a test would not show: a review, merge, Auto or doctor path that now refuses or misses a lane the owner made, or reads a policy from a folder that does not hold one and fails instead of falling back; a made lane reviewed in the wrong worktree; a tree read where `git diff --diff-filter=D` and the old `git ls-files --deleted` disagree (a renamed file, a file removed with `git rm`, a submodule, a path with a space, a bracket or a star, an unmerged path, a sparse checkout, a repository with no commit yet), or where the diff writes to the index or runs a filter; a full read that now waits on the diff when the list has already failed; a stop test in `tests/run-lane-stop.test.js` that can pass when the stop did nothing; and a `scale-live` flag that changes the default run's numbers. Run a finding's test or a short script in a temp folder when one would settle it, and say which findings you proved and which you only read. Write `docs/agents/AUDIT-2026-11-REVIEW-12.md`: a table of at most 8 findings, the one that would hurt the owner most first, each with `file:line`, what goes wrong and when, and the smallest fix; mark each one as a push blocker or not. Write no finding you cannot point to in the code. An empty table with what you checked is a good answer.
+
+Files: docs/agents/AUDIT-2026-11-REVIEW-12.md.
