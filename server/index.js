@@ -15,7 +15,7 @@ import { changeEvents, createControlApi } from './control.js'
 import { createDecideApi } from './decide.js'
 import { createFamilyApi } from './family.js'
 import { createAgentDepthApi } from './agent-depth.js'
-import { createEndpointsApi } from './endpoints.js'
+import { createEndpointsApi, createModelPinsApi } from './endpoints.js'
 import { createFilesApi } from './files.js'
 import { createGitApi } from './git.js'
 import { createHarnessModelsApi } from './harness-models.js'
@@ -586,6 +586,11 @@ export function createBridge(options = {}) {
     sendJson,
     readJsonBody,
     notify: notifyHeard,
+  })
+  const modelPins = createModelPinsApi({
+    runsFolder: resolve(options.runsFolder ?? options.orchestratorFolder ?? lanesSourceObject.folder ?? runsFolder()),
+    sendJson,
+    readJsonBody,
   })
   const maskedSince = new Date().toISOString()
   let maskedTotal = 0
@@ -1206,7 +1211,7 @@ export function createBridge(options = {}) {
     if (req.method === 'OPTIONS') {
       res.writeHead(204, {
         ...corsHeaders(req, isAllowed),
-        'Access-Control-Allow-Methods': 'GET, POST, PATCH, OPTIONS',
+        'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, OPTIONS',
         'Access-Control-Allow-Headers': 'Last-Event-ID, Content-Type, X-MachineRoom-Orchestrator',
       })
       res.end()
@@ -1218,6 +1223,7 @@ export function createBridge(options = {}) {
     if (await harnessModelsApi.handle(req, res, url)) return
     if (await agentsConfig.handle(req, res, url)) return
     if (await endpoints.handle(req, res, url)) return
+    if (await modelPins.handle(req, res, url)) return
     if (await mcp.handle(req, res, url)) return
     if (await activeLanes.handle(req, res, url)) return
     if (await runs.handle(req, res, url)) return

@@ -22,6 +22,8 @@ import {
   cleanEndpoint,
   createEndpointsApi,
   endpointProblem,
+  modelDetailsFromAnswer,
+  modelIdsFromAnswer,
   readEndpoints,
   saveEndpoints,
 } from '../server/endpoints.js'
@@ -136,6 +138,137 @@ describe('endpoint rules', () => {
     expect(cleanEndpoint(endpointBody({ provider: 'Custom', baseUrl: 'https://example.com/api/v1/' })).baseUrl).toBe(
       'https://example.com/api/v1',
     )
+  })
+})
+
+describe('model details', () => {
+  it('keeps all five details of an OpenRouter-shaped answer', async () => {
+    const runsDir = makeTempDir('mr-details-')
+    cleanups.push(async () => removeTempDir(runsDir))
+    saveEndpoints(runsDir, [
+      { name: 'Local', provider: 'Custom', baseUrl: 'http://127.0.0.1:11434/v1', keyName: '', models: [] },
+    ])
+    const answers = []
+    const api = createEndpointsApi({
+      runsFolder: runsDir,
+      sendJson: (_req, _res, status, body) => answers.push({ status, body }),
+      readJsonBody: async () => null,
+      fetchImpl: async () => ({
+        ok: true,
+        json: async () => ({
+          data: [
+            {
+              id: 'openai/gpt-5',
+              name: 'OpenAI: GPT-5',
+              context_length: 400000,
+              pricing: { prompt: '0.00000125', completion: '0.000010' },
+              created: 1735689600,
+            },
+          ],
+        }),
+      }),
+    })
+    await api.handle(
+      { method: 'GET', headers: {} },
+      {},
+      new URL('http://127.0.0.1/api/endpoints/Local/models'),
+    )
+    expect(answers).toEqual([
+      {
+        status: 200,
+        body: {
+          models: ['openai/gpt-5'],
+          modelDetails: [
+            {
+              id: 'openai/gpt-5',
+              name: 'OpenAI: GPT-5',
+              contextLength: 400000,
+              promptPrice: 0.00000125,
+              completionPrice: 0.00001,
+              created: 1735689600,
+            },
+          ],
+        },
+      },
+    ])
+  })
+
+  it('keeps ids and nulls for an answer of plain ids', () => {
+    const answer = { data: ['alpha', 'beta'] }
+    expect(modelIdsFromAnswer(answer)).toEqual(['alpha', 'beta'])
+    expect(modelDetailsFromAnswer(answer)).toEqual([
+      { id: 'alpha', name: 'alpha', contextLength: null, promptPrice: null, completionPrice: null, created: null },
+      { id: 'beta', name: 'beta', contextLength: null, promptPrice: null, completionPrice: null, created: null },
+    ])
+  })
+
+  it('cuts a huge name to 200 characters and keeps no description', () => {
+    const details = modelDetailsFromAnswer({
+      data: [{ id: 'alpha', name: 'n'.repeat(500), description: 'd'.repeat(500), context_length: 128000 }],
+    })
+    expect(details[0].name).toBe('n'.repeat(200))
+    expect(details[0]).not.toHaveProperty('description')
+    expect(details[0].contextLength).toBe(128000)
+  })
+
+  it('loads an old endpoints.json without details', () => {
+    const runsDir = makeTempDir('mr-old-endpoints-')
+    cleanups.push(async () => removeTempDir(runsDir))
+    writeFileSync(
+      join(runsDir, 'endpoints.json'),
+      JSON.stringify({
+        endpoints: [
+          {
+            name: 'Work',
+            provider: 'OpenRouter',
+            baseUrl: 'https://openrouter.ai/api/v1',
+            keyName: 'openrouter',
+            models: ['alpha'],
+          },
+        ],
+      }),
+      'utf8',
+    )
+    const endpoints = readEndpoints(runsDir)
+    expect(endpoints).toHaveLength(1)
+    expect(endpoints[0].models).toEqual(['alpha'])
+    expect(endpoints[0].modelDetails).toEqual([])
+  })
+
+  it('saves the details beside the ids from the quick route, capped at 1000', async () => {
+    const runsDir = makeTempDir('mr-quick-details-')
+    cleanups.push(async () => removeTempDir(runsDir))
+    const answers = []
+    const models = Array.from({ length: MAX_ENDPOINT_MODELS + 1 }, (_, index) => ({
+      id: `model-${index}`,
+      name: `Model ${index}`,
+      context_length: 128000,
+      pricing: { prompt: '0.000001', completion: '0.000002' },
+      created: 1735689600,
+    }))
+    const api = createEndpointsApi({
+      runsFolder: runsDir,
+      sendJson: (_req, _res, status, body) => answers.push({ status, body }),
+      readJsonBody: async () => ({ provider: 'OpenRouter', key: 'quick-details-value', confirmed: true }),
+      fetchImpl: async () => ({ ok: true, json: async () => ({ data: models }) }),
+    })
+    await api.handle(
+      { method: 'POST', headers: { origin: 'http://localhost:5173' } },
+      {},
+      new URL('http://127.0.0.1/api/endpoints/quick'),
+    )
+    expect(answers[0].status).toBe(200)
+    const saved = readEndpoints(runsDir)[0]
+    expect(saved.models).toHaveLength(MAX_ENDPOINT_MODELS)
+    expect(saved.modelDetails).toHaveLength(MAX_ENDPOINT_MODELS)
+    expect(saved.modelDetails[0]).toEqual({
+      id: 'model-0',
+      name: 'Model 0',
+      contextLength: 128000,
+      promptPrice: 0.000001,
+      completionPrice: 0.000002,
+      created: 1735689600,
+    })
   })
 })
 
@@ -326,7 +459,13 @@ describe('/api/endpoints/NAME/models', () => {
     expect(created.status).toBe(200)
     const answer = await get(url, `/api/endpoints/${encodeURIComponent('Local')}/models`)
     expect(answer.status).toBe(200)
-    expect(answer.body).toEqual({ models: ['alpha', 'beta'] })
+    expect(answer.body).toEqual({
+      models: ['alpha', 'beta'],
+      modelDetails: [
+        { id: 'alpha', name: 'alpha', contextLength: null, promptPrice: null, completionPrice: null, created: null },
+        { id: 'beta', name: 'beta', contextLength: null, promptPrice: null, completionPrice: null, created: null },
+      ],
+    })
     expect(seen).toEqual([`Bearer ${key}`])
     expect(seenUrls).toEqual(['/v1/models'])
     expect(answer.text).not.toContain(key)
@@ -386,7 +525,12 @@ describe('/api/endpoints/NAME/models', () => {
       runsFolder: runsDir,
       sendJson: (_req, _res, status, body) => {
         expect(status).toBe(200)
-        expect(body).toEqual({ models: ['alpha'] })
+        expect(body).toEqual({
+          models: ['alpha'],
+          modelDetails: [
+            { id: 'alpha', name: 'alpha', contextLength: null, promptPrice: null, completionPrice: null, created: null },
+          ],
+        })
       },
       readJsonBody: async () => null,
       fetchImpl: async (_url, init) => {
@@ -460,7 +604,16 @@ describe('POST /api/endpoints/quick', () => {
     const runsDir = makeTempDir('mr-quick-fail-')
     cleanups.push(async () => removeTempDir(runsDir))
     saveEndpoints(runsDir, [
-      { name: 'OpenRouter', provider: 'OpenRouter', baseUrl: 'https://openrouter.ai/api/v1', keyName: 'openrouter', models: ['alpha'] },
+      {
+        name: 'OpenRouter',
+        provider: 'OpenRouter',
+        baseUrl: 'https://openrouter.ai/api/v1',
+        keyName: 'openrouter',
+        models: ['alpha'],
+        modelDetails: [
+          { id: 'alpha', name: 'Alpha', contextLength: 128000, promptPrice: 0.000001, completionPrice: 0.000002, created: 1735689600 },
+        ],
+      },
     ])
     const key = 'quick-fail-value'
     const answers = []
@@ -484,6 +637,9 @@ describe('POST /api/endpoints/quick', () => {
     expect(JSON.stringify(answers[0].body)).not.toContain(key)
     expect(readKeys(runsDir)).toEqual({ openrouter: key })
     expect(readEndpoints(runsDir)[0].models).toEqual(['alpha'])
+    expect(readEndpoints(runsDir)[0].modelDetails).toEqual([
+      { id: 'alpha', name: 'Alpha', contextLength: 128000, promptPrice: 0.000001, completionPrice: 0.000002, created: 1735689600 },
+    ])
   })
 
   it('repoints the endpoint at the provider slot when another endpoint names that slot', async () => {

@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- P77: the bridge keeps each endpoint model's name, context length, prices and date in endpoints.json, answers them with the model list, and saves model pins in model-pins.json.
 - P88: a machineroom lane's run log becomes a recording, so native runs replay like the others.
 - P90: Codex writes a ranked plan of ten next briefs, C1 to C10, with file:line for each claim and which can run together.
 - P87: an audit finds that an OpenCode command without --standalone started the OpenCode service, which resumed an old P70 session that switched the worktree; the guide now says to pass --standalone.
