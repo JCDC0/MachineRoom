@@ -750,3 +750,20 @@ The codex lane runs in Codex's sandbox, which keeps git read-only, so it leaves 
 Run `npx vitest related --run` on every file you changed, `npm run build` and `npm run pack-check`; all must pass.
 
 Files: scripts/run-lane.mjs, docs/agents/lanes.json, tests/.
+
+
+## The runs folder leaves the temp folder (2026-11-12)
+
+On 2026-11-12 a cleanup of the C drive emptied `%TEMP%`, and with it the owner's room: `agents.json` with the lane the owner made, `keys.json` with the owner's key, and every run record. A temp folder is the place cleaners empty first, and the room keeps state there that cannot be rebuilt. The owner said yes to moving it.
+
+**P76. The room keeps its runs folder outside the temp folder (OpenCode).** Read no part of TASKS.md beyond this brief and the paragraph above it. Use no subagents. Run every command in the foreground. Commit each step as you finish it, and stop starting new work at minute 45. Work on temporary folders passed through `env`, never on the real `%LOCALAPPDATA%`, `%TEMP%` or home folder.
+
+1. `runsFolder(env)` in `server/lanes-source.js` answers `MACHINEROOM_RUNS` when it is set, as now. Otherwise, on Windows `%LOCALAPPDATA%\MachineRoom\runs`; on other systems `$XDG_STATE_HOME/machineroom/runs`, or `~/.local/state/machineroom/runs` when that variable is not set. When none of those can be found, the temp folder as now.
+2. The six other places that build `TEMP\machineroom-runs` themselves (`server/harness-models.js:28`, `server/orchestrator.js:284`, `server/orchestrators.js:69`, `scripts/mcp-bridge.mjs:29`, `scripts/mr-agent.mjs:386` and `:1016`, `scripts/run-recording.mjs:16`) call `runsFolder` instead, so there is one answer. `scripts/mr-agent.mjs` may import it only if that keeps it a single file that runs alone; if not, it gets a copy of the same rule with a test that the two agree.
+3. The first time the bridge or a lane command finds no folder at the new place and a folder at the old `TEMP\machineroom-runs`, it copies the old folder there, once, and prints `Moved the runs folder from OLD to NEW.` with `%TEMP%` and `%LOCALAPPDATA%` in place of the real folders. It never deletes the old folder and never copies over an existing new one.
+4. `docs/agents/architecture/LIVE.md` and `docs/GUIDE.md` name the new place; read only the lines that name `machineroom-runs`.
+5. Tests, by what they prove: each system's answer with and without its variables; `MACHINEROOM_RUNS` still wins; the six callers give the same folder as `runsFolder`; the copy happens once, keeps the old folder, and never overwrites a new one; no path in a printed line holds the real folder names.
+
+Run `npx vitest related --run` on every file you changed, `npm run build` and `npm run pack-check`; all must pass.
+
+Files: server/lanes-source.js, server/harness-models.js, server/orchestrator.js, server/orchestrators.js, scripts/mcp-bridge.mjs, scripts/mr-agent.mjs, scripts/run-recording.mjs, docs/agents/architecture/LIVE.md, docs/GUIDE.md, tests/.

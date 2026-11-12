@@ -56,7 +56,7 @@ Always:
 Before anything else:
 
 1. In the main checkout: `git status --short`, `git log --oneline -3` and `git rev-list --count origin/main..main`. Is it clean, and how much is unpushed.
-2. What is running: a `<lane>.lock` in the testbench `%TEMP%\machineroom-testbench\`, and any `opencode` process. One `opencode serve --service` with no child is the owner's. After a shutdown that service can resume an old lane session that writes in a worktree, so check before you start lanes.
+2. What is running: a `<lane>.lock` in the testbench `%LOCALAPPDATA%\MachineRoom\testbench\` (moved out of `%TEMP%` on 2026-11-12, after a disk cleanup emptied it), and any `opencode` process. One `opencode serve --service` with no child is the owner's. After a shutdown that service can resume an old lane session that writes in a worktree, so check before you start lanes.
 3. Each lane worktree: `git -C .worktrees/LANE status --short` is empty, and its branch is merged or waits for review.
 4. Read `Where things stand`, the newest section of `TASKS.md` and the top of the changelog. Then tell the owner what runs, what waits for review and what you will do next.
 
@@ -76,7 +76,7 @@ Step 0. Work in the testbench, never in the owner's room.
 - Every lane command of yours (`run-lane`, `merge-lane`, `outcome`, `review-lane`, `worktrees`, `hand-run`, `candidate`, `run-recording`) starts with these two variables, so its records, logs, locks and lanes stay in the testbench:
 
 ```
-$env:MACHINEROOM_RUNS = "$env:TEMP\machineroom-testbench"; $env:MACHINEROOM_LANES_DIR = "docs/agents"
+$env:MACHINEROOM_RUNS = "$env:LOCALAPPDATA\MachineRoom\testbench"; $env:MACHINEROOM_LANES_DIR = "docs/agents"
 ```
 
 - Without them the tools read the owner's room and refuse the fleet lanes. That refusal is correct: set the variables, do not change the room.
