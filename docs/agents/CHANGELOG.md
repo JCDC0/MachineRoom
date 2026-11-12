@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- A codex lane whose program is plain codex, with no codex on PATH, starts the newest codex.exe of the Codex app under %LOCALAPPDATA%\OpenAI\Codex\bin, and the harness check finds it too; the fleet's codex lane now names plain codex (P73, the first brief written by the codex lane).
 - Every tree event carries its version, the page reconnects from the newest one it applied, and a version the bridge no longer holds gets one full list, so files added or deleted while the page was away show after a reconnect (P72, from GPT 6.1 Sol's review).
 - A Codex lane passes --add-dir for each folder in cli.addDirs, so the codex lane can write the main checkout's .git, and a Codex run becomes a recording (P74).
 - Opening another project is refused while the lane source holds a run open, since the project route now gets the live lane source and not its settings (P71, from GPT 6.1 Sol's review).

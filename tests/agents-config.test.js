@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process'
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
-import { join, resolve } from 'node:path'
+import { existsSync, mkdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
+import { dirname, join, resolve } from 'node:path'
 import { tmpdir } from 'node:os'
 import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -13,6 +13,7 @@ import {
   NAME_LENGTH_PROBLEM,
   ORIGIN_CREATE_PROBLEM,
   buildMadeLane,
+  codexAppProgram,
   createAgentsConfigApi,
   effortUnavailableProblem,
   isHarnessAvailable,
@@ -295,6 +296,42 @@ describe('machineroom availability', () => {
     expect(isHarnessAvailable('machineroom', { lanes, env: { MACHINEROOM_API_KEY: 'test' } })).toBe(true)
     expect(isHarnessAvailable('machineroom', { lanes, env: { OPENROUTER_API_KEY: 'placeholder' } })).toBe(true)
     expect(isHarnessAvailable('machineroom', { lanes, env: { MACHINEROOM_API_KEY: '   ', OPENROUTER_API_KEY: '' } })).toBe(false)
+  })
+})
+
+describe('Codex app availability', () => {
+  it('finds the newest Codex app program by modified time', () => {
+    const localAppData = tempDir('mr-codex-app-')
+    const older = join(localAppData, 'OpenAI', 'Codex', 'bin', 'hash-old', 'codex.exe')
+    const newer = join(localAppData, 'OpenAI', 'Codex', 'bin', 'hash-new', 'codex.exe')
+    mkdirSync(dirname(older), { recursive: true })
+    mkdirSync(dirname(newer), { recursive: true })
+    writeFileSync(older, '')
+    writeFileSync(newer, '')
+    utimesSync(older, new Date(1000), new Date(1000))
+    utimesSync(newer, new Date(2000), new Date(2000))
+
+    expect(codexAppProgram({ env: { LOCALAPPDATA: localAppData }, platform: 'win32' })).toBe(newer)
+  })
+
+  it('returns null without a folder, variable, or on another system', () => {
+    const localAppData = tempDir('mr-codex-app-empty-')
+    expect(codexAppProgram({ env: { LOCALAPPDATA: localAppData }, platform: 'win32' })).toBeNull()
+    expect(codexAppProgram({ env: {}, platform: 'win32' })).toBeNull()
+    expect(codexAppProgram({ env: { LOCALAPPDATA: localAppData }, platform: 'linux' })).toBeNull()
+  })
+
+  it('marks a Codex lane available when its app program is installed', () => {
+    const localAppData = tempDir('mr-codex-app-available-')
+    const program = join(localAppData, 'OpenAI', 'Codex', 'bin', 'hash', 'codex.exe')
+    mkdirSync(dirname(program), { recursive: true })
+    writeFileSync(program, '')
+
+    expect(isHarnessAvailable('codex', {
+      lanes: { codex: { cli: { harness: 'codex', bin: 'codex' } } },
+      env: { LOCALAPPDATA: localAppData, PATH: '', Path: '' },
+      platform: 'win32',
+    })).toBe(true)
   })
 })
 

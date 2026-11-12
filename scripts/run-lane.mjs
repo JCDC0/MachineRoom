@@ -11,7 +11,8 @@ import { briefProblems, briefWorktreeProblems, childEnvironment, commandFor, cre
 import { outcomeTable } from '../server/outcomes.js'
 import { readMainSubjectsSync } from '../server/runs.js'
 import { isLockHolderStale, killTree, descendantProcesses, leftoverProcesses, listProcesses } from '../server/processTree.js'
-import { gitPath } from '../server/programPath.js'
+import { codexAppProgram } from '../server/agents-config.js'
+import { gitPath, programPath } from '../server/programPath.js'
 import { lanesFolder, readAllLanes, runsFolder } from '../server/lanes-source.js'
 import { readEndpoints } from '../server/endpoints.js'
 import { readAgentDepth } from '../server/agent-depth.js'
@@ -512,6 +513,23 @@ function printCommand(command, prompt, { mcpConfig = '', mcpServers = [] } = {})
   if (!command.args.includes(prompt)) console.log(`prompt: <prompt: ${prompt.length} characters>`)
 }
 
+function codexLaneProgram(lane, env = process.env) {
+  const bin = lane?.cli?.bin
+  if (lane?.cli?.harness !== 'codex' || (bin !== undefined && bin !== null && bin !== 'codex')) return { lane, program: null }
+  if (programPath('codex', { env })) return { lane, program: null }
+  const program = codexAppProgram({ env })
+  return program ? { lane: { ...lane, cli: { ...lane.cli, bin: program } }, program } : { lane, program: null }
+}
+
+function printedCodexProgram(command, program, env = process.env) {
+  if (!program || typeof env?.LOCALAPPDATA !== 'string' || env.LOCALAPPDATA === '') return command
+  const localAppData = resolve(env.LOCALAPPDATA)
+  return {
+    ...command,
+    file: command.file.startsWith(localAppData) ? `%LOCALAPPDATA%${command.file.slice(localAppData.length)}` : command.file,
+  }
+}
+
 function gitRead(cwd, args) {
   let git
   try {
@@ -991,8 +1009,9 @@ async function main() {
     const harness = lane.cli?.harness
     const needsMcp = enabledServers.length > 0 && (harness === 'claude' || harness === 'opencode')
     const mcpConfigPath = needsMcp ? join(folder, `${name}.mcp.json`) : ''
-    const command = commandFor({ lane, prompt, env: process.env, usageFile, title: name, mcpConfig: mcpConfigPath })
-    printCommand(command, prompt, { mcpConfig: mcpConfigPath, mcpServers: enabledServers })
+    const codex = codexLaneProgram(lane)
+    const command = commandFor({ lane: codex.lane, prompt, env: process.env, usageFile, title: name, mcpConfig: mcpConfigPath })
+    printCommand(printedCodexProgram(command, codex.program), prompt, { mcpConfig: mcpConfigPath, mcpServers: enabledServers })
     if (start) {
       const from = start.from && start.from !== start.startBranch ? ` (the worktree was on ${start.from})` : ''
       console.log(`start branch: ${start.startBranch}${from}`)
@@ -1035,8 +1054,9 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
 
   try {
     const sessionId = randomUUID()
+    const codex = codexLaneProgram(lane)
     const command = commandFor({
-      lane,
+      lane: codex.lane,
       prompt,
       env: process.env,
       usageFile,
