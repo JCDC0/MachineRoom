@@ -176,9 +176,10 @@ export function createTestDom() {
       },
       insertBefore(child, before) {
         if (before == null) return node.appendChild(child)
+        if (child === before) return child
+        if (child.parentNode) child.parentNode.removeChild(child)
         const index = node.childNodes.indexOf(before)
         if (index === -1) throw new Error('reference node not found')
-        if (child.parentNode) child.parentNode.removeChild(child)
         node.childNodes.splice(index, 0, child)
         child.parentNode = node
         return child
