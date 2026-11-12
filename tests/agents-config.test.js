@@ -302,8 +302,8 @@ describe('machineroom availability', () => {
 describe('Codex app availability', () => {
   it('finds the newest Codex app program by modified time', () => {
     const localAppData = tempDir('mr-codex-app-')
-    const older = join(localAppData, 'OpenAI', 'Codex', 'bin', 'hash-old', 'codex.exe')
-    const newer = join(localAppData, 'OpenAI', 'Codex', 'bin', 'hash-new', 'codex.exe')
+    const older = join(localAppData, 'OpenAI', 'Codex', 'bin', '0123456789abcdef', 'codex.exe')
+    const newer = join(localAppData, 'OpenAI', 'Codex', 'bin', 'fedcba9876543210', 'codex.exe')
     mkdirSync(dirname(older), { recursive: true })
     mkdirSync(dirname(newer), { recursive: true })
     writeFileSync(older, '')
@@ -312,6 +312,20 @@ describe('Codex app availability', () => {
     utimesSync(newer, new Date(2000), new Date(2000))
 
     expect(codexAppProgram({ env: { LOCALAPPDATA: localAppData }, platform: 'win32' })).toBe(newer)
+  })
+
+  it('skips a newer folder whose name is not 16 hex characters', () => {
+    const localAppData = tempDir('mr-codex-app-backup-')
+    const version = join(localAppData, 'OpenAI', 'Codex', 'bin', '0123456789abcdef', 'codex.exe')
+    const backup = join(localAppData, 'OpenAI', 'Codex', 'bin', 'backup copy', 'codex.exe')
+    mkdirSync(dirname(version), { recursive: true })
+    mkdirSync(dirname(backup), { recursive: true })
+    writeFileSync(version, '')
+    writeFileSync(backup, '')
+    utimesSync(version, new Date(1000), new Date(1000))
+    utimesSync(backup, new Date(2000), new Date(2000))
+
+    expect(codexAppProgram({ env: { LOCALAPPDATA: localAppData }, platform: 'win32' })).toBe(version)
   })
 
   it('returns null without a folder, variable, or on another system', () => {
@@ -323,7 +337,7 @@ describe('Codex app availability', () => {
 
   it('marks a Codex lane available when its app program is installed', () => {
     const localAppData = tempDir('mr-codex-app-available-')
-    const program = join(localAppData, 'OpenAI', 'Codex', 'bin', 'hash', 'codex.exe')
+    const program = join(localAppData, 'OpenAI', 'Codex', 'bin', '0123456789abcdef', 'codex.exe')
     mkdirSync(dirname(program), { recursive: true })
     writeFileSync(program, '')
 

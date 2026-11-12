@@ -1361,7 +1361,7 @@ describe('scripts/run-lane.mjs', () => {
     const folder = makeTempDir('machine-room-codex-app-')
     try {
       const localAppData = join(folder, 'local-app-data')
-      const appProgram = join(localAppData, 'OpenAI', 'Codex', 'bin', 'hash', 'codex.exe')
+      const appProgram = join(localAppData, 'OpenAI', 'Codex', 'bin', '0123456789abcdef', 'codex.exe')
       mkdirSync(dirname(appProgram), { recursive: true })
       writeFileSync(appProgram, '')
       const lanesFile = lanesFileUnderWorktrees(folder)
@@ -1386,7 +1386,7 @@ describe('scripts/run-lane.mjs', () => {
 
       const installed = await runLane(['codex', brief.id, '--dry-run', '--force'], runEnv)
       expect(installed.code).toBe(0)
-      expect(installed.stdout).toContain('file: %LOCALAPPDATA%\\OpenAI\\Codex\\bin\\hash\\codex.exe')
+      expect(installed.stdout).toContain('file: %LOCALAPPDATA%\\OpenAI\\Codex\\bin\\0123456789abcdef\\codex.exe')
       expect(installed.stdout).not.toContain(localAppData)
 
       const explicitProgram = join(folder, 'custom', 'codex.exe')
