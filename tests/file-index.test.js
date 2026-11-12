@@ -423,6 +423,11 @@ describe('touchesForCommand with the file index', () => {
     expect(difference('cat >> name~', ['name'], [])).toBeNull()
   })
 
+  it('notices a reference walk that breaks the redirect rule', () => {
+    expect(difference('echo hi > src/a.js', ['src/a.js'], [])).toBeNull()
+    expect(difference('echo hi > src/a.js', ['src/a.js'], [], false)).not.toBeNull()
+  })
+
   it('matches the old walk on every shell command in the fixtures', () => {
     const commands = shellCommands(FIXTURES)
     expect(commands.length).toBeGreaterThan(0)
