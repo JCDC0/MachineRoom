@@ -49,8 +49,7 @@ function exportSessionText(file, sessionId) {
 function commitRef(record) {
   const first = Array.isArray(record.commits) ? String(record.commits[0] ?? '') : ''
   const word = first.trim().split(/\s+/)[0]
-  const ref = word || String(record.branch ?? '').trim()
-  if (!ref) throw refusal('The run record names no commit or branch, so its file list cannot be read.')
+  const ref = word || String(record.branch ?? '').trim() || String(record.base ?? '').trim() || 'HEAD'
   if (!/^[A-Za-z0-9][\w./-]*$/.test(ref)) throw refusal(`The run record names ${ref} as its commit, which is not a plain commit or branch name.`)
   return ref
 }
