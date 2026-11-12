@@ -10942,7 +10942,7 @@ body:has(#hud-orchestrator-chat) .lens-waiting {
 }
 
 .mr-picker .mr-model-row {
-  align-items: stretch;
+  align-items: center;
 }
 
 .mr-picker button {
@@ -11088,6 +11088,10 @@ body:has(#hud-orchestrator-chat) .lens-waiting {
   min-width: 0;
   padding: 4px 6px;
   cursor: pointer;
+}
+
+.mr-picker-pick:hover {
+  background: rgb(255 255 255 / 0.06);
 }
 
 .mr-picker-row-main {
