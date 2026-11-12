@@ -1,5 +1,7 @@
 import { execFile } from 'node:child_process'
+import { randomBytes } from 'node:crypto'
 import { existsSync, readFileSync, realpathSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { worktreeFor } from '../src/briefs/run.js'
@@ -88,11 +90,28 @@ function readText(path) {
   }
 }
 
-function defaultGitRunner(worktree, args, { timeout = GIT_TIMEOUT_MS, extraEnv = null } = {}) {
+const NO_HOOKS_DIR = join(tmpdir(), `machineroom-no-hooks-${randomBytes(12).toString('hex')}`)
+
+export function emptyHooksDir() {
+  return NO_HOOKS_DIR
+}
+
+export function defaultGitRunner(worktree, args, { timeout = GIT_TIMEOUT_MS, extraEnv = null } = {}) {
+  const env = { ...process.env, ...(extraEnv ?? {}) }
+  for (const key of Object.keys(env)) {
+    const upper = key.toUpperCase()
+    if (upper === 'GIT_DIR' || upper === 'GIT_WORK_TREE' || upper === 'GIT_INDEX_FILE') {
+      delete env[key]
+    }
+  }
+  const hooksDir = emptyHooksDir()
+  const gitArgs = args[0] === '-c' && typeof args[1] === 'string' && args[1].startsWith('core.hooksPath=')
+    ? args
+    : ['-c', `core.hooksPath=${hooksDir}`, ...args]
   return new Promise((resolveGit, rejectGit) => {
     execFile(
       gitPath(),
-      args,
+      gitArgs,
       {
         cwd: worktree,
         shell: false,
@@ -100,7 +119,7 @@ function defaultGitRunner(worktree, args, { timeout = GIT_TIMEOUT_MS, extraEnv =
         timeout,
         maxBuffer: GIT_MAX_BUFFER,
         encoding: 'utf8',
-        env: extraEnv ? { ...process.env, ...extraEnv } : process.env,
+        env,
       },
       (error, stdout, stderr) => {
         if (error) {
