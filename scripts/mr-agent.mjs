@@ -1170,6 +1170,11 @@ function maxSteps(env) {
   return envNumber(env, 'MR_AGENT_MAX_STEPS', DEFAULT_MAX_STEPS)
 }
 
+function costLimitOf(env) {
+  const value = Number(env?.MR_AGENT_MAX_COST_USD)
+  return Number.isFinite(value) && value > 0 ? value : null
+}
+
 function messageChars(messages) {
   return JSON.stringify(messages).length
 }
@@ -1311,13 +1316,14 @@ async function main() {
   ]
   const limit = contextLimit(process.env)
   const stepLimit = maxSteps(process.env)
+  const costLimit = costLimitOf(process.env)
   let inputTokens = 0
   let outputTokens = 0
   let cost = null
   let lastText = ''
   let step = 0
 
-  const finish = (isError, result) => {
+  const finish = (isError, result, exitCode = isError ? 1 : 0) => {
     writeJson({
       type: 'result',
       subtype: isError ? 'error' : 'success',
@@ -1326,11 +1332,17 @@ async function main() {
       usage: { input_tokens: inputTokens, output_tokens: outputTokens },
       ...(cost === null ? {} : { total_cost_usd: cost }),
     })
-    if (isError) process.exitCode = 1
+    if (exitCode !== 0) process.exitCode = exitCode
   }
 
   try {
     for (step = 0; step < stepLimit; step += 1) {
+      if (costLimit !== null && cost !== null && cost >= costLimit) {
+        const sentence = `Stopped at the cost limit of $${costLimit}.`
+        finish(true, sentence, 3)
+        process.stdout.write(`${sentence}\n`)
+        return
+      }
       boundMessages(messages, limit)
       const payload = {
         model: options.model,

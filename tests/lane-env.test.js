@@ -91,6 +91,28 @@ describe('childEnvironment', () => {
     }
   })
 
+  it('gives only MachineRoom the MR_AGENT_MAX_COST_USD variable', () => {
+    const parentWithCost = { ...PARENT, MR_AGENT_MAX_COST_USD: '0.03' }
+    const mr = childEnvironment(parentWithCost, 'C:\\work', { harness: 'machineroom' })
+    expect(mr.MR_AGENT_MAX_COST_USD).toBe('0.03')
+    for (const harness of ['hermes', 'opencode', 'claude']) {
+      const child = childEnvironment(parentWithCost, 'C:\\work', { harness })
+      expect(child).not.toHaveProperty('MR_AGENT_MAX_COST_USD')
+    }
+  })
+
+  it('keeps MR_AGENT_MAX_COST_USD for MachineRoom when using a saved endpoint', () => {
+    const parentWithCost = { ...PARENT, MR_AGENT_MAX_COST_USD: '0.03' }
+    const mr = childEnvironment(parentWithCost, 'C:\\work', {
+      harness: 'machineroom',
+      model: 'local/test/model',
+      endpoints: [{ name: 'local' }],
+    })
+    expect(mr.MR_AGENT_MAX_COST_USD).toBe('0.03')
+    expect(mr).not.toHaveProperty('OPENROUTER_API_KEY')
+    expect(mr).not.toHaveProperty('MACHINEROOM_API_KEY')
+  })
+
   it('adds MACHINEROOM_RUNS and MACHINEROOM_LANES_FILE only when the runner names them', () => {
     const none = childEnvironment(PARENT, 'C:\\work')
     expect(none).not.toHaveProperty('MACHINEROOM_RUNS')

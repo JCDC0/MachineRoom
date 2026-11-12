@@ -600,6 +600,138 @@ describe('mr-agent', () => {
     expect(result.stderr.trim()).toBe('The endpoint Local was not found.')
   })
 
+  it('stops before the third request with the sentence and exits 3 after two answers of $0.02 with a limit of $0.03', async () => {
+    const folder = tempDir()
+    const runs = tempDir('mr-agent-runs-')
+    writeFileSync(join(folder, 'sample.txt'), 'content\n')
+    const api = await startFakeApi((_body, index) => {
+      if (index === 0) {
+        return chatAnswer({
+          text: 'First step.',
+          usage: { cost: 0.02 },
+          calls: [{ name: 'read_file', arguments: { path: 'sample.txt' } }],
+        })
+      }
+      if (index === 1) {
+        return chatAnswer({
+          text: 'Second step.',
+          usage: { cost: 0.02 },
+          calls: [{ name: 'read_file', arguments: { path: 'sample.txt' } }],
+        })
+      }
+      return chatAnswer({ text: 'Third step.' })
+    })
+    writeFileSync(
+      join(runs, 'endpoints.json'),
+      JSON.stringify({
+        endpoints: [{ name: 'Fake', provider: 'Custom', baseUrl: api.url, keyName: 'fake', models: ['test/model'] }],
+      }),
+    )
+    writeFileSync(join(runs, 'keys.json'), JSON.stringify({ fake: 'slot-key' }), 'utf8')
+    const result = await runAgent({
+      folder,
+      model: 'Fake/test/model',
+      endpoint: 'Fake',
+      env: {
+        MACHINEROOM_RUNS: runs,
+        MACHINEROOM_API_KEY: '',
+        OPENROUTER_API_KEY: '',
+        MR_AGENT_MAX_COST_USD: '0.03',
+      },
+    })
+    expect(api.calls).toHaveLength(2)
+    expect(result.code).toBe(3)
+    const lines = result.stdout.trim().split(/\r?\n/)
+    expect(lines.at(-1)).toBe('Stopped at the cost limit of $0.03.')
+  })
+
+  it('runs on when no cost limit is set', async () => {
+    const folder = tempDir()
+    const runs = tempDir('mr-agent-runs-')
+    writeFileSync(join(folder, 'sample.txt'), 'content\n')
+    const api = await startFakeApi((_body, index) => {
+      if (index === 0) {
+        return chatAnswer({
+          text: 'First step.',
+          usage: { cost: 0.02 },
+          calls: [{ name: 'read_file', arguments: { path: 'sample.txt' } }],
+        })
+      }
+      if (index === 1) {
+        return chatAnswer({
+          text: 'Second step.',
+          usage: { cost: 0.02 },
+          calls: [{ name: 'read_file', arguments: { path: 'sample.txt' } }],
+        })
+      }
+      return chatAnswer({ text: 'Third step.', usage: { cost: 0.02 } })
+    })
+    writeFileSync(
+      join(runs, 'endpoints.json'),
+      JSON.stringify({
+        endpoints: [{ name: 'Fake', provider: 'Custom', baseUrl: api.url, keyName: 'fake', models: ['test/model'] }],
+      }),
+    )
+    writeFileSync(join(runs, 'keys.json'), JSON.stringify({ fake: 'slot-key' }), 'utf8')
+    const result = await runAgent({
+      folder,
+      model: 'Fake/test/model',
+      endpoint: 'Fake',
+      env: {
+        MACHINEROOM_RUNS: runs,
+        MACHINEROOM_API_KEY: '',
+        OPENROUTER_API_KEY: '',
+      },
+    })
+    expect(api.calls).toHaveLength(3)
+    expect(result.code).toBe(0)
+    expect(result.stdout).not.toContain('Stopped at the cost limit')
+  })
+
+  it('counts an answer with no cost as 0', async () => {
+    const folder = tempDir()
+    const runs = tempDir('mr-agent-runs-')
+    writeFileSync(join(folder, 'sample.txt'), 'content\n')
+    const api = await startFakeApi((_body, index) => {
+      if (index === 0) {
+        return chatAnswer({
+          text: 'No cost step.',
+          usage: { prompt_tokens: 10, completion_tokens: 5 },
+          calls: [{ name: 'read_file', arguments: { path: 'sample.txt' } }],
+        })
+      }
+      if (index === 1) {
+        return chatAnswer({
+          text: 'Cost step.',
+          usage: { cost: 0.02 },
+          calls: [{ name: 'read_file', arguments: { path: 'sample.txt' } }],
+        })
+      }
+      return chatAnswer({ text: 'Final step.', usage: { cost: 0.02 } })
+    })
+    writeFileSync(
+      join(runs, 'endpoints.json'),
+      JSON.stringify({
+        endpoints: [{ name: 'Fake', provider: 'Custom', baseUrl: api.url, keyName: 'fake', models: ['test/model'] }],
+      }),
+    )
+    writeFileSync(join(runs, 'keys.json'), JSON.stringify({ fake: 'slot-key' }), 'utf8')
+    const result = await runAgent({
+      folder,
+      model: 'Fake/test/model',
+      endpoint: 'Fake',
+      env: {
+        MACHINEROOM_RUNS: runs,
+        MACHINEROOM_API_KEY: '',
+        OPENROUTER_API_KEY: '',
+        MR_AGENT_MAX_COST_USD: '0.03',
+      },
+    })
+    expect(api.calls).toHaveLength(3)
+    expect(result.code).toBe(0)
+    expect(result.stdout).not.toContain('Stopped at the cost limit')
+  })
+
   it('stops the whole shell tree on the time limit', async () => {
     const folder = tempDir()
     const leftover = join(folder, 'leftover.txt')
