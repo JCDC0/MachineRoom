@@ -1113,6 +1113,13 @@ export function createOrchestrator({
       }
       enforceSessionLimit(sessions)
     }
+    const currentRecord = currentSessionId ? sessions.find((s) => s.id === currentSessionId) : null
+    if (currentRecord) {
+      currentPinned = Boolean(currentRecord.pinned)
+      currentStarred = Boolean(currentRecord.starred)
+      currentUnread = Boolean(currentRecord.unread)
+      if (!currentTitle) currentTitle = currentRecord.title
+    }
     const list = Array.isArray(saved.messages) ? saved.messages : []
     for (const item of list) {
       if (!item || typeof item !== 'object') continue

@@ -420,6 +420,7 @@ export function Sidebar({ client = null, live = false, project = '', tasks = nul
       if (event.key === 'Escape') {
         event.preventDefault()
         event.stopPropagation()
+        event.stopImmediatePropagation?.()
         setMenu(null)
         menuAnchorRef.current?.focus?.()
         return
@@ -431,10 +432,11 @@ export function Sidebar({ client = null, live = false, project = '', tasks = nul
       if (!item) return
       event.preventDefault()
       event.stopPropagation()
+      event.stopImmediatePropagation?.()
       menuActionRef.current(menu.row, item)
     }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
   }, [menu, busy])
 
   function askProject(entry) {
