@@ -385,6 +385,34 @@ describe('mr-agent', () => {
     expect(final.damagedAnswers).toBe(2)
   })
 
+  it('stops without a second request when a cost limit is set and an answer is damaged', async () => {
+    const folder = tempDir()
+    const api = await startFakeApi((_body, index) =>
+      index === 0
+        ? { status: 200, headers: { 'retry-after': '0' }, raw: '<html>Service Unavailable</html>' }
+        : chatAnswer({ text: 'Done.' }),
+    )
+    const result = await runAgent({
+      folder,
+      api,
+      env: {
+        MR_AGENT_RETRY_BASE_MS: '1',
+        MR_AGENT_MAX_COST_USD: '0.05',
+      },
+    })
+    expect(api.calls).toHaveLength(1)
+    expect(result.code).toBe(3)
+    const lines = result.stdout.trim().split(/\r?\n/)
+    expect(lines.at(-1)).toBe('The cost limit is set but the provider did not report a cost; stopped.')
+    const final = JSON.parse(lines.at(-2))
+    expect(final).toMatchObject({
+      type: 'result',
+      is_error: true,
+      result: 'The cost limit is set but the provider did not report a cost; stopped.',
+      damagedAnswers: 1,
+    })
+  })
+
   it('still retries a 502 answer up to the limit', async () => {
     const folder = tempDir()
     const api = await startFakeApi((_body, index) =>
