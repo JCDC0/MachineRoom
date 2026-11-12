@@ -1331,6 +1331,7 @@ async function main() {
   let inputTokens = 0
   let outputTokens = 0
   let cost = null
+  let costUnknown = false
   let lastText = ''
   let step = 0
 
@@ -1348,6 +1349,12 @@ async function main() {
 
   try {
     for (step = 0; step < stepLimit; step += 1) {
+      if (costLimit !== null && costUnknown) {
+        const sentence = 'The cost limit is set but the provider did not report a cost; stopped.'
+        finish(true, sentence, 3)
+        process.stdout.write(`${sentence}\n`)
+        return
+      }
       if (costLimit !== null && cost !== null && cost >= costLimit) {
         const sentence = `Stopped at the cost limit of $${costLimit}.`
         finish(true, sentence, 3)
@@ -1368,7 +1375,11 @@ async function main() {
       const usage = usageOf(data)
       inputTokens += usage.input
       outputTokens += usage.output
-      if (usage.cost !== null) cost = (cost ?? 0) + usage.cost
+      if (usage.cost !== null) {
+        cost = (cost ?? 0) + usage.cost
+      } else {
+        costUnknown = true
+      }
       const text = textOf(message.content).trim()
       if (text !== '') lastText = text
       const calls = toolCallsOf(message, `call_${step}`)

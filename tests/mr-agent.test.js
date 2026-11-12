@@ -743,7 +743,7 @@ describe('mr-agent', () => {
     expect(result.stdout).not.toContain('Stopped at the cost limit')
   })
 
-  it('counts an answer with no cost as 0', async () => {
+  it('stops before the second request with the sentence and exits 3 when a limit is set and an answer reports no cost', async () => {
     const folder = tempDir()
     const runs = tempDir('mr-agent-runs-')
     writeFileSync(join(folder, 'sample.txt'), 'content\n')
@@ -755,14 +755,52 @@ describe('mr-agent', () => {
           calls: [{ name: 'read_file', arguments: { path: 'sample.txt' } }],
         })
       }
-      if (index === 1) {
+      return chatAnswer({ text: 'Second step.' })
+    })
+    writeFileSync(
+      join(runs, 'endpoints.json'),
+      JSON.stringify({
+        endpoints: [{ name: 'Fake', provider: 'Custom', baseUrl: api.url, keyName: 'fake', models: ['test/model'] }],
+      }),
+    )
+    writeFileSync(join(runs, 'keys.json'), JSON.stringify({ fake: 'slot-key' }), 'utf8')
+    const result = await runAgent({
+      folder,
+      model: 'Fake/test/model',
+      endpoint: 'Fake',
+      env: {
+        MACHINEROOM_RUNS: runs,
+        MACHINEROOM_API_KEY: '',
+        OPENROUTER_API_KEY: '',
+        MR_AGENT_MAX_COST_USD: '0.03',
+      },
+    })
+    expect(api.calls).toHaveLength(1)
+    expect(result.code).toBe(3)
+    const lines = result.stdout.trim().split(/\r?\n/)
+    expect(lines.at(-1)).toBe('The cost limit is set but the provider did not report a cost; stopped.')
+  })
+
+  it('runs on when a cost limit is set and reported costs are 0', async () => {
+    const folder = tempDir()
+    const runs = tempDir('mr-agent-runs-')
+    writeFileSync(join(folder, 'sample.txt'), 'content\n')
+    const api = await startFakeApi((_body, index) => {
+      if (index === 0) {
         return chatAnswer({
-          text: 'Cost step.',
-          usage: { cost: 0.02 },
+          text: 'First step.',
+          usage: { cost: 0 },
           calls: [{ name: 'read_file', arguments: { path: 'sample.txt' } }],
         })
       }
-      return chatAnswer({ text: 'Final step.', usage: { cost: 0.02 } })
+      if (index === 1) {
+        return chatAnswer({
+          text: 'Second step.',
+          usage: { cost: 0 },
+          calls: [{ name: 'read_file', arguments: { path: 'sample.txt' } }],
+        })
+      }
+      return chatAnswer({ text: 'Final step.', usage: { cost: 0 } })
     })
     writeFileSync(
       join(runs, 'endpoints.json'),
@@ -784,6 +822,51 @@ describe('mr-agent', () => {
     })
     expect(api.calls).toHaveLength(3)
     expect(result.code).toBe(0)
+    expect(result.stdout).not.toContain('The cost limit is set but the provider did not report a cost; stopped.')
+    expect(result.stdout).not.toContain('Stopped at the cost limit')
+  })
+
+  it('runs on when no cost limit is set and answers report no cost', async () => {
+    const folder = tempDir()
+    const runs = tempDir('mr-agent-runs-')
+    writeFileSync(join(folder, 'sample.txt'), 'content\n')
+    const api = await startFakeApi((_body, index) => {
+      if (index === 0) {
+        return chatAnswer({
+          text: 'First step.',
+          usage: { prompt_tokens: 10, completion_tokens: 5 },
+          calls: [{ name: 'read_file', arguments: { path: 'sample.txt' } }],
+        })
+      }
+      if (index === 1) {
+        return chatAnswer({
+          text: 'Second step.',
+          usage: { prompt_tokens: 10, completion_tokens: 5 },
+          calls: [{ name: 'read_file', arguments: { path: 'sample.txt' } }],
+        })
+      }
+      return chatAnswer({ text: 'Final step.', usage: { prompt_tokens: 10, completion_tokens: 5 } })
+    })
+    writeFileSync(
+      join(runs, 'endpoints.json'),
+      JSON.stringify({
+        endpoints: [{ name: 'Fake', provider: 'Custom', baseUrl: api.url, keyName: 'fake', models: ['test/model'] }],
+      }),
+    )
+    writeFileSync(join(runs, 'keys.json'), JSON.stringify({ fake: 'slot-key' }), 'utf8')
+    const result = await runAgent({
+      folder,
+      model: 'Fake/test/model',
+      endpoint: 'Fake',
+      env: {
+        MACHINEROOM_RUNS: runs,
+        MACHINEROOM_API_KEY: '',
+        OPENROUTER_API_KEY: '',
+      },
+    })
+    expect(api.calls).toHaveLength(3)
+    expect(result.code).toBe(0)
+    expect(result.stdout).not.toContain('The cost limit is set but the provider did not report a cost; stopped.')
     expect(result.stdout).not.toContain('Stopped at the cost limit')
   })
 
