@@ -9,7 +9,7 @@ import { projectLanesFileFor, writeHiddenLanes } from '../server/active-lanes.js
 import { briefProblems, briefWorktreeProblems, commandFor, DEFAULT_MINUTES, filterRunsSince, laneCommandProblem, readinessLine, retryStartProblem, SINCE_PROBLEM, startFailureText, worktreeFor, formatOutcomes, formatStats, formatSummary, laneLockPids, laneLockText, laneStats, laneStopProblem, laneWithOverrides, nextTestStep, parseRunArgs, projectRunGit, runListLine, runRecord, sessionToolLines, summarizeRun, UNATTENDED_NOTE, unattendedPrompt } from '../src/briefs/run.js'
 import { branchFor, parseBriefs } from '../src/briefs/briefs.js'
 import { harnessByKey } from '../src/harnesses/index.js'
-import { startLane } from '../scripts/run-lane.mjs'
+import { appendRunRecord, printedRunsFolder, startLane } from '../scripts/run-lane.mjs'
 import { makeTempDir } from './helpers/tempRoot.js'
 
 const lanes = JSON.parse(readFileSync(new URL('../docs/agents/lanes.json', import.meta.url), 'utf8'))
@@ -2097,6 +2097,97 @@ describe('a runner lane commit', () => {
       expect(run.record.commits).toEqual([])
     } finally {
       rmSync(run.folder, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+    }
+  })
+})
+
+describe('appendRunRecord', () => {
+  it('a record is written after the runs folder is deleted, and the line is printed once', () => {
+    const folder = makeTempDir('mr-append-deleted-')
+    try {
+      const runs = join(folder, 'runs')
+      mkdirSync(runs, { recursive: true })
+      rmSync(runs, { recursive: true, force: true })
+      const file = join(runs, 'runs.jsonl')
+      const messages = []
+      const print = (text) => messages.push(text)
+      const testEnv = { TEMP: folder }
+
+      appendRunRecord({ lane: 'hermes', exitCode: 0 }, { env: testEnv, print, file })
+
+      expect(existsSync(file)).toBe(true)
+      const lines = readFileSync(file, 'utf8').trim().split('\n')
+      expect(lines.length).toBe(1)
+      expect(JSON.parse(lines[0])).toEqual({ lane: 'hermes', exitCode: 0 })
+
+      const sep = process.platform === 'win32' ? '\\' : '/'
+      expect(messages).toEqual([
+        `The runs folder was gone; made it again at %TEMP%${sep}runs.`,
+      ])
+
+      appendRunRecord({ lane: 'hermes', exitCode: 1 }, { env: testEnv, print, file })
+      expect(messages.length).toBe(1)
+      const linesAfter = readFileSync(file, 'utf8').trim().split('\n')
+      expect(linesAfter.length).toBe(2)
+    } finally {
+      rmSync(folder, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+    }
+  })
+
+  it('a normal append prints nothing', () => {
+    const folder = makeTempDir('mr-append-normal-')
+    try {
+      const runs = join(folder, 'runs')
+      mkdirSync(runs, { recursive: true })
+      const file = join(runs, 'runs.jsonl')
+      const messages = []
+      const print = (text) => messages.push(text)
+      const testEnv = { TEMP: folder }
+
+      appendRunRecord({ lane: 'hermes', exitCode: 0 }, { env: testEnv, print, file })
+
+      expect(existsSync(file)).toBe(true)
+      expect(messages).toEqual([])
+    } finally {
+      rmSync(folder, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+    }
+  })
+
+  it('formats the printed path with %LOCALAPPDATA% when the runs folder is in LocalAppData', () => {
+    const local = 'C:\\Users\\me\\AppData\\Local'
+    const folder = `${local}\\MachineRoom\\runs`
+    expect(printedRunsFolder(folder, { LOCALAPPDATA: local })).toBe('%LOCALAPPDATA%\\MachineRoom\\runs')
+  })
+
+  it('formats the printed path with %TEMP% when the runs folder is in Temp', () => {
+    const temp = 'C:\\Users\\me\\AppData\\Local\\Temp'
+    const local = 'C:\\Users\\me\\AppData\\Local'
+    const folder = `${temp}\\machineroom-runs`
+    expect(printedRunsFolder(folder, { TEMP: temp, LOCALAPPDATA: local })).toBe('%TEMP%\\machineroom-runs')
+  })
+
+  it('appends to the runsFile configured by environment', () => {
+    const folder = makeTempDir('mr-append-env-')
+    try {
+      const runs = join(folder, 'custom-runs')
+      const testEnv = { TEMP: folder, MACHINEROOM_RUNS: runs }
+      const messages = []
+      const print = (text) => messages.push(text)
+
+      appendRunRecord({ lane: 'opencode', exitCode: 0 }, { env: testEnv, print })
+
+      const file = join(runs, 'runs.jsonl')
+      expect(existsSync(file)).toBe(true)
+      const lines = readFileSync(file, 'utf8').trim().split('\n')
+      expect(lines.length).toBe(1)
+      expect(JSON.parse(lines[0])).toEqual({ lane: 'opencode', exitCode: 0 })
+
+      const sep = process.platform === 'win32' ? '\\' : '/'
+      expect(messages).toEqual([
+        `The runs folder was gone; made it again at %TEMP%${sep}custom-runs.`,
+      ])
+    } finally {
+      rmSync(folder, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
     }
   })
 })

@@ -32,12 +32,75 @@ function stamp(date = new Date()) {
   return `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}-${pad(date.getHours())}${pad(date.getMinutes())}${pad(date.getSeconds())}`
 }
 
-function runsFile() {
-  return join(runsFolder(), 'runs.jsonl')
+function runsFile(env = process.env) {
+  return join(runsFolder(env), 'runs.jsonl')
 }
 
 function outcomesFile() {
   return join(runsFolder(), 'outcomes.jsonl')
+}
+
+function matchPathPrefix(pathStr, prefix) {
+  if (!pathStr || !prefix) return null
+  if (process.platform === 'win32') {
+    if (pathStr.toLowerCase() === prefix.toLowerCase()) return ''
+    const prefixWithSep = prefix.endsWith('\\') || prefix.endsWith('/') ? prefix : `${prefix}\\`
+    if (pathStr.toLowerCase().startsWith(prefixWithSep.toLowerCase())) {
+      return pathStr.slice(prefix.length)
+    }
+  } else {
+    if (pathStr === prefix) return ''
+    const prefixWithSep = prefix.endsWith('/') ? prefix : `${prefix}/`
+    if (pathStr.startsWith(prefixWithSep)) {
+      return pathStr.slice(prefix.length)
+    }
+  }
+  return null
+}
+
+function testPrefix(resolved, rawPrefix) {
+  if (!rawPrefix) return null
+  const direct = matchPathPrefix(resolved, resolve(rawPrefix))
+  if (direct !== null) return direct
+  const real = matchPathPrefix(resolved, realPath(rawPrefix))
+  if (real !== null) return real
+  return null
+}
+
+export function printedRunsFolder(folder, env = process.env) {
+  const resolved = resolve(String(folder ?? ''))
+  let tempFallback = ''
+  if (env === process.env) {
+    try {
+      tempFallback = tmpdir()
+    } catch {}
+  }
+  const temp = typeof env?.TEMP === 'string' && env.TEMP.trim()
+    ? env.TEMP.trim()
+    : (typeof env?.TMP === 'string' && env.TMP.trim() ? env.TMP.trim() : tempFallback)
+  const local = typeof env?.LOCALAPPDATA === 'string' && env.LOCALAPPDATA.trim()
+    ? env.LOCALAPPDATA.trim()
+    : (env === process.env && process.env.LOCALAPPDATA ? process.env.LOCALAPPDATA : '')
+  if (temp) {
+    const tempSuffix = testPrefix(resolved, temp)
+    if (tempSuffix !== null) return `%TEMP%${tempSuffix}`
+  }
+  if (local) {
+    const localSuffix = testPrefix(resolved, local)
+    if (localSuffix !== null) return `%LOCALAPPDATA%${localSuffix}`
+  }
+  return resolved
+}
+
+export function appendRunRecord(record, { env = process.env, print = console.log, file } = {}) {
+  const targetFile = file || runsFile(env)
+  const folder = dirname(targetFile)
+  if (!existsSync(folder)) {
+    mkdirSync(folder, { recursive: true })
+    print(`The runs folder was gone; made it again at ${printedRunsFolder(folder, env)}.`)
+  }
+  const line = typeof record === 'string' ? record : JSON.stringify(record)
+  appendFileSync(targetFile, `${line.endsWith('\n') ? line : `${line}\n`}`)
 }
 
 function lanesFile() {
@@ -464,7 +527,7 @@ function writeProjectRecord({ record, folder, startHead, startBranch } = {}) {
   })
   if (git.branch !== '') record.branch = git.branch
   record.commits = git.commits
-  appendFileSync(runsFile(), `${JSON.stringify(record)}\n`)
+  appendRunRecord(record)
   console.log(`record: ${runsFile()}`)
 }
 
@@ -899,7 +962,7 @@ async function runQueueProject({ options, lane, lanes }) {
           note: String(error?.message ?? error).slice(0, 200),
         })
         failedRecord.queueStatus = 'failed: the queue stopped'
-        appendFileSync(runsFile(), `${JSON.stringify(failedRecord)}\n`)
+        appendRunRecord(failedRecord)
         console.log(`record: ${runsFile()}`)
       }
       const back = startBranch
@@ -1344,7 +1407,7 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
         ...(project ? { project, task } : {}),
         ...(queue ? { queue } : {}),
       })
-      appendFileSync(runsFile(), `${JSON.stringify(retryRecord)}\n`)
+      appendRunRecord(retryRecord)
       console.log(`record: ${runsFile()}`)
       const retryName = `${name}-retry`
       return await startLane({
@@ -1383,7 +1446,7 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
     if (project && deferRecord) {
       return { code: result.code ?? 1, killed, record, startHead: projectStart.head, startBranch: projectStart.branch }
     }
-    appendFileSync(runsFile(), `${JSON.stringify(record)}\n`)
+    appendRunRecord(record)
     console.log(`record: ${runsFile()}`)
     if (project) return { code: result.code ?? 1, killed }
     try {
