@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- P90: Codex writes a ranked plan of ten next briefs, C1 to C10, with file:line for each claim and which can run together.
 - P87: an audit finds that an OpenCode command without --standalone started the OpenCode service, which resumed an old P70 session that switched the worktree; the guide now says to pass --standalone.
 - P79: the docked chat drops its z-index, so it no longer paints over the Settings panel and takes its clicks when the page is scrolled down.
 - P84: a closed agent chip is a 98 pixel box with its state; the name moves to its aria label and stays in the label under the agent.
