@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { saveEndpoints } from '../server/endpoints.js'
 import { DEFAULT_CONTEXT_WINDOW, resolveContextWindow } from '../server/model-list.js'
 import { createOrchestrator } from '../server/orchestrator.js'
+import { createOrchestrators } from '../server/orchestrators.js'
 import { contextLine } from '../src/ui/agentStrip.js'
 import { makeTempDir, removeTempDir } from './helpers/tempRoot.js'
 
@@ -59,6 +60,21 @@ describe('resolveContextWindow', () => {
     expect(contextLine({ context: { tokens: 16500, window: 1048576 } })).toBe(
       'Context size 16.5k / 1048.6k'
     )
+  })
+
+  it('reads the window from the named endpoint and takes an unnamed suffix only when it is unique', () => {
+    const details = [
+      { name: 'first', modelDetails: [{ id: 'model', contextLength: 1000000 }] },
+      { name: 'second', modelDetails: [{ id: 'model', contextLength: 32000 }] },
+    ]
+    expect(resolveContextWindow('first/model', 'machineroom', 0, details)).toBe(1000000)
+    expect(resolveContextWindow('second/model', 'machineroom', 0, details)).toBe(32000)
+    expect(resolveContextWindow('vendor/model', 'machineroom', 0, details)).toBe(DEFAULT_CONTEXT_WINDOW)
+    expect(
+      resolveContextWindow('vendor/model', 'machineroom', 0, [
+        { name: 'only', modelDetails: [{ id: 'model', contextLength: 32000 }] },
+      ])
+    ).toBe(32000)
   })
 })
 
@@ -233,5 +249,102 @@ describe('orchestrator context window and autocompact', () => {
     orch.setModel({ model: 'claude-opus-5-5', confirmed: true })
     expect(orch.answer().contextWindow).toBe(1000000)
     expect(orch.answer().autocompactPercent).toBe(80)
+  })
+})
+
+describe('a sub orchestrator context window', () => {
+  const ORCHESTRATOR_LANES = {
+    orchestrator: {
+      name: 'Orchestrator',
+      harness: 'Claude Code',
+      cli: { harness: 'claude', bin: 'claude', model: 'opus', contextWindow: 50000 },
+    },
+  }
+
+  function saveTwoEndpoints(temp) {
+    saveEndpoints(temp, [
+      {
+        name: 'first',
+        provider: 'OpenRouter',
+        baseUrl: 'https://openrouter.ai/api/v1',
+        keyName: 'openrouter',
+        models: ['model'],
+        modelDetails: [{ id: 'model', contextLength: 1000000 }],
+      },
+      {
+        name: 'second',
+        provider: 'OpenRouter',
+        baseUrl: 'https://openrouter.ai/api/v1',
+        keyName: 'openrouter',
+        models: ['model'],
+        modelDetails: [{ id: 'model', contextLength: 32000 }],
+      },
+    ])
+  }
+
+  function makeSub(model) {
+    return {
+      id: 'frontend',
+      name: 'Frontend',
+      harness: 'machineroom',
+      model,
+      lanes: [],
+      scope: ['src/ui/**'],
+      restricted: false,
+      setBy: 'owner',
+    }
+  }
+
+  function makeRegistry(temp, lanes) {
+    const registry = createOrchestrators({
+      projectRoot: join(temp, 'project'),
+      runsFolder: temp,
+      lanes,
+      promptFile: join(temp, 'prompt.md'),
+      bridgeUrl: () => 'http://127.0.0.1:5999',
+      onNotice: () => {},
+    })
+    cleanups.push(() => registry.close())
+    return registry
+  }
+
+  it('reads its own model from the right endpoint and follows a model change', () => {
+    const temp = makeTempDir('mr-test-sub-window-')
+    cleanups.push(() => removeTempDir(temp))
+    saveTwoEndpoints(temp)
+    const registry = makeRegistry(temp, ORCHESTRATOR_LANES)
+
+    const added = registry.ladderChange(
+      { ladder: { subs: [makeSub('first/model')] }, by: 'owner', confirmed: true },
+      true
+    )
+    expect(added.status).toBe(200)
+    expect(registry.find('frontend').answer().contextWindow).toBe(1000000)
+
+    const moved = registry.find('frontend').setModel({ model: 'second/model', confirmed: true })
+    expect(moved.status).toBe(200)
+    expect(registry.find('frontend').answer().contextWindow).toBe(32000)
+  })
+
+  it('keeps a lane own override over the endpoint details', () => {
+    const temp = makeTempDir('mr-test-sub-lane-window-')
+    cleanups.push(() => removeTempDir(temp))
+    saveTwoEndpoints(temp)
+    const lanes = {
+      ...ORCHESTRATOR_LANES,
+      endpoint: {
+        name: 'Endpoint',
+        harness: 'MachineRoom',
+        cli: { harness: 'machineroom', bin: 'machineroom', model: 'second/model', contextWindow: 64000 },
+      },
+    }
+    const registry = makeRegistry(temp, lanes)
+
+    const added = registry.ladderChange(
+      { ladder: { subs: [makeSub('second/model')] }, by: 'owner', confirmed: true },
+      true
+    )
+    expect(added.status).toBe(200)
+    expect(registry.find('frontend').answer().contextWindow).toBe(64000)
   })
 })

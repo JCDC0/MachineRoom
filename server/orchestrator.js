@@ -861,7 +861,7 @@ export function createOrchestrator({
   }
   const windowOption = Number.isFinite(contextWindowOption) && contextWindowOption > 0
     ? Math.round(contextWindowOption)
-    : Number.isFinite(lane.cli.contextWindow) && lane.cli.contextWindow > 0
+    : key === ORCHESTRATOR_KEY && Number.isFinite(lane.cli.contextWindow) && lane.cli.contextWindow > 0
       ? Math.round(lane.cli.contextWindow)
       : 0
   const conversationFile = chatFileFor(root, folder, key)
