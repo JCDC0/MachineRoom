@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs'
-import { join, resolve } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import { parseBriefs } from '../src/briefs/briefs.js'
 import { profileFromBrief, profileFromTask } from '../src/policy/profile.js'
 import { chooseRoute, readPolicy, routeLane } from '../src/policy/route.js'
@@ -43,6 +43,7 @@ export function createPolicyApi(options) {
   const resolvedRoot = projectRoot ? resolve(projectRoot) : ''
   const resolvedBriefs = briefsDir ? resolve(briefsDir) : resolvedRoot ? join(resolvedRoot, 'docs', 'agents') : ''
   const resolvedRuns = resolve(options.runsFolder ?? defaultRunsFolder())
+  const lanesDir = options.lanesFile ? dirname(resolve(options.lanesFile)) : lanesFolder()
   const lanes = typeof options.lanes === 'function' ? options.lanes : () => null
 
   function readMeters() {
@@ -59,8 +60,8 @@ export function createPolicyApi(options) {
     return { quotas: costs.quota, spent: { companyMonthlyUsd: costs.summary.spendCents / 100 } }
   }
 
-  function readPolicyFile({ fallback = false } = {}) {
-    const text = readText(resolvedBriefs ? join(resolvedBriefs, POLICY_FILE) : null) ?? (fallback ? readText(join(lanesFolder(), POLICY_FILE)) : null)
+  function readPolicyFile() {
+    const text = readText(join(lanesDir, POLICY_FILE))
     if (text === null) return { status: 404, error: 'The policy file is missing.' }
     try {
       return { policy: readPolicy(text) }
@@ -104,7 +105,7 @@ export function createPolicyApi(options) {
       return
     }
 
-    const read = readPolicyFile({ fallback: true })
+    const read = readPolicyFile()
     if (read.error) {
       sendJson(req, res, read.status, { error: read.error })
       return

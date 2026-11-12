@@ -384,6 +384,7 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
   const resolvedRoot = projectRoot ? realPath(projectRoot) : ''
   const resolvedBriefs = briefsDir ? resolve(briefsDir) : resolvedRoot ? join(resolvedRoot, 'docs', 'agents') : ''
   const laneFile = lanesFile ? resolve(lanesFile) : join(lanesFolder(), 'lanes.json')
+  const lanesDir = dirname(laneFile)
   const recordsDir = () => (runsFolder ? resolve(runsFolder) : dirname(runsFile()))
   const recordsPath = () => join(recordsDir(), 'runs.jsonl')
   const outcomesPath = () => join(recordsDir(), 'outcomes.jsonl')
@@ -428,7 +429,7 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
   }
 
   function routeStart({ lanesConfig, profile, only }) {
-    const policyText = readText('policy.json') ?? readPath(join(lanesFolder(), 'policy.json'))
+    const policyText = readPath(join(lanesDir, 'policy.json'))
     if (policyText === null) return { status: 404, error: 'The policy file is missing.' }
     let policy
     try {
@@ -447,6 +448,11 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
       spent: { companyMonthlyUsd: costs.summary.spendCents / 100 },
       lanes: states,
     })
+    const anyLane = states.some((lane) => lane.eligible && lane.active)
+    const ownerOnly = policy.tiers[answer.tier]?.every((choice) => choice.lane === 'owner')
+    if (answer.lane === null && !anyLane && ownerOnly) {
+      answer.reason = `There is no lane for the ${answer.tier} tier. Make one in the room.`
+    }
     if (answer.lane === null) return { status: 409, error: answer.reason }
     return { lane: answer.lane, routed: { tier: answer.tier, reason: answer.reason } }
   }

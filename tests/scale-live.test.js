@@ -1,10 +1,13 @@
 import { spawnSync } from 'node:child_process'
 import { existsSync, rmSync } from 'node:fs'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { pathsInTreeEvent, runScaleLive } from '../scripts/scale-live.mjs'
 import { gitPath } from '../server/programPath.js'
 import { makeTempDir } from './helpers/tempRoot.js'
+
+const REPO_ROOT = resolve(fileURLToPath(import.meta.url), '..', '..')
 
 const ROWS = [
   'build checkout',
@@ -33,6 +36,8 @@ const ROWS = [
 
 describe('the live scale probe', () => {
   it('runs the bridge on a real checkout and sends no ignored file', async () => {
+    const previousLanes = process.env.MACHINEROOM_LANES_DIR
+    process.env.MACHINEROOM_LANES_DIR = join(REPO_ROOT, 'docs', 'agents')
     const root = makeTempDir('mr-scale-live-')
     const lines = []
     try {
@@ -82,6 +87,8 @@ describe('the live scale probe', () => {
       })
       expect(branch.status).not.toBe(0)
     } finally {
+      if (previousLanes === undefined) delete process.env.MACHINEROOM_LANES_DIR
+      else process.env.MACHINEROOM_LANES_DIR = previousLanes
       rmSync(root, { recursive: true, force: true, maxRetries: 5 })
     }
   }, 90000)

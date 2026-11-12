@@ -235,7 +235,7 @@ export function checkPrerequisites({
   try {
     lanes = JSON.parse(readFileSync(lanesFile, 'utf8'))
   } catch {
-    return { error: 'docs/agents/lanes.json could not be read.' }
+    return { error: `${lanesFile} could not be read.` }
   }
   if (!lanes || typeof lanes !== 'object' || !Object.hasOwn(lanes, lane)) {
     return { error: `There is no lane named ${lane}.` }
@@ -470,7 +470,7 @@ export function finishMerge({
   try {
     lanes = JSON.parse(readFileSync(lanesFile, 'utf8'))
   } catch {
-    return { ok: false, error: 'docs/agents/lanes.json could not be read.' }
+    return { ok: false, error: `${lanesFile} could not be read.` }
   }
   const info = lanes[lane]
   if (!info || typeof info.worktree !== 'string' || !info.worktree.trim()) {
