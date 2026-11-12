@@ -222,12 +222,11 @@ export default function ModelPicker({
   const [query, setQuery] = useState('')
   const [sort, setSort] = useState(readSort)
   const [pins, setPins] = useState([])
+  const [pinsReady, setPinsReady] = useState(false)
   const [pinError, setPinError] = useState('')
   const [loadedDetails, setLoadedDetails] = useState(() => new Map())
   const [active, setActive] = useState(0)
   const searchRef = useRef(null)
-  const pinsRead = useRef(false)
-  const pinsTouched = useRef(false)
   const hasDetails = Array.isArray(details) && details.length > 0
 
   const detailMap = useMemo(() => {
@@ -260,19 +259,20 @@ export default function ModelPicker({
     if (!open) return undefined
     let alive = true
     if (searchRef.current?.focus) searchRef.current.focus()
-    if (typeof client?.modelPins === 'function' && !pinsRead.current) {
-      pinsRead.current = true
+    if (typeof client?.modelPins === 'function' && !pinsReady) {
       Promise.resolve()
         .then(() => client.modelPins())
         .then((list) => {
-          if (alive && !pinsTouched.current) setPins(cleanPickerPins(list))
+          if (!alive) return
+          setPins(cleanPickerPins(list))
+          setPinsReady(true)
         })
         .catch(() => {})
     }
     return () => {
       alive = false
     }
-  }, [open, client])
+  }, [open, client, pinsReady])
 
   useEffect(() => {
     if (!open || hasDetails || typeof client?.endpoints !== 'function') return undefined
@@ -305,7 +305,7 @@ export default function ModelPicker({
   }
 
   function togglePin(row) {
-    pinsTouched.current = true
+    if (!pinsReady) return
     if (!pins.includes(row.id) && pins.length >= PIN_LIMIT) {
       setPinError('At most 200 models can be pinned.')
       return
@@ -447,6 +447,7 @@ export default function ModelPicker({
                         title={pinned ? `Unpin ${parts.name}` : `Pin ${parts.name}`}
                         aria-label={pinned ? `Unpin ${parts.name}` : `Pin ${parts.name}`}
                         aria-pressed={pinned}
+                        disabled={!pinsReady}
                         onClick={() => togglePin(row)}
                       >
                         <PinIcon />

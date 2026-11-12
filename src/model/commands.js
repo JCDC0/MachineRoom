@@ -131,7 +131,7 @@ function withoutHeredocs(command) {
       continue
     }
     const bodyEnd = heredocEnd(text, lineEnd + 1, opener.word, opener.dashed)
-    out += `${text.slice(copied, at)} `
+    out += `${text.slice(copied, at)} ${text.slice(opener.end, lineEnd)}\n`
     copied = bodyEnd
     search = bodyEnd
   }
@@ -201,13 +201,19 @@ function firstSpans(spans) {
   return first
 }
 
-function writeTargets(visible, spans) {
+function writeTargets(segment, visible, spans, fileIndex) {
   const targets = new Set()
   for (const pattern of [REDIRECT, FILE_WRITER]) {
     const operator = new RegExp(pattern.source, 'g')
     let match
     while ((match = operator.exec(visible))) {
       const from = match.index + match[0].length
+      if (pattern === REDIRECT) {
+        const operand = /^\s*(?:"([^"]*)"|'([^']*)'|([^\s<>&|;]+))/.exec(segment.slice(from))
+        const path = operand && (operand[1] ?? operand[2] ?? operand[3])
+        if (path && fileIndex.has(path)) targets.add(path)
+        continue
+      }
       let first = null
       for (const span of spans) {
         if (span.at < from) continue
@@ -238,7 +244,7 @@ export function touchesForCommand(command, files, dirs) {
     const fileIndex = indexFor(files)
     const spans = withoutNested(namedSpans(segment, fileIndex))
     const firstFiles = firstSpans(spans)
-    const targets = mutator || inPlace ? null : writeTargets(visible, spans)
+    const targets = mutator || inPlace ? null : writeTargets(segment, visible, spans, fileIndex)
     const namedFiles = [...firstFiles].sort((a, b) => fileIndex.rankOf(a[0]) - fileIndex.rankOf(b[0]))
     for (const [file] of namedFiles) {
       const mode = mutator || inPlace || (targets && targets.has(file)) ? 'write' : 'read'

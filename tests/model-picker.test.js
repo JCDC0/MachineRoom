@@ -291,6 +291,85 @@ describe('ModelPicker', () => {
     })
   })
 
+  it('disables pinning until the saved pins load and keeps them in the next save', async () => {
+    let resolvePins
+    const pending = new Promise((resolve) => { resolvePins = resolve })
+    const saved = []
+    const client = {
+      modelPins: () => pending,
+      saveModelPins: async (payload) => { saved.push(payload) },
+    }
+    await withDom(async ({ container, root }) => {
+      await act(async () => {
+        root.render(createElement(ModelPicker, { choices: CHOICES, details: DETAILS, client }))
+      })
+      await click(root, container.querySelector('.mr-picker-trigger'))
+      const pin = container.querySelector('[aria-label="Pin GPT-5"]')
+      expect(pin.hasAttribute('disabled')).toBe(true)
+      await click(root, pin)
+      expect(saved).toEqual([])
+
+      await act(async () => { resolvePins(['free/model', 'saved/hidden']) })
+      expect(container.querySelector('[aria-label="Pin GPT-5"]').hasAttribute('disabled')).toBe(false)
+      await click(root, container.querySelector('[aria-label="Pin GPT-5"]'))
+      expect(saved).toEqual([{ pins: ['free/model', 'saved/hidden', 'openai/gpt-5'] }])
+    })
+  })
+
+  it('retries a cancelled pin read on opening and ignores its late answer', async () => {
+    const reads = []
+    const saved = []
+    const client = {
+      modelPins: () => new Promise((resolve) => { reads.push(resolve) }),
+      saveModelPins: async (payload) => { saved.push(payload) },
+    }
+    await withDom(async ({ container, root }) => {
+      await act(async () => {
+        root.render(createElement(ModelPicker, { choices: CHOICES, details: DETAILS, client }))
+      })
+      const trigger = container.querySelector('.mr-picker-trigger')
+      await click(root, trigger)
+      await click(root, trigger)
+      await click(root, trigger)
+      expect(reads).toHaveLength(2)
+      expect(container.querySelector('[aria-label="Pin GPT-5"]').hasAttribute('disabled')).toBe(true)
+      await act(async () => { reads[1](['free/model']) })
+      await act(async () => { reads[0](['old/model']) })
+      await click(root, container.querySelector('[aria-label="Pin GPT-5"]'))
+      expect(saved).toEqual([{ pins: ['free/model', 'openai/gpt-5'] }])
+    })
+  })
+
+  it('keeps pins disabled after a failed read and retries on opening', async () => {
+    let attempts = 0
+    const saved = []
+    const client = {
+      modelPins: async () => {
+        attempts += 1
+        if (attempts === 1) throw new Error('Read failed')
+        return ['free/model']
+      },
+      saveModelPins: async (payload) => { saved.push(payload) },
+    }
+    await withDom(async ({ container, root }) => {
+      await act(async () => {
+        root.render(createElement(ModelPicker, { choices: CHOICES, details: DETAILS, client }))
+      })
+      const trigger = container.querySelector('.mr-picker-trigger')
+      await click(root, trigger)
+      const pin = container.querySelector('[aria-label="Pin GPT-5"]')
+      expect(pin.hasAttribute('disabled')).toBe(true)
+      await click(root, pin)
+      expect(saved).toEqual([])
+      await click(root, trigger)
+      await click(root, trigger)
+      expect(attempts).toBe(2)
+      expect(container.querySelector('[aria-label="Pin GPT-5"]').hasAttribute('disabled')).toBe(false)
+      await click(root, container.querySelector('[aria-label="Pin GPT-5"]'))
+      expect(saved).toEqual([{ pins: ['free/model', 'openai/gpt-5'] }])
+    })
+  })
+
   it('reads the endpoint details when the picker opens', async () => {
     const client = {
       endpoints: async () => [

@@ -127,6 +127,41 @@ describe('touchesForCommand', () => {
     ])
   })
 
+  it('keeps a redirect after the heredoc opener and drops the body', () => {
+    for (const opener of ['<<EOF', "<<'EOF'", '<<"EOF"', '<<-EOF']) {
+      const command = [`cat ${opener} > out.txt`, 'src/a.js', 'EOF', 'cat src/b.js'].join('\n')
+      expect(touchesForCommand(command, ['out.txt', 'src/a.js', 'src/b.js'], [])).toEqual([
+        { path: 'out.txt', mode: 'write', kind: 'file' },
+        { path: 'src/b.js', mode: 'read', kind: 'file' },
+      ])
+    }
+  })
+
+  it('keeps a redirect after an unterminated heredoc opener', () => {
+    const command = ['cat <<EOF > out.txt', 'src/a.js'].join('\n')
+    expect(touchesForCommand(command, ['out.txt', 'src/a.js'], [])).toEqual([
+      { path: 'out.txt', mode: 'write', kind: 'file' },
+    ])
+  })
+
+  it('does not skip an unknown redirect operand to write a known source', () => {
+    for (const target of ['new.txt', '"new file.txt"', "'new file.txt'", 'new/src/b.js']) {
+      for (const operator of ['>', '>>']) {
+        const touches = touchesForCommand(`cat src/a.js ${operator} ${target} src/b.js`, ['src/a.js', 'src/b.js'], [])
+        expect(touches.map((touch) => `${touch.mode}:${touch.path}`)).toEqual([
+          'read:src/a.js', 'read:src/b.js',
+        ])
+      }
+    }
+  })
+
+  it('writes the exact quoted redirect operand and handles each redirect separately', () => {
+    const touches = touchesForCommand('cat src/a.js > "out file.txt" >> new.txt src/b.js', ['src/a.js', 'src/b.js', 'out file.txt'], [])
+    expect(touches.map((touch) => `${touch.mode}:${touch.path}`)).toEqual([
+      'read:src/a.js', 'read:src/b.js', 'write:out file.txt',
+    ])
+  })
+
   it('does not touch a file named in a bash heredoc body', () => {
     const known = ['SCRATCH/p85.md', 'scripts/run-lane.mjs', 'server/lanes-source.js', 'server/claude-sessions.js']
     const command = [
