@@ -628,7 +628,7 @@ Run `npx vitest related --run` on every file you changed, `npm run build` and `n
 
 Files: server/reviews.js, server/policy.js, server/runs.js, server/doctor.js, scripts/merge-lane.mjs, scripts/review-lane.mjs, tests/.
 
-**P66. The run-lane stop test passes under load (OpenCode).** A redo of P59. Read no part of TASKS.md beyond this brief. Use no subagents. Commit each step as you finish it, and stop starting new work at minute 40. Edit only files under `tests/`, and `scripts/run-lane.mjs` only if a test proves a real fault there.
+**P66. The run-lane stop test passes under load (OpenCode).** A redo of P59. Read no part of TASKS.md beyond this brief. Use no subagents. Commit each step as you finish it, and stop starting new work at minute 40. Edit only files under `tests/`, and `scripts/run-lane.mjs` only if a test proves a real fault there. Run every command in the foreground and wait for it to end: your session is over the moment you stop, so never end a turn while a run is still going.
 
 `tests/run-lane-stop.test.js` fails now and then while other lanes run their suites and passes on a retry. Run the file 15 times alone and 8 times with `node scripts/test.mjs` running beside it, find which test fails and why (a fixed wait, a process not yet started, a shared temp folder), and make it wait for the state it needs with the file's own `waitUntil`, never a busy loop and never a longer timeout alone. Give the runs and failures before and after in your report.
 
