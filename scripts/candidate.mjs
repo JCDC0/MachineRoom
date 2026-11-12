@@ -3,9 +3,10 @@ import { execFile, spawn } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
 import { createServer } from 'node:net'
 import { dirname, join, resolve } from 'node:path'
-import { pathToFileURL } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import { killTree as killProcessTree, treeSpawnOptions } from '../server/processTree.js'
-import { lanesFolder } from '../server/lanes-source.js'
+import { lanesFolder, mainCheckoutOf, readAllLanes, runsFolder } from '../server/lanes-source.js'
+import { worktreeFor } from '../src/briefs/run.js'
 import { gitPath } from '../server/programPath.js'
 
 export const DEFAULT_PORT = 5175
@@ -245,7 +246,14 @@ export function readLanes(folder = lanesFolder()) {
     throw new Error('The lane file is not valid.')
   }
   if (!lanes || typeof lanes !== 'object' || Array.isArray(lanes)) throw new Error('The lane file is not valid.')
-  return lanes
+  const all = readAllLanes({ lanesJson: lanes, runsFolder: runsFolder() })
+  const mainCheckout = mainCheckoutOf(resolve(fileURLToPath(import.meta.url), '..', '..'))
+  for (const [key, lane] of Object.entries(all)) {
+    if (lane?.custom === true && (typeof lane.worktree !== 'string' || lane.worktree.trim() === '')) {
+      lane.worktree = worktreeFor(mainCheckout, key)
+    }
+  }
+  return all
 }
 
 export function candidateArgs(plan, options) {

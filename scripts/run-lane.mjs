@@ -5,7 +5,7 @@ import { appendFileSync, createWriteStream, existsSync, lstatSync, mkdirSync, re
 import { homedir, tmpdir } from 'node:os'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { branchFor, buildPrompt, parseBriefs, parseRules } from '../src/briefs/briefs.js'
+import { branchFor, briefFileList, buildPrompt, nextVersion, parseBriefs, parseRules } from '../src/briefs/briefs.js'
 import { formatQueueSummary, parseQueue, parseQueueArgs, runQueue } from '../src/briefs/queue.js'
 import { briefProblems, briefWorktreeProblems, childEnvironment, commandFor, createLaneLog, DEFAULT_MINUTES, filterRunsSince, formatOutcomes, formatStats, formatSummary, laneCommandProblem, laneStats, laneStopProblem, laneWithOverrides, ORCHESTRATOR_LANE_PROBLEM, parseRunArgs, projectProblems, projectRunGit, readinessLine, retryStartProblem, runListLine, runRecord, sessionToolLines, startFailureText, summarizeRun, unattendedPrompt, worktreeFor, WORKTREES_FOLDER } from '../src/briefs/run.js'
 import { outcomeTable } from '../server/outcomes.js'
@@ -25,7 +25,6 @@ const entry = fileURLToPath(import.meta.url)
 const root = resolve(entry, '..', '..')
 const docs = join(root, 'docs', 'agents')
 const read = (name) => readFileSync(join(docs, name), 'utf8')
-const RUNNER_COMMIT_VERSION = '0.1.402'
 
 function stamp(date = new Date()) {
   const pad = (value) => String(value).padStart(2, '0')
@@ -295,27 +294,93 @@ function gitFailure(result) {
   return text === '' ? 'git failed' : text.replace(/\s*\r?\n\s*/g, ' ')
 }
 
-function runnerCommit({ laneKey, worktree, brief } = {}) {
+function commitChanges(worktree) {
+  const result = spawnSync(gitPath(), ['status', '--porcelain', '-z', '--untracked-files=all', '--no-renames'], {
+    cwd: worktree,
+    encoding: 'utf8',
+    windowsHide: true,
+  })
+  if (result.error) throw new Error(`git status did not run in ${worktree}.`)
+  if (result.status !== 0) throw new Error(`git status failed in ${worktree}: ${String(result.stderr ?? '').trim()}`)
+  return String(result.stdout ?? '')
+    .split('\0')
+    .filter(Boolean)
+    .map((line) => ({ status: line.slice(0, 2), path: line.slice(3) }))
+    .filter((change) => {
+      const name = change.path.replace(/\\/g, '/')
+      return !(name === 'node_modules' || name.startsWith('node_modules/'))
+    })
+}
+
+function slashPath(value) {
+  return String(value ?? '').replace(/\\/g, '/').replace(/^\.\/+/, '').replace(/\/+$/, '')
+}
+
+function sameCommitPath(one, two) {
+  return process.platform === 'win32' ? one.toLowerCase() === two.toLowerCase() : one === two
+}
+
+function blockedCommitPath(path) {
+  const parts = slashPath(path).split('/')
+  const name = (parts.pop() ?? '').toLowerCase()
+  if (name === 'keys.json' || name.endsWith('.key') || name.startsWith('.env') || name.endsWith('.log')) return true
+  return parts.some((part) => {
+    const folder = part.toLowerCase()
+    return folder === 'dist' || folder === 'build' || folder === 'out'
+  })
+}
+
+function briefCommitPath(path, entry) {
+  const target = slashPath(path)
+  const allowed = String(entry ?? '').replace(/\\/g, '/').replace(/^\.\/+/, '')
+  if (!allowed) return false
+  const folder = allowed.endsWith('/')
+  const bare = allowed.replace(/\/+$/, '')
+  if (!folder) return sameCommitPath(target, bare)
+  const prefix = `${bare}/`
+  return process.platform === 'win32'
+    ? target.toLowerCase().startsWith(prefix.toLowerCase())
+    : target.startsWith(prefix)
+}
+
+export function runnerCommitVersion(file = join(root, 'package.json')) {
+  return nextVersion(JSON.parse(readFileSync(file, 'utf8')).version)
+}
+
+export function runnerCommit({ laneKey, worktree, brief, version = runnerCommitVersion() } = {}) {
   const title = String(brief?.title ?? '').trim()
-  if (title === '') return false
-  if (worktreeChanges(worktree).length === 0) {
+  const result = { ok: true, committed: false, leftOut: [], error: '' }
+  if (title === '') return result
+  const changes = commitChanges(worktree)
+  if (changes.length === 0) {
     console.log(`The ${laneKey} lane changed no file.`)
-    return false
+    return result
   }
+  const files = briefFileList(brief?.text)
+  const selected = []
+  const leftOut = []
+  for (const change of changes) {
+    if (blockedCommitPath(change.path) || !files.some((entry) => briefCommitPath(change.path, entry))) leftOut.push(change.path)
+    else selected.push(change.path)
+  }
+  result.leftOut = leftOut
+  for (const path of leftOut) console.log(`Left out of the commit: ${path}`)
+  if (selected.length === 0) return result
   const run = (args) => spawnSync(gitPath(), args, { cwd: worktree, encoding: 'utf8', windowsHide: true })
-  const fail = (result) => {
-    console.log(`The runner could not commit the ${laneKey} lane's work: ${gitFailure(result)}`)
-    return false
+  const fail = (failure) => {
+    const error = gitFailure(failure)
+    console.log(`The runner could not commit the ${laneKey} lane's work: ${error}`)
+    return { ok: false, committed: false, leftOut, error }
   }
   const switched = run(['switch', '-c', branchFor(brief)])
   if (switched.error || switched.status !== 0) return fail(switched)
-  const added = run(['add', '-A'])
+  const added = run(['add', '-A', '--', ...selected])
   if (added.error || added.status !== 0) return fail(added)
-  const subject = `${RUNNER_COMMIT_VERSION}: ${title}`
+  const subject = `${version}: ${title}`
   const body = `Written by the ${laneKey} lane in its sandbox; committed by the runner.`
   const committed = run(['commit', '-m', subject, '-m', body])
   if (committed.error || committed.status !== 0) return fail(committed)
-  return true
+  return { ok: true, committed: true, leftOut, error: '' }
 }
 
 export function worktreePlan(project, lane) {
@@ -995,6 +1060,19 @@ async function main() {
   const badKey = Object.keys(lanesJson ?? {}).find((key) => !/^[A-Za-z0-9_-]+$/.test(key))
   if (badKey !== undefined) throw new Error(`The lane name ${badKey} in ${lanesPath} needs only letters, digits, dashes and underscores, so it can name a worktree and a branch.`)
   const lanes = readAllLanes({ lanesJson, runsFolder: runsFolder() })
+  for (const [key, item] of Object.entries(lanes)) {
+    if (item?.custom !== true) continue
+    const template = Object.values(lanes).find((other) => other !== item && other?.cli?.harness === item?.cli?.harness)
+    if (typeof item.worktree !== 'string' || item.worktree.trim() === '') {
+      item.worktree = worktreeFor(mainCheckout(), key)
+    }
+    if (!Array.isArray(item.forbidden)) {
+      item.forbidden = Array.isArray(template?.forbidden) ? [...template.forbidden] : []
+    }
+    if (typeof item.role !== 'string') {
+      item.role = typeof template?.role === 'string' ? template.role : ''
+    }
+  }
   if (!Object.hasOwn(lanes, options.lane)) throw new Error(`There is no lane named ${options.lane}.`)
   const lane = laneWithOverrides(lanes[options.lane], options)
   lanes[options.lane] = lane
@@ -1054,7 +1132,7 @@ async function main() {
     }
   }
 
-  if (!Object.hasOwn(lanesJson, options.lane)) {
+  if (!Object.hasOwn(lanes, options.lane)) {
     console.log(`The lane ${options.lane} is not in lanes.json.`)
     return 1
   }
@@ -1331,13 +1409,29 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
     process.removeListener('exit', onExit)
     const stoppedLeftovers = stopLeftovers({ worktree: project ? (options.worktree ? project : '') : lane.worktree, childPid: child.pid ?? 0 }).stopped
     const totalStoppedLeftovers = stoppedLeftovers + extraStopped
+    let commit = { ok: true, committed: false, leftOut: [], error: '' }
+    if (!project && !killed && result.code === 0 && lane.cli?.commits === 'runner' && wanted.length > 0) {
+      try {
+        commit = runnerCommit({ laneKey: options.lane, worktree: lane.worktree, brief: wanted[0] })
+      } catch (error) {
+        commit = { ok: false, committed: false, leftOut: [], error: String(error?.message ?? error) }
+      }
+    }
+    const notes = []
+    if (leftoversCleaned) notes.push('leftovers were stopped')
+    if (commit.leftOut.length > 0) {
+      for (const path of commit.leftOut) laneLog.push('stderr', `Left out of the commit: ${path}\n`)
+      notes.push(`Left out of the commit: ${commit.leftOut.join(', ')}`)
+    }
+    if (!commit.ok) {
+      const text = `The runner could not commit the ${options.lane} lane's work: ${commit.error}`
+      laneLog.push('stderr', `${text}\n`)
+      notes.push(text)
+    }
+    const note = notes.join('; ')
     laneLog.flush()
     await new Promise((done) => log.end(done))
     const minutes = Math.round(((Date.now() - startedAt) / 60000) * 10) / 10
-
-    if (!project && !killed && result.code === 0 && lane.cli?.commits === 'runner' && wanted.length > 0) {
-      runnerCommit({ laneKey: options.lane, worktree: lane.worktree, brief: wanted[0] })
-    }
 
     if (result.error) console.log(`start failed: ${result.error.message}`)
     if (start) {
@@ -1436,7 +1530,7 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
       commits: git.commits,
       base: runBase,
       stoppedLeftovers: totalStoppedLeftovers > 0 ? totalStoppedLeftovers : undefined,
-      note: leftoversCleaned ? 'leftovers were stopped' : undefined,
+      note: note || undefined,
       startFailed: startFailure !== '' ? true : undefined,
       ...(start ? { startBranch: start.startBranch } : {}),
       ...(options.startedBy ? { startedBy: options.startedBy } : {}),
