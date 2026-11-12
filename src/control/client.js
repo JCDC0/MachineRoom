@@ -449,6 +449,13 @@ export function createClient({
       return Array.isArray(data) ? data : data?.models ?? []
     },
 
+    modelPins: async () => {
+      const data = await request('GET', '/api/model-pins')
+      return Array.isArray(data) ? data : data?.pins ?? []
+    },
+
+    saveModelPins: ({ pins } = {}) => request('PUT', '/api/model-pins', { pins }),
+
     createLane: ({ name, harness, model, effort, confirmed = true } = {}) =>
       request('POST', '/api/lanes/create', { name, harness, model, effort, confirmed }),
 

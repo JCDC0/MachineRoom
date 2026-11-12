@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import ModelPicker from './ModelPicker.jsx'
 import ModelRefresh from './ModelRefresh.jsx'
 import { useDialogFocus } from './dialogFocus.js'
 
@@ -152,6 +153,7 @@ export default function EndpointsPanel({ client, initialEndpoints = null, initia
   const [confirm, setConfirm] = useState(null)
   const [busy, setBusy] = useState(false)
   const [modelsBusy, setModelsBusy] = useState(false)
+  const [pickedModel, setPickedModel] = useState({})
   const quickKeyRef = useRef(null)
   const quickConfirmRef = useRef(null)
   const confirmRef = useRef(null)
@@ -504,6 +506,17 @@ export default function EndpointsPanel({ client, initialEndpoints = null, initia
             <span className="endpoints-meta mono">{endpoint.provider}</span>
           </div>
           <div className="endpoints-meta mono">{endpointCount(endpoint.models)}</div>
+          <ModelPicker
+            label="Model list"
+            ariaLabel={`Models for ${endpoint.name}`}
+            value={pickedModel[endpoint.name] ?? ''}
+            choices={endpoint.models}
+            details={Array.isArray(endpoint.modelDetails) ? endpoint.modelDetails : []}
+            client={client}
+            onChange={(model) => setPickedModel((current) => ({ ...current, [endpoint.name]: model }))}
+            placeholder={endpointCount(endpoint.models)}
+            emptyText="No models saved."
+          />
           <div className="endpoints-actions">
             <button
               type="button"

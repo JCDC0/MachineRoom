@@ -10932,3 +10932,231 @@ body:has(#hud-orchestrator-chat) .lens-waiting {
     animation: none;
   }
 }
+
+/* P78: one model picker with search, sort and pins. */
+.mr-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.mr-picker .mr-model-row {
+  align-items: stretch;
+}
+
+.mr-picker button {
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
+.mr-picker-trigger {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid rgb(255 255 255 / 0.2);
+  border-radius: 2px;
+  background: #1b1b1b;
+  color: var(--white);
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 400;
+  line-height: 1.2;
+  cursor: pointer;
+}
+
+.mr-picker-trigger:hover:not(:disabled) {
+  border-color: rgb(255 255 255 / 0.5);
+  background: rgb(255 255 255 / 0.06);
+}
+
+.mr-picker-trigger:focus-visible {
+  border-color: var(--yellow);
+  outline: none;
+}
+
+.mr-picker-trigger:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.mr-picker-value {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mr-picker-caret {
+  flex: 0 0 auto;
+  display: inline-flex;
+  color: rgb(255 255 255 / 0.45);
+}
+
+.mr-picker-pop {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px;
+  border: 1px solid rgb(255 255 255 / 0.2);
+  background: #0b0b0b;
+}
+
+.mr-picker-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.mr-picker-search {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 24px;
+  padding: 0 6px;
+  border: 1px solid rgb(255 255 255 / 0.2);
+  border-radius: 2px;
+  background: #1b1b1b;
+  color: var(--white);
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 400;
+}
+
+.mr-picker-search:focus {
+  border-color: var(--yellow);
+  outline: none;
+}
+
+.mr-picker-sort {
+  flex: 0 0 auto;
+  max-width: 136px;
+  height: 24px;
+  padding: 0 4px;
+  border: 1px solid rgb(255 255 255 / 0.2);
+  border-radius: 2px;
+  background: #1b1b1b;
+  color: var(--white);
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 400;
+}
+
+.mr-picker-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.mr-picker-group {
+  margin: 6px 0 2px;
+  color: rgb(255 255 255 / 0.4);
+  font-family: var(--mono);
+  font-size: 8px;
+  font-weight: 400;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.mr-picker-row {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  border: 1px solid transparent;
+}
+
+.mr-picker-row.is-active {
+  border-color: rgb(255 255 255 / 0.28);
+  background: rgb(255 255 255 / 0.08);
+}
+
+.mr-picker-pick {
+  flex: 1 1 auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 4px 6px;
+  cursor: pointer;
+}
+
+.mr-picker-row-main {
+  flex: 1 1 150px;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.mr-picker-name {
+  overflow: hidden;
+  color: var(--white);
+  font-family: var(--sans);
+  font-size: 11px;
+  font-weight: 400;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mr-picker-row.is-current .mr-picker-name {
+  color: var(--yellow);
+}
+
+.mr-picker-id {
+  overflow: hidden;
+  color: rgb(255 255 255 / 0.45);
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 400;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mr-picker-meta {
+  flex: 0 1 auto;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  color: rgb(255 255 255 / 0.62);
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 400;
+}
+
+.mr-picker-pin {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  color: rgb(255 255 255 / 0.4);
+  cursor: pointer;
+}
+
+.mr-picker-pin:hover:not(:disabled) {
+  background: rgb(255 255 255 / 0.08);
+  color: var(--white);
+}
+
+.mr-picker-pin.is-on {
+  color: var(--yellow);
+}
+
+.mr-picker-note {
+  margin: 0;
+  padding: 4px;
+  color: rgb(255 255 255 / 0.5);
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 400;
+}
