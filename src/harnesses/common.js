@@ -36,7 +36,6 @@ export function lastJsonLine(log, match) {
 
 const TERMINAL_OSC = /\u001B\][^\u0007]*(?:\u0007|\u001B\\)/g
 const TERMINAL_CSI = /\u001B\[[0-9;?]*[ -/]*[@-~]/g
-const TOOL_LINE = /^(?:Executing|Running|Reading|Writing|Editing|Searching|Session|Run|Copilot|\$)/i
 
 export function terminalText(text) {
   return String(text ?? '')
@@ -44,8 +43,9 @@ export function terminalText(text) {
     .replace(TERMINAL_CSI, '')
 }
 
-export function lastPlainBlock(text) {
+export function lastPlainBlock(text, createParser) {
   const clean = terminalText(text).replace(/\r\n?/g, '\n')
+  const parser = createParser({ rootName: '', files: [], dirs: [] })
   const blocks = []
   let block = []
   const flush = () => {
@@ -54,12 +54,13 @@ export function lastPlainBlock(text) {
     block = []
   }
   for (const line of clean.split('\n')) {
-    const trimmed = line.trim()
-    if (!trimmed) {
-      flush()
+    const activities = parser.push(`${line}\n`, 0)
+    if (activities.some((activity) => activity.type === 'tool.start' || activity.type === 'tool.end')) {
+      blocks.length = 0
+      block = []
       continue
     }
-    if (TOOL_LINE.test(trimmed)) {
+    if (activities.some((activity) => activity.type === 'run.start' || activity.type === 'run.end')) {
       flush()
       continue
     }
