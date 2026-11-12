@@ -238,6 +238,31 @@ describe('the conversation menu', () => {
     })
   })
 
+  it('keeps the room shortcuts and later capture handlers from reading a menu key', async () => {
+    await withDom(async ({ container, dom, root }) => {
+      const roomKeys = []
+      dom.window.addEventListener('keydown', (event) => {
+        if (event.key === 'f' || event.key === 'F') roomKeys.push(event.key)
+      })
+      await mount(root, makeClient())
+      await openMenu(root, container, 'Alpha')
+
+      let laterCapture = 0
+      dom.window.addEventListener(
+        'keydown',
+        (event) => {
+          if (event.key === 'f' || event.key === 'F') laterCapture += 1
+        },
+        true
+      )
+
+      await press(root, dom.window, 'f')
+      expect(roomKeys).toEqual([])
+      expect(laterCapture).toBe(0)
+      expect(container.querySelector('.mr-side-menu')).toBeNull()
+    })
+  })
+
   it('disables archive and delete on the current row', async () => {
     await withDom(async ({ container, dom, root }) => {
       const client = makeClient()
