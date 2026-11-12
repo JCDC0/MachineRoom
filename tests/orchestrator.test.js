@@ -1,6 +1,7 @@
 import { spawn, spawnSync } from 'node:child_process'
 import { EventEmitter } from 'node:events'
 import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs'
+import { homedir } from 'node:os'
 import { basename, join, resolve } from 'node:path'
 import { PassThrough } from 'node:stream'
 import { fileURLToPath } from 'node:url'
@@ -2276,6 +2277,7 @@ describe('the orchestrator conversation file', () => {
 
   it('keeps a waiting message from a sub or the room as well as the owner after restart', async () => {
     const rig = makeRig()
+    rig.orchestrator.setLadder({ subs: [{ id: 'team-1', name: 'Team 1', lanes: [] }] })
     rig.behaviour.mode = 'hold'
     rig.send('First job')
     await waitFor(() => rig.calls().length === 1)
@@ -2408,6 +2410,143 @@ describe('the orchestrator chat file', () => {
     expect(restored.answer().messages[0].text).not.toContain(secret)
     expect(restored.masked.total).toBe(1)
     expect(readFileSync(file, 'utf8')).not.toContain(secret)
+  })
+
+  it('masks a key in a work step of the current conversation', async () => {
+    const rig = makeRig()
+    const secret = 'sk-or-v1-' + 'q'.repeat(24)
+    rig.behaviour.assistantLines = [
+      {
+        type: 'assistant',
+        message: {
+          role: 'assistant',
+          content: [{ type: 'tool_use', id: 'call-1', name: 'Read', input: { file_path: `src/${secret}.js` } }],
+        },
+      },
+    ]
+    rig.send('Read the file.')
+    await waitIdle(rig, 1)
+    const owner = rig.answer().messages[0]
+    expect(owner.work.steps[0].target).toContain('[key]')
+    expect(owner.work.steps[0].target).not.toContain(secret)
+    expect(JSON.stringify(rig.answer().messages)).not.toContain(secret)
+    expect(readFileSync(chatFileFor(rig.projectRoot, rig.runs), 'utf8')).not.toContain(secret)
+  })
+
+  it('masks a key in a saved work step before the chat answer and the saved file', () => {
+    const rig = makeRig()
+    rig.orchestrator.close()
+    const secret = 'sk-or-v1-' + 'q'.repeat(24)
+    const file = chatFileFor(rig.projectRoot, rig.runs)
+    writeFileSync(
+      file,
+      `${JSON.stringify({
+        project: rig.projectRoot,
+        sessionId: null,
+        state: 'idle',
+        messages: [
+          {
+            id: 'm1',
+            from: 'owner',
+            text: 'Run the saved step',
+            at: '2026-10-25T12:00:00.000Z',
+            work: { steps: [{ tool: 'Read', target: `src/${secret}.js` }], seconds: 3 },
+          },
+        ],
+        pending: [],
+      })}\n`
+    )
+    const restored = restoreRig(rig)
+    const message = restored.answer().messages[0]
+    expect(message.work.steps[0].target).toContain('[key]')
+    expect(message.work.steps[0].target).not.toContain(secret)
+    expect(JSON.stringify(restored.answer().messages)).not.toContain(secret)
+    expect(readFileSync(file, 'utf8')).not.toContain(secret)
+  })
+
+  it('masks a key at offset 61 of a saved agent name before the 80 character cap', () => {
+    const fleet = { ...LANES, opencode: { name: 'OpenCode', cli: { harness: 'opencode', bin: 'opencode', model: 'x' } } }
+    const rig = makeRig({ lanes: fleet })
+    rig.orchestrator.close()
+    const secret = 'sk-or-v1-' + 'q'.repeat(24)
+    const fromName = `${'a'.repeat(60)} ${secret}`
+    const file = chatFileFor(rig.projectRoot, rig.runs)
+    writeFileSync(
+      file,
+      `${JSON.stringify({
+        project: rig.projectRoot,
+        sessionId: null,
+        state: 'idle',
+        messages: [
+          {
+            id: 'm1',
+            from: 'agent',
+            text: 'Order',
+            at: '2026-10-25T12:00:00.000Z',
+            agent: { from: 'orchestrator', to: 'opencode', kind: 'order', text: 'Do it', fromName, toName: 'OpenCode' },
+          },
+        ],
+        pending: [],
+      })}\n`
+    )
+    const restored = restoreRig(rig)
+    const agent = restored.answer().messages[0].agent
+    expect(agent.fromName).toContain('[key]')
+    expect(agent.fromName).not.toContain(secret)
+    expect(agent.fromName.length).toBeLessThanOrEqual(80)
+    expect(readFileSync(file, 'utf8')).not.toContain(secret)
+  })
+
+  it('masks a profile path in an agent report in the chat and the saved file', () => {
+    const fleet = { ...LANES, opencode: { name: 'OpenCode', cli: { harness: 'opencode', bin: 'opencode', model: 'x' } } }
+    const rig = makeRig({ lanes: fleet })
+    const profile = process.env.USERPROFILE || process.env.HOME || homedir()
+    const profilePath = join(profile, 'project', 'trace.log')
+    const message = rig.orchestrator.recordAgentMessage({
+      from: 'orchestrator',
+      to: 'opencode',
+      kind: 'report',
+      text: `Trace at ${profilePath}`,
+      lanes: fleet,
+    })
+    expect(message).toBeTruthy()
+    expect(message.agent.text).not.toContain(profile)
+    expect(message.agent.text).toContain(process.platform === 'win32' ? '%USERPROFILE%' : '~')
+    expect(JSON.stringify(rig.answer().messages)).not.toContain(profile)
+    expect(readFileSync(chatFileFor(rig.projectRoot, rig.runs), 'utf8')).not.toContain(profile)
+  })
+
+  it('drops a saved sub or agent sender whose identity does not exist', () => {
+    const rig = makeRig()
+    rig.orchestrator.close()
+    const file = chatFileFor(rig.projectRoot, rig.runs)
+    writeFileSync(
+      file,
+      `${JSON.stringify({
+        project: rig.projectRoot,
+        sessionId: null,
+        state: 'idle',
+        ladder: { subs: [{ id: 'team-1', name: 'Team 1', lanes: [] }] },
+        messages: [
+          { id: 'm1', from: 'sub:team-1', text: 'Real sub report', at: '2026-10-25T12:00:00.000Z' },
+          { id: 'm2', from: 'sub-ghost', text: 'Invented sub report', at: '2026-10-25T12:00:00.000Z' },
+          {
+            id: 'm3',
+            from: 'agent',
+            text: 'Agent order',
+            at: '2026-10-25T12:00:00.000Z',
+            agent: { from: 'orchestrator', to: 'made-up', kind: 'order', text: 'Unknown lane' },
+          },
+        ],
+        pending: [],
+      })}\n`
+    )
+    const restored = restoreRig(rig)
+    const texts = restored.answer().messages.map((message) => message.text)
+    expect(texts).toContain('Real sub report')
+    expect(texts).not.toContain('Invented sub report')
+    expect(texts).not.toContain('Agent order')
+    expect(readFileSync(file, 'utf8')).not.toContain('Invented sub report')
   })
 
   it('keeps a chat file that fails to parse as .bad', () => {

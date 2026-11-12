@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Saved chat work steps mask the whole tool and target before shortening (P132).
+- Saved agent fields mask the whole string before the length cap (P132).
+- Chat messages mask profile, home, local app data and temp folder paths (P132).
+- A saved sub or agent sender is kept only when its identity exists (P132).
 - startProjectTask and the chat's lane dispatch have their own tests (P131).
 - The file-index test takes its write rule from commands.js, so it passes with the owner's recordings too (P128).
 - The file-index test takes its write rule from commands.js, and a recording-free case covers a redirect whose operand is cut short (P128).
