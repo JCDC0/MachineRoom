@@ -264,6 +264,12 @@ export function resolveEndpoint(runsFolder, name) {
   return readEndpoints(runsFolder).find((entry) => entry.name === wanted) ?? null
 }
 
+export function endpointModelDetails(runsFolder, endpointName = '') {
+  const endpoints = readEndpoints(runsFolder)
+  if (!endpointName) return endpoints
+  return endpoints.find((entry) => entry.name === endpointName) ?? null
+}
+
 export async function readEndpointKey(runsFolder, keyName) {
   const name = typeof keyName === 'string' ? keyName.trim() : ''
   if (name === '') return ''

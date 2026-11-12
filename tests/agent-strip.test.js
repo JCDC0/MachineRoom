@@ -647,9 +647,15 @@ describe('agent strip layout', () => {
 describe('the context line', () => {
   it('gives the used tokens and the window', () => {
     expect(contextLine({ context: { tokens: 128400, window: 200000 } })).toBe(
+      'Context size 128.4k / 200.0k (assumed)'
+    )
+    expect(contextLine({ context: { tokens: 128400, window: 200000, assumed: false } })).toBe(
       'Context size 128.4k / 200.0k'
     )
     expect(contextLine({ context: { tokens: 900, window: 2000 } })).toBe('Context size 900 / 2.0k')
+    expect(contextLine({ context: { tokens: 16500, window: 1048576 } })).toBe(
+      'Context size 16.5k / 1048.6k'
+    )
   })
 
   it('says so when the bridge has no context numbers', () => {

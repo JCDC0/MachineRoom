@@ -811,6 +811,12 @@ export function createOrchestrator({
     }
     return name
   }
+  function laneDetails() {
+    const endpoints = readEndpoints(folder)
+    const endpointName = typeof lane.cli?.endpoint === 'string' ? lane.cli.endpoint.trim() : ''
+    const match = endpointName ? endpoints.find((entry) => entry.name === endpointName) : null
+    return match || endpoints
+  }
   const windowOption = Number.isFinite(contextWindowOption) && contextWindowOption > 0
     ? Math.round(contextWindowOption)
     : Number.isFinite(lane.cli.contextWindow) && lane.cli.contextWindow > 0
@@ -830,7 +836,7 @@ export function createOrchestrator({
   let running = null
   let stopped = false
   let contextTokens = null
-  let contextWindow = resolveContextWindow(model, harness, windowOption)
+  let contextWindow = resolveContextWindow(model, harness, windowOption, laneDetails())
   let autocompact = true
   let autocompactMode = DEFAULT_AUTOCOMPACT_MODE
   let autocompactValue = DEFAULT_AUTOCOMPACT_VALUE
@@ -1036,10 +1042,7 @@ export function createOrchestrator({
     if (typeof saved.contextTokens === 'number' && Number.isFinite(saved.contextTokens) && saved.contextTokens >= 0) {
       contextTokens = Math.round(saved.contextTokens)
     }
-    contextWindow = resolveContextWindow(model, harness, windowOption)
-    if (!MODELS.some((m) => m.id === model) && typeof saved.contextWindow === 'number' && Number.isFinite(saved.contextWindow) && saved.contextWindow > 0) {
-      contextWindow = Math.round(saved.contextWindow)
-    }
+    contextWindow = resolveContextWindow(model, harness, windowOption, laneDetails())
     if (typeof saved.summary === 'string' && saved.summary.trim() !== '') summary = saved.summary.trim()
     if (typeof saved.branchTranscript === 'string' && saved.branchTranscript.trim() !== '') {
       branchTranscript = saved.branchTranscript.slice(0, BRANCH_TRANSCRIPT_LIMIT)
@@ -1815,7 +1818,7 @@ export function createOrchestrator({
     const allowed = modelAllowed(harness, nextModel, folder)
     if (!allowed) return { status: 400, body: { error: MODEL_PROBLEM } }
     model = nextModel
-    contextWindow = resolveContextWindow(model, harness, windowOption)
+    contextWindow = resolveContextWindow(model, harness, windowOption, laneDetails())
     persist()
     notify()
     return { status: 200, body: { id: key, model } }
@@ -1854,7 +1857,7 @@ export function createOrchestrator({
       s.sessionId = null
       s.opencodeSessionId = null
     }
-    contextWindow = resolveContextWindow(model, harness, windowOption)
+    contextWindow = resolveContextWindow(model, harness, windowOption, laneDetails())
     mode = modesFor(harness).some((entry) => entry.id === keptMode) ? keptMode : defaultMode(harness)
     persist()
     notify()

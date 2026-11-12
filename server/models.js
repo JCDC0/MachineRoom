@@ -7,6 +7,8 @@ export function endpointModels(runsFolder) {
   const models = []
   for (const endpoint of readEndpoints(runsFolder)) {
     for (const id of endpoint.models) {
+      const detail = endpoint.modelDetails?.find((d) => d.id === id)
+      const contextWindow = typeof detail?.contextLength === 'number' && detail.contextLength > 0 ? detail.contextLength : undefined
       models.push({
         id: `${endpoint.name}/${id}`,
         label: `${endpoint.name}/${id}`,
@@ -14,6 +16,7 @@ export function endpointModels(runsFolder) {
         tier: 'medium',
         free: false,
         endpoint: endpoint.name,
+        ...(contextWindow ? { contextWindow } : {}),
       })
     }
   }
