@@ -767,3 +767,49 @@ On 2026-11-12 a cleanup of the C drive emptied `%TEMP%`, and with it the owner's
 Run `npx vitest related --run` on every file you changed, `npm run build` and `npm run pack-check`; all must pass.
 
 Files: server/lanes-source.js, server/harness-models.js, server/orchestrator.js, server/orchestrators.js, scripts/mcp-bridge.mjs, scripts/mr-agent.mjs, scripts/run-recording.mjs, docs/agents/architecture/LIVE.md, docs/GUIDE.md, tests/.
+
+
+## The model list, and buttons that stop working (2026-11-12)
+
+The owner asked for a model list with details, search, sorting and pinning, like AIRP's (`C:\GitHub\AIRP\lib\widgets\model_selector.dart` and `lib\services\strategies\openrouter_strategy.dart`; AIRP is read only). AIRP keeps, per model, its name, context length, prompt and completion price and creation date; its picker searches name and id, sorts by name A to Z and Z to A, price low to high and high to low, and newest, and puts bookmarked models first. MachineRoom keeps only model ids (`modelIdsFromAnswer` in `server/endpoints.js`) and shows them in a plain `<select>`. The owner also found that with the page scrolled down, away from the lens, the Settings buttons do nothing until the page is scrolled up. P77 and P79 can run together; P78 starts after P77.
+
+**P77. The bridge keeps model details and pins (OpenCode).** Read no part of TASKS.md beyond this brief and the paragraph above it. Use no subagents. Run every command in the foreground. Commit each step as you finish it, and stop starting new work at minute 40. Work on a temporary runs folder, never on a real one.
+
+1. `fetchEndpointModelList` keeps, for each model the answer gives, `{ id, name, contextLength, promptPrice, completionPrice, created }`: numbers or null, prices per token as the provider sends them, `name` falling back to the id. An answer of plain ids still works. `endpoints.json` keeps the ids as now and the details beside them in `modelDetails`, capped at the same `MAX_ENDPOINT_MODELS`, each string cut to 200 characters.
+2. `GET /api/endpoints/NAME/models` answers the details with the ids.
+3. Pins: `GET /api/model-pins` answers `{ pins: [...] }` and `PUT /api/model-pins` with `{ pins }` saves them in `model-pins.json` in the runs folder; at most 200 pins, each a string of at most 200 characters, refused with `A pin is a model name of at most 200 characters.` otherwise. The route takes the same write guard the other settings writes take.
+4. Tests, by what they prove: an OpenRouter-shaped answer keeps all five details; an answer of ids keeps ids and nulls; a huge description or name is cut; pins save, read back and refuse a bad list; an old `endpoints.json` without details still loads.
+
+Run `npx vitest related --run` on every file you changed and `npm run build`; both must pass.
+
+Files: server/endpoints.js, server/index.js, tests/.
+
+**P78. A model picker with search, sort and pins (OpenCode).** Starts after P77 is merged. Read no part of TASKS.md beyond this brief and the paragraph above P77. Use no subagents. Commit each step as you finish it, and stop starting new work at minute 50. Fonts Jost and Space Mono at 400 and 500, never bold; colours from `docs/agents/ARCHITECTURE.md`, Conventions.
+
+1. One component, `src/ui/ModelPicker.jsx`, in place of every `<select>` that lists an endpoint's models in `src/ui/FamilyTree.jsx` and `src/ui/EndpointsPanel.jsx`: a button that shows the chosen model and opens a list with a search box (name and id, as you type), a sort menu (Name A to Z, Name Z to A, Price low to high, Price high to low, Newest, Context largest), and a pin button on each row. Pinned models come first in any sort; the chosen model shows at the top.
+2. Each row: the name, the id in Space Mono, the context as `128K`, the price per million tokens as `$0.27 / $1.10` in and out, `free` when both are 0, and the date as `2026-10`. A model with no details shows its id alone.
+3. Pins load from and save to `/api/model-pins`; the sort choice is kept in `localStorage` (wrapped in try).
+4. Keyboard: the search box takes focus on open, Up and Down move, Enter picks, Escape closes.
+5. Tests, by what they prove: search narrows by name and by id; each sort order; pinned first in every sort; a row's labels for a priced, a free and a bare model; Enter picks and Escape closes. Name the by-eye checks for the orchestrator at 1280 by 800: the list with 468 models, a search, a pin.
+
+Run `npx vitest related --run` on every file you changed and `npm run build`; both must pass.
+
+Files: src/ui/ModelPicker.jsx, src/ui/FamilyTree.jsx, src/ui/EndpointsPanel.jsx, src/styles.css, tests/.
+
+**P79. Buttons work with the page scrolled down (OpenCode).** Read no part of TASKS.md beyond this brief and the paragraph above P77. Use no subagents. Commit each step as you finish it, and stop starting new work at minute 40. Change nothing in `src/engine/` beyond what the cause needs, and name the cause in your report.
+
+The owner's window is about 620 pixels high, below the 900 at which the page stops scrolling. With the page scrolled to the bottom, Settings (open with the gear) shows its buttons, but Save key, Refresh models, Replace key, Delete and Custom endpoint do nothing; scrolled back up, they work.
+
+1. Find the cause: in the headless Chromium the screenshot script uses, at 1280 by 620, open Settings, scroll the page to the bottom and ask `document.elementFromPoint` at the centre of each of those buttons. Write in your report which element takes the click and why (a layer over the panel, a pointer handler on the lens that keeps the event, or a panel placed by a rectangle measured before the scroll).
+2. Fix that cause, so every button in Settings and in the lower half works at any scroll position.
+3. Tests, by what they prove: the element at each button's centre is the button with the page scrolled to the bottom, in a jsdom or Chromium test, whichever can show the cause.
+
+Run `npx vitest related --run` on every file you changed and `npm run build`; both must pass.
+
+Files: the files the cause is in, src/styles.css, tests/.
+
+**P80. Review the merges of P70 to P75 (MachineRoom native).** Read no part of TASKS.md beyond this brief. Change no code. Read only the diffs named here and the code around each change. Write the file by minute 30.
+
+Review the code the merges `23bad3c1` (P70), `580a28cf` (P71), `909f00fa` (P74), `1e027045` (P72), `3bb13972` (P73) and `b6bd90f7` (P75) brought, with `git show -m --first-parent SHA` for each, against the code around it. Hunt for what a test would not show: a path that still refuses a lane the owner made; a reconnect that sends the full file list more often than it must, or never; a project switch that a run can still slip past; a Codex program search that picks the wrong `codex.exe` or reads a folder it should not; a runner commit that adds files it should not (a log, a key, a build folder) or commits on the wrong branch; and anything that writes outside the runs folder or the worktree. Write `docs/agents/AUDIT-2026-11-REVIEW-13.md`: a table of at most 8 findings, the most harmful first, each with `file:line`, what goes wrong and when, and the smallest fix, each marked as a push blocker or not. Write no finding you cannot point to in the code. An empty table with what you checked is a good answer.
+
+Files: docs/agents/AUDIT-2026-11-REVIEW-13.md.

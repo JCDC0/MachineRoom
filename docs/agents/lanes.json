@@ -379,5 +379,26 @@
       "You cannot see the screen. When a brief asks for a check by eye, say in your report that it is left to the orchestrator.",
       "Touch only the files your brief names. Other lanes work at the same time in their own worktrees."
     ]
+  },
+  "native": {
+    "name": "MachineRoom native",
+    "harness": "MachineRoom",
+    "model": "DeepSeek V4.1 Flash 1017 on OpenRouter",
+    "modelHint": "the testbench endpoint OpenRouter; the owner keeps the key in the testbench room, and only this model is allowed",
+    "cli": {
+      "harness": "machineroom",
+      "model": "OpenRouter/deepseek/deepseek-v4.1-flash-1017"
+    },
+    "worktree": "C:\\GitHub\\MachineRoom\\.worktrees\\native",
+    "role": "You work on the brief in your own worktree and report back. You suit reviews, hunts and small fixes.",
+    "forbidden": [
+      "src/Stage.jsx",
+      "src/App.jsx"
+    ],
+    "notes": [
+      "You run on the owner's OpenRouter key, which has its own spending limit. Keep every run small: read only what the brief names.",
+      "You cannot see the screen. When a brief asks for a check by eye, say in your report that it is left to the orchestrator.",
+      "Touch only the files your brief names. Other lanes work at the same time in their own worktrees."
+    ]
   }
 }
