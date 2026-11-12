@@ -1,0 +1,14 @@
+﻿# P98 fleet room audit
+
+With `MACHINEROOM_LANES_DIR` and `MACHINEROOM_RUNS` unset, the bridge uses the room defaults. The room lane list is `config/lanes.json`, which contains only the orchestrator, plus agents saved in the room runs folder. The default runs folder is `%LOCALAPPDATA%\MachineRoom\runs` on Windows. I found one brief-dispatch path that still reads the development fleet when the bridge runs from the MachineRoom repository. It cannot activate or start those lanes through the owner room, but the read is unnecessary.
+
+| Path | Result | Why and smallest fix |
+| --- | --- | --- |
+| `server/lanes-source.js:24-26, 33-43, 56-86, 314-337` | Safe | With no variables, `lanesFolder()` selects `config/` and `runsFolder()` selects the normal profile runs folder. The legacy temp-folder migration moves to that profile folder. It does not select the testbench override. |
+| `bin/machine-room.mjs:107-122, 150-160, 202-214`; `bin/machineroom.mjs:24-30` | Safe | `machineroom FOLDER` only sets the project root. `up` enables the lane and session sources but does not set a fleet or runs folder. |
+| `server/index.js:415-429, 466-469, 527-537, 551-619, 1414-1424` | Safe | The bridge reads the default lane file and passes one resolved runs folder to its APIs, lane source and orchestrator. `--lanes` turns on live lane runs; it does not change the lane file. |
+| `server/agents-config.js:320-348, 351-365, 452-495`; `server/active-lanes.js:224-237, 310-314, 321-379`; `server/control.js:161-167` | Safe | Room agents merge the configured lanes with agents in the room runs folder. The active-lane API accepts keys only from that list, and writes made agents and choices to the resolved room runs folder. |
+| `server/doctor.js:19-24, 175-197, 241-257`; `server/briefs.js:34-36, 72-81, 101-114` | Safe | Startup checks use the same default lane and runs folders. The brief prompt reads `readAllLanes()`, which also defaults to the configured lane file. |
+| `server/runs.js:383-391, 620-629, 733-758, 776-838, 947-957`; `scripts/run-lane.mjs:43-47, 930-935` | Not fully isolated | A brief run from the MachineRoom repository reads `docs/agents/lanes.json` at `server/runs.js:748-758`. The owner active-lane check only accepts room lane keys, and the child runner defaults to `config/lanes.json`, so this path does not activate or start a development lane with variables unset. Still, the bridge reads the development list while deciding a brief run. The smallest fix is to read `laneFile` in this branch instead of `readText('lanes.json')`; the testbench can continue selecting its fleet through `MACHINEROOM_LANES_DIR`. Run records and runner children use `recordsDir()`, so this path does not read or write a separate testbench runs folder. |
+
+The code paths that populate the room lane list, choose active lanes, and choose the runs folder use the owner defaults. I found no path that writes into a separate testbench runs folder when the variables are unset.
