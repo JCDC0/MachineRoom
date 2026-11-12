@@ -176,7 +176,7 @@ describe('the model picker helpers', () => {
 
 describe('ModelPicker', () => {
   it('opens on the chosen model, shows each row and closes on Escape', async () => {
-    await withDom(async ({ container, root }) => {
+    await withDom(async ({ container, dom, root }) => {
       await act(async () => {
         root.render(createElement(ModelPicker, { choices: CHOICES, details: DETAILS, value: 'openai/gpt-5' }))
       })
@@ -195,6 +195,7 @@ describe('ModelPicker', () => {
       expect(container.querySelector('.mr-picker-group').textContent).toBe('Current')
 
       const search = container.querySelector('.mr-picker-search')
+      expect(dom.document.activeElement).toBe(search)
       await type(root, search, '')
       await act(async () => {
         search.dispatchEvent({ type: 'keydown', key: 'Escape', bubbles: true, cancelable: true })
