@@ -364,7 +364,8 @@
     "modelHint": "no --model is passed, so Codex uses the model set in the owner's Codex app",
     "cli": {
       "harness": "codex",
-      "bin": "codex"
+      "bin": "codex",
+      "commits": "runner"
     },
     "worktree": "C:\\GitHub\\MachineRoom\\.worktrees\\codex",
     "role": "You work on the brief in your own worktree and report back.",
