@@ -9,18 +9,24 @@ import {
   NO_GIT_PROJECT_TEXT,
   ORCHESTRATOR_ID,
   SESSION_LIMIT,
+  SESSION_SORTS,
   cleanText,
   copyGitInit,
+  loadSessionSort,
+  normalizeSessionSort,
   normalizeSidebarTab,
   previewLines,
   projectName,
+  saveSessionSort,
   sessionAge,
+  sessionMenuActionForKey,
+  sessionMenuItems,
   sessionTitle,
   sessionRows,
   waitForBridge,
 } from './sidebar.js'
 
-const GROUP_LABEL = { pinned: 'Pinned', starred: 'Starred', recent: 'Recent' }
+const GROUP_LABEL = { pinned: 'Pinned', recent: 'Recent', archived: 'Archived' }
 
 function messageOf(error) {
   return error instanceof Error && error.message ? error.message : 'The bridge refused the change.'
@@ -61,8 +67,15 @@ export function Sidebar({ client = null, live = false, project = '', tasks = nul
   const [preview, setPreview] = useState(null)
   const [showAll, setShowAll] = useState(false)
   const [renaming, setRenaming] = useState(null)
+  const [search, setSearch] = useState('')
+  const [sort, setSort] = useState(() => loadSessionSort())
+  const [showArchived, setShowArchived] = useState(false)
+  const [menu, setMenu] = useState(null)
   const previewReqRef = useRef(0)
   const confirmRef = useRef(null)
+  const menuRef = useRef(null)
+  const menuAnchorRef = useRef(null)
+  const menuActionRef = useRef(() => {})
 
   useDialogFocus(Boolean(confirm), { containerRef: confirmRef })
 
@@ -195,6 +208,7 @@ export function Sidebar({ client = null, live = false, project = '', tasks = nul
         title: sessionTitle(answer?.title ?? row.title),
         messages: Array.isArray(answer?.messages) ? answer.messages : [],
       })
+      markOpened(row)
     } catch (error) {
       if (previewReqRef.current !== ticket) return
       setPreview(null)
@@ -306,6 +320,122 @@ export function Sidebar({ client = null, live = false, project = '', tasks = nul
     })
   }
 
+  function runMenuAction(row, item) {
+    if (!row || !item || item.disabled) return
+    setMenu(null)
+    if (item.action === 'pin') {
+      setFlag(row, row.pinned ? { pinned: false, starred: false } : { pinned: true })
+    } else if (item.action === 'rename') {
+      startRename(row)
+    } else if (item.action === 'fork') {
+      forkSession(row)
+    } else if (item.action === 'unread') {
+      setFlag(row, { unread: true })
+    } else if (item.action === 'archive') {
+      setFlag(row, { archived: !row.archived })
+    } else if (item.action === 'delete') {
+      askDelete(row)
+    }
+  }
+
+  async function forkSession(row) {
+    if (!row || busy) return
+    if (typeof client?.branchOrchestratorSession !== 'function') {
+      setActionError('This bridge cannot start a branch.')
+      return
+    }
+    const count = Number(row.count)
+    if (!Number.isInteger(count) || count < 1) {
+      setActionError('This conversation has no messages to fork.')
+      return
+    }
+    setBusy(true)
+    setActionError('')
+    try {
+      if (!row.current) {
+        if (typeof client?.openOrchestratorSession !== 'function') {
+          throw new Error('This bridge cannot open a conversation.')
+        }
+        await client.openOrchestratorSession({ id: ORCHESTRATOR_ID, session: row.id, confirmed: true })
+      }
+      await client.branchOrchestratorSession({ id: ORCHESTRATOR_ID, index: count, confirmed: true })
+      previewReqRef.current += 1
+      setPreview(null)
+      setShowAll(false)
+      await refreshSessions()
+    } catch (error) {
+      setActionError(messageOf(error))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  function chooseSort(next) {
+    const value = normalizeSessionSort(next)
+    setSort(value)
+    saveSessionSort(value)
+  }
+
+  function toggleMenu(event, row) {
+    const key = row.id || 'current'
+    if (menu && menu.key === key) {
+      setMenu(null)
+      return
+    }
+    menuAnchorRef.current = event.currentTarget
+    setActionError('')
+    setMenu({ key, row })
+  }
+
+  async function markOpened(row) {
+    if (!row?.unread || !row.id) return
+    try {
+      await client.updateOrchestratorSession({
+        id: ORCHESTRATOR_ID,
+        session: row.id,
+        unread: false,
+        confirmed: true,
+      })
+      await refreshSessions()
+    } catch {}
+  }
+
+  menuActionRef.current = runMenuAction
+
+  useEffect(() => {
+    if (!menu) return undefined
+    function onPointer(event) {
+      if (menuRef.current?.contains?.(event.target)) return
+      if (menuAnchorRef.current?.contains?.(event.target)) return
+      setMenu(null)
+    }
+    window.addEventListener('pointerdown', onPointer)
+    return () => window.removeEventListener('pointerdown', onPointer)
+  }, [menu])
+
+  useEffect(() => {
+    if (!menu) return undefined
+    function onKey(event) {
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        event.stopPropagation()
+        setMenu(null)
+        menuAnchorRef.current?.focus?.()
+        return
+      }
+      if (event.metaKey || event.ctrlKey || event.altKey) return
+      const tag = event.target?.tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
+      const item = sessionMenuActionForKey(sessionMenuItems(menu.row, { busy }), event.key)
+      if (!item) return
+      event.preventDefault()
+      event.stopPropagation()
+      menuActionRef.current(menu.row, item)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [menu, busy])
+
   function askProject(entry) {
     const path = cleanText(entry?.path)
     if (!path) return
@@ -332,7 +462,7 @@ export function Sidebar({ client = null, live = false, project = '', tasks = nul
   }
 
   const now = Date.now()
-  const rows = sessionRows(sessions, { expanded: showAll })
+  const rows = sessionRows(sessions, { expanded: showAll, query: search, sort, showArchived })
   const fallbackName =
     cleanText(String(project ?? '').replace(/^\/+/, '')) || 'Project'
   const currentProject = projects?.current && typeof projects.current === 'object' ? projects.current : null
@@ -378,57 +508,51 @@ export function Sidebar({ client = null, live = false, project = '', tasks = nul
         </form>
       )
     }
+    const key = row.id || 'current'
+    const open = menu?.key === key
+    const items = sessionMenuItems(row, { busy })
     return (
-      <div className={`mr-side-row${row.current ? ' is-current' : ''}`} key={row.id || 'current'}>
+      <div className={`mr-side-row${row.current ? ' is-current' : ''}${row.unread ? ' is-unread' : ''}`} key={key}>
         <button
           type="button"
           className="mr-side-session"
           title={row.title}
           onClick={() => openPreview(row)}
         >
+          {row.unread ? <span className="mr-side-unread" aria-hidden="true" /> : null}
           <span className="mr-side-title">{row.title}</span>
         </button>
         {row.current && <span className="mr-side-current mono">Current</span>}
         <span className="mr-side-age mono">{sessionAge(row, now)}</span>
-        {!row.current && row.id ? (
-          <span className="mr-side-actions">
-            <button
-              type="button"
-              className={`mr-side-action${row.pinned ? ' is-on' : ''}`}
-              disabled={busy}
-              aria-label={`${row.pinned ? 'Unpin' : 'Pin'} ${row.title}`}
-              onClick={() => setFlag(row, { pinned: !row.pinned })}
-            >
-              {row.pinned ? 'Unpin' : 'Pin'}
-            </button>
-            <button
-              type="button"
-              className={`mr-side-action${row.starred ? ' is-on' : ''}`}
-              disabled={busy}
-              aria-label={`${row.starred ? 'Unstar' : 'Star'} ${row.title}`}
-              onClick={() => setFlag(row, { starred: !row.starred })}
-            >
-              {row.starred ? 'Unstar' : 'Star'}
-            </button>
-            <button
-              type="button"
-              className="mr-side-action"
-              disabled={busy}
-              aria-label={`Rename ${row.title}`}
-              onClick={() => startRename(row)}
-            >
-              Rename
-            </button>
-            <button
-              type="button"
-              className="mr-side-action is-danger"
-              disabled={busy}
-              aria-label={`Delete ${row.title}`}
-              onClick={() => askDelete(row)}
-            >
-              Delete
-            </button>
-          </span>
+        <span className="mr-side-actions">
+          <button
+            type="button"
+            className={`mr-side-menu-button${open ? ' is-open' : ''}`}
+            aria-label={`Actions for ${row.title}`}
+            aria-haspopup="menu"
+            aria-expanded={open}
+            onClick={(event) => toggleMenu(event, row)}
+          >
+            ...
+          </button>
+        </span>
+        {open ? (
+          <div className="mr-side-menu" role="menu" aria-label={`Actions for ${row.title}`} ref={menuRef}>
+            {items.map((item) => (
+              <button
+                type="button"
+                role="menuitem"
+                className={`mr-side-menu-item${item.danger ? ' is-danger' : ''}`}
+                key={item.action}
+                disabled={item.disabled}
+                title={item.disabled ? item.reason : undefined}
+                onClick={() => runMenuAction(row, item)}
+              >
+                <span className="mr-side-menu-label">{item.label}</span>
+                <span className="mr-side-menu-key mono" aria-hidden="true">{item.key}</span>
+              </button>
+            ))}
+          </div>
         ) : null}
       </div>
     )
@@ -473,13 +597,38 @@ export function Sidebar({ client = null, live = false, project = '', tasks = nul
                 {projectLabel}
               </span>
             </div>
+            {sessions ? (
+              <div className="mr-side-tools">
+                <input
+                  type="search"
+                  className="mr-side-search mono"
+                  value={search}
+                  placeholder="Search conversations"
+                  aria-label="Search conversations"
+                  onChange={(event) => setSearch(event.target.value)}
+                />
+                <div className="mr-side-sort mono" role="group" aria-label="Sort conversations">
+                  {SESSION_SORTS.map((choice) => (
+                    <button
+                      type="button"
+                      className={`mr-side-sort-button${sort === choice.key ? ' is-on' : ''}`}
+                      key={choice.key}
+                      aria-pressed={sort === choice.key}
+                      onClick={() => chooseSort(choice.key)}
+                    >
+                      {choice.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
             <div className="mr-side-conversations">
               {!sessions ? (
                 <p className="mr-side-note">
                   {sessionsError ? 'Conversations are not available.' : 'Loading conversations...'}
                 </p>
-              ) : rows.total === 0 ? (
-                <p className="mr-side-note">No conversations yet.</p>
+              ) : rows.rows.length === 0 && rows.archivedTotal === 0 ? (
+                <p className="mr-side-note">{search ? 'No conversations match.' : 'No conversations yet.'}</p>
               ) : (
                 <>
                   {renderSessionRows()}
@@ -491,6 +640,15 @@ export function Sidebar({ client = null, live = false, project = '', tasks = nul
                   {showAll && rows.total > SESSION_LIMIT ? (
                     <button type="button" className="mr-side-more" onClick={() => setShowAll(false)}>
                       Show less
+                    </button>
+                  ) : null}
+                  {rows.archivedTotal > 0 ? (
+                    <button
+                      type="button"
+                      className="mr-side-more mr-side-archived"
+                      onClick={() => setShowArchived((value) => !value)}
+                    >
+                      {showArchived ? 'Hide archived' : `Show archived (${rows.archivedTotal})`}
                     </button>
                   ) : null}
                 </>

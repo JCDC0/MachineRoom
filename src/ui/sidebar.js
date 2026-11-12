@@ -37,6 +37,41 @@ export function sessionTitle(value) {
   return cleanText(value, SESSION_TITLE_MAX) || 'Untitled conversation'
 }
 
+export const SESSION_SORTS = Object.freeze([
+  { key: 'newest', label: 'Newest' },
+  { key: 'oldest', label: 'Oldest' },
+  { key: 'name', label: 'Name' },
+])
+export const SESSION_SORT_DEFAULT = 'newest'
+export const SESSION_SORT_KEY = 'machineroom.sessionSort'
+
+export function normalizeSessionSort(value) {
+  const key = typeof value === 'string' ? value.trim().toLowerCase() : ''
+  return SESSION_SORTS.some((sort) => sort.key === key) ? key : SESSION_SORT_DEFAULT
+}
+
+function localStore() {
+  try {
+    return globalThis.localStorage ?? globalThis.window?.localStorage ?? null
+  } catch {
+    return null
+  }
+}
+
+export function loadSessionSort(storage = localStore()) {
+  try {
+    return normalizeSessionSort(storage?.getItem(SESSION_SORT_KEY))
+  } catch {
+    return SESSION_SORT_DEFAULT
+  }
+}
+
+export function saveSessionSort(value, storage = localStore()) {
+  try {
+    storage?.setItem(SESSION_SORT_KEY, normalizeSessionSort(value))
+  } catch {}
+}
+
 export function projectName(project) {
   const name = cleanText(project?.name)
   if (name) return name
@@ -87,14 +122,20 @@ export function sessionAge(session, now = Date.now()) {
   return `${Math.floor(days / 365)}y`
 }
 
+function isPinned(source) {
+  return source?.pinned === true || source?.starred === true
+}
+
 function sessionEntry(source, group, current) {
   return {
     id: typeof source.id === 'string' ? source.id : '',
     title: sessionTitle(source.title),
     startedAt: source.startedAt ?? null,
     endedAt: current ? null : source.endedAt ?? null,
-    pinned: current ? false : source.pinned === true,
-    starred: current ? false : source.starred === true,
+    pinned: isPinned(source),
+    starred: source?.starred === true,
+    unread: source?.unread === true,
+    archived: source?.archived === true,
     count: Number.isFinite(Number(source.count)) ? Math.max(0, Math.floor(Number(source.count))) : null,
     current,
     group,
@@ -114,34 +155,128 @@ export function groupSessions(answer) {
     if (!id) continue
     if (used.has(id)) continue
     used.add(id)
-    const group = raw.pinned === true ? 'pinned' : raw.starred === true ? 'starred' : 'recent'
+    const group = raw.archived === true ? 'archived' : isPinned(raw) ? 'pinned' : 'recent'
     sessions.push(sessionEntry(raw, group, false))
   }
-  sessions.sort((left, right) => right.at - left.at)
   return {
     current,
     pinned: sessions.filter((entry) => entry.group === 'pinned'),
-    starred: sessions.filter((entry) => entry.group === 'starred'),
     recent: sessions.filter((entry) => entry.group === 'recent'),
+    archived: sessions.filter((entry) => entry.group === 'archived'),
   }
 }
 
-export function sessionRows(answer, { expanded = false, limit = SESSION_LIMIT } = {}) {
+export function sortSessionRows(rows, sort = SESSION_SORT_DEFAULT) {
+  const order = normalizeSessionSort(sort)
+  return [...rows].sort((left, right) => {
+    if (order === 'name') {
+      const byName = left.title.localeCompare(right.title)
+      if (byName !== 0) return byName
+    } else {
+      const byTime = order === 'oldest' ? left.at - right.at : right.at - left.at
+      if (byTime !== 0) return byTime
+    }
+    return left.title.localeCompare(right.title) || left.id.localeCompare(right.id)
+  })
+}
+
+export function sessionRows(
+  answer,
+  { expanded = false, limit = SESSION_LIMIT, query = '', sort = SESSION_SORT_DEFAULT, showArchived = false } = {}
+) {
   const groups = groupSessions(answer)
-  const all = [
-    ...(groups.current ? [groups.current] : []),
-    ...groups.pinned,
-    ...groups.starred,
-    ...groups.recent,
-  ]
+  const needle = cleanText(query).toLowerCase()
+  const matches = (row) => !needle || row.title.toLowerCase().includes(needle)
+  const current = groups.current && matches(groups.current) ? groups.current : null
+  const pinned = sortSessionRows(groups.pinned.filter(matches), sort)
+  const recent = sortSessionRows(groups.recent.filter(matches), sort)
+  const archived = sortSessionRows(groups.archived.filter(matches), sort)
+  const active = [...(current ? [current] : []), ...pinned, ...recent]
   const cap = Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : SESSION_LIMIT
-  const rows = expanded ? all : all.slice(0, cap)
+  const activeRows = expanded || needle ? active : active.slice(0, cap)
+  const archivedRows = showArchived ? archived : []
   return {
-    ...groups,
-    rows,
-    total: all.length,
-    hidden: Math.max(0, all.length - rows.length),
+    current,
+    pinned,
+    recent,
+    archived,
+    rows: [...activeRows, ...archivedRows],
+    total: active.length,
+    hidden: Math.max(0, active.length - activeRows.length),
+    archivedTotal: archived.length,
+    showArchived,
   }
+}
+
+export const SESSION_MENU_KEYS = Object.freeze({
+  pin: 'P',
+  rename: 'R',
+  fork: 'F',
+  unread: 'U',
+  archive: 'A',
+  delete: 'D',
+})
+
+export function sessionMenuItems(row, { busy = false } = {}) {
+  const current = row?.current === true
+  const archived = row?.archived === true
+  const saved = Boolean(row?.id)
+  const count = Number(row?.count)
+  const noMessages = !Number.isFinite(count) || count < 1
+  const currentLock = 'The current conversation cannot be archived or deleted.'
+  return [
+    {
+      action: 'pin',
+      label: row?.pinned ? 'Unpin' : 'Pin',
+      key: SESSION_MENU_KEYS.pin,
+      disabled: busy || (current && !saved),
+      reason: 'The current conversation is not in the list yet.',
+    },
+    {
+      action: 'rename',
+      label: 'Rename',
+      key: SESSION_MENU_KEYS.rename,
+      disabled: busy || (current && !saved),
+      reason: 'The current conversation is not in the list yet.',
+    },
+    {
+      action: 'fork',
+      label: 'Fork',
+      key: SESSION_MENU_KEYS.fork,
+      disabled: busy || noMessages,
+      reason: 'This conversation has no messages to fork.',
+    },
+    {
+      action: 'unread',
+      label: 'Mark as unread',
+      key: SESSION_MENU_KEYS.unread,
+      disabled: busy || current || !saved,
+      reason: current ? 'The current conversation is already open.' : 'This conversation is not in the list yet.',
+    },
+    {
+      action: 'archive',
+      label: archived ? 'Unarchive' : 'Archive',
+      key: SESSION_MENU_KEYS.archive,
+      disabled: busy || current,
+      reason: currentLock,
+    },
+    {
+      action: 'delete',
+      label: 'Delete',
+      key: SESSION_MENU_KEYS.delete,
+      disabled: busy || current,
+      reason: currentLock,
+      danger: true,
+    },
+  ]
+}
+
+export function sessionMenuActionForKey(items, key) {
+  const letter = String(key ?? '').toLowerCase()
+  if (!letter) return null
+  return (Array.isArray(items) ? items : []).find(
+    (item) => !item.disabled && item.key.toLowerCase() === letter
+  ) ?? null
 }
 
 export function agentCountLine(activeCount, maxCount) {
