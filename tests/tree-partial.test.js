@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process'
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { createBridge, mergeNamedFiles, readTree, readTreePartial } from '../server/index.js'
+import { createBridge, deletedDiffArgs, mergeNamedFiles, readTree, readTreePartial } from '../server/index.js'
 import { gitPath } from '../server/programPath.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 
@@ -148,13 +148,19 @@ describe('a read whose list call fails', () => {
     const dir = makeRoot()
     writeFileSync(join(dir, 'a.js'), 'x')
     const calls = []
+    const deletedCalls = []
     const { files } = await readTree(dir, {
       gitList: async (_root, args) => {
         calls.push(args)
         return null
       },
+      gitDeleted: async () => {
+        deletedCalls.push(true)
+        return null
+      },
     })
-    expect(calls).toEqual([['--cached', '--others', '--exclude-standard'], ['--deleted']])
+    expect(calls).toEqual([['--cached', '--others', '--exclude-standard']])
+    expect(deletedCalls).toHaveLength(1)
     expect(files).toEqual(['a.js'])
   })
 
@@ -217,6 +223,90 @@ describe('an unstaged delete', () => {
   })
 })
 
+describe('the deleted-file diff', () => {
+  it('leaves a tracked file deleted from the folder out of a full read', async () => {
+    const dir = makeRoot()
+    execFileSync(gitPath(), ['init', '--quiet', '--initial-branch=main'], { cwd: dir, stdio: 'ignore' })
+    writeFileSync(join(dir, 'gone.js'), 'x')
+    writeFileSync(join(dir, 'kept.js'), 'x')
+    execFileSync(gitPath(), ['add', '--', '.'], { cwd: dir, stdio: 'ignore' })
+    rmSync(join(dir, 'gone.js'))
+
+    expect((await readTree(dir)).files).toEqual(['kept.js'])
+  })
+
+  it('leaves a tracked file deleted from the folder out of a partial read of its name', async () => {
+    const dir = makeRoot()
+    execFileSync(gitPath(), ['init', '--quiet', '--initial-branch=main'], { cwd: dir, stdio: 'ignore' })
+    writeFileSync(join(dir, 'gone.js'), 'x')
+    writeFileSync(join(dir, 'kept.js'), 'x')
+    execFileSync(gitPath(), ['add', '--', '.'], { cwd: dir, stdio: 'ignore' })
+    rmSync(join(dir, 'gone.js'))
+
+    expect((await readTreePartial(dir, ['gone.js'])).files).toEqual([])
+    expect((await readTreePartial(dir, ['kept.js'])).files).toEqual(['kept.js'])
+  })
+
+  it('leaves a file removed with git rm out of both reads', async () => {
+    const dir = makeRoot()
+    execFileSync(gitPath(), ['init', '--quiet', '--initial-branch=main'], { cwd: dir, stdio: 'ignore' })
+    writeFileSync(join(dir, 'gone.js'), 'x')
+    writeFileSync(join(dir, 'kept.js'), 'x')
+    execFileSync(gitPath(), ['add', '--', '.'], { cwd: dir, stdio: 'ignore' })
+    execFileSync(gitPath(), ['rm', '-f', '--quiet', '--', 'gone.js'], { cwd: dir, stdio: 'ignore' })
+
+    expect((await readTree(dir)).files).toEqual(['kept.js'])
+    expect((await readTreePartial(dir, ['gone.js'])).files).toEqual([])
+  })
+
+  it('reads a name that starts with a minus sign as a path', async () => {
+    const dir = makeRoot()
+    execFileSync(gitPath(), ['init', '--quiet', '--initial-branch=main'], { cwd: dir, stdio: 'ignore' })
+    writeFileSync(join(dir, '-odd.js'), 'x')
+    execFileSync(gitPath(), ['add', '--', '.'], { cwd: dir, stdio: 'ignore' })
+    rmSync(join(dir, '-odd.js'))
+
+    expect((await readTree(dir)).files).toEqual([])
+    expect((await readTreePartial(dir, ['-odd.js'])).files).toEqual([])
+  })
+
+  it('asks for the deleted names with the flags that keep the diff cheap', () => {
+    expect(deletedDiffArgs()).toEqual([
+      '-c',
+      'core.longpaths=true',
+      'diff',
+      '--name-only',
+      '-z',
+      '--diff-filter=D',
+      '--no-ext-diff',
+      '--no-textconv',
+    ])
+    expect(deletedDiffArgs(['gone.js'])).toEqual([
+      '-c',
+      'core.longpaths=true',
+      'diff',
+      '--name-only',
+      '-z',
+      '--diff-filter=D',
+      '--no-ext-diff',
+      '--no-textconv',
+      '--',
+      'gone.js',
+    ])
+  })
+
+  it('keeps the list when the diff fails', async () => {
+    const dir = makeRoot()
+    execFileSync(gitPath(), ['init', '--quiet', '--initial-branch=main'], { cwd: dir, stdio: 'ignore' })
+    writeFileSync(join(dir, 'gone.js'), 'x')
+    execFileSync(gitPath(), ['add', '--', '.'], { cwd: dir, stdio: 'ignore' })
+    rmSync(join(dir, 'gone.js'))
+
+    expect((await readTree(dir, { gitDeleted: async () => null })).files).toEqual(['gone.js'])
+    expect((await readTreePartial(dir, ['gone.js'], { gitDeleted: async () => null })).files).toEqual(['gone.js'])
+  })
+})
+
 describe('mergeNamedFiles', () => {
   it('drops a held file the list does not answer and keeps the other paths', () => {
     const current = { root: 'project', files: ['a.js', 'dir/a.js', 'dir/b.js'], created: [] }
@@ -252,6 +342,10 @@ describe('a plain folder', () => {
         return readTree(folder, {
           gitList: async (_folder, args) => {
             calls.push(args)
+            return null
+          },
+          gitDeleted: async () => {
+            calls.push(['diff', '--diff-filter=D'])
             return null
           },
         })

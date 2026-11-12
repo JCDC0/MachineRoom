@@ -107,11 +107,11 @@ function walkTree(projectRoot, listDir = readdirSync) {
   return { root: basename(resolved), files: walkFiles(listDir, resolved).sort(), created: [] }
 }
 
-function gitListPaths(resolved, args) {
+function runGitPaths(resolved, args) {
   return new Promise((resolveList) => {
     execFile(
       gitPath(),
-      ['-C', resolved, 'ls-files', '-z', ...args],
+      ['-C', resolved, ...args],
       {
         encoding: 'utf8',
         env: { ...process.env, GIT_CEILING_DIRECTORIES: dirname(resolved) },
@@ -135,32 +135,55 @@ function gitListPaths(resolved, args) {
   })
 }
 
+function gitListPaths(resolved, args) {
+  return runGitPaths(resolved, ['ls-files', '-z', ...args])
+}
+
+export function deletedDiffArgs(names) {
+  const args = [
+    '-c',
+    'core.longpaths=true',
+    'diff',
+    '--name-only',
+    '-z',
+    '--diff-filter=D',
+    '--no-ext-diff',
+    '--no-textconv',
+  ]
+  if (names !== null && names !== undefined) args.push('--', ...names)
+  return args
+}
+
+function gitDeletedPaths(resolved, names) {
+  return runGitPaths(resolved, deletedDiffArgs(names))
+}
+
 function dropDeleted(files, deleted) {
   if (deleted === null) return files
   const gone = new Set(deleted)
   return files.filter((file) => !gone.has(file))
 }
 
-export async function readTree(projectRoot, { listDir = readdirSync, gitList = gitListPaths } = {}) {
+export async function readTree(projectRoot, { listDir = readdirSync, gitList = gitListPaths, gitDeleted = gitDeletedPaths } = {}) {
   if (!projectRoot) return { root: '', files: [], created: [] }
   const resolved = resolve(projectRoot)
   const root = basename(resolved)
   const [listed, deleted] = await Promise.all([
     gitList(resolved, ['--cached', '--others', '--exclude-standard']),
-    gitList(resolved, ['--deleted']),
+    gitDeleted(resolved),
   ])
   if (listed === null) return { ...walkTree(resolved, listDir), [PLAIN_TREE]: true }
   return { root, files: dropDeleted(listed, deleted).sort(), created: [] }
 }
 
-export async function readTreePartial(projectRoot, names, { gitList = gitListPaths } = {}) {
+export async function readTreePartial(projectRoot, names, { gitList = gitListPaths, gitDeleted = gitDeletedPaths } = {}) {
   const wanted = Array.isArray(names) ? names.filter((name) => typeof name === 'string' && name !== '') : []
   if (!projectRoot || wanted.length === 0) return null
   const resolved = resolve(projectRoot)
   const root = basename(resolved)
   const listed = await gitList(resolved, ['--cached', '--others', '--exclude-standard', '--', ...wanted])
   if (listed === null) return null
-  const deleted = await gitList(resolved, ['--deleted', '--', ...wanted])
+  const deleted = await gitDeleted(resolved, wanted)
   return { root, files: dropDeleted(listed, deleted).sort(), created: [] }
 }
 
