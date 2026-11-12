@@ -3,7 +3,7 @@ import { existsSync, readFileSync, realpathSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { worktreeFor } from '../src/briefs/run.js'
-import { mainCheckoutOf } from './lanes-source.js'
+import { lanesFolder, mainCheckoutOf, readAllLanes, runsFolder as defaultRunsFolder } from './lanes-source.js'
 import { gitPath } from './programPath.js'
 import {
   beginRepoWrite,
@@ -23,7 +23,6 @@ const MERGE_ENV = { GIT_TERMINAL_PROMPT: '0', GIT_EDITOR: 'true' }
 const MAIN_REF = 'refs/heads/main'
 const MAIN_BASE = { ref: MAIN_REF, name: 'main' }
 const REPO_ROOT = resolve(fileURLToPath(import.meta.url), '..', '..')
-const ROOM_BRIEFS = join(REPO_ROOT, 'docs', 'agents')
 export const DEFAULT_PATCH_LIMIT = 400 * 1024
 export const DEFAULT_REVIEW_CONCURRENCY = 4
 export const NOT_OWNER_PROBLEM = 'The caller is not the owner, so the lane was not merged.'
@@ -214,15 +213,6 @@ function laneEntry(lanes, lane) {
   return info
 }
 
-function laneWorktree(lanes, lane) {
-  const info = laneEntry(lanes, lane)
-  if (!info) return null
-  if (!Object.hasOwn(info, 'worktree')) return null
-  const worktree = info.worktree
-  if (typeof worktree !== 'string' || !worktree) return null
-  return worktree
-}
-
 export async function mapConcurrent(items, limit, fn) {
   if (!Array.isArray(items) || items.length === 0) return []
   const max = Number.isInteger(limit) && limit > 0 ? limit : DEFAULT_REVIEW_CONCURRENCY
@@ -252,7 +242,6 @@ export function createReviewsApi({
   gitRunner = defaultGitRunner,
 }) {
   const resolvedRoot = projectRoot ? resolve(projectRoot) : ''
-  const resolvedBriefs = briefsDir ? resolve(briefsDir) : resolvedRoot ? join(resolvedRoot, 'docs', 'agents') : ''
   const limit = Number.isInteger(patchLimit) && patchLimit > 0 ? patchLimit : DEFAULT_PATCH_LIMIT
   const roomCheckout = resolvedRoot ? mainCheckoutOf(resolvedRoot) : ''
   const codeCheckoutHere = roomCheckout ? codeCheckout() : ''
@@ -265,18 +254,19 @@ export function createReviewsApi({
         ? pathKey(roomCheckout) !== pathKey(codeCheckoutHere)
         : !inside(projectCheckout, codeBase) && !inside(codeBase, projectCheckout))
   )
-  const lanesFolder =
-    resolvedBriefs && existsSync(join(resolvedBriefs, 'lanes.json'))
-      ? resolvedBriefs
-      : otherProject && existsSync(join(ROOM_BRIEFS, 'lanes.json'))
-        ? ROOM_BRIEFS
-        : resolvedBriefs
-  const lanesCheckout = lanesFolder ? mainCheckoutOf(lanesFolder) : ''
-  const lanesPlain = Boolean(lanesFolder) && !inGitWorkTree(lanesFolder)
+  const roomLanesDir = lanesFolder()
+  const lanesDir =
+    briefsDir && (existsSync(join(resolve(briefsDir), 'lanes.json')) || !otherProject)
+      ? resolve(briefsDir)
+      : roomLanesDir
+  const lanesCheckout = mainCheckoutOf(lanesDir)
+  const lanesPlain = !inGitWorkTree(lanesDir)
   const sameCheckout =
-    roomCheckout && lanesCheckout
-      ? pathKey(roomCheckout) === pathKey(lanesCheckout)
-      : inside(lanesFolder, projectCheckout) || lanesPlain
+    pathKey(lanesDir) === pathKey(roomLanesDir)
+      ? !otherProject
+      : roomCheckout && lanesCheckout
+        ? pathKey(roomCheckout) === pathKey(lanesCheckout)
+        : inside(lanesDir, projectCheckout) || lanesPlain
   const onProject = Boolean(resolvedRoot && !sameCheckout)
   const runGit = (cwd, args, options = {}) => gitRunner(cwd, args, { timeout: GIT_TIMEOUT_MS, ...options })
   let merging = false
@@ -292,7 +282,7 @@ export function createReviewsApi({
   }
 
   function readLanes() {
-    const text = lanesFolder ? readText(join(lanesFolder, 'lanes.json')) : null
+    const text = readText(join(lanesDir, 'lanes.json'))
     if (text === null) return { status: 404, error: 'The lane file is missing.' }
     let parsed
     try {
@@ -303,7 +293,11 @@ export function createReviewsApi({
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
       return { status: 400, error: 'The lane file is not valid.' }
     }
-    return { lanes: parsed }
+    const lanes = readAllLanes({
+      lanesJson: parsed,
+      runsFolder: runsFolder ? resolve(runsFolder) : defaultRunsFolder(),
+    })
+    return { lanes }
   }
 
   function recordsFile() {
@@ -322,9 +316,12 @@ export function createReviewsApi({
   }
 
   function laneFolder(lanes, lane) {
-    if (!onProject) return laneWorktree(lanes, lane)
-    if (!laneEntry(lanes, lane)) return null
-    return worktreeFor(resolvedRoot, lane)
+    const info = laneEntry(lanes, lane)
+    if (!info) return null
+    if (onProject) return worktreeFor(resolvedRoot, lane)
+    if (typeof info.worktree === 'string' && info.worktree) return info.worktree
+    if (info.custom === true && resolvedRoot) return worktreeFor(resolvedRoot, lane)
+    return null
   }
 
   async function projectBase() {
