@@ -359,12 +359,14 @@
   "codex": {
     "name": "Codex",
     "harness": "Codex",
-    "model": "the Codex account default",
-    "modelHint": "no --model is passed, so Codex uses the model set in the owner's Codex app",
+    "model": "GPT-6.1 Sol, medium effort",
+    "modelHint": "the owner chose GPT-6.1 Sol at medium effort on 2026-11-12; without --model Codex would use its app default, GPT-6 Luna at xhigh",
     "cli": {
       "harness": "codex",
       "bin": "codex",
-      "commits": "runner"
+      "commits": "runner",
+      "model": "gpt-6.1-sol",
+      "effort": "medium"
     },
     "worktree": "C:\\GitHub\\MachineRoom\\.worktrees\\codex",
     "role": "You work on the brief in your own worktree and report back.",
