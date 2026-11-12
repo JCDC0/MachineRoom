@@ -1,5 +1,5 @@
 import { spawn, spawnSync } from 'node:child_process'
-import { copyFileSync, existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, readFileSync, realpathSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
 import { delimiter, dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it, vi } from 'vitest'
@@ -9,7 +9,7 @@ import { projectLanesFileFor, writeHiddenLanes } from '../server/active-lanes.js
 import { briefProblems, briefWorktreeProblems, commandFor, DEFAULT_MINUTES, filterRunsSince, laneCommandProblem, readinessLine, retryStartProblem, SINCE_PROBLEM, startFailureText, worktreeFor, formatOutcomes, formatStats, formatSummary, laneLockPids, laneLockText, laneStats, laneStopProblem, laneWithOverrides, nextTestStep, parseRunArgs, projectRunGit, runListLine, runRecord, sessionToolLines, summarizeRun, UNATTENDED_NOTE, unattendedPrompt } from '../src/briefs/run.js'
 import { branchFor, briefFileList, parseBriefs } from '../src/briefs/briefs.js'
 import { harnessByKey } from '../src/harnesses/index.js'
-import { appendRunRecord, printedRunsFolder, runnerCommitVersion, sessionStartedBy, startLane } from '../scripts/run-lane.mjs'
+import { appendRunRecord, printCommand, printedRunsFolder, runnerCommitVersion, sessionStartedBy, startLane, takeProjectLock } from '../scripts/run-lane.mjs'
 import { makeTempDir } from './helpers/tempRoot.js'
 
 const lanes = JSON.parse(readFileSync(new URL('../docs/agents/lanes.json', import.meta.url), 'utf8'))
@@ -1348,8 +1348,95 @@ function runLane(args, env = {}) {
   })
 }
 
+describe('printCommand', () => {
+  it('masks program, working folder, MCP and usage paths without changing the command', () => {
+    const profile = 'C:\\Users\\<name>'
+    const local = `${profile}\\AppData\\Local`
+    const roaming = `${profile}\\AppData\\Roaming`
+    const temp = `${local}\\Temp`
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {})
+    vi.stubEnv('USERPROFILE', profile)
+    vi.stubEnv('LOCALAPPDATA', local)
+    vi.stubEnv('APPDATA', roaming)
+    vi.stubEnv('TEMP', temp)
+    try {
+      const mcpConfig = `${local.toLowerCase()}\\MachineRoom\\runs\\run.mcp.json`
+      const usage = `${local}\\MachineRoom\\runs\\run.usage.json`
+      for (const [file, shown] of [
+        [`${local.toLowerCase()}\\tools\\agent.exe`, '%LOCALAPPDATA%\\tools\\agent.exe'],
+        [`${roaming.toLowerCase()}\\tools\\agent.exe`, '%APPDATA%\\tools\\agent.exe'],
+        [`${profile.toLowerCase()}\\tools\\agent.exe`, '%USERPROFILE%\\tools\\agent.exe'],
+        [`${temp}\\custom\\agent.exe`, '%TEMP%\\custom\\agent.exe'],
+        ['claude', 'claude'],
+      ]) {
+        log.mockClear()
+        const command = { file, args: ['-p', prompt, '--mcp-config', mcpConfig, '--usage-file', usage, '--model', 'fake/model'], cwd: `${profile}\\project` }
+        const before = structuredClone(command)
+        printCommand(command, prompt, { mcpConfig, mcpServers: [{ name: 'browser' }] })
+        expect(log.mock.calls.map(([line]) => line)).toEqual([
+          `file: ${shown}`,
+          `args: ${JSON.stringify(['-p', `<prompt: ${prompt.length} characters>`, '--mcp-config', '%LOCALAPPDATA%\\MachineRoom\\runs\\run.mcp.json', '--usage-file', '%LOCALAPPDATA%\\MachineRoom\\runs\\run.usage.json', '--model', 'fake/model'])}`,
+          'cwd: %USERPROFILE%\\project',
+          'mcp config: %LOCALAPPDATA%\\MachineRoom\\runs\\run.mcp.json',
+          'mcp servers: browser',
+        ])
+        expect(command).toEqual(before)
+      }
+    } finally {
+      log.mockRestore()
+      vi.unstubAllEnvs()
+    }
+  })
+
+  it('masks the lock path when another project run holds it', () => {
+    const folder = makeTempDir('machine-room-project-lock-mask-')
+    const project = 'D:\\work\\project'
+    vi.stubEnv('TEMP', folder)
+    try {
+      const path = takeProjectLock(folder, project)
+      expect(() => takeProjectLock(folder, project)).toThrow(
+        `Another run is already going on ${project}; wait for it to end, or delete %TEMP%${path.slice(folder.length)} if no run is going.`
+      )
+      expect(laneLockPids(readFileSync(path, 'utf8')).pid).toBe(process.pid)
+    } finally {
+      vi.unstubAllEnvs()
+      rmSync(folder, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+    }
+  })
+})
+
 describe('scripts/run-lane.mjs', () => {
-  it('uses the Codex app for the default program and keeps explicit paths unchanged', async (context) => {
+  it.skipIf(process.platform !== 'win32')('ignores a reused child pid but refuses a live child before taking the project lock', async () => {
+    const folder = makeTempDir('machine-room-reused-child-')
+    try {
+      const project = join(folder, 'project')
+      const runs = join(folder, 'runs')
+      mkdirSync(project)
+      mkdirSync(runs)
+      const projectLock = takeProjectLock(runs, project)
+      const laneLock = join(runs, 'opencode.lock')
+      const text = laneLockText({ pid: 2147483647, child: process.pid })
+      writeFileSync(laneLock, text)
+      utimesSync(laneLock, new Date(0), new Date(0))
+      const runEnv = { MACHINEROOM_LANES_FILE: lanesFileUnderWorktrees(folder), MACHINEROOM_RUNS: runs, TEMP: folder }
+      const args = ['opencode', '--project', project, '--task', 'Fix it.']
+
+      const reused = await runLane(args, runEnv)
+      expect(reused.code).toBe(1)
+      expect(reused.stderr).toContain(`Another run is already going on ${project};`)
+
+      writeFileSync(laneLock, text)
+      const live = await runLane(args, runEnv)
+      expect(live.code).toBe(1)
+      expect(live.stderr).toContain(laneStopProblem({ lane: 'opencode', pid: process.pid }))
+      expect(readFileSync(laneLock, 'utf8')).toBe(text)
+      expect(laneLockPids(readFileSync(projectLock, 'utf8')).pid).toBe(process.pid)
+    } finally {
+      rmSync(folder, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+    }
+  })
+
+  it('uses the Codex app for the default program and masks explicit temporary paths', async (context) => {
     if (process.platform !== 'win32') {
       context.skip()
       return
@@ -1395,7 +1482,7 @@ describe('scripts/run-lane.mjs', () => {
       writeFileSync(lanesFile, JSON.stringify(configured))
       const explicit = await runLane(['codex', brief.id, '--dry-run', '--force'], runEnv)
       expect(explicit.code).toBe(0)
-      expect(explicit.stdout).toContain(`file: ${explicitProgram}`)
+      expect(explicit.stdout).toContain('file: %TEMP%\\custom\\codex.exe')
       expect(explicit.stdout).not.toContain('file: %LOCALAPPDATA%')
     } finally {
       rmSync(folder, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })

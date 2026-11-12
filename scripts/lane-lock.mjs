@@ -2,6 +2,7 @@ import { existsSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:
 import { join } from 'node:path'
 import { isLockHolderStale, listProcesses } from '../server/processTree.js'
 import { laneLockPids, laneLockText } from '../src/briefs/run.js'
+import { printedRunsFolder } from './run-lane.mjs'
 
 function readHolder(path) {
   try {
@@ -26,7 +27,7 @@ export function processAlive(pid) {
 }
 
 function running(laneKey, holder, path) {
-  return new Error(`The ${laneKey} lane is already running (process ${holder}). Wait for that run to end, or delete ${path} if no run is going.`)
+  return new Error(`The ${laneKey} lane is already running (process ${holder}). Wait for that run to end, or delete ${printedRunsFolder(path)} if no run is going.`)
 }
 
 function stoppedHalfWay(laneKey) {

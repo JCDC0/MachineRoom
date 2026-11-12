@@ -1,7 +1,8 @@
-import { existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { isHolderAlive, readLaneLock, releaseLaneLock, takeLaneLock, writeLaneChild } from '../scripts/lane-lock.mjs'
+import { printedRunsFolder } from '../scripts/run-lane.mjs'
 import { takeRoomLock } from '../server/orchestrator.js'
 import { laneLockText } from '../src/briefs/run.js'
 import { makeTempDir } from './helpers/tempRoot.js'
@@ -21,7 +22,7 @@ function takeoverPath(folder, lane = 'hermes') {
 }
 
 function sentence(lane, holder, path) {
-  return `The ${lane} lane is already running (process ${holder}). Wait for that run to end, or delete ${path} if no run is going.`
+  return `The ${lane} lane is already running (process ${holder}). Wait for that run to end, or delete ${printedRunsFolder(path)} if no run is going.`
 }
 
 describe('lane lock', () => {
@@ -62,6 +63,22 @@ describe('lane lock', () => {
     writeFileSync(path, String(process.pid))
     expect(() => takeLaneLock(folder, 'hermes')).toThrow(sentence('hermes', process.pid, path))
     expect(readFileSync(path, 'utf8')).toBe(String(process.pid))
+  })
+
+  it('masks the lock path in a live lane refusal and keeps the lock', () => {
+    const folder = makeTempDir('lane-lock-mask-')
+    const path = lockPath(folder)
+    vi.stubEnv('APPDATA', folder)
+    try {
+      writeFileSync(path, String(process.pid))
+      expect(() => takeLaneLock(folder, 'hermes')).toThrow(
+        `The hermes lane is already running (process ${process.pid}). Wait for that run to end, or delete %APPDATA%${path.slice(folder.length)} if no run is going.`
+      )
+      expect(readFileSync(path, 'utf8')).toBe(String(process.pid))
+    } finally {
+      vi.unstubAllEnvs()
+      rmSync(folder, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+    }
   })
 
   it('takes a stale lock and leaves no takeover file', () => {
