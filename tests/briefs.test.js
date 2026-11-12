@@ -120,6 +120,53 @@ describe('briefFileList', () => {
     ].join('\n')
     expect(briefFileList(text)).toEqual(['src/allowed.js'])
   })
+
+  it('reads the real P116, P121, P124 and P132 briefs from TASKS.md', () => {
+    expect(briefFileList(byId('P116').text)).toEqual([])
+    expect(briefFileList(byId('P121').text)).toEqual([
+      'src/briefs/briefs.js',
+      'scripts/mr-agent.mjs',
+      'tests/briefs.test.js',
+      'tests/mr-agent.test.js',
+      'docs/agents/CHANGELOG.md',
+    ])
+    expect(briefFileList(byId('P124').text)).toEqual([
+      'server/orchestrator.js',
+      'tests/orchestrator.test.js',
+      'docs/agents/CHANGELOG.md',
+    ])
+    expect(briefFileList(byId('P132').text)).toEqual([
+      'server/orchestrator.js',
+      'tests/orchestrator.test.js',
+      'docs/agents/CHANGELOG.md',
+    ])
+  })
+
+  it('ignores Files: markers inside backticks or quotes and keeps only the real paragraph', () => {
+    expect(briefFileList('Check the `Files: src/ignored.js` and ``Files: src/ignored2.js`` mention.')).toEqual([])
+    expect(briefFileList('Read "Files: src/a.js", \'Files: src/b.js\', \u201cFiles: src/c.js\u201d and \u2018Files: src/d.js\u2019.')).toEqual([])
+    expect(briefFileList('```\nFiles: src/a.js\n```')).toEqual([])
+    expect(briefFileList("Check the brief's 'Files:' note. Files: src/real.js.")).toEqual(['src/real.js'])
+
+    const quotedAfter = [
+      "Read the owner's and agents' notes. Files: src/real.js, tests/real.test.js.",
+      '',
+      '1. Keep the `Files:` marker and `Files: src/a.js` out of the result.',
+      '2. Also ignore "Files: src/b.js" and \'Files: src/c.js\'.',
+      '',
+      '```',
+      'Files: src/d.js',
+      '```',
+    ].join('\n')
+    expect(briefFileList(quotedAfter)).toEqual(['src/real.js', 'tests/real.test.js'])
+
+    const twoParagraphQuoted = [
+      'Files: src/allowed.js.',
+      '',
+      'Read docs/setup.md and quote `Files:` or "Files: private/config.json" for context.',
+    ].join('\n')
+    expect(briefFileList(twoParagraphQuoted)).toEqual(['src/allowed.js'])
+  })
 })
 
 describe('parseRules', () => {

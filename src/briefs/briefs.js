@@ -5,6 +5,12 @@ const BRIEF_LINE = /^\*\*([A-Z]\d+[a-z]?)\. (.+?)\.\*\*\s*(.*)$/
 const OWNER_TAIL = /^(.*?)\s*\(([^()]*)\)$/
 const DONE_MARKER = /\b(merged as|built as|done)\b/i
 const FILES_MARKER = /\bFiles:/g
+const QUOTED_SPAN =
+  /```[\s\S]*?```|``(?:[^`\r\n]|`(?!`)|\r?\n(?!\s*\r?\n))*``|`(?:[^`\r\n]|\r?\n(?!\s*\r?\n))*`|"(?:\\.|[^"\\\r\n]|\r?\n(?!\s*\r?\n))*"|(?<!\w)'(?:\\.|[^'\\\r\n]|(?<=\w)'(?=\w)|\r?\n(?!\s*\r?\n))*'(?!\w)|\u201c(?:\\.|[^\\\u201d\r\n]|\r?\n(?!\s*\r?\n))*\u201d|(?<!\w)\u2018(?:\\.|[^\\\u2019\r\n]|(?<=\w)\u2019(?=\w)|\r?\n(?!\s*\r?\n))*\u2019(?!\w)/g
+
+function maskQuoted(text) {
+  return text.replace(QUOTED_SPAN, (match) => match.replace(/[^\r\n]/g, ' '))
+}
 
 function pathLike(value) {
   return /^[A-Za-z]:/.test(value) || value.includes('/') || value.includes('\\') || /\.[A-Za-z0-9]+$/.test(value)
@@ -58,7 +64,7 @@ export function parseBriefs(markdown) {
 
 export function briefFileList(text) {
   const source = String(text ?? '')
-  const marker = [...source.matchAll(FILES_MARKER)].pop()
+  const marker = [...maskQuoted(source).matchAll(FILES_MARKER)].pop()
   if (!marker) return []
   const span = source.slice(marker.index + marker[0].length).split(/\r?\n\s*\r?\n/)[0] ?? ''
   const rest = span.replace(/\([^()]*\)/g, ' ')

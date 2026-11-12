@@ -2,12 +2,14 @@
 
 ## Unreleased
 
+- A Files marker inside backticks or quotes no longer hides a brief's real file list (P133).
 - Dry runs and lock refusals print their paths with the profile folders masked, and a lane's stale child lock no longer refuses a start (P140).
 - The file-index test's reference walk has its own write rules again, with a test that proves it can fail (P139).
 - ROOM.md, LIVE.md, COMMANDS.md and CODE.md describe the chat's lane tasks, the conversation menu, the runner's commit rules and the AGY models (P127).
 - The conversation menu closes when its row leaves the list or stops being current, so a key never acts on another conversation (P134).
 - PLAN.md, ARCHITECTURE.md and DOCUMENTS.md name what the audits and reviews leave open (P130).
 - A project switch counts a lane lock as live only when its holder started before the lock, like the runner (P125).
+- briefFileList ignores Files: markers inside backticks or quotes before taking the last real one (P133).
 - startProjectTask and the chat's lane dispatch have their own tests (P131).
 - The file-index test walks write targets on its own again and strips heredocs (P139).
 - A file-index test fails when the reference write walk is coupled back to commands.js (P139).
