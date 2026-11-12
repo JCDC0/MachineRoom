@@ -308,7 +308,9 @@ function treeDeltaEvent(root, files, removed = [], version = null, start = null)
 }
 
 function treeSinceVersion(text, start) {
-  const match = /^([0-9a-f]+):(\d+)$/.exec(String(text ?? ''))
+  const value = String(text ?? '')
+  if (/^\d+$/.test(value)) return Number(value)
+  const match = /^([0-9a-f]+):(\d+)$/.exec(value)
   if (!match || match[1] !== start) return null
   return Number(match[2])
 }
