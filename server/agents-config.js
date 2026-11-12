@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { projectLanesFileFor, readHiddenLanes, writeHiddenLanes } from './active-lanes.js'
 import { readEndpoints } from './endpoints.js'
@@ -80,6 +80,30 @@ function isProgram(path) {
   }
 }
 
+export function codexAppProgram({ env = process.env, platform = process.platform, listDir = readdirSync, statFile = statSync } = {}) {
+  if (platform !== 'win32' || typeof env?.LOCALAPPDATA !== 'string' || env.LOCALAPPDATA === '') return null
+  const binDir = join(env.LOCALAPPDATA, 'OpenAI', 'Codex', 'bin')
+  let folders
+  try {
+    folders = listDir(binDir)
+  } catch {
+    return null
+  }
+  if (!Array.isArray(folders)) return null
+  let newest = null
+  for (const folder of folders) {
+    if (typeof folder !== 'string') continue
+    const program = join(binDir, folder, 'codex.exe')
+    try {
+      const file = statFile(program)
+      const modified = Number(file.mtimeMs)
+      if (!file.isFile() || !Number.isFinite(modified)) continue
+      if (!newest || modified > newest.modified) newest = { program, modified }
+    } catch {}
+  }
+  return newest?.program ?? null
+}
+
 export function isHarnessAvailable(harnessKey, { lanes = {}, env = process.env, platform = process.platform, endpoints = [] } = {}) {
   if (harnessKey === 'machineroom') {
     if (Array.isArray(endpoints) && endpoints.length > 0) return true
@@ -110,6 +134,7 @@ export function isHarnessAvailable(harnessKey, { lanes = {}, env = process.env, 
     for (const name of endings) {
       if (programPath(name, { env, platform })) return true
     }
+    if (harnessKey === 'codex' && text === 'codex' && codexAppProgram({ env, platform })) return true
     return false
   }
 

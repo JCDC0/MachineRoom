@@ -1,9 +1,9 @@
 import { spawn, spawnSync } from 'node:child_process'
 import { copyFileSync, existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
-import { dirname, join, resolve } from 'node:path'
+import { delimiter, dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { gitPath } from '../server/programPath.js'
+import { gitPath, programPath } from '../server/programPath.js'
 import { saveAgentsConfig } from '../server/agents-config.js'
 import { projectLanesFileFor, writeHiddenLanes } from '../server/active-lanes.js'
 import { briefProblems, briefWorktreeProblems, commandFor, DEFAULT_MINUTES, filterRunsSince, laneCommandProblem, readinessLine, retryStartProblem, SINCE_PROBLEM, startFailureText, worktreeFor, formatOutcomes, formatStats, formatSummary, laneLockPids, laneLockText, laneStats, laneStopProblem, laneWithOverrides, nextTestStep, parseRunArgs, projectRunGit, runListLine, runRecord, sessionToolLines, summarizeRun, UNATTENDED_NOTE, unattendedPrompt } from '../src/briefs/run.js'
@@ -1348,6 +1348,59 @@ function runLane(args, env = {}) {
 }
 
 describe('scripts/run-lane.mjs', () => {
+  it('uses the Codex app for the default program and keeps explicit paths unchanged', async (context) => {
+    if (process.platform !== 'win32') {
+      context.skip()
+      return
+    }
+    const brief = briefWithFreeBranch()
+    if (!brief) {
+      context.skip()
+      return
+    }
+    const folder = makeTempDir('machine-room-codex-app-')
+    try {
+      const localAppData = join(folder, 'local-app-data')
+      const appProgram = join(localAppData, 'OpenAI', 'Codex', 'bin', 'hash', 'codex.exe')
+      mkdirSync(dirname(appProgram), { recursive: true })
+      writeFileSync(appProgram, '')
+      const lanesFile = lanesFileUnderWorktrees(folder)
+      const configured = JSON.parse(readFileSync(lanesFile, 'utf8'))
+      const laneWorktree = join(checkoutRoot(), '.worktrees', `p73-codex-${process.pid}`)
+      configured.codex = {
+        ...(configured.codex ?? {}),
+        name: 'Codex',
+        worktree: laneWorktree,
+        cli: { ...(configured.codex?.cli ?? {}), harness: 'codex', bin: 'codex' },
+      }
+      writeFileSync(lanesFile, JSON.stringify(configured))
+      const path = [...new Set([dirname(process.execPath), dirname(gitPath())])].join(delimiter)
+      expect(programPath('codex', { env: { PATH: path }, platform: 'win32' })).toBeNull()
+      const runEnv = {
+        LOCALAPPDATA: localAppData,
+        MACHINEROOM_LANES_FILE: lanesFile,
+        MACHINEROOM_RUNS: join(folder, 'runs'),
+        PATH: path,
+        TEMP: folder,
+      }
+
+      const installed = await runLane(['codex', brief.id, '--dry-run', '--force'], runEnv)
+      expect(installed.code).toBe(0)
+      expect(installed.stdout).toContain('file: %LOCALAPPDATA%\\OpenAI\\Codex\\bin\\hash\\codex.exe')
+      expect(installed.stdout).not.toContain(localAppData)
+
+      const explicitProgram = join(folder, 'custom', 'codex.exe')
+      configured.codex.cli.bin = explicitProgram
+      writeFileSync(lanesFile, JSON.stringify(configured))
+      const explicit = await runLane(['codex', brief.id, '--dry-run', '--force'], runEnv)
+      expect(explicit.code).toBe(0)
+      expect(explicit.stdout).toContain(`file: ${explicitProgram}`)
+      expect(explicit.stdout).not.toContain('file: %LOCALAPPDATA%')
+    } finally {
+      rmSync(folder, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+    }
+  })
+
   it('prints the outcome table from a temp runs folder, with --since filtering the runs', async () => {
     const folder = makeTempDir('machine-room-outcomes-')
     try {
