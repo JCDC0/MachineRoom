@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process'
+import { randomBytes } from 'node:crypto'
 import { readdirSync, statSync, watch } from 'node:fs'
 import { createServer } from 'node:http'
 import { basename, dirname, join, resolve } from 'node:path'
@@ -264,8 +265,11 @@ export function packTree(tree) {
   return { root: tree.root, shape: FOLDER_SHAPE, folders, files: runs }
 }
 
-export function treeEvent(tree, sent = null, shape = null, version = null) {
-  const stamped = (body) => (Number.isInteger(version) && version >= 0 ? { ...body, version } : body)
+export function treeEvent(tree, sent = null, shape = null, version = null, start = null) {
+  const stamped = (body) => {
+    const withVersion = Number.isInteger(version) && version >= 0 ? { ...body, version } : body
+    return typeof start === 'string' && start !== '' ? { ...withVersion, start } : withVersion
+  }
   if (!sent) {
     const body = shape === FOLDER_SHAPE ? { ...packTree(tree), full: true } : { root: tree.root, files: tree.files, full: true }
     return `event: tree\ndata: ${JSON.stringify(stamped(body))}\n\n`
@@ -296,10 +300,17 @@ function pathChanges(previous, next) {
   return { added, removed }
 }
 
-function treeDeltaEvent(root, files, removed = [], version = null) {
+function treeDeltaEvent(root, files, removed = [], version = null, start = null) {
   const body = { root, files, removed }
   if (Number.isInteger(version) && version >= 0) body.version = version
+  if (typeof start === 'string' && start !== '') body.start = start
   return `event: tree\ndata: ${JSON.stringify(body)}\n\n`
+}
+
+function treeSinceVersion(text, start) {
+  const match = /^([0-9a-f]+):(\d+)$/.exec(String(text ?? ''))
+  if (!match || match[1] !== start) return null
+  return Number(match[2])
 }
 
 function corsHeaders(req, isAllowed) {
@@ -731,6 +742,7 @@ export function createBridge(options = {}) {
   let watchFallback = false
   let treeNotGit = false
   let treePrimed = false
+  const treeStart = randomBytes(8).toString('hex')
   let treeVersion = 0
   const treeVersions = new Map()
   let treeReading = null
@@ -794,7 +806,7 @@ export function createBridge(options = {}) {
     if (folderAnswer && folderAnswer.version === version) return Promise.resolve(folderAnswer)
     if (folderBuild && folderBuild.version === version) return folderBuild.promise
     const build = (async () => {
-      const body = { ...packFolderTree(tree), created: tree.created, version }
+      const body = { ...packFolderTree(tree), created: tree.created, version, start: treeStart }
       const payload = Buffer.from(JSON.stringify(body), 'utf8')
       const gzipped = await gzipAsync(payload)
       const answer = { version, body, payload, gzipped }
@@ -811,7 +823,7 @@ export function createBridge(options = {}) {
   }
 
   function writeWholeTree(client, tree) {
-    client.write(treeEvent(tree, null, folderClients.has(client) ? FOLDER_SHAPE : null, treeVersion))
+    client.write(treeEvent(tree, null, folderClients.has(client) ? FOLDER_SHAPE : null, treeVersion, treeStart))
     treeClientVersion.set(client, treeVersion)
   }
 
@@ -845,7 +857,7 @@ export function createBridge(options = {}) {
       }
       treeClientVersion.set(client, treeVersion)
       if (changesSince.added.length > 0 || changesSince.removed.length > 0) {
-        client.write(treeDeltaEvent(current.root, changesSince.added, changesSince.removed, treeVersion))
+        client.write(treeDeltaEvent(current.root, changesSince.added, changesSince.removed, treeVersion, treeStart))
       }
     }
     return true
@@ -1315,7 +1327,7 @@ export function createBridge(options = {}) {
         return
       }
       if (!wantsFolders) {
-        sendJson(req, res, 200, tree)
+        sendJson(req, res, 200, { ...tree, start: treeStart })
         return
       }
       const answer = await folderAnswerFor(tree)
@@ -1382,16 +1394,21 @@ export function createBridge(options = {}) {
         treeClients.add(res)
         if (url.searchParams.get('tree') === FOLDER_SHAPE) folderClients.add(res)
         const sinceText = url.searchParams.get('since')
-        const sinceVersion = sinceText && /^\d+$/.test(sinceText) ? Number(sinceText) : null
-        if (sinceVersion !== null) {
-          const changes = treeFilesSince(sinceVersion)
-          if (changes !== null) {
-            treeClientVersion.set(res, treeVersion)
-            if ((changes.added.length > 0 || changes.removed.length > 0) && lastTree) {
-              res.write(treeDeltaEvent(lastTree.root, changes.added, changes.removed, treeVersion))
+        if (sinceText !== null) {
+          const sinceVersion = treeSinceVersion(sinceText, treeStart)
+          if (sinceVersion !== null) {
+            const changes = treeFilesSince(sinceVersion)
+            if (changes !== null) {
+              treeClientVersion.set(res, treeVersion)
+              if ((changes.added.length > 0 || changes.removed.length > 0) && lastTree) {
+                res.write(treeDeltaEvent(lastTree.root, changes.added, changes.removed, treeVersion, treeStart))
+              }
+            } else if (lastTree) {
+              res.write(treeEvent(lastTree, null, folderClients.has(res) ? FOLDER_SHAPE : null, treeVersion, treeStart))
+              treeClientVersion.set(res, treeVersion)
             }
           } else if (lastTree) {
-            res.write(treeEvent(lastTree, null, folderClients.has(res) ? FOLDER_SHAPE : null, treeVersion))
+            res.write(treeEvent(lastTree, null, folderClients.has(res) ? FOLDER_SHAPE : null, treeVersion, treeStart))
             treeClientVersion.set(res, treeVersion)
           }
         }

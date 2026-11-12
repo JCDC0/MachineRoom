@@ -224,7 +224,7 @@ describe('the bridge', () => {
     loops.push(loop)
     await waitForBridge(loop.url)
     const plain = (await getJson(`${loop.url}/api/tree`)).body
-    expect(plain).toEqual({ root: 'project', files: [...files].sort(), created: [] })
+    expect(plain).toEqual({ root: 'project', files: [...files].sort(), created: [], start: expect.any(String) })
     const packed = (await getJson(`${loop.url}/api/tree`, { headers: { Accept: FOLDER_SHAPE_ACCEPT } })).body
     expect(packed.shape).toBe(FOLDER_SHAPE)
     expect(packed.created).toEqual([])
@@ -248,9 +248,17 @@ describe('the bridge', () => {
     await ready
     const plain = readFirstTree(loop.url, '?tree=1', () => writeFileSync(join(root, 'src', 'c.js'), 'x\n'))
     const [packed, paths] = await Promise.all([asking, plain])
-    expect(paths).toEqual({ root: 'project', files: ['a.js', 'src/b.js', 'src/c.js'], full: true, version: expect.any(Number) })
+    expect(paths).toEqual({
+      root: 'project',
+      files: ['a.js', 'src/b.js', 'src/c.js'],
+      full: true,
+      version: expect.any(Number),
+      start: expect.any(String),
+    })
     expect(packed.shape).toBe(FOLDER_SHAPE)
-    expect(readFileList(packed)).toEqual({ ...paths, version: packed.version })
+    const { start, ...pathBody } = paths
+    expect(start).toBe(packed.start)
+    expect(readFileList(packed)).toEqual({ ...pathBody, version: packed.version })
   })
 
   it('keeps later tree events as a short list of paths', () => {

@@ -149,7 +149,7 @@ describe('a tree read in flight', () => {
     queued.reads[1].resolve({ root: 'project', files: ['src/a.js'], created: [] })
     const response = await pending
     expect(response.status).toBe(200)
-    expect(await response.json()).toEqual({ root: 'project', files: ['src/a.js'], created: [] })
+    expect(await response.json()).toEqual({ root: 'project', files: ['src/a.js'], created: [], start: expect.any(String) })
   })
 })
 
@@ -400,16 +400,18 @@ describe('a file that leaves the project', () => {
     const reads = changingReads(['a.js', 'b.js'])
     const { started } = startBridge({ readTree: reads.readTree, root, debounceMs: 10, pollMs: 10, quietMs: 20 })
     const { url } = await started
-    expect((await waitForVersion(url, 1)).body.files.length).toBeGreaterThan(0)
-    const plain = await openEvents(url, '?tree=1&since=1')
-    const folder = await openEvents(url, `?tree=${FOLDER_SHAPE}&since=1`)
+    const tree = await waitForVersion(url, 1)
+    expect(tree.body.files.length).toBeGreaterThan(0)
+    const since = `${tree.body.start}:1`
+    const plain = await openEvents(url, `?tree=1&since=${since}`)
+    const folder = await openEvents(url, `?tree=${FOLDER_SHAPE}&since=${since}`)
     try {
       reads.set(['a.js'])
       writeFileSync(join(root, 'tick.js'), '1\n')
       await waitFor(() => reads.count() >= 2)
       await waitFor(() => readTreeEvents(plain.text()).length > 0 && readTreeEvents(folder.text()).length > 0)
-      expect(readTreeEvents(plain.text())).toEqual([{ root: 'project', files: [], removed: ['b.js'], version: 2 }])
-      expect(readTreeEvents(folder.text())).toEqual([{ root: 'project', files: [], removed: ['b.js'], version: 2 }])
+      expect(readTreeEvents(plain.text())).toEqual([{ root: 'project', files: [], removed: ['b.js'], version: 2, start: tree.body.start }])
+      expect(readTreeEvents(folder.text())).toEqual([{ root: 'project', files: [], removed: ['b.js'], version: 2, start: tree.body.start }])
     } finally {
       await plain.close()
       await folder.close()
@@ -422,13 +424,15 @@ describe('a file that leaves the project', () => {
     const reads = changingReads(['a.js', 'old.js'])
     const { started } = startBridge({ readTree: reads.readTree, root, debounceMs: 10, pollMs: 10, quietMs: 20 })
     const { url } = await started
-    await waitForVersion(url, 1)
-    const events = await openEvents(url, '?tree=1&since=1')
+    const tree = await waitForVersion(url, 1)
+    const events = await openEvents(url, `?tree=1&since=${tree.body.start}:1`)
     try {
       reads.set(['a.js', 'new.js'])
       writeFileSync(join(root, 'tick.js'), '1\n')
       await waitFor(() => readTreeEvents(events.text()).length > 0)
-      expect(readTreeEvents(events.text())).toEqual([{ root: 'project', files: ['new.js'], removed: ['old.js'], version: 2 }])
+      expect(readTreeEvents(events.text())).toEqual([
+        { root: 'project', files: ['new.js'], removed: ['old.js'], version: 2, start: tree.body.start },
+      ])
     } finally {
       await events.close()
     }
@@ -440,7 +444,7 @@ describe('a file that leaves the project', () => {
     const reads = changingReads(['a.js', 'b.js'])
     const { started } = startBridge({ readTree: reads.readTree, root, debounceMs: 10, pollMs: 10, quietMs: 20 })
     const { url } = await started
-    await waitForVersion(url, 1)
+    const tree = await waitForVersion(url, 1)
 
     reads.set(['a.js'])
     writeFileSync(join(root, 'tick-1.js'), '1\n')
@@ -450,10 +454,12 @@ describe('a file that leaves the project', () => {
     writeFileSync(join(root, 'tick-2.js'), '1\n')
     await waitForVersion(url, 3)
 
-    const events = await openEvents(url, '?tree=1&since=1')
+    const events = await openEvents(url, `?tree=1&since=${tree.body.start}:1`)
     try {
       await waitFor(() => readTreeEvents(events.text()).length > 0)
-      expect(readTreeEvents(events.text())).toEqual([{ root: 'project', files: ['c.js'], removed: ['b.js'], version: 3 }])
+      expect(readTreeEvents(events.text())).toEqual([
+        { root: 'project', files: ['c.js'], removed: ['b.js'], version: 3, start: tree.body.start },
+      ])
     } finally {
       await events.close()
     }
