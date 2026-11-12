@@ -1410,3 +1410,25 @@ Review 20 (`docs/agents/AUDIT-2026-11-REVIEW-20.md`, P135, the first review on G
 **P141. Review P133, P134, P139 and P140 (Codex).** Read `docs/agents/OWNER.md` and this brief only. Change no code. Do not commit: the runner commits your file. Stop at minute 20. Files: docs/agents/AUDIT-2026-11-REVIEW-21.md.
 
 Review, with `git show -m --first-parent SHA`, against the code around each change: `d59a4929` (P133, `briefFileList` masks quoted spans before it finds the `Files:` marker), `b8126a17` (P134, the conversation menu closes when its row leaves the list), `61e2eb3d` (P139, the file-index test has its own write rules again), `99b41a3b` (P140, dry runs and lock refusals mask profile folders; the lock refusal is masked where `run-lane` prints errors). Hunt for: a real file list lost or a wrong one kept, including a brief with an apostrophe in its prose; a menu that closes while in use or acts on another row; a test that cannot fail; a printed path that still names a profile folder, or a masked one that breaks a command the owner copies. Write the file: a table of at most 6 findings, the most harmful first, each with `file:line`, what goes wrong and when, the smallest fix, and whether it blocks a push. An empty table with what you checked is a good answer.
+
+## The fixes from review 21 (2026-11-13)
+
+Review 21 (`docs/agents/AUDIT-2026-11-REVIEW-21.md`, P141) found four findings that block a push. These three briefs touch separate files. Stop starting new work at minute 18: the machine shuts down at 4 am.
+
+**P142. The menu knows which conversation is current (OpenCode).** Read review 21's first finding and this brief only. Use no subagents. Run every command in the foreground. Commit each step as you finish it. Files: src/ui/Sidebar.jsx, src/ui/sidebar.js, tests/sidebar-menu-ui.test.js, docs/agents/CHANGELOG.md.
+
+1. The bridge always names the current conversation `id: 'current'`, so the menu's key survives a switch. When the menu opens, keep a second identity for its row (for the current row, its start time and title, or a session id if the answer carries one) and close the menu when that identity changes.
+2. Change the P134 test so the switch keeps `id: 'current'` as the bridge does, and press P: no pin reaches the new conversation.
+3. Run `node node_modules/vitest/vitest.mjs related --run src/ui/Sidebar.jsx src/ui/sidebar.js` and `npm run build`. Report what passed.
+
+**P143. A brief's file list ignores only code, not prose quotes (AGY).** Read review 21's second and fourth findings and this brief only. Use no subagents. Run every command in the foreground. Commit each step as you finish it. Files: src/briefs/briefs.js, tests/briefs.test.js, docs/agents/CHANGELOG.md.
+
+1. In `briefFileList`, mask only code: fenced blocks of three or more backticks or tildes, closed by a fence of the same character and at least the same length, and inline backtick spans. Do not mask single or double quotes: prose apostrophes such as `'em` and `agents'` and `René's` must never hide the marker.
+2. Tests, by what they prove: the review's four-backtick and tilde fence examples give `src/real.js`; both apostrophe sentences give `src/real.js`; the real bodies of P116, P121, P124 and P132 still give their files.
+3. Run `node node_modules/vitest/vitest.mjs related --run src/briefs/briefs.js` and `npm run build`. Report what passed.
+
+**P144. Project paths in run-lane output are masked too (OpenCode).** Read review 21's third finding and this brief only. Use no subagents. Run every command in the foreground. Commit each step as you finish it. Files: scripts/run-lane.mjs, tests/run-lane.test.js, docs/agents/CHANGELOG.md.
+
+1. The two project-lock refusals in `takeProjectLock`, and the project and worktree lines of queue and worktree dry runs, print the project through `printedRunsFolder`. The paths the runner uses do not change.
+2. A test with a project below a profile folder and the runs folder elsewhere: the refusal and the dry run name the project with the profile masked.
+3. Run `node node_modules/vitest/vitest.mjs run tests/run-lane.test.js` and `npm run build`. Report what passed.
