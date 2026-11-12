@@ -6,6 +6,7 @@ Every file in this folder, and what it is for:
 - `architecture/ACTIVITIES.md`: current. The activity schema, how each agent reports tool calls and the DOM contract.
 - `architecture/CODE.md`: current. The layout of the code, one line per file.
 - `architecture/COMMANDS.md`: current. Every command, its flags and what it prints.
+- `architecture/DOCUMENTS.md`: current. This list of every file in `docs/agents` and what it is for.
 - `architecture/LIMITS.md`: current. The known limits, with the measurement behind each one.
 - `architecture/LIVE.md`: current. Live mode: the connect screen, the bridge, the sources and the query parameters.
 - `architecture/ROOM.md`: current. What the room shows and how it behaves.
@@ -27,9 +28,11 @@ Every file in this folder, and what it is for:
 - `AUDIT-2026-11-CORE.md`: history. The November 2026 audit of the pure logic and the tests, with the orchestrator's corrections.
 - `AUDIT-2026-11-CONTRACT.md`: history. The November 2026 hunt of the page and the bridge against each other, with a table of every write route and its guard.
 - `AUDIT-2026-11-DESIGN.md`: history. The November 2026 design review of how the room shows its work, with features and a full design.
+- `AUDIT-2026-11-DOCS-P70-P76.md`: history. The documentation audit for the P70 to P76 merges, read sentence by sentence against the code.
 - `AUDIT-2026-11-ENGINE.md`: history. The November 2026 audit of the engine.
 - `AUDIT-2026-11-LOGS.md`: history. The November 2026 hunt that ran 464 real run logs through the parsers.
 - `AUDIT-2026-11-ORCHESTRATOR.md`: history. The November 2026 hunt of the orchestrator's turns, wakes and ladder.
+- `AUDIT-2026-11-OWNER-ROOM.md`: history. The P56 audit of the owner's room with only its own lanes, walked through the routes and panels.
 - `AUDIT-2026-11-GROWTH.md`: history. The November 2026 hunt of what grows without a bound in a day-long live room.
 - `AUDIT-2026-11-LIGHT-START.md`: history. The November 2026 hunt of the page's start and memory on a 200,000 file project, with three proposed briefs.
 - `AUDIT-2026-11-LIGHT-BRIDGE.md`: history. The November 2026 hunt of what the bridge holds and repeats on a 200,000 file project, at start and at rest, with three proposed briefs.
@@ -37,6 +40,7 @@ Every file in this folder, and what it is for:
 - `AUDIT-2026-11-LIGHT-BROWSER.md`: history. The November 2026 hunt of the room's script, style, layout, heap and DOM cost in a headless Chromium at 40,000 and 200,000 files, at load, at rest and at work, with three proposed briefs.
 - `AUDIT-2026-11-LANES.md`: history. The November 2026 hunt of how lanes are given work, from the run and outcome records and the routing code, with twelve findings and the orchestrator's corrections.
 - `AUDIT-2026-11-FIRSTRUN.md`: history. The November 2026 hunt of a first run on a new project, with features.
+- `AUDIT-2026-11-FLEET-ROOM.md`: history. The P98 audit of the room's default lane list and the one brief path that still read the development fleet.
 - `AUDIT-2026-11-FRAME.md`: history. The November 2026 audit of the frame cost of music, bloom and light trails.
 - `AUDIT-2026-11-PANELS.md`: history. The November 2026 hunt of the page's panels.
 - `AUDIT-2026-11-PANELS-2.md`: history. The second November 2026 hunt of the page's panels, with features.
@@ -50,9 +54,19 @@ Every file in this folder, and what it is for:
 - `AUDIT-2026-11-REVIEW-7.md`: history. The co-orchestrator's review of S46, U164 and U165, with five findings, the orchestrator's corrections and the brief U166.
 - `AUDIT-2026-11-REVIEW-8.md`: history. The review of U166, U167, S47 and S48, the permission modes batch, with three findings, the orchestrator's corrections and the briefs U168 and U169.
 - `AUDIT-2026-11-REVIEW-9.md`: history. The review of the merges from P24 to P35, with twelve findings, the orchestrator's corrections and the briefs P40 to P42.
+- `AUDIT-2026-11-REVIEW-10.md`: history. The review of the merges since the last push, P44 to P47.
+- `AUDIT-2026-11-REVIEW-11.md`: history. The review of the P49 to P52 merges.
+- `AUDIT-2026-11-REVIEW-12.md`: history. The review of the P65 to P68 merges.
+- `AUDIT-2026-11-REVIEW-13.md`: history. The review of the P70 to P75 merges, with eight findings, two push blockers and the fixes P102 and P103.
+- `AUDIT-2026-11-REVIEW-15.md`: history. The review of the P77, P81, P89 and P95 merges, with three push blockers, fixed by P104, P105 and P123.
+- `AUDIT-2026-11-REVIEW-16.md`: history. The review of the late merges, with three push blockers fixed by P108 to P111 and its smaller merge-check finding left to P124.
+- `AUDIT-2026-11-REVIEW-17.md`: history. The review of the ten merges before the push, with five push blockers fixed by P116 to P118.
+- `AUDIT-2026-11-REVIEW-18.md`: history. The last review before the push, of P113 and P115 to P118, with six push blockers fixed by P120 to P122.
 - `AUDIT-2026-11-RUNNER.md`: history. The November 2026 hunt of the runner, worktrees, reviews and merges.
 - `AUDIT-2026-11-SUMMARY.md`: plan. The five November 2026 audits ranked and checked, with the features, the design changes that need the owner and the proposed briefs.
+- `AUDIT-2026-11-TREE-COST.md`: history. The measurement of what the deleted-file list costs on every tree read, since P51.
 - `AUDIT-2026-11-UI.md`: history. The November 2026 audit of the page.
+- `AUDIT-2026-11-WORKTREE-SWITCH.md`: history. The P87 audit of the worktree branch switch on 2026-11-12.
 - `CANDIDATE.md`: current. How to build and serve one lane's worktree beside the stable room.
 - `CHANGELOG.md`: history. One line per change under the version it shipped in.
 - `CONTROL-PLANE.md`: plan. The control plane design from the Paperclip era; parts are replaced by the lane records.
@@ -65,6 +79,7 @@ Every file in this folder, and what it is for:
 - `ORCHESTRATOR-AGENT.md`: prompt the code reads. The instructions added to every orchestrator turn.
 - `ORCHESTRATOR.md`: current. The orchestrator's guide: standing rules, the review and merge loop, ownership and lessons.
 - `OWNER.md`: current. What the owner wants the room to be, the settled design, and the steps for one of the owner's concerns.
+- `PLAN-CODEX-2026-11-12.md`: plan. Codex's plan for the work after P77 to P89, numbered C1 to C10, with C2 covered by P95 and the P87 audit.
 - `PLAN.md`: plan. Where the work stands and what comes next.
 - `policy.json`: config the code reads. The routing policy that `src/policy/route.js` parses.
 - `SLASH-COMMANDS.md`: current. What Claude Code and OpenCode do with a slash command in a headless turn, and the room's design for them.
