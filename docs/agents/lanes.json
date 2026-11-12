@@ -364,7 +364,10 @@
     "modelHint": "no --model is passed, so Codex uses the model set in the owner's Codex app",
     "cli": {
       "harness": "codex",
-      "bin": "%LOCALAPPDATA%\\OpenAI\\Codex\\bin\\9e1da79431da526b\\codex.exe"
+      "bin": "%LOCALAPPDATA%\\OpenAI\\Codex\\bin\\9e1da79431da526b\\codex.exe",
+      "addDirs": [
+        "C:\\GitHub\\MachineRoom\\.git"
+      ]
     },
     "worktree": "C:\\GitHub\\MachineRoom\\.worktrees\\codex",
     "role": "You work on the brief in your own worktree and report back.",

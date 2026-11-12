@@ -724,3 +724,15 @@ The owner gave the fleet a Codex lane. Codex here is the owner's Codex app: its 
 Run `npx vitest related --run` on every file you changed and `npm run build`; both must pass.
 
 Files: server/agents-config.js, scripts/run-lane.mjs, tests/.
+
+**P74. A Codex lane can commit, and its run is recorded (OpenCode).** Read no part of TASKS.md beyond this brief and the paragraph above P73. Use no subagents. Run every command in the foreground. Commit each step as you finish it, and stop starting new work at minute 30. `src/harnesses/` stays browser safe.
+
+The first Codex run stopped at once: `git switch -c` failed with access denied on `.git/worktrees/codex/index.lock`, because Codex's `workspace-write` sandbox lets it write only the worktree, and a worktree's git data lives in the main checkout's `.git`. `codex exec` takes `--add-dir DIR` for more writable folders. Separately, `scripts/recording-files.mjs` refuses a `codex` lane with `has no command line`, so its run gets no recording.
+
+1. `codexHarness.command` in `src/harnesses/codex.js` adds `--add-dir DIR` before the prompt for each string in `cli.addDirs`, expanded with `expandBin` as `bin` is. Nothing else in its arguments changes.
+2. `laneOf` in `scripts/recording-files.mjs` accepts a `codex` lane. Read how it records an `opencode` or `claude` run and make a Codex run's log into a recording the same way, with the frames `createCodexParser` gives; if that needs more than the harness check, stop and say what is missing in your report.
+3. Tests, by what they prove: a lane with two `addDirs` gives two `--add-dir` pairs before the prompt; a lane with none gives the same arguments as now; an `addDirs` entry with `%LOCALAPPDATA%` is expanded; a recorded Codex run log (write a short one with `thread.started`, a `command_execution` item and `turn.completed`) becomes a recording.
+
+Run `npx vitest related --run` on every file you changed and `npm run build`; both must pass.
+
+Files: src/harnesses/codex.js, scripts/recording-files.mjs, tests/.
