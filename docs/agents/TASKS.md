@@ -1341,3 +1341,28 @@ Review, with `git show -m --first-parent SHA` or `git show SHA`, against the cod
 2. Cover, by what each proves: a git project with `worktree: true` passes `--worktree` to the runner; a project that is not git runs without `--worktree`; a dirty git project is refused with the dirty sentence and starts nothing; the project being this repository is refused; an inactive or unknown lane is refused; a second start of a running lane answers 409; a good start answers 202 once, and the runner gets `--started-by orchestrator` when asked.
 3. If a case shows a real bug, keep its test marked `it.fails` with one line saying what is wrong, and name it in your report. Do not fix `server/`.
 4. Run `node node_modules/vitest/vitest.mjs run tests/project-task.test.js`. Report what passed.
+
+## The fixes from review 19 (2026-11-13)
+
+Review 19 (`docs/agents/AUDIT-2026-11-REVIEW-19.md`, P126) found five findings that block a push and one that does not. These three briefs touch separate files. Stop starting new work at minute 30: the machine shuts down at 4 am.
+
+**P132. Every saved chat string is masked, whole, before it is cut (OpenCode).** Read review 19 findings 1, 2, 3 and 6, and this brief only. Use no subagents. Run every command in the foreground. Commit each step as you finish it. Files: server/orchestrator.js, tests/orchestrator.test.js, docs/agents/CHANGELOG.md.
+
+1. Finding 2: in `restoredAgent` and every other place in `server/orchestrator.js` that caps a string from a saved or incoming message, mask the whole string first, then cut it.
+2. Finding 1: `cleanWork` masks each `work.steps[].tool` and `target` string, whole, before it shortens it, for both the current and the saved conversations.
+3. Finding 3: the shared message sanitizer (`maskText`) also replaces a profile folder prefix (the user profile, HOME, LOCALAPPDATA and TEMP, case-insensitive on Windows) with `%USERPROFILE%`, `~`, `%LOCALAPPDATA%` or `%TEMP%`, longest first, and keeps the rest of the path. Reuse `printedRunsFolder` from `scripts/run-lane.mjs` if it can be imported without side effects; otherwise share a small helper.
+4. Finding 6: a saved `sub-` or `sub:` sender is kept only when that sub exists, and an agent message's `from` and `to` only when each is a known lane key, a known sub, `orchestrator` or `owner`.
+5. Tests, by what they prove: a key in a saved step's target never reaches the chat answer or the file; a key at offset 61 of a long name is masked; a profile path in an agent report prints masked; an invented sub sender is dropped on load.
+6. Run `node node_modules/vitest/vitest.mjs related --run server/orchestrator.js` and `npm run build`. Report what passed.
+
+**P133. A brief's file list is the real Files line, not a quoted one (AGY).** Read review 19 finding 5 and this brief only. Use no subagents. Run every command in the foreground. Commit each step as you finish it. Files: src/briefs/briefs.js, tests/briefs.test.js, docs/agents/CHANGELOG.md.
+
+1. `briefFileList` takes the last `Files:` marker. Briefs P116 and P121 quote the marker later inside backticks, so their lists come back empty. Ignore a marker inside backticks or quotes, then take the last real one, then keep P121's paragraph cutoff.
+2. Tests, by what they prove: the real bodies of P116, P121, P124 and P132 (parse `docs/agents/TASKS.md` itself) each give the files on their `Files:` line; a quoted marker adds nothing; the review's two-paragraph example still gives one file.
+3. Run `node node_modules/vitest/vitest.mjs related --run src/briefs/briefs.js` and `npm run build`. Report what passed.
+
+**P134. The conversation menu never acts on a row that left the list (Codex).** Read review 19 finding 4 and this brief only. Change only the files listed; the runner commits them. Files: src/ui/Sidebar.jsx, tests/sidebar-menu-ui.test.js.
+
+1. In `src/ui/Sidebar.jsx`, when the menu's row is no longer in the rows on screen, or its current flag changed, close the menu and drop its key listener. Never act from the saved row snapshot.
+2. Add a test to `tests/sidebar-menu-ui.test.js`, following the tests already there: open the menu on the current row, change which conversation is current so that row leaves the list, press F, and no fork or branch call is made.
+3. You cannot run vitest here. Check your change by reading the existing menu tests and say in your report which test you added and what it asserts.
