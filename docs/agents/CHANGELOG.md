@@ -2,13 +2,14 @@
 
 ## Unreleased
 
+- The file-index test's reference walk has its own write rules again, with a test that proves it can fail (P139).
 - ROOM.md, LIVE.md, COMMANDS.md and CODE.md describe the chat's lane tasks, the conversation menu, the runner's commit rules and the AGY models (P127).
 - The conversation menu closes when its row leaves the list or stops being current, so a key never acts on another conversation (P134).
 - PLAN.md, ARCHITECTURE.md and DOCUMENTS.md name what the audits and reviews leave open (P130).
 - A project switch counts a lane lock as live only when its holder started before the lock, like the runner (P125).
 - startProjectTask and the chat's lane dispatch have their own tests (P131).
-- The file-index test takes its write rule from commands.js, so it passes with the owner's recordings too (P128).
-- The file-index test takes its write rule from commands.js, and a recording-free case covers a redirect whose operand is cut short (P128).
+- The file-index test walks write targets on its own again and strips heredocs (P139).
+- A file-index test fails when the reference write walk is coupled back to commands.js (P139).
 - Direct tests for `startProjectTask` and chat lane dispatch cover worktree, non-git, dirty, repository, inactive or unknown lane, running 409, and `--started-by orchestrator` (P131).
 - Project switch checks lane lock holder start times through `isHolderAlive` for both the runner pid and child pid, so a reused Windows pid no longer blocks switching (P125).
 - run-lane prints its log, record and runs folder paths with the profile, home and state folders masked (P123).
