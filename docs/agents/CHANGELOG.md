@@ -2,8 +2,10 @@
 
 ## Unreleased
 
+- startProjectTask and the chat's lane dispatch have their own tests (P131).
 - The file-index test takes its write rule from commands.js, so it passes with the owner's recordings too (P128).
 - The file-index test takes its write rule from commands.js, and a recording-free case covers a redirect whose operand is cut short (P128).
+- Direct tests for `startProjectTask` and chat lane dispatch cover worktree, non-git, dirty, repository, inactive or unknown lane, running 409, and `--started-by orchestrator` (P131).
 - run-lane prints its log, record and runs folder paths with the profile, home and state folders masked (P123).
 - Run output masks HOME, USERPROFILE and XDG_STATE_HOME alongside TEMP and LOCALAPPDATA, longest prefix first, on printed log, record and recovery lines (P123).
 - Agent messages are masked before they are stored, survive a restart and a fork, and a failed setup leaves no session id (P120).
