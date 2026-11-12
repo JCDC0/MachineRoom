@@ -306,18 +306,27 @@ describe('a stopped lane stays stopped', () => {
     const { project, runs, env } = setup('mr-run-hang-')
     const started = join(project, 'started.txt')
     writeFakeHangingResultHarness(project, started, { holdMs: 8000 })
-    const run = await runLane(['fake', '--project', project, '--task', 'Do it.'], {
+    const run = runLane(['fake', '--project', project, '--task', 'Do it.'], {
       ...env,
       MACHINEROOM_CLOSE_TIMEOUT_MS: '400',
     })
-    expect(run.code).toBe(0)
-    expect(run.stdout).toContain('exit code: 0 (leftovers were stopped)')
+    const aliveBeforeStop = await waitUntil(() => {
+      const pid = readStartedPid(started)
+      return pid > 0 && processAlive(pid)
+    }, 5000)
+    expect(aliveBeforeStop, 'the harness grandchild was not alive before the stop').toBe(true)
+    const grandchildPid = readStartedPid(started)
+    const result = await run
+    expect(result.code).toBe(0)
+    expect(result.stdout).toContain('exit code: 0 (leftovers were stopped)')
     expect(existsSync(join(runs, 'fake.lock'))).toBe(false)
     const record = JSON.parse(readFileSync(join(runs, 'runs.jsonl'), 'utf8').trim())
     expect(record.lane).toBe('fake')
     expect(record.exitCode).toBe(0)
     expect(record.killed).toBe(false)
     expect(record.note).toBe('leftovers were stopped')
+    if (process.platform === 'win32') expect(record.stoppedLeftovers).toBeGreaterThan(0)
+    expect(await waitUntil(() => !processAlive(grandchildPid), 5000), `the grandchild ${grandchildPid} is still alive`).toBe(true)
   }, 30000)
 })
 
