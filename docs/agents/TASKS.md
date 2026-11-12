@@ -1177,3 +1177,18 @@ Files: src/model/commands.js, src/ui/ModelPicker.jsx, tests/commands.test.js, te
 3. Tests in `tests/copilot-harness.test.js`: a two-paragraph answer after two tool lines keeps both paragraphs; an answer line that starts with `Run the migration` stays; a run with no tool lines keeps its whole text.
 
 Files: src/harnesses/common.js, src/harnesses/copilot.js, tests/copilot-harness.test.js.
+
+
+## The native agent gets a clock (2026-11-12, night)
+
+The native lanes went 0 for 5 tonight. Their logs show distinct, wandering commands (the P97 review ended reading `scripts/pack-check.mjs`), not a loop, and none wrote its file. Every brief says `Write the file by minute 25`, but `scripts/mr-agent.mjs` never tells the model the time or its limit, so it cannot follow that.
+
+**P112. The native agent knows its minutes (AGY).** Read no part of TASKS.md beyond this brief and the paragraph above it. Use no subagents. Run every command in the foreground. Commit each step as you finish it, and stop starting new work at minute 35.
+
+1. `run-lane` passes the run's minute limit to a `machineroom` lane as `MR_AGENT_MINUTES` (with the other names in `HARNESS_KEY_NAMES.machineroom` in `src/briefs/run.js`, and in `scripts/run-lane.mjs` where the child's environment is built).
+2. `scripts/mr-agent.mjs` adds one short line to each tool result it sends back: `Minutes used: U of M.` When 60 percent of M has passed it adds once: `Time is past 60 percent. Stop reading; write your file or your change now, then report.` Unset, nothing changes.
+3. Tests with a fake endpoint and a fake clock, by what they prove: the line appears with the right numbers; the 60 percent line appears once; unset adds nothing.
+
+Run `npx vitest related --run scripts/mr-agent.mjs src/briefs/run.js scripts/run-lane.mjs` and `npm run build`; both must pass.
+
+Files: scripts/mr-agent.mjs, src/briefs/run.js, scripts/run-lane.mjs, tests/.
