@@ -18,6 +18,7 @@ import {
   ORCH_STOP_CONFIRM,
   OrchestratorActivity,
   TEAM_TAB,
+  agentColor,
   approvalInputText,
   approvalTitle,
   canSend,
@@ -37,6 +38,7 @@ import {
   normalizeModes,
   projectBaseName,
   retryTarget,
+  runnableLanes,
   sendChatMessage,
   startConfirmText,
   statusDetail,
@@ -135,6 +137,7 @@ export default function OrchestratorChat({
   inline = false,
   focusRequest = 0,
   orchestrators = null,
+  lanes: initialLanes = null,
   onAutocompact = () => ({ ok: true }),
   onOrchestratorChange = () => {},
   selected: selectedTab = undefined,
@@ -144,10 +147,21 @@ export default function OrchestratorChat({
   initialConfirm = null,
   initialOrchestrators = null,
   initialSelected = 'orchestrator',
+  initialRecipient = 'orchestrator',
   activity = '',
 }) {
   const [chats, setChats] = useState(() => ({ orchestrator: initialChatState(initialChat) }))
   const [list, setList] = useState(() => initialList(initialOrchestrators))
+  const [lanesData, setLanesData] = useState(() => initialLanes ?? [])
+  const [toRecipient, setToRecipient] = useState(() => initialRecipient)
+  const [openAgentAll, setOpenAgentAll] = useState({})
+  const [showAgentMessages, setShowAgentMessages] = useState(() => {
+    try {
+      const saved = localStorage.getItem('machineroom:show-agent-messages')
+      if (saved !== null) return saved === 'true'
+    } catch {}
+    return true
+  })
   const [ownSelected, setOwnSelected] = useState(() =>
     typeof initialSelected === 'string' && initialSelected ? initialSelected : 'orchestrator'
   )
@@ -291,7 +305,22 @@ export default function OrchestratorChat({
     typeof client?.models === 'function' || typeof client?.harnessModels === 'function'
   const project = teamSelected ? chats.orchestrator?.project ?? '' : chat.project
   const projectLabel = projectBaseName(project)
-  const lines = teamSelected ? [] : chatLines(chat, ORCH_MAX_LINES, { id: selected })
+  const availableLanes = runnableLanes(lanesData)
+  const lines = teamSelected
+    ? []
+    : chatLines(chat, ORCH_MAX_LINES, {
+        id: selected,
+        showAgentMessages,
+        lanes: lanesData,
+      })
+
+  function toggleAgentMessages(val) {
+    const next = typeof val === 'boolean' ? val : !showAgentMessages
+    setShowAgentMessages(next)
+    try {
+      localStorage.setItem('machineroom:show-agent-messages', String(next))
+    } catch {}
+  }
   const workKey = lines
     .filter((line) => line.work)
     .map((line) => `${line.id}|${line.work.state}|${line.work.steps.length}|${line.work.seconds}`)
@@ -369,6 +398,26 @@ export default function OrchestratorChat({
     if (!Array.isArray(orchestrators)) return
     setList(initialList(orchestrators))
   }, [orchestrators])
+
+  useEffect(() => {
+    if (!open || !client || typeof client.lanes !== 'function') return undefined
+    let stopped = false
+    client
+      .lanes()
+      .then((answer) => {
+        if (stopped) return
+        const items = Array.isArray(answer)
+          ? answer
+          : Array.isArray(answer?.lanes)
+            ? answer.lanes
+            : []
+        if (items.length > 0) setLanesData(items)
+      })
+      .catch(() => {})
+    return () => {
+      stopped = true
+    }
+  }, [open, client])
 
   useEffect(() => {
     const ids = list.map((entry) => entry.id)
@@ -736,7 +785,7 @@ export default function OrchestratorChat({
     return entry?.name || id
   }
 
-  async function deliver(text, id = selected) {
+  async function deliver(text, id = toRecipient) {
     if (!client) {
       setError('The orchestrator is not connected.')
       return
@@ -753,7 +802,7 @@ export default function OrchestratorChat({
     setStartedIds((currentStarted) => ({ ...currentStarted, [id]: true }))
     setDraft((currentDraft) => (currentDraft.trim() === text ? '' : currentDraft))
     jumpToNewest()
-    if (id === selected) await readChatRef.current?.()
+    if (id === selected || id === 'orchestrator' || !list.some((item) => item.id === id)) await readChatRef.current?.()
     await readListRef.current?.()
   }
 
@@ -810,11 +859,11 @@ export default function OrchestratorChat({
       return
     }
     if (!canSend(text)) return
-    if (!startedIds[selected] && needsStartConfirm(chat)) {
+    if (!startedIds[selected] && needsStartConfirm(chat) && toRecipient === 'orchestrator') {
       setConfirm('start')
       return
     }
-    deliver(text)
+    deliver(text, toRecipient)
   }
 
   function onDraftChange(event) {
@@ -905,7 +954,7 @@ export default function OrchestratorChat({
   function startConfirmed() {
     const text = draft.trim()
     setConfirm(null)
-    if (canSend(text)) deliver(text)
+    if (canSend(text)) deliver(text, toRecipient)
   }
 
   function stopConfirmed() {
@@ -1368,46 +1417,92 @@ export default function OrchestratorChat({
         </div>
       ) : (
         <>
+          <div className="mr-orch-toggle-bar">
+            <label className="mr-orch-toggle mono">
+              <input
+                type="checkbox"
+                className="mr-orch-toggle-input"
+                checked={showAgentMessages}
+                onChange={() => toggleAgentMessages(!showAgentMessages)}
+                onClick={() => toggleAgentMessages(!showAgentMessages)}
+              />
+              Show agent messages
+            </label>
+          </div>
           <div className="mr-orch-log" role="log" aria-live="polite" ref={logRef} onScroll={onLogScroll}>
             {lines.length === 0 ? (
               <p className="mr-orch-empty">
                 {loaded ? 'Tell the orchestrator what you want built.' : 'Reading the chat.'}
               </p>
             ) : (
-              lines.map((line, index) => (
-                <div key={line.id} className={`mr-orch-line is-${line.from}`}>
-                  {line.from === 'room' ? <span className="mr-orch-who mono">room</span> : null}
-                  {line.fromMain ? <span className="mr-orch-who mono">from main</span> : null}
-                  {line.from === 'owner' ? (
-                    <span className="mr-orch-text">{line.text}</span>
-                  ) : (
-                    <div className={`mr-orch-blocks is-${line.from}`}>
-                      <ChatBlocks text={line.text} />
-                    </div>
-                  )}
-                  {line.work ? (
-                    <div className={`mr-orch-work${line.work.state === 'working' ? ' is-working' : ''}`}>
-                      <button
-                        type="button"
-                        className="mr-orch-work-line mono"
-                        aria-expanded={openWork[line.id] === true}
-                        onClick={() => toggleWork(line.id)}
-                        disabled={line.work.steps.length === 0}
-                      >
-                        {workText(line.work)}
-                      </button>
-                      {openWork[line.id] === true && line.work.steps.length > 0 ? (
-                        <ol className="mr-orch-work-steps mono">
-                          {workRows(line.work).map((row, stepIndex) => (
-                            <li key={`${line.id}-${stepIndex}`}>{row.text}</li>
-                          ))}
-                        </ol>
+              lines.map((line, index) => {
+                if (line.from === 'agent') {
+                  const parts = line.text.split('\n')
+                  const isLong = parts.length > 3
+                  const unfolded = Boolean(openAgentAll[line.id])
+                  const displayed = isLong && !unfolded ? parts.slice(0, 3).join('\n') : line.text
+                  const senderKey = line.agent?.from || (line.text.startsWith('Orchestrator') ? 'orchestrator' : line.text.split(' to ')[0].trim())
+                  return (
+                    <div
+                      key={line.id}
+                      className="mr-orch-line is-agent mono"
+                      style={{ color: agentColor(senderKey, lanesData) }}
+                    >
+                      <span className="mr-orch-agent-text">{displayed}</span>
+                      {isLong ? (
+                        <button
+                          type="button"
+                          className="mr-orch-show-all mono"
+                          style={{ marginLeft: 8, background: 'transparent', border: 'none', color: 'inherit', textDecoration: 'underline', cursor: 'pointer' }}
+                          onClick={() => setOpenAgentAll((prev) => ({ ...prev, [line.id]: !prev[line.id] }))}
+                        >
+                          {unfolded ? 'Show less' : 'Show all'}
+                        </button>
                       ) : null}
+                      {renderMessageActions(line, index)}
                     </div>
-                  ) : null}
-                  {renderMessageActions(line, index)}
-                </div>
-              ))
+                  )
+                }
+                return (
+                  <div key={line.id} className={`mr-orch-line is-${line.from}`}>
+                    {line.from === 'room' ? <span className="mr-orch-who mono">room</span> : null}
+                    {line.fromMain ? <span className="mr-orch-who mono">from main</span> : null}
+                    {line.from === 'lane' ? (
+                      <span className="mr-orch-who mono" style={{ color: agentColor(line.lane, lanesData) }}>
+                        {line.laneName || line.lane}
+                      </span>
+                    ) : null}
+                    {line.from === 'owner' ? (
+                      <span className="mr-orch-text">{line.text}</span>
+                    ) : (
+                      <div className={`mr-orch-blocks is-${line.from}`}>
+                        <ChatBlocks text={line.text} />
+                      </div>
+                    )}
+                    {line.work ? (
+                      <div className={`mr-orch-work${line.work.state === 'working' ? ' is-working' : ''}`}>
+                        <button
+                          type="button"
+                          className="mr-orch-work-line mono"
+                          aria-expanded={openWork[line.id] === true}
+                          onClick={() => toggleWork(line.id)}
+                          disabled={line.work.steps.length === 0}
+                        >
+                          {workText(line.work)}
+                        </button>
+                        {openWork[line.id] === true && line.work.steps.length > 0 ? (
+                          <ol className="mr-orch-work-steps mono">
+                            {workRows(line.work).map((row, stepIndex) => (
+                              <li key={`${line.id}-${stepIndex}`}>{row.text}</li>
+                            ))}
+                          </ol>
+                        ) : null}
+                      </div>
+                    ) : null}
+                    {renderMessageActions(line, index)}
+                  </div>
+                )
+              })
             )}
           </div>
 
@@ -1554,6 +1649,29 @@ export default function OrchestratorChat({
               />
               {renderSlashList()}
               <div className="hud-lower-tools">
+                <div className="hud-strip-to mono" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                  <label htmlFor={`${inputId}-to-inline`}>To:</label>
+                  <select
+                    id={`${inputId}-to-inline`}
+                    className="mr-orch-to-select mono"
+                    aria-label="To"
+                    value={toRecipient}
+                    onChange={(e) => setToRecipient(e.target.value)}
+                    style={{ background: 'transparent', color: 'inherit', border: '1px solid rgba(255,255,255,0.2)', padding: '2px 4px', fontSize: '0.85em' }}
+                  >
+                    <option value="orchestrator" style={{ background: '#111', color: '#fff' }}>Orchestrator</option>
+                    {subs.map((sub) => (
+                      <option key={sub.id} value={sub.id} style={{ background: '#111', color: '#fff' }}>
+                        {sub.name || sub.id}
+                      </option>
+                    ))}
+                    {availableLanes.map((lane) => (
+                      <option key={lane.key} value={lane.key} style={{ background: '#111', color: '#fff' }}>
+                        {lane.name || lane.key}
+                      </option>
+                    ))}
+                  </select>
+                </div>
                 <button
                   type="button"
                   className="hud-strip-model"
@@ -1851,6 +1969,29 @@ export default function OrchestratorChat({
             </form>
           ) : (
             <form className="mr-orch-form" onSubmit={handleSubmit}>
+              <div className="mr-orch-to-row mono" style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                <label htmlFor={`${inputId}-to-floating`}>To: </label>
+                <select
+                  id={`${inputId}-to-floating`}
+                  className="mr-orch-to-select mono"
+                  aria-label="To"
+                  value={toRecipient}
+                  onChange={(e) => setToRecipient(e.target.value)}
+                  style={{ background: 'transparent', color: 'inherit', border: '1px solid rgba(255,255,255,0.2)', padding: '2px 4px', fontSize: '0.85em' }}
+                >
+                  <option value="orchestrator" style={{ background: '#111', color: '#fff' }}>Orchestrator</option>
+                  {subs.map((sub) => (
+                    <option key={sub.id} value={sub.id} style={{ background: '#111', color: '#fff' }}>
+                      {sub.name || sub.id}
+                    </option>
+                  ))}
+                  {availableLanes.map((lane) => (
+                    <option key={lane.key} value={lane.key} style={{ background: '#111', color: '#fff' }}>
+                      {lane.name || lane.key}
+                    </option>
+                  ))}
+                </select>
+              </div>
               <label className="mr-orch-label mono" htmlFor={inputId}>
                 Message
               </label>

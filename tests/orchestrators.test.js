@@ -2238,3 +2238,97 @@ describe('availableHarnesses with a Direct API endpoint', () => {
     ])
   })
 })
+
+describe('talking to a lane and agent announcements', () => {
+  it('starts a lane task when a message is sent to a lane and returns 202', async () => {
+    const files = makeBase()
+    const started = []
+    const rig = makeRig(files, {
+      isWorking: () => false,
+      startLaneTask: async (lane, text) => {
+        started.push({ lane, text })
+        return { ok: true, id: 'run-test-1' }
+      },
+    })
+
+    const result = await rig.registry.message({ to: 'opencode', text: 'Implement feature' }, true)
+    expect(result.status).toBe(202)
+    expect(result.body.started).toBe(true)
+    expect(started).toEqual([{ lane: 'opencode', text: 'Implement feature' }])
+
+    const messages = rig.registry.find('orchestrator').answer().messages
+    expect(messages.some((m) => m.from === 'owner' && m.text === 'Implement feature')).toBe(true)
+  })
+
+  it('refuses sending to a busy lane with 409', async () => {
+    const files = makeBase()
+    const rig = makeRig(files, {
+      isWorking: (lane) => lane === 'opencode',
+      startLaneTask: async () => ({ ok: true }),
+    })
+
+    const result = await rig.registry.message({ to: 'opencode', text: 'Implement feature' }, true)
+    expect(result.status).toBe(409)
+    expect(result.body.error).toBe('That lane is working. Wait for it, or stop it.')
+  })
+
+  it('records announced order, report, wake, and dispatch messages in chat', () => {
+    const files = makeBase({ ladder: { subs: [FRONTEND] } })
+    const rig = makeRig(files)
+
+    rig.registry.recordAgentMessage({
+      from: 'orchestrator',
+      to: 'frontend',
+      kind: 'order',
+      text: 'Design header',
+    })
+
+    rig.registry.recordAgentMessage({
+      from: 'frontend',
+      to: 'orchestrator',
+      kind: 'report',
+      text: 'Header complete',
+    })
+
+    rig.registry.recordAgentMessage({
+      from: 'orchestrator',
+      to: 'opencode',
+      kind: 'dispatch',
+      text: 'Run build',
+    })
+
+    rig.registry.recordAgentMessage({
+      from: 'opencode',
+      to: 'orchestrator',
+      kind: 'wake',
+    })
+
+    const messages = rig.registry.find('orchestrator').answer().messages
+    const agentMessages = messages.filter((m) => m.from === 'agent')
+    expect(agentMessages).toHaveLength(4)
+    expect(agentMessages[0].text).toContain('order: Design header')
+    expect(agentMessages[1].text).toContain('report: Header complete')
+    expect(agentMessages[2].text).toContain('dispatch: Run build')
+    expect(agentMessages[3].text).toBe('OpenCode to Orchestrator, wake')
+  })
+
+  it('records lane reply in chat when a direct lane run finishes', async () => {
+    const files = makeBase()
+    const rig = makeRig(files, {
+      isWorking: () => false,
+      startLaneTask: async () => ({ ok: true, id: 'run-direct-1' }),
+    })
+
+    await rig.registry.message({ to: 'opencode', text: 'Run the tests' }, true)
+    const logFile = join(files.runs, 'opencode-direct-1.log')
+    writeFileSync(logFile, 'Building...\nTests all passing.\n')
+
+    appendRecord(rig, { logName: 'opencode-direct-1', lane: 'opencode' })
+    rig.registry.onFrame(frame('opencode-direct-1', 'succeeded', 'opencode'))
+
+    const messages = rig.registry.find('orchestrator').answer().messages
+    const laneMsg = messages.find((m) => m.from === 'opencode')
+    expect(laneMsg).toBeDefined()
+    expect(laneMsg.text).toContain('Run opencode-direct-1 on lane opencode ended: succeeded.')
+  })
+})

@@ -214,9 +214,84 @@ function sourceTags(source, names) {
   return { from: 'orchestrator', who: 'orchestrator' }
 }
 
+export const AGENT_PALETTE = ['#ff8c1a', '#ff3ddb', '#8f6bff', '#3ff0d8', '#ff6f91', '#c08a5a', '#d9b3ff']
+export const ORCHESTRATOR_COLOR = '#e5ff00'
+
+export function agentColor(key, lanes = {}) {
+  if (!key) return '#ffffff'
+  if (key === 'orchestrator' || (typeof key === 'string' && key.startsWith('sub-'))) {
+    return ORCHESTRATOR_COLOR
+  }
+  const laneObj =
+    typeof lanes === 'function'
+      ? lanes()[key]
+      : Array.isArray(lanes)
+        ? lanes.find((l) => l.key === key)
+        : lanes?.[key]
+  if (laneObj?.color) return laneObj.color
+  let hash = 0
+  const str = String(key)
+  for (let i = 0; i < str.length; i += 1) {
+    hash = (hash * 31 + str.charCodeAt(i)) >>> 0
+  }
+  return AGENT_PALETTE[hash % AGENT_PALETTE.length]
+}
+
+export function formatAgentLine({ from, to, kind, text = '', lanes = {}, names = new Map() } = {}) {
+  const nameOf = (key) => {
+    if (!key) return ''
+    if (key === 'orchestrator') return lanes?.orchestrator?.name || 'Orchestrator'
+    if (typeof key === 'string' && key.startsWith('sub-')) {
+      const subId = key.slice(4)
+      return (
+        (typeof names?.get === 'function' ? names.get(subId) || names.get(key) : names[subId] || names[key]) ||
+        lanes?.[key]?.name ||
+        `Sub ${subId}`
+      )
+    }
+    const laneObj =
+      typeof lanes === 'function'
+        ? lanes()[key]
+        : Array.isArray(lanes)
+          ? lanes.find((l) => l.key === key)
+          : lanes?.[key]
+    return (
+      laneObj?.name ||
+      (typeof names?.get === 'function' ? names.get(key) : names?.[key]) ||
+      key
+    )
+  }
+  const sender = nameOf(from)
+  const receiver = nameOf(to)
+  const prefix = `${sender} to ${receiver}, ${kind}`
+  const trimmed = typeof text === 'string' ? text.trim() : ''
+  return trimmed ? `${prefix}: ${trimmed}` : prefix
+}
+
+export function runnableLanes(lanes) {
+  let list = []
+  if (Array.isArray(lanes)) {
+    list = lanes
+  } else if (lanes && typeof lanes === 'object') {
+    list = Array.isArray(lanes.lanes)
+      ? lanes.lanes
+      : Object.entries(lanes).map(([key, value]) => ({ key, ...value }))
+  }
+  return list.filter((lane) => {
+    if (!lane || typeof lane !== 'object') return false
+    const key = typeof lane.key === 'string' ? lane.key.trim() : ''
+    if (!key || key === 'orchestrator') return false
+    if (lane.retired === true || lane.hidden === true) return false
+    return Boolean(lane.cli || lane.harness || lane.adapterType)
+  })
+}
+
 export function chatLines(chat, limit = ORCH_MAX_LINES, options = {}) {
   const list = chat && Array.isArray(chat.messages) ? chat.messages : []
   const id = typeof options?.id === 'string' && options.id ? options.id : 'orchestrator'
+  const showAgentMessages = options?.showAgentMessages !== false
+  const lanes = options?.lanes ?? {}
+  const names = options?.names ?? new Map()
   const lines = []
   for (let index = 0; index < list.length; index += 1) {
     const message = list[index]
@@ -225,13 +300,43 @@ export function chatLines(chat, limit = ORCH_MAX_LINES, options = {}) {
     const text = visibleChatText(raw).trim()
     if (!text) continue
     const source = typeof message.from === 'string' ? message.from : ''
+    if (source === 'agent' || Boolean(message.agent)) {
+      if (!showAgentMessages) continue
+      lines.push({
+        id: String(message.id ?? `agent-${lines.length}`),
+        index,
+        from: 'agent',
+        agent: message.agent ?? null,
+        text,
+        at: message.at ?? null,
+      })
+      continue
+    }
     const label = source.startsWith('sub:') ? subLabel(source.slice(4)) : ''
-    const from = label ? 'sub' : FROM_VALUES.has(source) ? source : 'orchestrator'
+    const laneKey = source.startsWith('lane:') ? source.slice(5) : source
+    const laneObj =
+      typeof lanes === 'function'
+        ? lanes()[laneKey]
+        : Array.isArray(lanes)
+          ? lanes.find((l) => l.key === laneKey)
+          : lanes?.[laneKey]
+    const isLane =
+      !label &&
+      source !== 'main' &&
+      !source.startsWith('sub:') &&
+      !FROM_VALUES.has(source) &&
+      (Boolean(laneObj) || source.startsWith('lane:'))
+    const from = label ? 'sub' : isLane ? 'lane' : FROM_VALUES.has(source) ? source : 'orchestrator'
+    const laneName = isLane
+      ? laneObj?.name || (typeof names?.get === 'function' ? names.get(laneKey) : names?.[laneKey]) || laneKey
+      : ''
     const work = normalizeWork(message.work)
     lines.push({
       id: String(message.id ?? `${from}-${lines.length}`),
       index,
       from,
+      lane: isLane ? laneKey : null,
+      laneName,
       fromMain: id !== 'orchestrator' && (source === 'orchestrator' || source === 'main'),
       text: label ? `${label}\n\n${text}` : text,
       at: message.at ?? null,
