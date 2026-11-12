@@ -1,9 +1,11 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import { tmpdir } from 'node:os'
+import { isHolderAlive } from '../scripts/lane-lock.mjs'
 import { lanesFolder } from './lanes-source.js'
 import { laneLockPids } from '../src/briefs/run.js'
 import { projectHash } from './orchestrator.js'
+import { listProcesses } from './processTree.js'
 
 export const MAX_RECENT = 20
 export const MAX_FOLDERS = 200
@@ -28,33 +30,38 @@ export function resetPruneCache() {
   lastPruneByFile.clear()
 }
 
-function processAlive(pid) {
-  if (!Number.isInteger(pid) || pid <= 0) return false
-  try {
-    process.kill(pid, 0)
-    return true
-  } catch (error) {
-    return error?.code === 'EPERM'
+function onceList(list) {
+  let loaded = false
+  let cached = null
+  return (options) => {
+    if (!loaded) {
+      loaded = true
+      cached = list(options)
+    }
+    return cached
   }
 }
 
-function laneLockRunning(folder) {
+export function laneLockRunning(folder, { platform = process.platform, list = listProcesses, stat = statSync } = {}) {
   let names = []
   try {
     names = readdirSync(folder)
   } catch {
     return false
   }
+  const readProcesses = onceList(list)
+  const options = { platform, list: readProcesses, stat }
   for (const name of names) {
     if (!name.endsWith('.lock') || name.startsWith('orchestrator-')) continue
+    const path = join(folder, name)
     let text = ''
     try {
-      text = readFileSync(join(folder, name), 'utf8')
+      text = readFileSync(path, 'utf8')
     } catch {
       continue
     }
     const holder = laneLockPids(text)
-    if (processAlive(holder.pid) || processAlive(holder.child)) return true
+    if (isHolderAlive(holder.pid, path, options) || isHolderAlive(holder.child, path, options)) return true
   }
   return false
 }
@@ -315,6 +322,9 @@ export function createProjectsApi({
   sendJson,
   readJsonBody,
   now = Date.now,
+  platform = process.platform,
+  list = listProcesses,
+  stat = statSync,
 } = {}) {
   const projectsFile = join(runsFolder, 'projects.json')
 
@@ -387,7 +397,10 @@ export function createProjectsApi({
 
       const runsApi = typeof runs === 'function' ? runs() : runs
       const laneSource = typeof lanesSource === 'function' ? lanesSource() : lanesSource
-      const laneRunning = Boolean(runsApi?.isRunning?.()) || Boolean(laneSource?.openRuns?.().length) || laneLockRunning(runsFolder)
+      const laneRunning =
+        Boolean(runsApi?.isRunning?.()) ||
+        Boolean(laneSource?.openRuns?.().length) ||
+        laneLockRunning(runsFolder, { platform, list, stat })
       if (laneRunning) {
         sendJson(req, res, 409, { error: LANES_RUNNING_PROBLEM })
         return true

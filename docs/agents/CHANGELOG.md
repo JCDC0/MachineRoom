@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Project switch checks lane lock holder start times through `isHolderAlive` for both the runner pid and child pid, so a reused Windows pid no longer blocks switching (P125).
 - run-lane prints its log, record and runs folder paths with the profile, home and state folders masked (P123).
 - Run output masks HOME, USERPROFILE and XDG_STATE_HOME alongside TEMP and LOCALAPPDATA, longest prefix first, on printed log, record and recovery lines (P123).
 - Agent messages are masked before they are stored, survive a restart and a fork, and a failed setup leaves no session id (P120).
