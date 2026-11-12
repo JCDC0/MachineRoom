@@ -386,10 +386,12 @@ export function createClient({
       return request('POST', '/api/orchestrator/sessions/branch', body)
     },
 
-    updateOrchestratorSession: ({ id, session, pinned, starred, title, confirmed = true } = {}) => {
+    updateOrchestratorSession: ({ id, session, pinned, starred, unread, archived, title, confirmed = true } = {}) => {
       const body = { confirmed }
       if (pinned !== undefined) body.pinned = pinned
       if (starred !== undefined) body.starred = starred
+      if (unread !== undefined) body.unread = unread
+      if (archived !== undefined) body.archived = archived
       if (title !== undefined) body.title = title
       if (id !== undefined && id !== null && id !== '') body.id = id
       const query = id !== undefined && id !== null && id !== '' ? `?id=${encodeURIComponent(id)}` : ''

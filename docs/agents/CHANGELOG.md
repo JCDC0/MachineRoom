@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Each conversation row has one menu: Pin, Rename, Fork, Mark as unread, Archive and Delete, with keys, a search box and a kept sort (P93, P115).
 - With a cost limit, a damaged answer stops the native agent before a second paid request; Copilot replies keep prose lines (P117).
 - The chat's To choice sends a task to a lane through the runner's own checks (P82, P113).
 - P113: a lane task from the orchestrator chat goes through the runner's own lane, active, task, project and dirty guards, and starts a worktree run without forcing allowDirty.

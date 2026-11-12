@@ -10,11 +10,17 @@ import {
   groupSessions,
   laneChoice,
   laneSummary,
+  loadSessionSort,
+  normalizeSessionSort,
   normalizeSidebarTab,
   previewLines,
   projectName,
+  saveSessionSort,
   sessionAge,
+  sessionMenuActionForKey,
+  sessionMenuItems,
   sessionRows,
+  sortSessionRows,
   waitForBridge,
 } from '../src/ui/sidebar.js'
 
@@ -55,12 +61,11 @@ describe('session groups', () => {
     ],
   }
 
-  it('puts the current one first, then pinned, starred and recent, newest first', () => {
+  it('puts the current one first, then pinned with starred counted, and recent', () => {
     const groups = groupSessions(answer)
     expect(groups.current.title).toBe('Live one')
     expect(groups.current.current).toBe(true)
-    expect(groups.pinned.map((row) => row.title)).toEqual(['Pinned one', 'Older pin'])
-    expect(groups.starred.map((row) => row.title)).toEqual(['Starred one'])
+    expect(groups.pinned.map((row) => row.title)).toEqual(['Pinned one', 'Starred one', 'Older pin'])
     expect(groups.recent.map((row) => row.title)).toEqual([
       'Recent one',
       'Old one',
@@ -95,6 +100,124 @@ describe('session groups', () => {
     expect(groups.recent.map((row) => row.id)).toEqual(['empty', 'bad'])
     expect(groups.recent[0].title).toBe('Untitled conversation')
     expect(groups.recent[1].title).toBe('Untitled conversation')
+  })
+
+  const sortable = {
+    sessions: [
+      { id: 'p1', title: 'Pin B', endedAt: NOW - DAY, pinned: true },
+      { id: 'r1', title: 'Alpha', endedAt: NOW - 5 * DAY },
+      { id: 'p2', title: 'Pin A', endedAt: NOW - 3 * DAY, starred: true },
+      { id: 'r2', title: 'Zulu', endedAt: NOW - 2 * DAY },
+    ],
+  }
+
+  it('keeps pinned rows first and sorts each group by the chosen order', () => {
+    expect(sessionRows(sortable, { sort: 'newest' }).rows.map((row) => row.title)).toEqual([
+      'Pin B',
+      'Pin A',
+      'Zulu',
+      'Alpha',
+    ])
+    expect(sessionRows(sortable, { sort: 'oldest' }).rows.map((row) => row.title)).toEqual([
+      'Pin A',
+      'Pin B',
+      'Alpha',
+      'Zulu',
+    ])
+    expect(sessionRows(sortable, { sort: 'name' }).rows.map((row) => row.title)).toEqual([
+      'Pin A',
+      'Pin B',
+      'Alpha',
+      'Zulu',
+    ])
+    expect(normalizeSessionSort('NAME')).toBe('name')
+    expect(normalizeSessionSort('sideways')).toBe('newest')
+    expect(sortSessionRows([{ title: 'B', at: 1, id: 'b' }, { title: 'A', at: 2, id: 'a' }], 'name')).toHaveLength(2)
+  })
+
+  it('filters by title and hides archived rows until they are shown', () => {
+    const answer = {
+      current: { id: 'live', title: 'Live one', startedAt: NOW },
+      sessions: [
+        { id: 'recent', title: 'Recent one', endedAt: NOW - DAY },
+        { id: 'archived', title: 'Old pin', endedAt: NOW - 2 * DAY, archived: true },
+      ],
+    }
+    const filtered = sessionRows(answer, { query: 'one' })
+    expect(filtered.rows.map((row) => row.id)).toEqual(['live', 'recent'])
+    expect(filtered.archivedTotal).toBe(0)
+
+    const hidden = sessionRows(answer)
+    expect(hidden.rows.map((row) => row.id)).toEqual(['live', 'recent'])
+    expect(hidden.archivedTotal).toBe(1)
+
+    const shown = sessionRows(answer, { showArchived: true })
+    expect(shown.rows.map((row) => row.id)).toEqual(['live', 'recent', 'archived'])
+
+    const matching = sessionRows(answer, { query: 'pin', showArchived: true })
+    expect(matching.rows.map((row) => row.id)).toEqual(['archived'])
+  })
+
+  it('reads and writes the sort choice, and never throws without storage', () => {
+    const storage = {
+      value: null,
+      getItem() {
+        return this.value
+      },
+      setItem(key, value) {
+        this.value = value
+      },
+    }
+    saveSessionSort('name', storage)
+    expect(loadSessionSort(storage)).toBe('name')
+    saveSessionSort('sideways', storage)
+    expect(loadSessionSort(storage)).toBe('newest')
+
+    const broken = {
+      getItem() {
+        throw new Error('blocked')
+      },
+      setItem() {
+        throw new Error('blocked')
+      },
+    }
+    expect(loadSessionSort(broken)).toBe('newest')
+    expect(() => saveSessionSort('oldest', broken)).not.toThrow()
+  })
+})
+
+describe('the conversation menu', () => {
+  it('lists every item with its key and marks archive and delete for the current row', () => {
+    const items = sessionMenuItems({ id: 's1', title: 'Alpha', count: 3 })
+    expect(items.map((item) => [item.label, item.key])).toEqual([
+      ['Pin', 'P'],
+      ['Rename', 'R'],
+      ['Fork', 'F'],
+      ['Mark as unread', 'U'],
+      ['Archive', 'A'],
+      ['Delete', 'D'],
+    ])
+    expect(items.find((item) => item.action === 'delete').danger).toBe(true)
+
+    const current = sessionMenuItems({ id: 'current', title: 'Live', count: 2, current: true })
+    expect(current.find((item) => item.action === 'archive')).toMatchObject({
+      disabled: true,
+      reason: 'The current conversation cannot be archived or deleted.',
+    })
+    expect(current.find((item) => item.action === 'delete').disabled).toBe(true)
+    expect(current.find((item) => item.action === 'pin').disabled).toBe(false)
+    expect(current.find((item) => item.action === 'rename').disabled).toBe(false)
+    expect(current.find((item) => item.action === 'unread').disabled).toBe(false)
+    expect(sessionMenuActionForKey(current, 'a')).toBeNull()
+    expect(sessionMenuActionForKey(current, 'f').action).toBe('fork')
+  })
+
+  it('unpins a starred row and unarchives an archived row', () => {
+    const starred = sessionMenuItems({ id: 's1', title: 'Starred', starred: true, pinned: true, count: 1 })
+    expect(starred.find((item) => item.action === 'pin').label).toBe('Unpin')
+    const archived = sessionMenuItems({ id: 's2', title: 'Archived', archived: true, count: 1 })
+    expect(archived.find((item) => item.action === 'archive').label).toBe('Unarchive')
+    expect(sessionMenuActionForKey(starred, 'P').action).toBe('pin')
   })
 })
 

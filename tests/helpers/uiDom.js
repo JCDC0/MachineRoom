@@ -72,18 +72,23 @@ function selection() {
 export function createTestDom() {
   const listeners = new WeakMap()
 
-  function addListener(node, type, fn) {
+  function captureOf(options) {
+    return typeof options === 'boolean' ? options : Boolean(options?.capture)
+  }
+
+  function addListener(node, type, fn, options) {
     if (!listeners.has(node)) listeners.set(node, new Map())
     const map = listeners.get(node)
     if (!map.has(type)) map.set(type, [])
-    map.get(type).push(fn)
+    map.get(type).push({ fn, capture: captureOf(options) })
   }
 
-  function removeListener(node, type, fn) {
+  function removeListener(node, type, fn, options) {
     const map = listeners.get(node)
     const list = map && map.get(type)
     if (!list) return
-    const index = list.indexOf(fn)
+    const capture = captureOf(options)
+    const index = list.findIndex((entry) => entry.fn === fn && entry.capture === capture)
     if (index !== -1) list.splice(index, 1)
   }
 
@@ -92,6 +97,8 @@ export function createTestDom() {
     event.bubbles = event.bubbles !== false
     event.cancelable = event.cancelable !== false
     event.defaultPrevented = false
+    event.cancelBubble = false
+    event.immediateStopped = false
     event.isTrusted = true
     event.timeStamp = Date.now()
     event.preventDefault = () => {
@@ -99,6 +106,10 @@ export function createTestDom() {
     }
     event.stopPropagation = () => {
       event.cancelBubble = true
+    }
+    event.stopImmediatePropagation = () => {
+      event.cancelBubble = true
+      event.immediateStopped = true
     }
     event.persist = () => {}
     event.composedPath = () => {
@@ -110,18 +121,30 @@ export function createTestDom() {
       }
       return path
     }
+    const path = []
     let current = node
     while (current) {
-      event.currentTarget = current
-      const list = listeners.get(current)?.get(event.type)
-      if (list) {
-        for (const fn of [...list]) {
-          if (event.cancelBubble) break
-          fn.call(current, event)
-        }
-      }
-      if (event.cancelBubble || !event.bubbles) break
+      path.push(current)
       current = current.parentNode
+    }
+    function invoke(target, capture) {
+      const list = listeners.get(target)?.get(event.type)
+      if (!list) return
+      for (const entry of [...list]) {
+        if (entry.capture !== capture) continue
+        if (event.immediateStopped) return
+        entry.fn.call(target, event)
+        if (event.immediateStopped) return
+      }
+    }
+    for (let index = path.length - 1; index >= 0 && !event.cancelBubble; index -= 1) {
+      event.currentTarget = path[index]
+      invoke(path[index], true)
+    }
+    for (let index = 0; index < path.length && !event.cancelBubble; index += 1) {
+      if (index > 0 && !event.bubbles) break
+      event.currentTarget = path[index]
+      invoke(path[index], false)
     }
     event.currentTarget = null
     return !event.defaultPrevented
@@ -176,9 +199,10 @@ export function createTestDom() {
       },
       insertBefore(child, before) {
         if (before == null) return node.appendChild(child)
+        if (child === before) return child
+        if (child.parentNode) child.parentNode.removeChild(child)
         const index = node.childNodes.indexOf(before)
         if (index === -1) throw new Error('reference node not found')
-        if (child.parentNode) child.parentNode.removeChild(child)
         node.childNodes.splice(index, 0, child)
         child.parentNode = node
         return child
@@ -205,11 +229,11 @@ export function createTestDom() {
       removeAttribute(name) {
         delete node.attributes[name]
       },
-      addEventListener(type, fn) {
-        addListener(node, type, fn)
+      addEventListener(type, fn, options) {
+        addListener(node, type, fn, options)
       },
-      removeEventListener(type, fn) {
-        removeListener(node, type, fn)
+      removeEventListener(type, fn, options) {
+        removeListener(node, type, fn, options)
       },
       attachEvent() {},
       detachEvent() {},
@@ -313,11 +337,11 @@ export function createTestDom() {
     createComment(data) {
       return createTextNode(data)
     },
-    addEventListener(type, fn) {
-      addListener(doc, type, fn)
+    addEventListener(type, fn, options) {
+      addListener(doc, type, fn, options)
     },
-    removeEventListener(type, fn) {
-      removeListener(doc, type, fn)
+    removeEventListener(type, fn, options) {
+      removeListener(doc, type, fn, options)
     },
     dispatchEvent(event) {
       return dispatch(doc, event)
@@ -372,11 +396,11 @@ export function createTestDom() {
       },
     },
     CustomEvent: TestCustomEvent,
-    addEventListener(type, fn) {
-      addListener(window, type, fn)
+    addEventListener(type, fn, options) {
+      addListener(window, type, fn, options)
     },
-    removeEventListener(type, fn) {
-      removeListener(window, type, fn)
+    removeEventListener(type, fn, options) {
+      removeListener(window, type, fn, options)
     },
     dispatchEvent(event) {
       return dispatch(window, event)

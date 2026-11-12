@@ -495,6 +495,15 @@ describe('the mock client still answers the contract', () => {
     const reloaded = await client.orchestratorSession({ id: 'orchestrator', session: sessions.sessions[0].id })
     expect(reloaded.title).toBe('Updated title')
 
+    await client.updateOrchestratorSession({
+      id: 'orchestrator',
+      session: sessions.sessions[0].id,
+      unread: true,
+      archived: true,
+    })
+    const flagged = await client.orchestratorSessions({ id: 'orchestrator' })
+    expect(flagged.sessions[0]).toMatchObject({ unread: true, archived: true })
+
     await client.newOrchestratorSession({ id: 'orchestrator' })
     const afterNew = await client.orchestratorSessions({ id: 'orchestrator' })
     expect(afterNew.current.count).toBe(0)
@@ -503,6 +512,11 @@ describe('the mock client still answers the contract', () => {
     const afterOpen = await client.orchestratorSessions({ id: 'orchestrator' })
     expect(afterOpen.current.count).toBe(2)
 
+    await expect(
+      client.deleteOrchestratorSession({ id: 'orchestrator', session: sessions.sessions[0].id })
+    ).rejects.toThrow('The current conversation cannot be archived or deleted.')
+
+    await client.newOrchestratorSession({ id: 'orchestrator' })
     await client.deleteOrchestratorSession({ id: 'orchestrator', session: sessions.sessions[0].id })
     const afterDelete = await client.orchestratorSessions({ id: 'orchestrator' })
     expect(afterDelete.sessions.some((s) => s.id === sessions.sessions[0].id)).toBe(false)
@@ -624,7 +638,14 @@ describe('the control client orchestrator routes', () => {
     await client.orchestratorSession({ id: 'frontend', session: 'sess-1' })
     await client.newOrchestratorSession({ id: 'frontend' })
     await client.branchOrchestratorSession({ id: 'frontend', index: 3 })
-    await client.updateOrchestratorSession({ id: 'frontend', session: 'sess-1', title: 'New title', pinned: true })
+    await client.updateOrchestratorSession({
+      id: 'frontend',
+      session: 'sess-1',
+      title: 'New title',
+      pinned: true,
+      unread: true,
+      archived: false,
+    })
     await client.openOrchestratorSession({ id: 'frontend', session: 'sess-1' })
     await client.deleteOrchestratorSession({ id: 'frontend', session: 'sess-1' })
 
@@ -662,7 +683,7 @@ describe('the control client orchestrator routes', () => {
       {
         url: 'http://127.0.0.1:9/api/orchestrator/sessions/sess-1?id=frontend',
         method: 'POST',
-        body: JSON.stringify({ confirmed: true, pinned: true, title: 'New title', id: 'frontend' }),
+        body: JSON.stringify({ confirmed: true, pinned: true, unread: true, archived: false, title: 'New title', id: 'frontend' }),
       },
       {
         url: 'http://127.0.0.1:9/api/orchestrator/sessions/sess-1/open?id=frontend',
