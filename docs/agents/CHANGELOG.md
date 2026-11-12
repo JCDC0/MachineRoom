@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The detail docs describe lane lock liveness, masked run-lane paths, the brief file list rules and the conversation menu's row checks (P147).
 - run-lane's project lock refusals and queue or worktree dry runs name the project with profile folders masked (P144).
 - Saved chat messages, their work steps and agent names are masked for keys and profile paths before they are cut, and unknown senders are dropped on load (P132).
 - The conversation menu closes when the current conversation changes, even though the bridge names it current each time (P142).
