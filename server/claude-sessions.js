@@ -178,7 +178,7 @@ export function createClaudeSessionsReader(options = {}) {
   }
 
   function baseOf(run) {
-    return { runId: run.runId, agentId: AGENT.id, issueId: `issue-${run.runId}` }
+    return { runId: run.runId, agentId: AGENT.id, issueId: `issue-${run.runId}`, ...(run.session ? { session: run.session } : {}) }
   }
 
   function send(type, session, payload) {
@@ -189,7 +189,7 @@ export function createClaudeSessionsReader(options = {}) {
     if (session.run?.open) endRun(session, 'succeeded')
     const at = now()
     session.number += 1
-    const run = { runId: `${session.id}:${session.number}`, seq: 0, startedAt: at, lastGrowth: at, open: true }
+    const run = { runId: `${session.id}:${session.number}`, seq: 0, startedAt: at, lastGrowth: at, open: true, session: session.id }
     session.run = run
     send('heartbeat.run.queued', session, baseOf(run))
     send('heartbeat.run.status', session, {

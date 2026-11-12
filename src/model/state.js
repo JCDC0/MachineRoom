@@ -32,6 +32,9 @@ function makeAgent(key, name, parent = null, depth = 0, runId = null, source = n
     label: '',
     target: '',
     endedAt: 0,
+    startedAt: 0,
+    startedBy: null,
+    sessions: null,
     error: null,
     lines: [],
     version: 0,
@@ -76,6 +79,12 @@ function say(agent, text, tone = 'normal') {
   agent.lines.push({ text, tone })
   if (agent.lines.length > LINE_LIMIT) agent.lines.shift()
   agent.version += 1
+}
+
+function rememberSession(agent, session) {
+  if (typeof session !== 'string' || session === '') return
+  if (!(agent.sessions instanceof Set)) agent.sessions = new Set()
+  agent.sessions.add(session)
 }
 
 export const RECENT_LIMIT = 8
@@ -197,12 +206,16 @@ export function apply(state, activity) {
       break
     case 'run.queued':
       agent.status = 'queued'
+      if (activity.session) rememberSession(agent, activity.session)
       say(agent, 'queued', 'dim')
       break
     case 'run.start':
       agent.status = 'working'
       agent.runId = activity.runId
       agent.runs += 1
+      agent.startedAt = activity.time
+      agent.startedBy = activity.startedBy ?? null
+      if (activity.session) rememberSession(agent, activity.session)
       agent.error = null
       agent.runWrites.clear()
       agent.calls.clear()

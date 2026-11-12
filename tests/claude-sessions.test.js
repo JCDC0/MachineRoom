@@ -146,6 +146,8 @@ describe('claude sessions reader', () => {
       'heartbeat.run.status',
     ])
     expect(frames[1].payload).toMatchObject({ status: 'running', agentId: AGENT.id })
+    expect(frames[0].payload.session).toBe('sess-1')
+    expect(logFrames(frames).every((frame) => frame.payload.session === 'sess-1')).toBe(true)
     expect(frames.at(-1).payload).toMatchObject({ status: 'succeeded', error: null })
     expect(frames.map((frame) => frame.payload.runId)).toEqual(Array(7).fill('sess-1:1'))
     expect(logFrames(frames).map((frame) => frame.payload.seq)).toEqual([1, 2, 3, 4])

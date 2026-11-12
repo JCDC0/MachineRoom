@@ -9,7 +9,7 @@ import { projectLanesFileFor, writeHiddenLanes } from '../server/active-lanes.js
 import { briefProblems, briefWorktreeProblems, commandFor, DEFAULT_MINUTES, filterRunsSince, laneCommandProblem, readinessLine, retryStartProblem, SINCE_PROBLEM, startFailureText, worktreeFor, formatOutcomes, formatStats, formatSummary, laneLockPids, laneLockText, laneStats, laneStopProblem, laneWithOverrides, nextTestStep, parseRunArgs, projectRunGit, runListLine, runRecord, sessionToolLines, summarizeRun, UNATTENDED_NOTE, unattendedPrompt } from '../src/briefs/run.js'
 import { branchFor, parseBriefs } from '../src/briefs/briefs.js'
 import { harnessByKey } from '../src/harnesses/index.js'
-import { appendRunRecord, printedRunsFolder, startLane } from '../scripts/run-lane.mjs'
+import { appendRunRecord, printedRunsFolder, sessionStartedBy, startLane } from '../scripts/run-lane.mjs'
 import { makeTempDir } from './helpers/tempRoot.js'
 
 const lanes = JSON.parse(readFileSync(new URL('../docs/agents/lanes.json', import.meta.url), 'utf8'))
@@ -2187,6 +2187,77 @@ describe('appendRunRecord', () => {
         `The runs folder was gone; made it again at %TEMP%${sep}custom-runs.`,
       ])
     } finally {
+      rmSync(folder, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+    }
+  })
+})
+
+describe('run-lane session attribution', () => {
+  it('reads the Claude Code and OpenCode session variables', () => {
+    expect(sessionStartedBy({ CLAUDE_CODE_SESSION_ID: 'c1', OPENCODE_SESSION_ID: 'o1' })).toEqual({ harness: 'claude', session: 'c1' })
+    expect(sessionStartedBy({ OPENCODE_SESSION_ID: 'o1' })).toEqual({ harness: 'opencode', session: 'o1' })
+    expect(sessionStartedBy({ CLAUDE_CODE_SESSION_ID: '  ' })).toBe(null)
+    expect(sessionStartedBy({})).toBe(null)
+  })
+
+  it('records the session in the record and the meta, and nothing without one', async () => {
+    const folder = makeTempDir('machine-room-session-run-')
+    const saved = {
+      runs: process.env.MACHINEROOM_RUNS,
+      claude: process.env.CLAUDE_CODE_SESSION_ID,
+      opencode: process.env.OPENCODE_SESSION_ID,
+    }
+    try {
+      const runs = join(folder, 'runs')
+      const project = join(folder, 'project')
+      mkdirSync(runs, { recursive: true })
+      mkdirSync(project, { recursive: true })
+      process.env.MACHINEROOM_RUNS = runs
+      writeFileSync(
+        join(project, 'run'),
+        "console.log('{\"type\":\"step_finish\",\"part\":{\"cost\":0,\"tokens\":{\"input\":1,\"output\":1}}}')\n"
+      )
+      const lane = {
+        name: 'test-opencode',
+        worktree: project,
+        cli: { harness: 'opencode', bin: process.execPath, model: 'fake/model' },
+      }
+      const start = (name) =>
+        startLane({
+          options: { lane: 'test-opencode', minutes: 1 },
+          lane,
+          lanes: { 'test-opencode': lane },
+          wanted: [],
+          prompt: 'test prompt',
+          logPath: join(runs, `${name}.log`),
+          usageFile: join(runs, `${name}.usage.json`),
+          name,
+          project,
+          task: 'task',
+        })
+
+      process.env.CLAUDE_CODE_SESSION_ID = 'session-a'
+      delete process.env.OPENCODE_SESSION_ID
+      await start('run-session')
+      const records = readFileSync(join(runs, 'runs.jsonl'), 'utf8').trim().split(/\r?\n/).map((line) => JSON.parse(line))
+      expect(records.at(-1).startedBy).toEqual({ harness: 'claude', session: 'session-a' })
+      expect(JSON.parse(readFileSync(join(runs, 'run-session.meta.json'), 'utf8')).startedBy).toEqual({
+        harness: 'claude',
+        session: 'session-a',
+      })
+
+      delete process.env.CLAUDE_CODE_SESSION_ID
+      await start('run-no-session')
+      const after = readFileSync(join(runs, 'runs.jsonl'), 'utf8').trim().split(/\r?\n/).map((line) => JSON.parse(line))
+      expect(Object.hasOwn(after.at(-1), 'startedBy')).toBe(false)
+      expect(Object.hasOwn(JSON.parse(readFileSync(join(runs, 'run-no-session.meta.json'), 'utf8')), 'startedBy')).toBe(false)
+    } finally {
+      if (saved.runs === undefined) delete process.env.MACHINEROOM_RUNS
+      else process.env.MACHINEROOM_RUNS = saved.runs
+      for (const [name, value] of [['CLAUDE_CODE_SESSION_ID', saved.claude], ['OPENCODE_SESSION_ID', saved.opencode]]) {
+        if (value === undefined) delete process.env[name]
+        else process.env[name] = value
+      }
       rmSync(folder, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
     }
   })

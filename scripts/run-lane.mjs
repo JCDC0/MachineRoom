@@ -405,6 +405,14 @@ function printWorktree(plan) {
   console.log(`worktree: ${plan.made ? 'would be made' : 'would be reused'}`)
 }
 
+export function sessionStartedBy(env = {}) {
+  const claude = typeof env.CLAUDE_CODE_SESSION_ID === 'string' ? env.CLAUDE_CODE_SESSION_ID.trim() : ''
+  if (claude) return { harness: 'claude', session: claude }
+  const opencode = typeof env.OPENCODE_SESSION_ID === 'string' ? env.OPENCODE_SESSION_ID.trim() : ''
+  if (opencode) return { harness: 'opencode', session: opencode }
+  return null
+}
+
 function startedByOption(argv) {
   const index = argv.findIndex((arg) => arg === '--started-by' || arg.startsWith('--started-by='))
   if (index === -1) return { args: argv, startedBy: '' }
@@ -962,6 +970,8 @@ async function runQueueProject({ options, lane, lanes }) {
           note: String(error?.message ?? error).slice(0, 200),
         })
         failedRecord.queueStatus = 'failed: the queue stopped'
+        const session = options.startedBy ? null : sessionStartedBy(process.env)
+        if (session) failedRecord.startedBy = session
         appendRunRecord(failedRecord)
         console.log(`record: ${runsFile()}`)
       }
@@ -1157,14 +1167,15 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
       mcpConfig: mcpConfigPath,
       ...(project ? { cwd: project } : {}),
     })
-    if (project) {
-      const meta = { lane: options.lane, project, sessionId, ...(runBase ? { base: runBase } : {}) }
-      if (queue) {
-        meta.queue = queue.branch
-        meta.index = queue.index
-      }
-      writeFileSync(join(dirname(logPath), `${name}.meta.json`), `${JSON.stringify(meta)}\n`)
+    const startedBy = options.startedBy ? null : sessionStartedBy(process.env)
+    const meta = { lane: options.lane, sessionId, ...(runBase ? { base: runBase } : {}) }
+    if (project) meta.project = project
+    if (queue) {
+      meta.queue = queue.branch
+      meta.index = queue.index
     }
+    if (startedBy) meta.startedBy = startedBy
+    writeFileSync(join(dirname(logPath), `${name}.meta.json`), `${JSON.stringify(meta)}\n`)
     const log = createWriteStream(logPath)
     const laneLog = createLaneLog({ write: (text) => log.write(text), runId: name })
     const startedAt = Date.now()
@@ -1407,6 +1418,7 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
         ...(project ? { project, task } : {}),
         ...(queue ? { queue } : {}),
       })
+      if (startedBy) retryRecord.startedBy = startedBy
       appendRunRecord(retryRecord)
       console.log(`record: ${runsFile()}`)
       const retryName = `${name}-retry`
@@ -1446,6 +1458,7 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
     if (project && deferRecord) {
       return { code: result.code ?? 1, killed, record, startHead: projectStart.head, startBranch: projectStart.branch }
     }
+    if (startedBy) record.startedBy = startedBy
     appendRunRecord(record)
     console.log(`record: ${runsFile()}`)
     if (project) return { code: result.code ?? 1, killed }

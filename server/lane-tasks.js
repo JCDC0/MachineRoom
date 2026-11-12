@@ -164,6 +164,7 @@ export function laneLiveRuns({ openRuns = [], agents = [] } = {}) {
       issueId: name,
       startedAt: isoOrEmpty(run?.startedAt) || null,
       lastOutputAt: null,
+      ...(run?.startedBy ? { startedBy: run.startedBy } : {}),
     })
   }
   return runs.sort((a, b) => timeValue(b.startedAt) - timeValue(a.startedAt))

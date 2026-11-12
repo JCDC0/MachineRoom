@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { toAgents } from '../live/source.js'
+import { sessionKeyFor } from '../model/laneStarter.js'
 import { agentTasks } from '../model/liveTasks.js'
 import AutocompactInput from './AutocompactInput.jsx'
 import { useDialogFocus } from './dialogFocus.js'
@@ -161,6 +162,35 @@ function assignSubLadder(ladder, subId, laneIds) {
 
 function agentCount(count) {
   return `${count} ${count === 1 ? 'agent' : 'agents'}`
+}
+
+export function sessionRowsFor({ agents = [], liveRuns = [], records = [] } = {}) {
+  const roster = Array.isArray(agents) ? agents : []
+  const rows = new Map()
+  const runs = [
+    ...(Array.isArray(liveRuns) ? liveRuns : []).map((run) => ({ run, open: true })),
+    ...(Array.isArray(records) ? records : []).map((run) => ({ run, open: false })),
+  ]
+  for (const entry of runs) {
+    const key = sessionKeyFor(entry.run?.startedBy)
+    if (!key) continue
+    const agent = roster.find((item) => item && item.key === key)
+    if (!agent) continue
+    const at = Date.parse(entry.run?.startedAt ?? '') || 0
+    const existing = rows.get(key)
+    if (existing && (existing.at > at || (existing.open && !entry.open))) continue
+    rows.set(key, {
+      id: `session:${key}`,
+      kind: 'session',
+      label: cleanText(agent.name, AGENT_NAME_MAX) || cleanText(agent.key, 80),
+      harness: cleanText(agent.harness ?? agent.parser, 40),
+      working: entry.open,
+      open: entry.open,
+      at,
+      step: `started ${cleanText(entry.run?.lane, 40) || 'a lane'}`,
+    })
+  }
+  return [...rows.values()].sort((a, b) => a.label.localeCompare(b.label))
 }
 
 export function FamilyTeams({ client = null, project = '' }) {
@@ -547,6 +577,7 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
   const [subProblem, setSubProblem] = useState('')
   const [orchestrators, setOrchestrators] = useState(null)
   const [liveTaskMap, setLiveTaskMap] = useState(null)
+  const [sessionRows, setSessionRows] = useState([])
 
   useDialogFocus(Boolean(confirm), { containerRef: confirmRef })
 
@@ -682,6 +713,41 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
   }, [client, canFamily, tasks])
 
   useEffect(() => {
+    if (!canFamily) return undefined
+    let active = true
+    async function readSessions() {
+      const jobs = []
+      if (typeof client?.agents === 'function') jobs.push(Promise.resolve(client.agents()).catch(() => []))
+      else jobs.push(Promise.resolve([]))
+      if (typeof client?.liveRuns === 'function') jobs.push(Promise.resolve(client.liveRuns()).catch(() => []))
+      else jobs.push(Promise.resolve([]))
+      if (typeof client?.runs === 'function') jobs.push(Promise.resolve(client.runs()).catch(() => null))
+      else jobs.push(Promise.resolve(null))
+      const [agentsRaw, liveRaw, runsRaw] = await Promise.all(jobs)
+      if (!active) return
+      setSessionRows(
+        sessionRowsFor({
+          agents: Array.isArray(agentsRaw) ? agentsRaw : [],
+          liveRuns: Array.isArray(liveRaw) ? liveRaw : [],
+          records: Array.isArray(runsRaw?.recent) ? runsRaw.recent : [],
+        })
+      )
+    }
+    readSessions()
+    const unsubscribe =
+      typeof client?.subscribe === 'function'
+        ? client.subscribe((notice) => {
+            if (!notice) return
+            if (notice.topic === 'agents' || notice.topic === 'liveRuns' || notice.topic === 'runs') readSessions()
+          })
+        : null
+    return () => {
+      active = false
+      if (typeof unsubscribe === 'function') unsubscribe()
+    }
+  }, [client, canFamily])
+
+  useEffect(() => {
     if (!confirm) return undefined
     function onKey(event) {
       if (event.key !== 'Escape' || busy) return
@@ -710,6 +776,16 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
   }, [orchestrators])
   const taskMap = tasks instanceof Map ? tasks : liveTaskMap
   const laneRows = useMemo(() => splitMoreLanes(tree.rows), [tree])
+  const mainRows = useMemo(() => {
+    if (sessionRows.length === 0) return laneRows.main
+    const index = laneRows.main.findIndex((row) => row.kind === 'orchestrator')
+    const at = index === -1 ? 0 : index + 1
+    return [
+      ...laneRows.main.slice(0, at),
+      ...sessionRows.map((row) => ({ ...row, depth: 1 })),
+      ...laneRows.main.slice(at),
+    ]
+  }, [laneRows.main, sessionRows])
   const countLine = family
     ? laneCountLine(tree.nodes)
     : readError
@@ -2013,6 +2089,36 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
     )
   }
 
+  function renderSessionRow(row) {
+    const dotState = row.working ? 'working' : 'idle'
+    return (
+      <div className="mr-family-node" key={row.id} data-kind="session" data-depth={row.depth}>
+        <div className="mr-family-row">
+          <span className="mr-family-indent" style={{ width: `${row.depth * 16}px` }} aria-hidden="true">
+            {Array.from({ length: row.depth }, (_, level) => (
+              <span className="mr-family-vline" key={level} style={{ left: `${level * 16 + 7}px` }} />
+            ))}
+            {row.depth > 0 ? (
+              <span className="mr-family-hline" style={{ left: `${(row.depth - 1) * 16 + 7}px` }} />
+            ) : null}
+          </span>
+          <span className="mr-family-check-space" aria-hidden="true" />
+          <div className="mr-family-main">
+            <span className="mr-family-top">
+              <span className={`mr-family-dot is-${dotState}`} aria-hidden="true" />
+              <span className="mr-family-label">{row.label}</span>
+            </span>
+            <div className="mr-family-under">
+              <span className={`mr-family-state is-${dotState} mono`}>{row.working ? 'working' : 'idle'}</span>
+              <span className="mr-family-kind mono">session</span>
+              <span className="mr-family-meta mono">{row.step}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   function renderRow(row) {
     const node = row
     const state = stateWord(node)
@@ -2178,7 +2284,7 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
               {renderRequests()}
               {renderSelection()}
               {tree.rows.length === 0 ? <p className="mr-side-note">No agents are listed.</p> : null}
-              {laneRows.main.map(renderRow)}
+              {mainRows.map((row) => (row.kind === 'session' ? renderSessionRow(row) : renderRow(row)))}
               {renderMoreLanes()}
             </>
           )}

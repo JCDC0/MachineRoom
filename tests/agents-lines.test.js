@@ -5,8 +5,10 @@ import {
   SUB_ORCHESTRATOR_LINK_OPACITY,
   createAgents,
   lineParentKey,
+  starOriginKey,
 } from '../src/engine/agents.js'
-import { createState } from '../src/model/state.js'
+import { ORCHESTRATOR_HOME, readerPoint } from '../src/engine/hub.js'
+import { apply, createState } from '../src/model/state.js'
 
 const LADDER = {
   subs: [
@@ -184,6 +186,54 @@ describe('the lane line with a ladder', () => {
     agents.setLadder(null)
     expect(agents.views.size).toBe(count)
     expect(agents.views.get('opencode')).toBe(lane)
+    expectAt(lineEnds(lane.orchestratorLink).start, main.group.position)
+    agents.dispose()
+  })
+})
+
+describe('starOriginKey', () => {
+  it('takes the lane-start star from the session at the top', () => {
+    expect(starOriginKey('orchestrator', 'claude-session')).toBe('claude-session')
+    expect(starOriginKey('orchestrator', 'orchestrator')).toBe('orchestrator')
+    expect(starOriginKey('orchestrator', '')).toBe('orchestrator')
+    expect(starOriginKey('sub-frontend', 'claude-session')).toBe('sub-frontend')
+    expect(starOriginKey('', 'claude-session')).toBe('')
+  })
+})
+
+describe('the session that starts a lane sits at the top', () => {
+  const ROSTER_WITH_SESSION = [...ROSTER, { key: 'claude-session', name: 'Claude Code session', parser: 'claude' }]
+
+  it('moves the session to the orchestrator place and gives it back on a turn', () => {
+    const { agents, state, terminals, world } = harness(ROSTER_WITH_SESSION)
+    apply(state, { type: 'run.start', agent: 'claude-session', runId: 's1:1', time: 1000, session: 's1' })
+    apply(state, {
+      type: 'run.start',
+      agent: 'opencode',
+      runId: 'run-opencode',
+      time: 1000,
+      startedBy: { harness: 'claude', session: 's1' },
+    })
+    agents.update(state, 0.016, 0, world, terminals)
+    agents.snap(state, world)
+    agents.update(state, 0.016, 0, world, terminals)
+    agents.snap(state, world)
+    const session = agents.views.get('claude-session')
+    const main = agents.views.get('orchestrator')
+    const lane = agents.views.get('opencode')
+    expect(agents.topKey()).toBe('claude-session')
+    expectAt(session.group.position, ORCHESTRATOR_HOME)
+    const side = readerPoint(0, 1)
+    expectAt(main.group.position, side)
+    expectAt(lineEnds(lane.orchestratorLink).start, session.group.position)
+
+    apply(state, { type: 'run.start', agent: 'orchestrator', runId: 'orchestrator:1', time: 2000 })
+    agents.update(state, 0.016, 0, world, terminals)
+    agents.snap(state, world)
+    agents.update(state, 0.016, 0, world, terminals)
+    agents.snap(state, world)
+    expect(agents.topKey()).toBe('orchestrator')
+    expectAt(main.group.position, ORCHESTRATOR_HOME)
     expectAt(lineEnds(lane.orchestratorLink).start, main.group.position)
     agents.dispose()
   })
