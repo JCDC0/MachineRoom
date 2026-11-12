@@ -868,3 +868,16 @@ The owner finds the chip beside each agent repeats the agent's name, which the l
 Run `npx vitest related --run` on every file you changed and `npm run build`; both must pass.
 
 Files: src/engine/terminals.js, src/styles.css, tests/.
+
+**P85. The session that starts the lanes sits at the top (OpenCode).** Read no part of TASKS.md beyond this brief. Use no subagents. Run every command in the foreground. Commit each step as you finish it, and stop starting new work at minute 50. Work on temporary runs folders and projects.
+
+The owner watches the testbench room while the orchestrator, a Claude Code session in the main checkout, starts the fleet's lanes with `npm run run-lane`. The room shows that session as a side agent (`CLAUDE-SESSION`, from the sessions source) and its own idle orchestrator at the top, so the owner cannot see who runs the lanes. The owner wants the session that starts the lanes at the orchestrator's place, with the lanes under it.
+
+1. `scripts/run-lane.mjs` writes `startedBy` into the run's record and its first log frame: `{ harness: 'claude', session: CLAUDE_CODE_SESSION_ID }` when that variable is set, `{ harness: 'opencode', session: ... }` when an OpenCode session variable is set (find its name in `server/opencode-sessions*.js` or the OpenCode docs the code cites), and nothing when neither is.
+2. The lane source carries `startedBy` with the run. The sessions source names its agent so the two can be matched (the session id is already in its key).
+3. In the room, when the room's own orchestrator is idle and a session started a lane run that is open now or ended in the last 10 minutes, that session takes the orchestrator's place at the top of the hub, and the room's orchestrator takes the session's old slot. The lane-start star and the lane's line run from that session. When the room's orchestrator starts a turn, it takes the top again. Find the placement code (search `src/model` and `src/engine/agents.js` for where the orchestrator's place is chosen) and keep the rule pure and tested there.
+4. Tests, by what they prove: a run started with `CLAUDE_CODE_SESSION_ID` set records it, one without records nothing; a matched session takes the top while the orchestrator is idle and gives it back when a turn starts; a session with no run in 10 minutes stays at the side; the lane-start star comes from the session.
+
+Run `npx vitest related --run` on every file you changed and `npm run build`; both must pass. Name the by-eye checks for the orchestrator at 1280 by 800: a testbench room served with `MACHINEROOM_RUNS` and `MACHINEROOM_LANES_DIR` set, while a lane runs.
+
+Files: scripts/run-lane.mjs, server/lanes-source.js, server/claude-sessions.js, the placement code it finds in src/model/ or src/engine/agents.js, tests/.
