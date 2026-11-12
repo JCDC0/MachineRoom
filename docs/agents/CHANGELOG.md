@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- PLAN.md, ARCHITECTURE.md and DOCUMENTS.md name what the audits and reviews leave open (P130).
 - A project switch counts a lane lock as live only when its holder started before the lock, like the runner (P125).
 - startProjectTask and the chat's lane dispatch have their own tests (P131).
 - The file-index test takes its write rule from commands.js, so it passes with the owner's recordings too (P128).

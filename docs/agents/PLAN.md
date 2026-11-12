@@ -58,10 +58,18 @@ Open now:
 
 1. The owner's P4: the public release. The licence is MIT (2026-11-04) and `src/engine/sprites.js` was rewritten (U151); the names are still to decide in G2, and the push is G6. The six design changes of `AUDIT-2026-11-SUMMARY.md` were approved on 2026-11-04 and run as U146 to U150.
 2. The room by eye in a live room, at 1280 by 800, 900 by 700 and 768 by 1024, including the U86 conversation column and the U87 and U88 placements. The replay was checked on 2026-10-30; the live room has not been. A lane cannot see the screen, so the orchestrator checks it in a browser.
-3. The open audit findings:
-   - The October audit (`AUDIT-2026-10.md`): N5 (a lane worktree's git config and hooks reach the merge), N6 (the merge stops after 10 seconds), N12 (the runs route starts the runner from the folder the room watches) and N16 (an all-zero cost reads as not reported, a design question).
+3. The audits, by what each still leaves open:
+   - The October audit (`AUDIT-2026-10.md`): N5 and N12 are accepted as the audit says, and N6 is fixed by S42. N16 stays open: an all-zero cost reads as not reported, a design question for the cost board.
+   - The version 3 audit (`AUDIT-2026-10-V3.md`): V3 is held by the owner's choice. V16 was fixed at its merge, and Q3a to Q3d fixed the rest.
+   - The version 6 audit (`AUDIT-2026-10-V6.md`): W1 to W12 are fixed by Q6a to Q6c, R3 and R4.
+   - The version 7 audit (`AUDIT-2026-10-V7.md`): X1 to X13 are fixed by Q12a to Q12h, Q13a, Q13b and S41. The sector gate stays advisory until each sub has its own token.
+   - The UI audit (`AUDIT-2026-10-UI.md`): all 20 findings are fixed, the 10 at the time and N1 to N10 by U6 to U12, U14 and U19.
+   - The delta audit (`AUDIT-2026-10-DELTA.md`): D1 to D8 are fixed by Q1a to Q1f.
+   - Reviews 13 and 15 to 18: every blocking finding is fixed by P102 to P123. Review 16's smaller finding on the merge check is P124, still open.
    - The version 9 audit's Y4 and Y7 stay as they are: Y4 is the rule O24 chose and Y7 is H17's design.
-4. No brief is open. S20, U92 and U93, the project's branches and the git tree above the INTERNET sphere, were checked in a browser on 2026-10-30: the section, Switch, New branch, Show the tree and `0`, at 1280 by 800 only.
+4. The last batch before the shutdown is open: P124 (the merge check no longer blocks the bridge), P125 (a project switch reads a lane lock the way the runner does), P126 (review 19 reads the merges since review 18), P127 (the detail docs catch up with P113 to P123), P128 (the file-index test follows the new append rule), P129 (two tests that fail only under load), P130 (the plan and the core guide say what is open) and P131 (tests for a lane task started from the chat).
+
+S20, U92 and U93, the project's branches and the git tree above the INTERNET sphere, were checked in a browser on 2026-10-30: the section, Switch, New branch, Show the tree and `0`, at 1280 by 800 only.
 
 ## History: the plan from 0.1.37
 
