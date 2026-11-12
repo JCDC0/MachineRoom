@@ -2605,6 +2605,22 @@ describe('the orchestrator chat file', () => {
     expect(readFileSync(chatFileFor(rig.projectRoot, rig.runs), 'utf8')).not.toContain(profile)
   })
 
+  it.skipIf(process.platform !== 'win32' || !process.env.APPDATA)('masks a roaming AppData path in an agent report', () => {
+    const fleet = { ...LANES, opencode: { name: 'OpenCode', cli: { harness: 'opencode', bin: 'opencode', model: 'x' } } }
+    const rig = makeRig({ lanes: fleet })
+    const roamingPath = join(process.env.APPDATA, 'tool', 'trace.log')
+    const message = rig.orchestrator.recordAgentMessage({
+      from: 'orchestrator',
+      to: 'opencode',
+      kind: 'report',
+      text: `Trace at ${roamingPath}`,
+      lanes: fleet,
+    })
+    expect(message.agent.text).toContain('%APPDATA%')
+    expect(message.agent.text).not.toContain(process.env.APPDATA)
+    expect(readFileSync(chatFileFor(rig.projectRoot, rig.runs), 'utf8')).not.toContain(process.env.APPDATA)
+  })
+
   it('drops a saved sub or agent sender whose identity does not exist', () => {
     const rig = makeRig()
     rig.orchestrator.close()

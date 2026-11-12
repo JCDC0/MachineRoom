@@ -359,7 +359,7 @@ export function readTail(file, maxBytes = LOG_TAIL_BYTES) {
   }
 }
 
-const PROFILE_LABELS = ['%TEMP%', '%LOCALAPPDATA%', '%USERPROFILE%', '~']
+const PROFILE_LABELS = ['%TEMP%', '%LOCALAPPDATA%', '%APPDATA%', '%USERPROFILE%', '~']
 const PATH_TOKEN = /(?:[A-Za-z]:[\\/][^\s"'`<>|]*|\\\\[^\s"'`<>|]+|(?<![\w:/])\/(?!\/)[^\s"'`<>|]+)/g
 const PATH_TRAIL = /[.,;:!?]+$/
 

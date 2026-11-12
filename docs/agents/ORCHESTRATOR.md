@@ -10,12 +10,12 @@ How to read this file: `Where things stand`, `Rules`, `Session start` and `The l
 
 Rewrite this section at every merge and before you end a session. Keep it under ten lines: what is pushed, what is unpushed, what runs, what waits on the owner, what is next.
 
-- 2026-11-13, early morning: the last push is `57ca054b`, green on Ubuntu and Windows (run 43275945484), after two CI test fixes (`0b802e9e`, `57ca054b`). It holds P77 to P122 (not P97), reviews 13 and 15 to 18 and all their blocking fixes. P113 carries P82 (the chat's To choice) and P115 carries P93 (one menu per conversation). Before it, every unpushed commit with a test.com author was rewritten to example.com (backup branches `backup/*-pre-rewrite`, `backup/pre-doc-rewrite`). Read CI first with `gh run list --limit 3 --repo JCDC0/MachineRoom`.
-- Running: nothing.
-- AGY: `agy models` lists Gemini 4 Hydrogen (low, medium, high, xhigh) and Gemini 4 Argon. Hydrogen answered from 2026-11-13 after a first 404. On the owner's word the AGY lanes run Gemini 4 Hydrogen High since 2026-11-13.
-- Small open items: P94 blocks on spawnSync (review 16), run-lane output does not mask paths (review 15, finding 3), a stale lane lock can match a reused PID (P103), the file-index test walks the old recordings, review 18 finding 7 is fixed but the menu still needs a look with a disabled Fork, and P85's top placement needs a look.
-- Flaky on this machine only: `tests/scale.test.js` (EPERM on a temp folder) and, under load, one `tests/tree-partial.test.js` case; both pass alone.
-- The owner's yes to push held for the night of 2026-11-12 only. A new session asks again. Codex runs GPT-6.1 Sol at medium effort.
+- 2026-11-13, 4 am shutdown: everything merged is pushed (check `git log origin/main -1`); read CI first with `gh run list --limit 3 --repo JCDC0/MachineRoom`. The night ran P77 to P150 and reviews 13 and 15 to 22. Every blocking finding of reviews 17 to 21 is fixed.
+- Open from review 22 (`AUDIT-2026-11-REVIEW-22.md`): finding 1 (a renamed title, compact rules and summaries are saved without masking), finding 3 (a missing project and a queue's worktree summary print full paths) and finding 4 (the current row's identity uses `startedAt`, which moves when the 200-message cap drops the oldest message, so the menu closes). Finding 2 (`%APPDATA%`) is fixed. Brief these first.
+- Check before new work: P148 (`server/printed-path.js`, so `server/orchestrator.js` stops importing `scripts/run-lane.mjs`) and P150 (the last full suite report) may have ended after the shutdown; read `npm run run-lane -- --list` and their branches.
+- The fleet at the owner's word: `opencode` to `opencode5` on DeepSeek V4.1 Flash at max reasoning (`reasoning: "max"`), `codex` on GPT-6.1 Sol high, `agy` and `agy2` on Gemini 4 Hydrogen XHigh (no Ultra tier exists), `agy3` on Hydrogen High. Hydrogen ran 8 briefs and a review well, 5 to 20 minutes each.
+- Open for the owner: N16 (an all-zero cost reads as not reported), the live room by eye, the release (P4).
+- Push: the owner's yes held until the 4 am shutdown of 2026-11-13 only. A new session asks again.
 
 ## Rules
 
