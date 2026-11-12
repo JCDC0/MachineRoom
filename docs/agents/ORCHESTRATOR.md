@@ -11,8 +11,8 @@ How to read this file: `Where things stand`, `Rules`, `Session start` and `The l
 Rewrite this section at every merge and before you end a session. Keep it under ten lines: what is pushed, what is unpushed, what runs, what waits on the owner, what is next.
 
 - 2026-11-12, day: the last push is `ab673388`, green on Ubuntu and Windows (run 43075124938). Read CI first with `gh run list --limit 3 --repo JCDC0/MachineRoom`.
-- Unpushed on `main`: the merges of P65 (reviews, Auto and the doctor read the room's lanes), P66 (the lane stop tests wait for the process) and P67 (the tree-cost audit) and P68 (the faster deleted-file list), the briefs P65 to P68, `OWNER.md` and this guide's rewrite. No batch review and no full suite has run on them yet.
-- Running: P69 on `opencode2`, review 12 of the merges P65 to P68, before the push ask. P68 is merged: the deleted names come from `git diff`, and a full tree read at 40,000 files is back to about 600 ms.
+- Unpushed on `main`: the merges of P65 to P69 (the room's lanes in reviews, Auto and the doctor; the lane stop tests; the tree-cost audit; the faster deleted-file list; review 12), the fix `64c41251`, the briefs P65 to P70, `OWNER.md` and this guide's rewrite. A push waits for the owner's yes.
+- Running: P70 on `opencode`, the four review 12 findings that do not block a push. Review 12 is merged; its corrections are in `AUDIT-2026-11-REVIEW-12.md`. The full suite passed on 2026-11-12 before the review fixes `64c41251` and the scale probe default.
 - `main` is 0.1.401 and has been since 2026-10-29. The owner's room holds only the orchestrator and the lanes the owner makes (P49); the fleet runs in the testbench (loop step 0).
 - The fleet: `opencode` to `opencode5`, `agy` and `agy2`, and `claude`. AGY ran out of time on 2 of 3 briefs on 2026-11-11, so a brief that matters goes to OpenCode.
 - Open for the owner: the idle draw rate, replay sound (review 9, finding 7), the beat ring with music, the all-zero cost display (N16), and a look at P63 and P64 in a live room.
