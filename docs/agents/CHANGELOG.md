@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- P86: the command parser drops bash heredoc bodies, marks only a redirect's target as written, and counts files inside inline programs as reads, so a brief written with cat and a heredoc no longer lights the files it names.
 - P80: review 13 of the P70 to P75 merges finds two push blockers (a made lane cannot start through run-lane, and the runner commit stages every file) and six smaller findings.
 - P98: an audit of every path that picks a room's lanes and runs folder finds the owner's room safe, with one route that still reads docs/agents/lanes.json when it decides a brief run.
 - P95: the runner makes the runs folder again when it was deleted during a run, says so once with the folder masked, and still writes its record.
