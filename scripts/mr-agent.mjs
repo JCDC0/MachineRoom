@@ -1125,7 +1125,7 @@ function sleep(ms) {
   return new Promise((done) => setTimeout(done, ms))
 }
 
-async function post(url, key, payload, { onDamaged } = {}) {
+async function post(url, key, payload, { onDamaged, costLimit } = {}) {
   const headers = { 'content-type': 'application/json' }
   if (key) headers.authorization = `Bearer ${key}`
   let damagedRetries = 0
@@ -1167,6 +1167,11 @@ async function post(url, key, payload, { onDamaged } = {}) {
       return data
     }
     onDamaged?.()
+    if (costLimit !== null && costLimit !== undefined) {
+      const error = new Error('The cost limit is set but the provider did not report a cost; stopped.')
+      error.isCostLimit = true
+      throw error
+    }
     const text = sanitize(body.slice(0, 200), key)
     const failure = new Error(`The API answer was not JSON (${response.status}): ${text}.`)
     if (damagedRetries >= DAMAGED_RETRY_LIMIT || attempt === RETRY_LIMIT) throw failure
@@ -1408,7 +1413,10 @@ async function main() {
         max_tokens: MAX_TOKENS,
       }
       if (options.reasoning !== '') payload.reasoning = { effort: options.reasoning }
-      const data = await post(url, key, payload, { onDamaged: () => { damagedAnswers += 1 } })
+      const data = await post(url, key, payload, {
+        costLimit,
+        onDamaged: () => { damagedAnswers += 1 },
+      })
       const message = replyOf(data)
       const usage = usageOf(data)
       inputTokens += usage.input
@@ -1482,6 +1490,12 @@ async function main() {
     }
     finish(true, lastText !== '' ? lastText : `Stopped after ${stepLimit} steps.`)
   } catch (error) {
+    if (error?.isCostLimit) {
+      const sentence = error.message
+      finish(true, sentence, 3)
+      process.stdout.write(`${sentence}\n`)
+      return
+    }
     finish(true, String(error?.message ?? error))
   }
 }

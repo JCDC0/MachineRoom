@@ -43,6 +43,8 @@ export function terminalText(text) {
     .replace(TERMINAL_CSI, '')
 }
 
+const BROAD_TOOL_PROSE = /^\s*(?:Running|Reading|Writing|Editing)(?!\s*(?:[:(]|\b(?:command|file)\b))/i
+
 export function lastPlainBlock(text, createParser) {
   const clean = terminalText(text).replace(/\r\n?/g, '\n')
   const parser = createParser({ rootName: '', files: [], dirs: [] })
@@ -54,6 +56,10 @@ export function lastPlainBlock(text, createParser) {
     block = []
   }
   for (const line of clean.split('\n')) {
+    if (BROAD_TOOL_PROSE.test(line)) {
+      block.push(line)
+      continue
+    }
     const activities = parser.push(`${line}\n`, 0)
     if (activities.some((activity) => activity.type === 'tool.start' || activity.type === 'tool.end')) {
       blocks.length = 0
