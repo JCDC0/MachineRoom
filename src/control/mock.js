@@ -1553,9 +1553,9 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
             title: chat.currentTitle || firstOwner.text.trim().slice(0, 60),
             startedAt: chat.messages[0]?.at ?? new Date(now()).toISOString(),
             endedAt: chat.messages.at(-1)?.at ?? new Date(now()).toISOString(),
-            pinned: false,
-            starred: false,
-            unread: false,
+            pinned: chat.currentPinned === true,
+            starred: chat.currentStarred === true,
+            unread: chat.currentUnread === true,
             archived: false,
             messages: chat.messages.map((m) => ({ ...m })),
           })
