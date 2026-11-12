@@ -306,7 +306,13 @@ export default function ModelPicker({
 
   function togglePin(row) {
     pinsTouched.current = true
-    const next = pins.includes(row.id) ? pins.filter((pin) => pin !== row.id) : [...pins, row.id]
+    if (!pins.includes(row.id) && pins.length >= PIN_LIMIT) {
+      setPinError('At most 200 models can be pinned.')
+      return
+    }
+    const next = cleanPickerPins(
+      pins.includes(row.id) ? pins.filter((pin) => pin !== row.id) : [...pins, row.id]
+    )
     setPins(next)
     setPinError('')
     if (typeof client?.saveModelPins === 'function') {
