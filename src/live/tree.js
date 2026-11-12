@@ -69,6 +69,8 @@ export function readFileList(data) {
     read.root = root
   }
   if (removed !== null) read.removed = removed
+  const version = readTreeVersion(data)
+  if (version !== null) read.version = version
   if (data.full === true) read.full = true
   return read
 }

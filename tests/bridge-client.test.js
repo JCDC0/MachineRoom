@@ -103,6 +103,101 @@ describe('openBridge', () => {
     link.close()
   })
 
+  it('reconnects with the version of the tree event it applied', () => {
+    const timers = []
+    const sources = []
+    class Counting extends FakeSource {
+      constructor(url) {
+        super(url)
+        sources.push(this)
+      }
+    }
+    const link = openBridge({
+      url: 'http://bridge-event-version',
+      EventSourceImpl: Counting,
+      onFrame: () => {},
+      onTree: () => {},
+      onStatus: () => {},
+      setTimer: (fn, ms) => {
+        timers.push({ fn, ms })
+        return timers.length
+      },
+      clearTimer: () => {},
+    })
+    expect(sources.at(-1).url).toBe('http://bridge-event-version/events?history=1&tree=folders')
+    sources.at(-1).emit('tree', JSON.stringify({ root: 'p', files: ['a.js'], removed: [], version: 21 }))
+    sources.at(-1).readyState = 2
+    sources.at(-1).onerror()
+    timers.at(-1).fn()
+    expect(sources.at(-1).url).toBe('http://bridge-event-version/events?history=1&tree=folders&since=21')
+    link.close()
+  })
+
+  it('takes the version of a full list even when it is lower, as after a bridge restart', () => {
+    const timers = []
+    const sources = []
+    class Counting extends FakeSource {
+      constructor(url) {
+        super(url)
+        sources.push(this)
+      }
+    }
+    const link = openBridge({
+      url: 'http://bridge-restart-version',
+      EventSourceImpl: Counting,
+      onFrame: () => {},
+      onTree: () => {},
+      onStatus: () => {},
+      setTimer: (fn, ms) => {
+        timers.push({ fn, ms })
+        return timers.length
+      },
+      clearTimer: () => {},
+    })
+    sources.at(-1).emit('tree', JSON.stringify({ root: 'p', files: ['a.js'], removed: [], version: 40 }))
+    sources.at(-1).emit('tree', JSON.stringify({ root: 'p', files: ['a.js'], full: true, version: 3 }))
+    sources.at(-1).readyState = 2
+    sources.at(-1).onerror()
+    timers.at(-1).fn()
+    expect(sources.at(-1).url).toBe('http://bridge-restart-version/events?history=1&tree=folders&since=3')
+    link.close()
+  })
+
+  it('keeps the version it had when a tree event carries none', async () => {
+    const url = 'http://bridge-old-event'
+    const fetchImpl = async (asked) => {
+      if (asked.endsWith('/api/agents')) return reply([])()
+      return reply({ root: 'p', files: ['a.js'], version: 12 })()
+    }
+    await discoverBridge({ url, fetchImpl })
+    const timers = []
+    const sources = []
+    class Counting extends FakeSource {
+      constructor(target) {
+        super(target)
+        sources.push(this)
+      }
+    }
+    const link = openBridge({
+      url,
+      EventSourceImpl: Counting,
+      onFrame: () => {},
+      onTree: () => {},
+      onStatus: () => {},
+      setTimer: (fn, ms) => {
+        timers.push({ fn, ms })
+        return timers.length
+      },
+      clearTimer: () => {},
+    })
+    sources.at(-1).emit('tree', JSON.stringify({ root: 'p', files: ['b.js'] }))
+    sources.at(-1).readyState = 2
+    sources.at(-1).onerror()
+    timers.at(-1).fn()
+    expect(sources.at(-1).url).toBe(`${url}/events?history=1&tree=folders&since=12`)
+    link.close()
+  })
+
   it('reports live once open and reconnecting after a drop', () => {
     const { source, seen } = harness()
     source.onopen()

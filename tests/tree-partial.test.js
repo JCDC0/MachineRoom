@@ -487,7 +487,7 @@ describe('a watcher event with names', () => {
     try {
       watcher.emit('b.js')
       await waitFor(() => readTreeEvents(events.text()).length > 0)
-      expect(readTreeEvents(events.text())).toEqual([{ root: 'project', files: [], removed: ['b.js'] }])
+      expect(readTreeEvents(events.text())).toEqual([{ root: 'project', files: [], removed: ['b.js'], version: 2 }])
       expect(counts.partial).toEqual([['b.js']])
       expect(counts.full).toBe(0)
     } finally {
@@ -509,7 +509,7 @@ describe('a watcher event with names', () => {
       watcher.emit('dir')
       await waitFor(() => readTreeEvents(events.text()).length > 0)
       expect(readTreeEvents(events.text())).toEqual([
-        { root: 'project', files: [], removed: ['dir/a.js', 'dir/b.js'] },
+        { root: 'project', files: [], removed: ['dir/a.js', 'dir/b.js'], version: 2 },
       ])
     } finally {
       await events.close()

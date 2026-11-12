@@ -264,15 +264,16 @@ export function packTree(tree) {
   return { root: tree.root, shape: FOLDER_SHAPE, folders, files: runs }
 }
 
-export function treeEvent(tree, sent = null, shape = null) {
+export function treeEvent(tree, sent = null, shape = null, version = null) {
+  const stamped = (body) => (Number.isInteger(version) && version >= 0 ? { ...body, version } : body)
   if (!sent) {
     const body = shape === FOLDER_SHAPE ? { ...packTree(tree), full: true } : { root: tree.root, files: tree.files, full: true }
-    return `event: tree\ndata: ${JSON.stringify(body)}\n\n`
+    return `event: tree\ndata: ${JSON.stringify(stamped(body))}\n\n`
   }
   const known = new Set(sent)
   const files = tree.files.filter((file) => !known.has(file))
   if (files.length === 0) return ''
-  return `event: tree\ndata: ${JSON.stringify({ root: tree.root, files })}\n\n`
+  return `event: tree\ndata: ${JSON.stringify(stamped({ root: tree.root, files }))}\n\n`
 }
 
 function pathChanges(previous, next) {
@@ -295,8 +296,10 @@ function pathChanges(previous, next) {
   return { added, removed }
 }
 
-function treeDeltaEvent(root, files, removed = []) {
-  return `event: tree\ndata: ${JSON.stringify({ root, files, removed })}\n\n`
+function treeDeltaEvent(root, files, removed = [], version = null) {
+  const body = { root, files, removed }
+  if (Number.isInteger(version) && version >= 0) body.version = version
+  return `event: tree\ndata: ${JSON.stringify(body)}\n\n`
 }
 
 function corsHeaders(req, isAllowed) {
@@ -803,7 +806,7 @@ export function createBridge(options = {}) {
   }
 
   function writeWholeTree(client, tree) {
-    client.write(treeEvent(tree, null, folderClients.has(client) ? FOLDER_SHAPE : null))
+    client.write(treeEvent(tree, null, folderClients.has(client) ? FOLDER_SHAPE : null, treeVersion))
     treeClientVersion.set(client, treeVersion)
   }
 
@@ -837,7 +840,7 @@ export function createBridge(options = {}) {
       }
       treeClientVersion.set(client, treeVersion)
       if (changesSince.added.length > 0 || changesSince.removed.length > 0) {
-        client.write(treeDeltaEvent(current.root, changesSince.added, changesSince.removed))
+        client.write(treeDeltaEvent(current.root, changesSince.added, changesSince.removed, treeVersion))
       }
     }
     return true
@@ -1379,8 +1382,11 @@ export function createBridge(options = {}) {
           if (changes !== null) {
             treeClientVersion.set(res, treeVersion)
             if ((changes.added.length > 0 || changes.removed.length > 0) && lastTree) {
-              res.write(treeDeltaEvent(lastTree.root, changes.added, changes.removed))
+              res.write(treeDeltaEvent(lastTree.root, changes.added, changes.removed, treeVersion))
             }
+          } else if (lastTree) {
+            res.write(treeEvent(lastTree, null, folderClients.has(res) ? FOLDER_SHAPE : null, treeVersion))
+            treeClientVersion.set(res, treeVersion)
           }
         }
       }
