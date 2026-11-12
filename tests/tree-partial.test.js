@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { createBridge, deletedDiffArgs, mergeNamedFiles, readTree, readTreePartial } from '../server/index.js'
@@ -270,26 +270,55 @@ describe('the deleted-file diff', () => {
     expect((await readTreePartial(dir, ['-odd.js'])).files).toEqual([])
   })
 
+  it('names a deleted file relative to a project folder inside the repository', async () => {
+    const dir = makeRoot()
+    execFileSync(gitPath(), ['init', '--quiet', '--initial-branch=main'], { cwd: dir, stdio: 'ignore' })
+    mkdirSync(join(dir, 'sub'))
+    writeFileSync(join(dir, 'sub', 'gone.js'), 'x')
+    writeFileSync(join(dir, 'sub', 'kept.js'), 'x')
+    execFileSync(gitPath(), ['add', '--', '.'], { cwd: dir, stdio: 'ignore' })
+    rmSync(join(dir, 'sub', 'gone.js'))
+
+    const deleted = execFileSync(gitPath(), ['-C', join(dir, 'sub'), ...deletedDiffArgs()], { encoding: 'utf8' })
+
+    expect(deleted.split(' ').filter(Boolean)).toEqual(['gone.js'])
+  })
+
+  it('does not write the index when a file only changed its time', async () => {
+    const dir = makeRoot()
+    execFileSync(gitPath(), ['init', '--quiet', '--initial-branch=main'], { cwd: dir, stdio: 'ignore' })
+    writeFileSync(join(dir, 'kept.js'), 'x')
+    execFileSync(gitPath(), ['add', '--', '.'], { cwd: dir, stdio: 'ignore' })
+    const later = new Date(Date.now() + 60000)
+    utimesSync(join(dir, 'kept.js'), later, later)
+    const before = statSync(join(dir, '.git', 'index')).mtimeMs
+
+    expect((await readTree(dir)).files).toEqual(['kept.js'])
+    expect(statSync(join(dir, '.git', 'index')).mtimeMs).toBe(before)
+  })
+
   it('asks for the deleted names with the flags that keep the diff cheap', () => {
     expect(deletedDiffArgs()).toEqual([
       '-c',
       'core.longpaths=true',
-      'diff',
+      'diff-files',
       '--name-only',
       '-z',
       '--diff-filter=D',
       '--no-ext-diff',
       '--no-textconv',
+      '--relative',
     ])
     expect(deletedDiffArgs(['gone.js'])).toEqual([
       '-c',
       'core.longpaths=true',
-      'diff',
+      'diff-files',
       '--name-only',
       '-z',
       '--diff-filter=D',
       '--no-ext-diff',
       '--no-textconv',
+      '--relative',
       '--',
       'gone.js',
     ])

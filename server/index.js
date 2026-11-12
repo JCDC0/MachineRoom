@@ -143,12 +143,13 @@ export function deletedDiffArgs(names) {
   const args = [
     '-c',
     'core.longpaths=true',
-    'diff',
+    'diff-files',
     '--name-only',
     '-z',
     '--diff-filter=D',
     '--no-ext-diff',
     '--no-textconv',
+    '--relative',
   ]
   if (names !== null && names !== undefined) args.push('--', ...names)
   return args

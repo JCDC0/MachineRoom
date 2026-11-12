@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The deleted names come from `git diff-files --relative`, which never writes the index and names a file from the project folder as the list does (review 12, findings 2 and 3).
 - A tree read gets the deleted names from git diff with --diff-filter=D in place of git ls-files --deleted, so a full read at 40,000 files takes 608 ms against 1769 ms and 1993 ms at 200,000 (P68).
 - The scale probe times each tree read and takes --tree-only and --server, and AUDIT-2026-11-TREE-COST.md records that the deleted-file list of P51 makes a full tree read about five times as long: 470 to 2645 ms at 40,000 files and 2749 to 14339 ms at 200,000 (P67).
 - The run-lane stop tests wait until the harness grandchild and the helper processes are in the process list before the stop, and wait for the grandchild to be gone in place of fixed sleeps (P66).
