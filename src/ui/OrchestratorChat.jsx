@@ -25,6 +25,7 @@ import {
   chatBlocks,
   chatLines,
   clampDraft,
+  copyChatText,
   errorText,
   isSendKey,
   modeClass,
@@ -34,6 +35,7 @@ import {
   normalizeChat,
   normalizeModes,
   projectBaseName,
+  retryTarget,
   sendChatMessage,
   startConfirmText,
   statusDetail,
@@ -162,6 +164,7 @@ export default function OrchestratorChat({
   const [stopping, setStopping] = useState(false)
   const [unavailable, setUnavailable] = useState(false)
   const [error, setError] = useState(null)
+  const [copiedId, setCopiedId] = useState('')
   const [readError, setReadError] = useState(null)
   const [listError, setListError] = useState(null)
   const [teamFailed, setTeamFailed] = useState([])
@@ -208,6 +211,7 @@ export default function OrchestratorChat({
   const effortConfirmRef = useRef(null)
   const modeConfirmRef = useRef(null)
   const modeSavedTimer = useRef(null)
+  const copyTimer = useRef(null)
   const compactRef = useRef(null)
   const roomActivity = useContext(OrchestratorActivity)
 
@@ -551,6 +555,11 @@ export default function OrchestratorChat({
     setModeSaved('')
     setAnswering({})
     setApprovalError({})
+    setCopiedId('')
+    if (copyTimer.current) {
+      clearTimeout(copyTimer.current)
+      copyTimer.current = null
+    }
   }, [selected])
 
   useEffect(() => {
@@ -565,6 +574,8 @@ export default function OrchestratorChat({
     () => () => {
       if (modeSavedTimer.current) clearTimeout(modeSavedTimer.current)
       modeSavedTimer.current = null
+      if (copyTimer.current) clearTimeout(copyTimer.current)
+      copyTimer.current = null
     },
     []
   )
@@ -719,6 +730,50 @@ export default function OrchestratorChat({
     setDraft((currentDraft) => (currentDraft.trim() === text ? '' : currentDraft))
     if (id === selected) await readChatRef.current?.()
     await readListRef.current?.()
+  }
+
+  async function copyMessage(line) {
+    if (!(await copyChatText(line.text))) return
+    if (copyTimer.current) clearTimeout(copyTimer.current)
+    setCopiedId(line.id)
+    copyTimer.current = setTimeout(() => {
+      copyTimer.current = null
+      setCopiedId('')
+    }, 2000)
+  }
+
+  async function retryMessage(target) {
+    if (working) {
+      setError('Wait for the turn to end, or stop it.')
+      return
+    }
+    if (!target || sending) return
+    await deliver(target.text)
+  }
+
+  async function branchMessage(line, index) {
+    if (typeof client?.branchOrchestratorSession !== 'function') {
+      setError('The bridge cannot start a branch.')
+      return
+    }
+    if (sending) return
+    setSending(true)
+    setError(null)
+    try {
+      await client.branchOrchestratorSession({ id: selected, index: line.index + 1, confirmed: true })
+      if (lines.slice(0, index + 1).some((entry) => entry.from === 'owner')) {
+        setStartedIds((currentStarted) => ({ ...currentStarted, [selected]: true }))
+      }
+      setDraft('')
+      setSlashOpen(false)
+      setConfirm(null)
+      await readChatRef.current?.()
+      await readListRef.current?.()
+    } catch (failure) {
+      setError(errorText(failure, 'Could not branch the conversation.'))
+    } finally {
+      setSending(false)
+    }
   }
 
   function requestSend() {
@@ -1135,6 +1190,37 @@ export default function OrchestratorChat({
     setReadError(null)
   }
 
+  function renderMessageActions(line, index) {
+    const retry = retryTarget(lines, index)
+    return (
+      <div className="mr-orch-line-actions">
+        <button
+          type="button"
+          className="mr-orch-line-action"
+          onClick={() => copyMessage(line)}
+        >
+          {copiedId === line.id ? 'Copied' : 'Copy'}
+        </button>
+        {retry ? (
+          <button
+            type="button"
+            className="mr-orch-line-action"
+            onClick={() => retryMessage(retry)}
+          >
+            Retry
+          </button>
+        ) : null}
+        <button
+          type="button"
+          className="mr-orch-line-action"
+          onClick={() => branchMessage(line, index)}
+        >
+          Branch
+        </button>
+      </div>
+    )
+  }
+
   function renderSlashList() {
     if (!slashVisible) return null
     return (
@@ -1263,7 +1349,7 @@ export default function OrchestratorChat({
                 {loaded ? 'Tell the orchestrator what you want built.' : 'Reading the chat.'}
               </p>
             ) : (
-              lines.map((line) => (
+              lines.map((line, index) => (
                 <div key={line.id} className={`mr-orch-line is-${line.from}`}>
                   {line.from === 'room' ? <span className="mr-orch-who mono">room</span> : null}
                   {line.fromMain ? <span className="mr-orch-who mono">from main</span> : null}
@@ -1274,6 +1360,7 @@ export default function OrchestratorChat({
                       <ChatBlocks text={line.text} />
                     </div>
                   )}
+                  {renderMessageActions(line, index)}
                 </div>
               ))
             )}

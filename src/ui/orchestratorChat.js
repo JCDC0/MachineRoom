@@ -218,7 +218,8 @@ export function chatLines(chat, limit = ORCH_MAX_LINES, options = {}) {
   const list = chat && Array.isArray(chat.messages) ? chat.messages : []
   const id = typeof options?.id === 'string' && options.id ? options.id : 'orchestrator'
   const lines = []
-  for (const message of list) {
+  for (let index = 0; index < list.length; index += 1) {
+    const message = list[index]
     if (!message || typeof message !== 'object') continue
     const raw = typeof message.text === 'string' ? message.text : ''
     const text = visibleChatText(raw).trim()
@@ -228,6 +229,7 @@ export function chatLines(chat, limit = ORCH_MAX_LINES, options = {}) {
     const from = label ? 'sub' : FROM_VALUES.has(source) ? source : 'orchestrator'
     lines.push({
       id: String(message.id ?? `${from}-${lines.length}`),
+      index,
       from,
       fromMain: id !== 'orchestrator' && (source === 'orchestrator' || source === 'main'),
       text: label ? `${label}\n\n${text}` : text,
@@ -236,6 +238,22 @@ export function chatLines(chat, limit = ORCH_MAX_LINES, options = {}) {
   }
   const cap = Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : ORCH_MAX_LINES
   return lines.slice(-cap)
+}
+
+export function retryTarget(lines, at) {
+  const list = Array.isArray(lines) ? lines : []
+  const line = list[at]
+  if (!line || line.from !== 'orchestrator') return null
+  let newestReply = -1
+  for (let index = 0; index < list.length; index += 1) {
+    if (list[index].from === 'orchestrator') newestReply = index
+  }
+  const stopped = /^The orchestrator stopped\b/.test(line.text)
+  if (at !== newestReply && !stopped) return null
+  for (let index = at - 1; index >= 0; index -= 1) {
+    if (list[index].from === 'owner') return list[index]
+  }
+  return null
 }
 
 export function teamLines(entries, limit = ORCH_MAX_LINES) {
@@ -510,6 +528,17 @@ export async function sendChatMessage(client, text, id = 'orchestrator') {
     return { ok: true }
   } catch (failure) {
     return { ok: false, error: errorText(failure, 'Could not send the message.') }
+  }
+}
+
+export async function copyChatText(text, clipboard = globalThis.navigator?.clipboard) {
+  const value = typeof text === 'string' ? text : ''
+  if (!clipboard || typeof clipboard.writeText !== 'function') return false
+  try {
+    await clipboard.writeText(value)
+    return true
+  } catch {
+    return false
   }
 }
 
