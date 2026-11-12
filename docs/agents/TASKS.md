@@ -1442,3 +1442,8 @@ Review 21 (`docs/agents/AUDIT-2026-11-REVIEW-21.md`, P141) found four findings t
 
 1. Start with `git merge --no-edit refs/heads/feat/p129-two-tests-that`. Its last commit holds the unfinished work of a run that hit its time limit. Build on it; do not redo it.
 2. Run each of the two files five times alone; report the counts. If either still fails, commit what you have and say what is left.
+
+**P147. The detail docs catch up with P125 to P142 (OpenCode).** Read this brief, `docs/agents/ARCHITECTURE.md` and the detail files below. Use no subagents. Commit each step as you finish it, and stop starting new work at minute 18. Change no code. Files: docs/agents/architecture/ROOM.md, docs/agents/architecture/LIVE.md, docs/agents/architecture/COMMANDS.md, docs/agents/architecture/CODE.md.
+
+1. Read the merges since `9d03cec2` with `git log --first-parent --oneline 9d03cec2..HEAD` and `git show -m --first-parent`. Bring the four files in line with the code: lane lock liveness (P125, P138), masked paths in run-lane output and dry runs (P123, P140), the brief file list rules (P133), the conversation menu closing on a changed row (P134, P142), the file-index test (P128, P139) and the new tests file `tests/project-task.test.js` (P131).
+2. Plain words, short sentences, no em dashes. Where a doc disagrees with the code, the code wins.
