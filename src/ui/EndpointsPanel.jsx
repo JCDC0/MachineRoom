@@ -69,6 +69,16 @@ export function modelsText(models) {
   return (Array.isArray(models) ? models : []).join('\n')
 }
 
+export function modelsFromAnswer(answer) {
+  if (Array.isArray(answer)) return answer
+  return Array.isArray(answer?.models) ? answer.models : []
+}
+
+export function detailsFromAnswer(answer) {
+  if (Array.isArray(answer)) return null
+  return Array.isArray(answer?.modelDetails) ? answer.modelDetails : []
+}
+
 export function keySlotNames(answer) {
   const list = Array.isArray(answer) ? answer : Array.isArray(answer?.keys) ? answer.keys : []
   const names = []
@@ -263,12 +273,15 @@ export default function EndpointsPanel({ client, initialEndpoints = null, initia
   }
 
   function draft() {
+    const draftName = name.trim()
+    const saved = endpoints.find((entry) => entry.name === draftName)
     return {
-      name: name.trim(),
+      name: draftName,
       provider,
       baseUrl: baseUrl.trim(),
       keyName: keyName.trim(),
       models: modelsFromText(modelText),
+      ...(saved && Array.isArray(saved.modelDetails) ? { modelDetails: saved.modelDetails } : {}),
     }
   }
 
@@ -395,8 +408,12 @@ export default function EndpointsPanel({ client, initialEndpoints = null, initia
     setModelsError('')
     setNote('')
     try {
-      const models = await client.endpointModels(endpoint.name)
-      await client.saveEndpoint({ ...endpoint, models, confirmed: true })
+      const answer = await client.endpointModels(endpoint.name)
+      const models = modelsFromAnswer(answer)
+      const modelDetails = detailsFromAnswer(answer)
+      const next = { ...endpoint, models, confirmed: true }
+      if (modelDetails !== null) next.modelDetails = modelDetails
+      await client.saveEndpoint(next)
       setNote(`Saved ${endpoint.name}, ${endpointCount(models)}.`)
       setBusy(false)
       await loadData({ reloadFailed: 'The models were saved, but the list could not be read.' })
@@ -420,7 +437,8 @@ export default function EndpointsPanel({ client, initialEndpoints = null, initia
     setError('')
     setModelsError('')
     try {
-      const models = await client.endpointModels(nameForFetch)
+      const answer = await client.endpointModels(nameForFetch)
+      const models = modelsFromAnswer(answer)
       setModelText(modelsText(models))
       setNote(`Fetched ${endpointCount(models)} for ${nameForFetch}.`)
     } catch (err) {
