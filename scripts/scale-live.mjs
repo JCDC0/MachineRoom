@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, readdirSync, renameSync, rmSync, statfsSync, sta
 import { appendFile, mkdir, writeFile } from 'node:fs/promises'
 import { request } from 'node:http'
 import { tmpdir } from 'node:os'
-import { dirname, join, parse, resolve } from 'node:path'
+import { basename, dirname, join, parse, resolve } from 'node:path'
 import { performance } from 'node:perf_hooks'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { gunzipSync } from 'node:zlib'
@@ -576,13 +576,14 @@ export async function runScaleLive(options = {}) {
     if (plain.status !== 200) throw new Error(`GET /api/tree answered ${plain.status}.`)
     const plainTree = JSON.parse(plain.bytes.toString('utf8'))
     const afterRead = await child.ask('metrics')
-    const firstFullReadMs = afterRead.readMs
-    const firstFullReadCpuMs = afterRead.readCpuMicros / 1000
+    const firstFullReads = Math.max(1, afterRead.reads)
+    const firstFullReadMs = afterRead.readMs / firstFullReads
+    const firstFullReadCpuMs = afterRead.readCpuMicros / 1000 / firstFullReads
     row(
       'first tree read',
       firstReadMs,
       LIVE_BUDGET.firstRead,
-      `${plainTree.files.length} files, read ${firstFullReadMs.toFixed(0)} ms and ${firstFullReadCpuMs.toFixed(0)} ms CPU`
+      `${plainTree.files.length} files, ${firstFullReads} full reads, ${firstFullReadMs.toFixed(0)} ms and ${firstFullReadCpuMs.toFixed(0)} ms CPU per read`
     )
 
     const rssEntry = {
@@ -697,31 +698,36 @@ export async function runScaleLive(options = {}) {
       row('GET /api/git, 2000 untracked', untrackedGit.ms, LIVE_BUDGET.gitUntracked, `${settings.burst} files, ${untrackedGitState.changeCount} changes`)
     }
 
-    const distFirstAt = stream.events.length
-    const distCpuBefore = await child.ask('metrics')
-    const distStartAt = performance.now()
-    written = 0
-    let distLastWriteAt = distStartAt
-    for (let tick = 0; tick < ticks && written < settings.burst; tick += 1) {
-      const batch = []
-      while (batch.length < perTick && written < settings.burst) {
-        batch.push(`f-${written}.js`)
-        written += 1
+    let distEvents = []
+    let distShare = 0
+    let afterBursts = outCpuAfter
+    if (!settings.treeOnly) {
+      const distFirstAt = stream.events.length
+      const distCpuBefore = await child.ask('metrics')
+      const distStartAt = performance.now()
+      written = 0
+      let distLastWriteAt = distStartAt
+      for (let tick = 0; tick < ticks && written < settings.burst; tick += 1) {
+        const batch = []
+        while (batch.length < perTick && written < settings.burst) {
+          batch.push(`f-${written}.js`)
+          written += 1
+        }
+        await eachLimit(batch, 16, (name) => writeFile(join(dir, 'dist', name), 'scale\n'))
+        distLastWriteAt = performance.now()
+        await sleepUntil(distStartAt + ((tick + 1) * settings.burstMs) / ticks)
       }
-      await eachLimit(batch, 16, (name) => writeFile(join(dir, 'dist', name), 'scale\n'))
-      distLastWriteAt = performance.now()
-      await sleepUntil(distStartAt + ((tick + 1) * settings.burstMs) / ticks)
+      await sleepUntil(Math.max(performance.now(), distLastWriteAt + settings.cpuWindowMs))
+      const distCpuAfter = await child.ask('metrics')
+      const distCpuMs = (cpuMicros(distCpuAfter.cpu) - cpuMicros(distCpuBefore.cpu)) / 1000
+      const distWallMs = Math.max(1, distCpuAfter.at - distCpuBefore.at)
+      distShare = (distCpuMs / distWallMs) * 100
+      distEvents = stream.events.slice(distFirstAt).filter((entry) => entry.paths.some((path) => path === 'dist' || path.startsWith('dist/')))
+      row('burst dist/, tree events naming it', distEvents.length, LIVE_BUDGET.ignoredEvents, `${settings.burst} files over ${Math.round(settings.burstMs)} ms`)
+      row('burst dist/, bridge CPU share', distShare, LIVE_BUDGET.cpuShare, `${distCpuMs.toFixed(0)} ms over ${Math.round(distWallMs)} ms`)
+      afterBursts = await child.ask('metrics')
     }
-    await sleepUntil(Math.max(performance.now(), distLastWriteAt + settings.cpuWindowMs))
-    const distCpuAfter = await child.ask('metrics')
-    const distCpuMs = (cpuMicros(distCpuAfter.cpu) - cpuMicros(distCpuBefore.cpu)) / 1000
-    const distWallMs = Math.max(1, distCpuAfter.at - distCpuBefore.at)
-    const distShare = (distCpuMs / distWallMs) * 100
-    const distEvents = stream.events.slice(distFirstAt).filter((entry) => entry.paths.some((path) => path === 'dist' || path.startsWith('dist/')))
-    row('burst dist/, tree events naming it', distEvents.length, LIVE_BUDGET.ignoredEvents, `${settings.burst} files over ${Math.round(settings.burstMs)} ms`)
-    row('burst dist/, bridge CPU share', distShare, LIVE_BUDGET.cpuShare, `${distCpuMs.toFixed(0)} ms over ${Math.round(distWallMs)} ms`)
 
-    const afterBursts = await child.ask('metrics')
     const heapEntry = {
       stage: 'bridge used heap after the bursts',
       runsAt: 'live',
@@ -794,8 +800,11 @@ export async function runScaleLive(options = {}) {
       await child.stop()
       child = null
     }
-    const plainFolder = await readPlainFolder(dir)
-    row('plain folder read', plainFolder.ms, LIVE_BUDGET.plainRead, `${plainFolder.files.length} files`)
+    let plainFolder = { ms: 0, files: [] }
+    if (!settings.treeOnly) {
+      plainFolder = await readPlainFolder(dir)
+      row('plain folder read', plainFolder.ms, LIVE_BUDGET.plainRead, `${plainFolder.files.length} files`)
+    }
 
     const allPaths = new Set()
     for (const entry of stream.events) for (const path of entry.paths) allPaths.add(path)
@@ -811,6 +820,7 @@ export async function runScaleLive(options = {}) {
       ignoredSeen: [...allPaths].filter((path) => path === 'dist' || path.startsWith('dist/')),
       stats: {
         firstReadMs,
+        firstFullReads,
         firstFullReadMs,
         firstFullReadCpuMs,
         folderMs: folder.ms,
@@ -863,7 +873,8 @@ export async function runScaleLive(options = {}) {
 }
 
 export function formatLiveResult(result) {
-  const head = `scale live: ${result.settings.files} files in ${result.settings.folders} folders, seed ${result.settings.seed}, checkout ${result.checkout}`
+  const server = result.settings.server ? basename(result.settings.server) : 'current'
+  const head = `scale live: ${result.settings.files} files in ${result.settings.folders} folders, seed ${result.settings.seed}, server ${server}, checkout ${result.checkout}`
   const stats = result.stats
   const cost = [
     `full tree read: ${stats.firstFullReadMs.toFixed(0)} ms and ${stats.firstFullReadCpuMs.toFixed(0)} ms CPU`,
@@ -881,7 +892,7 @@ export function formatLiveResult(result) {
 const isMain = process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href
 if (isMain) {
   if (process.argv[2] === '--bridge-child') {
-    runBridgeChild(process.argv[3]).catch(() => process.exit(1))
+    runBridgeChild(process.argv[3], process.argv[4]).catch(() => process.exit(1))
   } else {
     try {
       const options = parseLiveArgs(process.argv.slice(2))
