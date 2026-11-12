@@ -2,7 +2,7 @@ import { spawn, spawnSync } from 'node:child_process'
 import { copyFileSync, existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { delimiter, dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { gitPath, programPath } from '../server/programPath.js'
 import { saveAgentsConfig } from '../server/agents-config.js'
 import { projectLanesFileFor, writeHiddenLanes } from '../server/active-lanes.js'
@@ -1938,5 +1938,165 @@ describe('a lane key used in a path and a branch', () => {
     expect(worktreeFor('/work/sample', '../escape')).toBe('')
     expect(worktreeFor('/work/sample', 'Bad lane')).toBe('')
     expect(worktreeFor('/work/sample', 'a/b')).toBe('')
+  })
+})
+
+const RECORDINGS_FOLDER = fileURLToPath(new URL('../public/recordings', import.meta.url))
+const RUNNER_TITLE = "The runner commits a sandboxed lane's work"
+const RUNNER_BRIEF = { id: 'P75', title: RUNNER_TITLE }
+const RUNNER_BRANCH = 'feat/p75-the-runner-commits'
+
+function gitInRunnerRepo(repo, args) {
+  const result = spawnSync(gitPath(), args, { cwd: repo, encoding: 'utf8', windowsHide: true })
+  if (result.status !== 0) throw new Error(`git ${args.join(' ')} failed: ${String(result.stderr ?? '').trim()}`)
+  return String(result.stdout ?? '').trim()
+}
+
+function makeRunnerRepo(folder, script, preCommit = '') {
+  const repo = join(folder, 'lane')
+  mkdirSync(repo, { recursive: true })
+  spawnSync(gitPath(), ['init'], { cwd: repo, encoding: 'utf8', windowsHide: true })
+  gitInRunnerRepo(repo, ['symbolic-ref', 'HEAD', 'refs/heads/main'])
+  gitInRunnerRepo(repo, ['config', 'user.name', 'Test Lane'])
+  gitInRunnerRepo(repo, ['config', 'user.email', 'lane@example.invalid'])
+  writeFileSync(join(repo, 'README.md'), 'lane\n')
+  writeFileSync(join(repo, 'run'), script)
+  gitInRunnerRepo(repo, ['add', '-A'])
+  gitInRunnerRepo(repo, ['commit', '-m', 'start'])
+  if (preCommit !== '') writeFileSync(join(repo, '.git', 'hooks', 'pre-commit'), preCommit)
+  return repo
+}
+
+function runnerScript({ file = '', exitCode = 0 } = {}) {
+  const lines = ["const { writeFileSync } = require('node:fs')"]
+  if (file !== '') lines.push(`writeFileSync(${JSON.stringify(file)}, 'done\\n')`)
+  lines.push("console.log('{\"type\":\"step_finish\",\"part\":{\"cost\":0,\"tokens\":{\"input\":1,\"output\":1}}}')")
+  if (exitCode !== 0) lines.push(`process.exit(${exitCode})`)
+  lines.push('')
+  return lines.join('\n')
+}
+
+async function runRunnerLane({ name, script, commits = 'runner', preCommit = '' } = {}) {
+  const folder = makeTempDir('machine-room-runner-commit-')
+  const repo = makeRunnerRepo(folder, script, preCommit)
+  const runs = join(folder, 'runs')
+  mkdirSync(runs, { recursive: true })
+  const logPath = join(runs, `${name}.log`)
+  const usageFile = join(runs, `${name}.usage.json`)
+  const recordingsExisted = existsSync(RECORDINGS_FOLDER)
+  const indexBefore = recordingsExisted && existsSync(join(RECORDINGS_FOLDER, 'index.json'))
+    ? readFileSync(join(RECORDINGS_FOLDER, 'index.json'), 'utf8')
+    : null
+  const lane = {
+    name: 'Probe',
+    worktree: repo,
+    cli: { harness: 'opencode', bin: process.execPath, model: 'probe/fake', ...(commits === null ? {} : { commits }) },
+  }
+  const lanes = { probe: lane }
+  const previous = process.env.MACHINEROOM_RUNS
+  process.env.MACHINEROOM_RUNS = runs
+  const logs = []
+  const spy = vi.spyOn(console, 'log').mockImplementation((line) => logs.push(String(line)))
+  try {
+    await startLane({
+      options: { lane: 'probe', minutes: 1 },
+      lane,
+      lanes,
+      wanted: [RUNNER_BRIEF],
+      prompt: 'test prompt',
+      logPath,
+      usageFile,
+      name,
+    })
+  } finally {
+    spy.mockRestore()
+    if (previous === undefined) delete process.env.MACHINEROOM_RUNS
+    else process.env.MACHINEROOM_RUNS = previous
+    for (const suffix of ['run.jsonl', 'agents.json', 'tree.json']) {
+      rmSync(join(RECORDINGS_FOLDER, `${name}-${suffix}`), { force: true })
+    }
+    if (indexBefore !== null) writeFileSync(join(RECORDINGS_FOLDER, 'index.json'), indexBefore)
+    else rmSync(join(RECORDINGS_FOLDER, 'index.json'), { force: true })
+    if (!recordingsExisted) rmSync(RECORDINGS_FOLDER, { recursive: true, force: true })
+  }
+  const lines = readFileSync(join(runs, 'runs.jsonl'), 'utf8').trim().split(/\r?\n/)
+  return { folder, repo, record: JSON.parse(lines[lines.length - 1]), logs }
+}
+
+describe('a runner lane commit', () => {
+  it("puts the change on the brief's branch in one commit and names it in the record", async () => {
+    const run = await runRunnerLane({ name: 'runner-commit-writes', script: runnerScript({ file: 'lane-note.txt' }) })
+    try {
+      expect(gitInRunnerRepo(run.repo, ['branch', '--show-current'])).toBe(RUNNER_BRANCH)
+      expect(gitInRunnerRepo(run.repo, ['rev-list', '--count', 'refs/heads/main..HEAD'])).toBe('1')
+      expect(gitInRunnerRepo(run.repo, ['log', '-1', '--format=%s'])).toBe(`0.1.402: ${RUNNER_TITLE}`)
+      expect(gitInRunnerRepo(run.repo, ['log', '-1', '--format=%b'])).toBe('Written by the probe lane in its sandbox; committed by the runner.')
+      expect(gitInRunnerRepo(run.repo, ['status', '--porcelain'])).toBe('')
+      expect(run.record.branch).toBe(RUNNER_BRANCH)
+      expect(run.record.commits).toHaveLength(1)
+      expect(run.record.commits[0]).toContain(`0.1.402: ${RUNNER_TITLE}`)
+      expect(run.logs.join('\n')).not.toContain('could not commit')
+    } finally {
+      rmSync(run.folder, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+    }
+  })
+
+  it('commits nothing and says the lane changed no file', async () => {
+    const run = await runRunnerLane({ name: 'runner-commit-empty', script: runnerScript() })
+    try {
+      expect(gitInRunnerRepo(run.repo, ['for-each-ref', '--format=%(refname:short)', 'refs/heads'])).toBe('main')
+      expect(gitInRunnerRepo(run.repo, ['rev-list', '--count', 'HEAD'])).toBe('1')
+      expect(run.logs.join('\n')).toContain('The probe lane changed no file.')
+      expect(run.record.branch).toBe('')
+      expect(run.record.commits).toEqual([])
+    } finally {
+      rmSync(run.folder, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+    }
+  })
+
+  it('commits nothing when the harness exits 1', async () => {
+    const run = await runRunnerLane({ name: 'runner-commit-fails', script: runnerScript({ file: 'lane-note.txt', exitCode: 1 }) })
+    try {
+      expect(gitInRunnerRepo(run.repo, ['for-each-ref', '--format=%(refname:short)', 'refs/heads'])).toBe('main')
+      expect(gitInRunnerRepo(run.repo, ['status', '--porcelain'])).toContain('lane-note.txt')
+      expect(run.logs.join('\n')).not.toContain('changed no file')
+      expect(run.record.exitCode).toBe(1)
+      expect(run.record.branch).toBe('')
+      expect(run.record.commits).toEqual([])
+    } finally {
+      rmSync(run.folder, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+    }
+  })
+
+  it('leaves the files as they are and says why when the commit fails', async () => {
+    const run = await runRunnerLane({
+      name: 'runner-commit-refused',
+      script: runnerScript({ file: 'lane-note.txt' }),
+      preCommit: '#!/bin/sh\nexit 1\n',
+    })
+    try {
+      expect(readFileSync(join(run.repo, 'lane-note.txt'), 'utf8')).toBe('done\n')
+      expect(gitInRunnerRepo(run.repo, ['status', '--porcelain'])).toBe('A  lane-note.txt')
+      expect(gitInRunnerRepo(run.repo, ['rev-list', '--count', 'refs/heads/main..HEAD'])).toBe('0')
+      expect(gitInRunnerRepo(run.repo, ['branch', '--show-current'])).toBe(RUNNER_BRANCH)
+      expect(run.logs.join('\n')).toContain("The runner could not commit the probe lane's work:")
+      expect(run.record.branch).toBe(RUNNER_BRANCH)
+      expect(run.record.commits).toEqual([])
+    } finally {
+      rmSync(run.folder, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+    }
+  })
+
+  it('leaves a lane without the field uncommitted as before', async () => {
+    const run = await runRunnerLane({ name: 'runner-commit-none', script: runnerScript({ file: 'lane-note.txt' }), commits: null })
+    try {
+      expect(gitInRunnerRepo(run.repo, ['for-each-ref', '--format=%(refname:short)', 'refs/heads'])).toBe('main')
+      expect(gitInRunnerRepo(run.repo, ['status', '--porcelain'])).toContain('lane-note.txt')
+      expect(run.logs.join('\n')).not.toContain('changed no file')
+      expect(run.record.branch).toBe('')
+      expect(run.record.commits).toEqual([])
+    } finally {
+      rmSync(run.folder, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+    }
   })
 })
