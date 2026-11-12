@@ -613,3 +613,23 @@ Files: server/agents-config.js, server/active-lanes.js, server/teams.js, src/ui/
 Run `npx vitest related --run` on every file you changed and `npm run build`; both must pass.
 
 Files: src/ui/panels/briefs.js, server/briefs.js, src/policy/proposals.js, src/policy/route.js, tests/.
+
+## Left from the night of 2026-11-12
+
+**P65. Reviews, Auto and the doctor see the room's own lanes (OpenCode).** A redo of P60, which AGY left unfinished on `refs/heads/feat/p60-reviews-auto-and`: read that branch's diff against `refs/heads/main` first and take what is right. Read no part of TASKS.md beyond this brief, and of `docs/agents/AUDIT-2026-11-REVIEW-11.md` only findings 2, 4, 7 and 8. Use no subagents. Commit each step as you finish it, and stop starting new work at minute 50. Edit only the files listed below. Work on a temporary runs folder and project.
+
+1. `server/reviews.js` builds its lane map with `readAllLanes` over `lanesFolder()`, so a lane the owner made can be reviewed and merged; the fallback to the development `docs/agents` is gone. A made lane's worktree is `worktreeFor(projectRoot, lane)`.
+2. A policy names lanes, so it is read from the folder the lanes come from: `server/policy.js` and `server/runs.js` read `lanesFolder()/policy.json` and no longer a project's own `docs/agents/policy.json`. With no lane for a tier Auto says `There is no lane for the TIER tier. Make one in the room.`
+3. `server/doctor.js` checks the program of every lane `readAllLanes` returns, and its next step line names no lane the room lacks.
+4. `scripts/merge-lane.mjs` and `scripts/review-lane.mjs` name the lane file they read in their error.
+5. Tests with a temp runs folder holding one made lane and the `config/` lanes: its review diff answers 200; Auto on MachineRoom's own checkout reads `config/policy.json`; the doctor lists the made lane's program; the error names the file read; with `MACHINEROOM_LANES_DIR=docs/agents` the fleet works as now.
+
+Run `npx vitest related --run` on every file you changed, `npm run build` and `npm run pack-check`; all must pass.
+
+Files: server/reviews.js, server/policy.js, server/runs.js, server/doctor.js, scripts/merge-lane.mjs, scripts/review-lane.mjs, tests/.
+
+**P66. The run-lane stop test passes under load (OpenCode).** A redo of P59. Read no part of TASKS.md beyond this brief. Use no subagents. Commit each step as you finish it, and stop starting new work at minute 40. Edit only files under `tests/`, and `scripts/run-lane.mjs` only if a test proves a real fault there.
+
+`tests/run-lane-stop.test.js` fails now and then while other lanes run their suites and passes on a retry. Run the file 15 times alone and 8 times with `node scripts/test.mjs` running beside it, find which test fails and why (a fixed wait, a process not yet started, a shared temp folder), and make it wait for the state it needs with the file's own `waitUntil`, never a busy loop and never a longer timeout alone. Give the runs and failures before and after in your report.
+
+Files: tests/run-lane-stop.test.js, tests/helpers/, scripts/run-lane.mjs.
