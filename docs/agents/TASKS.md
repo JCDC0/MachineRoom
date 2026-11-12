@@ -813,3 +813,30 @@ Files: the files the cause is in, src/styles.css, tests/.
 Review the code the merges `23bad3c1` (P70), `580a28cf` (P71), `909f00fa` (P74), `1e027045` (P72), `3bb13972` (P73) and `b6bd90f7` (P75) brought, with `git show -m --first-parent SHA` for each, against the code around it. Hunt for what a test would not show: a path that still refuses a lane the owner made; a reconnect that sends the full file list more often than it must, or never; a project switch that a run can still slip past; a Codex program search that picks the wrong `codex.exe` or reads a folder it should not; a runner commit that adds files it should not (a log, a key, a build folder) or commits on the wrong branch; and anything that writes outside the runs folder or the worktree. Write `docs/agents/AUDIT-2026-11-REVIEW-13.md`: a table of at most 8 findings, the most harmful first, each with `file:line`, what goes wrong and when, and the smallest fix, each marked as a push blocker or not. Write no finding you cannot point to in the code. An empty table with what you checked is a good answer.
 
 Files: docs/agents/AUDIT-2026-11-REVIEW-13.md.
+
+
+## The chat: message actions, talking to a lane, and the messages between agents (2026-11-12)
+
+The owner asked for copy, branch and retry on chat messages, for a way to talk to a lane directly, and to see the messages agents send each other. The chat is `src/ui/OrchestratorChat.jsx` with its pure helpers in `src/ui/orchestratorChat.js`; the conversation lives in the bridge (`server/orchestrator.js`, `server/orchestrators.js`, routes under `/api/orchestrator`). The bridge already announces agent messages for the room's stars (`announce(from, to, kind)` with `order`, `report`, `wake` and `dispatch`), but their text never reaches the chat. P82 starts after P81, since both change the chat.
+
+**P81. Copy, retry and branch on chat messages (OpenCode).** Read no part of TASKS.md beyond this brief and the paragraph above it. Use no subagents. Run every command in the foreground. Commit each step as you finish it, and stop starting new work at minute 50. Fonts Jost and Space Mono at 400 and 500, never bold; colours from `docs/agents/ARCHITECTURE.md`, Conventions.
+
+1. Each message in the chat shows, on hover and on keyboard focus, small text buttons: `Copy` on every message, which puts its text on the clipboard and says `Copied` for 2 seconds; `Retry` on the newest reply and on a `The orchestrator stopped: ...` line, which sends the user message before it again; `Branch` on every message, which starts a new conversation that holds the messages up to and including that one.
+2. Branch in the bridge: `POST /api/orchestrator/sessions/branch` with `{ index }` makes a new conversation, keeps the old one in the sessions list, and puts the earlier messages into the new one. A harness that keeps its own session (Claude Code, OpenCode) starts a fresh session whose first turn carries the earlier messages as a quoted transcript, cut to the context budget the chat already uses; the native harness takes them as its message history. The title is the old title with ` (branch)`.
+3. Retry while a turn runs is refused with `Wait for the turn to end, or stop it.`; retry of a message with no user message before it is not offered.
+4. Tests, by what they prove: copy writes the exact text; retry resends the right message and is refused while a turn runs; branch at message 3 of 6 gives a new conversation of 3 and keeps the old one of 6; the quoted transcript stays inside the budget; the buttons reach the keyboard.
+
+Run `npx vitest related --run` on every file you changed and `npm run build`; both must pass. Name the by-eye checks for the orchestrator at 1280 by 800.
+
+Files: src/ui/OrchestratorChat.jsx, src/ui/orchestratorChat.js, src/styles.css, server/orchestrator.js, server/orchestrators.js, tests/.
+
+**P82. Talk to a lane, and see the messages between agents (OpenCode).** Starts after P81 is merged. Read no part of TASKS.md beyond this brief and the paragraph above P81. Use no subagents. Run every command in the foreground. Commit each step as you finish it, and stop starting new work at minute 50.
+
+1. The chat's composer gets a `To` choice: the orchestrator (the default), each sub orchestrator, and each lane of the room that can run. A message to a lane starts that lane on the message as its task, the way Dispatch does with a typed task, and the lane's reply shows in the chat under the lane's name and colour. A lane already running answers `That lane is working. Wait for it, or stop it.`
+2. Every agent message the bridge announces (`order`, `report`, `wake`, `dispatch`) also reaches the chat as one line with its text: `Orchestrator to Coder, order: TEXT`, in Space Mono, with the sender's colour, folded to its first 3 lines with `Show all`. Find where each kind's text is made and carry it with the announcement; a kind with no text shows its kind alone.
+3. A `Show agent messages` toggle in the chat hides or shows those lines; the choice is kept in `localStorage` (wrapped in try).
+4. Tests, by what they prove: a message to a lane starts it with that text and its reply lands in the chat; a busy lane refuses with the sentence; an order, a report, a wake and a dispatch each reach the chat with their text; the toggle hides them.
+
+Run `npx vitest related --run` on every file you changed and `npm run build`; both must pass. Name the by-eye checks for the orchestrator at 1280 by 800.
+
+Files: src/ui/OrchestratorChat.jsx, src/ui/orchestratorChat.js, src/styles.css, server/orchestrator.js, server/orchestrators.js, server/index.js, tests/.
