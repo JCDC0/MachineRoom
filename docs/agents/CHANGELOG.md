@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- CI fixes: the stop test waits for the harness grandchild to die only on Windows, where the runner can reach it, and the sessions test moves the runs folder's time itself instead of hoping two writes a few milliseconds apart move it.
 - Review 12 reads the merges of P65 to P68: eight findings, two fixed by the orchestrator (the deleted names from git diff-files, the scale probe's quiet default), four briefed as P70, one left as it is (P69).
 - The deleted names come from `git diff-files --relative`, which never writes the index and names a file from the project folder as the list does (review 12, findings 2 and 3).
 - A tree read gets the deleted names from git diff with --diff-filter=D in place of git ls-files --deleted, so a full read at 40,000 files takes 608 ms against 1769 ms and 1993 ms at 200,000 (P68).

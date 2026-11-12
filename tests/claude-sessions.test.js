@@ -391,6 +391,8 @@ describe('claude sessions reader', () => {
     expect(lists).toBe(1)
 
     writeFileSync(join(runs, 'claude-b.meta.json'), `${JSON.stringify({ sessionId: 'sess-b' })}\n`)
+    const later = new Date(Date.now() + 60000)
+    utimesSync(runs, later, later)
     reader.tick()
     expect(lists).toBe(2)
 

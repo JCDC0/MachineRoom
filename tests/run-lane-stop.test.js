@@ -296,8 +296,12 @@ describe('a stopped lane stays stopped', () => {
     // Linux gives an orphan to init, so its parent chain no longer reaches the harness.
     if (process.platform === 'win32') expect(record.stoppedLeftovers).toBeGreaterThan(0)
     const grandchildPid = readStartedPid(started)
-    if (grandchildPid > 0) {
+    if (grandchildPid > 0 && process.platform === 'win32') {
       expect(await waitUntil(() => !processAlive(grandchildPid), 5000), `the grandchild ${grandchildPid} is still alive`).toBe(true)
+    } else if (grandchildPid > 0) {
+      try {
+        process.kill(grandchildPid)
+      } catch {}
     }
     expect(existsSync(mark)).toBe(false)
   }, 30000)
