@@ -92,7 +92,7 @@ function git(folder, args) {
   })
 }
 
-async function gitCheckout(folder) {
+export async function isGitCheckout(folder) {
   const inside = await git(folder, ['rev-parse', '--is-inside-work-tree'])
   return inside !== null && inside.trim() === 'true'
 }
@@ -120,7 +120,7 @@ export function readMainSubjectsSync() {
 }
 
 async function projectDirty(folder) {
-  if (!(await gitCheckout(folder))) return false
+  if (!(await isGitCheckout(folder))) return false
   const status = await git(folder, ['status', '--porcelain'])
   return status !== null && status.trim() !== ''
 }
@@ -526,6 +526,88 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
     return null
   }
 
+  function laneStartProblem(lane, lanes) {
+    if (!Object.hasOwn(lanes, lane) || !lanes[lane] || typeof lanes[lane] !== 'object') {
+      return { status: 400, error: 'Choose a lane from the list.' }
+    }
+    if (lanes[lane].retired === true) {
+      return { status: 400, error: `The ${lane} lane is retired.` }
+    }
+    if (!Object.hasOwn(lanes[lane], 'cli') || !lanes[lane].cli || typeof lanes[lane].cli !== 'object') {
+      return { status: 400, error: 'That lane has no command line.' }
+    }
+    if (lane === 'orchestrator') {
+      return { status: 400, error: 'The orchestrator lane runs from the room, not as a lane run.' }
+    }
+    const activeHelper = typeof activeLanes === 'function' ? activeLanes() : activeLanes
+    const isHidden = activeHelper && typeof activeHelper.isLaneHidden === 'function'
+      ? activeHelper.isLaneHidden(lane)
+      : runsFolder && projectRoot
+        ? readHiddenLanes(projectLanesFileFor(projectRoot, runsFolder)).includes(lane)
+        : false
+    if (isHidden) return { status: 400, error: hiddenLaneProblem(lane) }
+    const chosen = activeHelper && typeof activeHelper.isChosen === 'function'
+      ? activeHelper.isChosen()
+      : runsFolder
+        ? readActiveLanesChoice(activeLanesFileFor(projectRoot, runsFolder)) !== null
+        : true
+    if (!chosen) return { status: 400, error: 'Pick the lanes for this project first.' }
+    const laneActive = typeof isLaneActive === 'function'
+      ? isLaneActive(lane)
+      : activeHelper && typeof activeHelper.isLaneActive === 'function'
+        ? activeHelper.isLaneActive(lane)
+        : true
+    if (!laneActive) return { status: 400, error: `The lane ${lane} is not active. Add it in Agents first.` }
+    return null
+  }
+
+  async function startProjectTask({ lane = '', task = '', worktree = false, allowDirty = false, startedBy = '' } = {}) {
+    const lanesText = readPath(laneFile)
+    if (lanesText === null) return { status: 404, body: { error: 'The brief files are missing.' } }
+    const lanes = readStartLanes({ lanesFile: laneFile, runsFolder: recordsDir() })
+    if (!lanes || typeof lanes !== 'object' || Array.isArray(lanes)) {
+      return { status: 400, body: { error: 'The lane file is not valid.' } }
+    }
+    const laneProblem = laneStartProblem(lane, lanes)
+    if (laneProblem) return { status: laneProblem.status, body: { error: laneProblem.error } }
+    if (typeof task !== 'string' || task.trim().length < 1 || task.length > TASK_LIMIT) {
+      return { status: 400, body: { error: TASK_PROBLEM } }
+    }
+    if (!resolvedRoot) return { status: 400, body: { error: NO_PROJECT } }
+    if (worktree && !(await isGitCheckout(resolvedRoot))) {
+      return { status: 400, body: { error: notGitProblem(resolvedRoot) } }
+    }
+    const dirty = await projectDirty(resolvedRoot)
+    const problems = projectProblems({
+      project: resolvedRoot,
+      root: realPath(REPO_ROOT),
+      mainCheckout: await mainCheckout(),
+      lanes: resolvedLanes(lanes),
+      home: realPath(homedir()),
+      temp: realPath(process.env.TEMP || tmpdir()),
+      runs: realPath(recordsDir()),
+      commonDir: await rootCommonDir(),
+      repoCommonDir: await repoCommonDir(),
+      dirty,
+      allowDirty,
+    })
+    if (problems.length > 0) {
+      return { status: 400, body: { error: problems.join(' ') } }
+    }
+    if (running.has(lane)) {
+      return { status: 409, body: { error: 'That lane is already running.' } }
+    }
+    let entry
+    try {
+      const reasoning = lanes[lane]?.effort || ''
+      entry = startRun(lane, [], { project: resolvedRoot, task, allowDirty, worktree }, startedBy, reasoning)
+    } catch {
+      return { status: 500, body: { error: 'The bridge could not start that run.' } }
+    }
+    notify({ topic: 'runs' })
+    return { status: 202, body: entry }
+  }
+
   function snapshot(item) {
     return {
       lane: item.entry.lane,
@@ -772,53 +854,9 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
 
     let lane = typeof body.lane === 'string' ? body.lane : ''
     if (!wantsAuto) {
-      if (!Object.hasOwn(lanes, lane) || !lanes[lane] || typeof lanes[lane] !== 'object') {
-        sendJson(req, res, 400, { error: 'Choose a lane from the list.' })
-        return true
-      }
-      if (lanes[lane].retired === true) {
-        sendJson(req, res, 400, { error: `The ${lane} lane is retired.` })
-        return true
-      }
-      if (!Object.hasOwn(lanes[lane], 'cli') || !lanes[lane].cli || typeof lanes[lane].cli !== 'object') {
-        sendJson(req, res, 400, { error: 'That lane has no command line.' })
-        return true
-      }
-
-      if (lane === 'orchestrator') {
-        sendJson(req, res, 400, { error: 'The orchestrator lane runs from the room, not as a lane run.' })
-        return true
-      }
-
-      const activeHelper = typeof activeLanes === 'function' ? activeLanes() : activeLanes
-      const isHidden = typeof isLaneHidden === 'function'
-        ? isLaneHidden(lane)
-        : activeHelper && typeof activeHelper.isLaneHidden === 'function'
-          ? activeHelper.isLaneHidden(lane)
-          : runsFolder && projectRoot
-            ? readHiddenLanes(projectLanesFileFor(projectRoot, runsFolder)).includes(lane)
-            : false
-      if (isHidden) {
-        sendJson(req, res, 400, { error: hiddenLaneProblem(lane) })
-        return true
-      }
-      const chosen = activeHelper && typeof activeHelper.isChosen === 'function'
-        ? activeHelper.isChosen()
-        : runsFolder
-          ? readActiveLanesChoice(activeLanesFileFor(projectRoot, runsFolder)) !== null
-          : true
-      if (!chosen) {
-        sendJson(req, res, 400, { error: 'Pick the lanes for this project first.' })
-        return true
-      }
-
-      const laneActive = typeof isLaneActive === 'function'
-        ? isLaneActive(lane)
-        : activeHelper && typeof activeHelper.isLaneActive === 'function'
-          ? activeHelper.isLaneActive(lane)
-          : true
-      if (!laneActive) {
-        sendJson(req, res, 400, { error: `The lane ${lane} is not active. Add it in Agents first.` })
+      const laneProblem = laneStartProblem(lane, lanes)
+      if (laneProblem) {
+        sendJson(req, res, laneProblem.status, { error: laneProblem.error })
         return true
       }
 
@@ -895,12 +933,23 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
       startedBy = finish.startedBy
     }
 
+    if (projectRun && !hasTasks) {
+      const started = await startProjectTask({ lane, task, worktree, allowDirty, startedBy })
+      sendJson(
+        req,
+        res,
+        started.status,
+        routedAnswer && started.status === 202 ? { ...started.body, routed: routedAnswer } : started.body
+      )
+      return true
+    }
+
     if (projectRun) {
       if (!resolvedRoot) {
         sendJson(req, res, 400, { error: NO_PROJECT })
         return true
       }
-      if ((hasTasks || worktree) && !(await gitCheckout(resolvedRoot))) {
+      if ((hasTasks || worktree) && !(await isGitCheckout(resolvedRoot))) {
         sendJson(req, res, 400, { error: notGitProblem(resolvedRoot, { queue: hasTasks }) })
         return true
       }
@@ -961,5 +1010,11 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
     return true
   }
 
-  return { handle, stopAll, isRunning: (lane) => (lane !== undefined ? running.has(lane) : running.size > 0), startRun }
+  return {
+    handle,
+    stopAll,
+    isRunning: (lane) => (lane !== undefined ? running.has(lane) : running.size > 0),
+    startRun,
+    startProjectTask,
+  }
 }

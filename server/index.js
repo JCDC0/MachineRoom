@@ -29,7 +29,7 @@ import { createPlansApi } from './plans.js'
 import { createPolicyApi } from './policy.js'
 import { createProjectsApi } from './projects.js'
 import { createReviewsApi } from './reviews.js'
-import { createRunsApi } from './runs.js'
+import { createRunsApi, isGitCheckout } from './runs.js'
 import { createTeamsApi } from './teams.js'
 import { createSearchApi } from './search.js'
 import { createSessionsSource } from './sessions-source.js'
@@ -630,9 +630,15 @@ export function createBridge(options = {}) {
         const fromRuns = runs && typeof runs.isRunning === 'function' ? runs.isRunning(key) : false
         return fromSource || fromRuns
       },
-      startLaneTask: (lane, taskText) => {
-        if (!runs || typeof runs.startRun !== 'function') throw new Error('The runner is not available.')
-        return runs.startRun(lane, [], { project: projectRoot, task: taskText, allowDirty: true }, 'orchestrator')
+      startLaneTask: async (lane, taskText) => {
+        if (!runs || typeof runs.startProjectTask !== 'function') throw new Error('The runner is not available.')
+        return runs.startProjectTask({
+          lane,
+          task: taskText,
+          worktree: await isGitCheckout(projectRoot),
+          allowDirty: false,
+          startedBy: 'orchestrator',
+        })
       },
     })
   }

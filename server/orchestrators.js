@@ -581,7 +581,7 @@ export function createOrchestrators({
     return null
   }
 
-  function message(body, page, tokenValue = '') {
+  async function message(body, page, tokenValue = '') {
     if (!page) {
       const actor = idForToken(tokenValue)
       if (!actor) return { status: 403, body: { error: NO_TOKEN_PROBLEM } }
@@ -606,7 +606,14 @@ export function createOrchestrators({
         }
         if (typeof startLaneTask === 'function') {
           try {
-            startLaneTask(target, text)
+            const started = await startLaneTask(target, text)
+            if (!started || started.status !== 202) {
+              const status = Number.isInteger(started?.status) ? started.status : 500
+              const error = typeof started?.body?.error === 'string' && started.body.error.trim()
+                ? started.body.error.trim()
+                : 'Could not start lane.'
+              return { status, body: { error } }
+            }
           } catch (err) {
             if (/working/i.test(err?.message ?? '')) {
               return { status: 409, body: { error: 'That lane is working. Wait for it, or stop it.' } }
@@ -616,7 +623,6 @@ export function createOrchestrators({
         }
         main.markDirectLaneTask?.(target)
         main.addMessage?.('owner', text)
-        announce(ORCHESTRATOR_KEY, target, 'dispatch', text)
         return { status: 202, body: { ok: true, started: true } }
       }
       return { status: 404, body: { error: NO_ORCHESTRATOR_PROBLEM } }
@@ -761,7 +767,7 @@ export function createOrchestrators({
       if (method !== 'POST') return methodNotAllowed(req, res)
       const body = await readJsonBody(req, res)
       if (body === null) return true
-      const out = message(body, page, token)
+      const out = await message(body, page, token)
       sendJson(req, res, out.status, out.body)
       return true
     }

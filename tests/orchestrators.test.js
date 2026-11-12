@@ -2247,7 +2247,7 @@ describe('talking to a lane and agent announcements', () => {
       isWorking: () => false,
       startLaneTask: async (lane, text) => {
         started.push({ lane, text })
-        return { ok: true, id: 'run-test-1' }
+        return { status: 202, body: { ok: true, id: 'run-test-1' } }
       },
     })
 
@@ -2264,12 +2264,66 @@ describe('talking to a lane and agent announcements', () => {
     const files = makeBase()
     const rig = makeRig(files, {
       isWorking: (lane) => lane === 'opencode',
-      startLaneTask: async () => ({ ok: true }),
+      startLaneTask: async () => ({ status: 202, body: { ok: true } }),
     })
 
     const result = await rig.registry.message({ to: 'opencode', text: 'Implement feature' }, true)
     expect(result.status).toBe(409)
     expect(result.body.error).toBe('That lane is working. Wait for it, or stop it.')
+  })
+
+  it('refuses a chat task on a dirty project with the runner text and starts nothing', async () => {
+    const files = makeBase({ branch: 'main' })
+    writeFileSync(join(files.projectRoot, 'notes.txt'), 'uncommitted\n')
+    const runner = join(files.base, 'runner.mjs')
+    writeFileSync(runner, RUNNER)
+    const runnerCalls = join(files.base, 'runner-calls.jsonl')
+    const rig = await makeBridge(files, { runnerCommand: { file: process.execPath, args: [runner, runnerCalls] } })
+
+    const result = await pagePost(`${rig.url}/api/orchestrator/messages`, { to: 'opencode', text: 'Fix it.' })
+    expect(result.status).toBe(400)
+    expect(result.body).toEqual({
+      error: `The project folder ${files.projectRoot} has uncommitted changes. Commit or discard them, or pass --allow-dirty.`,
+    })
+    expect(readLines(runnerCalls)).toHaveLength(0)
+    const messages = messagesOf(rig.bridge.orchestrators(), 'orchestrator')
+    expect(messages.some((message) => message.from === 'owner' && message.text === 'Fix it.')).toBe(false)
+  })
+
+  it('refuses a chat task naming a lane that is not active', async () => {
+    const files = makeBase()
+    const runner = join(files.base, 'runner.mjs')
+    writeFileSync(runner, RUNNER)
+    const runnerCalls = join(files.base, 'runner-calls.jsonl')
+    const rig = await makeBridge(files, { runnerCommand: { file: process.execPath, args: [runner, runnerCalls] } })
+    writeActiveLanes(activeLanesFileFor(files.projectRoot, files.runs), ['opencode2'])
+
+    const result = await pagePost(`${rig.url}/api/orchestrator/messages`, { to: 'opencode', text: 'Fix it.' })
+    expect(result.status).toBe(400)
+    expect(result.body).toEqual({ error: 'The lane opencode is not active. Add it in Agents first.' })
+    expect(readLines(runnerCalls)).toHaveLength(0)
+  })
+
+  it('starts one run and shows one dispatch line for a good chat task', async () => {
+    const files = makeBase()
+    const runner = join(files.base, 'runner.mjs')
+    writeFileSync(runner, RUNNER)
+    const runnerCalls = join(files.base, 'runner-calls.jsonl')
+    const rig = await makeBridge(files, { runnerCommand: { file: process.execPath, args: [runner, runnerCalls] } })
+
+    const result = await pagePost(`${rig.url}/api/orchestrator/messages`, { to: 'opencode', text: 'Fix the typo.' })
+    expect(result.status).toBe(202)
+    expect(result.body).toEqual({ ok: true, started: true })
+    await waitFor(() => readLines(runnerCalls).length === 1)
+    expect(readLines(runnerCalls)).toHaveLength(1)
+    const args = readLines(runnerCalls)[0]
+    expect(args.slice(0, 5)).toEqual(['opencode', '--project', files.projectRoot, '--task', 'Fix the typo.'])
+
+    const messages = messagesOf(rig.bridge.orchestrators(), 'orchestrator')
+    expect(messages.some((message) => message.from === 'owner' && message.text === 'Fix the typo.')).toBe(true)
+    const dispatches = messages.filter((message) => message.from === 'agent' && message.agent?.kind === 'dispatch')
+    expect(dispatches).toHaveLength(1)
+    expect(dispatches[0].text).toContain('Fix the typo.')
   })
 
   it('records announced order, report, wake, and dispatch messages in chat', () => {
@@ -2316,7 +2370,7 @@ describe('talking to a lane and agent announcements', () => {
     const files = makeBase()
     const rig = makeRig(files, {
       isWorking: () => false,
-      startLaneTask: async () => ({ ok: true, id: 'run-direct-1' }),
+      startLaneTask: async () => ({ status: 202, body: { ok: true, id: 'run-direct-1' } }),
     })
 
     await rig.registry.message({ to: 'opencode', text: 'Run the tests' }, true)
