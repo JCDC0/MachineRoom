@@ -347,8 +347,9 @@ export function runnerCommitVersion(file = join(root, 'package.json')) {
   return nextVersion(JSON.parse(readFileSync(file, 'utf8')).version)
 }
 
-export function runnerCommit({ laneKey, worktree, brief, version = runnerCommitVersion() } = {}) {
-  const title = String(brief?.title ?? '').trim()
+export function runnerCommit({ laneKey, worktree, briefs, version = runnerCommitVersion() } = {}) {
+  const list = Array.isArray(briefs) ? briefs : []
+  const title = String(list[0]?.title ?? '').trim()
   const result = { ok: true, committed: false, leftOut: [], error: '' }
   if (title === '') return result
   const changes = commitChanges(worktree)
@@ -356,7 +357,7 @@ export function runnerCommit({ laneKey, worktree, brief, version = runnerCommitV
     console.log(`The ${laneKey} lane changed no file.`)
     return result
   }
-  const files = briefFileList(brief?.text)
+  const files = list.flatMap((brief) => briefFileList(brief?.text))
   const selected = []
   const leftOut = []
   for (const change of changes) {
@@ -372,13 +373,13 @@ export function runnerCommit({ laneKey, worktree, brief, version = runnerCommitV
     console.log(`The runner could not commit the ${laneKey} lane's work: ${error}`)
     return { ok: false, committed: false, leftOut, error }
   }
-  const switched = run(['switch', '-c', branchFor(brief)])
+  const switched = run(['switch', '-c', branchFor(list[0])])
   if (switched.error || switched.status !== 0) return fail(switched)
   const added = run(['add', '-A', '--', ...selected])
   if (added.error || added.status !== 0) return fail(added)
   const subject = `${version}: ${title}`
   const body = `Written by the ${laneKey} lane in its sandbox; committed by the runner.`
-  const committed = run(['commit', '-m', subject, '-m', body])
+  const committed = run(['commit', '--only', '-m', subject, '-m', body, '--', ...selected])
   if (committed.error || committed.status !== 0) return fail(committed)
   return { ok: true, committed: true, leftOut, error: '' }
 }
@@ -1427,7 +1428,7 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
     let commit = { ok: true, committed: false, leftOut: [], error: '' }
     if (!project && !killed && result.code === 0 && lane.cli?.commits === 'runner' && wanted.length > 0) {
       try {
-        commit = runnerCommit({ laneKey: options.lane, worktree: lane.worktree, brief: wanted[0] })
+        commit = runnerCommit({ laneKey: options.lane, worktree: lane.worktree, briefs: wanted })
       } catch (error) {
         commit = { ok: false, committed: false, leftOut: [], error: String(error?.message ?? error) }
       }

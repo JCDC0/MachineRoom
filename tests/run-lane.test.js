@@ -2094,6 +2094,8 @@ describe('a lane key used in a path and a branch', () => {
 const RECORDINGS_FOLDER = fileURLToPath(new URL('../public/recordings', import.meta.url))
 const RUNNER_TITLE = "The runner commits a sandboxed lane's work"
 const RUNNER_BRIEF = { id: 'P75', title: RUNNER_TITLE, text: 'Do it.\n\nFiles: lane-note.txt\n' }
+const SECOND_TITLE = 'A second brief in one run'
+const SECOND_BRIEF = { id: 'P76', title: SECOND_TITLE, text: 'Do it too.\n\nFiles: other-note.txt\n' }
 const RUNNER_BRANCH = 'feat/p75-the-runner-commits'
 
 function gitInRunnerRepo(repo, args) {
@@ -2117,16 +2119,21 @@ function makeRunnerRepo(folder, script, preCommit = '') {
   return repo
 }
 
-function runnerScript({ file = '', exitCode = 0 } = {}) {
-  const lines = ["const { writeFileSync } = require('node:fs')"]
+function runnerScript({ file = '', file2 = '', stage = '', exitCode = 0 } = {}) {
+  const lines = ["const { writeFileSync } = require('node:fs')", "const { execFileSync } = require('node:child_process')"]
   if (file !== '') lines.push(`writeFileSync(${JSON.stringify(file)}, 'done\\n')`)
+  if (file2 !== '') lines.push(`writeFileSync(${JSON.stringify(file2)}, 'done\\n')`)
+  if (stage !== '') {
+    lines.push(`writeFileSync(${JSON.stringify(stage)}, 'stray\\n')`)
+    lines.push(`execFileSync(${JSON.stringify(gitPath())}, ['add', '--', ${JSON.stringify(stage)}])`)
+  }
   lines.push("console.log('{\"type\":\"step_finish\",\"part\":{\"cost\":0,\"tokens\":{\"input\":1,\"output\":1}}}')")
   if (exitCode !== 0) lines.push(`process.exit(${exitCode})`)
   lines.push('')
   return lines.join('\n')
 }
 
-async function runRunnerLane({ name, script, commits = 'runner', preCommit = '' } = {}) {
+async function runRunnerLane({ name, script, commits = 'runner', preCommit = '', briefs = [RUNNER_BRIEF] } = {}) {
   const folder = makeTempDir('machine-room-runner-commit-')
   const repo = makeRunnerRepo(folder, script, preCommit)
   const runs = join(folder, 'runs')
@@ -2152,7 +2159,7 @@ async function runRunnerLane({ name, script, commits = 'runner', preCommit = '' 
       options: { lane: 'probe', minutes: 1 },
       lane,
       lanes,
-      wanted: [RUNNER_BRIEF],
+      wanted: briefs,
       prompt: 'test prompt',
       logPath,
       usageFile,
@@ -2186,6 +2193,40 @@ describe('a runner lane commit', () => {
       expect(run.record.commits).toHaveLength(1)
       expect(run.record.commits[0]).toContain(`${runnerCommitVersion(join(REPO_ROOT, 'package.json'))}: ${RUNNER_TITLE}`)
       expect(run.logs.join('\n')).not.toContain('could not commit')
+    } finally {
+      rmSync(run.folder, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+    }
+  })
+
+  it('leaves a file the lane staged itself out of the commit', async () => {
+    const run = await runRunnerLane({
+      name: 'runner-commit-staged-outside',
+      script: runnerScript({ file: 'lane-note.txt', stage: 'stray.txt' }),
+    })
+    try {
+      const committed = gitInRunnerRepo(run.repo, ['show', '--name-only', '--pretty=format:', 'HEAD']).split(/\r?\n/).filter(Boolean)
+      expect(committed).toEqual(['lane-note.txt'])
+      expect(gitInRunnerRepo(run.repo, ['status', '--porcelain'])).toBe('A  stray.txt')
+      expect(run.logs.join('\n')).toContain('Left out of the commit: stray.txt')
+      expect(run.logs.join('\n')).not.toContain('could not commit')
+    } finally {
+      rmSync(run.folder, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+    }
+  })
+
+  it('commits the allowed files of every brief in one run', async () => {
+    const run = await runRunnerLane({
+      name: 'runner-commit-two-briefs',
+      script: runnerScript({ file: 'lane-note.txt', file2: 'other-note.txt' }),
+      briefs: [RUNNER_BRIEF, SECOND_BRIEF],
+    })
+    try {
+      expect(gitInRunnerRepo(run.repo, ['branch', '--show-current'])).toBe(RUNNER_BRANCH)
+      const committed = gitInRunnerRepo(run.repo, ['show', '--name-only', '--pretty=format:', 'HEAD']).split(/\r?\n/).filter(Boolean).sort()
+      expect(committed).toEqual(['lane-note.txt', 'other-note.txt'])
+      expect(gitInRunnerRepo(run.repo, ['log', '-1', '--format=%s'])).toBe(`${runnerCommitVersion(join(REPO_ROOT, 'package.json'))}: ${RUNNER_TITLE}`)
+      expect(run.record.briefs).toEqual(['P75', 'P76'])
+      expect(run.logs.join('\n')).not.toContain('Left out of the commit')
     } finally {
       rmSync(run.folder, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
     }

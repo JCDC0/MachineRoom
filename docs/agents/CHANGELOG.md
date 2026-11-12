@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The runner commits only the brief's listed paths, reads a brief's whole body, and allows the files of every brief in a run (P116).
 - A branch's carried transcript is cleared only once the agent has started, so a failed start keeps the history (P118).
 - Each conversation row has one menu: Pin, Rename, Fork, Mark as unread, Archive and Delete, with keys, a search box and a kept sort (P93, P115).
 - With a cost limit, a damaged answer stops the native agent before a second paid request; Copilot replies keep prose lines (P117).
@@ -9,6 +10,7 @@
 - P113: a lane task from the orchestrator chat goes through the runner's own lane, active, task, project and dirty guards, and starts a worktree run without forcing allowDirty.
 - P117: with a cost limit set, the native agent stops before any retry on a damaged 200 answer, and Copilot reply extraction keeps ordinary prose beginning with Running, Reading, Writing or Editing.
 
+- P116: the runner commits only the brief's selected paths, so a file the lane staged itself stays out, a brief keeps every line down to the next heading, and a run of several briefs commits every brief's allowed files.
 - P112: run-lane passes a native lane its minute limit as MR_AGENT_MINUTES, and each tool result tells the agent the minutes used, with one warning to write its file at 60 percent.
 - P105: a branched conversation saves and restores its quoted transcript and clears it only once a turn that carried it starts; an endpoint edit or refresh keeps the model details of the ids it keeps.
 - P118: a branch keeps its quoted transcript when its first turn fails to start, clears the provisional session id, and clears the transcript only once the child starts.
