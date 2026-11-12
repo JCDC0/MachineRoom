@@ -10,13 +10,12 @@ How to read this file: `Where things stand`, `Rules`, `Session start` and `The l
 
 Rewrite this section at every merge and before you end a session. Keep it under ten lines: what is pushed, what is unpushed, what runs, what waits on the owner, what is next.
 
-- 2026-11-12, evening: the last push is `fc3f87a6`, green on Ubuntu and Windows (run 43205136965). It carries P65 to P69, the review 12 fix `64c41251`, `OWNER.md`, this guide's rewrite and two CI test fixes. Read CI first with `gh run list --limit 3 --repo JCDC0/MachineRoom`.
-- Unpushed on `main`: only what merged after `fc3f87a6`.
-- Running: nothing. Merged since the push of `fc3f87a6`: P70 to P74 (review 12 fixes, Sol's two findings, the Codex lane). A batch review and the full suite wait for the next push ask.
-- `main` is 0.1.401 and has been since 2026-10-29. The owner's room holds only the orchestrator and the lanes the owner makes (P49); the fleet runs in the testbench (loop step 0).
-- The fleet: `opencode` to `opencode5`, `agy` and `agy2`, `claude` and, since 2026-11-12, `codex` (the owner's Codex app). The owner allows more OpenCode lanes as needed (2026-11-12): `opencode6` and `opencode7` may take work, still five lanes at once at most. AGY ran out of time on 2 of 3 briefs on 2026-11-11, so a brief that matters goes to OpenCode.
-- Open for the owner: the idle draw rate, replay sound (review 9, finding 7), the beat ring with music, the all-zero cost display (N16), and a look at P63 and P64 in a live room.
-- Next: the open list in `docs/agents/PLAN.md`: the live room by eye, the open audit findings, and the owner's licence and release (P4).
+- 2026-11-13, after midnight: the push that carries this line holds P77 to P112 (not P82, P93 or P97), reviews 13, 15 and 16 and their fixes. Before it, every unpushed commit authored with a test.com address was rewritten to test@example.com (backup branches `backup/*-pre-rewrite`). Read CI first with `gh run list --limit 3 --repo JCDC0/MachineRoom`.
+- Running: `opencode` on P113, which merges P82 (`feat/p82-talk-to-a`, the chat To choice) and routes its lane start through the runner's guards. Merge P113, not P82 alone: P82 skips the dirty and project checks.
+- Waiting: P93 (`feat/p93-one-menu-for`, the conversation menu) timed out with four commits and two uncommitted files in `.worktrees/opencode3`; rerun it on that branch. Native lanes now know their minutes (P112); try one again before judging them.
+- Small open items: P94 blocks on spawnSync (review 16), run-lane output does not mask paths (review 15, finding 3), a stale lane lock can match a reused PID (P103), the file-index test walks the old recordings, and P85's top placement needs a look.
+- The owner's yes to push held for the night of 2026-11-12 only. A new session asks again.
+- The fleet for that night was twelve lanes at the owner's word. Codex runs GPT-6.1 Sol at medium effort.
 
 ## Rules
 
