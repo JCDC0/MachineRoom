@@ -335,7 +335,7 @@ describe('mr-agent', () => {
     expect(final.result).not.toContain('test-key')
   })
 
-  it('tries a non-JSON 200 answer again and finishes', async () => {
+  it('goes on after one damaged answer with damagedAnswers 1', async () => {
     const folder = tempDir()
     const api = await startFakeApi((_body, index) =>
       index === 0
@@ -345,7 +345,12 @@ describe('mr-agent', () => {
     const result = await runAgent({ folder, api, env: { MR_AGENT_RETRY_BASE_MS: '1' } })
     expect(result.code).toBe(0)
     expect(api.calls).toHaveLength(2)
-    expect(jsonLines(result.stdout).at(-1)).toMatchObject({ type: 'result', is_error: false, result: 'Done.' })
+    expect(jsonLines(result.stdout).at(-1)).toMatchObject({
+      type: 'result',
+      is_error: false,
+      result: 'Done.',
+      damagedAnswers: 1,
+    })
   })
 
   it('tries a 200 answer without choices again and finishes', async () => {
@@ -358,20 +363,57 @@ describe('mr-agent', () => {
     const result = await runAgent({ folder, api, env: { MR_AGENT_RETRY_BASE_MS: '1' } })
     expect(result.code).toBe(0)
     expect(api.calls).toHaveLength(2)
-    expect(jsonLines(result.stdout).at(-1)).toMatchObject({ type: 'result', is_error: false, result: 'Done.' })
+    expect(jsonLines(result.stdout).at(-1)).toMatchObject({
+      type: 'result',
+      is_error: false,
+      result: 'Done.',
+      damagedAnswers: 1,
+    })
   })
 
-  it('fails with the sentence and the body start when non-JSON on every try', async () => {
+  it('fails after exactly two requests when two damaged answers arrive in a row', async () => {
     const folder = tempDir()
     const bodyStart = '<html>' + 'x'.repeat(194)
     const raw = `${bodyStart}EXTRA_THAT_EXCEEDS_200_CHARS`
     const api = await startFakeApi(() => ({ status: 200, headers: { 'retry-after': '0' }, raw }))
     const result = await runAgent({ folder, api, env: { MR_AGENT_RETRY_BASE_MS: '1' } })
     expect(result.code).toBe(1)
-    expect(api.calls).toHaveLength(5)
+    expect(api.calls).toHaveLength(2)
     const final = jsonLines(result.stdout).at(-1)
     expect(final.is_error).toBe(true)
     expect(final.result).toBe(`The API answer was not JSON (200): ${bodyStart}.`)
+    expect(final.damagedAnswers).toBe(2)
+  })
+
+  it('still retries a 502 answer up to the limit', async () => {
+    const folder = tempDir()
+    const api = await startFakeApi((_body, index) =>
+      index < 2
+        ? { status: 502, headers: { 'retry-after': '0' }, body: { error: 'bad gateway' } }
+        : chatAnswer({ text: 'Done.' }),
+    )
+    const result = await runAgent({ folder, api, env: { MR_AGENT_RETRY_BASE_MS: '1' } })
+    expect(result.code).toBe(0)
+    expect(api.calls).toHaveLength(3)
+    const final = jsonLines(result.stdout).at(-1)
+    expect(final).toMatchObject({ type: 'result', is_error: false, result: 'Done.' })
+    expect(final.damagedAnswers).toBeUndefined()
+  })
+
+  it('retries a 502 answer up to the limit and fails after five requests', async () => {
+    const folder = tempDir()
+    const api = await startFakeApi(() => ({
+      status: 502,
+      headers: { 'retry-after': '0' },
+      body: { error: 'bad gateway' },
+    }))
+    const result = await runAgent({ folder, api, env: { MR_AGENT_RETRY_BASE_MS: '1' } })
+    expect(result.code).toBe(1)
+    expect(api.calls).toHaveLength(5)
+    const final = jsonLines(result.stdout).at(-1)
+    expect(final.is_error).toBe(true)
+    expect(final.result).toContain('502')
+    expect(final.damagedAnswers).toBeUndefined()
   })
 
   it('masks a key in the body so it never reaches the error', async () => {

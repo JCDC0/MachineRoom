@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- P109: the native agent retries a damaged 200 answer at most once per step, keeps the retries for refused statuses, and reports damagedAnswers in its result.
 - P106: ROOM.md, LIVE.md, COMMANDS.md and CODE.md now describe tonight's merges P77 to P99.
 - P111: a plain Copilot reply is cut only at lines its parser reads as tool calls, so a two-paragraph answer or a line starting with Run is kept.
 - P110: a heredoc's opener line keeps its redirect, a redirect marks only its own operand as written, and the model picker's pin buttons wait for the saved pins.

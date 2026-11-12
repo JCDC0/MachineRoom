@@ -28,6 +28,7 @@ const TOOL_ARGUMENTS_REMOVED = '[Arguments removed to save room.]'
 const NEWEST_READABLE_CHARS = 2000
 const INSTRUCTIONS_LIMIT = 20000
 const RETRY_LIMIT = 4
+const DAMAGED_RETRY_LIMIT = 1
 const RETRY_BASE_MS = 2000
 const RETRY_MAX_MS = 60000
 const RETRY_STATUS = new Set([429, 500, 502, 503, 529])
@@ -1124,9 +1125,10 @@ function sleep(ms) {
   return new Promise((done) => setTimeout(done, ms))
 }
 
-async function post(url, key, payload) {
+async function post(url, key, payload, { onDamaged } = {}) {
   const headers = { 'content-type': 'application/json' }
   if (key) headers.authorization = `Bearer ${key}`
+  let damagedRetries = 0
   for (let attempt = 0; attempt <= RETRY_LIMIT; attempt += 1) {
     let response
     try {
@@ -1164,9 +1166,11 @@ async function post(url, key, payload) {
     if (data && typeof data === 'object' && !Array.isArray(data) && Array.isArray(data.choices)) {
       return data
     }
+    onDamaged?.()
     const text = sanitize(body.slice(0, 200), key)
     const failure = new Error(`The API answer was not JSON (${response.status}): ${text}.`)
-    if (attempt === RETRY_LIMIT) throw failure
+    if (damagedRetries >= DAMAGED_RETRY_LIMIT || attempt === RETRY_LIMIT) throw failure
+    damagedRetries += 1
     await sleep(retryDelayMs(attempt, response))
     continue
   }
@@ -1334,6 +1338,7 @@ async function main() {
   let costUnknown = false
   let lastText = ''
   let step = 0
+  let damagedAnswers = 0
 
   const finish = (isError, result, exitCode = isError ? 1 : 0) => {
     writeJson({
@@ -1343,6 +1348,7 @@ async function main() {
       result,
       usage: { input_tokens: inputTokens, output_tokens: outputTokens },
       ...(cost === null ? {} : { total_cost_usd: cost }),
+      ...(damagedAnswers > 0 ? { damagedAnswers } : {}),
     })
     if (exitCode !== 0) process.exitCode = exitCode
   }
@@ -1370,7 +1376,7 @@ async function main() {
         max_tokens: MAX_TOKENS,
       }
       if (options.reasoning !== '') payload.reasoning = { effort: options.reasoning }
-      const data = await post(url, key, payload)
+      const data = await post(url, key, payload, { onDamaged: () => { damagedAnswers += 1 } })
       const message = replyOf(data)
       const usage = usageOf(data)
       inputTokens += usage.input
