@@ -1334,3 +1334,10 @@ Review, with `git show -m --first-parent SHA` or `git show SHA`, against the cod
 1. `PLAN.md` "Next" still lists N5, N6 and N12 as open, but `docs/agents/AUDIT-2026-10.md` marks N6 fixed (S42) and N5 and N12 accepted. Rewrite "Open now" from the audits' own status columns (reviews 13 and 15 to 18 in `docs/agents/AUDIT-2026-11-REVIEW-*.md`, the V3, V6, V7, UI and delta audits) and the briefs still open in `TASKS.md`.
 2. `ARCHITECTURE.md` "Open work": name reviews 13 and 15 to 18 and that their blocking findings are fixed (P104 to P122). Keep the file short.
 3. `architecture/DOCUMENTS.md` lists every file in `docs/agents`; add the review and audit files it lacks.
+
+**P131. Tests for a lane task started from the chat (AGY).** Read this brief only. Use no subagents. Run every command in the foreground. Commit each step as you finish it, and stop starting new work at minute 30. Change no file outside the list. Files: tests/project-task.test.js, docs/agents/CHANGELOG.md.
+
+1. P113 moved the project-run guards of `server/runs.js` into `startProjectTask`, which both the runs route and the chat's lane dispatch (`startLaneTask` in `server/index.js`) call. No test calls `startProjectTask` directly. Write `tests/project-task.test.js` with a fake runner command (see how `tests/project-dispatch.test.js` builds `createRunsApi`), so no real lane starts.
+2. Cover, by what each proves: a git project with `worktree: true` passes `--worktree` to the runner; a project that is not git runs without `--worktree`; a dirty git project is refused with the dirty sentence and starts nothing; the project being this repository is refused; an inactive or unknown lane is refused; a second start of a running lane answers 409; a good start answers 202 once, and the runner gets `--started-by orchestrator` when asked.
+3. If a case shows a real bug, keep its test marked `it.fails` with one line saying what is wrong, and name it in your report. Do not fix `server/`.
+4. Run `node node_modules/vitest/vitest.mjs run tests/project-task.test.js`. Report what passed.
