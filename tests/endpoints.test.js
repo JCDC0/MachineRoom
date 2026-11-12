@@ -337,6 +337,31 @@ describe('/api/endpoints', () => {
     expect(readEndpoints(runsDir)).toEqual([])
   })
 
+  it('keeps saved model details for the ids an edit keeps', async () => {
+    const { url, runsDir } = await startLaneBridge()
+    const details = [
+      { id: 'alpha', name: 'Alpha', contextLength: 128000, promptPrice: 1, completionPrice: 2, created: 3 },
+      { id: 'beta', name: 'Beta', contextLength: 64000, promptPrice: 4, completionPrice: 5, created: 6 },
+    ]
+    const created = await post(url, '/api/endpoints', endpointBody({ models: ['alpha', 'beta'], modelDetails: details }))
+    expect(created.status).toBe(200)
+    expect(readEndpoints(runsDir)[0].modelDetails).toEqual(details)
+
+    const edited = await post(url, '/api/endpoints', endpointBody({ models: ['alpha', 'gamma'] }))
+    expect(edited.status).toBe(200)
+    const saved = readEndpoints(runsDir)[0]
+    expect(saved.models).toEqual(['alpha', 'gamma'])
+    expect(saved.modelDetails).toEqual([details[0]])
+
+    const refreshed = await post(
+      url,
+      '/api/endpoints',
+      endpointBody({ models: ['gamma'], modelDetails: [{ ...details[1], id: 'gamma', name: 'Gamma' }] }),
+    )
+    expect(refreshed.status).toBe(200)
+    expect(readEndpoints(runsDir)[0].modelDetails).toEqual([{ ...details[1], id: 'gamma', name: 'Gamma' }])
+  })
+
   it('saves an endpoint with 181 models', async () => {
     const { url, runsDir } = await startLaneBridge()
     const models = Array.from({ length: 181 }, (_, index) => `model-${index}`)

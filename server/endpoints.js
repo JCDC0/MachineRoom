@@ -407,7 +407,12 @@ export function createEndpointsApi(options = {}) {
         return true
       }
       const endpoints = readEndpoints(runsDir)
-      const endpoint = cleanEndpoint(body)
+      const draftName = typeof body.name === 'string' ? body.name.trim() : ''
+      const savedEndpoint = endpoints.find((entry) => entry.name === draftName)
+      const draft = savedEndpoint && !Array.isArray(body.modelDetails)
+        ? { ...body, modelDetails: savedEndpoint.modelDetails }
+        : body
+      const endpoint = cleanEndpoint(draft)
       const index = endpoints.findIndex((entry) => entry.name === endpoint.name)
       if (index === -1 && endpoints.length >= MAX_ENDPOINTS) {
         sendJson(req, res, 400, { error: TOO_MANY_PROBLEM })

@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- P105: a branched conversation saves and restores its quoted transcript and clears it only once a turn that carried it starts; an endpoint edit or refresh keeps the model details of the ids it keeps.
 - P108: a model named ENDPOINT/ID takes its window only from that endpoint's details, a suffix match counts only when it is the only one, and a sub orchestrator resolves its window again on a model change.
 - P102: a lane the owner made starts through run-lane and candidate, the runner commits only the brief's files and never a key, log or build path, names what it left out, logs a failed commit, and takes its version from package.json.
 - P100: a brief run started from the room reads its lanes from the room's lane file and its made lanes, never docs/agents/lanes.json unless MACHINEROOM_LANES_DIR names it.

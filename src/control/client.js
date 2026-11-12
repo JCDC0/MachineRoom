@@ -452,7 +452,11 @@ export function createClient({
 
     endpointModels: async (name) => {
       const data = await request('GET', `/api/endpoints/${encodeURIComponent(name ?? '')}/models`)
-      return Array.isArray(data) ? data : data?.models ?? []
+      if (Array.isArray(data)) return { models: data, modelDetails: [] }
+      return {
+        models: Array.isArray(data?.models) ? data.models : [],
+        modelDetails: Array.isArray(data?.modelDetails) ? data.modelDetails : [],
+      }
     },
 
     modelPins: async () => {

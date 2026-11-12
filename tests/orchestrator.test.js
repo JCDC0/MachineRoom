@@ -2737,6 +2737,33 @@ describe('orchestrator reasoning effort and sessions', () => {
     expect(prompt.endsWith('Carry on')).toBe(true)
   })
 
+  it('keeps a branch transcript when another conversation opens first', async () => {
+    const rig = makeRig()
+    rig.send('First task')
+    await waitIdle(rig, 1)
+    expect(rig.orchestrator.branchSession({ index: 2, confirmed: true }).status).toBe(200)
+    expect(rig.orchestrator.newSession({ confirmed: true }).status).toBe(200)
+    const branch = rig.orchestrator.listSessions().find((entry) => entry.title === 'First task (branch)')
+    expect(branch).toBeDefined()
+    rig.orchestrator.close()
+
+    const restored = restoreRig(rig)
+    expect(restored.orchestrator.openSession(branch.id, { confirmed: true }).status).toBe(200)
+    restored.orchestrator.send({ text: 'Carry on', confirmed: true })
+    await waitIdle(restored, 1)
+    const firstPrompt = valueAfter(restored.calls()[0].args, '-p')
+    expect(firstPrompt).toContain(BRANCH_TRANSCRIPT_INTRO)
+    expect(firstPrompt).toContain('> Owner: First task')
+    expect(firstPrompt).toContain('> Orchestrator: Reply: First task')
+    expect(firstPrompt.endsWith('Carry on')).toBe(true)
+
+    restored.orchestrator.send({ text: 'Once more', confirmed: true })
+    await waitIdle(restored, 2)
+    const secondPrompt = valueAfter(restored.calls()[1].args, '-p')
+    expect(secondPrompt).not.toContain(BRANCH_TRANSCRIPT_INTRO)
+    expect(secondPrompt.endsWith('Once more')).toBe(true)
+  })
+
   it('refuses a branch while a turn runs', async () => {
     const rig = makeRig()
     rig.behaviour.mode = 'hold'

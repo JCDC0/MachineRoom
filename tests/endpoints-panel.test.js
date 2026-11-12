@@ -19,7 +19,7 @@ import EndpointsPanel, {
   quickProviders,
   quickSavedText,
 } from '../src/ui/EndpointsPanel.jsx'
-import { click, settle, withDom } from './helpers/uiDom.js'
+import { buttonWithText, click, settle, withDom } from './helpers/uiDom.js'
 
 const ENDPOINTS = [
   {
@@ -211,6 +211,43 @@ describe('EndpointsPanel', () => {
       await click(root, row.querySelector('.mr-picker-pin'))
       await settle()
       expect(calls).toEqual([{ pins: ['deepseek/deepseek-v4.1-flash-1017'] }])
+    })
+  })
+
+  it('saves the model details from the same answer as a refresh', async () => {
+    const endpoint = {
+      ...ENDPOINTS[1],
+      modelDetails: [{ id: 'old', name: 'Old', contextLength: 1, promptPrice: 1, completionPrice: 1, created: 1 }],
+    }
+    const fresh = [
+      { id: 'alpha', name: 'Alpha', contextLength: 128000, promptPrice: 1, completionPrice: 2, created: 3 },
+      { id: 'beta', name: 'Beta', contextLength: 64000, promptPrice: 4, completionPrice: 5, created: 6 },
+    ]
+    const saved = []
+    const client = {
+      providers: async () => PROVIDERS,
+      endpoints: async () => [endpoint],
+      keys: async () => [],
+      endpointModels: async () => ({ models: ['alpha', 'beta'], modelDetails: fresh }),
+      saveEndpoint: async (draft) => {
+        saved.push(draft)
+        return { endpoint: draft, endpoints: [endpoint] }
+      },
+    }
+    await withDom(async ({ container, root }) => {
+      await act(async () => {
+        root.render(
+          createElement(EndpointsPanel, {
+            client,
+            initialProviders: PROVIDERS,
+            initialEndpoints: [endpoint],
+          })
+        )
+      })
+      await settle()
+      await click(root, buttonWithText(container, 'Refresh models'))
+      await settle()
+      expect(saved).toEqual([{ ...endpoint, models: ['alpha', 'beta'], modelDetails: fresh, confirmed: true }])
     })
   })
 })
