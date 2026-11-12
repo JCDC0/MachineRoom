@@ -1043,3 +1043,23 @@ The review git runner passes the whole process environment (`server/reviews.js`,
 Run `npx vitest related --run server/reviews.js` and `npm run build`; both must pass.
 
 Files: server/reviews.js, tests/.
+
+
+## After the fleet audit (2026-11-12, night)
+
+P98 (`docs/agents/AUDIT-2026-11-FLEET-ROOM.md`) found the owner's room safe, but a brief run started from the room reads `docs/agents/lanes.json` (`readText('lanes.json')` in `server/runs.js`, about line 748) instead of the room's own lane file.
+
+**P100. A brief run reads the room's own lane file (OpenCode).** Read no part of TASKS.md beyond this brief and the paragraph above it. Use no subagents. Run every command in the foreground. Commit each step as you finish it, and stop starting new work at minute 30. Work on temporary folders, never the real ones.
+
+1. The non-project branch of the brief-run route in `server/runs.js` reads its lanes from `laneFile` (the room's lane file, the same one the project branch uses) with `readStartLanes`, and still reads `TASKS.md` from where it does now. A room with no `MACHINEROOM_LANES_DIR` sees only `config/` lanes and the lanes the owner made.
+2. Tests, by what they prove: with the variable unset, a brief run in a temp copy of the repository cannot name a lane that is only in `docs/agents/lanes.json`; with `MACHINEROOM_LANES_DIR=docs/agents` it can.
+
+Run `npx vitest related --run server/runs.js` and `npm run build`; both must pass.
+
+Files: server/runs.js, tests/.
+
+**P101. Review tonight's merges (Codex).** Read `docs/agents/OWNER.md` and this brief only. Change no code. Do not commit: the runner commits your file.
+
+Review what these merges brought, with `git show -m --first-parent SHA` for each, against the code around each change: `ecea6fcc` (P84), `2658b11e` (P79), `06ff081a` (P88), `d8380254` (P77), `505595cf` (P81), `b465fb47` (P89), `1c22ca48` (P95). Hunt for what a test would not show: a write route without the page-origin guard; a value from a provider or a file saved without a cap; a branch of a chat that loses or duplicates messages, or carries a summary into the wrong conversation; a cost limit that never fires because cost is null; a printed line that shows a real profile folder; a style that breaks the fonts or colours in `docs/agents/ARCHITECTURE.md`, Conventions. Write `docs/agents/AUDIT-2026-11-REVIEW-15.md`: a table of at most 8 findings, the most harmful first, each with `file:line`, what goes wrong and when, the smallest fix, and whether it blocks a push. Write no finding you cannot point to in the code. An empty table with what you checked is a good answer.
+
+Files: docs/agents/AUDIT-2026-11-REVIEW-15.md.
