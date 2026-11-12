@@ -17,7 +17,7 @@ import { lanesFolder, readAllLanes, runsFolder } from '../server/lanes-source.js
 import { readEndpoints } from '../server/endpoints.js'
 import { readAgentDepth } from '../server/agent-depth.js'
 import { acpRunCommand } from './acp-run.mjs'
-import { processAlive, readLaneLock, releaseLaneLock, takeLaneLock, writeLaneChild } from './lane-lock.mjs'
+import { isHolderAlive, processAlive, readLaneLock, releaseLaneLock, takeLaneLock, writeLaneChild } from './lane-lock.mjs'
 import { enabledMcpServers, mcpConfigForClaude, mcpConfigForOpencode } from './mcp-bridge.mjs'
 import { writeRecording } from './recording-files.mjs'
 
@@ -99,12 +99,14 @@ export function printedRunsFolder(folder, env = process.env) {
   }
   const temp = readEnv(env, 'TEMP') || readEnv(env, 'TMP') || tempFallback
   const local = readEnv(env, 'LOCALAPPDATA')
+  const roaming = readEnv(env, 'APPDATA')
   const userProfile = readEnv(env, 'USERPROFILE') || (process.platform === 'win32' ? homeFallback : '')
   const stateHome = readEnv(env, 'XDG_STATE_HOME')
   const home = readEnv(env, 'HOME') || (process.platform !== 'win32' ? homeFallback : '')
   const candidates = [
     { prefix: temp, label: '%TEMP%' },
     { prefix: local, label: '%LOCALAPPDATA%' },
+    { prefix: roaming, label: '%APPDATA%' },
     { prefix: userProfile, label: '%USERPROFILE%' },
     { prefix: stateHome, label: '$XDG_STATE_HOME' },
     { prefix: home, label: '~' },
@@ -180,7 +182,7 @@ function stopDescendants(descendants, options = 'leftover') {
 function refuseRunningLane(laneKey, worktree, folder = runsFolder()) {
   const lock = join(folder, `${laneKey}.lock`)
   const holder = readLaneLock(lock)
-  if (processAlive(holder.child)) throw new Error(laneStopProblem({ lane: laneKey, pid: holder.child }))
+  if (isHolderAlive(holder.child, lock)) throw new Error(laneStopProblem({ lane: laneKey, pid: holder.child }))
   const folders = []
   for (const value of [worktree, holder.folder]) {
     const name = String(value ?? '').trim()
@@ -655,7 +657,7 @@ export function takeProjectLock(folder, project) {
       throw new Error(`Another start on ${project} stopped half way. Start it again.`)
     }
     if (message.includes('already running')) {
-      throw new Error(`Another run is already going on ${project}; wait for it to end, or delete ${path} if no run is going.`)
+      throw new Error(`Another run is already going on ${project}; wait for it to end, or delete ${printedRunsFolder(path)} if no run is going.`)
     }
     throw error
   }
@@ -696,13 +698,14 @@ export function laneSpawn({ command, minutes = DEFAULT_MINUTES, model = '', effo
   return { ...acpRunCommand({ command, minutes, model, effort }), input: true }
 }
 
-function printCommand(command, prompt, { mcpConfig = '', mcpServers = [] } = {}) {
-  const shown = command.args.map((arg) => (arg === prompt ? `<prompt: ${prompt.length} characters>` : arg))
-  console.log(`file: ${command.file}`)
+export function printCommand(command, prompt, { mcpConfig = '', mcpServers = [] } = {}) {
+  const printPath = (value) => (isAbsolute(value) || isWindowsPath(value) ? printedRunsFolder(value) : value)
+  const shown = command.args.map((arg) => (arg === prompt ? `<prompt: ${prompt.length} characters>` : printPath(arg)))
+  console.log(`file: ${printPath(command.file)}`)
   console.log(`args: ${JSON.stringify(shown)}`)
-  console.log(`cwd: ${command.cwd}`)
+  console.log(`cwd: ${printPath(command.cwd)}`)
   if (mcpConfig && Array.isArray(mcpServers) && mcpServers.length > 0) {
-    console.log(`mcp config: ${mcpConfig}`)
+    console.log(`mcp config: ${printedRunsFolder(mcpConfig)}`)
     console.log(`mcp servers: ${mcpServers.map((s) => s.name).join(', ')}`)
   }
   if (!command.args.includes(prompt)) console.log(`prompt: <prompt: ${prompt.length} characters>`)
@@ -714,15 +717,6 @@ function codexLaneProgram(lane, env = process.env) {
   if (programPath('codex', { env })) return { lane, program: null }
   const program = codexAppProgram({ env })
   return program ? { lane: { ...lane, cli: { ...lane.cli, bin: program } }, program } : { lane, program: null }
-}
-
-function printedCodexProgram(command, program, env = process.env) {
-  if (!program || typeof env?.LOCALAPPDATA !== 'string' || env.LOCALAPPDATA === '') return command
-  const localAppData = resolve(env.LOCALAPPDATA)
-  return {
-    ...command,
-    file: command.file.startsWith(localAppData) ? `%LOCALAPPDATA%${command.file.slice(localAppData.length)}` : command.file,
-  }
 }
 
 function gitRead(cwd, args) {
@@ -1221,7 +1215,7 @@ async function main() {
     const mcpConfigPath = needsMcp ? join(folder, `${name}.mcp.json`) : ''
     const codex = codexLaneProgram(lane)
     const command = commandFor({ lane: codex.lane, prompt, env: process.env, usageFile, title: name, mcpConfig: mcpConfigPath })
-    printCommand(printedCodexProgram(command, codex.program), prompt, { mcpConfig: mcpConfigPath, mcpServers: enabledServers })
+    printCommand(command, prompt, { mcpConfig: mcpConfigPath, mcpServers: enabledServers })
     if (start) {
       const from = start.from && start.from !== start.startBranch ? ` (the worktree was on ${start.from})` : ''
       console.log(`start branch: ${start.startBranch}${from}`)
@@ -1612,7 +1606,8 @@ if (process.argv[1] && sameFile(resolve(process.argv[1]), resolve(entry))) {
   main().then((code) => {
     process.exitCode = code
   }).catch((error) => {
-    console.error(String(error?.message ?? error))
+    const folder = runsFolder()
+    console.error(String(error?.message ?? error).split(folder).join(printedRunsFolder(folder)))
     process.exitCode = 1
   })
 }

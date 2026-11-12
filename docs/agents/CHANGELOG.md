@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Dry runs and lock refusals print their paths with the profile folders masked, and a lane's stale child lock no longer refuses a start (P140).
 - The file-index test's reference walk has its own write rules again, with a test that proves it can fail (P139).
 - ROOM.md, LIVE.md, COMMANDS.md and CODE.md describe the chat's lane tasks, the conversation menu, the runner's commit rules and the AGY models (P127).
 - The conversation menu closes when its row leaves the list or stops being current, so a key never acts on another conversation (P134).
