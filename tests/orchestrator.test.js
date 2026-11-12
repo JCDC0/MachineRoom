@@ -2675,6 +2675,48 @@ describe('orchestrator reasoning effort and sessions', () => {
     })
   })
 
+  it('takes the current row flags and title from its saved record on restore', async () => {
+    const rig = makeRig()
+    rig.send('First conversation')
+    await waitIdle(rig, 1)
+    rig.orchestrator.newSession({ confirmed: true })
+    const first = rig.orchestrator.listSessions()[0]
+    expect(rig.orchestrator.openSession(first.id, { confirmed: true }).status).toBe(200)
+    expect(
+      rig.orchestrator.updateSession(CURRENT_SESSION_KEY, {
+        title: 'Kept title',
+        pinned: true,
+        unread: true,
+        confirmed: true,
+      }).status
+    ).toBe(200)
+    rig.orchestrator.close()
+
+    const file = chatFileFor(rig.projectRoot, rig.runs)
+    const saved = JSON.parse(readFileSync(file, 'utf8'))
+    delete saved.currentTitle
+    delete saved.currentPinned
+    delete saved.currentStarred
+    delete saved.currentUnread
+    writeFileSync(file, `${JSON.stringify(saved)}\n`)
+
+    const restored = restoreRig(rig)
+    expect(restored.orchestrator.currentSessionInfo()).toMatchObject({
+      id: CURRENT_SESSION_KEY,
+      title: 'Kept title',
+      pinned: true,
+      unread: true,
+    })
+    expect(restored.orchestrator.newSession({ confirmed: true }).status).toBe(200)
+    expect(restored.orchestrator.listSessions()[0]).toMatchObject({
+      id: first.id,
+      title: 'Kept title',
+      pinned: true,
+      unread: true,
+      archived: false,
+    })
+  })
+
   it('refuses a session switch while messages wait and archives a conversation with no owner line', async () => {
     const rig = makeRig()
     rig.send('Start')
