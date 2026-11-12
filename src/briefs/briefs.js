@@ -60,7 +60,8 @@ export function briefFileList(text) {
   const source = String(text ?? '')
   const marker = [...source.matchAll(FILES_MARKER)].pop()
   if (!marker) return []
-  const rest = source.slice(marker.index + marker[0].length).replace(/\([^()]*\)/g, ' ')
+  const span = source.slice(marker.index + marker[0].length).split(/\r?\n\s*\r?\n/)[0] ?? ''
+  const rest = span.replace(/\([^()]*\)/g, ' ')
   const files = []
   for (const part of rest.split(/,|;|\band\b/i)) {
     const first = part.trim().split(/\s+/)[0] ?? ''

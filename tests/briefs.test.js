@@ -111,6 +111,15 @@ describe('briefFileList', () => {
     expect(briefFileList('Files: as R3.')).toEqual([])
     expect(briefFileList('')).toEqual([])
   })
+
+  it('reads only up to the end of the paragraph that holds the Files: marker', () => {
+    const text = [
+      'Files: src/allowed.js.',
+      '',
+      'Read docs/setup.md and private/config.json for context.',
+    ].join('\n')
+    expect(briefFileList(text)).toEqual(['src/allowed.js'])
+  })
 })
 
 describe('parseRules', () => {
