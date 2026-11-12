@@ -2,12 +2,13 @@ import * as THREE from 'three'
 import { CSS3DRenderer } from 'three/addons/renderers/CSS3DRenderer.js'
 import { basename, dirname } from '../model/paths.js'
 import { isOnlineCall } from '../model/online.js'
+import { laneStarterTop } from '../model/laneStarter.js'
 import { CALLOUT_CROWD_LIMIT, createAgents, litChain, starOriginKey, tunnelRoute, webTunnelEnd } from './agents.js'
 import { BLOOM_STRENGTH_DEFAULT, createBloomLayer } from './bloom.js'
 import { ANCHOR_DIST, FOV, OVERVIEW, createCameraRig, fitView, followTarget, projectPoint } from './camera.js'
 import { createCards } from './cards.js'
 import { boardVisible, createCostBoard } from './board.js'
-import { HUB_CENTER, HUB_RADIUS, createHub, workingKeys } from './hub.js'
+import { HUB_CENTER, HUB_RADIUS, ORCHESTRATOR_HOME, createHub, workingKeys } from './hub.js'
 import { GIT_FOCUS_DIST, createGitTree } from './gitTree.js'
 import { INTERNET_RADIUS, createInternet } from './internet.js'
 import { createLabels } from './labels.js'
@@ -887,11 +888,14 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
   function launchAgentStar(activity) {
     const pair = agentStar(activity, ladder)
     if (!pair) return
-    const fromKey = starOriginKey(pair.from, agentSet.topKey?.() ?? 'orchestrator')
+    const state = getState()
+    const topKey = laneStarterTop({ agents: state.agents, at: state.latest }) || 'orchestrator'
+    const fromKey = starOriginKey(pair.from, topKey)
     const from = agentSet.views.get(fromKey)
     const to = agentSet.views.get(pair.to)
     if (!from || !to) return
-    launchStarPath(from.group.position, to.group.position, from.color, fromKey, null, pair.to)
+    const start = fromKey === 'orchestrator' ? from.group.position : ORCHESTRATOR_HOME
+    launchStarPath(start, to.group.position, from.color, fromKey, null, pair.to)
   }
 
   function launchWebStar(view, activity) {
