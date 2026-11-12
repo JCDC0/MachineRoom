@@ -1001,3 +1001,17 @@ P87 (`docs/agents/AUDIT-2026-11-WORKTREE-SWITCH.md`) found that the P75 run lost
 Run `npx vitest related --run scripts/run-lane.mjs` and `npm run build`; both must pass.
 
 Files: scripts/run-lane.mjs, tests/.
+
+
+## The native agent survives one bad answer (2026-11-12, night)
+
+The native lane's P80 review ran 27 minutes and 88 tool calls, then ended with `The API answer was not JSON.` and wrote nothing. `post` in `scripts/mr-agent.mjs` retries a failed request and the statuses in `RETRY_STATUS`, but an answer with status 200 whose body is not JSON (a cut stream, or a provider's error page) throws at once and ends the run.
+
+**P96. A 200 answer that is not JSON is tried again (AGY).** Starts after P89 is merged, since both change `scripts/mr-agent.mjs`. Read no part of TASKS.md beyond this brief and the paragraph above it. Use no subagents. Run every command in the foreground. Commit each step as you finish it, and stop starting new work at minute 30.
+
+1. In `post`, a body that does not parse as JSON, or parses without `choices`, is retried like a 502, up to `RETRY_LIMIT`, with the same delay. After the last try the error names the status and the first 200 characters of the body, cleaned with `sanitize` so no key can show: `The API answer was not JSON (200): TEXT.`
+2. Tests with a fake endpoint, by what they prove: one non-JSON answer then a good one finishes the run; non-JSON on every try fails with the sentence and the body start; a key in the body never reaches the error.
+
+Run `npx vitest related --run scripts/mr-agent.mjs` and `npm run build`; both must pass.
+
+Files: scripts/mr-agent.mjs, tests/.
