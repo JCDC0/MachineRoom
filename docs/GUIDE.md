@@ -301,7 +301,7 @@ A lane started with `npm run run-lane` sees only a short allow-list of the shell
 
 The doctor prints `FAIL The OpenCode lane program was not found: <path>.` or the same for another lane. The room still opens, but that lane cannot start.
 
-Install the program, sign in, and check that it starts in the same shell (`opencode --version`, `claude --version`). A lane you make starts the program its harness names by default (OpenCode and AGY at their usual install folders, the others by name on `PATH`). If it is installed somewhere else, put its full path in `cli.bin` for that lane in the room's `lanes.json` (`config/lanes.json`, or the folder `MACHINEROOM_LANES_DIR` names), then run the doctor again.
+Install the program, sign in, and check that it starts in the same shell (`opencode --version`, `claude --version`). A lane you make starts the program its harness names by default (OpenCode, AGY and Codex at their usual install folders, the others by name on `PATH`). If it is installed somewhere else, put its full path in `cli.bin` for that lane in the room's `lanes.json` (`config/lanes.json`, or the folder `MACHINEROOM_LANES_DIR` names), then run the doctor again.
 
 ### The doctor prints FAIL lines
 
@@ -350,7 +350,7 @@ When `--lanes` is on, the room lists one agent for each active lane in the room'
 | Hermes | Supported, retired | plain `read` and `delegate` lines |
 | AGY | Supported: a lane you make | `step_update` lines, and `invoke_subagent` for a subagent |
 | ACP | Supported: no lane yet | `tool_call` updates, with each kind and location mapped to a touch |
-| Codex | Supported: no lane yet | `exec --json` item lines |
+| Codex | Supported: a lane you make | `exec --json` item lines |
 | GitHub Copilot | Supported: no lane yet | `-p --output-format json` lines, or plain tool lines |
 
 A new room's `config/lanes.json` holds only the orchestrator, and the lanes you make in Settings are kept in `<runs>/agents.json`. A lane marked `"retired": true` in a lane list does not start. A Direct API lane names a saved endpoint in its `cli.endpoint` and runs on the `machineroom` harness. Add its key and endpoint in Settings, Direct API, then pick its model in the family tree. Any Agent Client Protocol agent can be added as a lane with its own `cli.bin` and args; it runs through `scripts/acp-run.mjs`.
