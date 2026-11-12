@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The room's check for a merge in progress runs git asynchronously, one at a time, so a slow git never freezes the bridge (P124, P145).
 - A brief's file list ignores Files markers only inside code fences and inline code, so prose apostrophes never hide it (P143).
 - The tree-partial and git concurrency tests wait for the state they need rather than a fixed time (P129, P146).
 - The detail docs describe lane lock liveness, masked run-lane paths, the brief file list rules and the conversation menu's row checks (P147).
@@ -34,6 +35,8 @@
 - Project switch checks lane lock holder start times through `isHolderAlive` for both the runner pid and child pid, so a reused Windows pid no longer blocks switching (P125).
 - The tenth-partial tree test queues each next name before the read ends, so the first ten reads are partial and the eleventh is full (P129).
 - The concurrent git write test waits for the first switch to reach the runner instead of a fixed 50 ms wait (P129).
+- The bridge's merge check runs git without blocking, shares one check between waiting turns, and still starts a room turn when the check fails or times out (P124).
+- The slow git merge check test counts timer ticks while the check runs, so it proves the check does not block the bridge (P145).
 - run-lane prints its log, record and runs folder paths with the profile, home and state folders masked (P123).
 - Run output masks HOME, USERPROFILE and XDG_STATE_HOME alongside TEMP and LOCALAPPDATA, longest prefix first, on printed log, record and recovery lines (P123).
 - Agent messages are masked before they are stored, survive a restart and a fork, and a failed setup leaves no session id (P120).
