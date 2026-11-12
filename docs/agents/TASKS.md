@@ -736,3 +736,17 @@ The first Codex run stopped at once: `git switch -c` failed with access denied o
 Run `npx vitest related --run` on every file you changed and `npm run build`; both must pass.
 
 Files: src/harnesses/codex.js, scripts/recording-files.mjs, tests/.
+
+**P75. The runner commits a sandboxed lane's work (OpenCode).** Read no part of TASKS.md beyond this brief and the paragraph above P73. Use no subagents. Run every command in the foreground. Commit each step as you finish it, and stop starting new work at minute 40. Work on a temporary repository and runs folder, never on `%TEMP%\machineroom-runs`.
+
+The codex lane runs in Codex's sandbox, which keeps git read-only, so it leaves its work uncommitted and the orchestrator puts it on a branch by hand. The runner should do that. A lane says it needs this with `"commits": "runner"` in its `cli` block.
+
+1. In `scripts/run-lane.mjs`, after a brief run of a lane with `cli.commits` `runner` ends with exit code 0: if its worktree has changes, switch the worktree to a new branch named by `branchFor(brief)` from `src/briefs/briefs.js`, add every change and commit with the subject `0.1.402: ` and the brief's title, and the body `Written by the LANE lane in its sandbox; committed by the runner.` Use `gitPath()`, `--no-verify` is not used, and a commit that fails leaves the files as they are and prints `The runner could not commit the LANE lane's work: REASON` in the run output.
+2. The run record names the new branch and commit as a lane's own commit would, so `merge-lane`, `review-lane` and the recording find them. A run with no changes commits nothing and says `The LANE lane changed no file.`
+3. A lane without `cli.commits` behaves exactly as now.
+4. Add `"commits": "runner"` to the `codex` lane's `cli` in `docs/agents/lanes.json`. Then run `npx vitest related --run docs/agents/lanes.json tests/plan.test.js tests/lanes-source.test.js`.
+5. Tests, by what they prove, with a fake harness that writes a file and exits 0: a `runner` lane's change ends on the brief's branch in one commit with that subject and body, and the record names it; a fake that writes nothing gives no commit and the sentence; a fake that exits 1 commits nothing; a lane without the field is left uncommitted as now.
+
+Run `npx vitest related --run` on every file you changed, `npm run build` and `npm run pack-check`; all must pass.
+
+Files: scripts/run-lane.mjs, docs/agents/lanes.json, tests/.
