@@ -1424,6 +1424,13 @@ export function createOrchestrator({
     return list
   }
 
+  function failedToStart(turn) {
+    if (turn.started) return
+    if (!turn.provisionalSessionId) return
+    sessionId = null
+    persist()
+  }
+
   function startTurn(options = null) {
     if (roomTimer) {
       clearTimeout(roomTimer)
@@ -1462,7 +1469,7 @@ export function createOrchestrator({
     const needsOpencodeConfig = harness === 'opencode' && (needsMcp || turnMode === 'edits' || turnMode === 'plan')
     const mcpConfigPath = needsMcp || needsOpencodeConfig ? join(folder, `${logName}.mcp.json`) : ''
     let mcpEnv = null
-    const turn = { startedAt, logPath, metaPath, mcpConfigPath, killed: false, done: false, child: null, timer: null, compacting: compaction, stderr: '', anchorId: turnMessages[0]?.id ?? '', steps: [], parser: null }
+    const turn = { startedAt, logPath, metaPath, mcpConfigPath, killed: false, done: false, started: false, provisionalSessionId: first ? sessionId : null, child: null, timer: null, compacting: compaction, stderr: '', anchorId: turnMessages[0]?.id ?? '', steps: [], parser: null }
     turn.parser = compaction ? null : stepParserFor(harness)
     running = turn
     setState('working')
@@ -1624,15 +1631,22 @@ export function createOrchestrator({
         windowsHide: true,
       })
     } catch (error) {
+      failedToStart(turn)
       finish(null, error)
       return
     }
     turn.child = child
-    if (carriedBranch) {
-      branchTranscript = ''
-      persist()
+    const markStarted = () => {
+      if (turn.started) return
+      turn.started = true
+      if (carriedBranch) {
+        branchTranscript = ''
+        persist()
+      }
     }
+    child.once('spawn', markStarted)
     child.stdout?.pipe(stream, { end: false })
+    child.stdout?.once('data', markStarted)
     child.stdout?.on('data', (chunk) => collectSteps(turn, chunk))
     let stderrTail = Buffer.alloc(0)
     child.stderr?.on('data', (chunk) => {
@@ -1641,7 +1655,10 @@ export function createOrchestrator({
       stderrTail = Buffer.from(tail.subarray(-TURN_STDERR_LIMIT))
       turn.stderr = stderrTail.toString('utf8')
     })
-    child.once('error', (error) => finish(null, error))
+    child.once('error', (error) => {
+      failedToStart(turn)
+      finish(null, error)
+    })
     child.once('close', (code) => finish(code, null))
   }
 
