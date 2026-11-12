@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- P94: a room's orchestrator waits while the project has a merge, rebase or cherry-pick in progress, and its rules say never to abort, reset or finish one it did not start.
 - P96: the native agent retries an answer whose body is not JSON or has no choices, like a 502, and names the status and the start of the body after the last try.
 - P85: run-lane records the Claude Code or OpenCode session that started it, and the room puts that session in the orchestrator's place at the top and in the Agents tab, with lane-start stars leaving from it.
 - P86: the command parser drops bash heredoc bodies, marks only a redirect's target as written, and counts files inside inline programs as reads, so a brief written with cat and a heredoc no longer lights the files it names.

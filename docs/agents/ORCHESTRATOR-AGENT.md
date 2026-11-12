@@ -113,6 +113,7 @@ To add an agent, post a proposal with your token and a reason, tell the owner in
 ## Rules
 
 - Never push.
+- Never abort, reset or finish a merge, rebase or cherry-pick you did not start; if one is in progress, say so and wait.
 - Never delete a branch you did not make.
 - Never touch MachineRoom's own files.
 - Never print a key or a token.

@@ -49,6 +49,7 @@ import {
   NO_SESSION_PROBLEM,
 } from '../server/orchestrator.js'
 import { briefProblems } from '../src/briefs/run.js'
+import { gitPath } from '../server/programPath.js'
 import { getJson } from './helpers/bridge.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 
@@ -201,7 +202,7 @@ const FAKE_AGENT_SCRIPT = [
   'if (exitCode !== 0) process.exitCode = exitCode',
 ].join('\n')
 
-function makeRig({ prompt = PROMPT, mode = 'reply', lanes = LANES, harness = 'claude', model = '', contextWindow = 0, harnesses = undefined, project = true, id = undefined } = {}) {
+function makeRig({ prompt = PROMPT, mode = 'reply', lanes = LANES, harness = 'claude', model = '', contextWindow = 0, harnesses = undefined, project = true, id = undefined, mergeWaitMs = undefined } = {}) {
   const base = makeTempDir('mr-orchestrator-')
   const runs = join(base, 'runs')
   const projectRoot = project ? join(base, 'project') : ''
@@ -257,6 +258,7 @@ function makeRig({ prompt = PROMPT, mode = 'reply', lanes = LANES, harness = 'cl
       masked.total += count
     },
     ...(harnesses ? { harnesses } : {}),
+    ...(mergeWaitMs ? { mergeWaitMs } : {}),
   })
   const rig = {
     base,
@@ -343,6 +345,17 @@ function frame(runId, status, lane = 'opencode7') {
     type: 'heartbeat.run.status',
     payload: { runId, agentId: `agent-${lane}`, status },
   }
+}
+
+function gitInit(dir) {
+  const result = spawnSync(gitPath(), ['init', '-q'], {
+    cwd: dir,
+    encoding: 'utf8',
+    windowsHide: true,
+    shell: false,
+    env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
+  })
+  if (result.error || result.status !== 0) throw new Error(`git init failed: ${String(result.stderr ?? '').trim()}`)
 }
 
 function valueAfter(args, flag) {
@@ -551,6 +564,13 @@ describe('one orchestrator turn', () => {
     expect(instruction).toContain('Read the lanes from http://127.0.0.1:5999/api/lanes; start only the active ones.')
     expect(instruction).not.toContain('opencode10')
     expect(existsSync(scratch)).toBe(true)
+  })
+
+  it('tells the orchestrator to leave a merge it did not start alone', () => {
+    const guide = readFileSync(new URL('../docs/agents/ORCHESTRATOR-AGENT.md', import.meta.url), 'utf8')
+    expect(guide).toContain(
+      'Never abort, reset or finish a merge, rebase or cherry-pick you did not start; if one is in progress, say so and wait.'
+    )
   })
 
   it('passes enabled MCP servers to Claude turns and removes the config file when the turn ends', async () => {
@@ -1362,6 +1382,37 @@ describe('waking the orchestrator', () => {
     const roomMessage = main.answer().messages.find((m) => m.from === 'room' && m.text.includes('Run opencode7-del-1 on lane opencode7 ended: succeeded.'))
     expect(roomMessage).toBeDefined()
     expect(roomMessage.text).toContain('started by removed sub deleted-team')
+  })
+
+  it('waits a room turn while a merge is in progress and starts it when the merge ends', async () => {
+    const rig = makeRig({ mergeWaitMs: 40 })
+    gitInit(rig.projectRoot)
+    rig.send('Ready')
+    await waitIdle(rig, 1)
+    const mergeHead = join(rig.projectRoot, '.git', 'MERGE_HEAD')
+    writeFileSync(mergeHead, `${'a'.repeat(40)}\n`)
+
+    rig.orchestrator.onFrame(frame('run-opencode7-merge-wait', 'succeeded'))
+    await sleep(250)
+
+    expect(rig.calls()).toHaveLength(1)
+    expect(rig.answer().messages.some((m) => m.from === 'room' && m.text.includes('Run opencode7-merge-wait'))).toBe(true)
+    expect(stateFile(rig).pending).toHaveLength(1)
+
+    rmSync(mergeHead, { force: true })
+    await waitFor(() => rig.calls().length === 2, 5000, 'the room turn after the merge')
+    await waitIdle(rig, 2)
+  })
+
+  it('starts an owner message at once while a merge is in progress', async () => {
+    const rig = makeRig({ mergeWaitMs: 60000 })
+    gitInit(rig.projectRoot)
+    writeFileSync(join(rig.projectRoot, '.git', 'MERGE_HEAD'), `${'b'.repeat(40)}\n`)
+
+    rig.send('Go now')
+    await waitIdle(rig, 1)
+
+    expect(rig.calls()).toHaveLength(1)
   })
 
   it('wakes once for each real end when a run reopens, and suppresses duplicate turns for the same outcome', async () => {
