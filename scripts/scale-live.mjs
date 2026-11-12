@@ -77,7 +77,7 @@ export function parseLiveArgs(argv) {
     }
     if (argv[i] === '--server') {
       const server = argv[i + 1]
-      if (!server) throw new Error('--server needs a folder.')
+      if (!server || server.startsWith('-')) throw new Error('--server needs a folder.')
       out.server = server
       i += 1
       continue

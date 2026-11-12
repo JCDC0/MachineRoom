@@ -1126,10 +1126,10 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
       leftoversCleaned = true
       if (stopNote === '') stopNote = 'leftovers were stopped'
       let stopped = 0
+      const descendants = harnessDescendants(child.pid)
       if (child.pid && (child.exitCode === null && child.signalCode === null)) {
         killTree(child)
       }
-      const descendants = harnessDescendants(child.pid)
       stopped += stopDescendants(descendants).stopped
       // The worktree's name finds a harness child whose parent chain is already gone, such as an orphaned server.
       const folder = project ? (options.worktree ? project : '') : lane.worktree

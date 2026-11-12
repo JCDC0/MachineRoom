@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
-import { checkPrerequisites } from '../scripts/merge-lane.mjs'
+import { checkPrerequisites, finishMerge } from '../scripts/merge-lane.mjs'
 import { reviewLane } from '../scripts/review-lane.mjs'
 import { activeLanesFileFor, writeActiveLanes } from '../server/active-lanes.js'
 import { runDoctor, NEXT_STEP } from '../server/doctor.js'
@@ -191,4 +191,51 @@ describe('the room lanes across reviews, Auto and the doctor', () => {
     expect(answers[0].body.lane).toBe('opencode2')
     expect(answers[0].body.reason).not.toContain('Make one in the room.')
   })
+
+  it('finds a made lane in the review and merge scripts', async () => {
+    const root = makeDir('room-lanes-made-')
+    makeRepo(root)
+    writeFileSync(join(root, '.gitignore'), '.worktrees/\n')
+    writeFileSync(join(root, 'package.json'), JSON.stringify({ name: 'machineroom-made-lane', version: '0.1.401' }))
+    mkdirSync(join(root, 'docs', 'agents'), { recursive: true })
+    writeFileSync(join(root, 'docs', 'agents', 'CHANGELOG.md'), '# Changelog\n\n## Unreleased\n\n- Older line.\n')
+    git(root, ['add', '.gitignore', 'package.json', 'docs/agents/CHANGELOG.md'])
+    git(root, ['commit', '-m', 'add merge files'])
+
+    const worktree = join(root, '.worktrees', 'worker1')
+    git(root, ['worktree', 'add', '-q', '-b', 'feat/worker1', worktree, 'main'])
+    writeFileSync(join(worktree, 'worker1.txt'), 'worker one\n')
+    git(worktree, ['add', 'worker1.txt'])
+    git(worktree, ['commit', '-m', 'worker one work'])
+
+    const runs = makeDir('room-lanes-runs-')
+    writeFileSync(join(runs, 'agents.json'), JSON.stringify({ agents: [madeAgent('worker1', 'Worker One', 'opencode')] }))
+    const lanesPath = join(makeDir('room-lanes-lanes-'), 'lanes.json')
+    writeFileSync(lanesPath, '{}')
+
+    const prereq = checkPrerequisites({ root, lane: 'worker1', lanesPath, runsDir: runs })
+    expect(prereq).toMatchObject({ ok: true, worktree, branch: 'feat/worker1', ahead: 1 })
+
+    const report = await reviewLane({ root, lane: 'worker1', lanesPath, runsPath: join(runs, 'runs.jsonl') })
+    expect(report.error).toBeUndefined()
+    expect(report.branch).toBe('feat/worker1')
+    expect(report.worktree).toBe(worktree)
+
+    git(root, ['merge', '--no-ff', '--no-commit', 'feat/worker1'])
+    const finish = finishMerge({
+      root,
+      lane: 'worker1',
+      subject: 'A made lane',
+      line: 'A made lane merges.',
+      grade: 'A',
+      fixes: '0',
+      ids: [],
+      runsPath: join(runs, 'runs.jsonl'),
+      runsDir: runs,
+      outcomesPath: join(runs, 'outcomes.jsonl'),
+      lanesPath,
+    })
+    expect(finish.ok).toBe(true)
+    expect(finish.branch).toBe('feat/worker1')
+  }, 60000)
 })

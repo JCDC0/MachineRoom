@@ -23,7 +23,8 @@ import {
   worst,
 } from '../src/briefs/review.js'
 import { readAllRunRecords, runsFile } from '../server/runs.js'
-import { lanesFolder } from '../server/lanes-source.js'
+import { lanesFolder, readAllLanes } from '../server/lanes-source.js'
+import { worktreeFor } from '../src/briefs/run.js'
 import { killTree, treeSpawnOptions } from '../server/processTree.js'
 import { gitPath } from '../server/programPath.js'
 import { laneEnv } from './candidate.mjs'
@@ -257,24 +258,32 @@ export function branchMovedProblem(branch, expected, actual) {
   return `The branch ${branch} moved from ${expected} to ${actual} while the review ran, so the merge tested a head that the checks did not read. Read the lane again.`
 }
 
+function worktreeFromLane(root, lane, info) {
+  if (typeof info.worktree === 'string' && info.worktree.trim() !== '') return resolve(root, info.worktree)
+  if (info.custom === true) return worktreeFor(root, lane)
+  return ''
+}
+
 export async function reviewLane({ root, lane, keep = false, env = process.env, lanesPath = '', runsPath = runsFile(), execPath = process.execPath, onStep = () => {}, tempRoot = null }) {
   const docs = join(root, 'docs', 'agents')
   const lanesFile = lanesPath ? resolve(lanesPath) : join(lanesFolder(), 'lanes.json')
-  let lanes
+  let lanesJson
   try {
-    lanes = JSON.parse(readFileSync(lanesFile, 'utf8'))
+    lanesJson = JSON.parse(readFileSync(lanesFile, 'utf8'))
   } catch {
     return { error: `${lanesFile} could not be read.` }
   }
-  if (!lanes || typeof lanes !== 'object' || !Object.hasOwn(lanes, lane)) return { error: `There is no lane named ${lane}.` }
+  if (!lanesJson || typeof lanesJson !== 'object') return { error: `${lanesFile} could not be read.` }
+  const lanes = readAllLanes({ lanesJson, runsFolder: dirname(resolve(runsPath)) })
+  if (!Object.hasOwn(lanes, lane)) return { error: `There is no lane named ${lane}.` }
   const info = lanes[lane] ?? {}
   const report = { lane, branch: '', worktree: '', checks: [] }
   const stop = (text) => {
     report.checks.push(check('commits', 'FAIL', text))
     return report
   }
-  if (typeof info.worktree !== 'string' || info.worktree.trim() === '') return stop(`The lane ${lane} has no worktree in lanes.json.`)
-  const worktree = resolve(root, info.worktree)
+  const worktree = worktreeFromLane(root, lane, info)
+  if (!worktree) return stop(`The lane ${lane} has no worktree.`)
   report.worktree = worktree
   if (!existsSync(worktree)) return stop(`The worktree ${worktree} does not exist.`)
   if (samePath(worktree, root)) return stop('The lane worktree is the main checkout.')

@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The CLI review and merge find a lane the owner made, reviews read made lanes of a bridge started with a lanes folder, a failed tree list walks at once, the stop reads the harness children before it kills the harness, and scale-live refuses --server with no folder (P70).
 - CI fixes: the stop test waits for the harness grandchild to die only on Windows, where the runner can reach it, and the sessions test moves the runs folder's time itself instead of hoping two writes a few milliseconds apart move it.
 - Review 12 reads the merges of P65 to P68: eight findings, two fixed by the orchestrator (the deleted names from git diff-files, the scale probe's quiet default), four briefed as P70, one left as it is (P69).
 - The deleted names come from `git diff-files --relative`, which never writes the index and names a file from the project folder as the list does (review 12, findings 2 and 3).
