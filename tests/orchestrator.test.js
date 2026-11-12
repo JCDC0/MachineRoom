@@ -154,6 +154,22 @@ const FAKE_OPENCODE = [
   "if (mode === 'fail') process.exitCode = 3",
 ].join('\n')
 
+const SLOW_GIT = [
+  "const { existsSync, writeFileSync } = require('node:fs')",
+  "const { join } = require('node:path')",
+  "const folder = join(process.cwd(), '.git')",
+  "writeFileSync(join(folder, 'check-started'), '1')",
+  'const stopAt = Date.now() + 60000',
+  'const wait = () => {',
+  "  if (existsSync(join(folder, 'check-release')) || Date.now() > stopAt) {",
+  "    console.log(join(folder, 'MERGE_HEAD'))",
+  '    return',
+  '  }',
+  '  setTimeout(wait, 10)',
+  '}',
+  'wait()',
+].join('\n')
+
 const cleanups = []
 
 afterEach(async () => {
@@ -206,7 +222,7 @@ const FAKE_AGENT_SCRIPT = [
   'if (exitCode !== 0) process.exitCode = exitCode',
 ].join('\n')
 
-function makeRig({ prompt = PROMPT, mode = 'reply', lanes = LANES, harness = 'claude', model = '', contextWindow = 0, harnesses = undefined, project = true, id = undefined, mergeWaitMs = undefined } = {}) {
+function makeRig({ prompt = PROMPT, mode = 'reply', lanes = LANES, harness = 'claude', model = '', contextWindow = 0, harnesses = undefined, project = true, id = undefined, mergeWaitMs = undefined, gitSpawn = undefined, gitTimeoutMs = undefined } = {}) {
   const base = makeTempDir('mr-orchestrator-')
   const runs = join(base, 'runs')
   const projectRoot = project ? join(base, 'project') : ''
@@ -263,6 +279,8 @@ function makeRig({ prompt = PROMPT, mode = 'reply', lanes = LANES, harness = 'cl
     },
     ...(harnesses ? { harnesses } : {}),
     ...(mergeWaitMs ? { mergeWaitMs } : {}),
+    ...(gitSpawn ? { gitSpawn } : {}),
+    ...(gitTimeoutMs ? { gitTimeoutMs } : {}),
   })
   const rig = {
     base,
@@ -1541,6 +1559,68 @@ describe('waking the orchestrator', () => {
     await waitIdle(rig, 1)
 
     expect(rig.calls()).toHaveLength(1)
+  })
+
+  it('answers a timer and a request while a slow merge check runs, and starts one check for two wakes', async () => {
+    let checks = 0
+    const slowGit = (file, args, options) => {
+      checks += 1
+      return spawn(process.execPath, ['-e', SLOW_GIT], options)
+    }
+    const rig = makeRig({ mergeWaitMs: 40, gitSpawn: slowGit })
+    gitInit(rig.projectRoot)
+    rig.send('Ready')
+    await waitIdle(rig, 1)
+
+    rig.orchestrator.onFrame(frame('run-opencode7-slow-check', 'succeeded'))
+    await waitFor(
+      () => existsSync(join(rig.projectRoot, '.git', 'check-started')),
+      15000,
+      'the slow merge check to start'
+    )
+
+    await sleep(100)
+    expect(rig.orchestrator.answer().state).toBe('idle')
+    rig.orchestrator.deliver('room', 'A second wake')
+    await sleep(100)
+    expect(checks).toBe(1)
+    expect(rig.calls()).toHaveLength(1)
+
+    writeFileSync(join(rig.projectRoot, '.git', 'check-release'), '1')
+    await waitFor(() => rig.calls().length === 2, 5000, 'the room turn after the slow check')
+    await waitIdle(rig, 2)
+    expect(checks).toBe(1)
+  })
+
+  it('starts the room turn when the merge check fails', async () => {
+    let checks = 0
+    const child = emitterChild()
+    const failGit = () => {
+      checks += 1
+      return child
+    }
+    const rig = makeRig({ gitSpawn: failGit })
+    gitInit(rig.projectRoot)
+    rig.send('Ready')
+    await waitIdle(rig, 1)
+
+    rig.orchestrator.onFrame(frame('run-opencode7-failed-check', 'succeeded'))
+    await waitFor(() => checks === 1, 5000, 'the merge check to start')
+    child.emit('close', 128)
+
+    await waitFor(() => rig.calls().length === 2, 5000, 'the room turn after a failed check')
+    await waitIdle(rig, 2)
+  })
+
+  it('starts the room turn when the merge check times out', async () => {
+    const rig = makeRig({ gitSpawn: () => emitterChild(), gitTimeoutMs: 30 })
+    gitInit(rig.projectRoot)
+    rig.send('Ready')
+    await waitIdle(rig, 1)
+
+    rig.orchestrator.onFrame(frame('run-opencode7-check-timeout', 'succeeded'))
+    await waitFor(() => rig.calls().length === 2, 5000, 'the room turn after a timed out check')
+    await waitIdle(rig, 2)
   })
 
   it('wakes once for each real end when a run reopens, and suppresses duplicate turns for the same outcome', async () => {
