@@ -678,3 +678,32 @@ Files: docs/agents/AUDIT-2026-11-REVIEW-12.md.
 Run `npx vitest related --run` on every file you changed, `npm run build` and `npm run pack-check`; all must pass.
 
 Files: scripts/review-lane.mjs, scripts/merge-lane.mjs, server/reviews.js, server/index.js, scripts/scale-live.mjs, tests/.
+
+
+## Two findings from GPT 6.1 Sol's review (2026-11-12)
+
+Sol read `fc3f87a6` and found both; the orchestrator checked each in the code. Both touch `server/index.js`, so they start after P70 is merged, and P72 after P71.
+
+**P71. The project switch sees a run started from the command line (OpenCode).** Read no part of TASKS.md beyond this brief. Use no subagents. Run every command in the foreground. Commit each step as you finish it, and stop starting new work at minute 25. Work on a temporary runs folder and project, never on `%TEMP%\machineroom-runs`.
+
+`createProjectsApi` in `server/index.js` gets `lanesSource: () => lanesSourceObject`, the lane settings, which has no `openRuns`. So `POST /api/projects/open` in `server/projects.js` never sees a run that `npm run run-lane` started, and the room can switch projects under it. The git and control routes already get the live source (`() => lanesSource`).
+
+1. Pass `lanesSource: () => lanesSource` to `createProjectsApi`, as the git routes do.
+2. Tests, by what they prove: with a bridge started with the lane source on and a run the source has opened (a run log growing in its runs folder, as `tests/live-runs.test.js` drives one), opening another project answers 409 with `A lane run is open. Stop it or wait, then open the project.` and `onOpenProject` is never called; after the source finishes that run, the same request answers 200 and calls it once; a bridge with the lane source off still opens a project.
+
+Run `npx vitest related --run` on every file you changed and `npm run build`; both must pass.
+
+Files: server/index.js, tests/.
+
+**P72. A reconnect brings the file list up to date (OpenCode).** Read no part of TASKS.md beyond this brief. Use no subagents. Run every command in the foreground. Commit each step as you finish it, and stop starting new work at minute 40. Change nothing in `src/engine/`.
+
+The page asks `/events?...&since=V` with the tree version of its first `/api/tree` read, and no tree event moves that version (`src/live/bridge.js`). The bridge keeps only 4 tree versions (`TREE_VERSIONS_KEPT`), so after five changes every reconnect sends an expired version, `treeFilesSince` answers null, and the bridge sends nothing (`server/index.js`, the `since` branch of `/events`). Files added or deleted while the page was away stay wrong until the page reloads; a later change brings only its own file.
+
+1. Every tree event the bridge writes, delta or full, carries `version`: the tree version it brings the page to.
+2. `openBridge` keeps the newest `version` it read, from the first read or a tree event, and its next stream asks `since` that version.
+3. When `since` is expired or unknown and the bridge has a tree, it writes one full tree event (`treeEvent(lastTree, null, shape)`, with `full: true` and `version`) and counts the client as at the current version. A current `since` still gets only the delta, and an equal one nothing.
+4. Tests, by what they prove: a client that applied a tree event reconnects with that event's version; a reconnect within the kept versions gets the additions and deletions it missed and no full list; a reconnect with an expired version gets one full list with no new file change; the page replaces its files on that full list (`player.replaceFiles`); a tree event with no `version` from an older bridge leaves the cursor where it was.
+
+Run `npx vitest related --run` on every file you changed and `npm run build`; both must pass.
+
+Files: server/index.js, src/live/bridge.js, src/live/tree.js, tests/.

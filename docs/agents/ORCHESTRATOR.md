@@ -13,6 +13,7 @@ Rewrite this section at every merge and before you end a session. Keep it under 
 - 2026-11-12, evening: the last push is `fc3f87a6`, green on Ubuntu and Windows (run 43205136965). It carries P65 to P69, the review 12 fix `64c41251`, `OWNER.md`, this guide's rewrite and two CI test fixes. Read CI first with `gh run list --limit 3 --repo JCDC0/MachineRoom`.
 - Unpushed on `main`: only what merged after `fc3f87a6`.
 - Running: P70 on `opencode`, the four review 12 findings that do not block a push. Review 12 is merged; its corrections are in `AUDIT-2026-11-REVIEW-12.md`. The full suite passed on 2026-11-12 before the review fixes `64c41251` and the scale probe default.
+- Queued: P71 (the project switch sees a command-line run) and P72 (a reconnect brings the file list up to date), from GPT 6.1 Sol's review. Both touch `server/index.js`: P71 starts after P70 merges, P72 after P71.
 - `main` is 0.1.401 and has been since 2026-10-29. The owner's room holds only the orchestrator and the lanes the owner makes (P49); the fleet runs in the testbench (loop step 0).
 - The fleet: `opencode` to `opencode5`, `agy` and `agy2`, and `claude`. AGY ran out of time on 2 of 3 briefs on 2026-11-11, so a brief that matters goes to OpenCode.
 - Open for the owner: the idle draw rate, replay sound (review 9, finding 7), the beat ring with music, the all-zero cost display (N16), and a look at P63 and P64 in a live room.
