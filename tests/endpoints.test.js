@@ -604,7 +604,16 @@ describe('POST /api/endpoints/quick', () => {
     const runsDir = makeTempDir('mr-quick-fail-')
     cleanups.push(async () => removeTempDir(runsDir))
     saveEndpoints(runsDir, [
-      { name: 'OpenRouter', provider: 'OpenRouter', baseUrl: 'https://openrouter.ai/api/v1', keyName: 'openrouter', models: ['alpha'] },
+      {
+        name: 'OpenRouter',
+        provider: 'OpenRouter',
+        baseUrl: 'https://openrouter.ai/api/v1',
+        keyName: 'openrouter',
+        models: ['alpha'],
+        modelDetails: [
+          { id: 'alpha', name: 'Alpha', contextLength: 128000, promptPrice: 0.000001, completionPrice: 0.000002, created: 1735689600 },
+        ],
+      },
     ])
     const key = 'quick-fail-value'
     const answers = []
@@ -628,6 +637,9 @@ describe('POST /api/endpoints/quick', () => {
     expect(JSON.stringify(answers[0].body)).not.toContain(key)
     expect(readKeys(runsDir)).toEqual({ openrouter: key })
     expect(readEndpoints(runsDir)[0].models).toEqual(['alpha'])
+    expect(readEndpoints(runsDir)[0].modelDetails).toEqual([
+      { id: 'alpha', name: 'Alpha', contextLength: 128000, promptPrice: 0.000001, completionPrice: 0.000002, created: 1735689600 },
+    ])
   })
 
   it('repoints the endpoint at the provider slot when another endpoint names that slot', async () => {

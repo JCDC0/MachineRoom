@@ -468,6 +468,7 @@ export function createEndpointsApi(options = {}) {
         baseUrl: preset.baseUrl,
         keyName,
         models: existing ? [...existing.models] : [],
+        modelDetails: existing ? [...existing.modelDetails] : [],
       }
       const problem = endpointProblem(draft)
       if (problem !== null) {
