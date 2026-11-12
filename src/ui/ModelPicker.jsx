@@ -360,6 +360,7 @@ export default function ModelPicker({
           aria-label={ariaLabel}
           aria-haspopup="listbox"
           aria-expanded={open}
+          title={triggerText}
           disabled={disabled}
           onClick={() => (open ? close() : setOpen(true))}
         >
@@ -416,7 +417,12 @@ export default function ModelPicker({
                       role="option"
                       aria-selected={row.id === value}
                     >
-                      <button type="button" className="mr-picker-pick" onClick={() => pick(row)}>
+                      <button
+                        type="button"
+                        className="mr-picker-pick"
+                        title={parts.hasDetail ? `${parts.name} (${parts.id})` : parts.id}
+                        onClick={() => pick(row)}
+                      >
                         <span className="mr-picker-row-main">
                           <span className="mr-picker-name">{parts.name}</span>
                           {parts.hasDetail ? <span className="mr-picker-id mono">{parts.id}</span> : null}
