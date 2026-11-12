@@ -1325,10 +1325,17 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
         const id = options?.id
         const chat = chatStore(id)
         const firstOwner = chat.messages.find((m) => m.from === 'owner')
+        const record = chat.currentSessionId
+          ? (Array.isArray(chat.sessions) ? chat.sessions : []).find((s) => s.id === chat.currentSessionId)
+          : null
         const current = {
+          id: record ? record.id : '',
           title: chat.currentTitle || (firstOwner ? firstOwner.text.trim().slice(0, 60) : null),
           startedAt: chat.messages[0]?.at ?? null,
           count: chat.messages.length,
+          pinned: Boolean(record?.pinned),
+          starred: Boolean(record?.starred),
+          unread: Boolean(record?.unread),
         }
         const sessionList = Array.isArray(chat.sessions) ? chat.sessions : []
         const sorted = [...sessionList].sort((a, b) => {
@@ -1348,6 +1355,8 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
             endedAt: s.endedAt,
             pinned: Boolean(s.pinned),
             starred: Boolean(s.starred),
+            unread: Boolean(s.unread),
+            archived: Boolean(s.archived),
             count: Array.isArray(s.messages) ? s.messages.length : 0,
           })),
         }
@@ -1393,6 +1402,8 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
             endedAt: chat.messages.at(-1)?.at ?? new Date(now()).toISOString(),
             pinned: false,
             starred: false,
+            unread: false,
+            archived: false,
             messages: chat.messages.map((m) => ({ ...m })),
           })
         }
@@ -1425,6 +1436,8 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
           endedAt: chat.messages.at(-1)?.at ?? new Date(now()).toISOString(),
           pinned: false,
           starred: false,
+          unread: false,
+          archived: false,
           messages: chat.messages.map((m) => ({ ...m })),
         })
         chat.currentSessionId = null
@@ -1436,12 +1449,15 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
 
     updateOrchestratorSession: (options = {}) =>
       call('updateOrchestratorSession', () => {
-        const { id, session: sessionId, pinned, starred, title, confirmed = true } = options
+        const { id, session: sessionId, pinned, starred, unread, archived, title, confirmed = true } = options
         if (confirmed !== true) throw new Error('Confirm the session change first.')
         const chat = chatStore(id)
         const sessionList = Array.isArray(chat.sessions) ? chat.sessions : []
         const target = sessionList.find((s) => s.id === sessionId)
         if (!target) throw new Error('There is no session with that id.')
+        if (archived === true && chat.currentSessionId === sessionId) {
+          throw new Error('The current conversation cannot be archived or deleted.')
+        }
         if (title !== undefined) {
           if (typeof title !== 'string' || title.trim().length < 1 || title.trim().length > 80) {
             throw new Error('Write a title from 1 to 80 characters.')
@@ -1456,8 +1472,23 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
           if (typeof starred !== 'boolean') throw new Error('Say whether starred is true or false.')
           target.starred = starred
         }
+        if (unread !== undefined) {
+          if (typeof unread !== 'boolean') throw new Error('Say whether unread is true or false.')
+          target.unread = unread
+        }
+        if (archived !== undefined) {
+          if (typeof archived !== 'boolean') throw new Error('Say whether archived is true or false.')
+          target.archived = archived
+        }
         emit({ topic: 'orchestrator' })
-        return { id: target.id, title: target.title, pinned: target.pinned, starred: target.starred }
+        return {
+          id: target.id,
+          title: target.title,
+          pinned: target.pinned,
+          starred: target.starred,
+          unread: Boolean(target.unread),
+          archived: Boolean(target.archived),
+        }
       }),
 
     openOrchestratorSession: (options = {}) =>
@@ -1480,11 +1511,15 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
             endedAt: chat.messages.at(-1)?.at ?? new Date(now()).toISOString(),
             pinned: false,
             starred: false,
+            unread: false,
+            archived: false,
             messages: chat.messages.map((m) => ({ ...m })),
           })
         }
         chat.currentSessionId = target.id
         chat.currentTitle = target.title
+        target.unread = false
+        target.archived = false
         chat.messages = target.messages.map((m) => ({ ...m }))
         emit({ topic: 'orchestrator' })
         return { ok: true, id: target.id }
@@ -1498,11 +1533,10 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
         const sessionList = Array.isArray(chat.sessions) ? chat.sessions : []
         const index = sessionList.findIndex((s) => s.id === sessionId)
         if (index === -1) throw new Error('There is no session with that id.')
-        sessionList.splice(index, 1)
         if (chat.currentSessionId === sessionId) {
-          chat.currentSessionId = null
-          chat.currentTitle = null
+          throw new Error('The current conversation cannot be archived or deleted.')
         }
+        sessionList.splice(index, 1)
         emit({ topic: 'orchestrator' })
         return { ok: true }
       }),

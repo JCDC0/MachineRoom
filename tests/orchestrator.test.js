@@ -34,6 +34,8 @@ import {
   RESTART_MESSAGE,
   ORCHESTRATOR_ROOM_WINDOW_MS,
   SESSION_PENDING_PROBLEM,
+  SESSION_ARCHIVED_PROBLEM,
+  SESSION_UNREAD_PROBLEM,
   AUTOCOMPACT_PROBLEM,
   APPROVAL_PROMPT_TOOL,
   COMPACT_KEEP_PROBLEM,
@@ -42,6 +44,7 @@ import {
   CONFIRM_EFFORT_PROBLEM,
   CONFIRM_MESSAGE_PROBLEM,
   CONFIRM_STOP_PROBLEM,
+  CURRENT_SESSION_PROBLEM,
   EFFORT_PROBLEM,
   EMPTY_REPLY,
   MESSAGE_PROBLEM,
@@ -2517,6 +2520,42 @@ describe('orchestrator reasoning effort and sessions', () => {
     expect(rig.orchestrator.listSessions().some((s) => s.id === list2[0].id)).toBe(false)
   })
 
+  it('keeps unread and archived beside pinned, clears unread when opened, and locks the current row', async () => {
+    const rig = makeRig()
+    rig.send('First conversation')
+    await waitIdle(rig, 1)
+    rig.orchestrator.newSession({ confirmed: true })
+    const first = rig.orchestrator.listSessions()[0]
+    expect(first).toMatchObject({ pinned: false, starred: false, unread: false, archived: false })
+
+    expect(rig.orchestrator.updateSession(first.id, { unread: true, confirmed: true }).body).toMatchObject({
+      unread: true,
+      archived: false,
+    })
+    expect(rig.orchestrator.updateSession(first.id, { archived: true, confirmed: true }).status).toBe(200)
+    expect(rig.orchestrator.listSessions()[0]).toMatchObject({ unread: true, archived: true })
+
+    rig.orchestrator.close()
+    const restored = restoreRig(rig)
+    expect(restored.orchestrator.listSessions()[0]).toMatchObject({ unread: true, archived: true })
+
+    expect(restored.orchestrator.openSession(first.id, { confirmed: true }).status).toBe(200)
+    expect(restored.orchestrator.listSessions()[0]).toMatchObject({ unread: false, archived: false })
+
+    expect(restored.orchestrator.updateSession(first.id, { archived: true, confirmed: true })).toEqual({
+      status: 409,
+      body: { error: CURRENT_SESSION_PROBLEM },
+    })
+    expect(restored.orchestrator.updateSession(first.id, { unread: 'yes', confirmed: true })).toEqual({
+      status: 400,
+      body: { error: SESSION_UNREAD_PROBLEM },
+    })
+    expect(restored.orchestrator.updateSession(first.id, { archived: 'yes', confirmed: true })).toEqual({
+      status: 400,
+      body: { error: SESSION_ARCHIVED_PROBLEM },
+    })
+  })
+
   it('refuses a session switch while messages wait and archives a conversation with no owner line', async () => {
     const rig = makeRig()
     rig.send('Start')
@@ -2550,7 +2589,7 @@ describe('orchestrator reasoning effort and sessions', () => {
     expect(list[0].count).toBe(1)
   })
 
-  it('deletes the open conversation and starts a clean one', async () => {
+  it('refuses to delete the open conversation until another starts', async () => {
     const rig = makeRig()
     rig.send('The conversation to delete')
     await waitIdle(rig, 1)
@@ -2559,6 +2598,14 @@ describe('orchestrator reasoning effort and sessions', () => {
     expect(rig.orchestrator.openSession(archived.id, { confirmed: true }).status).toBe(200)
     expect(rig.answer().messages).toHaveLength(2)
 
+    expect(rig.orchestrator.deleteSession(archived.id, { confirmed: true })).toEqual({
+      status: 409,
+      body: { error: CURRENT_SESSION_PROBLEM },
+    })
+    expect(rig.orchestrator.listSessions()).toHaveLength(1)
+    expect(rig.answer().messages).toHaveLength(2)
+
+    rig.orchestrator.newSession({ confirmed: true })
     expect(rig.orchestrator.deleteSession(archived.id, { confirmed: true }).status).toBe(200)
     expect(rig.orchestrator.listSessions()).toHaveLength(0)
     expect(rig.answer().messages).toHaveLength(0)
