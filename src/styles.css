@@ -7765,6 +7765,7 @@ body:has(#hud-orchestrator-chat) .lens-waiting {
 
   .mr-orch.is-inline {
     position: static;
+    z-index: auto;
     flex: 1 1 auto;
     width: 100%;
     max-width: none;

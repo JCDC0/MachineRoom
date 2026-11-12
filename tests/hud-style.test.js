@@ -392,6 +392,17 @@ describe('HUD concept style structure', () => {
     expect(css).toContain('.mr-card-gap {')
   })
 
+  it('keeps the inline orchestrator chat below the fixed Settings dropdown', () => {
+    const css = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8')
+    const inline = css.match(/\.mr-orch\.is-inline \{([\s\S]*?)\n  \}/)
+    expect(inline).not.toBeNull()
+    expect(inline[1]).toContain('position: static;')
+    expect(inline[1]).toContain('z-index: auto;')
+    expect(inline[1]).not.toContain('z-index: 6;')
+    expect(css).toMatch(/\.mr-orch \{[^}]*position: fixed;[^}]*z-index: 6;/)
+    expect(css).toMatch(/\.hud-dropdown \{[^}]*position: fixed;[^}]*z-index: 6;/)
+  })
+
   it('narrows the right column below 1100 pixels and keeps a log path whole', () => {
     const css = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8')
     expect(css).toContain('@media (min-width: 900px) and (max-width: 1099px)')
