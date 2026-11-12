@@ -1376,3 +1376,9 @@ Review, with `git show -m --first-parent SHA` for each, against the code around 
 1. Run `node scripts/test.mjs` once in the foreground and keep its output.
 2. For each failing test, run its file alone three times with `node node_modules/vitest/vitest.mjs run FILE`. Sort each failure as: fails alone every time (a real failure), fails only in the full run (load or order), or fails only on this machine (it reads `public/recordings` or another ignored local folder).
 3. Write `docs/agents/RUN-2026-11-13-SUITE.md`: the commit you ran at, the totals, then one line per failure with its file, test name, first assertion line and its sort. Commit it.
+
+**P137. Up to three small open findings from reviews 13, 15 and 16 (OpenCode).** Read this brief, then the finding tables of `docs/agents/AUDIT-2026-11-REVIEW-13.md`, `docs/agents/AUDIT-2026-11-REVIEW-15.md` and `docs/agents/AUDIT-2026-11-REVIEW-16.md`. Use no subagents. Run every command in the foreground. Commit each fix as you finish it, and stop starting new work at minute 30. Do not touch `server/orchestrator.js`, `src/briefs/briefs.js`, `tests/tree-partial.test.js` or `tests/git.test.js`: other lanes hold them. Files: any others, plus docs/agents/CHANGELOG.md.
+
+1. For each finding marked as not blocking a push, check the code: is it still there, or did a later brief fix it? List each with its state in your report.
+2. Fix at most three that are still there, the smallest and safest first, each with a test that proves it. Skip any that needs a design choice or touches a held file, and say why.
+3. Run `node node_modules/vitest/vitest.mjs related --run` on every file you changed and `npm run build`. Report what passed.
