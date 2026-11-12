@@ -207,6 +207,52 @@ describe('copilot harness report and usage', () => {
     expect(copilotHarness.reply(log)).toBe('The turn is done.')
   })
 
+  it('keeps both answer paragraphs after two tool lines', () => {
+    const log = [
+      'I will check the files.',
+      'Running command: git status',
+      'I will update the helper.',
+      'Editing file: src/math.js',
+      '\u001B[32mThe helper now handles empty input.\u001B[0m',
+      '',
+      'The existing callers keep their behavior.',
+    ].join('\r\n')
+    expect(copilotHarness.reply(log)).toBe('The helper now handles empty input.\n\nThe existing callers keep their behavior.')
+    expect(copilotHarness.report(log)).toEqual([
+      'The helper now handles empty input.',
+      '',
+      'The existing callers keep their behavior.',
+    ])
+  })
+
+  it('keeps an answer line starting with Run the migration', () => {
+    const log = [
+      'Running command: git status',
+      'Run the migration before deploying.',
+      '',
+      'Then restart the service.',
+    ].join('\n')
+    expect(copilotHarness.reply(log)).toBe('Run the migration before deploying.\n\nThen restart the service.')
+  })
+
+  it('keeps the whole text when there are no tool lines', () => {
+    const log = 'Run the migration before deploying.\n\nCopilot can then check the result.\nSession notes stay here.'
+    expect(copilotHarness.reply(log)).toBe(log)
+  })
+
+  it('cuts progress at tool lines recognized by the parser', () => {
+    const log = [
+      'I will inspect the helper.',
+      'read: src/math.js',
+      'I will check the reference.',
+      'Fetching URL: https://example.com',
+      'The helper matches the reference.',
+      '',
+      'No changes are needed.',
+    ].join('\n')
+    expect(copilotHarness.reply(log)).toBe('The helper matches the reference.\n\nNo changes are needed.')
+  })
+
   it('extracts token counts from usage or tokens field', () => {
     const log = lines({
       type: 'session.completed',

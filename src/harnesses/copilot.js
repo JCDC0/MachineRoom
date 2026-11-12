@@ -15,7 +15,7 @@ function copilotReply(log) {
     if (typeof content === 'string' && content.trim()) text = content
   }
   if (text) return terminalText(text)
-  return lastPlainBlock(log)
+  return lastPlainBlock(log, createCopilotParser)
 }
 
 function copilotUsage(log) {
