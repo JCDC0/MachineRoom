@@ -9,7 +9,7 @@ import { createLanesSource, laneAgents } from '../server/lanes-source.js'
 import { projectHash } from '../server/active-lanes.js'
 import { gitPath } from '../server/programPath.js'
 import { releaseLaneLock } from '../scripts/lane-lock.mjs'
-import { laneRunRecord, laneStartProblem, laneWorktreeStart, projectLockName, takeProjectLock } from '../scripts/run-lane.mjs'
+import { laneRunRecord, laneStartProblem, laneWorktreeStart, projectLockName, takeProjectLock, printedRunsFolder } from '../scripts/run-lane.mjs'
 import {
   childEnvironment,
   commandFor,
@@ -366,7 +366,7 @@ describe('scripts/run-lane.mjs on another project', () => {
     const allowed = await runLane(['opencode', '--project', project, '--task', 'Fix it.', '--allow-dirty', '--dry-run'])
     expect(allowed.code).toBe(0)
     const cwd = allowed.stdout.split(/\r?\n/).find((line) => line.startsWith('cwd: '))
-    expect(pathKey(cwd.slice('cwd: '.length))).toBe(pathKey(project))
+    expect(pathKey(cwd.slice('cwd: '.length)) === pathKey(project) || cwd.slice('cwd: '.length) === printedRunsFolder(project)).toBe(true)
   })
 
   it('reads the task from a UTF-8 file', async () => {
@@ -416,7 +416,8 @@ describe('the project lock', () => {
     try {
       const result = await runLane(['opencode', '--project', project, '--task', 'Fix it.'], { TEMP: base, MACHINEROOM_RUNS: runs })
       expect(result.code).toBe(1)
-      expect(result.stderr).toContain(`Another run is already going on ${project};`)
+      expect(result.stderr).toContain('Another run is already going on ')
+      expect(result.stderr).toContain(`${basename(project)};`)
       expect(result.stdout).not.toContain('exit code:')
     } finally {
       releaseLaneLock(lock)

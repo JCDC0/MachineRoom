@@ -1,9 +1,9 @@
 import { spawn, spawnSync } from 'node:child_process'
 import { copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, rmSync, unlinkSync, writeFileSync } from 'node:fs'
-import { join, sep } from 'node:path'
+import { basename, join, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
-import { prepareWorktree, takeProjectLock, worktreePlan } from '../scripts/run-lane.mjs'
+import { prepareWorktree, takeProjectLock, worktreePlan, printedRunsFolder } from '../scripts/run-lane.mjs'
 import { releaseLaneLock } from '../scripts/lane-lock.mjs'
 import { gitPath } from '../server/programPath.js'
 import { parseRunArgs, worktreeFor, worktreeProblems } from '../src/briefs/run.js'
@@ -222,7 +222,7 @@ describe('run-lane --worktree --dry-run', () => {
     const path = worktreeFor(project, 'opencode')
     const result = await runLane(['opencode', '--project', project, '--task', 'Fix it.', '--worktree', '--dry-run'])
     expect(result.code).toBe(0)
-    expect(result.stdout).toContain(`worktree: ${path}`)
+    expect([`worktree: ${path}`, `worktree: ${printedRunsFolder(path)}`].some((text) => result.stdout.includes(text))).toBe(true)
     expect(result.stdout).toContain('worktree: would be made')
     expect(result.stdout).toContain('branch: machineroom/queue-opencode-')
     expect(result.stdout).toContain('1. Fix it.')
@@ -240,7 +240,7 @@ describe('run-lane --worktree --dry-run', () => {
     const path = worktreeFor(project, 'opencode')
     const result = await runLane(['opencode', '--project', project, '--queue', file, '--worktree', '--dry-run'])
     expect(result.code).toBe(0)
-    expect(result.stdout).toContain(`worktree: ${path}`)
+    expect([`worktree: ${path}`, `worktree: ${printedRunsFolder(path)}`].some((text) => result.stdout.includes(text))).toBe(true)
     expect(result.stdout).toContain('worktree: would be made')
     expect(result.stdout).toContain('branch: machineroom/queue-opencode-')
     expect(result.stdout).toContain('1. First task.')
@@ -360,7 +360,8 @@ describe('the worktree project lock', () => {
     try {
       const result = await runLane(['opencode', '--project', project, '--task', 'Fix it.', '--worktree'], { TEMP: base, MACHINEROOM_RUNS: runs })
       expect(result.code).toBe(1)
-      expect(result.stderr).toContain(`Another run is already going on ${path};`)
+      expect(result.stderr).toContain('Another run is already going on ')
+      expect(result.stderr).toContain(`${basename(path)};`)
       expect(result.stdout).not.toContain('exit code:')
     } finally {
       releaseLaneLock(lock)

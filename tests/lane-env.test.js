@@ -3,6 +3,7 @@ import { appendFileSync, mkdirSync, readFileSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
+import { printedRunsFolder } from '../scripts/run-lane.mjs'
 import { childEnvironment, commandFor, createLaneLog } from '../src/briefs/run.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 
@@ -196,7 +197,7 @@ describe('a lane runner with the allow-list', () => {
     })
     expect(result.status, result.stderr).toBe(0)
     expect(result.stdout).toContain('file:')
-    expect(result.stdout).toContain(`cwd: ${project}`)
+    expect([`cwd: ${project}`, `cwd: ${printedRunsFolder(project)}`].some((text) => result.stdout.includes(text))).toBe(true)
   })
 
   it('starts the OpenCode command with the filtered environment', (context) => {

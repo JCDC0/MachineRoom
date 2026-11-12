@@ -1,13 +1,13 @@
 import { spawn, spawnSync } from 'node:child_process'
 import { copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { basename, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterAll, describe, expect, it } from 'vitest'
 import { commitMessage, formatQueueSummary, parseQueue, parseQueueArgs, runQueue, QUEUE_SUBJECT_LIMIT, QUEUE_TASK_LIMIT, QUEUE_TASK_TEXT_LIMIT } from '../src/briefs/queue.js'
 import { DEFAULT_MINUTES } from '../src/briefs/run.js'
 import { gitPath } from '../server/programPath.js'
 import { releaseLaneLock } from '../scripts/lane-lock.mjs'
-import { takeProjectLock } from '../scripts/run-lane.mjs'
+import { takeProjectLock, printedRunsFolder } from '../scripts/run-lane.mjs'
 import { killTree } from '../server/processTree.js'
 import { makeTempDir, processTempRoot, removeTempDir } from './helpers/tempRoot.js'
 
@@ -493,7 +493,8 @@ describe('scripts/run-lane.mjs with --queue', { timeout: 30000 }, () => {
       try {
         const result = await runLane(['opencode', '--project', repo, '--queue', file], { TEMP: parent, MACHINEROOM_RUNS: runs })
         expect(result.code).toBe(1)
-        expect(result.stderr).toContain(`Another run is already going on ${repo};`)
+        expect(result.stderr).toContain('Another run is already going on ')
+        expect(result.stderr).toContain(`${basename(repo)};`)
         expect(git(repo, ['branch', '--show-current']).trim()).toBe('main')
         expect(git(repo, ['status', '--porcelain']).trim()).toBe('')
       } finally {

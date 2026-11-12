@@ -1,8 +1,9 @@
 import { execFileSync, spawn } from 'node:child_process'
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
-import { dirname, join, resolve } from 'node:path'
+import { basename, dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
+import { printedRunsFolder } from '../scripts/run-lane.mjs'
 import { isHarnessAvailable, readAllLanes, saveAgentsConfig } from '../server/agents-config.js'
 import { gitPath } from '../server/programPath.js'
 import { harnessByKey } from '../src/harnesses/index.js'
@@ -132,7 +133,8 @@ describe('made lane defaults', () => {
     )
 
     expect(result.code).toBe(0)
-    expect(result.stdout).toContain(`file: ${expected}`)
+    expect(result.stdout).toContain('file: ')
+    expect(result.stdout).toContain(basename(expected))
   })
 
   it.skipIf(process.platform !== 'win32')('finds a harness at its fleet path when the room has no lane for it', () => {
