@@ -854,3 +854,17 @@ The owner sees every terminal line of a turn saved into the chat, so the convers
 Run `npx vitest related --run` on every file you changed and `npm run build`; both must pass. Name the by-eye checks for the orchestrator at 1280 by 800.
 
 Files: src/ui/OrchestratorChat.jsx, src/ui/orchestratorChat.js, src/styles.css, server/orchestrator.js, src/harnesses/, tests/.
+
+**P84. A closed agent chip shows only its state (OpenCode).** Read no part of TASKS.md beyond this brief. Use no subagents. Run every command in the foreground. Commit each step as you finish it, and stop starting new work at minute 35. Change only `src/engine/terminals.js`, `src/styles.css` and tests.
+
+The owner finds the chip beside each agent repeats the agent's name, which the label under the agent already shows. The owner chose a small state-only chip over removing it, since the chip is also how the owner opens an agent's terminal log.
+
+1. A closed chip shows the state dot and the state word only (`WORKING`, `FINISHED`, `FAILED`, `IDLE`, as the chip shows them now), with no name. `chipTitle` answers an empty label for a closed chip; an open chip keeps its title (`NAME // STATUS`) and its log as now.
+2. The closed chip shrinks to fit: `CHIP_W` becomes the width of the longest state word plus the dot and the padding, and `chipHalfWidth(false)` follows it, so the thin line still meets the chip's edge.
+3. The chip keeps its `aria-label` with the agent's name and state, so a screen reader still hears whose chip it is, and a click still opens it.
+4. The finished, failed and working colours stay as they are.
+5. Tests, by what they prove: a closed chip's title is empty and its aria label holds the name; an open chip's title is unchanged; `chipHalfWidth(false)` is smaller than before and `chipHalfWidth(true)` unchanged. Name the by-eye checks for the orchestrator at 1280 by 800: a working, a finished and a failed chip, and an open one.
+
+Run `npx vitest related --run` on every file you changed and `npm run build`; both must pass.
+
+Files: src/engine/terminals.js, src/styles.css, tests/.
