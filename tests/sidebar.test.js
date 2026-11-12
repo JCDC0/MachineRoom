@@ -199,12 +199,15 @@ describe('the conversation menu', () => {
     ])
     expect(items.find((item) => item.action === 'delete').danger).toBe(true)
 
-    const current = sessionMenuItems({ id: '', title: 'Live', count: 2, current: true })
+    const current = sessionMenuItems({ id: 'current', title: 'Live', count: 2, current: true })
     expect(current.find((item) => item.action === 'archive')).toMatchObject({
       disabled: true,
       reason: 'The current conversation cannot be archived or deleted.',
     })
     expect(current.find((item) => item.action === 'delete').disabled).toBe(true)
+    expect(current.find((item) => item.action === 'pin').disabled).toBe(false)
+    expect(current.find((item) => item.action === 'rename').disabled).toBe(false)
+    expect(current.find((item) => item.action === 'unread').disabled).toBe(false)
     expect(sessionMenuActionForKey(current, 'a')).toBeNull()
     expect(sessionMenuActionForKey(current, 'f').action).toBe('fork')
   })

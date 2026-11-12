@@ -12,7 +12,7 @@ function clone(value) {
 function makeClient(overrides = {}) {
   const calls = { update: [], open: [], branch: [], delete: [], new: [] }
   const state = {
-    current: { id: '', title: 'Live one', startedAt: NOW, count: 2 },
+    current: { id: 'current', title: 'Live one', startedAt: NOW, count: 2 },
     sessions: [
       { id: 'alpha', title: 'Alpha', endedAt: NOW - 2000, count: 2 },
       { id: 'beta', title: 'Beta', endedAt: NOW - 1000, count: 3, pinned: true },
@@ -40,7 +40,7 @@ function makeClient(overrides = {}) {
     },
     updateOrchestratorSession: async (payload) => {
       calls.update.push(payload)
-      const found = findSession(payload.session)
+      const found = payload.session === 'current' ? state.current : findSession(payload.session)
       if (found) {
         for (const field of ['pinned', 'starred', 'unread', 'archived', 'title']) {
           if (payload[field] !== undefined) found[field] = payload[field]
@@ -52,7 +52,7 @@ function makeClient(overrides = {}) {
       calls.open.push(payload)
       const found = findSession(payload.session)
       if (found) {
-        state.current = { id: found.id, title: found.title, startedAt: NOW, count: found.count }
+        state.current = { id: 'current', title: found.title, startedAt: NOW, count: found.count }
         found.unread = false
         found.archived = false
       }
@@ -209,6 +209,32 @@ describe('the conversation menu', () => {
 
       expect(client.calls.open[0]).toMatchObject({ id: 'orchestrator', session: 'alpha', confirmed: true })
       expect(client.calls.branch[0]).toMatchObject({ id: 'orchestrator', index: 2, confirmed: true })
+    })
+  })
+
+  it('pins and renames the current row from its menu', async () => {
+    await withDom(async ({ container, root }) => {
+      const client = makeClient()
+      await mount(root, client)
+      await openMenu(root, container, 'Live one')
+      await click(root, menuItem(container, 'Pin'))
+      await settle()
+      expect(client.calls.update[0]).toMatchObject({ session: 'current', pinned: true })
+
+      await openMenu(root, container, 'Live one')
+      await click(root, menuItem(container, 'Rename'))
+      const input = container.querySelector('.mr-side-rename-input')
+      expect(input?.getAttribute('aria-label')).toBe('Rename Live one')
+      await type(root, input, 'Live renamed')
+      await act(async () => {
+        container.querySelector('.mr-side-rename').dispatchEvent({
+          type: 'submit',
+          bubbles: true,
+          cancelable: true,
+        })
+      })
+      await settle()
+      expect(client.calls.update[1]).toMatchObject({ session: 'current', title: 'Live renamed' })
     })
   })
 

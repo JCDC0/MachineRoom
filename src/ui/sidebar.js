@@ -250,8 +250,8 @@ export function sessionMenuItems(row, { busy = false } = {}) {
       action: 'unread',
       label: 'Mark as unread',
       key: SESSION_MENU_KEYS.unread,
-      disabled: busy || current || !saved,
-      reason: current ? 'The current conversation is already open.' : 'This conversation is not in the list yet.',
+      disabled: busy || !saved,
+      reason: 'This conversation is not in the list yet.',
     },
     {
       action: 'archive',

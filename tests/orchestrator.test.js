@@ -44,6 +44,7 @@ import {
   CONFIRM_EFFORT_PROBLEM,
   CONFIRM_MESSAGE_PROBLEM,
   CONFIRM_STOP_PROBLEM,
+  CURRENT_SESSION_KEY,
   CURRENT_SESSION_PROBLEM,
   EFFORT_PROBLEM,
   EMPTY_REPLY,
@@ -2553,6 +2554,59 @@ describe('orchestrator reasoning effort and sessions', () => {
     expect(restored.orchestrator.updateSession(first.id, { archived: 'yes', confirmed: true })).toEqual({
       status: 400,
       body: { error: SESSION_ARCHIVED_PROBLEM },
+    })
+  })
+
+  it('pins, renames and marks the current conversation from its own row', async () => {
+    const rig = makeRig()
+    rig.send('Live conversation')
+    await waitIdle(rig, 1)
+    expect(rig.orchestrator.currentSessionInfo()).toMatchObject({
+      id: CURRENT_SESSION_KEY,
+      pinned: false,
+      unread: false,
+    })
+
+    const changed = rig.orchestrator.updateSession(CURRENT_SESSION_KEY, {
+      title: 'Live renamed',
+      pinned: true,
+      unread: true,
+      confirmed: true,
+    })
+    expect(changed.status).toBe(200)
+    expect(changed.body).toMatchObject({
+      id: CURRENT_SESSION_KEY,
+      title: 'Live renamed',
+      pinned: true,
+      unread: true,
+      archived: false,
+    })
+    expect(rig.orchestrator.currentSessionInfo()).toMatchObject({
+      id: CURRENT_SESSION_KEY,
+      title: 'Live renamed',
+      pinned: true,
+      unread: true,
+    })
+
+    expect(rig.orchestrator.updateSession(CURRENT_SESSION_KEY, { archived: true, confirmed: true })).toEqual({
+      status: 409,
+      body: { error: CURRENT_SESSION_PROBLEM },
+    })
+    expect(rig.orchestrator.deleteSession(CURRENT_SESSION_KEY, { confirmed: true })).toEqual({
+      status: 409,
+      body: { error: CURRENT_SESSION_PROBLEM },
+    })
+    expect(rig.orchestrator.updateSession(CURRENT_SESSION_KEY, { archived: 'yes', confirmed: true })).toEqual({
+      status: 400,
+      body: { error: SESSION_ARCHIVED_PROBLEM },
+    })
+
+    rig.orchestrator.newSession({ confirmed: true })
+    expect(rig.orchestrator.listSessions()[0]).toMatchObject({
+      title: 'Live renamed',
+      pinned: true,
+      unread: true,
+      archived: false,
     })
   })
 

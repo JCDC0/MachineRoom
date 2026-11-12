@@ -1054,7 +1054,7 @@ describe('the orchestrator registry', () => {
     const initialSessions = await getJson(`${rig.url}/api/orchestrator/sessions`)
     expect(initialSessions.status).toBe(200)
     expect(initialSessions.body).toEqual({
-      current: { id: '', title: null, startedAt: null, count: 0, pinned: false, starred: false, unread: false },
+      current: { id: 'current', title: null, startedAt: null, count: 0, pinned: false, starred: false, unread: false },
       sessions: [],
     })
 

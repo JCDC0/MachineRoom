@@ -193,6 +193,7 @@ export function Sidebar({ client = null, live = false, project = '', tasks = nul
           title: row.title,
           messages: Array.isArray(answer?.messages) ? answer.messages : [],
         })
+        markOpened(row)
         return
       }
       if (!row.id) throw new Error('This conversation has no session.')

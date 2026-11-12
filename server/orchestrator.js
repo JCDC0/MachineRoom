@@ -87,6 +87,7 @@ export const SESSION_UNREAD_PROBLEM = 'Say whether unread is true or false.'
 export const SESSION_ARCHIVED_PROBLEM = 'Say whether archived is true or false.'
 export const SESSION_CHANGE_PROBLEM = 'Choose a field to change: pinned, starred, unread, archived or title.'
 export const CURRENT_SESSION_PROBLEM = 'The current conversation cannot be archived or deleted.'
+export const CURRENT_SESSION_KEY = 'current'
 export const SESSION_PENDING_PROBLEM = 'Messages are waiting for a turn. Wait for them to run or stop the orchestrator first.'
 export const BRANCH_INDEX_PROBLEM = 'Choose a message to branch from.'
 export const SESSIONS_LIMIT = 50
@@ -848,6 +849,9 @@ export function createOrchestrator({
   let mode = null
   let currentSessionId = null
   let currentTitle = null
+  let currentPinned = false
+  let currentStarred = false
+  let currentUnread = false
   const sessions = []
   let summary = ''
   let branchTranscript = ''
@@ -909,6 +913,9 @@ export function createOrchestrator({
         ...(mode ? { mode } : {}),
         currentSessionId,
         currentTitle,
+        currentPinned,
+        currentStarred,
+        currentUnread,
         summary,
         ...(branchTranscript ? { branchTranscript } : {}),
         completedRuns: [...completedRuns.entries()].slice(-200).map(([runId, value]) => [runId, { status: value.status, messageId: value.messageId ?? null }]),
@@ -1067,6 +1074,9 @@ export function createOrchestrator({
     if (typeof saved.currentTitle === 'string' && saved.currentTitle.trim() !== '') {
       currentTitle = saved.currentTitle.trim()
     }
+    currentPinned = saved.currentPinned === true
+    currentStarred = saved.currentStarred === true
+    currentUnread = saved.currentUnread === true
     if (Array.isArray(saved.sessions)) {
       for (const item of saved.sessions) {
         if (!item || typeof item !== 'object') continue
@@ -1888,7 +1898,15 @@ export function createOrchestrator({
   }
 
   function archiveCurrentSession() {
-    if (messages.length === 0) return null
+    function resetCurrentFlags() {
+      currentPinned = false
+      currentStarred = false
+      currentUnread = false
+    }
+    if (messages.length === 0) {
+      resetCurrentFlags()
+      return null
+    }
     const firstOwner = messages.find((m) => m.from === 'owner')
     const defaultTitle = (firstOwner ?? messages[0]).text.trim().slice(0, 60)
     const title = currentTitle || defaultTitle
@@ -1899,10 +1917,13 @@ export function createOrchestrator({
         existing.endedAt = messages.at(-1)?.at ?? iso(now())
         existing.sessionId = harness === 'claude' ? sessionId : null
         existing.opencodeSessionId = harness === 'opencode' ? sessionId : null
-        existing.unread = false
+        existing.pinned = currentPinned
+        existing.starred = currentStarred
+        existing.unread = currentUnread
         existing.archived = false
         existing.summary = summary || ''
         existing.messages = messages.slice(-SESSION_MESSAGES_LIMIT).map((m) => ({ ...m }))
+        resetCurrentFlags()
         return existing
       }
     }
@@ -1911,9 +1932,9 @@ export function createOrchestrator({
       title,
       startedAt: messages[0]?.at ?? iso(now()),
       endedAt: messages.at(-1)?.at ?? iso(now()),
-      pinned: false,
-      starred: false,
-      unread: false,
+      pinned: currentPinned,
+      starred: currentStarred,
+      unread: currentUnread,
       archived: false,
       sessionId: harness === 'claude' ? sessionId : null,
       opencodeSessionId: harness === 'opencode' ? sessionId : null,
@@ -1922,6 +1943,7 @@ export function createOrchestrator({
     }
     sessions.unshift(archived)
     enforceSessionLimit(sessions)
+    resetCurrentFlags()
     return archived
   }
 
@@ -1980,6 +2002,9 @@ export function createOrchestrator({
     archiveCurrentSession()
     currentSessionId = target.id
     currentTitle = target.title
+    currentPinned = target.pinned === true
+    currentStarred = target.starred === true
+    currentUnread = false
     target.unread = false
     target.archived = false
     messages.length = 0
@@ -1998,8 +2023,62 @@ export function createOrchestrator({
     return { status: 200, body: { ok: true, id: target.id } }
   }
 
+  function updateCurrentSession(body) {
+    if (
+      body.pinned === undefined &&
+      body.starred === undefined &&
+      body.unread === undefined &&
+      body.archived === undefined &&
+      body.title === undefined
+    ) {
+      return { status: 400, body: { error: SESSION_CHANGE_PROBLEM } }
+    }
+    if (body.archived === true) return { status: 409, body: { error: CURRENT_SESSION_PROBLEM } }
+    if (body.archived !== undefined && typeof body.archived !== 'boolean') {
+      return { status: 400, body: { error: SESSION_ARCHIVED_PROBLEM } }
+    }
+    const record = currentSessionId ? sessions.find((s) => s.id === currentSessionId) : null
+    if (body.title !== undefined) {
+      if (typeof body.title !== 'string' || body.title.trim().length < 1 || body.title.trim().length > 80) {
+        return { status: 400, body: { error: SESSION_TITLE_PROBLEM } }
+      }
+      currentTitle = body.title.trim()
+      if (record) record.title = currentTitle
+    }
+    if (body.pinned !== undefined) {
+      if (typeof body.pinned !== 'boolean') return { status: 400, body: { error: SESSION_PINNED_PROBLEM } }
+      currentPinned = body.pinned
+      if (record) record.pinned = body.pinned
+    }
+    if (body.starred !== undefined) {
+      if (typeof body.starred !== 'boolean') return { status: 400, body: { error: SESSION_STARRED_PROBLEM } }
+      currentStarred = body.starred
+      if (record) record.starred = body.starred
+    }
+    if (body.unread !== undefined) {
+      if (typeof body.unread !== 'boolean') return { status: 400, body: { error: SESSION_UNREAD_PROBLEM } }
+      currentUnread = body.unread
+      if (record) record.unread = body.unread
+    }
+    if (body.archived === false && record) record.archived = false
+    persist()
+    notify()
+    return {
+      status: 200,
+      body: {
+        id: CURRENT_SESSION_KEY,
+        title: currentTitle || record?.title || '',
+        pinned: currentPinned,
+        starred: currentStarred,
+        unread: currentUnread,
+        archived: false,
+      },
+    }
+  }
+
   function updateSession(sid, body) {
     if (body?.confirmed !== true) return { status: 400, body: { error: CONFIRM_SESSION_PROBLEM } }
+    if (sid === CURRENT_SESSION_KEY) return updateCurrentSession(body)
     const session = sessions.find((s) => s.id === sid)
     if (!session) return { status: 404, body: { error: NO_SESSION_ID_PROBLEM } }
     if (body.archived === true && currentSessionId === sid) {
@@ -2037,6 +2116,12 @@ export function createOrchestrator({
       if (typeof body.archived !== 'boolean') return { status: 400, body: { error: SESSION_ARCHIVED_PROBLEM } }
       session.archived = body.archived
     }
+    if (currentSessionId === sid) {
+      currentTitle = session.title
+      currentPinned = Boolean(session.pinned)
+      currentStarred = Boolean(session.starred)
+      currentUnread = Boolean(session.unread)
+    }
     persist()
     notify()
     return {
@@ -2054,6 +2139,7 @@ export function createOrchestrator({
 
   function deleteSession(sid, body) {
     if (body?.confirmed !== true) return { status: 400, body: { error: CONFIRM_SESSION_PROBLEM } }
+    if (sid === CURRENT_SESSION_KEY) return { status: 409, body: { error: CURRENT_SESSION_PROBLEM } }
     const index = sessions.findIndex((s) => s.id === sid)
     if (index === -1) return { status: 404, body: { error: NO_SESSION_ID_PROBLEM } }
     if (currentSessionId === sid) return { status: 409, body: { error: CURRENT_SESSION_PROBLEM } }
@@ -2103,13 +2189,13 @@ export function createOrchestrator({
     const title = currentTitle || (firstOwner ? firstOwner.text.trim().slice(0, 60) : null)
     const record = currentSessionId ? sessions.find((s) => s.id === currentSessionId) : null
     return {
-      id: record ? record.id : '',
+      id: CURRENT_SESSION_KEY,
       title,
       startedAt: messages[0]?.at ?? null,
       count: messages.length,
-      pinned: Boolean(record?.pinned),
-      starred: Boolean(record?.starred),
-      unread: Boolean(record?.unread),
+      pinned: record ? Boolean(record.pinned) : currentPinned,
+      starred: record ? Boolean(record.starred) : currentStarred,
+      unread: record ? Boolean(record.unread) : currentUnread,
     }
   }
 
