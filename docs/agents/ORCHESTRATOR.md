@@ -12,7 +12,7 @@ Rewrite this section at every merge and before you end a session. Keep it under 
 
 - 2026-11-12, evening: the last push is `fc3f87a6`, green on Ubuntu and Windows (run 43205136965). It carries P65 to P69, the review 12 fix `64c41251`, `OWNER.md`, this guide's rewrite and two CI test fixes. Read CI first with `gh run list --limit 3 --repo JCDC0/MachineRoom`.
 - Unpushed on `main`: only what merged after `fc3f87a6`.
-- Running: P72 on `opencode` (a reconnect brings the file list up to date, from GPT 6.1 Sol), and P73 on `codex`, the Codex lane's first brief. P70 and P71 are merged; a batch review and the full suite wait for the next push.
+- Running: nothing. Merged since the push of `fc3f87a6`: P70 to P74 (review 12 fixes, Sol's two findings, the Codex lane). A batch review and the full suite wait for the next push ask.
 - `main` is 0.1.401 and has been since 2026-10-29. The owner's room holds only the orchestrator and the lanes the owner makes (P49); the fleet runs in the testbench (loop step 0).
 - The fleet: `opencode` to `opencode5`, `agy` and `agy2`, `claude` and, since 2026-11-12, `codex` (the owner's Codex app). The owner allows more OpenCode lanes as needed (2026-11-12): `opencode6` and `opencode7` may take work, still five lanes at once at most. AGY ran out of time on 2 of 3 briefs on 2026-11-11, so a brief that matters goes to OpenCode.
 - Open for the owner: the idle draw rate, replay sound (review 9, finding 7), the beat ring with music, the all-zero cost display (N16), and a look at P63 and P64 in a live room.
@@ -207,7 +207,7 @@ Then do the review yourself. A PASS is not a review.
 | Orchestrator (main checkout) | Claude Code | `docs/agents/**`, merges, versions |
 | `opencode` to `opencode5` (`.worktrees\opencode` to `opencode5`) | `opencode-go/deepseek-v4.1-flash`, max | `server/**`, `scripts/**`, `src/**`, tests; reviews, full suites and hunts |
 | `claude` (`.worktrees\claude`) | Claude Sonnet | the brief it is given, in its own worktree |
-| `codex` (`.worktrees\codex`) | the Codex app's default model | the brief it is given; `src/Stage.jsx` and `src/App.jsx` are forbidden to it. Its `cli.bin` names the app's `codex.exe`, whose folder changes when the app updates, until P73 |
+| `codex` (`.worktrees\codex`) | the Codex app's default model | the brief it is given; `src/Stage.jsx` and `src/App.jsx` are forbidden to it. Its sandbox keeps git and the main checkout read-only: it edits files only, cannot run vitest or the process tests, and the orchestrator commits its work (`git -C .worktrees/codex switch -c BRANCH`, add, commit) and tests it at the merge |
 | `agy`, `agy2` (`.worktrees\agy`, `agy2`) | `gemini-3.8-flash-high` | backend, script and record briefs with exact steps; `src/ui/**`, `src/styles.css`, `src/engine/**`, `src/Stage.jsx` and `src/App.jsx` are forbidden to it. A Flash run takes about twice as long as an OpenCode run |
 | `opencode6`, `opencode7` | `opencode-go/deepseek-v4.1-flash`, max | as `opencode`, when more lanes are needed (the owner's word, 2026-11-12) |
 | `agy3` | | no work without the owner's word |
@@ -258,6 +258,7 @@ Lane habits:
 - An OpenCode lane's shell starts in the main checkout, so each lane begins every command with `cd` to its worktree. After every lane run, `git status` in the main checkout must be clean.
 - AGY adds aliases and extra forms nobody asked for. Cut them at the merge, with the tests that read them.
 - AGY often uses an old version prefix in its commit. Renumber when you merge.
+- Codex in its sandbox cannot write git, cannot run vitest (Vite writes into the main checkout's `node_modules`) and cannot start the processes the stop tests start. Its test report means nothing: run the tests yourself before you grade it. Brief it work that does not need a test run to be right, or say in the brief that the orchestrator runs them.
 - AGY on Flash has skipped by-eye checks and left races. Name the checks in the brief and have the owner look.
 - A chain of lane runs branches each run from main as it was when the run started, so an earlier run may fix the same thing its own way. Keep main's copy.
 
