@@ -1,5 +1,5 @@
 import { createAgyParser } from '../model/parsers/agy.js'
-import { expandBin, headLines, jsonLineReader, lastJsonLine, tokenCount } from './common.js'
+import { expandBin, headLines, jsonLineReader, lastJsonLine, terminalText, tokenCount } from './common.js'
 
 function agyReply(log) {
   let words = null
@@ -16,7 +16,7 @@ function agyReply(log) {
     if (typeof text !== 'string' || !text.trim()) continue
     words = text
   }
-  return words ?? ''
+  return terminalText(words ?? '')
 }
 
 function agyUsage(log) {

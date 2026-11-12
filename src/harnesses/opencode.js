@@ -1,5 +1,5 @@
 import { createOpencodeParser } from '../model/parsers/opencode.js'
-import { expandBin, headLines, jsonLineReader, sumTokens } from './common.js'
+import { expandBin, headLines, jsonLineReader, sumTokens, terminalText } from './common.js'
 
 function opencodeReply(log) {
   let words = null
@@ -16,7 +16,7 @@ function opencodeReply(log) {
     if (typeof text !== 'string' || !text.trim()) continue
     words = text
   }
-  return words ?? ''
+  return terminalText(words ?? '')
 }
 
 function opencodeFailure(log) {

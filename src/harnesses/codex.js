@@ -1,5 +1,5 @@
 import { createCodexParser } from '../model/parsers/codex.js'
-import { expandBin, headLines, jsonLineReader, lastJsonLine, sumTokens, tokenCount } from './common.js'
+import { expandBin, headLines, jsonLineReader, lastJsonLine, sumTokens, terminalText, tokenCount } from './common.js'
 
 function codexReply(log) {
   let text = null
@@ -16,7 +16,7 @@ function codexReply(log) {
     const content = typeof msg.text === 'string' ? msg.text : (typeof msg.content === 'string' ? msg.content : (typeof msg.message === 'string' ? msg.message : ''))
     if (content.trim()) text = content
   }
-  return text ?? ''
+  return terminalText(text ?? '')
 }
 
 function codexUsage(log) {

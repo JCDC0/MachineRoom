@@ -1,5 +1,5 @@
 import { createClaudeParser } from '../model/parsers/claude.js'
-import { finiteNumber, headLines, jsonLineReader, lastJsonLine, sumTokens, tokenCount } from './common.js'
+import { finiteNumber, headLines, jsonLineReader, lastJsonLine, sumTokens, terminalText, tokenCount } from './common.js'
 
 function resultLine(log) {
   return lastJsonLine(log, (item) => item?.type === 'result' && !item.parent_tool_use_id)
@@ -7,7 +7,7 @@ function resultLine(log) {
 
 function machineroomReply(log) {
   const text = resultLine(log)?.result
-  return typeof text === 'string' ? text : ''
+  return typeof text === 'string' ? terminalText(text) : ''
 }
 
 function machineroomPeak(log) {

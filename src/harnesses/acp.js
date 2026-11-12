@@ -1,6 +1,6 @@
 import { relativeTo } from '../model/paths.js'
 import { commandTouch, createLineReader, fileTouch, labelFor, parseJson, shorten, toolEnd, toolStart } from '../model/parsers/common.js'
-import { expandBin, headLines, jsonLineReader, sumTokens } from './common.js'
+import { expandBin, headLines, jsonLineReader, sumTokens, terminalText } from './common.js'
 
 const FILE_KINDS = new Set(['read', 'edit', 'delete', 'move'])
 const DONE = new Set(['completed', 'failed'])
@@ -277,7 +277,7 @@ function acpReply(log) {
     messages.set(id, (messages.get(id) ?? '') + text)
   }
   const kept = [...messages.values()].filter((text) => text.trim() !== '')
-  return kept.length > 0 ? kept[kept.length - 1] : ''
+  return terminalText(kept.length > 0 ? kept[kept.length - 1] : '')
 }
 
 function acpUsage(log) {
