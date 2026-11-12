@@ -896,7 +896,6 @@ if (isMain) {
   } else {
     try {
       const options = parseLiveArgs(process.argv.slice(2))
-      if (options.quietMs === undefined) options.quietMs = 120000
       const result = await runScaleLive(options)
       console.log(formatLiveResult(result))
     } catch (error) {

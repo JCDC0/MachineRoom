@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Review 12 reads the merges of P65 to P68: eight findings, two fixed by the orchestrator (the deleted names from git diff-files, the scale probe's quiet default), four briefed as P70, one left as it is (P69).
 - The deleted names come from `git diff-files --relative`, which never writes the index and names a file from the project folder as the list does (review 12, findings 2 and 3).
 - A tree read gets the deleted names from git diff with --diff-filter=D in place of git ls-files --deleted, so a full read at 40,000 files takes 608 ms against 1769 ms and 1993 ms at 200,000 (P68).
 - The scale probe times each tree read and takes --tree-only and --server, and AUDIT-2026-11-TREE-COST.md records that the deleted-file list of P51 makes a full tree read about five times as long: 470 to 2645 ms at 40,000 files and 2749 to 14339 ms at 200,000 (P67).
