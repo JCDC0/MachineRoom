@@ -1525,7 +1525,7 @@ describe('scripts/run-lane.mjs', () => {
     }
   })
 
-  it('runs a dry run for a made lane from a temp runs folder', async () => {
+  it.skipIf(process.platform !== 'win32')('runs a dry run for a made lane from a temp runs folder', async () => {
     const brief = briefWithFreeBranch()
     if (!brief) return
     const folder = makeTempDir('machine-room-made-lane-run-')

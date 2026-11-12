@@ -216,7 +216,7 @@ export async function runProbe(options = {}) {
     const listDir = fakeListDir(resolve(rootDir), scale.files)
     read = await timeItAsync(() => readTree(rootDir, { listDir }), 3)
   } finally {
-    rmSync(rootDir, { recursive: true, force: true })
+    rmSync(rootDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
   }
   row('readTree (fake listDir)', 'load', read.ms, `${read.result.files.length} files`)
   const sizeRow = (stage, text, budget = BUDGET.event) => {
