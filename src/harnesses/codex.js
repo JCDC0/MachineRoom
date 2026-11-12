@@ -43,6 +43,9 @@ export const codexHarness = {
     if (cli?.model) args.push('--model', String(cli.model))
     args.push('--sandbox', 'workspace-write', '--skip-git-repo-check')
     if (effort) args.push('-c', `model_reasoning_effort=${effort}`)
+    for (const dir of Array.isArray(cli?.addDirs) ? cli.addDirs : []) {
+      if (typeof dir === 'string') args.push('--add-dir', expandBin(dir, env))
+    }
     args.push(prompt)
     return { file: expandBin(cli?.bin ?? 'codex', env), args, cwd: folder }
   },

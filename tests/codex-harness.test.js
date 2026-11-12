@@ -71,6 +71,65 @@ describe('codex harness command builder', () => {
     })
     expect(cmd.file).toBe('C:\\Tools\\codex.exe')
   })
+
+  it('adds one --add-dir pair per folder before the prompt', () => {
+    const cmd = codexHarness.command({
+      cli: { bin: 'codex', addDirs: ['C:\\GitHub\\MachineRoom\\.git', 'C:\\scratch\\shared'] },
+      prompt: 'Fix the bug',
+      folder: 'C:\\sandbox',
+    })
+    expect(cmd.args).toEqual([
+      'exec',
+      '--json',
+      '--sandbox',
+      'workspace-write',
+      '--skip-git-repo-check',
+      '--add-dir',
+      'C:\\GitHub\\MachineRoom\\.git',
+      '--add-dir',
+      'C:\\scratch\\shared',
+      'Fix the bug',
+    ])
+  })
+
+  it('adds the folders after the effort and before the prompt', () => {
+    const cmd = codexHarness.command({
+      cli: { bin: 'codex', model: 'gpt-6.1-sol', effort: 'high', addDirs: ['C:\\one'] },
+      prompt: 'Audit',
+      folder: 'C:\\sandbox',
+    })
+    expect(cmd.args.slice(-4)).toEqual(['model_reasoning_effort=high', '--add-dir', 'C:\\one', 'Audit'])
+    expect(cmd.args.indexOf('--add-dir')).toBeGreaterThan(cmd.args.indexOf('model_reasoning_effort=high'))
+    expect(cmd.args.at(-1)).toBe('Audit')
+  })
+
+  it('expands environment variables in an addDirs entry', () => {
+    const cmd = codexHarness.command({
+      cli: { bin: 'codex', addDirs: ['%LOCALAPPDATA%\\MachineRoom\\.git'] },
+      prompt: 'Go',
+      env: { LOCALAPPDATA: 'C:\\Users\\tester\\AppData\\Local' },
+      folder: 'C:\\sandbox',
+    })
+    expect(cmd.args).toContain('--add-dir')
+    expect(cmd.args).toContain('C:\\Users\\tester\\AppData\\Local\\MachineRoom\\.git')
+    expect(cmd.args.join(' ')).not.toContain('%LOCALAPPDATA%')
+  })
+
+  it('leaves the arguments alone when the lane names no addDirs', () => {
+    const none = codexHarness.command({ cli: { bin: 'codex' }, prompt: 'Hello', folder: 'C:\\sandbox' })
+    expect(none.args).toEqual(['exec', '--json', '--sandbox', 'workspace-write', '--skip-git-repo-check', 'Hello'])
+    expect(none.args).not.toContain('--add-dir')
+  })
+
+  it('skips an addDirs entry that is not a string', () => {
+    const cmd = codexHarness.command({
+      cli: { bin: 'codex', addDirs: [null, 'C:\\one', 42] },
+      prompt: 'Hello',
+      folder: 'C:\\sandbox',
+    })
+    expect(cmd.args.filter((arg) => arg === '--add-dir')).toHaveLength(1)
+    expect(cmd.args.at(-1)).toBe('Hello')
+  })
 })
 
 describe('codex parser with fixture lines', () => {
