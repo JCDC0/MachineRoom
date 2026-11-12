@@ -1117,3 +1117,12 @@ Files: scripts/mr-agent.mjs, tests/.
 Run `npx vitest related --run` on every file you changed and `npm run build`; both must pass.
 
 Files: server/orchestrator.js, server/endpoints.js, src/control/client.js, src/ui/EndpointsPanel.jsx, tests/.
+
+
+**P106. The detail docs catch up with tonight's merges (AGY).** Read no part of TASKS.md beyond this brief. Use no subagents. Run every command in the foreground. Change no code. Commit each file as you finish it, and stop starting new work at minute 40.
+
+Tonight merged P77 to P99. For each merge below, read its changelog line under `## Unreleased` in `docs/agents/CHANGELOG.md` and the code it names, then make the detail docs say what the code now does, in plain words and short sentences, no em dashes: `docs/agents/architecture/ROOM.md` (what the owner sees: the state-only chip P84, buttons with the page scrolled P79, the model picker P78, chat Copy, Retry and Branch P81, the folded work line and Jump to newest P83, the context size and `(assumed)` P92, the session at the top P85), `docs/agents/architecture/LIVE.md` (routes and files: `/api/model-pins` and `model-pins.json` P77, model details in `endpoints.json` P77, `/api/orchestrator/sessions/branch` P81, a room turn that waits during a merge P94, hooks off in review merges P99), `docs/agents/architecture/COMMANDS.md` (`MR_AGENT_MAX_COST_USD` P89, the runs folder made again P95, the retry of a non-JSON answer P96, native recordings P88, the session a run records P85), and `docs/agents/architecture/CODE.md` (one line for each new file: `src/ui/ModelPicker.jsx`, `src/model/laneStarter.js`). Change only the lines that are wrong or missing; check every sentence you write against the code and give `file:line` for it in your report.
+
+Run `node node_modules/vitest/vitest.mjs run tests/briefs.test.js tests/docs.test.js` if they exist and `npm run build`; both must pass.
+
+Files: docs/agents/architecture/ROOM.md, docs/agents/architecture/LIVE.md, docs/agents/architecture/COMMANDS.md, docs/agents/architecture/CODE.md.
