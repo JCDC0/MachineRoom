@@ -18,6 +18,7 @@ import {
   saveSessionSort,
   sessionAge,
   sessionMenuActionForKey,
+  sessionMenuItemForKey,
   sessionMenuItems,
   sessionRows,
   sortSessionRows,
@@ -210,6 +211,11 @@ describe('the conversation menu', () => {
     expect(current.find((item) => item.action === 'unread').disabled).toBe(false)
     expect(sessionMenuActionForKey(current, 'a')).toBeNull()
     expect(sessionMenuActionForKey(current, 'f').action).toBe('fork')
+    for (const item of current) {
+      expect(sessionMenuItemForKey(current, item.key.toLowerCase())).toBe(item)
+    }
+    expect(sessionMenuItemForKey(current, 'a')).toMatchObject({ action: 'archive', disabled: true })
+    expect(sessionMenuItemForKey(current, 'x')).toBeNull()
   })
 
   it('unpins a starred row and unarchives an archived row', () => {

@@ -9,8 +9,17 @@ function clone(value) {
   return JSON.parse(JSON.stringify(value))
 }
 
+function messages(count) {
+  return Array.from({ length: count }, (_, index) => ({
+    id: `m${index + 1}`,
+    from: 'owner',
+    text: `Message ${index + 1}`,
+  }))
+}
+
 function makeClient(overrides = {}) {
   const calls = { update: [], open: [], branch: [], delete: [], new: [] }
+  const listeners = new Set()
   const state = {
     current: { id: 'current', title: 'Live one', startedAt: NOW, count: 2 },
     sessions: [
@@ -32,11 +41,18 @@ function makeClient(overrides = {}) {
     orchestratorSessions: async () => clone(state),
     orchestrator: async () => ({
       id: 'orchestrator',
-      messages: [{ id: 'm1', from: 'owner', text: 'Hello' }],
+      messages: messages(state.current.count),
     }),
     orchestratorSession: async ({ session }) => {
       const found = findSession(session)
-      return { title: found?.title ?? '', messages: [] }
+      return { title: found?.title ?? '', messages: messages(found?.count ?? 0) }
+    },
+    subscribe: (listener) => {
+      listeners.add(listener)
+      return () => listeners.delete(listener)
+    },
+    notify: (notice = { topic: 'orchestrator' }) => {
+      for (const listener of [...listeners]) listener(notice)
     },
     updateOrchestratorSession: async (payload) => {
       calls.update.push(payload)
@@ -212,6 +228,58 @@ describe('the conversation menu', () => {
     })
   })
 
+  it('forks the current conversation at the live count when the list is out of date', async () => {
+    await withDom(async ({ container, root }) => {
+      const client = makeClient()
+      client.orchestrator = async () => ({ id: 'orchestrator', messages: messages(4) })
+      await mount(root, client)
+      await openMenu(root, container, 'Live one')
+      await click(root, menuItem(container, 'Fork'))
+      await settle()
+
+      expect(client.calls.branch[0]).toMatchObject({ index: 4, confirmed: true })
+    })
+  })
+
+  it('forks a saved conversation at the count the bridge returns', async () => {
+    await withDom(async ({ container, root }) => {
+      const client = makeClient()
+      client.orchestratorSession = async ({ session }) => ({
+        title: session,
+        messages: messages(session === 'alpha' ? 5 : 0),
+      })
+      await mount(root, client)
+      await openMenu(root, container, 'Alpha')
+      await click(root, menuItem(container, 'Fork'))
+      await settle()
+
+      expect(client.calls.open[0]).toMatchObject({ session: 'alpha' })
+      expect(client.calls.branch[0]).toMatchObject({ index: 5, confirmed: true })
+    })
+  })
+
+  it('refreshes the counts when a chat turn ends and enables Fork', async () => {
+    await withDom(async ({ container, dom, root }) => {
+      const client = makeClient()
+      client.state.current.count = 0
+      client.orchestrator = async () => ({ id: 'orchestrator', messages: [] })
+      await mount(root, client)
+      await openMenu(root, container, 'Live one')
+      expect(menuItem(container, 'Fork').hasAttribute('disabled')).toBe(true)
+
+      client.state.current.count = 4
+      client.orchestrator = async () => ({ id: 'orchestrator', messages: messages(4) })
+      await act(async () => {
+        client.notify()
+      })
+      await settle(250)
+      expect(menuItem(container, 'Fork').hasAttribute('disabled')).toBe(false)
+
+      await press(root, dom.window, 'f')
+      expect(client.calls.branch[0]).toMatchObject({ index: 4, confirmed: true })
+    })
+  })
+
   it('pins and renames the current row from its menu', async () => {
     await withDom(async ({ container, root }) => {
       const client = makeClient()
@@ -278,6 +346,30 @@ describe('the conversation menu', () => {
       await press(root, dom.window, 'a')
       expect(client.calls.update).toHaveLength(0)
       expect(container.querySelector('.mr-side-confirm')).toBeNull()
+    })
+  })
+
+  it('consumes every menu key when the row has no enabled item and keeps the menu open', async () => {
+    await withDom(async ({ container, dom, root }) => {
+      const client = makeClient()
+      client.state.current.id = ''
+      client.state.current.count = 0
+      const roomKeys = []
+      dom.window.addEventListener('keydown', (event) => roomKeys.push(event.key))
+      await mount(root, client)
+      await openMenu(root, container, 'Live one')
+
+      for (const key of ['p', 'r', 'f', 'u', 'a', 'd']) {
+        await press(root, dom.window, key)
+        expect(container.querySelector('.mr-side-menu')).not.toBeNull()
+      }
+
+      expect(roomKeys).toEqual([])
+      expect(client.calls.update).toHaveLength(0)
+      expect(client.calls.open).toHaveLength(0)
+      expect(client.calls.branch).toHaveLength(0)
+      expect(client.calls.delete).toHaveLength(0)
+      expect(client.calls.new).toHaveLength(0)
     })
   })
 })

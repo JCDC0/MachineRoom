@@ -271,12 +271,17 @@ export function sessionMenuItems(row, { busy = false } = {}) {
   ]
 }
 
-export function sessionMenuActionForKey(items, key) {
+export function sessionMenuItemForKey(items, key) {
   const letter = String(key ?? '').toLowerCase()
   if (!letter) return null
   return (Array.isArray(items) ? items : []).find(
-    (item) => !item.disabled && item.key.toLowerCase() === letter
+    (item) => item.key.toLowerCase() === letter
   ) ?? null
+}
+
+export function sessionMenuActionForKey(items, key) {
+  const item = sessionMenuItemForKey(items, key)
+  return item && !item.disabled ? item : null
 }
 
 export function agentCountLine(activeCount, maxCount) {
