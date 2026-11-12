@@ -919,6 +919,9 @@ export function createOrchestrator({
           sessionId: s.sessionId ?? null,
           opencodeSessionId: s.opencodeSessionId ?? null,
           summary: s.summary ?? '',
+          branchTranscript: typeof s.branchTranscript === 'string'
+            ? s.branchTranscript.slice(0, BRANCH_TRANSCRIPT_LIMIT)
+            : '',
           messages: (Array.isArray(s.messages) ? s.messages : []).slice(-SESSION_MESSAGES_LIMIT).map((m) => ({ ...m })),
         })),
         ...(ladder ? { ladder } : {}),
@@ -1091,6 +1094,9 @@ export function createOrchestrator({
           sessionId: typeof item.sessionId === 'string' ? item.sessionId : null,
           opencodeSessionId: typeof item.opencodeSessionId === 'string' ? item.opencodeSessionId : null,
           summary: typeof item.summary === 'string' ? item.summary : '',
+          branchTranscript: typeof item.branchTranscript === 'string'
+            ? item.branchTranscript.slice(0, BRANCH_TRANSCRIPT_LIMIT)
+            : '',
           messages: itemMessages.slice(-SESSION_MESSAGES_LIMIT),
         })
       }
@@ -1337,9 +1343,10 @@ export function createOrchestrator({
     const first = !sessionId
     if (first && harness === 'claude') sessionId = randomUUID()
     const carried = first ? branchTranscript || summary : ''
+    const carriedBranch =
+      (harness === 'claude' || harness === 'opencode') && carried !== '' && branchTranscript !== ''
     if (carried && (harness === 'claude' || harness === 'opencode')) {
       summary = ''
-      branchTranscript = ''
     }
     const startedAt = now()
     const logName = `${logPrefix}-chat-${stamp(startedAt)}`
@@ -1518,6 +1525,10 @@ export function createOrchestrator({
       return
     }
     turn.child = child
+    if (carriedBranch) {
+      branchTranscript = ''
+      persist()
+    }
     child.stdout?.pipe(stream, { end: false })
     let stderrTail = Buffer.alloc(0)
     child.stderr?.on('data', (chunk) => {
@@ -1893,6 +1904,7 @@ export function createOrchestrator({
         existing.sessionId = harness === 'claude' ? sessionId : null
         existing.opencodeSessionId = harness === 'opencode' ? sessionId : null
         existing.summary = summary || ''
+        existing.branchTranscript = branchTranscript.slice(0, BRANCH_TRANSCRIPT_LIMIT)
         existing.messages = messages.slice(-SESSION_MESSAGES_LIMIT).map((m) => ({ ...m }))
         return existing
       }
@@ -1907,6 +1919,7 @@ export function createOrchestrator({
       sessionId: harness === 'claude' ? sessionId : null,
       opencodeSessionId: harness === 'opencode' ? sessionId : null,
       summary: summary || '',
+      branchTranscript: branchTranscript.slice(0, BRANCH_TRANSCRIPT_LIMIT),
       messages: messages.slice(-SESSION_MESSAGES_LIMIT).map((m) => ({ ...m })),
     }
     sessions.unshift(archived)
@@ -1978,7 +1991,9 @@ export function createOrchestrator({
       ? (target.opencodeSessionId || target.sessionId || null)
       : (target.sessionId || target.opencodeSessionId || null)
     summary = target.summary || ''
-    branchTranscript = ''
+    branchTranscript = typeof target.branchTranscript === 'string'
+      ? target.branchTranscript.slice(0, BRANCH_TRANSCRIPT_LIMIT)
+      : ''
     contextTokens = null
     persist()
     notify()
