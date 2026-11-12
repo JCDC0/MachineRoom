@@ -1,6 +1,21 @@
 import { toAgents } from './source.js'
 import { FOLDER_SHAPE, FOLDER_SHAPE_ACCEPT, readFileList, readTreeVersion, rememberTreeVersion, treeVersionFor } from './tree.js'
 
+const treeStarts = new Map()
+
+function readTreeStart(data) {
+  return typeof data?.start === 'string' && data.start !== '' ? data.start : null
+}
+
+function rememberTreeStart(url, start) {
+  if (start === null) treeStarts.delete(url)
+  else treeStarts.set(url, start)
+}
+
+function treeStartFor(url) {
+  return treeStarts.get(url) ?? null
+}
+
 async function getJson(fetchImpl, url, init) {
   const response = await fetchImpl(url, init)
   if (!response.ok) throw new Error(`${url} answered ${response.status}`)
@@ -16,6 +31,7 @@ export async function discoverBridge({ url, root, fetchImpl = fetch }) {
   if (tree.error) throw new Error(tree.error)
   const version = readTreeVersion(raw)
   rememberTreeVersion(url, version)
+  rememberTreeStart(url, readTreeStart(raw))
   return { agents: toAgents(agents), rootName: root ?? tree.root, files: tree.files, version }
 }
 
@@ -33,7 +49,9 @@ export function openBridge({ url, since, onFrame, onTree, onStatus, EventSourceI
   function streamUrl() {
     const start = lastId === null ? 'history=1' : `after=${encodeURIComponent(lastId)}`
     const version = cursor ?? treeVersionFor(url)
-    return `${url}/events?${start}&tree=${FOLDER_SHAPE}${version === undefined ? '' : `&since=${version}`}`
+    const bridgeStart = treeStartFor(url)
+    const since = version === undefined ? '' : bridgeStart === null ? `&since=${version}` : `&since=${bridgeStart}:${version}`
+    return `${url}/events?${start}&tree=${FOLDER_SHAPE}${since}`
   }
 
   function open() {
@@ -67,13 +85,16 @@ export function openBridge({ url, since, onFrame, onTree, onStatus, EventSourceI
       onFrame(frame)
     })
     current.addEventListener('tree', (event) => {
-      let tree
+      let data
       try {
-        tree = readFileList(JSON.parse(event.data))
+        data = JSON.parse(event.data)
       } catch {
         return
       }
+      const tree = readFileList(data)
       if (tree.error) return
+      const start = readTreeStart(data)
+      if (start !== null) rememberTreeStart(url, start)
       if (Number.isInteger(tree.version)) {
         cursor = cursor === null || tree.full ? tree.version : Math.max(cursor, tree.version)
         rememberTreeVersion(url, cursor)

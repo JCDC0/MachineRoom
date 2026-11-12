@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync,
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import { tmpdir } from 'node:os'
 import { lanesFolder } from './lanes-source.js'
+import { laneLockPids } from '../src/briefs/run.js'
 import { projectHash } from './orchestrator.js'
 
 export const MAX_RECENT = 20
@@ -25,6 +26,37 @@ const lastPruneByFile = new Map()
 
 export function resetPruneCache() {
   lastPruneByFile.clear()
+}
+
+function processAlive(pid) {
+  if (!Number.isInteger(pid) || pid <= 0) return false
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch (error) {
+    return error?.code === 'EPERM'
+  }
+}
+
+function laneLockRunning(folder) {
+  let names = []
+  try {
+    names = readdirSync(folder)
+  } catch {
+    return false
+  }
+  for (const name of names) {
+    if (!name.endsWith('.lock') || name.startsWith('orchestrator-')) continue
+    let text = ''
+    try {
+      text = readFileSync(join(folder, name), 'utf8')
+    } catch {
+      continue
+    }
+    const holder = laneLockPids(text)
+    if (processAlive(holder.pid) || processAlive(holder.child)) return true
+  }
+  return false
 }
 
 function samePath(a, b) {
@@ -355,7 +387,7 @@ export function createProjectsApi({
 
       const runsApi = typeof runs === 'function' ? runs() : runs
       const laneSource = typeof lanesSource === 'function' ? lanesSource() : lanesSource
-      const laneRunning = Boolean(runsApi?.isRunning?.()) || Boolean(laneSource?.openRuns?.().length)
+      const laneRunning = Boolean(runsApi?.isRunning?.()) || Boolean(laneSource?.openRuns?.().length) || laneLockRunning(runsFolder)
       if (laneRunning) {
         sendJson(req, res, 409, { error: LANES_RUNNING_PROBLEM })
         return true

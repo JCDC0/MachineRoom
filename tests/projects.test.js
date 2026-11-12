@@ -619,6 +619,61 @@ describe('projects api', () => {
     expect(answers[0].body.error).toBe(LANES_RUNNING_PROBLEM)
   })
 
+  it('refuses when a lock in the runs folder names a live process', async () => {
+    const env = createEnvironment()
+    writeFileSync(join(env.runs, 'opencode.lock'), JSON.stringify({ pid: process.pid }))
+    const answers = []
+    const openedPaths = []
+    const api = createProjectsApi({
+      projectRoot: env.root,
+      runsFolder: env.runs,
+      onOpenProject: (targetPath) => {
+        openedPaths.push(targetPath)
+      },
+      sendJson: (_req, _res, status, body) => {
+        answers.push({ status, body })
+      },
+      readJsonBody: async () => ({ path: env.siblingGit, confirmed: true }),
+    })
+    const handled = await api.handle(
+      { method: 'POST', headers: { origin: 'http://127.0.0.1:5173' } },
+      {},
+      new URL('http://127.0.0.1/api/projects/open')
+    )
+    expect(handled).toBe(true)
+    expect(answers[0].status).toBe(409)
+    expect(answers[0].body.error).toBe(LANES_RUNNING_PROBLEM)
+    await new Promise((resolveWait) => setTimeout(resolveWait, 50))
+    expect(openedPaths).toEqual([])
+  })
+
+  it('opens the project when a lock in the runs folder names a dead process', async () => {
+    const env = createEnvironment()
+    writeFileSync(join(env.runs, 'opencode.lock'), JSON.stringify({ pid: 99999999 }))
+    const answers = []
+    const openedPaths = []
+    const api = createProjectsApi({
+      projectRoot: env.root,
+      runsFolder: env.runs,
+      onOpenProject: (targetPath) => {
+        openedPaths.push(targetPath)
+      },
+      sendJson: (_req, _res, status, body) => {
+        answers.push({ status, body })
+      },
+      readJsonBody: async () => ({ path: env.siblingGit, confirmed: true }),
+    })
+    const handled = await api.handle(
+      { method: 'POST', headers: { origin: 'http://127.0.0.1:5173' } },
+      { writableFinished: true },
+      new URL('http://127.0.0.1/api/projects/open')
+    )
+    expect(handled).toBe(true)
+    expect(answers[0].status).toBe(200)
+    await new Promise((resolveWait) => setTimeout(resolveWait, 50))
+    expect(openedPaths).toEqual([resolve(env.siblingGit)])
+  })
+
   it('refuses while the lane source has a run open, then opens once that run ends', async () => {
     const env = createEnvironment()
     const openedPaths = []

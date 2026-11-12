@@ -58,6 +58,7 @@ export function laneNotFoundProblem(lane) {
 }
 
 const VARIABLE = /%([A-Za-z_][A-Za-z0-9_]*)%/g
+const CODEX_VERSION_FOLDER = /^[0-9a-f]{16}$/i
 
 function expand(bin, env) {
   let missing = ''
@@ -93,6 +94,7 @@ export function codexAppProgram({ env = process.env, platform = process.platform
   let newest = null
   for (const folder of folders) {
     if (typeof folder !== 'string') continue
+    if (!CODEX_VERSION_FOLDER.test(folder)) continue
     const program = join(binDir, folder, 'codex.exe')
     try {
       const file = statFile(program)

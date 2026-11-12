@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- P103: a project switch waits while a lane lock names a live process, a page that reconnects to a restarted bridge gets a full file list, and the Codex program search takes only 16-hex version folders.
 - P109: the native agent retries a damaged 200 answer at most once per step, keeps the retries for refused statuses, and reports damagedAnswers in its result.
 - P106: ROOM.md, LIVE.md, COMMANDS.md and CODE.md now describe tonight's merges P77 to P99.
 - P111: a plain Copilot reply is cut only at lines its parser reads as tool calls, so a two-paragraph answer or a line starting with Run is kept.
