@@ -5,7 +5,7 @@ import { appendFileSync, createWriteStream, existsSync, lstatSync, mkdirSync, re
 import { homedir, tmpdir } from 'node:os'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { buildPrompt, parseBriefs, parseRules } from '../src/briefs/briefs.js'
+import { branchFor, buildPrompt, parseBriefs, parseRules } from '../src/briefs/briefs.js'
 import { formatQueueSummary, parseQueue, parseQueueArgs, runQueue } from '../src/briefs/queue.js'
 import { briefProblems, briefWorktreeProblems, childEnvironment, commandFor, createLaneLog, DEFAULT_MINUTES, filterRunsSince, formatOutcomes, formatStats, formatSummary, laneCommandProblem, laneStats, laneStopProblem, laneWithOverrides, ORCHESTRATOR_LANE_PROBLEM, parseRunArgs, projectProblems, projectRunGit, readinessLine, retryStartProblem, runListLine, runRecord, sessionToolLines, startFailureText, summarizeRun, unattendedPrompt, worktreeFor, WORKTREES_FOLDER } from '../src/briefs/run.js'
 import { outcomeTable } from '../server/outcomes.js'
@@ -25,6 +25,7 @@ const entry = fileURLToPath(import.meta.url)
 const root = resolve(entry, '..', '..')
 const docs = join(root, 'docs', 'agents')
 const read = (name) => readFileSync(join(docs, name), 'utf8')
+const RUNNER_COMMIT_VERSION = '0.1.402'
 
 function stamp(date = new Date()) {
   const pad = (value) => String(value).padStart(2, '0')
@@ -224,6 +225,34 @@ function worktreeChanges(worktree) {
     const name = line.slice(3).trim().replace(/^"|"$/g, '')
     return !(name === 'node_modules' || name.startsWith('node_modules/') || name.startsWith('node_modules\\'))
   })
+}
+
+function gitFailure(result) {
+  const text = String(result.error?.message ?? result.stderr ?? '').trim()
+  return text === '' ? 'git failed' : text.replace(/\s*\r?\n\s*/g, ' ')
+}
+
+function runnerCommit({ laneKey, worktree, brief } = {}) {
+  const title = String(brief?.title ?? '').trim()
+  if (title === '') return false
+  if (worktreeChanges(worktree).length === 0) {
+    console.log(`The ${laneKey} lane changed no file.`)
+    return false
+  }
+  const run = (args) => spawnSync(gitPath(), args, { cwd: worktree, encoding: 'utf8', windowsHide: true })
+  const fail = (result) => {
+    console.log(`The runner could not commit the ${laneKey} lane's work: ${gitFailure(result)}`)
+    return false
+  }
+  const switched = run(['switch', '-c', branchFor(brief)])
+  if (switched.error || switched.status !== 0) return fail(switched)
+  const added = run(['add', '-A'])
+  if (added.error || added.status !== 0) return fail(added)
+  const subject = `${RUNNER_COMMIT_VERSION}: ${title}`
+  const body = `Written by the ${laneKey} lane in its sandbox; committed by the runner.`
+  const committed = run(['commit', '-m', subject, '-m', body])
+  if (committed.error || committed.status !== 0) return fail(committed)
+  return true
 }
 
 export function worktreePlan(project, lane) {
@@ -1242,6 +1271,10 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
     laneLog.flush()
     await new Promise((done) => log.end(done))
     const minutes = Math.round(((Date.now() - startedAt) / 60000) * 10) / 10
+
+    if (!project && !killed && result.code === 0 && lane.cli?.commits === 'runner' && wanted.length > 0) {
+      runnerCommit({ laneKey: options.lane, worktree: lane.worktree, brief: wanted[0] })
+    }
 
     if (result.error) console.log(`start failed: ${result.error.message}`)
     if (start) {
