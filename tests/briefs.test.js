@@ -142,30 +142,98 @@ describe('briefFileList', () => {
     ])
   })
 
-  it('ignores Files: markers inside backticks or quotes and keeps only the real paragraph', () => {
+  it('ignores Files: markers inside code spans and fences and keeps only the real paragraph', () => {
     expect(briefFileList('Check the `Files: src/ignored.js` and ``Files: src/ignored2.js`` mention.')).toEqual([])
-    expect(briefFileList('Read "Files: src/a.js", \'Files: src/b.js\', \u201cFiles: src/c.js\u201d and \u2018Files: src/d.js\u2019.')).toEqual([])
+    expect(briefFileList('Check ```Files: src/a.js``` and ````Files: src/b.js```` and `` `Files: src/c.js` ``.')).toEqual([])
     expect(briefFileList('```\nFiles: src/a.js\n```')).toEqual([])
     expect(briefFileList("Check the brief's 'Files:' note. Files: src/real.js.")).toEqual(['src/real.js'])
 
-    const quotedAfter = [
+    const codeAfter = [
       "Read the owner's and agents' notes. Files: src/real.js, tests/real.test.js.",
       '',
       '1. Keep the `Files:` marker and `Files: src/a.js` out of the result.',
-      '2. Also ignore "Files: src/b.js" and \'Files: src/c.js\'.',
+      '2. Also ignore `` `Files: src/b.js` `` and ```Files: src/c.js```.',
       '',
       '```',
       'Files: src/d.js',
       '```',
     ].join('\n')
-    expect(briefFileList(quotedAfter)).toEqual(['src/real.js', 'tests/real.test.js'])
+    expect(briefFileList(codeAfter)).toEqual(['src/real.js', 'tests/real.test.js'])
 
-    const twoParagraphQuoted = [
+    const twoParagraphCode = [
       'Files: src/allowed.js.',
       '',
-      'Read docs/setup.md and quote `Files:` or "Files: private/config.json" for context.',
+      'Read docs/setup.md and quote `Files:` or `Files: private/config.json` for context.',
     ].join('\n')
-    expect(briefFileList(twoParagraphQuoted)).toEqual(['src/allowed.js'])
+    expect(briefFileList(twoParagraphCode)).toEqual(['src/allowed.js'])
+  })
+
+  it('masks fenced blocks of three or more backticks or tildes until a matching closing fence', () => {
+    const fourBacktick = [
+      'Files: src/real.js.',
+      '',
+      '````markdown',
+      '```',
+      'Files: src/fake.js',
+      '```',
+      '````',
+    ].join('\n')
+    expect(briefFileList(fourBacktick)).toEqual(['src/real.js'])
+
+    const plainFourBacktick = [
+      'Files: src/real.js.',
+      '',
+      '````',
+      '```',
+      'Files: src/fake.js',
+      '```',
+      '````',
+    ].join('\n')
+    expect(briefFileList(plainFourBacktick)).toEqual(['src/real.js'])
+
+    const tildeFence = [
+      'Files: src/real.js.',
+      '',
+      '~~~',
+      'Files: src/fake.js',
+      '~~~',
+    ].join('\n')
+    expect(briefFileList(tildeFence)).toEqual(['src/real.js'])
+
+    const nestedTildeFence = [
+      'Files: src/real.js.',
+      '',
+      '~~~~markdown',
+      '~~~',
+      'Files: src/fake.js',
+      '~~~',
+      '```',
+      'Files: src/also-fake.js',
+      '```',
+      '~~~~',
+    ].join('\n')
+    expect(briefFileList(nestedTildeFence)).toEqual(['src/real.js'])
+
+    const longerClosingFence = [
+      'Files: src/real.js.',
+      '',
+      '```',
+      'Files: src/fake.js',
+      '~~~',
+      '```js',
+      '````',
+    ].join('\n')
+    expect(briefFileList(longerClosingFence)).toEqual(['src/real.js'])
+
+    expect(briefFileList('```Files: src/fake.js```\nFiles: src/real.js.')).toEqual(['src/real.js'])
+    expect(briefFileList('```\nunclosed\n\nFiles: src/real.js.')).toEqual(['src/real.js'])
+    expect(briefFileList('Keep `unclosed.\n\nFiles: src/real.js.')).toEqual(['src/real.js'])
+  })
+
+  it('does not let prose apostrophes or quotes hide a real Files: marker', () => {
+    expect(briefFileList("Keep 'em small. Files: src/real.js. Read the agents' notes.")).toEqual(['src/real.js'])
+    expect(briefFileList("Read René's note. Files: src/real.js. Keep the agents' guide.")).toEqual(['src/real.js'])
+    expect(briefFileList('Say "keep \'em" and \'check\' here. Files: src/real.js. Read René\'s notes.')).toEqual(['src/real.js'])
   })
 })
 

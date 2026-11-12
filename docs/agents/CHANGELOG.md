@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- A brief's file list ignores Files markers only inside code fences and inline code, so prose apostrophes never hide it (P143).
 - The tree-partial and git concurrency tests wait for the state they need rather than a fixed time (P129, P146).
 - The detail docs describe lane lock liveness, masked run-lane paths, the brief file list rules and the conversation menu's row checks (P147).
 - run-lane's project lock refusals and queue or worktree dry runs name the project with profile folders masked (P144).
@@ -10,6 +11,7 @@
 - The lane source and the runs route count a lane lock as live only when its holder or child started before the lock (P138).
 - The conversation menu keeps its row's start time and title, so a conversation switch closes it and its keys never reach the new conversation (P142).
 - Project-lock refusals and queue or worktree dry runs print the project with the profile folder masked (P144).
+- briefFileList masks only fenced code blocks and inline backticks so prose apostrophes and quotes never hide a brief's file list (P143).
 - A check of reviews 13, 15 and 16 found every non-blocking finding fixed but the merge check, which P124 holds (P137).
 - A Files marker inside backticks or quotes no longer hides a brief's real file list (P133).
 - Dry runs and lock refusals print their paths with the profile folders masked, and a lane's stale child lock no longer refuses a start (P140).
