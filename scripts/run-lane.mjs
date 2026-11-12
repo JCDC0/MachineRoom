@@ -1421,7 +1421,7 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
     if (leftoversCleaned) notes.push('leftovers were stopped')
     if (commit.leftOut.length > 0) {
       for (const path of commit.leftOut) laneLog.push('stderr', `Left out of the commit: ${path}\n`)
-      notes.push(`Left out of the commit: ${commit.leftOut.join(', ')}`)
+      notes.push(commit.leftOut.map((path) => `Left out of the commit: ${path}`).join('; '))
     }
     if (!commit.ok) {
       const text = `The runner could not commit the ${options.lane} lane's work: ${commit.error}`
