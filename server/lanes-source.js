@@ -273,12 +273,21 @@ export function createRecordsCache(file, folder = dirname(file)) {
   }
 }
 
+function startedByOf(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const harness = typeof value.harness === 'string' ? value.harness.trim() : ''
+  const session = typeof value.session === 'string' ? value.session.trim() : ''
+  return harness && session ? { harness, session } : null
+}
+
 function metaFor(logPath) {
   try {
     const meta = JSON.parse(readFileSync(String(logPath).replace(/\.log$/i, '.meta.json'), 'utf8'))
     if (!meta || typeof meta !== 'object' || Array.isArray(meta)) return null
-    if (typeof meta.project !== 'string' || meta.project.trim() === '') return null
-    return meta
+    const project = typeof meta.project === 'string' ? meta.project.trim() : ''
+    const startedBy = startedByOf(meta.startedBy)
+    if (!project && !startedBy) return null
+    return { ...meta, project, ...(startedBy ? { startedBy } : {}) }
   } catch {
     return null
   }
@@ -418,7 +427,7 @@ export function createLanesSource(options = {}) {
     return sameRepo.get(key)
   }
 
-  function beginRun(name, path, agent, keepPaths = false, project = '') {
+  function beginRun(name, path, agent, keepPaths = false, project = '', startedBy = null) {
     const startedAt = now()
     const run = {
       name,
@@ -426,7 +435,8 @@ export function createLanesSource(options = {}) {
       key: pathKey(path),
       agent,
       project,
-      base: { runId: `run-${name}`, agentId: agent.id, issueId: `issue-${name}` },
+      startedBy,
+      base: { runId: `run-${name}`, agentId: agent.id, issueId: `issue-${name}`, ...(startedBy ? { startedBy } : {}) },
       companyId: `company-${name}`,
       seq: 0,
       offset: 0,
@@ -499,17 +509,18 @@ export function createLanesSource(options = {}) {
         continue
       }
       const meta = metaFor(path)
-      const ownProject = meta && pathKey(meta.project) === pathKey(roomRoot)
-      if (meta && !ownProject && !inRoomRepo(meta.project)) {
+      const metaProject = meta?.project ?? ''
+      const ownProject = metaProject !== '' && pathKey(metaProject) === pathKey(roomRoot)
+      if (metaProject !== '' && !ownProject && !inRoomRepo(metaProject)) {
         seen.add(key)
         continue
       }
-      if (!meta && !worktreeRunsShown) {
+      if (metaProject === '' && !worktreeRunsShown) {
         seen.add(key)
         continue
       }
       seen.add(key)
-      beginRun(entry.name.slice(0, -4), path, agent, Boolean(ownProject), meta?.project ?? '')
+      beginRun(entry.name.slice(0, -4), path, agent, Boolean(ownProject), metaProject, meta?.startedBy ?? null)
     }
     pendingChecks.clear()
   }
@@ -780,6 +791,7 @@ export function createLanesSource(options = {}) {
       lane: run.agent.key,
       startedAt: iso(run.startedAt),
       project: run.project || null,
+      ...(run.startedBy ? { startedBy: run.startedBy } : {}),
     }))
   }
 

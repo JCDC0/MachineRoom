@@ -1069,3 +1069,24 @@ describe('the runs folder', () => {
     expect(frames[0].type).toBe('heartbeat.run.queued')
   })
 })
+
+describe('the lane source carries the session that started a run', () => {
+  it('reads startedBy from a brief run meta and sends it on the first frame', async () => {
+    const base = tempDir()
+    const runs = join(base, 'runs')
+    const main = join(base, 'MachineRoom')
+    mkdirSync(runs, { recursive: true })
+    mkdirSync(main, { recursive: true })
+    git(main, ['init'])
+    git(main, ['commit', '--allow-empty', '-m', 'base'])
+    const lanes = lanesFor({ opencode: join(base, 'MachineRoom-opencode') })
+    const { source, frames } = startSource({ runs, projectRoot: main, repoRoot: main, lanes })
+    const startedBy = { harness: 'claude', session: 'session-a' }
+    writeFileSync(join(runs, 'opencode-P85-20261112-220000.meta.json'), JSON.stringify({ lane: 'opencode', sessionId: 'lane-run', startedBy }))
+    writeFileSync(join(runs, 'opencode-P85-20261112-220000.log'), `${toolLine('src/a.js')}\n`)
+    await waitFor(() => frames.some((frame) => frame.type === 'heartbeat.run.queued'), { what: 'the queued frame' })
+    const queued = frames.find((frame) => frame.type === 'heartbeat.run.queued')
+    expect(queued.payload.startedBy).toEqual(startedBy)
+    expect(source.openRuns()[0].startedBy).toEqual(startedBy)
+  })
+})
