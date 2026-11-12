@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- P110: a heredoc's opener line keeps its redirect, a redirect marks only its own operand as written, and the model picker's pin buttons wait for the saved pins.
 - P104: with a cost limit set, the native agent stops before its next request when an answer reports no dollar cost; a reported cost of 0 still counts as 0.
 - P91: a doc audit of the P70 to P76 merges finds three lines to correct in GUIDE.md and COMMANDS.md; the rest match the code.
 - P107: review 16 of eight late merges finds three push blockers (repeated paid retries, a context size from the wrong endpoint, and a frozen sub orchestrator window) and five smaller findings, each probed.
