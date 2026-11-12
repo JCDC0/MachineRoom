@@ -1,17 +1,30 @@
 import { execFileSync } from 'node:child_process'
-import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { cpSync, existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
-import { DEFAULT_PORT, buildCommand, candidatePlan, laneEnv, parseCandidateArgs, runCandidate } from '../scripts/candidate.mjs'
+import { DEFAULT_PORT, buildCommand, candidatePlan, laneEnv, parseCandidateArgs, readLanes, runCandidate } from '../scripts/candidate.mjs'
 import { killTree } from '../server/processTree.js'
+import { saveAgentsConfig } from '../server/agents-config.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 
 const NO_GIT_CONFIG = join(tmpdir(), 'machineroom-candidate-no-git-config')
+const REPO_ROOT = fileURLToPath(new URL('..', import.meta.url))
 const cleanups = []
 let repoTemplate = ''
 let templateRoot = ''
+
+function checkoutRoot() {
+  const common = execFileSync('git', ['rev-parse', '--git-common-dir'], {
+    cwd: REPO_ROOT,
+    encoding: 'utf8',
+    windowsHide: true,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  }).trim()
+  return realpathSync.native(dirname(resolve(REPO_ROOT, common)))
+}
 
 beforeAll(() => {
   templateRoot = makeTempDir('mr-candidate-template-')
@@ -156,6 +169,33 @@ describe('parseCandidateArgs', () => {
 
   it('asks for help without a lane', () => {
     expect(parseCandidateArgs(['--help'])).toMatchObject({ help: true, lane: '', port: DEFAULT_PORT })
+  })
+})
+
+describe('readLanes', () => {
+  it('gives a made lane a worktree under the repository .worktrees', () => {
+    const base = tempDir('mr-candidate-made-')
+    const dir = join(base, 'config')
+    mkdirSync(dir, { recursive: true })
+    writeFileSync(join(dir, 'lanes.json'), '{}\n')
+    const runs = join(base, 'runs')
+    saveAgentsConfig(runs, {
+      agents: [{ key: 'made1', name: 'Made OpenCode', harness: 'opencode', model: 'opencode-go/deepseek-v4.1-flash' }],
+    })
+    const previousLanesDir = process.env.MACHINEROOM_LANES_DIR
+    const previousRuns = process.env.MACHINEROOM_RUNS
+    process.env.MACHINEROOM_LANES_DIR = dir
+    process.env.MACHINEROOM_RUNS = runs
+    cleanups.push(() => {
+      if (previousLanesDir === undefined) delete process.env.MACHINEROOM_LANES_DIR
+      else process.env.MACHINEROOM_LANES_DIR = previousLanesDir
+      if (previousRuns === undefined) delete process.env.MACHINEROOM_RUNS
+      else process.env.MACHINEROOM_RUNS = previousRuns
+    })
+
+    const lanes = readLanes()
+
+    expect(lanes.made1.worktree).toBe(join(checkoutRoot(), '.worktrees', 'made1'))
   })
 })
 

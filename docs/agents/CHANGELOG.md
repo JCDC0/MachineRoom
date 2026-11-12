@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- P102: a lane the owner made starts through run-lane and candidate, the runner commits only the brief's files and never a key, log or build path, names what it left out, logs a failed commit, and takes its version from package.json.
 - P100: a brief run started from the room reads its lanes from the room's lane file and its made lanes, never docs/agents/lanes.json unless MACHINEROOM_LANES_DIR names it.
 - P103: a project switch waits while a lane lock names a live process, a page that reconnects to a restarted bridge gets a full file list, and the Codex program search takes only 16-hex version folders.
 - P109: the native agent retries a damaged 200 answer at most once per step, keeps the retries for refused statuses, and reports damagedAnswers in its result.

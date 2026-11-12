@@ -9,7 +9,7 @@ import { projectLanesFileFor, writeHiddenLanes } from '../server/active-lanes.js
 import { briefProblems, briefWorktreeProblems, commandFor, DEFAULT_MINUTES, filterRunsSince, laneCommandProblem, readinessLine, retryStartProblem, SINCE_PROBLEM, startFailureText, worktreeFor, formatOutcomes, formatStats, formatSummary, laneLockPids, laneLockText, laneStats, laneStopProblem, laneWithOverrides, nextTestStep, parseRunArgs, projectRunGit, runListLine, runRecord, sessionToolLines, summarizeRun, UNATTENDED_NOTE, unattendedPrompt } from '../src/briefs/run.js'
 import { branchFor, parseBriefs } from '../src/briefs/briefs.js'
 import { harnessByKey } from '../src/harnesses/index.js'
-import { appendRunRecord, printedRunsFolder, sessionStartedBy, startLane } from '../scripts/run-lane.mjs'
+import { appendRunRecord, printedRunsFolder, runnerCommitVersion, sessionStartedBy, startLane } from '../scripts/run-lane.mjs'
 import { makeTempDir } from './helpers/tempRoot.js'
 
 const lanes = JSON.parse(readFileSync(new URL('../docs/agents/lanes.json', import.meta.url), 'utf8'))
@@ -1524,6 +1524,30 @@ describe('scripts/run-lane.mjs', () => {
     }
   })
 
+  it('runs a dry run for a made lane from a temp runs folder', async () => {
+    const brief = briefWithFreeBranch()
+    if (!brief) return
+    const folder = makeTempDir('machine-room-made-lane-run-')
+    try {
+      const runs = join(folder, 'runs')
+      saveAgentsConfig(runs, {
+        agents: [{ key: 'opencode99', name: 'Made OpenCode', harness: 'opencode', model: 'opencode-go/deepseek-v4.1-flash' }],
+      })
+      const lanesFile = join(folder, 'lanes.json')
+      writeFileSync(lanesFile, '{}\n')
+      const result = await runLane(['opencode99', brief.id, '--dry-run', '--force'], {
+        MACHINEROOM_LANES_DIR: '',
+        MACHINEROOM_LANES_FILE: lanesFile,
+        MACHINEROOM_RUNS: runs,
+      })
+      expect(result.code, result.stdout).toBe(0)
+      expect(result.stdout).not.toContain('is not in lanes.json')
+      expect(result.stdout).toContain(`cwd: ${join(checkoutRoot(), '.worktrees', 'opencode99')}`)
+    } finally {
+      rmSync(folder, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+    }
+  })
+
   it('refuses a dry run whose lane worktree is the main checkout', async () => {
     const folder = makeTempDir('machine-room-brief-worktree-')
     try {
@@ -1906,6 +1930,130 @@ describe('the record of a project run on a git project', { timeout: 30000 }, () 
   })
 })
 
+describe('the runner commit', { timeout: 30000 }, () => {
+  function gitIn(folder, args) {
+    const result = spawnSync(gitPath(), ['-c', 'user.name=MachineRoom Test', '-c', 'user.email=test@example.invalid', '-c', 'commit.gpgsign=false', ...args], {
+      cwd: folder,
+      encoding: 'utf8',
+      windowsHide: true,
+    })
+    if (result.error) throw result.error
+    if (result.status !== 0) throw new Error(`git ${args.join(' ')} failed: ${String(result.stderr ?? '').trim()}`)
+    return String(result.stdout ?? '').trim()
+  }
+
+  function makeRepo(folder) {
+    mkdirSync(folder, { recursive: true })
+    gitIn(folder, ['init', '-q', '-b', 'main'])
+    writeFileSync(join(folder, 'README.md'), 'start\n')
+    gitIn(folder, ['add', '-A'])
+    gitIn(folder, ['commit', '-q', '-m', 'Start the repo'])
+  }
+
+  function writeFake(folder) {
+    const script = join(folder, 'fake-codex.cjs')
+    writeFileSync(script, [
+      "const { mkdirSync, writeFileSync } = require('node:fs')",
+      "const { join } = require('node:path')",
+      "mkdirSync(join(process.cwd(), 'src'), { recursive: true })",
+      "mkdirSync(join(process.cwd(), 'tests'), { recursive: true })",
+      "writeFileSync(join(process.cwd(), 'src', 'one.js'), 'one\\n')",
+      "writeFileSync(join(process.cwd(), 'stray.txt'), 'stray\\n')",
+      "writeFileSync(join(process.cwd(), 'keys.json'), '{}\\n')",
+      "writeFileSync(join(process.cwd(), 'tests', 'ok.test.js'), 'ok\\n')",
+      "writeFileSync(join(process.cwd(), 'tests', 'keys.json'), '{}\\n')",
+    ].join('\n'))
+    return script
+  }
+
+  async function runFake(base, brief, before) {
+    const worktree = join(base, 'repo')
+    makeRepo(worktree)
+    if (typeof before === 'function') before(worktree)
+    const runs = join(base, 'runs')
+    mkdirSync(runs, { recursive: true })
+    const script = writeFake(base)
+    const previousRuns = process.env.MACHINEROOM_RUNS
+    const previousCommand = harnessByKey.codex.command
+    process.env.MACHINEROOM_RUNS = runs
+    harnessByKey.codex.command = ({ folder }) => ({ file: process.execPath, args: [script], cwd: folder })
+    const lane = {
+      name: 'test-codex',
+      worktree,
+      cli: { harness: 'codex', bin: process.execPath, model: 'fake/model', commits: 'runner' },
+    }
+    try {
+      await startLane({
+        options: { lane: 'test-codex', minutes: 1 },
+        lane,
+        lanes: {},
+        wanted: [brief],
+        prompt: 'Do it.',
+        logPath: join(runs, 'run.log'),
+        usageFile: join(runs, 'run.usage.json'),
+        name: 'run-commit',
+      })
+    } finally {
+      harnessByKey.codex.command = previousCommand
+      if (previousRuns === undefined) delete process.env.MACHINEROOM_RUNS
+      else process.env.MACHINEROOM_RUNS = previousRuns
+    }
+    const records = readFileSync(join(runs, 'runs.jsonl'), 'utf8').trim().split(/\r?\n/).map((line) => JSON.parse(line))
+    return { worktree, log: readFileSync(join(runs, 'run.log'), 'utf8'), record: records[records.length - 1] }
+  }
+
+  it('commits only the brief files and names the rest in the log and the note', async () => {
+    const base = makeTempDir('machine-room-runner-commit-')
+    const brief = { id: 'T99', title: 'The runner commit', text: 'Do it.\n\nFiles: src/one.js, tests/\n' }
+    try {
+      const { worktree, log, record } = await runFake(base, brief)
+      expect(log).toContain('Left out of the commit: stray.txt')
+      expect(log).toContain('Left out of the commit: keys.json')
+      expect(log).toContain('Left out of the commit: tests/keys.json')
+      expect(record.note).toContain('Left out of the commit: stray.txt')
+      expect(record.note).toContain('Left out of the commit: keys.json')
+      expect(record.note).toContain('Left out of the commit: tests/keys.json')
+      const committed = gitIn(worktree, ['show', '--name-only', '--pretty=format:', 'HEAD']).split(/\r?\n/).filter(Boolean).sort()
+      expect(committed).toEqual(['src/one.js', 'tests/ok.test.js'])
+      const status = gitIn(worktree, ['status', '--porcelain'])
+      expect(status).toContain('stray.txt')
+      expect(status).toContain('keys.json')
+      expect(status).toContain('tests/keys.json')
+      expect(gitIn(worktree, ['log', '-1', '--pretty=%s']))
+        .toBe(`${runnerCommitVersion(join(REPO_ROOT, 'package.json'))}: The runner commit`)
+    } finally {
+      rmSync(base, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+    }
+  })
+
+  it('writes a failed commit to the log and the note', async () => {
+    const base = makeTempDir('machine-room-runner-failure-')
+    const brief = { id: 'T99', title: 'The runner commit', text: 'Do it.\n\nFiles: src/one.js\n' }
+    try {
+      const { worktree, log, record } = await runFake(base, brief, (folder) => {
+        gitIn(folder, ['branch', branchFor(brief)])
+      })
+      expect(log).toContain('The runner could not commit the test-codex lane')
+      expect(record.note).toContain('The runner could not commit the test-codex lane')
+      expect(record.commits).toEqual([])
+      expect(gitIn(worktree, ['status', '--porcelain', '--untracked-files=all'])).toContain('src/one.js')
+    } finally {
+      rmSync(base, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+    }
+  })
+
+  it('takes the commit prefix from package.json at run time', () => {
+    const folder = makeTempDir('machine-room-runner-version-')
+    try {
+      const file = join(folder, 'package.json')
+      writeFileSync(file, JSON.stringify({ version: '9.9.9' }))
+      expect(runnerCommitVersion(file)).toBe('9.9.10')
+    } finally {
+      rmSync(folder, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+    }
+  })
+})
+
 describe('a harness that fails before it starts', () => {
   it('reads the readiness sentence from the log', () => {
     const log = 'booting\n{"type":"text"}\nStandalone server exited before reporting readiness\n'
@@ -1943,7 +2091,7 @@ describe('a lane key used in a path and a branch', () => {
 
 const RECORDINGS_FOLDER = fileURLToPath(new URL('../public/recordings', import.meta.url))
 const RUNNER_TITLE = "The runner commits a sandboxed lane's work"
-const RUNNER_BRIEF = { id: 'P75', title: RUNNER_TITLE }
+const RUNNER_BRIEF = { id: 'P75', title: RUNNER_TITLE, text: 'Do it.\n\nFiles: lane-note.txt\n' }
 const RUNNER_BRANCH = 'feat/p75-the-runner-commits'
 
 function gitInRunnerRepo(repo, args) {
@@ -2029,12 +2177,12 @@ describe('a runner lane commit', () => {
     try {
       expect(gitInRunnerRepo(run.repo, ['branch', '--show-current'])).toBe(RUNNER_BRANCH)
       expect(gitInRunnerRepo(run.repo, ['rev-list', '--count', 'refs/heads/main..HEAD'])).toBe('1')
-      expect(gitInRunnerRepo(run.repo, ['log', '-1', '--format=%s'])).toBe(`0.1.402: ${RUNNER_TITLE}`)
+      expect(gitInRunnerRepo(run.repo, ['log', '-1', '--format=%s'])).toBe(`${runnerCommitVersion(join(REPO_ROOT, 'package.json'))}: ${RUNNER_TITLE}`)
       expect(gitInRunnerRepo(run.repo, ['log', '-1', '--format=%b'])).toBe('Written by the probe lane in its sandbox; committed by the runner.')
       expect(gitInRunnerRepo(run.repo, ['status', '--porcelain'])).toBe('')
       expect(run.record.branch).toBe(RUNNER_BRANCH)
       expect(run.record.commits).toHaveLength(1)
-      expect(run.record.commits[0]).toContain(`0.1.402: ${RUNNER_TITLE}`)
+      expect(run.record.commits[0]).toContain(`${runnerCommitVersion(join(REPO_ROOT, 'package.json'))}: ${RUNNER_TITLE}`)
       expect(run.logs.join('\n')).not.toContain('could not commit')
     } finally {
       rmSync(run.folder, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })

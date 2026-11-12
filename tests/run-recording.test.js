@@ -360,6 +360,49 @@ describe('writeRecording', () => {
     expect(tree.files).toEqual(['README.md'])
   })
 
+  it('records a no-change run from its base commit', () => {
+    const { dir, sha } = worktreeWith({ 'README.md': 'x\n' })
+    const root = tempFolder()
+    const logPath = join(root, 'opencode-T20-20261113-101010.log')
+    writeFileSync(logPath, 'done\n')
+    const record = {
+      lane: 'opencode',
+      startedAt: '2026-11-13T10:10:10.000Z',
+      minutes: 1,
+      exitCode: 0,
+      killed: false,
+      log: logPath,
+      branch: '',
+      commits: [],
+      base: sha,
+    }
+    const written = writeRecording({ record, lanes: { opencode: { ...lanes.opencode, worktree: dir } }, root, env: {} })
+    expect(written.name).toBe('opencode-T20-20261113-101010')
+    const tree = JSON.parse(readFileSync(written.treePath, 'utf8'))
+    expect(tree.files).toEqual(['README.md'])
+  })
+
+  it('records a no-change run at HEAD when it names no base', () => {
+    const { dir } = worktreeWith({ 'README.md': 'x\n' })
+    const root = tempFolder()
+    const logPath = join(root, 'opencode-T20-20261113-101011.log')
+    writeFileSync(logPath, 'done\n')
+    const record = {
+      lane: 'opencode',
+      startedAt: '2026-11-13T10:10:11.000Z',
+      minutes: 1,
+      exitCode: 0,
+      killed: false,
+      log: logPath,
+      branch: '',
+      commits: [],
+    }
+    const written = writeRecording({ record, lanes: { opencode: { ...lanes.opencode, worktree: dir } }, root, env: {} })
+    expect(written.name).toBe('opencode-T20-20261113-101011')
+    const tree = JSON.parse(readFileSync(written.treePath, 'utf8'))
+    expect(tree.files).toEqual(['README.md'])
+  })
+
   it('refuses a record whose log is gone and writes nothing', () => {
     const { dir, sha } = worktreeWith({ 'README.md': 'x\n' })
     const root = tempFolder()
