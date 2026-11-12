@@ -1,5 +1,6 @@
 import { AGENT_ORDER } from '../harnesses/index.js'
 import { indexFor } from './fileIndex.js'
+import { cleanStartedBy } from './laneStarter.js'
 import { createParser } from './parsers/index.js'
 import { dirSetFor, shorten } from './parsers/common.js'
 import { ancestors } from './paths.js'
@@ -20,6 +21,10 @@ export function makeContext(tree) {
 
 const RUN_END = new Set(['succeeded', 'failed', 'cancelled', 'timed_out'])
 const MESSAGE_KINDS = new Set(['order', 'report', 'dispatch', 'wake'])
+
+function textOf(value) {
+  return typeof value === 'string' ? value.trim() : ''
+}
 export const SEEN_LIMIT = 20000
 export const ENDED_LIMIT = 1000
 export const RUN_IDLE_MS = 30 * 60000
@@ -92,7 +97,9 @@ export function createPipeline({ agents, tree }) {
 
     if (frame.type === 'heartbeat.run.queued') {
       lastRunTime.set(runId, time)
-      emit({ time, type: 'run.queued' })
+      const startedBy = cleanStartedBy(payload.startedBy)
+      const session = textOf(payload.session)
+      emit({ time, type: 'run.queued', ...(startedBy ? { startedBy } : {}), ...(session ? { session } : {}) })
     } else if (frame.type === 'heartbeat.run.status') {
       if (payload.status === 'running' && ended.has(runId)) {
         // The lane source reopens a run it ended for quiet when its log grows again.
@@ -103,7 +110,9 @@ export function createPipeline({ agents, tree }) {
       if (!once(`${runId}:${payload.status}`)) return []
       lastRunTime.set(runId, time)
       if (payload.status === 'running') {
-        emit({ time, type: 'run.start' })
+        const startedBy = cleanStartedBy(payload.startedBy)
+        const session = textOf(payload.session)
+        emit({ time, type: 'run.start', ...(startedBy ? { startedBy } : {}), ...(session ? { session } : {}) })
       } else if (RUN_END.has(payload.status)) {
         const entry = parsers.get(runId)
         if (entry) {

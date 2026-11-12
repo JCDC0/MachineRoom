@@ -840,3 +840,35 @@ describe('FamilyTeam', () => {
     })
   })
 })
+
+describe('FamilyTree session rows', () => {
+  it('lists the session that started a lane under the orchestrator', async () => {
+    const { client } = makeClient()
+    client.agents = async () => [
+      { id: 'agent-claude-session', key: 'claude-session', name: 'Claude Code session', harness: 'claude', sessionReader: true },
+    ]
+    client.liveRuns = async () => [
+      {
+        runId: 'run-opencode-P85-20261112-220000',
+        lane: 'opencode',
+        status: 'running',
+        startedAt: new Date().toISOString(),
+        startedBy: { harness: 'claude', session: 'session-a' },
+      },
+    ]
+    client.runs = async () => ({ recent: [] })
+    await withDom(async ({ container, root }) => {
+      await mount(root, client)
+      await act(async () => {})
+      const row = rowByLabel(container, 'Claude Code session')
+      expect(row).not.toBe(null)
+      expect(row.getAttribute('data-kind')).toBe('session')
+      expect(row.textContent).toContain('working')
+      expect(row.textContent).toContain('started opencode')
+      const orchestrator = rowByLabel(container, 'Orchestrator')
+      expect(orchestrator).not.toBe(null)
+      const all = Array.from(rows(container))
+      expect(all[all.indexOf(orchestrator) + 1]).toBe(row)
+    })
+  })
+})

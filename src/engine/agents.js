@@ -4,6 +4,7 @@ import { LineGeometry } from 'three/addons/lines/LineGeometry.js'
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js'
 import { CSS3DObject } from 'three/addons/renderers/CSS3DRenderer.js'
 import { ownerOf, sectorArcs } from '../model/hierarchy.js'
+import { laneStarterTop } from '../model/laneStarter.js'
 import { dirname } from '../model/paths.js'
 import { CHILD_LIFE_MS } from '../model/state.js'
 import { AGENT_RING_BASE, AGENT_RING_GROW, AGENT_RING_MAX_OPACITY, AGENT_RING_MS, AGENT_RING_OPACITY_FLOOR, AGENT_RING_POOL, HUB_RADIUS, HUB_Y, ORCHESTRATOR_HOME, ORCHESTRATOR_LIFT, PARK_LIFT, SWAY_LIFT, SWAY_RATE, SWAY_SCALE, danceEnvelope, hasSubs, isSessionReader, parkedKeysFor, readerPoint, ringPulse, sectorSlotAngles, slotAngle, startDanceEnvelope, subRingPlace, writeColor, writeOpacity } from './hub.js'
@@ -450,6 +451,12 @@ export function lineParentKey(key, ladder) {
   return owner === 'orchestrator' ? 'orchestrator' : `sub-${owner}`
 }
 
+export function starOriginKey(fromKey, topKey) {
+  if (typeof fromKey !== 'string' || fromKey === '') return ''
+  if (fromKey === 'orchestrator' && typeof topKey === 'string' && topKey !== '' && topKey !== 'orchestrator') return topKey
+  return fromKey
+}
+
 export function webTunnelEnd(agentPlace, internetPlace, radius = INTERNET_RADIUS, out = {}) {
   const point = out ?? {}
   const ax = Number.isFinite(Number(agentPlace?.x)) ? Number(agentPlace.x) : 0
@@ -720,6 +727,7 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
   let swayLevel = 0
   let sectorList = []
   let slotAngles = sectorSlotAngles(null, parkedKeys)
+  let topKey = 'orchestrator'
   const chainCache = { links: null, mask: null, parents: null, back: [] }
   let pulseSource = null
   const busyList = []
@@ -1124,7 +1132,8 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
 
   function placeViews() {
     const readers = [...views.values()].filter((view) => view.sessionReader && !view.parentKey)
-    let readerIndex = 0
+    const topView = topKey === 'orchestrator' ? null : views.get(topKey) ?? null
+    const topReader = topView ? Math.max(0, readers.indexOf(topView)) : 0
     for (const view of views.values()) {
       if (view.parentKey) continue
       const agent = agentByKey.get(view.key) ?? { key: view.key, name: view.name }
@@ -1136,15 +1145,19 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
       }
       if (view.orchestrator) {
         view.index = -1
+        if (topView) readerPoint(topReader, readers.length, view.home)
+        else view.home.copy(ORCHESTRATOR_HOME)
+      } else if (view === topView) {
+        view.index = -1
         view.home.copy(ORCHESTRATOR_HOME)
       } else if (view.subOrchestrator) {
         view.index = -1
         view.home.copy(subHome(agent))
       } else if (view.sessionReader) {
         view.index = -1
+        const readerIndex = readers.indexOf(view)
         view.readerIndex = readerIndex
         readerPoint(readerIndex, readers.length, view.home)
-        readerIndex += 1
       } else {
         view.index = parkedKeys.indexOf(view.key)
         view.home.copy(laneHome(view.key, view.index))
@@ -1336,6 +1349,11 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
   }
 
   function update(state, delta, now, world, terminals, callout = null) {
+    const nextTop = laneStarterTop({ agents: state.agents, at: state.latest }) || 'orchestrator'
+    if (nextTop !== topKey) {
+      topKey = nextTop
+      placeViews()
+    }
     if (world.back && world.right) {
       camUp.crossVectors(world.back, world.right).normalize()
       rotMatrix.makeBasis(world.right, camUp, world.back)
@@ -1347,10 +1365,13 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
     endedList.length = 0
     syncViews(state, terminals)
     let mainView = null
-    for (const view of views.values()) {
-      if (view.orchestrator) {
-        mainView = view
-        break
+    if (topKey !== 'orchestrator') mainView = views.get(topKey) ?? null
+    if (!mainView) {
+      for (const view of views.values()) {
+        if (view.orchestrator) {
+          mainView = view
+          break
+        }
       }
     }
     let subCount = 0
@@ -1379,7 +1400,7 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
       const style = STYLE[status] ?? STYLE.idle
       const fade = view.parentKey ? (view.fadeStart > 0 ? childFade(now - view.fadeStart, isStill) : 1) : 1
       const ran = Boolean(entry) && (entry.status !== 'idle' || (entry.runs ?? 0) > 0 || (entry.lines?.length ?? 0) > 0)
-      if (view.sessionReader && !ran) {
+      if (view.sessionReader && !ran && view.key !== topKey) {
         view.group.visible = false
         for (const slot of view.beatRings) slot.line.visible = false
         view.link.visible = false
@@ -1565,7 +1586,7 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
         aimOrchestratorLine(view, mainView)
         writeColor(view.orchestratorLink.material, WHITE)
         writeOpacity(view.orchestratorLink.material, view.subOrchestrator ? SUB_ORCHESTRATOR_LINK_OPACITY : ORCHESTRATOR_LINK_OPACITY)
-        view.orchestratorLink.visible = true
+        view.orchestratorLink.visible = view.key !== topKey
       }
 
       if (view.web && (!online || (status !== 'working' && status !== 'queued'))) view.web = false
@@ -1677,10 +1698,13 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
       }
     }
     let mainView = null
-    for (const view of views.values()) {
-      if (view.orchestrator) {
-        mainView = view
-        break
+    if (topKey !== 'orchestrator') mainView = views.get(topKey) ?? null
+    if (!mainView) {
+      for (const view of views.values()) {
+        if (view.orchestrator) {
+          mainView = view
+          break
+        }
       }
     }
     for (const view of views.values()) aimOrchestratorLine(view, mainView)
@@ -1693,5 +1717,5 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
     pickables.length = 0
   }
 
-  return { views, pickables, update, snap, aimAt, setTasks, setLadder, setLabels, setRoster, setBands, setViewport, dispose, beat, setSway, webStart, webEnd, webActive, setOnline }
+  return { views, pickables, update, snap, aimAt, setTasks, setLadder, setLabels, setRoster, setBands, setViewport, dispose, beat, setSway, webStart, webEnd, webActive, setOnline, topKey: () => topKey }
 }

@@ -2,7 +2,7 @@ import * as THREE from 'three'
 import { CSS3DRenderer } from 'three/addons/renderers/CSS3DRenderer.js'
 import { basename, dirname } from '../model/paths.js'
 import { isOnlineCall } from '../model/online.js'
-import { CALLOUT_CROWD_LIMIT, createAgents, litChain, tunnelRoute, webTunnelEnd } from './agents.js'
+import { CALLOUT_CROWD_LIMIT, createAgents, litChain, starOriginKey, tunnelRoute, webTunnelEnd } from './agents.js'
 import { BLOOM_STRENGTH_DEFAULT, createBloomLayer } from './bloom.js'
 import { ANCHOR_DIST, FOV, OVERVIEW, createCameraRig, fitView, followTarget, projectPoint } from './camera.js'
 import { createCards } from './cards.js'
@@ -887,10 +887,11 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
   function launchAgentStar(activity) {
     const pair = agentStar(activity, ladder)
     if (!pair) return
-    const from = agentSet.views.get(pair.from)
+    const fromKey = starOriginKey(pair.from, agentSet.topKey?.() ?? 'orchestrator')
+    const from = agentSet.views.get(fromKey)
     const to = agentSet.views.get(pair.to)
     if (!from || !to) return
-    launchStarPath(from.group.position, to.group.position, from.color, pair.from, null, pair.to)
+    launchStarPath(from.group.position, to.group.position, from.color, fromKey, null, pair.to)
   }
 
   function launchWebStar(view, activity) {
