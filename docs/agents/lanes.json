@@ -267,11 +267,11 @@
   "agy": {
     "name": "agy",
     "harness": "agy",
-    "model": "Gemini 4 Hydrogen (High)",
+    "model": "Gemini 4 Hydrogen (XHigh)",
     "cli": {
       "harness": "agy",
       "bin": "%LOCALAPPDATA%\\agy\\bin\\agy.exe",
-      "model": "gemini-4-hydrogen-high"
+      "model": "gemini-4-hydrogen-xhigh"
     },
     "worktree": "C:\\GitHub\\MachineRoom\\.worktrees\\agy",
     "role": "You own backend work: server/**, scripts/**, src/control/**, src/assistant/**, src/decider/**, src/briefs/**, src/harnesses/** and src/model/**, with only the small UI change a backend change needs. UI design and the look of the room belong to the OpenCode lanes.",
@@ -282,7 +282,7 @@
       "src/App.jsx"
     ],
     "notes": [
-      "Run on Gemini 4 Hydrogen High only. Do not switch to another model.",
+      "Run on Gemini 4 Hydrogen XHigh only. Do not switch to another model.",
       "You cannot judge a design by eye here. When a brief asks for a check by eye, say in your report that it is left to the orchestrator.",
       "Up to two other AGY lanes run at the same time, each in its own C:\\GitHub\\MachineRoom\\.worktrees\\agyN worktree. Touch only the files your brief names.",
       "Your shell may start in the owner's own checkout, not in your worktree. Begin every shell command with cd /c/GitHub/MachineRoom/.worktrees/agy && and never write or run anything in the owner's checkout."
@@ -291,11 +291,11 @@
   "agy2": {
     "name": "agy2",
     "harness": "agy",
-    "model": "Gemini 4 Hydrogen (High)",
+    "model": "Gemini 4 Hydrogen (XHigh)",
     "cli": {
       "harness": "agy",
       "bin": "%LOCALAPPDATA%\\agy\\bin\\agy.exe",
-      "model": "gemini-4-hydrogen-high"
+      "model": "gemini-4-hydrogen-xhigh"
     },
     "worktree": "C:\\GitHub\\MachineRoom\\.worktrees\\agy2",
     "role": "You own backend work: server/**, scripts/**, src/control/**, src/assistant/**, src/decider/**, src/briefs/**, src/harnesses/** and src/model/**, with only the small UI change a backend change needs. UI design and the look of the room belong to the OpenCode lanes.",
@@ -306,7 +306,7 @@
       "src/App.jsx"
     ],
     "notes": [
-      "Run on Gemini 4 Hydrogen High only. Do not switch to another model.",
+      "Run on Gemini 4 Hydrogen XHigh only. Do not switch to another model.",
       "You cannot judge a design by eye here. When a brief asks for a check by eye, say in your report that it is left to the orchestrator.",
       "Up to two other AGY lanes run at the same time, each in its own C:\\GitHub\\MachineRoom\\.worktrees\\agyN worktree. Touch only the files your brief names.",
       "Your shell may start in the owner's own checkout, not in your worktree. Begin every shell command with cd /c/GitHub/MachineRoom/.worktrees/agy2 && and never write or run anything in the owner's checkout."
@@ -359,14 +359,14 @@
   "codex": {
     "name": "Codex",
     "harness": "Codex",
-    "model": "GPT-6.1 Sol, medium effort",
+    "model": "GPT-6.1 Sol, high effort",
     "modelHint": "the owner chose GPT-6.1 Sol at medium effort on 2026-11-12; without --model Codex would use its app default, GPT-6 Luna at xhigh",
     "cli": {
       "harness": "codex",
       "bin": "codex",
       "commits": "runner",
       "model": "gpt-6.1-sol",
-      "effort": "medium"
+      "effort": "high"
     },
     "worktree": "C:\\GitHub\\MachineRoom\\.worktrees\\codex",
     "role": "You work on the brief in your own worktree and report back.",
