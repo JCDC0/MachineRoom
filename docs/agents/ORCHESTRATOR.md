@@ -12,10 +12,9 @@ Rewrite this section at every merge and before you end a session. Keep it under 
 
 - 2026-11-12, evening: the last push is `fc3f87a6`, green on Ubuntu and Windows (run 43205136965). It carries P65 to P69, the review 12 fix `64c41251`, `OWNER.md`, this guide's rewrite and two CI test fixes. Read CI first with `gh run list --limit 3 --repo JCDC0/MachineRoom`.
 - Unpushed on `main`: only what merged after `fc3f87a6`.
-- Running: P70 on `opencode`, the four review 12 findings that do not block a push. Review 12 is merged; its corrections are in `AUDIT-2026-11-REVIEW-12.md`. The full suite passed on 2026-11-12 before the review fixes `64c41251` and the scale probe default.
-- Queued: P71 (the project switch sees a command-line run) and P72 (a reconnect brings the file list up to date), from GPT 6.1 Sol's review. Both touch `server/index.js`: P71 starts after P70 merges, P72 after P71.
+- Running: P72 on `opencode` (a reconnect brings the file list up to date, from GPT 6.1 Sol), and P73 on `codex`, the Codex lane's first brief. P70 and P71 are merged; a batch review and the full suite wait for the next push.
 - `main` is 0.1.401 and has been since 2026-10-29. The owner's room holds only the orchestrator and the lanes the owner makes (P49); the fleet runs in the testbench (loop step 0).
-- The fleet: `opencode` to `opencode5`, `agy` and `agy2`, and `claude`. AGY ran out of time on 2 of 3 briefs on 2026-11-11, so a brief that matters goes to OpenCode.
+- The fleet: `opencode` to `opencode5`, `agy` and `agy2`, `claude` and, since 2026-11-12, `codex` (the owner's Codex app). The owner allows more OpenCode lanes as needed (2026-11-12): `opencode6` and `opencode7` may take work, still five lanes at once at most. AGY ran out of time on 2 of 3 briefs on 2026-11-11, so a brief that matters goes to OpenCode.
 - Open for the owner: the idle draw rate, replay sound (review 9, finding 7), the beat ring with music, the all-zero cost display (N16), and a look at P63 and P64 in a live room.
 - Next: the open list in `docs/agents/PLAN.md`: the live room by eye, the open audit findings, and the owner's licence and release (P4).
 
@@ -38,7 +37,7 @@ Never:
 Ask the owner first:
 
 - A feature, or a change to how the room looks or behaves that the owner did not ask for.
-- Anything that spends money, any work for `agy3`, `opencode6` or `opencode7`, a version bump or a release.
+- Anything that spends money, any work for `agy3`, a version bump or a release.
 - Reviews, merges of work the owner asked for, docs, hunts that change no code and stopping a lane need no yes.
 
 Always:
@@ -208,8 +207,10 @@ Then do the review yourself. A PASS is not a review.
 | Orchestrator (main checkout) | Claude Code | `docs/agents/**`, merges, versions |
 | `opencode` to `opencode5` (`.worktrees\opencode` to `opencode5`) | `opencode-go/deepseek-v4.1-flash`, max | `server/**`, `scripts/**`, `src/**`, tests; reviews, full suites and hunts |
 | `claude` (`.worktrees\claude`) | Claude Sonnet | the brief it is given, in its own worktree |
+| `codex` (`.worktrees\codex`) | the Codex app's default model | the brief it is given; `src/Stage.jsx` and `src/App.jsx` are forbidden to it. Its `cli.bin` names the app's `codex.exe`, whose folder changes when the app updates, until P73 |
 | `agy`, `agy2` (`.worktrees\agy`, `agy2`) | `gemini-3.8-flash-high` | backend, script and record briefs with exact steps; `src/ui/**`, `src/styles.css`, `src/engine/**`, `src/Stage.jsx` and `src/App.jsx` are forbidden to it. A Flash run takes about twice as long as an OpenCode run |
-| `agy3`, `opencode6`, `opencode7` | | no work without the owner's word |
+| `opencode6`, `opencode7` | `opencode-go/deepseek-v4.1-flash`, max | as `opencode`, when more lanes are needed (the owner's word, 2026-11-12) |
+| `agy3` | | no work without the owner's word |
 | `opencode8` to `opencode10`, `hermes` | | retired; the runner refuses them |
 
 The forbidden paths per lane are in `docs/agents/lanes.json`; `buildPrompt` puts them in every prompt.

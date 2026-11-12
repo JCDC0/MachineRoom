@@ -707,3 +707,20 @@ The page asks `/events?...&since=V` with the tree version of its first `/api/tre
 Run `npx vitest related --run` on every file you changed and `npm run build`; both must pass.
 
 Files: server/index.js, src/live/bridge.js, src/live/tree.js, tests/.
+
+
+## Codex as a lane (2026-11-12)
+
+The owner gave the fleet a Codex lane. Codex here is the owner's Codex app: its `codex.exe` lives in `%LOCALAPPDATA%\OpenAI\Codex\bin\HASH\codex.exe`, where HASH changes when the app updates, and `codex` is not on PATH. `codex exec` waits for more input when its stdin is open; the runner already starts a harness with stdin closed.
+
+**P73. A Codex lane finds the Codex app's program (Codex).** Read no part of TASKS.md beyond this brief. Commit each step as you finish it, and stop starting new work at minute 35. Run every command in the foreground and wait for it. `src/harnesses/` stays browser safe: no `fs`, no `process` there.
+
+1. One function in `server/agents-config.js`, `codexAppProgram({ env, platform, listDir, statFile })`: on Windows, the newest `codex.exe` under `%LOCALAPPDATA%\OpenAI\Codex\bin\*\`, by the file's modified time; null on other systems, when the variable is not set, or when there is none.
+2. `isHarnessAvailable('codex', ...)` answers true when the lane's program is not found but `codexAppProgram` finds one.
+3. `scripts/run-lane.mjs` starts that program for a lane with `cli.harness` `codex` whose `cli.bin` is `codex` (or unset) and is not on PATH, and its dry run prints it with `%LOCALAPPDATA%` in place of the folder. A `cli.bin` that names a path is started as it is.
+4. Tests, by what they prove: the newest of two hash folders wins; no folder, no variable or another system gives null; a lane with `bin: "codex"` and no `codex` on PATH runs the app's program in a dry run; a lane with a full `bin` path is left alone; the availability check finds the app's program. Use temp folders and pass `env`, never the real `%LOCALAPPDATA%`.
+5. Start the real program once with `--version` on this machine and give its first line in your report.
+
+Run `npx vitest related --run` on every file you changed and `npm run build`; both must pass.
+
+Files: server/agents-config.js, scripts/run-lane.mjs, tests/.

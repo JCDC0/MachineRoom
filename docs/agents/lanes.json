@@ -356,5 +356,26 @@
     "notes": [
       "Do not start Claude Code headless outside a lane run; it spends the owner's Claude subscription."
     ]
+  },
+  "codex": {
+    "name": "Codex",
+    "harness": "Codex",
+    "model": "the Codex account default",
+    "modelHint": "no --model is passed, so Codex uses the model set in the owner's Codex app",
+    "cli": {
+      "harness": "codex",
+      "bin": "%LOCALAPPDATA%\\OpenAI\\Codex\\bin\\9e1da79431da526b\\codex.exe"
+    },
+    "worktree": "C:\\GitHub\\MachineRoom\\.worktrees\\codex",
+    "role": "You work on the brief in your own worktree and report back.",
+    "forbidden": [
+      "src/Stage.jsx",
+      "src/App.jsx"
+    ],
+    "notes": [
+      "Codex runs from the owner's Codex app, whose codex.exe sits in a folder named by a hash that changes when the app updates. If the lane cannot start, the orchestrator updates cli.bin.",
+      "You cannot see the screen. When a brief asks for a check by eye, say in your report that it is left to the orchestrator.",
+      "Touch only the files your brief names. Other lanes work at the same time in their own worktrees."
+    ]
   }
 }
