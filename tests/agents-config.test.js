@@ -815,8 +815,8 @@ describe('POST /api/lanes/:key/delete', () => {
   })
 })
 
-describe('lane runs of made lanes and brief run refusal', () => {
-  it('refuses brief run for made lane not in lanes.json with 400', async () => {
+describe('lane runs of made lanes', () => {
+  it('starts a brief run for a made lane that is not in lanes.json', async () => {
     const { client } = await startBridgeRig({ projectRoot: REPO_ROOT })
     await client.createLane({
       name: 'Claude Made',
@@ -825,7 +825,8 @@ describe('lane runs of made lanes and brief run refusal', () => {
       confirmed: true,
     })
 
-    await expect(client.startRun('claude-2', ['T1'])).rejects.toThrow('Choose a lane from the list.')
+    const started = await client.startRun('claude-2', ['P100'])
+    expect(started.lane).toBe('claude-2')
   })
 
   it('runs made lane on project with fake runner and passes effort as reasoning', async () => {

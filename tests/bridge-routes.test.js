@@ -466,7 +466,7 @@ describe('run routes', () => {
       runsDir: tempDir(),
       bridge: {
         briefsDir: join(dir, 'docs', 'agents'),
-        lanesFile: join(REPO_ROOT, 'docs', 'agents', 'lanes.json'),
+        lanesFile: join(dir, 'docs', 'agents', 'lanes.json'),
         runnerCommand: { file: process.execPath, args: [runnerPath] },
         env: {},
       },
@@ -861,6 +861,80 @@ describe('run routes', () => {
       },
       { what: 'the runner to stop' }
     )
+  })
+})
+
+describe('brief runs read the room lane file', () => {
+  function writeLaneRoom() {
+    const briefs = join(tempDir('mr-brief-room-'), 'docs', 'agents')
+    mkdirSync(briefs, { recursive: true })
+    writeFileSync(join(briefs, 'TASKS.md'), '**B6. Late join replay (OpenCode).** Let the event stream send history.')
+    writeFileSync(
+      join(briefs, 'lanes.json'),
+      JSON.stringify({
+        'docs-only': {
+          name: 'Docs Only',
+          cli: { harness: 'opencode', bin: 'opencode.exe', model: 'opencode-go/deepseek-v4.1-flash' },
+        },
+      })
+    )
+    return briefs
+  }
+
+  async function startRoomBridge(briefs) {
+    const started = await laneBridge({
+      projectRoot: RUN_ROOM,
+      runsDir: tempDir('mr-brief-room-runs-'),
+      bridge: {
+        briefsDir: briefs,
+        runnerCommand: { file: process.execPath, args: ['-e', 'process.exit(0)'] },
+        env: {},
+      },
+    })
+    writeActiveLanes(activeLanesFileFor(started.projectRoot, started.runsDir), ['docs-only'])
+    const token = started.bridge.orchestrators()?.token('orchestrator') ?? ''
+    return { url: started.url, token }
+  }
+
+  function rememberLanesDir() {
+    const previous = process.env.MACHINEROOM_LANES_DIR
+    cleanups.push(() => {
+      if (previous === undefined) delete process.env.MACHINEROOM_LANES_DIR
+      else process.env.MACHINEROOM_LANES_DIR = previous
+    })
+  }
+
+  function tokenPost(url, body, token) {
+    return getJson(url, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        ...(token ? { 'X-MachineRoom-Orchestrator': token } : {}),
+      },
+      body: JSON.stringify(body),
+    })
+  }
+
+  it('cannot name a lane that is only in docs/agents/lanes.json when the variable is unset', async () => {
+    rememberLanesDir()
+    delete process.env.MACHINEROOM_LANES_DIR
+    const briefs = writeLaneRoom()
+    const { url, token } = await startRoomBridge(briefs)
+
+    const res = await tokenPost(`${url}/api/control/runs`, { lane: 'docs-only', briefs: ['B6'], confirmed: true }, token)
+    expect(res.status).toBe(400)
+    expect(res.body).toEqual({ error: 'Choose a lane from the list.' })
+  })
+
+  it('names a lane from the room lane file when MACHINEROOM_LANES_DIR names it', async () => {
+    rememberLanesDir()
+    const briefs = writeLaneRoom()
+    process.env.MACHINEROOM_LANES_DIR = briefs
+    const { url, token } = await startRoomBridge(briefs)
+
+    const res = await tokenPost(`${url}/api/control/runs`, { lane: 'docs-only', briefs: ['B6'], confirmed: true }, token)
+    expect(res.status).toBe(202)
+    expect(res.body.lane).toBe('docs-only')
   })
 })
 
