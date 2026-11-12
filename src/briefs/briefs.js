@@ -5,11 +5,82 @@ const BRIEF_LINE = /^\*\*([A-Z]\d+[a-z]?)\. (.+?)\.\*\*\s*(.*)$/
 const OWNER_TAIL = /^(.*?)\s*\(([^()]*)\)$/
 const DONE_MARKER = /\b(merged as|built as|done)\b/i
 const FILES_MARKER = /\bFiles:/g
-const QUOTED_SPAN =
-  /```[\s\S]*?```|``(?:[^`\r\n]|`(?!`)|\r?\n(?!\s*\r?\n))*``|`(?:[^`\r\n]|\r?\n(?!\s*\r?\n))*`|"(?:\\.|[^"\\\r\n]|\r?\n(?!\s*\r?\n))*"|(?<!\w)'(?:\\.|[^'\\\r\n]|(?<=\w)'(?=\w)|\r?\n(?!\s*\r?\n))*'(?!\w)|\u201c(?:\\.|[^\\\u201d\r\n]|\r?\n(?!\s*\r?\n))*\u201d|(?<!\w)\u2018(?:\\.|[^\\\u2019\r\n]|(?<=\w)\u2019(?=\w)|\r?\n(?!\s*\r?\n))*\u2019(?!\w)/g
+const FENCE_OPEN = /^[ \t]*(`{3,}|~{3,})(.*)$/
+const FENCE_CLOSE = /^[ \t]*(`{3,}|~{3,})[ \t]*$/
 
-function maskQuoted(text) {
-  return text.replace(QUOTED_SPAN, (match) => match.replace(/[^\r\n]/g, ' '))
+function maskFencedBlocks(text) {
+  const parts = text.split(/(\r?\n)/)
+  for (let i = 0; i < parts.length; i += 2) {
+    const open = FENCE_OPEN.exec(parts[i])
+    if (!open) continue
+    const [, fence, info] = open
+    const char = fence[0]
+    if (char === '`' && info.includes('`')) continue
+    let closeIndex = -1
+    for (let j = i + 2; j < parts.length; j += 2) {
+      const close = FENCE_CLOSE.exec(parts[j])
+      if (close && close[1][0] === char && close[1].length >= fence.length) {
+        closeIndex = j
+        break
+      }
+    }
+    if (closeIndex === -1) continue
+    for (let k = i; k <= closeIndex; k += 2) {
+      parts[k] = parts[k].replace(/[^\r\n]/g, ' ')
+    }
+    i = closeIndex
+  }
+  return parts.join('')
+}
+
+function maskInlineCode(text) {
+  const paragraphBreak = /\r?\n[ \t]*\r?\n/y
+  const out = []
+  let i = 0
+  while (i < text.length) {
+    const tick = text.indexOf('`', i)
+    if (tick === -1) {
+      out.push(text.slice(i))
+      break
+    }
+    if (tick > i) out.push(text.slice(i, tick))
+    let openEnd = tick
+    while (text[openEnd] === '`') openEnd++
+    const len = openEnd - tick
+    let closeEnd = -1
+    let j = openEnd
+    while (j < text.length) {
+      if (text[j] === '\r' || text[j] === '\n') {
+        paragraphBreak.lastIndex = j
+        if (paragraphBreak.test(text)) break
+        j++
+        continue
+      }
+      if (text[j] === '`') {
+        let runEnd = j
+        while (text[runEnd] === '`') runEnd++
+        if (runEnd - j === len) {
+          closeEnd = runEnd
+          break
+        }
+        j = runEnd
+        continue
+      }
+      j++
+    }
+    if (closeEnd === -1) {
+      out.push(text.slice(tick, openEnd))
+      i = openEnd
+    } else {
+      out.push(text.slice(tick, closeEnd).replace(/[^\r\n]/g, ' '))
+      i = closeEnd
+    }
+  }
+  return out.join('')
+}
+
+function maskCode(text) {
+  return maskInlineCode(maskFencedBlocks(text))
 }
 
 function pathLike(value) {
@@ -64,7 +135,7 @@ export function parseBriefs(markdown) {
 
 export function briefFileList(text) {
   const source = String(text ?? '')
-  const marker = [...maskQuoted(source).matchAll(FILES_MARKER)].pop()
+  const marker = [...maskCode(source).matchAll(FILES_MARKER)].pop()
   if (!marker) return []
   const span = source.slice(marker.index + marker[0].length).split(/\r?\n\s*\r?\n/)[0] ?? ''
   const rest = span.replace(/\([^()]*\)/g, ' ')
