@@ -1279,3 +1279,14 @@ Review 18 (`docs/agents/AUDIT-2026-11-REVIEW-18.md`, P119) read P113, P115 to P1
 2. Finding 7: with the menu open, every menu key (P, R, F, U, A, D) is consumed even when its item is disabled; only enabled items act.
 3. Tests, by what they prove: a fork after new messages carries all of them; F on a disabled Fork changes no room mode and the menu stays open.
 4. Run `node node_modules/vitest/vitest.mjs related --run src/ui/Sidebar.jsx src/ui/sidebar.js` and `npm run build`. Report what passed.
+
+## Run output names no profile folder (2026-11-13)
+
+Review 15 (`docs/agents/AUDIT-2026-11-REVIEW-15.md`, finding 3) found that `run-lane` prints full paths that name the owner's profile folder: the `log:` and `record:` lines, and the runs-folder sentence of P95, which masks only TEMP and LOCALAPPDATA. This is the first brief for the AGY lanes on Gemini 4 Hydrogen High.
+
+**P123. Run output names no profile folder (AGY).** Read review 15 finding 3 and this brief only. Use no subagents. Run every command in the foreground. Commit each step as you finish it, and stop starting new work at minute 35. Files: scripts/run-lane.mjs, tests/run-lane.test.js, docs/agents/CHANGELOG.md.
+
+1. `printedRunsFolder` in `scripts/run-lane.mjs` also masks HOME, USERPROFILE and XDG_STATE_HOME, the longest matching prefix first, as `%TEMP%`, `%LOCALAPPDATA%`, `%USERPROFILE%`, `~` and `$XDG_STATE_HOME`. It compares Windows paths without regard to case.
+2. Every path `run-lane` prints for the owner goes through it: the `log:` and `record:` lines, the recovery sentence, and the `--list` and `--stats` output if they print a path. The files written and the paths passed to the harness do not change.
+3. Tests, by what they prove: a log path under the profile prints with `%USERPROFILE%`; a Linux runs folder under HOME prints with `~`; the longest prefix wins (`%LOCALAPPDATA%` over `%USERPROFILE%`); a path outside them all prints as it is. Write the Windows cases so they run on Linux too, by passing the variables and using `path.win32` where the code needs it, or mark them Windows only with `it.skipIf(process.platform !== 'win32')`.
+4. Run `node node_modules/vitest/vitest.mjs run tests/run-lane.test.js` and `npm run build`. Report what passed.
