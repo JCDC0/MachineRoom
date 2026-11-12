@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- P98: an audit of every path that picks a room's lanes and runs folder finds the owner's room safe, with one route that still reads docs/agents/lanes.json when it decides a brief run.
 - P95: the runner makes the runs folder again when it was deleted during a run, says so once with the folder masked, and still writes its record.
 - P89: MR_AGENT_MAX_COST_USD stops the native agent before its next request once its counted cost reaches the limit, and it reaches only a machineroom lane.
 - P81: each chat message shows Copy and Branch on hover and focus, and the newest reply and each stopped line show Retry; Branch starts a new conversation from that message and keeps the old one in the list.
