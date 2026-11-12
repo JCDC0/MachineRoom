@@ -408,8 +408,8 @@ describe('a file that leaves the project', () => {
       writeFileSync(join(root, 'tick.js'), '1\n')
       await waitFor(() => reads.count() >= 2)
       await waitFor(() => readTreeEvents(plain.text()).length > 0 && readTreeEvents(folder.text()).length > 0)
-      expect(readTreeEvents(plain.text())).toEqual([{ root: 'project', files: [], removed: ['b.js'] }])
-      expect(readTreeEvents(folder.text())).toEqual([{ root: 'project', files: [], removed: ['b.js'] }])
+      expect(readTreeEvents(plain.text())).toEqual([{ root: 'project', files: [], removed: ['b.js'], version: 2 }])
+      expect(readTreeEvents(folder.text())).toEqual([{ root: 'project', files: [], removed: ['b.js'], version: 2 }])
     } finally {
       await plain.close()
       await folder.close()
@@ -428,7 +428,7 @@ describe('a file that leaves the project', () => {
       reads.set(['a.js', 'new.js'])
       writeFileSync(join(root, 'tick.js'), '1\n')
       await waitFor(() => readTreeEvents(events.text()).length > 0)
-      expect(readTreeEvents(events.text())).toEqual([{ root: 'project', files: ['new.js'], removed: ['old.js'] }])
+      expect(readTreeEvents(events.text())).toEqual([{ root: 'project', files: ['new.js'], removed: ['old.js'], version: 2 }])
     } finally {
       await events.close()
     }
@@ -453,7 +453,7 @@ describe('a file that leaves the project', () => {
     const events = await openEvents(url, '?tree=1&since=1')
     try {
       await waitFor(() => readTreeEvents(events.text()).length > 0)
-      expect(readTreeEvents(events.text())).toEqual([{ root: 'project', files: ['c.js'], removed: ['b.js'] }])
+      expect(readTreeEvents(events.text())).toEqual([{ root: 'project', files: ['c.js'], removed: ['b.js'], version: 3 }])
     } finally {
       await events.close()
     }

@@ -153,6 +153,13 @@ describe('the page side', () => {
     expect(trees).toEqual([{ root: 'p', files }, { root: 'p', files: ['c.js'] }])
   })
 
+  it('keeps the whole list flag and version of a tree event', () => {
+    const trees = []
+    openBridge({ url: 'http://bridge-full', EventSourceImpl: FakeSource, onFrame: () => {}, onTree: (tree) => trees.push(tree), onStatus: () => {} })
+    FakeSource.last.emit('tree', JSON.stringify({ root: 'p', files: ['a.js'], removed: ['gone/b.js'], full: true, version: 4 }))
+    expect(trees).toEqual([{ root: 'p', files: ['a.js'], removed: ['gone/b.js'], full: true, version: 4 }])
+  })
+
   it('asks for the folder shape and reads it in discoverBridge and loadTree', async () => {
     const asked = []
     const files = ['a.js', 'src/b.js']
@@ -223,7 +230,7 @@ describe('the bridge', () => {
     expect(packed.created).toEqual([])
     expect(Number.isInteger(packed.version)).toBe(true)
     expect(packed.version).toBeGreaterThan(0)
-    expect(readFileList(packed)).toEqual({ root: 'project', files: plain.files })
+    expect(readFileList(packed)).toEqual({ root: 'project', files: plain.files, version: packed.version })
     expect((await discoverBridge({ url: loop.url })).files).toEqual(plain.files)
   })
 
@@ -241,9 +248,9 @@ describe('the bridge', () => {
     await ready
     const plain = readFirstTree(loop.url, '?tree=1', () => writeFileSync(join(root, 'src', 'c.js'), 'x\n'))
     const [packed, paths] = await Promise.all([asking, plain])
-    expect(paths).toEqual({ root: 'project', files: ['a.js', 'src/b.js', 'src/c.js'], full: true })
+    expect(paths).toEqual({ root: 'project', files: ['a.js', 'src/b.js', 'src/c.js'], full: true, version: expect.any(Number) })
     expect(packed.shape).toBe(FOLDER_SHAPE)
-    expect(readFileList(packed)).toEqual(paths)
+    expect(readFileList(packed)).toEqual({ ...paths, version: packed.version })
   })
 
   it('keeps later tree events as a short list of paths', () => {

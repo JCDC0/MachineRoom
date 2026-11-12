@@ -431,7 +431,7 @@ describe('the file tree', () => {
 
     writeFileSync(join(dir, 'b.js'), '2\n')
     const event = await sse.next((e) => e.event === 'tree')
-    expect(JSON.parse(event.data)).toEqual({ root: basename(dir), files: ['b.js'], removed: [] })
+    expect(JSON.parse(event.data)).toEqual({ root: basename(dir), files: ['b.js'], removed: [], version: read.body.version + 1 })
   })
 
   it('sends a file added between the tree read and the stream connect', async () => {
@@ -450,20 +450,18 @@ describe('the file tree', () => {
     const sse = await openSse(url, {}, `?history=1&tree=${FOLDER_SHAPE}&since=${read.body.version}`)
     cleanups.push(() => sse.close())
     const event = await sse.next((e) => e.event === 'tree')
-    expect(JSON.parse(event.data)).toEqual({ root: basename(dir), files: ['b.js'], removed: [] })
+    expect(JSON.parse(event.data)).toEqual({ root: basename(dir), files: ['b.js'], removed: [], version: read.body.version + 1 })
   })
 
-  it('sends the whole list to a stream whose since is unknown', async () => {
+  it('sends the whole list at once to a stream whose since is unknown', async () => {
     const dir = tempDir()
     writeFileSync(join(dir, 'a.js'), '1\n')
     const { url } = await laneBridge({ projectRoot: dir, bridge: { debounceMs: 50 } })
-    await getJson(`${url}/api/tree`, { headers: { Accept: `application/json; shape=${FOLDER_SHAPE}` } })
+    const read = await getJson(`${url}/api/tree`, { headers: { Accept: `application/json; shape=${FOLDER_SHAPE}` } })
     const sse = await openSse(url, {}, `?tree=${FOLDER_SHAPE}&since=999999`)
     cleanups.push(() => sse.close())
-
-    writeFileSync(join(dir, 'b.js'), '2\n')
     const event = await sse.next((e) => e.event === 'tree')
-    expect(JSON.parse(event.data)).toEqual({ ...packTree({ root: basename(dir), files: ['a.js', 'b.js'] }), full: true })
+    expect(JSON.parse(event.data)).toEqual({ ...packTree({ root: basename(dir), files: ['a.js'] }), full: true, version: read.body.version })
   })
 
   it('sends no tree event to a page already at the current version', async () => {
@@ -478,7 +476,7 @@ describe('the file tree', () => {
 
     writeFileSync(join(dir, 'b.js'), '2\n')
     const event = await sse.next((e) => e.event === 'tree')
-    expect(JSON.parse(event.data)).toEqual({ root: basename(dir), files: ['b.js'], removed: [] })
+    expect(JSON.parse(event.data)).toEqual({ root: basename(dir), files: ['b.js'], removed: [], version: read.body.version + 1 })
   })
 
   it('sends a page two versions behind exactly the files added since', async () => {
@@ -508,10 +506,36 @@ describe('the file tree', () => {
     const sse = await openSse(url, {}, `?tree=${FOLDER_SHAPE}&since=${first.body.version}`)
     cleanups.push(() => sse.close())
     const event = await sse.next((e) => e.event === 'tree')
-    expect(JSON.parse(event.data)).toEqual({ root: basename(dir), files: ['b.js', 'c.js'], removed: [] })
+    expect(JSON.parse(event.data)).toEqual({ root: basename(dir), files: ['b.js', 'c.js'], removed: [], version: first.body.version + 2 })
   })
 
-  it('sends the whole list to a page whose version is no longer kept', async () => {
+  it('sends a reconnect the files added and removed since its version', async () => {
+    const dir = tempDir()
+    writeFileSync(join(dir, 'a.js'), '1\n')
+    writeFileSync(join(dir, 'b.js'), '2\n')
+    const { url } = await laneBridge({ projectRoot: dir, bridge: { debounceMs: 50 } })
+    const accept = { Accept: `application/json; shape=${FOLDER_SHAPE}` }
+    const read = await getJson(`${url}/api/tree`, { headers: accept })
+
+    rmSync(join(dir, 'b.js'))
+    writeFileSync(join(dir, 'c.js'), '3\n')
+    await waitFor(
+      async () => {
+        const body = (await getJson(`${url}/api/tree`, { headers: accept })).body
+        return body.version > read.body.version ? body : null
+      },
+      { what: 'the tree version to rise' }
+    )
+
+    const sse = await openSse(url, {}, `?tree=${FOLDER_SHAPE}&since=${read.body.version}`)
+    cleanups.push(() => sse.close())
+    const event = await sse.next((e) => e.event === 'tree')
+    const body = JSON.parse(event.data)
+    expect(body).toEqual({ root: basename(dir), files: ['c.js'], removed: ['b.js'], version: read.body.version + 1 })
+    expect(body.full).toBeUndefined()
+  })
+
+  it('sends one whole list to a page whose version is no longer kept, then only what changes', async () => {
     const dir = tempDir()
     writeFileSync(join(dir, 'a.js'), '1\n')
     const { url } = await laneBridge({ projectRoot: dir, bridge: { debounceMs: 50 } })
@@ -533,11 +557,19 @@ describe('the file tree', () => {
       version = next.version
     }
 
-    const sse = await openSse(url, {}, `?tree=1&since=${first.body.version}`)
+    const sse = await openSse(url, {}, `?tree=${FOLDER_SHAPE}&since=${first.body.version}`)
     cleanups.push(() => sse.close())
-    writeFileSync(join(dir, 'later.js'), 'x\n')
     const event = await sse.next((e) => e.event === 'tree')
-    expect(JSON.parse(event.data).files).toEqual(['a.js', ...added, 'later.js'].sort())
+    expect(JSON.parse(event.data)).toEqual({
+      ...packTree({ root: basename(dir), files: ['a.js', ...added].sort() }),
+      full: true,
+      version,
+    })
+    await expect(sse.next((e) => e.event === 'tree', 300)).rejects.toThrow('timed out waiting for SSE event')
+
+    writeFileSync(join(dir, 'later.js'), 'x\n')
+    const next = await sse.next((e) => e.event === 'tree')
+    expect(JSON.parse(next.data)).toEqual({ root: basename(dir), files: ['later.js'], removed: [], version: version + 1 })
   })
 
   it('emits a tree SSE event only to a stream that asks for one', async () => {

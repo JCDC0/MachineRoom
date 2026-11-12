@@ -28,10 +28,11 @@ export function openBridge({ url, since, onFrame, onTree, onStatus, EventSourceI
   let delay = REOPEN_START
   let closed = false
   let lastId = null
+  let cursor = Number.isInteger(since) && since >= 0 ? since : null
 
   function streamUrl() {
     const start = lastId === null ? 'history=1' : `after=${encodeURIComponent(lastId)}`
-    const version = since ?? treeVersionFor(url)
+    const version = cursor ?? treeVersionFor(url)
     return `${url}/events?${start}&tree=${FOLDER_SHAPE}${version === undefined ? '' : `&since=${version}`}`
   }
 
@@ -72,7 +73,12 @@ export function openBridge({ url, since, onFrame, onTree, onStatus, EventSourceI
       } catch {
         return
       }
-      if (!tree.error) onTree(tree)
+      if (tree.error) return
+      if (Number.isInteger(tree.version)) {
+        cursor = cursor === null ? tree.version : Math.max(cursor, tree.version)
+        rememberTreeVersion(url, cursor)
+      }
+      onTree(tree)
     })
   }
 
