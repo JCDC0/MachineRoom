@@ -2,10 +2,12 @@
 
 ## Unreleased
 
+- run-lane's project lock refusals and queue or worktree dry runs name the project with profile folders masked (P144).
 - Saved chat messages, their work steps and agent names are masked for keys and profile paths before they are cut, and unknown senders are dropped on load (P132).
 - The conversation menu closes when the current conversation changes, even though the bridge names it current each time (P142).
 - The lane source and the runs route count a lane lock as live only when its holder or child started before the lock (P138).
 - The conversation menu keeps its row's start time and title, so a conversation switch closes it and its keys never reach the new conversation (P142).
+- Project-lock refusals and queue or worktree dry runs print the project with the profile folder masked (P144).
 - A check of reviews 13, 15 and 16 found every non-blocking finding fixed but the merge check, which P124 holds (P137).
 - A Files marker inside backticks or quotes no longer hides a brief's real file list (P133).
 - Dry runs and lock refusals print their paths with the profile folders masked, and a lane's stale child lock no longer refuses a start (P140).
