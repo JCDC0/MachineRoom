@@ -643,3 +643,16 @@ Files: tests/run-lane-stop.test.js, tests/helpers/, scripts/run-lane.mjs.
 Run `npx vitest related --run scripts/scale-live.mjs` and `npm run build`; both must pass.
 
 Files: scripts/scale-live.mjs, docs/agents/AUDIT-2026-11-TREE-COST.md.
+
+**P68. The deleted-file list takes a tenth of the time (OpenCode).** Read no part of TASKS.md beyond this brief, and of `docs/agents/AUDIT-2026-11-TREE-COST.md` only `What grew` and `Ways to cut it`. Use no subagents. Run every command in the foreground and wait for it. Commit each step as you finish it, and stop starting new work at minute 40. In `server/index.js` change only the tree read.
+
+Since P51 a tree read asks `git ls-files --deleted` for the tracked files missing from the folder, and that makes a full read about five times as long. `git diff --name-only -z --diff-filter=D` gives the same names in a tenth of the time.
+
+1. Before any change: `node scripts/scale-live.mjs --files 40000 --folders 4000 --seed 36 --tree-only --keep`, and write down the full read's time.
+2. `readTree` and `readTreePartial` get the deleted names from `git diff --name-only -z --diff-filter=D --no-ext-diff --no-textconv`, with `-- NAMES` and literal pathspecs for the partial read as the list has now. Start it the way the list starts git: the same git path, time limit and buffer. A diff that fails leaves the list as it is, as a failed `--deleted` does now. A plain folder still starts no git after the first read (P62), and the two calls of a full read still run side by side.
+3. Tests, by what they prove: a tracked file deleted from the folder is not in a full read; it is not in a partial read of its name; a file removed with `git rm` is in neither; a name that starts with `-` is read as a path; the command carries `--no-ext-diff` and `--no-textconv`; a failed diff keeps the list. Keep the P51 and P62 tests passing, changing only the arguments they expect.
+4. The same command as step 1 after the change, then once with `--files 200000 --folders 20000`. Remove the kept checkouts. Report the three numbers; a full read at 40,000 files should be under 700 ms.
+
+Run `npx vitest related --run` on every file you changed and `npm run build`; both must pass.
+
+Files: server/index.js, tests/.
