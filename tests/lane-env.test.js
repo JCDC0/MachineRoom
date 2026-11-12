@@ -113,6 +113,28 @@ describe('childEnvironment', () => {
     expect(mr).not.toHaveProperty('MACHINEROOM_API_KEY')
   })
 
+  it('gives only MachineRoom the MR_AGENT_MINUTES variable', () => {
+    const parentWithMinutes = { ...PARENT, MR_AGENT_MINUTES: '25' }
+    const mr = childEnvironment(parentWithMinutes, 'C:\\work', { harness: 'machineroom' })
+    expect(mr.MR_AGENT_MINUTES).toBe('25')
+    for (const harness of ['hermes', 'opencode', 'claude']) {
+      const child = childEnvironment(parentWithMinutes, 'C:\\work', { harness })
+      expect(child).not.toHaveProperty('MR_AGENT_MINUTES')
+    }
+  })
+
+  it('keeps MR_AGENT_MINUTES for MachineRoom when using a saved endpoint', () => {
+    const parentWithMinutes = { ...PARENT, MR_AGENT_MINUTES: '25' }
+    const mr = childEnvironment(parentWithMinutes, 'C:\\work', {
+      harness: 'machineroom',
+      model: 'local/test/model',
+      endpoints: [{ name: 'local' }],
+    })
+    expect(mr.MR_AGENT_MINUTES).toBe('25')
+    expect(mr).not.toHaveProperty('OPENROUTER_API_KEY')
+    expect(mr).not.toHaveProperty('MACHINEROOM_API_KEY')
+  })
+
   it('adds MACHINEROOM_RUNS and MACHINEROOM_LANES_FILE only when the runner names them', () => {
     const none = childEnvironment(PARENT, 'C:\\work')
     expect(none).not.toHaveProperty('MACHINEROOM_RUNS')

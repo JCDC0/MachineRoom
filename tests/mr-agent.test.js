@@ -9,7 +9,7 @@ import { createRunLineReader } from '../src/briefs/recording.js'
 import { harnessByKey } from '../src/harnesses/index.js'
 import { killTree } from '../server/processTree.js'
 import { gitPath } from '../server/programPath.js'
-import { shellFor } from '../scripts/mr-agent.mjs'
+import { minuteLimitOf, shellFor, toolResultWithMinutes } from '../scripts/mr-agent.mjs'
 import { makeTempDir, removeTempDir } from './helpers/tempRoot.js'
 
 const SCRIPT = fileURLToPath(new URL('../scripts/mr-agent.mjs', import.meta.url))
@@ -910,6 +910,135 @@ describe('mr-agent', () => {
     expect(result.code).toBe(0)
     expect(result.stdout).not.toContain('The cost limit is set but the provider did not report a cost; stopped.')
     expect(result.stdout).not.toContain('Stopped at the cost limit')
+  })
+
+  it('formats tool results with the minutes line and the warning line', () => {
+    expect(minuteLimitOf({})).toBeNull()
+    expect(minuteLimitOf({ MR_AGENT_MINUTES: '0' })).toBeNull()
+    expect(minuteLimitOf({ MR_AGENT_MINUTES: '15' })).toBe(15)
+    expect(toolResultWithMinutes('done', { used: 3, limit: 10, warned: false })).toBe('done\nMinutes used: 3 of 10.')
+    expect(toolResultWithMinutes('done\n', { used: 3, limit: 10, warned: false })).toBe('done\nMinutes used: 3 of 10.')
+    expect(toolResultWithMinutes('', { used: 0, limit: 10, warned: false })).toBe('Minutes used: 0 of 10.')
+    expect(toolResultWithMinutes('done', { used: 6, limit: 10, warned: true })).toBe(
+      'done\nMinutes used: 6 of 10.\nTime is past 60 percent. Stop reading; write your file or your change now, then report.',
+    )
+  })
+
+  it('adds the minutes used line with the right numbers', async () => {
+    const folder = tempDir()
+    const clockFile = join(folder, 'clock.txt')
+    writeFileSync(clockFile, '0')
+    writeFileSync(join(folder, 'sample.txt'), 'content\n')
+    const api = await startFakeApi((_body, index) => {
+      if (index === 0) {
+        return chatAnswer({
+          text: 'First step.',
+          calls: [{ id: 'call_1', name: 'read_file', arguments: { path: 'sample.txt' } }],
+        })
+      }
+      if (index === 1) {
+        writeFileSync(clockFile, String(2 * 60 * 1000))
+        return chatAnswer({
+          text: 'Second step.',
+          calls: [{ id: 'call_2', name: 'read_file', arguments: { path: 'sample.txt' } }],
+        })
+      }
+      return chatAnswer({ text: 'Third step.' })
+    })
+    const result = await runAgent({
+      folder,
+      api,
+      env: {
+        MR_AGENT_MINUTES: '10',
+        MR_AGENT_CLOCK_FILE: clockFile,
+      },
+    })
+    expect(result.code).toBe(0)
+    const users = jsonLines(result.stdout)
+      .filter((line) => line.type === 'user')
+      .map((line) => line.message.content[0])
+    expect(users).toHaveLength(2)
+    expect(users[0].content).toContain('Minutes used: 0 of 10.')
+    expect(users[1].content).toContain('Minutes used: 2 of 10.')
+    expect(api.calls[1].body.messages.find((message) => message.role === 'tool').content).toContain('Minutes used: 0 of 10.')
+    expect(api.calls[2].body.messages.filter((message) => message.role === 'tool')[1].content).toContain('Minutes used: 2 of 10.')
+  })
+
+  it('adds the 60 percent line once', async () => {
+    const folder = tempDir()
+    const clockFile = join(folder, 'clock.txt')
+    writeFileSync(clockFile, '0')
+    writeFileSync(join(folder, 'sample.txt'), 'content\n')
+    const warning = 'Time is past 60 percent. Stop reading; write your file or your change now, then report.'
+    const api = await startFakeApi((_body, index) => {
+      if (index === 0) {
+        return chatAnswer({
+          text: 'First step.',
+          calls: [{ id: 'call_1', name: 'read_file', arguments: { path: 'sample.txt' } }],
+        })
+      }
+      if (index === 1) {
+        writeFileSync(clockFile, String(7 * 60 * 1000))
+        return chatAnswer({
+          text: 'Second step.',
+          calls: [{ id: 'call_2', name: 'read_file', arguments: { path: 'sample.txt' } }],
+        })
+      }
+      if (index === 2) {
+        writeFileSync(clockFile, String(8 * 60 * 1000))
+        return chatAnswer({
+          text: 'Third step.',
+          calls: [{ id: 'call_3', name: 'read_file', arguments: { path: 'sample.txt' } }],
+        })
+      }
+      return chatAnswer({ text: 'Fourth step.' })
+    })
+    const result = await runAgent({
+      folder,
+      api,
+      env: {
+        MR_AGENT_MINUTES: '10',
+        MR_AGENT_CLOCK_FILE: clockFile,
+      },
+    })
+    expect(result.code).toBe(0)
+    const users = jsonLines(result.stdout)
+      .filter((line) => line.type === 'user')
+      .map((line) => line.message.content[0])
+    expect(users).toHaveLength(3)
+    expect(users[0].content).not.toContain(warning)
+    expect(users[1].content).toContain('Minutes used: 7 of 10.')
+    expect(users[1].content).toContain(warning)
+    expect(users[2].content).toContain('Minutes used: 8 of 10.')
+    expect(users[2].content).not.toContain(warning)
+  })
+
+  it('adds nothing when MR_AGENT_MINUTES is unset', async () => {
+    const folder = tempDir()
+    writeFileSync(join(folder, 'sample.txt'), 'content\n')
+    const api = await startFakeApi((_body, index) => {
+      if (index === 0) {
+        return chatAnswer({
+          text: 'First step.',
+          calls: [{ id: 'call_1', name: 'read_file', arguments: { path: 'sample.txt' } }],
+        })
+      }
+      return chatAnswer({ text: 'Second step.' })
+    })
+    const result = await runAgent({
+      folder,
+      api,
+      env: {
+        MR_AGENT_MINUTES: '',
+      },
+    })
+    expect(result.code).toBe(0)
+    const users = jsonLines(result.stdout)
+      .filter((line) => line.type === 'user')
+      .map((line) => line.message.content[0])
+    expect(users).toHaveLength(1)
+    expect(users[0].content).not.toContain('Minutes used:')
+    expect(users[0].content).not.toContain('Time is past 60 percent')
   })
 
   it('stops the whole shell tree on the time limit', async () => {

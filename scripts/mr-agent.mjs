@@ -1190,6 +1190,35 @@ function costLimitOf(env) {
   return Number.isFinite(value) && value > 0 ? value : null
 }
 
+export function minuteLimitOf(env) {
+  const value = Number(env?.MR_AGENT_MINUTES)
+  return Number.isFinite(value) && value > 0 ? value : null
+}
+
+function readClock(env = process.env) {
+  const file = typeof env?.MR_AGENT_CLOCK_FILE === 'string' ? env.MR_AGENT_CLOCK_FILE.trim() : ''
+  if (file !== '') {
+    try {
+      const text = readFileSync(file, 'utf8').trim()
+      const value = Number(text)
+      if (Number.isFinite(value)) return value
+    } catch {}
+  }
+  const rawNow = Number(env?.MR_AGENT_NOW)
+  if (Number.isFinite(rawNow)) return rawNow
+  return Date.now()
+}
+
+export function toolResultWithMinutes(text, { used, limit, warned = false } = {}) {
+  const base = typeof text === 'string' ? text : ''
+  const head = base === '' ? '' : base.endsWith('\n') ? base : `${base}\n`
+  const lines = [`Minutes used: ${used} of ${limit}.`]
+  if (warned) {
+    lines.push('Time is past 60 percent. Stop reading; write your file or your change now, then report.')
+  }
+  return `${head}${lines.join('\n')}`
+}
+
 function messageChars(messages) {
   return JSON.stringify(messages).length
 }
@@ -1332,6 +1361,9 @@ async function main() {
   const limit = contextLimit(process.env)
   const stepLimit = maxSteps(process.env)
   const costLimit = costLimitOf(process.env)
+  const minuteLimit = minuteLimitOf(process.env)
+  const startedAt = readClock(process.env)
+  let warned60 = false
   let inputTokens = 0
   let outputTokens = 0
   let cost = null
@@ -1429,12 +1461,21 @@ async function main() {
         const outcome = inputs[index].error !== ''
           ? { text: inputs[index].error, isError: true }
           : await runTool(call.name, inputs[index].args, options.cwd, web)
-        messages.push({ role: 'tool', tool_call_id: call.id, content: outcome.text })
+        let text = outcome.text
+        if (minuteLimit !== null) {
+          const now = readClock(process.env)
+          const elapsedMs = Math.max(0, now - startedAt)
+          const used = Math.floor(elapsedMs / 60000)
+          const shouldWarn = !warned60 && elapsedMs >= minuteLimit * 60000 * 0.6
+          if (shouldWarn) warned60 = true
+          text = toolResultWithMinutes(outcome.text, { used, limit: minuteLimit, warned: shouldWarn })
+        }
+        messages.push({ role: 'tool', tool_call_id: call.id, content: text })
         writeJson({
           type: 'user',
           message: {
             role: 'user',
-            content: [{ type: 'tool_result', tool_use_id: call.id, content: outcome.text, is_error: Boolean(outcome.isError) }],
+            content: [{ type: 'tool_result', tool_use_id: call.id, content: text, is_error: Boolean(outcome.isError) }],
           },
         })
       }

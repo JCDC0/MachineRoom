@@ -1269,10 +1269,14 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
       .filter((name) => typeof process.env[name] === 'string' && process.env[name] !== '')
     const runsDir = options?.runs || (logPath ? dirname(logPath) : runsFolder())
     const endpoints = readEndpoints(runsDir)
+    const extra = { ...command.env }
+    if (lane.cli.harness === 'machineroom' && Number.isFinite(Number(options?.minutes))) {
+      extra.MR_AGENT_MINUTES = String(options.minutes)
+    }
     const childEnv = childEnvironment(process.env, command.cwd, {
       harness: lane.cli.harness,
       names: runnerNames,
-      extra: command.env,
+      extra,
       model: lane.cli.model,
       endpoints,
     })
