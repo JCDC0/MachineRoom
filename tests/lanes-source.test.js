@@ -1090,3 +1090,105 @@ describe('the lane source carries the session that started a run', () => {
     expect(source.openRuns()[0].startedBy).toEqual(startedBy)
   })
 })
+
+describe('lane lock stale checks in the lane source', () => {
+  const DEAD_PID = 2147483647
+
+  function noWatch() {
+    return {
+      on() {
+        return this
+      },
+      close() {},
+    }
+  }
+
+  function startLockedSource({ lock, platform = 'win32', stat, list }) {
+    const base = tempDir('mr-lanes-lock-')
+    const runs = join(base, 'runs')
+    mkdirSync(runs, { recursive: true })
+    const worktree = join(base, 'MachineRoom-opencode3')
+    const lanes = lanesFor({ opencode: worktree })
+    const lockPath = join(runs, 'opencode.lock')
+    writeFileSync(lockPath, JSON.stringify(lock))
+    writeFileSync(join(runs, 'opencode-P138-20261113-120000.log'), `${toolLine(`${worktree}\\src\\a.js`)}\n`)
+
+    let current = 1_000_000
+    const frames = []
+    const source = createLanesSource({
+      folder: runs,
+      lanes,
+      quietMs: 100,
+      pollMs: 20,
+      now: () => current,
+      platform,
+      stat,
+      list,
+      watchFolder: noWatch,
+      onFrame: (frame) => frames.push(frame),
+    })
+    cleanups.push(() => source.stop())
+    source.start()
+    return {
+      runs,
+      lockPath,
+      frames,
+      source,
+      advance(ms) {
+        current += ms
+        source.tick()
+      },
+    }
+  }
+
+  it('closes an orphan run on Windows when the lock pid and child pid were reused', () => {
+    const childPid = process.ppid > 0 && process.ppid !== process.pid ? process.ppid : DEAD_PID
+    let listCalls = 0
+    const rig = startLockedSource({
+      lock: { pid: process.pid, child: childPid },
+      stat: () => ({ mtimeMs: 10000 }),
+      list: () => {
+        listCalls += 1
+        return [
+          { pid: process.pid, created: 13000 },
+          { pid: childPid, created: 14000 },
+        ]
+      },
+    })
+
+    expect(rig.source.openRuns()).toHaveLength(1)
+    expect(endFrame(rig.frames)).toBeUndefined()
+
+    rig.advance(150)
+    expect(endFrame(rig.frames)?.payload).toMatchObject({ status: 'failed', error: 'no record' })
+    expect(rig.source.openRuns()).toEqual([])
+    expect(listCalls).toBe(1)
+  })
+
+  it('keeps an orphan run open when the runner pid died or was reused on Windows while the child is live', () => {
+    const hasDistinctParent = process.ppid > 0 && process.ppid !== process.pid
+    const childPid = hasDistinctParent ? process.ppid : process.pid
+    const rig = startLockedSource({
+      lock: { pid: hasDistinctParent ? process.pid : DEAD_PID, child: childPid },
+      stat: () => ({ mtimeMs: 10000 }),
+      list: () => [
+        { pid: process.pid, created: hasDistinctParent ? 13000 : 9000 },
+        ...(hasDistinctParent ? [{ pid: childPid, created: 9000 }] : []),
+      ],
+    })
+
+    rig.advance(150)
+    expect(endFrame(rig.frames)).toBeUndefined()
+    expect(rig.source.openRuns()).toHaveLength(1)
+
+    writeFileSync(rig.lockPath, JSON.stringify({ pid: DEAD_PID, child: childPid }))
+    rig.advance(50)
+    expect(endFrame(rig.frames)).toBeUndefined()
+    expect(rig.source.openRuns()).toHaveLength(1)
+
+    rmSync(rig.lockPath, { force: true })
+    rig.advance(50)
+    expect(endFrame(rig.frames)?.payload).toMatchObject({ status: 'failed', error: 'no record' })
+    expect(rig.source.openRuns()).toEqual([])
+  })
+})
