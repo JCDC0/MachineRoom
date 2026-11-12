@@ -1063,3 +1063,32 @@ Files: server/runs.js, tests/.
 Review what these merges brought, with `git show -m --first-parent SHA` for each, against the code around each change: `ecea6fcc` (P84), `2658b11e` (P79), `06ff081a` (P88), `d8380254` (P77), `505595cf` (P81), `b465fb47` (P89), `1c22ca48` (P95). Hunt for what a test would not show: a write route without the page-origin guard; a value from a provider or a file saved without a cap; a branch of a chat that loses or duplicates messages, or carries a summary into the wrong conversation; a cost limit that never fires because cost is null; a printed line that shows a real profile folder; a style that breaks the fonts or colours in `docs/agents/ARCHITECTURE.md`, Conventions. Write `docs/agents/AUDIT-2026-11-REVIEW-15.md`: a table of at most 8 findings, the most harmful first, each with `file:line`, what goes wrong and when, the smallest fix, and whether it blocks a push. Write no finding you cannot point to in the code. An empty table with what you checked is a good answer.
 
 Files: docs/agents/AUDIT-2026-11-REVIEW-15.md.
+
+
+## The fixes from review 13 (2026-11-12, night)
+
+Review 13 (`docs/agents/AUDIT-2026-11-REVIEW-13.md`) read the P70 to P75 merges and found eight findings; 1 and 2 block a push. P102 takes the runner's findings (1, 2, 5, 7 and 8); P103 takes the bridge's (3, 4 and 6). They touch different files and run together.
+
+**P102. A made lane runs, and the runner commits only the brief's files (OpenCode).** Read no part of TASKS.md beyond this brief, the paragraph above it, and findings 1, 2, 5, 7 and 8 of review 13. Use no subagents. Run every command in the foreground. Commit each step as you finish it, and stop starting new work at minute 45. Work on temporary repositories and runs folders, never the real ones. P85 also changes `scripts/run-lane.mjs`: keep each change to the lines it needs.
+
+1. Finding 1: `scripts/run-lane.mjs` checks the lane against the lanes `readAllLanes` gives (the owner's made lanes too), and a made lane with no `worktree` gets `worktreeFor(mainCheckout(), key)`. `scripts/candidate.mjs` reads lanes the same way.
+2. Finding 2: `runnerCommit` stages only the paths in the brief's `Files:` line (`briefFileList`), where a folder entry such as `tests/` covers the files under it. Any other changed path is left out of the commit and named in the lane log and the record's `note` as `Left out of the commit: PATH`. A path that looks like a key, a log or a build output (`keys.json`, `*.key`, `.env*`, `*.log`, `dist/`, `build/`, `out/`) is never staged, even when the brief names its folder.
+3. Finding 5: a failure in the runner commit is written to the lane log before the log closes, and into the record's `note`.
+4. Finding 7: the runner commit's version prefix comes from `package.json` at run time, the way `buildPrompt` finds it.
+5. Finding 8: `scripts/recording-files.mjs` falls back to `record.base`, then `HEAD`, when a record has no branch and no commit.
+6. Tests, by what they prove: a made lane in a temp runs folder starts with `--dry-run`; a Codex-style run that writes a brief file, a stray file and a `keys.json` commits only the brief file and names the others; a failing commit lands in the log and the note; the prefix follows `package.json`; a no-change run is recorded.
+
+Run `npx vitest related --run` on every file you changed and `npm run build`; both must pass.
+
+Files: scripts/run-lane.mjs, scripts/candidate.mjs, scripts/recording-files.mjs, tests/.
+
+**P103. The bridge's fixes from review 13 (OpenCode).** Read no part of TASKS.md beyond this brief, the paragraph above P102, and findings 3, 4 and 6 of review 13. Use no subagents. Run every command in the foreground. Commit each step as you finish it, and stop starting new work at minute 40. Work on temporary folders, never the real ones.
+
+1. Finding 3: the project switch in `server/projects.js` also refuses while a `LANE.lock` in the runs folder names a live process, with the same refusal it gives a running lane.
+2. Finding 4: each bridge start gets a start id; the tree event carries it, the page sends it back with `since`, and a different id gets a full list.
+3. Finding 6: the Codex app program search in `server/agents-config.js` skips a folder whose name is not 16 hex characters.
+4. Tests, by what they prove: a live lock refuses the switch and a dead one does not; a page that reconnects to a restarted bridge with the same version number gets a full list; a newer folder with a non-hex name is skipped.
+
+Run `npx vitest related --run` on every file you changed and `npm run build`; both must pass.
+
+Files: server/projects.js, server/index.js, src/live/bridge.js, server/agents-config.js, tests/.
