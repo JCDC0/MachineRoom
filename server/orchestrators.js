@@ -6,7 +6,7 @@ import { HARNESSES } from '../src/harnesses/index.js'
 import { canChange, outsideScope, readLadder, subPrompt } from '../src/model/hierarchy.js'
 import { isHarnessAvailable } from './agents-config.js'
 import { readEndpoints } from './endpoints.js'
-import { MODELS, resolveContextWindow } from './models.js'
+import { MODELS } from './models.js'
 import {
   CONFIRM_MESSAGE_PROBLEM,
   createOrchestrator,
@@ -305,7 +305,7 @@ export function createOrchestrators({
       harness,
       model,
       bin: String(defaults?.bin ?? harness),
-      contextWindow: resolveContextWindow(model, harness, laneWindow, readEndpoints(folder)),
+      ...(laneWindow > 0 ? { contextWindow: laneWindow } : {}),
       lanes: [...sub.lanes],
       scope: [...sub.scope],
       restricted: sub.restricted,

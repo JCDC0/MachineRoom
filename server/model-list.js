@@ -34,51 +34,73 @@ export const MODELS = [
   { id: 'gpt-5', label: 'GPT-5', harness: 'copilot', tier: 'large', free: false },
 ]
 
-function matchDetailContextLength(detail, wanted, endpointName = '') {
-  if (!detail || typeof detail !== 'object') return null
-  const id = typeof detail.id === 'string' ? detail.id.trim() : ''
-  if (!id) return null
-  const matches =
-    id === wanted ||
-    (endpointName !== '' && `${endpointName}/${id}` === wanted) ||
-    (wanted.includes('/') && wanted.slice(wanted.indexOf('/') + 1) === id) ||
-    (wanted.includes('/') && id.includes('/') && wanted.endsWith(`/${id}`)) ||
-    (id.includes('/') && wanted.endsWith(`/${id}`))
-  if (matches && typeof detail.contextLength === 'number' && Number.isFinite(detail.contextLength) && detail.contextLength > 0) {
+function detailId(detail) {
+  return detail && typeof detail === 'object' && typeof detail.id === 'string' ? detail.id.trim() : ''
+}
+
+function detailWindow(detail) {
+  if (detailId(detail) === '') return null
+  if (typeof detail.contextLength === 'number' && Number.isFinite(detail.contextLength) && detail.contextLength > 0) {
     return Math.round(detail.contextLength)
   }
   return null
 }
 
-function detailContextLength(details, wanted) {
-  if (!details || !wanted) return null
-  if (!Array.isArray(details) && typeof details === 'object') {
-    if (Array.isArray(details.modelDetails)) {
-      const endpointName = typeof details.name === 'string' ? details.name.trim() : ''
-      for (const d of details.modelDetails) {
-        const found = matchDetailContextLength(d, wanted, endpointName)
-        if (found !== null) return found
-      }
-      return null
-    }
-    return matchDetailContextLength(details, wanted)
-  }
+function detailGroups(details) {
+  const groups = []
+  if (!details || typeof details !== 'object') return groups
   if (Array.isArray(details)) {
     for (const item of details) {
       if (!item || typeof item !== 'object') continue
       if (Array.isArray(item.modelDetails)) {
-        const endpointName = typeof item.name === 'string' ? item.name.trim() : ''
-        for (const d of item.modelDetails) {
-          const found = matchDetailContextLength(d, wanted, endpointName)
-          if (found !== null) return found
-        }
+        groups.push({ name: typeof item.name === 'string' ? item.name.trim() : '', details: item.modelDetails })
       } else {
-        const found = matchDetailContextLength(item, wanted)
-        if (found !== null) return found
+        groups.push({ name: '', details: [item] })
       }
     }
+    return groups
   }
-  return null
+  if (Array.isArray(details.modelDetails)) {
+    groups.push({ name: typeof details.name === 'string' ? details.name.trim() : '', details: details.modelDetails })
+    return groups
+  }
+  groups.push({ name: '', details: [details] })
+  return groups
+}
+
+function detailContextLength(details, wanted) {
+  if (!details || !wanted) return null
+  const groups = detailGroups(details)
+
+  for (const group of groups) {
+    if (group.name === '' || !wanted.startsWith(`${group.name}/`)) continue
+    const id = wanted.slice(group.name.length + 1)
+    for (const detail of group.details) {
+      if (detailId(detail) !== id) continue
+      const window = detailWindow(detail)
+      if (window !== null) return window
+    }
+    return null
+  }
+
+  for (const group of groups) {
+    for (const detail of group.details) {
+      if (detailId(detail) !== wanted) continue
+      const window = detailWindow(detail)
+      if (window !== null) return window
+    }
+  }
+
+  const matches = []
+  for (const group of groups) {
+    for (const detail of group.details) {
+      const id = detailId(detail)
+      if (id === '' || !wanted.endsWith(`/${id}`)) continue
+      const window = detailWindow(detail)
+      if (window !== null) matches.push(window)
+    }
+  }
+  return matches.length === 1 ? matches[0] : null
 }
 
 export function resolveContextWindow(modelId, harnessKey = '', laneWindowOption = 0, modelDetailsOption = null) {
