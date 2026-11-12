@@ -840,3 +840,17 @@ Files: src/ui/OrchestratorChat.jsx, src/ui/orchestratorChat.js, src/styles.css, 
 Run `npx vitest related --run` on every file you changed and `npm run build`; both must pass. Name the by-eye checks for the orchestrator at 1280 by 800.
 
 Files: src/ui/OrchestratorChat.jsx, src/ui/orchestratorChat.js, src/styles.css, server/orchestrator.js, server/orchestrators.js, server/index.js, tests/.
+
+**P83. The chat holds the conversation, and the work folds away (OpenCode).** Starts after P81 is merged, before P82. Read no part of TASKS.md beyond this brief and the paragraph above P81. Use no subagents. Run every command in the foreground. Commit each step as you finish it, and stop starting new work at minute 45.
+
+The owner sees every terminal line of a turn saved into the chat, so the conversation drowns in tool output. The owner sent a message, saw nothing happen at the bottom, and found by scrolling up that the turn was already working.
+
+1. Find where a turn's tool calls and their output enter the chat's messages or reply text (`server/orchestrator.js` and the harness `reply` functions it calls), and keep them out: a turn leaves in the chat the owner's message and the agent's final answer, nothing else.
+2. A turn's work shows as one line under the owner's message: `Working: STEP` while it runs, the newest step only, and `Worked: N steps, M s` when it ends, in Space Mono. It opens to the list of steps (the tool and its target, one line each, no output), and closes again.
+3. Sending a message scrolls to the bottom. While a turn runs, the view stays at the bottom unless the owner scrolled up; then a `Jump to newest` button shows at the bottom edge. The working line and a reply always land at the bottom.
+4. Old conversations that already hold terminal lines still show, unchanged.
+5. Tests, by what they prove: a turn with five tool calls leaves two messages and one folded line of 5 steps; the working line shows the newest step; a sent message scrolls to the bottom; scrolled up, new lines do not move the view and the button shows.
+
+Run `npx vitest related --run` on every file you changed and `npm run build`; both must pass. Name the by-eye checks for the orchestrator at 1280 by 800.
+
+Files: src/ui/OrchestratorChat.jsx, src/ui/orchestratorChat.js, src/styles.css, server/orchestrator.js, src/harnesses/, tests/.
