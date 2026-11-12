@@ -377,7 +377,7 @@ export default function ModelPicker({
           <div className="mr-picker-head">
             <input
               ref={searchRef}
-              type="text"
+              type="search"
               className="mr-picker-search"
               value={query}
               autoComplete="off"
