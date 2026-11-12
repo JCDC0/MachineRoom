@@ -2360,6 +2360,59 @@ describe('appendRunRecord', () => {
     expect(printedRunsFolder(folder, { TEMP: temp, LOCALAPPDATA: local })).toBe('%TEMP%\\machineroom-runs')
   })
 
+  it('masks a Windows log path under USERPROFILE without regard to case', () => {
+    expect(printedRunsFolder('c:\\users\\me\\custom-runs\\run.log', { USERPROFILE: 'C:\\Users\\Me' })).toBe(
+      '%USERPROFILE%\\custom-runs\\run.log'
+    )
+  })
+
+  it('masks a Linux runs folder under HOME with ~, and prefers XDG_STATE_HOME when longer', () => {
+    expect(printedRunsFolder('/home/me/.local/state/machineroom/runs', { HOME: '/home/me' })).toBe(
+      '~/.local/state/machineroom/runs'
+    )
+    expect(
+      printedRunsFolder('/home/me/.local/state/machineroom/runs', {
+        HOME: '/home/me',
+        XDG_STATE_HOME: '/home/me/.local/state',
+      })
+    ).toBe('$XDG_STATE_HOME/machineroom/runs')
+  })
+
+  it('picks the longest matching prefix (%LOCALAPPDATA% over %USERPROFILE%, and %TEMP% over both)', () => {
+    const profile = 'C:\\Users\\me'
+    const local = `${profile}\\AppData\\Local`
+    const temp = `${local}\\Temp`
+    expect(
+      printedRunsFolder(`${local}\\MachineRoom\\runs\\run.log`, {
+        USERPROFILE: profile,
+        LOCALAPPDATA: local,
+      })
+    ).toBe('%LOCALAPPDATA%\\MachineRoom\\runs\\run.log')
+    expect(
+      printedRunsFolder(`${temp}\\machineroom-runs\\run.log`, {
+        USERPROFILE: profile,
+        LOCALAPPDATA: local,
+        TEMP: temp,
+      })
+    ).toBe('%TEMP%\\machineroom-runs\\run.log')
+  })
+
+  it('leaves a path outside all masked prefixes as it is', () => {
+    expect(
+      printedRunsFolder('D:\\work\\runs\\run.log', {
+        USERPROFILE: 'C:\\Users\\me',
+        LOCALAPPDATA: 'C:\\Users\\me\\AppData\\Local',
+        TEMP: 'C:\\Users\\me\\AppData\\Local\\Temp',
+      })
+    ).toBe('D:\\work\\runs\\run.log')
+    expect(
+      printedRunsFolder('/var/tmp/machineroom-runs', {
+        HOME: '/home/me',
+        XDG_STATE_HOME: '/home/me/.local/state',
+      })
+    ).toBe('/var/tmp/machineroom-runs')
+  })
+
   it('appends to the runsFile configured by environment', () => {
     const folder = makeTempDir('mr-append-env-')
     try {
@@ -2381,6 +2434,69 @@ describe('appendRunRecord', () => {
         `The runs folder was gone; made it again at %TEMP%${sep}custom-runs.`,
       ])
     } finally {
+      rmSync(folder, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+    }
+  })
+
+  it('masks the printed log and record lines in startLane without changing written files or record paths', async () => {
+    const folder = makeTempDir('mr-start-masked-')
+    const envKeys = ['MACHINEROOM_RUNS', 'TEMP', 'TMP', 'LOCALAPPDATA', 'USERPROFILE', 'HOME', 'XDG_STATE_HOME']
+    const saved = Object.fromEntries(envKeys.map((key) => [key, process.env[key]]))
+    const lines = []
+    const logSpy = vi.spyOn(console, 'log').mockImplementation((text) => {
+      lines.push(String(text))
+    })
+    try {
+      const profile = join(folder, 'profile')
+      const runs = join(profile, 'custom-runs')
+      const otherTemp = join(folder, 'other-temp')
+      const project = join(folder, 'project')
+      mkdirSync(runs, { recursive: true })
+      mkdirSync(otherTemp, { recursive: true })
+      mkdirSync(project, { recursive: true })
+      process.env.MACHINEROOM_RUNS = runs
+      process.env.TEMP = otherTemp
+      process.env.TMP = otherTemp
+      delete process.env.LOCALAPPDATA
+      process.env.USERPROFILE = profile
+      process.env.HOME = profile
+      delete process.env.XDG_STATE_HOME
+      writeFileSync(
+        join(project, 'run'),
+        "console.log('{\"type\":\"step_finish\",\"part\":{\"cost\":0,\"tokens\":{\"input\":1,\"output\":1}}}')\n"
+      )
+      const lane = {
+        name: 'test-opencode',
+        worktree: project,
+        cli: { harness: 'opencode', bin: process.execPath, model: 'fake/model' },
+      }
+      const logPath = join(runs, 'run-masked.log')
+      await startLane({
+        options: { lane: 'test-opencode', minutes: 1 },
+        lane,
+        lanes: { 'test-opencode': lane },
+        wanted: [],
+        prompt: 'test prompt',
+        logPath,
+        usageFile: join(runs, 'run-masked.usage.json'),
+        name: 'run-masked',
+        project,
+        task: 'task',
+      })
+
+      const prefix = process.platform === 'win32' ? '%USERPROFILE%' : '~'
+      const sep = process.platform === 'win32' ? '\\' : '/'
+      expect(lines).toContain(`log: ${prefix}${sep}custom-runs${sep}run-masked.log`)
+      expect(lines).toContain(`record: ${prefix}${sep}custom-runs${sep}runs.jsonl`)
+      expect(existsSync(logPath)).toBe(true)
+      const records = readFileSync(join(runs, 'runs.jsonl'), 'utf8').trim().split(/\r?\n/).map((line) => JSON.parse(line))
+      expect(records.at(-1).log).toBe(logPath)
+    } finally {
+      logSpy.mockRestore()
+      for (const key of envKeys) {
+        if (saved[key] === undefined) delete process.env[key]
+        else process.env[key] = saved[key]
+      }
       rmSync(folder, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
     }
   })

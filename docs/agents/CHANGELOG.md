@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- run-lane prints its log, record and runs folder paths with the profile, home and state folders masked (P123).
+- Run output masks HOME, USERPROFILE and XDG_STATE_HOME alongside TEMP and LOCALAPPDATA, longest prefix first, on printed log, record and recovery lines (P123).
 - Agent messages are masked before they are stored, survive a restart and a fork, and a failed setup leaves no session id (P120).
 - A brief's Files list ends at its paragraph, and with a cost limit a fetch with no answer stops the native agent (P121).
 - Fork reads the conversation's live length before it branches, and every menu key is consumed while the menu is open (P122).
