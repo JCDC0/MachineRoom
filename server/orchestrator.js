@@ -928,6 +928,56 @@ export function createOrchestrator({
     return safe.text
   }
 
+  function laneRecords() {
+    const list = typeof lanes === 'function' ? lanes() : lanes
+    return list && typeof list === 'object' ? list : {}
+  }
+
+  function knownSender(value) {
+    const from = typeof value === 'string' ? value.trim() : ''
+    if (!from) return ''
+    if (from === 'owner' || from === 'room' || from === ORCHESTRATOR_KEY || from === 'agent') return from
+    if (from.startsWith('sub-') || from.startsWith('sub:')) return from
+    return Object.hasOwn(laneRecords(), from) ? from : ''
+  }
+
+  function restoredAgent(value) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+    const from = typeof value.from === 'string' ? value.from.trim().slice(0, 80) : ''
+    const to = typeof value.to === 'string' ? value.to.trim().slice(0, 80) : ''
+    const kind = typeof value.kind === 'string' ? value.kind.trim().slice(0, 40) : ''
+    if (!from || !to || !kind) return null
+    return {
+      from: maskText(from),
+      to: maskText(to),
+      kind: maskText(kind),
+      text: typeof value.text === 'string' ? maskText(value.text.trim().slice(0, ORCHESTRATOR_MESSAGE_LIMIT)) : '',
+      fromName: typeof value.fromName === 'string' ? maskText(value.fromName.trim().slice(0, 80)) : '',
+      toName: typeof value.toName === 'string' ? maskText(value.toName.trim().slice(0, 80)) : '',
+    }
+  }
+
+  function restoredMessage(item) {
+    if (!item || typeof item !== 'object') return null
+    const from = knownSender(item.from)
+    if (!from) return null
+    if (typeof item.text !== 'string' || item.text.trim() === '') return null
+    const work = cleanWork(item.work)
+    const message = {
+      id: typeof item.id === 'string' && item.id ? item.id : randomUUID(),
+      from,
+      text: maskText(item.text),
+      at: typeof item.at === 'string' && item.at ? item.at : iso(now()),
+      ...(work ? { work } : {}),
+    }
+    if (from === 'agent') {
+      const agent = restoredAgent(item.agent)
+      if (!agent) return null
+      message.agent = agent
+    }
+    return message
+  }
+
   function persist() {
     let failure = null
     try {
@@ -1129,18 +1179,8 @@ export function createOrchestrator({
         const itemMessages = []
         if (Array.isArray(item.messages)) {
           for (const msg of item.messages) {
-            if (!msg || typeof msg !== 'object') continue
-            const from = typeof msg.from === 'string' ? msg.from : ''
-            if (!['owner', 'orchestrator', 'room'].includes(from) && !from.startsWith('sub:')) continue
-            if (typeof msg.text !== 'string' || msg.text.trim() === '') continue
-            const work = cleanWork(msg.work)
-            itemMessages.push({
-              id: typeof msg.id === 'string' && msg.id ? msg.id : randomUUID(),
-              from,
-              text: maskText(msg.text),
-              at: typeof msg.at === 'string' && msg.at ? msg.at : iso(now()),
-              ...(work ? { work } : {}),
-            })
+            const message = restoredMessage(msg)
+            if (message) itemMessages.push(message)
           }
         }
         sessions.push({
@@ -1172,18 +1212,8 @@ export function createOrchestrator({
     }
     const list = Array.isArray(saved.messages) ? saved.messages : []
     for (const item of list) {
-      if (!item || typeof item !== 'object') continue
-      const from = typeof item.from === 'string' ? item.from : ''
-      if (!['owner', 'orchestrator', 'room'].includes(from) && !from.startsWith('sub:')) continue
-      if (typeof item.text !== 'string' || item.text.trim() === '') continue
-      const work = cleanWork(item.work)
-      messages.push({
-        id: typeof item.id === 'string' && item.id ? item.id : randomUUID(),
-        from,
-        text: maskText(item.text),
-        at: typeof item.at === 'string' && item.at ? item.at : iso(now()),
-        ...(work ? { work } : {}),
-      })
+      const message = restoredMessage(item)
+      if (message) messages.push(message)
     }
     while (messages.length > ORCHESTRATOR_CHAT_LIMIT) messages.shift()
     const cutoff = now() - ORCHESTRATOR_ROOM_WINDOW_MS
@@ -1255,16 +1285,18 @@ export function createOrchestrator({
       }
       return allLanes?.[k]?.name || k
     }
-    const fromName = resolveName(from)
-    const toName = resolveName(to)
-    const prefix = `${fromName} to ${toName}, ${kind}`
+    const fromName = maskText(String(resolveName(from) ?? ''))
+    const toName = maskText(String(resolveName(to) ?? ''))
+    const safeKind = maskText(String(kind ?? ''))
+    const prefix = `${fromName} to ${toName}, ${safeKind}`
     const trimmed = typeof text === 'string' ? text.trim() : ''
-    const lineText = trimmed ? `${prefix}: ${trimmed}` : prefix
+    const safeText = maskText(trimmed)
+    const lineText = safeText ? `${prefix}: ${safeText}` : prefix
     const message = {
       id: randomUUID(),
       from: 'agent',
-      agent: { from, to, kind, text: trimmed, fromName, toName },
-      text: maskText(lineText),
+      agent: { from: maskText(String(from ?? '')), to: maskText(String(to ?? '')), kind: safeKind, text: safeText, fromName, toName },
+      text: lineText,
       at: iso(now()),
     }
     messages.push(message)
@@ -1569,6 +1601,7 @@ export function createOrchestrator({
           rmSync(mcpConfigPath, { force: true })
         } catch {}
       }
+      failedToStart(turn)
       running = null
       addMessage('orchestrator', STOPPED_REPLY)
       setState('idle')
