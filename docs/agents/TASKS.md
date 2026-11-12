@@ -986,3 +986,18 @@ At 22:02 a room's orchestrator woke on a lane's end, found a merge the Claude or
 Run `npx vitest related --run` on every file you changed and `npm run build`; both must pass.
 
 Files: server/orchestrator.js, the file that builds the orchestrator's prompt, tests/.
+
+
+## The runner keeps its record when the runs folder vanishes (2026-11-12, night)
+
+P87 (`docs/agents/AUDIT-2026-11-WORKTREE-SWITCH.md`) found that the P75 run lost its record: a disk cleanup deleted the runs folder during the run, and `appendFileSync(runsFile(), ...)` at the end of `scripts/run-lane.mjs` threw `ENOENT`, so the runner died before it wrote the record or released the lane.
+
+**P95. The runner writes its record into a runs folder that was deleted (AGY).** Read no part of TASKS.md beyond this brief and the paragraph above it. Use no subagents. Run every command in the foreground. Commit each step as you finish it, and stop starting new work at minute 30. Work on temporary runs folders passed through `env`, never a real one. P85 also changes `scripts/run-lane.mjs`: change only the lines this brief needs.
+
+1. One helper in `scripts/run-lane.mjs` makes the runs folder (`mkdirSync(..., { recursive: true })`) and appends one record. The four `appendFileSync(runsFile(), ...)` calls (about lines 467, 902, 1347 and 1386) use it.
+2. When the folder had to be made again, the runner prints `The runs folder was gone; made it again at PATH.` once, with `%LOCALAPPDATA%` or `%TEMP%` in place of the real folder.
+3. Tests, by what they prove: a record is written after the runs folder is deleted, and the line is printed once; a normal append prints nothing.
+
+Run `npx vitest related --run scripts/run-lane.mjs` and `npm run build`; both must pass.
+
+Files: scripts/run-lane.mjs, tests/.
