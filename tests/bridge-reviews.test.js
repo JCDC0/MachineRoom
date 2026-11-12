@@ -1,11 +1,11 @@
 import { execFileSync } from 'node:child_process'
-import { cpSync, mkdirSync, writeFileSync } from 'node:fs'
+import { cpSync, existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createBridge } from '../server/index.js'
-import { defaultGitRunner, GIT_TIMEOUT_MS, GIT_WRITE_TIMEOUT_MS } from '../server/git.js'
+import { GIT_TIMEOUT_MS, GIT_WRITE_TIMEOUT_MS } from '../server/git.js'
 import { gitPath } from '../server/programPath.js'
-import { createReviewsApi, mapConcurrent, NOT_OWNER_PROBLEM } from '../server/reviews.js'
+import { createReviewsApi, defaultGitRunner, emptyHooksDir, mapConcurrent, NOT_OWNER_PROBLEM } from '../server/reviews.js'
 import { requestJson } from './helpers/httpJson.js'
 import { makeTempDir as makeTempRoot, processTempRoot, removeTempDir } from './helpers/tempRoot.js'
 
@@ -870,5 +870,80 @@ describe('merge write limits', { timeout: 30000 }, () => {
     const write = calls.find((call) => call.args[0] === 'merge' && call.args[1] === '--ff-only')
     expect(write.timeout).toBe(GIT_WRITE_TIMEOUT_MS)
     expect(git(project, ['rev-parse', 'HEAD']).trim()).toBe(head)
+  })
+})
+
+describe('merge hooks and git environment isolation', { timeout: 30000 }, () => {
+  it('owns an empty hooks directory', () => {
+    const dir = emptyHooksDir()
+    expect(existsSync(dir)).toBe(true)
+    expect(readdirSync(dir)).toHaveLength(0)
+  })
+
+  it('does not run pre-merge-commit and post-merge hooks in the repository during merge', async () => {
+    const { base, repo, worktree } = makeLaneRepo()
+    const hooksDir = join(repo, '.git', 'hooks')
+    mkdirSync(hooksDir, { recursive: true })
+    const preHook = join(hooksDir, 'pre-merge-commit')
+    const postHook = join(hooksDir, 'post-merge')
+    const postMarker = join(base, 'post-hook-ran')
+    writeFileSync(preHook, '#!/bin/sh\nexit 1\n', { mode: 0o777 })
+    writeFileSync(postHook, `#!/bin/sh\necho ran > "${postMarker.replace(/\\/g, '/')}"\n`, { mode: 0o777 })
+
+    const head = git(worktree, ['rev-parse', 'HEAD']).trim()
+    const { api, answers } = reviewsApiOn(repo, worktree, undefined, { head })
+
+    await api.handle({ method: 'POST', headers: { origin: 'http://localhost:5173' } }, {}, MERGE_URL)
+    expect(answers[0].status).toBe(200)
+    expect(answers[0].body.ok).toBe(true)
+    expect(existsSync(postMarker)).toBe(false)
+    expect(git(repo, ['rev-parse', 'HEAD']).trim()).toBe(answers[0].body.commit)
+  })
+
+  it('does not run hooks from core.hooksPath set in config during merge', async () => {
+    const { base, repo, worktree } = makeLaneRepo()
+    const customHooks = join(base, 'custom-hooks')
+    mkdirSync(customHooks, { recursive: true })
+    git(repo, ['config', 'core.hooksPath', customHooks])
+    const preHook = join(customHooks, 'pre-merge-commit')
+    const postHook = join(customHooks, 'post-merge')
+    const postMarker = join(base, 'post-hook-ran')
+    writeFileSync(preHook, '#!/bin/sh\nexit 1\n', { mode: 0o777 })
+    writeFileSync(postHook, `#!/bin/sh\necho ran > "${postMarker.replace(/\\/g, '/')}"\n`, { mode: 0o777 })
+
+    const head = git(worktree, ['rev-parse', 'HEAD']).trim()
+    const { api, answers } = reviewsApiOn(repo, worktree, undefined, { head })
+
+    await api.handle({ method: 'POST', headers: { origin: 'http://localhost:5173' } }, {}, MERGE_URL)
+    expect(answers[0].status).toBe(200)
+    expect(answers[0].body.ok).toBe(true)
+    expect(existsSync(postMarker)).toBe(false)
+    expect(git(repo, ['rev-parse', 'HEAD']).trim()).toBe(answers[0].body.commit)
+  })
+
+  it('does not move the merge to another repository when GIT_DIR is set in the environment', async () => {
+    const { repo, worktree } = makeLaneRepo()
+    const foreign = makeLaneRepo()
+    const foreignHeadBefore = git(foreign.repo, ['rev-parse', 'HEAD']).trim()
+    const head = git(worktree, ['rev-parse', 'HEAD']).trim()
+
+    process.env.GIT_DIR = join(foreign.repo, '.git')
+    process.env.GIT_WORK_TREE = foreign.repo
+    process.env.GIT_INDEX_FILE = join(foreign.repo, '.git', 'index')
+    let answers
+    try {
+      const apiOn = reviewsApiOn(repo, worktree, undefined, { head })
+      answers = apiOn.answers
+      await apiOn.api.handle({ method: 'POST', headers: { origin: 'http://localhost:5173' } }, {}, MERGE_URL)
+    } finally {
+      delete process.env.GIT_DIR
+      delete process.env.GIT_WORK_TREE
+      delete process.env.GIT_INDEX_FILE
+    }
+
+    expect(answers[0].status).toBe(200)
+    expect(answers[0].body.ok).toBe(true)
+    expect(git(repo, ['rev-parse', 'HEAD']).trim()).toBe(answers[0].body.commit)
+    expect(git(foreign.repo, ['rev-parse', 'HEAD']).trim()).toBe(foreignHeadBefore)
   })
 })
