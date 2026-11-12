@@ -29,7 +29,7 @@ import { createPlansApi } from './plans.js'
 import { createPolicyApi } from './policy.js'
 import { createProjectsApi } from './projects.js'
 import { createReviewsApi } from './reviews.js'
-import { createRunsApi } from './runs.js'
+import { createRunsApi, isGitCheckout } from './runs.js'
 import { createTeamsApi } from './teams.js'
 import { createSearchApi } from './search.js'
 import { createSessionsSource } from './sessions-source.js'
@@ -625,6 +625,21 @@ export function createBridge(options = {}) {
       onMessage: sendAgentMessage,
       sendJson,
       readJsonBody,
+      isWorking: (key) => {
+        const fromSource = lanesSource ? lanesSource.openRuns().some((r) => r.lane === key) : false
+        const fromRuns = runs && typeof runs.isRunning === 'function' ? runs.isRunning(key) : false
+        return fromSource || fromRuns
+      },
+      startLaneTask: async (lane, taskText) => {
+        if (!runs || typeof runs.startProjectTask !== 'function') throw new Error('The runner is not available.')
+        return runs.startProjectTask({
+          lane,
+          task: taskText,
+          worktree: await isGitCheckout(projectRoot),
+          allowDirty: false,
+          startedBy: 'orchestrator',
+        })
+      },
     })
   }
   const bridgeRunsFolder = resolve(options.runsFolder ?? options.orchestratorFolder ?? lanesSourceObject.folder ?? runsFolder())
@@ -1190,10 +1205,26 @@ export function createBridge(options = {}) {
     release(masker.push(parsed, Date.now()))
   }
 
-  function sendAgentMessage(message) {
-    const from = typeof message?.from === 'string' ? message.from.trim() : ''
-    const to = typeof message?.to === 'string' ? message.to.trim() : ''
-    const kind = message?.kind
+  function sendAgentMessage(first, second, third, fourth) {
+    let from = ''
+    let to = ''
+    let kind = ''
+    let text = ''
+    if (first && typeof first === 'object') {
+      from = typeof first.from === 'string' ? first.from.trim() : ''
+      to = typeof first.to === 'string' ? first.to.trim() : ''
+      kind = first.kind
+      text = typeof first.text === 'string' && first.text.trim()
+        ? first.text.trim()
+        : typeof second === 'string'
+          ? second.trim()
+          : ''
+    } else {
+      from = typeof first === 'string' ? first.trim() : ''
+      to = typeof second === 'string' ? second.trim() : ''
+      kind = third
+      text = typeof fourth === 'string' ? fourth.trim() : ''
+    }
     if (!from || !to || !AGENT_MESSAGE_KINDS.has(kind)) return
     const ts = new Date().toISOString()
     accept({
@@ -1202,6 +1233,7 @@ export function createBridge(options = {}) {
       createdAt: ts,
       payload: { from, to, kind, ts },
     })
+    orchestrators?.recordAgentMessage?.({ from, to, kind, text })
   }
 
   const heartbeatTimer = setInterval(() => {
