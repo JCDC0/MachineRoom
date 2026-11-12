@@ -3,7 +3,7 @@ import { spawn, spawnSync } from 'node:child_process'
 import { createHash, randomUUID } from 'node:crypto'
 import { appendFileSync, createWriteStream, existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
-import { dirname, isAbsolute, join, resolve } from 'node:path'
+import { dirname, isAbsolute, join, posix, resolve, win32 } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { branchFor, briefFileList, buildPrompt, nextVersion, parseBriefs, parseRules } from '../src/briefs/briefs.js'
 import { formatQueueSummary, parseQueue, parseQueueArgs, runQueue } from '../src/briefs/queue.js'
@@ -39,56 +39,85 @@ function outcomesFile() {
   return join(runsFolder(), 'outcomes.jsonl')
 }
 
-function matchPathPrefix(pathStr, prefix) {
+function isWindowsPath(value) {
+  return /^[A-Za-z]:(?:[\\/]|$)/.test(value) || value.startsWith('\\\\')
+}
+
+function matchPathPrefix(pathStr, prefix, win32Path) {
   if (!pathStr || !prefix) return null
-  if (process.platform === 'win32') {
-    if (pathStr.toLowerCase() === prefix.toLowerCase()) return ''
-    const prefixWithSep = prefix.endsWith('\\') || prefix.endsWith('/') ? prefix : `${prefix}\\`
-    if (pathStr.toLowerCase().startsWith(prefixWithSep.toLowerCase())) {
-      return pathStr.slice(prefix.length)
+  if (win32Path) {
+    const lowerPath = pathStr.toLowerCase()
+    const lowerPrefix = prefix.toLowerCase()
+    if (lowerPath === lowerPrefix) return { suffix: '', length: prefix.length }
+    const hasSep = prefix.endsWith('\\') || prefix.endsWith('/')
+    const prefixWithSep = hasSep ? prefix : `${prefix}\\`
+    if (lowerPath.startsWith(prefixWithSep.toLowerCase())) {
+      const suffix = hasSep ? pathStr.slice(prefix.length - 1) : pathStr.slice(prefix.length)
+      return { suffix, length: prefix.length }
     }
-  } else {
-    if (pathStr === prefix) return ''
-    const prefixWithSep = prefix.endsWith('/') ? prefix : `${prefix}/`
-    if (pathStr.startsWith(prefixWithSep)) {
-      return pathStr.slice(prefix.length)
-    }
+    return null
+  }
+  if (pathStr === prefix) return { suffix: '', length: prefix.length }
+  const hasSep = prefix.endsWith('/')
+  const prefixWithSep = hasSep ? prefix : `${prefix}/`
+  if (pathStr.startsWith(prefixWithSep)) {
+    const suffix = hasSep ? pathStr.slice(prefix.length - 1) : pathStr.slice(prefix.length)
+    return { suffix, length: prefix.length }
   }
   return null
 }
 
-function testPrefix(resolved, rawPrefix) {
+function testPrefix(resolved, rawPrefix, pathApi, win32Path) {
   if (!rawPrefix) return null
-  const direct = matchPathPrefix(resolved, resolve(rawPrefix))
-  if (direct !== null) return direct
-  const real = matchPathPrefix(resolved, realPath(rawPrefix))
-  if (real !== null) return real
-  return null
+  if (win32Path && rawPrefix.startsWith('/') && !rawPrefix.startsWith('//')) return null
+  if (!win32Path && isWindowsPath(rawPrefix)) return null
+  const direct = matchPathPrefix(resolved, pathApi.resolve(rawPrefix), win32Path)
+  const samePlatform = win32Path === (process.platform === 'win32')
+  const real = samePlatform ? matchPathPrefix(resolved, realPath(rawPrefix), win32Path) : null
+  if (direct && real) return real.length > direct.length ? real : direct
+  return direct ?? real
+}
+
+function readEnv(env, name) {
+  return typeof env?.[name] === 'string' ? env[name].trim() : ''
 }
 
 export function printedRunsFolder(folder, env = process.env) {
-  const resolved = resolve(String(folder ?? ''))
+  const raw = String(folder ?? '')
+  const win32Path = isWindowsPath(raw) || (process.platform === 'win32' && !raw.startsWith('/'))
+  const pathApi = win32Path ? win32 : posix
+  const resolved = pathApi.resolve(raw)
   let tempFallback = ''
+  let homeFallback = ''
   if (env === process.env) {
     try {
       tempFallback = tmpdir()
     } catch {}
+    try {
+      homeFallback = homedir()
+    } catch {}
   }
-  const temp = typeof env?.TEMP === 'string' && env.TEMP.trim()
-    ? env.TEMP.trim()
-    : (typeof env?.TMP === 'string' && env.TMP.trim() ? env.TMP.trim() : tempFallback)
-  const local = typeof env?.LOCALAPPDATA === 'string' && env.LOCALAPPDATA.trim()
-    ? env.LOCALAPPDATA.trim()
-    : (env === process.env && process.env.LOCALAPPDATA ? process.env.LOCALAPPDATA : '')
-  if (temp) {
-    const tempSuffix = testPrefix(resolved, temp)
-    if (tempSuffix !== null) return `%TEMP%${tempSuffix}`
+  const temp = readEnv(env, 'TEMP') || readEnv(env, 'TMP') || tempFallback
+  const local = readEnv(env, 'LOCALAPPDATA')
+  const userProfile = readEnv(env, 'USERPROFILE') || (process.platform === 'win32' ? homeFallback : '')
+  const stateHome = readEnv(env, 'XDG_STATE_HOME')
+  const home = readEnv(env, 'HOME') || (process.platform !== 'win32' ? homeFallback : '')
+  const candidates = [
+    { prefix: temp, label: '%TEMP%' },
+    { prefix: local, label: '%LOCALAPPDATA%' },
+    { prefix: userProfile, label: '%USERPROFILE%' },
+    { prefix: stateHome, label: '$XDG_STATE_HOME' },
+    { prefix: home, label: '~' },
+  ]
+  let best = null
+  for (const { prefix, label } of candidates) {
+    const match = testPrefix(resolved, prefix, pathApi, win32Path)
+    if (!match) continue
+    if (!best || match.length > best.length) {
+      best = { length: match.length, value: `${label}${match.suffix}` }
+    }
   }
-  if (local) {
-    const localSuffix = testPrefix(resolved, local)
-    if (localSuffix !== null) return `%LOCALAPPDATA%${localSuffix}`
-  }
-  return resolved
+  return best ? best.value : resolved
 }
 
 export function appendRunRecord(record, { env = process.env, print = console.log, file } = {}) {
@@ -602,7 +631,7 @@ function writeProjectRecord({ record, folder, startHead, startBranch } = {}) {
   if (git.branch !== '') record.branch = git.branch
   record.commits = git.commits
   appendRunRecord(record)
-  console.log(`record: ${runsFile()}`)
+  console.log(`record: ${printedRunsFolder(runsFile())}`)
 }
 
 function projectHash(project) {
@@ -1039,7 +1068,7 @@ async function runQueueProject({ options, lane, lanes }) {
         const session = options.startedBy ? null : sessionStartedBy(process.env)
         if (session) failedRecord.startedBy = session
         appendRunRecord(failedRecord)
-        console.log(`record: ${runsFile()}`)
+        console.log(`record: ${printedRunsFolder(runsFile())}`)
       }
       const back = startBranch
         ? gitRead(target.path, ['switch', startBranch])
@@ -1456,7 +1485,7 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
     }
     console.log(`exit code: ${result.code === null ? 'none' : result.code}${stopNote ? ` (${stopNote})` : ''}`)
     console.log(`minutes: ${minutes}`)
-    console.log(`log: ${logPath}`)
+    console.log(`log: ${printedRunsFolder(logPath)}`)
     const report = harness === 'hermes' ? readUsage(usageFile) : null
     let toolLines = { count: 0, session: '' }
     if (harness === 'hermes') {
@@ -1519,7 +1548,7 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
       })
       if (startedBy) retryRecord.startedBy = startedBy
       appendRunRecord(retryRecord)
-      console.log(`record: ${runsFile()}`)
+      console.log(`record: ${printedRunsFolder(runsFile())}`)
       const retryName = `${name}-retry`
       return await startLane({
         options: { ...options, retried: true },
@@ -1559,7 +1588,7 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
     }
     if (startedBy) record.startedBy = startedBy
     appendRunRecord(record)
-    console.log(`record: ${runsFile()}`)
+    console.log(`record: ${printedRunsFolder(runsFile())}`)
     if (project) return { code: result.code ?? 1, killed }
     try {
       const written = writeRecording({ record, lanes, root, env: process.env, session: toolLines.session })
