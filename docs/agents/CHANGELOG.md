@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Saved chat messages, their work steps and agent names are masked for keys and profile paths before they are cut, and unknown senders are dropped on load (P132).
 - The conversation menu closes when the current conversation changes, even though the bridge names it current each time (P142).
 - The lane source and the runs route count a lane lock as live only when its holder or child started before the lock (P138).
 - The conversation menu keeps its row's start time and title, so a conversation switch closes it and its keys never reach the new conversation (P142).
@@ -16,6 +17,10 @@
 - PLAN.md, ARCHITECTURE.md and DOCUMENTS.md name what the audits and reviews leave open (P130).
 - A project switch counts a lane lock as live only when its holder started before the lock, like the runner (P125).
 - briefFileList ignores Files: markers inside backticks or quotes before taking the last real one (P133).
+- Saved chat work steps mask the whole tool and target before shortening (P132).
+- Saved agent fields mask the whole string before the length cap (P132).
+- Chat messages mask profile, home, local app data and temp folder paths (P132).
+- A saved sub or agent sender is kept only when its identity exists (P132).
 - startProjectTask and the chat's lane dispatch have their own tests (P131).
 - The file-index test walks write targets on its own again and strips heredocs (P139).
 - A file-index test fails when the reference write walk is coupled back to commands.js (P139).

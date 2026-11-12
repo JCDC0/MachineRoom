@@ -15,10 +15,11 @@ import {
   statSync,
   writeFileSync,
 } from 'node:fs'
-import { homedir } from 'node:os'
+import { homedir, tmpdir } from 'node:os'
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { maskKeys } from '../src/briefs/audit.js'
+import { printedRunsFolder } from '../scripts/run-lane.mjs'
 import { childEnvironment, mcpConfigForClaude, mcpConfigForOpencode, normalizeMcpServers, replyText, runRecord, summarizeRun } from '../src/briefs/run.js'
 import { defaultMode, legacyMode, modesFor } from '../src/control/modes.js'
 import { harnessByKey } from '../src/harnesses/index.js'
@@ -358,9 +359,54 @@ export function readTail(file, maxBytes = LOG_TAIL_BYTES) {
   }
 }
 
+const PROFILE_LABELS = ['%TEMP%', '%LOCALAPPDATA%', '%USERPROFILE%', '~']
+const PATH_TOKEN = /(?:[A-Za-z]:[\\/][^\s"'`<>|]*|\\\\[^\s"'`<>|]+|(?<![\w:/])\/(?!\/)[^\s"'`<>|]+)/g
+const PATH_TRAIL = /[.,;:!?]+$/
+
+function profileEnv(env = process.env) {
+  const copy = { ...env, XDG_STATE_HOME: '' }
+  if (!copy.TEMP && !copy.TMP) {
+    try {
+      copy.TEMP = tmpdir()
+    } catch {}
+  }
+  if (!copy.USERPROFILE && process.platform === 'win32') {
+    try {
+      copy.USERPROFILE = homedir()
+    } catch {}
+  }
+  if (!copy.HOME && process.platform !== 'win32') {
+    try {
+      copy.HOME = homedir()
+    } catch {}
+  }
+  return copy
+}
+
+function maskProfilePaths(text, env = process.env) {
+  if (typeof text !== 'string' || text === '' || !/[\\/]/.test(text)) return text
+  const resolvedEnv = profileEnv(env)
+  return text.replace(PATH_TOKEN, (token) => {
+    const trail = token.match(PATH_TRAIL)?.[0] ?? ''
+    const body = trail ? token.slice(0, -trail.length) : token
+    let shown = ''
+    try {
+      shown = printedRunsFolder(body, resolvedEnv)
+    } catch {
+      return token
+    }
+    return PROFILE_LABELS.some((label) => shown === label || shown.startsWith(label)) ? `${shown}${trail}` : token
+  })
+}
+
+function maskMessageText(text) {
+  const safe = maskKeys(text)
+  return { text: maskProfilePaths(safe.text), count: safe.count }
+}
+
 function cleanFailure(raw) {
   if (typeof raw !== 'string' || !raw.trim()) return null
-  const safe = maskKeys(raw).text.trim()
+  const safe = maskMessageText(raw).text.trim()
   if (!safe) return null
   return safe.length > 300 ? safe.slice(0, 300) : safe
 }
@@ -406,19 +452,29 @@ export function turnStepsOf(descriptor, log, rootName = '') {
   }
 }
 
-function cleanWork(value) {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+function cleanStep(item, mask = (text) => maskMessageText(text).text) {
+  if (!item || typeof item !== 'object' || Array.isArray(item)) return null
+  const tool = typeof item.tool === 'string' ? mask(item.tool.trim()).slice(0, 40) : ''
+  const target = typeof item.target === 'string' ? mask(item.target.trim()).slice(0, 300) : ''
+  if (!tool && !target) return null
+  return { tool: tool || 'tool', target }
+}
+
+function cleanSteps(value, mask = (text) => maskMessageText(text).text) {
   const steps = []
-  for (const item of Array.isArray(value.steps) ? value.steps : []) {
-    if (!item || typeof item !== 'object') continue
-    const tool = typeof item.tool === 'string' ? item.tool.trim().slice(0, 40) : ''
-    const target = typeof item.target === 'string' ? item.target.trim().slice(0, 300) : ''
-    if (!tool && !target) continue
-    steps.push({ tool: tool || 'tool', target })
+  for (const item of Array.isArray(value) ? value : []) {
+    const step = cleanStep(item, mask)
+    if (step) steps.push(step)
   }
+  return steps.slice(-TURN_STEP_LIMIT)
+}
+
+function cleanWork(value, mask = (text) => maskMessageText(text).text) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const steps = cleanSteps(value.steps, mask)
   const seconds = Number.isFinite(value.seconds) && value.seconds >= 0 ? Math.round(value.seconds) : 0
   if (steps.length === 0 && seconds === 0) return null
-  return { steps: steps.slice(-TURN_STEP_LIMIT), seconds }
+  return { steps, seconds }
 }
 
 function pauseSync(ms) {
@@ -905,7 +961,7 @@ export function createOrchestrator({
 
   function subExists(id) {
     if (!id || id === ORCHESTRATOR_KEY) return false
-    if (typeof hasSub === 'function') return Boolean(hasSub(id))
+    if (typeof hasSub === 'function' && hasSub(id)) return true
     if (ladder && Array.isArray(ladder.subs)) {
       return ladder.subs.some((s) => s?.id === id)
     }
@@ -919,13 +975,28 @@ export function createOrchestrator({
   }
 
   function maskText(text) {
-    const safe = maskKeys(text)
+    const safe = maskMessageText(text)
     if (safe.count > 0) {
       try {
         onMasked(safe.count)
       } catch {}
     }
     return safe.text
+  }
+
+  function subIdOf(value) {
+    if (value.startsWith('sub-') || value.startsWith('sub:')) return value.slice(4)
+    return ''
+  }
+
+  function knownAgentParty(value, records = laneRecords()) {
+    const id = typeof value === 'string' ? value.trim() : ''
+    if (!id) return ''
+    if (id === ORCHESTRATOR_KEY || id === 'owner') return id
+    const subId = subIdOf(id)
+    if (subId) return subExists(subId) ? id : ''
+    if (records && typeof records === 'object' && Object.hasOwn(records, id)) return id
+    return subExists(id) ? id : ''
   }
 
   function laneRecords() {
@@ -937,23 +1008,25 @@ export function createOrchestrator({
     const from = typeof value === 'string' ? value.trim() : ''
     if (!from) return ''
     if (from === 'owner' || from === 'room' || from === ORCHESTRATOR_KEY || from === 'agent') return from
-    if (from.startsWith('sub-') || from.startsWith('sub:')) return from
+    const subId = subIdOf(from)
+    if (subId) return subExists(subId) ? from : ''
     return Object.hasOwn(laneRecords(), from) ? from : ''
   }
 
   function restoredAgent(value) {
     if (!value || typeof value !== 'object' || Array.isArray(value)) return null
-    const from = typeof value.from === 'string' ? value.from.trim().slice(0, 80) : ''
-    const to = typeof value.to === 'string' ? value.to.trim().slice(0, 80) : ''
-    const kind = typeof value.kind === 'string' ? value.kind.trim().slice(0, 40) : ''
+    const from = maskText(typeof value.from === 'string' ? value.from.trim() : '')
+    const to = maskText(typeof value.to === 'string' ? value.to.trim() : '')
+    const kind = maskText(typeof value.kind === 'string' ? value.kind.trim() : '')
     if (!from || !to || !kind) return null
+    if (!knownAgentParty(from) || !knownAgentParty(to)) return null
     return {
-      from: maskText(from),
-      to: maskText(to),
-      kind: maskText(kind),
-      text: typeof value.text === 'string' ? maskText(value.text.trim().slice(0, ORCHESTRATOR_MESSAGE_LIMIT)) : '',
-      fromName: typeof value.fromName === 'string' ? maskText(value.fromName.trim().slice(0, 80)) : '',
-      toName: typeof value.toName === 'string' ? maskText(value.toName.trim().slice(0, 80)) : '',
+      from: from.slice(0, 80),
+      to: to.slice(0, 80),
+      kind: kind.slice(0, 40),
+      text: typeof value.text === 'string' ? maskText(value.text.trim()).slice(0, ORCHESTRATOR_MESSAGE_LIMIT) : '',
+      fromName: typeof value.fromName === 'string' ? maskText(value.fromName.trim()).slice(0, 80) : '',
+      toName: typeof value.toName === 'string' ? maskText(value.toName.trim()).slice(0, 80) : '',
     }
   }
 
@@ -962,7 +1035,7 @@ export function createOrchestrator({
     const from = knownSender(item.from)
     if (!from) return null
     if (typeof item.text !== 'string' || item.text.trim() === '') return null
-    const work = cleanWork(item.work)
+    const work = cleanWork(item.work, maskText)
     const message = {
       id: typeof item.id === 'string' && item.id ? item.id : randomUUID(),
       from,
@@ -1152,7 +1225,7 @@ export function createOrchestrator({
     contextWindow = resolveContextWindow(model, harness, windowOption, laneDetails())
     if (typeof saved.summary === 'string' && saved.summary.trim() !== '') summary = saved.summary.trim()
     if (typeof saved.branchTranscript === 'string' && saved.branchTranscript.trim() !== '') {
-      branchTranscript = saved.branchTranscript.slice(0, BRANCH_TRANSCRIPT_LIMIT)
+      branchTranscript = maskText(saved.branchTranscript).slice(0, BRANCH_TRANSCRIPT_LIMIT)
     }
     if (saved.effort === null || typeof saved.effort === 'string') {
       const allowed = harness === 'claude' ? CLAUDE_EFFORT_LEVELS : OPENCODE_EFFORT_LEVELS
@@ -1185,7 +1258,7 @@ export function createOrchestrator({
         }
         sessions.push({
           id: item.id,
-          title: typeof item.title === 'string' ? item.title.slice(0, 80) : '',
+          title: typeof item.title === 'string' ? maskText(item.title).slice(0, 80) : '',
           startedAt: typeof item.startedAt === 'string' ? item.startedAt : iso(now()),
           endedAt: typeof item.endedAt === 'string' ? item.endedAt : iso(now()),
           pinned: Boolean(item.pinned),
@@ -1196,7 +1269,7 @@ export function createOrchestrator({
           opencodeSessionId: typeof item.opencodeSessionId === 'string' ? item.opencodeSessionId : null,
           summary: typeof item.summary === 'string' ? item.summary : '',
           branchTranscript: typeof item.branchTranscript === 'string'
-            ? item.branchTranscript.slice(0, BRANCH_TRANSCRIPT_LIMIT)
+            ? maskText(item.branchTranscript).slice(0, BRANCH_TRANSCRIPT_LIMIT)
             : '',
           messages: itemMessages.slice(-SESSION_MESSAGES_LIMIT),
         })
@@ -1274,6 +1347,9 @@ export function createOrchestrator({
   function recordAgentMessage({ from, to, kind, text = '', lanes: lanesInput } = {}) {
     if (stopped) return null
     const allLanes = lanesInput || (typeof lanes === 'function' ? lanes() : lanes) || {}
+    const safeFrom = knownAgentParty(from, allLanes)
+    const safeTo = knownAgentParty(to, allLanes)
+    if (!safeFrom || !safeTo) return null
     const resolveName = (k) => {
       if (!k) return ''
       if (k === 'orchestrator' || k === ORCHESTRATOR_KEY) {
@@ -1285,8 +1361,8 @@ export function createOrchestrator({
       }
       return allLanes?.[k]?.name || k
     }
-    const fromName = maskText(String(resolveName(from) ?? ''))
-    const toName = maskText(String(resolveName(to) ?? ''))
+    const fromName = maskText(String(resolveName(safeFrom) ?? ''))
+    const toName = maskText(String(resolveName(safeTo) ?? ''))
     const safeKind = maskText(String(kind ?? ''))
     const prefix = `${fromName} to ${toName}, ${safeKind}`
     const trimmed = typeof text === 'string' ? text.trim() : ''
@@ -1295,7 +1371,7 @@ export function createOrchestrator({
     const message = {
       id: randomUUID(),
       from: 'agent',
-      agent: { from: maskText(String(from ?? '')), to: maskText(String(to ?? '')), kind: safeKind, text: safeText, fromName, toName },
+      agent: { from: safeFrom, to: safeTo, kind: safeKind, text: safeText, fromName, toName },
       text: lineText,
       at: iso(now()),
     }
@@ -1487,7 +1563,7 @@ export function createOrchestrator({
     }
     let changed = false
     for (const activity of activities) {
-      const step = turnStepOf(activity)
+      const step = cleanStep(turnStepOf(activity), maskText)
       if (!step) continue
       turn.steps.push(step)
       while (turn.steps.length > TURN_STEP_LIMIT) turn.steps.shift()
@@ -1500,7 +1576,7 @@ export function createOrchestrator({
     if (!turn.anchorId || turn.compacting) return
     const anchor = messages.find((message) => message.id === turn.anchorId)
     if (!anchor) return
-    anchor.work = { steps: turn.steps.map((step) => ({ ...step })), seconds: turnSeconds(turn) }
+    anchor.work = { steps: cleanSteps(turn.steps, maskText), seconds: turnSeconds(turn) }
   }
 
   function shownMessages() {
@@ -1511,7 +1587,7 @@ export function createOrchestrator({
       if (anchor) {
         anchor.work = {
           state: 'working',
-          steps: turn.steps.map((step) => ({ ...step })),
+          steps: cleanSteps(turn.steps, maskText),
           seconds: turnSeconds(turn),
         }
       }
