@@ -240,6 +240,22 @@ describe('copilot harness report and usage', () => {
     expect(copilotHarness.reply(log)).toBe(log)
   })
 
+  it('keeps prose lines starting with Running, Reading, Writing or Editing', () => {
+    const log = [
+      'The fix is ready.',
+      '',
+      'Running the tests requires Node 24.',
+      'Keep the lockfile.',
+    ].join('\n')
+    expect(copilotHarness.reply(log)).toBe(log)
+    expect(copilotHarness.report(log)).toEqual([
+      'The fix is ready.',
+      '',
+      'Running the tests requires Node 24.',
+      'Keep the lockfile.',
+    ])
+  })
+
   it('cuts progress at tool lines recognized by the parser', () => {
     const log = [
       'I will inspect the helper.',

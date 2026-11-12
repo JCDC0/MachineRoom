@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- P117: with a cost limit set, the native agent stops before any retry on a damaged 200 answer, and Copilot reply extraction keeps ordinary prose beginning with Running, Reading, Writing or Editing.
+
 - P112: run-lane passes a native lane its minute limit as MR_AGENT_MINUTES, and each tool result tells the agent the minutes used, with one warning to write its file at 60 percent.
 - P105: a branched conversation saves and restores its quoted transcript and clears it only once a turn that carried it starts; an endpoint edit or refresh keeps the model details of the ids it keeps.
 - P108: a model named ENDPOINT/ID takes its window only from that endpoint's details, a suffix match counts only when it is the only one, and a sub orchestrator resolves its window again on a model change.
