@@ -259,11 +259,12 @@ export function branchMovedProblem(branch, expected, actual) {
 
 export async function reviewLane({ root, lane, keep = false, env = process.env, lanesPath = '', runsPath = runsFile(), execPath = process.execPath, onStep = () => {}, tempRoot = null }) {
   const docs = join(root, 'docs', 'agents')
+  const lanesFile = lanesPath ? resolve(lanesPath) : join(lanesFolder(), 'lanes.json')
   let lanes
   try {
-    lanes = JSON.parse(readFileSync(lanesPath ? resolve(lanesPath) : join(lanesFolder(), 'lanes.json'), 'utf8'))
+    lanes = JSON.parse(readFileSync(lanesFile, 'utf8'))
   } catch {
-    return { error: 'docs/agents/lanes.json could not be read.' }
+    return { error: `${lanesFile} could not be read.` }
   }
   if (!lanes || typeof lanes !== 'object' || !Object.hasOwn(lanes, lane)) return { error: `There is no lane named ${lane}.` }
   const info = lanes[lane] ?? {}
