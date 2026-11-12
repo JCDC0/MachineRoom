@@ -13,15 +13,20 @@ import {
   createOrchestrator,
   contextTokensFromLog,
   compactPrompt,
+  BRANCH_INDEX_PROBLEM,
+  BRANCH_TRANSCRIPT_INTRO,
+  BRANCH_TRANSCRIPT_LIMIT,
   COMPACTED_MESSAGE,
   COMPACT_FAILED_MESSAGE,
   CHAT_SAVE_PROBLEM,
   COMPACT_PROMPT,
+  CONFIRM_SESSION_PROBLEM,
   DEFAULT_COMPACT_RULES,
   AUTOCOMPACT_MODE_PROBLEM,
   AUTOCOMPACT_PERCENT_PROBLEM,
   AUTOCOMPACT_TOKENS_PROBLEM,
   LOG_TAIL_BYTES,
+  quotedTranscript,
   readTail,
   AUTOCOMPACT_RULES_PROBLEM,
   NO_NEW_REPORT,
@@ -2555,6 +2560,79 @@ describe('orchestrator reasoning effort and sessions', () => {
     expect(list.some((s) => s.id === 'sess-0')).toBe(true)
     expect(list.some((s) => s.id === 'sess-1')).toBe(false)
   }, 30000)
+
+  it('keeps a quoted transcript inside the prompt budget', () => {
+    const sample = quotedTranscript([
+      { from: 'owner', text: 'Build the page.' },
+      { from: 'orchestrator', text: 'It is built.' },
+    ])
+    expect(sample).toContain(BRANCH_TRANSCRIPT_INTRO)
+    expect(sample).toContain('> Owner: Build the page.')
+    expect(sample).toContain('> Orchestrator: It is built.')
+
+    const many = Array.from({ length: 60 }, (_, index) => ({
+      from: index % 2 === 0 ? 'owner' : 'orchestrator',
+      text: `Message ${index} ${'x'.repeat(1200)}`,
+    }))
+    const text = quotedTranscript(many)
+    expect(text.length).toBeLessThanOrEqual(BRANCH_TRANSCRIPT_LIMIT)
+    expect(text).toContain('Message 59')
+    expect(text).not.toContain('Message 0 ')
+  })
+
+  it('branches a conversation and quotes its earlier messages for a fresh session', async () => {
+    const rig = makeRig()
+    rig.send('First task')
+    await waitIdle(rig, 1)
+    rig.send('Second task')
+    await waitIdle(rig, 2)
+    expect(rig.answer().messages).toHaveLength(4)
+
+    expect(rig.orchestrator.branchSession({ index: 1 })).toEqual({
+      status: 400,
+      body: { error: CONFIRM_SESSION_PROBLEM },
+    })
+    expect(rig.orchestrator.branchSession({ index: 0, confirmed: true })).toEqual({
+      status: 400,
+      body: { error: BRANCH_INDEX_PROBLEM },
+    })
+    expect(rig.orchestrator.branchSession({ index: 9, confirmed: true })).toEqual({
+      status: 400,
+      body: { error: BRANCH_INDEX_PROBLEM },
+    })
+
+    const branched = rig.orchestrator.branchSession({ index: 3, confirmed: true })
+    expect(branched.status).toBe(200)
+    expect(branched.body).toMatchObject({ ok: true, title: 'First task (branch)', count: 3 })
+    expect(rig.answer().messages).toHaveLength(3)
+    expect(rig.orchestrator.listSessions()).toHaveLength(1)
+    expect(rig.orchestrator.listSessions()[0]).toMatchObject({ title: 'First task', count: 4 })
+
+    rig.send('Carry on')
+    await waitIdle(rig, 3)
+    const args = rig.calls()[2].args
+    expect(args).toContain('--session-id')
+    expect(args).not.toContain('--resume')
+    const prompt = valueAfter(args, '-p')
+    expect(prompt).toContain(BRANCH_TRANSCRIPT_INTRO)
+    expect(prompt).toContain('> Owner: First task')
+    expect(prompt).toContain('> Orchestrator: Reply: First task')
+    expect(prompt).toContain('> Owner: Second task')
+    expect(prompt.endsWith('Carry on')).toBe(true)
+  })
+
+  it('refuses a branch while a turn runs', async () => {
+    const rig = makeRig()
+    rig.behaviour.mode = 'hold'
+    rig.send('Active running task')
+    await waitFor(() => rig.calls().length === 1)
+    expect(rig.orchestrator.branchSession({ index: 1, confirmed: true })).toEqual({
+      status: 409,
+      body: { error: COMPACT_RUNNING_PROBLEM },
+    })
+    writeFileSync(rig.releaseFile, 'go')
+    await waitIdle(rig, 1)
+  })
 
   it('refuses new and open while a turn runs with 409', async () => {
     const rig = makeRig()

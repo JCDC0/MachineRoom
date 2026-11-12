@@ -84,6 +84,7 @@ export const SESSION_PINNED_PROBLEM = 'Say whether pinned is true or false.'
 export const SESSION_STARRED_PROBLEM = 'Say whether starred is true or false.'
 export const SESSION_CHANGE_PROBLEM = 'Choose a field to change: pinned, starred or title.'
 export const SESSION_PENDING_PROBLEM = 'Messages are waiting for a turn. Wait for them to run or stop the orchestrator first.'
+export const BRANCH_INDEX_PROBLEM = 'Choose a message to branch from.'
 export const SESSIONS_LIMIT = 50
 export const SESSION_MESSAGES_LIMIT = 200
 export const CLAUDE_EFFORT_LEVELS = ['low', 'medium', 'high', 'xhigh', 'max']
@@ -99,7 +100,9 @@ export const RESTART_MESSAGE = 'The room restarted during a turn. Send the messa
 
 const REPO_ROOT = resolve(fileURLToPath(import.meta.url), '..', '..')
 const PROMPT_FILE = join(REPO_ROOT, 'docs', 'agents', 'ORCHESTRATOR-AGENT.md')
-const PROMPT_LIMIT = 20000
+export const BRANCH_TRANSCRIPT_LIMIT = 20000
+const PROMPT_LIMIT = BRANCH_TRANSCRIPT_LIMIT
+export const BRANCH_TRANSCRIPT_INTRO = 'Earlier messages in this conversation, quoted:'
 const RECORD_COMMITS = 10
 const TURN_STDERR_LIMIT = 4 * 1024
 const TURN_LOG = /-chat-\d{8}-\d{6}-\d{3}\.log$/i
@@ -645,6 +648,34 @@ function blockFor(message) {
   return `${label}: ${message.text}`
 }
 
+function quoteBlock(message) {
+  return blockFor(message)
+    .split('\n')
+    .map((line) => `> ${line}`)
+    .join('\n')
+}
+
+export function quotedTranscript(list, limit = BRANCH_TRANSCRIPT_LIMIT) {
+  const items = Array.isArray(list) ? list : []
+  const cap = Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : BRANCH_TRANSCRIPT_LIMIT
+  const header = `${BRANCH_TRANSCRIPT_INTRO}\n\n`
+  const room = Math.max(0, cap - header.length)
+  const blocks = []
+  let size = 0
+  for (let index = items.length - 1; index >= 0; index -= 1) {
+    const block = quoteBlock(items[index])
+    if (block.length > room) {
+      if (blocks.length === 0 && room > 0) blocks.unshift(block.slice(-room))
+      break
+    }
+    if (size + block.length + 2 > room) break
+    blocks.unshift(block)
+    size += block.length + 2
+  }
+  const text = `${header}${blocks.join('\n\n')}`
+  return text.length > cap ? text.slice(text.length - cap) : text
+}
+
 function fitTurnText(messages) {
   if (messages.length === 1 && messages[0].from === 'owner') return { text: messages[0].text, used: [...messages] }
   const blocks = []
@@ -796,6 +827,7 @@ export function createOrchestrator({
   let currentTitle = null
   const sessions = []
   let summary = ''
+  let branchTranscript = ''
   let pendingCompaction = null
   let persistError = null
   let siblings = Array.isArray(siblingsOption) ? [...siblingsOption] : []
@@ -855,6 +887,7 @@ export function createOrchestrator({
         currentSessionId,
         currentTitle,
         summary,
+        ...(branchTranscript ? { branchTranscript } : {}),
         completedRuns: [...completedRuns.entries()].slice(-200).map(([runId, value]) => [runId, { status: value.status, messageId: value.messageId ?? null }]),
         sessions: sessions.map((s) => ({
           id: s.id,
@@ -994,6 +1027,9 @@ export function createOrchestrator({
       contextWindow = Math.round(saved.contextWindow)
     }
     if (typeof saved.summary === 'string' && saved.summary.trim() !== '') summary = saved.summary.trim()
+    if (typeof saved.branchTranscript === 'string' && saved.branchTranscript.trim() !== '') {
+      branchTranscript = saved.branchTranscript.slice(0, BRANCH_TRANSCRIPT_LIMIT)
+    }
     if (saved.effort === null || typeof saved.effort === 'string') {
       const allowed = harness === 'claude' ? CLAUDE_EFFORT_LEVELS : OPENCODE_EFFORT_LEVELS
       if (saved.effort === null || allowed.includes(saved.effort.trim())) {
@@ -1248,8 +1284,11 @@ export function createOrchestrator({
     if (!hasOwner) roomTurns.push(now())
     const first = !sessionId
     if (first && harness === 'claude') sessionId = randomUUID()
-    const carried = first && summary ? summary : ''
-    if (carried && (harness === 'claude' || harness === 'opencode')) summary = ''
+    const carried = first ? branchTranscript || summary : ''
+    if (carried && (harness === 'claude' || harness === 'opencode')) {
+      summary = ''
+      branchTranscript = ''
+    }
     const startedAt = now()
     const logName = `${logPrefix}-chat-${stamp(startedAt)}`
     const logPath = join(folder, `${logName}.log`)
@@ -1823,6 +1862,34 @@ export function createOrchestrator({
     return archived
   }
 
+  function branchSession(body) {
+    if (body?.confirmed !== true) return { status: 400, body: { error: CONFIRM_SESSION_PROBLEM } }
+    if (running && !running.done) return { status: 409, body: { error: COMPACT_RUNNING_PROBLEM } }
+    if (pending.length > 0) return { status: 409, body: { error: SESSION_PENDING_PROBLEM } }
+    const index = body?.index
+    if (!Number.isInteger(index) || index < 1 || index > messages.length) {
+      return { status: 400, body: { error: BRANCH_INDEX_PROBLEM } }
+    }
+    const kept = messages.slice(0, index).map((message) => ({ ...message }))
+    const firstOwner = messages.find((message) => message.from === 'owner')
+    const baseTitle = currentTitle || (firstOwner ? firstOwner.text.trim().slice(0, 60) : 'Conversation')
+    const suffix = ' (branch)'
+    const title = `${baseTitle.slice(0, Math.max(0, 80 - suffix.length))}${suffix}`
+    archiveCurrentSession()
+    branchTranscript = harness === 'claude' || harness === 'opencode' ? quotedTranscript(kept) : ''
+    currentSessionId = null
+    currentTitle = title
+    messages.length = 0
+    messages.push(...kept)
+    pending.length = 0
+    sessionId = null
+    summary = ''
+    contextTokens = null
+    persist()
+    notify()
+    return { status: 200, body: { ok: true, title, count: kept.length } }
+  }
+
   function newSession(body) {
     if (body?.confirmed !== true) return { status: 400, body: { error: CONFIRM_SESSION_PROBLEM } }
     if (running && !running.done) return { status: 409, body: { error: COMPACT_RUNNING_PROBLEM } }
@@ -1834,6 +1901,7 @@ export function createOrchestrator({
     pending.length = 0
     sessionId = null
     summary = ''
+    branchTranscript = ''
     contextTokens = null
     persist()
     notify()
@@ -1858,6 +1926,7 @@ export function createOrchestrator({
       ? (target.opencodeSessionId || target.sessionId || null)
       : (target.sessionId || target.opencodeSessionId || null)
     summary = target.summary || ''
+    branchTranscript = ''
     contextTokens = null
     persist()
     notify()
@@ -1903,6 +1972,7 @@ export function createOrchestrator({
       pending.length = 0
       sessionId = null
       summary = ''
+      branchTranscript = ''
       contextTokens = null
     }
     persist()
@@ -2103,6 +2173,7 @@ export function createOrchestrator({
     currentSessionInfo,
     getSession,
     newSession,
+    branchSession,
     openSession,
     updateSession,
     deleteSession,

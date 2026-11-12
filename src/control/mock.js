@@ -50,6 +50,7 @@ export const CLIENT_METHODS = [
   'orchestratorSessions',
   'orchestratorSession',
   'newOrchestratorSession',
+  'branchOrchestratorSession',
   'updateOrchestratorSession',
   'openOrchestratorSession',
   'deleteOrchestratorSession',
@@ -1400,6 +1401,37 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
         chat.messages = []
         emit({ topic: 'orchestrator' })
         return { ok: true }
+      }),
+
+    branchOrchestratorSession: (options = {}) =>
+      call('branchOrchestratorSession', () => {
+        const { id, index, confirmed = true } = options
+        if (confirmed !== true) throw new Error('Confirm the session change first.')
+        const chat = chatStore(id)
+        if (chat.state === 'working') throw new Error('A turn is already running.')
+        if (!Number.isInteger(index) || index < 1 || index > chat.messages.length) {
+          throw new Error('Choose a message to branch from.')
+        }
+        if (!Array.isArray(chat.sessions)) chat.sessions = []
+        const firstOwner = chat.messages.find((m) => m.from === 'owner')
+        const baseTitle = chat.currentTitle || (firstOwner ? firstOwner.text.trim().slice(0, 60) : 'Conversation')
+        const suffix = ' (branch)'
+        const title = `${baseTitle.slice(0, Math.max(0, 80 - suffix.length))}${suffix}`
+        orchestratorMessageCounter += 1
+        chat.sessions.unshift({
+          id: `session-mock-${orchestratorMessageCounter}`,
+          title: baseTitle,
+          startedAt: chat.messages[0]?.at ?? new Date(now()).toISOString(),
+          endedAt: chat.messages.at(-1)?.at ?? new Date(now()).toISOString(),
+          pinned: false,
+          starred: false,
+          messages: chat.messages.map((m) => ({ ...m })),
+        })
+        chat.currentSessionId = null
+        chat.currentTitle = title
+        chat.messages = chat.messages.slice(0, index).map((m) => ({ ...m }))
+        emit({ topic: 'orchestrator' })
+        return { ok: true, title, count: chat.messages.length }
       }),
 
     updateOrchestratorSession: (options = {}) =>

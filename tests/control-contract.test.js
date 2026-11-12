@@ -507,6 +507,23 @@ describe('the mock client still answers the contract', () => {
     const afterDelete = await client.orchestratorSessions({ id: 'orchestrator' })
     expect(afterDelete.sessions.some((s) => s.id === sessions.sessions[0].id)).toBe(false)
   })
+
+  it('branches the current conversation on the mock', async () => {
+    const client = createMockClient({ latencyMs: 0 })
+    const before = await client.orchestrator()
+    expect(before.messages).toHaveLength(3)
+    await expect(client.branchOrchestratorSession({ id: 'orchestrator', index: 0 })).rejects.toThrow(
+      'Choose a message to branch from.'
+    )
+    const branched = await client.branchOrchestratorSession({ id: 'orchestrator', index: 2 })
+    expect(branched).toMatchObject({ ok: true, title: 'What is running? (branch)', count: 2 })
+    expect((await client.orchestrator()).messages).toHaveLength(2)
+    const after = await client.orchestratorSessions({ id: 'orchestrator' })
+    expect(after.current.title).toBe('What is running? (branch)')
+    expect(after.current.count).toBe(2)
+    expect(after.sessions).toHaveLength(3)
+    expect(after.sessions.find((session) => session.title === 'What is running?').count).toBe(3)
+  })
 })
 
 describe('the control client orchestrator routes', () => {
@@ -606,6 +623,7 @@ describe('the control client orchestrator routes', () => {
     await client.orchestratorSessions({ id: 'frontend' })
     await client.orchestratorSession({ id: 'frontend', session: 'sess-1' })
     await client.newOrchestratorSession({ id: 'frontend' })
+    await client.branchOrchestratorSession({ id: 'frontend', index: 3 })
     await client.updateOrchestratorSession({ id: 'frontend', session: 'sess-1', title: 'New title', pinned: true })
     await client.openOrchestratorSession({ id: 'frontend', session: 'sess-1' })
     await client.deleteOrchestratorSession({ id: 'frontend', session: 'sess-1' })
@@ -635,6 +653,11 @@ describe('the control client orchestrator routes', () => {
         url: 'http://127.0.0.1:9/api/orchestrator/sessions/new',
         method: 'POST',
         body: JSON.stringify({ confirmed: true, id: 'frontend' }),
+      },
+      {
+        url: 'http://127.0.0.1:9/api/orchestrator/sessions/branch',
+        method: 'POST',
+        body: JSON.stringify({ index: 3, confirmed: true, id: 'frontend' }),
       },
       {
         url: 'http://127.0.0.1:9/api/orchestrator/sessions/sess-1?id=frontend',
