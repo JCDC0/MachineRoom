@@ -85,8 +85,9 @@ function git(cwd, args) {
 describe('lane agents', () => {
   it('lists one agent per lane with a command line and leaves retired lanes out', () => {
     const agents = laneAgents(realLanes)
-    expect(agents.map((agent) => agent.key)).toEqual(['orchestrator', 'opencode', 'opencode2', 'opencode3', 'opencode4', 'opencode5', 'opencode6', 'opencode7', 'agy', 'agy2', 'agy3', 'claude'])
-    expect(agents.filter((agent) => !agent.key.startsWith('agy') && agent.key !== 'claude' && agent.key !== 'orchestrator').every((agent) => agent.parser === 'opencode' && agent.adapterType === 'opencode_local')).toBe(true)
+    expect(agents.map((agent) => agent.key)).toEqual(['orchestrator', 'opencode', 'opencode2', 'opencode3', 'opencode4', 'opencode5', 'opencode6', 'opencode7', 'agy', 'agy2', 'agy3', 'claude', 'codex'])
+    expect(agents.filter((agent) => !agent.key.startsWith('agy') && agent.key !== 'claude' && agent.key !== 'codex' && agent.key !== 'orchestrator').every((agent) => agent.parser === 'opencode' && agent.adapterType === 'opencode_local')).toBe(true)
+    expect(agents.find((agent) => agent.key === 'codex')).toMatchObject({ name: 'Codex', parser: 'codex', adapterType: 'codex_local' })
     expect(agents.find((agent) => agent.key === 'opencode2').name).toBe('OpenCode 2')
     expect(agents.find((agent) => agent.key === 'claude')).toMatchObject({ name: 'Claude Code', parser: 'claude', adapterType: 'claude_local' })
     expect(agents.find((agent) => agent.key === 'orchestrator')).toMatchObject({ harness: 'claude', model: 'opus' })

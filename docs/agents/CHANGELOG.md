@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- A Codex lane passes --add-dir for each folder in cli.addDirs, so the codex lane can write the main checkout's .git, and a Codex run becomes a recording (P74).
 - Opening another project is refused while the lane source holds a run open, since the project route now gets the live lane source and not its settings (P71, from GPT 6.1 Sol's review).
 - The CLI review and merge find a lane the owner made, reviews read made lanes of a bridge started with a lanes folder, a failed tree list walks at once, the stop reads the harness children before it kills the harness, and scale-live refuses --server with no folder (P70).
 - CI fixes: the stop test waits for the harness grandchild to die only on Windows, where the runner can reach it, and the sessions test moves the runs folder's time itself instead of hoping two writes a few milliseconds apart move it.
