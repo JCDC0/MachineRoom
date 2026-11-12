@@ -143,6 +143,13 @@ function sessionEntry(source, group, current) {
   }
 }
 
+export function sessionRowIdentity(row) {
+  if (!row || typeof row !== 'object') return ''
+  if (row.current !== true) return typeof row.id === 'string' && row.id ? `saved:${row.id}` : ''
+  if (typeof row.id === 'string' && row.id && row.id !== 'current') return `current:${row.id}`
+  return `current:${stamp(row.startedAt)}:${sessionTitle(row.title)}`
+}
+
 export function groupSessions(answer) {
   const source = answer && typeof answer === 'object' ? answer : {}
   const currentSource = source.current && typeof source.current === 'object' ? source.current : null

@@ -280,7 +280,7 @@ describe('the conversation menu', () => {
     })
   })
 
-  it('closes the menu and releases F when its row leaves the list or stops being current', async () => {
+  it('closes the menu and releases P when its row leaves the list or stops being current', async () => {
     for (const hidden of [true, false]) {
       await withDom(async ({ container, dom, root }) => {
         const client = makeClient()
@@ -297,8 +297,8 @@ describe('the conversation menu', () => {
         await mount(root, client)
         await openMenu(root, container, 'Live one')
 
-        client.state.sessions.push({ ...client.state.current, endedAt: NOW })
-        client.state.current = { id: 'next', title: 'Live two', startedAt: NOW, count: 3 }
+        client.state.sessions.push({ ...client.state.current, id: 'live-one', endedAt: NOW })
+        client.state.current = { id: 'current', title: 'Live two', startedAt: NOW, count: 3 }
         await act(async () => {
           client.notify()
         })
@@ -306,10 +306,11 @@ describe('the conversation menu', () => {
 
         expect(rowByTitle(container, 'Live one') === null).toBe(hidden)
         expect(container.querySelector('.mr-side-menu')).toBeNull()
-        await press(root, dom.window, 'F')
+        await press(root, dom.window, 'P')
+        expect(client.calls.update).toHaveLength(0)
         expect(client.calls.open).toHaveLength(0)
         expect(client.calls.branch).toHaveLength(0)
-        expect(roomKeys).toEqual(['F'])
+        expect(roomKeys).toEqual(['P'])
       })
     }
   })
