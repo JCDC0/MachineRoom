@@ -633,3 +633,13 @@ Files: server/reviews.js, server/policy.js, server/runs.js, server/doctor.js, sc
 `tests/run-lane-stop.test.js` fails now and then while other lanes run their suites and passes on a retry. Run the file 15 times alone and 8 times with `node scripts/test.mjs` running beside it, find which test fails and why (a fixed wait, a process not yet started, a shared temp folder), and make it wait for the state it needs with the file's own `waitUntil`, never a busy loop and never a longer timeout alone. Give the runs and failures before and after in your report.
 
 Files: tests/run-lane-stop.test.js, tests/helpers/, scripts/run-lane.mjs.
+
+**P67. The cost of the deleted-file list, measured alone (OpenCode).** The redo of P55, which the time limit cut while four other lanes loaded the machine. Read P55 above for what to measure and no other part of TASKS.md. Use no subagents. Change no code but `scripts/scale-live.mjs`. Run every command in the foreground and wait for it; a turn that ends while a command still runs leaves nothing. Commit by minute 70.
+
+1. Start from the unfinished work: `git merge --ff-only refs/heads/feat/p55-what-a-deleted` if it applies, else `git cherry-pick 1cfdc0d7`. Read what it added to `scale-live`, finish only what the table needs, and commit.
+2. Measure in this order and write each number to the audit file as you get it, with a commit after each row: 40,000 files on `refs/heads/main`, 40,000 on the commit before the P51 merge (a temp worktree, removed after), then 200,000 on each. Three runs each and the median; when minute 50 has passed, one run of what is left and say so in the table.
+3. `docs/agents/AUDIT-2026-11-TREE-COST.md`: the table, what grew and by how much, and at most two ways to cut it if a full read costs more than 10 percent over the commit before P51. No other lane runs, so say the numbers are from a quiet machine.
+
+Run `npx vitest related --run scripts/scale-live.mjs` and `npm run build`; both must pass.
+
+Files: scripts/scale-live.mjs, docs/agents/AUDIT-2026-11-TREE-COST.md.
