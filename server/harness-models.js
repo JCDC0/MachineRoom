@@ -1,6 +1,5 @@
 import { spawn } from 'node:child_process'
 import { mkdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { readEndpoints } from './endpoints.js'
 import { readLanes, runsFolder as defaultRunsFolder } from './lanes-source.js'
@@ -24,8 +23,8 @@ function pageRequest(req) {
   return headers['sec-fetch-site'] === 'same-origin'
 }
 
-function runsFolderDefault() {
-  return join(process.env.TEMP || tmpdir(), 'machineroom-runs')
+export function runsFolderDefault(env = process.env) {
+  return defaultRunsFolder(env)
 }
 
 export function cacheFileFor(runsFolder) {

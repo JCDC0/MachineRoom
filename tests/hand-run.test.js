@@ -262,16 +262,28 @@ describe('hand-run record', () => {
 describe('the runs file', () => {
   it('follows MACHINEROOM_RUNS, else the default runs folder', async () => {
     const { runsFile, outcomesFile } = await import('../server/runs.js')
-    const before = process.env.MACHINEROOM_RUNS
+    const names = ['MACHINEROOM_RUNS', 'TEMP', 'LOCALAPPDATA', 'XDG_STATE_HOME', 'HOME']
+    const before = Object.fromEntries(names.map((name) => [name, process.env[name]]))
+    const local = join(tmpdir(), 'mr-runs-file-local')
+    const state = join(tmpdir(), 'mr-runs-file-state')
     try {
       process.env.MACHINEROOM_RUNS = join(tmpdir(), 'mr-runs-file-check')
       expect(runsFile()).toBe(join(resolve(process.env.MACHINEROOM_RUNS), 'runs.jsonl'))
       expect(outcomesFile()).toBe(join(resolve(process.env.MACHINEROOM_RUNS), 'outcomes.jsonl'))
       delete process.env.MACHINEROOM_RUNS
-      expect(runsFile()).toBe(join(process.env.TEMP || tmpdir(), 'machineroom-runs', 'runs.jsonl'))
+      process.env.TEMP = join(tmpdir(), 'mr-runs-file-temp')
+      process.env.LOCALAPPDATA = local
+      process.env.XDG_STATE_HOME = state
+      process.env.HOME = join(tmpdir(), 'mr-runs-file-home')
+      const expected = process.platform === 'win32'
+        ? join(local, 'MachineRoom', 'runs', 'runs.jsonl')
+        : join(state, 'machineroom', 'runs', 'runs.jsonl')
+      expect(runsFile()).toBe(expected)
     } finally {
-      if (before === undefined) delete process.env.MACHINEROOM_RUNS
-      else process.env.MACHINEROOM_RUNS = before
+      for (const name of names) {
+        if (before[name] === undefined) delete process.env[name]
+        else process.env[name] = before[name]
+      }
     }
   })
 })

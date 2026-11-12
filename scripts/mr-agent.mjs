@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 import { execFileSync, spawn } from 'node:child_process'
 import { closeSync, existsSync, lstatSync, mkdirSync, openSync, readFileSync, readdirSync, readSync, realpathSync, statSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
 import { basename, dirname, isAbsolute, join, relative, resolve, sep, win32 } from 'node:path'
 import { StringDecoder } from 'node:string_decoder'
 import { fileURLToPath } from 'node:url'
 import { keyFromFile } from '../server/family.js'
 import { killTree } from '../server/processTree.js'
+import { runsFolder } from '../server/lanes-source.js'
 import { gitPath, programPath } from '../server/programPath.js'
 import { SEARCH_OFF, fetchPage, readSearchChoice, searchWeb } from '../server/search.js'
 import { childEnvironment } from '../src/briefs/run.js'
@@ -380,10 +380,8 @@ function baseUrl(env) {
   return url.replace(/\/+$/, '')
 }
 
-function runsFolderFrom(env) {
-  const given = env?.MACHINEROOM_RUNS
-  if (typeof given === 'string' && given.trim() !== '') return resolve(given.trim())
-  return join(env?.TEMP || tmpdir(), 'machineroom-runs')
+export function runsFolderFrom(env = process.env) {
+  return runsFolder(env)
 }
 
 function readEndpoint(runsFolder, name) {
@@ -1010,12 +1008,6 @@ function shellTool(args, cwd) {
   })
 }
 
-function runsFolder() {
-  const given = process.env.MACHINEROOM_RUNS
-  if (typeof given === 'string' && given.trim() !== '') return resolve(given)
-  return join(process.env.TEMP || tmpdir(), 'machineroom-runs')
-}
-
 async function slotKey(folder, name) {
   const slot = String(name ?? '').trim()
   if (slot === '') return ''
@@ -1311,7 +1303,7 @@ async function main() {
     }
     url = baseUrl(process.env)
   }
-  const web = { runsFolder: runsFolder() }
+  const web = { runsFolder: runsFolderFrom(process.env) }
   const shell = shellFor('')
   const messages = [
     { role: 'system', content: systemPrompt({ cwd: options.cwd, shell }) },
