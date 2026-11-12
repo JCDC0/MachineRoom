@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Reviews 13, 15 and 16 have no open finding left that this lane may fix; the merge check in server/orchestrator.js is P124, held by another lane (P137).
 - ROOM.md, LIVE.md, COMMANDS.md and CODE.md describe the chat's lane tasks, the conversation menu, the runner's commit rules and the AGY models (P127).
 - The conversation menu closes when its row leaves the list or stops being current, so a key never acts on another conversation (P134).
 - PLAN.md, ARCHITECTURE.md and DOCUMENTS.md name what the audits and reviews leave open (P130).
