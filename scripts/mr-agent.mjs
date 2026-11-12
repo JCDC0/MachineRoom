@@ -1153,11 +1153,22 @@ async function post(url, key, payload) {
       await sleep(retryDelayMs(attempt, response))
       continue
     }
+    let body = ''
     try {
-      return await response.json()
-    } catch {
-      throw new Error('The API answer was not JSON.')
+      body = await response.text()
+    } catch {}
+    let data = null
+    try {
+      data = JSON.parse(body)
+    } catch {}
+    if (data && typeof data === 'object' && !Array.isArray(data) && Array.isArray(data.choices)) {
+      return data
     }
+    const text = sanitize(body.slice(0, 200), key)
+    const failure = new Error(`The API answer was not JSON (${response.status}): ${text}.`)
+    if (attempt === RETRY_LIMIT) throw failure
+    await sleep(retryDelayMs(attempt, response))
+    continue
   }
   throw new Error('The API request failed.')
 }
