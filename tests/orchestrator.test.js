@@ -340,6 +340,65 @@ function stateFile(rig) {
   return JSON.parse(readFileSync(join(rig.runs, file), 'utf8'))
 }
 
+function emitterChild() {
+  const child = new EventEmitter()
+  child.stdout = new PassThrough()
+  child.stderr = new PassThrough()
+  child.kill = () => {}
+  return child
+}
+
+function branchSetup(tag) {
+  const base = makeTempDir(tag)
+  const runs = join(base, 'runs')
+  const projectRoot = join(base, 'project')
+  mkdirSync(runs, { recursive: true })
+  mkdirSync(projectRoot, { recursive: true })
+  const promptFile = join(base, 'orchestrator-agent.md')
+  writeFileSync(promptFile, PROMPT)
+  const transcript = `${BRANCH_TRANSCRIPT_INTRO}\n\n> Owner: First task\n> Orchestrator: Reply: First task`
+  const conversation = chatFileFor(projectRoot, runs)
+  const at = new Date().toISOString()
+  writeFileSync(
+    conversation,
+    `${JSON.stringify({
+      project: projectRoot,
+      harness: 'claude',
+      model: 'opus',
+      sessionId: null,
+      state: 'idle',
+      messages: [
+        { id: 'branch-owner', from: 'owner', text: 'First task', at },
+        { id: 'branch-reply', from: 'orchestrator', text: 'Reply: First task', at },
+      ],
+      pending: [],
+      branchTranscript: transcript,
+    }, null, 2)}\n`
+  )
+  return {
+    runs,
+    projectRoot,
+    promptFile,
+    conversation,
+    transcript,
+    make(spawn) {
+      const orchestrator = createOrchestrator({
+        projectRoot,
+        runsFolder: runs,
+        lanes: LANES,
+        promptFile,
+        spawn,
+      })
+      cleanups.push(async () => {
+        orchestrator.close()
+        await sleep(20)
+        rmSync(base, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+      })
+      return orchestrator
+    },
+  }
+}
+
 function recordsOf(rig) {
   return readLines(join(rig.runs, 'runs.jsonl'))
 }
@@ -2905,6 +2964,89 @@ describe('orchestrator reasoning effort and sessions', () => {
     const secondPrompt = valueAfter(restored.calls()[1].args, '-p')
     expect(secondPrompt).not.toContain(BRANCH_TRANSCRIPT_INTRO)
     expect(secondPrompt.endsWith('Once more')).toBe(true)
+  })
+
+  it('keeps a branch transcript when the first start fails', async () => {
+    const branch = branchSetup('mr-branch-start-error-')
+    const argsSeen = []
+    let calls = 0
+    const spawnFake = (file, args, options) => {
+      calls += 1
+      argsSeen.push([...args])
+      if (calls === 1) {
+        return spawn(join(branch.projectRoot, 'no-such-agent.exe'), [], options)
+      }
+      const child = emitterChild()
+      setTimeout(() => {
+        child.stdout.write(JSON.stringify({ type: 'system', subtype: 'init', session_id: 'fake' }) + '\n')
+        child.stdout.write(
+          JSON.stringify({ type: 'result', subtype: 'success', result: 'Carried on.', usage: { input_tokens: 1, output_tokens: 1 } }) + '\n'
+        )
+        child.emit('close', 0)
+      }, 10)
+      return child
+    }
+    const orchestrator = branch.make(spawnFake)
+
+    expect(orchestrator.send({ text: 'Carry on', confirmed: true }).status).toBe(202)
+    await waitFor(() => calls === 1 && orchestrator.answer().state === 'idle', 5000, 'the failed start')
+    const saved = JSON.parse(readFileSync(branch.conversation, 'utf8'))
+    expect(saved.branchTranscript).toBe(branch.transcript)
+    expect(saved.sessionId).toBe(null)
+    expect(valueAfter(argsSeen[0], '-p')).toContain(BRANCH_TRANSCRIPT_INTRO)
+
+    expect(orchestrator.send({ text: 'Try again', confirmed: true }).status).toBe(202)
+    await waitFor(() => calls === 2 && orchestrator.answer().state === 'idle', 5000, 'the retried start')
+    const retried = valueAfter(argsSeen[1], '-p')
+    expect(argsSeen[1]).toContain('--session-id')
+    expect(argsSeen[1]).not.toContain('--resume')
+    expect(retried).toContain(BRANCH_TRANSCRIPT_INTRO)
+    expect(retried).toContain('> Owner: First task')
+    expect(retried.endsWith('Try again')).toBe(true)
+    const after = JSON.parse(readFileSync(branch.conversation, 'utf8'))
+    expect(after.branchTranscript).toBeUndefined()
+  })
+
+  it('clears a branch transcript once its first child starts', async () => {
+    const branch = branchSetup('mr-branch-start-clear-')
+    const children = []
+    const argsSeen = []
+    const spawnFake = (file, args) => {
+      argsSeen.push([...args])
+      const child = emitterChild()
+      children.push(child)
+      return child
+    }
+    const orchestrator = branch.make(spawnFake)
+
+    expect(orchestrator.send({ text: 'Carry on', confirmed: true }).status).toBe(202)
+    const first = children[0]
+    expect(valueAfter(argsSeen[0], '-p')).toContain(BRANCH_TRANSCRIPT_INTRO)
+    expect(JSON.parse(readFileSync(branch.conversation, 'utf8')).branchTranscript).toBe(branch.transcript)
+    first.emit('spawn')
+    await waitFor(
+      () => JSON.parse(readFileSync(branch.conversation, 'utf8')).branchTranscript === undefined,
+      5000,
+      'the started branch to clear'
+    )
+    expect(orchestrator.answer().state).toBe('working')
+    first.stdout.write(JSON.stringify({ type: 'system', subtype: 'init', session_id: 'fake' }) + '\n')
+    first.stdout.write(
+      JSON.stringify({ type: 'result', subtype: 'success', result: 'Carried on.', usage: { input_tokens: 1, output_tokens: 1 } }) + '\n'
+    )
+    first.emit('close', 0)
+    await waitFor(() => orchestrator.answer().state === 'idle', 5000, 'the first turn')
+    expect(JSON.parse(readFileSync(branch.conversation, 'utf8')).branchTranscript).toBeUndefined()
+
+    expect(orchestrator.send({ text: 'Once more', confirmed: true }).status).toBe(202)
+    const second = children[1]
+    second.stdout.write(JSON.stringify({ type: 'system', subtype: 'init', session_id: 'fake' }) + '\n')
+    second.stdout.write(
+      JSON.stringify({ type: 'result', subtype: 'success', result: 'Done.', usage: { input_tokens: 1, output_tokens: 1 } }) + '\n'
+    )
+    second.emit('close', 0)
+    await waitFor(() => orchestrator.answer().state === 'idle', 5000, 'the second turn')
+    expect(valueAfter(argsSeen[1], '-p')).not.toContain(BRANCH_TRANSCRIPT_INTRO)
   })
 
   it('refuses a branch while a turn runs', async () => {

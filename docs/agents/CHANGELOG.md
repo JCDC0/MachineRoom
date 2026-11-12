@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- A branch's carried transcript is cleared only once the agent has started, so a failed start keeps the history (P118).
 - Each conversation row has one menu: Pin, Rename, Fork, Mark as unread, Archive and Delete, with keys, a search box and a kept sort (P93, P115).
 - With a cost limit, a damaged answer stops the native agent before a second paid request; Copilot replies keep prose lines (P117).
 - The chat's To choice sends a task to a lane through the runner's own checks (P82, P113).
@@ -10,6 +11,7 @@
 
 - P112: run-lane passes a native lane its minute limit as MR_AGENT_MINUTES, and each tool result tells the agent the minutes used, with one warning to write its file at 60 percent.
 - P105: a branched conversation saves and restores its quoted transcript and clears it only once a turn that carried it starts; an endpoint edit or refresh keeps the model details of the ids it keeps.
+- P118: a branch keeps its quoted transcript when its first turn fails to start, clears the provisional session id, and clears the transcript only once the child starts.
 - P108: a model named ENDPOINT/ID takes its window only from that endpoint's details, a suffix match counts only when it is the only one, and a sub orchestrator resolves its window again on a model change.
 - P102: a lane the owner made starts through run-lane and candidate, the runner commits only the brief's files and never a key, log or build path, names what it left out, logs a failed commit, and takes its version from package.json.
 - P100: a brief run started from the room reads its lanes from the room's lane file and its made lanes, never docs/agents/lanes.json unless MACHINEROOM_LANES_DIR names it.
