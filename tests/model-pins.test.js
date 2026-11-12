@@ -9,6 +9,7 @@ import {
   readModelPins,
   saveModelPins,
 } from '../server/endpoints.js'
+import { createClient } from '../src/control/client.js'
 import { startLaneBridge } from './helpers/bridge.js'
 import { makeTempDir, removeTempDir } from './helpers/tempRoot.js'
 
@@ -128,5 +129,26 @@ describe('model pin rules', () => {
     expect(modelPinsProblem(pins)).toBe(PIN_PROBLEM)
     saveModelPins(runsDir, pins)
     expect(readModelPins(runsDir)).toHaveLength(MAX_MODEL_PINS)
+  })
+})
+
+describe('the client model pin methods', () => {
+  it('reads and saves the pins at /api/model-pins', async () => {
+    const seen = []
+    const fetchImpl = async (url, options = {}) => {
+      seen.push({ url, method: options.method, body: options.body })
+      const pins = options.method === 'PUT' ? JSON.parse(options.body).pins : ['alpha']
+      return { ok: true, json: async () => ({ ok: true, pins }) }
+    }
+    const client = createClient({ fetchImpl })
+    expect(await client.modelPins()).toEqual(['alpha'])
+    expect(await client.saveModelPins({ pins: ['alpha', 'beta'] })).toEqual({
+      ok: true,
+      pins: ['alpha', 'beta'],
+    })
+    expect(seen).toEqual([
+      { url: '/api/model-pins', method: 'GET', body: undefined },
+      { url: '/api/model-pins', method: 'PUT', body: JSON.stringify({ pins: ['alpha', 'beta'] }) },
+    ])
   })
 })

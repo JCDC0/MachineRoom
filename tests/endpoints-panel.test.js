@@ -19,7 +19,7 @@ import EndpointsPanel, {
   quickProviders,
   quickSavedText,
 } from '../src/ui/EndpointsPanel.jsx'
-import { settle, withDom } from './helpers/uiDom.js'
+import { click, settle, withDom } from './helpers/uiDom.js'
 
 const ENDPOINTS = [
   {
@@ -162,6 +162,57 @@ describe('EndpointsPanel', () => {
       expect(container.textContent).not.toContain('slot-secret')
     })
   })
+
+  it('opens an endpoint model list with its details and pins the model', async () => {
+    const endpoint = {
+      ...ENDPOINTS[1],
+      modelDetails: [
+        {
+          id: 'deepseek/deepseek-v4.1-flash-1017',
+          name: 'DeepSeek V4.1 Flash',
+          contextLength: 128000,
+          promptPrice: 0.00000027,
+          completionPrice: 0.0000011,
+          created: 1767225600,
+        },
+      ],
+    }
+    const calls = []
+    const client = {
+      providers: async () => PROVIDERS,
+      endpoints: async () => [endpoint],
+      keys: async () => [],
+      modelPins: async () => [],
+      saveModelPins: async (payload) => {
+        calls.push(payload)
+        return { ok: true, pins: payload.pins }
+      },
+    }
+    await withDom(async ({ container, root }) => {
+      await act(async () => {
+        root.render(
+          createElement(EndpointsPanel, {
+            client,
+            initialProviders: PROVIDERS,
+            initialEndpoints: [endpoint],
+          })
+        )
+      })
+      const trigger = container.querySelector('button[aria-label="Models for OpenRouter Work"]')
+      expect(trigger).not.toBeNull()
+      expect(trigger.textContent).toContain('1 model')
+      await click(root, trigger)
+      const row = container.querySelector('.mr-picker-row')
+      expect(row.textContent).toContain('DeepSeek V4.1 Flash')
+      expect(row.textContent).toContain('deepseek/deepseek-v4.1-flash-1017')
+      expect(row.textContent).toContain('128K')
+      expect(row.textContent).toContain('$0.27 / $1.10')
+      expect(row.textContent).toContain('2026-01')
+      await click(root, row.querySelector('.mr-picker-pin'))
+      await settle()
+      expect(calls).toEqual([{ pins: ['deepseek/deepseek-v4.1-flash-1017'] }])
+    })
+  })
 })
 
 describe('endpoint mock methods', () => {
@@ -187,6 +238,18 @@ describe('endpoint mock methods', () => {
     await client.deleteEndpoint({ name: 'Groq Work', confirmed: true })
     expect((await client.endpoints()).some((entry) => entry.name === 'Groq Work')).toBe(false)
     await expect(client.saveEndpoint({ name: 'No', confirmed: false })).rejects.toThrow('Confirm saving the endpoint first.')
+  })
+
+  it('saves and reads model pins', async () => {
+    const client = createMockClient({ latencyMs: 0 })
+    expect(await client.modelPins()).toEqual([])
+    const saved = await client.saveModelPins({ pins: ['alpha', 'beta', 'alpha'] })
+    expect(saved).toEqual({ ok: true, pins: ['alpha', 'beta'] })
+    expect(await client.modelPins()).toEqual(['alpha', 'beta'])
+    await expect(client.saveModelPins({ pins: ['x'.repeat(201)] })).rejects.toThrow(
+      'A pin is a model name of at most 200 characters.'
+    )
+    expect(await client.modelPins()).toEqual(['alpha', 'beta'])
   })
 
   it('saves the quick key, endpoint and three models without the key', async () => {

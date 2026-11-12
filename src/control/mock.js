@@ -65,6 +65,8 @@ export const CLIENT_METHODS = [
   'quickEndpoint',
   'deleteEndpoint',
   'endpointModels',
+  'modelPins',
+  'saveModelPins',
   'createLane',
   'updateLane',
   'deleteLane',
@@ -629,6 +631,7 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
   const runsState = { project: 'MachineRoom', running: [], recent: [] }
   const reviewState = clone(SAMPLE_REVIEWS)
   let endpointState = clone(SAMPLE_ENDPOINTS)
+  let modelPinState = []
   let mcpServerState = clone(SAMPLE_MCP_SERVERS)
   let gitState = {
     git: true,
@@ -1743,6 +1746,23 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
         const endpoint = endpointState.find((entry) => entry.name === name)
         if (!endpoint) throw new Error('The endpoint was not found.')
         return [...endpoint.models]
+      }),
+
+    modelPins: () => call('modelPins', () => [...modelPinState]),
+
+    saveModelPins: ({ pins } = {}) =>
+      call('saveModelPins', () => {
+        if (!Array.isArray(pins) || pins.length > 200) {
+          throw new Error('A pin is a model name of at most 200 characters.')
+        }
+        const next = []
+        for (const pin of pins) {
+          const text = typeof pin === 'string' ? pin.trim() : ''
+          if (!text || text.length > 200) throw new Error('A pin is a model name of at most 200 characters.')
+          if (!next.includes(text)) next.push(text)
+        }
+        modelPinState = next
+        return { ok: true, pins: [...modelPinState] }
       }),
 
     createLane: ({ name, harness, model, effort, confirmed = true } = {}) =>
