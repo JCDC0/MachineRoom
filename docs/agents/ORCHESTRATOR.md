@@ -12,7 +12,7 @@ Rewrite this section at every merge and before you end a session. Keep it under 
 
 - 2026-11-13, early morning: the last push is `57ca054b`, green on Ubuntu and Windows (run 43275945484), after two CI test fixes (`0b802e9e`, `57ca054b`). It holds P77 to P122 (not P97), reviews 13 and 15 to 18 and all their blocking fixes. P113 carries P82 (the chat's To choice) and P115 carries P93 (one menu per conversation). Before it, every unpushed commit with a test.com author was rewritten to example.com (backup branches `backup/*-pre-rewrite`, `backup/pre-doc-rewrite`). Read CI first with `gh run list --limit 3 --repo JCDC0/MachineRoom`.
 - Running: nothing.
-- AGY: `agy models` lists Gemini 4 Hydrogen (low, medium, high, xhigh) and Gemini 4 Argon. Hydrogen answered from 2026-11-13 after a first 404. The AGY lanes still run Gemini 3.8 Flash High until the owner says to switch.
+- AGY: `agy models` lists Gemini 4 Hydrogen (low, medium, high, xhigh) and Gemini 4 Argon. Hydrogen answered from 2026-11-13 after a first 404. On the owner's word the AGY lanes run Gemini 4 Hydrogen High since 2026-11-13.
 - Small open items: P94 blocks on spawnSync (review 16), run-lane output does not mask paths (review 15, finding 3), a stale lane lock can match a reused PID (P103), the file-index test walks the old recordings, review 18 finding 7 is fixed but the menu still needs a look with a disabled Fork, and P85's top placement needs a look.
 - Flaky on this machine only: `tests/scale.test.js` (EPERM on a temp folder) and, under load, one `tests/tree-partial.test.js` case; both pass alone.
 - The owner's yes to push held for the night of 2026-11-12 only. A new session asks again. Codex runs GPT-6.1 Sol at medium effort.
@@ -209,7 +209,7 @@ Then do the review yourself. A PASS is not a review.
 | `opencode` to `opencode5` (`.worktrees\opencode` to `opencode5`) | `opencode-go/deepseek-v4.1-flash`, max | `server/**`, `scripts/**`, `src/**`, tests; reviews, full suites and hunts |
 | `claude` (`.worktrees\claude`) | Claude Sonnet | the brief it is given, in its own worktree |
 | `codex` (`.worktrees\codex`) | the Codex app's default model | the brief it is given; `src/Stage.jsx` and `src/App.jsx` are forbidden to it. Its sandbox keeps git and the main checkout read-only: it edits files only, cannot run vitest or the process tests, and the orchestrator commits its work (`git -C .worktrees/codex switch -c BRANCH`, add, commit) and tests it at the merge |
-| `agy`, `agy2` (`.worktrees\agy`, `agy2`) | `gemini-3.8-flash-high` | backend, script and record briefs with exact steps; `src/ui/**`, `src/styles.css`, `src/engine/**`, `src/Stage.jsx` and `src/App.jsx` are forbidden to it. A Flash run takes about twice as long as an OpenCode run |
+| `agy`, `agy2` (`.worktrees\agy`, `agy2`) | `gemini-4-hydrogen-high` (3.8 Flash before 2026-11-13) | backend, script and record briefs with exact steps; `src/ui/**`, `src/styles.css`, `src/engine/**`, `src/Stage.jsx` and `src/App.jsx` are forbidden to it. A Flash run takes about twice as long as an OpenCode run |
 | `opencode6`, `opencode7` | `opencode-go/deepseek-v4.1-flash`, max | as `opencode`, when more lanes are needed (the owner's word, 2026-11-12) |
 | `agy3` | | no work without the owner's word |
 | `opencode8` to `opencode10`, `hermes` | | retired; the runner refuses them |

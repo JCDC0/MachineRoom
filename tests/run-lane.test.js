@@ -38,7 +38,7 @@ describe('commandFor', () => {
   it('builds the AGY command in the lane worktree', () => {
     expect(commandFor({ lane: lanes.agy, prompt, env, usageFile, title })).toEqual({
       file: 'C:\\Users\\me\\AppData\\Local\\agy\\bin\\agy.exe',
-      args: ['--print', prompt, '--output-format', 'stream-json', '--model', 'gemini-3.8-flash-high', '--dangerously-skip-permissions'],
+      args: ['--print', prompt, '--output-format', 'stream-json', '--model', lanes.agy.cli.model, '--dangerously-skip-permissions'],
       cwd: lanes.agy.worktree,
     })
   })
