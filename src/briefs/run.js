@@ -508,7 +508,7 @@ export const LANE_ENV_NAMES = [
 
 export const HARNESS_KEY_NAMES = {
   hermes: ['OPENROUTER_API_KEY'],
-  machineroom: ['MACHINEROOM_API_KEY', 'OPENROUTER_API_KEY', 'MACHINEROOM_API_URL', 'MR_AGENT_MAX_COST_USD'],
+  machineroom: ['MACHINEROOM_API_KEY', 'OPENROUTER_API_KEY', 'MACHINEROOM_API_URL', 'MR_AGENT_MAX_COST_USD', 'MR_AGENT_MINUTES'],
 }
 
 const LANE_ENV_SET = new Set(LANE_ENV_NAMES.map((name) => name.toLowerCase()))
@@ -521,7 +521,7 @@ export function harnessKeyNames(harness, { model = '', endpoints = [] } = {}) {
       const name = typeof ep === 'string' ? ep.trim() : typeof ep?.name === 'string' ? ep.name.trim() : ''
       return name !== '' && model.startsWith(`${name}/`)
     })
-    if (hasEndpoint) return ['MR_AGENT_MAX_COST_USD']
+    if (hasEndpoint) return ['MR_AGENT_MAX_COST_USD', 'MR_AGENT_MINUTES']
   }
   return Object.hasOwn(HARNESS_KEY_NAMES, key) ? HARNESS_KEY_NAMES[key] : []
 }

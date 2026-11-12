@@ -1700,6 +1700,7 @@ describe('scripts/run-lane.mjs', () => {
         hasOpenRouter: Object.hasOwn(process.env, 'OPENROUTER_API_KEY'),
         hasMrKey: Object.hasOwn(process.env, 'MACHINEROOM_API_KEY'),
         hasMrUrl: Object.hasOwn(process.env, 'MACHINEROOM_API_URL'),
+        minutes: process.env.MR_AGENT_MINUTES ?? null,
       }));\n`
     )
 
@@ -1747,6 +1748,7 @@ describe('scripts/run-lane.mjs', () => {
       expect(envResult.hasOpenRouter).toBe(false)
       expect(envResult.hasMrKey).toBe(false)
       expect(envResult.hasMrUrl).toBe(false)
+      expect(envResult.minutes).toBe('1')
     } finally {
       harnessByKey.machineroom.command = previousCmd
       for (const [name, value] of [['OPENROUTER_API_KEY', prevOpenRouter], ['MACHINEROOM_API_KEY', prevMrKey], ['MACHINEROOM_API_URL', prevMrUrl]]) {
