@@ -43,7 +43,7 @@ function take(path, folder, projectRun = false) {
   }
 }
 
-function isHolderAlive(holder, path, { platform = process.platform, list = listProcesses, stat = statSync } = {}) {
+export function isHolderAlive(holder, path, { platform = process.platform, list = listProcesses, stat = statSync } = {}) {
   if (!processAlive(holder)) return false
   if (platform !== 'win32') return true
   let mtime = null

@@ -647,9 +647,7 @@ describe('projects api', () => {
     expect(openedPaths).toEqual([])
   })
 
-  it('opens the project when a lock in the runs folder names a dead process', async () => {
-    const env = createEnvironment()
-    writeFileSync(join(env.runs, 'opencode.lock'), JSON.stringify({ pid: 99999999 }))
+  async function tryOpenProject(env, options = {}) {
     const answers = []
     const openedPaths = []
     const api = createProjectsApi({
@@ -662,16 +660,118 @@ describe('projects api', () => {
         answers.push({ status, body })
       },
       readJsonBody: async () => ({ path: env.siblingGit, confirmed: true }),
+      ...options,
     })
     const handled = await api.handle(
       { method: 'POST', headers: { origin: 'http://127.0.0.1:5173' } },
       { writableFinished: true },
       new URL('http://127.0.0.1/api/projects/open')
     )
-    expect(handled).toBe(true)
-    expect(answers[0].status).toBe(200)
     await new Promise((resolveWait) => setTimeout(resolveWait, 50))
+    return { handled, answer: answers[0], openedPaths }
+  }
+
+  it('opens the project when a lock in the runs folder names a dead process', async () => {
+    const env = createEnvironment()
+    writeFileSync(join(env.runs, 'opencode.lock'), JSON.stringify({ pid: 99999999 }))
+    const { handled, answer, openedPaths } = await tryOpenProject(env)
+    expect(handled).toBe(true)
+    expect(answer.status).toBe(200)
     expect(openedPaths).toEqual([resolve(env.siblingGit)])
+  })
+
+  it('opens the project without listing processes when lock pid and child pid are dead', async () => {
+    const env = createEnvironment()
+    writeFileSync(join(env.runs, 'opencode.lock'), JSON.stringify({ pid: 99999999, child: 99999998 }))
+    let listCalls = 0
+    const { handled, answer, openedPaths } = await tryOpenProject(env, {
+      platform: 'win32',
+      list: () => {
+        listCalls += 1
+        return []
+      },
+    })
+    expect(handled).toBe(true)
+    expect(answer.status).toBe(200)
+    expect(openedPaths).toEqual([resolve(env.siblingGit)])
+    expect(listCalls).toBe(0)
+  })
+
+  it('opens the project on Windows when lock pid and child pid are alive but started after the lock was written', async () => {
+    const env = createEnvironment()
+    const childPid = process.ppid > 0 ? process.ppid : process.pid
+    writeFileSync(join(env.runs, 'opencode.lock'), JSON.stringify({ pid: process.pid, child: childPid }))
+    let listCalls = 0
+    const { handled, answer, openedPaths } = await tryOpenProject(env, {
+      platform: 'win32',
+      stat: () => ({ mtimeMs: 10000 }),
+      list: () => {
+        listCalls += 1
+        return [
+          { pid: process.pid, created: 13000 },
+          { pid: childPid, created: 14000 },
+        ]
+      },
+    })
+    expect(handled).toBe(true)
+    expect(answer.status).toBe(200)
+    expect(openedPaths).toEqual([resolve(env.siblingGit)])
+    expect(listCalls).toBe(1)
+  })
+
+  it('refuses on Windows when the lock pid started before the lock was written', async () => {
+    const env = createEnvironment()
+    writeFileSync(join(env.runs, 'opencode.lock'), JSON.stringify({ pid: process.pid }))
+    const { handled, answer, openedPaths } = await tryOpenProject(env, {
+      platform: 'win32',
+      stat: () => ({ mtimeMs: 10000 }),
+      list: () => [{ pid: process.pid, created: 9000 }],
+    })
+    expect(handled).toBe(true)
+    expect(answer.status).toBe(409)
+    expect(answer.body.error).toBe(LANES_RUNNING_PROBLEM)
+    expect(openedPaths).toEqual([])
+  })
+
+  it('refuses on Windows when the lock pid is stale but the child pid started before the lock', async () => {
+    const env = createEnvironment()
+    const childPid = process.ppid > 0 ? process.ppid : process.pid
+    writeFileSync(join(env.runs, 'opencode.lock'), JSON.stringify({ pid: process.pid, child: childPid }))
+    let listCalls = 0
+    const { handled, answer, openedPaths } = await tryOpenProject(env, {
+      platform: 'win32',
+      stat: () => ({ mtimeMs: 10000 }),
+      list: () => {
+        listCalls += 1
+        return [
+          { pid: process.pid, created: 13000 },
+          { pid: childPid, created: 9000 },
+        ]
+      },
+    })
+    expect(handled).toBe(true)
+    expect(answer.status).toBe(409)
+    expect(answer.body.error).toBe(LANES_RUNNING_PROBLEM)
+    expect(openedPaths).toEqual([])
+    expect(listCalls).toBe(1)
+  })
+
+  it('refuses away from Windows without listing processes when a lock pid is alive', async () => {
+    const env = createEnvironment()
+    writeFileSync(join(env.runs, 'opencode.lock'), JSON.stringify({ pid: process.pid }))
+    let listCalls = 0
+    const { handled, answer, openedPaths } = await tryOpenProject(env, {
+      platform: 'linux',
+      list: () => {
+        listCalls += 1
+        return []
+      },
+    })
+    expect(handled).toBe(true)
+    expect(answer.status).toBe(409)
+    expect(answer.body.error).toBe(LANES_RUNNING_PROBLEM)
+    expect(openedPaths).toEqual([])
+    expect(listCalls).toBe(0)
   })
 
   it('refuses while the lane source has a run open, then opens once that run ends', async () => {

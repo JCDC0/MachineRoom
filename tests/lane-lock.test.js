@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { readLaneLock, releaseLaneLock, takeLaneLock, writeLaneChild } from '../scripts/lane-lock.mjs'
+import { isHolderAlive, readLaneLock, releaseLaneLock, takeLaneLock, writeLaneChild } from '../scripts/lane-lock.mjs'
 import { takeRoomLock } from '../server/orchestrator.js'
 import { laneLockText } from '../src/briefs/run.js'
 import { makeTempDir } from './helpers/tempRoot.js'
@@ -191,6 +191,64 @@ describe('lane lock', () => {
       }),
     ).toThrow(sentence('hermes', process.pid, path))
     expect(listCalled).toBe(false)
+  })
+
+  it('checks process liveness and Windows start time through isHolderAlive', () => {
+    const folder = makeTempDir('lane-lock-holder-')
+    const path = lockPath(folder)
+    writeFileSync(path, String(process.pid))
+
+    let listCalled = false
+    const trackList = (rows) => () => {
+      listCalled = true
+      return rows
+    }
+
+    expect(isHolderAlive(deadPid(), path, { platform: 'win32', list: trackList([]) })).toBe(false)
+    expect(isHolderAlive(0, path, { platform: 'win32', list: trackList([]) })).toBe(false)
+    expect(isHolderAlive(null, path, { platform: 'win32', list: trackList([]) })).toBe(false)
+    expect(listCalled).toBe(false)
+
+    expect(
+      isHolderAlive(process.pid, path, {
+        platform: 'linux',
+        list: trackList([]),
+      }),
+    ).toBe(true)
+    expect(listCalled).toBe(false)
+
+    expect(
+      isHolderAlive(process.pid, path, {
+        platform: 'win32',
+        stat: () => ({ mtimeMs: 10000 }),
+        list: trackList([{ pid: process.pid, created: 13000 }]),
+      }),
+    ).toBe(false)
+    expect(listCalled).toBe(true)
+
+    expect(
+      isHolderAlive(process.pid, path, {
+        platform: 'win32',
+        stat: () => ({ mtimeMs: 10000 }),
+        list: () => [{ pid: process.pid, created: 9000 }],
+      }),
+    ).toBe(true)
+
+    expect(
+      isHolderAlive(process.pid, path, {
+        platform: 'win32',
+        stat: () => ({ mtimeMs: 10000 }),
+        list: () => [{ pid: process.pid, created: 12000 }],
+      }),
+    ).toBe(true)
+
+    expect(
+      isHolderAlive(process.pid, path, {
+        platform: 'win32',
+        stat: () => ({ mtimeMs: 10000 }),
+        list: () => [],
+      }),
+    ).toBe(true)
   })
 })
 
