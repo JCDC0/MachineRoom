@@ -34,7 +34,8 @@ import {
   teamRows,
 } from './family.js'
 import { changeSub, idFromName, ladderFromOrchestrators, ladderSubs } from './ladderForm.js'
-import { ModelSelect, useHarnessModels } from './ModelRefresh.jsx'
+import { useHarnessModels } from './ModelRefresh.jsx'
+import ModelPicker from './ModelPicker.jsx'
 import { withHarnessModels, withModelRows } from './modelRefresh.js'
 import { AGENT_NAME_MAX, cleanText, laneChoice, laneSummary, projectName } from './sidebar.js'
 
@@ -1575,11 +1576,12 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
             {directMissing ? (
               renderDirectNotice(editorModels.refresh)
             ) : harness ? (
-              <ModelSelect
+              <ModelPicker
                 label="Model"
                 ariaLabel={`Model for ${node.label}`}
                 value={nodeDraft.model}
                 choices={choices}
+                client={client}
                 onChange={(model) => setNodeDraft({ ...nodeDraft, model })}
                 onRefresh={editorModels.refresh}
                 loading={editorModels.loading}
@@ -1661,11 +1663,12 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
             {directMissing ? (
               renderDirectNotice(editorModels.refresh)
             ) : harness ? (
-              <ModelSelect
+              <ModelPicker
                 label="Model"
                 ariaLabel={`Model for ${node.label}`}
                 value={nodeDraft.model}
                 choices={choices}
+                client={client}
                 onChange={(model) => setNodeDraft({ ...nodeDraft, model })}
                 onRefresh={editorModels.refresh}
                 loading={editorModels.loading}
@@ -1834,11 +1837,12 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
         )}
         {directMissing ? renderDirectNotice(childModels.refresh) : null}
         {selected && !directMissing ? (
-          <ModelSelect
+          <ModelPicker
             label="Model"
             ariaLabel="New agent model"
             value={draft.model}
             choices={choices}
+            client={client}
             onChange={(model) => setDraft({ ...draft, model })}
             onRefresh={childModels.refresh}
             loading={childModels.loading}
@@ -1922,11 +1926,12 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
         </label>
         {directMissing ? renderDirectNotice(subModels.refresh) : null}
         {selected && !directMissing ? (
-          <ModelSelect
+          <ModelPicker
             label="Model"
             ariaLabel="Sub orchestrator model"
             value={subDraft.model}
             choices={subModels.choices}
+            client={client}
             onChange={(model) => setSubDraft({ ...subDraft, model })}
             onRefresh={subModels.refresh}
             loading={subModels.loading}
