@@ -1606,7 +1606,8 @@ if (process.argv[1] && sameFile(resolve(process.argv[1]), resolve(entry))) {
   main().then((code) => {
     process.exitCode = code
   }).catch((error) => {
-    console.error(String(error?.message ?? error))
+    const folder = runsFolder()
+    console.error(String(error?.message ?? error).split(folder).join(printedRunsFolder(folder)))
     process.exitCode = 1
   })
 }
