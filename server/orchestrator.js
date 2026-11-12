@@ -1,4 +1,4 @@
-import { spawn, spawnSync } from 'node:child_process'
+import { spawn } from 'node:child_process'
 import { createHash, randomBytes, randomUUID } from 'node:crypto'
 import {
   appendFileSync,
@@ -817,6 +817,7 @@ export function createOrchestrator({
   runsFolder = runsFolderDefault(),
   lanes = {},
   spawn: spawnChild = spawn,
+  gitSpawn: spawnGit = spawn,
   now = Date.now,
   onNotice = () => {},
   promptFile = PROMPT_FILE,
@@ -837,6 +838,7 @@ export function createOrchestrator({
   recordsCache: recordsCacheOption = null,
   approvalTimeoutMs = APPROVAL_TIMEOUT_MS,
   mergeWaitMs = ORCHESTRATOR_MERGE_WAIT_MS,
+  gitTimeoutMs = GIT_OPERATION_TIMEOUT_MS,
 } = {}) {
   const token = typeof tokenOption === 'string' && tokenOption ? tokenOption : randomBytes(24).toString('base64url')
   const root = projectRoot ? resolve(projectRoot) : ''
@@ -1333,31 +1335,91 @@ export function createOrchestrator({
     roomTimer.unref?.()
   }
 
+  let mergeCheck = null
+  let mergeCheckChild = null
+  let cancelMergeCheck = null
+
   function gitOperationInProgress() {
-    if (!root || !insideGitFolder(root)) return false
-    let output
-    try {
-      output = spawnSync(
-        gitPath(),
-        ['rev-parse', ...GIT_OPERATION_FILES.flatMap((name) => ['--git-path', name])],
-        {
-          cwd: root,
-          encoding: 'utf8',
-          timeout: GIT_OPERATION_TIMEOUT_MS,
-          windowsHide: true,
-          shell: false,
-          env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
+    if (!root || !insideGitFolder(root)) return Promise.resolve(false)
+    if (mergeCheck) return mergeCheck
+    let cancel = () => {}
+    const check = new Promise((resolve) => {
+      let settled = false
+      let timer = null
+      const output = []
+      const finish = (value) => {
+        if (settled) return
+        settled = true
+        if (timer) clearTimeout(timer)
+        resolve(value)
+      }
+      cancel = () => finish(false)
+      cancelMergeCheck = cancel
+      let child
+      try {
+        child = spawnGit(
+          gitPath(),
+          ['rev-parse', ...GIT_OPERATION_FILES.flatMap((name) => ['--git-path', name])],
+          {
+            cwd: root,
+            shell: false,
+            windowsHide: true,
+            stdio: ['ignore', 'pipe', 'ignore'],
+            env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
+          }
+        )
+      } catch {
+        finish(false)
+        return
+      }
+      mergeCheckChild = child
+      timer = setTimeout(() => {
+        try {
+          child.kill()
+        } catch {}
+        finish(false)
+      }, gitTimeoutMs)
+      child.stdout?.setEncoding?.('utf8')
+      child.stdout?.on('data', (chunk) => output.push(String(chunk)))
+      child.once('error', () => {
+        if (mergeCheckChild === child) mergeCheckChild = null
+        finish(false)
+      })
+      child.once('close', (code) => {
+        if (mergeCheckChild === child) mergeCheckChild = null
+        if (code !== 0) {
+          finish(false)
+          return
         }
-      )
-    } catch {
-      return false
+        const found = String(output.join(''))
+          .split(/\r?\n/)
+          .map((line) => line.trim())
+          .filter(Boolean)
+          .some((line) => existsSync(isAbsolute(line) ? line : join(root, line)))
+        finish(found)
+      })
+    })
+    mergeCheck = check
+    const clear = () => {
+      if (mergeCheck === check) mergeCheck = null
+      if (cancelMergeCheck === cancel) cancelMergeCheck = null
     }
-    if (output.error || output.status !== 0) return false
-    return String(output.stdout ?? '')
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .filter(Boolean)
-      .some((line) => existsSync(isAbsolute(line) ? line : join(root, line)))
+    check.then(clear, clear)
+    return check
+  }
+
+  function finishMaybeStartTurn(inProgress) {
+    if (stopped || running || state === 'paused') return
+    if (pending.length === 0) return
+    if (inProgress) {
+      scheduleRoomTurn(mergeWaitMs)
+      return
+    }
+    if (!roomTurnAllowed()) {
+      scheduleRoomTurn()
+      return
+    }
+    startTurn()
   }
 
   function maybeStartTurn() {
@@ -1368,18 +1430,16 @@ export function createOrchestrator({
     }
     if (pending.length === 0) return
     const ordered = pending.some((message) => message.from === 'owner' || (key !== ORCHESTRATOR_KEY && message.from === ORCHESTRATOR_KEY))
-    if (!ordered) {
-      if (!givenWork()) return
-      if (gitOperationInProgress()) {
-        scheduleRoomTurn(mergeWaitMs)
-        return
-      }
-      if (!roomTurnAllowed()) {
-        scheduleRoomTurn()
-        return
-      }
+    if (ordered) {
+      startTurn()
+      return
     }
-    startTurn()
+    if (!givenWork()) return
+    if (!root || !insideGitFolder(root)) {
+      finishMaybeStartTurn(false)
+      return
+    }
+    gitOperationInProgress().then(finishMaybeStartTurn, () => finishMaybeStartTurn(false))
   }
 
   function givenWork() {
@@ -2549,6 +2609,16 @@ export function createOrchestrator({
     if (roomTimer) {
       clearTimeout(roomTimer)
       roomTimer = null
+    }
+    if (cancelMergeCheck) {
+      cancelMergeCheck()
+      cancelMergeCheck = null
+    }
+    if (mergeCheckChild) {
+      try {
+        mergeCheckChild.kill()
+      } catch {}
+      mergeCheckChild = null
     }
     const turn = running
     if (turn) {
