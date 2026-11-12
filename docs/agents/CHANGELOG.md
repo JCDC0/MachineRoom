@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- briefFileList ignores Files: markers inside backticks or quotes before taking the last real one (P133).
 - startProjectTask and the chat's lane dispatch have their own tests (P131).
 - The file-index test takes its write rule from commands.js, so it passes with the owner's recordings too (P128).
 - The file-index test takes its write rule from commands.js, and a recording-free case covers a redirect whose operand is cut short (P128).
