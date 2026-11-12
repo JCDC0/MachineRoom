@@ -655,8 +655,9 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
       finish(item)
     })
     if (startedBy) {
+      const dispatchText = projectRun?.task || (Array.isArray(briefs) && briefs.length > 0 ? briefs.join(' ') : '')
       try {
-        onMessage({ from: startedBy === 'orchestrator' ? 'orchestrator' : `sub-${startedBy}`, to: lane, kind: 'dispatch' })
+        onMessage({ from: startedBy === 'orchestrator' ? 'orchestrator' : `sub-${startedBy}`, to: lane, kind: 'dispatch' }, dispatchText)
       } catch {}
     }
     return entry
@@ -964,5 +965,5 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
     return true
   }
 
-  return { handle, stopAll, isRunning: (lane) => (lane !== undefined ? running.has(lane) : running.size > 0) }
+  return { handle, stopAll, isRunning: (lane) => (lane !== undefined ? running.has(lane) : running.size > 0), startRun }
 }

@@ -10,6 +10,7 @@ import {
   ORCH_STOP_CONFIRM,
   OrchestratorActivity,
   TEAM_TAB,
+  agentColor,
   approvalInputText,
   approvalTitle,
   canSend,
@@ -18,6 +19,7 @@ import {
   chatLines,
   clampDraft,
   copyChatText,
+  formatAgentLine,
   isSendKey,
   listsOrchestrator,
   modeClass,
@@ -30,6 +32,7 @@ import {
   orchestratorDoing,
   projectBaseName,
   retryTarget,
+  runnableLanes,
   sendChatMessage,
   startConfirmText,
   statusDetail,
@@ -963,6 +966,281 @@ describe('message actions', () => {
       expect(buttonWithText(container, 'Jump to newest')).toBeNull()
       expect(container.querySelectorAll('.mr-orch-line')).toHaveLength(2)
     })
+  })
+})
+
+describe('talking to a lane and seeing agent messages', () => {
+  it('formats an agent message line with text and with kind alone', () => {
+    expect(
+      formatAgentLine({
+        from: 'orchestrator',
+        to: 'opencode',
+        kind: 'order',
+        text: 'Fix the bug',
+      })
+    ).toBe('Orchestrator to opencode, order: Fix the bug')
+
+    expect(
+      formatAgentLine({
+        from: 'opencode',
+        to: 'orchestrator',
+        kind: 'wake',
+      })
+    ).toBe('opencode to Orchestrator, wake')
+  })
+
+  it('filters runnable lanes and excludes the orchestrator', () => {
+    const lanes = [
+      { key: 'orchestrator', name: 'Orchestrator', cli: { bin: 'orch' } },
+      { key: 'coder', name: 'Coder', cli: { bin: 'coder' } },
+      { key: 'retired-lane', name: 'Retired', retired: true, cli: { bin: 'ret' } },
+      { key: 'hidden-lane', name: 'Hidden', hidden: true, cli: { bin: 'hid' } },
+      { key: 'doc', name: 'Docs', harness: 'opencode' },
+      { key: 'viewer', name: 'Viewer' },
+    ]
+    const runnable = runnableLanes(lanes)
+    expect(runnable.map((l) => l.key)).toEqual(['coder', 'doc'])
+  })
+
+  it('hides agent messages when showAgentMessages is false', () => {
+    const chat = {
+      messages: [
+        { id: '1', from: 'owner', text: 'Hello' },
+        { id: '2', from: 'agent', text: 'Orchestrator to Coder, order: build' },
+        { id: '3', from: 'opencode', text: 'Working on it' },
+      ],
+    }
+    const withAgent = chatLines(chat, 10, {
+      showAgentMessages: true,
+      lanes: [{ key: 'opencode', name: 'OpenCode' }],
+    })
+    expect(withAgent).toHaveLength(3)
+    expect(withAgent[1].from).toBe('agent')
+    expect(withAgent[2].from).toBe('lane')
+    expect(withAgent[2].laneName).toBe('OpenCode')
+
+    const withoutAgent = chatLines(chat, 10, {
+      showAgentMessages: false,
+      lanes: [{ key: 'opencode', name: 'OpenCode' }],
+    })
+    expect(withoutAgent).toHaveLength(2)
+    expect(withoutAgent.map((l) => l.from)).toEqual(['owner', 'lane'])
+  })
+
+  it('offers To choices and delivers message to a lane', async () => {
+    const chat = { state: 'idle', messages: [{ id: '1', from: 'owner', text: 'Initial' }] }
+    const lanes = [
+      { key: 'opencode', name: 'OpenCode', cli: { bin: 'opencode' } },
+      { key: 'claude', name: 'Claude', harness: 'claude' },
+    ]
+    const calls = []
+    const client = {
+      ...fakeClient(chat),
+      sendOrchestrator: async (text, options) => {
+        calls.push({ text, options })
+        return { id: 'msg-2' }
+      },
+    }
+
+    await withDom(async ({ container, root }) => {
+      await act(async () => {
+        root.render(
+          createElement(OrchestratorChat, {
+            client,
+            inline: true,
+            initialChat: chat,
+            lanes,
+            initialOrchestrators: [
+              { id: 'orchestrator', name: 'Orchestrator' },
+              { id: 'frontend', name: 'Frontend' },
+            ],
+          })
+        )
+      })
+      await act(async () => {})
+
+      const toSelect = container.querySelector('select[aria-label="To"]')
+      expect(toSelect).not.toBeNull()
+      const options = Array.from(toSelect.querySelectorAll('option')).map((o) => ({
+        value: o.getAttribute('value'),
+        text: o.textContent.trim(),
+      }))
+      expect(options).toEqual([
+        { value: 'orchestrator', text: 'Orchestrator' },
+        { value: 'frontend', text: 'Frontend' },
+        { value: 'opencode', text: 'OpenCode' },
+        { value: 'claude', text: 'Claude' },
+      ])
+
+      await act(async () => {
+        toSelect.value = 'opencode'
+        toSelect.dispatchEvent({ type: 'change', bubbles: true })
+      })
+
+      await type(root, container.querySelector('.mr-orch-input'), 'Fix tests')
+      await act(async () => {
+        container.querySelector('.mr-orch-form').dispatchEvent({
+          type: 'submit',
+          bubbles: true,
+          cancelable: true,
+        })
+      })
+
+      expect(calls).toEqual([{ text: 'Fix tests', options: { id: 'opencode' } }])
+    })
+  })
+
+  it('displays lane reply under lane name and colour', async () => {
+    const lanes = [{ key: 'opencode', name: 'OpenCode', color: '#ff8c1a', cli: { bin: 'opencode' } }]
+    const chat = {
+      state: 'idle',
+      messages: [
+        { id: '1', from: 'owner', text: 'Fix tests' },
+        { id: '2', from: 'opencode', text: 'Tests fixed and passing.' },
+      ],
+    }
+    const html = renderToString(
+      createElement(OrchestratorChat, {
+        open: true,
+        client: fakeClient(chat),
+        initialChat: chat,
+        lanes,
+      })
+    )
+    expect(html).toContain('class="mr-orch-line is-lane"')
+    expect(html).toContain('>OpenCode</span>')
+    expect(html).toContain('color:#ff8c1a')
+    expect(html).toContain('Tests fixed and passing.')
+  })
+
+  it('refuses sending to a busy lane with the sentence', async () => {
+    const chat = { state: 'idle', messages: [] }
+    const lanes = [{ key: 'opencode', name: 'OpenCode', cli: { bin: 'opencode' } }]
+    const client = {
+      ...fakeClient(chat),
+      sendOrchestrator: async () => {
+        const error = new Error('That lane is working. Wait for it, or stop it.')
+        error.status = 409
+        throw error
+      },
+    }
+
+    await withDom(async ({ container, root }) => {
+      await act(async () => {
+        root.render(
+          createElement(OrchestratorChat, {
+            client,
+            inline: true,
+            initialChat: chat,
+            lanes,
+            initialRecipient: 'opencode',
+          })
+        )
+      })
+      await act(async () => {})
+
+      await type(root, container.querySelector('.mr-orch-input'), 'Run task')
+      await act(async () => {
+        container.querySelector('.mr-orch-form').dispatchEvent({
+          type: 'submit',
+          bubbles: true,
+          cancelable: true,
+        })
+      })
+
+      const err = container.querySelector('.mr-orch-error')
+      expect(err).not.toBeNull()
+      expect(err.textContent).toContain('That lane is working. Wait for it, or stop it.')
+    })
+  })
+
+  it('renders agent message in Space Mono with sender colour and folds long text with Show all', async () => {
+    const chat = {
+      state: 'idle',
+      messages: [
+        {
+          id: 'agent-1',
+          from: 'agent',
+          agent: { from: 'orchestrator', to: 'opencode', kind: 'order' },
+          text: 'Orchestrator to OpenCode, order: line 1\nline 2\nline 3\nline 4\nline 5',
+        },
+      ],
+    }
+
+    await withDom(async ({ container, root }) => {
+      await act(async () => {
+        root.render(
+          createElement(OrchestratorChat, {
+            client: fakeClient(chat),
+            inline: true,
+            initialChat: chat,
+          })
+        )
+      })
+      await act(async () => {})
+
+      const agentLine = container.querySelector('.mr-orch-line.is-agent')
+      expect(agentLine).not.toBeNull()
+      expect(agentLine.className).toContain('mono')
+      expect(agentLine.style.color).toBe('#e5ff00')
+
+      const showAllBtn = buttonWithText(agentLine, 'Show all')
+      expect(showAllBtn).not.toBeNull()
+      expect(agentLine.querySelector('.mr-orch-agent-text').textContent).not.toContain('line 5')
+
+      await click(root, showAllBtn)
+      expect(agentLine.querySelector('.mr-orch-agent-text').textContent).toContain('line 5')
+      expect(buttonWithText(agentLine, 'Show less')).not.toBeNull()
+    })
+  })
+
+  it('toggles agent messages and persists choice in localStorage', async () => {
+    const chat = {
+      state: 'idle',
+      messages: [
+        { id: '1', from: 'owner', text: 'Hello' },
+        { id: '2', from: 'agent', text: 'Orchestrator to Coder, order: test' },
+      ],
+    }
+
+    let storageValue = null
+    const storageMock = {
+      getItem: (k) => (k === 'machineroom:show-agent-messages' ? storageValue : null),
+      setItem: (k, v) => {
+        if (k === 'machineroom:show-agent-messages') storageValue = String(v)
+      },
+    }
+    vi.stubGlobal('localStorage', storageMock)
+
+    try {
+      await withDom(async ({ container, root }) => {
+        await act(async () => {
+          root.render(
+            createElement(OrchestratorChat, {
+              client: fakeClient(chat),
+              inline: true,
+              initialChat: chat,
+            })
+          )
+        })
+        await act(async () => {})
+
+        expect(container.querySelectorAll('.mr-orch-line.is-agent')).toHaveLength(1)
+        const toggle = container.querySelector('.mr-orch-toggle-input')
+        expect(toggle).not.toBeNull()
+        expect(toggle.checked).toBe(true)
+
+        await click(root, toggle)
+        expect(container.querySelectorAll('.mr-orch-line.is-agent')).toHaveLength(0)
+        expect(storageValue).toBe('false')
+
+        await click(root, toggle)
+        expect(container.querySelectorAll('.mr-orch-line.is-agent')).toHaveLength(1)
+        expect(storageValue).toBe('true')
+      })
+    } finally {
+      vi.unstubAllGlobals()
+    }
   })
 })
 

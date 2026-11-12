@@ -213,6 +213,8 @@ export function createOrchestrators({
   home = '',
   recordsCache,
   approvalTimeoutMs = APPROVAL_TIMEOUT_MS,
+  isWorking,
+  startLaneTask,
 } = {}) {
   const root = projectRoot ? resolve(projectRoot) : ''
   const folder = resolve(runsFolder)
@@ -228,14 +230,33 @@ export function createOrchestrators({
     return key === ORCHESTRATOR_KEY ? ORCHESTRATOR_KEY : `sub-${key}`
   }
 
-  function announce(from, to, kind) {
+  const recentAgentMessages = new Set()
+
+  function recordAgentMessage(message) {
+    if (stopped) return
+    const from = typeof message?.from === 'string' ? message.from.trim() : ''
+    const to = typeof message?.to === 'string' ? message.to.trim() : ''
+    const kind = message?.kind
+    const text = typeof message?.text === 'string' ? message.text.trim() : ''
+    if (!from || !to || !kind) return
+    const dedupKey = `${from}|${to}|${kind}|${text}|${Math.floor(Date.now() / 2000)}`
+    if (recentAgentMessages.has(dedupKey)) return
+    recentAgentMessages.add(dedupKey)
+    setTimeout(() => recentAgentMessages.delete(dedupKey), 5000).unref?.()
+    const allLanes = typeof lanes === 'function' ? lanes() : (lanes ?? {})
+    main.recordAgentMessage?.({ from, to, kind, text, lanes: allLanes })
+  }
+
+  function announce(from, to, kind, text = '') {
     if (stopped) return
     const sender = typeof from === 'string' ? from.trim() : ''
     const receiver = typeof to === 'string' ? to.trim() : ''
     if (!sender || !receiver || !kind) return
+    const messageText = typeof text === 'string' ? text.trim() : ''
     try {
       onMessage({ from: sender, to: receiver, kind })
     } catch {}
+    recordAgentMessage({ from: sender, to: receiver, kind, text: messageText })
   }
 
   function eligibleLaneKeys() {
@@ -265,7 +286,7 @@ export function createOrchestrators({
     bridgeUrl,
     onNotice,
     onMasked,
-    onMessage: (message) => announce(message?.from, message?.to, message?.kind),
+    onMessage: (message) => announce(message?.from, message?.to, message?.kind, message?.text),
     hasSub: (id) => instances.has(id),
     home,
     recordsCache: sharedCache,
@@ -352,7 +373,7 @@ export function createOrchestrators({
       onMasked,
       recordsCache: sharedCache,
       approvalTimeoutMs,
-      onMessage: (message) => announce(message?.from, agentKey(message?.to), message?.kind),
+      onMessage: (message) => announce(message?.from, agentKey(message?.to), message?.kind, message?.text),
       extraInstructions: () => {
         const ladder = readSaved().ladder
         const current = ladder.subs.find((entry) => entry.id === config.id) || sub
@@ -381,7 +402,7 @@ export function createOrchestrators({
         const parent = instances.get(ORCHESTRATOR_KEY)
         if (!parent) return
         const delivered = parent.deliver(`sub:${config.id}`, text)
-        if (delivered) announce(agentKey(config.id), ORCHESTRATOR_KEY, 'report')
+        if (delivered) announce(agentKey(config.id), ORCHESTRATOR_KEY, 'report', trimmed)
       },
       outsideFiles: (record) => {
         if (sub.restricted !== true) return []
@@ -566,9 +587,42 @@ export function createOrchestrators({
       if (!actor) return { status: 403, body: { error: NO_TOKEN_PROBLEM } }
       if (actor !== ORCHESTRATOR_KEY) return { status: 403, body: { error: MAIN_MESSAGE_PROBLEM } }
     }
-    const id = typeof body.id === 'string' && body.id.trim() ? body.id.trim() : ORCHESTRATOR_KEY
+    const target =
+      typeof body.to === 'string' && body.to.trim()
+        ? body.to.trim()
+        : typeof body.id === 'string' && body.id.trim()
+          ? body.id.trim()
+          : ORCHESTRATOR_KEY
+    if (!instances.has(target)) {
+      const currentLanes = typeof lanes === 'function' ? lanes() : (lanes ?? {})
+      const isLaneTarget = Object.hasOwn(currentLanes, target) || eligibleLaneKeys().includes(target)
+      if (isLaneTarget) {
+        if (typeof isWorking === 'function' && isWorking(target)) {
+          return { status: 409, body: { error: 'That lane is working. Wait for it, or stop it.' } }
+        }
+        const text = typeof body.text === 'string' ? body.text.trim() : ''
+        if (text.length < 1 || text.length > ORCHESTRATOR_MESSAGE_LIMIT) {
+          return { status: 400, body: { error: MESSAGE_PROBLEM } }
+        }
+        if (typeof startLaneTask === 'function') {
+          try {
+            startLaneTask(target, text)
+          } catch (err) {
+            if (/working/i.test(err?.message ?? '')) {
+              return { status: 409, body: { error: 'That lane is working. Wait for it, or stop it.' } }
+            }
+            return { status: 500, body: { error: err?.message || 'Could not start lane.' } }
+          }
+        }
+        main.markDirectLaneTask?.(target)
+        main.addMessage?.('owner', text)
+        announce(ORCHESTRATOR_KEY, target, 'dispatch', text)
+        return { status: 202, body: { ok: true, started: true } }
+      }
+      return { status: 404, body: { error: NO_ORCHESTRATOR_PROBLEM } }
+    }
+    const id = target
     const instance = instances.get(id)
-    if (!instance) return { status: 404, body: { error: NO_ORCHESTRATOR_PROBLEM } }
     const from =
       body.from === undefined || body.from === null || body.from === ''
         ? page
@@ -585,7 +639,7 @@ export function createOrchestrators({
         return { status: 400, body: { error: MESSAGE_PROBLEM } }
       }
       const sent = instance.deliver('orchestrator', text)
-      if (sent) announce(ORCHESTRATOR_KEY, agentKey(id), 'order')
+      if (sent) announce(ORCHESTRATOR_KEY, agentKey(id), 'order', text)
       return { status: 202, body: { id: sent?.id ?? null } }
     }
     if (from !== 'owner') return { status: 400, body: { error: MESSAGE_FROM_PROBLEM } }
@@ -1070,6 +1124,7 @@ export function createOrchestrators({
   return {
     main,
     handle,
+    message,
     list,
     subs,
     sector,
@@ -1080,6 +1135,7 @@ export function createOrchestrators({
     onFrame,
     close,
     ladderChange,
+    recordAgentMessage,
     getLadder: () => readSaved().ladder,
   }
 }

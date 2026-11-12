@@ -1205,6 +1205,45 @@ export function createOrchestrator({
     return message
   }
 
+  const directLaneTasks = new Set()
+
+  function markDirectLaneTask(laneKey) {
+    if (laneKey) directLaneTasks.add(laneKey)
+  }
+
+  function recordAgentMessage({ from, to, kind, text = '', lanes: lanesInput } = {}) {
+    if (stopped) return null
+    const allLanes = lanesInput || (typeof lanes === 'function' ? lanes() : lanes) || {}
+    const resolveName = (k) => {
+      if (!k) return ''
+      if (k === 'orchestrator' || k === ORCHESTRATOR_KEY) {
+        return allLanes?.[ORCHESTRATOR_KEY]?.name || 'Orchestrator'
+      }
+      if (typeof k === 'string' && k.startsWith('sub-')) {
+        const subId = k.slice(4)
+        return allLanes?.[k]?.name || allLanes?.[subId]?.name || `Sub ${subId}`
+      }
+      return allLanes?.[k]?.name || k
+    }
+    const fromName = resolveName(from)
+    const toName = resolveName(to)
+    const prefix = `${fromName} to ${toName}, ${kind}`
+    const trimmed = typeof text === 'string' ? text.trim() : ''
+    const lineText = trimmed ? `${prefix}: ${trimmed}` : prefix
+    const message = {
+      id: randomUUID(),
+      from: 'agent',
+      agent: { from, to, kind, text: trimmed, fromName, toName },
+      text: maskText(lineText),
+      at: iso(now()),
+    }
+    messages.push(message)
+    while (messages.length > ORCHESTRATOR_CHAT_LIMIT) messages.shift()
+    persist()
+    notify()
+    return message
+  }
+
   function recordFor(runName) {
     if (!runName) return null
     const wanted = pathKey(join(folder, `${runName}.log`))
@@ -2273,8 +2312,30 @@ export function createOrchestrator({
       }
     }
     try {
-      onMessage({ from: laneKey, to: key, kind: 'wake' })
+      onMessage({ from: laneKey, to: key, kind: 'wake', text })
     } catch {}
+    if (directLaneTasks.has(laneKey)) {
+      directLaneTasks.delete(laneKey)
+      let laneReply = ''
+      const replyCandidate = typeof record?.log === 'string' && record.log ? resolve(folder, record.log) : (logName ? resolve(folder, `${logName}.log`) : '')
+      const replyRel = replyCandidate ? relative(folder, replyCandidate) : ''
+      const replyInside = Boolean(replyCandidate && replyRel && !replyRel.startsWith('..') && !isAbsolute(replyRel))
+      const replyFile = replyInside ? replyCandidate : ''
+      const replyContent = replyFile ? readTail(replyFile) : ''
+      if (replyContent) {
+        const laneEntry = lanes && Object.hasOwn(lanes, laneKey) ? lanes[laneKey] : null
+        const laneHarnessKey = laneEntry?.cli?.harness || laneEntry?.harness || laneKey
+        const descriptor = (harnesses && (harnesses[laneHarnessKey] || harnesses[laneKey])) || harnessByKey[laneHarnessKey] || harnessByKey[laneKey]
+        laneReply = descriptor?.reply ? descriptor.reply(replyContent).trim() : ''
+        if (!laneReply) {
+          try {
+            laneReply = replyText(laneHarnessKey, replyContent)
+          } catch {}
+        }
+      }
+      if (!laneReply) laneReply = text
+      addMessage(laneKey, laneReply)
+    }
     const message = addMessage('room', text)
     pending.push(message)
     if (runId) {
@@ -2341,5 +2402,9 @@ export function createOrchestrator({
     onFrame,
     close,
     token,
+    addMessage,
+    recordAgentMessage,
+    markDirectLaneTask,
+    addLaneReply: (lane, replyText) => addMessage(lane, replyText),
   }
 }

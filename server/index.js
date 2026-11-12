@@ -612,6 +612,15 @@ export function createBridge(options = {}) {
       onMessage: sendAgentMessage,
       sendJson,
       readJsonBody,
+      isWorking: (key) => {
+        const fromSource = lanesSource ? lanesSource.openRuns().some((r) => r.lane === key) : false
+        const fromRuns = runs && typeof runs.isRunning === 'function' ? runs.isRunning(key) : false
+        return fromSource || fromRuns
+      },
+      startLaneTask: (lane, taskText) => {
+        if (!runs || typeof runs.startRun !== 'function') throw new Error('The runner is not available.')
+        return runs.startRun(lane, [], { project: projectRoot, task: taskText, allowDirty: true }, 'orchestrator')
+      },
     })
   }
   const bridgeRunsFolder = resolve(options.runsFolder ?? options.orchestratorFolder ?? lanesSourceObject.folder ?? runsFolder())
@@ -1176,10 +1185,26 @@ export function createBridge(options = {}) {
     release(masker.push(parsed, Date.now()))
   }
 
-  function sendAgentMessage(message) {
-    const from = typeof message?.from === 'string' ? message.from.trim() : ''
-    const to = typeof message?.to === 'string' ? message.to.trim() : ''
-    const kind = message?.kind
+  function sendAgentMessage(first, second, third, fourth) {
+    let from = ''
+    let to = ''
+    let kind = ''
+    let text = ''
+    if (first && typeof first === 'object') {
+      from = typeof first.from === 'string' ? first.from.trim() : ''
+      to = typeof first.to === 'string' ? first.to.trim() : ''
+      kind = first.kind
+      text = typeof first.text === 'string' && first.text.trim()
+        ? first.text.trim()
+        : typeof second === 'string'
+          ? second.trim()
+          : ''
+    } else {
+      from = typeof first === 'string' ? first.trim() : ''
+      to = typeof second === 'string' ? second.trim() : ''
+      kind = third
+      text = typeof fourth === 'string' ? fourth.trim() : ''
+    }
     if (!from || !to || !AGENT_MESSAGE_KINDS.has(kind)) return
     const ts = new Date().toISOString()
     accept({
@@ -1188,6 +1213,7 @@ export function createBridge(options = {}) {
       createdAt: ts,
       payload: { from, to, kind, ts },
     })
+    orchestrators?.recordAgentMessage?.({ from, to, kind, text })
   }
 
   const heartbeatTimer = setInterval(() => {
