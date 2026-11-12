@@ -1015,3 +1015,9 @@ The native lane's P80 review ran 27 minutes and 88 tool calls, then ended with `
 Run `npx vitest related --run scripts/mr-agent.mjs` and `npm run build`; both must pass.
 
 Files: scripts/mr-agent.mjs, tests/.
+
+**P97. Review the merge of P76, the runs folder move (MachineRoom native).** Read no part of TASKS.md beyond this brief. Change no code. Read only the diff named here and the code around each change. Write the file by minute 25.
+
+Review `git show -m --first-parent 4a3eebce` against the code around it. Hunt for what a test would not show: a caller that still builds `TEMP\machineroom-runs` itself; a copy from the old folder that can run twice, overwrite a newer folder, follow a link out of the folder, or copy `keys.json` anywhere but the new runs folder; a printed line or error that shows the real profile folder; a Linux or macOS answer that differs between the bridge and `scripts/mr-agent.mjs`. Write `docs/agents/AUDIT-2026-11-REVIEW-14.md`: a table of at most 6 findings, the most harmful first, each with `file:line`, what goes wrong and when, the smallest fix, and whether it blocks a push. Write no finding you cannot point to in the code. An empty table with what you checked is a good answer.
+
+Files: docs/agents/AUDIT-2026-11-REVIEW-14.md.
