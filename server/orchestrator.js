@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
 import { createHash, randomBytes, randomUUID } from 'node:crypto'
 import {
   appendFileSync,
@@ -16,7 +16,7 @@ import {
   writeFileSync,
 } from 'node:fs'
 import { homedir } from 'node:os'
-import { basename, isAbsolute, join, relative, resolve } from 'node:path'
+import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { maskKeys } from '../src/briefs/audit.js'
 import { childEnvironment, mcpConfigForClaude, mcpConfigForOpencode, normalizeMcpServers, replyText, runRecord, summarizeRun } from '../src/briefs/run.js'
@@ -29,7 +29,7 @@ import { readEndpoints } from './endpoints.js'
 import { modelAllowed } from './harness-models.js'
 import { DEFAULT_CONTEXT_WINDOW, MODELS, resolveContextWindow } from './models.js'
 import { isLockHolderStale, killTree, listProcesses } from './processTree.js'
-import { programPath } from './programPath.js'
+import { gitPath, programPath } from './programPath.js'
 import { createRecordsCache, runsFolder as sharedRunsFolder } from './lanes-source.js'
 
 export const ORCHESTRATOR_KEY = 'orchestrator'
@@ -37,6 +37,7 @@ export const ORCHESTRATOR_CHAT_LIMIT = 200
 export const ORCHESTRATOR_TURN_LIMIT_MS = 60 * 60 * 1000
 export const ORCHESTRATOR_ROOM_TURNS = 30
 export const ORCHESTRATOR_ROOM_WINDOW_MS = 60 * 60 * 1000
+export const ORCHESTRATOR_MERGE_WAIT_MS = 30 * 1000
 export const ORCHESTRATOR_MESSAGE_LIMIT = 8000
 export { DEFAULT_CONTEXT_WINDOW } from './models.js'
 export const AUTOCOMPACT_SHARE = 0.8
@@ -100,6 +101,8 @@ export const RESTART_MESSAGE = 'The room restarted during a turn. Send the messa
 const REPO_ROOT = resolve(fileURLToPath(import.meta.url), '..', '..')
 const PROMPT_FILE = join(REPO_ROOT, 'docs', 'agents', 'ORCHESTRATOR-AGENT.md')
 const PROMPT_LIMIT = 20000
+const GIT_OPERATION_FILES = ['MERGE_HEAD', 'REBASE_HEAD', 'CHERRY_PICK_HEAD']
+const GIT_OPERATION_TIMEOUT_MS = 10000
 const RECORD_COMMITS = 10
 const TURN_STDERR_LIMIT = 4 * 1024
 const TURN_LOG = /-chat-\d{8}-\d{6}-\d{3}\.log$/i
@@ -500,6 +503,16 @@ function enabledMcpServersFor(runsFolder) {
   return normalizeMcpServers(parsed).filter((entry) => entry.enabled)
 }
 
+function insideGitFolder(projectRoot) {
+  let current = projectRoot
+  for (;;) {
+    if (existsSync(join(current, '.git'))) return true
+    const parent = dirname(current)
+    if (parent === current) return false
+    current = parent
+  }
+}
+
 function instructionFor(file, projectRoot, runsFolder, bridgeUrl, token = '', scratchFolder = '') {
   const text = readText(file).trim()
   const scratch = scratchFolder || runsFolder
@@ -746,6 +759,7 @@ export function createOrchestrator({
   siblings: siblingsOption = [],
   recordsCache: recordsCacheOption = null,
   approvalTimeoutMs = APPROVAL_TIMEOUT_MS,
+  mergeWaitMs = ORCHESTRATOR_MERGE_WAIT_MS,
 } = {}) {
   const token = typeof tokenOption === 'string' && tokenOption ? tokenOption : randomBytes(24).toString('base64url')
   const root = projectRoot ? resolve(projectRoot) : ''
@@ -1119,14 +1133,45 @@ export function createOrchestrator({
     return roomTurns.length < ORCHESTRATOR_ROOM_TURNS
   }
 
-  function scheduleRoomTurn() {
-    if (roomTimer || roomTurns.length === 0) return
-    const wait = Math.max(0, roomTurns[0] + ORCHESTRATOR_ROOM_WINDOW_MS - now()) + 10
+  function scheduleRoomTurn(waitMs = null) {
+    if (roomTimer) return
+    let wait = waitMs
+    if (wait === null) {
+      if (roomTurns.length === 0) return
+      wait = Math.max(0, roomTurns[0] + ORCHESTRATOR_ROOM_WINDOW_MS - now()) + 10
+    }
     roomTimer = setTimeout(() => {
       roomTimer = null
       maybeStartTurn()
     }, wait)
     roomTimer.unref?.()
+  }
+
+  function gitOperationInProgress() {
+    if (!root || !insideGitFolder(root)) return false
+    let output
+    try {
+      output = spawnSync(
+        gitPath(),
+        ['rev-parse', ...GIT_OPERATION_FILES.flatMap((name) => ['--git-path', name])],
+        {
+          cwd: root,
+          encoding: 'utf8',
+          timeout: GIT_OPERATION_TIMEOUT_MS,
+          windowsHide: true,
+          shell: false,
+          env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
+        }
+      )
+    } catch {
+      return false
+    }
+    if (output.error || output.status !== 0) return false
+    return String(output.stdout ?? '')
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .some((line) => existsSync(isAbsolute(line) ? line : join(root, line)))
   }
 
   function maybeStartTurn() {
@@ -1139,6 +1184,10 @@ export function createOrchestrator({
     const ordered = pending.some((message) => message.from === 'owner' || (key !== ORCHESTRATOR_KEY && message.from === ORCHESTRATOR_KEY))
     if (!ordered) {
       if (!givenWork()) return
+      if (gitOperationInProgress()) {
+        scheduleRoomTurn(mergeWaitMs)
+        return
+      }
       if (!roomTurnAllowed()) {
         scheduleRoomTurn()
         return
