@@ -1192,3 +1192,15 @@ The native lanes went 0 for 5 tonight. Their logs show distinct, wandering comma
 Run `npx vitest related --run scripts/mr-agent.mjs src/briefs/run.js scripts/run-lane.mjs` and `npm run build`; both must pass.
 
 Files: scripts/mr-agent.mjs, src/briefs/run.js, scripts/run-lane.mjs, tests/.
+
+## A lane task from the chat keeps the runner's guards (2026-11-13)
+
+P82 (branch `feat/p82-talk-to-a`) lets the owner pick a lane in the orchestrator chat's To choice and send it a task. Review found that the new path in `server/orchestrators.js` calls `runs.startRun` directly through `startLaneTask` in `server/index.js`, so it skips every guard the bridge's own project-run route in `server/runs.js` applies: the lane must be active, the actor checks, `projectProblems` (the project must not be this repository, a lane worktree, the profile, the temp folder or the runs folder) and the dirty check. It also forces `allowDirty: true`, and it starts no worktree, so a lane could edit the owner's uncommitted checkout in place.
+
+**P113. A lane task from the chat keeps the runner's guards (OpenCode).** Read no part of TASKS.md beyond this brief and the paragraph above it. Use no subagents. Run every command in the foreground. Commit each step as you finish it, and stop starting new work at minute 40.
+
+1. Start with `git merge --no-edit refs/heads/feat/p82-talk-to-a`. Build on that branch's work; do not redo it.
+2. In `server/runs.js`, move the checks the project-run route makes before `startRun` (lane known and active, task text, project folder, `gitCheckout` when a worktree is asked, `projectDirty` and `projectProblems`, the lane already running) into one exported async function, for example `startProjectTask({ lane, task, worktree, allowDirty, startedBy })`, that answers `{ status, body }`. The HTTP route calls it, so its answers do not change. `createRunsApi` returns it.
+3. `startLaneTask` in `server/index.js` calls that function with `allowDirty: false` and `worktree: true` when the project is a git checkout, and `startedBy: 'orchestrator'`. The route in `server/orchestrators.js` awaits it and returns its status and error text to the page; it adds the owner message and announces the dispatch only when the start answered 202. Drop the second `dispatch` announce if `startRun` already sends one, so a dispatch shows once.
+4. Tests, by what they prove: a chat task to a lane on a dirty project is refused with the runner's own dirty text and starts nothing; a chat task naming an inactive lane is refused; a chat task to a working lane gets 409; a good chat task starts the run once and shows one dispatch line. Keep P82's tests passing.
+5. Run `node node_modules/vitest/vitest.mjs related server/runs.js server/orchestrators.js server/index.js --run` and `npm run build`. Report what passed.
