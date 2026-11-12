@@ -416,6 +416,71 @@ describe('one orchestrator turn', () => {
     expect(rig.notices.every((event) => event.topic === 'orchestrator')).toBe(true)
   })
 
+  it('leaves two messages and one folded line of five steps for a turn of five tool calls', async () => {
+    const rig = makeRig()
+    rig.behaviour.assistantLines = [
+      'Read src/a.js',
+      'Read src/b.js',
+      'Edit src/c.js',
+      'Bash npm test',
+      'Read src/d.js',
+    ].map((entry, index) => {
+      const [name, ...target] = entry.split(' ')
+      const input = name === 'Bash' ? { command: target.join(' ') } : { file_path: target.join(' ') }
+      return {
+        type: 'assistant',
+        message: {
+          role: 'assistant',
+          content: [{ type: 'tool_use', id: `call-${index}`, name, input }],
+        },
+      }
+    })
+    rig.send('Do the work.')
+    await waitIdle(rig, 1)
+
+    const answer = rig.answer()
+    expect(answer.messages).toHaveLength(2)
+    const [owner, reply] = answer.messages
+    expect(owner).toMatchObject({ from: 'owner', text: 'Do the work.' })
+    expect(owner.work.steps).toHaveLength(5)
+    expect(owner.work.steps[0]).toEqual({ tool: 'read', target: 'src/a.js' })
+    expect(owner.work.steps[3]).toEqual({ tool: 'shell', target: 'npm test' })
+    expect(Number.isFinite(owner.work.seconds)).toBe(true)
+    expect(reply.from).toBe('orchestrator')
+    expect(reply.work).toBeUndefined()
+    expect(stateFile(rig).messages[0].work.steps).toHaveLength(5)
+  })
+
+  it('shows the turn as working with the newest step before it ends', async () => {
+    const rig = makeRig()
+    rig.behaviour.mode = 'hold'
+    rig.behaviour.assistantLines = [
+      {
+        type: 'assistant',
+        message: {
+          role: 'assistant',
+          content: [
+            { type: 'tool_use', id: 'one', name: 'Read', input: { file_path: 'src/one.js' } },
+            { type: 'tool_use', id: 'two', name: 'Edit', input: { file_path: 'src/two.js' } },
+          ],
+        },
+      },
+    ]
+    rig.send('Go.')
+    await waitFor(
+      () => rig.answer().messages[0]?.work?.steps?.length === 2,
+      15000,
+      'the working line to reach its second step'
+    )
+    const work = rig.answer().messages[0].work
+    expect(work.state).toBe('working')
+    expect(work.steps.at(-1)).toEqual({ tool: 'edit', target: 'src/two.js' })
+    writeFileSync(rig.releaseFile, 'go')
+    await waitIdle(rig, 1)
+    expect(rig.answer().messages[0].work.state).toBeUndefined()
+    expect(rig.answer().messages[0].work.steps).toHaveLength(2)
+  })
+
   it('runs an OpenCode turn with the instructions first, then the same session', async () => {
     const rig = makeRig({ harness: 'opencode', lanes: OPENCODE_LANES })
     expect(rig.answer()).toMatchObject({ state: 'idle', model: 'opencode-go/deepseek-v4.1-flash' })
