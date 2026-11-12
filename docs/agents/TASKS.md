@@ -1133,3 +1133,38 @@ Files: docs/agents/architecture/ROOM.md, docs/agents/architecture/LIVE.md, docs/
 Review what these merges brought, with `git show -m --first-parent SHA` for each, against the code around each change: `0486c7cf` (P86, the command parser), `5ca6cefb` (P85, the session at the top, merged with hand-resolved conflicts in `scripts/run-lane.mjs`), `79e9c364` (P96, the retry of a non-JSON answer), `da2017c2` (P94, a room turn waits during a merge), `1f17dda1` (P92, the context window from model details), `030fd52b` (P78, the model picker), `3cc8bede` (P99, hooks off in review merges), `babd7fd2` (P83, the folded work line). Hunt for what a test would not show: a parser case that now misses a real write or invents one; a session id or a profile path written into a record, frame or page; a retry that can resend a paid request after the provider took it; a git check that blocks the bridge's event loop for long; a context window taken from the wrong model; a picker or pin write without the page-origin guard or a cap; a git command in a review or merge that still runs a hook; a turn whose steps or answer land on the wrong message. Write `docs/agents/AUDIT-2026-11-REVIEW-16.md`: a table of at most 8 findings, the most harmful first, each with `file:line`, what goes wrong and when, the smallest fix, and whether it blocks a push. Write no finding you cannot point to in the code. An empty table with what you checked is a good answer.
 
 Files: docs/agents/AUDIT-2026-11-REVIEW-16.md.
+
+
+## The fixes from review 16 (2026-11-12, night)
+
+Review 16 (`docs/agents/AUDIT-2026-11-REVIEW-16.md`, Codex on GPT-6.1 Sol) found three push blockers and five smaller findings in the late merges. P108 takes P92's two, P109 takes P96's, and P110 takes three of the smaller ones; they touch different files.
+
+**P108. The context size comes from the right endpoint and follows a model change (OpenCode).** Read no part of TASKS.md beyond this brief, the paragraph above it, and the second and third P1 findings of review 16. Use no subagents. Run every command in the foreground. Commit each step as you finish it, and stop starting new work at minute 40. P105 also changes `server/orchestrator.js`: keep each change to the lines it needs.
+
+1. `server/model-list.js`: for a model named `ENDPOINT/ID`, look only in that endpoint's details and match `ID` exactly. Match by suffix only when the endpoint is not named and exactly one detail matches.
+2. `server/orchestrators.js` passes a sub orchestrator only the lane's own `contextWindow` override (or none), never a resolved size, so its window is resolved again from its current model when the model or harness changes.
+3. Tests, by what they prove: endpoints `first` and `second` both list `model` at 1000000 and 32000, and `second/model` gives 32000; a sub orchestrator moved from a large model to a small one gets the small window; a lane's own override still wins.
+
+Run `npx vitest related --run` on every file you changed and `npm run build`; both must pass.
+
+Files: server/model-list.js, server/orchestrators.js, server/orchestrator.js, tests/.
+
+**P109. A damaged answer is tried once more, not four times (AGY).** Starts after P104 is merged, since both change `scripts/mr-agent.mjs`. Read no part of TASKS.md beyond this brief, the paragraph above P108, and the first P1 finding of review 16. Use no subagents. Run every command in the foreground. Commit each step as you finish it, and stop starting new work at minute 30.
+
+A provider may bill a generation whose body is then cut, so a retry of a damaged 200 answer can pay twice. The native runs tonight died on such answers, so one retry stays.
+
+1. In `post` in `scripts/mr-agent.mjs`, a 200 answer whose body is not JSON or has no `choices` is retried at most once per step, then fails with the sentence P96 made. Refused statuses keep their retries as now.
+2. The agent counts each damaged answer, and its result line carries `damagedAnswers: N` when N is above 0.
+3. Tests with a fake endpoint, by what they prove: one damaged answer then a good one goes on, with `damagedAnswers: 1`; two damaged answers in a row fail after exactly two requests; a 502 still gets its retries.
+
+Run `npx vitest related --run scripts/mr-agent.mjs` and `npm run build`; both must pass.
+
+Files: scripts/mr-agent.mjs, tests/.
+
+**P110. Three small fixes from review 16 (Codex).** Read `docs/agents/OWNER.md`, this brief, the paragraph above P108, and the three P2 findings of review 16 on `src/model/commands.js` (two) and `src/ui/ModelPicker.jsx` (one). Do not commit: the runner commits your files. Your sandbox cannot run the tests; write them, and say in your report that the orchestrator runs them.
+
+1. `src/model/commands.js`: removing a heredoc keeps the rest of its opener line, so `cat <<EOF > out.txt` with its body still writes `out.txt`; a redirect marks as written only its own operand, and only when that exact operand is a known file, so `cat src/a.js > new.txt src/b.js` writes nothing known and reads both.
+2. `src/ui/ModelPicker.jsx`: the pin buttons stay disabled until the saved pins have loaded; a read that was cancelled or failed is tried again when the picker opens; a pin never saves a list that lost the saved pins.
+3. Tests in `tests/commands.test.js` and `tests/model-picker.test.js` for each case above.
+
+Files: src/model/commands.js, src/ui/ModelPicker.jsx, tests/commands.test.js, tests/model-picker.test.js.
