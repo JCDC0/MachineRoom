@@ -745,17 +745,13 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
       }
       lanes = readStartLanes({ lanesFile: laneFile, runsFolder: recordsDir() })
     } else {
-      const lanesText = readText('lanes.json')
+      const lanesText = readPath(laneFile)
       tasksText = readText('TASKS.md')
       if (lanesText === null || tasksText === null) {
         sendJson(req, res, 404, { error: 'The brief files are missing.' })
         return true
       }
-      try {
-        lanes = JSON.parse(lanesText)
-      } catch {
-        lanes = null
-      }
+      lanes = readStartLanes({ lanesFile: laneFile, runsFolder: recordsDir() })
     }
     if (!lanes || typeof lanes !== 'object' || Array.isArray(lanes)) {
       sendJson(req, res, 400, { error: 'The lane file is not valid.' })

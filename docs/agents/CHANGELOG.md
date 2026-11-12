@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- P100: a brief run started from the room reads its lanes from the room's lane file and its made lanes, never docs/agents/lanes.json unless MACHINEROOM_LANES_DIR names it.
 - P103: a project switch waits while a lane lock names a live process, a page that reconnects to a restarted bridge gets a full file list, and the Codex program search takes only 16-hex version folders.
 - P109: the native agent retries a damaged 200 answer at most once per step, keeps the retries for refused statuses, and reports damagedAnswers in its result.
 - P106: ROOM.md, LIVE.md, COMMANDS.md and CODE.md now describe tonight's merges P77 to P99.
