@@ -10,12 +10,12 @@ How to read this file: `Where things stand`, `Rules`, `Session start` and `The l
 
 Rewrite this section at every merge and before you end a session. Keep it under ten lines: what is pushed, what is unpushed, what runs, what waits on the owner, what is next.
 
-- 2026-11-13, after midnight: the push that carries this line holds P77 to P112 (not P82, P93 or P97), reviews 13, 15 and 16 and their fixes. Before it, every unpushed commit authored with a test.com address was rewritten to test@example.com (backup branches `backup/*-pre-rewrite`). Read CI first with `gh run list --limit 3 --repo JCDC0/MachineRoom`.
-- Running: `opencode` on P113, which merges P82 (`feat/p82-talk-to-a`, the chat To choice) and routes its lane start through the runner's guards. Merge P113, not P82 alone: P82 skips the dirty and project checks.
-- Waiting: P93 (`feat/p93-one-menu-for`, the conversation menu) timed out with four commits and two uncommitted files in `.worktrees/opencode3`; rerun it on that branch. Native lanes now know their minutes (P112); try one again before judging them.
-- Small open items: P94 blocks on spawnSync (review 16), run-lane output does not mask paths (review 15, finding 3), a stale lane lock can match a reused PID (P103), the file-index test walks the old recordings, and P85's top placement needs a look.
-- The owner's yes to push held for the night of 2026-11-12 only. A new session asks again.
-- The fleet for that night was twelve lanes at the owner's word. Codex runs GPT-6.1 Sol at medium effort.
+- 2026-11-13, early morning: the push that carries this line holds P77 to P122 (not P97), reviews 13 and 15 to 18 and all their blocking fixes. P113 carries P82 (the chat's To choice) and P115 carries P93 (one menu per conversation). Before it, every unpushed commit with a test.com author was rewritten to example.com (backup branches `backup/*-pre-rewrite`, `backup/pre-doc-rewrite`). Read CI first with `gh run list --limit 3 --repo JCDC0/MachineRoom`.
+- Running: nothing.
+- AGY: `agy models` lists Gemini 4 Hydrogen (low, medium, high, xhigh) and Gemini 4 Argon. Hydrogen answered from 2026-11-13 after a first 404. The AGY lanes still run Gemini 3.8 Flash High until the owner says to switch.
+- Small open items: P94 blocks on spawnSync (review 16), run-lane output does not mask paths (review 15, finding 3), a stale lane lock can match a reused PID (P103), the file-index test walks the old recordings, review 18 finding 7 is fixed but the menu still needs a look with a disabled Fork, and P85's top placement needs a look.
+- Flaky on this machine only: `tests/scale.test.js` (EPERM on a temp folder) and, under load, one `tests/tree-partial.test.js` case; both pass alone.
+- The owner's yes to push held for the night of 2026-11-12 only. A new session asks again. Codex runs GPT-6.1 Sol at medium effort.
 
 ## Rules
 
