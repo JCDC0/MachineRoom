@@ -3,14 +3,14 @@ import { accessSync, constants, mkdirSync, readFileSync, statSync } from 'node:f
 import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { readTree } from './index.js'
-import { lanesFolder, runsFolder } from './lanes-source.js'
+import { lanesFolder, readAllLanes, runsFolder } from './lanes-source.js'
 import { programPath } from './programPath.js'
 
 const REPO_ROOT = resolve(fileURLToPath(import.meta.url), '..', '..')
 const VARIABLE = /%([A-Za-z_][A-Za-z0-9_]*)%/g
 
 export const ALL_CHECKS_PASSED = 'All checks passed.'
-export const NEXT_STEP = 'Start a lane with npm run run-lane -- opencode T2, or press C in the room for Dispatch.'
+export const NEXT_STEP = 'Press C in the room for Dispatch.'
 export const PROJECT_READ_LIMIT_MS = 10000
 const PROJECT_READ_TIMEOUT = 'The folder did not answer in time.'
 const PROJECT_READ_FAILED = 'The folder could not be listed.'
@@ -150,11 +150,12 @@ function readLaneFile(file) {
   return { lanes }
 }
 
-function laneLines(file, env) {
+function laneLines(file, env, runsDir) {
   const read = readLaneFile(file)
   if (read.problem) return [{ ok: false, text: read.problem }]
+  const lanes = readAllLanes({ lanesJson: read.lanes, runsFolder: runsDir })
   const lines = []
-  for (const [key, lane] of Object.entries(read.lanes)) {
+  for (const [key, lane] of Object.entries(lanes)) {
     if (!lane || typeof lane !== 'object' || Array.isArray(lane)) continue
     if (lane.retired === true) continue
     if (!lane.cli || typeof lane.cli !== 'object' || typeof lane.cli.bin !== 'string' || lane.cli.bin === '') continue
@@ -191,7 +192,7 @@ export function runDoctor(options = {}) {
   for (const line of gitLines(settings.projectRoot, env)) add(line)
   add(viewerLine(settings.dist))
   add(runsLine(settings.runsFolder))
-  for (const line of laneLines(settings.lanesFile, env)) add(line)
+  for (const line of laneLines(settings.lanesFile, env, settings.runsFolder)) add(line)
 
   return { exitCode: ok ? 0 : 1, lines, folderOk: folder.ok }
 }
