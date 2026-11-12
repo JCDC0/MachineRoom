@@ -84,6 +84,8 @@ function childEnv(temp) {
   delete env.MACHINEROOM_SESSIONS
   delete env.MACHINEROOM_RUNS
   env.TEMP = temp
+  env.XDG_STATE_HOME = join(temp, 'state')
+  env.HOME = join(temp, 'home')
   return withLanePrograms(env, temp)
 }
 
@@ -418,7 +420,10 @@ describe('the machine-room doctor command', () => {
     )
     expect(lines[1]).toBe('ok The project holds 0 files in 0 folders.')
     expect(lines.slice(-2)).toEqual([ALL_CHECKS_PASSED, NEXT_STEP])
-    expect(existsSync(join(temp, 'machineroom-runs'))).toBe(true)
+    const runs = process.platform === 'win32'
+      ? join(temp, 'localappdata', 'MachineRoom', 'runs')
+      : join(temp, 'state', 'machineroom', 'runs')
+    expect(existsSync(runs)).toBe(true)
   })
 
   it('exits 1 on a failed check', async () => {

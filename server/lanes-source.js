@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import { closeSync, mkdirSync, openSync, readFileSync, readdirSync, readSync, statSync, watch } from 'node:fs'
+import { closeSync, cpSync, existsSync, mkdirSync, openSync, readFileSync, readdirSync, readSync, rmSync, renameSync, statSync, watch } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { StringDecoder } from 'node:string_decoder'
@@ -26,9 +26,64 @@ export function lanesFolder(env = process.env) {
   return given ? resolve(given) : join(REPO_ROOT, 'config')
 }
 
-export function runsFolder(env = process.env) {
+function tempFolder(env) {
+  return env.TEMP || tmpdir()
+}
+
+function defaultRunsFolder(env, platform) {
+  const local = typeof env.LOCALAPPDATA === 'string' ? env.LOCALAPPDATA.trim() : ''
+  if (platform === 'win32' && local) return join(resolve(local), 'MachineRoom', 'runs')
+  if (platform !== 'win32') {
+    const state = typeof env.XDG_STATE_HOME === 'string' ? env.XDG_STATE_HOME.trim() : ''
+    if (state) return join(resolve(state), 'machineroom', 'runs')
+    const home = typeof env.HOME === 'string' ? env.HOME.trim() : ''
+    if (home) return join(resolve(home), '.local', 'state', 'machineroom', 'runs')
+  }
+  return join(tempFolder(env), 'machineroom-runs')
+}
+
+function oldRunsLabel() {
+  return '%TEMP%\\machineroom-runs'
+}
+
+function newRunsLabel(env, platform) {
+  if (platform === 'win32') return '%LOCALAPPDATA%\\MachineRoom\\runs'
+  const state = typeof env.XDG_STATE_HOME === 'string' ? env.XDG_STATE_HOME.trim() : ''
+  if (state) return '$XDG_STATE_HOME/machineroom/runs'
+  return '~/.local/state/machineroom/runs'
+}
+
+export function migrateRunsFolder(env = process.env, platform = process.platform, print = console.log) {
+  if (env.MACHINEROOM_RUNS) return null
+  const folder = defaultRunsFolder(env, platform)
+  const old = join(tempFolder(env), 'machineroom-runs')
+  if (resolve(folder) === resolve(old) || existsSync(folder) || !existsSync(old)) return null
+  const staging = `${folder}.moving-${process.pid}`
+  try {
+    mkdirSync(dirname(folder), { recursive: true })
+    rmSync(staging, { recursive: true, force: true })
+    cpSync(old, staging, { recursive: true })
+    if (existsSync(folder)) {
+      rmSync(staging, { recursive: true, force: true })
+      return null
+    }
+    renameSync(staging, folder)
+  } catch {
+    try {
+      rmSync(staging, { recursive: true, force: true })
+    } catch {}
+    return null
+  }
+  print(`Moved the runs folder from ${oldRunsLabel()} to ${newRunsLabel(env, platform)}.`)
+  return { from: old, to: folder }
+}
+
+export function runsFolder(env = process.env, platform = process.platform) {
   const given = env.MACHINEROOM_RUNS
-  return given ? resolve(given) : join(env.TEMP || tmpdir(), 'machineroom-runs')
+  if (given) return resolve(given)
+  const folder = defaultRunsFolder(env, platform)
+  migrateRunsFolder(env, platform)
+  return folder
 }
 
 export function readLanes(folder = lanesFolder()) {

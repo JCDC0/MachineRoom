@@ -1,5 +1,4 @@
 import { execFileSync } from 'node:child_process'
-import { tmpdir } from 'node:os'
 import { isAbsolute, join, relative, resolve } from 'node:path'
 import { maskKeys } from '../src/briefs/audit.js'
 import { legacyMode, modesFor } from '../src/control/modes.js'
@@ -26,7 +25,7 @@ import {
 import { gitPath } from './programPath.js'
 import { readAllLanes } from './agents-config.js'
 import { activeEligibleLaneKeys, eligibleLanes, projectLanesFileFor, readHiddenLanes } from './active-lanes.js'
-import { createRecordsCache } from './lanes-source.js'
+import { createRecordsCache, runsFolder as sharedRunsFolder } from './lanes-source.js'
 
 function pathKey(path) {
   try {
@@ -65,8 +64,8 @@ export const NO_APPROVAL_PROBLEM = 'There is no approval with that id.'
 export const APPROVAL_LIMIT_PROBLEM = '20 approvals are already waiting for the owner.'
 export const APPROVAL_INPUT_LIMIT = 2000
 
-function runsFolderDefault() {
-  return join(process.env.TEMP || tmpdir(), 'machineroom-runs')
+export function runsFolderDefault(env = process.env) {
+  return sharedRunsFolder(env)
 }
 
 export const SCOPE_UNREAD_PROBLEM = 'The scope could not be read.'

@@ -2,9 +2,9 @@
 import { spawn } from 'node:child_process'
 import { once } from 'node:events'
 import { readFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { createInterface } from 'node:readline'
+import { runsFolder } from '../server/lanes-source.js'
 import { killTree } from '../server/processTree.js'
 import { mcpConfigForClaude, mcpConfigForOpencode, normalizeMcpServers } from '../src/briefs/run.js'
 
@@ -24,9 +24,7 @@ function delay(ms) {
 export function mcpRunsDir(env = process.env) {
   const givenDir = env?.MACHINEROOM_RUNS_DIR
   if (typeof givenDir === 'string' && givenDir.trim() !== '') return resolve(givenDir.trim())
-  const given = env?.MACHINEROOM_RUNS
-  if (typeof given === 'string' && given.trim() !== '') return resolve(given.trim())
-  return join(env?.TEMP || tmpdir(), 'machineroom-runs')
+  return runsFolder(env ?? process.env)
 }
 
 export function readMcpServers(runsDir = mcpRunsDir()) {

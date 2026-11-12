@@ -15,7 +15,7 @@ import {
   statSync,
   writeFileSync,
 } from 'node:fs'
-import { homedir, tmpdir } from 'node:os'
+import { homedir } from 'node:os'
 import { basename, isAbsolute, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { maskKeys } from '../src/briefs/audit.js'
@@ -30,7 +30,7 @@ import { modelAllowed } from './harness-models.js'
 import { DEFAULT_CONTEXT_WINDOW, MODELS, resolveContextWindow } from './models.js'
 import { isLockHolderStale, killTree, listProcesses } from './processTree.js'
 import { programPath } from './programPath.js'
-import { createRecordsCache } from './lanes-source.js'
+import { createRecordsCache, runsFolder as sharedRunsFolder } from './lanes-source.js'
 
 export const ORCHESTRATOR_KEY = 'orchestrator'
 export const ORCHESTRATOR_CHAT_LIMIT = 200
@@ -280,8 +280,8 @@ export function expandSlashCommand(text, commands, readBody = readText) {
   return expanded
 }
 
-function runsFolderDefault() {
-  return join(process.env.TEMP || tmpdir(), 'machineroom-runs')
+export function runsFolderDefault(env = process.env) {
+  return sharedRunsFolder(env)
 }
 
 function iso(ms) {

@@ -255,7 +255,7 @@ Press C or click CONTROL at the top right to open the drawer. It has five tabs: 
 
 ## Where the logs and records are
 
-Every lane run writes its log to `<runs>`, which is `%TEMP%\machineroom-runs` on Windows, or the system temp folder elsewhere. `MACHINEROOM_RUNS` names another runs folder.
+Every lane run writes its log to `<runs>`, which is `%LOCALAPPDATA%\MachineRoom\runs` on Windows, or `$XDG_STATE_HOME/machineroom/runs` (or `~/.local/state/machineroom/runs`) elsewhere. `MACHINEROOM_RUNS` names another runs folder, and the first start copies the old `%TEMP%\machineroom-runs` folder there once.
 
 - `<lane>-<briefs>-<stamp>.log` for a run on briefs.
 - `<lane>-project-<stamp>.log` for one task on a project without `--worktree`.

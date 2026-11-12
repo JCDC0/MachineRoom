@@ -1,10 +1,9 @@
 #!/usr/bin/env node
 import { existsSync, readFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { writeRecording } from './recording-files.mjs'
-import { lanesFolder } from '../server/lanes-source.js'
+import { lanesFolder, runsFolder } from '../server/lanes-source.js'
 
 const root = resolve(fileURLToPath(import.meta.url), '..', '..')
 
@@ -12,8 +11,8 @@ function refusal(message) {
   return new Error(message)
 }
 
-function runsFile() {
-  return join(process.env.TEMP || tmpdir(), 'machineroom-runs', 'runs.jsonl')
+export function runsFile(env = process.env) {
+  return join(runsFolder(env), 'runs.jsonl')
 }
 
 function readRecords() {
@@ -52,9 +51,17 @@ function main() {
   console.log(`tool calls: ${written.toolCalls}`)
 }
 
-try {
-  main()
-} catch (error) {
-  console.error(String(error?.message ?? error))
-  process.exitCode = 1
+const startedFile = process.argv[1] ? resolve(process.argv[1]) : ''
+const currentFile = fileURLToPath(import.meta.url)
+const isMain = startedFile !== '' && (process.platform === 'win32'
+  ? startedFile.toLowerCase() === currentFile.toLowerCase()
+  : startedFile === currentFile)
+
+if (isMain) {
+  try {
+    main()
+  } catch (error) {
+    console.error(String(error?.message ?? error))
+    process.exitCode = 1
+  }
 }
