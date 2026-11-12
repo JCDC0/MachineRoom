@@ -1126,3 +1126,10 @@ Tonight merged P77 to P99. For each merge below, read its changelog line under `
 Run `node node_modules/vitest/vitest.mjs run tests/briefs.test.js tests/docs.test.js` if they exist and `npm run build`; both must pass.
 
 Files: docs/agents/architecture/ROOM.md, docs/agents/architecture/LIVE.md, docs/agents/architecture/COMMANDS.md, docs/agents/architecture/CODE.md.
+
+
+**P107. Review the late merges (Codex).** Read `docs/agents/OWNER.md` and this brief only. Change no code. Do not commit: the runner commits your file.
+
+Review what these merges brought, with `git show -m --first-parent SHA` for each, against the code around each change: `0486c7cf` (P86, the command parser), `5ca6cefb` (P85, the session at the top, merged with hand-resolved conflicts in `scripts/run-lane.mjs`), `79e9c364` (P96, the retry of a non-JSON answer), `da2017c2` (P94, a room turn waits during a merge), `1f17dda1` (P92, the context window from model details), `030fd52b` (P78, the model picker), `3cc8bede` (P99, hooks off in review merges), `babd7fd2` (P83, the folded work line). Hunt for what a test would not show: a parser case that now misses a real write or invents one; a session id or a profile path written into a record, frame or page; a retry that can resend a paid request after the provider took it; a git check that blocks the bridge's event loop for long; a context window taken from the wrong model; a picker or pin write without the page-origin guard or a cap; a git command in a review or merge that still runs a hook; a turn whose steps or answer land on the wrong message. Write `docs/agents/AUDIT-2026-11-REVIEW-16.md`: a table of at most 8 findings, the most harmful first, each with `file:line`, what goes wrong and when, the smallest fix, and whether it blocks a push. Write no finding you cannot point to in the code. An empty table with what you checked is a good answer.
+
+Files: docs/agents/AUDIT-2026-11-REVIEW-16.md.
