@@ -29,6 +29,7 @@ import {
   siblingFolders,
 } from '../server/projects.js'
 import { createClient } from '../src/control/client.js'
+import { waitFor } from './helpers/bridge.js'
 import { makeTempDir, processTempRoot, removeTempDir } from './helpers/tempRoot.js'
 
 const cleanups = []
@@ -616,6 +617,99 @@ describe('projects api', () => {
     expect(handled).toBe(true)
     expect(answers[0].status).toBe(409)
     expect(answers[0].body.error).toBe(LANES_RUNNING_PROBLEM)
+  })
+
+  it('refuses while the lane source has a run open, then opens once that run ends', async () => {
+    const env = createEnvironment()
+    const openedPaths = []
+    const lanes = {
+      opencode: {
+        name: 'OpenCode',
+        harness: 'OpenCode',
+        cli: { harness: 'opencode', model: 'test-model' },
+        worktree: join(env.base, 'opencode-worktree'),
+      },
+    }
+    const bridge = createBridge({
+      projectRoot: env.root,
+      runsFolder: env.runs,
+      port: 0,
+      env: {},
+      lanesSource: { folder: env.runs, lanes, repoRoot: env.root, pollMs: 20, quietMs: 60000 },
+      onOpenProject: (targetPath) => {
+        openedPaths.push(targetPath)
+      },
+    })
+    const info = await bridge.start()
+    cleanups.push(() => bridge.stop())
+
+    const name = 'opencode-L2-20261112-120000'
+    const log = join(env.runs, `${name}.log`)
+    writeFileSync(log, '')
+    const live = await waitFor(
+      async () => {
+        const { body } = await getJson(`${info.url}/api/control/live-runs`)
+        return body?.runs?.some((run) => run.runId === `run-${name}`) ? body.runs : null
+      },
+      { what: 'the lane source to open the run' }
+    )
+    expect(live).toHaveLength(1)
+
+    const refused = await postJson(
+      `${info.url}/api/projects/open`,
+      { path: env.siblingGit, confirmed: true },
+      { headers: { Origin: info.url } }
+    )
+    expect(refused.status).toBe(409)
+    expect(refused.body.error).toBe(LANES_RUNNING_PROBLEM)
+    await new Promise((resolveWait) => setTimeout(resolveWait, 50))
+    expect(openedPaths).toEqual([])
+
+    writeFileSync(
+      join(env.runs, 'runs.jsonl'),
+      `${JSON.stringify({ lane: 'opencode', briefs: ['L2'], log, startedAt: '2026-11-12T12:00:00.000Z', exitCode: 0 })}\n`
+    )
+    await waitFor(
+      async () => {
+        const { body } = await getJson(`${info.url}/api/control/live-runs`)
+        return body?.runs?.length === 0 ? true : null
+      },
+      { what: 'the lane source to finish the run' }
+    )
+
+    const opened = await postJson(
+      `${info.url}/api/projects/open`,
+      { path: env.siblingGit, confirmed: true },
+      { headers: { Origin: info.url } }
+    )
+    expect(opened.status).toBe(200)
+    await waitFor(() => (openedPaths.length > 0 ? true : null), { what: 'onOpenProject' })
+    expect(openedPaths).toEqual([resolve(env.siblingGit)])
+  })
+
+  it('opens a project with the lane source off', async () => {
+    const env = createEnvironment()
+    const openedPaths = []
+    const bridge = createBridge({
+      projectRoot: env.root,
+      runsFolder: env.runs,
+      port: 0,
+      env: {},
+      onOpenProject: (targetPath) => {
+        openedPaths.push(targetPath)
+      },
+    })
+    const info = await bridge.start()
+    cleanups.push(() => bridge.stop())
+
+    const res = await postJson(
+      `${info.url}/api/projects/open`,
+      { path: env.siblingGit, confirmed: true },
+      { headers: { Origin: info.url } }
+    )
+    expect(res.status).toBe(200)
+    await waitFor(() => (openedPaths.length > 0 ? true : null), { what: 'onOpenProject' })
+    expect(openedPaths).toEqual([resolve(env.siblingGit)])
   })
 
   it('answers 501 when bridge started without onOpenProject', async () => {
