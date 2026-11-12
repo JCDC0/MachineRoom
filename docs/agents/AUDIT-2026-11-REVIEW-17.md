@@ -1,0 +1,32 @@
+# Review 17: the merges before the push
+
+Reviewed 2026-11-13 at `f5d82e462d43b1733e2f841ad2560434a888ee90` for P114. No code changed.
+
+The merges improve cost guards, answer handling, tree cursors, lane starts, commit selection, endpoint details and branch history. The findings below concern their combined behavior in the current checkout.
+
+| # | File:line | What goes wrong and when | Smallest fix | Blocks a push |
+| --- | --- | --- | --- | --- |
+| 1 | `scripts/run-lane.mjs:381` | P102 filters the paths passed to `git add`, but the following `git commit` commits the whole index. If the lane stages an outside file during its run, the runner logs that it left the file out and still commits it alongside an allowed file. This also defeats the blocked filename check for an already staged file. The clean check before starting does not prevent staging during the run. | Limit the commit itself to the selected paths, for example with `git commit --only ... -- <selected paths>`. Test an outside file staged during the run. | Yes |
+| 2 | `scripts/mr-agent.mjs:1169`, `scripts/mr-agent.mjs:1411` | P109 retries a damaged successful response inside `post`. That response has no usable cost, but the callback only counts damaged answers. P104's `costUnknown` guard never sees it. With a cost limit set, a damaged answer followed by a priced answer can cause another paid request and leave the total understated. | With a cost limit set, stop on a damaged successful response before retrying. Keep the one damaged-answer retry when no cost limit is set. | Yes |
+| 3 | `src/briefs/briefs.js:36`, `scripts/run-lane.mjs:359` | P102 gets its allowed files from `brief.text`. The parser stores only the text on the bold brief heading line. P114 puts its `Files:` list on a later line, so its parsed file list is empty. The runner leaves the requested audit out and returns success without a commit. | Collect the continuation lines through the end of each brief before passing its text to the file-list parser. Test the actual multi-paragraph P114 layout. | Yes |
+| 4 | `server/orchestrator.js:1631` | P105 clears and persists the branch transcript as soon as `spawnChild` returns. Node can then emit an asynchronous start error, such as a missing executable. In an OpenCode branch no session was created, but the only carried transcript is already gone. The next start receives no branch history. | Keep the carried transcript until a turn succeeds. On a failed first start, retain it and clear any provisional session id so the next attempt receives it. | Yes |
+| 5 | `scripts/run-lane.mjs:1430` | A command can select several briefs. The prompt includes all of them at line 1180, but P102 filters the final commit using only `wanted[0]`. A file allowed only by the second brief is left uncommitted, even though the run record names both briefs. | Build the commit allowlist from every selected brief. Keep the first brief for the branch name and title if desired. Test two briefs with separate allowed files. | Yes |
+| 6 | `src/harnesses/common.js:59`, `src/model/parsers/copilot.js:3` | P111 uses the activity parser to remove plain tool lines, but that parser also accepts ordinary prose beginning with `Running`, `Reading`, `Writing` or `Editing`. For `The fix is ready.`, a blank line, `Running the tests requires Node 24.`, and `Keep the lockfile.`, the reply becomes only `Keep the lockfile.`. The matched line and all preceding answer text disappear. | Use unambiguous tool markers for reply extraction. Do not clear the answer on the parser's broad bare-word matches. Add the prose example as a regression test. | No |
+
+## Scope checked
+
+Read each requested merge with `git show -m --first-parent`: `44d01aa6`, `5ca9c8a7`, `0cb7a073`, `823223e4`, `edd309b9`, `59b6136b`, `676162cf`, `55fe5ecf`, `7954cfd4`, and `6ea44c42`. Also read the `treeSinceVersion` follow-up in `ae0b1c78`.
+
+Traced the surrounding runner selection, clean-start guard, file-list parser, lane environment, candidate lane lookup, recording reference fallback, API retries, cost accounting, Copilot parser, tree discovery and reconnect cursors, project lock checks, endpoint detail retention, context-window selection, and branch archive and restore paths. Reviewed the relevant changed tests. Assumed the owner's local room with parallel lanes on one computer.
+
+The current tree client sends the bridge start id and resets its cursor on a full list. The server deliberately still accepts bare numeric versions after `ae0b1c78`; those legacy cursors cannot establish which bridge start produced them. This compatibility path does not provide restart identity. No browser or bridge restart was run here.
+
+Checked the changed record and output construction without opening credential files or real session logs. No real paid request was sent. This is a code review, not a claim that arbitrary tool output or existing records contain no private data.
+
+## Validation and limits
+
+- `node node_modules/vitest/vitest.mjs run tests/commands.test.js tests/copilot-harness.test.js tests/model-picker.test.js tests/model-context-window.test.js --maxWorkers=1` could not start. This worktree has no `node_modules/vitest/vitest.mjs`. Zero Vitest tests ran.
+- Six dependency-free checks passed through PowerShell here-strings piped to `node --input-type=module`: the Copilot prose truncation; the empty P114 file list; the runner's filtered add followed by a whole-index commit using mocked git calls; one damaged response followed by a retry with only the second response's cost using mocked fetch; the named endpoint context window; and minute parsing and warning formatting. These checks confirm observations, not a passing regression suite.
+- An earlier `node -e` form of the Copilot check failed on PowerShell quoting. The here-string form passed. `rg` was unavailable, so searches used `Select-String`. A probe for `vitest.config.js` found no such file.
+- Test files changed: zero. Suite test counts before and after are unmeasured. No full suite, build, live provider, actual runner commit, or screen check was run. Dependencies were not installed. Screen checks remain with the orchestrator.
+- Only this audit file was written. No branch switch, commit, push, scratch file, or background process was created. P114's separate file list means the current runner needs to recover this uncommitted audit explicitly until finding 3 is fixed.

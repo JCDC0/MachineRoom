@@ -1222,3 +1222,28 @@ P93 ran out of time with five commits on `feat/p93-one-menu-for`: the bridge kee
 1. Start with `git merge --no-edit refs/heads/feat/p93-one-menu-for`. Build on that work; do not redo it. Check the last commit's edits and keep them only if a test shows they are needed.
 2. Read P93's five steps against the code and finish what is missing. Most likely missing: Fork, Mark as unread with its yellow dot, the `Show archived` line with Unarchive, the search box and the kept sort, and the tests of step 5.
 3. Run `node node_modules/vitest/vitest.mjs related --run` on every file you changed and `npm run build`; both must pass. Report which of P93's steps are done and the by-eye checks it names.
+
+## The fixes from review 17 (2026-11-13)
+
+Review 17 (`docs/agents/AUDIT-2026-11-REVIEW-17.md`, P114) read the merges P100 to P112 and found five that block the push. These three briefs touch separate files and can run at once.
+
+**P116. The runner commits only what the briefs allow (OpenCode).** Read review 17 findings 1, 3 and 5, and this brief only. Use no subagents. Run every command in the foreground. Commit each step as you finish it, and stop starting new work at minute 40.
+
+1. Finding 1: `runnerCommit` in `scripts/run-lane.mjs` commits only the selected paths (`git commit --only -m ... -- <selected>`), so a file the lane staged itself never rides along.
+2. Finding 3: `parseBriefs` in `src/briefs/briefs.js` keeps every line of a brief, from its bold heading to the next brief or section heading, in `text`, so a `Files:` line in a later paragraph is found. Check that the prompt and the brief list still show what they showed.
+3. Finding 5: the commit's allowed files come from every brief of the run; the branch name and title still come from the first.
+4. Tests, by what they prove: a file the lane staged outside the list stays out of the commit; a `Files:` line two paragraphs below the heading is read (use P114's layout); a run of two briefs commits both briefs' files.
+5. Run `node node_modules/vitest/vitest.mjs related --run scripts/run-lane.mjs src/briefs/briefs.js` and `npm run build`. Report what passed.
+
+**P117. A cost limit stops on a damaged answer, and a Copilot reply keeps its prose (AGY).** Read review 17 findings 2 and 6, and this brief only. Use no subagents. Run every command in the foreground. Commit each step as you finish it, and stop starting new work at minute 35.
+
+1. Finding 2: in `scripts/mr-agent.mjs`, when `MR_AGENT_MAX_COST_USD` is set, a 200 answer that is damaged stops the run before any retry, with the same stop text P104 uses when cost is unknown. With no cost limit, the one retry of P109 stays.
+2. Finding 6: in `src/harnesses/common.js`, reply extraction drops only lines that carry an unambiguous tool marker, not prose that begins with `Running`, `Reading`, `Writing` or `Editing`.
+3. Tests, by what they prove: with a cost limit a damaged answer sends no second request and stops; without one it retries once; the review's four-line prose example keeps all its lines.
+4. Run `node node_modules/vitest/vitest.mjs related --run scripts/mr-agent.mjs src/harnesses/common.js` and `npm run build`. Report what passed.
+
+**P118. A branch keeps its transcript until a turn starts (OpenCode).** Read review 17 finding 4 and this brief only. Use no subagents. Run every command in the foreground. Commit each step as you finish it, and stop starting new work at minute 35.
+
+1. In `server/orchestrator.js`, the carried branch transcript is cleared and saved only once the child has really started (its `spawn` event, or the first output) and not on a start error. On a start error the transcript stays and any provisional session id is cleared, so the next turn gets the history.
+2. Tests, by what they prove: a child that emits a start error leaves the transcript for the next turn; a child that starts clears it once.
+3. Run `node node_modules/vitest/vitest.mjs related --run server/orchestrator.js` and `npm run build`. Report what passed.
