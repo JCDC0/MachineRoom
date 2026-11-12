@@ -6,7 +6,7 @@ import { HARNESSES } from '../src/harnesses/index.js'
 import { canChange, outsideScope, readLadder, subPrompt } from '../src/model/hierarchy.js'
 import { isHarnessAvailable } from './agents-config.js'
 import { readEndpoints } from './endpoints.js'
-import { MODELS } from './models.js'
+import { MODELS, resolveContextWindow } from './models.js'
 import {
   CONFIRM_MESSAGE_PROBLEM,
   createOrchestrator,
@@ -165,7 +165,15 @@ export function availableHarnesses(lanes = {}, env = process.env, platform = pro
       const descriptor = HARNESSES.find((h) => h.key === key)
       const name = descriptor?.name ?? key
       const models = key === 'machineroom' && endpoints.length > 0
-        ? endpoints.flatMap((endpoint) => (endpoint.models ?? []).map((id) => ({ id: `${endpoint.name}/${id}`, label: `${endpoint.name}/${id}` })))
+        ? endpoints.flatMap((endpoint) => (endpoint.models ?? []).map((id) => {
+            const detail = endpoint.modelDetails?.find((d) => d.id === id)
+            const contextWindow = typeof detail?.contextLength === 'number' && detail.contextLength > 0 ? detail.contextLength : undefined
+            return {
+              id: `${endpoint.name}/${id}`,
+              label: `${endpoint.name}/${id}`,
+              ...(contextWindow ? { contextWindow } : {}),
+            }
+          }))
         : MODELS.filter((m) => m.harness === key).map(({ id, label, contextWindow }) => ({
           id,
           label,
@@ -289,13 +297,15 @@ export function createOrchestrators({
       .map((entry) => entry.id)
       .filter((id) => id !== sub.id)
       .sort()
+    const model = sub.model || String(defaults?.model ?? fallbackModel)
+    const laneWindow = Number.isFinite(defaults?.contextWindow) && defaults.contextWindow > 0 ? Math.round(defaults.contextWindow) : 0
     return {
       id: sub.id,
       name: sub.name,
       harness,
-      model: sub.model || String(defaults?.model ?? fallbackModel),
+      model,
       bin: String(defaults?.bin ?? harness),
-      contextWindow: Number.isFinite(defaults?.contextWindow) && defaults.contextWindow > 0 ? Math.round(defaults.contextWindow) : 0,
+      contextWindow: resolveContextWindow(model, harness, laneWindow, readEndpoints(folder)),
       lanes: [...sub.lanes],
       scope: [...sub.scope],
       restricted: sub.restricted,

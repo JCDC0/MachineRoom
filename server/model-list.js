@@ -34,16 +34,80 @@ export const MODELS = [
   { id: 'gpt-5', label: 'GPT-5', harness: 'copilot', tier: 'large', free: false },
 ]
 
-export function resolveContextWindow(modelId, harnessKey = '', fallbackWindow = 0) {
+function matchDetailContextLength(detail, wanted, endpointName = '') {
+  if (!detail || typeof detail !== 'object') return null
+  const id = typeof detail.id === 'string' ? detail.id.trim() : ''
+  if (!id) return null
+  const matches =
+    id === wanted ||
+    (endpointName !== '' && `${endpointName}/${id}` === wanted) ||
+    (wanted.includes('/') && wanted.slice(wanted.indexOf('/') + 1) === id) ||
+    (wanted.includes('/') && id.includes('/') && wanted.endsWith(`/${id}`)) ||
+    (id.includes('/') && wanted.endsWith(`/${id}`))
+  if (matches && typeof detail.contextLength === 'number' && Number.isFinite(detail.contextLength) && detail.contextLength > 0) {
+    return Math.round(detail.contextLength)
+  }
+  return null
+}
+
+function detailContextLength(details, wanted) {
+  if (!details || !wanted) return null
+  if (!Array.isArray(details) && typeof details === 'object') {
+    if (Array.isArray(details.modelDetails)) {
+      const endpointName = typeof details.name === 'string' ? details.name.trim() : ''
+      for (const d of details.modelDetails) {
+        const found = matchDetailContextLength(d, wanted, endpointName)
+        if (found !== null) return found
+      }
+      return null
+    }
+    return matchDetailContextLength(details, wanted)
+  }
+  if (Array.isArray(details)) {
+    for (const item of details) {
+      if (!item || typeof item !== 'object') continue
+      if (Array.isArray(item.modelDetails)) {
+        const endpointName = typeof item.name === 'string' ? item.name.trim() : ''
+        for (const d of item.modelDetails) {
+          const found = matchDetailContextLength(d, wanted, endpointName)
+          if (found !== null) return found
+        }
+      } else {
+        const found = matchDetailContextLength(item, wanted)
+        if (found !== null) return found
+      }
+    }
+  }
+  return null
+}
+
+export function resolveContextWindow(modelId, harnessKey = '', laneWindowOption = 0, modelDetailsOption = null) {
+  let laneWindow = typeof laneWindowOption === 'number' ? laneWindowOption : 0
+  let modelDetails = modelDetailsOption
+  if (laneWindowOption && typeof laneWindowOption === 'object' && !Array.isArray(laneWindowOption)) {
+    if ('laneWindow' in laneWindowOption || 'contextWindow' in laneWindowOption || 'modelDetails' in laneWindowOption) {
+      laneWindow = laneWindowOption.laneWindow ?? laneWindowOption.contextWindow ?? 0
+      modelDetails = laneWindowOption.modelDetails ?? modelDetailsOption
+    }
+  }
+
+  if (typeof laneWindow === 'number' && Number.isFinite(laneWindow) && laneWindow > 0) {
+    return Math.round(laneWindow)
+  }
+
+  const wanted = typeof modelId === 'string' ? modelId.trim() : ''
+  const endpointWindow = detailContextLength(modelDetails, wanted)
+  if (endpointWindow !== null) {
+    return endpointWindow
+  }
+
   const modelEntry =
     MODELS.find((m) => m.id === modelId && (!harnessKey || m.harness === harnessKey)) ??
     MODELS.find((m) => m.id === modelId)
   if (typeof modelEntry?.contextWindow === 'number' && modelEntry.contextWindow > 0) {
     return modelEntry.contextWindow
   }
-  if (typeof fallbackWindow === 'number' && Number.isFinite(fallbackWindow) && fallbackWindow > 0) {
-    return Math.round(fallbackWindow)
-  }
+
   return DEFAULT_CONTEXT_WINDOW
 }
 

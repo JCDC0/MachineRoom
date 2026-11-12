@@ -754,7 +754,7 @@ export function createOrchestrator({
   const key = String(id) === ORCHESTRATOR_KEY ? ORCHESTRATOR_KEY : String(id)
   const logPrefix = key === ORCHESTRATOR_KEY ? ORCHESTRATOR_KEY : `sub-${key}`
   const lockFile = key === ORCHESTRATOR_KEY ? chatLockFileFor(root, folder) : null
-  const laneEntry = lanes && Object.hasOwn(lanes, ORCHESTRATOR_KEY) ? lanes[ORCHESTRATOR_KEY] : null
+  const laneEntry = lanes && (Object.hasOwn(lanes, key) ? lanes[key] : Object.hasOwn(lanes, ORCHESTRATOR_KEY) ? lanes[ORCHESTRATOR_KEY] : null)
   const lane = laneEntry?.cli ? laneEntry : DEFAULT_LANE
   let harness = harnessOption || String(lane.cli.harness ?? 'claude')
   let model = modelOption ? String(modelOption) : String(lane.cli.model ?? (harness === 'opencode' ? DEFAULT_OPENCODE_MODEL : 'opus'))
@@ -765,6 +765,12 @@ export function createOrchestrator({
       if (entry?.cli?.harness === name && entry.cli.bin) return String(entry.cli.bin)
     }
     return name
+  }
+  function laneDetails() {
+    const endpoints = readEndpoints(folder)
+    const endpointName = typeof lane.cli?.endpoint === 'string' ? lane.cli.endpoint.trim() : ''
+    const match = endpointName ? endpoints.find((entry) => entry.name === endpointName) : null
+    return match || endpoints
   }
   const windowOption = Number.isFinite(contextWindowOption) && contextWindowOption > 0
     ? Math.round(contextWindowOption)
@@ -785,7 +791,7 @@ export function createOrchestrator({
   let running = null
   let stopped = false
   let contextTokens = null
-  let contextWindow = resolveContextWindow(model, harness, windowOption)
+  let contextWindow = resolveContextWindow(model, harness, windowOption, laneDetails())
   let autocompact = true
   let autocompactMode = DEFAULT_AUTOCOMPACT_MODE
   let autocompactValue = DEFAULT_AUTOCOMPACT_VALUE
@@ -989,10 +995,7 @@ export function createOrchestrator({
     if (typeof saved.contextTokens === 'number' && Number.isFinite(saved.contextTokens) && saved.contextTokens >= 0) {
       contextTokens = Math.round(saved.contextTokens)
     }
-    contextWindow = resolveContextWindow(model, harness, windowOption)
-    if (!MODELS.some((m) => m.id === model) && typeof saved.contextWindow === 'number' && Number.isFinite(saved.contextWindow) && saved.contextWindow > 0) {
-      contextWindow = Math.round(saved.contextWindow)
-    }
+    contextWindow = resolveContextWindow(model, harness, windowOption, laneDetails())
     if (typeof saved.summary === 'string' && saved.summary.trim() !== '') summary = saved.summary.trim()
     if (saved.effort === null || typeof saved.effort === 'string') {
       const allowed = harness === 'claude' ? CLAUDE_EFFORT_LEVELS : OPENCODE_EFFORT_LEVELS
@@ -1727,7 +1730,7 @@ export function createOrchestrator({
     const allowed = modelAllowed(harness, nextModel, folder)
     if (!allowed) return { status: 400, body: { error: MODEL_PROBLEM } }
     model = nextModel
-    contextWindow = resolveContextWindow(model, harness, windowOption)
+    contextWindow = resolveContextWindow(model, harness, windowOption, laneDetails())
     persist()
     notify()
     return { status: 200, body: { id: key, model } }
@@ -1766,7 +1769,7 @@ export function createOrchestrator({
       s.sessionId = null
       s.opencodeSessionId = null
     }
-    contextWindow = resolveContextWindow(model, harness, windowOption)
+    contextWindow = resolveContextWindow(model, harness, windowOption, laneDetails())
     mode = modesFor(harness).some((entry) => entry.id === keptMode) ? keptMode : defaultMode(harness)
     persist()
     notify()
