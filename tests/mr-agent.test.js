@@ -67,6 +67,10 @@ function startFakeApi(handler) {
         const parsed = body === '' ? null : JSON.parse(body)
         calls.push({ method: req.method, url: req.url, headers: req.headers, body: parsed })
         const answer = await handler(parsed, calls.length - 1, calls)
+        if (answer?.destroy) {
+          req.socket.destroy()
+          return
+        }
         const status = Number.isInteger(answer?.status) ? answer.status : 200
         const headers = { 'content-type': 'application/json', ...(answer?.headers ?? {}) }
         res.writeHead(status, headers)
@@ -411,6 +415,53 @@ describe('mr-agent', () => {
       result: 'The cost limit is set but the provider did not report a cost; stopped.',
       damagedAnswers: 1,
     })
+  })
+
+  it('stops without a second request when a cost limit is set and a fetch rejects', async () => {
+    const folder = tempDir()
+    const api = await startFakeApi((_body, index) =>
+      index === 0
+        ? { destroy: true }
+        : chatAnswer({ text: 'Done.' }),
+    )
+    const result = await runAgent({
+      folder,
+      api,
+      env: {
+        MR_AGENT_RETRY_BASE_MS: '1',
+        MR_AGENT_MAX_COST_USD: '0.05',
+      },
+    })
+    expect(api.calls).toHaveLength(1)
+    expect(result.code).toBe(3)
+    const lines = result.stdout.trim().split(/\r?\n/)
+    expect(lines.at(-1)).toBe('The cost limit is set but the provider did not report a cost; stopped.')
+    const final = JSON.parse(lines.at(-2))
+    expect(final).toMatchObject({
+      type: 'result',
+      is_error: true,
+      result: 'The cost limit is set but the provider did not report a cost; stopped.',
+    })
+  })
+
+  it('retries when a fetch rejects and no cost limit is set', async () => {
+    const folder = tempDir()
+    const api = await startFakeApi((_body, index) =>
+      index === 0
+        ? { destroy: true }
+        : chatAnswer({ text: 'Done.' }),
+    )
+    const result = await runAgent({
+      folder,
+      api,
+      env: {
+        MR_AGENT_RETRY_BASE_MS: '1',
+      },
+    })
+    expect(result.code).toBe(0)
+    expect(api.calls).toHaveLength(2)
+    const final = jsonLines(result.stdout).at(-1)
+    expect(final).toMatchObject({ type: 'result', is_error: false, result: 'Done.' })
   })
 
   it('still retries a 502 answer up to the limit', async () => {

@@ -1139,6 +1139,11 @@ async function post(url, key, payload, { onDamaged, costLimit } = {}) {
         signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
       })
     } catch (error) {
+      if (costLimit !== null && costLimit !== undefined) {
+        const failure = new Error('The cost limit is set but the provider did not report a cost; stopped.')
+        failure.isCostLimit = true
+        throw failure
+      }
       const failure = new Error(`The API request failed: ${sanitize(error?.message ?? String(error), key)}`)
       if (attempt === RETRY_LIMIT) throw failure
       await sleep(retryDelayMs(attempt, null))
