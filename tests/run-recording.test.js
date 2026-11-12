@@ -406,6 +406,47 @@ describe('writeRecording', () => {
     expect(tree.files).toEqual(['src/strings.js'])
   })
 
+  it('writes the three recording files for a Codex record', () => {
+    const { dir, sha } = worktreeWith({ 'src/math.js': 'x\n' })
+    const root = tempFolder()
+    const logPath = join(root, 'codex-T3-20261112-101010.log')
+    writeFileSync(logPath, [
+      JSON.stringify({ type: 'thread.started', thread_id: 'thread-1' }),
+      JSON.stringify({ type: 'item.started', item: { id: 'item_cmd_1', type: 'command_execution', command: 'git status', status: 'in_progress' } }),
+      JSON.stringify({ type: 'item.completed', item: { id: 'item_cmd_1', type: 'command_execution', command: 'git status', status: 'completed', exit_code: 0 } }),
+      JSON.stringify({ type: 'turn.completed', usage: { input_tokens: 10, output_tokens: 5 } }),
+    ].join('\n') + '\n')
+    const record = {
+      lane: 'codex',
+      startedAt: '2026-11-12T10:10:10.000Z',
+      minutes: 2,
+      exitCode: 0,
+      killed: false,
+      log: logPath,
+      branch: 'feat/p74',
+      commits: [`${sha} one`],
+    }
+    const written = writeRecording({ record, lanes: { codex: { ...lanes.codex, worktree: dir } }, root, env: {} })
+
+    expect(written.name).toBe('codex-T3-20261112-101010')
+    expect(written.frames).toBe(5)
+    expect(written.toolCalls).toBe(1)
+    const frames = readFrames(written.runPath)
+    expect(frames.map((frame) => frame.type)).toEqual([
+      'heartbeat.run.queued',
+      'heartbeat.run.status',
+      'heartbeat.run.log',
+      'heartbeat.run.log',
+      'heartbeat.run.status',
+    ])
+    expect(frames[2].payload.chunk).toContain('git status')
+    expect(frames[4].payload).toMatchObject({ status: 'succeeded', error: null })
+    const agents = JSON.parse(readFileSync(written.agentsPath, 'utf8'))
+    expect(agents.agents[0]).toMatchObject({ key: 'codex', adapterType: 'codex_local', parser: 'codex' })
+    const tree = JSON.parse(readFileSync(written.treePath, 'utf8'))
+    expect(tree.files).toEqual(['src/math.js'])
+  })
+
   it('writes the three recording files for a Claude record from scenario-h', () => {
     const tree = JSON.parse(readFileSync(new URL('../public/fixtures/scenario-h-tree.json', import.meta.url), 'utf8'))
     const { dir, sha } = worktreeWith(Object.fromEntries(tree.files.map((name) => [name, 'x\n'])))

@@ -155,8 +155,8 @@ describe('parsePlan', () => {
   })
 
   it('says a brief names an owner that is not a lane', () => {
-    expect(problems(plan(good({ owner: 'codex' })))).toEqual([
-      'Brief C7a names an owner that is not a lane: codex.',
+    expect(problems(plan(good({ owner: 'nobody' })))).toEqual([
+      'Brief C7a names an owner that is not a lane: nobody.',
     ])
   })
 
