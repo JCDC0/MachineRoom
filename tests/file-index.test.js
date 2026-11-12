@@ -8,12 +8,9 @@ import { makeTree, normalise } from '../src/model/paths.js'
 import { parseFrames, prepare } from '../src/model/source.js'
 import { makeScaleTree, random } from '../scripts/scale-probe.mjs'
 
-const WRITE_OPERATOR = /(>>|(?<![>=-])>(?![&=])|\bSet-Content\b|\bAdd-Content\b|\bOut-File\b|\btee\b|\bsed\s+-i\b)/
-const MUTATOR = /^\s*(?:sudo\s+|npx\s+)?(?:git\s+)?(?:mv|rm|cp|del|erase|move|ren|rename|copy|Remove-Item|Rename-Item|Move-Item|Copy-Item|New-Item)\b/i
 const LISTER = /\b(ls|dir|Get-ChildItem|gci|find|tree|cd|Set-Location|Test-Path)\b/
 const MESSAGE_FLAG = /(?:^|[\s;|&(])(?:--message|--data-raw|--data-binary|--data|-m|-d)(?:[ \t]*=[ \t]*|[ \t]+)/g
 const HERE_STRING = /(?<![\w'"@])@(['"])/g
-const COMMAND_STRING = /^\s*(?:[^\s;&|]*\/)?(?:sudo\s+)?(?:powershell|pwsh|bash|sh|cmd)(?:\.exe)?\b[^;&|]*?(?<!-)(?:-Command|-[A-Za-z]*c|\/c)\s*$/i
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 const FIXTURES = join(ROOT, 'public', 'fixtures')
@@ -68,24 +65,6 @@ function escape(text) {
   return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
-function outsideQuotedText(text) {
-  let out = ''
-  let cursor = 0
-  while (cursor < text.length) {
-    const quote = text[cursor]
-    if (quote !== '"' && quote !== "'") {
-      out += quote
-      cursor += 1
-      continue
-    }
-    const end = quotedValueEnd(text, cursor)
-    const before = text.slice(0, cursor)
-    out += COMMAND_STRING.test(before) ? text.slice(cursor, end) : ' '.repeat(end - cursor)
-    cursor = end
-  }
-  return out
-}
-
 function tokenSpans(segment, token, folder = false) {
   if (!token || !segment.includes(token)) return []
   const tail = folder ? '(?![\\w-])(?!/[\\w.-])' : '(?![\\w-])'
@@ -121,6 +100,14 @@ function firstSpans(spans) {
   return first
 }
 
+function writtenFiles(segment, files) {
+  const written = new Set()
+  for (const touch of touchesForCommand(segment, files, [])) {
+    if (touch.kind === 'file' && touch.mode === 'write') written.add(touch.path)
+  }
+  return written
+}
+
 function referenceTouchesForCommand(command, files, dirs) {
   const touches = []
   const seen = new Set()
@@ -132,8 +119,7 @@ function referenceTouchesForCommand(command, files, dirs) {
   }
   const segments = normalise(withoutHereStrings(withoutMessageValues(command))).split(/&&|;|\|\||\|/)
   for (const segment of segments) {
-    const operator = WRITE_OPERATOR.exec(outsideQuotedText(segment))
-    const mutator = MUTATOR.exec(segment)
+    const written = writtenFiles(segment, files)
     const fileSpans = []
     for (const file of files) {
       for (const span of tokenSpans(segment, file)) fileSpans.push({ path: file, ...span })
@@ -142,7 +128,7 @@ function referenceTouchesForCommand(command, files, dirs) {
     for (const file of files) {
       const span = firstFiles.get(file)
       if (!span) continue
-      const mode = mutator || (operator && operator.index < span.at) ? 'write' : 'read'
+      const mode = written.has(file) ? 'write' : 'read'
       add({ path: file, mode, kind: 'file' })
     }
     const lister = LISTER.exec(segment)
@@ -319,6 +305,13 @@ describe('indexFor', () => {
 })
 
 describe('touchesForCommand with the file index', () => {
+  it('reads a file the redirect operand only extends', () => {
+    expect(touchesForCommand('cat >> name~', ['name'], [])).toEqual([
+      { path: 'name', mode: 'read', kind: 'file' },
+    ])
+    expect(difference('cat >> name~', ['name'], [])).toBeNull()
+  })
+
   it('matches the old walk on every shell command in the fixtures', () => {
     const commands = shellCommands(FIXTURES)
     expect(commands.length).toBeGreaterThan(0)
