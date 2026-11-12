@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The lane source and lane state checks read both runner and child lock holders through isHolderAlive, so a reused Windows pid no longer holds an orphan run open or marks a lane busy (P138).
 - ROOM.md, LIVE.md, COMMANDS.md and CODE.md describe the chat's lane tasks, the conversation menu, the runner's commit rules and the AGY models (P127).
 - The conversation menu closes when its row leaves the list or stops being current, so a key never acts on another conversation (P134).
 - PLAN.md, ARCHITECTURE.md and DOCUMENTS.md name what the audits and reviews leave open (P130).
