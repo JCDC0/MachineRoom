@@ -23,7 +23,7 @@ Read this before you answer the owner or brief work for them. It is short on pur
 1. Say the concern back in one sentence, as the result the owner wants, not as the symptom. When two readings fit, ask one question before any change. Example of the wrong reading: the owner deleted lanes from their room, the tools then refused those lanes, and the orchestrator put the lanes back. The owner wanted them gone from their room and run somewhere else.
 2. Find the cause in the code. `architecture/CODE.md` names the file that owns a behaviour; search it, do not read whole docs.
 3. Sort it. A bug, or a thing the owner asked for: brief it. A new feature, a change of look or behaviour they did not ask for, a cost, a push or a release: ask first.
-4. Never fix a concern by changing the owner's room: no lane added, restored or hidden there, no file moved or deleted in `%TEMP%\machineroom-runs`, no key read or copied.
+4. Never fix a concern by changing the owner's room: no lane added, restored or hidden there, no file moved or deleted in `%LOCALAPPDATA%\MachineRoom\runs`, no key read or copied.
 5. A fix of a few lines is yours. Anything larger is a brief for a lane (`ORCHESTRATOR.md`, Briefs).
 6. A change the owner sees is not done until it was seen on screen. Say which window size, and say when only tests were run.
 7. Report: the answer first in plain words, then what was not done or not checked, then at most one question.

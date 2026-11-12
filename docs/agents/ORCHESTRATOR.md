@@ -26,7 +26,7 @@ Never:
 
 - Push without the owner's yes for that push. Only `main` to `origin`: `git push origin refs/heads/main:refs/heads/main`, after `npm run history-audit -- --from origin/main` shows no finding. Never merge into anything but `main` in this checkout. Never push to another project's repository.
 - Read, print, store or copy a key. `OPENROUTER_API_KEY` stays in the owner's shell and the owner's `keys.json` stays where it is.
-- Change the owner's room: `%TEMP%\machineroom-runs` and the lanes of `config/`. No lane added, restored or hidden there, no file moved or deleted (loop step 0).
+- Change the owner's room: `%LOCALAPPDATA%\MachineRoom\runs` and the lanes of `config/`. No lane added, restored or hidden there, no file moved or deleted (loop step 0).
 - Open or touch the owner's coursework folder. Its look is written down in brief V2.
 - Write a user path, a profile name or a real e-mail address into a tracked file. Write `%TEMP%`, `%LOCALAPPDATA%`, `C:\Users\<name>` and `example.com`.
 - Start Paperclip or a fake of it. It is gone from the room.
@@ -72,7 +72,7 @@ Reading:
 
 Step 0. Work in the testbench, never in the owner's room.
 
-- The owner's room is `%TEMP%\machineroom-runs` with the lanes of `config/`: the orchestrator and the lanes the owner makes, one per subscription.
+- The owner's room is `%LOCALAPPDATA%\MachineRoom\runs` with the lanes of `config/`: the orchestrator and the lanes the owner makes, one per subscription.
 - Every lane command of yours (`run-lane`, `merge-lane`, `outcome`, `review-lane`, `worktrees`, `hand-run`, `candidate`, `run-recording`) starts with these two variables, so its records, logs, locks and lanes stay in the testbench:
 
 ```
