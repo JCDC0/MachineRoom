@@ -9,7 +9,7 @@ import { projectLanesFileFor, writeHiddenLanes } from '../server/active-lanes.js
 import { briefProblems, briefWorktreeProblems, commandFor, DEFAULT_MINUTES, filterRunsSince, laneCommandProblem, readinessLine, retryStartProblem, SINCE_PROBLEM, startFailureText, worktreeFor, formatOutcomes, formatStats, formatSummary, laneLockPids, laneLockText, laneStats, laneStopProblem, laneWithOverrides, nextTestStep, parseRunArgs, projectRunGit, runListLine, runRecord, sessionToolLines, summarizeRun, UNATTENDED_NOTE, unattendedPrompt } from '../src/briefs/run.js'
 import { branchFor, briefFileList, parseBriefs } from '../src/briefs/briefs.js'
 import { harnessByKey } from '../src/harnesses/index.js'
-import { appendRunRecord, printCommand, printedRunsFolder, runnerCommitVersion, sessionStartedBy, startLane, takeProjectLock } from '../scripts/run-lane.mjs'
+import { appendRunRecord, printCommand, printedRunsFolder, projectLockName, runnerCommitVersion, sessionStartedBy, startLane, takeProjectLock } from '../scripts/run-lane.mjs'
 import { makeTempDir } from './helpers/tempRoot.js'
 
 const lanes = JSON.parse(readFileSync(new URL('../docs/agents/lanes.json', import.meta.url), 'utf8'))
@@ -1423,7 +1423,7 @@ describe('scripts/run-lane.mjs', () => {
 
       const reused = await runLane(args, runEnv)
       expect(reused.code).toBe(1)
-      expect(reused.stderr).toContain(`Another run is already going on ${project};`)
+      expect(reused.stderr).toContain('Another run is already going on %TEMP%\\project;')
 
       writeFileSync(laneLock, text)
       const live = await runLane(args, runEnv)
@@ -1432,6 +1432,51 @@ describe('scripts/run-lane.mjs', () => {
       expect(readFileSync(laneLock, 'utf8')).toBe(text)
       expect(laneLockPids(readFileSync(projectLock, 'utf8')).pid).toBe(process.pid)
     } finally {
+      rmSync(folder, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+    }
+  })
+
+  it('masks a profile folder in a project-lock refusal and a worktree dry run', async () => {
+    const folder = makeTempDir('machine-room-profile-project-')
+    const keys = ['USERPROFILE', 'HOME', 'TEMP', 'TMP']
+    const saved = Object.fromEntries(keys.map((key) => [key, process.env[key]]))
+    try {
+      const profile = join(folder, 'profile')
+      const project = join(profile, 'project')
+      const runs = join(folder, 'runs')
+      mkdirSync(project, { recursive: true })
+      mkdirSync(runs, { recursive: true })
+      const init = spawnSync(gitPath(), ['init'], { cwd: project, encoding: 'utf8', windowsHide: true })
+      expect(init.status).toBe(0)
+      const lanesFile = lanesFileUnderWorktrees(folder)
+      process.env.USERPROFILE = profile
+      process.env.HOME = profile
+      process.env.TEMP = folder
+      process.env.TMP = folder
+      const sep = process.platform === 'win32' ? '\\' : '/'
+      const shownProject = `%USERPROFILE%${sep}project`
+      takeProjectLock(runs, project)
+      expect(() => takeProjectLock(runs, project)).toThrow(`Another run is already going on ${shownProject};`)
+      writeFileSync(`${join(runs, `${projectLockName(project)}.lock`)}.takeover`, laneLockText({ pid: 2147483647 }))
+      expect(() => takeProjectLock(runs, project)).toThrow(`Another start on ${shownProject} stopped half way. Start it again.`)
+
+      const result = await runLane(['opencode', '--project', project, '--task', 'Fix it.', '--worktree', '--dry-run'], {
+        MACHINEROOM_LANES_FILE: lanesFile,
+        MACHINEROOM_RUNS: runs,
+        USERPROFILE: profile,
+        HOME: profile,
+        TEMP: folder,
+        TMP: folder,
+      })
+      expect(result.code, result.stdout + result.stderr).toBe(0)
+      expect(result.stdout).toContain(`project: ${shownProject}`)
+      expect(result.stdout).toContain(`worktree: ${shownProject}${sep}.worktrees${sep}opencode`)
+      expect(result.stdout).not.toContain(project)
+    } finally {
+      for (const key of keys) {
+        if (saved[key] === undefined) delete process.env[key]
+        else process.env[key] = saved[key]
+      }
       rmSync(folder, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
     }
   })

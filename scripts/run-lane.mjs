@@ -498,7 +498,7 @@ export function prepareWorktree(project, lane) {
 }
 
 function printWorktree(plan) {
-  console.log(`worktree: ${plan.path}`)
+  console.log(`worktree: ${printedRunsFolder(plan.path)}`)
   console.log(`worktree: ${plan.made ? 'would be made' : 'would be reused'}`)
 }
 
@@ -654,10 +654,10 @@ export function takeProjectLock(folder, project) {
   } catch (error) {
     const message = String(error?.message ?? error)
     if (message.includes('stopped half way')) {
-      throw new Error(`Another start on ${project} stopped half way. Start it again.`)
+      throw new Error(`Another start on ${printedRunsFolder(project)} stopped half way. Start it again.`)
     }
     if (message.includes('already running')) {
-      throw new Error(`Another run is already going on ${project}; wait for it to end, or delete ${printedRunsFolder(path)} if no run is going.`)
+      throw new Error(`Another run is already going on ${printedRunsFolder(project)}; wait for it to end, or delete ${printedRunsFolder(path)} if no run is going.`)
     }
     throw error
   }
@@ -961,7 +961,7 @@ async function runQueueProject({ options, lane, lanes }) {
     const plan = options.worktree ? worktreePlan(project, options.lane) : { path: project, made: false }
     const test = projectTestCommand(plan.made ? project : plan.path, options.test)
     console.log(`lane: ${options.lane}`)
-    console.log(`project: ${project}`)
+    console.log(`project: ${printedRunsFolder(project)}`)
     if (options.worktree) printWorktree(plan)
     console.log(`branch: ${branch}`)
     console.log(`tests: ${test || 'none, the project has no tests'}`)

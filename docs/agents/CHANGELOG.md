@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Project-lock refusals and queue or worktree dry runs print the project with the profile folder masked (P144).
 - A check of reviews 13, 15 and 16 found every non-blocking finding fixed but the merge check, which P124 holds (P137).
 - A Files marker inside backticks or quotes no longer hides a brief's real file list (P133).
 - Dry runs and lock refusals print their paths with the profile folders masked, and a lane's stale child lock no longer refuses a start (P140).
