@@ -7,7 +7,8 @@ import { newestRunFor, parseDiff, unreleasedRange } from '../src/briefs/review.j
 import { readAllRunRecords, runsFile } from '../server/runs.js'
 import { killTree, treeSpawnOptions } from '../server/processTree.js'
 import { gitPath } from '../server/programPath.js'
-import { lanesFolder, runsFolder } from '../server/lanes-source.js'
+import { lanesFolder, readAllLanes, runsFolder } from '../server/lanes-source.js'
+import { worktreeFor } from '../src/briefs/run.js'
 import { processAlive, readLaneLock } from './lane-lock.mjs'
 import { GRADES, recordOutcome } from './outcome.mjs'
 
@@ -198,6 +199,12 @@ function npmCliPath(env, execPath) {
   return places.find((place) => existsSync(place)) ?? null
 }
 
+function worktreeFromLane(root, lane, info) {
+  if (typeof info?.worktree === 'string' && info.worktree.trim() !== '') return resolve(root, info.worktree)
+  if (info?.custom === true) return worktreeFor(root, lane)
+  return ''
+}
+
 export function checkPrerequisites({
   root,
   lane,
@@ -231,22 +238,26 @@ export function checkPrerequisites({
   }
 
   const lanesFile = lanesPath ?? join(lanesFolder(), 'lanes.json')
-  let lanes = {}
+  let lanesJson = {}
   try {
-    lanes = JSON.parse(readFileSync(lanesFile, 'utf8'))
+    lanesJson = JSON.parse(readFileSync(lanesFile, 'utf8'))
   } catch {
     return { error: `${lanesFile} could not be read.` }
   }
-  if (!lanes || typeof lanes !== 'object' || !Object.hasOwn(lanes, lane)) {
+  if (!lanesJson || typeof lanesJson !== 'object' || Array.isArray(lanesJson)) {
+    return { error: `${lanesFile} could not be read.` }
+  }
+  const runsDirActual = runsDir ?? runsFolder()
+  const lanes = readAllLanes({ lanesJson, runsFolder: runsDirActual })
+  if (!Object.hasOwn(lanes, lane)) {
     return { error: `There is no lane named ${lane}.` }
   }
 
   const info = lanes[lane]
-  if (!info || typeof info.worktree !== 'string' || !info.worktree.trim()) {
-    return { error: `The lane ${lane} has no worktree in lanes.json.` }
+  const worktree = worktreeFromLane(root, lane, info)
+  if (!worktree) {
+    return { error: `The lane ${lane} has no worktree.` }
   }
-
-  const worktree = resolve(root, info.worktree)
   if (!existsSync(worktree)) {
     return { error: `The worktree ${worktree} does not exist.` }
   }
@@ -259,7 +270,6 @@ export function checkPrerequisites({
     return { error: `The worktree for ${lane} has uncommitted changes.` }
   }
 
-  const runsDirActual = runsDir ?? runsFolder()
   const lockPath = join(runsDirActual, `${lane}.lock`)
   if (existsSync(lockPath)) {
     const holder = readLaneLock(lockPath)
@@ -455,6 +465,7 @@ export function finishMerge({
   git = defaultGitRunner,
   outcomesPath = null,
   runsPath = null,
+  runsDir = null,
   changelogPath = null,
   packageJsonPath = null,
   lanesPath = null,
@@ -466,17 +477,22 @@ export function finishMerge({
   const mergeHead = mergeHeadRes.stdout.trim()
 
   const lanesFile = lanesPath ?? join(lanesFolder(), 'lanes.json')
-  let lanes = {}
+  let lanesJson = {}
   try {
-    lanes = JSON.parse(readFileSync(lanesFile, 'utf8'))
+    lanesJson = JSON.parse(readFileSync(lanesFile, 'utf8'))
   } catch {
     return { ok: false, error: `${lanesFile} could not be read.` }
   }
-  const info = lanes[lane]
-  if (!info || typeof info.worktree !== 'string' || !info.worktree.trim()) {
-    return { ok: false, error: `The lane ${lane} has no worktree in lanes.json.` }
+  if (!lanesJson || typeof lanesJson !== 'object' || Array.isArray(lanesJson)) {
+    return { ok: false, error: `${lanesFile} could not be read.` }
   }
-  const worktree = resolve(root, info.worktree)
+  const agentsFolder = runsDir ?? (runsPath ? dirname(resolve(runsPath)) : runsFolder())
+  const lanes = readAllLanes({ lanesJson, runsFolder: agentsFolder })
+  const info = lanes[lane]
+  const worktree = worktreeFromLane(root, lane, info)
+  if (!worktree) {
+    return { ok: false, error: `The lane ${lane} has no worktree.` }
+  }
   const branchRes = git(worktree, ['branch', '--show-current'])
   const branch = (branchRes.stdout ?? '').trim()
   const headRes = git(root, ['rev-parse', '--verify', '--quiet', `refs/heads/${branch}^{commit}`])
