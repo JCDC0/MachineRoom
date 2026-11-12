@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The run-lane stop tests wait until the harness grandchild and the helper processes are in the process list before the stop, and wait for the grandchild to be gone in place of fixed sleeps (P66).
 - Reviews and the doctor read the room's lanes with the lanes the owner made, the routing policy is read from the folder the lanes come from, and lane script errors name the file read (P65).
 - A brief runs on a lane the owner made with its harness, the brief prompt route reads the room's lanes and names them when it refuses, a policy patch names the file the room reads, and Auto says when the policy sends a tier to the owner (P64).
 - A lane made on a project with no active choice becomes its first active lane, Dispatch no longer offers the orchestrator, a team saved before any choice keeps the visible lanes, and the Team tab says lanes are made in the family tree (P63).

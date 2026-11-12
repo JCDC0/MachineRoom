@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
-import { killTree } from '../server/processTree.js'
+import { descendantProcesses, killTree, leftoverProcesses, listProcesses } from '../server/processTree.js'
 import { readLaneLock, releaseLaneLock, takeLaneLock, processAlive } from '../scripts/lane-lock.mjs'
 import { isResultLine, startLane, stopLane } from '../scripts/run-lane.mjs'
 import { laneLockText } from '../src/briefs/run.js'
@@ -26,17 +26,22 @@ function tempDir(prefix) {
   return folder
 }
 
-function sleep(ms) {
-  return new Promise((settle) => setTimeout(settle, ms))
-}
-
 async function waitUntil(fn, timeoutMs = 15000) {
   const deadline = Date.now() + timeoutMs
   while (Date.now() < deadline) {
     if (fn()) return true
-    await sleep(50)
+    await new Promise((settle) => setTimeout(settle, 50))
   }
   return false
+}
+
+function readStartedPid(path) {
+  try {
+    const pid = Number(readFileSync(path, 'utf8').trim())
+    return Number.isInteger(pid) && pid > 0 ? pid : 0
+  } catch {
+    return 0
+  }
 }
 
 function runLane(args, env) {
@@ -84,14 +89,13 @@ function writeFakeHarness(project, mark, started, { stay = true } = {}) {
   const late = join(project, 'late.cjs')
   writeFileSync(late, [
     "const { writeFileSync } = require('node:fs')",
-    `setTimeout(() => writeFileSync(${JSON.stringify(mark)}, 'late'), 6000)`,
+    `writeFileSync(${JSON.stringify(started)}, String(process.pid))`,
+    `setTimeout(() => { try { writeFileSync(${JSON.stringify(mark)}, 'late') } catch {} }, 6000)`,
     '',
   ].join('\n'))
   const script = join(project, 'run')
   writeFileSync(script, [
     "const { spawn } = require('node:child_process')",
-    "const { writeFileSync } = require('node:fs')",
-    `writeFileSync(${JSON.stringify(started)}, 'started')`,
     `const grandchild = spawn(process.execPath, [${JSON.stringify(late)}, ${JSON.stringify(project)}], { detached: true, stdio: 'ignore', windowsHide: true })`,
     'grandchild.unref()',
     stay ? 'setTimeout(() => {}, 60000)' : '',
@@ -104,14 +108,13 @@ function writeFakeHarnessHoldingStdout(project, mark, started, { holdMs = 8000 }
   const late = join(project, 'late.cjs')
   writeFileSync(late, [
     "const { writeFileSync } = require('node:fs')",
+    `writeFileSync(${JSON.stringify(started)}, String(process.pid))`,
     `setTimeout(() => { try { writeFileSync(${JSON.stringify(mark)}, 'late') } catch {} }, ${holdMs})`,
     '',
   ].join('\n'))
   const script = join(project, 'run')
   writeFileSync(script, [
     "const { spawn } = require('node:child_process')",
-    "const { writeFileSync } = require('node:fs')",
-    `writeFileSync(${JSON.stringify(started)}, 'started')`,
     `const grandchild = spawn(process.execPath, [${JSON.stringify(late)}, ${JSON.stringify(project)}], { detached: true, stdio: [0, 1, 2], windowsHide: true })`,
     'grandchild.unref()',
     "console.log('{\"type\":\"text\",\"part\":{\"type\":\"text\",\"text\":\"fake harness\"}}')",
@@ -123,14 +126,13 @@ function writeFakeHangingResultHarness(project, started, { holdMs = 8000 } = {})
   const late = join(project, 'late.cjs')
   writeFileSync(late, [
     "const { writeFileSync } = require('node:fs')",
+    `writeFileSync(${JSON.stringify(started)}, String(process.pid))`,
     `setTimeout(() => {}, ${holdMs})`,
     '',
   ].join('\n'))
   const script = join(project, 'run')
   writeFileSync(script, [
     "const { spawn } = require('node:child_process')",
-    "const { writeFileSync } = require('node:fs')",
-    `writeFileSync(${JSON.stringify(started)}, 'started')`,
     `const grandchild = spawn(process.execPath, [${JSON.stringify(late)}, ${JSON.stringify(project)}], { detached: true, stdio: [0, 1, 2], windowsHide: true })`,
     'grandchild.unref()',
     "console.log('{\"event\":\"result\",\"result\":{\"status\":\"SUCCESS\"}}')",
@@ -160,12 +162,21 @@ describe('a stopped lane stays stopped', () => {
     const started = join(project, 'started.txt')
     writeFakeHarness(project, mark, started)
     const run = runLane(['fake', '--project', project, '--task', 'Do it.'], env)
-    expect(await waitUntil(() => existsSync(started) && existsSync(join(runs, 'fake.lock')))).toBe(true)
-    const lock = readLaneLock(join(runs, 'fake.lock'))
+    let lock
+    let grandchildPid = 0
+    const ready = await waitUntil(() => {
+      lock = readLaneLock(join(runs, 'fake.lock'))
+      if (!Number.isInteger(lock.child) || lock.child <= 0) return false
+      grandchildPid = readStartedPid(started)
+      if (grandchildPid <= 0) return false
+      return descendantProcesses(listProcesses(), { rootPid: lock.child, ownPid: process.pid }).some((item) => item.pid === grandchildPid)
+    })
+    expect(ready, 'the harness and its grandchild were not in the process list').toBe(true)
     expect(lock.pid).toBeGreaterThan(0)
     expect(lock.child).toBeGreaterThan(0)
     expect(lock.folder).toBe(project)
     expect(lock.projectRun).toBe(true)
+    expect(processAlive(grandchildPid)).toBe(true)
 
     const stopped = await runLane(['--stop', 'fake'], env)
     expect(stopped.code).toBe(0)
@@ -173,9 +184,9 @@ describe('a stopped lane stays stopped', () => {
     expect(stopped.stdout).toContain('leftover: stopped')
     expect(existsSync(join(runs, 'fake.lock'))).toBe(false)
     expect(await waitUntil(() => !processAlive(lock.pid), 5000), `the run ${lock.pid} is still alive`).toBe(true)
+    expect(await waitUntil(() => !processAlive(grandchildPid), 5000), `the grandchild ${grandchildPid} is still alive`).toBe(true)
     const finished = await run
     expect(finished.code === null || Number.isInteger(finished.code)).toBe(true)
-    await sleep(6600)
     expect(existsSync(mark)).toBe(false)
   }, 40000)
 
@@ -202,7 +213,13 @@ describe('a stopped lane stays stopped', () => {
         lockPath: lock,
       })
       expect(run.killed).toBe(true)
-      await sleep(6600)
+      const grandchildPid = readStartedPid(started)
+      if (grandchildPid > 0) {
+        expect(await waitUntil(() => !processAlive(grandchildPid), 5000), `the grandchild ${grandchildPid} is still alive`).toBe(true)
+      } else {
+        const harnessPid = readLaneLock(lock).child
+        expect(await waitUntil(() => descendantProcesses(listProcesses(), { rootPid: harnessPid, ownPid: process.pid }).length === 0, 5000), 'the harness still has a child').toBe(true)
+      }
       expect(existsSync(mark)).toBe(false)
       const record = JSON.parse(readFileSync(join(runs, 'runs.jsonl'), 'utf8').trim())
       expect(record.lane).toBe('fake')
@@ -226,11 +243,15 @@ describe('a stopped lane stays stopped', () => {
   it('refuses a new run while a process still names the worktree the lock recorded', async () => {
     const { project, runs, env } = setup('mr-run-leftover-')
     writeFileSync(join(runs, 'fake.lock'), laneLockText({ pid: DEAD_PID, folder: project }))
-    const leftover = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 60000)', project], {
+    const began = join(project, 'leftover-started.txt')
+    const leftoverScript = `require('node:fs').writeFileSync(${JSON.stringify(began)}, String(process.pid)); setTimeout(() => {}, 60000)`
+    const leftover = spawn(process.execPath, ['-e', leftoverScript, project], {
       stdio: 'ignore',
       windowsHide: true,
     })
     cleanups.push(() => killTree(leftover))
+    const leftoverReady = await waitUntil(() => existsSync(began) && leftoverProcesses(listProcesses(), { worktree: project, ownPid: process.pid }).some((item) => item.pid === leftover.pid))
+    expect(leftoverReady, 'the leftover process was not in the process list').toBe(true)
     const result = await runLane(['fake', '--project', project, '--task', 'Do it.'], env)
     expect(result.code).toBe(1)
     expect(result.stderr).toContain(`The fake lane still has leftover process ${leftover.pid}; stop it with npm run run-lane -- --stop fake.`)
@@ -240,11 +261,15 @@ describe('a stopped lane stays stopped', () => {
   it('does not take a process that names a project run without its own worktree', async () => {
     const { project, runs, env } = setup('mr-run-editor-')
     writeFileSync(join(runs, 'fake.lock'), laneLockText({ pid: DEAD_PID }))
-    const editor = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 60000)', project], {
+    const began = join(project, 'editor-started.txt')
+    const editorScript = `require('node:fs').writeFileSync(${JSON.stringify(began)}, String(process.pid)); setTimeout(() => {}, 60000)`
+    const editor = spawn(process.execPath, ['-e', editorScript, project], {
       stdio: 'ignore',
       windowsHide: true,
     })
     cleanups.push(() => killTree(editor))
+    const editorReady = await waitUntil(() => existsSync(began) && leftoverProcesses(listProcesses(), { worktree: project, ownPid: process.pid }).some((item) => item.pid === editor.pid))
+    expect(editorReady, 'the editor process was not in the process list').toBe(true)
     const result = await runLane(['fake', '--project', project, '--task', 'Do it.'], env)
     expect(result.stderr).not.toContain('leftover process')
     expect(result.stdout).not.toContain(`leftover: stopped ${editor.pid}`)
@@ -270,7 +295,10 @@ describe('a stopped lane stays stopped', () => {
     expect(record.note).toBe('leftovers were stopped')
     // Linux gives an orphan to init, so its parent chain no longer reaches the harness.
     if (process.platform === 'win32') expect(record.stoppedLeftovers).toBeGreaterThan(0)
-    await sleep(500)
+    const grandchildPid = readStartedPid(started)
+    if (grandchildPid > 0) {
+      expect(await waitUntil(() => !processAlive(grandchildPid), 5000), `the grandchild ${grandchildPid} is still alive`).toBe(true)
+    }
     expect(existsSync(mark)).toBe(false)
   }, 30000)
 
