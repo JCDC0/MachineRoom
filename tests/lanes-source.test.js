@@ -85,8 +85,8 @@ function git(cwd, args) {
 describe('lane agents', () => {
   it('lists one agent per lane with a command line and leaves retired lanes out', () => {
     const agents = laneAgents(realLanes)
-    expect(agents.map((agent) => agent.key)).toEqual(['orchestrator', 'opencode', 'opencode2', 'opencode3', 'opencode4', 'opencode5', 'opencode6', 'opencode7', 'agy', 'agy2', 'agy3', 'claude', 'codex', 'native'])
-    expect(agents.filter((agent) => !agent.key.startsWith('agy') && agent.key !== 'claude' && agent.key !== 'codex' && agent.key !== 'native' && agent.key !== 'orchestrator').every((agent) => agent.parser === 'opencode' && agent.adapterType === 'opencode_local')).toBe(true)
+    expect(agents.map((agent) => agent.key)).toEqual(['orchestrator', 'opencode', 'opencode2', 'opencode3', 'opencode4', 'opencode5', 'opencode6', 'opencode7', 'agy', 'agy2', 'agy3', 'claude', 'codex', 'native', 'native2'])
+    expect(agents.filter((agent) => !agent.key.startsWith('agy') && agent.key !== 'claude' && agent.key !== 'codex' && !agent.key.startsWith('native') && agent.key !== 'orchestrator').every((agent) => agent.parser === 'opencode' && agent.adapterType === 'opencode_local')).toBe(true)
     expect(agents.find((agent) => agent.key === 'codex')).toMatchObject({ name: 'Codex', parser: 'codex', adapterType: 'codex_local' })
     expect(agents.find((agent) => agent.key === 'native')).toMatchObject({ name: 'MachineRoom native', adapterType: 'machineroom_local' })
     expect(agents.find((agent) => agent.key === 'opencode2').name).toBe('OpenCode 2')
@@ -97,7 +97,7 @@ describe('lane agents', () => {
       model: 'opencode-go/deepseek-v4.1-flash',
     })
     expect(agents.some((agent) => agent.key === 'hermes')).toBe(false)
-    expect(agents.find((agent) => agent.key === 'opencode6')).toMatchObject({ harness: 'opencode', model: 'opencode/crouton-alpha-free' })
+    expect(agents.find((agent) => agent.key === 'opencode6')).toMatchObject({ harness: 'opencode', model: 'opencode-go/deepseek-v4.1-flash' })
     expect(agents.some((agent) => agent.key === 'opencode8' || agent.key === 'opencode10')).toBe(false)
     expect(agents.find((agent) => agent.key === 'agy3')).toMatchObject({ parser: 'agy', adapterType: 'process' })
   })

@@ -895,3 +895,49 @@ The owner watched the orchestrator in the room and saw it write `run-lane.mjs`, 
 Run `npx vitest related --run src/model/commands.js` and `npm run build`; both must pass.
 
 Files: src/model/commands.js, tests/.
+
+
+## Twelve lanes (2026-11-12, evening)
+
+The owner asked for twelve lanes at once before the computer shuts down: six OpenCode, three AGY, Codex as the orchestrator's planner, and two native lanes on OpenRouter. These briefs are small and touch different files, so they run side by side; timings measured tonight are high, since the machine is loaded.
+
+**P87. Why a lane's worktree moved to an old branch (AGY).** Read no part of TASKS.md beyond this brief. Change no code. Use no subagents. Run every command in the foreground. Write the file by minute 40.
+
+On 2026-11-12 at 21:04 the `opencode` lane committed P75 on `feat/p75-the-runner-commits`. At 21:05 the runner crashed, because a disk cleanup had deleted its runs folder (`ENOENT ... runs.jsonl`). At 21:06:26 the reflog of `.worktrees/opencode` shows `checkout: moving from feat/p75-the-runner-commits to feat/p70-the-fixes-from`, an old merged branch. Read `scripts/run-lane.mjs` from the end of a run to its exit, and every place that switches a worktree's branch (`switch`, `checkout`, the move to a detached `refs/heads/main` before a run), and find what can switch a worktree to a branch named in an older run record when the newest record is missing. Prove it with a temp repository and runs folder if you can. Write `docs/agents/AUDIT-2026-11-WORKTREE-SWITCH.md`: what switched it, `file:line`, when it can happen again, and the smallest fix; or, if nothing in the code can, say so and list what else ran.
+
+Files: docs/agents/AUDIT-2026-11-WORKTREE-SWITCH.md.
+
+**P88. A native lane's run is recorded (AGY).** Read no part of TASKS.md beyond this brief. Use no subagents. Run every command in the foreground. Commit each step as you finish it, and stop starting new work at minute 30. Edit only the files listed.
+
+`scripts/recording-files.mjs:31` refuses a `machineroom` lane with `has no command line, so its run cannot be recorded.`, so the native lanes' runs get no recording.
+
+1. `laneOf` accepts a `machineroom` lane, and its run log becomes a recording with the frames `createClaudeParser` gives, as the machineroom harness reads its own log.
+2. Tests, by what they prove: a short machineroom run log (an assistant line, a tool call, a result) becomes a recording; an unknown harness is still refused with the same sentence.
+
+Run `npx vitest related --run scripts/recording-files.mjs` and `npm run build`; both must pass.
+
+Files: scripts/recording-files.mjs, tests/run-recording.test.js.
+
+**P89. The native agent stops at a cost limit (AGY).** Read no part of TASKS.md beyond this brief. Use no subagents. Run every command in the foreground. Commit each step as you finish it, and stop starting new work at minute 35. Edit only the files listed.
+
+The native lanes run on the owner's OpenRouter key and `scripts/mr-agent.mjs` has a step limit but no cost limit.
+
+1. `MR_AGENT_MAX_COST_USD`, when set to a number above 0, stops the agent before its next request once the cost it has counted from the answers' usage (`usageOf`) reaches the limit, and it prints `Stopped at the cost limit of $N.` as its last line and exits 3. Unset, nothing changes.
+2. `src/briefs/run.js` passes `MR_AGENT_MAX_COST_USD` to a `machineroom` lane with its key names (`HARNESS_KEY_NAMES.machineroom`), and to no other harness.
+3. Tests with a fake endpoint, by what they prove: two answers of $0.02 with a limit of $0.03 stop before the third request with the sentence and exit 3; no limit runs on; an answer with no cost counts as 0; the variable reaches only a machineroom lane.
+
+Run `npx vitest related --run scripts/mr-agent.mjs src/briefs/run.js` and `npm run build`; both must pass.
+
+Files: scripts/mr-agent.mjs, src/briefs/run.js, tests/.
+
+**P90. Codex plans the next round with the orchestrator (Codex).** Read `docs/agents/OWNER.md`, the newest two sections of TASKS.md, `docs/agents/PLAN.md` and `docs/agents/AUDIT-2026-11-OWNER-ROOM.md`. Change no code. Do not commit: the runner commits your file.
+
+Write `docs/agents/PLAN-CODEX-2026-11-12.md`: the next ten briefs you would give the fleet after P77 to P89, ranked by what the owner would notice most. For each: a one-line title, why, the files it touches, the lane kind that suits it (OpenCode for code, AGY for backend steps, Codex for reviews and plans, native for small reviews and doc checks), and whether it needs the owner's yes (a feature or a change of look does). Read the code each one names before you list it, and name `file:line` for each claim. Mark which ones can run at the same time without sharing a file.
+
+Files: docs/agents/PLAN-CODEX-2026-11-12.md.
+
+**P91. Do the docs match the code after P70 to P76 (MachineRoom native).** Read no part of TASKS.md beyond this brief. Change no code. Write the file by minute 30.
+
+For each merge `23bad3c1`, `580a28cf`, `909f00fa`, `1e027045`, `3bb13972`, `b6bd90f7` and `4a3eebce`, read its changelog line and the lines of `docs/agents/architecture/LIVE.md`, `COMMANDS.md`, `CODE.md` and `docs/GUIDE.md` that describe what it changed, and check each sentence against the code. Write `docs/agents/AUDIT-2026-11-DOCS-P70-P76.md`: a table of each sentence that is wrong or missing, with the doc line, the code `file:line` and the sentence it should be. An empty table with what you checked is a good answer.
+
+Files: docs/agents/AUDIT-2026-11-DOCS-P70-P76.md.

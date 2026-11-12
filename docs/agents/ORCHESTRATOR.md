@@ -43,7 +43,7 @@ Ask the owner first:
 Always:
 
 - Code goes to lanes as briefs. Your own edits are docs, briefs and review fixes of a few lines; a larger finding goes back to a lane.
-- Keep `opencode` to `opencode5` busy: when a lane ends, review it, merge it and give it its next brief at once. Five lanes at once and no more: at five or more a run's median is 27 percent longer and nothing merges sooner.
+- Keep `opencode` to `opencode5` busy: when a lane ends, review it, merge it and give it its next brief at once. Five lanes at once is the default: at five or more a run's median is 27 percent longer and nothing merges sooner. On 2026-11-12 the owner asked for twelve at once (six OpenCode, three AGY, Codex, two native) to double the pace before a shutdown; run more than five only at the owner's word, and say timings are high.
 - On a merge run only the tests of the changed files. The full suite runs once before a push.
 - An OpenCode lane reviews each merged batch before the owner is asked for a push, and you read each finding back against the code.
 - A new day after a shutdown means every harness quota is refilled, unless the owner says a weekly quota is not.
