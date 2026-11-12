@@ -1290,3 +1290,47 @@ Review 15 (`docs/agents/AUDIT-2026-11-REVIEW-15.md`, finding 3) found that `run-
 2. Every path `run-lane` prints for the owner goes through it: the `log:` and `record:` lines, the recovery sentence, and the `--list` and `--stats` output if they print a path. The files written and the paths passed to the harness do not change.
 3. Tests, by what they prove: a log path under the profile prints with `%USERPROFILE%`; a Linux runs folder under HOME prints with `~`; the longest prefix wins (`%LOCALAPPDATA%` over `%USERPROFILE%`); a path outside them all prints as it is. Write the Windows cases so they run on Linux too, by passing the variables and using `path.win32` where the code needs it, or mark them Windows only with `it.skipIf(process.platform !== 'win32')`.
 4. Run `node node_modules/vitest/vitest.mjs run tests/run-lane.test.js` and `npm run build`. Report what passed.
+
+## The last batch before the 4 am shutdown (2026-11-13)
+
+Each brief below touches its own files. Every lane stops starting new work at minute 35, because the machine shuts down at 4 am.
+
+**P124. The merge check no longer blocks the bridge (OpenCode).** Read review 16 (`docs/agents/AUDIT-2026-11-REVIEW-16.md`, the P94 row) and this brief only. Use no subagents. Run every command in the foreground. Commit each step as you finish it. Files: server/orchestrator.js, tests/orchestrator.test.js, docs/agents/CHANGELOG.md.
+
+1. `gitOperationInProgress` in `server/orchestrator.js` uses `spawnSync` on the bridge's event loop. Make it async with `spawn` and the same timeout, and have `maybeStartTurn` await it (or start it and continue in its callback), so a slow git never freezes requests, streams or timers. A check that fails or times out still answers false, as now.
+2. Guard against two checks at once: while one runs, a second `maybeStartTurn` waits for it rather than starting another git.
+3. Tests, by what they prove: a git that takes long does not delay a timer or another request; a merge in progress still defers a room turn; a failed check lets the turn start.
+4. Run `node node_modules/vitest/vitest.mjs related --run server/orchestrator.js` and `npm run build`. Report what passed.
+
+**P125. A project switch reads a lane lock the way the runner does (AGY).** Read this brief only. Use no subagents. Run every command in the foreground. Commit each step as you finish it. Files: server/projects.js, scripts/lane-lock.mjs, tests/projects.test.js, tests/lane-lock.test.js, docs/agents/CHANGELOG.md.
+
+1. `laneLockRunning` in `server/projects.js` counts a lock as live when its pid answers `process.kill(pid, 0)`. On Windows a pid is reused, so a stale lock can block a project switch forever. `scripts/lane-lock.mjs` already has `isHolderAlive`, which also compares the process start time with the lock file's time (`isLockHolderStale`). Export it and use it in `projects.js` for both the pid and the child pid, so both places decide the same way.
+2. Tests, by what they prove: a lock whose pid is alive but started after the lock was written does not block a switch on Windows; a live holder still blocks; a dead pid does not.
+3. Run `node node_modules/vitest/vitest.mjs related --run server/projects.js scripts/lane-lock.mjs` and `npm run build`. Report what passed.
+
+**P126. Review the merges since review 18 (Codex).** Read `docs/agents/OWNER.md` and this brief only. Change no code. Do not commit: the runner commits your file. Files: docs/agents/AUDIT-2026-11-REVIEW-19.md.
+
+Review, with `git show -m --first-parent SHA` or `git show SHA`, against the code around each change: `4782700c` (P120, agent messages masked, kept on load, a failed setup clears the session id), `0be42340` (P121, a brief's file list ends at its paragraph; a cost limit stops on a rejected fetch), `4c7404e9` (P122, fork reads the live length, menu keys consumed), `0b802e9e` and `57ca054b` (CI test fixes in `tests/run-lane.test.js` and `scripts/scale-probe.mjs`), `612bfce3` and `67ca5cfc` (the lane models in `docs/agents/lanes.json` and `server/model-list.js`). Hunt for: a key or profile path that still reaches the page, a log or a record; a saved message from an unknown sender accepted on load; a file list that drops a real file or keeps a wrong one; a paid request sent twice; a fork or menu key that acts on the wrong row; a test fix that hides a real failure on one platform; a lane model id the harness cannot run. Write the file: a table of at most 8 findings, the most harmful first, each with `file:line`, what goes wrong and when, the smallest fix, and whether it blocks a push. Write no finding you cannot point to in the code. An empty table with what you checked is a good answer.
+
+**P127. The detail docs catch up with P113 to P123 (OpenCode).** Read this brief, `docs/agents/ARCHITECTURE.md` and the detail files it names. Use no subagents. Commit each step as you finish it. Change no code. Files: docs/agents/architecture/ROOM.md, docs/agents/architecture/LIVE.md, docs/agents/architecture/COMMANDS.md, docs/agents/architecture/CODE.md.
+
+1. Read the merges since `6ea44c42` with `git log --first-parent --oneline 6ea44c42..HEAD` and `git show -m --first-parent`. Bring the four detail files in line with the code: the chat's To choice and agent message lines (P113), one menu per conversation with search, sort, unread, archive and fork (P115, P122), agent messages kept on load and masked (P120), the runner's commit rules and a brief's whole body (P116, P121), the cost limit stops (P117, P121), and the AGY lanes on Gemini 4 Hydrogen.
+2. Plain words, short sentences, no em dashes. Where a doc disagrees with the code, the code wins; name each such fix in your report.
+
+**P128. The file-index test follows the new append rule (OpenCode).** Read this brief only. Use no subagents. Run every command in the foreground. Commit each step as you finish it. Files: tests/file-index.test.js, docs/agents/CHANGELOG.md.
+
+1. `tests/file-index.test.js`, "matches the old walk on every shell command in the recordings", compares `touchesForCommand` with the file index against an old walk. Since P110 a command such as `cat >> name~` reads rather than writes, and the old walk in the test still expects a write, so the test fails wherever `public/recordings` holds such a command (the owner's machine; CI has none).
+2. Make the old walk in the test follow the same rule as `src/model/commands.js` now does, by importing the rule or the helper, not by copying it. Do not change `src/`.
+3. Add one small recording-free case with `cat >> name~` so the rule is covered on CI too.
+4. Run `node node_modules/vitest/vitest.mjs run tests/file-index.test.js`. Report what passed.
+
+**P129. Two tests that fail only under load (OpenCode).** Read this brief only. Use no subagents. Run every command in the foreground. Commit each step as you finish it. Files: tests/tree-partial.test.js, tests/git.test.js, docs/agents/CHANGELOG.md.
+
+1. In a full local run, `tests/tree-partial.test.js` "follows the tenth partial read with a full one" (near line 552, `expect(counts.full).toBe(0)`) and `tests/git.test.js` "refuses a concurrent write with 409 while a write is running" sometimes fail, and pass when run alone. Find the timing each one depends on (a watcher debounce, a fixed wait, a write that ends before the second request) and make the test wait for the state it needs, not for time. Do not change `server/` or `src/` unless the test shows a real bug; then stop and report it instead.
+2. Run each file ten times in a row with `--maxWorkers=1` and once with the full suite's worker count, and report the counts.
+
+**P130. The plan and the core guide say what is open (OpenCode).** Read this brief, `docs/agents/PLAN.md` and `docs/agents/ARCHITECTURE.md`. Use no subagents. Commit each step as you finish it. Change no code. Files: docs/agents/PLAN.md, docs/agents/ARCHITECTURE.md, docs/agents/architecture/DOCUMENTS.md.
+
+1. `PLAN.md` "Next" still lists N5, N6 and N12 as open, but `docs/agents/AUDIT-2026-10.md` marks N6 fixed (S42) and N5 and N12 accepted. Rewrite "Open now" from the audits' own status columns (reviews 13 and 15 to 18 in `docs/agents/AUDIT-2026-11-REVIEW-*.md`, the V3, V6, V7, UI and delta audits) and the briefs still open in `TASKS.md`.
+2. `ARCHITECTURE.md` "Open work": name reviews 13 and 15 to 18 and that their blocking findings are fixed (P104 to P122). Keep the file short.
+3. `architecture/DOCUMENTS.md` lists every file in `docs/agents`; add the review and audit files it lacks.
