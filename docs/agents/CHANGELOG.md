@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The scale probe times each tree read and takes --tree-only and --server, and AUDIT-2026-11-TREE-COST.md records that the deleted-file list of P51 makes a full tree read about five times as long: 470 to 2645 ms at 40,000 files and 2749 to 14339 ms at 200,000 (P67).
 - The run-lane stop tests wait until the harness grandchild and the helper processes are in the process list before the stop, and wait for the grandchild to be gone in place of fixed sleeps (P66).
 - Reviews and the doctor read the room's lanes with the lanes the owner made, the routing policy is read from the folder the lanes come from, and lane script errors name the file read (P65).
 - A brief runs on a lane the owner made with its harness, the brief prompt route reads the room's lanes and names them when it refuses, a policy patch names the file the room reads, and Auto says when the policy sends a tier to the owner (P64).
