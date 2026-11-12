@@ -34,6 +34,41 @@ export function lastJsonLine(log, match) {
   return last
 }
 
+const TERMINAL_OSC = /\u001B\][^\u0007]*(?:\u0007|\u001B\\)/g
+const TERMINAL_CSI = /\u001B\[[0-9;?]*[ -/]*[@-~]/g
+const TOOL_LINE = /^(?:Executing|Running|Reading|Writing|Editing|Searching|Session|Run|Copilot|\$)/i
+
+export function terminalText(text) {
+  return String(text ?? '')
+    .replace(TERMINAL_OSC, '')
+    .replace(TERMINAL_CSI, '')
+}
+
+export function lastPlainBlock(text) {
+  const clean = terminalText(text).replace(/\r\n?/g, '\n')
+  const blocks = []
+  let block = []
+  const flush = () => {
+    const value = block.join('\n').trim()
+    if (value) blocks.push(value)
+    block = []
+  }
+  for (const line of clean.split('\n')) {
+    const trimmed = line.trim()
+    if (!trimmed) {
+      flush()
+      continue
+    }
+    if (TOOL_LINE.test(trimmed)) {
+      flush()
+      continue
+    }
+    block.push(line)
+  }
+  flush()
+  return blocks.length > 0 ? blocks[blocks.length - 1] : ''
+}
+
 export function tokenCount(value) {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null
 }

@@ -195,6 +195,18 @@ describe('copilot harness report and usage', () => {
     expect(copilotHarness.report(log)).toEqual(['Everything looks good.'])
   })
 
+  it('keeps tool output and terminal codes out of a plain-text reply', () => {
+    const log = [
+      '\u001B[32mSession started\u001B[0m',
+      'Running command: npm run build',
+      '> machine-room@0.1.401 build',
+      'dist/index.js  1.2 kB',
+      '\u001B[31mSession completed\u001B[0m',
+      '\u001B[32mThe turn is done.\u001B[0m',
+    ].join('\n')
+    expect(copilotHarness.reply(log)).toBe('The turn is done.')
+  })
+
   it('extracts token counts from usage or tokens field', () => {
     const log = lines({
       type: 'session.completed',

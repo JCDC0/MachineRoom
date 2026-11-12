@@ -30,6 +30,7 @@ import {
   isSendKey,
   modeClass,
   modeLabel,
+  nearChatBottom,
   needsStartConfirm,
   normalizeApprovals,
   normalizeChat,
@@ -41,6 +42,8 @@ import {
   statusDetail,
   statusTone,
   teamLines,
+  workRows,
+  workText,
 } from './orchestratorChat.js'
 import { OPEN_CHAT_EVENT } from './transportOrchestrators.js'
 import {
@@ -165,6 +168,8 @@ export default function OrchestratorChat({
   const [unavailable, setUnavailable] = useState(false)
   const [error, setError] = useState(null)
   const [copiedId, setCopiedId] = useState('')
+  const [atBottom, setAtBottom] = useState(true)
+  const [openWork, setOpenWork] = useState({})
   const [readError, setReadError] = useState(null)
   const [listError, setListError] = useState(null)
   const [teamFailed, setTeamFailed] = useState([])
@@ -287,6 +292,10 @@ export default function OrchestratorChat({
   const project = teamSelected ? chats.orchestrator?.project ?? '' : chat.project
   const projectLabel = projectBaseName(project)
   const lines = teamSelected ? [] : chatLines(chat, ORCH_MAX_LINES, { id: selected })
+  const workKey = lines
+    .filter((line) => line.work)
+    .map((line) => `${line.id}|${line.work.state}|${line.work.steps.length}|${line.work.seconds}`)
+    .join(';')
   const teamKey = subs.map((entry) => entry.id).join('\n')
   const teamEntries = [
     { id: 'orchestrator', name: 'Main', chat: chats.orchestrator },
@@ -536,6 +545,7 @@ export default function OrchestratorChat({
 
   useEffect(() => {
     setTeamOpen(false)
+    setAtBottom(true)
   }, [selected])
 
   useEffect(() => {
@@ -581,10 +591,10 @@ export default function OrchestratorChat({
   )
 
   useEffect(() => {
-    if (open && logRef.current) {
-      logRef.current.scrollTop = logRef.current.scrollHeight
-    }
-  }, [open, selected, lines.length, teamRows.length])
+    if (!open || !atBottom) return
+    const node = logRef.current
+    if (node) node.scrollTop = node.scrollHeight
+  }, [open, selected, lines.length, workKey, teamRows.length, atBottom])
 
   useEffect(() => {
     if (!modelConfirm && !effortConfirm && !modeConfirm && !compactOpen) return undefined
@@ -706,6 +716,20 @@ export default function OrchestratorChat({
     else setOwnSelected(id)
   }
 
+  function onLogScroll() {
+    setAtBottom(nearChatBottom(logRef.current))
+  }
+
+  function jumpToNewest() {
+    setAtBottom(true)
+    const node = logRef.current
+    if (node) node.scrollTop = node.scrollHeight
+  }
+
+  function toggleWork(id) {
+    setOpenWork((current) => ({ ...current, [id]: !current[id] }))
+  }
+
   function teamName(id) {
     if (id === 'orchestrator') return 'Main'
     const entry = list.find((item) => item.id === id)
@@ -728,6 +752,7 @@ export default function OrchestratorChat({
     }
     setStartedIds((currentStarted) => ({ ...currentStarted, [id]: true }))
     setDraft((currentDraft) => (currentDraft.trim() === text ? '' : currentDraft))
+    jumpToNewest()
     if (id === selected) await readChatRef.current?.()
     await readListRef.current?.()
   }
@@ -1343,7 +1368,7 @@ export default function OrchestratorChat({
         </div>
       ) : (
         <>
-          <div className="mr-orch-log" role="log" aria-live="polite" ref={logRef}>
+          <div className="mr-orch-log" role="log" aria-live="polite" ref={logRef} onScroll={onLogScroll}>
             {lines.length === 0 ? (
               <p className="mr-orch-empty">
                 {loaded ? 'Tell the orchestrator what you want built.' : 'Reading the chat.'}
@@ -1360,11 +1385,37 @@ export default function OrchestratorChat({
                       <ChatBlocks text={line.text} />
                     </div>
                   )}
+                  {line.work ? (
+                    <div className={`mr-orch-work${line.work.state === 'working' ? ' is-working' : ''}`}>
+                      <button
+                        type="button"
+                        className="mr-orch-work-line mono"
+                        aria-expanded={openWork[line.id] === true}
+                        onClick={() => toggleWork(line.id)}
+                        disabled={line.work.steps.length === 0}
+                      >
+                        {workText(line.work)}
+                      </button>
+                      {openWork[line.id] === true && line.work.steps.length > 0 ? (
+                        <ol className="mr-orch-work-steps mono">
+                          {workRows(line.work).map((row, stepIndex) => (
+                            <li key={`${line.id}-${stepIndex}`}>{row.text}</li>
+                          ))}
+                        </ol>
+                      ) : null}
+                    </div>
+                  ) : null}
                   {renderMessageActions(line, index)}
                 </div>
               ))
             )}
           </div>
+
+          {!atBottom ? (
+            <button type="button" className="mr-orch-jump mono" onClick={jumpToNewest}>
+              Jump to newest
+            </button>
+          ) : null}
 
           {confirm === 'start' ? (
             <section ref={confirmRef} className="mr-orch-confirm" aria-label="Start the orchestrator">

@@ -1,5 +1,5 @@
 import { createCopilotParser } from '../model/parsers/copilot.js'
-import { expandBin, headLines, jsonLineReader, lastJsonLine, sumTokens, tokenCount } from './common.js'
+import { expandBin, headLines, jsonLineReader, lastJsonLine, lastPlainBlock, sumTokens, terminalText, tokenCount } from './common.js'
 
 function copilotReply(log) {
   let text = null
@@ -14,16 +14,8 @@ function copilotReply(log) {
     const content = item?.data?.content ?? item?.content ?? item?.text ?? item?.message
     if (typeof content === 'string' && content.trim()) text = content
   }
-  if (text) return text
-
-  const lines = []
-  for (const line of String(log ?? '').split(/\r?\n/)) {
-    const trimmed = line.trim()
-    if (!trimmed) continue
-    if (/^(?:Executing|Running|Reading|Writing|Editing|Searching|Session|Run|Copilot|\$)/i.test(trimmed)) continue
-    lines.push(trimmed)
-  }
-  return lines.join('\n')
+  if (text) return terminalText(text)
+  return lastPlainBlock(log)
 }
 
 function copilotUsage(log) {

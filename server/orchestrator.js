@@ -88,6 +88,7 @@ export const SESSION_PENDING_PROBLEM = 'Messages are waiting for a turn. Wait fo
 export const BRANCH_INDEX_PROBLEM = 'Choose a message to branch from.'
 export const SESSIONS_LIMIT = 50
 export const SESSION_MESSAGES_LIMIT = 200
+export const TURN_STEP_LIMIT = 100
 export const CLAUDE_EFFORT_LEVELS = ['low', 'medium', 'high', 'xhigh', 'max']
 export const OPENCODE_EFFORT_LEVELS = ['low', 'medium', 'high', 'max']
 export const NO_PROJECT_PROBLEM = 'The bridge has no project folder, so the orchestrator has nothing to work on.'
@@ -373,6 +374,47 @@ function stoppedTurnText({ code, report, killed, failureMessage, stderrMessage }
   const reason = (!killed && report) || failureMessage || stderrMessage
   if (reason) return `The orchestrator stopped: ${reason}`
   return Number.isInteger(code) ? `The orchestrator stopped: exit ${code}.` : STOPPED_REPLY
+}
+
+export function turnStepOf(activity) {
+  if (!activity || activity.type !== 'tool.start') return null
+  const tool = typeof activity.tool === 'string' && activity.tool.trim() ? activity.tool.trim() : 'tool'
+  const label = typeof activity.label === 'string' ? activity.label.trim() : ''
+  const prefix = `${tool} `
+  const stripped = label.startsWith('$ ') ? label.slice(2).trim() : label
+  const target = stripped.toLowerCase().startsWith(prefix.toLowerCase()) ? stripped.slice(prefix.length).trim() : stripped
+  return { tool, target }
+}
+
+export function turnStepsOf(descriptor, log, rootName = '') {
+  if (!descriptor || typeof descriptor.createParser !== 'function') return []
+  try {
+    const parser = descriptor.createParser({ rootName: String(rootName ?? ''), files: [], dirs: [] })
+    const activities = [...parser.push(String(log ?? ''), 0), ...parser.flush(0)]
+    const steps = []
+    for (const activity of activities) {
+      const step = turnStepOf(activity)
+      if (step) steps.push(step)
+    }
+    return steps.slice(-TURN_STEP_LIMIT)
+  } catch {
+    return []
+  }
+}
+
+function cleanWork(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const steps = []
+  for (const item of Array.isArray(value.steps) ? value.steps : []) {
+    if (!item || typeof item !== 'object') continue
+    const tool = typeof item.tool === 'string' ? item.tool.trim().slice(0, 40) : ''
+    const target = typeof item.target === 'string' ? item.target.trim().slice(0, 300) : ''
+    if (!tool && !target) continue
+    steps.push({ tool: tool || 'tool', target })
+  }
+  const seconds = Number.isFinite(value.seconds) && value.seconds >= 0 ? Math.round(value.seconds) : 0
+  if (steps.length === 0 && seconds === 0) return null
+  return { steps: steps.slice(-TURN_STEP_LIMIT), seconds }
 }
 
 function pauseSync(ms) {
@@ -1073,11 +1115,13 @@ export function createOrchestrator({
             const from = typeof msg.from === 'string' ? msg.from : ''
             if (!['owner', 'orchestrator', 'room'].includes(from) && !from.startsWith('sub:')) continue
             if (typeof msg.text !== 'string' || msg.text.trim() === '') continue
+            const work = cleanWork(msg.work)
             itemMessages.push({
               id: typeof msg.id === 'string' && msg.id ? msg.id : randomUUID(),
               from,
               text: maskText(msg.text),
               at: typeof msg.at === 'string' && msg.at ? msg.at : iso(now()),
+              ...(work ? { work } : {}),
             })
           }
         }
@@ -1102,11 +1146,13 @@ export function createOrchestrator({
       const from = typeof item.from === 'string' ? item.from : ''
       if (!['owner', 'orchestrator', 'room'].includes(from) && !from.startsWith('sub:')) continue
       if (typeof item.text !== 'string' || item.text.trim() === '') continue
+      const work = cleanWork(item.work)
       messages.push({
         id: typeof item.id === 'string' && item.id ? item.id : randomUUID(),
         from,
         text: maskText(item.text),
         at: typeof item.at === 'string' && item.at ? item.at : iso(now()),
+        ...(work ? { work } : {}),
       })
     }
     while (messages.length > ORCHESTRATOR_CHAT_LIMIT) messages.shift()
@@ -1316,6 +1362,62 @@ export function createOrchestrator({
     })
   }
 
+  function stepParserFor(name) {
+    const descriptor = (harnesses && harnesses[name]) || harnessByKey[name]
+    if (!descriptor || typeof descriptor.createParser !== 'function') return null
+    try {
+      return descriptor.createParser({ rootName: basename(String(root ?? '')), files: [], dirs: [] })
+    } catch {
+      return null
+    }
+  }
+
+  function turnSeconds(turn) {
+    return Math.max(0, Math.round((now() - turn.startedAt) / 1000))
+  }
+
+  function collectSteps(turn, chunk) {
+    if (!turn.parser) return
+    let activities = []
+    try {
+      activities = turn.parser.push(String(chunk), now())
+    } catch {
+      return
+    }
+    let changed = false
+    for (const activity of activities) {
+      const step = turnStepOf(activity)
+      if (!step) continue
+      turn.steps.push(step)
+      while (turn.steps.length > TURN_STEP_LIMIT) turn.steps.shift()
+      changed = true
+    }
+    if (changed) notify()
+  }
+
+  function settleWork(turn) {
+    if (!turn.anchorId || turn.compacting) return
+    const anchor = messages.find((message) => message.id === turn.anchorId)
+    if (!anchor) return
+    anchor.work = { steps: turn.steps.map((step) => ({ ...step })), seconds: turnSeconds(turn) }
+  }
+
+  function shownMessages() {
+    const list = messages.map((message) => ({ ...message }))
+    const turn = running && !running.done && !running.compacting ? running : null
+    if (turn?.anchorId) {
+      const anchor = list.find((message) => message.id === turn.anchorId)
+      if (anchor) {
+        anchor.work = {
+          state: 'working',
+          steps: turn.steps.map((step) => ({ ...step })),
+          seconds: turnSeconds(turn),
+        }
+      }
+    }
+    return list
+  }
+
   function startTurn(options = null) {
     if (roomTimer) {
       clearTimeout(roomTimer)
@@ -1353,7 +1455,8 @@ export function createOrchestrator({
     const needsOpencodeConfig = harness === 'opencode' && (needsMcp || turnMode === 'edits' || turnMode === 'plan')
     const mcpConfigPath = needsMcp || needsOpencodeConfig ? join(folder, `${logName}.mcp.json`) : ''
     let mcpEnv = null
-    const turn = { startedAt, logPath, metaPath, mcpConfigPath, killed: false, done: false, child: null, timer: null, compacting: compaction, stderr: '' }
+    const turn = { startedAt, logPath, metaPath, mcpConfigPath, killed: false, done: false, child: null, timer: null, compacting: compaction, stderr: '', anchorId: turnMessages[0]?.id ?? '', steps: [], parser: null }
+    turn.parser = compaction ? null : stepParserFor(harness)
     running = turn
     setState('working')
     try {
@@ -1519,6 +1622,7 @@ export function createOrchestrator({
     }
     turn.child = child
     child.stdout?.pipe(stream, { end: false })
+    child.stdout?.on('data', (chunk) => collectSteps(turn, chunk))
     let stderrTail = Buffer.alloc(0)
     child.stderr?.on('data', (chunk) => {
       const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk), 'utf8')
@@ -1613,6 +1717,7 @@ export function createOrchestrator({
     } catch {}
     if (running === turn) running = null
     if (stopped) return
+    settleWork(turn)
     addMessage('orchestrator', text)
     if (!turn.compacting && typeof onReply === 'function') {
       try {
@@ -1669,7 +1774,7 @@ export function createOrchestrator({
       modes: modesFor(harness),
       approvals: approvalList(),
       saveError: persistError,
-      messages: messages.map((message) => ({ ...message })),
+      messages: shownMessages(),
     }
   }
 

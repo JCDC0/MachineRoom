@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- P83: a turn leaves only the owner's message and the final answer in the chat; its tool steps fold into one Working or Worked line under the message, and the chat stays at the bottom with a Jump to newest button.
 - P99: the review and merge git commands run with hooks pointed at a folder that does not exist and without GIT_DIR, GIT_WORK_TREE or GIT_INDEX_FILE from the bridge's environment.
 - P78: one model picker replaces the plain model lists: search by name and id, six sort orders, pinned models first, and each row with its context, price and date.
 - P101: review 15 of seven of tonight's merges finds two push blockers (a cost limit that never fires without a dollar cost, and a branch that loses its context when reopened) and two smaller findings.

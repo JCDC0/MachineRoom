@@ -1,10 +1,10 @@
 import { LINE as HERMES_LINE, createHermesParser } from '../model/parsers/hermes.js'
-import { expandBin, headLines } from './common.js'
+import { expandBin, headLines, terminalText } from './common.js'
 
 function hermesReply(log) {
   const lines = String(log ?? '').split(/\r?\n/)
   const firstTool = lines.findIndex((line) => line.trimStart().startsWith('┊'))
-  return (firstTool === -1 ? lines : lines.slice(0, firstTool)).join('\n').replace(/\s+$/, '')
+  return terminalText((firstTool === -1 ? lines : lines.slice(0, firstTool)).join('\n').replace(/\s+$/, ''))
 }
 
 export const hermesHarness = {

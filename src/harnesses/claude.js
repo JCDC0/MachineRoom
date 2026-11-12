@@ -1,5 +1,5 @@
 import { createClaudeParser } from '../model/parsers/claude.js'
-import { expandBin, finiteNumber, headLines, jsonLineReader, lastJsonLine, sumTokens, tokenCount } from './common.js'
+import { expandBin, finiteNumber, headLines, jsonLineReader, lastJsonLine, sumTokens, terminalText, tokenCount } from './common.js'
 
 function claudeReply(log) {
   let words = null
@@ -17,7 +17,7 @@ function claudeReply(log) {
     if (typeof text !== 'string' || !text.trim()) continue
     words = text
   }
-  return words ?? ''
+  return terminalText(words ?? '')
 }
 
 function claudeFailure(log) {
