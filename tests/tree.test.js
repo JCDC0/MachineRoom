@@ -68,6 +68,23 @@ describe('readTree without git', () => {
     const { files } = await readTree(root, { listDir })
     expect(files).toEqual(['readme.md', 'src/main.js'])
   })
+
+  it('walks the disk without waiting when the list fails', async () => {
+    const dir = makeTempDir('mr-tree-')
+    try {
+      writeFileSync(join(dir, 'kept.txt'), 'x')
+      const startedAt = Date.now()
+      const { files } = await readTree(dir, {
+        gitList: () => Promise.resolve(null),
+        gitDeleted: () => new Promise((settle) => setTimeout(() => settle([]), 500)),
+      })
+      const elapsed = Date.now() - startedAt
+      expect(elapsed).toBeLessThan(100)
+      expect(files).toEqual(['kept.txt'])
+    } finally {
+      rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+    }
+  })
 })
 
 describe('readTree with git', () => {

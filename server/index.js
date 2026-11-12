@@ -169,11 +169,11 @@ export async function readTree(projectRoot, { listDir = readdirSync, gitList = g
   if (!projectRoot) return { root: '', files: [], created: [] }
   const resolved = resolve(projectRoot)
   const root = basename(resolved)
-  const [listed, deleted] = await Promise.all([
-    gitList(resolved, ['--cached', '--others', '--exclude-standard']),
-    gitDeleted(resolved),
-  ])
+  const listedPromise = gitList(resolved, ['--cached', '--others', '--exclude-standard'])
+  const deletedPromise = gitDeleted(resolved)
+  const listed = await listedPromise
   if (listed === null) return { ...walkTree(resolved, listDir), [PLAIN_TREE]: true }
+  const deleted = await deletedPromise
   return { root, files: dropDeleted(listed, deleted).sort(), created: [] }
 }
 
@@ -460,11 +460,15 @@ export function createBridge(options = {}) {
       for (const client of clients) writeSseChange(client, event)
     },
   })
+  const lanesSourceOption = options.lanesSource
+  const lanesSourceOn =
+    lanesSourceOption === true || (lanesSourceOption !== null && typeof lanesSourceOption === 'object') || env.MACHINEROOM_LANES === '1'
+  const lanesSourceObject = lanesSourceOption !== null && typeof lanesSourceOption === 'object' ? lanesSourceOption : {}
   const reviews = createReviewsApi({
     projectRoot,
     briefsDir: options.briefsDir ?? process.env.BRIEFS_DIR,
     patchLimit: options.patchLimit,
-    runsFolder: options.runsFolder ?? options.orchestratorFolder ?? '',
+    runsFolder: options.runsFolder ?? options.orchestratorFolder ?? lanesSourceObject.folder ?? '',
     sendJson,
     readJsonBody,
     orchestrators: () => orchestrators,
@@ -517,10 +521,6 @@ export function createBridge(options = {}) {
     openFolder: options.musicOpenFolder,
   })
   const serveStatic = createStaticHandler({ staticDir: options.staticDir })
-  const lanesSourceOption = options.lanesSource
-  const lanesSourceOn =
-    lanesSourceOption === true || (lanesSourceOption !== null && typeof lanesSourceOption === 'object') || env.MACHINEROOM_LANES === '1'
-  const lanesSourceObject = lanesSourceOption !== null && typeof lanesSourceOption === 'object' ? lanesSourceOption : {}
   const lanesConfig = lanesSourceOn ? lanesSourceObject.lanes ?? readLanes() : {}
   const lanesSource = lanesSourceOn
     ? createLanesSource({

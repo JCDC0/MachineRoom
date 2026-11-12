@@ -219,6 +219,35 @@ describe('review routes', () => {
     expect(git(worktree, ['status', '--porcelain'])).toBe('')
   })
 
+  it('lists a made lane when lanesSource names the runs folder', async () => {
+    const { repo } = makeLaneRepo()
+    mkdirSync(join(repo, 'docs', 'agents'), { recursive: true })
+    writeFileSync(join(repo, 'docs', 'agents', 'lanes.json'), '{}')
+    const worktree = join(repo, '.worktrees', 'worker1')
+    git(repo, ['worktree', 'add', '-q', '-b', 'feat/worker1', worktree, 'main'])
+    writeFileSync(join(worktree, 'worker1.txt'), 'worker one\n')
+    git(worktree, ['add', 'worker1.txt'])
+    git(worktree, ['commit', '-m', 'worker one work'])
+
+    const runs = makeTempDir()
+    writeFileSync(join(runs, 'agents.json'), JSON.stringify({ agents: [{ key: 'worker1', name: 'Worker One', harness: 'opencode' }] }))
+    const bridge = createBridge({
+      projectRoot: repo,
+      briefsDir: join(repo, 'docs', 'agents'),
+      port: 0,
+      lanesSource: { folder: runs, lanes: {} },
+      readTree: () => Promise.resolve({ root: 'project', files: [], created: [] }),
+    })
+    cleanups.push(() => bridge.stop())
+    const { url } = await bridge.start()
+
+    const res = await requestJson(`${url}/api/control/reviews`)
+    expect(res.status).toBe(200)
+    const { lanes } = await res.json()
+    expect(lanes.map((entry) => entry.lane)).toEqual(['worker1'])
+    expect(lanes[0].worktree).toBe(worktree)
+  })
+
   it('marks a worktree with uncommitted changes as dirty', async () => {
     const { worktree } = makeLaneRepo()
     writeFileSync(join(worktree, 'extra.js'), 'export const x = 2\n')
