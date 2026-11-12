@@ -99,17 +99,66 @@ describe('touchesForCommand', () => {
     expect(read("rg 'a>b' src/x.js")).toEqual(['read:src/x.js'])
   })
 
-  it('writes when a quoted command string holds the write', () => {
-    const known = ['notes.md', 'out.txt']
-    const write = (command, path) => {
-      const touched = touchesForCommand(command, known, []).filter((touch) => touch.path === path)
-      expect(touched).toEqual([{ path, mode: 'write', kind: 'file' }])
-    }
-    write('powershell -Command "Set-Content notes.md x"', 'notes.md')
-    write('pwsh -c "Set-Content notes.md x"', 'notes.md')
-    write('bash -c "echo hi > out.txt"', 'out.txt')
-    write("sh -c 'echo hi > out.txt'", 'out.txt')
-    write('cmd /c "echo hi > out.txt"', 'out.txt')
+  it('reads files named inside an inline program', () => {
+    const known = ['notes.md', 'src/math.js', 'x.js']
+    const read = (command) =>
+      touchesForCommand(command, known, [])
+        .map((touch) => `${touch.mode}:${touch.path}`)
+        .sort()
+    expect(read(`python -c "open('x.js', 'w').write('')"`)).toEqual(['read:x.js'])
+    expect(read(`node -e "writeFileSync('x.js', '')"`)).toEqual(['read:x.js'])
+    expect(read(`node --eval "require('src/math.js')"`)).toEqual(['read:src/math.js'])
+    expect(read('pwsh -Command "Set-Content notes.md x"')).toEqual(['read:notes.md'])
+    expect(read('powershell -Command "Set-Content notes.md x"')).toEqual(['read:notes.md'])
+    expect(read('bash -c "echo hi > notes.md"')).toEqual(['read:notes.md'])
+  })
+
+  it('writes only the file a write operator points at', () => {
+    const known = ['docs/notes.md', 'src/math.js']
+    const read = (command) =>
+      touchesForCommand(command, known, [])
+        .map((touch) => `${touch.mode}:${touch.path}`)
+        .sort()
+    expect(read('echo hi > docs/notes.md src/math.js')).toEqual(['read:src/math.js', 'write:docs/notes.md'])
+    expect(read('cat src/math.js | tee docs/notes.md')).toEqual(['read:src/math.js', 'write:docs/notes.md'])
+    expect(read('Get-Content src/math.js | Out-File docs/notes.md')).toEqual([
+      'read:src/math.js',
+      'write:docs/notes.md',
+    ])
+  })
+
+  it('does not touch a file named in a bash heredoc body', () => {
+    const known = ['SCRATCH/p85.md', 'scripts/run-lane.mjs', 'server/lanes-source.js', 'server/claude-sessions.js']
+    const command = [
+      "cat > SCRATCH/p85.md <<'EOF'",
+      'The brief names scripts/run-lane.mjs, server/lanes-source.js and server/claude-sessions.js.',
+      'EOF',
+    ].join('\n')
+    expect(touchesForCommand(command, known, []).map((touch) => `${touch.mode}:${touch.path}`)).toEqual([
+      'write:SCRATCH/p85.md',
+    ])
+  })
+
+  it('ends an indented heredoc on a line that holds only the word', () => {
+    const command = ['cat <<-EOF', '\tdocs/notes.md', '\tEOF', 'cat src/math.js'].join('\n')
+    expect(run(command)).toEqual(['read:src/math.js'])
+  })
+
+  it('ends a heredoc at the end when the word never appears', () => {
+    const command = ["cat > docs/notes.md <<'EOF'", 'see src/math.js'].join('\n')
+    expect(run(command)).toEqual(['write:docs/notes.md'])
+  })
+
+  it('removes a double quoted heredoc body', () => {
+    const command = ['cat docs/notes.md <<"EOF"', 'src/math.js', 'EOF'].join('\n')
+    expect(run(command)).toEqual(['read:docs/notes.md'])
+  })
+
+  it('writes the redirect target and reads the other file', () => {
+    const known = ['in.txt', 'out.txt']
+    expect(
+      touchesForCommand('echo a > out.txt; cat in.txt', known, []).map((touch) => `${touch.mode}:${touch.path}`)
+    ).toEqual(['write:out.txt', 'read:in.txt'])
   })
 
   it('touches only the longer known file when one lies inside another', () => {

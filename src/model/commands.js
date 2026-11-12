@@ -1,12 +1,13 @@
 import { indexFor } from './fileIndex.js'
 import { normalise } from './paths.js'
 
-const WRITE_OPERATOR = /(>>|(?<![>=-])>(?![&=])|\bSet-Content\b|\bAdd-Content\b|\bOut-File\b|\btee\b|\bsed\s+-i\b)/
+const REDIRECT = />>|(?<![>=-])>(?![&=])/
+const FILE_WRITER = /\b(?:Set-Content|Add-Content|Out-File|tee)\b/
+const IN_PLACE = /\bsed\s+-i\b/
 const MUTATOR = /^\s*(?:sudo\s+|npx\s+)?(?:git\s+)?(?:mv|rm|cp|del|erase|move|ren|rename|copy|Remove-Item|Rename-Item|Move-Item|Copy-Item|New-Item)\b/i
 const LISTER = /\b(ls|dir|Get-ChildItem|gci|find|tree|cd|Set-Location|Test-Path)\b/
 const MESSAGE_FLAG = /(?:^|[\s;|&(])(?:--message|--data-raw|--data-binary|--data|-m|-d)(?:[ \t]*=[ \t]*|[ \t]+)/g
 const HERE_STRING = /(?<![\w'"@])@(['"])/g
-const COMMAND_STRING = /^\s*(?:[^\s;&|]*\/)?(?:sudo\s+)?(?:powershell|pwsh|bash|sh|cmd)(?:\.exe)?\b[^;&|]*?(?<!-)(?:-Command|-[A-Za-z]*c|\/c)\s*$/i
 
 function quotedValueEnd(text, at) {
   const quote = text.startsWith('\\"', at) ? '\\"' : text[at]
@@ -64,11 +65,77 @@ function outsideQuotedText(text) {
       continue
     }
     const end = quotedValueEnd(text, cursor)
-    const before = text.slice(0, cursor)
-    out += COMMAND_STRING.test(before) ? text.slice(cursor, end) : ' '.repeat(end - cursor)
+    out += ' '.repeat(end - cursor)
     cursor = end
   }
   return out
+}
+
+function heredocOpener(text, at) {
+  if (text[at + 2] === '<') return null
+  let cursor = at + 2
+  let dashed = false
+  if (text[cursor] === '-') {
+    dashed = true
+    cursor += 1
+  }
+  while (text[cursor] === ' ' || text[cursor] === '\t') cursor += 1
+  const quote = text[cursor]
+  let word = ''
+  let end = cursor
+  if (quote === "'" || quote === '"') {
+    const close = text.indexOf(quote, cursor + 1)
+    if (close === -1) return null
+    word = text.slice(cursor + 1, close)
+    end = close + 1
+  } else {
+    while (end < text.length && !/[\s;&|<>()]/.test(text[end])) end += 1
+    word = text.slice(cursor, end)
+  }
+  if (!word) return null
+  return { dashed, word, end }
+}
+
+function heredocEnd(text, from, word, dashed) {
+  let line = from
+  while (line <= text.length) {
+    const newline = text.indexOf('\n', line)
+    const stop = newline === -1 ? text.length : newline
+    let content = text.slice(line, stop)
+    if (content.endsWith('\r')) content = content.slice(0, -1)
+    if (dashed) content = content.replace(/^\t+/, '')
+    if (content === word) return newline === -1 ? text.length : newline + 1
+    if (newline === -1) break
+    line = newline + 1
+  }
+  return text.length
+}
+
+function withoutHeredocs(command) {
+  const text = String(command)
+  const visible = outsideQuotedText(text)
+  let out = ''
+  let copied = 0
+  let search = 0
+  while (search < text.length) {
+    const at = visible.indexOf('<<', search)
+    if (at === -1) break
+    const opener = heredocOpener(text, at)
+    if (!opener) {
+      search = at + 2
+      continue
+    }
+    const lineEnd = text.indexOf('\n', opener.end)
+    if (lineEnd === -1) {
+      search = opener.end
+      continue
+    }
+    const bodyEnd = heredocEnd(text, lineEnd + 1, opener.word, opener.dashed)
+    out += `${text.slice(copied, at)} `
+    copied = bodyEnd
+    search = bodyEnd
+  }
+  return out + text.slice(copied)
 }
 
 function word(code) {
@@ -134,6 +201,24 @@ function firstSpans(spans) {
   return first
 }
 
+function writeTargets(visible, spans) {
+  const targets = new Set()
+  for (const pattern of [REDIRECT, FILE_WRITER]) {
+    const operator = new RegExp(pattern.source, 'g')
+    let match
+    while ((match = operator.exec(visible))) {
+      const from = match.index + match[0].length
+      let first = null
+      for (const span of spans) {
+        if (span.at < from) continue
+        if (!first || span.at < first.at) first = span
+      }
+      if (first) targets.add(first.path)
+    }
+  }
+  return targets
+}
+
 export function touchesForCommand(command, files, dirs) {
   const touches = []
   const seen = new Set()
@@ -143,15 +228,20 @@ export function touchesForCommand(command, files, dirs) {
     seen.add(key)
     touches.push(touch)
   }
-  const segments = normalise(withoutHereStrings(withoutMessageValues(command))).split(/&&|;|\|\||\|/)
+  const segments = normalise(withoutHeredocs(withoutHereStrings(withoutMessageValues(command)))).split(
+    /&&|;|\|\||\|/
+  )
   for (const segment of segments) {
-    const operator = WRITE_OPERATOR.exec(outsideQuotedText(segment))
+    const visible = outsideQuotedText(segment)
     const mutator = MUTATOR.exec(segment)
+    const inPlace = IN_PLACE.exec(visible)
     const fileIndex = indexFor(files)
-    const firstFiles = firstSpans(withoutNested(namedSpans(segment, fileIndex)))
+    const spans = withoutNested(namedSpans(segment, fileIndex))
+    const firstFiles = firstSpans(spans)
+    const targets = mutator || inPlace ? null : writeTargets(visible, spans)
     const namedFiles = [...firstFiles].sort((a, b) => fileIndex.rankOf(a[0]) - fileIndex.rankOf(b[0]))
-    for (const [file, span] of namedFiles) {
-      const mode = mutator || (operator && operator.index < span.at) ? 'write' : 'read'
+    for (const [file] of namedFiles) {
+      const mode = mutator || inPlace || (targets && targets.has(file)) ? 'write' : 'read'
       add({ path: file, mode, kind: 'file' })
     }
     const lister = LISTER.exec(segment)
