@@ -7,7 +7,7 @@ import { gitPath, programPath } from '../server/programPath.js'
 import { saveAgentsConfig } from '../server/agents-config.js'
 import { projectLanesFileFor, writeHiddenLanes } from '../server/active-lanes.js'
 import { briefProblems, briefWorktreeProblems, commandFor, DEFAULT_MINUTES, filterRunsSince, laneCommandProblem, readinessLine, retryStartProblem, SINCE_PROBLEM, startFailureText, worktreeFor, formatOutcomes, formatStats, formatSummary, laneLockPids, laneLockText, laneStats, laneStopProblem, laneWithOverrides, nextTestStep, parseRunArgs, projectRunGit, runListLine, runRecord, sessionToolLines, summarizeRun, UNATTENDED_NOTE, unattendedPrompt } from '../src/briefs/run.js'
-import { branchFor, parseBriefs } from '../src/briefs/briefs.js'
+import { branchFor, briefFileList, parseBriefs } from '../src/briefs/briefs.js'
 import { harnessByKey } from '../src/harnesses/index.js'
 import { appendRunRecord, printedRunsFolder, runnerCommitVersion, sessionStartedBy, startLane } from '../scripts/run-lane.mjs'
 import { makeTempDir } from './helpers/tempRoot.js'
@@ -1297,6 +1297,7 @@ function checkoutRoot() {
 function briefWithFreeBranch() {
   const root = checkoutRoot()
   return parseBriefs(TASKS_MARKDOWN).find((brief) => {
+    if (briefFileList(brief.text).length > 0) return false
     const found = spawnSync(gitPath(), ['rev-parse', '--verify', '--quiet', `refs/heads/${branchFor(brief)}`], {
       cwd: root,
       windowsHide: true,
@@ -1947,6 +1948,8 @@ describe('the runner commit', { timeout: 30000 }, () => {
   function makeRepo(folder) {
     mkdirSync(folder, { recursive: true })
     gitIn(folder, ['init', '-q', '-b', 'main'])
+    gitIn(folder, ['config', 'user.name', 'MachineRoom Test'])
+    gitIn(folder, ['config', 'user.email', 'machineroom@example.invalid'])
     writeFileSync(join(folder, 'README.md'), 'start\n')
     gitIn(folder, ['add', '-A'])
     gitIn(folder, ['commit', '-q', '-m', 'Start the repo'])
@@ -2115,7 +2118,7 @@ function makeRunnerRepo(folder, script, preCommit = '') {
   writeFileSync(join(repo, 'run'), script)
   gitInRunnerRepo(repo, ['add', '-A'])
   gitInRunnerRepo(repo, ['commit', '-m', 'start'])
-  if (preCommit !== '') writeFileSync(join(repo, '.git', 'hooks', 'pre-commit'), preCommit)
+  if (preCommit !== '') writeFileSync(join(repo, '.git', 'hooks', 'pre-commit'), preCommit, { mode: 0o755 })
   return repo
 }
 
@@ -2344,13 +2347,13 @@ describe('appendRunRecord', () => {
     }
   })
 
-  it('formats the printed path with %LOCALAPPDATA% when the runs folder is in LocalAppData', () => {
+  it.skipIf(process.platform !== 'win32')('formats the printed path with %LOCALAPPDATA% when the runs folder is in LocalAppData', () => {
     const local = 'C:\\Users\\me\\AppData\\Local'
     const folder = `${local}\\MachineRoom\\runs`
     expect(printedRunsFolder(folder, { LOCALAPPDATA: local })).toBe('%LOCALAPPDATA%\\MachineRoom\\runs')
   })
 
-  it('formats the printed path with %TEMP% when the runs folder is in Temp', () => {
+  it.skipIf(process.platform !== 'win32')('formats the printed path with %TEMP% when the runs folder is in Temp', () => {
     const temp = 'C:\\Users\\me\\AppData\\Local\\Temp'
     const local = 'C:\\Users\\me\\AppData\\Local'
     const folder = `${temp}\\machineroom-runs`
