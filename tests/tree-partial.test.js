@@ -536,23 +536,32 @@ describe('a watcher event with names', () => {
 
   it('follows the tenth partial read with a full one', async () => {
     const watcher = fakeWatch()
+    const order = []
+    const partialFiles = Array.from({ length: 10 }, (_, index) => `f-${index}.js`)
+    let nextIndex = 1
     const { bridge, counts } = startBridge({
       root: makeRoot(),
       files: ['a.js'],
       watcher,
       treeBudgetMs: 20,
-      readTree: async () => ({ root: 'project', files: ['a.js'], created: [] }),
+      readTree: async () => {
+        order.push('full')
+        return { root: 'project', files: ['a.js', ...partialFiles], created: [] }
+      },
+      readTreePartial: async (_root, names) => {
+        order.push(names[0])
+        if (nextIndex <= 10) {
+          watcher.emit(`f-${nextIndex}.js`)
+          nextIndex += 1
+        }
+        return { root: 'project', files: [...names], created: [] }
+      },
     })
     await bridge.start()
 
-    for (let index = 0; index < 10; index += 1) {
-      watcher.emit(`f-${index}.js`)
-      await waitFor(() => counts.partial.length === index + 1)
-    }
-    expect(counts.full).toBe(0)
-
-    watcher.emit('f-10.js')
+    watcher.emit('f-0.js')
     await waitFor(() => counts.full === 1)
+    expect(order).toEqual([...partialFiles, 'full'])
     expect(counts.partial).toHaveLength(10)
   })
 
