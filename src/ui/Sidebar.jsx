@@ -426,7 +426,7 @@ export function Sidebar({ client = null, live = false, project = '', tasks = nul
     }
     menuAnchorRef.current = event.currentTarget
     setActionError('')
-    setMenu({ key, row })
+    setMenu({ key, current: row.current })
   }
 
   async function markOpened(row) {
@@ -470,6 +470,7 @@ export function Sidebar({ client = null, live = false, project = '', tasks = nul
       const tag = event.target?.tagName
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
       const row = menuRowRef.current
+      if (!row) return
       const item = sessionMenuItemForKey(sessionMenuItems(row, { busy }), event.key)
       if (!item) return
       event.preventDefault()
@@ -511,9 +512,12 @@ export function Sidebar({ client = null, live = false, project = '', tasks = nul
   const rows = sessionRows(sessions, { expanded: showAll, query: search, sort, showArchived })
   const menuRow =
     menu && menu.key
-      ? rows.rows.find((row) => (row.id || 'current') === menu.key) ?? menu.row
+      ? rows.rows.find((row) => (row.id || 'current') === menu.key && row.current === menu.current) ?? null
       : null
   menuRowRef.current = menuRow
+  useEffect(() => {
+    if (menu && !menuRow) setMenu(null)
+  }, [menu, menuRow])
   const fallbackName =
     cleanText(String(project ?? '').replace(/^\/+/, '')) || 'Project'
   const currentProject = projects?.current && typeof projects.current === 'object' ? projects.current : null
@@ -560,7 +564,7 @@ export function Sidebar({ client = null, live = false, project = '', tasks = nul
       )
     }
     const key = row.id || 'current'
-    const open = menu?.key === key
+    const open = menuRow === row
     const items = sessionMenuItems(row, { busy })
     return (
       <div className={`mr-side-row${row.current ? ' is-current' : ''}${row.unread ? ' is-unread' : ''}`} key={key}>

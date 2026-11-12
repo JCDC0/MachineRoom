@@ -280,6 +280,40 @@ describe('the conversation menu', () => {
     })
   })
 
+  it('closes the menu and releases F when its row leaves the list or stops being current', async () => {
+    for (const hidden of [true, false]) {
+      await withDom(async ({ container, dom, root }) => {
+        const client = makeClient()
+        if (hidden) {
+          client.state.sessions = Array.from({ length: 6 }, (_, index) => ({
+            id: `pinned-${index}`,
+            title: `Pinned ${index}`,
+            pinned: true,
+            count: 1,
+          }))
+        }
+        const roomKeys = []
+        dom.window.addEventListener('keydown', (event) => roomKeys.push(event.key))
+        await mount(root, client)
+        await openMenu(root, container, 'Live one')
+
+        client.state.sessions.push({ ...client.state.current, endedAt: NOW })
+        client.state.current = { id: 'next', title: 'Live two', startedAt: NOW, count: 3 }
+        await act(async () => {
+          client.notify()
+        })
+        await settle(250)
+
+        expect(rowByTitle(container, 'Live one') === null).toBe(hidden)
+        expect(container.querySelector('.mr-side-menu')).toBeNull()
+        await press(root, dom.window, 'F')
+        expect(client.calls.open).toHaveLength(0)
+        expect(client.calls.branch).toHaveLength(0)
+        expect(roomKeys).toEqual(['F'])
+      })
+    }
+  })
+
   it('pins and renames the current row from its menu', async () => {
     await withDom(async ({ container, root }) => {
       const client = makeClient()
