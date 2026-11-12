@@ -4,10 +4,12 @@ import { tmpdir } from 'node:os'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { StringDecoder } from 'node:string_decoder'
 import { fileURLToPath } from 'node:url'
+import { isHolderAlive } from '../scripts/lane-lock.mjs'
 import { agentsFile, createRunLineReader, failureText } from '../src/briefs/recording.js'
 import { laneLockPids } from '../src/briefs/run.js'
 import { activeLanesFileFor, readActiveLanesChoice } from './active-lanes.js'
 import { readAllLanes } from './agents-config.js'
+import { listProcesses } from './processTree.js'
 import { gitPath } from './programPath.js'
 
 export { readAllLanes }
@@ -170,22 +172,38 @@ export function mainCheckoutOf(folder) {
   }
 }
 
-function processAlive(pid) {
-  if (!Number.isInteger(pid) || pid <= 0) return false
-  try {
-    process.kill(pid, 0)
-    return true
-  } catch (error) {
-    return error?.code === 'EPERM'
+function onceList(list) {
+  let loaded = false
+  let cached = null
+  return (options) => {
+    if (!loaded) {
+      loaded = true
+      cached = list(options)
+    }
+    return cached
   }
 }
 
-function laneLockAlive(folder, lane) {
+function checkLaneLock(folder, lane, options) {
+  if (!folder || !lane) return false
+  const path = join(folder, `${lane}.lock`)
+  let text = ''
   try {
-    return processAlive(laneLockPids(readFileSync(join(folder, `${lane}.lock`), 'utf8')).pid)
+    text = readFileSync(path, 'utf8')
   } catch {
     return false
   }
+  const holder = laneLockPids(text)
+  return isHolderAlive(holder.pid, path, options) || isHolderAlive(holder.child, path, options)
+}
+
+export function laneLockAlive(folder, lane, { platform = process.platform, list = listProcesses, stat = statSync } = {}) {
+  return checkLaneLock(folder, lane, { platform, list: onceList(list), stat })
+}
+
+export function createLaneLockCheck({ platform = process.platform, list = listProcesses, stat = statSync } = {}) {
+  const options = { platform, list: onceList(list), stat }
+  return (folder, lane) => checkLaneLock(folder, lane, options)
 }
 
 export function createRecordsCache(file, folder = dirname(file)) {
@@ -362,6 +380,9 @@ export function createLanesSource(options = {}) {
   const listFolder = typeof options.listFolder === 'function' ? options.listFolder : (dir) => readdirSync(dir, { withFileTypes: true })
   const watchFolder = typeof options.watchFolder === 'function' ? options.watchFolder : watch
   const statFile = typeof options.statFile === 'function' ? options.statFile : statSync
+  const lockPlatform = options.platform ?? process.platform
+  const listRunningProcesses = typeof options.list === 'function' ? options.list : listProcesses
+  const statLock = typeof options.stat === 'function' ? options.stat : statSync
   const active = new Map()
   const quiet = new Map()
   const seen = new Set()
@@ -714,6 +735,7 @@ export function createLanesSource(options = {}) {
       }
       if (active.size === 0) return
       const records = recordsCache.read()
+      let checkLock = null
       for (const run of [...active.values()]) {
         readNew(run)
         const record = records.get(run.key)
@@ -721,8 +743,11 @@ export function createLanesSource(options = {}) {
           finishRecord(run, record)
           continue
         }
-        if (now() - run.lastGrowth >= quietMs && !laneLockAlive(folder, run.agent.key)) {
-          finish(run, 'failed', 'no record', { reopen: true })
+        if (now() - run.lastGrowth >= quietMs) {
+          checkLock ??= createLaneLockCheck({ platform: lockPlatform, list: listRunningProcesses, stat: statLock })
+          if (!checkLock(folder, run.agent.key)) {
+            finish(run, 'failed', 'no record', { reopen: true })
+          }
         }
       }
     } finally {
