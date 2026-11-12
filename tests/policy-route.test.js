@@ -71,12 +71,12 @@ async function startRouteBridge({
   removed = [],
 } = {}) {
   const briefsDir = tempDir()
-  if (policy !== null) writeFileSync(join(briefsDir, 'policy.json'), policy)
   if (projectLanes !== null) {
     writeFileSync(join(briefsDir, 'lanes.json'), typeof projectLanes === 'string' ? projectLanes : JSON.stringify(projectLanes))
   }
   if (tasks !== null) writeFileSync(join(briefsDir, 'TASKS.md'), tasks)
   const base = tempDir()
+  if (policy !== null) writeFileSync(join(base, 'policy.json'), policy)
   const lanesFile = join(base, 'lanes.json')
   if (lanes !== null) writeFileSync(lanesFile, typeof lanes === 'string' ? lanes : JSON.stringify(lanes))
   const runs = runsFolder ?? join(base, 'machineroom-runs')
@@ -354,7 +354,15 @@ describe('POST /api/control/route/lane', () => {
   })
 
   it('says in one sentence that there is no lane for the tier in the room', async () => {
-    const { url } = await startRouteBridge({ policy: null, lanes: {}, tasks: TASKS, active: ['owner'] })
+    const ownerPolicy = JSON.stringify({
+      ...POLICY,
+      tiers: {
+        small: [{ lane: 'owner', model: null, reasoning: null, provider: null }],
+        medium: [{ lane: 'owner', model: null, reasoning: null, provider: null }],
+        large: [{ lane: 'owner', model: null, reasoning: null, provider: null }],
+      },
+    })
+    const { url } = await startRouteBridge({ policy: ownerPolicy, lanes: {}, tasks: TASKS, active: [] })
     const answer = await postLaneRoute(url, { task: SMALL_TASK })
     expect(answer.status).toBe(200)
     expect(answer.body.lane).toBeNull()
@@ -404,8 +412,8 @@ describe('POST /api/control/route/lane', () => {
   it('refuses a missing policy, a broken policy and a broken lane file', async () => {
     const missing = await startRouteBridge({ policy: null, lanes: LANES, tasks: TASKS, active: ALL })
     const noPolicy = await postLaneRoute(missing.url, { task: MEDIUM_TASK })
-    expect(noPolicy.status).toBe(200)
-    expect(noPolicy.body.tier).toBe('medium')
+    expect(noPolicy.status).toBe(404)
+    expect(noPolicy.body).toEqual({ error: 'The policy file is missing.' })
 
     const broken = await startRouteBridge({ policy: '{', lanes: LANES, tasks: TASKS, active: ALL })
     const badPolicy = await postLaneRoute(broken.url, { task: MEDIUM_TASK })

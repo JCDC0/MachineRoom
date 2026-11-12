@@ -203,12 +203,13 @@ describe('a run started with no lane', () => {
     expect(readCalls(rig.calls)).toEqual([])
   })
 
-  it('routes with the policy of this repository when the project has no policy file', async () => {
+  it('refuses when the lane folder has no policy file', async () => {
     const rig = await startRig()
     rmSync(join(rig.briefs, 'policy.json'))
     const answer = await postJson(`${rig.url}/api/control/runs`, { briefs: ['P31'], confirmed: true })
-    expect(answer.status).toBe(202)
-    expect(answer.body.routed.reason).toBeTruthy()
+    expect(answer.status).toBe(404)
+    expect(answer.body).toEqual({ error: 'The policy file is missing.' })
+    expect(readCalls(rig.calls)).toEqual([])
   })
 
   it('keeps the named lane refusal and the brief check', async () => {

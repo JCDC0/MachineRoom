@@ -248,6 +248,9 @@ describe('review routes on another project', () => {
 
   it('reads the room lanes when the project has no lane file of its own', async () => {
     const { room, project, briefsDir } = makeProject()
+    const runs = join(project, '..', 'runs')
+    mkdirSync(runs, { recursive: true })
+    writeFileSync(join(runs, 'agents.json'), JSON.stringify({ agents: [{ key: 'opencode', name: 'OpenCode', harness: 'opencode', model: 'opencode-go/deepseek-v4.1-flash' }] }))
     rmSync(join(room, 'docs', 'agents', 'lanes.json'))
     const { url } = await startBridge({ projectRoot: project, briefsDir })
     const res = await fetch(`${url}/api/control/reviews`)
@@ -284,6 +287,9 @@ describe('review routes on another project', () => {
 
   it('reads the room lanes when the project has no lane file and git cannot start', async () => {
     const { room, project, briefsDir } = makeProject()
+    const runs = join(project, '..', 'runs')
+    mkdirSync(runs, { recursive: true })
+    writeFileSync(join(runs, 'agents.json'), JSON.stringify({ agents: [{ key: 'opencode', name: 'OpenCode', harness: 'opencode', model: 'opencode-go/deepseek-v4.1-flash' }] }))
     rmSync(join(room, 'docs', 'agents', 'lanes.json'))
     const { url } = await startBridge({ projectRoot: project, briefsDir, hideGitAtStart: true })
     const res = await fetch(`${url}/api/control/reviews`)

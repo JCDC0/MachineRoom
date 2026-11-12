@@ -98,7 +98,7 @@ describe('the review list and a git planted in a lane worktree', () => {
     cleanups.push(() => {
       process.env.PATH = previousPath
     })
-    const bridge = createBridge({ projectRoot: base, port: 0 })
+    const bridge = createBridge({ projectRoot: base, briefsDir: agents, port: 0 })
     cleanups.push(() => bridge.stop())
     const { url } = await bridge.start()
     const { lanes } = await fetch(`${url}/api/control/reviews`).then((r) => r.json())

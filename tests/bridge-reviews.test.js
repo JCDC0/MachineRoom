@@ -126,7 +126,7 @@ async function startReviewsBridge(lanes, { patchLimit, withFiles = true, project
   }
   const bridge = createBridge({
     projectRoot: projectRoot ?? dir,
-    briefsDir: withFiles ? join(dir, 'docs', 'agents') : undefined,
+    briefsDir: join(dir, 'docs', 'agents'),
     port: 0,
     patchLimit,
     readTree: () => Promise.resolve({ root: 'project', files: [], created: [] }),
@@ -423,8 +423,10 @@ describe('merge route', { timeout: 30000 }, () => {
 
   it('takes a valid orchestrator token with no Origin and refuses a wrong one', async () => {
     const answers = []
+    const dir = makeTempDir()
     const api = createReviewsApi({
-      projectRoot: makeTempDir(),
+      projectRoot: dir,
+      briefsDir: join(dir, 'docs', 'agents'),
       sendJson: (req, res, status, body) => {
         answers.push({ status, body })
       },
