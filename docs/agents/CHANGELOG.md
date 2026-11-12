@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- P81: each chat message shows Copy and Branch on hover and focus, and the newest reply and each stopped line show Retry; Branch starts a new conversation from that message and keeps the old one in the list.
 - P77: the bridge keeps each endpoint model's name, context length, prices and date in endpoints.json, answers them with the model list, and saves model pins in model-pins.json.
 - P88: a machineroom lane's run log becomes a recording, so native runs replay like the others.
 - P90: Codex writes a ranked plan of ten next briefs, C1 to C10, with file:line for each claim and which can run together.

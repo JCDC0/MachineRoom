@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { createBridge } from '../server/index.js'
 import { activeLanesFileFor, projectLanesFileFor, writeActiveLanes, writeHiddenLanes } from '../server/active-lanes.js'
 import { createLanesSource, createRecordsCache, subOrchestratorAgent } from '../server/lanes-source.js'
-import { chatFileFor, COMPACT_RUNNING_PROBLEM, COMPACTED_MESSAGE, CONFIRM_AUTOCOMPACT_PROBLEM, CONFIRM_HARNESS_PROBLEM, CONFIRM_MODE_PROBLEM, MODE_PROBLEM, NO_NEW_REPORT, NO_REPORT, RESTART_MESSAGE } from '../server/orchestrator.js'
+import { chatFileFor, BRANCH_INDEX_PROBLEM, COMPACT_RUNNING_PROBLEM, COMPACTED_MESSAGE, CONFIRM_AUTOCOMPACT_PROBLEM, CONFIRM_HARNESS_PROBLEM, CONFIRM_MODE_PROBLEM, MODE_PROBLEM, NO_NEW_REPORT, NO_REPORT, RESTART_MESSAGE } from '../server/orchestrator.js'
 import {
   availableHarnesses,
   branchChanges,
@@ -1137,6 +1137,45 @@ describe('the orchestrator registry', () => {
     const remainingSessions = (await getJson(`${rig.url}/api/orchestrator/sessions`)).body.sessions
     expect(remainingSessions).toHaveLength(1)
     expect(remainingSessions[0].id).toBe(session1.id)
+  })
+
+  it('branches a conversation over the bridge and keeps the old one in the sessions list', async () => {
+    const files = makeBase()
+    const messages = [
+      { id: 'm1', from: 'owner', text: 'First message', at: '2026-10-30T10:00:00.000Z' },
+      { id: 'm2', from: 'orchestrator', text: 'First reply', at: '2026-10-30T10:00:01.000Z' },
+      { id: 'm3', from: 'owner', text: 'Second message', at: '2026-10-30T10:00:02.000Z' },
+      { id: 'm4', from: 'orchestrator', text: 'Second reply', at: '2026-10-30T10:00:03.000Z' },
+      { id: 'm5', from: 'owner', text: 'Third message', at: '2026-10-30T10:00:04.000Z' },
+      { id: 'm6', from: 'orchestrator', text: 'Third reply', at: '2026-10-30T10:00:05.000Z' },
+    ]
+    writeFileSync(
+      chatFileFor(files.projectRoot, files.runs),
+      `${JSON.stringify({ project: files.projectRoot, sessionId: null, state: 'idle', messages, pending: [] })}\n`
+    )
+    const rig = await makeBridge(files)
+
+    const noOrigin = await postJson(`${rig.url}/api/orchestrator/sessions/branch`, { index: 3, confirmed: true })
+    expect(noOrigin.status).toBe(403)
+    expect(noOrigin.body).toEqual({ error: OWNER_SESSION_PROBLEM })
+    expect((await pagePost(`${rig.url}/api/orchestrator/sessions/branch`, { index: 3 })).status).toBe(400)
+    const badIndex = await pagePost(`${rig.url}/api/orchestrator/sessions/branch`, { index: 9, confirmed: true })
+    expect(badIndex.status).toBe(400)
+    expect(badIndex.body).toEqual({ error: BRANCH_INDEX_PROBLEM })
+
+    const branched = await pagePost(`${rig.url}/api/orchestrator/sessions/branch`, { index: 3, confirmed: true })
+    expect(branched.status).toBe(200)
+    expect(branched.body).toMatchObject({ ok: true, title: 'First message (branch)', count: 3 })
+
+    const sessions = (await getJson(`${rig.url}/api/orchestrator/sessions`)).body
+    expect(sessions.current.title).toBe('First message (branch)')
+    expect(sessions.current.count).toBe(3)
+    expect(sessions.sessions).toHaveLength(1)
+    expect(sessions.sessions[0].title).toBe('First message')
+    expect(sessions.sessions[0].count).toBe(6)
+    const oldSession = await getJson(`${rig.url}/api/orchestrator/sessions/${sessions.sessions[0].id}`)
+    expect(oldSession.body.messages).toHaveLength(6)
+    expect(rig.chat().messages).toHaveLength(3)
   })
 
   it('attaches a sub from the owner ladder, answers its chat by id and removes it', async () => {

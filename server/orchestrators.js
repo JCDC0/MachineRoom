@@ -935,6 +935,23 @@ export function createOrchestrators({
       sendJson(req, res, out.status, out.body)
       return true
     }
+    if (path === '/api/orchestrator/sessions/branch') {
+      if (method !== 'POST') return methodNotAllowed(req, res)
+      if (!page) {
+        sendJson(req, res, 403, { error: OWNER_SESSION_PROBLEM })
+        return true
+      }
+      const body = await readJsonBody(req, res)
+      if (body === null) return true
+      const instance = find(body.id || url.searchParams.get('id'))
+      if (!instance) {
+        sendJson(req, res, 404, { error: NO_ORCHESTRATOR_PROBLEM })
+        return true
+      }
+      const out = instance.branchSession(body)
+      sendJson(req, res, out.status, out.body)
+      return true
+    }
     const openMatch = /^\/api\/orchestrator\/sessions\/([^/?#]+)\/open$/.exec(path)
     if (openMatch) {
       if (method !== 'POST') return methodNotAllowed(req, res)

@@ -5771,6 +5771,46 @@ body:has(#hud-orchestrator-chat) .lens-waiting {
   min-width: 0;
 }
 
+.mr-orch-line-actions {
+  display: flex;
+  gap: 12px;
+  min-height: 14px;
+  opacity: 0;
+}
+
+.mr-orch-line.is-owner .mr-orch-line-actions {
+  justify-content: flex-end;
+}
+
+.mr-orch-line:hover .mr-orch-line-actions,
+.mr-orch-line:focus-within .mr-orch-line-actions {
+  opacity: 1;
+}
+
+.mr-orch-line-action {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: rgb(255 255 255 / 0.5);
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 400;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.mr-orch-line-action:hover:not(:disabled) {
+  border-color: transparent;
+  background: transparent;
+  color: var(--yellow);
+}
+
+.mr-orch-line-action:focus-visible {
+  outline: 2px solid var(--yellow);
+  outline-offset: 2px;
+}
+
 .mr-orch-block {
   margin: 0;
   white-space: pre-wrap;

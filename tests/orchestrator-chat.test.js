@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { act, createElement } from 'react'
 import { renderToString } from 'react-dom/server'
 import { describe, expect, it, vi } from 'vitest'
@@ -16,6 +17,7 @@ import {
   chatBlocks,
   chatLines,
   clampDraft,
+  copyChatText,
   isSendKey,
   listsOrchestrator,
   modeClass,
@@ -26,6 +28,7 @@ import {
   normalizeModes,
   orchestratorDoing,
   projectBaseName,
+  retryTarget,
   sendChatMessage,
   startConfirmText,
   statusDetail,
@@ -650,6 +653,147 @@ describe('sendChatMessage', () => {
     accept({ id: 'message-1' })
     expect(await pending).toEqual({ ok: true })
     expect(calls).toEqual([])
+  })
+})
+
+describe('message actions', () => {
+  const LINES = [
+    { id: 'o1', index: 0, from: 'owner', text: 'First' },
+    { id: 'r1', index: 1, from: 'orchestrator', text: 'Reply one' },
+    { id: 'o2', index: 2, from: 'owner', text: 'Second' },
+    { id: 'r2', index: 3, from: 'orchestrator', text: 'The orchestrator stopped: exit 3.' },
+    { id: 'o3', index: 4, from: 'owner', text: 'Third' },
+    { id: 'r3', index: 5, from: 'orchestrator', text: 'Reply three' },
+  ]
+
+  it('copies the exact text', async () => {
+    const written = []
+    const copied = await copyChatText('Line one\nLine two', {
+      writeText: async (text) => written.push(text),
+    })
+    expect(copied).toBe(true)
+    expect(written).toEqual(['Line one\nLine two'])
+    expect(await copyChatText('Text', null)).toBe(false)
+    expect(
+      await copyChatText('Text', {
+        writeText: async () => {
+          throw new Error('denied')
+        },
+      })
+    ).toBe(false)
+  })
+
+  it('offers retry on the newest reply and on a stopped line when an owner message comes before it', () => {
+    expect(retryTarget(LINES, 5)?.text).toBe('Third')
+    expect(retryTarget(LINES, 3)?.text).toBe('Second')
+    expect(retryTarget(LINES, 1)).toBeNull()
+    expect(retryTarget(LINES, 0)).toBeNull()
+    expect(retryTarget([{ from: 'orchestrator', text: 'A reply' }], 0)).toBeNull()
+  })
+
+  it('branches at the message and keeps the earlier messages', async () => {
+    const chat = { state: 'idle', messages: LINES.map((line) => ({ id: line.id, from: line.from, text: line.text })) }
+    const calls = []
+    const client = {
+      ...fakeClient(chat),
+      branchOrchestratorSession: async (options) => {
+        calls.push(options)
+        return { ok: true }
+      },
+    }
+    await withDom(async ({ container, root }) => {
+      await act(async () => {
+        root.render(createElement(OrchestratorChat, { client, inline: true, initialChat: chat }))
+      })
+      await act(async () => {})
+      const lines = container.querySelectorAll('.mr-orch-line')
+      expect(lines).toHaveLength(6)
+      await click(root, buttonWithText(lines[2], 'Branch'))
+      expect(calls).toEqual([{ id: 'orchestrator', index: 3, confirmed: true }])
+    })
+  })
+
+  it('retries the owner message before the newest reply', async () => {
+    const chat = { state: 'idle', messages: LINES.map((line) => ({ id: line.id, from: line.from, text: line.text })) }
+    const calls = []
+    const client = {
+      ...fakeClient(chat),
+      sendToOrchestrator: async (text, options) => {
+        calls.push({ text, options })
+        return { id: 'message-2' }
+      },
+    }
+    await withDom(async ({ container, root }) => {
+      await act(async () => {
+        root.render(createElement(OrchestratorChat, { client, inline: true, initialChat: chat }))
+      })
+      await act(async () => {})
+      const lines = container.querySelectorAll('.mr-orch-line')
+      await click(root, buttonWithText(lines[5], 'Retry'))
+      expect(calls).toEqual([{ text: 'Third', options: { confirmed: true } }])
+    })
+  })
+
+  it('refuses a retry while a turn runs', async () => {
+    const chat = { state: 'working', messages: LINES.map((line) => ({ id: line.id, from: line.from, text: line.text })) }
+    const calls = []
+    const client = {
+      ...fakeClient(chat),
+      sendToOrchestrator: async (text, options) => {
+        calls.push({ text, options })
+        return { id: 'message-2' }
+      },
+    }
+    await withDom(async ({ container, root }) => {
+      await act(async () => {
+        root.render(createElement(OrchestratorChat, { client, inline: true, initialChat: chat }))
+      })
+      await act(async () => {})
+      const lines = container.querySelectorAll('.mr-orch-line')
+      await click(root, buttonWithText(lines[5], 'Retry'))
+      expect(container.querySelector('.mr-orch-error').textContent).toContain(
+        'Wait for the turn to end, or stop it.'
+      )
+      expect(calls).toEqual([])
+    })
+  })
+
+  it('says Copied for two seconds and reaches the buttons with the keyboard', async () => {
+    vi.useFakeTimers()
+    vi.stubGlobal('navigator', {
+      clipboard: {
+        writeText: async () => {},
+      },
+    })
+    const chat = { state: 'idle', messages: LINES.map((line) => ({ id: line.id, from: line.from, text: line.text })) }
+    try {
+      await withDom(async ({ container, root, dom }) => {
+        await act(async () => {
+          root.render(createElement(OrchestratorChat, { client: fakeClient(chat), inline: true, initialChat: chat }))
+        })
+        await act(async () => {})
+        const first = container.querySelectorAll('.mr-orch-line')[0]
+        const copy = buttonWithText(first, 'Copy')
+        expect(copy).not.toBeNull()
+        await act(async () => {
+          copy.focus()
+        })
+        expect(dom.document.activeElement).toBe(copy)
+        await click(root, copy)
+        expect(buttonWithText(first, 'Copied')).not.toBeNull()
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(2000)
+        })
+        expect(buttonWithText(first, 'Copy')).not.toBeNull()
+
+        const css = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8')
+        expect(css).toContain('.mr-orch-line:hover .mr-orch-line-actions')
+        expect(css).toContain('.mr-orch-line:focus-within .mr-orch-line-actions')
+      })
+    } finally {
+      vi.useRealTimers()
+      vi.unstubAllGlobals()
+    }
   })
 })
 
