@@ -876,8 +876,22 @@ The owner watches the testbench room while the orchestrator, a Claude Code sessi
 1. `scripts/run-lane.mjs` writes `startedBy` into the run's record and its first log frame: `{ harness: 'claude', session: CLAUDE_CODE_SESSION_ID }` when that variable is set, `{ harness: 'opencode', session: ... }` when an OpenCode session variable is set (find its name in `server/opencode-sessions*.js` or the OpenCode docs the code cites), and nothing when neither is.
 2. The lane source carries `startedBy` with the run. The sessions source names its agent so the two can be matched (the session id is already in its key).
 3. In the room, when the room's own orchestrator is idle and a session started a lane run that is open now or ended in the last 10 minutes, that session takes the orchestrator's place at the top of the hub, and the room's orchestrator takes the session's old slot. The lane-start star and the lane's line run from that session. When the room's orchestrator starts a turn, it takes the top again. Find the placement code (search `src/model` and `src/engine/agents.js` for where the orchestrator's place is chosen) and keep the rule pure and tested there.
-4. Tests, by what they prove: a run started with `CLAUDE_CODE_SESSION_ID` set records it, one without records nothing; a matched session takes the top while the orchestrator is idle and gives it back when a turn starts; a session with no run in 10 minutes stays at the side; the lane-start star comes from the session.
+4. The Agents tab lists a session that started a lane run, under the orchestrator, with its state and its newest step, so the owner can find it there as well as in the room.
+5. Tests, by what they prove: the Agents tab lists the matched session; a run started with `CLAUDE_CODE_SESSION_ID` set records it, one without records nothing; a matched session takes the top while the orchestrator is idle and gives it back when a turn starts; a session with no run in 10 minutes stays at the side; the lane-start star comes from the session.
 
 Run `npx vitest related --run` on every file you changed and `npm run build`; both must pass. Name the by-eye checks for the orchestrator at 1280 by 800: a testbench room served with `MACHINEROOM_RUNS` and `MACHINEROOM_LANES_DIR` set, while a lane runs.
 
-Files: scripts/run-lane.mjs, server/lanes-source.js, server/claude-sessions.js, the placement code it finds in src/model/ or src/engine/agents.js, tests/.
+Files: scripts/run-lane.mjs, server/lanes-source.js, server/claude-sessions.js, the placement code it finds in src/model/ or src/engine/agents.js, src/ui/FamilyTree.jsx, tests/.
+
+**P86. A command's text is not a file touch (OpenCode).** Read no part of TASKS.md beyond this brief. Use no subagents. Run every command in the foreground. Commit each step as you finish it, and stop starting new work at minute 35. Change only `src/model/commands.js` and tests.
+
+The owner watched the orchestrator in the room and saw it write `run-lane.mjs`, which it never did. Its command was `cat > SCRATCH/p85.md <<'EOF'` followed by a brief that names `run-lane.mjs`, `lanes-source.js` and `claude-sessions.js`. `touchesForCommand` removes PowerShell here-strings (`withoutHereStrings`) but not bash heredocs, so every file named in the body counts as touched, and as written because the `>` comes first.
+
+1. Remove bash heredoc bodies before the files are matched: `<<WORD`, `<<'WORD'`, `<<"WORD"` and `<<-WORD`, up to the line that holds only `WORD` (with leading tabs for `<<-`), or to the end when there is none.
+2. A write operator writes only the file it points at: in `cmd > FILE`, `>> FILE`, `| tee FILE` and `Out-File FILE`, only FILE is written; other files the segment names stay reads.
+3. Files named inside an inline program (`python -c "..."`, `node -e "..."`, `node --eval`, `pwsh -Command "..."`) are reads unless that program's own text opens them for writing, which the parser does not try to tell: keep them reads.
+4. Tests, by what they prove: the owner's case above gives one write of `p85.md` (if it is in the tree) and no touch of the three names; `cat <<-EOF` with tabs; a heredoc with no end line; `echo a > out.txt; cat in.txt` writes out.txt and reads in.txt; `node -e "...writeFileSync('x.js')"` reads x.js only; the old here-string and message tests stay as they are.
+
+Run `npx vitest related --run src/model/commands.js` and `npm run build`; both must pass.
+
+Files: src/model/commands.js, tests/.
