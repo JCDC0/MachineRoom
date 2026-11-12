@@ -12,7 +12,7 @@ const CARD_GAP = 40
 const CONSOLE_ROWS = 5
 const CONSOLE_HOLD_MS = 6000
 const CONSOLE_TOOLS = new Set(['shell', 'other'])
-export const CHIP_W = 180
+export const CHIP_W = 98
 export const OPEN_W = 320
 export const CHIP_REACH = AGENT_GAP + CHIP_W * SCALE + CARD_GAP
 const CONSOLE_LIFT = CHIP_W * SCALE
@@ -27,9 +27,15 @@ export function chipHalfWidth(open) {
 }
 
 export function chipTitle(name, status, open) {
+  if (!open) return ''
   const label = typeof name === 'string' ? name : ''
-  if (!open) return label
   return status ? `${label} // ${status}` : label
+}
+
+export function chipAriaLabel(name, status) {
+  const label = typeof name === 'string' && name ? name : 'agent'
+  const state = typeof status === 'string' && status ? status : 'idle'
+  return `${label}, ${state}`
 }
 
 export const CHIP_SIDE_DEAD_BAND = 24
@@ -202,6 +208,7 @@ export function createTerminals(cssScene, roster, { onPick = null } = {}) {
       placed: false,
       visible: true,
       version: -1,
+      ariaLabel: '',
       typedAt: 0,
       lastLine: null,
       rows: [],
@@ -383,6 +390,11 @@ export function createTerminals(cssScene, roster, { onPick = null } = {}) {
       if (term.element.className !== className) term.element.className = className
       const title = chipTitle(term.name, entry.status, term.open)
       if (term.title.textContent !== title) term.title.textContent = title
+      const aria = chipAriaLabel(term.name, entry.status)
+      if (term.ariaLabel !== aria) {
+        term.ariaLabel = aria
+        term.element.setAttribute('aria-label', aria)
+      }
 
       const muted = Boolean(focusKey && focusKey !== term.key)
       const held = notes.get(term.key)

@@ -1,11 +1,27 @@
 import { describe, expect, it } from 'vitest'
-import { CHIP_SIDE_DEAD_BAND, addressIn, addressUrl, chipSideFromScreen, chipTitle, consoleRows } from '../src/engine/terminals.js'
+import {
+  CHIP_SIDE_DEAD_BAND,
+  CHIP_W,
+  OPEN_W,
+  addressIn,
+  addressUrl,
+  chipAriaLabel,
+  chipHalfWidth,
+  chipSideFromScreen,
+  chipTitle,
+  consoleRows,
+} from '../src/engine/terminals.js'
 
 const line = (text, tone = 'normal') => ({ text, tone })
 
 describe('chipTitle', () => {
-  it('keeps a closed chip to its label', () => {
-    expect(chipTitle('ORCHESTRATOR', 'working', false)).toBe('ORCHESTRATOR')
+  it('leaves a closed chip to its state', () => {
+    expect(chipTitle('ORCHESTRATOR', 'working', false)).toBe('')
+  })
+
+  it('keeps the name in the aria label of a closed chip', () => {
+    expect(chipTitle('ORCHESTRATOR', 'working', false)).toBe('')
+    expect(chipAriaLabel('ORCHESTRATOR', 'working')).toContain('ORCHESTRATOR')
   })
 
   it('adds the state word to an open chip', () => {
@@ -14,6 +30,30 @@ describe('chipTitle', () => {
 
   it('leaves out a missing status', () => {
     expect(chipTitle('OPENCODE', '', true)).toBe('OPENCODE')
+  })
+})
+
+describe('chipAriaLabel', () => {
+  it('names the agent and its state', () => {
+    expect(chipAriaLabel('ORCHESTRATOR', 'working')).toBe('ORCHESTRATOR, working')
+    expect(chipAriaLabel('OPENCODE', 'done')).toBe('OPENCODE, done')
+  })
+
+  it('answers a fallback for a missing name and state', () => {
+    expect(chipAriaLabel('', '')).toBe('agent, idle')
+    expect(chipAriaLabel(null, null)).toBe('agent, idle')
+    expect(chipAriaLabel(42, 7)).toBe('agent, idle')
+  })
+})
+
+describe('chipHalfWidth', () => {
+  it('fits a closed chip to its state', () => {
+    expect(chipHalfWidth(false)).toBe((CHIP_W * 1.2) / 2)
+    expect(chipHalfWidth(false)).toBeLessThan((180 * 1.2) / 2)
+  })
+
+  it('keeps the open chip width', () => {
+    expect(chipHalfWidth(true)).toBe((OPEN_W * 1.2) / 2)
   })
 })
 
