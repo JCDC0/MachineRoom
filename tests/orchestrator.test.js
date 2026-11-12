@@ -2119,6 +2119,49 @@ describe('the orchestrator conversation file', () => {
     expect(restored.answer().messages.some((message) => message.text === 'Still there?')).toBe(true)
   })
 
+  it('keeps agent messages and lane replies through a restart and a fork', () => {
+    const fleet = { ...LANES, opencode: { name: 'OpenCode', cli: { harness: 'opencode', bin: 'opencode', model: 'x' } } }
+    const rig = makeRig({ lanes: fleet })
+    const order = rig.orchestrator.recordAgentMessage({
+      from: 'orchestrator',
+      to: 'opencode',
+      kind: 'order',
+      text: 'Build the page',
+      lanes: fleet,
+    })
+    const reply = rig.orchestrator.addLaneReply('opencode', 'The page builds.')
+    expect(order).toBeTruthy()
+    expect(reply).toBeTruthy()
+    expect(rig.answer().messages.some((message) => message.from === 'agent' && message.agent?.text === 'Build the page')).toBe(true)
+    expect(rig.answer().messages.some((message) => message.from === 'opencode' && message.text === 'The page builds.')).toBe(true)
+    rig.orchestrator.close()
+
+    const restarted = restoreRig(rig)
+    const afterRestart = restarted.answer().messages
+    expect(
+      afterRestart.some(
+        (message) =>
+          message.from === 'agent' &&
+          message.agent?.from === 'orchestrator' &&
+          message.agent?.to === 'opencode' &&
+          message.agent?.kind === 'order' &&
+          message.agent?.text === 'Build the page'
+      )
+    ).toBe(true)
+    expect(afterRestart.some((message) => message.from === 'opencode' && message.text === 'The page builds.')).toBe(true)
+
+    expect(restarted.orchestrator.branchSession({ index: afterRestart.length, confirmed: true }).status).toBe(200)
+    const afterFork = restarted.answer().messages
+    expect(afterFork.some((message) => message.from === 'agent' && message.agent?.text === 'Build the page')).toBe(true)
+    expect(afterFork.some((message) => message.from === 'opencode' && message.text === 'The page builds.')).toBe(true)
+    restarted.orchestrator.close()
+
+    const forked = restoreRig(rig, { file: 'calls-forked.jsonl' })
+    const afterBoth = forked.answer().messages
+    expect(afterBoth.some((message) => message.from === 'agent' && message.agent?.text === 'Build the page')).toBe(true)
+    expect(afterBoth.some((message) => message.from === 'opencode' && message.text === 'The page builds.')).toBe(true)
+  })
+
   it('gives a resumed OpenCode session its new token once after a restart', async () => {
     const rig = makeRig({ harness: 'opencode', lanes: OPENCODE_LANES })
     rig.send('Remember me')
@@ -2282,6 +2325,66 @@ describe('the orchestrator chat file', () => {
     expect(saved).toContain('[key]')
     expect(saved).not.toContain(secret)
     expect(rig.masked.total).toBe(2)
+  })
+
+  it('masks a key in an agent order or report in the chat, its metadata and the saved file', () => {
+    const secret = 'sk-or-v1-' + 'q'.repeat(24)
+    const setting = 'OPENROUTER_API_KEY='
+    const fleet = {
+      ...LANES,
+      opencode: { name: `OpenCode ${setting}${secret}`, cli: { harness: 'opencode', bin: 'opencode', model: 'x' } },
+    }
+    const rig = makeRig({ lanes: fleet })
+    for (const kind of ['order', 'report']) {
+      const message = rig.orchestrator.recordAgentMessage({
+        from: 'orchestrator',
+        to: 'opencode',
+        kind,
+        text: `Read ${setting}${secret}`,
+        lanes: fleet,
+      })
+      expect(message).toBeTruthy()
+      expect(message.agent.text).toContain('[key]')
+      expect(message.agent.text).not.toContain(secret)
+      expect(message.agent.toName).toContain('[key]')
+      expect(message.agent.toName).not.toContain(secret)
+      expect(message.text).not.toContain(secret)
+    }
+    const chat = JSON.stringify(rig.answer().messages)
+    expect(chat).toContain('[key]')
+    expect(chat).not.toContain(secret)
+    const saved = readFileSync(chatFileFor(rig.projectRoot, rig.runs), 'utf8')
+    expect(saved).toContain('[key]')
+    expect(saved).not.toContain(secret)
+  })
+
+  it('masks a key in a saved-session agent message it restores', () => {
+    const secret = 'sk-or-v1-' + 'q'.repeat(24)
+    const setting = 'OPENROUTER_API_KEY='
+    const fleet = { ...LANES, opencode: { name: 'OpenCode', cli: { harness: 'opencode', bin: 'opencode', model: 'x' } } }
+    const rig = makeRig({ lanes: fleet })
+    rig.orchestrator.recordAgentMessage({
+      from: 'orchestrator',
+      to: 'opencode',
+      kind: 'report',
+      text: `Done with ${setting}${secret}`,
+      lanes: fleet,
+    })
+    rig.orchestrator.addLaneReply('opencode', `Report sent with ${setting}${secret}`)
+    expect(rig.orchestrator.newSession({ confirmed: true }).status).toBe(200)
+    const savedId = rig.orchestrator.listSessions()[0].id
+    rig.orchestrator.close()
+
+    const restored = restoreRig(rig)
+    expect(restored.answer().messages).toEqual([])
+    const session = restored.orchestrator.getSession(savedId)
+    expect(session.status).toBe(200)
+    expect(session.body.messages.some((message) => message.from === 'agent' && message.agent?.text.includes('[key]'))).toBe(true)
+    expect(session.body.messages.some((message) => message.from === 'opencode' && message.text.includes('[key]'))).toBe(true)
+    const text = JSON.stringify(session.body.messages)
+    expect(text).toContain('[key]')
+    expect(text).not.toContain(secret)
+    expect(readFileSync(chatFileFor(rig.projectRoot, rig.runs), 'utf8')).not.toContain(secret)
   })
 
   it('masks a key in a chat file it restores', () => {
@@ -3005,6 +3108,44 @@ describe('orchestrator reasoning effort and sessions', () => {
     expect(retried.endsWith('Try again')).toBe(true)
     const after = JSON.parse(readFileSync(branch.conversation, 'utf8'))
     expect(after.branchTranscript).toBeUndefined()
+  })
+
+  it('clears a provisional session id when setup fails and carries the transcript next time', async () => {
+    const branch = branchSetup('mr-branch-setup-error-')
+    const argsSeen = []
+    let calls = 0
+    const spawnFake = (file, args, options) => {
+      calls += 1
+      argsSeen.push([...args])
+      const child = emitterChild()
+      setTimeout(() => {
+        child.stdout.write(JSON.stringify({ type: 'system', subtype: 'init', session_id: 'fake' }) + '\n')
+        child.stdout.write(
+          JSON.stringify({ type: 'result', subtype: 'success', result: 'Carried on.', usage: { input_tokens: 1, output_tokens: 1 } }) + '\n'
+        )
+        child.emit('close', 0)
+      }, 10)
+      return child
+    }
+    const orchestrator = branch.make(spawnFake)
+    const blocker = join(branch.runs, 'scratch-orchestrator')
+    writeFileSync(blocker, 'not a folder')
+    expect(orchestrator.send({ text: 'Carry on', confirmed: true }).status).toBe(202)
+    await waitFor(() => orchestrator.answer().state === 'idle', 5000, 'the failed setup')
+    expect(calls).toBe(0)
+    const saved = JSON.parse(readFileSync(branch.conversation, 'utf8'))
+    expect(saved.sessionId).toBe(null)
+    expect(saved.branchTranscript).toBe(branch.transcript)
+
+    rmSync(blocker, { force: true })
+    expect(orchestrator.send({ text: 'Try again', confirmed: true }).status).toBe(202)
+    await waitFor(() => calls === 1 && orchestrator.answer().state === 'idle', 5000, 'the retried start')
+    expect(argsSeen[0]).toContain('--session-id')
+    expect(argsSeen[0]).not.toContain('--resume')
+    const retried = valueAfter(argsSeen[0], '-p')
+    expect(retried).toContain(BRANCH_TRANSCRIPT_INTRO)
+    expect(retried).toContain('> Owner: First task')
+    expect(retried.endsWith('Try again')).toBe(true)
   })
 
   it('clears a branch transcript once its first child starts', async () => {

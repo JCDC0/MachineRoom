@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- P120: agent messages mask their stored text and sender names, saved sessions and forks keep agent messages and lane replies, and a failed setup clears the provisional session id.
 - The runner commits only the brief's listed paths, reads a brief's whole body, and allows the files of every brief in a run (P116).
 - A branch's carried transcript is cleared only once the agent has started, so a failed start keeps the history (P118).
 - Each conversation row has one menu: Pin, Rename, Fork, Mark as unread, Archive and Delete, with keys, a search box and a kept sort (P93, P115).
