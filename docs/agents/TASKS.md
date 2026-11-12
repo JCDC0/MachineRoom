@@ -1454,3 +1454,12 @@ Review 21 (`docs/agents/AUDIT-2026-11-REVIEW-21.md`, P141) found four findings t
 2. `server/orchestrator.js` imports it from `server/printed-path.js`, not from `scripts/run-lane.mjs`. Change only that import line in `server/orchestrator.js`: another lane edits the rest of it.
 3. Add `server/printed-path.js` to the `files` list of `package.json` if the list names server files one by one, and one line for it in `docs/agents/architecture/CODE.md`. Move the masking tests that call `printedRunsFolder` directly into `tests/printed-path.test.js` only if that is a plain move.
 4. Run `node node_modules/vitest/vitest.mjs related --run server/printed-path.js scripts/run-lane.mjs server/orchestrator.js`, `npm run build` and `npm run pack-check`. Report what passed.
+
+**P149. Review the last merges before the shutdown (Codex).** Read `docs/agents/OWNER.md` and this brief only. Change no code. Do not commit: the runner commits your file. Stop at minute 12. Files: docs/agents/AUDIT-2026-11-REVIEW-22.md.
+
+Review, with `git show -m --first-parent SHA`, against the code around each change: `b06c625e` (P132, saved chat strings masked whole before they are cut), `e74e9c86` (P138, lane lock liveness in the lane source and the runs route), `55ed7e00` (P142, the menu row identity), `2bf33102` (P143, a brief file list ignores only code), `c149fa89` (P144, project paths masked in run-lane output), `5a3ba672` (P145, the async merge check), `f1c1123f` (P146, the two load tests). Hunt for: a key or profile path that still reaches the page or a saved file; a live lane counted as stale or a stale one as live; a menu that closes while in use; a real file list lost; a turn that never starts, or two git checks at once; a test that cannot fail. Write the file: a table of at most 6 findings, the most harmful first, each with `file:line`, what goes wrong and when, the smallest fix, and whether it blocks a push. An empty table with what you checked is a good answer.
+
+**P150. Run the full suite before the shutdown (OpenCode).** Read this brief only. Change no file except your report. Stop at minute 15. Files: docs/agents/RUN-2026-11-13-SUITE-2.md.
+
+1. Run `node scripts/test.mjs` once in the foreground.
+2. For each failing test, run its file alone twice. Write `docs/agents/RUN-2026-11-13-SUITE-2.md`: the commit, the totals, and one line per failure with its file, test name, first assertion line and whether it fails alone. Commit it.
