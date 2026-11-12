@@ -227,6 +227,8 @@ export default function ModelPicker({
   const [active, setActive] = useState(0)
   const searchRef = useRef(null)
   const pinsRead = useRef(false)
+  const pinsTouched = useRef(false)
+  const hasDetails = Array.isArray(details) && details.length > 0
 
   const detailMap = useMemo(() => {
     const given = modelDetailMap(details)
@@ -263,22 +265,28 @@ export default function ModelPicker({
       Promise.resolve()
         .then(() => client.modelPins())
         .then((list) => {
-          if (alive) setPins(cleanPickerPins(list))
-        })
-        .catch(() => {})
-    }
-    if (!details && typeof client?.endpoints === 'function') {
-      Promise.resolve()
-        .then(() => client.endpoints())
-        .then((endpoints) => {
-          if (alive) setLoadedDetails(endpointDetailMap(endpoints))
+          if (alive && !pinsTouched.current) setPins(cleanPickerPins(list))
         })
         .catch(() => {})
     }
     return () => {
       alive = false
     }
-  }, [open, client, details])
+  }, [open, client])
+
+  useEffect(() => {
+    if (!open || hasDetails || typeof client?.endpoints !== 'function') return undefined
+    let alive = true
+    Promise.resolve()
+      .then(() => client.endpoints())
+      .then((endpoints) => {
+        if (alive) setLoadedDetails(endpointDetailMap(endpoints))
+      })
+      .catch(() => {})
+    return () => {
+      alive = false
+    }
+  }, [open, client, hasDetails])
 
   function close() {
     setOpen(false)
@@ -297,6 +305,7 @@ export default function ModelPicker({
   }
 
   function togglePin(row) {
+    pinsTouched.current = true
     const next = pins.includes(row.id) ? pins.filter((pin) => pin !== row.id) : [...pins, row.id]
     setPins(next)
     setPinError('')
