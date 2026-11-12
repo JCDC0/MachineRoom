@@ -236,6 +236,7 @@ In tests:
 - A fake runner in a test does not prove a command starts on Windows (`opencode` is an npm shim). Start it for real once.
 - A test must never write into a real runs folder or read the real lane list (`tests/helpers/isolate.js`).
 - A test that waits on a process waits for the process (`waitUntil`), not for a fixed sleep.
+- A change to `docs/agents/lanes.json` is code: tests read the real lane list. Run `npx vitest related --run docs/agents/lanes.json` and `tests/plan.test.js` before you commit it.
 
 In a brief that sets a budget:
 
