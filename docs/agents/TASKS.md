@@ -1168,3 +1168,12 @@ Files: scripts/mr-agent.mjs, tests/.
 3. Tests in `tests/commands.test.js` and `tests/model-picker.test.js` for each case above.
 
 Files: src/model/commands.js, src/ui/ModelPicker.jsx, tests/commands.test.js, tests/model-picker.test.js.
+
+
+**P111. A Copilot reply keeps all of its answer (Codex).** Read `docs/agents/OWNER.md`, this brief, and the P2 finding of review 16 (`docs/agents/AUDIT-2026-11-REVIEW-16.md`) on `src/harnesses/common.js` and `src/harnesses/copilot.js`. Do not commit: the runner commits your files. Your sandbox cannot run the tests; write them, and say in your report that the orchestrator runs them.
+
+1. The plain-text reply of a Copilot run keeps every paragraph of its final answer. Earlier progress is cut only at a line the Copilot parser already reads as a tool call or tool result, never at a blank line or at an ordinary word such as `Run`.
+2. Escape codes stay stripped, and the replies of the other harnesses do not change.
+3. Tests in `tests/copilot-harness.test.js`: a two-paragraph answer after two tool lines keeps both paragraphs; an answer line that starts with `Run the migration` stays; a run with no tool lines keeps its whole text.
+
+Files: src/harnesses/common.js, src/harnesses/copilot.js, tests/copilot-harness.test.js.
