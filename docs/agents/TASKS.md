@@ -1253,3 +1253,29 @@ Review 17 (`docs/agents/AUDIT-2026-11-REVIEW-17.md`, P114) read the merges P100 
 **P119. Review the last merges before the push (Codex).** Read `docs/agents/OWNER.md` and this brief only. Change no code. Do not commit: the runner commits your file. Files: docs/agents/AUDIT-2026-11-REVIEW-18.md.
 
 Review what these merges brought, with `git show -m --first-parent SHA` for each, against the code around each change: `68dacfd4` (P113 with P82: the chat's To choice sends a task to a lane through `startProjectTask` in `server/runs.js`, and agent messages show in the chat), `a8203a93` (P117, a cost limit stops on a damaged answer; Copilot prose lines kept), `b432f9b2` (P115 with P93: one menu per conversation, unread and archived on the bridge, search and sort), `98eea768` (P118, a branch transcript kept until the child starts), `aa382b6e` (P116, the runner commits only the briefs' paths and reads a brief's whole body). Hunt for what a test would not show: a lane started from the chat on a dirty project, on this repository or without a worktree; a page or lane token that can start a lane it should not; an agent message that carries a key, a path or a session id to the page; a conversation write (archive, unread, fork, delete) without the page-origin guard or a cap, or one that can act on the current conversation; a fork that drops or duplicates messages; a menu key that reaches the room's shortcuts; a paid request sent twice; a runner commit that takes a file outside the briefs or misses one inside; a brief body that swallows the next brief. Write the file: a table of at most 8 findings, the most harmful first, each with `file:line`, what goes wrong and when, the smallest fix, and whether it blocks a push. Write no finding you cannot point to in the code. An empty table with what you checked is a good answer.
+
+## The fixes from review 18 (2026-11-13)
+
+Review 18 (`docs/agents/AUDIT-2026-11-REVIEW-18.md`, P119) read P113, P115 to P118 and found six findings that block the push and one that does not. These three briefs touch separate files and run at once.
+
+**P120. Agent messages are masked, kept and resumed right (OpenCode).** Read review 18 findings 1, 4 and 5, and this brief only. Use no subagents. Run every command in the foreground. Commit each step as you finish it, and stop starting new work at minute 40. Files: server/orchestrator.js, tests/orchestrator.test.js, docs/agents/CHANGELOG.md.
+
+1. Finding 1: in `server/orchestrator.js`, mask an agent message's stored text (`agent.text`) and its sender with the same masker the display text uses, before it is stored, persisted or returned to the page.
+2. Finding 5: the saved-session and current-chat loaders keep validated agent messages and lane replies (sender a known lane key or `sub-` key), with their safe metadata, and mask their text on load.
+3. Finding 4: the setup failure path before the spawn calls `failedToStart(turn)`, so a provisional session id never outlives a turn that did not start.
+4. Tests, by what they prove: a key in an order or report never reaches the chat API or the saved file; an agent message survives a bridge restart and a fork; a setup write failure leaves no session id and the next turn carries the transcript.
+5. Run `node node_modules/vitest/vitest.mjs related --run server/orchestrator.js` and `npm run build`. Report what passed.
+
+**P121. A brief's file list ends with its paragraph, and a cost limit stops on a lost connection (AGY).** Read review 18 findings 2 and 3, and this brief only. Use no subagents. Run every command in the foreground. Commit each step as you finish it, and stop starting new work at minute 35. Files: src/briefs/briefs.js, scripts/mr-agent.mjs, tests/briefs.test.js, tests/mr-agent.test.js, docs/agents/CHANGELOG.md.
+
+1. Finding 2: `briefFileList` in `src/briefs/briefs.js` reads only up to the end of the paragraph that holds the last `Files:` marker (the first blank line after it), so a later paragraph never adds files.
+2. Finding 3: in `scripts/mr-agent.mjs`, when `MR_AGENT_MAX_COST_USD` is set, a fetch that rejects (no response) stops the run with the cost-unknown sentence of P104 and exit 3, before any retry. With no cost limit the retries stay.
+3. Tests, by what they prove: the review's two-paragraph example lists only `src/allowed.js`; with a cost limit a rejected fetch sends no second request; without one it retries.
+4. Run `node node_modules/vitest/vitest.mjs related --run src/briefs/briefs.js scripts/mr-agent.mjs` and `npm run build`. Report what passed.
+
+**P122. Fork reads the current length, and a menu key never reaches the room (OpenCode).** Read review 18 findings 6 and 7, and this brief only. Use no subagents. Run every command in the foreground. Commit each step as you finish it, and stop starting new work at minute 35. Files: src/ui/Sidebar.jsx, src/ui/sidebar.js, tests/sidebar-menu-ui.test.js, tests/sidebar.test.js, docs/agents/CHANGELOG.md.
+
+1. Finding 6: Fork reads the conversation's message count again (from the bridge, or the live chat for the current one) right before it sends the branch, and the list's counts refresh when a chat turn ends. Fork is enabled once messages arrive.
+2. Finding 7: with the menu open, every menu key (P, R, F, U, A, D) is consumed even when its item is disabled; only enabled items act.
+3. Tests, by what they prove: a fork after new messages carries all of them; F on a disabled Fork changes no room mode and the menu stays open.
+4. Run `node node_modules/vitest/vitest.mjs related --run src/ui/Sidebar.jsx src/ui/sidebar.js` and `npm run build`. Report what passed.
