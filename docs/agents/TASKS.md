@@ -1092,3 +1092,28 @@ Files: scripts/run-lane.mjs, scripts/candidate.mjs, scripts/recording-files.mjs,
 Run `npx vitest related --run` on every file you changed and `npm run build`; both must pass.
 
 Files: server/projects.js, server/index.js, src/live/bridge.js, server/agents-config.js, tests/.
+
+
+## The fixes from review 15 (2026-11-12, night)
+
+Review 15 (`docs/agents/AUDIT-2026-11-REVIEW-15.md`, by Codex on GPT-6.1 Sol) found two push blockers: the native agent's cost limit never fires when answers give token counts but no dollar cost, and a branched chat loses its quoted transcript when another conversation is opened before its first turn. P104 and P105 touch different files and run together.
+
+**P104. A cost limit never runs blind (AGY).** Read no part of TASKS.md beyond this brief, the paragraph above it, and the P1 finding on P89 in review 15. Use no subagents. Run every command in the foreground. Commit each step as you finish it, and stop starting new work at minute 30.
+
+1. In `scripts/mr-agent.mjs`, when `MR_AGENT_MAX_COST_USD` is set and an answer reports usage with no usable dollar cost, the agent stops before its next request, prints `The cost limit is set but the provider did not report a cost; stopped.` as its last line, and exits 3. Unknown cost stays apart from a cost of 0: a reported 0 counts as 0 and goes on.
+2. With no limit set, nothing changes.
+3. Tests with a fake endpoint, by what they prove: a limit and an answer without cost stops before the second request with the sentence; a limit and reported costs of 0 runs on; no limit and no cost runs on.
+
+Run `npx vitest related --run scripts/mr-agent.mjs` and `npm run build`; both must pass.
+
+Files: scripts/mr-agent.mjs, tests/.
+
+**P105. A branch keeps its transcript, and an edit keeps model details (OpenCode).** Read no part of TASKS.md beyond this brief, the paragraph above P104, and the P1 finding on P81 and the P2 finding on P77 in review 15. Use no subagents. Run every command in the foreground. Commit each step as you finish it, and stop starting new work at minute 45. Work on temporary runs folders, never the real ones.
+
+1. `server/orchestrator.js`: an archived session saves its `branchTranscript` (capped as now) beside its summary, opening a session restores it, and it is cleared only once a turn that carried it has started.
+2. `server/endpoints.js`, `src/control/client.js` and `src/ui/EndpointsPanel.jsx`: saving an endpoint whose draft has no `modelDetails` keeps the saved details of every model id it keeps; a model refresh saves the details from the same answer as the ids.
+3. Tests, by what they prove: branch a Claude chat, open another conversation, open the branch again, and its first turn carries the quoted transcript; a second turn does not; an endpoint edit keeps the details of kept ids and drops those of removed ids; a refresh saves new details.
+
+Run `npx vitest related --run` on every file you changed and `npm run build`; both must pass.
+
+Files: server/orchestrator.js, server/endpoints.js, src/control/client.js, src/ui/EndpointsPanel.jsx, tests/.
