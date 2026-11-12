@@ -19,7 +19,7 @@ import {
   projectName,
   saveSessionSort,
   sessionAge,
-  sessionMenuActionForKey,
+  sessionMenuItemForKey,
   sessionMenuItems,
   sessionTitle,
   sessionRows,
@@ -76,6 +76,7 @@ export function Sidebar({ client = null, live = false, project = '', tasks = nul
   const menuRef = useRef(null)
   const menuAnchorRef = useRef(null)
   const menuActionRef = useRef(() => {})
+  const menuRowRef = useRef(null)
 
   useDialogFocus(Boolean(confirm), { containerRef: confirmRef })
 
@@ -108,6 +109,30 @@ export function Sidebar({ client = null, live = false, project = '', tasks = nul
     })
     return () => {
       active = false
+    }
+  }, [client, connected])
+
+  useEffect(() => {
+    if (!connected || typeof client?.subscribe !== 'function') return undefined
+    if (typeof client?.orchestratorSessions !== 'function') return undefined
+    let active = true
+    let timer = null
+    async function readCounts() {
+      timer = null
+      try {
+        const answer = await client.orchestratorSessions({ id: ORCHESTRATOR_ID })
+        if (active) setSessions(answer)
+      } catch {}
+    }
+    const unsubscribe = client.subscribe((notice) => {
+      if (!active || !notice || notice.topic !== 'orchestrator') return
+      if (timer !== null) clearTimeout(timer)
+      timer = setTimeout(readCounts, 200)
+    })
+    return () => {
+      active = false
+      if (timer !== null) clearTimeout(timer)
+      if (typeof unsubscribe === 'function') unsubscribe()
     }
   }, [client, connected])
 
@@ -339,20 +364,36 @@ export function Sidebar({ client = null, live = false, project = '', tasks = nul
     }
   }
 
+  async function forkCount(row) {
+    if (row.current) {
+      if (typeof client?.orchestrator !== 'function') {
+        throw new Error('This bridge cannot show this conversation.')
+      }
+      const answer = await client.orchestrator()
+      return Array.isArray(answer?.messages) ? answer.messages.length : 0
+    }
+    if (!row.id) throw new Error('This conversation has no session.')
+    if (typeof client?.orchestratorSession !== 'function') {
+      throw new Error('This bridge cannot show a conversation.')
+    }
+    const answer = await client.orchestratorSession({ id: ORCHESTRATOR_ID, session: row.id })
+    return Array.isArray(answer?.messages) ? answer.messages.length : 0
+  }
+
   async function forkSession(row) {
     if (!row || busy) return
     if (typeof client?.branchOrchestratorSession !== 'function') {
       setActionError('This bridge cannot start a branch.')
       return
     }
-    const count = Number(row.count)
-    if (!Number.isInteger(count) || count < 1) {
-      setActionError('This conversation has no messages to fork.')
-      return
-    }
     setBusy(true)
     setActionError('')
     try {
+      const count = await forkCount(row)
+      if (!Number.isInteger(count) || count < 1) {
+        setActionError('This conversation has no messages to fork.')
+        return
+      }
       if (!row.current) {
         if (typeof client?.openOrchestratorSession !== 'function') {
           throw new Error('This bridge cannot open a conversation.')
@@ -428,12 +469,14 @@ export function Sidebar({ client = null, live = false, project = '', tasks = nul
       if (event.metaKey || event.ctrlKey || event.altKey) return
       const tag = event.target?.tagName
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
-      const item = sessionMenuActionForKey(sessionMenuItems(menu.row, { busy }), event.key)
+      const row = menuRowRef.current
+      const item = sessionMenuItemForKey(sessionMenuItems(row, { busy }), event.key)
       if (!item) return
       event.preventDefault()
       event.stopPropagation()
       event.stopImmediatePropagation?.()
-      menuActionRef.current(menu.row, item)
+      if (item.disabled) return
+      menuActionRef.current(row, item)
     }
     window.addEventListener('keydown', onKey, true)
     return () => window.removeEventListener('keydown', onKey, true)
@@ -466,6 +509,11 @@ export function Sidebar({ client = null, live = false, project = '', tasks = nul
 
   const now = Date.now()
   const rows = sessionRows(sessions, { expanded: showAll, query: search, sort, showArchived })
+  const menuRow =
+    menu && menu.key
+      ? rows.rows.find((row) => (row.id || 'current') === menu.key) ?? menu.row
+      : null
+  menuRowRef.current = menuRow
   const fallbackName =
     cleanText(String(project ?? '').replace(/^\/+/, '')) || 'Project'
   const currentProject = projects?.current && typeof projects.current === 'object' ? projects.current : null

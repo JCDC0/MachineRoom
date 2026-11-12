@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Fork reads the conversation's current message count from the bridge or the live chat, and the list's counts refresh when a chat turn ends (P122).
+- With the conversation menu open, every menu key is consumed even when its item is disabled, and only an enabled item acts (P122).
 - The runner commits only the brief's listed paths, reads a brief's whole body, and allows the files of every brief in a run (P116).
 - A branch's carried transcript is cleared only once the agent has started, so a failed start keeps the history (P118).
 - Each conversation row has one menu: Pin, Rename, Fork, Mark as unread, Archive and Delete, with keys, a search box and a kept sort (P93, P115).
