@@ -2,7 +2,7 @@
 
 The orchestrator is Claude, in Claude Code, in the main checkout `C:\GitHub\MachineRoom`. Claude held the role before 0.1.90 and from 0.1.124 to 0.1.162, Hermes from 0.1.90 to 0.1.123, and OpenCode from 0.1.163 until Claude took it back. The orchestrator reviews and merges every branch, writes the briefs, starts the worker lanes, checks UI branches by eye and reports to the owner. It is the only agent that works in the main checkout.
 
-Start a session with `claude` in `C:\GitHub\MachineRoom`. First message: "You are the MachineRoom orchestrator. Read docs/agents/ORCHESTRATOR.md, then docs/agents/ARCHITECTURE.md and docs/agents/PLAN.md, then tell me what is running, what waits for review and what you will do next."
+Start a session with `claude` in `C:\GitHub\MachineRoom`. First message: "You are the MachineRoom orchestrator. Read docs/agents/ORCHESTRATOR.md and docs/agents/OWNER.md, then docs/agents/ARCHITECTURE.md and docs/agents/PLAN.md, then tell me what is running, what waits for review and what you will do next."
 
 The worker lanes are separate. `npm run run-lane -- opencode ID` starts an OpenCode run in its own worktree, and the same command takes `opencode2`, `opencode3`, `agy`, `agy2`, `agy3` and `claude`. One run per lane at a time. Your own session never works in those worktrees. The `claude` lane runs Claude Code headless; the orchestrator is the interactive Claude Code session in the main checkout.
 
@@ -12,12 +12,13 @@ You cannot see the screen. A branch that changes what the room or the drawer loo
 
 ## Where things stand
 
-- 2026-11-12 (02:15, before the owner's 03:00 shutdown): the last push carries P63 and P64; read CI with `gh run list --limit 3 --repo JCDC0/MachineRoom` first. `5d295796` was green on Ubuntu and Windows (run 43070216494). Pushed tonight: P36b, P44 to P54, P56 to P58, P61 to P64, reviews 10 and 11 and the owner-room audit (P56). P49 split the owner's room (`config/` lanes, `%TEMP%\machineroom-runs`) from the fleet's testbench (`MACHINEROOM_LANES_DIR=docs/agents`, `%TEMP%\machineroom-testbench`): see loop step 0. Tests now always use their own runs folder (P57's merge fixed `tests/helpers/isolate.js`). P59 (the flaky `run-lane-stop` test) was cut by AGY's time limit and rejected; its WIP is on `feat/p59-the-run-lane` and the test still fails now and then under load. Not merged, kept on their branches: P55 (`feat/p55-what-a-deleted`, cut at 65 minutes because six other lanes skewed the timings; rerun its measurement on a quiet machine), and P60 (`feat/p60-reviews-auto-and`, AGY cut at 55 minutes: four steps committed without their tests, plus a WIP commit with the tests; review it before a merge, and decide whether a project's own `docs/agents/policy.json` should still win over the room's `config/policy.json`, which its step 2 reverses). Every lane was free at shutdown. Next: review and finish P60, rerun P55 quietly, and redo P59 (the flaky `run-lane-stop` test) on OpenCode, not AGY. Open for the owner: the idle draw rate; finding 7 of review 9; a look at the beat ring with music; the all-zero cost display (N16).
-- `main` is 0.1.401 and has been since 2026-10-29; a push waits for the owner's yes. Paperclip was removed from the app on 2026-10-24. The room's orchestrator runs in the app (K1 to K3, R3 and R4: Claude Code or OpenCode), and the page is a lens over the room with a dock below (I1, I2).
-- Five OpenCode lanes (`opencode` to `opencode5`), three AGY lanes (`agy` and `agy2` on Flash with work again since 2026-11-10, `agy3` with none) and `claude` are live, each with its own worktree. `opencode6` to `opencode10` and Hermes are retired.
-- Merged on 2026-10-30: the Direct API in Settings (H17, U85), the eye-check fixes (U86 to U88), the chat send and the undefined-name test (U89, T27), a stop that never kills a stranger (H19), an OpenCode run that stops with its process tree (H18), the run and wake fixes from the version 9 audit (Q15a, Q15b), the team-test fixes (O22 to O26), the MCP server and ACP agent checks (L6), and the test hunts (T26). The doc passes D15 and D16 are in the same list.
-- The briefs in flight when the owner paused the lanes on 2026-10-27 were U71, U72 and U73. All three are merged (0.1.391, 0.1.392 and 0.1.395), so do not rerun them. Their partial edits may still be the five `git stash list` entries named `opencode partial work`, `opencode2 partial work`, `opencode3 partial work`, `U71 partial 2` and `U73 partial`; leave them unless a merged fix is missing. A stray `opencode.exe` service from an old run is not harmless if it holds a session: see the OpenCode service lesson below.
-- Next: the findings of the November audits, then the open list in `docs/agents/PLAN.md`: the live room by eye, the open audit findings, and the owner's licence and release (P4).
+- 2026-11-12, day: the last push is `ab673388`, green on Ubuntu and Windows (run 43075124938). It carries P36b, P44 to P54, P56 to P58, P61 to P64, reviews 10 and 11 and the owner-room audit. Read CI first with `gh run list --limit 3 --repo JCDC0/MachineRoom`.
+- Unpushed on `main`: the briefs P65 and P66 and the merge of P65 (reviews, Auto and the doctor read the room's lanes; the policy is read from the lanes folder). A push waits for the owner's yes for that push.
+- Running or waiting: P66 on `opencode2` (the redo of P59, `tests/run-lane-stop.test.js` under load). The P55 measurement (the cost of the deleted list at 200,000 files) runs alone after it; its unfinished work is on `feat/p55-what-a-deleted`.
+- `main` is 0.1.401 and has been since 2026-10-29. The owner's room holds only the orchestrator and the lanes the owner makes (P49); the fleet runs in the testbench, loop step 0.
+- The fleet: `opencode` to `opencode5`, `agy` and `agy2` on Flash for backend briefs, and `claude`. `agy3` gets no work. `opencode6` to `opencode10` and Hermes are retired. AGY ran out of time on 2 of 3 briefs on 2026-11-11, so a brief that matters goes to OpenCode.
+- Open for the owner: the idle draw rate, replay sound (review 9, finding 7), the beat ring with music, the all-zero cost display (N16), and a look at P63 and P64 in a live room.
+- Next: the open list in `docs/agents/PLAN.md`: the live room by eye, the open audit findings, and the owner's licence and release (P4).
 
 ## Standing rules from the owner
 
@@ -57,11 +58,11 @@ Written on 2026-11-10 for whoever holds the role next, a smaller model included.
 At the start of a session, before anything else:
 
 1. `git status --short`, `git log --oneline -3` and `git rev-list --count origin/main..main` in the main checkout: is it clean, and how much is unpushed.
-2. What is running: a `<lane>.lock` in `%TEMP%\machineroom-runs\` (the `orchestrator-*.lock` files are the room's own, leave them) and any `opencode` process. One `opencode serve --service` with no child is the owner's.
+2. What is running: a `<lane>.lock` in the testbench `%TEMP%\machineroom-testbench\` (the owner's room `%TEMP%\machineroom-runs\` is not yours: look, never change) and any `opencode` process. One `opencode serve --service` with no child is the owner's.
 3. Each lane worktree: `git -C .worktrees/LANE status --short` is empty, and its branch is merged or waits for review.
 4. Read `Where things stand` above, the newest section of `TASKS.md` and the top of the changelog. Then tell the owner what runs, what waits for review and what you will do next.
 
-Reading. `ARCHITECTURE.md` is about 200 KB: never read it whole, search for the name you need and read around it. `TASKS.md` holds the briefs since 2026-11-09 and the older ones are in `history/TASKS-ARCHIVE.md`, over 1 MB, which you only search. `grep -n '^\*\*P24\.' docs/agents/TASKS.md` finds a brief, and the last `## ` heading of `TASKS.md` is the newest section. Before you name a new brief, search both files for its id. When `TASKS.md` grows past 150 KB, move its oldest sections to the archive, unchanged, and run `tests/briefs.test.js`.
+Reading. `ARCHITECTURE.md` is a short core since P34 and its detail is in six files under `architecture/`: read the core, then search the one detail file its table names. `TASKS.md` holds the briefs since 2026-11-09 and the older ones are in `history/TASKS-ARCHIVE.md`, over 1 MB, which you only search. `grep -n '^\*\*P24\.' docs/agents/TASKS.md` finds a brief, and the last `## ` heading of `TASKS.md` is the newest section. Before you name a new brief, search both files for its id. When `TASKS.md` grows past 150 KB, move its oldest sections to the archive, unchanged, and run `tests/briefs.test.js`.
 
 Briefs:
 
@@ -87,7 +88,17 @@ This machine:
 - The built-in browser pane and a window in the background draw about one frame a second, so a frame time is real only with the owner's Brave window in front: ask for it. Reading text and the DOM works at any time.
 - Never print a key, and never write a user path or a profile name into a tracked file: write `%TEMP%` and `%LOCALAPPDATA%`.
 
-Saying it to the owner: the answer and its number first, in plain words, then what was not done or not checked, and at most one question.
+When things go wrong:
+
+- A full run with every test passed and `Errors 1` is an unhandled rejection: a component set state after its window was torn down. Read the `Unhandled Errors` block first.
+- A CI job that times out in code the push did not touch: `gh run rerun --failed` once before any hunt.
+- CI runs on Linux too: a test that needs `APPDATA` or `LOCALAPPDATA` sets it itself, and builds no Windows path with `path.join`.
+- The history audit reads every new commit, not the last tree: an address or a home path in an old unpushed commit fails the push. Write `example.com` addresses. To clean unpushed commits use `git filter-branch --tree-filter` on `origin/main..main` after making a backup branch; `git rebase -r` drops the fixes made inside merges.
+- A lane that ends its turn while a command of its own still runs in the background leaves nothing. Say `run every command in the foreground` in a brief that runs long commands. A branch left from a failed run blocks the same id: delete the empty branch or take a new id.
+- An AGY run far past its size has likely stalled on a subagent. Stop it and give the brief to OpenCode.
+- Never type a git command that switches the main checkout (`git checkout NAME --`, `git switch`), and never `cd` into a lane worktree: use `git -C .worktrees/LANE`.
+
+Saying it to the owner (the steps for one of the owner's concerns are in `OWNER.md`): the answer and its number first, in plain words, then what was not done or not checked, and at most one question.
 
 ## Review checker
 

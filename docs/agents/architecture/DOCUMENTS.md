@@ -64,6 +64,7 @@ Every file in this folder, and what it is for:
 - `lanes.json`: config the code reads. Each lane's harness, model, worktree, forbidden paths and retirement.
 - `ORCHESTRATOR-AGENT.md`: prompt the code reads. The instructions added to every orchestrator turn.
 - `ORCHESTRATOR.md`: current. The orchestrator's guide: standing rules, the review and merge loop, ownership and lessons.
+- `OWNER.md`: current. What the owner wants the room to be, the settled design, and the steps for one of the owner's concerns.
 - `PLAN.md`: plan. Where the work stands and what comes next.
 - `policy.json`: config the code reads. The routing policy that `src/policy/route.js` parses.
 - `SLASH-COMMANDS.md`: current. What Claude Code and OpenCode do with a slash command in a headless turn, and the room's design for them.
