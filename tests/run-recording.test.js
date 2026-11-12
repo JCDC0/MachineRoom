@@ -368,11 +368,15 @@ describe('writeRecording', () => {
     expect(existsSync(join(root, 'public'))).toBe(false)
   })
 
-  it('refuses an unknown lane and a lane with no command line', () => {
+  it('refuses an unknown lane, an unknown harness and a lane with no command line', () => {
     const root = tempFolder()
     expect(() => writeRecording({ record: { lane: 'nobody' }, lanes, root, env: {} })).toThrow(/no lane named nobody/)
     const noCli = { ...lanes, agy: { ...lanes.agy, cli: undefined } }
     expect(() => writeRecording({ record: { lane: 'agy' }, lanes: noCli, root, env: {} })).toThrow(/no command line/)
+    const unknown = { ...lanes, mystery: { name: 'Mystery', cli: { harness: 'mystery' } } }
+    expect(() => writeRecording({ record: { lane: 'mystery' }, lanes: unknown, root, env: {} })).toThrow(
+      'The lane mystery has no command line, so its run cannot be recorded.'
+    )
   })
 
   it('writes the three recording files for an AGY record', () => {
@@ -443,6 +447,46 @@ describe('writeRecording', () => {
     expect(frames[4].payload).toMatchObject({ status: 'succeeded', error: null })
     const agents = JSON.parse(readFileSync(written.agentsPath, 'utf8'))
     expect(agents.agents[0]).toMatchObject({ key: 'codex', adapterType: 'codex_local', parser: 'codex' })
+    const tree = JSON.parse(readFileSync(written.treePath, 'utf8'))
+    expect(tree.files).toEqual(['src/math.js'])
+  })
+
+  it('writes the three recording files for a MachineRoom native record', () => {
+    const { dir, sha } = worktreeWith({ 'src/math.js': 'x\n' })
+    const root = tempFolder()
+    const logPath = join(root, 'native-T1-20261112-101010.log')
+    writeFileSync(logPath, [
+      JSON.stringify({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', id: 'call_1', name: 'Read', input: { file_path: 'src/math.js' } }] } }),
+      JSON.stringify({ type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'call_1', content: 'ok', is_error: false }] } }),
+      JSON.stringify({ type: 'result', subtype: 'success', is_error: false, result: 'Done.', total_cost_usd: 0.001 }),
+    ].join('\n') + '\n')
+    const record = {
+      lane: 'native',
+      startedAt: '2026-11-12T10:10:10.000Z',
+      minutes: 2,
+      exitCode: 0,
+      killed: false,
+      log: logPath,
+      branch: 'feat/p88',
+      commits: [`${sha} one`],
+    }
+    const written = writeRecording({ record, lanes: { native: { ...lanes.native, worktree: dir } }, root, env: {} })
+
+    expect(written.name).toBe('native-T1-20261112-101010')
+    expect(written.frames).toBe(5)
+    expect(written.toolCalls).toBe(1)
+    const frames = readFrames(written.runPath)
+    expect(frames.map((frame) => frame.type)).toEqual([
+      'heartbeat.run.queued',
+      'heartbeat.run.status',
+      'heartbeat.run.log',
+      'heartbeat.run.log',
+      'heartbeat.run.status',
+    ])
+    expect(frames[2].payload.chunk).toContain('tool_use')
+    expect(frames[4].payload).toMatchObject({ status: 'succeeded', error: null })
+    const agents = JSON.parse(readFileSync(written.agentsPath, 'utf8'))
+    expect(agents.agents[0]).toMatchObject({ key: 'native', adapterType: 'machineroom_local', parser: 'machineroom' })
     const tree = JSON.parse(readFileSync(written.treePath, 'utf8'))
     expect(tree.files).toEqual(['src/math.js'])
   })
