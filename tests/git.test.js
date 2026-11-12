@@ -467,9 +467,14 @@ describe('switch branch refusals', () => {
     const firstBlocked = new Promise((res) => {
       releaseFirst = res
     })
+    let markFirstStarted
+    const firstStarted = new Promise((res) => {
+      markFirstStarted = res
+    })
 
     const slowRunner = async (cwd, args, opts) => {
       if (Array.isArray(args) && args[0] === 'switch' && args[2] === 'feat-1') {
+        markFirstStarted()
         await firstBlocked
       }
       return defaultGitRunner(cwd, args, opts)
@@ -478,7 +483,7 @@ describe('switch branch refusals', () => {
     const { url } = await startBridge({ projectRoot: repo, gitRunner: slowRunner })
     const switchPromise = postJson(url, '/api/git/switch', { branch: 'feat-1', confirmed: true })
 
-    await new Promise((r) => setTimeout(r, 50))
+    await firstStarted
 
     const branchRes = await postJson(url, '/api/git/branch', { name: 'feat-3', from: 'main', confirmed: true })
     expect(branchRes.status).toBe(409)
