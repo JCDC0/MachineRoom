@@ -1432,3 +1432,13 @@ Review 21 (`docs/agents/AUDIT-2026-11-REVIEW-21.md`, P141) found four findings t
 1. The two project-lock refusals in `takeProjectLock`, and the project and worktree lines of queue and worktree dry runs, print the project through `printedRunsFolder`. The paths the runner uses do not change.
 2. A test with a project below a profile folder and the runs folder elsewhere: the refusal and the dry run name the project with the profile masked.
 3. Run `node node_modules/vitest/vitest.mjs run tests/run-lane.test.js` and `npm run build`. Report what passed.
+
+**P145. Finish P124, the merge check that does not block the bridge (OpenCode).** Read the brief for P124 in TASKS.md and this brief only. Use no subagents. Run every command in the foreground. Commit each step as you finish it, and stop starting new work at minute 18. Files: server/orchestrator.js, tests/orchestrator.test.js, docs/agents/CHANGELOG.md.
+
+1. Start with `git merge --no-edit refs/heads/feat/p124-the-merge-check`. Its last commit holds the unfinished work of a run that hit its time limit. Build on it; do not redo it.
+2. Finish only what P124 still lacks, then run `node node_modules/vitest/vitest.mjs related --run server/orchestrator.js` and `npm run build`. If they do not pass by minute 20, commit what you have and say what is left.
+
+**P146. Finish P129, two tests that fail only under load (OpenCode).** Read the brief for P129 in TASKS.md and this brief only. Use no subagents. Run every command in the foreground. Commit each step as you finish it, and stop starting new work at minute 18. Files: tests/tree-partial.test.js, tests/git.test.js, docs/agents/CHANGELOG.md.
+
+1. Start with `git merge --no-edit refs/heads/feat/p129-two-tests-that`. Its last commit holds the unfinished work of a run that hit its time limit. Build on it; do not redo it.
+2. Run each of the two files five times alone; report the counts. If either still fails, commit what you have and say what is left.
