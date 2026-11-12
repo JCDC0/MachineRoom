@@ -1447,3 +1447,10 @@ Review 21 (`docs/agents/AUDIT-2026-11-REVIEW-21.md`, P141) found four findings t
 
 1. Read the merges since `9d03cec2` with `git log --first-parent --oneline 9d03cec2..HEAD` and `git show -m --first-parent`. Bring the four files in line with the code: lane lock liveness (P125, P138), masked paths in run-lane output and dry runs (P123, P140), the brief file list rules (P133), the conversation menu closing on a changed row (P134, P142), the file-index test (P128, P139) and the new tests file `tests/project-task.test.js` (P131).
 2. Plain words, short sentences, no em dashes. Where a doc disagrees with the code, the code wins.
+
+**P148. The path masker gets its own module (OpenCode).** Read this brief only. Use no subagents. Run every command in the foreground. Commit each step as you finish it, and stop starting new work at minute 15. Files: server/printed-path.js, scripts/run-lane.mjs, server/orchestrator.js, tests/printed-path.test.js, docs/agents/architecture/CODE.md, package.json.
+
+1. Move `printedRunsFolder` and the helpers only it uses (`isWindowsPath`, `matchPathPrefix`, `testPrefix`, `readEnv` and the real-path helper it needs) from `scripts/run-lane.mjs` into a new `server/printed-path.js` with no other imports than `node:` modules. `scripts/run-lane.mjs` imports it from there and re-exports `printedRunsFolder` so its tests still pass.
+2. `server/orchestrator.js` imports it from `server/printed-path.js`, not from `scripts/run-lane.mjs`. Change only that import line in `server/orchestrator.js`: another lane edits the rest of it.
+3. Add `server/printed-path.js` to the `files` list of `package.json` if the list names server files one by one, and one line for it in `docs/agents/architecture/CODE.md`. Move the masking tests that call `printedRunsFolder` directly into `tests/printed-path.test.js` only if that is a plain move.
+4. Run `node node_modules/vitest/vitest.mjs related --run server/printed-path.js scripts/run-lane.mjs server/orchestrator.js`, `npm run build` and `npm run pack-check`. Report what passed.
