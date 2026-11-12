@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- P101: review 15 of seven of tonight's merges finds two push blockers (a cost limit that never fires without a dollar cost, and a branch that loses its context when reopened) and two smaller findings.
 - P92: the context window comes from the lane's own window, then the endpoint's saved model details, then the known list; the chat marks a default window as (assumed).
 - P94: a room's orchestrator waits while the project has a merge, rebase or cherry-pick in progress, and its rules say never to abort, reset or finish one it did not start.
 - P96: the native agent retries an answer whose body is not JSON or has no choices, like a 502, and names the status and the start of the body after the last try.
