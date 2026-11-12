@@ -5094,7 +5094,7 @@ body:has(#hud-orchestrator-chat) .lens-waiting {
 }
 
 .mr-term:not(.is-open) {
-  width: 180px;
+  width: 98px;
   display: flex;
   background: var(--corner-ticks), rgb(0 0 0 / 0.92);
   border-color: rgb(255 255 255 / 0.7);

@@ -254,18 +254,19 @@ describe('a child view', () => {
     const state = createState({ files: [], dirs: [], created: [] }, [{ key: 'a', name: 'Alpha' }])
     apply(state, { time: 1000, type: 'agent.spawn', agent: 'a', child: 'a~1', name: 'Scout', label: 'task', runId: 'r1' })
     terminals.ensure('a~1', 'Alpha > Scout')
+    terminals.setOpen('a~1', true)
     const camera = new THREE.PerspectiveCamera()
     terminals.update(state, 1000, camera, null, () => new THREE.Vector3(0, 290, 300), 0.016, () => 1)
     const term = terminals.terminals.get('a~1')
-    expect(term.title.textContent).toBe('Alpha > Scout')
+    expect(term.title.textContent).toBe('Alpha > Scout // working')
 
     terminals.setLabels(new Map([['a', 'Bridge Coder']]))
     terminals.update(state, 1016, camera, null, () => new THREE.Vector3(0, 290, 300), 0.016, () => 1)
-    expect(term.title.textContent).toBe('Bridge Coder > Scout')
+    expect(term.title.textContent).toBe('Bridge Coder > Scout // working')
 
     terminals.setLabels(null)
     terminals.update(state, 1032, camera, null, () => new THREE.Vector3(0, 290, 300), 0.016, () => 1)
-    expect(term.title.textContent).toBe('Alpha > Scout')
+    expect(term.title.textContent).toBe('Alpha > Scout // working')
 
     terminals.setFade('a~1', 0.5)
     expect(term.element.style.opacity).toBe('0.5')

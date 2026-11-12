@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- P84: a closed agent chip is a 98 pixel box with its state; the name moves to its aria label and stays in the label under the agent.
 - The runs folder defaults to %LOCALAPPDATA%\MachineRoom\runs on Windows and ~/.local/state/machineroom/runs elsewhere, every caller asks runsFolder, and an old %TEMP%\machineroom-runs is copied there once and never deleted (P76, after a disk cleanup emptied %TEMP%).
 - A lane with cli.commits runner, such as the codex lane, has its changes put on the brief's branch and committed by the runner after a run that ends with exit code 0 (P75).
 - A codex lane whose program is plain codex, with no codex on PATH, starts the newest codex.exe of the Codex app under %LOCALAPPDATA%\OpenAI\Codex\bin, and the harness check finds it too; the fleet's codex lane now names plain codex (P73, the first brief written by the codex lane).

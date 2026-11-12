@@ -361,7 +361,9 @@ describe('owner labels', () => {
     const roster = [{ key: 'a', name: 'Alpha', shape: 'claude' }]
     const agents = createAgents(new THREE.Scene(), roster, cssScene)
     const terminals = createTerminals(cssScene, roster)
+    terminals.setOpen('a', true)
     const state = createState({ files: [], dirs: [], created: [] }, roster)
+    apply(state, { time: 1000, type: 'run.start', agent: 'a', runId: 'r1' })
     const world = {
       right: new THREE.Vector3(1, 0, 0),
       back: new THREE.Vector3(0, 0, 1),
@@ -374,21 +376,21 @@ describe('owner labels', () => {
     agents.update(state, 0.016, 1000, world, terminals)
     terminals.update(state, 1000, new THREE.PerspectiveCamera(), null, () => new THREE.Vector3(0, 290, 300), 0.016, () => 1)
     expect(agents.views.get('a').callout.title.textContent).toBe('BRIDGE CODER')
-    expect(terminals.terminals.get('a').title.textContent).toBe('Bridge Coder')
+    expect(terminals.terminals.get('a').title.textContent).toBe('Bridge Coder // working')
 
     agents.setLabels(new Map([['other', 'Other']]))
     terminals.setLabels(new Map([['other', 'Other']]))
     agents.update(state, 0.016, 1008, world, terminals)
     terminals.update(state, 1008, new THREE.PerspectiveCamera(), null, () => new THREE.Vector3(0, 290, 300), 0.016, () => 1)
     expect(agents.views.get('a').callout.title.textContent).toBe('A')
-    expect(terminals.terminals.get('a').title.textContent).toBe('a')
+    expect(terminals.terminals.get('a').title.textContent).toBe('a // working')
 
     agents.setLabels(null)
     terminals.setLabels(null)
     agents.update(state, 0.016, 1016, world, terminals)
     terminals.update(state, 1016, new THREE.PerspectiveCamera(), null, () => new THREE.Vector3(0, 290, 300), 0.016, () => 1)
     expect(agents.views.get('a').callout.title.textContent).toBe('ALPHA')
-    expect(terminals.terminals.get('a').title.textContent).toBe('Alpha')
+    expect(terminals.terminals.get('a').title.textContent).toBe('Alpha // working')
     agents.dispose()
     terminals.dispose()
   })
