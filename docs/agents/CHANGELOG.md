@@ -2,11 +2,13 @@
 
 ## Unreleased
 
+- The lane source and the runs route count a lane lock as live only when its holder or child started before the lock (P138).
 - A check of reviews 13, 15 and 16 found every non-blocking finding fixed but the merge check, which P124 holds (P137).
 - A Files marker inside backticks or quotes no longer hides a brief's real file list (P133).
 - Dry runs and lock refusals print their paths with the profile folders masked, and a lane's stale child lock no longer refuses a start (P140).
 - The file-index test's reference walk has its own write rules again, with a test that proves it can fail (P139).
 - Reviews 13, 15 and 16 have no open finding left that this lane may fix; the merge check in server/orchestrator.js is P124, held by another lane (P137).
+- The lane source and lane state checks read both runner and child lock holders through isHolderAlive, so a reused Windows pid no longer holds an orphan run open or marks a lane busy (P138).
 - ROOM.md, LIVE.md, COMMANDS.md and CODE.md describe the chat's lane tasks, the conversation menu, the runner's commit rules and the AGY models (P127).
 - The conversation menu closes when its row leaves the list or stops being current, so a key never acts on another conversation (P134).
 - PLAN.md, ARCHITECTURE.md and DOCUMENTS.md name what the audits and reviews leave open (P130).

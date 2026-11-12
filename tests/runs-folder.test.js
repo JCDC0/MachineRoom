@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { migrateRunsFolder, runsFolder } from '../server/lanes-source.js'
+import { createRunsApi, laneStatesFor } from '../server/runs.js'
 import { runsFolderDefault as harnessModelsRunsFolder } from '../server/harness-models.js'
 import { runsFolderDefault as orchestratorRunsFolder } from '../server/orchestrator.js'
 import { runsFolderDefault as orchestratorsRunsFolder } from '../server/orchestrators.js'
@@ -165,5 +166,141 @@ describe('moving the old runs folder', () => {
     const named = join(base, 'named')
     expect(runsFolder({ MACHINEROOM_RUNS: named, LOCALAPPDATA: join(base, 'local'), TEMP: join(base, 'temp') }, 'win32')).toBe(resolve(named))
     expect(existsSync(named)).toBe(false)
+  })
+})
+
+describe('lane lock checks in laneStatesFor', () => {
+  const DEAD_PID = 2147483647
+  const lanesConfig = {
+    orchestrator: { name: 'Orchestrator', cli: { harness: 'claude', model: 'opus' } },
+    opencode: { name: 'OpenCode', cli: { harness: 'opencode', model: 'model' } },
+    opencode2: { name: 'OpenCode 2', cli: { harness: 'opencode', model: 'model' } },
+  }
+  const activeLanes = { isChosen: () => true, isLaneActive: () => true, hiddenKeySet: () => new Set() }
+
+  function statesWith({ lock, platform = 'win32', stat, list }) {
+    const runs = tempDir('mr-runs-lock-')
+    if (lock !== undefined) writeFileSync(join(runs, 'opencode.lock'), JSON.stringify(lock))
+    return laneStatesFor({ lanesConfig, runsFolder: runs, activeLanes, platform, stat, list })
+  }
+
+  function busyOf(state, key) {
+    return state.lanes.find((lane) => lane.key === key)?.busy
+  }
+
+  it('does not mark a lane busy on Windows when lock pid and child pid were reused', () => {
+    const childPid = process.ppid > 0 && process.ppid !== process.pid ? process.ppid : DEAD_PID
+    let listCalls = 0
+    const state = statesWith({
+      lock: { pid: process.pid, child: childPid },
+      stat: () => ({ mtimeMs: 10000 }),
+      list: () => {
+        listCalls += 1
+        return [
+          { pid: process.pid, created: 13000 },
+          { pid: childPid, created: 14000 },
+        ]
+      },
+    })
+    expect(busyOf(state, 'opencode')).toBe(false)
+    expect(busyOf(state, 'opencode2')).toBe(false)
+    expect(listCalls).toBe(1)
+  })
+
+  it('marks a lane busy when either runner pid or child pid is alive', () => {
+    const hasDistinctParent = process.ppid > 0 && process.ppid !== process.pid
+    const childPid = hasDistinctParent ? process.ppid : process.pid
+    const reusedPidLiveChild = statesWith({
+      lock: { pid: hasDistinctParent ? process.pid : DEAD_PID, child: childPid },
+      stat: () => ({ mtimeMs: 10000 }),
+      list: () => [
+        { pid: process.pid, created: hasDistinctParent ? 13000 : 9000 },
+        ...(hasDistinctParent ? [{ pid: childPid, created: 9000 }] : []),
+      ],
+    })
+    expect(busyOf(reusedPidLiveChild, 'opencode')).toBe(true)
+
+    const liveRunnerOnly = statesWith({
+      lock: { pid: process.pid },
+      stat: () => ({ mtimeMs: 10000 }),
+      list: () => [{ pid: process.pid, created: 9000 }],
+    })
+    expect(busyOf(liveRunnerOnly, 'opencode')).toBe(true)
+
+    let listCalls = 0
+    const linuxChild = statesWith({
+      lock: { pid: DEAD_PID, child: process.pid },
+      platform: 'linux',
+      list: () => {
+        listCalls += 1
+        return []
+      },
+    })
+    expect(busyOf(linuxChild, 'opencode')).toBe(true)
+    expect(listCalls).toBe(0)
+
+    const allDead = statesWith({
+      lock: { pid: DEAD_PID, child: DEAD_PID - 1 },
+      list: () => {
+        listCalls += 1
+        return []
+      },
+    })
+    expect(busyOf(allDead, 'opencode')).toBe(false)
+    expect(listCalls).toBe(0)
+  })
+
+  it('routes an auto run to a lane whose Windows lock pid was reused', async () => {
+    const base = tempDir('mr-runs-auto-stale-')
+    const runs = join(base, 'runs')
+    const project = join(base, 'project')
+    mkdirSync(runs, { recursive: true })
+    mkdirSync(project, { recursive: true })
+    const lanesFile = join(base, 'lanes.json')
+    writeFileSync(lanesFile, JSON.stringify(lanesConfig))
+    writeFileSync(
+      join(base, 'policy.json'),
+      JSON.stringify({
+        tiers: {
+          small: [
+            { lane: 'opencode', model: 'model', reasoning: 'max', provider: 'opencode' },
+            { lane: 'opencode2', model: 'model', reasoning: 'max', provider: 'opencode' },
+          ],
+          medium: [{ lane: 'opencode', model: 'model', reasoning: 'max', provider: 'opencode' }],
+          large: [{ lane: 'owner', model: null, reasoning: null, provider: null }],
+        },
+        limits: { runUsd: 1, issueUsd: 5, agentMonthlyUsd: 50, companyMonthlyUsd: 100, maxTurnsPerRun: 200, timeoutSec: 3600 },
+        quotaSkipPercent: 90,
+      })
+    )
+    writeFileSync(join(runs, 'opencode.lock'), JSON.stringify({ pid: process.pid }))
+
+    let answer = null
+    const api = createRunsApi({
+      projectRoot: project,
+      runsFolder: runs,
+      lanesFile,
+      activeLanes,
+      runnerCommand: { file: process.execPath, args: ['-e', ''] },
+      sendJson: (_req, _res, status, body) => {
+        answer = { status, body }
+      },
+      readJsonBody: async () => ({ lane: 'auto', task: 'Fix typo.', confirmed: true }),
+      platform: 'win32',
+      stat: () => ({ mtimeMs: 10000 }),
+      list: () => [{ pid: process.pid, created: 13000 }],
+    })
+    try {
+      const handled = await api.handle({ method: 'POST', headers: { origin: 'http://127.0.0.1:5173' } }, {}, new URL('http://127.0.0.1/api/control/runs'))
+      expect(handled).toBe(true)
+      expect(answer.status).toBe(202)
+      expect(answer.body.lane).toBe('opencode')
+      const deadline = Date.now() + 5000
+      while (api.isRunning('opencode') && Date.now() < deadline) {
+        await new Promise((done) => setTimeout(done, 20))
+      }
+    } finally {
+      api.stopAll()
+    }
   })
 })

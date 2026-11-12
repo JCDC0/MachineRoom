@@ -5,14 +5,14 @@ import { basename, dirname, join, resolve } from 'node:path'
 import { StringDecoder } from 'node:string_decoder'
 import { fileURLToPath } from 'node:url'
 import { parseBriefs } from '../src/briefs/briefs.js'
-import { SINCE_PROBLEM, dayStart, laneLockPids, laneStats, pathInside, projectProblems, runRecord } from '../src/briefs/run.js'
+import { SINCE_PROBLEM, dayStart, laneStats, pathInside, projectProblems, runRecord } from '../src/briefs/run.js'
 import { profileFromBrief, profileFromTask } from '../src/policy/profile.js'
 import { readPolicy, routeLane, tierFor, TIERS } from '../src/policy/route.js'
 import { readLaneCosts } from './lane-costs.js'
 import { outcomeTable, subjectsFromLog } from './outcomes.js'
 import { gitPath } from './programPath.js'
-import { killTree, treeSpawnOptions } from './processTree.js'
-import { laneAgents, lanesFolder, readAllLanes, runsFolder as defaultRunsFolder } from './lanes-source.js'
+import { killTree, listProcesses, treeSpawnOptions } from './processTree.js'
+import { createLaneLockCheck, laneAgents, lanesFolder, readAllLanes, runsFolder as defaultRunsFolder } from './lanes-source.js'
 import { NO_ACTIVE_CHOICE_PROBLEM, activeLanesFileFor, hiddenLaneProblem, projectLanesFileFor, readActiveLanesChoice, readHiddenLanes } from './active-lanes.js'
 
 export const RECENT_LIMIT = 20
@@ -47,16 +47,6 @@ function realPath(value) {
   }
 }
 
-function processAlive(pid) {
-  if (!Number.isInteger(pid) || pid <= 0) return false
-  try {
-    process.kill(pid, 0)
-    return true
-  } catch (error) {
-    return error?.code === 'EPERM'
-  }
-}
-
 function readTextAt(path) {
   if (!path) return null
   try {
@@ -64,12 +54,6 @@ function readTextAt(path) {
   } catch {
     return null
   }
-}
-
-function laneLockAlive(folder, key) {
-  if (!folder) return false
-  const holder = laneLockPids(readTextAt(join(folder, `${key}.lock`)))
-  return processAlive(holder.pid) || processAlive(holder.child)
 }
 
 function git(folder, args) {
@@ -229,6 +213,9 @@ export function laneStatesFor({
   activeLanes = null,
   isLaneActive = null,
   running = null,
+  platform = process.platform,
+  list = listProcesses,
+  stat = statSync,
 } = {}) {
   const helper = typeof activeLanes === 'function' ? activeLanes() : activeLanes
   const hiddenSet = helper && typeof helper.hiddenKeySet === 'function'
@@ -238,6 +225,7 @@ export function laneStatesFor({
       : new Set()
   const saved = folder ? readActiveLanesChoice(activeLanesFileFor(projectRoot, folder)) : null
   const chosen = helper && typeof helper.isChosen === 'function' ? helper.isChosen() : saved !== null
+  const checkLock = createLaneLockCheck({ platform, list, stat })
   const lanes = []
   for (const [key, entry] of Object.entries(lanesConfig ?? {})) {
     if (key === 'orchestrator') continue
@@ -251,7 +239,7 @@ export function laneStatesFor({
       key,
       eligible: entry.retired !== true && entry.cli !== null && typeof entry.cli === 'object',
       active: active === true && !hiddenSet.has(key),
-      busy: (running !== null && typeof running.has === 'function' && running.has(key)) || laneLockAlive(folder, key),
+      busy: (running !== null && typeof running.has === 'function' && running.has(key)) || checkLock(folder, key),
     })
   }
   return { lanes, chosen }
@@ -380,7 +368,7 @@ export function readOutcomeRecords(file) {
   return readJsonLines(file)
 }
 
-export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand, sendJson, readJsonBody, notify = () => {}, orchestrators = () => null, lanesFile = '', runsFolder = '', activeLanes = null, isLaneActive = null, onMessage = () => {} }) {
+export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand, sendJson, readJsonBody, notify = () => {}, orchestrators = () => null, lanesFile = '', runsFolder = '', activeLanes = null, isLaneActive = null, onMessage = () => {}, platform = process.platform, list = listProcesses, stat = statSync }) {
   const resolvedRoot = projectRoot ? realPath(projectRoot) : ''
   const resolvedBriefs = briefsDir ? resolve(briefsDir) : resolvedRoot ? join(resolvedRoot, 'docs', 'agents') : ''
   const laneFile = lanesFile ? resolve(lanesFile) : join(lanesFolder(), 'lanes.json')
@@ -438,7 +426,7 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
       return { status: 400, error: error.message }
     }
     const costs = readLaneCosts({ agents: laneAgents(lanesConfig), records: readAllRunRecords(recordsPath()) })
-    const state = laneStatesFor({ lanesConfig, projectRoot, runsFolder: recordsDir(), activeLanes, isLaneActive, running })
+    const state = laneStatesFor({ lanesConfig, projectRoot, runsFolder: recordsDir(), activeLanes, isLaneActive, running, platform, list, stat })
     if (!state.chosen) return { status: 400, error: NO_ACTIVE_CHOICE_PROBLEM }
     const states = state.lanes.filter((lane) => only === null || only.includes(lane.key))
     const answer = routeLane({
