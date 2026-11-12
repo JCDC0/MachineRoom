@@ -28,7 +28,7 @@ function laneOf(lanes, record) {
   const lane = lanes && Object.hasOwn(lanes, key) ? lanes[key] : null
   if (!lane) throw refusal(`There is no lane named ${key} in docs/agents/lanes.json.`)
   const harness = lane.cli?.harness
-  if (harness !== 'hermes' && harness !== 'opencode' && harness !== 'agy' && harness !== 'claude' && harness !== 'codex') throw refusal(`The lane ${key} has no command line, so its run cannot be recorded.`)
+  if (harness !== 'hermes' && harness !== 'opencode' && harness !== 'agy' && harness !== 'claude' && harness !== 'codex' && harness !== 'machineroom') throw refusal(`The lane ${key} has no command line, so its run cannot be recorded.`)
   return { key, lane, harness }
 }
 
