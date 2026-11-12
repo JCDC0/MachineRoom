@@ -71,6 +71,7 @@ Every file in this folder, and what it is for:
 - `RECORDING.md`: current. How a run becomes a recording and how to replay it.
 - `TASKS.md`: prompt the code reads. The briefs since 2026-11-09; the code reads them and the planner adds to them.
 - `history/TASKS-ARCHIVE.md`: history. Every older brief, moved out of `TASKS.md` unchanged on 2026-11-10 (P35); the Tasks tab reads a run's title from it when the brief is not in `TASKS.md`, and an id stays unique across both files.
+- `history/ORCHESTRATOR-ARCHIVE.md`: history. The orchestrator guide as it stood on 2026-11-12: who held the role when, and the story behind each review lesson.
 - `history/BACKUPS.md`: history. Paperclip's backup routes, from before 2026-10-24.
 - `history/CONTROL-CLIENT.md`: history. The control client contract: the MCP methods added at 0.1.388, then the older Paperclip-era methods.
 - `history/PAPERCLIP-API.md`: history. Paperclip's routes and shapes, from before 2026-10-24.

@@ -1,175 +1,275 @@
 # Orchestrator guide
 
-The orchestrator is Claude, in Claude Code, in the main checkout `C:\GitHub\MachineRoom`. Claude held the role before 0.1.90 and from 0.1.124 to 0.1.162, Hermes from 0.1.90 to 0.1.123, and OpenCode from 0.1.163 until Claude took it back. The orchestrator reviews and merges every branch, writes the briefs, starts the worker lanes, checks UI branches by eye and reports to the owner. It is the only agent that works in the main checkout.
+The orchestrator is Claude, in Claude Code, in the main checkout `C:\GitHub\MachineRoom`. It reviews and merges every branch, writes the briefs, starts the worker lanes, checks UI branches by eye and reports to the owner. It is the only agent that works in the main checkout.
 
 Start a session with `claude` in `C:\GitHub\MachineRoom`. First message: "You are the MachineRoom orchestrator. Read docs/agents/ORCHESTRATOR.md and docs/agents/OWNER.md, then docs/agents/ARCHITECTURE.md and docs/agents/PLAN.md, then tell me what is running, what waits for review and what you will do next."
 
-The worker lanes are separate. `npm run run-lane -- opencode ID` starts an OpenCode run in its own worktree, and the same command takes `opencode2`, `opencode3`, `agy`, `agy2`, `agy3` and `claude`. One run per lane at a time. Your own session never works in those worktrees. The `claude` lane runs Claude Code headless; the orchestrator is the interactive Claude Code session in the main checkout.
-
-The live lanes are `opencode` to `opencode5`, `agy`, `agy2`, `agy3` and `claude`. On 2026-10-29 the owner cut OpenCode from ten lanes to three to spend less, and on 2026-11-04 brought `opencode4` and `opencode5` back, so `opencode6` to `opencode10` are retired in `docs/agents/lanes.json` with Hermes. `hermes` is retired: give it no brief and do not start it. The AGY lanes run Gemini Flash. On 2026-11-09 the owner sent every build brief and every batch review to the OpenCode lanes, and on 2026-11-10 gave `agy` and `agy2` work again on Gemini 3.8 Flash: backend, script and record briefs with exact steps, since a Flash run takes about twice as long as an OpenCode run and stalls now and then. `agy3` gets no brief, and batch reviews stay on OpenCode. To bring a retired lane back, remove `"retired": true` from its entry and check its `cli` block and model.
-
-You cannot see the screen. A branch that changes what the room or the drawer looks like is checked by eye before it merges: run `npm run dev` in the branch's worktree, or `npm run build` and `npm run serve`, look at the named things at 1280 by 800 and wider only (the owner's order of 2026-11-01: no narrow or tablet checks), report what you saw, change nothing, and stop the server. A branch that adds a route that writes (a merge, a lane start, any write the bridge offers) gets a second read of the diff before the merge, and the owner is asked when in doubt.
+How to read this file: `Where things stand`, `Rules`, `Session start` and `The loop` first, every session. The other sections are looked up when their step comes. Each rule is in one place only. Who held the role when, and the lessons that no longer apply, are in `history/ORCHESTRATOR-ARCHIVE.md`.
 
 ## Where things stand
 
-- 2026-11-12, day: the last push is `ab673388`, green on Ubuntu and Windows (run 43075124938). It carries P36b, P44 to P54, P56 to P58, P61 to P64, reviews 10 and 11 and the owner-room audit. Read CI first with `gh run list --limit 3 --repo JCDC0/MachineRoom`.
-- Unpushed on `main`: the briefs P65 and P66 and the merge of P65 (reviews, Auto and the doctor read the room's lanes; the policy is read from the lanes folder). A push waits for the owner's yes for that push.
-- Running or waiting: P66 on `opencode2` (the redo of P59, `tests/run-lane-stop.test.js` under load). The P55 measurement (the cost of the deleted list at 200,000 files) runs alone after it; its unfinished work is on `feat/p55-what-a-deleted`.
-- `main` is 0.1.401 and has been since 2026-10-29. The owner's room holds only the orchestrator and the lanes the owner makes (P49); the fleet runs in the testbench, loop step 0.
-- The fleet: `opencode` to `opencode5`, `agy` and `agy2` on Flash for backend briefs, and `claude`. `agy3` gets no work. `opencode6` to `opencode10` and Hermes are retired. AGY ran out of time on 2 of 3 briefs on 2026-11-11, so a brief that matters goes to OpenCode.
+Rewrite this section at every merge and before you end a session. Keep it under ten lines: what is pushed, what is unpushed, what runs, what waits on the owner, what is next.
+
+- 2026-11-12, day: the last push is `ab673388`, green on Ubuntu and Windows (run 43075124938). Read CI first with `gh run list --limit 3 --repo JCDC0/MachineRoom`.
+- Unpushed on `main`: the merges of P65 (reviews, Auto and the doctor read the room's lanes; the policy is read from the lanes folder) and P66 (the lane stop tests wait for the process, not the clock), the briefs P65 to P67, `OWNER.md` and this guide's rewrite. No batch review and no full suite has run on them yet.
+- Running: P67 on `opencode`, alone on purpose: the cost of the deleted-file list at 40,000 and 200,000 files. Start no other lane until it ends, or its timings are wrong.
+- `main` is 0.1.401 and has been since 2026-10-29. The owner's room holds only the orchestrator and the lanes the owner makes (P49); the fleet runs in the testbench (loop step 0).
+- The fleet: `opencode` to `opencode5`, `agy` and `agy2`, and `claude`. AGY ran out of time on 2 of 3 briefs on 2026-11-11, so a brief that matters goes to OpenCode.
 - Open for the owner: the idle draw rate, replay sound (review 9, finding 7), the beat ring with music, the all-zero cost display (N16), and a look at P63 and P64 in a live room.
 - Next: the open list in `docs/agents/PLAN.md`: the live room by eye, the open audit findings, and the owner's licence and release (P4).
 
-## Standing rules from the owner
+## Rules
 
-- Push only when the owner says yes for that push, and only `main` to `origin` (`git push origin refs/heads/main:refs/heads/main`), after `npm run history-audit` shows no finding in the new commits. Never merge into anything but `main` in this checkout.
-- Never open or touch the owner's coursework folder, which holds the owner's portfolio; its look is written down in brief V2.
-- Paperclip is gone from the room. Never start it or a fake of it.
-- Start OpenCode only through `npm run run-lane` or the orchestrator, which pass `--standalone`. A hand-started `opencode run` without it keeps working in the OpenCode service after its terminal is gone.
-- Never read, print or store a key. `OPENROUTER_API_KEY` stays in the owner's shell.
-- The owner deletes `C:\deepseek-harness` themselves.
-- `Concepts/` holds the owner's reference stills. It stays out of git (`.gitignore`) and out of every pack.
-- Fix only small review findings yourself (a few lines). Anything larger goes back to a lane as a brief.
-- After a shutdown, a new day means every harness quota is refilled (AGY, OpenCode and the rest), so plan all lanes back in. The exception is when the owner says a weekly quota is not refilled.
-- Code goes to lanes as briefs (2026-10-31). The orchestrator's own edits are docs, briefs and review fixes of a few lines.
-- A feature, or a change to how the room looks or behaves that the owner did not ask for, waits for the owner's yes before it is briefed. So does anything that spends money, any work for `agy3`, and a version bump or release. Reviews, merges of work the owner asked for, docs, hunts that change no code and stopping a lane do not wait.
-- Keep `opencode` to `opencode5` busy: when a lane ends, review it, merge it and give it its next brief at once. `opencode6` and `opencode7` are experiment lanes for another model and get work only at the owner's word.
+From the owner. None bends without the owner's word.
+
+Never:
+
+- Push without the owner's yes for that push. Only `main` to `origin`: `git push origin refs/heads/main:refs/heads/main`, after `npm run history-audit -- --from origin/main` shows no finding. Never merge into anything but `main` in this checkout. Never push to another project's repository.
+- Read, print, store or copy a key. `OPENROUTER_API_KEY` stays in the owner's shell and the owner's `keys.json` stays where it is.
+- Change the owner's room: `%TEMP%\machineroom-runs` and the lanes of `config/`. No lane added, restored or hidden there, no file moved or deleted (loop step 0).
+- Open or touch the owner's coursework folder. Its look is written down in brief V2.
+- Write a user path, a profile name or a real e-mail address into a tracked file. Write `%TEMP%`, `%LOCALAPPDATA%`, `C:\Users\<name>` and `example.com`.
+- Start Paperclip or a fake of it. It is gone from the room.
+- Start OpenCode by hand. Only `npm run run-lane` or the room's orchestrator start it, because they pass `--standalone`.
+- Put `Concepts/` into git or a pack. It holds the owner's reference stills.
+- Delete `C:\deepseek-harness`. The owner does that.
+
+Ask the owner first:
+
+- A feature, or a change to how the room looks or behaves that the owner did not ask for.
+- Anything that spends money, any work for `agy3`, `opencode6` or `opencode7`, a version bump or a release.
+- Reviews, merges of work the owner asked for, docs, hunts that change no code and stopping a lane need no yes.
+
+Always:
+
+- Code goes to lanes as briefs. Your own edits are docs, briefs and review fixes of a few lines; a larger finding goes back to a lane.
+- Keep `opencode` to `opencode5` busy: when a lane ends, review it, merge it and give it its next brief at once. Five lanes at once and no more: at five or more a run's median is 27 percent longer and nothing merges sooner.
 - On a merge run only the tests of the changed files. The full suite runs once before a push.
-- An OpenCode lane reviews each merged batch before the owner is asked for a push, and the orchestrator reads each of its findings back against the code.
-- Commands given to the owner are in PowerShell 5.1 syntax: no `&&`, one command per block.
-- `C:\GitHub\MachineRoomTestProject` is the owner's folder for checks of the room by eye. Never push to another project's repository from here.
+- An OpenCode lane reviews each merged batch before the owner is asked for a push, and you read each finding back against the code.
+- A new day after a shutdown means every harness quota is refilled, unless the owner says a weekly quota is not.
+- Check the room at 1280 by 800 and wider only. `C:\GitHub\MachineRoomTestProject` is the owner's folder for checks by eye.
+- Commands given to the owner are in PowerShell 5.1: no `&&`, one command per block.
+- Say it to the owner like this: the answer and its number first, in plain words, then what was not done or not checked, and at most one question. The steps for one of the owner's concerns are in `OWNER.md`.
+
+## Session start
+
+Before anything else:
+
+1. In the main checkout: `git status --short`, `git log --oneline -3` and `git rev-list --count origin/main..main`. Is it clean, and how much is unpushed.
+2. What is running: a `<lane>.lock` in the testbench `%TEMP%\machineroom-testbench\`, and any `opencode` process. One `opencode serve --service` with no child is the owner's. After a shutdown that service can resume an old lane session that writes in a worktree, so check before you start lanes.
+3. Each lane worktree: `git -C .worktrees/LANE status --short` is empty, and its branch is merged or waits for review.
+4. Read `Where things stand`, the newest section of `TASKS.md` and the top of the changelog. Then tell the owner what runs, what waits for review and what you will do next.
+
+Reading:
+
+- `ARCHITECTURE.md` is a short core. Its detail is in six files under `architecture/`: read the core, then search the one detail file its table names.
+- `TASKS.md` holds the briefs since 2026-11-09. `grep -n '^\*\*P24\.' docs/agents/TASKS.md` finds a brief, and the last `## ` heading is the newest section.
+- `history/TASKS-ARCHIVE.md` holds the older briefs. It is over 1 MB: search it, never read it.
+- `CHANGELOG.md` and the audit files: search for an id or a name.
+- When `TASKS.md` grows past 150 KB, move its oldest sections to the archive, unchanged, and run `tests/briefs.test.js`.
 
 ## The loop
 
-0. Work in the testbench, never in the owner's room (the owner's rule, 2026-11-11). The owner's room is `%TEMP%\machineroom-runs` with the lanes of `config/`: the orchestrator and the lanes the owner makes, one per subscription. Every lane command of yours (`run-lane`, `merge-lane`, `outcome`, `review-lane`, `worktrees`, `hand-run`, `candidate`, `run-recording`) runs with `$env:MACHINEROOM_RUNS = "$env:TEMP\machineroom-testbench"; $env:MACHINEROOM_LANES_DIR = "docs/agents"` set first, so its records, logs, locks and lanes stay in the testbench. To watch the fleet, serve a second room with the same two variables on its own port. Never restore, add or hide a lane in the owner's room to unblock a run; never copy the owner's `keys.json`.
-1. Start a lane. `npm run run-lane -- opencode ID` or `npm run run-lane -- opencode2 ID`, in the background, one task per lane at a time; two briefs with disjoint files can go to one run (`-- opencode2 Q1d G8`). Never start Hermes: it is retired, and the runner refuses it. The AGY lanes are live backend workers. The runner refuses a brief that is missing, repeated, marked merged, owned by another lane or whose branch already exists. A run on a brief writes its log and a record under `%TEMP%\machineroom-runs\` and a recording you can open at `/?recording=NAME`; a project or queue run writes no recording but shows live with `--lanes`. `npm run run-lane -- --list` shows the last runs and `--stats --since YYYY-MM-DD` the cost. Every new task gets a new session (the owner's rule): the runner starts a one-shot harness session (`opencode run --standalone` or `claude -p`) in that lane's own worktree, the prompt carries the house rules and the brief, and the agent reads its `AGENTS.md` and `docs/agents/ARCHITECTURE.md` first. Before a brief starts, the runner reads the lane worktree's branch, moves it to a detached `refs/heads/main` when it has no commits ahead, and refuses it when its branch has commits `refs/heads/main` does not have, because that is another lane's unfinished work; the run record and summary name `main` as the starting branch. To pause a lane, run `npm run run-lane -- --stop LANE`: it stops the run, its harness and every process still working in that lane's worktree, and removes the lock, so no work goes on after the record ends. Never delete a lane lock to stop a run. Never continue an old session for a new task, and never start a lane in the main checkout.
-2. A retired lane. Hermes has no brief. If the owner brings it back, remove `"retired": true` from its entry in `lanes.json`, check its `cli` block and model, and start it through `npm run run-lane` like any other lane. A project run through `--project` works too.
-3. Review. A lane's end arrives as a notice from its background command: act on it at once. Read the report at the end of the run output. Then `git log --oneline refs/heads/main..BRANCH`, `git -C WORKTREE status --short` (it must be clean) and `git diff --no-ext-diff --no-textconv refs/heads/main...BRANCH`. Check that only the brief's files changed, the brief's sentences are exact, and the review lessons below hold. Open the `file:line` behind each claim of the report before you repeat it to the owner: two of the five hunts of 2026-11-10 had a finding that was half right. Probe new routes and parsers with hostile input. For UI work, check it by eye in a browser. `npm run review-lane -- LANE` (see Review checker below) does the mechanical checks and a full suite on the merged result; use it for a branch that touches the runner, a route that writes or more than ten files.
-4. Test. On a merge, `git merge --no-ff --no-commit -q refs/heads/BRANCH`, then `npx vitest related --run` on the changed files, `npm run build`, and `npm run pack-check` when `scripts/`, `bin/` or `package.json` changed. Before a push, once: `node scripts/test.mjs` (the same as `npm test`), the build, `npm run pack-check` and `npm run history-audit -- --from origin/main`. A full run can die inside Node with 0xC0000409; the test script runs it again up to three times. That is not a test failure. While several worker lanes run their own suites it can crash on all three tries; then run `node scripts/test.mjs --maxWorkers=1 --no-file-parallelism`, which takes about five minutes and does not crash. A test that fails only under load and passes alone is load, not the branch: say so in the review. Run any new command for real once on this machine. After every push, read CI: `gh run list --limit 3 --repo JCDC0/MachineRoom`, and for a failure `gh run view ID --repo JCDC0/MachineRoom --log-failed`. CI runs on Linux too, where `LOCALAPPDATA` and `APPDATA` are not set: a test that starts a script must pass every Windows variable the script reads. `npm run merge-lane -- LANE` does this step and `npm run merge-lane -- LANE --finish --subject TEXT --line TEXT --grade G --fixes N --note TEXT --trailer TEXT` does the changelog line, the commit and the outcome of step 5; change `ARCHITECTURE.md` and make small fixes between the two, and the finish stages them.
-5. Merge. With the merge from step 4 still uncommitted: make small fixes, add one line at the top of `## Unreleased` in `docs/agents/CHANGELOG.md` that ends with `(task ID)`, and change the architecture docs in the same commit when a behaviour, a command or a measured number changed: since P34 `ARCHITECTURE.md` is a short core, and the detail is in `docs/agents/architecture/` (`ROOM.md`, `COMMANDS.md`, `CODE.md`, `LIVE.md`, `ACTIVITIES.md`, `LIMITS.md`), so edit the detail file, and the core only for a new command or folder; a new doc gets a line in `architecture/DOCUMENTS.md`. For a hunt, append `## The orchestrator's corrections` to its audit file: which findings hold, which do not and why. Commit as `0.1.401: Merge ID, WHAT IT DOES`. Record every review: `npm run outcome -- BRANCH merged --grade A- --fixes N --note "..."`, or `rejected` with a `--note`. Then `git status --short` must be empty. The version has stayed at 0.1.401 since 2026-10-29: lanes commit as 0.1.402 on their branches, merges carry the 0.1.401 prefix, and `npm run bump` waits for the owner to ask for a release. Briefs are no longer marked merged in `TASKS.md`; the branch that still exists is what stops a second run. Run `node node_modules/vitest/vitest.mjs run tests/briefs.test.js` after any edit to `TASKS.md`.
-6. Next brief. Search `TASKS.md` for the id first. One paragraph: the owner lane in the title, what and why, exact sentences for refusals and UI text, the tests by name, the files it may touch. A UI brief names the by-eye checks and the window sizes. A brief that spends money or writes to another service says it needs the owner's yes.
-7. Report. What merged, the grade, minutes and cost, what runs now, and what waits on the owner.
-8. Push, only at the owner's yes for that push. First an OpenCode lane reviews the merged batch (a Q brief: the merge diffs, at most 10 findings in a new `AUDIT-...-REVIEW-N.md`), you read each finding back and brief the fixes. Then the full checks of step 4, `git push origin refs/heads/main:refs/heads/main`, and read CI.
+Step 0. Work in the testbench, never in the owner's room.
 
-## Working method
+- The owner's room is `%TEMP%\machineroom-runs` with the lanes of `config/`: the orchestrator and the lanes the owner makes, one per subscription.
+- Every lane command of yours (`run-lane`, `merge-lane`, `outcome`, `review-lane`, `worktrees`, `hand-run`, `candidate`, `run-recording`) starts with these two variables, so its records, logs, locks and lanes stay in the testbench:
 
-Written on 2026-11-10 for whoever holds the role next, a smaller model included. Follow it as a checklist. When a rule here and your own habit disagree, the rule wins; when a rule here and the code disagree, fix the rule.
+```
+$env:MACHINEROOM_RUNS = "$env:TEMP\machineroom-testbench"; $env:MACHINEROOM_LANES_DIR = "docs/agents"
+```
 
-At the start of a session, before anything else:
+- Without them the tools read the owner's room and refuse the fleet lanes. That refusal is correct: set the variables, do not change the room.
+- To watch the fleet, serve a second room with the same two variables on its own port.
 
-1. `git status --short`, `git log --oneline -3` and `git rev-list --count origin/main..main` in the main checkout: is it clean, and how much is unpushed.
-2. What is running: a `<lane>.lock` in the testbench `%TEMP%\machineroom-testbench\` (the owner's room `%TEMP%\machineroom-runs\` is not yours: look, never change) and any `opencode` process. One `opencode serve --service` with no child is the owner's.
-3. Each lane worktree: `git -C .worktrees/LANE status --short` is empty, and its branch is merged or waits for review.
-4. Read `Where things stand` above, the newest section of `TASKS.md` and the top of the changelog. Then tell the owner what runs, what waits for review and what you will do next.
+Step 1. Start a lane.
 
-Reading. `ARCHITECTURE.md` is a short core since P34 and its detail is in six files under `architecture/`: read the core, then search the one detail file its table names. `TASKS.md` holds the briefs since 2026-11-09 and the older ones are in `history/TASKS-ARCHIVE.md`, over 1 MB, which you only search. `grep -n '^\*\*P24\.' docs/agents/TASKS.md` finds a brief, and the last `## ` heading of `TASKS.md` is the newest section. Before you name a new brief, search both files for its id. When `TASKS.md` grows past 150 KB, move its oldest sections to the archive, unchanged, and run `tests/briefs.test.js`.
+- Move the lane to main first: `git -C .worktrees/LANE switch --detach refs/heads/main`.
+- Try it: `npm run run-lane -- LANE ID --dry-run`.
+- Start it as a tracked background command: `npm run run-lane -- LANE ID --minutes N`, with N at the brief's stop minute plus 20. The runner's own limit is 100.
+- One run per lane at a time. Two small briefs with no shared file can go to one run: `npm run run-lane -- LANE ID1 ID2`. That is one wait and one review less.
+- Start lanes a few seconds apart. You are told when each ends: do not poll and do not sleep.
+- The runner refuses a brief that is missing, repeated, owned by another lane or whose branch already exists. It refuses a retired lane. It refuses a worktree whose branch has commits main does not have, because that is unfinished work.
+- Every task gets a new session in the lane's own worktree. Never continue an old session for a new task, and never start a lane in the main checkout.
+- A run on a brief writes its log, a record and a recording you can open at `/?recording=NAME`. `npm run run-lane -- --list` shows the last runs and `--stats --since YYYY-MM-DD` the cost.
+- To stop a lane: `npm run run-lane -- --stop LANE`. It stops the run, its harness and every process in that worktree, and removes the lock. Never delete a lock by hand. Afterwards look for what the run left (a server on a port its brief named, a browser), stop it, and run the stop again.
+- To bring a retired lane back, at the owner's word: remove `"retired": true` from its entry in `lanes.json` and check its `cli` block and model.
 
-Briefs:
+Step 2. Review, as soon as the lane's end is announced.
 
-- One set of files per lane in a round. End each brief with `Files:` and name in its first lines the files and folders other lanes hold. Two briefs that need the same file run one after the other.
-- A usual OpenCode run ends in about 13 minutes (the median since 2026-10-28). Three to five numbered steps fit, with `Use no subagents`, `Commit each step as you finish it` and `stop starting new work at minute N`.
-- Start the run with `--minutes` at the brief's stop minute plus 20: the brief's minute is where the lane stops starting new work, and the runner's limit, 100 by default, is what stops a run that hangs.
-- Two small briefs that share no file can go to one run (`npm run run-lane -- LANE ID1 ID2`): one wait and one review less. From 2026-10-28 to 2026-11-10 this was never done, and a lane waited a median of 33 to 88 minutes for its next brief while a run took 13 (`AUDIT-2026-11-LANES.md`).
-- Five lanes at once and no more: at five or more a run's median is 27 percent longer and nothing merges sooner.
-- Give the exact sentences, names and budgets, and name each test by what it proves. Say which part of which doc to read and no more.
-- A fix starts from a measured number and ends with the same tool's number before and after, both taken in that lane's own run, because the other lanes load the machine.
-- A hunt changes no code and writes one audit file: at most 12 findings, each with `file:line`, a measured cost and the smallest fix, then at most three proposed briefs. Its proposals go to the owner as one ranked list with what each would change for them, and none starts before the owner's yes.
-- A brief that measures time runs alone, or says its numbers are high: five lanes at once about doubled every timing on 2026-11-10. A brief that starts the headless Chromium keeps a core busy with software rendering, so keep its windows short and tell the owner it is running.
-- Write a new brief to a scratch file and append that file to `TASKS.md`, since a heredoc breaks on an apostrophe. Then `npm run run-lane -- LANE ID --dry-run`, commit, and start.
+- Read the report at the end of the run output.
+- `git log --oneline refs/heads/main..BRANCH`
+- `git -C .worktrees/LANE status --short` must be empty.
+- `git diff --no-ext-diff --no-textconv refs/heads/main...BRANCH`
+- Check: only the brief's files changed, the brief's sentences are exact, and the review lessons below hold.
+- Open the `file:line` behind each claim of the report before you repeat it to the owner. Two of the five hunts of 2026-11-10 had a finding that was half right.
+- Probe new routes and parsers with odd input (see Review checker).
+- UI work is checked by eye in a browser at 1280 by 800 or wider: `npm run dev` in the branch's worktree, or `npm run build` and `npm run serve`. Look at the named things, report what you saw, change nothing, stop the server.
+- A branch that adds a route that writes gets a second read of its diff, and the owner is asked when in doubt.
+- For a branch that touches the runner, a route that writes or more than ten files: `npm run review-lane -- LANE`.
 
-Lanes:
+Step 3. Merge and test.
 
-- Start each lane as its own tracked background command, a few seconds apart. You are told when it ends: do not poll and do not sleep.
-- After `npm run run-lane -- --stop LANE`, look for what the run left: a server on a port its brief named, a browser, the lock. Stop the server, then run the stop again to clear the lock.
+- `npm run merge-lane -- LANE` merges with `--no-ff --no-commit` and runs `vitest related` on the changed files, the build, and `pack-check` when `scripts/`, `bin/` or `package.json` changed. It leaves the merge uncommitted.
+- A test that fails only under load and passes alone is load, not the branch: say so in the review.
+- Run any new command for real once on this machine.
 
-This machine:
+Step 4. Fix and write the docs, with the merge still uncommitted.
 
-- `ARCHITECTURE.md` and `CHANGELOG.md` have CRLF line ends. Edit them with the editor tool or a script that keeps the line ends, and check that `git diff --stat` shows only the lines you meant.
-- The built-in browser pane and a window in the background draw about one frame a second, so a frame time is real only with the owner's Brave window in front: ask for it. Reading text and the DOM works at any time.
-- Never print a key, and never write a user path or a profile name into a tracked file: write `%TEMP%` and `%LOCALAPPDATA%`.
+- Make small fixes.
+- Change the architecture docs when a behaviour, a command or a measured number changed. Edit the detail file under `docs/agents/architecture/` (`ROOM.md`, `COMMANDS.md`, `CODE.md`, `LIVE.md`, `ACTIVITIES.md`, `LIMITS.md`). Edit the core `ARCHITECTURE.md` only for a new command or folder. A new doc gets a line in `architecture/DOCUMENTS.md`.
+- For a hunt, append `## The orchestrator's corrections` to its audit file: which findings hold, which do not and why.
+- `git add` what you changed.
 
-When things go wrong:
+Step 5. Finish.
 
-- A full run with every test passed and `Errors 1` is an unhandled rejection: a component set state after its window was torn down. Read the `Unhandled Errors` block first.
-- A CI job that times out in code the push did not touch: `gh run rerun --failed` once before any hunt.
-- CI runs on Linux too: a test that needs `APPDATA` or `LOCALAPPDATA` sets it itself, and builds no Windows path with `path.join`.
-- The history audit reads every new commit, not the last tree: an address or a home path in an old unpushed commit fails the push. Write `example.com` addresses. To clean unpushed commits use `git filter-branch --tree-filter` on `origin/main..main` after making a backup branch; `git rebase -r` drops the fixes made inside merges.
-- A lane that ends its turn while a command of its own still runs in the background leaves nothing. Say `run every command in the foreground` in a brief that runs long commands. A branch left from a failed run blocks the same id: delete the empty branch or take a new id.
-- An AGY run far past its size has likely stalled on a subagent. Stop it and give the brief to OpenCode.
-- Never type a git command that switches the main checkout (`git checkout NAME --`, `git switch`), and never `cd` into a lane worktree: use `git -C .worktrees/LANE`.
+```
+npm run merge-lane -- LANE --finish --subject TEXT --line TEXT --grade G --fixes N --note TEXT --trailer TEXT
+```
 
-Saying it to the owner (the steps for one of the owner's concerns are in `OWNER.md`): the answer and its number first, in plain words, then what was not done or not checked, and at most one question.
+- It writes the changelog line under `## Unreleased` (it must end with `(task ID)`), the commit `0.1.401: Merge ID, WHAT IT DOES` and the outcome record.
+- For a branch you do not merge: `npm run outcome -- BRANCH rejected --note "..."`.
+- Then `git status --short` must be empty.
+- The version stays 0.1.401: lanes commit as 0.1.402 on their branches, merges carry the 0.1.401 prefix, and `npm run bump` waits for the owner to ask for a release.
+- Rewrite `Where things stand`.
+
+Step 6. Next brief, at once (see Briefs).
+
+Step 7. Report: what merged, the grade, minutes and cost, what runs now, and what waits on the owner.
+
+Step 8. Push, only at the owner's yes for that push.
+
+1. An OpenCode lane reviews the merged batch: a Q brief with the merge diffs, at most 10 findings in a new `AUDIT-...-REVIEW-N.md`. Read each finding back and brief the fixes.
+2. `node scripts/test.mjs` (the same as `npm test`), `npm run build`, `npm run pack-check`.
+3. `npm run history-audit -- --from origin/main` must show no finding.
+4. Ask the owner. On a yes: `git push origin refs/heads/main:refs/heads/main`.
+5. Read CI: `gh run list --limit 3 --repo JCDC0/MachineRoom`, and for a failure `gh run view ID --repo JCDC0/MachineRoom --log-failed`.
+
+## Briefs
+
+- Search `TASKS.md` and the archive for the id before you name a brief.
+- One paragraph, then three to five numbered steps. The title names the owner lane. Say what and why, the exact sentences for refusals and UI text, the names and budgets, and each test by what it proves.
+- Start with what to read and no more: `Read no part of TASKS.md beyond this brief`. Add `Use no subagents`, `Commit each step as you finish it` and `stop starting new work at minute N`. A usual OpenCode run ends in about 13 minutes.
+- End with `Files:`. One set of files per lane in a round, and name the files other lanes hold. Two briefs that need the same file run one after the other.
+- A UI brief names the by-eye checks and the window sizes. A brief that spends money or writes to another service says it needs the owner's yes.
+- A brief that runs long commands says `run every command in the foreground`. A lane that ends its turn while its own command still runs leaves nothing.
+- A fix starts from a measured number and ends with the same tool's number before and after, both taken in that lane's own run.
+- A brief that measures time runs alone, or says its numbers are high: five lanes at once about doubled every timing on 2026-11-10. A brief that starts the headless Chromium keeps a core busy, so keep its windows short and tell the owner it is running.
+- A hunt changes no code and writes one audit file: at most 12 findings, each with `file:line`, a measured cost and the smallest fix, then at most three proposed briefs. Its proposals go to the owner as one ranked list, and none starts before the owner's yes.
+- Write a new brief to a scratch file and append that file to `TASKS.md`, keeping its line ends. Then run `node node_modules/vitest/vitest.mjs run tests/briefs.test.js`, the dry run, commit, and start.
+- Briefs are not marked merged in `TASKS.md`. A branch left from a failed run blocks the same id: delete the empty branch or take a new id.
+
+## This machine
+
+- `ARCHITECTURE.md`, `CHANGELOG.md` and `TASKS.md` can have CRLF line ends. Edit them with a script that keeps the line ends, and check that `git diff --stat` shows only the lines you meant.
+- A heredoc can eat backslashes and breaks on an apostrophe. Write a file that holds Windows paths with a tool.
+- Never type a git command that switches the main checkout (`git checkout NAME --`, `git switch`), never use a bare `git stash`, and never `cd` into a lane worktree: use `git -C .worktrees/LANE`.
+- The built-in browser pane and a window in the background draw about one frame a second. A frame time is real only with the owner's Brave window in front: ask for it. Reading text and the DOM works at any time.
+- Give reviews, full suites and flaky-test hunts to an OpenCode lane. Join output-heavy commands with `| Select-Object -Last 5`: a passing check needs one line.
+
+## When things go wrong
+
+- A full run dies inside Node with 0xC0000409: the test script runs it again up to three times, and it is not a test failure. If it dies on all three while lanes run their own suites: `node scripts/test.mjs --maxWorkers=1 --no-file-parallelism`, about five minutes.
+- Every test passed and `Errors 1`: an unhandled rejection, a component that set state after its window was torn down. Read the `Unhandled Errors` block first.
+- A CI job times out in code the push did not touch: `gh run rerun --failed` once before any hunt.
+- A test passes here and fails on Ubuntu: Linux has no `APPDATA` or `LOCALAPPDATA` and uses forward slashes. The test sets the variables itself, passes them to any script it starts, and builds no Windows path with `path.join`.
+- The history audit fails on an old unpushed commit: it reads every new commit, not the last tree. Make a backup branch, then `git filter-branch --tree-filter` on `origin/main..main`. `git rebase -r` drops the fixes made inside merges.
+- A test wrote into a real runs folder: `tests/helpers/isolate.js` must set `MACHINEROOM_RUNS` for every test. Clean the testbench of what it left.
+- An AGY run is far past its size: it has likely stalled on a subagent. Stop it and give the brief to OpenCode.
+- An OpenCode session keeps writing after its run stopped: it was started without `--standalone` and lives in the OpenCode service. Stop it with `opencode api POST /api/session/SESSION/interrupt` using the id in its log, or stop the service. Then check `git status` in every folder it could reach.
+- A file named `nul`, or any stray file, in the main checkout after a lane run: a lane's command lost its `cd`. Delete the file and check `git status`.
 
 ## Review checker
 
-`npm run review-lane -- LANE` turns the mechanical part of step 3 into checks. Run it first, in the main checkout, for every branch before you read the diff. LANE is a key in `lanes.json`; the script reviews the branch that lane's worktree is on. It prints one line per check with PASS, WARN or FAIL, the files and lines under each, and a summary line. It exits 1 when any check fails. Add `--json` for the same report as JSON.
+`npm run review-lane -- LANE` does the mechanical checks of step 2 and a full suite on the merged result. LANE is a key in `lanes.json`; the script reviews the branch that lane's worktree is on. It prints one line per check with PASS, WARN or FAIL and exits 1 when any check fails. `--json` gives the same report as JSON. It never merges, never pushes and never changes the main checkout or the lane worktree.
 
 - commits: the branch has commits ahead of `refs/heads/main` and the worktree has nothing uncommitted.
-- paths: no changed file is in the lane's `forbidden` list (case and `.` or `..` folded).
+- paths: no changed file is in the lane's `forbidden` list.
 - brief: each changed file is named in the `Files:` list of the brief in the newest run record for the branch. A branch with no record only gets a warning.
-- added lines: FAIL for an em dash, a key, a Windows user path or an e-mail address; WARN for an emoji and for a font weight above 500 or bold. A key is never printed.
+- added lines: FAIL for an em dash, a key, a Windows user path or an e-mail address; WARN for an emoji and for a font weight above 500 or bold.
 - package.json: FAIL for a new dependency, WARN for a new dev dependency.
-- heuristics: WARN, in `server/`, `scripts/` and `src/`, for a bare `git` passed to a spawn call, a `main..` range or a bare `main` ref, a `git diff` without `--no-ext-diff` and `--no-textconv`, a fetch without a signal in `server/`, and a lookup by a name from a request or a file without `Object.hasOwn`. These match text, not meaning: each can be a false alarm, and a clean line proves nothing.
+- heuristics: WARN for a bare `git` passed to a spawn call, a `main..` range or a bare `main` ref, a `git diff` without `--no-ext-diff` and `--no-textconv`, a fetch without a signal in `server/`, and a lookup by a name from a request or a file without `Object.hasOwn`. These match text, not meaning.
 - changelog and commit messages: a line added under `## Unreleased`, and a version prefix on each commit.
 - TASKS.md: the branch's `TASKS.md` parses with unique ids.
-- merged result: a temporary worktree of `refs/heads/main` under the system temp folder, the branch merged into it with `--no-ff --no-commit`, then `npm test` and `npm run build` there with `node_modules` linked from the main checkout and no keys in the environment. It reports the test counts and removes the worktree. `--keep` leaves it for a look; delete its `node_modules` link before you remove it with `git worktree remove --force PATH`. This takes as long as a full test run and a build. A 0xC0000409 crash is retried as in `npm test`.
+- merged result: a temporary worktree of `refs/heads/main`, the branch merged into it, then `npm test` and `npm run build` there with no keys in the environment. It takes as long as a full test run. `--keep` leaves the worktree for a look; delete its `node_modules` link before you remove it with `git worktree remove --force PATH`.
 
-The script never merges into main, never pushes and never changes the main checkout or the lane worktree.
+Then do the review yourself. A PASS is not a review.
 
-Then do the review yourself:
-
-1. Read every FAIL and every WARN. A FAIL stops the merge until the lane or a small fix of yours clears it. For each WARN you accept, say why in the review.
-2. Read the whole diff. The script does not check that the brief's sentences are exact, that the logic is right or that the tests test the right thing.
+1. Read every FAIL and every WARN. A FAIL stops the merge until the lane or a small fix of yours clears it. For each WARN you accept, say why.
+2. Read the whole diff. The script does not check that the sentences are exact, that the logic is right or that the tests test the right thing.
 3. Probe odd input: `__proto__`, `constructor`, an empty value, a path with `..`, a huge body, a name that starts with `-`.
 4. Have the owner check UI work by eye, with the exact things to look at.
-
-A PASS is not a review.
 
 ## Who owns what
 
 | Lane | Model | Owns |
 | --- | --- | --- |
-| Orchestrator (main checkout, Claude Code) | Claude Code | `docs/agents/**`, merges, versions |
-| OpenCode (`C:\GitHub\MachineRoom\.worktrees\opencode`) | `opencode-go/deepseek-v4.1-flash`, max | `server/**`, `scripts/**`, `src/control/**`, `src/assistant/**`, `src/decider/**`, and the UI briefs moved from AGY at 0.1.126: `src/ui/**`, `src/styles.css`, `src/engine/**`; the orchestrator checks UI work by eye |
-| OpenCode 2 to 5 (`C:\GitHub\MachineRoom\.worktrees\opencode2` to `opencode5`; 6 to 10 retired on 2026-10-29) | `opencode-go/deepseek-v4.1-flash`, max | the same as OpenCode; small briefs by the routing policy |
-| Claude (`C:\GitHub\MachineRoom\.worktrees\claude`) | Claude Sonnet | works on the brief in its own worktree and reports back |
-| Hermes (retired) | `deepseek/deepseek-v4.1-flash-1017`, xhigh | its old work goes to OpenCode 2 |
-| AGY (`C:\GitHub\MachineRoom\.worktrees\agy`, `agy2` and `agy3`) | `gemini-3.8-flash-high` | `agy` and `agy2` take backend, script and record briefs again since 2026-11-10, at the owner's word, and `agy3` takes none; `src/ui/**`, `src/styles.css`, `src/engine/**`, `src/Stage.jsx` and `src/App.jsx` are forbidden to it |
+| Orchestrator (main checkout) | Claude Code | `docs/agents/**`, merges, versions |
+| `opencode` to `opencode5` (`.worktrees\opencode` to `opencode5`) | `opencode-go/deepseek-v4.1-flash`, max | `server/**`, `scripts/**`, `src/**`, tests; reviews, full suites and hunts |
+| `claude` (`.worktrees\claude`) | Claude Sonnet | the brief it is given, in its own worktree |
+| `agy`, `agy2` (`.worktrees\agy`, `agy2`) | `gemini-3.8-flash-high` | backend, script and record briefs with exact steps; `src/ui/**`, `src/styles.css`, `src/engine/**`, `src/Stage.jsx` and `src/App.jsx` are forbidden to it. A Flash run takes about twice as long as an OpenCode run |
+| `agy3`, `opencode6`, `opencode7` | | no work without the owner's word |
+| `opencode8` to `opencode10`, `hermes` | | retired; the runner refuses them |
 
 The forbidden paths per lane are in `docs/agents/lanes.json`; `buildPrompt` puts them in every prompt.
 
 ## Review lessons
 
-- A screenshot brief that runs long goes stale under the merges around it. G4b branched at 0.1.191 and took 186 minutes; by its merge V19 had moved the cost board to a screen panel and the strip had become a straight striped line, so three of its five images show the old room. Brief screenshots last, on a quiet main, or retake only the images a later merge changes.
-- In the sphere room, a clearance in 3D does not keep a screen panel clear. V18 kept every card's centre away from the cost board's bounding ball, as briefed, yet in the browser cards on nearer and farther shells still project over the board; moving the board beside the hub made it worse (13 cards over it against 3). Brief a panel that must stay readable in screen space, not as an obstacle in the scene.
-- Decode any binary an agent writes into the code. V17's fish eye map was a base64 PNG whose second chunk had a garbage type and length, so the browser could not load it and the filter only shifted the picture; AGY's console checks read attributes and did not catch it. Generate such data in code, with a test.
-- A probe budget must be measured at the size the room will really draw. V12's rows used the 39 cards the seeded tree has at depth 2, while V13 lets the room draw 300; the cold layout took about 1.2 seconds there and 0.4 ms in the probe.
-- A CPU budget must count the child processes the change starts. P15 met "the bridge's CPU share" by polling with `git ls-files` back to back during a burst, which moved the cost into git (about one core per listing on this machine, measured on `ucrt64\bin\git.exe`, since `cmd\git.exe` is a wrapper and shows almost no CPU).
-- A doc brief that says every command and number must appear in `ARCHITECTURE.md` makes the lane delete true lines that are not there. G3e took out `paperclipai run` and three true numbers to pass that check. Ask instead that every new or changed line be checked against the code or `ARCHITECTURE.md`.
-- A layout brief needs a stillness bound beside its goal. P14 met "no overlap" and "a clean layout keeps its places" by repacking every card on any overlap and hiding the old places for the next warm start, so at 200,000 files the cards moved over 150 units on average in 253 of 399 layouts (main 52). Measure the mean move between layouts, the worst move and the tallest layout, old against new.
-- A speedup in `layoutCards` must not add overlaps: count them over every fixture and recording, old against new, before merging. V10's shorter warm passes made the layout 4 times faster and left 45 overlapping pairs in 3027 layouts where main left 12. A cache key must hold everything the cached work reads: V10's layout key left out the faint folders, the `+ N more` line and the cost board's box.
-- AGY's report can say a look was checked when it was not: V10's frame line came out in capitals at 0.85 white, because `.hud-title p` outranks one class. Read the computed style in the browser.
-- An OpenCode lane's shell starts in the main checkout, not in its worktree, so each lane begins every command with `cd` to its worktree (a note in `lanes.json` says so). After every lane run, `git status` in the main checkout must be clean; on 2026-10-22 U20's first command, `cd C:\GitHub\MachineRoom-opencode 2>nul`, lost its backslashes in bash and left a file named `nul` here.
-- An OpenCode session started without `--standalone` lives in the OpenCode background service, not in the process tree. Killing the CLI leaves the session working, and the service can resume it and keep writing when it next starts. On 2026-10-30 a probe's session did this in the main checkout and kept editing files after its run had stopped. Lane runs and orchestrator turns pass `--standalone` (H18). A command started by hand, or by an older build, does not: stop its session with `opencode api POST /api/session/SESSION/interrupt`, using the session id in its log, or stop the service, then check `git status` in every folder it could reach before you trust the tree.
-- AGY adds aliases and extra forms nobody asked for (V9's `motionHelper`, Q1e's `latestOnly.isLatest`). Cut them at the merge, with the tests that read them.
-- A lookup keyed by text from a request or a file (`lanes[name]`) must use `Object.hasOwn`, or `__proto__`, `constructor` and `toString` break it. This gap came back more than once.
+Each is a defect that reached a branch at least once. The story behind each is in `history/ORCHESTRATOR-ARCHIVE.md`.
+
+In a diff of `server/` or `scripts/`:
+
+- A lookup keyed by text from a request or a file (`lanes[name]`) uses `Object.hasOwn`, or `__proto__`, `constructor` and `toString` break it. This gap came back more than once.
 - A thrown error inside an async route handler leaves the request hanging unless something answers 500.
-- A fake runner in a test does not prove a command starts on Windows (`opencode` is an npm shim). Start it for real once.
 - Any `git diff` the bridge runs needs `--no-ext-diff --no-textconv`.
-- Start git through `gitPath()`, never as a bare `git`, when its working folder is a lane worktree: Windows runs a `git.exe` committed there first (checked on this machine in 0.1.102). Name `refs/heads/main`, never `main`.
-- A call from the bridge to another program needs a time limit (`AbortSignal.timeout`), and a lane's code never gets the owner's keys (`laneEnv` in `scripts/candidate.mjs`).
-- Agents pass their own tests and miss odd input. Hermes parser work can pin wrong behaviour in scenario tests: ask it to list every changed scenario line and why.
-- AGY on Flash has skipped by-eye checks and left races (a task created, its thread opened, "not found"). Name the checks in the brief and have the owner look.
-- AGY often uses an old version prefix in its commit. Renumber when you merge.
+- Git starts through `gitPath()`, never as a bare `git`, when its working folder is a lane worktree. Name `refs/heads/main`, never `main`.
+- A call from the bridge to another program needs a time limit (`AbortSignal.timeout`), and a lane's code never gets the owner's keys (`laneEnv`).
+- Text from a model that is written into a file we parse again must be one line.
+- Decode any binary an agent writes into the code (a base64 image, a table). Better: generate it in code, with a test.
+- A cache key must hold everything the cached work reads.
+
+In tests:
+
+- Agents pass their own tests and miss odd input. Probe it yourself.
+- A fake runner in a test does not prove a command starts on Windows (`opencode` is an npm shim). Start it for real once.
+- A test must never write into a real runs folder or read the real lane list (`tests/helpers/isolate.js`).
+- A test that waits on a process waits for the process (`waitUntil`), not for a fixed sleep.
+
+In a brief that sets a budget:
+
+- Measure at the size the room will really draw, not at the size of the seed.
+- A CPU budget counts the child processes the change starts. A poll that calls git moves the cost into git.
+- A layout goal needs a stillness bound beside it: measure the mean and worst move between layouts, old against new. A layout speedup must not add overlaps: count them over every fixture and recording.
+- A doc brief asks that every new or changed line be checked against the code. It never asks that every number appear in one file, or the lane deletes true lines.
+- Screenshots are briefed last, on a quiet main, or they go stale under the merges around them.
+
+By eye:
+
+- A lane's report can say a look was checked when it was not. Read the computed style in the browser.
 - CSS3D elements paint over the WebGL canvas unless the canvas sits on top with depth planes. Check depth by orbiting, not from the default angle.
-- The CSS3D renderer sets each element's `display` from its object's `visible` on every frame, so hide a CSS3D element with `object.visible`, never `style.display` (V7b's callouts never hid).
-- A chain of lane runs branches each run from main as it was when the run started, so a fix merged to main mid-chain reaches only the later runs, and an earlier run may fix the same thing its own way (U7 and `tests/plan.test.js`). Keep main's copy.
-- Text from a model that we write into a file we parse again must be one line. A planner brief whose text held a blank line and `**Z9. ... (Hermes).**` became a second brief in `TASKS.md` that `parsePlan` never checked (C5d); `briefMarkdown` now writes one line.
-- Run the brief tests after writing briefs: 0.1.85 shipped a red test because two briefs shared the id W3a.
-- Bash heredocs on this machine eat backslashes. Write files with a tool, not a heredoc, when they hold Windows paths.
+- Hide a CSS3D element with `object.visible`, never `style.display`: the renderer sets `display` every frame.
+- A change to tunnels, touches or agent effects keeps the settled design in `OWNER.md`.
+
+Lane habits:
+
+- An OpenCode lane's shell starts in the main checkout, so each lane begins every command with `cd` to its worktree. After every lane run, `git status` in the main checkout must be clean.
+- AGY adds aliases and extra forms nobody asked for. Cut them at the merge, with the tests that read them.
+- AGY often uses an old version prefix in its commit. Renumber when you merge.
+- AGY on Flash has skipped by-eye checks and left races. Name the checks in the brief and have the owner look.
+- A chain of lane runs branches each run from main as it was when the run started, so an earlier run may fix the same thing its own way. Keep main's copy.
+
+## Changing this guide
+
+- Whoever holds the role may change this file, in a commit of its own, and says so in the report to the owner.
+- A rule under `Rules` came from the owner. Change or drop one only at the owner's word, and write the date beside it.
+- Add a lesson when a defect reached a merge or cost a rerun: one or two sentences, under the heading where it will be looked up. Put the story in the archive, not here.
+- Drop a lesson when its subject is gone from the code: move it to `history/ORCHESTRATOR-ARCHIVE.md`, unchanged.
+- Each rule is in one place. Before you add one, search for it. When this file passes 30 KB, cut it back.
+- When a rule and the code disagree, fix the rule. When a rule and your habit disagree, the rule wins.
+- What the next model needs goes here or in `OWNER.md`, not in a private memory: other models cannot read that.
 
 ## Waiting on the owner
 
 - The licence and the public release (P4): the licence and names (G2), then the private repository and every push (G6). Run the history audit first.
-- The owner's yes for any push, after `npm run history-audit` shows no finding in the new commits.
+- The owner's yes for any push.
 - D1: `npm run decide-eval` with the owner's key, and the routing labels in `tests/probes/routing.js`.
