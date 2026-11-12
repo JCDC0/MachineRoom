@@ -21,6 +21,7 @@ import {
   sessionAge,
   sessionMenuItemForKey,
   sessionMenuItems,
+  sessionRowIdentity,
   sessionTitle,
   sessionRows,
   waitForBridge,
@@ -426,7 +427,7 @@ export function Sidebar({ client = null, live = false, project = '', tasks = nul
     }
     menuAnchorRef.current = event.currentTarget
     setActionError('')
-    setMenu({ key, current: row.current })
+    setMenu({ key, current: row.current, identity: sessionRowIdentity(row) })
   }
 
   async function markOpened(row) {
@@ -512,7 +513,12 @@ export function Sidebar({ client = null, live = false, project = '', tasks = nul
   const rows = sessionRows(sessions, { expanded: showAll, query: search, sort, showArchived })
   const menuRow =
     menu && menu.key
-      ? rows.rows.find((row) => (row.id || 'current') === menu.key && row.current === menu.current) ?? null
+      ? rows.rows.find(
+          (row) =>
+            (row.id || 'current') === menu.key &&
+            row.current === menu.current &&
+            sessionRowIdentity(row) === menu.identity
+        ) ?? null
       : null
   menuRowRef.current = menuRow
   useEffect(() => {
