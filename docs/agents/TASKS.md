@@ -941,3 +941,33 @@ Files: docs/agents/PLAN-CODEX-2026-11-12.md.
 For each merge `23bad3c1`, `580a28cf`, `909f00fa`, `1e027045`, `3bb13972`, `b6bd90f7` and `4a3eebce`, read its changelog line and the lines of `docs/agents/architecture/LIVE.md`, `COMMANDS.md`, `CODE.md` and `docs/GUIDE.md` that describe what it changed, and check each sentence against the code. Write `docs/agents/AUDIT-2026-11-DOCS-P70-P76.md`: a table of each sentence that is wrong or missing, with the doc line, the code `file:line` and the sentence it should be. An empty table with what you checked is a good answer.
 
 Files: docs/agents/AUDIT-2026-11-DOCS-P70-P76.md.
+
+
+## The context size from the model, and a conversation menu (2026-11-12, night)
+
+The owner found the chat's `Context size 16.5k / 200.0k` for DeepSeek v4.1 Flash on OpenRouter: `resolveContextWindow` in `server/model-list.js` knows a window only for the models in its own list, and gives `DEFAULT_CONTEXT_WINDOW` (200000) for every other, so autocompact fires at the wrong point for any model with a larger or smaller window. P77 keeps each endpoint model's `contextLength` in `endpoints.json`. The owner also asked for a conversation list managed like the Gemini app's or Claude Code's: one menu per row with Pin, Rename, Fork, Mark as unread, Archive and Delete. P92 starts after P77 is merged; P93 starts after P81 is merged, since it uses P81's branch route.
+
+**P92. The context size comes from the model (OpenCode).** Starts after P77 is merged. Read no part of TASKS.md beyond this brief and the paragraph above it. Use no subagents. Run every command in the foreground. Commit each step as you finish it, and stop starting new work at minute 40. Work on a temporary runs folder, never on a real one.
+
+1. `resolveContextWindow` takes, in order: a window the lane sets (`cli.contextWindow`), the `contextLength` the endpoint's saved `modelDetails` give for that model (a machineroom lane's endpoint, read from `endpoints.json` in the runs folder), the window in `MODELS`, and only then `DEFAULT_CONTEXT_WINDOW`. Find every caller (`server/orchestrator.js`, `server/orchestrators.js`, the lanes and agents answers) and pass what it needs; keep the function pure by passing the details in.
+2. The chat says where the number came from when it is the default: `Context size 16.5k / 200.0k (assumed)`, in `src/ui/agentStrip.js`; a known window shows as now.
+3. The autocompact point in tokens follows the new window when a model changes, and a saved percent stays a percent.
+4. Tests, by what they prove: DeepSeek on OpenRouter with a saved `contextLength` of 1048576 gives that window; the lane's own window wins; a model with no details gives the default and the label says `(assumed)`; autocompact fires at the percent of the right window.
+
+Run `npx vitest related --run` on every file you changed and `npm run build`; both must pass.
+
+Files: server/model-list.js, server/models.js, server/orchestrator.js, server/orchestrators.js, server/endpoints.js, src/ui/agentStrip.js, tests/.
+
+**P93. One menu for each conversation (OpenCode).** Starts after P81 is merged. Read no part of TASKS.md beyond this brief and the paragraph above P92. Use no subagents. Commit each step as you finish it, and stop starting new work at minute 50. Fonts Jost and Space Mono at 400 and 500, never bold; colours from `docs/agents/ARCHITECTURE.md`, Conventions.
+
+The list is `renderSessionRow` in `src/ui/Sidebar.jsx` with helpers in `src/ui/sidebar.js`; it shows Pin, Star, Rename and Delete as a row of text buttons on every row but the current one, and the routes are in `server/orchestrators.js` under `/api/orchestrator/sessions`.
+
+1. Each row, the current one too, gets one `...` button on hover and on keyboard focus, which opens a menu: Pin or Unpin, Rename, Fork, Mark as unread, Archive, and Delete in red. The menu shows each item's key (P, R, F, U, A, D), and with the menu open the key does the item; Escape closes it. Star leaves the row and its starred conversations count as pinned. The row of text buttons goes.
+2. Fork starts a new conversation from the whole of that one, with P81's branch route at its last message. Mark as unread puts a yellow dot on the row until it is opened. Archive hides the row; a `Show archived` line at the end of the list shows them with Unarchive in their menu. Delete keeps its confirm. The current conversation cannot be archived or deleted, and its items are disabled with that reason.
+3. A search box over the list filters by title as you type, and a sort choice (Newest, Oldest, Name) is kept in `localStorage` (wrapped in try); pinned rows come first in each.
+4. The bridge keeps `unread` and `archived` beside `pinned`, with the same write guard the pin takes.
+5. Tests, by what they prove: each menu item calls the right route; each key does its item and Escape closes; fork makes a new conversation of the same length; unread clears on open; archived rows hide and come back; the current row's archive and delete are disabled; search and each sort with pinned first.
+
+Run `npx vitest related --run` on every file you changed and `npm run build`; both must pass. Name the by-eye checks for the orchestrator at 1280 by 800: the menu open on a row, an archived list, a search.
+
+Files: src/ui/Sidebar.jsx, src/ui/sidebar.js, src/styles.css, server/orchestrator.js, server/orchestrators.js, tests/.
