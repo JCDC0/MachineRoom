@@ -1572,24 +1572,33 @@ describe('waking the orchestrator', () => {
     rig.send('Ready')
     await waitIdle(rig, 1)
 
-    rig.orchestrator.onFrame(frame('run-opencode7-slow-check', 'succeeded'))
-    await waitFor(
-      () => existsSync(join(rig.projectRoot, '.git', 'check-started')),
-      15000,
-      'the slow merge check to start'
-    )
+    let ticks = 0
+    const ticker = setInterval(() => {
+      ticks += 1
+    }, 10)
+    try {
+      rig.orchestrator.onFrame(frame('run-opencode7-slow-check', 'succeeded'))
+      await waitFor(
+        () => existsSync(join(rig.projectRoot, '.git', 'check-started')),
+        15000,
+        'the slow merge check to start'
+      )
 
-    await sleep(100)
-    expect(rig.orchestrator.answer().state).toBe('idle')
-    rig.orchestrator.deliver('room', 'A second wake')
-    await sleep(100)
-    expect(checks).toBe(1)
-    expect(rig.calls()).toHaveLength(1)
+      await sleep(100)
+      expect(ticks).toBeGreaterThan(1)
+      expect(rig.orchestrator.answer().state).toBe('idle')
+      rig.orchestrator.deliver('room', 'A second wake')
+      await sleep(100)
+      expect(checks).toBe(1)
+      expect(rig.calls()).toHaveLength(1)
 
-    writeFileSync(join(rig.projectRoot, '.git', 'check-release'), '1')
-    await waitFor(() => rig.calls().length === 2, 5000, 'the room turn after the slow check')
-    await waitIdle(rig, 2)
-    expect(checks).toBe(1)
+      writeFileSync(join(rig.projectRoot, '.git', 'check-release'), '1')
+      await waitFor(() => rig.calls().length === 2, 5000, 'the room turn after the slow check')
+      await waitIdle(rig, 2)
+      expect(checks).toBe(1)
+    } finally {
+      clearInterval(ticker)
+    }
   })
 
   it('starts the room turn when the merge check fails', async () => {

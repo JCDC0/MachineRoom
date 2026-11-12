@@ -20,6 +20,7 @@
 - Direct tests for `startProjectTask` and chat lane dispatch cover worktree, non-git, dirty, repository, inactive or unknown lane, running 409, and `--started-by orchestrator` (P131).
 - Project switch checks lane lock holder start times through `isHolderAlive` for both the runner pid and child pid, so a reused Windows pid no longer blocks switching (P125).
 - The bridge's merge check runs git without blocking, shares one check between waiting turns, and still starts a room turn when the check fails or times out (P124).
+- The slow git merge check test counts timer ticks while the check runs, so it proves the check does not block the bridge (P145).
 - run-lane prints its log, record and runs folder paths with the profile, home and state folders masked (P123).
 - Run output masks HOME, USERPROFILE and XDG_STATE_HOME alongside TEMP and LOCALAPPDATA, longest prefix first, on printed log, record and recovery lines (P123).
 - Agent messages are masked before they are stored, survive a restart and a fork, and a failed setup leaves no session id (P120).
