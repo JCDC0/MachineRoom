@@ -1449,6 +1449,7 @@ describe('run-lane first use', () => {
       const result = await runLane(['opencode', '--project', project, '--task', 'Fix it first.\nThen stop.', '--dry-run'], {
         MACHINEROOM_LANES_FILE: lanesFileUnderWorktrees(folder),
         MACHINEROOM_RUNS: join(folder, 'runs'),
+        APPDATA: join(folder, 'AppData', 'Roaming'),
         TEMP: folder,
         TMP: folder,
       })
@@ -1474,6 +1475,7 @@ describe('run-lane first use', () => {
         const result = await runLane(['opencode', '--project', project, '--task', task, '--dry-run'], {
           MACHINEROOM_LANES_FILE: lanesFileUnderWorktrees(folder),
           MACHINEROOM_RUNS: join(folder, 'runs'),
+          APPDATA: join(folder, 'AppData', 'Roaming'),
           TEMP: folder,
           TMP: folder,
         })
