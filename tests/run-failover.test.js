@@ -3,8 +3,8 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node
 import { basename, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it, vi } from 'vitest'
-import { branchFor } from '../src/briefs/briefs.js'
-import { laneLockText } from '../src/briefs/run.js'
+import { branchFor, buildPrompt } from '../src/briefs/briefs.js'
+import { failoverKind, laneLockText } from '../src/briefs/run.js'
 import { gitPath } from '../server/programPath.js'
 import { startLane } from '../scripts/run-lane.mjs'
 import { makeTempDir } from './helpers/tempRoot.js'
@@ -340,5 +340,28 @@ describe('a backup lane named in lanes.json', () => {
     } finally {
       rmSync(folder, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
     }
+  })
+})
+
+describe('when a run moves to its backup lane', () => {
+  it('moves only on a limit or a failed start, never after a success or a plain failure', () => {
+    expect(failoverKind({ exitCode: 1, limited: 'rate-limit' })).toBe('rate-limit')
+    expect(failoverKind({ exitCode: 1, limited: '', startFailed: true })).toBe('start-failed')
+    expect(failoverKind({ exitCode: 1, limited: '' })).toBe('')
+    expect(failoverKind({ exitCode: 0, limited: 'rate-limit' })).toBe('')
+    expect(failoverKind({ exitCode: 1, limited: 'quota', killed: true })).toBe('')
+  })
+
+  it('gives the backup lane a prompt with its own worktree and the -on- branch', () => {
+    const lanes = {
+      opencode: { name: 'First', harness: 'OpenCode', model: 'a', role: '', worktree: 'C:/w/first', forbidden: [] },
+      agy: { name: 'Backup', harness: 'AGY', model: 'b', role: '', worktree: 'C:/w/backup', forbidden: ['src/engine/**'] },
+    }
+    const briefs = [{ id: 'P1', title: 'Do the thing', text: 'Text.' }]
+    const prompt = buildPrompt({ briefs, laneKey: 'agy', lanes, rules: { about: '', rules: [] }, version: '0.1.1', branchSuffix: '-on-agy' })
+    expect(prompt).toContain('Your worktree is C:/w/backup.')
+    expect(prompt).toContain(`git switch -c ${branchFor(briefs[0])}-on-agy refs/heads/main`)
+    expect(prompt).toContain('src/engine/**')
+    expect(prompt).not.toContain('C:/w/first')
   })
 })

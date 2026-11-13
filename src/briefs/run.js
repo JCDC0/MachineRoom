@@ -554,11 +554,10 @@ export function fallbackProblem({ laneKey, fallback, lanes } = {}) {
 
 export function failoverKind({ exitCode, limited, startFailed, killed = false } = {}) {
   if (killed === true) return ''
+  if (exitCode === 0 && startFailed !== true) return ''
   const kind = typeof limited === 'string' ? limited.trim() : ''
   if (kind !== '') return kind
-  if (startFailed === true) return 'start-failed'
-  if (Number.isInteger(exitCode) && exitCode !== 0) return 'failed'
-  return ''
+  return startFailed === true ? 'start-failed' : ''
 }
 
 export function limitedFor(harness, log) {

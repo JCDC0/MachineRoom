@@ -1359,7 +1359,9 @@ async function main() {
   const wanted = options.briefs.map((id) => briefs.find((item) => item.id.toUpperCase() === id.toUpperCase()))
   const rules = parseRules(read('HOUSE-RULES.md'))
   const version = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).version
-  const prompt = unattendedPrompt(buildPrompt({ briefs: wanted, laneKey: options.lane, lanes, rules, version, agentDepth: readAgentDepth(runsFolder()).limit }))
+  const agentDepth = readAgentDepth(runsFolder()).limit
+  const promptFor = (laneKey, branchSuffix = '') => unattendedPrompt(buildPrompt({ briefs: wanted, laneKey, lanes, rules, version, agentDepth, branchSuffix }))
+  const prompt = promptFor(options.lane)
   const name = `${options.lane}-${wanted.map((brief) => brief.id).join('-')}-${stamp()}`
   const folder = runsFolder()
   const logPath = join(folder, `${name}.log`)
@@ -1386,7 +1388,7 @@ async function main() {
   refuseRunningLane(options.lane, lane.worktree, folder)
   const lock = takeLaneLock(folder, options.lane, { worktree: lane.worktree })
   try {
-    const run = await startLane({ options, lane, lanes, wanted, prompt, logPath, usageFile, name, lockPath: lock })
+    const run = await startLane({ options, lane, lanes, wanted, prompt, promptFor, logPath, usageFile, name, lockPath: lock })
     return run.code
   } finally {
     releaseLaneLock(lock)
@@ -1403,7 +1405,7 @@ function recordRoom(record, toolLines, lanes) {
   }
 }
 
-async function startFailover({ laneKey, target, lanes, options, wanted, prompt, folder, project, task, deferRecord, openLog, failedRecord, failedStartBranch }) {
+async function startFailover({ laneKey, target, lanes, options, wanted, prompt, promptFor = null, folder, project, task, deferRecord, openLog, failedRecord, failedStartBranch }) {
   const fallbackLane = lanes?.[target]
   if (!fallbackLane) return null
   let lock
@@ -1435,7 +1437,7 @@ async function startFailover({ laneKey, target, lanes, options, wanted, prompt, 
       lane: fallbackLane,
       lanes,
       wanted,
-      prompt,
+      prompt: !project && typeof promptFor === 'function' ? promptFor(target, `-on-${target}`) : prompt,
       logPath: join(folder, `${fallbackName}.log`),
       usageFile: join(folder, `${fallbackName}.usage.json`),
       name: fallbackName,
@@ -1453,7 +1455,7 @@ async function startFailover({ laneKey, target, lanes, options, wanted, prompt, 
   }
 }
 
-export async function startLane({ options, lane, lanes, wanted, prompt, logPath, usageFile, name, project = '', task = '', queue = null, lockPath = '', projectBranch = null, deferRecord = false, base = '', openLog = createWriteStream, branchSuffix = '', failoverFrom = null }) {
+export async function startLane({ options, lane, lanes, wanted, prompt, logPath, usageFile, name, project = '', task = '', queue = null, lockPath = '', projectBranch = null, deferRecord = false, base = '', openLog = createWriteStream, branchSuffix = '', failoverFrom = null, promptFor = null }) {
   if (options?.failedOver !== true) {
     const problem = fallbackProblem({ laneKey: options?.lane, fallback: lane?.fallback, lanes })
     if (problem !== '') throw new Error(problem)
@@ -1847,6 +1849,7 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
         options,
         wanted,
         prompt,
+        promptFor,
         folder,
         project,
         task,
