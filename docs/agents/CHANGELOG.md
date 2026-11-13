@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- A failed status, branch or log read carries its own sentence, counts stay null, and Repository and the inspector show the sentence instead of a clean state.
 - Queue task records carry queueSize, and the record where a queue stopped carries queueRemaining, masked; Ask for recovery now lists those tasks.
 - The hands-on check was blocked: Codex's sandbox cannot read the Playwright browser folder, and the screenshot helper reports access denied as a missing browser.
 - A reported 0 reads as $0.00, a lane with no runs reads 0, and not reported appears only when runs gave no number (N16, the owner's word).
@@ -12,6 +13,7 @@
 - A source that stops, such as a failed tree read or a stopped OpenCode session reader, shows its sentence in the health chip while the bridge stays connected (P220).
 - A conversation's menu has Export (E), which saves its title, project, summary and saved messages as one Markdown file.
 - The fourth readiness pass lists eight live-room problems on another project, among them outside files matched by folder name and failed git reads shown as clean.
+- A failed git status read leaves the change count unknown and shows its sentence in the Repository section and Source control, and a failed branch or log read shows its own sentence (P221).
 - A conversation's `...` menu exports its saved title, project, start time, summary and messages as a Markdown file, and E runs it while the menu is open (P218).
 - Dispatch offers Ask for recovery on a stopped or failed queue row, and Confirm sends the failed task, the tasks that did not run and the record's missing parts to Main (P216).
 - Reviews offers Ask to prepare on a refused fast forward or a branch with its own commits whose destination moved on (reviews now carry `behind`), and sends the lane, branch, full head and destination to Main after a confirm (P215).

@@ -11,12 +11,15 @@ import {
   createConfirmText,
   defaultBranchFrom,
   newBranchProblem,
+  repositoryBranchesNotice,
   repositoryHead,
+  repositoryStatusNotice,
   repositoryProjectName,
   switchBlockReason,
   switchConfirmText,
   validBranchName,
 } from '../src/ui/repository.js'
+import { gitChangesView, gitGraphView } from '../src/ui/inspector.js'
 
 function gitState(overrides = {}) {
   return {
@@ -163,6 +166,46 @@ describe('a new branch name', () => {
     expect(defaultBranchFrom(gitState())).toBe('main')
     expect(defaultBranchFrom(gitState({ branch: 'feat/login' }))).toBe('feat/login')
     expect(defaultBranchFrom(gitState({ branch: null, detached: true }))).toBe('main')
+  })
+})
+
+describe('a failed git read', () => {
+  it('gives the status sentence, no count and no switchable branch', () => {
+    const state = gitState({
+      dirty: null,
+      changeCount: null,
+      statusError: 'Could not check for uncommitted changes.',
+    })
+    expect(repositoryStatusNotice(state)).toBe('Could not check for uncommitted changes.')
+    expect(switchBlockReason(state, { worktree: false })).toBe('Could not check for uncommitted changes.')
+    expect(branchRows(state)[1].reason).toBe('Could not check for uncommitted changes.')
+    expect(branchRows(state)[1].switchable).toBe(false)
+  })
+
+  it('gives the branch sentence, and no sentence after a good read', () => {
+    expect(repositoryBranchesNotice(gitState({ refsError: 'Could not read the branches.' }))).toBe(
+      'Could not read the branches.'
+    )
+    expect(repositoryStatusNotice(gitState())).toBe('')
+    expect(repositoryBranchesNotice(gitState())).toBe('')
+  })
+
+  it('shows the status sentence instead of a clean change list', () => {
+    const view = gitChangesView({
+      git: true,
+      changes: [],
+      changeCount: null,
+      statusError: 'Could not check for uncommitted changes.',
+    })
+    expect(view).toEqual({ notice: 'Could not check for uncommitted changes.', count: null, rows: [] })
+  })
+
+  it('shows the log sentence instead of an empty graph', () => {
+    expect(gitGraphView({ git: true, commits: [], logError: 'Could not read the commits.' })).toEqual({
+      notice: 'Could not read the commits.',
+      rows: [],
+    })
+    expect(gitGraphView({ git: true, commits: [] })).toEqual({ notice: '', rows: [] })
   })
 })
 
