@@ -217,9 +217,9 @@ function projectFolder(value) {
   try {
     stat = statSync(folder)
   } catch {
-    throw new Error(`The project folder ${folder} does not exist.`)
+    throw new Error(`The project folder ${printedRunsFolder(folder)} does not exist.`)
   }
-  if (!stat.isDirectory()) throw new Error(`The project folder ${folder} is not a folder.`)
+  if (!stat.isDirectory()) throw new Error(`The project folder ${printedRunsFolder(folder)} is not a folder.`)
   return folder
 }
 
@@ -846,7 +846,7 @@ function projectRefusals(project, lanes, allowDirty) {
 
 async function runQueueProject({ options, lane, lanes }) {
   const project = projectFolder(options.project)
-  if (!gitCheckout(project)) throw new Error(`The project folder ${project} is not a git folder. A queue needs one.`)
+  if (!gitCheckout(project)) throw new Error(`The project folder ${printedRunsFolder(project)} is not a git folder. A queue needs one.`)
   const problems = projectRefusals(project, lanes, options.allowDirty === true && !options.queue)
   if (problems.length > 0) {
     problems.forEach((sentence) => console.log(sentence))
@@ -941,7 +941,7 @@ async function runQueueProject({ options, lane, lanes }) {
           return outcome
         } : null,
       })
-      formatQueueSummary({ branch: result.branch, results: result.results, tests: test, worktree: options.worktree ? target.path : '' }).forEach((line) => console.log(line))
+      formatQueueSummary({ branch: result.branch, results: result.results, tests: test, worktree: options.worktree ? printedRunsFolder(target.path) : '' }).forEach((line) => console.log(line))
       return result.results.some((item) => item.status.startsWith('failed')) ? 1 : 0
     } catch (error) {
       if (pending) {
