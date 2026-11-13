@@ -474,6 +474,7 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
   const laneFile = lanesFile ? resolve(lanesFile) : join(lanesFolder(), 'lanes.json')
   const lanesDir = dirname(laneFile)
   const recordsDir = () => (runsFolder ? resolve(runsFolder) : dirname(runsFile()))
+  const readSavedCheckCommand = () => readProjectCheckCommand(resolvedRoot, recordsDir())
   const recordsPath = () => join(recordsDir(), 'runs.jsonl')
   const outcomesPath = () => join(recordsDir(), 'outcomes.jsonl')
   const command = runnerCommand ?? { file: process.execPath, args: ['scripts/run-lane.mjs'] }
@@ -1203,7 +1204,7 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
     if (projectRun) {
       const given = Object.hasOwn(body, 'checkCommand')
         ? body.checkCommand
-        : readProjectCheckCommand(resolvedRoot, recordsDir())
+        : readSavedCheckCommand()
       const checkProblem = checkCommandProblem(given)
       if (checkProblem) {
         sendJson(req, res, 400, { error: checkProblem })
@@ -1411,5 +1412,6 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
     isRunning: (lane) => (lane !== undefined ? running.has(lane) : running.size > 0),
     startRun,
     startProjectTask,
+    readSavedCheckCommand,
   }
 }

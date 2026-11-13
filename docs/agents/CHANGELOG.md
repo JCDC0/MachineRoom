@@ -1,11 +1,14 @@
 # Changelog
 
 ## Unreleased
+- P265: the chat's lane start passes the project's saved check command, and each AgentDock gets the full orchestrator list, so sub and sector rows show.
 - P264: ROOM.md, LIVE.md and COMMANDS.md take the 15 corrected sentences from the docs audit; rows 1 and 6 wait for P265.
 - P258: RUN-2026-11-13-COMMANDS.md runs each command's help form; seven lack --help and four doc lines miss an empty or refusal case.
 - P266: storage, dispatch and doctor tests assert the partial archive, the queue's --test parse, both notice sentences and the literal %TEMP% mask.
 - P263: an empty reply gets one nudge before it ends the run, a provider error exits 1, and the result is the agent's last message.
 - P249: GET /api/control/runs/conversation turns a lane run's log into prompt, agent, tool and result entries, masked, from the runs folder only.
+- P265: the agent dock receives the full orchestrator list, so a sub shows its lanes, scope and restriction and a lane shows its sector.
+- P265: a lane task sent from chat passes the project's saved check command to the runner as --test.
 - P254: a folder-shaped /api/tree answers from the last tree while the watcher is armed, the last full read was clean and no read is due.
 - P263: the native agent nudges an empty or reasoning-only reply once, reports a provider error in an answer as a failure, and uses the last message as its result text.
 - P266: The four weak tests in storage, project-dispatch and machine-doctor now fail when their behaviour is undone, proved in `%TEMP%` scratch copies.

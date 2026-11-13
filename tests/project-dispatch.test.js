@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { basename, join, resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import { act, createElement } from 'react'
 import { afterEach, describe, expect, it } from 'vitest'
 import DispatchPanel from '../src/ui/panels/DispatchPanel.jsx'
@@ -81,6 +81,20 @@ function writeRunner(dir, out, waitMs = 0, exitCode = 0) {
   ]
   if (waitMs > 0) lines.push(`await new Promise((resolve) => setTimeout(resolve, ${waitMs}))`)
   if (exitCode !== 0) lines.push(`process.exit(${exitCode})`)
+  writeFileSync(path, lines.join('\n'))
+  return path
+}
+
+function writeParseRunner(dir, out) {
+  const path = join(dir, 'parse-runner.mjs')
+  const runUrl = pathToFileURL(join(REPO_ROOT, 'src', 'briefs', 'run.js')).href
+  const lines = [
+    "import { writeFileSync } from 'node:fs'",
+    `import { parseRunArgs } from ${JSON.stringify(runUrl)}`,
+    'const args = process.argv.slice(2)',
+    'const parsed = parseRunArgs(args)',
+    `writeFileSync(${JSON.stringify(out)}, JSON.stringify(parsed))`,
+  ]
   writeFileSync(path, lines.join('\n'))
   return path
 }
@@ -377,6 +391,64 @@ describe('the runs route with a starter', () => {
     expect(answer.status).toBe(202)
     expect(messages).toEqual([{ from: 'sub-frontend', to: 'opencode', kind: 'dispatch' }])
     await waitFor(() => readArgs(out), { what: 'the runner arguments' })
+  })
+})
+
+describe('the chat lane start with a saved check command', () => {
+  it('starts run-lane through parseRunArgs with --test and the saved command', async () => {
+    const project = tempDir('mr-chat-dispatch-')
+    const runnerDir = tempDir('mr-chat-runner-')
+    const base = tempDir('mr-chat-bridge-')
+    const runs = join(base, 'runs')
+    const out = join(runnerDir, 'parsed.json')
+    const promptFile = join(base, 'orchestrator-agent.md')
+    mkdirSync(runs, { recursive: true })
+    writeFileSync(promptFile, 'project={{PROJECT}}\nruns={{RUNS}}\n')
+    const lanes = JSON.parse(readFileSync(join(REPO_ROOT, 'docs', 'agents', 'lanes.json'), 'utf8'))
+    writeActiveLanes(activeLanesFileFor(project, runs), ['opencode'])
+    const bridge = createBridge({
+      projectRoot: project,
+      port: 0,
+      env: {},
+      briefsDir: join(REPO_ROOT, 'docs', 'agents'),
+      lanesFile: join(REPO_ROOT, 'docs', 'agents', 'lanes.json'),
+      runsFolder: runs,
+      runnerCommand: { file: process.execPath, args: [writeParseRunner(runnerDir, out)] },
+      orchestratorPrompt: promptFile,
+      lanesSource: { folder: runs, lanes, pollMs: 20, quietMs: 60000 },
+      orchestratorSpawn: () => {
+        throw new Error('the orchestrator should not spawn for a lane dispatch')
+      },
+    })
+    cleanups.push(() => bridge.stop())
+    const { url } = await bridge.start()
+
+    const saved = await fetch(`${url}/api/control/project-settings`, {
+      method: 'POST',
+      headers: { origin: url, 'content-type': 'application/json' },
+      body: JSON.stringify({ checkCommand: 'node scripts/check.mjs', confirmed: true }),
+    })
+    expect(saved.status).toBe(200)
+
+    const res = await fetch(`${url}/api/orchestrator/messages`, {
+      method: 'POST',
+      headers: { origin: url, 'content-type': 'application/json' },
+      body: JSON.stringify({ to: 'opencode', text: 'Fix the typo.' }),
+    })
+    expect(res.status).toBe(202)
+    expect(await res.json()).toEqual({ ok: true, started: true })
+
+    const parsed = await waitFor(() => readArgs(out), { what: 'the parsed lane arguments' })
+    expect(parsed).toMatchObject({
+      lane: 'opencode',
+      project,
+      task: 'Fix the typo.',
+      test: 'node scripts/check.mjs',
+      startedBy: 'orchestrator',
+    })
+    await waitFor(async () => (await getJson(`${url}/api/control/runs`)).body.running.length === 0, {
+      what: 'the chat lane run to end',
+    })
   })
 })
 
