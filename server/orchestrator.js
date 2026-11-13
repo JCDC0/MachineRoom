@@ -93,6 +93,7 @@ export const SESSION_PENDING_PROBLEM = 'Messages are waiting for a turn. Wait fo
 export const BRANCH_INDEX_PROBLEM = 'Choose a message to branch from.'
 export const SESSIONS_LIMIT = 50
 export const SESSION_MESSAGES_LIMIT = 200
+export const SESSIONS_FULL_PROBLEM = 'The saved list is full of pinned conversations. Unpin or delete one to save this conversation.'
 export const TURN_STEP_LIMIT = 100
 export const CLAUDE_EFFORT_LEVELS = ['low', 'medium', 'high', 'xhigh', 'max']
 export const OPENCODE_EFFORT_LEVELS = ['low', 'medium', 'high', 'max']
@@ -891,6 +892,16 @@ function enforceSessionLimit(list) {
       list.splice(oldestIndex, 1)
     }
   }
+}
+
+const ARCHIVE_FULL = Symbol('archive-full')
+
+function archiveFits(list, startedAt, pinned = false) {
+  if (list.length < SESSIONS_LIMIT) return true
+  if (pinned) return list.some((entry) => !entry.pinned)
+  const start = new Date(startedAt).getTime()
+  if (!Number.isFinite(start)) return false
+  return list.some((entry) => !entry.pinned && new Date(entry.startedAt).getTime() < start)
 }
 
 export function createOrchestrator({
@@ -2332,6 +2343,7 @@ export function createOrchestrator({
       branchTranscript: branchTranscript.slice(0, BRANCH_TRANSCRIPT_LIMIT),
       messages: messages.slice(-SESSION_MESSAGES_LIMIT).map((m) => ({ ...m })),
     }
+    if (!archiveFits(sessions, archived.startedAt, archived.pinned)) return ARCHIVE_FULL
     sessions.unshift(archived)
     enforceSessionLimit(sessions)
     resetCurrentFlags()
@@ -2351,7 +2363,9 @@ export function createOrchestrator({
     const baseTitle = currentTitle || (firstOwner ? firstOwner.text.trim().slice(0, 60) : 'Conversation')
     const suffix = ' (branch)'
     const title = `${baseTitle.slice(0, Math.max(0, 80 - suffix.length))}${suffix}`
-    archiveCurrentSession()
+    if (archiveCurrentSession() === ARCHIVE_FULL) {
+      return { status: 409, body: { error: SESSIONS_FULL_PROBLEM } }
+    }
     branchTranscript = harness === 'claude' || harness === 'opencode' ? quotedTranscript(kept) : ''
     currentConversationId = randomUUID()
     currentSessionId = null
@@ -2371,7 +2385,9 @@ export function createOrchestrator({
     if (body?.confirmed !== true) return { status: 400, body: { error: CONFIRM_SESSION_PROBLEM } }
     if (running && !running.done) return { status: 409, body: { error: COMPACT_RUNNING_PROBLEM } }
     if (pending.length > 0) return { status: 409, body: { error: SESSION_PENDING_PROBLEM } }
-    archiveCurrentSession()
+    if (archiveCurrentSession() === ARCHIVE_FULL) {
+      return { status: 409, body: { error: SESSIONS_FULL_PROBLEM } }
+    }
     currentConversationId = randomUUID()
     currentSessionId = null
     currentTitle = null
@@ -2392,7 +2408,9 @@ export function createOrchestrator({
     if (pending.length > 0) return { status: 409, body: { error: SESSION_PENDING_PROBLEM } }
     const target = sessions.find((s) => s.id === sid)
     if (!target) return { status: 404, body: { error: NO_SESSION_ID_PROBLEM } }
-    archiveCurrentSession()
+    if (archiveCurrentSession() === ARCHIVE_FULL) {
+      return { status: 409, body: { error: SESSIONS_FULL_PROBLEM } }
+    }
     currentConversationId = randomUUID()
     currentSessionId = target.id
     currentTitle = target.title
