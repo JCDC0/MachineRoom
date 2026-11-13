@@ -2003,3 +2003,11 @@ The three readiness audits read the commands, long use and the panels. Read what
 2. Finding 4: git labels whose screen positions would overlap are merged into one label at that commit, `main +4` style (the first name in today's order, then the count), with every name in its title or tooltip. Do this in a pure, tested function in `gitTree.js`. It never drops a branch without counting it.
 3. Tests, by what they prove: three top-level folders and one child give card positions with no two closer than a card's width; five labels on neighbouring commits give one merged label naming the count; labels far apart stay separate.
 4. Run `node node_modules/vitest/vitest.mjs related --run src/model/folderView.js src/engine/room.js src/engine/gitTree.js src/engine/camera.js` and `npm run build`. Report what passed.
+
+**P236. Storage usage answers faster (AGY).** Read finding 9 in `docs/agents/RUN-2026-11-13-HANDS-ON-2.md` and this brief only. Use no subagents. Run every command in the foreground. Commit each step as you finish it. Files: server/storage.js, tests/storage.test.js, docs/agents/CHANGELOG.md, docs/agents/architecture/LIMITS.md.
+
+1. Measure first. Time `measureStorage` on a seeded folder under `%TEMP%` with 17 worktree folders of about 3,000 files each. Put the numbers in your report.
+2. `measureDirectoryBytes` today awaits one `lstat` per file in turn. Read each folder's files with a bounded number of `lstat` calls at once (at most 64 in flight in the whole scan), and measure the worktrees side by side under that same bound. Keep skipping symbolic links, and keep a failed read counted as 0 bytes as it is now. The answer's shape and numbers do not change.
+3. Tests, by what they prove: the byte totals equal the old sequential walk's on a seeded tree with nested folders and a symbolic link; no more than 64 `lstat` calls are ever in flight (inject the stat function to count them).
+4. Measure again on the same seed and write both numbers in `LIMITS.md`.
+5. Run `node node_modules/vitest/vitest.mjs related --run server/storage.js` and `npm run build`. Report what passed.
