@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Review 24 reads the merges since the last push: four findings, briefed as P175 (P174).
 - A review merge sends its destination branch and head, and the bridge refuses it when the project switched branch or that branch moved; a fast forward asks for no message (P169).
 - README says lanes are made in the Agents tab and how to use npm.cmd when PowerShell refuses npm, and run-lane's missing-lane sentence points to the Agents tab (P173).
 - A queue keeps an explicit --test, and otherwise reads the test command from its worktree after each task, so a test script a task adds is run (P172).
