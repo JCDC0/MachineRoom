@@ -2011,3 +2011,15 @@ The three readiness audits read the commands, long use and the panels. Read what
 3. Tests, by what they prove: the byte totals equal the old sequential walk's on a seeded tree with nested folders and a symbolic link; no more than 64 `lstat` calls are ever in flight (inject the stat function to count them).
 4. Measure again on the same seed and write both numbers in `LIMITS.md`.
 5. Run `node node_modules/vitest/vitest.mjs related --run server/storage.js` and `npm run build`. Report what passed.
+
+**P237. A change to git's index reads the tree again (AGY).** This is step 3 of P230, which stopped at the owner's word after steps 1 and 2 were merged. Read finding P213-8 in `docs/agents/AUDIT-2026-11-READINESS-4.md` and this brief only. Use no subagents. Run every command in the foreground. Commit each step as you finish it. Files: server/index.js, tests/tree-read.test.js, docs/agents/CHANGELOG.md, docs/agents/architecture/LIVE.md.
+
+1. A change to `.git/index` or `.git/info/exclude` schedules a tree read through the existing reader and its quiet timer. For a worktree, the same files in its git folder count (`git rev-parse --git-dir`, read once at start and again after a failed read). Other `.git` writes stay ignored, as `IGNORED_WATCH` ignores them now. Do not start a second watcher on the whole `.git` folder; watch only those two files, or their folder with a name filter.
+2. Tests, by what they prove: an index-only change (a force-added file, `git add -f` of an ignored file) adds that file to the tree; a write to `.git/logs/HEAD` alone does not read the tree; a worktree's index change is seen. The first must fail before your change.
+3. Run `node node_modules/vitest/vitest.mjs related --run server/index.js` and `npm run build`. Report what passed.
+
+**P238. Each reader lifetime keeps its own run in a replay (OpenCode).** Read finding D4 in `docs/agents/AUDIT-2026-11-READINESS-4.md` (the replay case at its end) and this brief only. Use no subagents. Run every command in the foreground. Commit each step as you finish it, and stop starting new work at minute 28. Files: server/claude-sessions.js, server/opencode-sessions.js, tests/claude-sessions.test.js, tests/opencode-sessions.test.js, tests/session-recorder.test.js, docs/agents/CHANGELOG.md, docs/agents/architecture/LIVE.md.
+
+1. A session reader's run id carries a token made once when the reader is created, `SESSION:TOKEN:NUMBER` (eight hex characters from `randomBytes(4)`), so a restarted reader never reuses a run id the page has already seen. Do the same in the OpenCode reader if it builds its run ids the same way. First grep `server` and `src` for code that parses these run ids, and change it with them if any does.
+2. Tests, by what they prove: two reader lifetimes over the same session file give different run ids; six frames kept by one recorder from two lifetimes give two tool calls after `recorderToReplay` and `prepare`, not one. The second must fail before your change.
+3. Run `node node_modules/vitest/vitest.mjs related --run server/claude-sessions.js server/opencode-sessions.js` and `npm run build`. Report what passed.
