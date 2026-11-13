@@ -5,6 +5,14 @@ import Settings from '../src/ui/Settings.jsx'
 import StorageSettings, { formatBytes } from '../src/ui/StorageSettings.jsx'
 import { buttonWithText, click, settle, type, withDom } from './helpers/uiDom.js'
 
+async function waitForText(container, text, timeoutMs = 10000) {
+  const deadline = Date.now() + timeoutMs
+  while (!container.textContent.includes(text)) {
+    if (Date.now() > deadline) throw new Error(`Timed out waiting for ${text}.`)
+    await settle(25)
+  }
+}
+
 describe('StorageSettings', () => {
   it('hides when the client has no storage methods', async () => {
     await withDom(async ({ container, root }) => {
@@ -96,7 +104,7 @@ describe('StorageSettings', () => {
       const reopenedCard = container.querySelector('#mr-storage-confirm')
       await click(root, buttonWithText(reopenedCard, 'Confirm archive'))
       await settle()
-      for (let tries = 0; tries < 40 && !container.textContent.includes('2 KB'); tries += 1) await settle(25)
+      await waitForText(container, '2 KB')
 
       expect(archiveSpy).toHaveBeenCalledWith({
         days: 40,

@@ -1573,7 +1573,11 @@ describe('waking the orchestrator', () => {
     writeFileSync(mergeHead, `${'a'.repeat(40)}\n`)
 
     rig.orchestrator.onFrame(frame('run-opencode7-merge-wait', 'succeeded'))
-    await sleep(250)
+    await waitFor(
+      () => rig.answer().messages.some((m) => m.from === 'room' && m.text.includes('Run opencode7-merge-wait')),
+      15000,
+      'the room turn after the merge'
+    )
 
     expect(rig.calls()).toHaveLength(1)
     expect(rig.answer().messages.some((m) => m.from === 'room' && m.text.includes('Run opencode7-merge-wait'))).toBe(true)
@@ -1691,7 +1695,11 @@ describe('waking the orchestrator', () => {
       type: 'heartbeat.run.status',
       payload: { runId: 'run-opencode7-reopen-1', agentId: 'agent-opencode7', status: 'failed' },
     })
-    await sleep(300)
+    await waitFor(
+      () => rig.answer().messages.some((m) => m.text.includes('Run opencode7-reopen-1 on lane opencode7 ended: failed.')),
+      15000,
+      'the failed run end on the room message'
+    )
     expect(rig.calls()).toHaveLength(2)
     const messages = rig.answer().messages.filter((m) => m.from === 'room')
     expect(messages.some((m) => m.text.includes('Run opencode7-reopen-1 on lane opencode7 ended: failed.'))).toBe(true)
@@ -1860,7 +1868,11 @@ describe('waking the orchestrator', () => {
       `${JSON.stringify({ lane: 'opencode7', model: 'm', startedAt: '2026-10-30T12:00:00.000Z', minutes: 1, exitCode: 0, killed: false, log })}\n`
     )
     rig.orchestrator.onFrame(frame('run-opencode7-paused-1', 'succeeded'))
-    await sleep(200)
+    await waitFor(
+      () => rig.answer().messages.some((message) => message.from === 'room' && message.text.includes('Run opencode7-paused-1')),
+      15000,
+      'the kept run end while paused'
+    )
 
     expect(rig.calls()).toHaveLength(1)
     expect(rig.answer().state).toBe('paused')
@@ -3254,7 +3266,11 @@ describe('the orchestrator chat file', () => {
     expect(Math.min(...saved.roomTurns)).toBeGreaterThan(nowMs - 60 * 60 * 1000)
 
     orchestrator.onFrame(frame('run-opencode7-cap-saved', 'succeeded'))
-    await sleep(150)
+    await waitFor(
+      () => orchestrator.answer().messages.some((message) => message.text.includes('cap-saved')),
+      15000,
+      'the refused cap turn message'
+    )
     expect(orchestrator.answer().messages.filter((message) => message.from === 'orchestrator')).toEqual([])
     expect(orchestrator.answer().messages.some((message) => message.text.includes('cap-saved'))).toBe(true)
   })

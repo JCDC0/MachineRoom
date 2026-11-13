@@ -1,10 +1,12 @@
 # Changelog
 
 ## Unreleased
+- P253: the session timer, orchestrator room turn, tree retry and storage refresh tests wait for their condition instead of a fixed sleep.
 - P251: the waiting card counts working agents and names the session readers on a Watching line, and the Inspector says waiting for you when the transport does, through one shared rule.
 - P257: a fresh clone installs, builds, passes the doctor and serves the room; README.md has 10 gaps to fix.
 - P251: the inspector's main orchestrator reads WAITING FOR YOU when the transport says waiting for you, while lanes and subs keep their state words.
 - P251: the waiting card counts only the orchestrators and lanes as ready and names the session readers on their own line.
+- P253: the tree retry, sessions timer, storage archive refresh and four orchestrator room turn tests wait for their condition with a ten second bound instead of sleeping a fixed time.
 - P248: the full suite passes at a01af28f, 5,189 passed and 4 skipped in 281 files.
 - P247: the check command keeps escaped quotes and refuses an unclosed one, and the bridge refuses shell syntax when the command is saved or a run starts.
 - P246: the archive checks the new file's real path lies in the archive folder before removing the source, and otherwise removes the copy and skips the file.

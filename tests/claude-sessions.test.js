@@ -6,6 +6,7 @@ import { SESSION_HARNESSES, harnessByAdapter, harnessByKey } from '../server/har
 import { createBridge } from '../server/index.js'
 import { createSessionsSource } from '../server/sessions-source.js'
 import { buildActivities, createPipeline } from '../src/model/pipeline.js'
+import { waitFor } from './helpers/bridge.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 
 const AGENT = {
@@ -659,7 +660,7 @@ describe('sessions source', () => {
     })
     cleanups.push(() => source.stop())
     source.start()
-    await sleep(40)
+    await waitFor(() => calls > 1, { what: 'the session timer to tick twice' })
     const seen = calls
     expect(seen).toBeGreaterThan(1)
     source.stop()
@@ -684,7 +685,7 @@ describe('sessions source', () => {
     })
     cleanups.push(() => bridge.stop())
     const { url } = await bridge.start()
-    await sleep(60)
+    await waitFor(() => frames.length > 0, { what: 'the first session tick' })
     expect(frames.length).toBeGreaterThan(0)
 
     const health = await fetch(`${url}/api/health`).then((response) => response.json())
