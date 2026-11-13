@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Review 26 confirms review 25's six findings fixed and finds two in the stream cap, briefed as P194 (P193).
 - The full suite passed on the review 25 fixes: 275 files, 4989 tests passed, 4 skipped (P192).
 - Review checks keep the newest passed or failed result for a head across untested runs, and a failed queue task with uncommitted edits records no head, so a good earlier commit stays mergeable (P188).
 - A reconnect resets when any frame between its cursor and the newest is missing, and a reset replays the kept history once in order, so a running agent is not left queued (P191).
