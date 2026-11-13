@@ -7,7 +7,7 @@ import { apply, createState } from '../src/model/state.js'
 import { resetRunState } from '../src/Stage.jsx'
 import { getJson, readFrames, startLaneBridge, waitFor } from './helpers/bridge.js'
 import { makeTempDir } from './helpers/tempRoot.js'
-import { eventResetNeeded } from '../server/index.js'
+import { eventResetNeeded, createSseWriter, SSE_PENDING_LIMIT } from '../server/index.js'
 
 const KEY = 'sk-or-v1-' + '0123456789abcdef'.repeat(4)
 const cleanups = []
@@ -564,5 +564,99 @@ describe('eventResetNeeded', () => {
   })
   it('resets for a cursor from another bridge', () => {
     expect(eventResetNeeded([{ seq: 1 }], 'other:1', start, 1)).toBe(true)
+  })
+})
+
+function fakeSseClient({ drain = true } = {}) {
+  const res = {
+    writableLength: 0,
+    ended: false,
+    writes: [],
+    write(text) {
+      res.writes.push(text)
+      if (drain) res.writableLength = 0
+      else res.writableLength += text.length
+      return drain
+    },
+    end() {
+      res.ended = true
+    },
+  }
+  return res
+}
+
+describe('the SSE pending limit', () => {
+  it('ends a response whose write returns false and never drains once its pending bytes pass the cap', () => {
+    const dropped = []
+    const writer = createSseWriter({ onDrop: (res) => dropped.push(res) })
+    const stuck = fakeSseClient({ drain: false })
+    const chunk = 'x'.repeat(1024 * 1024)
+    const under = Math.floor(SSE_PENDING_LIMIT / chunk.length)
+
+    for (let index = 0; index < under; index += 1) {
+      expect(writer.write(stuck, chunk)).toBe(false)
+      expect(stuck.ended).toBe(false)
+    }
+    expect(writer.write(stuck, chunk)).toBe(false)
+    expect(stuck.ended).toBe(true)
+    expect(dropped).toEqual([stuck])
+
+    expect(writer.write(stuck, chunk)).toBe(false)
+    expect(stuck.writes).toHaveLength(under + 1)
+  })
+
+  it('does not end a client that drains what it writes', () => {
+    const writer = createSseWriter()
+    const normal = fakeSseClient()
+
+    for (let index = 0; index < 20; index += 1) {
+      expect(writer.write(normal, 'x'.repeat(1024 * 1024))).toBe(true)
+    }
+    expect(normal.ended).toBe(false)
+    expect(normal.writes).toHaveLength(20)
+  })
+
+  it('keeps sending frames to the other clients when one is dropped', () => {
+    const clients = new Set()
+    const writer = createSseWriter({
+      onDrop: (res) => {
+        clients.delete(res)
+      },
+    })
+    const stuck = fakeSseClient({ drain: false })
+    const first = fakeSseClient()
+    const second = fakeSseClient()
+    for (const client of [stuck, first, second]) clients.add(client)
+    const frame = (seq) => `id: abc123:${seq}\nevent: frame\ndata: ${'x'.repeat(1024 * 1024)}\n\n`
+
+    for (let seq = 1; seq <= 9; seq += 1) {
+      for (const client of clients) writer.write(client, frame(seq))
+    }
+
+    expect(stuck.ended).toBe(true)
+    expect(clients.has(stuck)).toBe(false)
+    expect(first.ended).toBe(false)
+    expect(first.writes).toHaveLength(9)
+    expect(second.writes).toHaveLength(9)
+  })
+
+  it('keeps a client that drains the frames the bridge sends', async () => {
+    const { url, send } = await sourceBridge()
+    const sse = await openSse(url)
+    cleanups.push(() => sse.close())
+    const chunk = 'x'.repeat(1024 * 1024)
+    const count = Math.ceil((SSE_PENDING_LIMIT + chunk.length) / chunk.length)
+
+    for (let seq = 1; seq <= count; seq += 1) {
+      send(sessionLog('big', seq, chunk))
+      await sleep(20)
+    }
+
+    let last = null
+    for (let seq = 1; seq <= count; seq += 1) {
+      last = await sse.next((event) => event.event === 'frame' && frameOf(event).payload?.seq === seq)
+    }
+    expect(last).not.toBeNull()
+    expect(frameOf(last).payload.chunk).toHaveLength(chunk.length)
   })
 })
