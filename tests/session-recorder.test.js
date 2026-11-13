@@ -272,7 +272,7 @@ describe('createSessionRecorder', () => {
     recorder.push(runFrame('heartbeat.run.queued', 0))
     for (let index = 1; index <= 2000; index += 1) recorder.push(notice(index * 1000))
     recorder.clear()
-    expect(recorder.stats()).toEqual({ kept: 0, slots: 0 })
+    expect(recorder.stats()).toEqual({ kept: 0, slots: 0, held: 0 })
     recorder.push(runFrame('heartbeat.run.status', 5000, { status: 'running' }))
     expect(timesOf(recorder)).toEqual([5000])
   })
@@ -312,6 +312,32 @@ describe('createSessionRecorder', () => {
     expect(recorder.size()).toBeLessThanOrEqual(RECORD_BYTES_MAX)
     expect(recorder.truncated()).toBe(true)
     const replay = recorderToReplay(recorder, { agentsFile: AGENTS, treeFile: TREE })
+    expect(replay.truncated).toBe(true)
+  })
+
+  it('lets go of a dropped frame instead of keeping it in its slot', () => {
+    const MIB = 1024 * 1024
+    const recorder = createSessionRecorder()
+    const chunk = 'x'.repeat(MIB)
+    const pushed = []
+    for (let index = 0; index < 60; index += 1) {
+      const frame = runFrame('heartbeat.run.log', index, { chunk })
+      pushed.push(frame)
+      recorder.push(frame)
+    }
+    const stats = recorder.stats()
+    expect(stats.kept).toBe(19)
+    expect(stats.slots).toBe(60)
+    expect(stats.slots - stats.kept).toBeGreaterThan(0)
+    expect(stats.held).toBe(stats.kept)
+    expect(recorder.size()).toBeLessThanOrEqual(RECORD_BYTES_MAX)
+    expect(recorder.size() + MIB).toBeGreaterThan(RECORD_BYTES_MAX)
+    expect(recorder.frames()).toHaveLength(stats.kept)
+    expect(recorder.frames()).not.toContain(pushed[0])
+    expect(recorder.frames()[0]).toBe(pushed[60 - stats.kept])
+    expect(recorder.truncated()).toBe(true)
+    const replay = recorderToReplay(recorder, { agentsFile: AGENTS, treeFile: TREE })
+    expect(replay.frames).toHaveLength(stats.kept)
     expect(replay.truncated).toBe(true)
   })
 })

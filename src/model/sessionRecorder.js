@@ -54,7 +54,9 @@ export function createSessionRecorder({ minutes = RECORD_MINUTES_DEFAULT } = {})
   let sizeTrimmed = false
 
   function dropHead() {
-    bytes -= kept[head].bytes
+    const item = kept[head]
+    bytes -= item.bytes
+    kept[head] = null
     head += 1
   }
 
@@ -135,7 +137,9 @@ export function createSessionRecorder({ minutes = RECORD_MINUTES_DEFAULT } = {})
   }
 
   function stats() {
-    return { kept: kept.length - head, slots: kept.length }
+    let held = 0
+    for (const item of kept) if (item) held += 1
+    return { kept: kept.length - head, slots: kept.length, held }
   }
 
   function size() {
