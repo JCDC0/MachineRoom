@@ -1729,3 +1729,21 @@ Review, with `git show -m --first-parent SHA`, against the code around each chan
 2. The writes made while a client connects (the reset, the history replay and the first tree) are not checked against the cap. After them, the client may hold its backlog at that moment plus 8 MB; past that it is dropped. The history is at most 500 frames, so this stays bounded.
 3. Test a late joiner through the real bridge with twelve one-MiB frames kept and a client that reads all the time: it receives all twelve and is not cut. Keep the stuck-client test.
 4. Run `node node_modules/vitest/vitest.mjs related --run server/index.js` and `npm run build`. Report what passed.
+
+**P195. The run cache reads in chunks and stops copying its whole history (AGY).** Read finding D5 in `docs/agents/AUDIT-2026-11-READINESS-2.md` and this brief only. Use no subagents. Run every command in the foreground. Commit each step as you finish it. Files: server/runs.js, server/reviews.js, server/lane-costs.js, server/control.js, tests/runs-cache.test.js, docs/agents/CHANGELOG.md, docs/agents/architecture/LIMITS.md.
+
+1. `cachedRunRecords` reads an unread part of `runs.jsonl` in fixed chunks of at most 4 MB, carrying a cut line over to the next chunk, instead of one buffer the size of everything unread.
+2. It stops returning a fresh copy of the whole array on every read: return the cached array as read only (frozen, or documented and never written), and change any caller that writes to it to copy only what it changes. Read every caller first.
+3. Tests, by what they prove: a 10 MB unread delta parses the same records as one read, with a line cut across a chunk edge; a caller cannot change the cached records; a growing file still appends.
+4. Run `node node_modules/vitest/vitest.mjs related --run server/runs.js server/reviews.js server/lane-costs.js server/control.js` and `npm run build`. Report what passed and the time of a 10 MB cold read before and after.
+
+**P196. The lane source stops relisting and rechecking old logs (AGY).** Read finding D5 in `docs/agents/AUDIT-2026-11-READINESS-2.md` and this brief only. Use no subagents. Run every command in the foreground. Commit each step as you finish it. Files: server/lanes-source.js, tests/lanes-source.test.js, docs/agents/CHANGELOG.md, docs/agents/architecture/LIVE.md.
+
+1. Lane discovery lists the runs folder only when its change time moved since the last list (the way the Claude sessions reader does), with a full list at least every 60 seconds as a safety net.
+2. A log whose run has a record and has not grown for an hour is dropped from the watched set, so old startup logs are not checked every ten seconds forever. A dropped log that grows again is picked up by the next list.
+3. Tests, by what they prove: an unchanged folder is not listed again within the minute; a new log appears after the folder changes; an old finished log leaves the watched set and comes back when it grows.
+4. Run `node node_modules/vitest/vitest.mjs related --run server/lanes-source.js` and `npm run build`. Report what passed.
+
+**P197. What misleads or fails in the room's panels on another project (Codex).** Read `docs/agents/OWNER.md`, `docs/agents/AUDIT-2026-11-READINESS.md`, `docs/agents/AUDIT-2026-11-READINESS-2.md` and this brief only. Change no code. Do not commit: the runner commits your file. Stop at minute 25. Files: docs/agents/AUDIT-2026-11-READINESS-3.md.
+
+The two readiness audits read the command path and long use. Read the code of what the owner clicks in a live room open on another project: the Dispatch panel (task, queue, worktree), the Reviews panel, the Repository section, the Agents family tree (making, editing and removing a lane), Settings, the chat with its menus, and the cost and run meters. Look for a button that does something other than its label says, a state the panel shows wrongly or late, an error the owner never sees, a confirm card that names one thing and acts on another, and anything that works only on MachineRoom itself. Write the file with two tables, the most harmful first: at most 8 problems (`file:line`, what goes wrong and when, the smallest fix) and at most 4 suggested features, each marked `needs the owner's yes`. Prefer what you confirmed by reading or a command over a guess, and say which. An item already in the two readiness audits gets its id, not a new row.
