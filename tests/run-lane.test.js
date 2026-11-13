@@ -1454,7 +1454,7 @@ describe('scripts/run-lane.mjs', () => {
       process.env.TEMP = folder
       process.env.TMP = folder
       const sep = process.platform === 'win32' ? '\\' : '/'
-      const shownProject = `%USERPROFILE%${sep}project`
+      const shownProject = `${process.platform === 'win32' ? '%USERPROFILE%' : '~'}${sep}project`
       takeProjectLock(runs, project)
       expect(() => takeProjectLock(runs, project)).toThrow(`Another run is already going on ${shownProject};`)
       writeFileSync(`${join(runs, `${projectLockName(project)}.lock`)}.takeover`, laneLockText({ pid: 2147483647 }))
