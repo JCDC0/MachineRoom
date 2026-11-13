@@ -2103,3 +2103,22 @@ Find each merge's SHA with `git log --first-parent --oneline 4224921d..HEAD`. Re
 - Whether the folder-shaped `/api/tree` now reads the whole tree on every request after the first second, and what that costs on a large project.
 
 Write the file: one row per finding, with `fixed`, `partly` or `not fixed` and why, then a table of at most 5 new findings, most harmful first. Give each new finding its `file:line`, the case, the smallest fix, and whether it blocks a push.
+
+**P246. An archived file is checked in place before its source is removed (AGY).** Read finding 1 in `docs/agents/AUDIT-2026-11-REVIEW-30.md` and this brief only. Use no subagents. Run every command in the foreground. Commit each step as you finish it. Files: server/storage.js, tests/storage.test.js, docs/agents/CHANGELOG.md, docs/agents/architecture/LIVE.md.
+
+1. In `moveFileSafe` (and its caller near the `beforeMove` seam), after the exclusive link or copy makes the destination and before the source is removed, resolve the destination's real path and check that it lies under the real runs folder's `archive` folder. When it does not, remove the destination just made, keep the source, count the file as skipped with the reason `The archive folder changed during the move.`, and go on with the next file.
+2. Do not add a second watcher or lock. Say in the report what race remains, if any, and why it no longer removes a source.
+3. Tests, by what they prove: using the `beforeMove` seam, a month folder replaced by a junction (or a symbolic link where junctions are not available) to an outside folder leaves the source in place, leaves nothing in the outside folder, and reports the file skipped. It must fail before your change.
+4. Run `node node_modules/vitest/vitest.mjs related --run server/storage.js` and `npm run build`. Report what passed.
+
+**P247. The check command keeps escaped quotes, and the bridge refuses what the runner refuses (OpenCode).** Read findings 2 and 3 in `docs/agents/AUDIT-2026-11-REVIEW-30.md` and this brief only. Start after P243 is merged. Use no subagents. Run every command in the foreground. Commit each step as you finish it, and stop starting new work at minute 25. Files: src/briefs/run.js, server/project-settings.js, server/runs.js, tests/run-lane.test.js, tests/project-settings.test.js, tests/project-dispatch.test.js, docs/agents/CHANGELOG.md, docs/agents/architecture/COMMANDS.md.
+
+1. Finding 2: `splitCheckCommand` treats `\"` inside or outside quotes as a literal double quote, and `\\` as one backslash. A backslash before any other character stays as it is, so Windows paths keep working. An unclosed quote is refused before the run with `The check command has an unclosed quote.`
+2. Finding 3: the bridge's saved setting and the Dispatch start use the runner's shell-syntax check (import it from `src/briefs/run.js`) as well as the length and newline checks. A refused command is answered with the runner's sentence and is never saved.
+3. Tests, by what they prove:
+   - `node --test --test-name-pattern="^a\"b$" x.test.cjs` splits to the argument `--test-name-pattern=^a"b$`.
+   - `node "C:\Program Files\x.js"` keeps its backslashes.
+   - An unclosed quote is refused.
+   - Saving `npm test && npm run build` is refused with 400 and the runner's sentence.
+   - Each must fail before your change.
+4. Run `node node_modules/vitest/vitest.mjs related --run src/briefs/run.js server/project-settings.js server/runs.js` and `npm run build`. Report what passed.
