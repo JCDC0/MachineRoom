@@ -478,9 +478,15 @@ describe('the mock client still answers the contract', () => {
     expect((await client.orchestrator()).effort).toBeNull()
 
     const sessions = await client.orchestratorSessions({ id: 'orchestrator' })
+    expect(sessions.current.sessionId).toEqual(expect.any(String))
+    expect(sessions.current.sessionId.length).toBeGreaterThan(0)
     expect(sessions.current.count).toBe(3)
     expect(sessions.sessions).toHaveLength(2)
     expect(sessions.sessions[0].pinned).toBe(true)
+
+    await client.sendOrchestrator('Keep current conversation id', { id: 'orchestrator' })
+    const afterSend = await client.orchestratorSessions({ id: 'orchestrator' })
+    expect(afterSend.current.sessionId).toBe(sessions.current.sessionId)
 
     const session1 = await client.orchestratorSession({ id: 'orchestrator', session: sessions.sessions[0].id })
     expect(session1.id).toBe(sessions.sessions[0].id)
@@ -507,10 +513,14 @@ describe('the mock client still answers the contract', () => {
     await client.newOrchestratorSession({ id: 'orchestrator' })
     const afterNew = await client.orchestratorSessions({ id: 'orchestrator' })
     expect(afterNew.current.count).toBe(0)
+    expect(afterNew.current.sessionId).toEqual(expect.any(String))
+    expect(afterNew.current.sessionId).not.toBe(sessions.current.sessionId)
 
     await client.openOrchestratorSession({ id: 'orchestrator', session: sessions.sessions[0].id })
     const afterOpen = await client.orchestratorSessions({ id: 'orchestrator' })
     expect(afterOpen.current.count).toBe(2)
+    expect(afterOpen.current.sessionId).toEqual(expect.any(String))
+    expect(afterOpen.current.sessionId).not.toBe(afterNew.current.sessionId)
 
     await expect(
       client.deleteOrchestratorSession({ id: 'orchestrator', session: sessions.sessions[0].id })
@@ -525,6 +535,7 @@ describe('the mock client still answers the contract', () => {
   it('branches the current conversation on the mock', async () => {
     const client = createMockClient({ latencyMs: 0 })
     const before = await client.orchestrator()
+    const beforeSessions = await client.orchestratorSessions({ id: 'orchestrator' })
     expect(before.messages).toHaveLength(3)
     await expect(client.branchOrchestratorSession({ id: 'orchestrator', index: 0 })).rejects.toThrow(
       'Choose a message to branch from.'
@@ -533,6 +544,9 @@ describe('the mock client still answers the contract', () => {
     expect(branched).toMatchObject({ ok: true, title: 'What is running? (branch)', count: 2 })
     expect((await client.orchestrator()).messages).toHaveLength(2)
     const after = await client.orchestratorSessions({ id: 'orchestrator' })
+    expect(after.current.sessionId).toEqual(expect.any(String))
+    expect(after.current.sessionId.length).toBeGreaterThan(0)
+    expect(after.current.sessionId).not.toBe(beforeSessions.current.sessionId)
     expect(after.current.title).toBe('What is running? (branch)')
     expect(after.current.count).toBe(2)
     expect(after.sessions).toHaveLength(3)

@@ -627,6 +627,23 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
   const failures = new Map()
   let issueCounter = 22
   let orchestratorMessageCounter = 3
+  let orchestratorConversationCounter = 0
+  const conversationIds = new WeakMap()
+
+  function conversationIdFor(chat) {
+    if (!conversationIds.has(chat)) {
+      orchestratorConversationCounter += 1
+      conversationIds.set(chat, `conv-mock-${orchestratorConversationCounter}`)
+    }
+    return conversationIds.get(chat)
+  }
+
+  function rotateConversationId(chat) {
+    orchestratorConversationCounter += 1
+    const next = `conv-mock-${orchestratorConversationCounter}`
+    conversationIds.set(chat, next)
+    return next
+  }
   const listeners = new Set()
   const runsState = { project: 'MachineRoom', running: [], recent: [] }
   const reviewState = clone(SAMPLE_REVIEWS)
@@ -1333,6 +1350,7 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
           : null
         const current = {
           id: 'current',
+          sessionId: conversationIdFor(chat),
           title: chat.currentTitle || (firstOwner ? firstOwner.text.trim().slice(0, 60) : null),
           startedAt: chat.messages[0]?.at ?? null,
           count: chat.messages.length,
@@ -1410,6 +1428,7 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
             messages: chat.messages.map((m) => ({ ...m })),
           })
         }
+        rotateConversationId(chat)
         chat.currentSessionId = null
         chat.currentTitle = null
         chat.currentPinned = false
@@ -1446,6 +1465,7 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
           archived: false,
           messages: chat.messages.map((m) => ({ ...m })),
         })
+        rotateConversationId(chat)
         chat.currentSessionId = null
         chat.currentTitle = title
         chat.currentPinned = false
@@ -1563,6 +1583,7 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
             messages: chat.messages.map((m) => ({ ...m })),
           })
         }
+        rotateConversationId(chat)
         chat.currentSessionId = target.id
         chat.currentTitle = target.title
         chat.currentPinned = target.pinned === true
