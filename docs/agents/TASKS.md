@@ -2266,3 +2266,24 @@ For each command the doc lists, run its help form (`--help`, or no arguments whe
 2. Fix the loop. An empty or reasoning-only reply gets one nudge (`Continue with the task. Use tools, or say you are done.`) and then counts as the end. A provider error is reported as a failure with exit code 1, never as a success. The final `result` text is the agent's last message, not its first.
 3. Tests, by what they prove: with a fake provider that returns an empty reply once and then a tool call, the loop goes on; a provider error exits 1; the result text is the last message. Each must fail before your change.
 4. Run `node node_modules/vitest/vitest.mjs related --run scripts/mr-agent.mjs` and `npm run build`. Report what passed.
+
+**P264. The detail docs say what the code does (Codex).** Read `docs/agents/AUDIT-2026-11-DOCS-2.md` and this brief only. Change only docs. Commit each step as you finish it, and stop at minute 30. Files: docs/agents/architecture/ROOM.md, docs/agents/architecture/LIVE.md, docs/agents/architecture/COMMANDS.md, docs/agents/AUDIT-2026-11-DOCS-2.md, docs/agents/CHANGELOG.md.
+
+1. For rows 2, 3, 4, 5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16 and 17, check the row against the code at `HEAD` once more, then replace the doc sentence with the corrected one. Keep the docs' style: plain words, short sentences, no em dashes. Edit the sentence in place; the lines are long, so change only the sentences the row names.
+2. Leave rows 1 and 6 alone: P265 changes the code to match those docs.
+3. Add a `Status` column to the audit table: `fixed in P264`, `code fix in P265`, or `no change` for rows 18 to 20.
+4. Run `node node_modules/vitest/vitest.mjs run tests/briefs.test.js` and report what passed.
+
+**P265. A chat-started lane uses the saved check command, and the dock sees every orchestrator (OpenCode).** Rows 1 and 6 of `docs/agents/AUDIT-2026-11-DOCS-2.md` found two places where the code does less than the docs say. Read those two rows and this brief only. Use no subagents. Run every command in the foreground. Commit each step as you finish it, and stop starting new work at minute 25. Files: server/index.js, server/runs.js, src/ui/Hud.jsx, tests/project-dispatch.test.js, tests/hud-orchestrator-focus.test.js, tests/agent-dock-ui.test.js (new), docs/agents/CHANGELOG.md.
+
+1. The chat's lane start (`startLaneTask` in `server/index.js`) passes the project's saved check command to `runs.startProjectTask`, read the same way `POST /api/control/runs` reads it when the body leaves it out. Reuse that read; do not copy it.
+2. `Hud.jsx` passes the full orchestrator list it already keeps (`orchestratorList`) to each `AgentDock` mount, so a sub's dock shows its lanes, scope and restriction, and a lane's dock shows its sector. Read how `src/ui/agentContext.js` looks up a sub before you change the prop.
+3. Tests, by what they prove: a chat-started lane task with a saved command starts the real `parseRunArgs` path with `--test` and that command (not only a fake runner's argv); a sub's dock shows its sector rows when Hud is given two orchestrators. Each must fail before your change.
+4. Run `node node_modules/vitest/vitest.mjs related --run server/index.js server/runs.js src/ui/Hud.jsx` and `npm run build`. Report what passed.
+
+**P266. The four tests that could not fail can fail now (OpenCode).** Read `docs/agents/AUDIT-2026-11-TESTS.md` and this brief only. Use no subagents. Run every command in the foreground. Never change product code. Commit each step as you finish it, and stop starting new work at minute 25. Files: tests/storage.test.js, tests/project-dispatch.test.js, tests/machine-doctor.test.js, docs/agents/AUDIT-2026-11-TESTS.md, docs/agents/CHANGELOG.md.
+
+1. For each of the four rows in the table, add the smallest real assertion the row proposes, or one that proves the same thing. The project-dispatch `--test` row may assert through `parseRunArgs` rather than starting the real runner.
+2. Prove each new assertion fails with the change undone, the same way the audit did: in a scratch copy under `%TEMP%`, never in the worktree. Delete the copy after.
+3. Add a `Fixed` column to the audit table naming the test that now fails.
+4. Run each changed test file alone and report what passed.
