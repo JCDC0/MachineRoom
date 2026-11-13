@@ -22,6 +22,7 @@ export const BUSY_PROBLEM = 'A storage archive is already running.'
 export const ARCHIVE_PATH_PROBLEM = 'The archive folder must stay inside the runs folder.'
 export const NOT_ELIGIBLE_REASON = 'The file is no longer eligible.'
 export const DESTINATION_EXISTS_REASON = 'The destination already exists.'
+export const ARCHIVE_CHANGED_REASON = 'The archive folder changed during the move.'
 export const METHOD_PROBLEM = 'Use GET for /api/storage or POST for /api/storage/preview and /api/storage/archive.'
 
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -37,6 +38,12 @@ const NO_HARDLINK_CODES = new Set(['EXDEV', 'EPERM', 'ENOTSUP', 'ENOSYS', 'EOPNO
 function refusal(message, status = 400) {
   const error = new Error(message)
   error.status = status
+  return error
+}
+
+function archiveChangedError() {
+  const error = refusal(ARCHIVE_CHANGED_REASON, 400)
+  error.code = 'EARCHIVECHANGED'
   return error
 }
 
@@ -230,15 +237,15 @@ async function verifyRealChildDir(parentReal, dirPath, expectedName, { lstatFn, 
 }
 
 async function ensureSafeArchiveDirs(runsDir, months, options = {}) {
-  const verified = new Map()
-  if (!runsDir) return verified
+  const monthDirs = new Map()
+  if (!runsDir) return { realArchiveDir: '', monthDirs }
   const lstatFn = typeof options.lstatFn === 'function' ? options.lstatFn : lstat
   const realpathFn = typeof options.realpathFn === 'function' ? options.realpathFn : realpath
   const platform = options.platform ?? process.platform
 
   let runsInfo = await lstatOrNull(runsDir, lstatFn)
   if (!runsInfo) {
-    if (months.length === 0) return verified
+    if (months.length === 0) return { realArchiveDir: '', monthDirs }
     await mkdir(runsDir, { recursive: true })
     runsInfo = await lstatOrNull(runsDir, lstatFn)
   }
@@ -271,12 +278,12 @@ async function ensureSafeArchiveDirs(runsDir, months, options = {}) {
       })
       if (realMonth) {
         if (!isInsideDir(realRunsDir, realMonth)) throw refusal(ARCHIVE_PATH_PROBLEM, 400)
-        verified.set(month, realMonth)
+        monthDirs.set(month, realMonth)
       }
     }
   }
 
-  if (months.length === 0) return verified
+  if (months.length === 0) return { realArchiveDir: existingArchive ?? '', monthDirs }
 
   const realArchiveDir =
     existingArchive ??
@@ -288,7 +295,7 @@ async function ensureSafeArchiveDirs(runsDir, months, options = {}) {
     }))
 
   for (const month of months) {
-    if (verified.has(month)) continue
+    if (monthDirs.has(month)) continue
     if (!MONTH_FOLDER.test(month)) throw refusal(ARCHIVE_PATH_PROBLEM, 400)
     const realMonth = await verifyRealChildDir(realArchiveDir, join(realArchiveDir, month), month, {
       lstatFn,
@@ -297,9 +304,9 @@ async function ensureSafeArchiveDirs(runsDir, months, options = {}) {
       create: true,
     })
     if (!isInsideDir(realRunsDir, realMonth)) throw refusal(ARCHIVE_PATH_PROBLEM, 400)
-    verified.set(month, realMonth)
+    monthDirs.set(month, realMonth)
   }
-  return verified
+  return { realArchiveDir, monthDirs }
 }
 
 async function statDirEntries(dirPath, entries, lstatFn, limit) {
@@ -778,8 +785,21 @@ export async function previewStorageArchive(options = {}) {
   }
 }
 
+async function verifyDestinationInArchive(destination, realArchiveDir, realpathFn) {
+  if (!realArchiveDir) return
+  let realDestination
+  try {
+    realDestination = await realpathFn(destination)
+  } catch {
+    throw archiveChangedError()
+  }
+  if (!isInsideDir(realArchiveDir, realDestination)) {
+    throw archiveChangedError()
+  }
+}
+
 /**
- * Move one file into an existing destination directory without ever overwriting an existing target.
+ * Move one file into an existing destination directory without overwriting an existing target, verifying realArchiveDir before removing source.
  */
 export async function moveFileSafe(source, destination, options = {}) {
   const linkFn = typeof options.linkFn === 'function' ? options.linkFn : link
@@ -787,6 +807,8 @@ export async function moveFileSafe(source, destination, options = {}) {
   const unlinkFn = typeof options.unlinkFn === 'function' ? options.unlinkFn : unlink
   const lstatFn = typeof options.lstatFn === 'function' ? options.lstatFn : lstat
   const utimesFn = typeof options.utimesFn === 'function' ? options.utimesFn : utimes
+  const realpathFn = typeof options.realpathFn === 'function' ? options.realpathFn : realpath
+  const realArchiveDir = typeof options.realArchiveDir === 'string' ? options.realArchiveDir : ''
 
   const info = await lstatFn(source)
   if (!info.isFile()) {
@@ -801,19 +823,15 @@ export async function moveFileSafe(source, destination, options = {}) {
     if (!NO_HARDLINK_CODES.has(error?.code)) throw error
   }
 
-  if (linked) {
-    try {
-      await unlinkFn(source)
-      return
-    } catch (error) {
-      await unlinkFn(destination).catch(() => {})
-      throw error
-    }
+  if (!linked) {
+    await copyFileFn(source, destination, constants.COPYFILE_EXCL)
   }
 
-  await copyFileFn(source, destination, constants.COPYFILE_EXCL)
   try {
-    await utimesFn(destination, info.atime, info.mtime)
+    await verifyDestinationInArchive(destination, realArchiveDir, realpathFn)
+    if (!linked) {
+      await utimesFn(destination, info.atime, info.mtime)
+    }
     await unlinkFn(source)
   } catch (error) {
     await unlinkFn(destination).catch(() => {})
@@ -833,7 +851,7 @@ export async function applyStorageArchive(options = {}) {
 
   const runsDir = resolvedOption(options.runsFolder)
   const months = [...new Set(toMove.map((item) => item.archiveDir.slice(`${ARCHIVE_DIR_NAME}/`.length)))]
-  const verifiedMonthDirs = await ensureSafeArchiveDirs(runsDir, months, {
+  const { realArchiveDir, monthDirs: verifiedMonthDirs } = await ensureSafeArchiveDirs(runsDir, months, {
     platform: options.platform ?? process.platform,
     realpathFn: options.realpathFn,
   })
@@ -849,6 +867,8 @@ export async function applyStorageArchive(options = {}) {
       await moveFileSafe(item.source, destination, {
         linkFn: options.linkFn,
         copyFileFn: options.copyFileFn,
+        realpathFn: options.realpathFn,
+        realArchiveDir,
       })
     } catch (error) {
       if (error?.code === 'EEXIST') {
@@ -857,6 +877,10 @@ export async function applyStorageArchive(options = {}) {
       }
       if (error?.code === 'ENOENT') {
         skipped.push({ name: item.name, reason: NOT_ELIGIBLE_REASON })
+        continue
+      }
+      if (error?.code === 'EARCHIVECHANGED') {
+        skipped.push({ name: item.name, reason: ARCHIVE_CHANGED_REASON })
         continue
       }
       throw error

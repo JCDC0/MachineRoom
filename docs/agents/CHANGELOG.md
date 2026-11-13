@@ -1,7 +1,9 @@
 # Changelog
 
 ## Unreleased
+- P246: the archive checks the new file's real path lies in the archive folder before removing the source, and otherwise removes the copy and skips the file.
 - P243: a queue record's remaining tasks and the recovery message mask profile and home paths with a browser-safe masker.
+- P246: storage archive checks each destination realpath stays inside the real runs archive folder before removing the source, removing the destination and skipping the file when it changed.
 - P245: review 30 confirms five review 29 fixes, two partly, and finds an archive parent race and a quote-splitting gap.
 - P240: the archive refuses a junction or link at the archive or month folder, never overwrites a destination, and moves only the previewed files that are still eligible.
 - P243: a queue record's remaining tasks and the recovery message mask profile and home paths as well as keys.
