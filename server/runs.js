@@ -5,7 +5,7 @@ import { basename, dirname, join, resolve } from 'node:path'
 import { StringDecoder } from 'node:string_decoder'
 import { fileURLToPath } from 'node:url'
 import { parseBriefs } from '../src/briefs/briefs.js'
-import { SINCE_PROBLEM, dayStart, laneStats, pathInside, projectProblems, runRecord } from '../src/briefs/run.js'
+import { SINCE_PROBLEM, dayStart, laneStats, pathInside, projectProblems, runRecord, worktreeFor } from '../src/briefs/run.js'
 import { profileFromBrief, profileFromTask } from '../src/policy/profile.js'
 import { readPolicy, routeLane, tierFor, TIERS } from '../src/policy/route.js'
 import { readLaneCosts } from './lane-costs.js'
@@ -750,6 +750,32 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
     running.clear()
   }
 
+  async function inThisRepository() {
+    if (!resolvedRoot) return false
+    return samePath(await rootCommonDir(), await repoCommonDir())
+  }
+
+  function roomRecords(records, thisRepo) {
+    const resolvedProjects = new Map()
+    const resolvedWorktrees = new Map()
+    function resolveOnce(cache, folder) {
+      if (!cache.has(folder)) cache.set(folder, realPath(folder))
+      return cache.get(folder)
+    }
+    return records.filter((record) => {
+      if (!record || typeof record !== 'object') return false
+      const raw = typeof record.project === 'string' ? record.project.trim() : ''
+      if (raw === '') return thisRepo
+      if (thisRepo || !resolvedRoot) return false
+      const project = resolveOnce(resolvedProjects, raw)
+      if (samePath(project, resolvedRoot)) return true
+      const lane = typeof record.lane === 'string' ? record.lane.trim() : ''
+      if (!lane) return false
+      const worktree = worktreeFor(resolvedRoot, lane)
+      return Boolean(worktree && samePath(project, resolveOnce(resolvedWorktrees, worktree)))
+    })
+  }
+
   async function handle(req, res, url) {
     const path = url.pathname
     const method = req.method ?? 'GET'
@@ -781,7 +807,8 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
     if (path !== '/api/control/runs') return false
 
     if (method === 'GET') {
-      const records = readAllRunRecords(recordsPath())
+      const thisRepo = await inThisRepository()
+      const records = roomRecords(readAllRunRecords(recordsPath()), thisRepo)
       sendJson(req, res, 200, {
         project: resolvedRoot ? basename(resolvedRoot) : '',
         running: [...running.values()].map(snapshot),
@@ -811,7 +838,7 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
     }
 
     const projectRun = body.briefs === undefined
-    if (!projectRun && (!resolvedRoot || !samePath(await rootCommonDir(), await repoCommonDir()))) {
+    if (!projectRun && !(await inThisRepository())) {
       sendJson(req, res, 400, { error: BRIEF_PROJECT_PROBLEM })
       return true
     }

@@ -30,17 +30,39 @@ export function timeSinceStart(startedAt, now) {
   return `${days} d ago`
 }
 
+function singleLine(value) {
+  if (typeof value !== 'string') return ''
+  return value.replace(/\s+/g, ' ').trim()
+}
+
+function firstLine(value) {
+  if (typeof value !== 'string') return ''
+  for (const line of value.split(/\r?\n/)) {
+    const clean = singleLine(line)
+    if (clean !== '') return clean
+  }
+  return ''
+}
+
 export function recordLine(record) {
   if (!record || typeof record !== 'object') return ''
   const lane = record.lane || 'unknown'
+  const task = firstLine(record.task)
   const briefs = Array.isArray(record.briefs) && record.briefs.length > 0
     ? record.briefs.join(' ')
-    : 'none'
+    : (task || 'none')
   const result = resultWord(record)
   const cost = formatCost(record.costUsd)
   const minutes = Number.isFinite(record.minutes) ? `${record.minutes} min` : '0 min'
   const start = record.startedAt || 'time unknown'
-  return `${lane} | ${briefs} | ${result} | ${cost} | ${minutes} | ${start}`
+  const parts = [`${lane} | ${briefs} | ${result} | ${cost} | ${minutes} | ${start}`]
+  const queueStatus = singleLine(record.queueStatus)
+  if (queueStatus !== '') parts.push(queueStatus)
+  const tests = singleLine(record.tests)
+  if (tests !== '') parts.push(`tests ${tests}`)
+  const note = result === 'failed' || record.startFailed === true ? singleLine(record.note) : ''
+  if (note !== '') parts.push(note)
+  return parts.join(' | ')
 }
 
 export function runStartLine(answer) {

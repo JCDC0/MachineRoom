@@ -8,6 +8,7 @@ import { activeLanesFileFor, writeActiveLanes } from '../server/active-lanes.js'
 import { runsFolder } from '../server/lanes-source.js'
 import { gitPath } from '../server/programPath.js'
 import { BRIEF_PROJECT_PROBLEM, QUEUE_DIRTY_PROBLEM, RUN_KIND_PROBLEM, TASK_PROBLEM, TASK_SEPARATOR_PROBLEM, TASKS_PROBLEM, createRunsApi, writeQueue } from '../server/runs.js'
+import { worktreeFor } from '../src/briefs/run.js'
 import { createMockClient } from '../src/control/mock.js'
 import {
   PROJECT_CONFIRM_LIMIT,
@@ -630,5 +631,110 @@ describe('writeQueue', () => {
     writeQueue(fallbackFile, ['task a', 'task b'], { rename: renameFails })
     expect(readFileSync(fallbackFile, 'utf8')).toBe('task a\n---\ntask b')
     expect(existsSync(`${fallbackFile}.tmp`)).toBe(false)
+  })
+})
+
+describe('GET /api/control/runs project scoping', () => {
+  async function getRuns(projectRoot, runsDir) {
+    let answer = null
+    const api = createRunsApi({
+      projectRoot,
+      briefsDir: join(REPO_ROOT, 'docs', 'agents'),
+      runsFolder: runsDir,
+      lanesFile: join(REPO_ROOT, 'docs', 'agents', 'lanes.json'),
+      runnerCommand: { file: process.execPath, args: [] },
+      sendJson: (req, res, status, body) => {
+        answer = { status, body }
+      },
+      readJsonBody: async () => ({}),
+    })
+    cleanups.push(() => api.stopAll())
+    const handled = await api.handle(
+      { method: 'GET', headers: { origin: 'http://localhost:5173' } },
+      {},
+      new URL('http://127.0.0.1/api/control/runs')
+    )
+    expect(handled).toBe(true)
+    expect(answer.status).toBe(200)
+    return answer.body
+  }
+
+  function writeRunRecords(runsDir, records) {
+    mkdirSync(runsDir, { recursive: true })
+    writeFileSync(join(runsDir, 'runs.jsonl'), `${records.map((record) => JSON.stringify(record)).join('\n')}\n`)
+  }
+
+  it('returns only project A runs including its worktree, and no project B or brief run', async () => {
+    const runsDir = tempDir('mr-runs-scope-')
+    const projectA = tempDir('mr-project-a-')
+    const projectB = tempDir('mr-project-b-')
+    const records = [
+      { lane: 'opencode', briefs: [], project: projectA, task: 'Older A task', startedAt: '2026-11-10T01:00:00.000Z', exitCode: 0 },
+      { lane: 'opencode2', briefs: [], project: worktreeFor(projectA, 'opencode2'), task: 'Worktree A task', startedAt: '2026-11-10T02:00:00.000Z', exitCode: 0 },
+      { lane: 'agy', briefs: ['P1'], startedAt: '2026-11-10T03:00:00.000Z', exitCode: 0 },
+      { lane: 'claude', briefs: [], project: projectB, task: 'Project B task', startedAt: '2026-11-10T04:00:00.000Z', exitCode: 0 },
+      { lane: 'opencode2', briefs: [], project: worktreeFor(projectB, 'opencode2'), task: 'Worktree B task', startedAt: '2026-11-10T04:05:00.000Z', exitCode: 0 },
+    ]
+    for (let i = 1; i <= 21; i += 1) {
+      records.push({
+        lane: 'opencode',
+        briefs: [],
+        project: projectB,
+        task: `Project B task ${i}`,
+        startedAt: `2026-11-10T05:${String(i).padStart(2, '0')}:00.000Z`,
+        exitCode: 0,
+      })
+    }
+    writeRunRecords(runsDir, records)
+
+    const body = await getRuns(projectA, runsDir)
+    expect(body.recent.map((record) => record.task)).toEqual(['Worktree A task', 'Older A task'])
+    expect(new Map(body.last.map((record) => [record.lane, record.task]))).toEqual(
+      new Map([
+        ['opencode', 'Older A task'],
+        ['opencode2', 'Worktree A task'],
+      ])
+    )
+  })
+
+  it('matches resolved folders through junctions or symlinks for project A only', async (context) => {
+    const runsDir = tempDir('mr-runs-link-')
+    const projectA = tempDir('mr-project-a-target-')
+    const projectB = tempDir('mr-project-b-other-')
+    const aliasDir = tempDir('mr-project-alias-')
+    const linkA = join(aliasDir, 'link-a')
+    try {
+      symlinkSync(projectA, linkA, process.platform === 'win32' ? 'junction' : 'dir')
+    } catch {
+      context.skip()
+      return
+    }
+    writeRunRecords(runsDir, [
+      { lane: 'opencode', briefs: [], project: linkA, task: 'Linked A task', startedAt: '2026-11-10T01:00:00.000Z', exitCode: 0 },
+      { lane: 'opencode2', briefs: [], project: projectA, task: 'Direct A task', startedAt: '2026-11-10T02:00:00.000Z', exitCode: 0 },
+      { lane: 'claude', briefs: [], project: projectB, task: 'Other B task', startedAt: '2026-11-10T03:00:00.000Z', exitCode: 0 },
+    ])
+
+    const fromTarget = await getRuns(projectA, runsDir)
+    expect(fromTarget.recent.map((record) => record.task)).toEqual(['Direct A task', 'Linked A task'])
+
+    const fromLink = await getRuns(linkA, runsDir)
+    expect(fromLink.recent.map((record) => record.task)).toEqual(['Direct A task', 'Linked A task'])
+  })
+
+  it('returns only brief runs for this repository and no project A or project B run', async () => {
+    const runsDir = tempDir('mr-runs-briefs-')
+    const projectA = tempDir('mr-project-a-')
+    const projectB = tempDir('mr-project-b-')
+    writeRunRecords(runsDir, [
+      { lane: 'opencode', briefs: [], project: projectA, task: 'Project A task', startedAt: '2026-11-10T01:00:00.000Z', exitCode: 0 },
+      { lane: 'agy', briefs: ['P1'], startedAt: '2026-11-10T02:00:00.000Z', exitCode: 0 },
+      { lane: 'opencode2', briefs: [], project: worktreeFor(projectB, 'opencode2'), task: 'Project B task', startedAt: '2026-11-10T03:00:00.000Z', exitCode: 0 },
+      { lane: 'claude', briefs: ['P2'], project: '', startedAt: '2026-11-10T04:00:00.000Z', exitCode: 1, note: 'Failed brief' },
+    ])
+
+    const body = await getRuns(REPO_ROOT, runsDir)
+    expect(body.recent.map((record) => record.briefs)).toEqual([['P2'], ['P1']])
+    expect(body.last.map((record) => record.lane).sort()).toEqual(['agy', 'claude'])
   })
 })
