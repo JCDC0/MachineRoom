@@ -600,6 +600,7 @@ export const LANE_ENV_NAMES = [
   'USERPROFILE', 'HOMEDRIVE', 'HOMEPATH', 'APPDATA', 'LOCALAPPDATA',
   'PROGRAMFILES', 'PROGRAMFILES(X86)', 'PROGRAMDATA', 'NUMBER_OF_PROCESSORS',
   'OS', 'PROCESSOR_ARCHITECTURE', 'LANG', 'LC_ALL', 'TERM', 'HOME', 'SHELL',
+  'CODEX_HOME',
 ]
 
 export const HARNESS_KEY_NAMES = {
@@ -1030,6 +1031,20 @@ function tokenField(value) {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? Math.round(value) : null
 }
 
+function quotaField(quota) {
+  if (!quota || typeof quota !== 'object' || Array.isArray(quota)) return null
+  const at = isoTime(quota.at)
+  if (at === null || !Array.isArray(quota.windows)) return null
+  const windows = []
+  for (const window of quota.windows) {
+    if (!window || typeof window !== 'object' || Array.isArray(window)) continue
+    const label = window.label === 'primary' || window.label === 'secondary' ? window.label : ''
+    if (label === '' || typeof window.usedPercent !== 'number' || !Number.isFinite(window.usedPercent)) continue
+    windows.push({ label, usedPercent: window.usedPercent, resetsAt: isoTime(window.resetsAt) })
+  }
+  return windows.length > 0 ? { windows, at } : null
+}
+
 const RECORD_TEXT_LIMIT = 200
 
 const PROFILE_PATH_NAMES = [
@@ -1087,7 +1102,7 @@ export function maskedQueueTasks(tasks) {
   return (Array.isArray(tasks) ? tasks : []).map((task) => maskProfilePaths(maskKeys(String(task ?? '')).text).slice(0, RECORD_TEXT_LIMIT))
 }
 
-export function runRecord({ lane, briefs, model, reasoning, startedAt, minutes, exitCode, killed, costUsd, inputTokens, outputTokens, peakTokens, log, branch, commits, base, head, tests, project, task, startedBy, stoppedLeftovers, queue, startFailed, note, retried, failover, failoverFrom } = {}) {
+export function runRecord({ lane, briefs, model, reasoning, startedAt, minutes, exitCode, killed, costUsd, inputTokens, outputTokens, peakTokens, log, branch, commits, base, head, tests, project, task, startedBy, stoppedLeftovers, queue, startFailed, note, retried, failover, failoverFrom, quota } = {}) {
   const record = {
     lane: String(lane ?? ''),
     briefs: Array.isArray(briefs) ? briefs.map(String) : [],
@@ -1123,6 +1138,8 @@ export function runRecord({ lane, briefs, model, reasoning, startedAt, minutes, 
   if (typeof startedBy === 'string' && startedBy.trim() !== '') record.startedBy = startedBy.trim()
   if (typeof project === 'string' && project.trim() !== '') record.project = project
   if (typeof task === 'string' && task !== '') record.task = maskKeys(task).text.slice(0, RECORD_TEXT_LIMIT)
+  const reading = quotaField(quota)
+  if (reading !== null) record.quota = reading
   if (failover && typeof failover === 'object' && !Array.isArray(failover)) {
     const kind = typeof failover.kind === 'string' ? failover.kind.trim() : ''
     const to = typeof failover.to === 'string' ? failover.to.trim() : ''

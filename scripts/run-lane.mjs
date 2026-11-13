@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { spawn, spawnSync } from 'node:child_process'
 import { createHash, randomUUID } from 'node:crypto'
-import { appendFileSync, createWriteStream, existsSync, lstatSync, mkdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
+import { appendFileSync, closeSync, createWriteStream, existsSync, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path'
 import { finished } from 'node:stream'
@@ -13,6 +13,7 @@ import { outcomeTable } from '../server/outcomes.js'
 import { readMainSubjectsSync } from '../server/runs.js'
 import { isLockHolderStale, killTree, descendantProcesses, leftoverProcesses, listProcesses } from '../server/processTree.js'
 import { codexAppProgram } from '../server/agents-config.js'
+import { codexHarness } from '../src/harnesses/codex.js'
 import { gitPath, programPath } from '../server/programPath.js'
 import { isWindowsPath, printedRunsFolder, realPath } from '../server/printed-path.js'
 import { lanesFolder, readAllLanes, runsFolder } from '../server/lanes-source.js'
@@ -919,6 +920,117 @@ function readLog(path) {
   }
 }
 
+const CODEX_ROLLOUT_TAIL_BYTES = 64 * 1024
+
+function codexHome(env = process.env) {
+  const value = typeof env?.CODEX_HOME === 'string' ? env.CODEX_HOME.trim() : ''
+  return value || join(homedir(), '.codex')
+}
+
+export function codexThreadId(log) {
+  for (const line of String(log ?? '').split(/\r?\n/)) {
+    if (!line.includes('"thread.started"')) continue
+    let item
+    try {
+      item = JSON.parse(line)
+    } catch {
+      continue
+    }
+    if (item?.type !== 'thread.started') continue
+    const threadId = typeof item.thread_id === 'string' ? item.thread_id.trim() : ''
+    if (/^[A-Za-z0-9-]+$/.test(threadId)) return threadId
+  }
+  return ''
+}
+
+function codexMonthFolders({ env, startedAt, now }) {
+  const sessions = join(codexHome(env), 'sessions')
+  const folders = []
+  const seen = new Set()
+  for (const time of [startedAt, now]) {
+    const date = new Date(time)
+    if (Number.isNaN(date.getTime())) continue
+    for (const [year, month] of [[date.getFullYear(), date.getMonth() + 1], [date.getUTCFullYear(), date.getUTCMonth() + 1]]) {
+      const key = `${year}-${month}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      folders.push(join(sessions, String(year), String(month).padStart(2, '0')))
+    }
+  }
+  return folders
+}
+
+function findCodexRollout({ threadId, env, startedAt, now }) {
+  if (!/^[A-Za-z0-9-]+$/.test(threadId)) return ''
+  const suffix = `-${threadId}.jsonl`
+  for (const monthFolder of codexMonthFolders({ env, startedAt, now })) {
+    let days
+    try {
+      days = readdirSync(monthFolder, { withFileTypes: true })
+    } catch {
+      continue
+    }
+    const names = days.filter((entry) => entry.isDirectory() && /^\d{2}$/.test(entry.name)).map((entry) => entry.name).sort().reverse()
+    for (const day of names) {
+      let files
+      try {
+        files = readdirSync(join(monthFolder, day))
+      } catch {
+        continue
+      }
+      const match = files.find((name) => name.startsWith('rollout-') && name.endsWith(suffix))
+      if (match) return join(monthFolder, day, match)
+    }
+  }
+  return ''
+}
+
+export function readCodexQuota(file, limit = CODEX_ROLLOUT_TAIL_BYTES) {
+  let stat
+  try {
+    stat = statSync(file)
+  } catch {
+    return null
+  }
+  if (!stat.isFile() || stat.size <= 0) return null
+  const length = Math.min(stat.size, limit)
+  let fd
+  try {
+    fd = openSync(file, 'r')
+  } catch {
+    return null
+  }
+  try {
+    const buffer = Buffer.alloc(length)
+    const got = readSync(fd, buffer, 0, length, stat.size - length)
+    if (got <= 0) return null
+    let text = buffer.subarray(0, got).toString('utf8')
+    if (stat.size > length) {
+      const newline = text.indexOf('\n')
+      text = newline === -1 ? '' : text.slice(newline + 1)
+    }
+    let newest = null
+    for (const line of text.split(/\r?\n/)) {
+      const reading = codexHarness.quotaFrom(line)
+      if (reading) newest = reading
+    }
+    return newest
+  } finally {
+    closeSync(fd)
+  }
+}
+
+export function quotaForRun({ harness, log, env = process.env, startedAt = Date.now(), now = Date.now() } = {}) {
+  if (harness !== 'codex') return null
+  const threadId = codexThreadId(log)
+  if (threadId === '') return null
+  const file = findCodexRollout({ threadId, env, startedAt, now })
+  if (file === '') return null
+  const reading = readCodexQuota(file)
+  if (!reading) return null
+  return { windows: reading.windows, at: new Date(now).toISOString() }
+}
+
 function captureToolLines(file, sessionId, logPath) {
   if (!sessionId) return { count: 0, session: '' }
   const result = spawnSync(file, ['sessions', 'export', '--session-id', String(sessionId), '--format', 'jsonl', '-'], {
@@ -1741,6 +1853,7 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
 
     const worktree = project || lane.worktree
     const logText = readLog(logPath)
+    const quota = quotaForRun({ harness, log: logText, env: process.env, startedAt, now: Date.now() })
     const summary = summarizeRun({ harness, log: logText, worktree })
     const limited = limitedFor(harness, logText)
     formatSummary(summary).forEach((line) => console.log(line))
@@ -1785,6 +1898,7 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
         branch: git.branch,
         commits: git.commits,
         base: runBase,
+        quota,
         retried: true,
         startFailed: startFailure !== '' ? true : undefined,
         ...(start ? { startBranch: start.startBranch } : {}),
@@ -1821,6 +1935,7 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
       branch: git.branch,
       commits: git.commits,
       base: runBase,
+      quota,
       stoppedLeftovers: totalStoppedLeftovers > 0 ? totalStoppedLeftovers : undefined,
       note: note || undefined,
       startFailed: startFailure !== '' ? true : undefined,
