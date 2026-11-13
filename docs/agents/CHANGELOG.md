@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- P247: the check command keeps an escaped double quote and a doubled backslash, and refuses an unclosed quote.
 - P243: a queue record's remaining tasks and the recovery message mask profile and home paths with a browser-safe masker.
 - P245: review 30 confirms five review 29 fixes, two partly, and finds an archive parent race and a quote-splitting gap.
 - P240: the archive refuses a junction or link at the archive or month folder, never overwrites a destination, and moves only the previewed files that are still eligible.
