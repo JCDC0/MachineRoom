@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Project run records store `head` and `tests` (`passed`, `failed` or `none`) when tests ran, and omit `tests` otherwise (P177).
+- Review `lastRun` matches the reviewed project and limits brief runs to MachineRoom (P177).
+- Review rows, confirm cards, mock reviews and merges carry per-head check states, warn on unchecked heads and refuse failed heads (P177).
 - A dry run prints only the prompt's length, a broken package.json stops a queue task, --help inside a value stays that value, and README's up fallback adds --open (P175).
 - Review 24 reads the merges since the last push: four findings, briefed as P175 (P174).
 - A dry run prints the command and `Dry run, nothing started.` without the prompt's first line (P175).
