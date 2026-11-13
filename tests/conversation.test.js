@@ -114,6 +114,32 @@ describe('a conversation read from a lane log', () => {
     for (const item of entries) expect(item.text).not.toContain(key)
   })
 
+  it('masks a JSON line from a harness it does not read as data', () => {
+    const text = lines({ type: 'item.completed', text: 'Reading C:\\Users\\NAME\\MachineRoom\\src\\app.js' })
+    const entries = conversationFromLog('native', text)
+    expect(entries).toHaveLength(1)
+    expect(entries[0].text).toContain('%USERPROFILE%')
+    expect(entries[0].text).not.toContain('NAME')
+  })
+
+  it('masks a named secret field in an unknown OpenCode event', () => {
+    const value = 'opaque-value-12345'
+    const entries = conversationFromLog('opencode', lines({ type: 'session.updated', env: { OPENAI_API_KEY: value } }))
+    expect(entries).toHaveLength(1)
+    expect(entries[0]).toMatchObject({ role: 'line' })
+    expect(entries[0].text).toContain('[key]')
+    expect(entries[0].text).not.toContain(value)
+  })
+
+  it('masks a named secret field in an unknown Claude event', () => {
+    const value = 'opaque-value-54321'
+    const entries = conversationFromLog('claude', lines({ type: 'debug', env: { OPENAI_API_KEY: value } }))
+    expect(entries).toHaveLength(1)
+    expect(entries[0]).toMatchObject({ role: 'line' })
+    expect(entries[0].text).toContain('[key]')
+    expect(entries[0].text).not.toContain(value)
+  })
+
   it('keeps the last 2000 entries and cuts each text to 4000 characters', () => {
     const many = Array.from({ length: CONVERSATION_ENTRY_LIMIT + 100 }, (_, index) => `line ${index + 1}`).join('\n')
     const kept = conversationFromLog('hermes', many)
