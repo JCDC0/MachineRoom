@@ -1688,3 +1688,21 @@ P164 read the path to a first merged change. Read the code for what happens when
 **P187. Review the readiness merges (Codex).** Read `docs/agents/OWNER.md` and this brief only. Change no code. Do not commit: the runner commits your file. Stop at minute 20. Files: docs/agents/AUDIT-2026-11-REVIEW-25.md.
 
 Review, with `git show -m --first-parent SHA`, against the code around each change: `8f3269ca` (P175), `798d759e` (P176), `c30f8e2f` (P177, run records carry head and tests, review check states, failed-head refusal), `87555c4c` (P183, recorder ceiling), `e9e17fed` (P182, forgotten Claude session positions), `792b1745` (P179, a full pinned list refuses new, open and fork), `8b42589c` (P180, chat recovery by exact turn log) and `314e92b6` (P181, reset on a stale or foreign cursor). Hunt for: a merge allowed on a failed head or refused on a passed one; a run record whose `head` is not the commit its tests ran on; a conversation lost or refused wrongly at the saved limit; a recovery record on the wrong log, or none where one is due; a reconnect that leaves a finished run working, or resets on every reconnect; old session lines replayed, or new ones missed; a replay that grows past its ceiling; a test that cannot fail. Write the file: a table of at most 6 findings, the most harmful first, each with `file:line`, what goes wrong and when, the smallest fix, and whether it blocks a push. An empty table with what you checked is a good answer.
+
+**P188. A check result is never erased or put on the wrong commit (AGY).** Read findings R1 and R2 in `docs/agents/AUDIT-2026-11-REVIEW-25.md` and this brief only. Use no subagents. Run every command in the foreground. Commit each step as you finish it. Files: server/reviews.js, scripts/run-lane.mjs, tests/project-reviews.test.js, tests/run-queue.test.js, docs/agents/CHANGELOG.md.
+
+1. `checkStateFor` takes the newest record for this project, lane and head that has `tests` of `passed` or `failed`; a record without a test result never replaces one. Test a failed head followed by an untested retry: still `failed`, and both merge paths refuse it.
+2. A queue task whose tests failed while its working tree differs from HEAD keeps its run record with `tests: 'failed'` but no `head`. Change `tests/run-queue.test.js` around line 712 to that. Test a passing task that made H, then a failing task, then its edits discarded: H reads `passed` and merges.
+3. Run `node node_modules/vitest/vitest.mjs related --run server/reviews.js scripts/run-lane.mjs` and `npm run build`. Report what passed.
+
+**P189. The recorder frees what it trims (OpenCode).** Read finding R3 in `docs/agents/AUDIT-2026-11-REVIEW-25.md` and this brief only. Use no subagents. Run every command in the foreground. Commit each step as you finish it, and stop starting new work at minute 12. Files: src/model/sessionRecorder.js, tests/session-recorder.test.js, docs/agents/CHANGELOG.md.
+
+1. When the recorder drops a frame, it clears that array slot after subtracting its bytes. Keep the batched compaction.
+2. Test 60 one-MiB payloads: the slots before `head` hold no frame, and `size()` and the replay length match the ceiling.
+3. Run `node node_modules/vitest/vitest.mjs related --run src/model/sessionRecorder.js` and `npm run build`. Report what passed.
+
+**P190. A forgotten Claude session keeps its run number (OpenCode).** Read finding R4 in `docs/agents/AUDIT-2026-11-REVIEW-25.md` and this brief only. Use no subagents. Run every command in the foreground. Commit each step as you finish it, and stop starting new work at minute 15. Files: server/claude-sessions.js, tests/claude-sessions.test.js, docs/agents/CHANGELOG.md.
+
+1. The forgotten marker keeps `number` beside the offset, and a session rebuilt from it starts at that number.
+2. Test with 201 files: an append to a forgotten session goes through the same live pipeline that took the first turn, and the pipeline emits the new tool call.
+3. Run `node node_modules/vitest/vitest.mjs related --run server/claude-sessions.js` and `npm run build`. Report what passed.
