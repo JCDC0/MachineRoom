@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Dispatch's running rows and the Inspector offer Stop with a confirm card; the bridge stops a matching run with --stop and tells the lane's sub orchestrator, else Main, as a note its next turn reads first.
 - Settings has a Storage section with sizes by kind, a preview of finished run logs and old recordings older than N days, and Archive, which moves exactly those into runs/archive/YYYY-MM and deletes nothing.
 - Repository has a branch filter and shows at most 200 rows, the current branch first, with Showing N of M branches.
 - A database that appears after the OpenCode reader starts is read from the start time, so the first conversation on a new install becomes frames; an existing database still skips its old history.
@@ -24,6 +25,7 @@
 - Reviews offers Ask to prepare on a refused fast forward or a branch with its own commits whose destination moved on (reviews now carry `behind`), and sends the lane, branch, full head and destination to Main after a confirm (P215).
 - Costs show what each lane reported: no runs or a reported 0 reads as $0.00 and 0 tokens, and not reported appears only when its runs gave no number (P214).
 - Storage in Settings shows counts and byte sizes by kind, lists clean merged worktrees with their cleanup command, previews archive candidates older than 1 to 365 days and moves confirmed files into month folders under `<runs>/archive` (P217).
+- POST /api/control/runs/stop stops a running lane by matching start time through the runner, tells the lane's sector orchestrator or Main with a saved room note carried on its next turn, and Dispatch running rows and the Inspector add Stop with a confirm card (P219).
 - Lane Update and Delete read the request body before the saved configuration, so a lane created meanwhile and its key count are kept.
 - The Removed lanes row sums each removed lane's rounded cents, so deleting lanes never moves the total.
 - Removed lanes adds each removed lane's rounded cents for the month and today, so deleting lanes no longer changes the total (P212).

@@ -717,6 +717,15 @@ describe('run routes', () => {
     expect(last.find((record) => record.lane === 'opencode')).toMatchObject({ lane: 'opencode', exitCode: 1 })
   })
 
+  it('refuses a stop with no Origin and no orchestrator token', async () => {
+    useRunsTemp()
+    const { url } = await startRunsBridge()
+
+    const noToken = await postJson(`${url}/api/control/runs/stop`, { lane: 'opencode', startedAt: '2026-11-13T00:00:00.000Z', confirmed: true })
+    expect(noToken.status).toBe(403)
+    expect(noToken.body).toEqual({ error: 'A request with no Origin needs a valid orchestrator token.' })
+  })
+
   it('starts the runner with an argument list, keeps the last five lines and records the run when it ends', async () => {
     useRunsTemp()
     const { url, token } = await startRunsBridge()

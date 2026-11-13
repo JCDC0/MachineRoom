@@ -7,6 +7,7 @@ import { PassThrough } from 'node:stream'
 import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
 import { createBridge } from '../server/index.js'
+import { activeLanesFileFor, writeActiveLanes } from '../server/active-lanes.js'
 import { createLanesSource, laneAgents } from '../server/lanes-source.js'
 import {
   chatFileFor,
@@ -4564,5 +4565,183 @@ describe('the lane source and the orchestrator turn', () => {
       await waitIdle(rig, 1)
       expect(rig.answer().messages.at(-1).text).toBe('The orchestrator stopped: exit 1.')
     })
+  })
+})
+
+describe('stopping a running lane tells its head orchestrator', () => {
+  it('saves the room note in the sector sub orchestrator or Main and carries it first in the next turn', async () => {
+    const base = makeTempDir('mr-stop-head-')
+    cleanups.push(() => rmSync(base, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }))
+    const projectRoot = join(base, 'project')
+    const runs = join(base, 'runs')
+    mkdirSync(projectRoot, { recursive: true })
+    mkdirSync(runs, { recursive: true })
+    const lanes = {
+      orchestrator: ORCHESTRATOR_LANE,
+      opencode: {
+        name: 'OpenCode',
+        harness: 'OpenCode',
+        cli: { harness: 'opencode', bin: 'opencode', model: 'opencode-go/deepseek-v4.1-flash' },
+      },
+      opencode2: {
+        name: 'OpenCode 2',
+        harness: 'OpenCode',
+        cli: { harness: 'opencode', bin: 'opencode', model: 'opencode-go/deepseek-v4.1-flash' },
+      },
+    }
+    const lanesFile = join(base, 'lanes.json')
+    writeFileSync(lanesFile, JSON.stringify(lanes))
+    writeActiveLanes(activeLanesFileFor(projectRoot, runs), ['opencode', 'opencode2'])
+
+    const claudeScript = join(base, 'fake-claude.mjs')
+    writeFileSync(claudeScript, FAKE_CLAUDE)
+    const promptFile = join(base, 'prompt.md')
+    writeFileSync(promptFile, PROMPT)
+    const callsFile = join(base, 'calls.jsonl')
+
+    const stopRunner = join(base, 'runner.mjs')
+    const startedFlag = join(base, 'lane-started')
+    writeFileSync(
+      stopRunner,
+      [
+        "import { writeFileSync } from 'node:fs'",
+        'const args = process.argv.slice(2)',
+        "if (args[0] === '--stop') {",
+        "  console.log('stopped: ' + args[1])",
+        '  process.exit(0)',
+        '}',
+        `writeFileSync(${JSON.stringify(startedFlag)}, args.join(' '))`,
+        'await new Promise((resolve) => setTimeout(resolve, 5000))',
+      ].join('\n')
+    )
+
+    const spawnClaude = (file, args, options) =>
+      spawn(process.execPath, [claudeScript, ...args], {
+        ...options,
+        env: { ...(options.env ?? process.env), MR_CALLS: callsFile, MR_MODE: 'reply' },
+      })
+
+    const bridge = createBridge({
+      projectRoot,
+      port: 0,
+      env: {},
+      runsFolder: runs,
+      lanesFile,
+      runnerCommand: { file: process.execPath, args: [stopRunner] },
+      lanesSource: { folder: runs, lanes, pollMs: 20, quietMs: 60000 },
+      orchestratorPrompt: promptFile,
+      orchestratorSpawn: spawnClaude,
+    })
+    cleanups.push(() => bridge.stop())
+    const { url } = await bridge.start()
+
+    const ladderRes = await pagePostJson(`${url}/api/orchestrator/ladder`, {
+      ladder: {
+        subs: [
+          {
+            id: 'frontend',
+            name: 'Frontend',
+            harness: 'claude',
+            model: 'sonnet',
+            lanes: ['opencode2'],
+            scope: ['src/ui/**'],
+            restricted: true,
+            setBy: 'owner',
+          },
+        ],
+      },
+      by: 'owner',
+      confirmed: true,
+    })
+    expect(ladderRes.status).toBe(200)
+
+    const subRun = await pagePostJson(`${url}/api/control/runs`, {
+      lane: 'opencode2',
+      task: 'Fix button alignment',
+      allowDirty: true,
+      confirmed: true,
+    })
+    expect(subRun.status).toBe(202)
+    await waitFor(() => existsSync(startedFlag), 5000, 'sub lane runner to start')
+
+    const subStop = await pagePostJson(`${url}/api/control/runs/stop`, {
+      lane: 'opencode2',
+      startedAt: subRun.body.startedAt,
+      confirmed: true,
+    })
+    expect(subStop.status).toBe(200)
+    expect(subStop.body.output).toBe('stopped: opencode2')
+
+    const subChat = await getJson(`${url}/api/orchestrator?id=frontend`)
+    const subNote = subChat.body.messages.find((m) => m.from === 'room')
+    expect(subNote).toBeDefined()
+    expect(subNote.text).toMatch(/^The owner stopped opencode2's run on Fix button alignment at .+\.$/)
+
+    const mainChat = await getJson(`${url}/api/orchestrator`)
+    expect(mainChat.body.messages.some((m) => m.text.includes('opencode2'))).toBe(false)
+    expect(readLines(callsFile)).toHaveLength(0)
+
+    const subChatFile = chatFileFor(projectRoot, runs, 'frontend')
+    const savedSub = JSON.parse(readFileSync(subChatFile, 'utf8'))
+    expect(savedSub.messages.at(-1)).toMatchObject({ from: 'room', text: subNote.text })
+    expect(savedSub.pending[0]).toBe(subNote.id)
+
+    const nextSubTurn = await pagePostJson(`${url}/api/orchestrator/messages`, {
+      id: 'frontend',
+      text: 'Pick another fix.',
+      confirmed: true,
+    })
+    expect(nextSubTurn.status).toBe(202)
+    await waitFor(async () => (await getJson(`${url}/api/orchestrator?id=frontend`)).body.state === 'idle' && readLines(callsFile).length === 1, 15000, 'frontend turn to finish')
+    const subPrompt = readLines(callsFile)[0].args[readLines(callsFile)[0].args.indexOf('-p') + 1]
+    expect(subPrompt).toBe(`Room: ${subNote.text}\n\nOwner: Pick another fix.`)
+
+    rmSync(startedFlag, { force: true })
+    const mainRun = await pagePostJson(`${url}/api/control/runs`, {
+      lane: 'opencode',
+      task: 'Audit the logs',
+      allowDirty: true,
+      confirmed: true,
+    })
+    expect(mainRun.status).toBe(202)
+    await waitFor(() => existsSync(startedFlag), 5000, 'main lane runner to start')
+
+    const mainStop = await pagePostJson(`${url}/api/control/runs/stop`, {
+      lane: 'opencode',
+      startedAt: mainRun.body.startedAt,
+      confirmed: true,
+    })
+    expect(mainStop.status).toBe(200)
+
+    const mainAfter = await getJson(`${url}/api/orchestrator`)
+    const mainNote = mainAfter.body.messages.find((m) => m.from === 'room')
+    expect(mainNote).toBeDefined()
+    expect(mainNote.text).toMatch(/^The owner stopped opencode's run on Audit the logs at .+\.$/)
+
+    await bridge.stop()
+
+    const restarted = createBridge({
+      projectRoot,
+      port: 0,
+      env: {},
+      runsFolder: runs,
+      lanesFile,
+      runnerCommand: { file: process.execPath, args: [stopRunner] },
+      lanesSource: { folder: runs, lanes, pollMs: 20, quietMs: 60000 },
+      orchestratorPrompt: promptFile,
+      orchestratorSpawn: spawnClaude,
+    })
+    cleanups.push(() => restarted.stop())
+    const { url: restartedUrl } = await restarted.start()
+
+    const nextMainTurn = await pagePostJson(`${restartedUrl}/api/orchestrator/messages`, {
+      text: 'Carry on.',
+      confirmed: true,
+    })
+    expect(nextMainTurn.status).toBe(202)
+    await waitFor(async () => (await getJson(`${restartedUrl}/api/orchestrator`)).body.state === 'idle' && readLines(callsFile).length === 2, 15000, 'main turn after restart')
+    const mainPrompt = readLines(callsFile)[1].args[readLines(callsFile)[1].args.indexOf('-p') + 1]
+    expect(mainPrompt.split('\n')[0]).toBe(`Room: ${mainNote.text}`)
+    expect(mainPrompt).toContain('Owner: Carry on.')
   })
 })

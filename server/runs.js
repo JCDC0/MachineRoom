@@ -29,6 +29,13 @@ export const NO_TOKEN_PROBLEM = 'A request with no Origin needs a valid orchestr
 export const TOKEN_MISMATCH_PROBLEM = 'The startedBy orchestrator must match the token.'
 export const QUEUE_DIRTY_PROBLEM = 'A queue needs a clean project.'
 export const BRIEF_PROJECT_PROBLEM = 'Briefs run in this repository. Use a task or a queue on another project.'
+export const CONFIRM_STOP_PROBLEM = 'Confirm the stop first.'
+export const STOP_LANE_PROBLEM = 'Choose a lane to stop.'
+export const STOP_TIME_PROBLEM = 'Name the start time to stop.'
+export const STOP_MISMATCH_PROBLEM = 'That start time does not match the running run.'
+export const STOP_BUSY_PROBLEM = 'That run is already stopping.'
+const STOP_TIMEOUT_MS = 15 * 1000
+const STOP_SETTLE_MS = 50
 export function notGitProblem(project, { queue = false } = {}) {
   return `The project folder ${project} is not a git folder. ${queue ? 'A queue needs one.' : '--worktree needs one.'}`
 }
@@ -37,6 +44,25 @@ const REPO_ROOT = resolve(fileURLToPath(import.meta.url), '..', '..')
 const GIT_TIMEOUT_MS = 10 * 1000
 const GIT_MAX_BUFFER = 8 * 1024 * 1024
 const RUNS_BODY_LIMIT = 256 * 1024
+
+function oneLineTask(value, limit = 120) {
+  if (typeof value !== 'string') return ''
+  const clean = value.replace(/\s+/g, ' ').trim()
+  if (clean.length <= limit) return clean
+  return `${clean.slice(0, limit - 3)}...`
+}
+
+function stopTaskLabel(item) {
+  if (Array.isArray(item.entry.briefs) && item.entry.briefs.length > 0) {
+    return item.entry.briefs.join(' ')
+  }
+  const text = oneLineTask(item.task || (item.entry.queue && item.entry.tasks === 1 ? item.firstTask : ''))
+  if (text) return text
+  if (item.entry.queue) {
+    return `${item.entry.tasks} task${item.entry.tasks === 1 ? '' : 's'} in order`
+  }
+  return 'this project'
+}
 
 function realPath(value) {
   const folder = resolve(String(value ?? ''))
@@ -606,13 +632,16 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
   }
 
   function snapshot(item) {
-    return {
+    const out = {
       lane: item.entry.lane,
       briefs: [...item.entry.briefs],
       startedAt: item.entry.startedAt,
       lastLines: [...item.entry.lastLines],
       ...(item.entry.queue ? { queue: true, tasks: item.entry.tasks } : {}),
     }
+    const taskLabel = item.task || (item.entry.queue && item.entry.tasks === 1 ? item.firstTask : '')
+    if (taskLabel) out.task = taskLabel
+    return out
   }
 
   function flushTail(item) {
@@ -655,8 +684,12 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
       startedAt: item.entry.startedAt,
       minutes: 0,
       exitCode,
-      killed: false,
-      note: note !== '' ? note.slice(0, 200) : 'the runner refused to start or could not start',
+      killed: Boolean(item.stoppedByOwner),
+      note: item.stoppedByOwner
+        ? 'stopped by the owner'
+        : note !== ''
+          ? note.slice(0, 200)
+          : 'the runner refused to start or could not start',
       ...(item.project ? { project: item.project, task: item.task } : {}),
       ...(item.startedBy ? { startedBy: item.startedBy } : {}),
     })
@@ -678,7 +711,12 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
       tail: '',
       project: projectRun?.project || '',
       task: projectRun?.task || '',
+      firstTask: projectRun?.firstTask || '',
       startedBy,
+      stopping: false,
+      stoppedByOwner: false,
+      closed: false,
+      onClose: [],
     }
     const args = projectRun
       ? projectRun.queue
@@ -719,6 +757,15 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
         if (entry.lastLines.length > LAST_LINE_LIMIT) entry.lastLines.shift()
       }
     }
+    const settleItem = () => {
+      item.closed = true
+      while (item.onClose.length > 0) {
+        const done = item.onClose.shift()
+        try {
+          done()
+        } catch {}
+      }
+    }
     child.stdout?.on('data', take)
     child.stderr?.on('data', take)
     child.on('error', (error) => {
@@ -727,11 +774,13 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
       flushTail(item)
       if (!stopped) recordRefusal(item, 1)
       finish(item)
+      settleItem()
     })
     child.on('close', (code) => {
       flushTail(item)
       if (!stopped && (code === null || code !== 0)) recordRefusal(item, code ?? 1)
       finish(item)
+      settleItem()
     })
     if (startedBy) {
       const dispatchText = projectRun?.task || (Array.isArray(briefs) && briefs.length > 0 ? briefs.join(' ') : '')
@@ -740,6 +789,153 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
       } catch {}
     }
     return entry
+  }
+
+  function waitForItemClose(item, timeoutMs = STOP_SETTLE_MS) {
+    if (item.closed) return Promise.resolve(true)
+    return new Promise((done) => {
+      let finished = false
+      const onClosed = () => {
+        if (finished) return
+        finished = true
+        clearTimeout(timer)
+        done(true)
+      }
+      const timer = setTimeout(() => {
+        if (finished) return
+        finished = true
+        const index = item.onClose.indexOf(onClosed)
+        if (index !== -1) item.onClose.splice(index, 1)
+        done(false)
+      }, timeoutMs)
+      timer.unref?.()
+      item.onClose.push(onClosed)
+    })
+  }
+
+  function runStopCommand(lane, projectRun) {
+    return new Promise((resolveStop) => {
+      const args = [...command.args, '--stop', lane]
+      let stdout = ''
+      let stderr = ''
+      let settled = false
+      let timer = null
+      let child
+      const finishStop = (result) => {
+        if (settled) return
+        settled = true
+        if (timer) clearTimeout(timer)
+        resolveStop(result)
+      }
+      try {
+        child = spawn(command.file, args, {
+          cwd: projectRun ? REPO_ROOT : resolvedRoot || undefined,
+          shell: false,
+          windowsHide: true,
+          stdio: ['ignore', 'pipe', 'pipe'],
+          env: {
+            ...process.env,
+            MACHINEROOM_RUNS: recordsDir(),
+            ...(lanesFile && projectRun ? { MACHINEROOM_LANES_FILE: laneFile } : {}),
+          },
+        })
+      } catch {
+        finishStop({ ok: false, status: 500, error: 'The bridge could not stop that run.', output: '' })
+        return
+      }
+      child.stdout?.on('data', (chunk) => {
+        stdout += chunk.toString('utf8')
+      })
+      child.stderr?.on('data', (chunk) => {
+        stderr += chunk.toString('utf8')
+      })
+      timer = setTimeout(() => {
+        killTree(child)
+        finishStop({ ok: false, status: 500, error: 'Stopping that run took too long.', output: '' })
+      }, STOP_TIMEOUT_MS)
+      timer.unref?.()
+      child.on('error', () => {
+        finishStop({ ok: false, status: 500, error: 'The bridge could not stop that run.', output: '' })
+      })
+      child.on('close', (code) => {
+        const output = [stdout.trim(), stderr.trim()].filter(Boolean).join('\n')
+        if (code === 0) {
+          finishStop({ ok: true, output })
+          return
+        }
+        finishStop({ ok: false, status: 500, error: output || 'The bridge could not stop that run.', output })
+      })
+    })
+  }
+
+  function notifyHeadStop(item, lane, stoppedAt) {
+    const registry = typeof orchestrators === 'function' ? orchestrators() : null
+    if (!registry) return
+    const sector = typeof registry.sectorForLane === 'function' ? registry.sectorForLane(lane) : null
+    const head =
+      (sector?.id && typeof registry.find === 'function' ? registry.find(sector.id) : null) ??
+      (typeof registry.find === 'function' ? registry.find('orchestrator') : null) ??
+      registry.main ??
+      null
+    if (!head || typeof head.addNote !== 'function') return
+    const taskLabel = stopTaskLabel(item)
+    const note = `The owner stopped ${lane}'s run on ${taskLabel} at ${stoppedAt}.`
+    try {
+      head.addNote(note)
+    } catch {}
+  }
+
+  async function stopRun({ lane = '', startedAt = '', confirmed = false } = {}) {
+    if (confirmed !== true) return { status: 400, body: { error: CONFIRM_STOP_PROBLEM } }
+    const targetLane = typeof lane === 'string' ? lane.trim() : ''
+    if (!targetLane || !/^[A-Za-z0-9_-]+$/.test(targetLane)) {
+      return { status: 400, body: { error: STOP_LANE_PROBLEM } }
+    }
+    const wantedStart = typeof startedAt === 'string' ? startedAt.trim() : ''
+    if (!wantedStart) {
+      return { status: 400, body: { error: STOP_TIME_PROBLEM } }
+    }
+    const item = running.get(targetLane)
+    if (!item) {
+      return { status: 409, body: { error: `No run is running on ${targetLane}.` } }
+    }
+    if (item.entry.startedAt !== wantedStart) {
+      return { status: 409, body: { error: STOP_MISMATCH_PROBLEM } }
+    }
+    if (item.stopping) {
+      return { status: 409, body: { error: STOP_BUSY_PROBLEM } }
+    }
+    item.stopping = true
+    item.stoppedByOwner = true
+    const result = await runStopCommand(targetLane, Boolean(item.project))
+    if (stopped) {
+      return { status: 500, body: { error: 'The bridge stopped.' } }
+    }
+    if (!result.ok) {
+      if (running.get(targetLane) === item) {
+        item.stopping = false
+        item.stoppedByOwner = false
+      }
+      return {
+        status: result.status,
+        body: { error: result.error, ...(result.output ? { output: result.output } : {}) },
+      }
+    }
+    if (running.get(targetLane) === item && !item.closed) {
+      await waitForItemClose(item, STOP_SETTLE_MS)
+      if (!item.closed && running.get(targetLane) === item) {
+        if (item.child?.pid) killTree(item.child)
+        await waitForItemClose(item, STOP_SETTLE_MS)
+        if (!item.closed) {
+          recordRefusal(item, 1)
+          finish(item)
+          item.closed = true
+        }
+      }
+    }
+    const stoppedAt = new Date().toISOString()
+    notifyHeadStop(item, targetLane, stoppedAt)
+    return { status: 200, body: { ok: true, lane: targetLane, startedAt: wantedStart, output: result.output } }
   }
 
   function stopAll() {
@@ -779,6 +975,22 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
   async function handle(req, res, url) {
     const path = url.pathname
     const method = req.method ?? 'GET'
+    if (path === '/api/control/runs/stop') {
+      if (method !== 'POST') {
+        sendJson(req, res, 405, { error: 'Method not allowed.' })
+        return true
+      }
+      const body = await readJsonBody(req, res, RUNS_BODY_LIMIT)
+      if (body === null) return true
+      const actor = readActor(req, {})
+      if (actor.status) {
+        sendJson(req, res, actor.status, { error: actor.error })
+        return true
+      }
+      const out = await stopRun(body)
+      sendJson(req, res, out.status, out.body)
+      return true
+    }
     if (path === '/api/control/runs/outcomes') {
       if (method !== 'GET') {
         sendJson(req, res, 405, { error: 'Method not allowed.' })
@@ -1016,11 +1228,12 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
     try {
       const laneConfig = lanes[lane]
       const reasoning = laneConfig?.effort || ''
+      const firstTask = hasTasks && body.tasks.length > 0 ? body.tasks[0].trim() : ''
       entry = startRun(
         lane,
         briefs,
         projectRun
-          ? { project: resolvedRoot, task, allowDirty, queue: queueFile, taskCount, worktree }
+          ? { project: resolvedRoot, task, firstTask, allowDirty, queue: queueFile, taskCount, worktree }
           : null,
         startedBy,
         reasoning
@@ -1037,6 +1250,7 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
   return {
     handle,
     stopAll,
+    stopRun,
     isRunning: (lane) => (lane !== undefined ? running.has(lane) : running.size > 0),
     startRun,
     startProjectTask,

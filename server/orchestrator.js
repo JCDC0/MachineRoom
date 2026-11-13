@@ -1431,13 +1431,21 @@ export function createOrchestrator({
     notify()
   }
 
-  function addMessage(from, text) {
+  function addMessage(from, text, queueFirst = false) {
     const message = { id: randomUUID(), from, text: maskText(text), at: iso(now()) }
     messages.push(message)
     while (messages.length > ORCHESTRATOR_CHAT_LIMIT) messages.shift()
+    if (queueFirst) pending.unshift(message)
     persist()
     notify()
     return message
+  }
+
+  function addNote(text) {
+    if (stopped) return null
+    const value = typeof text === 'string' ? text.trim() : ''
+    if (!value) return null
+    return addMessage('room', value, true)
   }
 
   const directLaneTasks = new Set()
@@ -2869,6 +2877,7 @@ export function createOrchestrator({
     close,
     token,
     addMessage,
+    addNote,
     recordAgentMessage,
     markDirectLaneTask,
     addLaneReply: (lane, replyText) => addMessage(lane, replyText),

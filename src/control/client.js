@@ -422,6 +422,15 @@ export function createClient({
       return request('POST', '/api/control/runs', { lane, ...body, confirmed: true })
     },
 
+    stopRun: (laneOrOptions = {}, startedAtOption, options = {}) => {
+      if (typeof laneOrOptions === 'string') {
+        const confirmed = Object.hasOwn(options, 'confirmed') ? options.confirmed : true
+        return request('POST', '/api/control/runs/stop', { lane: laneOrOptions, startedAt: startedAtOption, confirmed })
+      }
+      const { lane = '', startedAt = '', confirmed = true } = laneOrOptions ?? {}
+      return request('POST', '/api/control/runs/stop', { lane, startedAt, confirmed })
+    },
+
     lanes: () => request('GET', '/api/lanes'),
 
     harnesses: () => request('GET', '/api/harnesses'),
