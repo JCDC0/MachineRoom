@@ -2,11 +2,13 @@
 
 ## Unreleased
 
+- A queue keeps an explicit --test, and otherwise reads the test command from its worktree after each task, so a test script a task adds is run (P172).
 - run-lane has --help, lists the lane file and its lanes when a lane is missing, says where --list looked, and ends a dry run with Dry run, nothing started (P167).
 - doctor takes a folder, counts warnings in its last line and stops at a missing folder; pack-check has a usage line and says what it read; README has a First run block (P168).
 - The connect screen's replay card names the replay of this visit with no fixed length, and its recovery line leads with machineroom YOUR-PROJECT (P171).
 - The connect screen describes the replay as what this page has seen since the first conversation, with no fixed length, and keeps the tour as the sample (P171).
 - The connect screen's recovery line leads with machineroom YOUR-PROJECT and says to run the npm form in the MachineRoom folder (P171).
+- A queue keeps an explicit --test and otherwise reads the test command from the prepared worktree after each task, so a test script a task adds or one on the project head is run (P172).
 - The readiness review lists 3 blockers, 5 bug patches and 3 suggested features on the owner's path to daily use (P164).
 - machine-room doctor takes a folder first as --root and refuses both forms in one sentence (P168).
 - Doctor counts warnings in its summary line and stops after a failed project folder, so the one FAIL line is last (P168).

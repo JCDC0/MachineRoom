@@ -329,6 +329,37 @@ describe('run-lane --worktree with one task', { timeout: 60000 }, () => {
     expect(cleanPath(record.project)).toBe(cleanPath(path))
     expect(record.task).toBe('Write the lane note.')
   })
+
+  it('runs the test script on the project head in a reused worktree', async () => {
+    const base = tempDir()
+    const project = initRepo(base)
+    copyFileSync(FAKE_LANE, join(project, 'run'))
+    git(project, ['add', '-A'])
+    git(project, ['commit', '-q', '-m', 'Add the fake lane'])
+    const path = prepareWorktree(project, 'opencode').path
+    writeFileSync(join(project, 'package.json'), `${JSON.stringify({ scripts: { test: 'node test-runner.cjs' } })}\n`)
+    writeFileSync(join(project, 'test-runner.cjs'), "require('node:fs').writeFileSync('tests-ran.txt', 'yes')\n")
+    git(project, ['add', '-A'])
+    git(project, ['commit', '-q', '-m', 'Add the test script'])
+    const runs = join(base, 'machineroom-runs')
+    mkdirSync(runs)
+    const lanesFile = join(base, 'lanes.json')
+    writeFileSync(lanesFile, `${JSON.stringify({
+      opencode: {
+        name: 'Fake lane',
+        harness: 'OpenCode',
+        cli: { harness: 'opencode', bin: process.execPath, model: 'opencode/fake' },
+      },
+    }, null, 2)}\n`)
+
+    const result = await runLane(
+      ['opencode', '--project', project, '--task', 'Write the lane note.', '--worktree'],
+      { TEMP: base, MACHINEROOM_RUNS: runs, MACHINEROOM_LANES_FILE: lanesFile }
+    )
+    expect(result.code).toBe(0)
+    expect(result.stdout).toContain('tests: npm test')
+    expect(git(path, ['show', 'HEAD:tests-ran.txt']).trim()).toBe('yes')
+  }, 60000)
 })
 
 describe('the worktree project lock', () => {

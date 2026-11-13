@@ -55,6 +55,33 @@ function initRepo(parent) {
   return folder
 }
 
+function writeFakeLane(folder, files = {}) {
+  const writes = Object.entries(files).map(([name, content]) => (
+    `writeFileSync(join(process.cwd(), ${JSON.stringify(name)}), ${JSON.stringify(content)})`
+  ))
+  writeFileSync(join(folder, 'run'), [
+    "const { writeFileSync } = require('node:fs')",
+    "const { join } = require('node:path')",
+    "writeFileSync(join(process.cwd(), 'lane-note.txt'), 'The fake lane wrote this file.\\n')",
+    ...writes,
+    "console.log(JSON.stringify({ type: 'text', timestamp: Date.now(), sessionID: 'ses_fake_lane', part: { id: 'prt_fake_lane_1', type: 'text', text: 'The fake lane wrote its files.' } }))",
+    '',
+  ].join('\n'))
+}
+
+function fakeLaneFile(parent) {
+  const file = join(parent, 'lanes.json')
+  writeFileSync(file, `${JSON.stringify({
+    fake: {
+      name: 'Fake lane',
+      harness: 'OpenCode',
+      worktree: join(parent, 'worktree'),
+      cli: { harness: 'opencode', bin: process.execPath, model: 'opencode/fake' },
+    },
+  }, null, 2)}\n`)
+  return file
+}
+
 function queueTemplate() {
   const base = makeTempDir('machine-room-queue-template-')
   templateCleanup = () => removeTempDir(base)
@@ -438,6 +465,62 @@ describe('scripts/run-lane.mjs with --queue', { timeout: 30000 }, () => {
       remove(parent)
     }
   })
+
+  it('runs the test script that a task adds to package.json', async () => {
+    const parent = makeTempDir('machine-room-queue-')
+    try {
+      const repo = initRepo(parent)
+      const runs = join(parent, 'machineroom-runs')
+      const file = join(parent, 'queue.txt')
+      writeFileSync(file, 'Add the test script.\n')
+      writeFakeLane(repo, {
+        'package.json': `${JSON.stringify({ scripts: { test: 'node test-runner.cjs' } })}\n`,
+        'test-runner.cjs': "require('node:fs').writeFileSync('tests-ran.txt', 'yes')\n",
+      })
+      git(repo, ['add', '-A'])
+      git(repo, ['commit', '-m', 'the fake lane program'])
+      const result = await runLane(['fake', '--project', repo, '--queue', file], {
+        TEMP: parent,
+        MACHINEROOM_RUNS: runs,
+        MACHINEROOM_LANES_FILE: fakeLaneFile(parent),
+      })
+      expect(result.code).toBe(0)
+      expect(result.stdout).toContain('1. committed')
+      expect(result.stdout).toContain('tests: npm test')
+      expect(git(repo, ['show', 'HEAD:tests-ran.txt']).trim()).toBe('yes')
+    } finally {
+      remove(parent)
+    }
+  }, 60000)
+
+  it('runs an explicit --test instead of the script a task adds', async () => {
+    const parent = makeTempDir('machine-room-queue-')
+    try {
+      const repo = initRepo(parent)
+      const runs = join(parent, 'machineroom-runs')
+      const file = join(parent, 'queue.txt')
+      writeFileSync(file, 'Add the test script.\n')
+      writeFileSync(join(repo, 'explicit-test.cjs'), "require('node:fs').writeFileSync('explicit-ran.txt', 'yes')\n")
+      writeFakeLane(repo, {
+        'package.json': `${JSON.stringify({ scripts: { test: 'node auto-test.cjs' } })}\n`,
+        'auto-test.cjs': "require('node:fs').writeFileSync('auto-ran.txt', 'yes')\n",
+      })
+      git(repo, ['add', '-A'])
+      git(repo, ['commit', '-m', 'the fake lane program'])
+      const result = await runLane(['fake', '--project', repo, '--queue', file, '--test', 'node explicit-test.cjs'], {
+        TEMP: parent,
+        MACHINEROOM_RUNS: runs,
+        MACHINEROOM_LANES_FILE: fakeLaneFile(parent),
+      })
+      expect(result.code).toBe(0)
+      expect(result.stdout).toContain('1. committed')
+      expect(result.stdout).toContain('tests: node explicit-test.cjs')
+      expect(git(repo, ['show', 'HEAD:explicit-ran.txt']).trim()).toBe('yes')
+      expect(existsSync(join(repo, 'auto-ran.txt'))).toBe(false)
+    } finally {
+      remove(parent)
+    }
+  }, 60000)
 
   it('refuses --queue with a task, a task file, --allow-dirty or a brief id', async () => {
     const parent = makeTempDir('machine-room-queue-')

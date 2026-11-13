@@ -990,7 +990,7 @@ async function runQueueProject({ options, lane, lanes }) {
   const branch = `machineroom/queue-${options.lane}-${queueStamp}`
   if (options.dryRun) {
     const plan = options.worktree ? worktreePlan(project, options.lane) : { path: project, made: false }
-    const test = projectTestCommand(plan.made ? project : plan.path, options.test)
+    const test = projectTestCommand(project, options.test)
     console.log(`lane: ${options.lane}`)
     console.log(`project: ${printedRunsFolder(project)}`)
     if (options.worktree) printWorktree(plan)
@@ -1020,7 +1020,7 @@ async function runQueueProject({ options, lane, lanes }) {
       ? (gitRead(plan.path, ['branch', '--show-current']) || gitRead(project, ['branch', '--show-current']) || '')
       : (gitRead(project, ['branch', '--show-current']) || '')
     const startHead = gitRead(options.worktree && !plan.made ? plan.path : project, ['rev-parse', 'HEAD']) || ''
-    const test = projectTestCommand(plan.made ? project : plan.path, options.test)
+    let test = typeof options.test === 'string' && options.test.trim() !== '' ? options.test : ''
     const target = options.worktree ? prepareWorktree(project, options.lane) : plan
     const base = gitRead(target.path, ['rev-parse', 'HEAD']) || startHead
     let pending = null
@@ -1056,11 +1056,14 @@ async function runQueueProject({ options, lane, lanes }) {
           if (run.code !== 0 || run.killed) finishPending()
           return { code: run.code, killed: run.killed }
         },
-        runTests: test ? async () => {
-          const outcome = await runTestCommand(test, target.path, options.minutes)
+        runTests: async () => {
+          const command = projectTestCommand(target.path, options.test)
+          if (command === '') return { ok: true }
+          test = command
+          const outcome = await runTestCommand(command, target.path, options.minutes)
           testsFailed = outcome?.ok !== true
           return outcome
-        } : null,
+        },
       })
       formatQueueSummary({ branch: result.branch, results: result.results, tests: test, worktree: options.worktree ? printedRunsFolder(target.path) : '' }).forEach((line) => console.log(line))
       return result.results.some((item) => item.status.startsWith('failed')) ? 1 : 0
