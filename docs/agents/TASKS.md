@@ -1667,3 +1667,24 @@ P164 read the path to a first merged change. Read the code for what happens when
 1. Beside the time window, the recorder keeps at most 20,000 frames and about 20 MB of payload text, trimming the oldest first, and `recorderToReplay` marks the replay `truncated: true` when it trimmed for size. Keep the rolling time window as it is.
 2. Tests, by what they prove: 30,000 frames at one timestamp keep 20,000 and mark the replay truncated; one oversized frame does not grow the kept size past the ceiling; a normal feed is not marked truncated.
 3. Run `node node_modules/vitest/vitest.mjs related --run src/model/sessionRecorder.js` and `npm run build`. Report what passed.
+
+**P184. A full disk or a failed record write is said, not hidden (OpenCode).** Read finding D3 in `docs/agents/AUDIT-2026-11-READINESS-2.md` and this brief only. Use no subagents. Run every command in the foreground. Commit each step as you finish it, and stop starting new work at minute 18. Files: scripts/run-lane.mjs, server/orchestrator.js, tests/run-lane.test.js, tests/orchestrator.test.js, docs/agents/CHANGELOG.md.
+
+1. Every write stream run-lane opens for a lane log has an error listener: on an error it prints one sentence naming the log (masked with `printedRunsFolder`) and the error code, stops writing to that log, and lets the run go on to its record. A failed `appendRunRecord` prints one sentence and sets a non-zero exit code.
+2. In the orchestrator, a chat run record that cannot be appended adds one room message saying the record was not saved and why, instead of being swallowed.
+3. Tests with an injected failing stream and a failing append. Delete nothing and add no retention rule. Run `node node_modules/vitest/vitest.mjs related --run scripts/run-lane.mjs server/orchestrator.js` and `npm run build`. Report what passed.
+
+**P185. A slow page cannot fill the bridge's memory (OpenCode).** Read finding D7 in `docs/agents/AUDIT-2026-11-READINESS-2.md` and this brief only. Use no subagents. Run every command in the foreground. Commit each step as you finish it, and stop starting new work at minute 18. Files: server/index.js, tests/bridge-stream.test.js, docs/agents/CHANGELOG.md, docs/agents/architecture/LIVE.md.
+
+1. Every SSE write (frames, tree, keepalive, reset) goes through one helper that checks the response's `writableLength` after writing. Past 8 MB pending, the bridge ends that client's response and drops it from its client sets. The page reconnects and the P181 reset brings it back up to date.
+2. Tests, by what they prove: a response whose `write` returns false and never drains is ended once its pending bytes pass the cap; a normal client is not ended; other clients keep receiving frames.
+3. Run `node node_modules/vitest/vitest.mjs related --run server/index.js` and `npm run build`. Report what passed.
+
+**P186. Run the full suite on the readiness merges (OpenCode).** Read this brief only. Change no file except your report. Stop at minute 18. Files: docs/agents/RUN-2026-11-13-SUITE-4.md.
+
+1. Run `node scripts/test.mjs` once in the foreground.
+2. For each failing test, run its file alone twice. Write `docs/agents/RUN-2026-11-13-SUITE-4.md`: the commit, the totals, and one line per failure with its file, test name, first assertion line and whether it fails alone. Commit it.
+
+**P187. Review the readiness merges (Codex).** Read `docs/agents/OWNER.md` and this brief only. Change no code. Do not commit: the runner commits your file. Stop at minute 20. Files: docs/agents/AUDIT-2026-11-REVIEW-25.md.
+
+Review, with `git show -m --first-parent SHA`, against the code around each change: `8f3269ca` (P175), `798d759e` (P176), `c30f8e2f` (P177, run records carry head and tests, review check states, failed-head refusal), `87555c4c` (P183, recorder ceiling), `e9e17fed` (P182, forgotten Claude session positions), `792b1745` (P179, a full pinned list refuses new, open and fork), `8b42589c` (P180, chat recovery by exact turn log) and `314e92b6` (P181, reset on a stale or foreign cursor). Hunt for: a merge allowed on a failed head or refused on a passed one; a run record whose `head` is not the commit its tests ran on; a conversation lost or refused wrongly at the saved limit; a recovery record on the wrong log, or none where one is due; a reconnect that leaves a finished run working, or resets on every reconnect; old session lines replayed, or new ones missed; a replay that grows past its ceiling; a test that cannot fail. Write the file: a table of at most 6 findings, the most harmful first, each with `file:line`, what goes wrong and when, the smallest fix, and whether it blocks a push. An empty table with what you checked is a good answer.
