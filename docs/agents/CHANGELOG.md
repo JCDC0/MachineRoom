@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The second readiness review lists 8 problems after days of use and 2 suggested features (P178).
 - A broken package.json stops a queue task with one masked sentence instead of a stand-in test command (P176).
 - A broken package.json stops a queue task with one masked sentence and no node command, and a dry run prints that sentence on its tests line (P176).
 - A dry run prints only the prompt's length, a broken package.json stops a queue task, --help inside a value stays that value, and README's up fallback adds --open (P175).
