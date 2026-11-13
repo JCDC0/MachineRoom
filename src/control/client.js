@@ -12,6 +12,9 @@ export const REQUEST_LIMITS = {
   mergeReview: 140000,
   switchBranch: 140000,
   createBranch: 140000,
+  storage: 60000,
+  previewStorageArchive: 60000,
+  archiveStorage: 120000,
   decide: 10000,
   quickEndpoint: 60000,
 }
@@ -728,6 +731,19 @@ export function createClient({
     switchBranch: ({ branch, confirmed = true } = {}) => request('POST', '/api/git/switch', { branch, confirmed }, REQUEST_LIMITS.switchBranch),
 
     createBranch: ({ name, from, confirmed = true } = {}) => request('POST', '/api/git/branch', { name, from, confirmed }, REQUEST_LIMITS.createBranch),
+
+    storage: () => request('GET', '/api/storage', undefined, REQUEST_LIMITS.storage),
+
+    previewStorageArchive: ({ days } = {}) =>
+      request('POST', '/api/storage/preview', days === undefined ? {} : { days }, REQUEST_LIMITS.previewStorageArchive),
+
+    archiveStorage: ({ days, confirmed = false } = {}) =>
+      request(
+        'POST',
+        '/api/storage/archive',
+        days === undefined ? { confirmed } : { days, confirmed },
+        REQUEST_LIMITS.archiveStorage
+      ),
 
     subscribe(listener) {
       listeners.add(listener)

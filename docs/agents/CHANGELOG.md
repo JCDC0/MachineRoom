@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Settings has a Storage section with sizes by kind, a preview of finished run logs and old recordings older than N days, and Archive, which moves exactly those into runs/archive/YYYY-MM and deletes nothing.
 - Repository has a branch filter and shows at most 200 rows, the current branch first, with Showing N of M branches.
 - A database that appears after the OpenCode reader starts is read from the start time, so the first conversation on a new install becomes frames; an existing database still skips its old history.
 - A failed status, branch or log read carries its own sentence, counts stay null, and Repository and the inspector show the sentence instead of a clean state.
@@ -22,6 +23,7 @@
 - Dispatch offers Ask for recovery on a stopped or failed queue row, and Confirm sends the failed task, the tasks that did not run and the record's missing parts to Main (P216).
 - Reviews offers Ask to prepare on a refused fast forward or a branch with its own commits whose destination moved on (reviews now carry `behind`), and sends the lane, branch, full head and destination to Main after a confirm (P215).
 - Costs show what each lane reported: no runs or a reported 0 reads as $0.00 and 0 tokens, and not reported appears only when its runs gave no number (P214).
+- Storage in Settings shows counts and byte sizes by kind, lists clean merged worktrees with their cleanup command, previews archive candidates older than 1 to 365 days and moves confirmed files into month folders under `<runs>/archive` (P217).
 - Lane Update and Delete read the request body before the saved configuration, so a lane created meanwhile and its key count are kept.
 - The Removed lanes row sums each removed lane's rounded cents, so deleting lanes never moves the total.
 - Removed lanes adds each removed lane's rounded cents for the month and today, so deleting lanes no longer changes the total (P212).
