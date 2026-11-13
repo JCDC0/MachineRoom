@@ -7,8 +7,10 @@ import ReviewsPanel, { MergeConfirmCard } from '../src/ui/panels/ReviewsPanel.js
 import {
   canMerge,
   defaultMergeMessage,
+  isBehindDestination,
   mergeHead,
   patchLines,
+  prepareMergeMessage,
   reviewRow,
 } from '../src/ui/panels/reviews.js'
 import { buttonWithText, click, settle, withDom } from './helpers/uiDom.js'
@@ -33,6 +35,35 @@ describe('reviews helpers', () => {
     ).toBe("Merge hermes's feat/p5-recover-cut-tool-lines")
     expect(defaultMergeMessage({})).toBe('')
     expect(defaultMergeMessage(null)).toBe('')
+  })
+
+  it('isBehindDestination finds a branch with no commits ahead and another head', () => {
+    const head = '1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d'
+    const baseHead = '9f8e7d6c5b4a39281706f5e4d3c2b1a09f8e7d6c'
+    expect(isBehindDestination({ ahead: 0, head, baseHead })).toBe(true)
+    expect(isBehindDestination({ ahead: 0, head: baseHead, baseHead })).toBe(false)
+    expect(isBehindDestination({ ahead: 1, head, baseHead })).toBe(false)
+    expect(isBehindDestination({ error: 'That worktree is missing.', ahead: 0, head, baseHead })).toBe(false)
+  })
+
+  it('prepareMergeMessage carries the lane, branch, full head and destination', () => {
+    const head = '1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d'
+    const text = prepareMergeMessage({
+      lane: 'opencode',
+      branch: 'feat/p215-ask-the-orchestrator',
+      head,
+      base: 'trunk',
+    })
+    expect(text).toContain('Lane: opencode')
+    expect(text).toContain('Branch: feat/p215-ask-the-orchestrator')
+    expect(text).toContain(`Head: ${head}`)
+    expect(text).toContain('Destination: trunk')
+    expect(text).toContain("In the lane's worktree, rebase or merge the branch onto trunk.")
+    expect(text).toContain("Run the project's checks.")
+    expect(text).toContain('Do not merge into trunk.')
+    expect(text).toContain('Do not discard work.')
+    expect(prepareMergeMessage(null)).toBe('')
+    expect(prepareMergeMessage({ lane: 'opencode' })).toBe('')
   })
 
   it('reviewRow formats ahead count, diff counts, dirty state, last run and errors', () => {
@@ -548,5 +579,170 @@ describe('ReviewsPanel and ControlDrawer', () => {
       await settle()
       expect(mergedLanes).toEqual(['opencode', 'hermes'])
     })
+  })
+})
+
+describe('ReviewsPanel Ask to prepare', () => {
+  const destinationHead = '9f8e7d6c5b4a39281706f5e4d3c2b1a09f8e7d6c'
+  const aheadHead = 'a1b2c3d4e5f60718293a4b5c6d7e8f901a2b3c4d'
+  const behindHead = 'b1c2d3e4f5061728394a5b6c7d8e9f0a1b2c3d4e'
+  const refusedHead = 'c1d2e3f40516273849a5b6c7d8e9f0a1b2c3d4e5'
+
+  function makeReview(lane, branch, head, ahead) {
+    return {
+      lane,
+      branch,
+      head,
+      base: 'trunk',
+      baseHead: destinationHead,
+      strategy: 'fast-forward',
+      ahead,
+      dirty: false,
+      files: 1,
+      added: 1,
+      deleted: 0,
+      checks: 'passed',
+    }
+  }
+
+  function reviewCard(container, lane) {
+    return container
+      .querySelectorAll('.review-card')
+      .find((card) => card.querySelector('.review-lane')?.textContent.trim() === lane)
+  }
+
+  it('offers Ask to prepare only on a behind or refused row', async () => {
+    const reviews = [
+      makeReview('ahead', 'feat/ahead', aheadHead, 2),
+      makeReview('behind', 'feat/behind', behindHead, 0),
+      makeReview('refused', 'feat/refused', refusedHead, 1),
+    ]
+    const client = {
+      reviews: async () => reviews,
+      mergeReview: async () => {
+        throw new Error('The lane is not a fast forward of trunk. Rebase it onto trunk and read it again.')
+      },
+      sendOrchestrator: async () => ({ ok: true }),
+      orchestrator: async () => ({}),
+      subscribe: () => () => {},
+    }
+
+    await withDom(async ({ container, root }) => {
+      await act(async () => {
+        root.render(createElement(ReviewsPanel, { client, initialReviews: reviews }))
+      })
+
+      expect(container.querySelectorAll('.review-prepare-btn')).toHaveLength(1)
+      expect(reviewCard(container, 'ahead').querySelector('.review-prepare-btn')).toBeNull()
+      expect(reviewCard(container, 'behind').querySelector('.review-prepare-btn')).not.toBeNull()
+      expect(reviewCard(container, 'refused').querySelector('.review-prepare-btn')).toBeNull()
+
+      await click(root, reviewCard(container, 'refused').querySelector('.review-merge-btn'))
+      const mergeCard = reviewCard(container, 'refused').querySelector('.review-confirm-card')
+      await click(root, buttonWithText(mergeCard, 'Merge'))
+      await settle()
+
+      expect(reviewCard(container, 'refused').querySelector('.review-prepare-btn')).not.toBeNull()
+      expect(container.querySelectorAll('.review-prepare-btn')).toHaveLength(2)
+    })
+  })
+
+  it('names the lane and short head in the card and sends the full head and destination', async () => {
+    const sent = []
+    const reviews = [makeReview('behind', 'feat/behind', behindHead, 0)]
+    const client = {
+      reviews: async () => reviews,
+      sendOrchestrator: async (text) => {
+        sent.push(text)
+        return { ok: true }
+      },
+      orchestrator: async () => ({}),
+      subscribe: () => () => {},
+    }
+
+    await withDom(async ({ container, root }) => {
+      await act(async () => {
+        root.render(createElement(ReviewsPanel, { client, initialReviews: reviews }))
+      })
+
+      const rowCard = reviewCard(container, 'behind')
+      await click(root, buttonWithText(rowCard, 'Ask to prepare'))
+      const confirm = rowCard.querySelector('.review-prepare-card')
+      expect(confirm).not.toBeNull()
+      expect(confirm.textContent).toContain("behind's feat/behind")
+      expect(confirm.textContent).toContain(`(${behindHead.slice(0, 7)})`)
+      expect(confirm.textContent).toContain('into trunk')
+      expect(confirm.textContent).not.toContain(behindHead)
+      expect(sent).toEqual([])
+
+      await click(root, buttonWithText(confirm, 'Send'))
+      await settle()
+
+      expect(sent).toHaveLength(1)
+      expect(sent[0]).toContain('Lane: behind')
+      expect(sent[0]).toContain('Branch: feat/behind')
+      expect(sent[0]).toContain(`Head: ${behindHead}`)
+      expect(sent[0]).toContain('Destination: trunk')
+      expect(rowCard.querySelector('.review-prepare-card')).toBeNull()
+      expect(rowCard.querySelector('[role="status"]')?.textContent).toBe('Sent to Main.')
+    })
+  })
+
+  it('shows the client error under the row and keeps the card open', async () => {
+    const reviews = [makeReview('behind', 'feat/behind', behindHead, 0)]
+    const client = {
+      reviews: async () => reviews,
+      sendOrchestrator: async () => {
+        throw new Error('Main is not connected.')
+      },
+      orchestrator: async () => ({}),
+      subscribe: () => () => {},
+    }
+
+    await withDom(async ({ container, root }) => {
+      await act(async () => {
+        root.render(createElement(ReviewsPanel, { client, initialReviews: reviews }))
+      })
+
+      const rowCard = reviewCard(container, 'behind')
+      await click(root, buttonWithText(rowCard, 'Ask to prepare'))
+      await click(root, buttonWithText(rowCard.querySelector('.review-prepare-card'), 'Send'))
+      await settle()
+
+      const alerts = rowCard.querySelectorAll('[role="alert"]').map((node) => node.textContent)
+      expect(alerts).toContain('Main is not connected.')
+      expect(rowCard.textContent).not.toContain('Sent to Main.')
+      expect(rowCard.querySelector('.review-prepare-card')).not.toBeNull()
+    })
+  })
+
+  it('offers nothing without sendOrchestrator or a readable orchestrator', () => {
+    const reviews = [makeReview('behind', 'feat/behind', behindHead, 0)]
+    const base = { reviews: async () => reviews, subscribe: () => () => {} }
+
+    const withoutSend = renderToString(
+      createElement(ReviewsPanel, { client: base, initialReviews: reviews })
+    )
+    expect(withoutSend).not.toContain('Ask to prepare')
+
+    const withoutRead = renderToString(
+      createElement(ReviewsPanel, {
+        client: { ...base, sendOrchestrator: async () => ({ ok: true }) },
+        initialReviews: reviews,
+      })
+    )
+    expect(withoutRead).not.toContain('Ask to prepare')
+
+    const ready = renderToString(
+      createElement(ReviewsPanel, {
+        client: {
+          ...base,
+          sendOrchestrator: async () => ({ ok: true }),
+          orchestrator: async () => ({}),
+        },
+        initialReviews: reviews,
+      })
+    )
+    expect(ready).toContain('Ask to prepare')
   })
 })

@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Reviews offers Ask to prepare on a refused fast forward or a branch behind its destination, and sends the lane, branch, full head and destination to Main after a confirm (P215).
 - Lane Update and Delete read the request body before the saved configuration, so a lane created meanwhile and its key count are kept.
 - The Removed lanes row sums each removed lane's rounded cents, so deleting lanes never moves the total.
 - Removed lanes adds each removed lane's rounded cents for the month and today, so deleting lanes no longer changes the total (P212).

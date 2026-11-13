@@ -25,6 +25,33 @@ export function canMerge(review) {
   return typeof review.ahead === 'number' && Number.isFinite(review.ahead) && review.ahead > 0
 }
 
+export function isBehindDestination(review) {
+  if (!review || typeof review !== 'object' || review.error) return false
+  const head = typeof review.head === 'string' ? review.head.trim().toLowerCase() : ''
+  const baseHead = typeof review.baseHead === 'string' ? review.baseHead.trim().toLowerCase() : ''
+  const ahead = review.ahead
+  return Boolean(
+    head &&
+      baseHead &&
+      head !== baseHead &&
+      typeof ahead === 'number' &&
+      Number.isFinite(ahead) &&
+      ahead === 0
+  )
+}
+
+export function canAskMain(client) {
+  return Boolean(
+    client &&
+      typeof client.sendOrchestrator === 'function' &&
+      typeof client.orchestrator === 'function'
+  )
+}
+
+export function isFastForwardRefusal(error) {
+  return typeof error === 'string' && /not a fast forward of/i.test(error)
+}
+
 export function mergeHead(row, diff) {
   const rowHead = typeof row?.head === 'string' ? row.head : ''
   if (!diff || typeof diff !== 'object') return { head: rowHead }
@@ -44,6 +71,28 @@ export function defaultMergeMessage(review) {
   if (!lane) return ''
   if (!branch) return `Merge ${lane}`
   return `Merge ${lane}'s ${branch}`
+}
+
+export function prepareMergeMessage(review) {
+  if (!review || typeof review !== 'object') return ''
+  const lane = typeof review.lane === 'string' ? review.lane.trim() : ''
+  const head = typeof review.head === 'string' ? review.head.trim() : ''
+  if (!lane || !head) return ''
+  const branch =
+    typeof review.branch === 'string' && review.branch.trim() ? review.branch.trim() : '(detached)'
+  const destination =
+    typeof review.base === 'string' && review.base.trim() ? review.base.trim() : 'main'
+  return [
+    'Prepare a lane for merge. The owner confirmed this in Reviews.',
+    '',
+    `Lane: ${lane}`,
+    `Branch: ${branch}`,
+    `Head: ${head}`,
+    `Destination: ${destination}`,
+    '',
+    `In the lane's worktree, rebase or merge the branch onto ${destination}. Run the project's checks. Report what you did and the result.`,
+    `Do not merge into ${destination}. Do not discard work.`,
+  ].join('\n')
 }
 
 function formatRunCost(costUsd) {
@@ -87,6 +136,7 @@ export function reviewRow(review) {
       lastRunText: 'no run yet',
       error: null,
       canMerge: false,
+      behindDestination: false,
     }
   }
 
@@ -121,6 +171,7 @@ export function reviewRow(review) {
       lastRunText: null,
       error: String(review.error),
       canMerge: false,
+      behindDestination: false,
     }
   }
 
@@ -155,6 +206,7 @@ export function reviewRow(review) {
     lastRunText: formatLastRun(review.lastRun),
     error: null,
     canMerge: canMerge(review),
+    behindDestination: isBehindDestination(review),
   }
 }
 
