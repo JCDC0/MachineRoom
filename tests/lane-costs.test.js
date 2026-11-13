@@ -109,6 +109,28 @@ describe('laneCosts', () => {
     expect(rowsTotal).toBe(after.summary.spendCents)
   })
 
+  it('rounds each removed lane before summing, so deleting lanes keeps the total', () => {
+    const laneA = { id: 'agent-temp-a', key: 'temp-a', name: 'Temp A' }
+    const laneB = { id: 'agent-temp-b', key: 'temp-b', name: 'Temp B' }
+    const records = [
+      record('temp-a', localTime(0, 9), 0.006),
+      record('temp-b', localTime(0, 10), 0.006),
+    ]
+
+    const before = laneCosts({ records, agents: [...AGENTS, laneA, laneB], now: NOW })
+    const after = laneCosts({ records, agents: AGENTS, now: NOW })
+
+    expect(before.byAgent.slice(-2).map((row) => [row.costCents, row.todayCents])).toEqual([[1, 1], [1, 1]])
+    expect(before.summary.spendCents).toBe(2)
+    expect(after.byAgent.at(-1)).toMatchObject({
+      agentId: 'removed-lanes',
+      agentName: 'Removed lanes',
+      costCents: 2,
+      todayCents: 2,
+    })
+    expect(after.summary.spendCents).toBe(before.summary.spendCents)
+  })
+
   it('shows no removed lanes row when every recorded lane is in the roster', () => {
     const costs = laneCosts({
       records: [record('opencode', localTime(0, 9), 0.5)],

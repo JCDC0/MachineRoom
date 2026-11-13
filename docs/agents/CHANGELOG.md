@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- The Removed lanes row sums each removed lane's rounded cents, so deleting lanes never moves the total.
+- Removed lanes adds each removed lane's rounded cents for the month and today, so deleting lanes no longer changes the total (P212).
 - Review 28 finds overlapping lane writes can lose a new lane and reuse its key, and removed lanes round their spend differently.
 - The full suite passes at 31f73519: 5026 passed, 4 skipped, no failure.
 - Add MCP server sends create, and the bridge and the mock refuse a saved name with one sentence and change nothing; on and off still updates.

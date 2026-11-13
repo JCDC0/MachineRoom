@@ -91,10 +91,10 @@ export function laneCosts({ records = [], agents = [], now = Date.now() } = {}) 
   for (const [lane, total] of totals) {
     if (rosterKeys.has(lane)) continue
     if (!removed) {
-      removed = { cost: 0, today: 0, input: 0, output: 0, hasInput: false, hasOutput: false }
+      removed = { costCents: 0, todayCents: 0, input: 0, output: 0, hasInput: false, hasOutput: false }
     }
-    removed.cost += total.cost
-    removed.today += total.today
+    removed.costCents += Math.round(total.cost * 100)
+    removed.todayCents += Math.round(total.today * 100)
     if (total.hasInput) {
       removed.input += total.input
       removed.hasInput = true
@@ -104,13 +104,12 @@ export function laneCosts({ records = [], agents = [], now = Date.now() } = {}) 
       removed.hasOutput = true
     }
   }
-  const removedCents = removed ? Math.round(removed.cost * 100) : 0
-  if (removedCents > 0) {
+  if (removed && removed.costCents > 0) {
     byAgent.push({
       agentId: 'removed-lanes',
       agentName: 'Removed lanes',
-      costCents: removedCents,
-      todayCents: Math.round(removed.today * 100),
+      costCents: removed.costCents,
+      todayCents: removed.todayCents,
       inputTokens: removed.hasInput ? removed.input : null,
       outputTokens: removed.hasOutput ? removed.output : null,
     })
