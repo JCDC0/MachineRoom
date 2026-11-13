@@ -29,7 +29,7 @@ import {
 } from '../server/endpoints.js'
 import { modelsFor } from '../server/models.js'
 import { readAllLanes } from '../server/agents-config.js'
-import { readKeys } from '../server/family.js'
+import { readKeys, saveKeys } from '../server/family.js'
 import { startLaneBridge } from './helpers/bridge.js'
 import { makeTempDir, removeTempDir } from './helpers/tempRoot.js'
 
@@ -725,6 +725,122 @@ describe('POST /api/endpoints/quick', () => {
     expect(answers[0].body.endpoint.keyName).toBe('single_slot')
     const savedKeys = readKeys(runsDir)
     expect(savedKeys.single_slot).toBe(updatedValue)
+  })
+
+  it('replaces the key of the named endpoint and leaves the provider endpoint alone', async () => {
+    const runsDir = makeTempDir('mr-replace-key-')
+    cleanups.push(async () => removeTempDir(runsDir))
+    saveEndpoints(runsDir, [
+      { name: 'Work', provider: 'OpenRouter', baseUrl: 'https://openrouter.ai/api/v1', keyName: 'Work', models: ['alpha'] },
+      {
+        name: 'OpenRouter',
+        provider: 'OpenRouter',
+        baseUrl: 'https://openrouter.ai/api/v1',
+        keyName: 'OpenRouter',
+        models: ['beta'],
+      },
+    ])
+    saveKeys(runsDir, { Work: 'old-work-value', OpenRouter: 'old-open-value' })
+    const key = 'new-work-value'
+    const answers = []
+    const fetched = []
+    const api = createEndpointsApi({
+      runsFolder: runsDir,
+      sendJson: (_req, _res, status, body) => answers.push({ status, body }),
+      readJsonBody: async () => ({ name: 'Work', provider: 'OpenRouter', keyName: 'Work', key, confirmed: true }),
+      fetchImpl: async (url) => {
+        fetched.push(String(url))
+        throw new Error('no network')
+      },
+    })
+    await api.handle(
+      { method: 'POST', headers: { origin: 'http://localhost:5173' } },
+      {},
+      new URL('http://127.0.0.1/api/endpoints/quick'),
+    )
+    expect(answers).toHaveLength(1)
+    expect(answers[0].status).toBe(200)
+    expect(answers[0].body.endpoint).toMatchObject({ name: 'Work', provider: 'OpenRouter', keyName: 'Work', models: 1 })
+    expect(JSON.stringify(answers[0].body)).not.toContain(key)
+    expect(readKeys(runsDir)).toEqual({ Work: key, OpenRouter: 'old-open-value' })
+    expect(fetched).toEqual([])
+    const endpoints = readEndpoints(runsDir)
+    expect(
+      endpoints.map(({ name, provider, baseUrl, keyName, models }) => ({ name, provider, baseUrl, keyName, models })),
+    ).toEqual([
+      { name: 'Work', provider: 'OpenRouter', baseUrl: 'https://openrouter.ai/api/v1', keyName: 'Work', models: ['alpha'] },
+      {
+        name: 'OpenRouter',
+        provider: 'OpenRouter',
+        baseUrl: 'https://openrouter.ai/api/v1',
+        keyName: 'OpenRouter',
+        models: ['beta'],
+      },
+    ])
+  })
+
+  it('refuses a key replacement for a name that is not saved and creates nothing', async () => {
+    const runsDir = makeTempDir('mr-replace-missing-')
+    cleanups.push(async () => removeTempDir(runsDir))
+    saveEndpoints(runsDir, [
+      {
+        name: 'OpenRouter',
+        provider: 'OpenRouter',
+        baseUrl: 'https://openrouter.ai/api/v1',
+        keyName: 'OpenRouter',
+        models: ['alpha'],
+      },
+    ])
+    saveKeys(runsDir, { OpenRouter: 'old-open-value' })
+    const answers = []
+    const api = createEndpointsApi({
+      runsFolder: runsDir,
+      sendJson: (_req, _res, status, body) => answers.push({ status, body }),
+      readJsonBody: async () => ({
+        name: 'Missing',
+        provider: 'OpenRouter',
+        keyName: 'Missing',
+        key: 'new-missing-value',
+        confirmed: true,
+      }),
+      fetchImpl: async () => ({ ok: true, json: async () => ({ data: [] }) }),
+    })
+    await api.handle(
+      { method: 'POST', headers: { origin: 'http://localhost:5173' } },
+      {},
+      new URL('http://127.0.0.1/api/endpoints/quick'),
+    )
+    expect(answers).toHaveLength(1)
+    expect(answers[0].status).toBe(404)
+    expect(answers[0].body.error).toBe(ENDPOINT_NOT_FOUND_PROBLEM)
+    expect(readEndpoints(runsDir)).toHaveLength(1)
+    expect(readKeys(runsDir)).toEqual({ OpenRouter: 'old-open-value' })
+  })
+
+  it('refuses a shared key slot so the other endpoint keeps its key', async () => {
+    const runsDir = makeTempDir('mr-replace-shared-')
+    cleanups.push(async () => removeTempDir(runsDir))
+    saveEndpoints(runsDir, [
+      { name: 'Work', provider: 'OpenRouter', baseUrl: 'https://openrouter.ai/api/v1', keyName: 'shared', models: ['alpha'] },
+      { name: 'Team', provider: 'OpenRouter', baseUrl: 'https://openrouter.ai/api/v1', keyName: 'shared', models: ['beta'] },
+    ])
+    saveKeys(runsDir, { shared: 'old-shared-value' })
+    const answers = []
+    const api = createEndpointsApi({
+      runsFolder: runsDir,
+      sendJson: (_req, _res, status, body) => answers.push({ status, body }),
+      readJsonBody: async () => ({ name: 'Work', provider: 'OpenRouter', keyName: 'shared', key: 'new-shared-value', confirmed: true }),
+      fetchImpl: async () => ({ ok: true, json: async () => ({ data: [] }) }),
+    })
+    await api.handle(
+      { method: 'POST', headers: { origin: 'http://localhost:5173' } },
+      {},
+      new URL('http://127.0.0.1/api/endpoints/quick'),
+    )
+    expect(answers).toHaveLength(1)
+    expect(answers[0].status).toBe(400)
+    expect(answers[0].body.error).toBe('That key slot is shared with another endpoint.')
+    expect(readKeys(runsDir)).toEqual({ shared: 'old-shared-value' })
   })
 
   it('removes the temporary file when rename fails', () => {

@@ -446,8 +446,13 @@ export function createClient({
 
     saveEndpoint: (draft) => request('POST', '/api/endpoints', draft ?? {}),
 
-    quickEndpoint: ({ provider, key, confirmed = true } = {}) =>
-      request('POST', '/api/endpoints/quick', { provider, key, confirmed }, REQUEST_LIMITS.quickEndpoint),
+    quickEndpoint: ({ provider, key, name, keyName, confirmed = true } = {}) =>
+      request(
+        'POST',
+        '/api/endpoints/quick',
+        { provider, key, confirmed, ...(name ? { name, keyName } : {}) },
+        REQUEST_LIMITS.quickEndpoint
+      ),
 
     deleteEndpoint: ({ name, confirmed = true } = {}) =>
       request('POST', `/api/endpoints/${encodeURIComponent(name ?? '')}/delete`, { confirmed }),

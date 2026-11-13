@@ -19,7 +19,7 @@ import EndpointsPanel, {
   quickProviders,
   quickSavedText,
 } from '../src/ui/EndpointsPanel.jsx'
-import { buttonWithText, click, settle, withDom } from './helpers/uiDom.js'
+import { buttonWithText, click, settle, type, withDom } from './helpers/uiDom.js'
 
 const ENDPOINTS = [
   {
@@ -46,6 +46,12 @@ function renderPanel(props = {}) {
       initialProviders: PROVIDERS,
       ...props,
     }),
+  )
+}
+
+function endpointRow(container, name) {
+  return [...container.querySelectorAll('.endpoints-row')].find(
+    (row) => row.querySelector('.endpoints-name')?.textContent === name,
   )
 }
 
@@ -106,6 +112,10 @@ describe('the quick direct API form', () => {
     expect(quickKeyProblem('OpenRouter', 'x'.repeat(501))).toBe('Keep the key to 500 characters.')
     expect(quickKeyProblem('OpenRouter', 'sk-test')).toBeNull()
   })
+
+  it('names the endpoint in a key replacement', () => {
+    expect(quickConfirmText('OpenRouter', 'Work')).toBe('Save the Work key?')
+  })
 })
 
 describe('EndpointsPanel', () => {
@@ -160,6 +170,92 @@ describe('EndpointsPanel', () => {
       const slots = container.querySelector('#endpoints-key').querySelectorAll('option')
       expect(slots.map((option) => option.getAttribute('value'))).toEqual(['', 'openrouter'])
       expect(container.textContent).not.toContain('slot-secret')
+    })
+  })
+
+  it('replaces the key on the row it was clicked on and names that endpoint', async () => {
+    const endpoints = [
+      {
+        name: 'Work',
+        provider: 'OpenRouter',
+        baseUrl: 'https://openrouter.ai/api/v1',
+        keyName: 'Work',
+        models: ['alpha'],
+      },
+      {
+        name: 'OpenRouter',
+        provider: 'OpenRouter',
+        baseUrl: 'https://openrouter.ai/api/v1',
+        keyName: 'OpenRouter',
+        models: ['beta'],
+      },
+    ]
+    const calls = []
+    const client = {
+      providers: async () => PROVIDERS,
+      endpoints: async () => endpoints,
+      keys: async () => [{ name: 'Work' }, { name: 'OpenRouter' }],
+      quickEndpoint: async (payload) => {
+        calls.push(payload)
+        return { endpoint: { name: payload.name, models: 1 } }
+      },
+    }
+    await withDom(async ({ container, root }) => {
+      await act(async () => {
+        root.render(
+          createElement(EndpointsPanel, {
+            client,
+            initialProviders: PROVIDERS,
+            initialEndpoints: endpoints,
+          })
+        )
+      })
+      await settle()
+
+      await click(root, buttonWithText(endpointRow(container, 'Work'), 'Replace key'))
+      expect(container.textContent).toContain('Replacing the key for Work.')
+      await type(root, container.querySelector('#endpoints-quick-key'), 'sk-work')
+      await click(root, buttonWithText(container.querySelector('.endpoints-quick'), 'Save key'))
+      const card = container.querySelector('.endpoints-confirm')
+      expect(card.textContent).toContain('Save the Work key?')
+      await click(root, buttonWithText(card, 'Save key'))
+      await settle()
+
+      expect(calls).toEqual([
+        { provider: 'OpenRouter', key: 'sk-work', confirmed: true, name: 'Work', keyName: 'Work' },
+      ])
+      expect(container.textContent).toContain('Saved the Work key.')
+    })
+  })
+
+  it('disables Replace key on a row with no provider preset and says why', async () => {
+    const custom = {
+      name: 'Custom One',
+      provider: 'Custom',
+      baseUrl: 'https://custom.example/v1',
+      keyName: 'custom',
+      models: [],
+    }
+    const client = {
+      providers: async () => PROVIDERS,
+      endpoints: async () => [custom],
+      keys: async () => [],
+    }
+    await withDom(async ({ container, root }) => {
+      await act(async () => {
+        root.render(
+          createElement(EndpointsPanel, {
+            client,
+            initialProviders: PROVIDERS,
+            initialEndpoints: [custom],
+          })
+        )
+      })
+      await settle()
+
+      const row = endpointRow(container, 'Custom One')
+      expect(buttonWithText(row, 'Replace key').getAttribute('disabled')).not.toBeNull()
+      expect(row.textContent).toContain('This endpoint has no provider preset to replace its key.')
     })
   })
 
