@@ -2047,3 +2047,42 @@ Hunt for:
 - A test that cannot fail.
 
 Write the file: a table of at most 8 findings, the most harmful first. Give each its `file:line`, what goes wrong and when, the smallest fix, and whether it blocks a push. An empty table that lists what you checked is a good answer.
+
+**P240. The storage archive stays in the runs folder and moves only what was shown (AGY).** Read findings 1 and 7 in `docs/agents/AUDIT-2026-11-REVIEW-29.md` and this brief only. Use no subagents. Run every command in the foreground. Commit each step as you finish it. Files: server/storage.js, src/ui/StorageSettings.jsx, src/control/client.js, src/control/mock.js, tests/storage.test.js, tests/storage-settings.test.js, tests/control-contract.test.js, docs/agents/CHANGELOG.md, docs/agents/architecture/LIVE.md.
+
+1. Finding 1: before any move, resolve the archive folder and the month folder with `realpath`, and refuse the archive with one sentence when either is a symbolic link or junction, or resolves outside the real runs folder. Move each file with an operation that fails when the destination already exists, never one that overwrites it.
+2. Finding 7: the page sends the names it showed in the preview, as `files`. The server makes a fresh preview and moves only the files that are in both lists. It answers with what it moved and what it skipped because the file is no longer eligible. A request with no `files` is refused. Change the real client, the mock and the contract suite together.
+3. Tests, by what they prove: a junction or symbolic link at `archive` or at the month folder refuses the archive, and the source file stays in place (skip the test where the platform cannot make one, and say so); a file that became eligible after the preview is not moved; an existing destination is never overwritten. Each must fail before your change.
+4. Run `node node_modules/vitest/vitest.mjs related --run server/storage.js src/ui/StorageSettings.jsx src/control/client.js src/control/mock.js` and `npm run build`. Report what passed.
+
+**P241. The check command runs without a shell, and every task start accepts it (OpenCode).** Read findings 2, 4 and 6 in `docs/agents/AUDIT-2026-11-REVIEW-29.md` and this brief only. Use no subagents. Run every command in the foreground. Commit each step as you finish it, and stop starting new work at minute 30. Files: scripts/run-lane.mjs, src/briefs/run.js, tests/run-lane.test.js, tests/run-queue.test.js, tests/run-project.test.js, tests/run-worktree.test.js, docs/agents/CHANGELOG.md, docs/agents/architecture/COMMANDS.md.
+
+1. Finding 2: the runner splits the check command into a program and its arguments (double quotes group words), and launches it with `shell: false`. On Windows, `npm` and `npx` launch through Node and npm's own JavaScript entry point, not `npm.cmd`. The working folder stays the lane's worktree. A command holding `|`, `&`, `;`, `<`, `>`, `` ` ``, `$(` or `%NAME%` is refused before the run starts, with `The check command cannot use shell syntax; put it in an npm script.` Put the splitting and the refusal in pure, tested functions in `src/briefs/run.js`.
+2. Finding 4: `--test` is accepted by the single-task argument parser, and a single task (with or without `--worktree`) runs the check after its task the way a queue task does. Read how the queue path runs it first, and reuse it.
+3. Finding 6: a queue task whose harness exits nonzero or is killed writes `queueStatus: 'failed'` (or `'stopped'` for a stop), as the test-failure path already does.
+4. Tests, by what they prove:
+   - `npm test -- --runInBand` splits into its parts.
+   - `npm test && rm x` is refused with the sentence.
+   - The single-task parser accepts `--test` and passes it on.
+   - A queue whose harness exits 3 records `queueStatus: 'failed'` with `queueRemaining`.
+   - Each must fail before your change, and at least one test must go through the real parser, not a fake runner.
+5. Run `node node_modules/vitest/vitest.mjs related --run scripts/run-lane.mjs src/briefs/run.js` and `npm run build`. Report what passed.
+
+**P242. A write route with no Origin needs a token even without lanes (AGY).** Read finding 3 in `docs/agents/AUDIT-2026-11-REVIEW-29.md` and this brief only. Use no subagents. Run every command in the foreground. Commit each step as you finish it. Files: server/runs.js, tests/bridge-routes.test.js, tests/run-lane-route.test.js, docs/agents/CHANGELOG.md, docs/agents/architecture/LIVE.md.
+
+1. In `readActor` in `server/runs.js`, a request with no Origin and no orchestrator registry is refused with 403 and `NO_TOKEN_PROBLEM`, not let through. First grep for every caller of `readActor`, and for tests and scripts that call the runs routes with no Origin, and keep the ones that must work (say which and why in the report).
+2. Tests, by what they prove: on a bridge started without `--lanes`, a run start and a stop with no Origin and no token are refused with 403, and the same requests from an allowed page Origin still work. The refusal must fail before your change.
+3. Run `node node_modules/vitest/vitest.mjs related --run server/runs.js` and `npm run build`. Report what passed.
+
+**P243. A queue's stored tasks hide home paths (OpenCode).** Read finding 8 in `docs/agents/AUDIT-2026-11-REVIEW-29.md` and this brief only. Start after P241 is merged. Use no subagents. Run every command in the foreground. Commit each step as you finish it, and stop starting new work at minute 18. Files: src/briefs/run.js, src/ui/panels/runs.js, tests/run-queue.test.js, tests/panels-runs.test.js, docs/agents/CHANGELOG.md.
+
+1. `maskedQueueTasks` masks the profile and home paths the same way the runner already masks other printed paths, as well as keys. Find that helper and reuse it, don't write a new one. The recovery message built in `src/ui/panels/runs.js` masks them too, for records written before this change.
+2. Tests, by what they prove: a remaining task that holds a path built from `homedir()` is stored and sent without it. Each must fail before your change.
+3. Run `node node_modules/vitest/vitest.mjs related --run src/briefs/run.js src/ui/panels/runs.js` and `npm run build`. Report what passed.
+
+**P244. A failed tree read tries again on its own (OpenCode).** Read finding 5 in `docs/agents/AUDIT-2026-11-REVIEW-29.md` and this brief only. Use no subagents. Run every command in the foreground. Commit each step as you finish it, and stop starting new work at minute 25. Files: server/index.js, tests/tree-read.test.js, docs/agents/CHANGELOG.md, docs/agents/architecture/LIVE.md.
+
+1. While the last full tree read failed or left unreadable folders, the bridge schedules another full read through the existing reader: after 5 seconds, then doubling to at most 60 seconds. A successful full read with no unreadable folders cancels it, and so does shutdown. One retry timer at most.
+2. The folder-shaped `/api/tree` answer is the same age rule as the plain one: a stale `lastTree` while a read is failing still answers, but `/api/health` keeps the problem until a read succeeds.
+3. Tests, by what they prove: with a reader that fails once and then succeeds, and with no file event or new GET, the new file appears and the health problem clears; shutdown leaves no timer. Use fake timers. Each must fail before your change.
+4. Run `node node_modules/vitest/vitest.mjs related --run server/index.js` and `npm run build`. Report what passed.
