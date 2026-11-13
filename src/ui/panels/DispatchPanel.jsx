@@ -9,7 +9,7 @@ import {
 import { subscribeToNotices } from './notices.js'
 import { laneNeedsNetwork } from '../../model/online.js'
 import { TIERS } from '../../policy/route.js'
-import { PROJECT_CONFIRM_LIMIT, PROJECT_QUEUE_TEXT_LIMIT, cancelSplitRun, clearSplitRun, planLaneTasks, projectRunBody, projectRunConfirm, projectRunLabel, projectRunLanes, projectSplitLabel, projectTaskProblem, projectWorktreeName, recordLine, resultWord, splitRunProgress, splitRunSnapshot, splitTasks, startSplitRun, subscribeSplitRun, timeSinceStart } from './runs.js'
+import { PROJECT_CONFIRM_LIMIT, PROJECT_QUEUE_TEXT_LIMIT, cancelSplitRun, clearSplitRun, planLaneTasks, projectRunBody, projectRunConfirm, projectRunLabel, projectRunLanes, projectSplitLabel, projectTaskProblem, projectWorktreeName, queueRecoveryAvailable, queueRecoveryMessage, queueRecoveryPlan, recordLine, resultWord, splitRunProgress, splitRunSnapshot, splitTasks, startSplitRun, subscribeSplitRun, timeSinceStart } from './runs.js'
 
 function projectKey(value) {
   if (typeof value !== 'string') return ''
@@ -64,6 +64,9 @@ export default function DispatchPanel({
   const [projectError, setProjectError] = useState(null)
   const [networkOnline, setNetworkOnline] = useState(true)
   const [routeNonce, setRouteNonce] = useState(0)
+  const [recoveryKey, setRecoveryKey] = useState('')
+  const [recoverySending, setRecoverySending] = useState(false)
+  const [recoveryStatus, setRecoveryStatus] = useState({})
 
   const splitRun = useSyncExternalStore(subscribeSplitRun, splitRunSnapshot, splitRunSnapshot)
   const splitAnswers = splitRun.answers
@@ -78,6 +81,7 @@ export default function DispatchPanel({
   const hasBriefs = typeof client?.briefs === 'function'
   const hasRuns = typeof client?.runs === 'function'
   const hasRouteLane = typeof client?.routeLane === 'function'
+  const hasOrchestrator = typeof client?.sendOrchestrator === 'function'
 
   const selectedBrief = briefs.find((item) => item.id === selectedBriefId)
   const runLane = selectedBrief ? runLaneFor(selectedBrief, runsState.running, agents) : null
@@ -143,6 +147,39 @@ export default function DispatchPanel({
     } finally {
       setRunsLoading(false)
     }
+  }
+
+  async function sendQueueRecovery(record, key) {
+    if (typeof client?.sendOrchestrator !== 'function') return
+    setRecoverySending(true)
+    setRecoveryStatus((current) => {
+      if (!Object.hasOwn(current, key)) return current
+      const next = { ...current }
+      delete next[key]
+      return next
+    })
+    try {
+      await client.sendOrchestrator(queueRecoveryMessage(record, { project: projectName }))
+      setRecoveryStatus((current) => ({ ...current, [key]: { ok: true, message: 'Sent to Main.' } }))
+      setRecoveryKey('')
+    } catch (err) {
+      setRecoveryStatus((current) => ({
+        ...current,
+        [key]: { ok: false, message: err?.message || 'Could not send the message.' },
+      }))
+    } finally {
+      setRecoverySending(false)
+    }
+  }
+
+  function openQueueRecovery(key) {
+    setRecoveryKey(key)
+    setRecoveryStatus((current) => {
+      if (!Object.hasOwn(current, key)) return current
+      const next = { ...current }
+      delete next[key]
+      return next
+    })
   }
 
   async function refreshAgents() {
@@ -1073,14 +1110,86 @@ export default function DispatchPanel({
                   )}
                 </div>
               ))}
-              {runsState.recent.map((record, index) => (
-                <div
-                  key={`recent-${record.lane}-${record.startedAt || index}`}
-                  className={`runs-entry is-recent mono is-${resultWord(record)}`}
-                >
-                  {recordLine(record)}
-                </div>
-              ))}
+              {runsState.recent.map((record, index) => {
+                const key = `recent-${record.lane}-${record.startedAt || index}`
+                const canRecover = hasOrchestrator && queueRecoveryAvailable(record)
+                const plan = canRecover ? queueRecoveryPlan(record, { project: projectName }) : null
+                const status = recoveryStatus[key]
+                const failedLine = plan
+                  ? (plan.number !== null
+                    ? `Task ${plan.number}: ${plan.firstLine || 'the record does not hold the failed task.'}`
+                    : `Failed task: ${plan.firstLine || 'the record does not hold it.'}`)
+                  : ''
+                const remainingLine = plan
+                  ? (plan.remainingCount !== null
+                    ? `${plan.remainingCount} task${plan.remainingCount === 1 ? '' : 's'} did not run.`
+                    : 'The record does not say which tasks did not run.')
+                  : ''
+                return (
+                  <div
+                    key={key}
+                    className={`runs-entry is-recent mono is-${resultWord(record)}`}
+                  >
+                    {recordLine(record)}
+                    {canRecover && (
+                      <div className="brief-confirm-actions">
+                        <button
+                          type="button"
+                          className="brief-run-btn"
+                          onClick={() => openQueueRecovery(key)}
+                        >
+                          Ask for recovery
+                        </button>
+                      </div>
+                    )}
+                    {canRecover && recoveryKey === key && (
+                      <div className="brief-confirm-card" role="region" aria-label="Confirm recovery message">
+                        <div className="brief-confirm-meta mono">
+                          <span className="brief-confirm-lane">Lane: {plan.lane}</span>
+                          <span className="brief-confirm-model">Project: {plan.project}</span>
+                          <span className="brief-confirm-id">Queue branch: {plan.branch || 'not in the record'}</span>
+                        </div>
+                        <div className="brief-confirm-warning">{failedLine}</div>
+                        <div className="brief-confirm-warning">{remainingLine}</div>
+                        {plan.missing.length > 0 && (
+                          <div className="brief-confirm-warning" role="status">
+                            Missing from the record: {plan.missing.join(', ')}.
+                          </div>
+                        )}
+                        <div className="brief-confirm-warning">
+                          This sends one message to Main. It does not discard changes or rerun the queue.
+                        </div>
+                        <div className="brief-confirm-actions">
+                          <button
+                            type="button"
+                            className="brief-confirm-btn"
+                            disabled={recoverySending}
+                            onClick={() => sendQueueRecovery(record, key)}
+                          >
+                            {recoverySending ? 'Sending' : 'Confirm'}
+                          </button>
+                          <button
+                            type="button"
+                            className="brief-cancel-btn"
+                            disabled={recoverySending}
+                            onClick={() => setRecoveryKey('')}
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                    {status && (
+                      <div
+                        className={`brief-copy-status mono ${status.ok ? 'is-ok' : 'is-error'}`}
+                        role={status.ok ? 'status' : 'alert'}
+                      >
+                        {status.message}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
             </div>
           )}
         </div>

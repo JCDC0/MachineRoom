@@ -1,6 +1,8 @@
+import { act, createElement } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createClient } from '../src/control/client.js'
 import { createMockClient } from '../src/control/mock.js'
+import DispatchPanel from '../src/ui/panels/DispatchPanel.jsx'
 import {
   cancelSplitRun,
   clearSplitRun,
@@ -18,6 +20,9 @@ import {
   projectSplitLabel,
   projectTaskProblem,
   projectWorktreeName,
+  queueRecoveryAvailable,
+  queueRecoveryMessage,
+  queueRecoveryPlan,
   recordLine,
   resultWord,
   runStartLine,
@@ -27,6 +32,7 @@ import {
   startSplitRun,
   timeSinceStart,
 } from '../src/ui/panels/runs.js'
+import { buttonWithText, settle, withDom } from './helpers/uiDom.js'
 
 describe('resultWord', () => {
   it('returns finished when exitCode is 0 and killed is false', () => {
@@ -653,6 +659,192 @@ describe('the control client startRun', () => {
     const answer = await client.startRun('opencode', { task: 'Fix it.', worktree: true })
     expect(bodies).toEqual([{ lane: 'opencode', task: 'Fix it.', worktree: true, confirmed: true }])
     expect(answer).toMatchObject({ lane: 'opencode', worktree: true })
+  })
+})
+
+const RECOVERY_BRANCH = 'machineroom/queue-opencode-20261113-120000-123'
+const RECOVERY_TASK = 'Fix the parser\nand add a test.'
+const RECOVERY_TASKS = ['Add the parser', RECOVERY_TASK, 'Write the docs', 'Run the checks']
+
+function recoveryRecord(extra = {}) {
+  return {
+    lane: 'opencode',
+    project: 'C:\\work\\demo',
+    queue: RECOVERY_BRANCH,
+    queueIndex: 2,
+    queueStatus: 'failed: tests',
+    task: RECOVERY_TASK,
+    tasks: RECOVERY_TASKS,
+    note: 'The tests failed.',
+    exitCode: 1,
+    ...extra,
+  }
+}
+
+describe('queueRecoveryAvailable', () => {
+  it('offers recovery only on a queue row whose queueStatus says it failed or stopped', () => {
+    expect(queueRecoveryAvailable({ queue: RECOVERY_BRANCH, queueStatus: 'failed: tests' })).toBe(true)
+    expect(queueRecoveryAvailable({ queue: RECOVERY_BRANCH, queueStatus: 'failed: the queue stopped' })).toBe(true)
+    expect(queueRecoveryAvailable({ queue: RECOVERY_BRANCH, queueStatus: 'stopped by the owner' })).toBe(true)
+    expect(queueRecoveryAvailable({ queue: RECOVERY_BRANCH, queueStatus: 'passed' })).toBe(false)
+    expect(queueRecoveryAvailable({ queue: RECOVERY_BRANCH })).toBe(false)
+    expect(queueRecoveryAvailable({ queueStatus: 'failed: tests' })).toBe(false)
+    expect(queueRecoveryAvailable({ lane: 'agy', briefs: ['P1'], queueStatus: 'failed: tests' })).toBe(false)
+    expect(queueRecoveryAvailable(null)).toBe(false)
+  })
+})
+
+describe('queueRecoveryPlan', () => {
+  it('names the lane, project, branch, failed task number and first line, and the count left', () => {
+    const plan = queueRecoveryPlan(recoveryRecord())
+    expect(plan).toMatchObject({
+      lane: 'opencode',
+      project: 'demo',
+      branch: RECOVERY_BRANCH,
+      number: 2,
+      task: RECOVERY_TASK,
+      firstLine: 'Fix the parser',
+      remainingCount: 2,
+      count: 4,
+      note: 'The tests failed.',
+      missing: [],
+    })
+    expect(plan.remaining).toEqual(['Write the docs', 'Run the checks'])
+  })
+
+  it('reports the parts a record without a task list does not hold', () => {
+    const plan = queueRecoveryPlan({
+      lane: 'opencode',
+      project: 'C:\\work\\demo',
+      queue: RECOVERY_BRANCH,
+      queueIndex: 2,
+      queueStatus: 'failed: tests',
+      task: 'Fix the parser',
+    })
+    expect(plan.remaining).toBeNull()
+    expect(plan.remainingCount).toBeNull()
+    expect(plan.missing).toEqual(['the queue task list', 'how many tasks the queue held', 'the note'])
+  })
+})
+
+describe('queueRecoveryMessage', () => {
+  it('carries the failed task and every task that did not run in full', () => {
+    const message = queueRecoveryMessage(recoveryRecord())
+    expect(message).toContain('Recovery for the opencode lane on demo.')
+    expect(message).toContain(`Queue branch: ${RECOVERY_BRANCH}`)
+    expect(message).toContain('Failed task: task 2.')
+    expect(message).toContain(RECOVERY_TASK)
+    expect(message).toContain('2 tasks did not run:')
+    expect(message).toContain('3. Write the docs')
+    expect(message).toContain('4. Run the checks')
+    expect(message).toContain('Note: The tests failed.')
+    expect(message).toContain("Inspect the uncommitted work in the lane's worktree first")
+    expect(message).toContain('Do not discard changes and do not rerun the queue by itself.')
+  })
+
+  it('says which parts are missing instead of guessing the remaining tasks', () => {
+    const message = queueRecoveryMessage({
+      lane: 'opencode',
+      project: 'C:\\work\\demo',
+      queue: RECOVERY_BRANCH,
+      queueIndex: 2,
+      queueStatus: 'failed: tests',
+      task: 'Fix the parser',
+    })
+    expect(message).toContain("The record does not hold the queue's task list, so the tasks that did not run are not known.")
+    expect(message).toContain('Missing from the record: the queue task list, how many tasks the queue held, the note.')
+    expect(message).not.toContain('Write the docs')
+  })
+})
+
+describe('Dispatch queue recovery', () => {
+  function makeClient(records, send) {
+    return {
+      health: async () => ({ lanes: true }),
+      runs: async () => ({ running: [], recent: records, project: 'demo' }),
+      sendOrchestrator: async (text) => {
+        send.push(text)
+      },
+    }
+  }
+
+  async function mount(root, client) {
+    await act(async () => {
+      root.render(createElement(DispatchPanel, { client, initialAgents: [] }))
+    })
+    await settle()
+  }
+
+  it('offers Ask for recovery only on a stopped or failed queue row', async () => {
+    const send = []
+    const client = makeClient([
+      recoveryRecord(),
+      { lane: 'opencode2', queue: 'machineroom/queue-opencode2-1', task: 'Done.', exitCode: 0 },
+      { lane: 'agy', briefs: ['P1'], exitCode: 1, note: 'The run failed.' },
+    ], send)
+    await withDom(async ({ container, root }) => {
+      await mount(root, client)
+      const buttons = container
+        .querySelectorAll('button')
+        .filter((button) => button.textContent.trim() === 'Ask for recovery')
+      expect(buttons).toHaveLength(1)
+      expect(container.textContent).toContain('opencode')
+      expect(container.textContent).toContain('opencode2')
+      expect(container.textContent).toContain('agy')
+    })
+  })
+
+  it('sends nothing before Confirm and then one message to Main', async () => {
+    const send = []
+    const client = makeClient([recoveryRecord()], send)
+    await withDom(async ({ container, root }) => {
+      await mount(root, client)
+      const ask = buttonWithText(container, 'Ask for recovery')
+      expect(ask).not.toBeNull()
+      await act(async () => {
+        ask.click()
+      })
+      await settle()
+      expect(send).toHaveLength(0)
+      expect(container.textContent).toContain('Lane: opencode')
+      expect(container.textContent).toContain('Project: demo')
+      expect(container.textContent).toContain(`Queue branch: ${RECOVERY_BRANCH}`)
+      expect(container.textContent).toContain('Task 2: Fix the parser')
+      expect(container.textContent).toContain('2 tasks did not run.')
+
+      const confirm = buttonWithText(container, 'Confirm')
+      expect(confirm).not.toBeNull()
+      await act(async () => {
+        confirm.click()
+      })
+      await settle()
+      expect(send).toHaveLength(1)
+      expect(send[0]).toContain(RECOVERY_TASK)
+      expect(send[0]).toContain('3. Write the docs')
+      expect(send[0]).toContain('4. Run the checks')
+      expect(container.textContent).toContain('Sent to Main.')
+    })
+  })
+
+  it('shows the error under the row when the message cannot be sent', async () => {
+    const client = makeClient([recoveryRecord()], [])
+    client.sendOrchestrator = async () => {
+      throw new Error('The orchestrator is not connected.')
+    }
+    await withDom(async ({ container, root }) => {
+      await mount(root, client)
+      const ask = buttonWithText(container, 'Ask for recovery')
+      await act(async () => {
+        ask.click()
+      })
+      await settle()
+      const confirm = buttonWithText(container, 'Confirm')
+      await act(async () => {
+        confirm.click()
+      })
+      await settle()
+      expect(container.textContent).toContain('The orchestrator is not connected.')
+    })
   })
 })
 
