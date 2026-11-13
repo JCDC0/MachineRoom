@@ -1908,3 +1908,10 @@ The three readiness audits read the commands, long use and the panels. Read what
 1. The OpenCode session reader sets its startup time when it starts, whether or not the database exists. A database that already existed at start keeps today's rule: its old history is skipped. A database that first appears after start is read from the startup time, so messages made after the reader started become frames.
 2. Tests, by what they prove: a database created after start emits the first conversation's run; a database present at start still skips its old messages. The first must fail before your change.
 3. Run `npx.cmd vitest related --run server/opencode-sessions.js` and `npm.cmd run build`, and report what passed.
+
+**P223. A queue's record holds what did not run (OpenCode).** P216's Ask for recovery tells Main the remaining tasks only when the record holds them, and today it does not. Read this brief only. Use no subagents. Run every command in the foreground. Commit each step as you finish it, and stop starting new work at minute 25. Files: scripts/run-lane.mjs, src/briefs/run.js, tests/run-queue.test.js, docs/agents/CHANGELOG.md, docs/agents/architecture/COMMANDS.md.
+
+1. Every queue task's record carries `queueSize`, the number of tasks in the queue. The record of the task where the queue stopped (a failed task, failed tests, or a stop) also carries `queueRemaining`: the text of each task after it, in order, each masked with the same key masking `runRecord` uses for `task` and cut to 200 characters. A queue that ends well carries no `queueRemaining`.
+2. Name the fields exactly as above, since `src/ui/panels/runs.js` will read them; do not change that file.
+3. Tests, by what they prove: a three-task queue that fails on task 2 records `queueSize: 3` and task 3's text in `queueRemaining`; a queue that ends well has no `queueRemaining`; a task holding a key-shaped text is masked.
+4. Run `node node_modules/vitest/vitest.mjs related --run scripts/run-lane.mjs src/briefs/run.js` and `npm run build`. Report what passed.
