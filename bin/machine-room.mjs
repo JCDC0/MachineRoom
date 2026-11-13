@@ -249,8 +249,8 @@ if (command === 'doctor') {
   const result = await runDoctorWithProject(options)
   for (const line of result.lines) console.log(line)
   if (result.exitCode === 0) {
-    console.log(checksPassedLine(result.warnings))
     console.log(NEXT_STEP)
+    console.log(checksPassedLine(result.warnings))
   }
   process.exitCode = result.exitCode
 } else if (command === 'up') {

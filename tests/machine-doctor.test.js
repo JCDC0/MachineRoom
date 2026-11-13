@@ -435,7 +435,7 @@ describe('the machine-room doctor command', () => {
       'warn This folder is not a git repository. Source control stays empty. Run git init here to fill it.'
     )
     expect(lines[1]).toBe('ok The project holds 0 files in 0 folders.')
-    expect(lines.slice(-2)).toEqual([checksPassedLine(1), NEXT_STEP])
+    expect(lines.slice(-2)).toEqual([NEXT_STEP, checksPassedLine(1)])
     const runs = process.platform === 'win32'
       ? join(temp, 'localappdata', 'MachineRoom', 'runs')
       : join(temp, 'state', 'machineroom', 'runs')
@@ -452,7 +452,7 @@ describe('the machine-room doctor command', () => {
     expect(run.stderr).toBe('')
     expect(run.stdout).toContain(`ok The project folder ${project} exists.`)
     const lines = run.stdout.trim().split(/\r?\n/)
-    expect(lines.slice(-2)).toEqual([ALL_CHECKS_PASSED, NEXT_STEP])
+    expect(lines.slice(-2)).toEqual([NEXT_STEP, ALL_CHECKS_PASSED])
   })
 
   it('refuses a folder and --root together in one sentence', async () => {
