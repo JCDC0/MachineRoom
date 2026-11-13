@@ -1,11 +1,12 @@
 import { execFileSync } from 'node:child_process'
-import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs'
+import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, renameSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs'
 import { lstat, readdir, realpath } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { createBridge } from '../server/index.js'
 import {
+  ARCHIVE_CHANGED_REASON,
   ARCHIVE_PATH_PROBLEM,
   CONFIRM_PROBLEM,
   DAYS_PROBLEM,
@@ -928,5 +929,138 @@ describe('server/storage', () => {
     expect(existsSync(secondLog)).toBe(true)
     expect(existsSync(join(fixture.runs, 'archive', '2026-09', 'agy-20260915-100000-001.log'))).toBe(false)
     expect(existsSync(thirdLog)).toBe(true)
+  })
+
+  it('skips the file, keeps the source, leaves the outside folder empty, and continues when a month or archive folder becomes a junction during the move', async (ctx) => {
+    const fixture = buildSyntheticFixture()
+    const outsideMonth = join(fixture.base, 'outside-during-move')
+    mkdirSync(outsideMonth, { recursive: true })
+    const old80Ms = NOW_MS - 80 * DAY_MS
+    const augLog = join(fixture.runs, 'agy-20260820-100000-001.log')
+    const sepLog = join(fixture.runs, 'agy-20260910-100000-001.log')
+    writeAgedFile(augLog, 'keep-aug-source', old80Ms)
+    const sepBytes = writeAgedFile(sepLog, 'move-sep-source', OLD_45_MS)
+
+    const linkType = process.platform === 'win32' ? 'junction' : 'dir'
+    let symlinkBlocked = false
+    const archived = await applyStorageArchive({
+      runsFolder: fixture.runs,
+      projectRoot: fixture.project,
+      days: 30,
+      files: ['agy-20260820-100000-001.log', 'agy-20260910-100000-001.log'],
+      now: () => NOW_MS,
+      beforeMove: async (item) => {
+        if (item.name !== 'agy-20260820-100000-001.log') return
+        const monthDir = join(fixture.runs, 'archive', '2026-08')
+        const asideDir = join(fixture.base, 'aside-2026-08')
+        renameSync(monthDir, asideDir)
+        try {
+          symlinkSync(outsideMonth, monthDir, linkType)
+        } catch (error) {
+          if (error?.code === 'EPERM' || error?.code === 'EACCES' || error?.code === 'ENOTSUP') {
+            renameSync(asideDir, monthDir)
+            symlinkBlocked = true
+            return
+          }
+          throw error
+        }
+      },
+    })
+    if (symlinkBlocked) {
+      ctx.skip()
+      return
+    }
+
+    expect(archived.ok).toBe(true)
+    expect(archived.count).toBe(1)
+    expect(archived.totalBytes).toBe(sepBytes)
+    expect(archived.moved.map((item) => item.name)).toEqual(['agy-20260910-100000-001.log'])
+    expect(archived.skipped).toEqual([
+      { name: 'agy-20260820-100000-001.log', reason: 'The archive folder changed during the move.' },
+    ])
+    expect(existsSync(augLog)).toBe(true)
+    expect(readFileSync(augLog, 'utf8')).toBe('keep-aug-source')
+    expect(readdirSync(outsideMonth)).toEqual([])
+    expect(existsSync(sepLog)).toBe(false)
+    expect(readFileSync(join(fixture.runs, 'archive', '2026-09', 'agy-20260910-100000-001.log'), 'utf8')).toBe('move-sep-source')
+
+    const copyFixture = buildSyntheticFixture()
+    const outsideCopyDir = join(copyFixture.base, 'outside-copy')
+    mkdirSync(outsideCopyDir, { recursive: true })
+    const copyLog = join(copyFixture.runs, 'agy-20260912-100000-001.log')
+    writeAgedFile(copyLog, 'keep-copy-source', OLD_45_MS)
+
+    const copyResult = await applyStorageArchive({
+      runsFolder: copyFixture.runs,
+      projectRoot: copyFixture.project,
+      days: 30,
+      files: ['agy-20260912-100000-001.log'],
+      now: () => NOW_MS,
+      linkFn: async () => {
+        const error = new Error('cross device')
+        error.code = 'EXDEV'
+        throw error
+      },
+      beforeMove: async () => {
+        const monthDir = join(copyFixture.runs, 'archive', '2026-09')
+        renameSync(monthDir, join(copyFixture.base, 'aside-copy-2026-09'))
+        symlinkSync(outsideCopyDir, monthDir, linkType)
+      },
+    })
+    expect(copyResult.count).toBe(0)
+    expect(copyResult.moved).toEqual([])
+    expect(copyResult.skipped).toEqual([
+      { name: 'agy-20260912-100000-001.log', reason: 'The archive folder changed during the move.' },
+    ])
+    expect(existsSync(copyLog)).toBe(true)
+    expect(readFileSync(copyLog, 'utf8')).toBe('keep-copy-source')
+    expect(readdirSync(outsideCopyDir)).toEqual([])
+
+    const archiveSwapFixture = buildSyntheticFixture()
+    const outsideArchive = join(archiveSwapFixture.base, 'outside-archive')
+    mkdirSync(join(outsideArchive, '2026-09'), { recursive: true })
+    const swapLog = join(archiveSwapFixture.runs, 'agy-20260915-100000-001.log')
+    writeAgedFile(swapLog, 'keep-archive-swap-source', OLD_45_MS)
+
+    const swapResult = await applyStorageArchive({
+      runsFolder: archiveSwapFixture.runs,
+      projectRoot: archiveSwapFixture.project,
+      days: 30,
+      files: ['agy-20260915-100000-001.log'],
+      now: () => NOW_MS,
+      beforeMove: async () => {
+        const archiveDir = join(archiveSwapFixture.runs, 'archive')
+        renameSync(archiveDir, join(archiveSwapFixture.base, 'aside-archive'))
+        symlinkSync(outsideArchive, archiveDir, linkType)
+      },
+    })
+    expect(swapResult.count).toBe(0)
+    expect(swapResult.moved).toEqual([])
+    expect(swapResult.skipped).toEqual([
+      { name: 'agy-20260915-100000-001.log', reason: ARCHIVE_CHANGED_REASON },
+    ])
+    expect(ARCHIVE_CHANGED_REASON).toBe('The archive folder changed during the move.')
+    expect(existsSync(swapLog)).toBe(true)
+    expect(readFileSync(swapLog, 'utf8')).toBe('keep-archive-swap-source')
+    expect(readdirSync(join(outsideArchive, '2026-09'))).toEqual([])
+
+    const directFixture = buildSyntheticFixture()
+    const directArchiveDir = join(directFixture.runs, 'archive')
+    const directMonthDir = join(directArchiveDir, '2026-09')
+    mkdirSync(directMonthDir, { recursive: true })
+    const directSource = join(directFixture.runs, 'agy-20260916-100000-001.log')
+    const directDest = join(directMonthDir, 'agy-20260916-100000-001.log')
+    writeAgedFile(directSource, 'keep-direct-source', OLD_45_MS)
+    await expect(
+      moveFileSafe(directSource, directDest, {
+        realArchiveDir: directArchiveDir,
+        realpathFn: async () => {
+          throw new Error('ENOENT')
+        },
+      })
+    ).rejects.toThrow(ARCHIVE_CHANGED_REASON)
+    expect(existsSync(directSource)).toBe(true)
+    expect(readFileSync(directSource, 'utf8')).toBe('keep-direct-source')
+    expect(existsSync(directDest)).toBe(false)
   })
 })
