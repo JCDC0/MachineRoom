@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- P273: a backup lane whose worktree is the main checkout or another lane's is refused with the problem, and the run stays failed.
 - P273: a project task or queue that fails over returns the backup's record, start head and branch, so its check and bookkeeping use the backup's run.
 - P273: a harness program that cannot start counts as a failed start, so the run moves to its backup lane and its record says why.
 - P273: a readiness retry keeps the backup prompt builder, so a failover after the retry gives the backup its own worktree and branch.

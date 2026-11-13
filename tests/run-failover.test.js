@@ -1,6 +1,6 @@
 import { spawn, spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
-import { basename, join } from 'node:path'
+import { basename, dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it, vi } from 'vitest'
 import { branchFor, buildPrompt } from '../src/briefs/briefs.js'
@@ -101,10 +101,11 @@ async function runFailover({ laneKey, lane, lanes, runs, prompt = 'Do it.', prom
   const recordingsExisted = existsSync(RECORDINGS)
   const indexBefore = existsSync(indexPath) ? readFileSync(indexPath, 'utf8') : null
   const logs = []
+  const check = { mainCheckout: dirname(runs), lanes, home: join(dirname(runs), 'home'), temp: join(dirname(runs), 'temp'), runs }
   const spy = vi.spyOn(console, 'log').mockImplementation((line) => logs.push(String(line)))
   try {
     const result = await startLane({
-      options: { lane: laneKey, minutes: 1 },
+      options: { lane: laneKey, minutes: 1, folderCheck: check },
       lane,
       lanes,
       wanted: [BRIEF],
@@ -127,8 +128,8 @@ describe('a lane that hits its quota hands its run to a backup lane', { timeout:
   it('starts the same brief once on the backup lane with a -on- branch and links both records', async () => {
     const base = makeTempDir('machine-room-failover-')
     try {
-      const first = join(base, 'first')
-      const backup = join(base, 'backup')
+      const first = join(base, '.worktrees', 'first')
+      const backup = join(base, '.worktrees', 'backup')
       const runs = join(base, 'runs')
       const failCount = join(base, 'fail-count.txt')
       const okCount = join(base, 'ok-count.txt')
@@ -159,8 +160,8 @@ describe('a lane that hits its quota hands its run to a backup lane', { timeout:
   it('keeps the backup prompt when a readiness retry moves the run', async () => {
     const base = makeTempDir('machine-room-failover-ready-')
     try {
-      const first = join(base, 'first')
-      const backup = join(base, 'backup')
+      const first = join(base, '.worktrees', 'first')
+      const backup = join(base, '.worktrees', 'backup')
       const runs = join(base, 'runs')
       const readyCount = join(base, 'ready-count.txt')
       const okCount = join(base, 'ok-count.txt')
@@ -205,8 +206,8 @@ describe('a lane that hits its quota hands its run to a backup lane', { timeout:
   it('moves the run when the harness program cannot start at all', async () => {
     const base = makeTempDir('machine-room-failover-spawn-')
     try {
-      const first = join(base, 'first')
-      const backup = join(base, 'backup')
+      const first = join(base, '.worktrees', 'first')
+      const backup = join(base, '.worktrees', 'backup')
       const runs = join(base, 'runs')
       const okCount = join(base, 'ok-count.txt')
       makeRepo(first)
@@ -234,9 +235,9 @@ describe('a lane that hits its quota hands its run to a backup lane', { timeout:
   it('does not move again when the backup run also fails', async () => {
     const base = makeTempDir('machine-room-failover-again-')
     try {
-      const first = join(base, 'first')
-      const backup = join(base, 'backup')
-      const third = join(base, 'third')
+      const first = join(base, '.worktrees', 'first')
+      const backup = join(base, '.worktrees', 'backup')
+      const third = join(base, '.worktrees', 'third')
       const runs = join(base, 'runs')
       const failCount = join(base, 'fail-count.txt')
       const backupCount = join(base, 'backup-count.txt')
@@ -446,8 +447,8 @@ describe('a lane that hits its quota hands its run to a backup lane', { timeout:
   it('leaves the run failed with one sentence when the backup lane is busy', async () => {
     const base = makeTempDir('machine-room-failover-busy-')
     try {
-      const first = join(base, 'first')
-      const backup = join(base, 'backup')
+      const first = join(base, '.worktrees', 'first')
+      const backup = join(base, '.worktrees', 'backup')
       const runs = join(base, 'runs')
       const failCount = join(base, 'fail-count.txt')
       const okCount = join(base, 'ok-count.txt')
@@ -466,6 +467,37 @@ describe('a lane that hits its quota hands its run to a backup lane', { timeout:
       expect(records[0].failover).toEqual({ kind: 'rate-limit', to: 'agy' })
       expect(count(okCount)).toBe(0)
       expect(logs).toContain('The backup lane agy is busy, so the run stays failed.')
+    } finally {
+      rmSync(base, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+    }
+  })
+
+  it('refuses a backup whose worktree is the main checkout', async () => {
+    const base = makeTempDir('machine-room-failover-main-')
+    try {
+      const first = join(base, '.worktrees', 'first')
+      const runs = join(base, 'runs')
+      const failCount = join(runs, 'fail-count.txt')
+      const okCount = join(runs, 'ok-count.txt')
+      makeRepo(base)
+      writeFileSync(join(base, '.gitignore'), '.worktrees/\nruns/\n')
+      gitIn(base, ['add', '-A'])
+      gitIn(base, ['commit', '-q', '-m', 'Ignore the lane folders and runs'])
+      makeRepo(first, failScript(failCount))
+      mkdirSync(runs, { recursive: true })
+      const lanes = {
+        opencode: { name: 'Fail lane', worktree: first, fallback: 'agy', cli: { harness: 'opencode', bin: process.execPath, model: 'fake/fail', commits: 'runner' } },
+        agy: { name: 'Backup lane', worktree: base, cli: { harness: 'opencode', bin: process.execPath, model: 'fake/ok', commits: 'runner' } },
+      }
+      const { result, logs } = await runFailover({ laneKey: 'opencode', lane: lanes.opencode, lanes, runs })
+      expect(result.code).toBe(1)
+      const records = readRecords(runs)
+      expect(records).toHaveLength(1)
+      expect(records[0].failover).toEqual({ kind: 'rate-limit', to: 'agy' })
+      expect(count(okCount)).toBe(0)
+      expect(logs).toContain(`The lane worktree ${base} is the main checkout, so the runner will not start there.`)
+      expect(gitIn(base, ['branch', '--show-current'])).toBe('main')
+      expect(gitIn(base, ['status', '--porcelain'])).toBe('')
     } finally {
       rmSync(base, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
     }

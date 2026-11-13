@@ -585,6 +585,16 @@ function resolvedLanes(lanes) {
   }))
 }
 
+function folderCheckFor(lanes) {
+  return {
+    mainCheckout: realPath(mainCheckout()),
+    lanes: resolvedLanes(lanes),
+    home: realPath(homedir()),
+    temp: realPath(process.env.TEMP || tmpdir()),
+    runs: realPath(runsFolder()),
+  }
+}
+
 function projectTestCommand(project, given) {
   if (typeof given === 'string' && given.trim() !== '') return given
   const file = join(project, 'package.json')
@@ -1330,19 +1340,17 @@ async function main() {
     return 1
   }
 
+  const folderCheck = folderCheckFor(lanes)
   const folderProblems = briefWorktreeProblems({
     worktree: typeof lane.worktree === 'string' && lane.worktree.trim() !== '' ? realPath(lane.worktree) : '',
     laneKey: options.lane,
-    mainCheckout: realPath(mainCheckout()),
-    lanes: resolvedLanes(lanes),
-    home: realPath(homedir()),
-    temp: realPath(process.env.TEMP || tmpdir()),
-    runs: realPath(runsFolder()),
+    ...folderCheck,
   })
   if (folderProblems.length > 0) {
     folderProblems.forEach((sentence) => console.log(sentence))
     return 1
   }
+  options.folderCheck = folderCheck
 
   const briefs = parseBriefs(read('TASKS.md'))
   const problems = briefProblems({
@@ -1409,6 +1417,14 @@ function recordRoom(record, toolLines, lanes) {
 async function startFailover({ laneKey, target, lanes, options, wanted, prompt, promptFor = null, folder, project, task, queue = null, base = '', deferRecord, openLog, failedRecord, failedStartBranch }) {
   const fallbackLane = lanes?.[target]
   if (!fallbackLane) return null
+  if (!project) {
+    const worktree = typeof fallbackLane.worktree === 'string' && fallbackLane.worktree.trim() !== '' ? realPath(fallbackLane.worktree) : ''
+    const problems = briefWorktreeProblems({ worktree, laneKey: target, ...(options?.folderCheck ?? folderCheckFor(lanes)) })
+    if (problems.length > 0) {
+      problems.forEach((sentence) => console.log(sentence))
+      return null
+    }
+  }
   let lock
   try {
     refuseRunningLane(target, project ? '' : fallbackLane.worktree, folder)
