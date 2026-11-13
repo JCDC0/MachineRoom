@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Dispatch scopes GET /api/control/runs to the room's project and shows each project run's first task line, failure note, queue status and test status on finished rows.
 - The late-session meta test moves the runs folder time forward, as P165 did for the test above it, so Windows CI rereads the meta.
 - The runs folder is listed only when its change time moves or once a minute, and a finished log quiet for an hour leaves the ten-second check until it grows.
 - Retry under a reply sends to the conversation on screen, whatever To says now, so a sub's retry never goes to Main.
