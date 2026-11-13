@@ -420,6 +420,39 @@ export function currentRunFrames(history) {
   return [...latest.values()]
 }
 
+export const SSE_PENDING_LIMIT = 8 * 1024 * 1024
+
+export function createSseWriter({ limit = SSE_PENDING_LIMIT, onDrop = null } = {}) {
+  const dropped = new WeakSet()
+
+  function drop(res) {
+    if (!res || dropped.has(res)) return
+    dropped.add(res)
+    if (typeof onDrop === 'function') onDrop(res)
+    try {
+      res.end()
+    } catch {}
+  }
+
+  function write(res, text) {
+    if (!res || dropped.has(res)) return false
+    if ((res.writableLength ?? 0) > limit) {
+      drop(res)
+      return false
+    }
+    let ok = true
+    try {
+      ok = res.write(text) !== false
+    } catch {
+      drop(res)
+      return false
+    }
+    return ok
+  }
+
+  return { write, drop, isDropped: (res) => !res || dropped.has(res) }
+}
+
 export function trimHistory(history, now = Date.now) {
   const currentTime = typeof now === 'function' ? now() : Number(now ?? Date.now())
   const lastFrameAt = new Map()
@@ -762,6 +795,13 @@ export function createBridge(options = {}) {
   const treeClientVersion = new WeakMap()
   const folderClients = new WeakSet()
   const treeClients = new WeakSet()
+  const sseWriter = createSseWriter({
+    onDrop: (res) => {
+      clients.delete(res)
+      treeClients.delete(res)
+      folderClients.delete(res)
+    },
+  })
   const history = []
   let nextId = 0
   let stopped = false
@@ -798,11 +838,11 @@ export function createBridge(options = {}) {
   let parserByAgentId = new Map()
 
   function writeSseFrame(res, entry) {
-    res.write(`id: ${entry.id}\nevent: frame\ndata: ${entry.data}\n\n`)
+    sseWriter.write(res, `id: ${entry.id}\nevent: frame\ndata: ${entry.data}\n\n`)
   }
 
   function writeSseChange(res, event) {
-    res.write(`event: change\ndata: ${JSON.stringify(event)}\n\n`)
+    sseWriter.write(res, `event: change\ndata: ${JSON.stringify(event)}\n\n`)
   }
 
   function notifyHeard(event) {
@@ -863,7 +903,7 @@ export function createBridge(options = {}) {
   }
 
   function writeWholeTree(client, tree) {
-    client.write(treeEvent(tree, null, folderClients.has(client) ? FOLDER_SHAPE : null, treeVersion, treeStart))
+    sseWriter.write(client, treeEvent(tree, null, folderClients.has(client) ? FOLDER_SHAPE : null, treeVersion, treeStart))
     treeClientVersion.set(client, treeVersion)
   }
 
@@ -897,7 +937,7 @@ export function createBridge(options = {}) {
       }
       treeClientVersion.set(client, treeVersion)
       if (changesSince.added.length > 0 || changesSince.removed.length > 0) {
-        client.write(treeDeltaEvent(current.root, changesSince.added, changesSince.removed, treeVersion, treeStart))
+        sseWriter.write(client, treeDeltaEvent(current.root, changesSince.added, changesSince.removed, treeVersion, treeStart))
       }
     }
     return true
@@ -1258,7 +1298,7 @@ export function createBridge(options = {}) {
 
   const heartbeatTimer = setInterval(() => {
     for (const client of clients) {
-      client.write(': keepalive\n\n')
+      sseWriter.write(client, ': keepalive\n\n')
     }
   }, heartbeatMs)
   heartbeatTimer.unref?.()
@@ -1427,7 +1467,7 @@ export function createBridge(options = {}) {
       const wantsHistory = url.searchParams.get('history') === '1'
       if (lastEventId) {
         if (eventResetNeeded(history, lastEventId, treeStart, nextId)) {
-          res.write(`event: reset\ndata: ${JSON.stringify({ start: treeStart })}\n\n`)
+          sseWriter.write(res, `event: reset\ndata: ${JSON.stringify({ start: treeStart })}\n\n`)
           for (const entry of currentRunFrames(history)) writeSseFrame(res, entry)
           for (const entry of history) writeSseFrame(res, entry)
         } else {
@@ -1442,6 +1482,8 @@ export function createBridge(options = {}) {
         }
       }
 
+      if (sseWriter.isDropped(res)) return
+
       clients.add(res)
       if (url.searchParams.has('tree')) {
         treeClients.add(res)
@@ -1454,20 +1496,22 @@ export function createBridge(options = {}) {
             if (changes !== null) {
               treeClientVersion.set(res, treeVersion)
               if ((changes.added.length > 0 || changes.removed.length > 0) && lastTree) {
-                res.write(treeDeltaEvent(lastTree.root, changes.added, changes.removed, treeVersion, treeStart))
+                sseWriter.write(res, treeDeltaEvent(lastTree.root, changes.added, changes.removed, treeVersion, treeStart))
               }
             } else if (lastTree) {
-              res.write(treeEvent(lastTree, null, folderClients.has(res) ? FOLDER_SHAPE : null, treeVersion, treeStart))
+              sseWriter.write(res, treeEvent(lastTree, null, folderClients.has(res) ? FOLDER_SHAPE : null, treeVersion, treeStart))
               treeClientVersion.set(res, treeVersion)
             }
           } else if (lastTree) {
-            res.write(treeEvent(lastTree, null, folderClients.has(res) ? FOLDER_SHAPE : null, treeVersion, treeStart))
+            sseWriter.write(res, treeEvent(lastTree, null, folderClients.has(res) ? FOLDER_SHAPE : null, treeVersion, treeStart))
             treeClientVersion.set(res, treeVersion)
           }
         }
       }
       req.on('close', () => {
         clients.delete(res)
+        treeClients.delete(res)
+        folderClients.delete(res)
       })
       return
     }
