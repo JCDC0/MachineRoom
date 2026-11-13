@@ -5,7 +5,7 @@ import { claudeProjectSlug, createClaudeSessionsReader } from '../server/claude-
 import { SESSION_HARNESSES, harnessByAdapter, harnessByKey } from '../server/harnesses/index.js'
 import { createBridge } from '../server/index.js'
 import { createSessionsSource } from '../server/sessions-source.js'
-import { buildActivities } from '../src/model/pipeline.js'
+import { buildActivities, createPipeline } from '../src/model/pipeline.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 
 const AGENT = {
@@ -703,12 +703,17 @@ describe('sessions source', () => {
     }
   })
 
-  it('reads only the new tool call when a forgotten file grows', () => {
+  it('reads only the new tool call when a forgotten file grows, through the live pipeline', () => {
     const { projectRoot, home, runs, sessionsFolder } = setup()
     let currentTime = 1000000
     const now = () => currentTime
     const frames = []
     const reader = makeReader({ projectRoot, home, runs, frames, now, idleMs: 1000, idlePollMs: 1000 })
+    const pipeline = createPipeline({ agents: [AGENT], tree: { rootName: 'app', files: [], dirs: [] } })
+    const activities = []
+    function feed(list) {
+      for (const frame of list) activities.push(...pipeline.push(frame))
+    }
     reader.tick()
 
     const read = join(projectRoot, 'src', 'math.js')
@@ -722,25 +727,34 @@ describe('sessions source', () => {
       idleIds.push(id)
     }
     reader.tick()
+    feed(frames)
     expect(logFrames(frames)).toHaveLength(201)
+    expect(activities.filter((activity) => activity.type === 'tool.start')).toHaveLength(201)
 
     currentTime += 2000
     reader.tick()
     expect(reader.sessions().size).toBe(0)
     const forgottenId = idleIds.find((id) => !reader.evicted().has(id))
     expect(forgottenId).toBeDefined()
+    expect(activities.some((activity) => activity.type === 'tool.start' && activity.id === `call-${forgottenId}`)).toBe(true)
 
     const before = frames.length
+    const activityCount = activities.length
     appendFileSync(join(sessionsFolder, `${forgottenId}.jsonl`), jsonLines([
       sessionLine('user', { role: 'user', content: 'A new turn.' }, { sessionId: forgottenId }, projectRoot),
       sessionLine('assistant', { role: 'assistant', content: [readUse('fresh-1', join(projectRoot, 'src', 'fresh.js'))], stop_reason: 'end_turn' }, { sessionId: forgottenId }, projectRoot),
     ]))
     reader.tick()
+    feed(frames.slice(before))
 
     const sent = chunks(frames.slice(before))
     expect(sent).toHaveLength(1)
     expect(sent[0].message.content[0].id).toBe('fresh-1')
     expect(JSON.stringify(frames.slice(before))).not.toContain('call-sess-grow')
+
+    const fresh = activities.slice(activityCount).filter((activity) => activity.type === 'tool.start')
+    expect(fresh).toHaveLength(1)
+    expect(fresh[0]).toMatchObject({ id: 'fresh-1', runId: `${forgottenId}:2` })
   })
 
   it('drops finished subagent buffers from session.children once result is read', () => {
