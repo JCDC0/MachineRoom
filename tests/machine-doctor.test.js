@@ -536,7 +536,8 @@ describe('the machine-room doctor command', () => {
 
     for (const run of runs) {
       expect(run.code).toBe(1)
-      expect(run.stderr.trim().split(/\r?\n/)[0]).toBe('Give the project folder once, as FOLDER or --root FOLDER.')
+      expect(run.stdout).toBe('')
+      expect(run.stderr).toBe('Give the project folder once, as FOLDER or --root FOLDER.\n')
     }
   })
 

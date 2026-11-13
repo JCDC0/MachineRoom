@@ -81,7 +81,11 @@ function parseArgs(argv, names = OPTION_NAMES, { folder = false } = {}) {
     options[names[flag]] = value
   }
   if (firstFolder !== undefined) {
-    if (options.projectRoot !== undefined) throw new Error('Give the project folder once, as FOLDER or --root FOLDER.')
+    if (options.projectRoot !== undefined) {
+      const error = new Error('Give the project folder once, as FOLDER or --root FOLDER.')
+      error.usage = false
+      throw error
+    }
     options.projectRoot = firstFolder
   }
   return options
@@ -236,7 +240,7 @@ try {
   options = parseArgs(command === 'serve' ? argv : argv.slice(1), names, { folder: command === 'doctor' })
 } catch (error) {
   console.error(error.message)
-  console.error(USAGE)
+  if (error.usage !== false) console.error(USAGE)
   process.exit(1)
 }
 
