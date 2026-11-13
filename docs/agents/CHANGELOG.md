@@ -1,6 +1,9 @@
 # Changelog
 
 ## Unreleased
+- P249: `src/model/conversation.js` turns a Claude, OpenCode, Codex or AGY log into prompt, agent, tool and result entries, masks keys and home paths, keeps the last 2,000 entries and cuts each text to 4,000 characters.
+- P249: `GET /api/control/runs/conversation` answers a run's conversation from its record and log, refuses a log outside the runs folder with 400 and an unknown run with 404, and reads only the last 8 MB with `cut: true`.
+- P249: `runConversation({ lane, startedAt })` reads that route on the control client and the mock, with contract tests.
 - P248: the full suite passes at a01af28f, 5,189 passed and 4 skipped in 281 files.
 - P247: the check command keeps escaped quotes and refuses an unclosed one, and the bridge refuses shell syntax when the command is saved or a run starts.
 - P246: the archive checks the new file's real path lies in the archive folder before removing the source, and otherwise removes the copy and skips the file.

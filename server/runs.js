@@ -1110,10 +1110,12 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
         return true
       }
       let harness = ''
-      const lanes = readStartLanes({ lanesFile: laneFile, runsFolder: recordsDir() })
-      if (lanes && Object.hasOwn(lanes, lane) && lanes[lane] && typeof lanes[lane] === 'object') {
-        harness = typeof lanes[lane].cli?.harness === 'string' ? lanes[lane].cli.harness : ''
-      }
+      try {
+        const lanes = readStartLanes({ lanesFile: laneFile, runsFolder: recordsDir() })
+        if (lanes && Object.hasOwn(lanes, lane) && lanes[lane] && typeof lanes[lane] === 'object') {
+          harness = typeof lanes[lane].cli?.harness === 'string' ? lanes[lane].cli.harness : ''
+        }
+      } catch {}
       let isRunning = false
       for (const item of running.values()) {
         if (item.entry.lane === lane && item.entry.startedAt === record.startedAt) {

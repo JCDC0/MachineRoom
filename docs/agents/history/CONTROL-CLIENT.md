@@ -1,3 +1,17 @@
+# Control client: a lane run's conversation
+
+Task P249 adds one method to `src/control/client.js`, `src/control/mock.js`, `CLIENT_METHODS` and `tests/control-contract.test.js`:
+
+| Method | Bridge route | Returns |
+| --- | --- | --- |
+| `runConversation({ lane, startedAt })` | `GET /api/control/runs/conversation?lane=NAME&startedAt=ISO` | `{ lane, startedAt, harness, running, entries, cut? }` |
+
+`entries` holds `{ role, text, tool, at }` in log order. `role` is `prompt` for the task the runner gave the agent, `agent` for the agent's own words, `tool` for a tool call with its name in `tool` and its one-line label in `text`, `result` for the run's end line, and `line` for a line the reader cannot place. `at` is an ISO time when the log line carries one, and `null` otherwise. The bridge sets the prompt's `at` to the run's start time. The reader keeps the last 2,000 entries, cuts each text to 4,000 characters, masks keys and home paths, and reads `claude`, `opencode`, `codex` and `agy` through the existing parsers. Any other harness gives `line` entries.
+
+The bridge finds the run in `runs.jsonl` by lane and start time and reads the log path from that record only. A path that resolves outside the runs folder is refused with 400 `The run's log is outside the runs folder.`; an unknown lane or run answers 404 `No run of that lane started at that time.`, and a missing log answers 404 `The run's log is missing.`. A log over 8 MB is read from its last 8 MB and the answer adds `cut: true`. The method is a read, so the bridge's Host and Origin gate applies and no orchestrator token is needed.
+
+The mock answers the same shape from its running and recent runs. It rejects with the same sentence when no run matches. The contract suite checks the bridge answer and the mock answer, and checks that both refuse an unknown start time.
+
 # Control client: Storage and archive preview
 
 Task P217 adds three storage methods to `src/control/client.js`, `src/control/mock.js`, `CLIENT_METHODS` and `tests/control-contract.test.js`:
