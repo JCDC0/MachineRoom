@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- An update or delete reads the saved lane configuration after its request body, so a lane created while that body is held open is kept and its key is not reused (P211).
 - Review 28 finds overlapping lane writes can lose a new lane and reuse its key, and removed lanes round their spend differently.
 - The full suite passes at 31f73519: 5026 passed, 4 skipped, no failure.
 - Add MCP server sends create, and the bridge and the mock refuse a saved name with one sentence and change nothing; on and off still updates.

@@ -585,6 +585,9 @@ export function createAgentsConfigApi(options = {}) {
         return true
       }
       const key = updateMatch[1]
+      const body = await readJsonBody(req, res)
+      if (body === null) return true
+
       const baseLanes = getBaseLanes()
       if (Object.hasOwn(baseLanes, key)) {
         sendJson(req, res, 400, { error: LANES_JSON_UPDATE_PROBLEM })
@@ -597,9 +600,6 @@ export function createAgentsConfigApi(options = {}) {
         sendJson(req, res, 404, { error: laneNotFoundProblem(key) })
         return true
       }
-
-      const body = await readJsonBody(req, res)
-      if (body === null) return true
 
       if (body.confirmed !== true) {
         sendJson(req, res, 400, { error: CONFIRM_UPDATE_PROBLEM })
@@ -695,6 +695,14 @@ export function createAgentsConfigApi(options = {}) {
         return true
       }
 
+      const body = await readJsonBody(req, res)
+      if (body === null) return true
+
+      if (body.confirmed !== true) {
+        sendJson(req, res, 400, { error: CONFIRM_DELETE_PROBLEM })
+        return true
+      }
+
       const baseLanes = getBaseLanes()
       const config = readAgentsConfig(runsDir)
       const hiddenFile = projectLanesFileFor(projectRoot, runsDir)
@@ -708,14 +716,6 @@ export function createAgentsConfigApi(options = {}) {
 
       if (typeof isWorking === 'function' && isWorking(key)) {
         sendJson(req, res, 409, { error: laneRunningProblem(key) })
-        return true
-      }
-
-      const body = await readJsonBody(req, res)
-      if (body === null) return true
-
-      if (body.confirmed !== true) {
-        sendJson(req, res, 400, { error: CONFIRM_DELETE_PROBLEM })
         return true
       }
 
