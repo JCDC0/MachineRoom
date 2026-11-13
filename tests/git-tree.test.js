@@ -11,6 +11,7 @@ import {
   GIT_START,
   createGitTree,
   layoutGitTree,
+  mergeGitLabels,
 } from '../src/engine/gitTree.js'
 
 const context2d = {
@@ -303,20 +304,64 @@ describe('layoutGitTree', () => {
     expect(layoutGitTree(commits, branches)).toEqual(layoutGitTree(commits, branches))
   })
 
-  it('labels at most 12 tips, the current branch first and then the newest', () => {
-    const commits = [commit('root', [], 0)]
-    const branches = [{ name: 'main', head: 'root', current: true }]
-    for (let index = 0; index < 15; index += 1) {
-      const sha = `b${String(index).padStart(2, '0')}`
-      commits.unshift(commit(sha, ['root'], 100 + index))
-      branches.push({ name: `branch-${String(index).padStart(2, '0')}`, head: sha, current: false })
-    }
+  it('merges five labels on neighbouring commits into one that names the count', () => {
+    const commits = linearCommits(6)
+    const branches = [{ name: 'main', head: 'c5', current: true }]
+    for (let index = 1; index <= 4; index += 1) branches.push({ name: `lane-${index}`, head: `c${index}`, current: false })
     const layout = layoutGitTree(commits, branches)
-    expect(layout.labels).toHaveLength(GIT_MAX_LABELS)
-    expect(layout.labels[0]).toMatchObject({ name: 'main', current: true })
-    const newest = Array.from({ length: GIT_MAX_LABELS - 1 }, (_, index) => `branch-${String(14 - index).padStart(2, '0')}`)
-    expect(layout.labels.slice(1).map((label) => label.name)).toEqual(newest)
+
+    expect(layout.labels).toHaveLength(1)
+    expect(layout.labels[0]).toMatchObject({ name: 'main +4', count: 5, current: true })
+    expect(layout.labels[0].names).toEqual(['main', 'lane-4', 'lane-3', 'lane-2', 'lane-1'])
+    expect(layout.labels[0].title).toBe('main, lane-4, lane-3, lane-2, lane-1')
   })
+
+  it('keeps labels far apart separate', () => {
+    const commits = linearCommits(20)
+    const branches = [
+      { name: 'main', head: 'c19', current: true },
+      { name: 'old', head: 'c0', current: false },
+    ]
+    const layout = layoutGitTree(commits, branches)
+
+    expect(layout.labels).toHaveLength(2)
+    expect(layout.labels.map((label) => label.name)).toEqual(['main', 'old'])
+    expect(layout.labels.every((label) => label.count === 1 && label.title === label.name)).toBe(true)
+  })
+
+  it('counts every label it cannot show past the cap', () => {
+    const labels = Array.from({ length: GIT_MAX_LABELS + 3 }, (_, index) => ({
+      name: `lane-${String(index).padStart(2, '0')}`,
+      sha: `s${index}`,
+      current: index === 0,
+      x: index * 1000,
+      y: 0,
+      z: 0,
+    }))
+    const merged = mergeGitLabels(labels)
+
+    expect(merged).toHaveLength(GIT_MAX_LABELS)
+    expect(merged[0].current).toBe(true)
+    const last = merged.at(-1)
+    expect(last.count).toBe(4)
+    expect(last.name).toBe('lane-11 +3')
+    expect(last.names).toEqual(['lane-11', 'lane-12', 'lane-13', 'lane-14'])
+    for (const index of [11, 12, 13, 14]) expect(last.title).toContain(`lane-${index}`)
+  })
+
+  it('gives the same merged labels for the same input', () => {
+    const labels = Array.from({ length: 5 }, (_, index) => ({
+      name: `lane-${index}`,
+      sha: `s${index}`,
+      current: index === 0,
+      x: index * 60,
+      y: 0,
+      z: 0,
+    }))
+    expect(mergeGitLabels(labels)).toEqual(mergeGitLabels(labels))
+    expect(mergeGitLabels([])).toEqual([])
+  })
+
 })
 
 function disposals(scene) {
@@ -373,10 +418,11 @@ describe('createGitTree', () => {
     named.branches = [...switched.branches, { name: 'new-at-head', head: 'f2', current: false }]
     expect(tree.setState({ ...named, commits: switched.commits })).toBe(true)
     const labels = tree.layout().labels
-    expect(labels.map((label) => label.name)).toContain('new-at-head')
-    const atHead = labels.filter((label) => label.sha === 'f2').map((label) => label.y)
-    expect(atHead.length).toBeGreaterThan(1)
-    expect(new Set(atHead).size).toBe(atHead.length)
+    const atHead = labels.filter((label) => label.sha === 'f2')
+    expect(atHead).toHaveLength(1)
+    expect(atHead[0].name).toBe('feature +1')
+    expect(atHead[0].title).toContain('new-at-head')
+    expect(labels.map((label) => label.name)).not.toContain('main +1')
     expect(tree.setState({ git: false })).toBe(true)
     expect(tree.layout()).toBe(null)
     tree.dispose()

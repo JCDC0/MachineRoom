@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import { OVERVIEW, viewBasis } from './camera.js'
 import { HUB_CENTER } from './hub.js'
 import { WHITE, YELLOW, still, textSprite } from './sprites.js'
 
@@ -8,7 +9,8 @@ export const GIT_MAX_WIDTH = 1400
 export const GIT_LEAN_STEP = 76
 export const GIT_MAX_LABELS = 12
 export const GIT_LABEL_LIFT = 18
-export const GIT_LABEL_STACK = 44
+export const GIT_LABEL_WIDTH = 120
+export const GIT_LABEL_HEIGHT = 36
 export const GIT_FOCUS_DIST = 1700
 export const GIT_HIT_MARGIN = 60
 export const GIT_START = {
@@ -30,6 +32,88 @@ function nameOrder(a, b) {
   if (a.name < b.name) return -1
   if (a.name > b.name) return 1
   return 0
+}
+
+function nameWidth(name) {
+  const text = String(name ?? '')
+  return Math.max(GIT_LABEL_WIDTH, text.length * 17 + 16)
+}
+
+export function mergeGitLabels(labels, { yaw = OVERVIEW.yaw, pitch = OVERVIEW.pitch, width = 0, height = GIT_LABEL_HEIGHT, max = GIT_MAX_LABELS } = {}) {
+  const list = Array.isArray(labels) ? labels : []
+  if (list.length === 0) return []
+  const { right, up } = viewBasis(yaw, pitch)
+  const boxes = list.map((label, index) => {
+    const x = Number(label?.x)
+    const y = Number(label?.y)
+    const z = Number(label?.z)
+    const px = Number.isFinite(x) ? x : 0
+    const py = Number.isFinite(y) ? y : 0
+    const pz = Number.isFinite(z) ? z : 0
+    return {
+      index,
+      label,
+      x: px * right.x + py * right.y + pz * right.z,
+      y: px * up.x + py * up.y + pz * up.z,
+      width: Number(width) > 0 ? Number(width) : nameWidth(label?.name),
+      height: Number(height) > 0 ? Number(height) : GIT_LABEL_HEIGHT,
+    }
+  })
+  const parent = boxes.map((_, index) => index)
+  const find = (index) => {
+    let at = index
+    while (parent[at] !== at) {
+      parent[at] = parent[parent[at]]
+      at = parent[at]
+    }
+    return at
+  }
+  const join = (a, b) => {
+    const rootA = find(a)
+    const rootB = find(b)
+    if (rootA !== rootB) parent[Math.max(rootA, rootB)] = Math.min(rootA, rootB)
+  }
+  for (let i = 0; i < boxes.length; i += 1) {
+    for (let j = i + 1; j < boxes.length; j += 1) {
+      const a = boxes[i]
+      const b = boxes[j]
+      if (Math.abs(a.x - b.x) < (a.width + b.width) / 2 && Math.abs(a.y - b.y) < (a.height + b.height) / 2) join(i, j)
+    }
+  }
+  const groups = new Map()
+  for (let index = 0; index < boxes.length; index += 1) {
+    const root = find(index)
+    const group = groups.get(root)
+    if (group) group.push(boxes[index])
+    else groups.set(root, [boxes[index]])
+  }
+  const merged = [...groups.values()].map((group) => {
+    const first = group[0].label
+    const names = group.map((box) => box.label.name)
+    return {
+      ...first,
+      name: names.length > 1 ? `${first.name} +${names.length - 1}` : first.name,
+      names,
+      count: names.length,
+      title: names.join(', '),
+    }
+  })
+  const cap = Math.floor(Number(max) || 0)
+  if (cap > 0 && merged.length > cap) {
+    const kept = merged.slice(0, cap)
+    const rest = merged.slice(cap)
+    const last = kept[cap - 1]
+    const names = [...last.names, ...rest.flatMap((label) => label.names)]
+    kept[cap - 1] = {
+      ...last,
+      name: `${last.names[0]} +${names.length - 1}`,
+      names,
+      count: names.length,
+      title: names.join(', '),
+    }
+    return kept
+  }
+  return merged
 }
 
 function timeOf(commit) {
@@ -191,19 +275,16 @@ export function layoutGitTree(commits, branches = [], head = '') {
     })
   }
   tips.sort((a, b) => Number(b.current) - Number(a.current) || b.time - a.time || nameOrder(a, b))
-  const onCommit = new Map()
-  const labels = tips.slice(0, GIT_MAX_LABELS).map((tip) => {
-    const below = onCommit.get(tip.sha) ?? 0
-    onCommit.set(tip.sha, below + 1)
-    return {
+  const labels = mergeGitLabels(
+    tips.map((tip) => ({
       name: tip.name,
       sha: tip.sha,
       current: tip.current,
       x: tip.x,
-      y: tip.y + GIT_LABEL_LIFT + below * GIT_LABEL_STACK,
+      y: tip.y + GIT_LABEL_LIFT,
       z: tip.z,
-    }
-  })
+    })),
+  )
 
   const headIndex = trunkHead ? commitPlaces.findIndex((commit) => commit.sha === trunkHead) : -1
 
