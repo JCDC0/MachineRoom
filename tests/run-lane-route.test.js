@@ -6,8 +6,16 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { createBridge } from '../server/index.js'
 import { activeLanesFileFor, writeActiveLanes } from '../server/active-lanes.js'
 import { gitPath } from '../server/programPath.js'
-import { postJson, waitFor } from './helpers/bridge.js'
+import { getJson, waitFor } from './helpers/bridge.js'
 import { makeTempDir } from './helpers/tempRoot.js'
+
+function pagePost(url, body, origin) {
+  return getJson(url, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', origin },
+    body: JSON.stringify(body),
+  })
+}
 
 const REPO_ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)))
 
@@ -133,7 +141,7 @@ function readCalls(file) {
 describe('a run started with no lane', () => {
   it('routes a brief and names the lane and the policy reason', async () => {
     const rig = await startRig()
-    const answer = await postJson(`${rig.url}/api/control/runs`, { briefs: ['P31'], confirmed: true })
+    const answer = await pagePost(`${rig.url}/api/control/runs`, { briefs: ['P31'], confirmed: true }, rig.url)
     expect(answer.status).toBe(202)
     expect(answer.body.lane).toBe('opencode2')
     expect(answer.body.briefs).toEqual(['P31'])
@@ -144,7 +152,7 @@ describe('a run started with no lane', () => {
 
   it('routes a task when the lane is auto and skips a busy lane', async () => {
     const rig = await startRig({ project: true, active: ['opencode2', 'opencode3', 'opencode'], lock: 'opencode2' })
-    const answer = await postJson(`${rig.url}/api/control/runs`, { lane: 'auto', task: MEDIUM_TASK, confirmed: true })
+    const answer = await pagePost(`${rig.url}/api/control/runs`, { lane: 'auto', task: MEDIUM_TASK, confirmed: true }, rig.url)
     expect(answer.status).toBe(202)
     expect(answer.body.lane).toBe('opencode')
     expect(answer.body.routed).toEqual({
@@ -158,11 +166,11 @@ describe('a run started with no lane', () => {
   it('routes a queue by the largest tier among its tasks', async () => {
     const rig = await startRig({ project: true, active: ['opencode2', 'opencode'] })
     execFileSync(gitPath(), ['init'], { cwd: rig.root, stdio: 'ignore' })
-    const answer = await postJson(`${rig.url}/api/control/runs`, {
+    const answer = await pagePost(`${rig.url}/api/control/runs`, {
       lane: 'auto',
       tasks: [SMALL_TASK, MEDIUM_TASK],
       confirmed: true,
-    })
+    }, rig.url)
     expect(answer.status).toBe(202)
     expect(answer.body.lane).toBe('opencode')
     expect(answer.body.routed).toEqual({
@@ -175,11 +183,11 @@ describe('a run started with no lane', () => {
 
   it('starts a named lane as before and adds no route', async () => {
     const rig = await startRig()
-    const answer = await postJson(`${rig.url}/api/control/runs`, {
+    const answer = await pagePost(`${rig.url}/api/control/runs`, {
       lane: 'opencode3',
       briefs: ['P31'],
       confirmed: true,
-    })
+    }, rig.url)
     expect(answer.status).toBe(202)
     expect(answer.body.lane).toBe('opencode3')
     expect(answer.body).not.toHaveProperty('routed')
@@ -189,7 +197,7 @@ describe('a run started with no lane', () => {
 
   it('answers 409 and the reason when no lane is free', async () => {
     const rig = await startRig({ active: [] })
-    const answer = await postJson(`${rig.url}/api/control/runs`, { briefs: ['P31'], confirmed: true })
+    const answer = await pagePost(`${rig.url}/api/control/runs`, { briefs: ['P31'], confirmed: true }, rig.url)
     expect(answer.status).toBe(409)
     expect(answer.body).toEqual({ error: 'Every lane is busy or turned off.' })
     expect(readCalls(rig.calls)).toEqual([])
@@ -197,7 +205,7 @@ describe('a run started with no lane', () => {
 
   it('answers the manual sentence when no lane choice is saved', async () => {
     const rig = await startRig({ project: true, active: null })
-    const answer = await postJson(`${rig.url}/api/control/runs`, { lane: 'auto', task: MEDIUM_TASK, confirmed: true })
+    const answer = await pagePost(`${rig.url}/api/control/runs`, { lane: 'auto', task: MEDIUM_TASK, confirmed: true }, rig.url)
     expect(answer.status).toBe(400)
     expect(answer.body).toEqual({ error: 'Pick the lanes for this project first.' })
     expect(readCalls(rig.calls)).toEqual([])
@@ -206,7 +214,7 @@ describe('a run started with no lane', () => {
   it('refuses when the lane folder has no policy file', async () => {
     const rig = await startRig()
     rmSync(join(rig.briefs, 'policy.json'))
-    const answer = await postJson(`${rig.url}/api/control/runs`, { briefs: ['P31'], confirmed: true })
+    const answer = await pagePost(`${rig.url}/api/control/runs`, { briefs: ['P31'], confirmed: true }, rig.url)
     expect(answer.status).toBe(404)
     expect(answer.body).toEqual({ error: 'The policy file is missing.' })
     expect(readCalls(rig.calls)).toEqual([])
@@ -214,10 +222,10 @@ describe('a run started with no lane', () => {
 
   it('keeps the named lane refusal and the brief check', async () => {
     const rig = await startRig()
-    const bad = await postJson(`${rig.url}/api/control/runs`, { lane: 'nobody', briefs: ['P31'], confirmed: true })
+    const bad = await pagePost(`${rig.url}/api/control/runs`, { lane: 'nobody', briefs: ['P31'], confirmed: true }, rig.url)
     expect(bad.status).toBe(400)
     expect(bad.body).toEqual({ error: 'Choose a lane from the list.' })
-    const brief = await postJson(`${rig.url}/api/control/runs`, { briefs: ['Z99'], confirmed: true })
+    const brief = await pagePost(`${rig.url}/api/control/runs`, { briefs: ['Z99'], confirmed: true }, rig.url)
     expect(brief.status).toBe(400)
     expect(brief.body).toEqual({ error: 'Choose a brief from the list.' })
     expect(readCalls(rig.calls)).toEqual([])
