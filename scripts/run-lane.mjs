@@ -664,7 +664,9 @@ function writeProjectRecord({ record, folder, startHead, startBranch, tests = ''
   if (git.branch !== '') record.branch = git.branch
   record.commits = git.commits
   const head = gitRead(folder, ['rev-parse', 'HEAD']) ?? ''
-  if (head !== '') record.head = head
+  const testedDiffers = (tests === 'failed' || tests === 'passed') && gitRead(folder, ['status', '--porcelain']) !== ''
+  if (head !== '' && !testedDiffers) record.head = head
+  else if (testedDiffers) delete record.head
   if (tests === 'passed' || tests === 'failed' || tests === 'none') record.tests = tests
   appendRunRecord(record)
   console.log(`record: ${printedRunsFolder(runsFile())}`)

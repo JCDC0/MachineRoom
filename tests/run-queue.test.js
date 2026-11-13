@@ -6,6 +6,7 @@ import { afterAll, describe, expect, it } from 'vitest'
 import { commitMessage, formatQueueSummary, parseQueue, parseQueueArgs, runQueue, QUEUE_SUBJECT_LIMIT, QUEUE_TASK_LIMIT, QUEUE_TASK_TEXT_LIMIT } from '../src/briefs/queue.js'
 import { DEFAULT_MINUTES } from '../src/briefs/run.js'
 import { gitPath } from '../server/programPath.js'
+import { createReviewsApi } from '../server/reviews.js'
 import { releaseLaneLock } from '../scripts/lane-lock.mjs'
 import { takeProjectLock, printedRunsFolder } from '../scripts/run-lane.mjs'
 import { killTree } from '../server/processTree.js'
@@ -709,10 +710,145 @@ describe('a queue that stops', () => {
       expect(result.code).toBe(1)
       expect(result.stdout).toContain('1. failed: tests')
       const records = readFileSync(join(runs, 'runs.jsonl'), 'utf8').trim().split(/\r?\n/).map((line) => JSON.parse(line))
-      expect(records.at(-1)).toMatchObject({ lane: 'fake', exitCode: 1, queueStatus: 'failed: tests', base: head, head, tests: 'failed' })
+      expect(records.at(-1)).toMatchObject({ lane: 'fake', exitCode: 1, queueStatus: 'failed: tests', base: head, tests: 'failed' })
+      expect(records.at(-1)).not.toHaveProperty('head')
       expect(records.at(-1).commits).toEqual([])
       const meta = JSON.parse(readFileSync(records.at(-1).log.replace(/\.log$/i, '.meta.json'), 'utf8'))
       expect(meta.base).toBe(head)
+    } finally {
+      remove(parent)
+    }
+  }, 60000)
+
+  it('keeps head on a failed test record when the working tree matches HEAD', async () => {
+    const parent = makeTempDir('machine-room-queue-')
+    try {
+      const repo = initRepo(parent)
+      const runs = join(parent, 'machineroom-runs')
+      const file = join(parent, 'queue.txt')
+      writeFileSync(file, 'Check the repo.\n')
+      writeFileSync(join(repo, 'run'), "console.log(JSON.stringify({ type: 'text', timestamp: Date.now(), sessionID: 'ses_fake', part: { id: 'prt_1', type: 'text', text: 'ok' } }))\n")
+      git(repo, ['add', 'run'])
+      git(repo, ['commit', '-m', 'no-op fake lane'])
+      const head = git(repo, ['rev-parse', 'HEAD']).trim()
+      const lanes = laneFile(parent, {
+        name: 'fake',
+        worktree: join(parent, 'worktree'),
+        cli: { harness: 'opencode', bin: process.execPath, model: 'opencode/fake' },
+      })
+      const result = await runLane(['fake', '--project', repo, '--queue', file, '--test', 'node -e "process.exit(1)"'], {
+        TEMP: parent,
+        MACHINEROOM_RUNS: runs,
+        MACHINEROOM_LANES_FILE: lanes,
+      })
+      expect(result.code).toBe(1)
+      expect(result.stdout).toContain('1. failed: tests')
+      const records = readFileSync(join(runs, 'runs.jsonl'), 'utf8').trim().split(/\r?\n/).map((line) => JSON.parse(line))
+      expect(records.at(-1)).toMatchObject({ lane: 'fake', exitCode: 1, queueStatus: 'failed: tests', base: head, head, tests: 'failed' })
+    } finally {
+      remove(parent)
+    }
+  }, 60000)
+
+  it('keeps H passed and merges it after a failing second task has its edits discarded', async () => {
+    const parent = makeTempDir('machine-room-queue-')
+    try {
+      const repo = initRepo(parent)
+      const room = join(parent, 'room')
+      cpSync(TEMPLATE_REPO, room, { recursive: true })
+      const lanes = join(room, 'lanes.json')
+      writeFileSync(lanes, `${JSON.stringify({
+        fake: {
+          name: 'Fake lane',
+          harness: 'OpenCode',
+          worktree: join(parent, 'unused-worktree'),
+          cli: { harness: 'opencode', bin: process.execPath, model: 'opencode/fake' },
+        },
+      }, null, 2)}\n`)
+      git(room, ['add', 'lanes.json'])
+      git(room, ['commit', '-m', 'Add lanes file'])
+
+      const runs = join(parent, 'machineroom-runs')
+      const file = join(parent, 'queue.txt')
+      writeFileSync(file, 'First task.\n---\nSecond task.\n')
+      writeFileSync(join(repo, 'package.json'), `${JSON.stringify({ scripts: { test: 'node check.cjs' } })}\n`)
+      writeFileSync(join(repo, 'check.cjs'), "if (require('node:fs').existsSync('broken.txt')) process.exit(1)\n")
+      writeFileSync(join(repo, 'run'), [
+        "const { writeFileSync } = require('node:fs')",
+        "const args = process.argv.join(' ')",
+        "if (args.includes('Second task')) writeFileSync('broken.txt', 'bad\\n')",
+        "else writeFileSync('good.txt', 'ok\\n')",
+        "console.log(JSON.stringify({ type: 'text', timestamp: Date.now(), sessionID: 'ses_fake', part: { id: 'prt_1', type: 'text', text: 'done' } }))",
+        '',
+      ].join('\n'))
+      git(repo, ['add', '-A'])
+      git(repo, ['commit', '-m', 'Add test check and fake lane'])
+      const startHead = git(repo, ['rev-parse', 'HEAD']).trim()
+
+      const result = await runLane(['fake', '--project', repo, '--worktree', '--queue', file], {
+        TEMP: parent,
+        MACHINEROOM_RUNS: runs,
+        MACHINEROOM_LANES_FILE: lanes,
+      })
+      expect(result.code).toBe(1)
+      expect(result.stdout).toContain('1. committed')
+      expect(result.stdout).toContain('2. failed: tests')
+
+      const worktree = join(repo, '.worktrees', 'fake')
+      const madeHead = git(worktree, ['rev-parse', 'HEAD']).trim()
+      expect(madeHead).not.toBe(startHead)
+      expect(git(worktree, ['status', '--porcelain']).trim()).toContain('broken.txt')
+
+      const records = readFileSync(join(runs, 'runs.jsonl'), 'utf8').trim().split(/\r?\n/).map((line) => JSON.parse(line))
+      expect(records).toHaveLength(2)
+      expect(records[0]).toMatchObject({ lane: 'fake', exitCode: 0, head: madeHead, tests: 'passed' })
+      expect(records[1]).toMatchObject({ lane: 'fake', exitCode: 1, queueStatus: 'failed: tests', tests: 'failed' })
+      expect(records[1]).not.toHaveProperty('head')
+
+      git(worktree, ['checkout', '--', '.'])
+      git(worktree, ['clean', '-fd'])
+      expect(git(worktree, ['status', '--porcelain']).trim()).toBe('')
+      expect(git(worktree, ['rev-parse', 'HEAD']).trim()).toBe(madeHead)
+
+      const answers = []
+      let body = null
+      const api = createReviewsApi({
+        projectRoot: repo,
+        briefsDir: room,
+        runsFolder: runs,
+        sendJson: (req, res, status, payload) => answers.push({ status, payload }),
+        readJsonBody: async () => body,
+        orchestrators: () => null,
+      })
+      await api.handle(
+        { method: 'GET', headers: { origin: 'http://localhost:5173' } },
+        {},
+        new URL('http://127.0.0.1/api/control/reviews')
+      )
+      const list = answers.at(-1)
+      expect(list.status).toBe(200)
+      expect(list.payload.lanes).toHaveLength(1)
+      expect(list.payload.lanes[0]).toMatchObject({
+        lane: 'fake',
+        head: madeHead,
+        base: 'main',
+        baseHead: startHead,
+        strategy: 'fast-forward',
+        dirty: false,
+        checks: 'passed',
+      })
+
+      body = { confirmed: true, head: madeHead, base: 'main', baseHead: startHead }
+      await api.handle(
+        { method: 'POST', headers: { origin: 'http://localhost:5173' } },
+        {},
+        new URL('http://127.0.0.1/api/control/reviews/fake/merge')
+      )
+      const merged = answers.at(-1)
+      expect(merged.status).toBe(200)
+      expect(merged.payload).toMatchObject({ ok: true, lane: 'fake', head: madeHead, commit: madeHead })
+      expect(git(repo, ['rev-parse', 'refs/heads/main']).trim()).toBe(madeHead)
+      expect(git(repo, ['show', 'HEAD:good.txt']).trim()).toBe('ok')
     } finally {
       remove(parent)
     }
