@@ -64,10 +64,10 @@ function stopProcess(pid, { kill = killTree, alive = processAlive } = {}) {
   return !alive(pid)
 }
 
-function stopLeftovers({ worktree, childPid = 0, label = 'leftover', excludePids = [], list = listProcesses, kill = killTree, alive = processAlive } = {}) {
+function stopLeftovers({ worktree, childPid = 0, label = 'leftover', excludePids = [], list = listProcesses, kill = killTree, alive = processAlive, processes = null } = {}) {
   const folder = String(worktree ?? '').trim()
   if (!folder && !(childPid > 0)) return { found: 0, stopped: 0, failed: 0 }
-  const found = leftoverProcesses(list(), { childPid, worktree: folder, ownPid: process.pid, excludePids })
+  const found = leftoverProcesses(Array.isArray(processes) ? processes : list(), { childPid, worktree: folder, ownPid: process.pid, excludePids })
   let stopped = 0
   let failed = 0
   for (const item of found) {
@@ -85,13 +85,47 @@ function stopLeftovers({ worktree, childPid = 0, label = 'leftover', excludePids
 function harnessDescendants(childPid, { excludePids = [], processes = null } = {}) {
   if (!Number.isInteger(childPid) || childPid <= 0) return []
   return descendantProcesses(processes ?? listProcesses(), { rootPid: childPid, ownPid: process.pid, excludePids })
+    .map((item) => ({ ...item }))
+}
+
+function descendantState(item, currentByPid) {
+  if (currentByPid.size === 0) return 'kill'
+  const current = currentByPid.get(item.pid)
+  if (!current) return 'gone'
+  if (typeof item.created === 'number' && Number.isFinite(item.created) && current.created !== item.created) {
+    return 'reused'
+  }
+  return 'kill'
 }
 
 function stopDescendants(descendants, options = 'leftover') {
-  const { label = 'leftover', kill = killTree, alive = processAlive } = typeof options === 'string' ? { label: options } : options ?? {}
+  const {
+    label = 'leftover',
+    kill = killTree,
+    alive = processAlive,
+    list = listProcesses,
+    processes = null,
+  } = typeof options === 'string' ? { label: options } : options ?? {}
+  const items = Array.isArray(descendants) ? descendants : []
+  if (items.length === 0) return { stopped: 0, failed: 0, processes }
+  const currentList = Array.isArray(processes) ? processes : list()
+  const currentByPid = new Map(currentList.map((row) => [row.pid, row]))
   let stopped = 0
   let failed = 0
-  for (const item of Array.isArray(descendants) ? descendants : []) {
+  let killed = false
+  for (const item of items) {
+    const state = descendantState(item, currentByPid)
+    if (state === 'gone') {
+      console.log(`${label}: stopped ${item.pid}`)
+      stopped += 1
+      continue
+    }
+    if (state === 'reused') {
+      console.log(`stale: ${item.pid} was not this run`)
+      stopped += 1
+      continue
+    }
+    killed = true
     if (stopProcess(item.pid, { kill, alive })) {
       console.log(`${label}: stopped ${item.pid}`)
       stopped += 1
@@ -100,7 +134,7 @@ function stopDescendants(descendants, options = 'leftover') {
       failed += 1
     }
   }
-  return { stopped, failed }
+  return { stopped, failed, processes: killed ? null : currentList }
 }
 
 function refuseRunningLane(laneKey, worktree, folder = runsFolder()) {
@@ -160,11 +194,13 @@ export function stopLane(laneKey, { platform = process.platform, list = listProc
   const descendants = isStranger(rootPid) ? [] : harnessDescendants(rootPid, { excludePids: [holder.pid ?? 0], processes })
   let stopped = 0
   let failed = 0
+  let listStale = false
   for (const [pid, name] of [[holder.child, 'the harness'], [holder.pid, 'the run']]) {
     if (!Number.isInteger(pid) || pid <= 0 || pid === process.pid) continue
     if (isStranger(pid)) {
       console.log(`stale: ${pid} was not this run`)
     } else if (platform !== 'win32' || processes.length === 0 || byPid.has(pid)) {
+      listStale = true
       if (stopProcess(pid, { kill, alive })) {
         console.log(`stopped: ${pid} (${name})`)
         stopped += 1
@@ -174,11 +210,23 @@ export function stopLane(laneKey, { platform = process.platform, list = listProc
       }
     }
   }
-  const descendantsResult = stopDescendants(descendants, { kill, alive })
+  const descendantsResult = stopDescendants(descendants, {
+    list,
+    kill,
+    alive,
+    processes: listStale ? null : processes,
+  })
   stopped += descendantsResult.stopped
   failed += descendantsResult.failed
   const byName = holder.projectRun !== true
-  const leftovers = stopLeftovers({ worktree: byName ? worktree : '', excludePids: [holder.pid ?? 0], list, kill, alive })
+  const leftovers = stopLeftovers({
+    worktree: byName ? worktree : '',
+    excludePids: [holder.pid ?? 0],
+    list,
+    kill,
+    alive,
+    processes: descendantsResult.processes,
+  })
   stopped += leftovers.stopped
   failed += leftovers.failed
   if (stopped === 0 && leftovers.found === 0 && descendants.length === 0 && failed === 0) {
@@ -1270,14 +1318,18 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
       leftoversCleaned = true
       if (stopNote === '') stopNote = 'leftovers were stopped'
       let stopped = 0
-      const descendants = harnessDescendants(child.pid)
+      const folder = project ? (options.worktree ? project : '') : lane.worktree
+      const processes = child.pid || folder ? listProcesses() : []
+      const descendants = harnessDescendants(child.pid, { processes })
+      let killedParent = false
       if (child.pid && (child.exitCode === null && child.signalCode === null)) {
+        killedParent = true
         killTree(child)
       }
-      stopped += stopDescendants(descendants).stopped
+      const descendantsResult = stopDescendants(descendants, { processes: killedParent ? null : processes })
+      stopped += descendantsResult.stopped
       // The worktree's name finds a harness child whose parent chain is already gone, such as an orphaned server.
-      const folder = project ? (options.worktree ? project : '') : lane.worktree
-      stopped += stopLeftovers({ worktree: folder, childPid: child.pid ?? 0 }).stopped
+      stopped += stopLeftovers({ worktree: folder, childPid: child.pid ?? 0, processes: descendantsResult.processes }).stopped
       extraStopped += stopped
       try {
         child.stdout?.destroy()

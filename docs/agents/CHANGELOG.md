@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- A stop checks each descendant's current row and creation time before killing it, so a pid Windows reused for another process is skipped (P163).
+- A lane stop skips killing a captured descendant whose pid is gone or whose creation time changed, counting it as stopped from one shared process list (P163).
 - Review 23 reads today's merges: five findings, briefed as P161 to P163 (P160).
 - The full suite passed on today's merges: 274 files, 4917 tests passed, 4 skipped (P159).
 - The current conversation carries a stable id that changes only on new, open and fork, so the 200-message cap no longer closes its menu (P157).

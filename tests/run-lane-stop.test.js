@@ -732,4 +732,134 @@ describe('stopLane creation time rules', () => {
       console.log = log
     }
   })
+
+  function runStopWithLists({ prefix, lockFields, lists }) {
+    const { runs, env } = setup(prefix)
+    const lockPath = join(runs, 'fake.lock')
+    writeFileSync(lockPath, laneLockText(lockFields))
+    const killed = []
+    const lines = []
+    let listCalls = 0
+    const log = console.log
+    console.log = (msg) => lines.push(msg)
+    try {
+      const code = withEnv(env, () =>
+        stopLane('fake', {
+          platform: 'win32',
+          stat: () => ({ mtimeMs: 10000 }),
+          list: () => {
+            const index = Math.min(listCalls, lists.length - 1)
+            listCalls += 1
+            return lists[index]
+          },
+          kill: ({ pid }) => {
+            killed.push(pid)
+            return true
+          },
+        }),
+      )
+      return { code, killed, lines, listCalls, lockPath }
+    } finally {
+      console.log = log
+    }
+  }
+
+  it('does not kill a descendant whose pid is reused by a newer process and removes the lock', () => {
+    const { code, killed, lines, listCalls, lockPath } = runStopWithLists({
+      prefix: 'mr-stop-reused-desc-',
+      lockFields: { pid: 100, child: 200 },
+      lists: [
+        [
+          { pid: 100, ppid: 1, created: 9000 },
+          { pid: 200, ppid: 100, created: 9500 },
+          { pid: 300, ppid: 200, created: 9600 },
+        ],
+        [
+          { pid: 300, ppid: 1, created: 9900 },
+        ],
+      ],
+    })
+    expect(code).toBe(0)
+    expect(killed).toEqual([200, 100])
+    expect(lines).toContain('stale: 300 was not this run')
+    expect(existsSync(lockPath)).toBe(false)
+    expect(listCalls).toBe(2)
+  })
+
+  it('kills a descendant that is still the same process', () => {
+    const { code, killed, lines, listCalls, lockPath } = runStopWithLists({
+      prefix: 'mr-stop-same-desc-',
+      lockFields: { pid: 100, child: 200 },
+      lists: [
+        [
+          { pid: 100, ppid: 1, created: 9000 },
+          { pid: 200, ppid: 100, created: 9500 },
+          { pid: 300, ppid: 200, created: 9600 },
+        ],
+        [
+          { pid: 300, ppid: 200, created: 9600 },
+        ],
+      ],
+    })
+    expect(code).toBe(0)
+    expect(killed).toEqual([200, 100, 300])
+    expect(lines).toContain('leftover: stopped 300')
+    expect(existsSync(lockPath)).toBe(false)
+    expect(listCalls).toBe(2)
+  })
+
+  it('checks multiple descendants from one list read and skips gone and reused pids', () => {
+    const { code, killed, lines, listCalls, lockPath } = runStopWithLists({
+      prefix: 'mr-stop-multi-desc-',
+      lockFields: { pid: 100, child: 200, folder: 'C:\\fake\\worktree' },
+      lists: [
+        [
+          { pid: 100, ppid: 1, created: 9000 },
+          { pid: 200, ppid: 100, created: 9500 },
+          { pid: 300, ppid: 200, created: 9600 },
+          { pid: 301, ppid: 200, created: 9601 },
+          { pid: 302, ppid: 200, created: 9602 },
+        ],
+        [
+          { pid: 301, ppid: 1, created: 9901 },
+          { pid: 302, ppid: 200, created: 9602 },
+          { pid: 999, ppid: 1, created: 5000 },
+        ],
+        [
+          { pid: 999, ppid: 1, created: 5000 },
+        ],
+      ],
+    })
+    expect(code).toBe(0)
+    expect(killed).toEqual([200, 100, 302])
+    expect(lines).toContain('leftover: stopped 300')
+    expect(lines).toContain('stale: 301 was not this run')
+    expect(lines).toContain('leftover: stopped 302')
+    expect(existsSync(lockPath)).toBe(false)
+    expect(listCalls).toBe(3)
+  })
+
+  it('reuses the post-harness process list for leftovers when no descendant is killed', () => {
+    const { code, killed, lines, listCalls, lockPath } = runStopWithLists({
+      prefix: 'mr-stop-reuse-list-',
+      lockFields: { pid: 100, child: 200, folder: 'C:\\fake\\worktree' },
+      lists: [
+        [
+          { pid: 100, ppid: 1, created: 9000 },
+          { pid: 200, ppid: 100, created: 9500 },
+          { pid: 300, ppid: 200, created: 9600 },
+        ],
+        [
+          { pid: 300, ppid: 1, created: 9900 },
+          { pid: 400, ppid: 1, created: 9700, command: 'node C:\\fake\\worktree\\worker.js' },
+        ],
+      ],
+    })
+    expect(code).toBe(0)
+    expect(killed).toEqual([200, 100, 400])
+    expect(lines).toContain('stale: 300 was not this run')
+    expect(lines).toContain('leftover: stopped 400')
+    expect(existsSync(lockPath)).toBe(false)
+    expect(listCalls).toBe(2)
+  })
 })
