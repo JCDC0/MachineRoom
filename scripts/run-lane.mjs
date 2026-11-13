@@ -121,6 +121,7 @@ export function helpLines() {
     '  --model <id>         use this model for this run only',
     '  --reasoning <level>  use this reasoning level for this run only',
     '  --minutes <n>        stop the run after n minutes (100 by default)',
+    '  --test <command>     run this check after each task, or npm test when the package has one',
     '  --started-by <id>    name the orchestrator that started the run',
     '  --force              run a retired lane or a brief marked done',
     '',
@@ -656,6 +657,20 @@ function runTestCommand(command, cwd, minutes) {
   })
 }
 
+async function projectCheck({ project, given, minutes }) {
+  let command
+  try {
+    command = projectTestCommand(project, given)
+  } catch (error) {
+    const message = String(error?.message ?? error)
+    console.error(message)
+    return { command: message, ok: false, ran: false }
+  }
+  if (command === '') return { command: '', ok: true, ran: false }
+  const outcome = await runTestCommand(command, project, minutes)
+  return { command, ok: outcome?.ok === true, ran: true, outcome }
+}
+
 function queueGit(project, branch, lane, { onSettled } = {}) {
   const settle = typeof onSettled === 'function' ? onSettled : () => {}
   const run = (args, allowFailure = false) => {
@@ -1117,26 +1132,11 @@ async function runQueueProject({ options, lane, lanes }) {
           return { code: run.code, killed: run.killed }
         },
         runTests: async () => {
-          let command
-          try {
-            command = projectTestCommand(target.path, options.test)
-          } catch (error) {
-            const message = String(error?.message ?? error)
-            console.error(message)
-            test = message
-            testsFailed = true
-            if (pending) pending.tests = 'failed'
-            return { ok: false }
-          }
-          if (command === '') {
-            if (pending) pending.tests = 'none'
-            return { ok: true }
-          }
-          test = command
-          const outcome = await runTestCommand(command, target.path, options.minutes)
-          testsFailed = outcome?.ok !== true
-          if (pending) pending.tests = testsFailed ? 'failed' : 'passed'
-          return outcome
+          const check = await projectCheck({ project: target.path, given: options.test, minutes: options.minutes })
+          test = check.command
+          testsFailed = !check.ok
+          if (pending) pending.tests = check.command === '' ? 'none' : (check.ok ? 'passed' : 'failed')
+          return { ok: check.ok }
         },
       })
       formatQueueSummary({ branch: result.branch, results: result.results, tests: test, worktree: options.worktree ? printedRunsFolder(target.path) : '' }).forEach((line) => console.log(line))
@@ -1281,7 +1281,9 @@ async function main() {
       const needsMcp = enabledServers.length > 0 && (harness === 'claude' || harness === 'opencode')
       const mcpConfigPath = needsMcp ? join(folder, `${name}.mcp.json`) : ''
       const command = commandFor({ lane, prompt, env: process.env, usageFile, title: name, cwd: project, mcpConfig: mcpConfigPath })
+      const test = testCommandFor(project, options.test)
       printCommand(command, prompt, { mcpConfig: mcpConfigPath, mcpServers: enabledServers })
+      console.log(`tests: ${test || 'none, the project has no tests'}`)
       console.log('Dry run, nothing started.')
       return 0
     }
@@ -1297,8 +1299,20 @@ async function main() {
       throw error
     }
     try {
-      const run = await startLane({ options, lane, lanes, wanted: [], prompt, logPath, usageFile, name, project, task, lockPath: lock })
-      return run.code
+      const run = await startLane({ options, lane, lanes, wanted: [], prompt, logPath, usageFile, name, project, task, lockPath: lock, deferRecord: true })
+      let code = run.code
+      let tests = ''
+      if (run.code === 0 && run.killed !== true) {
+        const check = await projectCheck({ project, given: options.test, minutes: options.minutes })
+        tests = check.command === '' ? 'none' : (check.ok ? 'passed' : 'failed')
+        console.log(`tests: ${check.command || 'none, the project has no tests'}`)
+        if (!check.ok) {
+          run.record.exitCode = 1
+          code = 1
+        }
+      }
+      writeProjectRecord({ record: run.record, folder: project, startHead: run.startHead, startBranch: run.startBranch, tests })
+      return code
     } finally {
       releaseLaneLock(lock)
       releaseLaneLock(projectLock)

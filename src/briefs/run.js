@@ -354,6 +354,7 @@ export function parseRunArgs(argv) {
   let allowDirty = false
   let worktree = false
   let startedBy = ''
+  let test = ''
   const overrides = {}
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index]
@@ -435,6 +436,15 @@ export function parseRunArgs(argv) {
       startedBy = value
       continue
     }
+    if (arg === '--test' || arg.startsWith('--test=')) {
+      const value = arg === '--test' ? args[index + 1] : arg.slice('--test='.length)
+      if (arg === '--test') index += 1
+      if (typeof value !== 'string' || value.trim() === '') throw new Error('--test needs a command.')
+      const problem = checkCommandProblem(value)
+      if (problem !== '') throw new Error(problem)
+      test = value
+      continue
+    }
     if (arg.startsWith('-')) throw new Error(`Unknown option ${arg}.`)
     if (arg === '') continue
     if (!lane) lane = arg
@@ -460,9 +470,11 @@ export function parseRunArgs(argv) {
       project,
       ...(task ? { task } : {}),
       ...(taskFile ? { taskFile } : {}),
+      ...(test ? { test } : {}),
       ...(allowDirty ? { allowDirty: true } : {}),
     }
   }
+  if (test !== '') throw new Error('--test needs a --project task.')
   if (briefs.length === 0) throw new Error('Name at least one brief id.')
   return { lane, briefs, dryRun, minutes, list, ...(force ? { force: true } : {}), ...overrides, ...(startedBy ? { startedBy } : {}) }
 }

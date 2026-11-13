@@ -362,6 +362,38 @@ describe('run-lane --worktree with one task', { timeout: 60000 }, () => {
   }, 60000)
 })
 
+describe('run-lane with one task and a check', { timeout: 60000 }, () => {
+  it('runs --test after the task and records that it passed', async () => {
+    const base = tempDir()
+    const project = initRepo(base)
+    copyFileSync(FAKE_LANE, join(project, 'run'))
+    writeFileSync(join(project, 'package.json'), `${JSON.stringify({ scripts: { test: 'node check.cjs' } })}\n`)
+    writeFileSync(join(project, 'check.cjs'), "require('node:fs').writeFileSync('check-ran.txt', 'yes')\n")
+    git(project, ['add', '-A'])
+    git(project, ['commit', '-q', '-m', 'Add the check and fake lane'])
+    const runs = join(base, 'machineroom-runs')
+    mkdirSync(runs)
+    const lanesFile = join(base, 'lanes.json')
+    writeFileSync(lanesFile, `${JSON.stringify({
+      opencode: {
+        name: 'Fake lane',
+        harness: 'OpenCode',
+        cli: { harness: 'opencode', bin: process.execPath, model: 'opencode/fake' },
+      },
+    }, null, 2)}\n`)
+
+    const result = await runLane(
+      ['opencode', '--project', project, '--task', 'Write the lane note.', '--test', 'npm test -- --runInBand'],
+      { TEMP: base, MACHINEROOM_RUNS: runs, MACHINEROOM_LANES_FILE: lanesFile }
+    )
+    expect(result.code).toBe(0)
+    expect(result.stdout).toContain('tests: npm test -- --runInBand')
+    expect(existsSync(join(project, 'check-ran.txt'))).toBe(true)
+    const record = JSON.parse(readFileSync(join(runs, 'runs.jsonl'), 'utf8').trim())
+    expect(record).toMatchObject({ lane: 'opencode', exitCode: 0, tests: 'passed', task: 'Write the lane note.' })
+  })
+})
+
 describe('the worktree project lock', () => {
   it('locks the worktree folder, so a project lock does not stop it', async () => {
     const base = tempDir()
