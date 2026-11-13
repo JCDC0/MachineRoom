@@ -1,9 +1,11 @@
 import React from 'react'
+import { act } from 'react'
 import { renderToString } from 'react-dom/server'
 import { describe, expect, it, vi } from 'vitest'
 import { healthNotice } from '../src/ui/healthNotice.js'
 import { fetchBridgeHealth, useBridgeHealth } from '../src/ui/useBridgeHealth.js'
 import Hud from '../src/ui/Hud.jsx'
+import { click, withDom } from './helpers/uiDom.js'
 
 describe('healthNotice', () => {
   it('returns null for junk and empty input', () => {
@@ -40,6 +42,40 @@ describe('healthNotice', () => {
     })
     expect(healthNotice({ ok: true, runner: { alive: true } })).toBeNull()
     expect(healthNotice({ ok: false, runner: { alive: false } })).toBeNull()
+  })
+
+  it('names a failed tree read while the bridge stays ok', () => {
+    const problem = "The last tree read failed: EACCES: permission denied, scandir 'C:\\Users\\<name>\\project'."
+    expect(healthNotice({ ok: true, problems: [problem] })).toEqual({
+      tone: 'red',
+      title: 'A source looks stopped',
+      lines: [problem],
+    })
+  })
+
+  it('names a stopped OpenCode reader while the bridge stays ok', () => {
+    const problem = 'The OpenCode session source stopped: The database file is missing.'
+    expect(healthNotice({ ok: true, problems: [problem] })).toEqual({
+      tone: 'red',
+      title: 'A source looks stopped',
+      lines: [problem],
+    })
+  })
+
+  it('shows nothing for an empty problems list', () => {
+    expect(healthNotice({ ok: true, problems: [] })).toBeNull()
+    expect(healthNotice({ ok: true, problems: ['', '   '] })).toBeNull()
+    expect(healthNotice({ ok: true, problems: 'junk' })).toBeNull()
+  })
+
+  it('shows one line per problem', () => {
+    const tree = 'The last tree read failed: The folder was removed.'
+    const opencode = 'The OpenCode session source stopped: The database file is missing.'
+    expect(healthNotice({ ok: true, problems: [tree, opencode] })).toEqual({
+      tone: 'red',
+      title: 'A source looks stopped',
+      lines: [tree, opencode],
+    })
   })
 })
 
@@ -168,5 +204,32 @@ describe('Hud health chip rendering', () => {
     )
     expect(html).toContain('class="hud-health is-red"')
     expect(html).toContain('The runner looks stopped')
+  })
+
+  it('shows each source problem in the chip details and stays connected', async () => {
+    const tree = 'The last tree read failed: The folder was removed.'
+    const opencode = 'The OpenCode session source stopped: The database file is missing.'
+    await withDom(async ({ container, root }) => {
+      await act(async () => {
+        root.render(
+          React.createElement(Hud, {
+            mode: 'live',
+            snapshot,
+            focused: null,
+            speeds: [1],
+            health: { ok: true, problems: [tree, opencode] },
+          })
+        )
+      })
+      const hud = container.querySelector('.hud')
+      expect(hud).not.toBeNull()
+      expect(String(hud.className)).not.toContain('is-disconnected')
+      const chip = container.querySelector('.hud-health-chip')
+      expect(chip).not.toBeNull()
+      expect(chip.textContent).toContain('A source looks stopped')
+      await click(root, chip)
+      const lines = [...container.querySelectorAll('li')].map((item) => item.textContent)
+      expect(lines).toEqual([tree, opencode])
+    })
   })
 })
