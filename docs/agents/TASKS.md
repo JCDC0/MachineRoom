@@ -1489,3 +1489,8 @@ Review, with `git show -m --first-parent SHA`, against the code around each chan
 2. If you find and fix the cause, remove the `skipIf` and the `shortcut:` comment. If you cannot prove it, leave the skip and write the likely cause in the changelog line.
 3. Remove the `printedRunsFolder` imports no test uses in the five other test files listed above.
 4. Run `node node_modules/vitest/vitest.mjs related --run server/printed-path.js scripts/run-lane.mjs` and `npm run build`. Report what passed.
+
+**P155. The detail docs catch up with P143 to P148 (Codex).** Read this brief, `docs/agents/ARCHITECTURE.md` and the detail files below. Change no code. Do not commit: the runner commits your files. Stop at minute 15. Files: docs/agents/architecture/ROOM.md, docs/agents/architecture/LIVE.md, docs/agents/architecture/COMMANDS.md, docs/agents/architecture/CODE.md, docs/agents/architecture/LIMITS.md.
+
+1. Read the merges since `2061a5a6` with `git log --first-parent --oneline 2061a5a6..HEAD` and `git show -m --first-parent`: P143 (a brief's file list ignores only code), P144 (project paths masked in run-lane output), P145 (the merge check no longer blocks the bridge), P146 (two load tests wait for state) and P148 (`server/printed-path.js`). Bring the five files in line with the code. Add to `LIMITS.md` that the masked log line test in `tests/run-lane.test.js` runs on Windows only until its Linux case is traced.
+2. Plain words, short sentences, no em dashes. Where a doc disagrees with the code, the code wins. Change nothing that is already right.
