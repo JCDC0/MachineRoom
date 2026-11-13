@@ -1621,3 +1621,9 @@ Review, with `git show -m --first-parent SHA`, against the code around each chan
 3. `--help` and `-h` count as help only where an option is expected. A value taken by `--task`, `--test`, `--model` or another value flag stays its value. Test `--task "--help" --dry-run`.
 4. README's `npm run serve -- up --root FOLDER` fallback adds `--open`, so the room opens in the browser as the next line says.
 5. Run `node node_modules/vitest/vitest.mjs related --run scripts/run-lane.mjs` and `npm run build`. Report what passed.
+
+**P176. A broken package.json fails the queue task directly (OpenCode).** Read review 24's second finding in `docs/agents/AUDIT-2026-11-REVIEW-24.md` and this brief only. Use no subagents. Run every command in the foreground. Commit each step as you finish it, and stop starting new work at minute 15. Files: scripts/run-lane.mjs, tests/run-queue.test.js, docs/agents/CHANGELOG.md.
+
+1. P175 handles an unreadable `package.json` by returning a `node -e` command as the test command. That command holds the node program path and is printed on the queue's `tests:` line, and its message names the raw file path. Remove `packageFileFailure`. `projectTestCommand` throws one error, `The package.json at FILE could not be read, so the tests cannot run.`, with FILE through `printedRunsFolder`. The queue's `runTests` catches it, prints the sentence and returns a failed outcome, so the task stops as `failed: tests` and nothing is committed. A dry run prints the sentence on its `tests:` line.
+2. The P175 test for a broken `package.json` still passes; add assertions that the output holds no node program path and the masked file path.
+3. Run `node node_modules/vitest/vitest.mjs related --run scripts/run-lane.mjs` and `npm run build`. Report what passed.
