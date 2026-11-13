@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The fourth readiness pass lists eight live-room problems on another project, among them outside files matched by folder name and failed git reads shown as clean.
 - Lane Update and Delete read the request body before the saved configuration, so a lane created meanwhile and its key count are kept.
 - The Removed lanes row sums each removed lane's rounded cents, so deleting lanes never moves the total.
 - Removed lanes adds each removed lane's rounded cents for the month and today, so deleting lanes no longer changes the total (P212).
