@@ -563,12 +563,6 @@ function resolvedLanes(lanes) {
   }))
 }
 
-function packageFileFailure(file) {
-  const message = `The package.json at ${file} could not be read or parsed, so the tests cannot run.`
-  const encoded = Buffer.from(message, 'utf8').toString('base64')
-  return `"${process.execPath}" -e "console.error(Buffer.from('${encoded}', 'base64').toString('utf8')); process.exit(1)"`
-}
-
 function projectTestCommand(project, given) {
   if (typeof given === 'string' && given.trim() !== '') return given
   const file = join(project, 'package.json')
@@ -578,7 +572,15 @@ function projectTestCommand(project, given) {
     const script = pkg?.scripts?.test
     return typeof script === 'string' && script.trim() !== '' ? 'npm test' : ''
   } catch {
-    return packageFileFailure(file)
+    throw new Error(`The package.json at ${printedRunsFolder(file)} could not be read, so the tests cannot run.`)
+  }
+}
+
+function testCommandFor(project, given) {
+  try {
+    return projectTestCommand(project, given)
+  } catch (error) {
+    return String(error?.message ?? error)
   }
 }
 
@@ -994,7 +996,7 @@ async function runQueueProject({ options, lane, lanes }) {
   const branch = `machineroom/queue-${options.lane}-${queueStamp}`
   if (options.dryRun) {
     const plan = options.worktree ? worktreePlan(project, options.lane) : { path: project, made: false }
-    const test = projectTestCommand(project, options.test)
+    const test = testCommandFor(project, options.test)
     console.log(`lane: ${options.lane}`)
     console.log(`project: ${printedRunsFolder(project)}`)
     if (options.worktree) printWorktree(plan)
@@ -1061,7 +1063,16 @@ async function runQueueProject({ options, lane, lanes }) {
           return { code: run.code, killed: run.killed }
         },
         runTests: async () => {
-          const command = projectTestCommand(target.path, options.test)
+          let command
+          try {
+            command = projectTestCommand(target.path, options.test)
+          } catch (error) {
+            const message = String(error?.message ?? error)
+            console.error(message)
+            test = message
+            testsFailed = true
+            return { ok: false }
+          }
           if (command === '') return { ok: true }
           test = command
           const outcome = await runTestCommand(command, target.path, options.minutes)
