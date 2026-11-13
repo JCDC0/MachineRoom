@@ -10,7 +10,7 @@ How to read this file: `Where things stand`, `Rules`, `Session start` and `The l
 
 Rewrite this section at every merge and before you end a session. Keep it under ten lines: what is pushed, what is unpushed, what runs, what waits on the owner, what is next.
 
-- 2026-11-13, night: everything merged is pushed at `6939dd82` (CI run 43438890851, read it first with `gh run list --limit 3 --repo JCDC0/MachineRoom`). The full suite at `a01af28f` passed (`RUN-2026-11-13-SUITE-7.md`, 5,189 passed).
+- 2026-11-13, night: everything merged is pushed at `12c25524`, CI green on Windows and Ubuntu (run 43439953614; read CI first with `gh run list --limit 3 --repo JCDC0/MachineRoom`). The full suite at `a01af28f` passed (`RUN-2026-11-13-SUITE-7.md`, 5,189 passed).
 - Since `1bb54a0f`: P213 to P248. The owner said yes to the check command (P224, P241, P247), Ask to prepare (P215), failed-queue handoff (P216, P223, P243), storage cleanup (P217, P236, P240, P246), conversation export (P218), Stop a lane with a note to its head (P219), the branch filter (P225) and the Dispatch draft (P226). Readiness 4 (P213) is fixed by P220 to P222, P228 to P230, P237 and P238. Reviews 29 and 30 (Codex) are fixed by P240 to P247.
 - The hands-on check by eye is `RUN-2026-11-13-HANDS-ON-2.md`; its findings are fixed by P232 to P236, with the transport overlap fixed by hand after a look at 1280 by 800.
 - Nothing runs at this rewrite.
