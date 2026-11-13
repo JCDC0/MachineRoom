@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- P241: the check command splits into a program and its arguments, starts without a shell, uses Node and npm's own JavaScript entry point for npm and npx on Windows, and refuses shell syntax before a run.
+- P241: `--test` works on a single project task with or without `--worktree`, and the check runs after the task.
+- P241: a queue task whose harness fails or is stopped records `queueStatus: failed` or `stopped` with `queueRemaining`.
 - P239: review 29 lists six push blockers and two smaller findings in P216 to P230.
 - P237: a change to .git/index or info/exclude, or a worktree's own, reads the tree through the existing reader; other .git writes stay ignored.
 - P238: Claude and OpenCode session run ids carry a token made per reader, so a restarted reader never merges two runs in a replay (D4).
