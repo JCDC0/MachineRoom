@@ -522,6 +522,34 @@ describe('scripts/run-lane.mjs with --queue', { timeout: 30000 }, () => {
     }
   }, 60000)
 
+  it('fails the task when it breaks package.json instead of committing it', async () => {
+    const parent = makeTempDir('machine-room-queue-')
+    try {
+      const repo = initRepo(parent)
+      const runs = join(parent, 'machineroom-runs')
+      const file = join(parent, 'queue.txt')
+      writeFileSync(file, 'Break the package file.\n')
+      writeFakeLane(repo, {
+        'package.json': '{ not json\n',
+      })
+      git(repo, ['add', '-A'])
+      git(repo, ['commit', '-m', 'the fake lane program'])
+      const before = git(repo, ['rev-parse', 'HEAD']).trim()
+      const result = await runLane(['fake', '--project', repo, '--queue', file], {
+        TEMP: parent,
+        MACHINEROOM_RUNS: runs,
+        MACHINEROOM_LANES_FILE: fakeLaneFile(parent),
+      })
+      expect(result.code).toBe(1)
+      expect(result.stdout).toContain('1. failed: tests')
+      expect(result.stderr).toContain('package.json')
+      expect(result.stderr).toContain('could not be read or parsed')
+      expect(git(repo, ['rev-parse', 'HEAD']).trim()).toBe(before)
+    } finally {
+      remove(parent)
+    }
+  }, 60000)
+
   it('refuses --queue with a task, a task file, --allow-dirty or a brief id', async () => {
     const parent = makeTempDir('machine-room-queue-')
     try {

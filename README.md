@@ -58,7 +58,7 @@ machineroom FOLDER
 It prints `MachineRoom is running.` and the address. Without `npm link`, run this in the MachineRoom folder:
 
 ```
-npm run serve -- up --root FOLDER
+npm run serve -- up --root FOLDER --open
 ```
 
 It prints the same line.

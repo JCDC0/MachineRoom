@@ -563,6 +563,12 @@ function resolvedLanes(lanes) {
   }))
 }
 
+function packageFileFailure(file) {
+  const message = `The package.json at ${file} could not be read or parsed, so the tests cannot run.`
+  const encoded = Buffer.from(message, 'utf8').toString('base64')
+  return `"${process.execPath}" -e "console.error(Buffer.from('${encoded}', 'base64').toString('utf8')); process.exit(1)"`
+}
+
 function projectTestCommand(project, given) {
   if (typeof given === 'string' && given.trim() !== '') return given
   const file = join(project, 'package.json')
@@ -572,7 +578,7 @@ function projectTestCommand(project, given) {
     const script = pkg?.scripts?.test
     return typeof script === 'string' && script.trim() !== '' ? 'npm test' : ''
   } catch {
-    return ''
+    return packageFileFailure(file)
   }
 }
 
@@ -724,11 +730,9 @@ export function laneSpawn({ command, minutes = DEFAULT_MINUTES, model = '', effo
 export function printCommand(command, prompt, { mcpConfig = '', mcpServers = [] } = {}) {
   const printPath = (value) => (isAbsolute(value) || isWindowsPath(value) ? printedRunsFolder(value) : value)
   const shown = command.args.map((arg) => (arg === prompt ? `<prompt: ${prompt.length} characters>` : printPath(arg)))
-  const firstLine = String(prompt ?? '').split(/\r?\n/, 1)[0].trim()
   console.log(`file: ${printPath(command.file)}`)
   console.log(`args: ${JSON.stringify(shown)}`)
   if (!command.args.includes(prompt)) console.log(`prompt: <prompt: ${prompt.length} characters>`)
-  console.log(`prompt: ${firstLine}`)
   console.log(`cwd: ${printPath(command.cwd)}`)
   if (mcpConfig && Array.isArray(mcpServers) && mcpServers.length > 0) {
     console.log(`mcp config: ${printedRunsFolder(mcpConfig)}`)
@@ -1116,9 +1120,26 @@ async function runQueueProject({ options, lane, lanes }) {
   }
 }
 
+const VALUE_FLAGS = new Set([
+  '--project', '--task', '--task-file', '--since', '--minutes', '--started-by',
+  '--model', '--reasoning', '--queue', '--test',
+])
+
+function helpRequested(argv) {
+  for (let index = 0; index < argv.length; index += 1) {
+    const arg = String(argv[index] ?? '')
+    if (VALUE_FLAGS.has(arg)) {
+      index += 1
+      continue
+    }
+    if (arg === '--help' || arg === '-h') return true
+  }
+  return false
+}
+
 async function main() {
   const argv = process.argv.slice(2)
-  if (argv.some((arg) => arg === '--help' || arg === '-h')) {
+  if (helpRequested(argv)) {
     printHelp(console.log)
     return 0
   }
