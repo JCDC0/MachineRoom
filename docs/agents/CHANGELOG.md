@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The readiness review lists 3 blockers, 5 bug patches and 3 suggested features on the owner's path to daily use (P164).
 - The claude sessions meta test moves the runs folder time after writing the meta file, so the reader re-lists it on Windows (P165).
 - A first-use run of the setup commands lists where a new owner gets stuck (P166).
 - The claude sessions test moves the runs folder time after writing a lane meta file, so the reader re-lists the folder and the test no longer races the file system's folder time (P165).
