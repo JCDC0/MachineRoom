@@ -4,6 +4,7 @@ import { createHash, randomUUID } from 'node:crypto'
 import { appendFileSync, createWriteStream, existsSync, lstatSync, mkdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
+import { finished } from 'node:stream'
 import { fileURLToPath } from 'node:url'
 import { branchFor, briefFileList, buildPrompt, nextVersion, parseBriefs, parseRules } from '../src/briefs/briefs.js'
 import { formatQueueSummary, parseQueue, parseQueueArgs, runQueue } from '../src/briefs/queue.js'
@@ -42,15 +43,31 @@ function outcomesFile() {
   return join(runsFolder(), 'outcomes.jsonl')
 }
 
-export function appendRunRecord(record, { env = process.env, print = console.log, file } = {}) {
+function errorCode(error) {
+  if (typeof error?.code === 'string' && error.code) return error.code
+  const message = String(error?.message ?? error).trim()
+  return message || 'no error code'
+}
+
+let recordFailed = false
+
+export function appendRunRecord(record, { env = process.env, print = console.log, file, write = appendFileSync } = {}) {
   const targetFile = file || runsFile(env)
   const folder = dirname(targetFile)
-  if (!existsSync(folder)) {
-    mkdirSync(folder, { recursive: true })
-    print(`The runs folder was gone; made it again at ${printedRunsFolder(folder, env)}.`)
+  try {
+    if (!existsSync(folder)) {
+      mkdirSync(folder, { recursive: true })
+      print(`The runs folder was gone; made it again at ${printedRunsFolder(folder, env)}.`)
+    }
+    const line = typeof record === 'string' ? record : JSON.stringify(record)
+    write(targetFile, `${line.endsWith('\n') ? line : `${line}\n`}`)
+    return true
+  } catch (error) {
+    recordFailed = true
+    process.exitCode = 1
+    print(`The run record was not saved at ${printedRunsFolder(targetFile, env)} (${errorCode(error)}); the run still ended.`)
+    return false
   }
-  const line = typeof record === 'string' ? record : JSON.stringify(record)
-  appendFileSync(targetFile, `${line.endsWith('\n') ? line : `${line}\n`}`)
 }
 
 function lanesFile() {
@@ -666,8 +683,7 @@ function writeProjectRecord({ record, folder, startHead, startBranch, tests = ''
   const head = gitRead(folder, ['rev-parse', 'HEAD']) ?? ''
   if (head !== '') record.head = head
   if (tests === 'passed' || tests === 'failed' || tests === 'none') record.tests = tests
-  appendRunRecord(record)
-  console.log(`record: ${printedRunsFolder(runsFile())}`)
+  if (appendRunRecord(record)) console.log(`record: ${printedRunsFolder(runsFile())}`)
 }
 
 function projectHash(project) {
@@ -1121,8 +1137,7 @@ async function runQueueProject({ options, lane, lanes }) {
         failedRecord.queueStatus = 'failed: the queue stopped'
         const session = options.startedBy ? null : sessionStartedBy(process.env)
         if (session) failedRecord.startedBy = session
-        appendRunRecord(failedRecord)
-        console.log(`record: ${printedRunsFolder(runsFile())}`)
+        if (appendRunRecord(failedRecord)) console.log(`record: ${printedRunsFolder(runsFile())}`)
       }
       const back = startBranch
         ? gitRead(target.path, ['switch', startBranch])
@@ -1324,7 +1339,7 @@ async function main() {
   }
 }
 
-export async function startLane({ options, lane, lanes, wanted, prompt, logPath, usageFile, name, project = '', task = '', queue = null, lockPath = '', projectBranch = null, deferRecord = false, base = '' }) {
+export async function startLane({ options, lane, lanes, wanted, prompt, logPath, usageFile, name, project = '', task = '', queue = null, lockPath = '', projectBranch = null, deferRecord = false, base = '', openLog = createWriteStream }) {
   let start = null
   if (!project) {
     const status = gitStatus(lane.worktree)
@@ -1368,8 +1383,29 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
     }
     if (startedBy) meta.startedBy = startedBy
     writeFileSync(join(dirname(logPath), `${name}.meta.json`), `${JSON.stringify(meta)}\n`)
-    const log = createWriteStream(logPath)
-    const laneLog = createLaneLog({ write: (text) => log.write(text), runId: name })
+    const log = openLog(logPath)
+    let logBroken = false
+    const logClosed = new Promise((done) => finished(log, () => done()))
+    const onLogError = (error) => {
+      if (logBroken) return
+      logBroken = true
+      console.log(`The lane log ${printedRunsFolder(logPath)} could not be written (${errorCode(error)}); the run goes on and its record is still saved.`)
+      try {
+        log.destroy()
+      } catch {}
+    }
+    log.on('error', onLogError)
+    const laneLog = createLaneLog({
+      write: (text) => {
+        if (logBroken) return
+        try {
+          log.write(text)
+        } catch (error) {
+          onLogError(error)
+        }
+      },
+      runId: name,
+    })
     const startedAt = Date.now()
     const projectStart = project
       ? {
@@ -1563,7 +1599,8 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
     }
     const note = notes.join('; ')
     laneLog.flush()
-    await new Promise((done) => log.end(done))
+    if (!logBroken) log.end()
+    await logClosed
     const minutes = Math.round(((Date.now() - startedAt) / 60000) * 10) / 10
 
     if (result.error) console.log(`start failed: ${result.error.message}`)
@@ -1635,15 +1672,14 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
         ...(queue ? { queue } : {}),
       })
       if (startedBy) retryRecord.startedBy = startedBy
-      appendRunRecord(retryRecord)
-      console.log(`record: ${printedRunsFolder(runsFile())}`)
+      if (appendRunRecord(retryRecord)) console.log(`record: ${printedRunsFolder(runsFile())}`)
       const retryName = `${name}-retry`
       return await startLane({
         options: { ...options, retried: true },
         lane, lanes, wanted, prompt,
         logPath: join(dirname(logPath), `${retryName}.log`),
         usageFile: join(dirname(usageFile), `${retryName}.usage.json`),
-        name: retryName, project, task, queue, lockPath, projectBranch, deferRecord, base: runBase,
+        name: retryName, project, task, queue, lockPath, projectBranch, deferRecord, base: runBase, openLog,
       })
     }
     const record = laneRunRecord({
@@ -1675,8 +1711,7 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
       return { code: result.code ?? 1, killed, record, startHead: projectStart.head, startBranch: projectStart.branch }
     }
     if (startedBy) record.startedBy = startedBy
-    appendRunRecord(record)
-    console.log(`record: ${printedRunsFolder(runsFile())}`)
+    if (appendRunRecord(record)) console.log(`record: ${printedRunsFolder(runsFile())}`)
     if (project) return { code: result.code ?? 1, killed }
     try {
       const written = writeRecording({ record, lanes, root, env: process.env, session: toolLines.session })
@@ -1698,7 +1733,7 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
 const sameFile = (a, b) => (process.platform === 'win32' ? a.toLowerCase() === b.toLowerCase() : a === b)
 if (process.argv[1] && sameFile(resolve(process.argv[1]), resolve(entry))) {
   main().then((code) => {
-    process.exitCode = code
+    process.exitCode = code || (recordFailed ? 1 : 0)
   }).catch((error) => {
     const folder = runsFolder()
     console.error(String(error?.message ?? error).split(folder).join(printedRunsFolder(folder)))

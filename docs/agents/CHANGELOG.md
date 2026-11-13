@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- A lane log that cannot be written says so once with the masked log and error code, the run still writes its record, and a failed record write says so and exits non-zero (P184).
+- A chat run record that cannot be saved adds one room message with the error code instead of being swallowed (P184).
 - Live event ids carry the bridge's start, and a reconnect with a cursor from another bridge or past the kept history gets a reset and the live runs first, so a finished run is no longer left working (P181).
 - A chat turn saves its exact log name with the conversation, and recovery after a restart records only that log, never another project's (P180).
 - New, open and fork refuse with one sentence when the saved list is full of pinned conversations, and keep the current conversation (P179).
