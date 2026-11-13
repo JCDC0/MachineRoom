@@ -5,6 +5,7 @@ import { createMockClient } from '../src/control/mock.js'
 import DispatchPanel from '../src/ui/panels/DispatchPanel.jsx'
 import {
   cancelSplitRun,
+  clearProjectDraft,
   clearSplitRun,
   formatCost,
   NO_IDLE_LANE_PROBLEM,
@@ -24,6 +25,7 @@ import {
   queueRecoveryAvailable,
   queueRecoveryMessage,
   queueRecoveryPlan,
+  readProjectDraft,
   recordLine,
   resultWord,
   runStartLine,
@@ -991,5 +993,141 @@ describe('queueRecoveryMessage with the runner record fields', () => {
     expect(message).toContain('1 task did not run:')
     expect(message).toContain('3. Write the third file.')
     expect(message).not.toContain('the queue task list')
+  })
+})
+
+describe('Dispatch draft per project', () => {
+  const draftAgents = [{ key: 'opencode', name: 'OpenCode', adapterType: 'opencode_local', role: null }]
+
+  function draftClient(project, { savedCheckCommand = '', startRun } = {}) {
+    return {
+      health: async () => ({ lanes: true }),
+      runs: async () => ({ running: [], recent: [], project }),
+      projectSettings: async () => ({ checkCommand: savedCheckCommand, hasTestScript: true }),
+      saveProjectSettings: async ({ checkCommand }) => ({ checkCommand, hasTestScript: true }),
+      startRun:
+        startRun ??
+        (async (lane, body) => ({ lane, queue: Array.isArray(body?.tasks), tasks: body?.tasks?.length ?? 1 })),
+    }
+  }
+
+  async function mountDraftPanel(root, client) {
+    await act(async () => {
+      root.render(createElement(DispatchPanel, { client, initialAgents: draftAgents }))
+    })
+    await settle()
+  }
+
+  it('keeps the task, lane and check command after the panel unmounts and mounts again', async () => {
+    const project = 'draft-survives'
+    const client = draftClient(project, { savedCheckCommand: 'node saved-check.mjs' })
+    await withDom(async ({ container, root, window }) => {
+      await mountDraftPanel(root, client)
+      await type(root, container.querySelector('#project-run-task'), 'Write the draft.')
+      await type(root, container.querySelector('#project-run-lane'), 'opencode')
+      await type(root, container.querySelector('#project-run-check'), 'node draft-check.mjs')
+      expect(window.localStorage.values.size).toBe(0)
+    })
+    await withDom(async ({ container, root }) => {
+      await mountDraftPanel(root, client)
+      expect(container.querySelector('#project-run-task').value).toBe('Write the draft.')
+      expect(container.querySelector('#project-run-check').value).toBe('node draft-check.mjs')
+      await act(async () => {
+        buttonWithText(container, 'Run').click()
+      })
+      await settle()
+      expect(container.textContent).toContain('Lane: opencode')
+      expect(container.textContent).toContain('Check: node draft-check.mjs')
+    })
+    clearProjectDraft(project)
+  })
+
+  it('keeps two projects apart and brings each draft back on return', async () => {
+    const alpha = draftClient('draft-alpha')
+    const beta = draftClient('draft-beta')
+    await withDom(async ({ container, root }) => {
+      await mountDraftPanel(root, alpha)
+      await type(root, container.querySelector('#project-run-task'), 'Alpha task.')
+
+      await act(async () => {
+        root.render(createElement(DispatchPanel, { client: beta, initialAgents: draftAgents }))
+      })
+      await settle()
+      expect(container.querySelector('#project-run-task').value).toBe('')
+      await type(root, container.querySelector('#project-run-task'), 'Beta task.')
+
+      await act(async () => {
+        root.render(createElement(DispatchPanel, { client: alpha, initialAgents: draftAgents }))
+      })
+      await settle()
+      expect(container.querySelector('#project-run-task').value).toBe('Alpha task.')
+      expect(readProjectDraft('draft-beta').task).toBe('Beta task.')
+    })
+    clearProjectDraft('draft-alpha')
+    clearProjectDraft('draft-beta')
+  })
+
+  it('clears the draft when a start succeeds', async () => {
+    const project = 'draft-start'
+    const started = []
+    const client = draftClient(project, {
+      startRun: async (lane, body) => {
+        started.push({ lane, body })
+        return { lane, queue: true, tasks: 1 }
+      },
+    })
+    await withDom(async ({ container, root }) => {
+      await mountDraftPanel(root, client)
+      await type(root, container.querySelector('#project-run-lane'), 'opencode')
+      await type(root, container.querySelector('#project-run-task'), 'Run this once.')
+      await act(async () => {
+        buttonWithText(container, 'Run').click()
+      })
+      await settle()
+      await act(async () => {
+        buttonWithText(container, 'Confirm').click()
+      })
+      await settle()
+      expect(started).toHaveLength(1)
+      expect(container.querySelector('#project-run-task').value).toBe('')
+      expect(readProjectDraft(project)).toBeNull()
+    })
+    await withDom(async ({ container, root }) => {
+      await mountDraftPanel(root, client)
+      expect(container.querySelector('#project-run-task').value).toBe('')
+    })
+    clearProjectDraft(project)
+  })
+
+  it('clears the draft only after Discard draft is confirmed', async () => {
+    const project = 'draft-discard'
+    const client = draftClient(project, { savedCheckCommand: 'node saved-check.mjs' })
+    await withDom(async ({ container, root }) => {
+      await mountDraftPanel(root, client)
+      await type(root, container.querySelector('#project-run-task'), 'Throw this away.')
+      await type(root, container.querySelector('#project-run-lane'), 'opencode')
+      await type(root, container.querySelector('#project-run-check'), 'node draft-check.mjs')
+
+      const discard = buttonWithText(container, 'Discard draft')
+      expect(discard).not.toBeNull()
+      await act(async () => {
+        discard.click()
+      })
+      expect(container.querySelector('#project-run-task').value).toBe('Throw this away.')
+      expect(readProjectDraft(project).task).toBe('Throw this away.')
+
+      await act(async () => {
+        buttonWithText(container, 'Confirm discard').click()
+      })
+      expect(container.querySelector('#project-run-task').value).toBe('')
+      expect(container.querySelector('#project-run-check').value).toBe('')
+      expect(readProjectDraft(project)).toBeNull()
+    })
+    await withDom(async ({ container, root }) => {
+      await mountDraftPanel(root, client)
+      expect(container.querySelector('#project-run-task').value).toBe('')
+      expect(container.querySelector('#project-run-check').value).toBe('node saved-check.mjs')
+    })
+    clearProjectDraft(project)
   })
 })

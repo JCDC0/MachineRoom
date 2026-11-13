@@ -9,7 +9,7 @@ import {
 import { subscribeToNotices } from './notices.js'
 import { laneNeedsNetwork } from '../../model/online.js'
 import { TIERS } from '../../policy/route.js'
-import { PROJECT_CONFIRM_LIMIT, PROJECT_QUEUE_TEXT_LIMIT, cancelSplitRun, clearSplitRun, planLaneTasks, projectCheckLine, projectRunBody, projectRunConfirm, projectRunLabel, projectRunLanes, projectSplitLabel, projectTaskProblem, projectWorktreeName, queueRecoveryAvailable, queueRecoveryMessage, queueRecoveryPlan, recordLine, resultWord, splitRunProgress, splitRunSnapshot, splitTasks, startSplitRun, subscribeSplitRun, timeSinceStart } from './runs.js'
+import { PROJECT_CONFIRM_LIMIT, PROJECT_QUEUE_TEXT_LIMIT, cancelSplitRun, clearProjectDraft, clearSplitRun, planLaneTasks, projectCheckLine, projectDraftKey, projectRunBody, projectRunConfirm, projectRunLabel, projectRunLanes, projectSplitLabel, projectTaskProblem, projectWorktreeName, queueRecoveryAvailable, queueRecoveryMessage, queueRecoveryPlan, readProjectDraft, recordLine, resultWord, splitRunProgress, splitRunSnapshot, splitTasks, startSplitRun, subscribeSplitRun, timeSinceStart, writeProjectDraft } from './runs.js'
 import { formatTime } from '../inspector.js'
 
 function projectKey(value) {
@@ -85,6 +85,8 @@ export default function DispatchPanel({
   const [projectNeedsPreview, setProjectNeedsPreview] = useState(false)
   const [projectStarting, setProjectStarting] = useState(false)
   const [projectError, setProjectError] = useState(null)
+  const [projectDiscardConfirm, setProjectDiscardConfirm] = useState(false)
+  const [projectDraftPresent, setProjectDraftPresent] = useState(false)
   const [networkOnline, setNetworkOnline] = useState(true)
   const [routeNonce, setRouteNonce] = useState(0)
   const [recoveryKey, setRecoveryKey] = useState('')
@@ -97,6 +99,7 @@ export default function DispatchPanel({
   const mountedRef = useRef(true)
   const splitDoneRef = useRef(false)
   const splitProjectRef = useRef('')
+  const loadedProjectRef = useRef('')
   const promptReqRef = useRef(0)
   const routeReqRef = useRef(0)
   const promptBoxRef = useRef(null)
@@ -304,7 +307,10 @@ export default function DispatchPanel({
       try {
         const answer = await client.projectSettings()
         if (!alive) return
-        setProjectCheckCommand(typeof answer?.checkCommand === 'string' ? answer.checkCommand : '')
+        const draft = readProjectDraft(projectName)
+        if (!draft || typeof draft.checkCommand !== 'string') {
+          setProjectCheckCommand(typeof answer?.checkCommand === 'string' ? answer.checkCommand : '')
+        }
         setProjectHasTestScript(answer?.hasTestScript === true)
       } catch {}
     }
@@ -313,6 +319,21 @@ export default function DispatchPanel({
       alive = false
     }
   }, [client, hasProjectSettings, projectName])
+
+  useEffect(() => {
+    const key = projectDraftKey(projectName)
+    if (!key || key === loadedProjectRef.current) return
+    loadedProjectRef.current = key
+    const draft = readProjectDraft(projectName)
+    const fallbackLane = hasRouteLane ? 'auto' : ''
+    setProjectTask(draft && typeof draft.task === 'string' ? draft.task : '')
+    setProjectLane(draft && typeof draft.lane === 'string' ? draft.lane : fallbackLane)
+    setProjectCheckCommand(draft && typeof draft.checkCommand === 'string' ? draft.checkCommand : '')
+    setProjectAllowDirty(false)
+    setProjectDiscardConfirm(false)
+    setProjectDraftPresent(Boolean(draft))
+    dismissProjectConfirm()
+  }, [projectName, hasRouteLane])
 
   useEffect(() => {
     return subscribeToNotices(client, 'agents', () => {
@@ -519,6 +540,21 @@ export default function DispatchPanel({
     setProjectError(null)
   }
 
+  function rememberProjectDraft(patch) {
+    if (writeProjectDraft(projectName, patch)) setProjectDraftPresent(true)
+  }
+
+  function discardProjectDraft() {
+    clearProjectDraft(projectName)
+    setProjectTask('')
+    setProjectLane(hasRouteLane ? 'auto' : '')
+    setProjectCheckCommand('')
+    setProjectAllowDirty(false)
+    setProjectDiscardConfirm(false)
+    setProjectDraftPresent(false)
+    dismissProjectConfirm()
+  }
+
   function openProjectConfirm() {
     if (splitActive) return
     const tasks = splitTasks(projectTask)
@@ -561,6 +597,11 @@ export default function DispatchPanel({
       if (!started) {
         splitProjectRef.current = ''
         setProjectError('The split run is already starting.')
+        return
+      }
+      if (!splitRunSnapshot().failed) {
+        clearProjectDraft(projectName)
+        if (mountedRef.current) setProjectDraftPresent(false)
       }
       return
     }
@@ -596,6 +637,8 @@ export default function DispatchPanel({
         checkCommand: projectCheckCommand,
       })
       await client.startRun(lane, run)
+      clearProjectDraft(projectName)
+      setProjectDraftPresent(false)
       setProjectShowConfirm(false)
       setProjectConfirmLane('')
       setProjectNeedsPreview(false)
@@ -691,6 +734,8 @@ export default function DispatchPanel({
               disabled={projectSplitRun}
               onChange={(event) => {
                 setProjectLane(event.target.value)
+                rememberProjectDraft({ lane: event.target.value })
+                setProjectDiscardConfirm(false)
                 dismissProjectConfirm()
               }}
             >
@@ -723,7 +768,18 @@ export default function DispatchPanel({
           </div>
 
           <div className="panel-field">
-            <label htmlFor="project-run-task">Task</label>
+            <div className="panel-field-head">
+              <label htmlFor="project-run-task">Task</label>
+              {projectDraftPresent && !projectDiscardConfirm && (
+                <button
+                  type="button"
+                  className="brief-cancel-btn"
+                  onClick={() => setProjectDiscardConfirm(true)}
+                >
+                  Discard draft
+                </button>
+              )}
+            </div>
             <textarea
               id="project-run-task"
               rows={4}
@@ -731,10 +787,27 @@ export default function DispatchPanel({
               maxLength={PROJECT_QUEUE_TEXT_LIMIT}
               placeholder="What should the agent do in this project? Separate tasks with a line of ---"
               onChange={(event) => {
-                setProjectTask(event.target.value)
+                const value = event.target.value
+                setProjectTask(value)
+                rememberProjectDraft({ task: value })
+                setProjectDiscardConfirm(false)
                 dismissProjectConfirm()
               }}
             />
+            {projectDiscardConfirm && (
+              <div className="brief-confirm-actions">
+                <button type="button" className="brief-cancel-btn" onClick={discardProjectDraft}>
+                  Confirm discard
+                </button>
+                <button
+                  type="button"
+                  className="brief-cancel-btn"
+                  onClick={() => setProjectDiscardConfirm(false)}
+                >
+                  Cancel
+                </button>
+              </div>
+            )}
           </div>
 
           {hasProjectSettings && (
@@ -748,6 +821,8 @@ export default function DispatchPanel({
                 placeholder="Empty uses npm test when package.json has one"
                 onChange={(event) => {
                   setProjectCheckCommand(event.target.value)
+                  rememberProjectDraft({ checkCommand: event.target.value })
+                  setProjectDiscardConfirm(false)
                   dismissProjectConfirm()
                 }}
               />
