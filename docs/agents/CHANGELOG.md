@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The full suite passes at 31f73519: 5026 passed, 4 skipped, no failure.
 - Add MCP server sends create, and the bridge and the mock refuse a saved name with one sentence and change nothing; on and off still updates.
 - The runs list answers only the room's own project, and a finished row keeps a project run's task and a failed run's note and queue or test status.
 - Replace key saves to the clicked endpoint's own key slot and names it on the card, and a row it cannot serve shows the button disabled with the reason.
