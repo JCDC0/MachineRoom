@@ -7,27 +7,27 @@ const OTHER_FIXTURES = {
   'fixtures/sandbox': {
     activities: 'd0953d03899647e6',
     plans: '6dab246be0dc06a2',
-    layouts: 'bed751052ed5df63',
+    layouts: 'cb9a4332076900b8',
   },
   'fixtures/scenario-a': {
     activities: '00673deaecca9630',
     plans: '70d7b3ec3fb1f703',
-    layouts: '2bf4946527815204',
+    layouts: '74321cc8e8feda76',
   },
   'fixtures/scenario-b': {
     activities: '0a10dbb64e548bb9',
     plans: '8ffbd6484e9cfd8d',
-    layouts: '4abf77e0f29edb1e',
+    layouts: '28237138c87c28bf',
   },
   'fixtures/scenario-c': {
     activities: 'e6dc4d8a1b46b1d2',
     plans: '209e2edc80cfd82f',
-    layouts: '2c938f0f8fc1c4b5',
+    layouts: 'cf9437e37f63146d',
   },
   'fixtures/scenario-d': {
     activities: '2fab820498862bc2',
     plans: '895e32dddf24ede1',
-    layouts: '41b174563a17170f',
+    layouts: '76e5d528b7944672',
   },
 }
 
@@ -98,6 +98,6 @@ describe('the replay digests', () => {
   })
 
   it('keeps the scenario E layout digest', () => {
-    expect(results.get('fixtures/scenario-e')?.digest.layouts).toEqual('1c74b81561426b17')
+    expect(results.get('fixtures/scenario-e')?.digest.layouts).toEqual('46f1ee22a9e7eaf8')
   })
 })

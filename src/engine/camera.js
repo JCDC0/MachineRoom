@@ -95,6 +95,25 @@ export function minTextScale(screenScale, font, min) {
   return Math.max(1, min / (font * value))
 }
 
+export function distanceForRatio(spheres, { yaw = OVERVIEW.yaw, pitch = OVERVIEW.pitch, ratio = 2, center = null } = {}) {
+  const list = Array.isArray(spheres) ? spheres : []
+  const want = Number(ratio)
+  if (!(want > 1)) return 0
+  const { back } = viewBasis(yaw, pitch)
+  const at = center ?? { x: 0, y: 0, z: 0 }
+  let near = 0
+  let far = 0
+  for (const sphere of list) {
+    if (!sphere) continue
+    const d = { x: Number(sphere.x) - at.x, y: Number(sphere.y) - at.y, z: Number(sphere.z) - at.z }
+    if (!Number.isFinite(d.x) || !Number.isFinite(d.y) || !Number.isFinite(d.z)) continue
+    const depth = dot(d, back)
+    if (depth > near) near = depth
+    if (-depth > far) far = -depth
+  }
+  return Math.max(0, (want * near + far) / (want - 1))
+}
+
 export function projectPoint(camera, point, width, height) {
   if (!camera || !point) return null
   const w = Number(width)

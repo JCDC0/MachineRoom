@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- P235: a project of one to four folders starts its card ring off the camera axis, turns each child card off its parent's line, and backs the overview off until no card is drawn more than twice another's size.
+
 - P230: an unreadable root is an error and an unreadable folder keeps its last files with a problem line; a failed git read keeps the git tree, and a plain tree checks for git every 60 seconds. The .git/index watch is still open.
 - P232: the transport state word shrinks clear of the spend, panel Refresh buttons match Team, and Days to keep stays on one line.
 - P229: session discovery reads the root slug's folder and its subfolder slugs, and the cwd check still drops sibling projects.

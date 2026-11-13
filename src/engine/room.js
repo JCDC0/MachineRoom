@@ -5,13 +5,14 @@ import { isOnlineCall } from '../model/online.js'
 import { laneStarterTop } from '../model/laneStarter.js'
 import { CALLOUT_CROWD_LIMIT, createAgents, litChain, starOriginKey, tunnelRoute, webTunnelEnd } from './agents.js'
 import { BLOOM_STRENGTH_DEFAULT, createBloomLayer } from './bloom.js'
-import { ANCHOR_DIST, FOV, OVERVIEW, createCameraRig, fitView, followTarget, projectPoint } from './camera.js'
+import { ANCHOR_DIST, FOV, OVERVIEW, createCameraRig, distanceForRatio, fitView, followTarget, projectPoint } from './camera.js'
 import { createCards } from './cards.js'
 import { boardVisible, createCostBoard } from './board.js'
 import { HUB_CENTER, HUB_RADIUS, ORCHESTRATOR_HOME, createHub, workingKeys } from './hub.js'
 import { GIT_FOCUS_DIST, createGitTree } from './gitTree.js'
 import { INTERNET_RADIUS, createInternet } from './internet.js'
 import { createLabels } from './labels.js'
+import { SMALL_TOP } from './ring.js'
 import { agentStar, createStars, speedRate, starRoute, touchLabelPoint } from './stars.js'
 import { GREEN, RED, WHITE, cssColor, disposeStill, glowTexture, still } from './sprites.js'
 import { createStrings } from './strings.js'
@@ -340,15 +341,25 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     const spheres = [HUB_SPHERE, ...cards.overviewSpheres()]
     const next = fitView(spheres, { width, height, center: HUB_CENTER })
     if (heldPath !== null) {
-      fitted = next
+      fitted = { target: next.target, dist: next.dist }
       return
+    }
+    let distance = next.dist
+    const drawn = [...cards.cards.values()].filter((card) => card.view && !card.leaving)
+    if (drawn.length > 0 && drawn.length - 1 <= SMALL_TOP) {
+      const points = []
+      for (const card of drawn) {
+        const sphere = cards.cardSphere(card.path)
+        if (sphere) points.push(sphere)
+      }
+      distance = Math.max(distance, distanceForRatio(points, { center: HUB_CENTER }))
     }
     if (!force && fitted) {
       const shift = Math.hypot(next.target.x - fitted.target.x, next.target.y - fitted.target.y, next.target.z - fitted.target.z)
-      if (shift < REFIT_SHIFT && Math.abs(next.dist - fitted.dist) < fitted.dist * REFIT_RATIO) return
+      if (shift < REFIT_SHIFT && Math.abs(distance - fitted.dist) < fitted.dist * REFIT_RATIO) return
     }
-    fitted = next
-    rig.setFit(next.target, next.dist)
+    fitted = { target: next.target, dist: distance }
+    rig.setFit(next.target, distance)
   }
 
   const scratch = new THREE.Vector3()

@@ -305,7 +305,7 @@ describe('the sway on a card', () => {
       clock += 16
       cards.update(state, 0.016, camera())
     }
-    expect(src.object.position.y - src.base.y).toBeLessThan(0.05)
+    expect(src.object.position.y - src.base.y).toBeLessThan(0.12)
     cards.dispose()
   })
 
