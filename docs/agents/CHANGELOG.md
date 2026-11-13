@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- P237: a change to .git/index or info/exclude, or a worktree's own, reads the tree through the existing reader; other .git writes stay ignored.
 - P238: Claude and OpenCode session run ids carry a token made per reader, so a restarted reader never merges two runs in a replay (D4).
 - P236: storage usage stats files with at most 64 lstat calls in flight and measures worktrees side by side, 3.4 s to 0.6 s on 51,000 files.
 - P233: every path the doctor prints goes through printedRunsFolder; the checks still use the real paths.
@@ -11,6 +12,7 @@
 - P233: the doctor masks every path it prints, including the project folder, the runs folder, the built viewer, the lane file and each lane program, with `%TEMP%`, `%LOCALAPPDATA%`, `%APPDATA%`, `%USERPROFILE%` or `~`.
 - P236: storage usage reads folder entries with at most 64 lstat calls in flight across the whole scan and measures worktree folders side by side.
 - P238: a session reader's run id carries a token made when the reader is created, so a replay of two reader lifetimes keeps both runs' tool calls.
+- P237: changes to .git/index or .git/info/exclude (including a worktree's git folder) trigger a full tree read through the existing reader while other .git writes stay ignored.
 - P230: an unreadable root is an error and an unreadable folder keeps its last files with a problem line; a failed git read keeps the git tree, and a plain tree checks for git every 60 seconds. The .git/index watch is still open.
 - P232: the transport state word shrinks clear of the spend, panel Refresh buttons match Team, and Days to keep stays on one line.
 - P229: session discovery reads the root slug's folder and its subfolder slugs, and the cwd check still drops sibling projects.
