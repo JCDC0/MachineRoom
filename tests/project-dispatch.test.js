@@ -10,7 +10,7 @@ import { activeLanesFileFor, writeActiveLanes } from '../server/active-lanes.js'
 import { runsFolder } from '../server/lanes-source.js'
 import { gitPath } from '../server/programPath.js'
 import { BRIEF_PROJECT_PROBLEM, QUEUE_DIRTY_PROBLEM, RUN_KIND_PROBLEM, TASK_PROBLEM, TASK_SEPARATOR_PROBLEM, TASKS_PROBLEM, createRunsApi, writeQueue } from '../server/runs.js'
-import { worktreeFor } from '../src/briefs/run.js'
+import { worktreeFor, CHECK_SHELL_PROBLEM } from '../src/briefs/run.js'
 import { createMockClient } from '../src/control/mock.js'
 import {
   NO_CODE_LANE_FORM_LINE,
@@ -456,6 +456,22 @@ describe('the runs route with a queue', () => {
       if (previousRuns === undefined) delete process.env.MACHINEROOM_RUNS
       else process.env.MACHINEROOM_RUNS = previousRuns
     }
+  })
+
+  it('refuses a queue start whose check command uses shell syntax', async () => {
+    const project = gitProject('mr-project-dispatch-')
+    const runnerDir = tempDir('mr-project-runner-')
+    const out = join(runnerDir, 'args.json')
+    const { url } = await startBridge({ projectRoot: project, runnerPath: writeRunner(runnerDir, out) })
+    const res = await postJson(`${url}/api/control/runs`, {
+      lane: 'opencode',
+      tasks: ['Fix the typo.'],
+      checkCommand: 'npm test && npm run build',
+      confirmed: true,
+    })
+    expect(res.status).toBe(400)
+    expect(res.body).toEqual({ error: CHECK_SHELL_PROBLEM })
+    expect(existsSync(out)).toBe(false)
   })
 
   it('accepts twenty tasks of 4000 characters', async () => {

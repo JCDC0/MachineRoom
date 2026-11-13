@@ -303,10 +303,26 @@ export function worktreeProblems({ worktree, project } = {}) {
 }
 
 export const CHECK_SHELL_PROBLEM = 'The check command cannot use shell syntax; put it in an npm script.'
+export const CHECK_QUOTE_PROBLEM = 'The check command has an unclosed quote.'
+
+function quoteIsOpen(text) {
+  let quoted = false
+  for (let index = 0; index < text.length; index += 1) {
+    const character = text[index]
+    if (character === '\\' && (text[index + 1] === '"' || text[index + 1] === '\\')) {
+      index += 1
+      continue
+    }
+    if (character === '"') quoted = !quoted
+  }
+  return quoted
+}
 
 export function checkCommandProblem(command) {
   const text = String(command ?? '')
-  return /[|&;<>`]|\$\(|%[^%\r\n]+%/.test(text) ? CHECK_SHELL_PROBLEM : ''
+  if (/[|&;<>`]|\$\(|%[^%\r\n]+%/.test(text)) return CHECK_SHELL_PROBLEM
+  if (quoteIsOpen(text)) return CHECK_QUOTE_PROBLEM
+  return ''
 }
 
 export function splitCheckCommand(command) {
@@ -316,7 +332,14 @@ export function splitCheckCommand(command) {
   let current = ''
   let started = false
   let quoted = false
-  for (const character of text) {
+  for (let index = 0; index < text.length; index += 1) {
+    const character = text[index]
+    if (character === '\\' && (text[index + 1] === '"' || text[index + 1] === '\\')) {
+      current += text[index + 1]
+      started = true
+      index += 1
+      continue
+    }
     if (character === '"') {
       quoted = !quoted
       started = true
@@ -333,6 +356,7 @@ export function splitCheckCommand(command) {
     current += character
     started = true
   }
+  if (quoted) throw new Error(CHECK_QUOTE_PROBLEM)
   if (started) parts.push(current)
   return parts
 }

@@ -1,7 +1,10 @@
 # Changelog
 
 ## Unreleased
+- P247: the check command keeps escaped quotes and refuses an unclosed one, and the bridge refuses shell syntax when the command is saved or a run starts.
 - P246: the archive checks the new file's real path lies in the archive folder before removing the source, and otherwise removes the copy and skips the file.
+- P247: the bridge refuses shell syntax and an unclosed quote when the check command is saved or a Dispatch start uses it, with the runner's sentence.
+- P247: the check command keeps an escaped double quote and a doubled backslash, and refuses an unclosed quote.
 - P243: a queue record's remaining tasks and the recovery message mask profile and home paths with a browser-safe masker.
 - P246: storage archive checks each destination realpath stays inside the real runs archive folder before removing the source, removing the destination and skipping the file when it changed.
 - P245: review 30 confirms five review 29 fixes, two partly, and finds an archive parent race and a quote-splitting gap.

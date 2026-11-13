@@ -1,5 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
+import { checkCommandProblem as runnerCheckCommandProblem } from '../src/briefs/run.js'
 import { projectHash } from './active-lanes.js'
 
 export const CHECK_COMMAND_LIMIT = 500
@@ -20,6 +21,8 @@ export function checkCommandProblem(value) {
   if (text === '') return null
   if (text.length > CHECK_COMMAND_LIMIT) return CHECK_COMMAND_PROBLEM
   if (/[\r\n]/.test(text)) return CHECK_COMMAND_PROBLEM
+  const runnerProblem = runnerCheckCommandProblem(text)
+  if (runnerProblem) return runnerProblem
   return null
 }
 

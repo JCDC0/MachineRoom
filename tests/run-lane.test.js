@@ -7,7 +7,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { gitPath, programPath } from '../server/programPath.js'
 import { saveAgentsConfig } from '../server/agents-config.js'
 import { projectLanesFileFor, writeHiddenLanes } from '../server/active-lanes.js'
-import { briefProblems, briefWorktreeProblems, CHECK_SHELL_PROBLEM, checkCommandProblem, commandFor, DEFAULT_MINUTES, filterRunsSince, laneCommandProblem, readinessLine, retryStartProblem, SINCE_PROBLEM, splitCheckCommand, startFailureText, worktreeFor, formatOutcomes, formatStats, formatSummary, laneLockPids, laneLockText, laneStats, laneStopProblem, laneWithOverrides, nextTestStep, parseRunArgs, projectRunGit, runListLine, runRecord, sessionToolLines, summarizeRun, UNATTENDED_NOTE, unattendedPrompt } from '../src/briefs/run.js'
+import { briefProblems, briefWorktreeProblems, CHECK_QUOTE_PROBLEM, CHECK_SHELL_PROBLEM, checkCommandProblem, commandFor, DEFAULT_MINUTES, filterRunsSince, laneCommandProblem, readinessLine, retryStartProblem, SINCE_PROBLEM, splitCheckCommand, startFailureText, worktreeFor, formatOutcomes, formatStats, formatSummary, laneLockPids, laneLockText, laneStats, laneStopProblem, laneWithOverrides, nextTestStep, parseRunArgs, projectRunGit, runListLine, runRecord, sessionToolLines, summarizeRun, UNATTENDED_NOTE, unattendedPrompt } from '../src/briefs/run.js'
 import { branchFor, briefFileList, parseBriefs } from '../src/briefs/briefs.js'
 import { harnessByKey } from '../src/harnesses/index.js'
 import { appendRunRecord, printCommand, printedRunsFolder, projectLockName, runnerCommitVersion, sessionStartedBy, startLane, takeProjectLock } from '../scripts/run-lane.mjs'
@@ -204,6 +204,20 @@ describe('the check command', () => {
   it('splits npm test -- --runInBand into its parts', () => {
     expect(splitCheckCommand('npm test -- --runInBand')).toEqual(['npm', 'test', '--', '--runInBand'])
     expect(splitCheckCommand('node -e "process.exit(1)"')).toEqual(['node', '-e', 'process.exit(1)'])
+  })
+
+  it('keeps an escaped quote and a Windows path', () => {
+    expect(splitCheckCommand('node --test --test-name-pattern="^a\\"b$" x.test.cjs'))
+      .toEqual(['node', '--test', '--test-name-pattern=^a"b$', 'x.test.cjs'])
+    expect(splitCheckCommand('node "C:\\Program Files\\x.js"')).toEqual(['node', 'C:\\Program Files\\x.js'])
+    expect(splitCheckCommand('node C:\\\\temp\\\\x.js')).toEqual(['node', 'C:\\temp\\x.js'])
+  })
+
+  it('refuses an unclosed quote before the run', () => {
+    expect(() => splitCheckCommand('node "x.test.cjs')).toThrow(CHECK_QUOTE_PROBLEM)
+    expect(() => splitCheckCommand('node -e "x\\"')).toThrow(CHECK_QUOTE_PROBLEM)
+    expect(checkCommandProblem('node "x.test.cjs')).toBe(CHECK_QUOTE_PROBLEM)
+    expect(checkCommandProblem('node "C:\\Program Files\\x.js"')).toBe('')
   })
 
   it('refuses shell syntax with one sentence', () => {
