@@ -1540,3 +1540,24 @@ Review, with `git show -m --first-parent SHA`, against the code around each chan
 1. `stopLane` captures the harness descendants before it kills the harness tree. Keep each descendant's creation time from that process list. Before each later kill in `stopDescendants`, read the current row for that pid and skip it, counted as stopped, when the pid is gone or its creation time changed. Use the process list the stop already reads where you can; do not add a list read per pid.
 2. Test with injected lists: a descendant whose pid is reused by a newer process is not killed and the lock is removed; a descendant that is still the same process is killed.
 3. Run `node node_modules/vitest/vitest.mjs related --run scripts/run-lane.mjs` and `npm run build`. Report what passed.
+
+**P164. What stands between the owner and daily use of MachineRoom (Codex).** Read `docs/agents/OWNER.md`, `README.md`, `docs/agents/ARCHITECTURE.md`, `docs/agents/PLAN.md` (its Next section) and the detail files under `docs/agents/architecture/` you need. Change no code. Do not commit: the runner commits your file. Stop at minute 25. Files: docs/agents/AUDIT-2026-11-READINESS.md.
+
+The owner wants to start using MachineRoom on their own projects. Read the code along the path they will take: `npm install`, `npm run build`, `npm run serve -- doctor` and `up`, `machineroom FOLDER`, the connect screen, the live room with `--lanes --sessions`, the chat with the orchestrator, starting a lane from the room, a task or a queue on another project, and the review and merge routes. Write the file with three tables, the most important first in each:
+
+1. Blockers, at most 8: what fails, confuses or loses work on that path today. Each with `file:line`, what goes wrong and when, and the smallest fix.
+2. Bug patches, at most 8: smaller defects found on the way, same columns.
+3. Suggested features, at most 6: what the owner will miss in daily use, each with why, the smallest version, and the files it touches. Mark each `needs the owner's yes`.
+
+Prefer what you confirmed by reading the code or by a command over a guess, and say which. An item already listed as open in PLAN.md or an audit gets its id, not a new row.
+
+**P165. The claude sessions test that fails now and then on Windows CI (OpenCode).** Read this brief only. Use no subagents. Run every command in the foreground. Commit each step as you finish it, and stop starting new work at minute 18. Files: tests/claude-sessions.test.js, server/claude-sessions.js, docs/agents/CHANGELOG.md.
+
+1. `notices a lane meta file written after the session file was registered` in `tests/claude-sessions.test.js` failed once on Windows CI at `8091f05d` with `expected [ { type: 'heartbeat.run.log', …(3) } ] to deeply equal []`. It passes alone here. Run the file ten times alone, then ten times while `node scripts/test.mjs` runs beside it, and note each result.
+2. Find the race by reading the test against the reader's polling and meta file timing. Fix the test when it races (wait for a state, not a time), or the reader when a real lane could hit it. Do not raise a timeout to hide it.
+3. Run the file ten times again and report both counts. Run `node node_modules/vitest/vitest.mjs related --run server/claude-sessions.js` and `npm run build` if you changed the reader. Report what passed.
+
+**P166. Try the first-use commands the way a new owner would (OpenCode).** Read `README.md` and this brief only. Use no subagents. Run every command in the foreground with a time limit. Change no code. Stop at minute 18. Files: docs/agents/RUN-2026-11-13-FIRST-USE.md.
+
+1. Set `MACHINEROOM_RUNS` to a new folder under `%TEMP%` for every command, and never start a bridge with `--lanes` on the testbench runs folder. Run, in order, the commands README gives a new owner that do not start a server: `npm run serve -- doctor` on this checkout and on `C:\GitHub\MachineRoomTestProject`, `npm run pack-check`, `npm run run-lane -- --list`, `npm run run-lane -- opencode --project C:\GitHub\MachineRoomTestProject --task "Say hello." --dry-run`, and each command's help or usage line.
+2. Write the file: one row per command with what it printed in short, whether a new owner would know what to do next, and anything wrong, unclear or missing. End with the five changes that would help a new owner most. Stop every process you started. Commit the file.
