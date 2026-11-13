@@ -78,6 +78,7 @@ const POLL_READ_GAP = 3
 const SKIP_DIRS = new Set(['.git', 'node_modules', 'dist', '.worktrees'])
 const TREE_MAX_BUFFER = 64 * 1024 * 1024
 const TREE_TIMEOUT_MS = 20000
+export const GIT_RECHECK_MS = 60000
 const PARTIAL_NAME_LIMIT = 50
 const PARTIAL_FULL_EVERY = 10
 const IGNORED_WATCH = /(^|[/\\])(\.git|node_modules|\.worktrees)([/\\]|$)/
@@ -86,17 +87,23 @@ const AGENT_MESSAGE_KINDS = new Set(['order', 'report', 'dispatch', 'wake'])
 const PLAIN_TREE = Symbol('plainTree')
 const gzipAsync = promisify(gzipCallback)
 
-function walkFiles(listDir, currentDir, prefix = '', out = []) {
+function walkFiles(listDir, currentDir, prefix = '', out = [], failed = []) {
   let entries
-  try {
+  if (prefix === '') {
     entries = listDir(currentDir, { withFileTypes: true })
-  } catch {
-    return out
+  } else {
+    try {
+      entries = listDir(currentDir, { withFileTypes: true })
+    } catch (error) {
+      if (error?.code === 'ENOENT' || error?.code === 'ENOTDIR') return out
+      failed.push(prefix.slice(0, -1))
+      return out
+    }
   }
   for (const entry of entries) {
     if (entry.isDirectory()) {
       if (SKIP_DIRS.has(entry.name)) continue
-      walkFiles(listDir, join(currentDir, entry.name), `${prefix}${entry.name}/`, out)
+      walkFiles(listDir, join(currentDir, entry.name), `${prefix}${entry.name}/`, out, failed)
     } else if (entry.isFile()) {
       out.push(`${prefix}${entry.name}`)
     }
@@ -106,13 +113,24 @@ function walkFiles(listDir, currentDir, prefix = '', out = []) {
 
 function walkTree(projectRoot, listDir = readdirSync) {
   const resolved = resolve(projectRoot)
-  return { root: basename(resolved), files: walkFiles(listDir, resolved).sort(), created: [] }
+  const failed = []
+  const files = walkFiles(listDir, resolved, '', [], failed).sort()
+  const tree = { root: basename(resolved), files, created: [] }
+  if (failed.length > 0) tree.failed = failed
+  return tree
 }
 
 function runGitPaths(resolved, args) {
   return new Promise((resolveList) => {
+    let file
+    try {
+      file = gitPath()
+    } catch {
+      resolveList(null)
+      return
+    }
     execFile(
-      gitPath(),
+      file,
       ['-C', resolved, ...args],
       {
         encoding: 'utf8',
@@ -132,6 +150,47 @@ function runGitPaths(resolved, args) {
             .filter(Boolean)
             .map((line) => line.replace(/\\/g, '/'))
         )
+      }
+    )
+  })
+}
+
+function isGitWorkTree(resolved) {
+  return new Promise((resolveCheck) => {
+    let file
+    try {
+      file = gitPath()
+    } catch {
+      resolveCheck(null)
+      return
+    }
+    execFile(
+      file,
+      ['-C', resolved, 'rev-parse', '--is-inside-work-tree'],
+      {
+        encoding: 'utf8',
+        env: { ...process.env, GIT_CEILING_DIRECTORIES: dirname(resolved) },
+        timeout: TREE_TIMEOUT_MS,
+        windowsHide: true,
+      },
+      (error, stdout, stderr) => {
+        if (!error) {
+          const value = String(stdout ?? '').trim()
+          if (value === 'true') resolveCheck(true)
+          else if (value === 'false') resolveCheck(false)
+          else resolveCheck(null)
+          return
+        }
+        const message = String(stderr ?? '')
+        if (/not a git repository/i.test(message)) {
+          resolveCheck(false)
+          return
+        }
+        if (/cannot change to/i.test(message) && /no such file or directory/i.test(message)) {
+          resolveCheck(false)
+          return
+        }
+        resolveCheck(null)
       }
     )
   })
@@ -167,14 +226,23 @@ function dropDeleted(files, deleted) {
   return files.filter((file) => !gone.has(file))
 }
 
-export async function readTree(projectRoot, { listDir = readdirSync, gitList = gitListPaths, gitDeleted = gitDeletedPaths } = {}) {
+export async function readTree(
+  projectRoot,
+  { listDir = readdirSync, gitList = gitListPaths, gitDeleted = gitDeletedPaths, gitWorkTree = isGitWorkTree } = {}
+) {
   if (!projectRoot) return { root: '', files: [], created: [] }
   const resolved = resolve(projectRoot)
   const root = basename(resolved)
   const listedPromise = gitList(resolved, ['--cached', '--others', '--exclude-standard'])
   const deletedPromise = gitDeleted(resolved)
   const listed = await listedPromise
-  if (listed === null) return { ...walkTree(resolved, listDir), [PLAIN_TREE]: true }
+  if (listed === null) {
+    const inside = await gitWorkTree(resolved)
+    if (inside === false) {
+      return { ...walkTree(resolved, listDir), [PLAIN_TREE]: true }
+    }
+    throw new Error('Could not read the git file list.')
+  }
   const deleted = await deletedPromise
   return { root, files: dropDeleted(listed, deleted).sort(), created: [] }
 }
@@ -486,7 +554,17 @@ export function trimHistory(history, now = Date.now) {
 
 export function createBridge(options = {}) {
   const projectRoot = options.projectRoot ?? process.env.PROJECT_ROOT ?? process.cwd()
-  const treeReader = options.readTree ?? readTree
+  const listDir = options.listDir ?? readdirSync
+  const gitWorkTreeCheck = options.gitWorkTree ?? isGitWorkTree
+  const treeReader =
+    options.readTree ??
+    ((root) =>
+      readTree(root, {
+        listDir,
+        gitWorkTree: gitWorkTreeCheck,
+        ...(options.gitList ? { gitList: options.gitList } : {}),
+        ...(options.gitDeleted ? { gitDeleted: options.gitDeleted } : {}),
+      }))
   const partialTreeReader = options.readTreePartial ?? readTreePartial
   const watchProject = options.watchProject ?? watch
   const packFolderTree = options.packTree ?? packTree
@@ -497,6 +575,7 @@ export function createBridge(options = {}) {
   const quietMs = Number(options.quietMs ?? WATCH_QUIET_MS)
   const quietFullMs = Number(options.quietFullMs ?? QUIET_FULL_READ_MS)
   const treeBudgetMs = Number(options.treeBudgetMs ?? TREE_LAST_FILE_BUDGET_MS)
+  const gitRecheckMs = Number(options.gitRecheckMs ?? GIT_RECHECK_MS)
   const now = typeof options.now === 'function' ? options.now : Date.now
   const env = options.env ?? process.env
   const origins = namedOrigins(env.MACHINEROOM_ORIGINS)
@@ -832,12 +911,15 @@ export function createBridge(options = {}) {
   let lastTree = null
   let lastTreeAt = 0
   let lastTreeError = ''
+  let lastTreeProblems = []
   let treeChangedAt = 0
   let lastReadMs = 0
   let lastReadEndAt = 0
   let lastReadChanged = false
   let watchFallback = false
   let treeNotGit = false
+  let plainCheckedAt = 0
+  let gitRecheckTimer = null
   let treePrimed = false
   const treeStart = randomBytes(8).toString('hex')
   let treeVersion = 0
@@ -896,6 +978,28 @@ export function createBridge(options = {}) {
       else removed.push(file)
     }
     return { added, removed }
+  }
+
+  function sendFolderPayload(req, res, answer) {
+    const wantsGzip = /(^|,)\s*gzip\b/i.test(String(req.headers['accept-encoding'] ?? ''))
+    if (!wantsGzip) {
+      res.writeHead(200, {
+        ...corsHeaders(req, isAllowed),
+        'Content-Type': 'application/json; charset=utf-8',
+        Vary: 'Origin',
+        'Content-Length': answer.payload.length,
+      })
+      res.end(answer.payload)
+      return
+    }
+    res.writeHead(200, {
+      ...corsHeaders(req, isAllowed),
+      'Content-Type': 'application/json; charset=utf-8',
+      'Content-Encoding': 'gzip',
+      Vary: 'Origin, Accept-Encoding',
+      'Content-Length': answer.gzipped.length,
+    })
+    res.end(answer.gzipped)
   }
 
   function folderAnswerFor(tree) {
@@ -960,25 +1064,96 @@ export function createBridge(options = {}) {
     return true
   }
 
+  function mergeFailedSubtrees(nextFiles, previousFiles, failedDirs) {
+    if (!Array.isArray(previousFiles) || previousFiles.length === 0 || failedDirs.length === 0) return nextFiles
+    const merged = new Set(nextFiles)
+    for (const file of previousFiles) {
+      if (failedDirs.some((dir) => file === dir || file.startsWith(`${dir}/`))) merged.add(file)
+    }
+    return [...merged].sort()
+  }
+
+  function clearGitRecheck() {
+    if (gitRecheckTimer) {
+      clearTimeout(gitRecheckTimer)
+      gitRecheckTimer = null
+    }
+  }
+
+  async function recheckGitWorkTree() {
+    if (stopped || !treeNotGit) return
+    if (treeReading) {
+      scheduleGitRecheck()
+      return
+    }
+    let inside = null
+    try {
+      inside = await gitWorkTreeCheck(resolve(projectRoot))
+    } catch {
+      inside = null
+    }
+    if (stopped || !treeNotGit) return
+    if (inside === false) {
+      plainCheckedAt = now()
+      scheduleGitRecheck()
+      return
+    }
+    treeNotGit = false
+    clearGitRecheck()
+    checkTreeChange()
+  }
+
+  function scheduleGitRecheck() {
+    if (stopped || !treeNotGit || gitRecheckTimer) return
+    const delay = Math.max(1, gitRecheckMs - Math.max(0, now() - plainCheckedAt))
+    gitRecheckTimer = setTimeout(() => {
+      gitRecheckTimer = null
+      if (stopped || !treeNotGit) return
+      recheckGitWorkTree().catch(() => {})
+    }, delay)
+    gitRecheckTimer.unref?.()
+  }
+
   async function readWholeTree() {
     let tree
     try {
+      if (treeNotGit && now() - plainCheckedAt >= gitRecheckMs) {
+        treeNotGit = false
+        clearGitRecheck()
+      }
       if (treeNotGit) {
-        tree = walkTree(projectRoot)
+        tree = walkTree(projectRoot, listDir)
       } else {
         tree = await treeReader(projectRoot)
-        if (tree?.[PLAIN_TREE]) treeNotGit = true
+        if (tree?.[PLAIN_TREE]) {
+          treeNotGit = true
+          plainCheckedAt = now()
+          scheduleGitRecheck()
+        } else {
+          treeNotGit = false
+          clearGitRecheck()
+        }
+      }
+      if (typeof tree?.error === 'string' && tree.error) {
+        throw new Error(tree.error)
+      }
+      if (!tree || !Array.isArray(tree.files)) {
+        throw new Error('The tree read returned no file list.')
       }
       lastTreeError = ''
+      const failedDirs = Array.isArray(tree.failed) ? tree.failed.filter((dir) => typeof dir === 'string' && dir !== '') : []
+      if (failedDirs.length > 0) {
+        const files = mergeFailedSubtrees(tree.files, lastTree?.files, failedDirs)
+        lastTreeProblems = failedDirs.map((dir) => `The tree could not read ${dir}.`)
+        return { root: tree.root, files, created: Array.isArray(tree.created) ? tree.created : [] }
+      }
+      lastTreeProblems = []
+      return { root: tree.root, files: tree.files, created: Array.isArray(tree.created) ? tree.created : [] }
     } catch (error) {
       lastTreeError = error instanceof Error ? error.message : String(error)
-      tree = { root: '', files: [], created: [] }
+      lastTreeProblems = []
+      return null
     }
-    if (!tree || !Array.isArray(tree.files)) {
-      if (!lastTreeError) lastTreeError = 'The tree read returned no file list.'
-      tree = { root: '', files: [], created: [] }
-    }
-    return tree
   }
 
   function clearQuietRead() {
@@ -1036,6 +1211,7 @@ export function createBridge(options = {}) {
       }
       if (tree) {
         lastTreeError = ''
+        lastTreeProblems = []
         partialStreak += 1
         usedPartial = true
       } else {
@@ -1043,6 +1219,10 @@ export function createBridge(options = {}) {
         tree = await readWholeTree()
       }
       if (stopped) return tree
+      if (!tree) {
+        changed = false
+        return lastTree
+      }
       changed = publishTree(tree)
       return tree
     })()
@@ -1388,6 +1568,7 @@ export function createBridge(options = {}) {
       // The page shows ok: false as a dead room, so only a room that cannot work sets it.
       const fatal = problems.length
       if (lastTreeError) problems.push(`The last tree read failed: ${lastTreeError}`)
+      for (const problem of lastTreeProblems) problems.push(problem)
       if (sessionsSource && typeof sessionsSource.problems === 'function') {
         for (const problem of sessionsSource.problems()) {
           problems.push(`The ${problem.name} source stopped: ${problem.message}`)
@@ -1434,8 +1615,26 @@ export function createBridge(options = {}) {
         const recent = lastTree && Date.now() - lastTreeAt <= TREE_REUSE_MS
         tree = recent ? lastTree : await startTreeRead()
       }
-      if (stopped || !tree) {
+      if (stopped) {
         res.destroy()
+        return
+      }
+      if (!tree) {
+        const fallback = { root: '', files: [], created: [] }
+        if (!wantsFolders) {
+          sendJson(req, res, 200, { ...fallback, start: treeStart })
+          return
+        }
+        const payload = Buffer.from(
+          JSON.stringify({ ...packFolderTree(fallback), created: fallback.created, version: 0, start: treeStart }),
+          'utf8'
+        )
+        const gzipped = await gzipAsync(payload)
+        if (stopped) {
+          res.destroy()
+          return
+        }
+        sendFolderPayload(req, res, { payload, gzipped })
         return
       }
       if (!wantsFolders) {
@@ -1447,25 +1646,7 @@ export function createBridge(options = {}) {
         res.destroy()
         return
       }
-      const wantsGzip = /(^|,)\s*gzip\b/i.test(String(req.headers['accept-encoding'] ?? ''))
-      if (!wantsGzip) {
-        res.writeHead(200, {
-          ...corsHeaders(req, isAllowed),
-          'Content-Type': 'application/json; charset=utf-8',
-          Vary: 'Origin',
-          'Content-Length': answer.payload.length,
-        })
-        res.end(answer.payload)
-        return
-      }
-      res.writeHead(200, {
-        ...corsHeaders(req, isAllowed),
-        'Content-Type': 'application/json; charset=utf-8',
-        'Content-Encoding': 'gzip',
-        Vary: 'Origin, Accept-Encoding',
-        'Content-Length': answer.gzipped.length,
-      })
-      res.end(answer.gzipped)
+      sendFolderPayload(req, res, answer)
       return
     }
 
@@ -1594,6 +1775,7 @@ export function createBridge(options = {}) {
       pollTimer = null
     }
     clearQuietRead()
+    clearGitRecheck()
     quietFullDue = false
     if (watcher) {
       try {

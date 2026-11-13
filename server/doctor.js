@@ -238,6 +238,9 @@ export async function readProjectLine(projectRoot, { read = readTree, limit = PR
     if (!tree || !Array.isArray(tree.files)) {
       return { ok: false, text: `The project could not be read: ${PROJECT_READ_EMPTY}`, tree: null }
     }
+    if (typeof tree.error === 'string' && tree.error) {
+      return { ok: false, text: `The project could not be read: ${PROJECT_READ_FAILED}`, tree: null }
+    }
     return { ...projectLine(tree.files), tree }
   } catch (error) {
     const reason = error instanceof Error && error.message === PROJECT_READ_TIMEOUT ? PROJECT_READ_TIMEOUT : PROJECT_READ_FAILED

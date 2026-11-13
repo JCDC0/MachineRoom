@@ -1,7 +1,8 @@
-import { rmSync, writeFileSync } from 'node:fs'
+import { execFileSync } from 'node:child_process'
+import { mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { FOLDER_SHAPE, createBridge, packTree, treeReadDue } from '../server/index.js'
+import { FOLDER_SHAPE, GIT_RECHECK_MS, createBridge, packTree, treeReadDue } from '../server/index.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
@@ -9,7 +10,7 @@ const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 async function waitFor(check, { timeoutMs = 5000, everyMs = 10 } = {}) {
   const deadline = Date.now() + timeoutMs
   for (;;) {
-    if (check()) return
+    if (await check()) return
     if (Date.now() > deadline) throw new Error('Timed out waiting for the tree read.')
     await wait(everyMs)
   }
@@ -463,5 +464,193 @@ describe('a file that leaves the project', () => {
     } finally {
       await events.close()
     }
+  })
+})
+
+describe('unreadable folders in the plain tree', () => {
+  it('reports an unreadable root error in health and keeps the last good tree', async () => {
+    const root = makeRoot()
+    writeFileSync(join(root, 'a.js'), '1\n')
+    let blockRoot = true
+    const listDir = (folder, options) => {
+      if (blockRoot && folder === root) throw Object.assign(new Error('permission denied'), { code: 'EACCES' })
+      return readdirSync(folder, options)
+    }
+    const initialFailBridge = createBridge({
+      projectRoot: root,
+      port: 0,
+      env: {},
+      debounceMs: 15,
+      pollMs: 15,
+      quietMs: 50,
+      listDir,
+    })
+    bridges.push(initialFailBridge)
+    const { url: failUrl } = await initialFailBridge.start()
+    await waitFor(async () => {
+      const health = await (await fetch(`${failUrl}/api/health`)).json()
+      return health.problems.length > 0
+    })
+    const initialHealth = await (await fetch(`${failUrl}/api/health`)).json()
+    expect(initialHealth.ok).toBe(true)
+    expect(initialHealth.problems.join('\n')).toContain('permission denied')
+
+    blockRoot = false
+    const recoverRoot = makeRoot()
+    writeFileSync(join(recoverRoot, 'kept.js'), '1\n')
+    let lockAfter = false
+    const recoverBridge = createBridge({
+      projectRoot: recoverRoot,
+      port: 0,
+      env: {},
+      debounceMs: 15,
+      pollMs: 15,
+      quietMs: 50,
+      listDir: (folder, options) => {
+        if (lockAfter && folder === recoverRoot) throw Object.assign(new Error('root locked'), { code: 'EACCES' })
+        return readdirSync(folder, options)
+      },
+    })
+    bridges.push(recoverBridge)
+    const { url } = await recoverBridge.start()
+    const before = await (await fetch(`${url}/api/tree`)).json()
+    expect(before.files).toEqual(['kept.js'])
+    const events = await openEvents(url, `?tree=1&since=${before.start}:1`)
+    try {
+      lockAfter = true
+      await wait(1100)
+      const after = await (await fetch(`${url}/api/tree`)).json()
+      expect(after.files).toEqual(['kept.js'])
+      const health = await (await fetch(`${url}/api/health`)).json()
+      expect(health.ok).toBe(true)
+      expect(health.problems.join('\n')).toContain('root locked')
+      expect(readTreeEvents(events.text())).toEqual([])
+    } finally {
+      await events.close()
+    }
+  })
+
+  it('keeps the old files of an unreadable child folder and names it in health problems', async () => {
+    const root = makeRoot()
+    mkdirSync(join(root, 'open'), { recursive: true })
+    mkdirSync(join(root, 'sub', 'locked', 'deep'), { recursive: true })
+    writeFileSync(join(root, 'open', 'a.js'), '1\n')
+    writeFileSync(join(root, 'sub', 'locked', 'b.js'), '2\n')
+    writeFileSync(join(root, 'sub', 'locked', 'deep', 'c.js'), '3\n')
+    let blockChild = false
+    const bridge = createBridge({
+      projectRoot: root,
+      port: 0,
+      env: {},
+      debounceMs: 15,
+      pollMs: 15,
+      quietMs: 50,
+      listDir: (folder, options) => {
+        if (blockChild && folder === join(root, 'sub', 'locked')) {
+          throw Object.assign(new Error('permission denied'), { code: 'EACCES' })
+        }
+        return readdirSync(folder, options)
+      },
+    })
+    bridges.push(bridge)
+    const { url } = await bridge.start()
+    const first = await (await fetch(`${url}/api/tree`)).json()
+    expect(first.files).toEqual(['open/a.js', 'sub/locked/b.js', 'sub/locked/deep/c.js'])
+
+    blockChild = true
+    writeFileSync(join(root, 'open', 'added.js'), '4\n')
+    await waitFor(async () => {
+      const health = await (await fetch(`${url}/api/health`)).json()
+      return health.problems.some((line) => line.includes('sub/locked'))
+    })
+
+    const tree = await (await fetch(`${url}/api/tree`)).json()
+    expect(tree.files).toEqual(['open/a.js', 'open/added.js', 'sub/locked/b.js', 'sub/locked/deep/c.js'])
+    const health = await (await fetch(`${url}/api/health`)).json()
+    expect(health.ok).toBe(true)
+    expect(health.problems.some((line) => line.includes('sub/locked'))).toBe(true)
+  })
+})
+
+describe('git timeouts and plain-to-git transitions', () => {
+  it('keeps the git tree on a git timeout and tries git again on the next read', async () => {
+    const root = makeRoot()
+    execFileSync('git', ['init', '-b', 'main'], { cwd: root, stdio: 'ignore' })
+    writeFileSync(join(root, '.gitignore'), 'ignored.txt\n')
+    writeFileSync(join(root, 'kept.js'), '1\n')
+    writeFileSync(join(root, 'ignored.txt'), 'secret\n')
+    let calls = 0
+    const gitList = async () => {
+      calls += 1
+      if (calls === 1) return ['.gitignore', 'kept.js']
+      if (calls === 2) return null
+      return ['.gitignore', 'kept.js', 'next.js']
+    }
+    const bridge = createBridge({
+      projectRoot: root,
+      port: 0,
+      env: {},
+      debounceMs: 15,
+      pollMs: 15,
+      quietMs: 50,
+      gitList,
+      gitDeleted: () => Promise.resolve([]),
+    })
+    bridges.push(bridge)
+    const { url } = await bridge.start()
+    const first = await (await fetch(`${url}/api/tree`)).json()
+    expect(first.files).toEqual(['.gitignore', 'kept.js'])
+
+    const events = await openEvents(url, `?tree=1&since=${first.start}:1`)
+    try {
+      await wait(1100)
+      const duringTimeout = await (await fetch(`${url}/api/tree`)).json()
+      expect(duringTimeout.files).toEqual(['.gitignore', 'kept.js'])
+      const failedHealth = await (await fetch(`${url}/api/health`)).json()
+      expect(failedHealth.ok).toBe(true)
+      expect(failedHealth.problems.length).toBeGreaterThan(0)
+      expect(readTreeEvents(events.text())).toEqual([])
+
+      await wait(1100)
+      const recovered = await (await fetch(`${url}/api/tree`)).json()
+      expect(calls).toBeGreaterThanOrEqual(3)
+      expect(recovered.files).toEqual(['.gitignore', 'kept.js', 'next.js'])
+      const recoveredHealth = await (await fetch(`${url}/api/health`)).json()
+      expect(recoveredHealth.problems).toEqual([])
+    } finally {
+      await events.close()
+    }
+  })
+
+  it('reads a plain folder with git within the minute after git init', async () => {
+    expect(GIT_RECHECK_MS).toBe(60000)
+    const root = makeRoot()
+    mkdirSync(join(root, 'ignored'), { recursive: true })
+    writeFileSync(join(root, '.gitignore'), 'ignored/\n')
+    writeFileSync(join(root, 'keep.txt'), '1\n')
+    writeFileSync(join(root, 'ignored', 'secret.txt'), '2\n')
+
+    const bridge = createBridge({
+      projectRoot: root,
+      port: 0,
+      env: {},
+      debounceMs: 15,
+      pollMs: 15,
+      quietMs: 50,
+      gitRecheckMs: 80,
+    })
+    bridges.push(bridge)
+    const { url } = await bridge.start()
+    const before = await (await fetch(`${url}/api/tree`)).json()
+    expect(before.files).toEqual(['.gitignore', 'ignored/secret.txt', 'keep.txt'])
+
+    execFileSync('git', ['init', '-b', 'main'], { cwd: root, stdio: 'ignore' })
+    await waitFor(async () => {
+      const tree = await (await fetch(`${url}/api/tree`)).json()
+      return tree.files.length === 2 && !tree.files.includes('ignored/secret.txt')
+    })
+
+    const after = await (await fetch(`${url}/api/tree`)).json()
+    expect(after.files).toEqual(['.gitignore', 'keep.txt'])
   })
 })
