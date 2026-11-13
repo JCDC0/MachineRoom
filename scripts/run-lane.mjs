@@ -1128,7 +1128,7 @@ async function runQueueProject({ options, lane, lanes }) {
             projectBranch: startBranch, deferRecord: true, base,
           })
           pending = { record: run.record, folder: target.path, startHead: run.startHead, startBranch, tests: '' }
-          if (run.code !== 0 || run.killed) finishPending('', true)
+          if (run.code !== 0 || run.killed) finishPending(run.killed ? 'stopped' : 'failed', true)
           return { code: run.code, killed: run.killed }
         },
         runTests: async () => {
