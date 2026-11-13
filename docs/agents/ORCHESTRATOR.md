@@ -10,12 +10,12 @@ How to read this file: `Where things stand`, `Rules`, `Session start` and `The l
 
 Rewrite this section at every merge and before you end a session. Keep it under ten lines: what is pushed, what is unpushed, what runs, what waits on the owner, what is next.
 
-- 2026-11-13, 4 am shutdown: everything merged is pushed (check `git log origin/main -1`); read CI first with `gh run list --limit 3 --repo JCDC0/MachineRoom`. The night ran P77 to P150 and reviews 13 and 15 to 22. Every blocking finding of reviews 17 to 21 is fixed.
-- Open from review 22 (`AUDIT-2026-11-REVIEW-22.md`): finding 1 (a renamed title, compact rules and summaries are saved without masking), finding 3 (a missing project and a queue's worktree summary print full paths) and finding 4 (the current row's identity uses `startedAt`, which moves when the 200-message cap drops the oldest message, so the menu closes). Finding 2 (`%APPDATA%`) is fixed. Brief these first.
-- P148 (the path masker in `server/printed-path.js`) and P150 (the last full suite, `RUN-2026-11-13-SUITE-2.md`) are merged; the eight suite failures it found (tests expecting raw paths) are fixed in `f98b0db7`. CI on `593fe62f` was green on Windows and failed one Ubuntu test (the masked log line of P123 is not printed as ~/...); P154 (2026-11-13) found the cause: USERPROFILE won a tie with HOME on a posix path; the test runs on Linux again. Read CI on the last push first.
-- The fleet at the owner's word: `opencode` to `opencode5` on DeepSeek V4.1 Flash at max reasoning (`reasoning: "max"`), `codex` on GPT-6.1 Sol high, `agy` and `agy2` on Gemini 4 Hydrogen XHigh (no Ultra tier exists), `agy3` on Hydrogen High. Hydrogen ran 8 briefs and a review well, 5 to 20 minutes each.
-- Open for the owner: N16 (an all-zero cost reads as not reported), the live room by eye, the release (P4).
-- Push: the owner's yes held until the 4 am shutdown of 2026-11-13 only. A new session asks again.
+- 2026-11-13, evening: pushed to `4f2f6c24`; merged and unpushed since: P196, P200 to P204, P206 to P208 (check `git log origin/main..main`). Read CI first with `gh run list --limit 3 --repo JCDC0/MachineRoom`; `4f2f6c24` was green on Ubuntu and failed one Windows claude-sessions test, fixed by P207.
+- Today ran P151 to P210 and reviews 23 to 27. Every finding of reviews 22 to 27 and of readiness passes 1 and 2 (except D5's archive boundary, part of F1) is fixed. Readiness pass 3 (`AUDIT-2026-11-READINESS-3.md`, Codex): P197-1 to P197-7 and its Dispatch history note are merged as P200 to P206 and P208.
+- Running at this rewrite: P209 (full suite, opencode) and P210 (review 28 of the batch, codex). Read both before the next push.
+- The fleet at the owner's word: `opencode` to `opencode5` on DeepSeek V4.1 Flash at max reasoning, `codex` on GPT-6.1 Sol high (in rotation for briefs, not only reviews), `agy` and `agy2` on Gemini 4 Hydrogen XHigh, `agy3` on Hydrogen High. The owner said to ignore AGY's Argon orchestrator for now.
+- Open for the owner: N16 (an all-zero cost reads as not reported), the live room by eye, the release (P4), and seven suggested features, each waiting for a yes: a check command per project, the orchestrator preparing a merge, handing off a failed queue, storage cleanup preview with an archive boundary (F1), conversation export (F2), Stop a running lane from Dispatch, and a kept Dispatch draft per project.
+- Push: the owner said "push commits" for the session of 2026-11-13. A new session asks again.
 
 ## Rules
 
