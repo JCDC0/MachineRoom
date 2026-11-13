@@ -1759,3 +1759,49 @@ CI on Ubuntu (run 43392354399, commit 9036d11c) failed `tests/run-queue.test.js`
 1. Read the code path from the harness exit to the record: `scripts/run-lane.mjs` around lines 1040 to 1130 (`finishPending`, the queue status), 1480 to 1540 (`harnessExitCode`, `child.exitCode`, `killTree`) and 1640 to 1700 (the records). Find every way the second run can record 1: a `failed: tests` status, a queue that throws, a race between the child's `exit` and `close` events, a kill of the process tree that wins over the real exit, a worktree reused at the old commit so `node run` fails to start. Name the cause you confirm and say how you confirmed it.
 2. Fix the cause in the code if the code records the wrong exit code. Change the test only if the test itself is wrong, and keep it able to fail.
 3. Run the test 20 times in a row (`node node_modules/vitest/vitest.mjs run tests/run-queue.test.js -t "omits tests on harness exit"` in a loop) and report how many passed. Then run `node node_modules/vitest/vitest.mjs related --run scripts/run-lane.mjs` and report what passed.
+
+**P200. Retry resends to the conversation that owns the reply (OpenCode).** Read finding P197-1 in `docs/agents/AUDIT-2026-11-READINESS-3.md` and this brief only. Use no subagents. Run every command in the foreground. Commit each step as you finish it, and stop starting new work at minute 25. Files: src/ui/OrchestratorChat.jsx, tests/orchestrator-chat.test.js, docs/agents/CHANGELOG.md.
+
+1. Retry under a reply sends the prompt to the conversation that reply belongs to, passed to `deliver` explicitly, whatever To says now. A sub's retry goes to that sub, never to Main.
+2. Tests, by what they prove: a reply from Main retried after To changed to a lane goes to Main; a sub's reply retried goes to that sub. Each test must fail on the code before your change.
+3. Run `node node_modules/vitest/vitest.mjs related --run src/ui/OrchestratorChat.jsx` and `npm run build`. Report what passed.
+
+**P201. Auto starts the lane its confirm card names (OpenCode).** Read finding P197-2 in `docs/agents/AUDIT-2026-11-READINESS-3.md` and this brief only. Use no subagents. Run every command in the foreground. Commit each step as you finish it, and stop starting new work at minute 25. Files: src/ui/panels/DispatchPanel.jsx, tests/dispatch-auto-ui.test.js, docs/agents/CHANGELOG.md.
+
+1. The Auto preview routes the whole task list the owner submits (every queue task, not only the first), so the card names the lane the server would choose for all of it.
+2. Confirm sends the lane the card names, not `auto`. If that lane is no longer free, the existing start guard refuses it and the panel asks for a fresh preview; it never starts another lane.
+3. Tests, by what they prove: a queue whose tasks have different tiers previews the lane for the highest tier; Confirm sends that lane's name; a refused start shows the refusal and starts nothing. Each must fail before your change.
+4. Run `node node_modules/vitest/vitest.mjs related --run src/ui/panels/DispatchPanel.jsx` and `npm run build`. Report what passed.
+
+**P202. A deleted lane's key is never given to a new lane (OpenCode).** Read finding P197-3 in `docs/agents/AUDIT-2026-11-READINESS-3.md` and this brief only. Use no subagents. Run every command in the foreground. Commit each step as you finish it, and stop starting new work at minute 25. Files: server/agents-config.js, tests/agents-config.test.js, docs/agents/CHANGELOG.md.
+
+1. The lane key allocation keeps the highest number it has handed out for each harness in the saved agent configuration, and a new lane takes the next one, so a key a deleted lane used is never handed out again. A configuration saved before this change starts from the highest number its current entries and its kept run records show, whichever is larger. Read the records only through the existing run readers.
+2. Tests, by what they prove: create, delete and create again gives a new key; the same after the configuration is read again from disk (a bridge restart); existing entries keep their keys.
+3. Run `node node_modules/vitest/vitest.mjs related --run server/agents-config.js` and `npm run build`. Report what passed.
+
+**P203. Spent this month keeps a deleted lane's spend (OpenCode).** Read finding P197-7 in `docs/agents/AUDIT-2026-11-READINESS-3.md` and this brief only. Use no subagents. Run every command in the foreground. Commit each step as you finish it, and stop starting new work at minute 25. Files: server/lane-costs.js, tests/lane-costs.test.js, src/ui/panels/MetersPanel.jsx, tests/meters-panel.test.js, docs/agents/CHANGELOG.md.
+
+1. The month and today totals count every recorded run with a cost, including runs of lanes no longer in the roster.
+2. The cost of runs whose lane is not in the roster shows as one row named `Removed lanes`, after the other rows, only when it is above zero, so the rows add up to the total.
+3. Tests, by what they prove: the total does not drop when a lane with positive spend leaves the roster; the Removed lanes row holds that spend; no such row appears when nothing is unmatched. Do not change how an unknown or all-zero cost reads (that is N16).
+4. Run `node node_modules/vitest/vitest.mjs related --run server/lane-costs.js src/ui/panels/MetersPanel.jsx` and `npm run build`. Report what passed.
+
+**P204. Replace key acts on the endpoint row it is clicked on (OpenCode).** Read finding P197-4 in `docs/agents/AUDIT-2026-11-READINESS-3.md` and this brief only. Use no subagents. Run every command in the foreground. Commit each step as you finish it, and stop starting new work at minute 25. Files: src/ui/EndpointsPanel.jsx, server/endpoints.js, tests/endpoints-panel.test.js, tests/endpoints.test.js, docs/agents/CHANGELOG.md.
+
+1. Replace key carries the clicked endpoint's name and key slot to the save, and the card names that endpoint. The save changes only that endpoint's key and never creates or changes another endpoint.
+2. A row whose key cannot be replaced this way (a Custom provider row with no preset) shows the button disabled with a one-sentence reason instead of a failing click.
+3. Tests, by what they prove: a row named Work on the OpenRouter preset with slot Work saves to Work and leaves OpenRouter alone; the Custom row's button is disabled. Each must fail before your change.
+4. Run `node node_modules/vitest/vitest.mjs related --run src/ui/EndpointsPanel.jsx server/endpoints.js` and `npm run build`. Report what passed.
+
+**P205. Add MCP server refuses a name that is already saved (AGY).** Read finding P197-5 in `docs/agents/AUDIT-2026-11-READINESS-3.md` and this brief only. Use no subagents. Run every command in the foreground. Commit each step as you finish it. Files: src/ui/McpSettings.jsx, server/mcp.js, tests/mcp-settings.test.js, tests/mcp-server.test.js, docs/agents/CHANGELOG.md.
+
+1. Adding a server whose name is already saved is refused with one sentence naming it, in the form and on the server (a create-only check on the add path). The on and off action keeps its current update behaviour.
+2. Tests, by what they prove: the add route refuses an existing name and leaves the saved server unchanged; the form shows the sentence; on and off still works. Each new test must fail before your change.
+3. Run `node node_modules/vitest/vitest.mjs related --run src/ui/McpSettings.jsx server/mcp.js` and `npm run build`. Report what passed.
+
+**P206. Dispatch history shows this project's runs and why a run failed (AGY).** Read finding P197-6 and the Q2 paragraph under Existing IDs in `docs/agents/AUDIT-2026-11-READINESS-3.md`, and this brief only. Use no subagents. Run every command in the foreground. Commit each step as you finish it. Files: server/runs.js, src/ui/panels/runs.js, tests/panels-runs.test.js, tests/project-dispatch.test.js, docs/agents/CHANGELOG.md.
+
+1. `GET /api/control/runs` (around `server/runs.js:775`) answers only the runs of the room's own project: brief runs when the room is this repository, project runs whose project is the room's folder otherwise. Compare resolved folders the way the Reviews lookup already does, and reuse its helper.
+2. A finished row in Dispatch shows the run's task (first line, cut to one line) for a project run, and the saved `note` when the run failed or was refused, with any queue or test status, so the reason stays after the running row goes. Change only the formatter in `src/ui/panels/runs.js` unless the panel cannot show the text without a change, and then say why.
+3. Tests, by what they prove: a GET for project A returns no record of project B; a refused start's note shows on its finished row; a project run's task shows. Each must fail before your change.
+4. Run `node node_modules/vitest/vitest.mjs related --run server/runs.js src/ui/panels/runs.js` and `npm run build`. Report what passed.
