@@ -159,6 +159,118 @@ describe('recordLine', () => {
     expect(recordLine({})).toBe('unknown | none | failed | cost unknown | 0 min | time unknown')
     expect(recordLine(null)).toBe('')
   })
+
+  it('formats a project run using the first line of task', () => {
+    const line = recordLine({
+      lane: 'opencode',
+      briefs: [],
+      task: '\r\n  Fix the flaky lock.\tPlease.\r\nAlso add a regression test.',
+      project: 'App',
+      startedAt: '2026-10-19T22:00:00.000Z',
+      minutes: 2,
+      exitCode: 0,
+      killed: false,
+      costUsd: 0.01,
+    })
+    expect(line).toBe('opencode | Fix the flaky lock. Please. | finished | $0.0100 | 2 min | 2026-10-19T22:00:00.000Z')
+    expect(line).not.toContain('Also add a regression test')
+    expect(line).not.toMatch(/[\r\n]/)
+  })
+
+  it('shows the saved note when a run failed or was refused', () => {
+    const refused = recordLine({
+      lane: 'opencode',
+      briefs: [],
+      task: 'Fix the typo.',
+      project: 'App',
+      startedAt: '2026-10-19T22:05:00.000Z',
+      minutes: 0,
+      exitCode: 3,
+      killed: false,
+      startFailed: true,
+      note: 'the runner refused to start\nor could not start',
+      costUsd: null,
+    })
+    expect(refused).toContain('opencode | Fix the typo. | failed | cost unknown | 0 min | 2026-10-19T22:05:00.000Z')
+    expect(refused).toContain('the runner refused to start or could not start')
+    expect(refused).not.toMatch(/[\r\n]/)
+
+    const failed = recordLine({
+      lane: 'agy',
+      briefs: ['P206'],
+      startedAt: '2026-10-19T22:10:00.000Z',
+      minutes: 1,
+      exitCode: 1,
+      killed: false,
+      note: 'Runner exited 1 before committing.',
+      costUsd: 0.002,
+    })
+    expect(failed).toContain('Runner exited 1 before committing.')
+
+    const succeeded = recordLine({
+      lane: 'agy',
+      briefs: ['P206'],
+      startedAt: '2026-10-19T22:12:00.000Z',
+      minutes: 1,
+      exitCode: 0,
+      killed: false,
+      note: 'leftovers were stopped',
+      costUsd: 0.002,
+    })
+    expect(succeeded).toBe('agy | P206 | finished | $0.0020 | 1 min | 2026-10-19T22:12:00.000Z')
+  })
+
+  it('shows queueStatus and tests status when present', () => {
+    const failedTests = recordLine({
+      lane: 'opencode',
+      briefs: [],
+      task: 'Queue task one',
+      project: 'App',
+      startedAt: '2026-10-19T22:15:00.000Z',
+      minutes: 3,
+      exitCode: 1,
+      killed: false,
+      costUsd: 0.05,
+      tests: 'failed',
+      queueStatus: 'failed: tests',
+      note: 'Tests exited with code 1.',
+    })
+    expect(failedTests).toContain('opencode | Queue task one | failed')
+    expect(failedTests).toContain('failed: tests')
+    expect(failedTests).toContain('tests failed')
+    expect(failedTests).toContain('Tests exited with code 1.')
+
+    const passedTests = recordLine({
+      lane: 'opencode',
+      briefs: [],
+      task: 'Queue task two',
+      project: 'App',
+      startedAt: '2026-10-19T22:20:00.000Z',
+      minutes: 2,
+      exitCode: 0,
+      killed: false,
+      costUsd: 0.03,
+      tests: 'passed',
+    })
+    expect(passedTests).toContain('tests passed')
+
+    const stoppedQueue = recordLine({
+      lane: 'opencode',
+      briefs: [],
+      task: 'Queue task three',
+      project: 'App',
+      startedAt: '2026-10-19T22:25:00.000Z',
+      minutes: 1,
+      exitCode: null,
+      killed: true,
+      costUsd: 0.01,
+      tests: 'none',
+      queueStatus: 'failed: lane killed',
+    })
+    expect(stoppedQueue).toContain('stopped')
+    expect(stoppedQueue).toContain('failed: lane killed')
+    expect(stoppedQueue).toContain('tests none')
+  })
 })
 
 describe('runStartLine', () => {
