@@ -21,9 +21,9 @@ import { healthNotice } from './healthNotice.js'
 import { ladderGroups } from './ladderGroups.js'
 import { lensProject } from './lens.js'
 import {
-  REPLAY_LINE,
   currentSessionTitle,
   lowerBreadcrumb,
+  replayFoot,
 } from './lowerHalf.js'
 import { latestOnly } from './panels/notices.js'
 import { orchestratorOn } from './orchestratorChat.js'
@@ -172,6 +172,7 @@ export default function Hud({
     mode === 'live' &&
     (['reconnecting', 'disconnected'].includes(snapshot?.status) || health?.ok === false)
   const chatAvailable = orchestratorOn(health)
+  const replay = replayFoot({ connected: liveAvailable })
   const wide = wideLayout(viewportWidth)
   const floatingChat = !wide || mode === 'replay'
   const settingsCountRef = useRef(Number(settingsRequest) || 0)
@@ -1011,14 +1012,16 @@ export default function Hud({
                   <EventLogBody entries={visibleLog} bodyRef={lowerFollow.ref} onScroll={lowerFollow.onScroll} />
                 </div>
                 <div className="hud-lower-replay-foot">
-                  <p className="hud-lower-note">{REPLAY_LINE}</p>
-                  <button
-                    type="button"
-                    className="hud-lower-connect"
-                    onClick={() => onMode('live')}
-                  >
-                    Connect
-                  </button>
+                  <p className="hud-lower-note">{replay.line}</p>
+                  {replay.connect && (
+                    <button
+                      type="button"
+                      className="hud-lower-connect"
+                      onClick={() => onMode('live')}
+                    >
+                      Connect
+                    </button>
+                  )}
                 </div>
               </div>
             ) : client && chatAvailable ? (

@@ -369,6 +369,17 @@ export function projectRunLanes(agents, running) {
   return lanes
 }
 
+export const NO_LANES_FORM_LINE =
+  'Runs start from a room opened with --lanes: npm run serve -- up --lanes.'
+export const NO_CODE_LANE_FORM_LINE =
+  'No code lane is set up. Add one in Agents, Build a team.'
+
+export function projectFormNotice({ lanesMode = false, lanes = [] } = {}) {
+  if (!lanesMode) return NO_LANES_FORM_LINE
+  if (!Array.isArray(lanes) || lanes.length === 0) return NO_CODE_LANE_FORM_LINE
+  return ''
+}
+
 function idleProjectLanes(lanes) {
   const list = Array.isArray(lanes) ? lanes : []
   const seen = new Set()
