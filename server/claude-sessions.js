@@ -96,6 +96,7 @@ export function createClaudeSessionsReader(options = {}) {
   const projectsFolder = join(home, '.claude', 'projects', claudeProjectSlug(projectRoot))
   const sessions = new Map()
   const evicted = new Map()
+  const forgotten = new Map()
   const metaFiles = new Map()
   let metaNames = null
   let metaFolderStamp = null
@@ -369,24 +370,44 @@ export function createClaudeSessionsReader(options = {}) {
       return
     }
     const skipped = skippedIds ?? skippedSessions()
+    const seen = new Set()
     for (const entry of entries) {
       if (!entry.isFile() || !entry.name.endsWith('.jsonl')) continue
       const id = entry.name.slice(0, -6)
+      seen.add(id)
       if (sessions.has(id) || evicted.has(id)) continue
       const path = join(projectsFolder, entry.name)
-      if (skipped.has(id)) {
-        sessions.set(id, { id, path, skipped: true, stream: null, children: new Map(), number: 0, run: null, lastGrowth: now() })
-        continue
-      }
+      const mark = forgotten.get(id)
       let size = 0
-      if (!primed) {
+      if (!mark && !primed) {
         try {
           size = statSync(path).size
         } catch {
           size = 0
         }
       }
-      sessions.set(id, { id, path, skipped: false, stream: newStream(path, size), children: new Map(), number: 0, run: null, lastGrowth: now() })
+      forgotten.delete(id)
+      if (skipped.has(id)) {
+        sessions.set(id, { id, path, skipped: true, stream: null, offset: mark?.offset ?? size, children: new Map(), number: 0, run: null, lastGrowth: now() })
+        continue
+      }
+      if (mark) {
+        let current = 0
+        try {
+          current = statSync(path).size
+        } catch {
+          current = 0
+        }
+        if (current === mark.offset) {
+          forgotten.set(id, { path, offset: mark.offset })
+          continue
+        }
+        size = current < mark.offset ? 0 : mark.offset
+      }
+      sessions.set(id, { id, path, skipped: false, stream: newStream(path, size), offset: size, children: new Map(), number: 0, run: null, lastGrowth: now() })
+    }
+    for (const id of forgotten.keys()) {
+      if (!seen.has(id) && !sessions.has(id) && !evicted.has(id)) forgotten.delete(id)
     }
   }
 
@@ -397,13 +418,15 @@ export function createClaudeSessionsReader(options = {}) {
     evicted.set(id, {
       id,
       path: session.path,
-      offset: session.stream ? session.stream.offset : 0,
+      offset: session.stream ? session.stream.offset : session.offset ?? 0,
       number: session.number ?? 0,
       skipped: Boolean(session.skipped),
     })
     while (evicted.size > MAX_EVICTED) {
       const oldest = evicted.keys().next().value
+      const dropped = evicted.get(oldest)
       evicted.delete(oldest)
+      forgotten.set(oldest, { path: dropped.path, offset: dropped.offset })
     }
   }
 
@@ -422,11 +445,13 @@ export function createClaudeSessionsReader(options = {}) {
       }
       if (size !== entry.offset) {
         evicted.delete(id)
+        forgotten.delete(id)
         sessions.set(id, {
           id,
           path: entry.path,
           skipped: false,
           stream: newStream(entry.path, entry.offset),
+          offset: entry.offset,
           children: new Map(),
           number: entry.number ?? 0,
           run: null,
@@ -477,6 +502,7 @@ export function createClaudeSessionsReader(options = {}) {
     stopped = true
     sessions.clear()
     evicted.clear()
+    forgotten.clear()
     metaFiles.clear()
     metaNames = null
     metaFolderStamp = null
