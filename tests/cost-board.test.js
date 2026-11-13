@@ -178,6 +178,26 @@ describe('boardLines', () => {
     })
   })
 
+  it('formats a reported 0 as $0.00 and 0 tokens', () => {
+    const board = costBoard(
+      {
+        summary: { spendCents: 0, budgetCents: 0 },
+        byAgent: [{ agentId: 'agent-1', agentName: 'Agent One', costCents: 0, todayCents: 0, inputTokens: 0, outputTokens: 0 }],
+      },
+      [{ id: 'agent-1', key: 'one', name: 'Agent One' }]
+    )
+    const lines = boardLines(board)
+
+    expect(lines.rows[0]).toEqual({
+      key: 'one',
+      name: 'Agent One',
+      cost: '$0.00',
+      tokens: '0 in / 0 out',
+      share: null,
+      reported: true,
+    })
+  })
+
   it('formats over budget', () => {
     const board = costBoard(
       {

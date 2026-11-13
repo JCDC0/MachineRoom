@@ -59,6 +59,20 @@ describe('MetersPanel', () => {
     expect(html).toContain('500 in / 0 out')
   })
 
+  it('shows a reported 0 as $0.00 and 0 tokens', () => {
+    const costs = {
+      summary: { spendCents: 0, budgetCents: 0, utilizationPercent: null },
+      byAgent: [
+        { agentId: 'agent-zero', agentName: 'Zero lane', costCents: 0, todayCents: 0, inputTokens: 0, outputTokens: 0 },
+      ],
+      quota: [],
+    }
+    const html = renderPanel(costs)
+    expect(html).toContain('Zero lane')
+    expect(html).toContain('$0.00')
+    expect(html).toContain('0 in / 0 out')
+  })
+
   it('shows the removed lanes spend after the lanes in the roster', () => {
     const costs = {
       summary: { spendCents: 445, budgetCents: 0, utilizationPercent: null },

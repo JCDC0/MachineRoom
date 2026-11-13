@@ -1,5 +1,4 @@
 const NOT_AVAILABLE = 'Not available.'
-const NOT_REPORTED = [null, 0]
 
 function isPlainObject(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
@@ -66,7 +65,7 @@ function rowFor(agent, source) {
   const inputTokens = countOrNull(source?.inputTokens)
   const outputTokens = countOrNull(source?.outputTokens)
   const numbers = [costCents, inputTokens, outputTokens]
-  const reported = Boolean(source) && !numbers.every((value) => NOT_REPORTED.includes(value))
+  const reported = Boolean(source) && numbers.some((value) => value !== null)
   const name = agent.name ?? textOrNull(source?.agentName) ?? agent.id ?? textOrNull(source?.agentId)
   return {
     key: agent.key,
