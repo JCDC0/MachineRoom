@@ -86,6 +86,8 @@ export function createOpencodeSessionsReader(options = {}) {
   const idleSessionPollMs = Number.isFinite(rawIdleSessionPoll) ? rawIdleSessionPoll : DEFAULT_IDLE_SESSION_POLL_MS
   const onQuery = typeof options.onQuery === 'function' ? options.onQuery : () => {}
   const now = typeof options.now === 'function' ? options.now : Date.now
+  const startupAt = now()
+  const dbExistedAtStart = existsSync(dbPath)
   const emit = typeof options.emit === 'function' ? options.emit : () => {}
   const rawRetention = Number(options.retentionMs)
   const retentionMs = Number.isFinite(rawRetention) ? rawRetention : DEFAULT_RETENTION_MS
@@ -243,10 +245,12 @@ export function createOpencodeSessionsReader(options = {}) {
     const at = now()
     for (const [id, rootId] of included) {
       const handled = new Map()
-      let since = -1
-      for (const row of messageRows(id, -1)) {
-        handled.set(row.id, row.time_updated)
-        if (Number.isFinite(row.time_updated) && row.time_updated > since) since = row.time_updated
+      let since = dbExistedAtStart ? -1 : startupAt
+      if (dbExistedAtStart) {
+        for (const row of messageRows(id, -1)) {
+          handled.set(row.id, row.time_updated)
+          if (Number.isFinite(row.time_updated) && row.time_updated > since) since = row.time_updated
+        }
       }
       sessions.set(id, {
         handled,
@@ -455,7 +459,7 @@ export function createOpencodeSessionsReader(options = {}) {
       if (!info) {
         info = {
           handled: new Map(),
-          since: forgottenEntry ? forgottenEntry.since : -1,
+          since: forgottenEntry ? forgottenEntry.since : (dbExistedAtStart ? -1 : startupAt),
           rootId,
           lastSeen: at,
           lastPolled: 0,
