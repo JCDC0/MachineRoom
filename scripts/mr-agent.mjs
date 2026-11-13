@@ -32,6 +32,7 @@ const DAMAGED_RETRY_LIMIT = 1
 const RETRY_BASE_MS = 2000
 const RETRY_MAX_MS = 60000
 const RETRY_STATUS = new Set([429, 500, 502, 503, 529])
+const NUDGE = 'Continue with the task. Use tools, or say you are done.'
 const SEARCH_MATCH_LIMIT = 200
 const SEARCH_LINE_LIMIT = 300
 const SEARCH_FILE_LIMIT = 2000000
@@ -422,6 +423,20 @@ function replyOf(data) {
   const message = choice?.message
   if (!message || typeof message !== 'object' || Array.isArray(message)) throw new Error('The API answer had no message.')
   return message
+}
+
+function providerErrorOf(data, choice) {
+  for (const value of [data?.error, choice?.error, choice?.message?.error]) {
+    if (value === undefined || value === null || value === false) continue
+    if (typeof value === 'string') return value.trim() === '' ? 'The provider reported an error.' : value.trim()
+    if (typeof value === 'object' && !Array.isArray(value)) {
+      const message = typeof value.message === 'string' ? value.message.trim() : ''
+      return message === '' ? 'The provider reported an error.' : message
+    }
+    return 'The provider reported an error.'
+  }
+  if (choice?.finish_reason === 'error' || choice?.finish_reason === 'failed') return 'The provider reported an error.'
+  return ''
 }
 
 function textOf(content) {
@@ -1381,6 +1396,7 @@ async function main() {
   let lastText = ''
   let step = 0
   let damagedAnswers = 0
+  let nudged = false
 
   const finish = (isError, result, exitCode = isError ? 1 : 0) => {
     writeJson({
@@ -1422,6 +1438,9 @@ async function main() {
         costLimit,
         onDamaged: () => { damagedAnswers += 1 },
       })
+      const choice = Array.isArray(data?.choices) ? data.choices[0] : null
+      const providerError = providerErrorOf(data, choice)
+      if (providerError !== '') throw new Error(sanitize(providerError, key))
       const message = replyOf(data)
       const usage = usageOf(data)
       inputTokens += usage.input
@@ -1434,6 +1453,17 @@ async function main() {
       const text = textOf(message.content).trim()
       if (text !== '') lastText = text
       const calls = toolCallsOf(message, `call_${step}`)
+      if (calls.length === 0 && text === '') {
+        if (nudged) {
+          finish(false, lastText)
+          return
+        }
+        nudged = true
+        messages.push({ role: 'user', content: NUDGE })
+        writeJson({ type: 'user', message: { role: 'user', content: [{ type: 'text', text: NUDGE }] } })
+        continue
+      }
+      nudged = false
       const inputs = calls.map((call) => {
         try {
           return { args: argumentsOf(call.arguments), error: '' }
