@@ -1706,3 +1706,10 @@ Review, with `git show -m --first-parent SHA`, against the code around each chan
 1. The forgotten marker keeps `number` beside the offset, and a session rebuilt from it starts at that number.
 2. Test with 201 files: an append to a forgotten session goes through the same live pipeline that took the first turn, and the pipeline emits the new tool call.
 3. Run `node node_modules/vitest/vitest.mjs related --run server/claude-sessions.js` and `npm run build`. Report what passed.
+
+**P191. A reconnect resets whenever any frame is missing, and replays in order (OpenCode).** Read findings R5 and R6 in `docs/agents/AUDIT-2026-11-REVIEW-25.md` and this brief only. Use no subagents. Run every command in the foreground. Commit each step as you finish it, and stop starting new work at minute 18. Files: server/index.js, tests/bridge-stream.test.js, docs/agents/CHANGELOG.md, docs/agents/architecture/LIVE.md.
+
+1. `eventResetNeeded` resets when any sequence number between the cursor and the latest one is missing from the kept history, not only when the first one after the cursor is. Keep the cases the current tests cover (a current cursor, a following frame, a foreign cursor, an empty history after the cursor).
+2. On a reset, the bridge sends the reset event and then the kept history once, in sequence order. Remove the separate `currentRunFrames` send if nothing else needs it, since the history already holds the pinned run starts.
+3. Tests, by what they prove: cursor 1 with pinned start 2 and frames 15 onward resets; after a reset of a run that was queued then running, the final state through the real pipeline and state reducer is running.
+4. Run `node node_modules/vitest/vitest.mjs related --run server/index.js` and `npm run build`. Report what passed.
