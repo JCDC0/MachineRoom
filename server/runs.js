@@ -8,6 +8,7 @@ import { parseBriefs } from '../src/briefs/briefs.js'
 import { SINCE_PROBLEM, dayStart, laneStats, pathInside, projectProblems, runRecord, worktreeFor } from '../src/briefs/run.js'
 import { profileFromBrief, profileFromTask } from '../src/policy/profile.js'
 import { readPolicy, routeLane, tierFor, TIERS } from '../src/policy/route.js'
+import { conversationFromLog } from '../src/model/conversation.js'
 import { readLaneCosts } from './lane-costs.js'
 import { outcomeTable, subjectsFromLog } from './outcomes.js'
 import { gitPath } from './programPath.js'
@@ -35,6 +36,10 @@ export const STOP_LANE_PROBLEM = 'Choose a lane to stop.'
 export const STOP_TIME_PROBLEM = 'Name the start time to stop.'
 export const STOP_MISMATCH_PROBLEM = 'That start time does not match the running run.'
 export const STOP_BUSY_PROBLEM = 'That run is already stopping.'
+export const CONVERSATION_UNKNOWN_PROBLEM = 'No run of that lane started at that time.'
+export const CONVERSATION_LOG_OUTSIDE_PROBLEM = "The run's log is outside the runs folder."
+export const CONVERSATION_LOG_MISSING_PROBLEM = "The run's log is missing."
+export const CONVERSATION_LOG_BYTES = 8 * 1024 * 1024
 const STOP_TIMEOUT_MS = 15 * 1000
 const STOP_SETTLE_MS = 50
 export function notGitProblem(project, { queue = false } = {}) {
@@ -376,6 +381,65 @@ function readJsonLines(file) {
 
 export function readRunRecords(file) {
   return readAllRunRecords(file).slice(-RECENT_LIMIT).reverse()
+}
+
+function readLogTail(path) {
+  let stat
+  try {
+    stat = statSync(path)
+  } catch {
+    return null
+  }
+  if (!stat.isFile()) return null
+  const start = Math.max(0, stat.size - CONVERSATION_LOG_BYTES)
+  if (start === 0) {
+    try {
+      return { text: readFileSync(path, 'utf8'), cut: false }
+    } catch {
+      return null
+    }
+  }
+  let fd
+  try {
+    fd = openSync(path, 'r')
+    const buffer = Buffer.alloc(stat.size - start)
+    let read = 0
+    while (read < buffer.length) {
+      const got = readSync(fd, buffer, read, buffer.length - read, start + read)
+      if (got <= 0) break
+      read += got
+    }
+    let text = buffer.subarray(0, read).toString('utf8')
+    const newline = text.indexOf('\n')
+    if (newline !== -1 && newline + 1 < text.length) text = text.slice(newline + 1)
+    return { text, cut: true }
+  } catch {
+    return null
+  } finally {
+    if (fd !== undefined) {
+      try {
+        closeSync(fd)
+      } catch {}
+    }
+  }
+}
+
+function conversationPrompt(record, tasksText) {
+  if (typeof record?.task === 'string' && record.task.trim() !== '') return record.task
+  const ids = Array.isArray(record?.briefs) ? record.briefs.filter((id) => typeof id === 'string' && id.trim() !== '') : []
+  if (ids.length === 0) return ''
+  if (tasksText) {
+    const briefs = parseBriefs(tasksText).filter((brief) => ids.includes(brief.id))
+    if (briefs.length > 0) {
+      return briefs
+        .map((brief) => {
+          const title = brief.title.trim().replace(/[.:;!?]+$/, '')
+          return `Task ${brief.id}: ${title}.\n${brief.text}`
+        })
+        .join('\n\n')
+    }
+  }
+  return `Task ${ids.join(', ')}.`
 }
 
 export function newestRecordPerLane(records) {
@@ -1004,6 +1068,72 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
       return true
     }
     if (await projectSettings.handle(req, res, url)) return true
+    if (path === '/api/control/runs/conversation') {
+      if (method !== 'GET') {
+        sendJson(req, res, 405, { error: 'Method not allowed.' })
+        return true
+      }
+      const lane = (url.searchParams.get('lane') ?? '').trim()
+      const startedAt = (url.searchParams.get('startedAt') ?? '').trim()
+      const wantedTime = Date.parse(startedAt)
+      const records = readAllRunRecords(recordsPath())
+      let record = null
+      for (let index = records.length - 1; index >= 0; index -= 1) {
+        const item = records[index]
+        if (!item || item.lane !== lane) continue
+        if (item.startedAt === startedAt) {
+          record = item
+          break
+        }
+        if (Number.isFinite(wantedTime) && Date.parse(item.startedAt) === wantedTime) {
+          record = item
+          break
+        }
+      }
+      if (!record) {
+        sendJson(req, res, 404, { error: CONVERSATION_UNKNOWN_PROBLEM })
+        return true
+      }
+      const folder = realPath(recordsDir())
+      const logPath = typeof record.log === 'string' && record.log.trim() !== '' ? realPath(record.log.trim()) : ''
+      if (logPath !== '' && !pathInside(logPath, folder)) {
+        sendJson(req, res, 400, { error: CONVERSATION_LOG_OUTSIDE_PROBLEM })
+        return true
+      }
+      if (logPath === '') {
+        sendJson(req, res, 404, { error: CONVERSATION_LOG_MISSING_PROBLEM })
+        return true
+      }
+      const log = readLogTail(logPath)
+      if (log === null) {
+        sendJson(req, res, 404, { error: CONVERSATION_LOG_MISSING_PROBLEM })
+        return true
+      }
+      let harness = ''
+      const lanes = readStartLanes({ lanesFile: laneFile, runsFolder: recordsDir() })
+      if (lanes && Object.hasOwn(lanes, lane) && lanes[lane] && typeof lanes[lane] === 'object') {
+        harness = typeof lanes[lane].cli?.harness === 'string' ? lanes[lane].cli.harness : ''
+      }
+      let isRunning = false
+      for (const item of running.values()) {
+        if (item.entry.lane === lane && item.entry.startedAt === record.startedAt) {
+          isRunning = true
+          break
+        }
+      }
+      const prompt = conversationPrompt(record, readText('TASKS.md'))
+      const entries = conversationFromLog(harness, log.text, prompt)
+      if (entries.length > 0 && entries[0].role === 'prompt') entries[0] = { ...entries[0], at: record.startedAt }
+      sendJson(req, res, 200, {
+        lane,
+        startedAt: record.startedAt,
+        harness,
+        running: isRunning,
+        entries,
+        ...(log.cut ? { cut: true } : {}),
+      })
+      return true
+    }
     if (path === '/api/control/runs/outcomes') {
       if (method !== 'GET') {
         sendJson(req, res, 405, { error: 'Method not allowed.' })
