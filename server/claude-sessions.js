@@ -399,12 +399,12 @@ export function createClaudeSessionsReader(options = {}) {
           current = 0
         }
         if (current === mark.offset) {
-          forgotten.set(id, { path, offset: mark.offset })
+          forgotten.set(id, { path, offset: mark.offset, number: mark.number ?? 0 })
           continue
         }
         size = current < mark.offset ? 0 : mark.offset
       }
-      sessions.set(id, { id, path, skipped: false, stream: newStream(path, size), offset: size, children: new Map(), number: 0, run: null, lastGrowth: now() })
+      sessions.set(id, { id, path, skipped: false, stream: newStream(path, size), offset: size, children: new Map(), number: mark?.number ?? 0, run: null, lastGrowth: now() })
     }
     for (const id of forgotten.keys()) {
       if (!seen.has(id) && !sessions.has(id) && !evicted.has(id)) forgotten.delete(id)
@@ -426,7 +426,7 @@ export function createClaudeSessionsReader(options = {}) {
       const oldest = evicted.keys().next().value
       const dropped = evicted.get(oldest)
       evicted.delete(oldest)
-      forgotten.set(oldest, { path: dropped.path, offset: dropped.offset })
+      forgotten.set(oldest, { path: dropped.path, offset: dropped.offset, number: dropped.number ?? 0 })
     }
   }
 
