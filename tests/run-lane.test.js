@@ -1348,6 +1348,110 @@ function runLane(args, env = {}) {
   })
 }
 
+function writeLaneFile(folder, names) {
+  const path = join(folder, 'lanes.json')
+  const saved = {}
+  for (const name of names) {
+    saved[name] = {
+      name,
+      worktree: join(folder, '.worktrees', name),
+      cli: { harness: 'opencode', bin: 'opencode', model: 'opencode-go/deepseek-v4.1-flash' },
+    }
+  }
+  writeFileSync(path, `${JSON.stringify(saved, null, 2)}\n`)
+  return path
+}
+
+describe('run-lane first use', () => {
+  it('prints a usage block for --help and -h, and the same block on stderr for a bare run', async () => {
+    const folder = makeTempDir('machine-room-help-')
+    try {
+      const path = writeLaneFile(folder, ['opencode'])
+      const runEnv = { MACHINEROOM_LANES_FILE: path, MACHINEROOM_RUNS: join(folder, 'runs') }
+      for (const flag of ['--help', '-h']) {
+        const result = await runLane([flag], runEnv)
+        expect(result.code, result.stderr).toBe(0)
+        expect(result.stdout).toContain('Usage: npm run run-lane -- <lane> <brief...> [options]')
+        for (const form of ['--project <folder> --task <text>', '--task-file <path>', '--queue <path>', '--list', '--stats', '--outcomes', '--stop <lane>']) {
+          expect(result.stdout).toContain(form)
+        }
+        for (const option of ['--dry-run', '--worktree', '--allow-dirty', '--model <id>', '--reasoning <level>', '--minutes <n>', '--started-by <id>', '--force']) {
+          expect(result.stdout).toContain(option)
+        }
+        expect(result.stdout).toContain('Example: npm run run-lane -- opencode <brief> --dry-run')
+        expect(result.stdout).not.toContain('hermes')
+      }
+      const bare = await runLane([], runEnv)
+      expect(bare.code).toBe(1)
+      expect(bare.stderr).toContain('Usage: npm run run-lane -- <lane> <brief...> [options]')
+      expect(bare.stderr).toContain('--dry-run')
+      expect(bare.stderr).not.toContain('hermes')
+    } finally {
+      rmSync(folder, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+    }
+  })
+
+  it('names the lanes and the masked lane file when a lane is missing', async () => {
+    const folder = makeTempDir('machine-room-missing-lane-')
+    try {
+      const path = writeLaneFile(folder, ['opencode', 'claude'])
+      const result = await runLane(['nope', 'T2', '--dry-run'], {
+        MACHINEROOM_LANES_FILE: path,
+        MACHINEROOM_RUNS: join(folder, 'runs'),
+        TEMP: folder,
+        TMP: folder,
+      })
+      expect(result.code).toBe(1)
+      expect(result.stderr).toContain('There is no lane named nope.')
+      expect(result.stderr).toContain('opencode, claude')
+      expect(result.stderr).toContain(`%TEMP%${path.slice(folder.length)}`)
+      expect(result.stderr).toContain("Add a lane in the room's Settings.")
+      expect(result.stderr).not.toContain(folder)
+    } finally {
+      rmSync(folder, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+    }
+  })
+
+  it('says where --list looked and how to start a run when there are no runs', async () => {
+    const folder = makeTempDir('machine-room-empty-list-')
+    try {
+      const runs = join(folder, 'runs')
+      const result = await runLane(['--list'], { MACHINEROOM_RUNS: runs, TEMP: folder, TMP: folder })
+      expect(result.code).toBe(0)
+      expect(result.stdout).toContain('No runs recorded yet.')
+      expect(result.stdout).toContain(`The runs folder is %TEMP%${runs.slice(folder.length)}.`)
+      expect(result.stdout).toContain('Start one with npm run run-lane -- <lane> <brief>.')
+      expect(result.stdout).not.toContain(folder)
+    } finally {
+      rmSync(folder, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+    }
+  })
+
+  it('ends a dry run with the prompt first line and the nothing-started line', async () => {
+    const folder = makeTempDir('machine-room-dry-run-first-line-')
+    try {
+      const project = join(folder, 'project')
+      mkdirSync(project, { recursive: true })
+      const init = spawnSync(gitPath(), ['init'], { cwd: project, encoding: 'utf8', windowsHide: true })
+      expect(init.status).toBe(0)
+      const result = await runLane(['opencode', '--project', project, '--task', 'Fix it first.\nThen stop.', '--dry-run'], {
+        MACHINEROOM_LANES_FILE: lanesFileUnderWorktrees(folder),
+        MACHINEROOM_RUNS: join(folder, 'runs'),
+        TEMP: folder,
+        TMP: folder,
+      })
+      expect(result.code, result.stderr).toBe(0)
+      const lines = result.stdout.trim().split(/\r?\n/)
+      expect(lines.at(-1)).toBe('Dry run, nothing started.')
+      expect(result.stdout).toContain('characters>')
+      expect(result.stdout.indexOf('prompt: Fix it first.')).toBeGreaterThan(result.stdout.indexOf('characters>'))
+      expect(result.stdout).not.toContain('Then stop.')
+    } finally {
+      rmSync(folder, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+    }
+  })
+})
+
 describe('printCommand', () => {
   it('masks program, working folder, MCP and usage paths without changing the command', () => {
     const profile = 'C:\\Users\\<name>'
@@ -1376,6 +1480,7 @@ describe('printCommand', () => {
         expect(log.mock.calls.map(([line]) => line)).toEqual([
           `file: ${shown}`,
           `args: ${JSON.stringify(['-p', `<prompt: ${prompt.length} characters>`, '--mcp-config', '%LOCALAPPDATA%\\MachineRoom\\runs\\run.mcp.json', '--usage-file', '%LOCALAPPDATA%\\MachineRoom\\runs\\run.usage.json', '--model', 'fake/model'])}`,
+          `prompt: ${prompt}`,
           'cwd: %USERPROFILE%\\project',
           'mcp config: %LOCALAPPDATA%\\MachineRoom\\runs\\run.mcp.json',
           'mcp servers: browser',

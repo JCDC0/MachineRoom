@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- run-lane has --help, lists the lane file and its lanes when a lane is missing, says where --list looked, and ends a dry run with Dry run, nothing started (P167).
 - doctor takes a folder, counts warnings in its last line and stops at a missing folder; pack-check has a usage line and says what it read; README has a First run block (P168).
 - The connect screen's replay card names the replay of this visit with no fixed length, and its recovery line leads with machineroom YOUR-PROJECT (P171).
 - The connect screen describes the replay as what this page has seen since the first conversation, with no fixed length, and keeps the tour as the sample (P171).
@@ -11,6 +12,7 @@
 - Doctor counts warnings in its summary line and stops after a failed project folder, so the one FAIL line is last (P168).
 - pack-check prints a usage line for --help and says in one line what a passing check read (P168).
 - README's Quick start has a First run block with the line each command prints when all is well (P168).
+- run-lane prints a usage block for --help and -h and for a bare run, names the lanes in the lane file when one is missing, says where --list looked, and ends a dry run with the prompt's first line and `Dry run, nothing started.` (P167).
 - The claude sessions meta test moves the runs folder time after writing the meta file, so the reader re-lists it on Windows (P165).
 - A first-use run of the setup commands lists where a new owner gets stuck (P166).
 - The claude sessions test moves the runs folder time after writing a lane meta file, so the reader re-lists the folder and the test no longer races the file system's folder time (P165).
