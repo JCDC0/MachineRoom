@@ -2132,8 +2132,13 @@ export function createOrchestrator({
       }
     }
 
+    let nextRules
     if (body.rules !== undefined && body.rules !== null) {
-      if (typeof body.rules !== 'string' || body.rules.length > COMPACT_RULES_LIMIT) {
+      if (typeof body.rules !== 'string') {
+        return { status: 400, body: { error: AUTOCOMPACT_RULES_PROBLEM } }
+      }
+      nextRules = maskText(body.rules)
+      if (nextRules.length > COMPACT_RULES_LIMIT) {
         return { status: 400, body: { error: AUTOCOMPACT_RULES_PROBLEM } }
       }
     }
@@ -2146,7 +2151,7 @@ export function createOrchestrator({
       autocompactValue = body.percent
     }
     if (body.rules !== undefined) {
-      compactRules = body.rules === null ? '' : body.rules
+      compactRules = body.rules === null ? '' : nextRules
     }
     persist()
     notify()

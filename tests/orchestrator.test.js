@@ -2594,6 +2594,28 @@ describe('the orchestrator chat file', () => {
     expect(saved.sessions[0].summary).not.toContain(profile)
   })
 
+  it('masks a key and a profile path in compact rules saved live', () => {
+    const rig = makeRig()
+    const secret = 'sk-or-v1-' + 'q'.repeat(24)
+    const setting = 'OPENROUTER_API_KEY='
+    const profile = process.env.USERPROFILE || process.env.HOME || homedir()
+    const profilePath = join(profile, 'project', 'trace.log')
+    const rawRules = `Rules at ${profilePath} for ${setting}${secret}`
+
+    const saved = rig.orchestrator.setAutocompact({ rules: rawRules, confirmed: true })
+    expect(saved.status).toBe(200)
+    expect(saved.body.compactRules).toContain('[key]')
+    expect(saved.body.compactRules).not.toContain(secret)
+    expect(saved.body.compactRules).not.toContain(profile)
+    expect(rig.answer().compactRules).toBe(saved.body.compactRules)
+
+    const file = readFileSync(chatFileFor(rig.projectRoot, rig.runs), 'utf8')
+    expect(file).toContain('[key]')
+    expect(file).not.toContain(secret)
+    expect(file).not.toContain(profile)
+    expect(JSON.parse(file).compactRules).toBe(saved.body.compactRules)
+  })
+
   it('masks a key in a work step of the current conversation', async () => {
     const rig = makeRig()
     const secret = 'sk-or-v1-' + 'q'.repeat(24)
