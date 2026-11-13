@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- A source that stops, such as a failed tree read or a stopped OpenCode session reader, shows its sentence in the health chip while the bridge stays connected (P220).
 - A conversation's menu has Export (E), which saves its title, project, summary and saved messages as one Markdown file.
 - The fourth readiness pass lists eight live-room problems on another project, among them outside files matched by folder name and failed git reads shown as clean.
 - A conversation's `...` menu exports its saved title, project, start time, summary and messages as a Markdown file, and E runs it while the menu is open (P218).
