@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process'
 import { existsSync, mkdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -129,7 +130,7 @@ describe('machine-room doctor', () => {
       opencode: { name: 'OpenCode', cli: { harness: 'opencode', bin: process.execPath } },
       claude: { name: 'Claude Code', cli: { harness: 'claude', bin: '%NODE_BIN%' } },
     })
-    const env = { ...process.env, NODE_BIN: process.execPath }
+    const env = { ...process.env, NODE_BIN: process.execPath, TEMP: process.env.TEMP || tmpdir() }
     const result = runDoctor({
       projectRoot: project,
       runsFolder: runs,
@@ -192,7 +193,7 @@ describe('machine-room doctor', () => {
     const project = makeFolder('machine-room-doctor-project-')
     const runs = join(makeFolder('machine-room-doctor-runs-'), 'named-runs')
     const lanes = writeLanes({})
-    const env = { ...process.env, MACHINEROOM_RUNS: runs }
+    const env = { ...process.env, MACHINEROOM_RUNS: runs, TEMP: process.env.TEMP || tmpdir() }
 
     expect(doctorSettings({}, env).runsFolder).toBe(resolve(runs))
     const result = runDoctor({ projectRoot: project, dist: makeDist(), lanesFile: lanes, env })
