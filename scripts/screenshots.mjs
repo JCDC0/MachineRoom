@@ -4,6 +4,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync
 import { homedir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { printedRunsFolder } from '../server/printed-path.js'
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const DEFAULT_PORT = 5180
@@ -24,15 +25,22 @@ function valueOf(name, fallback) {
   return fallback
 }
 
-function chromePath() {
-  if (process.env.MACHINEROOM_CHROME) return process.env.MACHINEROOM_CHROME
-  const local = process.env.LOCALAPPDATA || join(homedir(), 'AppData', 'Local')
+function errorCode(error) {
+  if (typeof error?.code === 'string' && error.code) return error.code
+  const message = String(error?.message ?? error).trim()
+  return message || 'no error code'
+}
+
+export function chromePath({ env = process.env, readFolder = readdirSync } = {}) {
+  if (env.MACHINEROOM_CHROME) return env.MACHINEROOM_CHROME
+  const local = env.LOCALAPPDATA || join(homedir(), 'AppData', 'Local')
   const base = join(local, 'ms-playwright')
+  const shown = printedRunsFolder(base, env)
   let names = []
   try {
-    names = readdirSync(base).filter((name) => /^chromium-\d+$/.test(name))
-  } catch {
-    names = []
+    names = readFolder(base).filter((name) => /^chromium-\d+$/.test(name))
+  } catch (error) {
+    throw new Error(`Could not read ${shown}: ${errorCode(error)}. Set MACHINEROOM_CHROME to the browser program.`)
   }
   names.sort((a, b) => Number(a.slice('chromium-'.length)) - Number(b.slice('chromium-'.length)))
   const folder = names[names.length - 1] ?? 'chromium-1228'
@@ -42,7 +50,7 @@ function chromePath() {
     join(base, folder, 'chrome-mac', 'Chromium.app', 'Contents', 'MacOS', 'Chromium'),
   ]
   const found = candidates.find((candidate) => existsSync(candidate))
-  if (!found) throw new Error(`No Playwright Chromium found under ${base}. Set MACHINEROOM_CHROME to its program.`)
+  if (!found) throw new Error(`No Playwright Chromium found under ${shown}. Set MACHINEROOM_CHROME to its program.`)
   return found
 }
 
@@ -357,7 +365,10 @@ async function main() {
   }
 }
 
-main().catch((error) => {
-  console.error(error.message)
-  process.exitCode = 1
-})
+const entry = process.argv[1] ? resolve(process.argv[1]) : ''
+if (entry === fileURLToPath(import.meta.url)) {
+  main().catch((error) => {
+    console.error(error.message)
+    process.exitCode = 1
+  })
+}
