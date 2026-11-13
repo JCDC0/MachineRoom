@@ -2757,6 +2757,17 @@ describe('project paths in run-lane output', { timeout: 30000 }, () => {
     return { profile, runs, env, shown: (path) => `${label}${path.slice(profile.length)}` }
   }
 
+  function makeDirtyProject(profile) {
+    const project = join(profile, 'Dirty')
+    mkdirSync(project)
+    gitIn(project, ['init', '-q', '-b', 'main'])
+    writeFileSync(join(project, 'readme.txt'), 'start\n')
+    gitIn(project, ['add', '-A'])
+    gitIn(project, ['commit', '-q', '-m', 'Start the project'])
+    writeFileSync(join(project, 'readme.txt'), 'changed\n')
+    return project
+  }
+
   it('masks a missing project folder below a profile folder', async () => {
     const base = makeTempDir('machine-room-missing-project-mask-')
     try {
@@ -2798,6 +2809,36 @@ describe('project paths in run-lane output', { timeout: 30000 }, () => {
       expect(result.code, result.stdout + result.stderr).toBe(1)
       expect(result.stderr).toContain(`The project folder ${shown(project)} is not a git folder. A queue needs one.`)
       expect(result.stderr).not.toContain(project)
+    } finally {
+      rmSync(base, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+    }
+  })
+
+  it('masks a dirty project folder below a profile folder in the project refusal', async () => {
+    const base = makeTempDir('machine-room-dirty-project-mask-')
+    try {
+      const { profile, env, shown } = setupMaskedProject(base)
+      const project = makeDirtyProject(profile)
+      const result = await runLane(['opencode', '--project', project, '--task', 'Fix it.'], env)
+      expect(result.code, result.stdout + result.stderr).toBe(1)
+      expect(result.stdout).toContain(`The project folder ${shown(project)} has uncommitted changes.`)
+      expect(result.stdout).not.toContain(project)
+    } finally {
+      rmSync(base, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+    }
+  })
+
+  it('masks a dirty project folder below a profile folder in the queue refusal', async () => {
+    const base = makeTempDir('machine-room-dirty-queue-mask-')
+    try {
+      const { profile, env, shown } = setupMaskedProject(base)
+      const project = makeDirtyProject(profile)
+      const queue = join(base, 'queue.txt')
+      writeFileSync(queue, 'Write the lane note.\n')
+      const result = await runLane(['opencode', '--project', project, '--queue', queue], env)
+      expect(result.code, result.stdout + result.stderr).toBe(1)
+      expect(result.stdout).toContain(`The project folder ${shown(project)} has uncommitted changes.`)
+      expect(result.stdout).not.toContain(project)
     } finally {
       rmSync(base, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
     }

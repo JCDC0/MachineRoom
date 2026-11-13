@@ -848,12 +848,17 @@ function projectRefusals(project, lanes, allowDirty) {
   })
 }
 
+function printProjectRefusals(problems, project) {
+  const shown = printedRunsFolder(project)
+  problems.forEach((sentence) => console.log(sentence.split(project).join(shown)))
+}
+
 async function runQueueProject({ options, lane, lanes }) {
   const project = projectFolder(options.project)
   if (!gitCheckout(project)) throw new Error(`The project folder ${printedRunsFolder(project)} is not a git folder. A queue needs one.`)
   const problems = projectRefusals(project, lanes, options.allowDirty === true && !options.queue)
   if (problems.length > 0) {
-    problems.forEach((sentence) => console.log(sentence))
+    printProjectRefusals(problems, project)
     return 1
   }
   let tasks
@@ -1042,7 +1047,7 @@ async function main() {
     const project = projectFolder(options.project)
     const problems = projectRefusals(project, lanes, options.allowDirty === true)
     if (problems.length > 0) {
-      problems.forEach((sentence) => console.log(sentence))
+      printProjectRefusals(problems, project)
       return 1
     }
     const task = readTask(options)

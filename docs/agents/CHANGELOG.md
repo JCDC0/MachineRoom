@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- run-lane's project and queue refusals print a dirty project folder with profile folders masked (P162).
+- printedRunsFolder offers $XDG_STATE_HOME and ~ only to posix paths, so a Windows path below a longer Windows HOME keeps %USERPROFILE% (P162).
 - Review 23 reads today's merges: five findings, briefed as P161 to P163 (P160).
 - The full suite passed on today's merges: 274 files, 4917 tests passed, 4 skipped (P159).
 - The current conversation carries a stable id that changes only on new, open and fork, so the 200-message cap no longer closes its menu (P157).
