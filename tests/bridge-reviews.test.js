@@ -3,7 +3,7 @@ import { cpSync, existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:
 import { join } from 'node:path'
 import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createBridge } from '../server/index.js'
-import { GIT_TIMEOUT_MS, GIT_WRITE_TIMEOUT_MS } from '../server/git.js'
+import { beginRepoWrite, endRepoWrite, GIT_TIMEOUT_MS, GIT_WRITE_TIMEOUT_MS, WRITE_IN_FLIGHT_PROBLEM } from '../server/git.js'
 import { gitPath } from '../server/programPath.js'
 import { createReviewsApi, defaultGitRunner, emptyHooksDir, mapConcurrent, NOT_OWNER_PROBLEM } from '../server/reviews.js'
 import { requestJson } from './helpers/httpJson.js'
@@ -595,6 +595,86 @@ describe('merge route', { timeout: 30000 }, () => {
       repo,
       worktree,
     })
+  })
+
+  it('refuses bad destination branch or head fields with one sentence', async () => {
+    const { repo, worktree } = makeLaneRepo()
+    const head = git(worktree, ['rev-parse', 'HEAD']).trim()
+    const baseHead = git(repo, ['rev-parse', 'HEAD']).trim()
+    const { url } = await startReviewsBridge({ opencode: { name: 'OpenCode', worktree } }, { projectRoot: repo })
+    const bodies = [
+      { confirmed: true, head, message: 'Merge the lane' },
+      { confirmed: true, head, base: '', baseHead, message: 'Merge the lane' },
+      { confirmed: true, head, base: ' main', baseHead, message: 'Merge the lane' },
+      { confirmed: true, head, base: 'main', baseHead: 'bad', message: 'Merge the lane' },
+    ]
+    await expectMergeRefusals(
+      url,
+      bodies.map((body) => ({ lane: 'opencode', body })),
+      {
+        status: 400,
+        error: 'Send the destination branch and head you read.',
+        repo,
+        worktree,
+      }
+    )
+  })
+
+  it('refuses a merge when main moved or the card named another branch, before any git write', async () => {
+    const { repo, worktree } = makeLaneRepo()
+    const head = git(worktree, ['rev-parse', 'HEAD']).trim()
+    const oldMain = git(repo, ['rev-parse', 'HEAD']).trim()
+    writeFileSync(join(repo, 'other.txt'), 'advance main\n')
+    git(repo, ['add', 'other.txt'])
+    git(repo, ['commit', '-m', 'advance main'])
+    const movedMain = git(repo, ['rev-parse', 'HEAD']).trim()
+
+    const { url } = await startReviewsBridge({ opencode: { name: 'OpenCode', worktree } }, { projectRoot: repo })
+    await expectMergeRefusal(url, 'opencode', { confirmed: true, head, base: 'main', baseHead: oldMain, message: 'Merge the lane' }, {
+      status: 409,
+      error: 'The main branch moved since you read it, so refresh reviews first.',
+      repo,
+      worktree,
+    })
+    await expectMergeRefusal(url, 'opencode', { confirmed: true, head, base: 'release', baseHead: movedMain, message: 'Merge the lane' }, {
+      status: 409,
+      error: 'The project is on main now, not release, so refresh reviews first.',
+      repo,
+      worktree,
+    })
+
+    const calls = []
+    const recordingRunner = async (cwd, args, opts) => {
+      calls.push(args)
+      return defaultGitRunner(cwd, args, opts)
+    }
+    const { api, answers } = reviewsApiOn(repo, worktree, recordingRunner, {
+      head,
+      base: 'main',
+      baseHead: oldMain,
+    })
+    await api.handle({ method: 'POST', headers: { origin: 'http://localhost:5173' } }, {}, MERGE_URL)
+    expect(answers[0]).toEqual({
+      status: 409,
+      body: { error: 'The main branch moved since you read it, so refresh reviews first.' },
+    })
+    expect(calls.some((args) => args.includes('merge'))).toBe(false)
+
+    const lockKey = beginRepoWrite(repo)
+    expect(lockKey).not.toBeNull()
+    try {
+      const locked = reviewsApiOn(repo, worktree, recordingRunner, {
+        head,
+        base: 'main',
+        baseHead: movedMain,
+      })
+      calls.length = 0
+      await locked.api.handle({ method: 'POST', headers: { origin: 'http://localhost:5173' } }, {}, MERGE_URL)
+      expect(locked.answers[0]).toEqual({ status: 409, body: { error: WRITE_IN_FLIGHT_PROBLEM } })
+      expect(calls).toEqual([])
+    } finally {
+      endRepoWrite(lockKey)
+    }
   })
 
   it('refuses a merge while the main checkout has uncommitted changes', async () => {

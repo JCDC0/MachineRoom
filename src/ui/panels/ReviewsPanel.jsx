@@ -253,6 +253,7 @@ export default function ReviewsPanel({
         options.message = mergeMessage
       }
       const result = await client.mergeReview(confirmTarget.lane, options)
+      if (!mountedRef.current) return
       const commitShort = typeof result?.commit === 'string' ? result.commit.slice(0, 7) : ''
       const text = `Merged as ${commitShort}.`
       setMergeSuccessByLane((prev) => ({ ...prev, [confirmTarget.lane]: text }))
@@ -260,10 +261,13 @@ export default function ReviewsPanel({
       setMergeMessage('')
       await loadReviews({ isInitial: false })
     } catch (err) {
+      if (!mountedRef.current) return
       setMergeError(err.message || 'Could not merge lane.')
       setMergeConflictFiles(Array.isArray(err?.files) ? err.files : [])
     } finally {
-      setMerging(false)
+      if (mountedRef.current) {
+        setMerging(false)
+      }
     }
   }
 

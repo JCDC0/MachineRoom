@@ -11,7 +11,7 @@ import {
   patchLines,
   reviewRow,
 } from '../src/ui/panels/reviews.js'
-import { settle, withDom } from './helpers/uiDom.js'
+import { buttonWithText, click, settle, withDom } from './helpers/uiDom.js'
 
 const MOVED_BRANCH_ERROR = 'The branch moved since you read the diff. Open it again.'
 
@@ -303,5 +303,158 @@ describe('ReviewsPanel and ControlDrawer', () => {
     expect(html).toContain('The patch was cut at 400 KB.')
     expect(html).toContain('review-patch-line is-added')
     expect(html).toContain('review-patch-line is-hunk')
+  })
+
+  it('carries baseHead and strategy in reviewRow and hides message input only for fast-forward', async () => {
+    const laneHead = '1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d'
+    const baseHead = '9f8e7d6c5b4a39281706f5e4d3c2b1a09f8e7d6c'
+    const ffRow = reviewRow({
+      lane: 'opencode',
+      branch: 'feat/w3a',
+      head: laneHead,
+      base: 'trunk',
+      baseHead,
+      strategy: 'fast-forward',
+      ahead: 1,
+      dirty: false,
+    })
+    expect(ffRow.base).toBe('trunk')
+    expect(ffRow.baseHead).toBe(baseHead)
+    expect(ffRow.strategy).toBe('fast-forward')
+
+    const mcRow = reviewRow({
+      lane: 'hermes',
+      branch: 'feat/p5',
+      head: laneHead,
+      base: 'main',
+      baseHead,
+      ahead: 1,
+      dirty: false,
+    })
+    expect(mcRow.strategy).toBe('merge-commit')
+
+    const ffHtml = renderToString(
+      createElement(MergeConfirmCard, {
+        target: {
+          lane: ffRow.lane,
+          branch: ffRow.branch,
+          base: ffRow.base,
+          baseHead: ffRow.baseHead,
+          strategy: 'fast-forward',
+          head: ffRow.head,
+          headShort: ffRow.headShort,
+        },
+        message: '',
+        messageValid: false,
+        merging: false,
+        mergedBanner: null,
+        mergeError: null,
+        conflictFiles: [],
+        onMessageChange: () => {},
+        onConfirm: () => {},
+        onCancel: () => {},
+      })
+    )
+    expect(ffHtml).toContain("Fast-forward merge. The lane&#x27;s commits are kept as they are.")
+    expect(ffHtml).not.toContain('review-message-field')
+    expect(ffHtml).not.toContain('<input')
+    expect(ffHtml).not.toContain('disabled=""')
+
+    const mcHtml = renderToString(
+      createElement(MergeConfirmCard, {
+        target: {
+          lane: mcRow.lane,
+          branch: mcRow.branch,
+          base: mcRow.base,
+          baseHead: mcRow.baseHead,
+          strategy: 'merge-commit',
+          head: mcRow.head,
+          headShort: mcRow.headShort,
+        },
+        message: "Merge hermes's feat/p5",
+        messageValid: true,
+        merging: false,
+        mergedBanner: null,
+        mergeError: null,
+        conflictFiles: [],
+        onMessageChange: () => {},
+        onConfirm: () => {},
+        onCancel: () => {},
+      })
+    )
+    expect(mcHtml).toContain('review-message-field')
+    expect(mcHtml).toContain('id="merge-msg-hermes"')
+    expect(mcHtml).not.toContain("Fast-forward merge. The lane&#x27;s commits are kept as they are.")
+
+    const sent = []
+    const ffReview = {
+      lane: 'opencode',
+      branch: 'feat/w3a',
+      head: laneHead,
+      base: 'trunk',
+      baseHead,
+      strategy: 'fast-forward',
+      ahead: 1,
+      dirty: false,
+      files: 1,
+      added: 1,
+      deleted: 0,
+    }
+    const mcReview = {
+      lane: 'hermes',
+      branch: 'feat/p5',
+      head: laneHead,
+      base: 'main',
+      baseHead,
+      strategy: 'merge-commit',
+      ahead: 1,
+      dirty: false,
+      files: 1,
+      added: 1,
+      deleted: 0,
+    }
+    const client = {
+      reviews: async () => [ffReview, mcReview],
+      mergeReview: async (lane, options) => {
+        sent.push({ lane, options })
+        return { ok: true, lane, commit: laneHead }
+      },
+      subscribe: () => () => {},
+    }
+
+    await withDom(async ({ container, root }) => {
+      await act(async () => {
+        root.render(createElement(ReviewsPanel, { client, initialReviews: [ffReview, mcReview] }))
+      })
+      const mergeButtons = container.querySelectorAll('.review-merge-btn')
+      expect(mergeButtons).toHaveLength(2)
+
+      await click(root, mergeButtons[0])
+      let card = container.querySelector('.review-confirm-card')
+      expect(card.querySelector('input')).toBeNull()
+      expect(card.textContent).toContain("Fast-forward merge. The lane's commits are kept as they are.")
+      await click(root, buttonWithText(card, 'Merge'))
+      await settle()
+      expect(sent[0]).toEqual({
+        lane: 'opencode',
+        options: { head: laneHead, base: 'trunk', baseHead },
+      })
+      expect(Object.hasOwn(sent[0].options, 'message')).toBe(false)
+
+      await click(root, container.querySelectorAll('.review-merge-btn')[1])
+      card = container.querySelector('.review-confirm-card')
+      expect(card.querySelector('#merge-msg-hermes')).not.toBeNull()
+      await click(root, buttonWithText(card, 'Merge'))
+      await settle()
+      expect(sent[1]).toEqual({
+        lane: 'hermes',
+        options: {
+          head: laneHead,
+          base: 'main',
+          baseHead,
+          message: "Merge hermes's feat/p5",
+        },
+      })
+    })
   })
 })

@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Review merges carry the destination branch and head so a stale or switched branch refuses before any write, and fast-forward confirms hide the commit message field (P169).
 - The readiness review lists 3 blockers, 5 bug patches and 3 suggested features on the owner's path to daily use (P164).
 - The claude sessions meta test moves the runs folder time after writing the meta file, so the reader re-lists it on Windows (P165).
 - A first-use run of the setup commands lists where a new owner gets stuck (P166).
