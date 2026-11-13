@@ -82,10 +82,23 @@ export const GIT_RECHECK_MS = 60000
 const PARTIAL_NAME_LIMIT = 50
 const PARTIAL_FULL_EVERY = 10
 const IGNORED_WATCH = /(^|[/\\])(\.git|node_modules|\.worktrees)([/\\]|$)/
+const GIT_META_WATCH_PATHS = new Set(['.git/index', '.git/info/exclude'])
 const RUN_END_STATUSES = new Set(['succeeded', 'failed', 'cancelled', 'timed_out'])
 const AGENT_MESSAGE_KINDS = new Set(['order', 'report', 'dispatch', 'wake'])
 const PLAIN_TREE = Symbol('plainTree')
 const gzipAsync = promisify(gzipCallback)
+
+function normalizeWatchName(filename) {
+  return filename ? String(filename).replace(/\\/g, '/').replace(/^\.\//, '') : ''
+}
+
+function isGitMetaWatchPath(filename) {
+  return GIT_META_WATCH_PATHS.has(normalizeWatchName(filename))
+}
+
+function matchesGitWatchName(filename, target) {
+  return normalizeWatchName(filename) === target
+}
 
 function walkFiles(listDir, currentDir, prefix = '', out = [], failed = []) {
   let entries
@@ -155,18 +168,24 @@ function runGitPaths(resolved, args) {
   })
 }
 
-function isGitWorkTree(resolved) {
-  return new Promise((resolveCheck) => {
+function isGitNotRepoError(stderr) {
+  const message = String(stderr ?? '')
+  if (/not a git repository/i.test(message)) return true
+  return /cannot change to/i.test(message) && /no such file or directory/i.test(message)
+}
+
+function runGitCommand(resolved, args) {
+  return new Promise((resolveResult) => {
     let file
     try {
       file = gitPath()
     } catch {
-      resolveCheck(null)
+      resolveResult({ ok: false, notRepo: false, stdout: '' })
       return
     }
     execFile(
       file,
-      ['-C', resolved, 'rev-parse', '--is-inside-work-tree'],
+      ['-C', resolved, ...args],
       {
         encoding: 'utf8',
         env: { ...process.env, GIT_CEILING_DIRECTORIES: dirname(resolved) },
@@ -174,26 +193,37 @@ function isGitWorkTree(resolved) {
         windowsHide: true,
       },
       (error, stdout, stderr) => {
-        if (!error) {
-          const value = String(stdout ?? '').trim()
-          if (value === 'true') resolveCheck(true)
-          else if (value === 'false') resolveCheck(false)
-          else resolveCheck(null)
+        if (error) {
+          resolveResult({ ok: false, notRepo: isGitNotRepoError(stderr), stdout: '' })
           return
         }
-        const message = String(stderr ?? '')
-        if (/not a git repository/i.test(message)) {
-          resolveCheck(false)
-          return
-        }
-        if (/cannot change to/i.test(message) && /no such file or directory/i.test(message)) {
-          resolveCheck(false)
-          return
-        }
-        resolveCheck(null)
+        resolveResult({ ok: true, notRepo: false, stdout: String(stdout ?? '') })
       }
     )
   })
+}
+
+async function isGitWorkTree(resolved) {
+  const result = await runGitCommand(resolved, ['rev-parse', '--is-inside-work-tree'])
+  if (!result.ok) return result.notRepo ? false : null
+  const value = result.stdout.trim()
+  if (value === 'true') return true
+  if (value === 'false') return false
+  return null
+}
+
+async function readGitDirs(resolved) {
+  const result = await runGitCommand(resolved, ['rev-parse', '--git-dir', '--git-common-dir'])
+  if (!result.ok) return result.notRepo ? false : null
+  const lines = result.stdout
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+  if (lines.length === 0) return null
+  const gitDir = resolve(resolved, lines[0])
+  const commonDir = resolve(resolved, lines[1] ?? lines[0])
+  const infoDirs = [...new Set([join(commonDir, 'info'), join(gitDir, 'info')])]
+  return { gitDir, infoDirs }
 }
 
 function gitListPaths(resolved, args) {
@@ -556,6 +586,8 @@ export function createBridge(options = {}) {
   const projectRoot = options.projectRoot ?? process.env.PROJECT_ROOT ?? process.cwd()
   const listDir = options.listDir ?? readdirSync
   const gitWorkTreeCheck = options.gitWorkTree ?? isGitWorkTree
+  const gitDirCheck = options.gitDir ?? readGitDirs
+  const waitGitMetaOnRead = !options.readTree || Boolean(options.gitDir)
   const treeReader =
     options.readTree ??
     ((root) =>
@@ -902,6 +934,10 @@ export function createBridge(options = {}) {
   let nextId = 0
   let stopped = false
   let watcher = null
+  let gitWatchers = []
+  let gitMeta = null
+  let gitMetaDirty = true
+  let gitMetaPromise = null
   let pollTimer = null
   let pendingNames = new Set()
   let pendingAllNamed = true
@@ -1100,6 +1136,7 @@ export function createBridge(options = {}) {
     }
     treeNotGit = false
     clearGitRecheck()
+    gitMetaDirty = true
     checkTreeChange()
   }
 
@@ -1114,16 +1151,79 @@ export function createBridge(options = {}) {
     gitRecheckTimer.unref?.()
   }
 
+  function normalizeGitMeta(result, resolvedRoot) {
+    if (result === null || result === undefined || result === false) return result
+    if (typeof result === 'string') {
+      const trimmed = result.trim()
+      if (!trimmed) return null
+      const gitDir = resolve(resolvedRoot, trimmed)
+      return { gitDir, infoDirs: [join(gitDir, 'info')] }
+    }
+    const gitDir = typeof result.gitDir === 'string' && result.gitDir ? resolve(resolvedRoot, result.gitDir) : ''
+    if (!gitDir) return null
+    const rawInfo = Array.isArray(result.infoDirs) ? result.infoDirs : [join(gitDir, 'info')]
+    const infoDirs = [...new Set(rawInfo.filter((dir) => typeof dir === 'string' && dir !== '').map((dir) => resolve(resolvedRoot, dir)))]
+    return { gitDir, infoDirs }
+  }
+
+  function closeGitWatchers() {
+    for (const item of gitWatchers) {
+      try {
+        item.close()
+      } catch {}
+    }
+    gitWatchers = []
+  }
+
+  function ensureGitMeta() {
+    if (stopped || !projectRoot) return Promise.resolve(null)
+    if (!gitMetaDirty && !gitMetaPromise) return Promise.resolve(gitMeta)
+    if (gitMetaPromise) return gitMetaPromise
+    const resolvedRoot = resolve(projectRoot)
+    const pending = Promise.resolve(gitDirCheck(resolvedRoot))
+      .then((raw) => {
+        if (stopped) return null
+        const result = normalizeGitMeta(raw, resolvedRoot)
+        if (result === null || result === undefined) {
+          gitMetaDirty = true
+          return gitMeta
+        }
+        if (result === false) {
+          gitMeta = null
+          gitMetaDirty = false
+          closeGitWatchers()
+          return null
+        }
+        gitMeta = result
+        gitMetaDirty = false
+        closeGitWatchers()
+        if (watcher && !pollTimer) armGitWatchers()
+        return gitMeta
+      })
+      .catch(() => {
+        gitMetaDirty = true
+        return gitMeta
+      })
+      .finally(() => {
+        if (gitMetaPromise === pending) gitMetaPromise = null
+      })
+    gitMetaPromise = pending
+    return pending
+  }
+
   async function readWholeTree() {
     let tree
+    const gitMetaWait = gitMetaDirty || gitMetaPromise ? ensureGitMeta() : null
     try {
       if (treeNotGit && now() - plainCheckedAt >= gitRecheckMs) {
         treeNotGit = false
         clearGitRecheck()
+        gitMetaDirty = true
       }
       if (treeNotGit) {
         tree = walkTree(projectRoot, listDir)
       } else {
+        const wasPlain = treeNotGit
         tree = await treeReader(projectRoot)
         if (tree?.[PLAIN_TREE]) {
           treeNotGit = true
@@ -1132,7 +1232,12 @@ export function createBridge(options = {}) {
         } else {
           treeNotGit = false
           clearGitRecheck()
+          if (wasPlain) gitMetaDirty = true
         }
+      }
+      if (waitGitMetaOnRead) {
+        if (gitMetaWait) await gitMetaWait
+        if (!tree?.[PLAIN_TREE] && gitMetaDirty) await ensureGitMeta()
       }
       if (typeof tree?.error === 'string' && tree.error) {
         throw new Error(tree.error)
@@ -1152,6 +1257,8 @@ export function createBridge(options = {}) {
     } catch (error) {
       lastTreeError = error instanceof Error ? error.message : String(error)
       lastTreeProblems = []
+      if (gitMetaWait) await gitMetaWait.catch(() => {})
+      gitMetaDirty = true
       return null
     }
   }
@@ -1275,8 +1382,50 @@ export function createBridge(options = {}) {
       treePrimed = true
       return
     }
+    ensureGitMeta().catch(() => {})
     if (!adoptInitialTree(options.initialTree)) startTreeRead().catch(() => {})
     if (!armWatcher()) beginPolling(false)
+  }
+
+  function invalidateGitTree() {
+    if (stopped) return
+    pendingAllNamed = false
+    beginPolling()
+  }
+
+  function armOneGitWatcher(folder, targetName) {
+    try {
+      if (!statSync(folder).isDirectory()) return null
+      const current = watchProject(folder, { recursive: false }, (_eventType, filename) => {
+        if (stopped) return
+        if (!matchesGitWatchName(filename, targetName)) return
+        invalidateGitTree()
+      })
+      if (typeof current?.on === 'function') {
+        current.on('error', () => {
+          gitWatchers = gitWatchers.filter((entry) => entry !== current)
+          try {
+            current.close()
+          } catch {}
+          gitMetaDirty = true
+        })
+      }
+      return current
+    } catch {
+      return null
+    }
+  }
+
+  function armGitWatchers() {
+    if (stopped || !watcher || !gitMeta || gitWatchers.length > 0) return
+    const watched = []
+    const indexWatcher = armOneGitWatcher(gitMeta.gitDir, 'index')
+    if (indexWatcher) watched.push(indexWatcher)
+    for (const infoDir of gitMeta.infoDirs) {
+      const excludeWatcher = armOneGitWatcher(infoDir, 'exclude')
+      if (excludeWatcher) watched.push(excludeWatcher)
+    }
+    gitWatchers = watched
   }
 
   function noteWatchName(filename) {
@@ -1301,6 +1450,10 @@ export function createBridge(options = {}) {
       if (!statSync(resolve(projectRoot)).isDirectory()) return false
       const current = watchProject(resolve(projectRoot), { recursive: true }, (_eventType, filename) => {
         if (stopped) return
+        if (filename && isGitMetaWatchPath(filename)) {
+          invalidateGitTree()
+          return
+        }
         if (filename && IGNORED_WATCH.test(String(filename))) return
         noteWatchName(filename)
         beginPolling()
@@ -1311,15 +1464,18 @@ export function createBridge(options = {}) {
           current.close()
         } catch {}
         watcher = null
+        closeGitWatchers()
         watchFallback = true
         clearQuietRead()
         beginPolling(false)
       })
       watcher = current
       watchFallback = false
+      armGitWatchers()
       return true
     } catch {
       watcher = null
+      closeGitWatchers()
       watchFallback = true
       clearQuietRead()
       return false
@@ -1335,6 +1491,7 @@ export function createBridge(options = {}) {
       } catch {}
       watcher = null
     }
+    closeGitWatchers()
     if (pollTimer) return
     if (readNow) checkTreeChange()
     pollTimer = setInterval(pollTreeChange, pollMs)
@@ -1783,6 +1940,7 @@ export function createBridge(options = {}) {
       } catch {}
       watcher = null
     }
+    closeGitWatchers()
     for (const client of clients) {
       try {
         client.end()

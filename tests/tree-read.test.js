@@ -1,8 +1,9 @@
 import { execFileSync } from 'node:child_process'
-import { mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { mkdirSync, readdirSync, rmSync, watch, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join, resolve } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { FOLDER_SHAPE, GIT_RECHECK_MS, createBridge, packTree, treeReadDue } from '../server/index.js'
+import { FOLDER_SHAPE, GIT_RECHECK_MS, createBridge, packTree, readTree, readTreePartial, treeReadDue } from '../server/index.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
@@ -653,4 +654,248 @@ describe('git timeouts and plain-to-git transitions', () => {
     const after = await (await fetch(`${url}/api/tree`)).json()
     expect(after.files).toEqual(['.gitignore', 'keep.txt'])
   })
+})
+
+const NO_GIT_CONFIG = join(tmpdir(), 'machineroom-tree-read-no-git-config')
+
+function git(cwd, args) {
+  return execFileSync('git', args, {
+    cwd,
+    shell: false,
+    windowsHide: true,
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+    env: {
+      ...process.env,
+      GIT_CONFIG_SYSTEM: NO_GIT_CONFIG,
+      GIT_CONFIG_GLOBAL: NO_GIT_CONFIG,
+      GIT_CONFIG_NOSYSTEM: '1',
+      GIT_TERMINAL_PROMPT: '0',
+      GIT_AUTHOR_NAME: 'MachineRoom Test',
+      GIT_AUTHOR_EMAIL: 'test@example.invalid',
+      GIT_COMMITTER_NAME: 'MachineRoom Test',
+      GIT_COMMITTER_EMAIL: 'test@example.invalid',
+    },
+  })
+}
+
+describe('git index and exclude changes', () => {
+  it('adds a force-added ignored file to the tree on an index-only change', async () => {
+    const root = makeRoot()
+    git(root, ['init', '-b', 'main'])
+    writeFileSync(join(root, '.gitignore'), 'ignored.txt\n')
+    writeFileSync(join(root, 'keep.txt'), '1\n')
+    writeFileSync(join(root, 'ignored.txt'), 'secret\n')
+    git(root, ['add', '.gitignore', 'keep.txt'])
+    git(root, ['commit', '-m', 'init'])
+
+    const bridge = createBridge({
+      projectRoot: root,
+      port: 0,
+      env: {},
+      debounceMs: 15,
+      pollMs: 15,
+      quietMs: 50,
+    })
+    bridges.push(bridge)
+    const { url } = await bridge.start()
+    const first = await (await fetch(`${url}/api/tree`)).json()
+    expect(first.files).toEqual(['.gitignore', 'keep.txt'])
+
+    const events = await openEvents(url, `?tree=1&since=${first.start}:1`)
+    try {
+      git(root, ['add', '-f', 'ignored.txt'])
+      await waitFor(() => readTreeEvents(events.text()).some((event) => event.files?.includes('ignored.txt')), { timeoutMs: 2000 })
+      const after = await (await fetch(`${url}/api/tree`)).json()
+      expect(after.files).toEqual(['.gitignore', 'ignored.txt', 'keep.txt'])
+    } finally {
+      await events.close()
+    }
+  })
+
+  it('removes a file from the tree on an index-only removal and on a .git/info/exclude change', async () => {
+    const root = makeRoot()
+    git(root, ['init', '-b', 'main'])
+    writeFileSync(join(root, '.gitignore'), 'ignored.txt\n')
+    writeFileSync(join(root, 'keep.txt'), '1\n')
+    writeFileSync(join(root, 'ignored.txt'), 'secret\n')
+    writeFileSync(join(root, 'scratch.log'), 'temp\n')
+    git(root, ['add', '.gitignore', 'keep.txt'])
+    git(root, ['add', '-f', 'ignored.txt'])
+    git(root, ['commit', '-m', 'init'])
+
+    const bridge = createBridge({
+      projectRoot: root,
+      port: 0,
+      env: {},
+      debounceMs: 15,
+      pollMs: 15,
+      quietMs: 50,
+      treeBudgetMs: 60,
+    })
+    bridges.push(bridge)
+    const { url } = await bridge.start()
+    const first = await (await fetch(`${url}/api/tree`)).json()
+    expect(first.files).toEqual(['.gitignore', 'ignored.txt', 'keep.txt', 'scratch.log'])
+
+    const events = await openEvents(url, `?tree=1&since=${first.start}:1`)
+    try {
+      git(root, ['rm', '--cached', 'ignored.txt'])
+      await waitFor(() => readTreeEvents(events.text()).some((event) => event.removed?.includes('ignored.txt')), { timeoutMs: 3000 })
+
+      await wait(450)
+      writeFileSync(join(root, '.git', 'info', 'exclude'), '*.log\n')
+      await waitFor(() => readTreeEvents(events.text()).some((event) => event.removed?.includes('scratch.log')), { timeoutMs: 3000 })
+
+      const after = await (await fetch(`${url}/api/tree`)).json()
+      expect(after.files).toEqual(['.gitignore', 'keep.txt'])
+    } finally {
+      await events.close()
+    }
+  })
+
+  it('does not read the tree when .git/logs/HEAD changes alone', async () => {
+    const root = makeRoot()
+    git(root, ['init', '-b', 'main'])
+    writeFileSync(join(root, 'keep.txt'), '1\n')
+    git(root, ['add', 'keep.txt'])
+    git(root, ['commit', '-m', 'init'])
+
+    let fullReads = 0
+    let partialReads = 0
+    const bridge = createBridge({
+      projectRoot: root,
+      port: 0,
+      env: {},
+      debounceMs: 15,
+      pollMs: 15,
+      quietMs: 50,
+      readTree: (folder) => {
+        fullReads += 1
+        return readTree(folder)
+      },
+      readTreePartial: (folder, names) => {
+        partialReads += 1
+        return readTreePartial(folder, names)
+      },
+    })
+    bridges.push(bridge)
+    const { url } = await bridge.start()
+    const first = await folderTree(url)
+    expect(first.body.version).toBe(1)
+    expect(fullReads).toBe(1)
+
+    const events = await openEvents(url, `?tree=1&since=${first.body.start}:1`)
+    try {
+      await wait(100)
+      writeFileSync(join(root, '.git', 'logs', 'HEAD'), '0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Test <test@example.invalid> 1 +0000\tcommit: note\n', { flag: 'a' })
+      await wait(250)
+      expect(fullReads).toBe(1)
+      expect(partialReads).toBe(0)
+      expect(readTreeEvents(events.text())).toEqual([])
+    } finally {
+      await events.close()
+    }
+  })
+
+  it('sees an index change in a git worktree and watches only the index and exclude folders without recursion', async () => {
+    const base = makeRoot()
+    const main = join(base, 'main')
+    const wt = join(base, 'wt')
+    mkdirSync(main, { recursive: true })
+    git(main, ['init', '-b', 'main'])
+    writeFileSync(join(main, '.gitignore'), 'ignored.txt\n')
+    writeFileSync(join(main, 'keep.txt'), '1\n')
+    git(main, ['add', '.gitignore', 'keep.txt'])
+    git(main, ['commit', '-m', 'init'])
+    git(main, ['worktree', 'add', '-b', 'wt', wt])
+    writeFileSync(join(wt, 'ignored.txt'), 'secret\n')
+
+    const watched = []
+    const bridge = createBridge({
+      projectRoot: wt,
+      port: 0,
+      env: {},
+      debounceMs: 15,
+      pollMs: 15,
+      quietMs: 50,
+      watchProject: (folder, watchOptions, listener) => {
+        watched.push({ folder, recursive: Boolean(watchOptions?.recursive) })
+        return watch(folder, watchOptions, listener)
+      },
+    })
+    bridges.push(bridge)
+    const { url } = await bridge.start()
+    const first = await (await fetch(`${url}/api/tree`)).json()
+    expect(first.files).toEqual(['.gitignore', 'keep.txt'])
+
+    const gitDirWatches = watched.filter((entry) => entry.folder !== resolve(wt))
+    expect(gitDirWatches.length).toBeGreaterThan(0)
+    expect(gitDirWatches.every((entry) => entry.recursive === false)).toBe(true)
+
+    const events = await openEvents(url, `?tree=1&since=${first.start}:1`)
+    try {
+      git(wt, ['add', '-f', 'ignored.txt'])
+      await waitFor(() => readTreeEvents(events.text()).some((event) => event.files?.includes('ignored.txt')), { timeoutMs: 2500 })
+      const after = await (await fetch(`${url}/api/tree`)).json()
+      expect(after.files).toEqual(['.gitignore', 'ignored.txt', 'keep.txt'])
+    } finally {
+      await events.close()
+    }
+  })
+
+  it('reads git-dir once at start and again only after a failed read', async () => {
+    const base = makeRoot()
+    const main = join(base, 'main')
+    const wt = join(base, 'wt')
+    mkdirSync(main, { recursive: true })
+    git(main, ['init', '-b', 'main'])
+    writeFileSync(join(main, '.gitignore'), 'ignored.txt\n')
+    writeFileSync(join(main, 'keep.txt'), '1\n')
+    git(main, ['add', '.gitignore', 'keep.txt'])
+    git(main, ['commit', '-m', 'init'])
+    git(main, ['worktree', 'add', '-b', 'wt', wt])
+
+    const wtGitDir = resolve(wt, git(wt, ['rev-parse', '--git-dir']).trim())
+    const wtCommonDir = resolve(wt, git(wt, ['rev-parse', '--git-common-dir']).trim())
+    let gitDirCalls = 0
+    let listCalls = 0
+    const bridge = createBridge({
+      projectRoot: wt,
+      port: 0,
+      env: {},
+      debounceMs: 15,
+      pollMs: 15,
+      quietMs: 50,
+      gitDir: async () => {
+        gitDirCalls += 1
+        return { gitDir: wtGitDir, infoDirs: [join(wtCommonDir, 'info')] }
+      },
+      gitList: async () => {
+        listCalls += 1
+        if (listCalls === 2) return null
+        return ['.gitignore', 'keep.txt']
+      },
+      gitDeleted: () => Promise.resolve([]),
+    })
+    bridges.push(bridge)
+    const { url } = await bridge.start()
+    await folderTree(url)
+    expect(gitDirCalls).toBe(1)
+    expect(listCalls).toBe(1)
+
+    await wait(1100)
+    await (await fetch(`${url}/api/tree`)).json()
+    expect(listCalls).toBe(2)
+    expect(gitDirCalls).toBe(1)
+
+    await (await fetch(`${url}/api/tree`)).json()
+    expect(listCalls).toBe(3)
+    expect(gitDirCalls).toBe(2)
+
+    await wait(1100)
+    await (await fetch(`${url}/api/tree`)).json()
+    expect(listCalls).toBe(4)
+    expect(gitDirCalls).toBe(2)
+  }, 15000)
 })

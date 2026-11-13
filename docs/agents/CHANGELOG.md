@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- P237: changes to .git/index or .git/info/exclude (including a worktree's git folder) trigger a full tree read through the existing reader while other .git writes stay ignored.
 - P230: an unreadable root is an error and an unreadable folder keeps its last files with a problem line; a failed git read keeps the git tree, and a plain tree checks for git every 60 seconds. The .git/index watch is still open.
 - P232: the transport state word shrinks clear of the spend, panel Refresh buttons match Team, and Days to keep stays on one line.
 - P229: session discovery reads the root slug's folder and its subfolder slugs, and the cwd check still drops sibling projects.
