@@ -348,18 +348,34 @@ describe('server/storage', () => {
     ])
 
     const previewNames = preview.files.map((item) => item.name)
+    const oneName = 'agy-20260910-100000-001.log'
+    const partial = await applyStorageArchive({
+      runsFolder: fixture.runs,
+      projectRoot: fixture.project,
+      days: 30,
+      files: [oneName],
+      now: () => NOW_MS,
+    })
+    expect(partial.ok).toBe(true)
+    expect(partial.count).toBe(1)
+    expect(partial.moved.map((item) => item.name)).toEqual([oneName])
+    expect(existsSync(join(fixture.runs, 'agy-20260910-100000-001.meta.json'))).toBe(true)
+    expect(existsSync(join(fixture.runs, 'agy-20260910-100000-001.usage.json'))).toBe(true)
+    expect(existsSync(join(fixture.recordings, 'orphan-agents.json'))).toBe(true)
+
+    const restNames = previewNames.filter((name) => name !== oneName)
     const archived = await applyStorageArchive({
       runsFolder: fixture.runs,
       projectRoot: fixture.project,
       days: 30,
-      files: previewNames,
+      files: restNames,
       now: () => NOW_MS,
     })
 
     expect(archived.ok).toBe(true)
-    expect(archived.count).toBe(preview.count)
-    expect(archived.totalBytes).toBe(preview.totalBytes)
-    expect(archived.moved.map((item) => item.name).sort()).toEqual(previewNames.slice().sort())
+    expect(archived.count).toBe(preview.count - 1)
+    expect(partial.totalBytes + archived.totalBytes).toBe(preview.totalBytes)
+    expect(archived.moved.map((item) => item.name).sort()).toEqual(restNames.slice().sort())
     expect(archived.skipped).toEqual([])
 
     expect(existsSync(join(fixture.runs, 'agy-20260910-100000-001.log'))).toBe(false)
