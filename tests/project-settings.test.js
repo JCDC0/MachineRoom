@@ -11,6 +11,7 @@ import {
   writeProjectSettings,
 } from '../server/project-settings.js'
 import { createMockClient } from '../src/control/mock.js'
+import { CHECK_SHELL_PROBLEM } from '../src/briefs/run.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 
 const cleanups = []
@@ -66,6 +67,7 @@ describe('project settings file', () => {
     expect(checkCommandProblem('one\ntwo')).toBe(CHECK_COMMAND_PROBLEM)
     expect(checkCommandProblem('')).toBeNull()
     expect(checkCommandProblem('npm run check')).toBeNull()
+    expect(checkCommandProblem('npm test && npm run build')).toBe(CHECK_SHELL_PROBLEM)
     const sentence = CHECK_COMMAND_PROBLEM
     expect(sentence.endsWith('.')).toBe(true)
     expect(sentence.slice(0, -1)).not.toContain('.')
@@ -97,6 +99,16 @@ describe('the project settings route', () => {
     const cleared = await postSettings(url, { checkCommand: '', confirmed: true })
     expect(cleared.status).toBe(200)
     expect(await cleared.json()).toEqual({ checkCommand: '', hasTestScript: true })
+  })
+
+  it('refuses shell syntax and never saves it', async () => {
+    const { url } = await startBridge()
+    const res = await postSettings(url, { checkCommand: 'npm test && npm run build', confirmed: true })
+    expect(res.status).toBe(400)
+    expect(await res.json()).toEqual({ error: CHECK_SHELL_PROBLEM })
+
+    const read = await (await fetch(`${url}/api/control/project-settings`)).json()
+    expect(read).toEqual({ checkCommand: '', hasTestScript: true })
   })
 
   it('refuses a page write with no Origin and a command of more than one line', async () => {

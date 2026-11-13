@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- P247: the bridge refuses shell syntax and an unclosed quote when the check command is saved or a Dispatch start uses it, with the runner's sentence.
 - P247: the check command keeps an escaped double quote and a doubled backslash, and refuses an unclosed quote.
 - P243: a queue record's remaining tasks and the recovery message mask profile and home paths with a browser-safe masker.
 - P245: review 30 confirms five review 29 fixes, two partly, and finds an archive parent race and a quote-splitting gap.
