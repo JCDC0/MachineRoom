@@ -659,6 +659,90 @@ describe('sessions source', () => {
     expect(reader.evicted().has('sess-cap-0205')).toBe(true)
   })
 
+  it('reads no old tool call from 201 idle files through several eviction cycles', () => {
+    const { projectRoot, home, runs, sessionsFolder } = setup()
+    let currentTime = 1000000
+    const now = () => currentTime
+    const frames = []
+    const reader = makeReader({ projectRoot, home, runs, frames, now, idleMs: 1000, idlePollMs: 1000 })
+    reader.tick()
+
+    const read = join(projectRoot, 'src', 'math.js')
+    function writeFiles(prefix, count) {
+      const ids = []
+      for (let i = 1; i <= count; i += 1) {
+        const id = `${prefix}-${String(i).padStart(4, '0')}`
+        writeFileSync(join(sessionsFolder, `${id}.jsonl`), jsonLines([
+          sessionLine('user', { role: 'user', content: 'Turn.' }, { sessionId: id }, projectRoot),
+          sessionLine('assistant', { role: 'assistant', content: [readUse(`call-${id}`, read)], stop_reason: 'end_turn' }, { sessionId: id }, projectRoot),
+        ]))
+        ids.push(id)
+      }
+      return ids
+    }
+
+    const idleIds = writeFiles('sess-bulk', 201)
+    reader.tick()
+    expect(logFrames(frames)).toHaveLength(201)
+
+    currentTime += 2000
+    reader.tick()
+    expect(reader.sessions().size).toBe(0)
+    expect(reader.evicted().size).toBe(200)
+    expect(idleIds.some((id) => !reader.evicted().has(id))).toBe(true)
+
+    const afterFirstRead = frames.length
+    for (let cycle = 0; cycle < 4; cycle += 1) {
+      writeFiles(`sess-cycle-${cycle}`, 5)
+      reader.tick()
+      currentTime += 2000
+      reader.tick()
+      expect(reader.sessions().size).toBe(0)
+      const later = JSON.stringify(frames.slice(afterFirstRead))
+      for (const id of idleIds) expect(later).not.toContain(`call-${id}`)
+    }
+  })
+
+  it('reads only the new tool call when a forgotten file grows', () => {
+    const { projectRoot, home, runs, sessionsFolder } = setup()
+    let currentTime = 1000000
+    const now = () => currentTime
+    const frames = []
+    const reader = makeReader({ projectRoot, home, runs, frames, now, idleMs: 1000, idlePollMs: 1000 })
+    reader.tick()
+
+    const read = join(projectRoot, 'src', 'math.js')
+    const idleIds = []
+    for (let i = 1; i <= 201; i += 1) {
+      const id = `sess-grow-${String(i).padStart(4, '0')}`
+      writeFileSync(join(sessionsFolder, `${id}.jsonl`), jsonLines([
+        sessionLine('user', { role: 'user', content: 'Turn.' }, { sessionId: id }, projectRoot),
+        sessionLine('assistant', { role: 'assistant', content: [readUse(`call-${id}`, read)], stop_reason: 'end_turn' }, { sessionId: id }, projectRoot),
+      ]))
+      idleIds.push(id)
+    }
+    reader.tick()
+    expect(logFrames(frames)).toHaveLength(201)
+
+    currentTime += 2000
+    reader.tick()
+    expect(reader.sessions().size).toBe(0)
+    const forgottenId = idleIds.find((id) => !reader.evicted().has(id))
+    expect(forgottenId).toBeDefined()
+
+    const before = frames.length
+    appendFileSync(join(sessionsFolder, `${forgottenId}.jsonl`), jsonLines([
+      sessionLine('user', { role: 'user', content: 'A new turn.' }, { sessionId: forgottenId }, projectRoot),
+      sessionLine('assistant', { role: 'assistant', content: [readUse('fresh-1', join(projectRoot, 'src', 'fresh.js'))], stop_reason: 'end_turn' }, { sessionId: forgottenId }, projectRoot),
+    ]))
+    reader.tick()
+
+    const sent = chunks(frames.slice(before))
+    expect(sent).toHaveLength(1)
+    expect(sent[0].message.content[0].id).toBe('fresh-1')
+    expect(JSON.stringify(frames.slice(before))).not.toContain('call-sess-grow')
+  })
+
   it('drops finished subagent buffers from session.children once result is read', () => {
     const { projectRoot, home, runs, sessionsFolder } = setup()
     const frames = []
