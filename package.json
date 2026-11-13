@@ -42,6 +42,7 @@
     "src/decider/wire.js",
     "src/harnesses/",
     "src/model/commands.js",
+    "src/model/conversation.js",
     "src/model/fileIndex.js",
     "src/model/hierarchy.js",
     "src/model/laneStarter.js",
