@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- P245: review 30 confirms five review 29 fixes, two partly, and finds an archive parent race and a quote-splitting gap.
 - P240: the archive refuses a junction or link at the archive or month folder, never overwrites a destination, and moves only the previewed files that are still eligible.
 - P241: the check command is split into a program and arguments and run with shell false (npm through its own script on Windows), shell syntax is refused, a single task accepts --test and runs the check, and a crashed queue task records queueStatus.
 - P242: readActor refuses a runs start or stop with no Origin and no registry, closing the no-lanes bypass (review 29 finding 3).
