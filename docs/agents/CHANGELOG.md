@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Live event ids carry the bridge's start, and a reconnect with a cursor from another bridge or past the kept history gets a reset and the live runs first, so a finished run is no longer left working (P181).
 - A chat turn saves its exact log name with the conversation, and recovery after a restart records only that log, never another project's (P180).
 - New, open and fork refuse with one sentence when the saved list is full of pinned conversations, and keep the current conversation (P179).
 - The Claude sessions reader keeps the read position of a session file it forgot, so an unchanged old file is not replayed and an append reads only the new lines (P182).
@@ -11,6 +12,7 @@
 - A forgotten idle Claude session file keeps its read position, so old tool calls are not replayed and an append reads only the new lines (P182).
 - A full saved list of pinned conversations answers 409 to a new, open or branch request and keeps the current conversation and its messages (P179).
 - Chat turns save their exact log name so restart recovery writes a stopped record only for that project's turn and skips ambiguous pre-change matches (P180).
+- A reconnect whose cursor comes from another bridge or sits before a hole in the kept frames gets a reset with the current start of each live run, and the page clears its seen ids and run state, so a missed finish no longer leaves an agent working (P181).
 - The second readiness review lists 8 problems after days of use and 2 suggested features (P178).
 - A broken package.json stops a queue task with one masked sentence instead of a stand-in test command (P176).
 - A broken package.json stops a queue task with one masked sentence and no node command, and a dry run prints that sentence on its tests line (P176).

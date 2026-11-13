@@ -159,6 +159,13 @@ export function createPipeline({ agents, tree }) {
     return finalise(out)
   }
 
+  function reset() {
+    seen.clear()
+    ended.clear()
+    parsers.clear()
+    lastRunTime.clear()
+  }
+
   function learn(paths) {
     for (const path of paths) {
       if (indexFor(ctx.files).has(path)) continue
@@ -176,7 +183,7 @@ export function createPipeline({ agents, tree }) {
     dirSetFor(ctx.dirs)
   }
 
-  return { push, flush, learn, warm, context: ctx, remembered: () => ({ keys: seen.size, runs: lastRunTime.size, parsers: parsers.size }) }
+  return { push, flush, reset, learn, warm, context: ctx, remembered: () => ({ keys: seen.size, runs: lastRunTime.size, parsers: parsers.size }) }
 }
 
 export function buildActivities(frames, { agents, tree }) {

@@ -397,6 +397,29 @@ export function treeReadDue({ now, lastReadEndAt, lastReadMs, lastReadChanged, l
 
 export const RUN_PIN_TIMEOUT_MS = 2 * 60 * 60 * 1000
 
+export function readEventCursor(text, start) {
+  const match = /^([0-9a-f]+):(\d+)$/.exec(String(text ?? ''))
+  if (!match || match[1] !== start) return null
+  return Number(match[2])
+}
+
+export function eventResetNeeded(history, lastEventId, start, latestSeq) {
+  const seq = readEventCursor(lastEventId, start)
+  if (seq === null) return true
+  if (seq > latestSeq) return true
+  const next = history.find((item) => item.seq > seq)
+  return seq < latestSeq && (!next || next.seq !== seq + 1)
+}
+
+export function currentRunFrames(history) {
+  const latest = new Map()
+  for (const item of history) {
+    if (item.runId === undefined || item.runId === null || !item.pinned) continue
+    latest.set(item.runId, item)
+  }
+  return [...latest.values()]
+}
+
 export function trimHistory(history, now = Date.now) {
   const currentTime = typeof now === 'function' ? now() : Number(now ?? Date.now())
   const lastFrameAt = new Map()
@@ -1158,17 +1181,14 @@ export function createBridge(options = {}) {
   }
 
   function emit(parsed) {
-    if (typeof parsed.id === 'number' && parsed.id > nextId) {
-      nextId = parsed.id
-    } else {
-      nextId += 1
-    }
-    const id = String(parsed.id ?? nextId)
+    nextId += 1
+    const seq = nextId
+    const id = `${treeStart}:${seq}`
     const data = JSON.stringify(parsed)
     const runId = parsed?.payload?.runId
     const endsRun = parsed?.type === 'heartbeat.run.status' && RUN_END_STATUSES.has(parsed.payload?.status)
     const at = typeof now === 'function' ? now() : Date.now()
-    const entry = { id, data, runId, pinned: holdsRunStart(parsed), at }
+    const entry = { id, seq, data, runId, pinned: holdsRunStart(parsed), at }
     history.push(entry)
     if (runId !== undefined && runId !== null && endsRun) {
       for (const item of history) {
@@ -1406,16 +1426,15 @@ export function createBridge(options = {}) {
           : String(url.searchParams.get('after') ?? '').trim()
       const wantsHistory = url.searchParams.get('history') === '1'
       if (lastEventId) {
-        const index = history.findIndex((item) => item.id === lastEventId)
-        let replay = []
-        if (index !== -1) {
-          replay = history.slice(index + 1)
-        } else if (/^\d+$/.test(lastEventId)) {
-          const threshold = Number(lastEventId)
-          replay = history.filter((item) => /^\d+$/.test(item.id) && Number(item.id) > threshold)
-        }
-        for (const entry of replay) {
-          writeSseFrame(res, entry)
+        if (eventResetNeeded(history, lastEventId, treeStart, nextId)) {
+          res.write(`event: reset\ndata: ${JSON.stringify({ start: treeStart })}\n\n`)
+          for (const entry of currentRunFrames(history)) writeSseFrame(res, entry)
+          for (const entry of history) writeSseFrame(res, entry)
+        } else {
+          const seq = readEventCursor(lastEventId, treeStart)
+          for (const entry of history) {
+            if (entry.seq > seq) writeSseFrame(res, entry)
+          }
         }
       } else if (wantsHistory) {
         for (const entry of history) {
