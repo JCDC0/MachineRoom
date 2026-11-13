@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- P267: scale-live, scale-probe, screenshots, hand-run, history-audit, agy-prompt and run-recording answer --help and -h with their usage and exit 0 before any work; COMMANDS.md names them and the empty cases.
 - P274: a second empty reply after the nudge ends the native run with exit 1 and 'The agent stopped without a final answer.'
 - P271: a codex run's record carries the rate-limit windows from Codex's rollout file, found by thread id; lane costs answer the newest live reading so routing can skip codex.
 - P274: a native run fails when a second empty reply follows its nudge, instead of reporting an earlier message as a final answer.
@@ -12,6 +13,7 @@
 - P271: Codex's descriptor reads the primary and secondary quota windows from a rollout `token_count` line.
 - P271: a codex run record carries the newest rollout reading from the last 64 KB as `quota: { windows, at }`.
 - P271: lane costs answer the newest codex quota reading and leave out a window past its reset, so chooseRoute skips codex above `quotaSkipPercent`.
+- P267: scale-live, scale-probe, screenshots, hand-run, history-audit, agy-prompt and run-recording answer --help and -h with one usage line, and COMMANDS.md records their help forms and three missing empty or refusal cases.
 - P260: a lane may name fallback; a brief run or project task that fails on a quota, rate limit, overload or failed start runs once on the backup lane on a -on-LANE branch.
 - P265: the chat's lane start passes the project's saved check command, and each AgentDock gets the full orchestrator list, so sub and sector rows show.
 - P264: ROOM.md, LIVE.md and COMMANDS.md take the 15 corrected sentences from the docs audit; rows 1 and 6 wait for P265.

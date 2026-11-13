@@ -1,8 +1,35 @@
+import { spawnSync } from 'node:child_process'
+import { existsSync, rmSync } from 'node:fs'
+import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { chromePath } from '../scripts/screenshots.mjs'
+import { SCREENSHOTS_USAGE, chromePath } from '../scripts/screenshots.mjs'
+import { makeTempDir } from './helpers/tempRoot.js'
 
+const SCRIPT = fileURLToPath(new URL('../scripts/screenshots.mjs', import.meta.url))
 const env = { LOCALAPPDATA: 'C:\\Users\\<name>\\AppData\\Local' }
 const shown = '%LOCALAPPDATA%\\ms-playwright'
+
+describe('screenshots help', () => {
+  it('prints the usage for --help and -h before the room check and writes no file', () => {
+    const temp = makeTempDir('mr-screenshots-help-')
+    const out = join(temp, 'images')
+    try {
+      for (const flag of ['--help', '-h']) {
+        const result = spawnSync(process.execPath, [SCRIPT, flag, '--port', '1', '--out', out], {
+          encoding: 'utf8',
+          windowsHide: true,
+        })
+        expect(result.status, flag).toBe(0)
+        expect(result.stdout.trim(), flag).toBe(SCREENSHOTS_USAGE)
+        expect(result.stderr, flag).toBe('')
+      }
+      expect(existsSync(out)).toBe(false)
+    } finally {
+      rmSync(temp, { recursive: true, force: true, maxRetries: 5 })
+    }
+  })
+})
 
 describe('chromePath', () => {
   it('says the Playwright folder could not be read, with the folder masked and its code', () => {

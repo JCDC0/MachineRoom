@@ -11,10 +11,15 @@ import { runsFolder, lanesFolder } from '../server/lanes-source.js'
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const docs = join(root, 'docs', 'agents')
 const read = (name) => readFileSync(join(docs, name), 'utf8')
+const AGY_PROMPT_USAGE = 'Usage: node scripts/agy-prompt.mjs BRIEF_ID [--clean]'
 
 const id = process.argv[2]
+if (id === '--help' || id === '-h') {
+  console.log(AGY_PROMPT_USAGE)
+  process.exit(0)
+}
 if (!id) {
-  console.log('Usage: node scripts/agy-prompt.mjs BRIEF_ID [--clean]')
+  console.log(AGY_PROMPT_USAGE)
   process.exit(1)
 }
 

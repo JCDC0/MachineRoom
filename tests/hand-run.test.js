@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { handRun } from '../scripts/hand-run.mjs'
+import { HAND_RUN_USAGE, handRun } from '../scripts/hand-run.mjs'
 import { parseBriefs } from '../src/briefs/briefs.js'
 import { outcomeTable } from '../server/outcomes.js'
 import { readAllRunRecords, readOutcomeRecords } from '../server/runs.js'
@@ -88,6 +88,25 @@ function lanesFor(worktree) {
 function hand(args, { worktree, runsPath, now } = {}) {
   return handRun({ argv: args, lanes: lanesFor(worktree), briefs: BRIEFS, runsPath, now })
 }
+
+describe('hand-run help', () => {
+  it('prints the usage for --help and -h without recording a run', () => {
+    const temp = tempFolder()
+    for (const flag of ['--help', '-h']) {
+      const result = spawnSync(process.execPath, [HAND_SCRIPT, flag], {
+        cwd: ROOT,
+        encoding: 'utf8',
+        env: { ...process.env, TEMP: temp, MACHINEROOM_RUNS: join(temp, 'machineroom-runs') },
+        windowsHide: true,
+      })
+
+      expect(result.status, flag).toBe(0)
+      expect(result.stdout.trim(), flag).toBe(HAND_RUN_USAGE)
+      expect(result.stderr, flag).toBe('')
+      expect(existsSync(runsPathFor(temp)), flag).toBe(false)
+    }
+  })
+})
 
 describe('hand-run refusals', () => {
   it('refuses a lane that is not in lanes.json and writes nothing', () => {
