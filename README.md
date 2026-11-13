@@ -35,6 +35,8 @@ npm run build
 npm run serve -- doctor
 ```
 
+On Windows PowerShell, use `npm.cmd` instead of `npm` when the script policy refuses it, and `npm.cmd link` to link. Leave the execution policy as it is.
+
 Each command prints one line when all is well.
 
 - `npm install` prints `added N packages`, or `up to date` when the packages are already there.
@@ -75,9 +77,9 @@ The control drawer open on Dispatch.
 
 ## Lanes
 
-A new room has the orchestrator and no lane. The owner makes one lane per subscription in Settings (name, harness, model, effort), each runs in its own harness on the owner's account.
+A new room has the orchestrator and no lane. Make a lane in the Agents tab: open the family tree, press Add child on the orchestrator, and fill in the label, harness, model and effort. Each lane runs in its own harness on the owner's account.
 
-Settings offers Remove from project and Delete everywhere. Remove from project hides a lane in that project. Delete everywhere removes a lane you made across all projects.
+Settings only shows or removes lanes. Remove from project hides a lane in that project. Delete everywhere removes a lane you made across all projects.
 
 `MACHINEROOM_LANES_DIR` points a room at another lane list, which is how MachineRoom's own development runs its lanes.
 

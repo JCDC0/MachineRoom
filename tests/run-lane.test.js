@@ -1405,7 +1405,7 @@ describe('run-lane first use', () => {
       expect(result.stderr).toContain('There is no lane named nope.')
       expect(result.stderr).toContain('opencode, claude')
       expect(result.stderr).toContain(`%TEMP%${path.slice(folder.length)}`)
-      expect(result.stderr).toContain("Add a lane in the room's Settings.")
+      expect(result.stderr).toContain("Add a lane in the room's Agents tab.")
       expect(result.stderr).not.toContain(folder)
     } finally {
       rmSync(folder, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
