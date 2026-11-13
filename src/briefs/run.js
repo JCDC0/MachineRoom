@@ -934,7 +934,7 @@ function tokenField(value) {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? Math.round(value) : null
 }
 
-export function runRecord({ lane, briefs, model, reasoning, startedAt, minutes, exitCode, killed, costUsd, inputTokens, outputTokens, peakTokens, log, branch, commits, base, project, task, startedBy, stoppedLeftovers, queue, startFailed, note, retried } = {}) {
+export function runRecord({ lane, briefs, model, reasoning, startedAt, minutes, exitCode, killed, costUsd, inputTokens, outputTokens, peakTokens, log, branch, commits, base, head, tests, project, task, startedBy, stoppedLeftovers, queue, startFailed, note, retried } = {}) {
   const record = {
     lane: String(lane ?? ''),
     briefs: Array.isArray(briefs) ? briefs.map(String) : [],
@@ -953,6 +953,8 @@ export function runRecord({ lane, briefs, model, reasoning, startedAt, minutes, 
     commits: Array.isArray(commits) ? commits.map(String) : [],
   }
   if (typeof base === 'string' && base.trim() !== '') record.base = base.trim()
+  if (typeof head === 'string' && head.trim() !== '') record.head = head.trim()
+  if (tests === 'passed' || tests === 'failed' || tests === 'none') record.tests = tests
   const queueBranch = typeof queue?.branch === 'string' ? queue.branch.trim() : ''
   if (queueBranch !== '') {
     record.branch = queueBranch

@@ -685,10 +685,52 @@ describe('a queue that stops', () => {
       expect(result.code).toBe(1)
       expect(result.stdout).toContain('1. failed: tests')
       const records = readFileSync(join(runs, 'runs.jsonl'), 'utf8').trim().split(/\r?\n/).map((line) => JSON.parse(line))
-      expect(records.at(-1)).toMatchObject({ lane: 'fake', exitCode: 1, queueStatus: 'failed: tests', base: head })
+      expect(records.at(-1)).toMatchObject({ lane: 'fake', exitCode: 1, queueStatus: 'failed: tests', base: head, head, tests: 'failed' })
       expect(records.at(-1).commits).toEqual([])
       const meta = JSON.parse(readFileSync(records.at(-1).log.replace(/\.log$/i, '.meta.json'), 'utf8'))
       expect(meta.base).toBe(head)
+    } finally {
+      remove(parent)
+    }
+  }, 60000)
+
+  it('writes head and tests: none when the project has no test command, and omits tests on harness exit', async () => {
+    const parent = makeTempDir('machine-room-queue-')
+    try {
+      const repo = initRepo(parent)
+      const runs = join(parent, 'machineroom-runs')
+      const file = join(parent, 'queue.txt')
+      writeFileSync(file, 'Write a file.\n')
+      writeFakeLane(repo)
+      git(repo, ['add', '-A'])
+      git(repo, ['commit', '-m', 'the fake lane program'])
+      const okResult = await runLane(['fake', '--project', repo, '--queue', file], {
+        TEMP: parent,
+        MACHINEROOM_RUNS: runs,
+        MACHINEROOM_LANES_FILE: fakeLaneFile(parent),
+      })
+      expect(okResult.code).toBe(0)
+      let records = readFileSync(join(runs, 'runs.jsonl'), 'utf8').trim().split(/\r?\n/).map((line) => JSON.parse(line))
+      expect(records.at(-1)).toMatchObject({
+        lane: 'fake',
+        head: git(repo, ['rev-parse', 'HEAD']).trim(),
+        tests: 'none',
+      })
+
+      git(repo, ['switch', 'main'])
+      writeFileSync(join(repo, 'run'), 'process.exit(2)\n')
+      git(repo, ['add', 'run'])
+      git(repo, ['commit', '-m', 'fail the fake lane'])
+      const headBeforeFail = git(repo, ['rev-parse', 'HEAD']).trim()
+      const failResult = await runLane(['fake', '--project', repo, '--queue', file], {
+        TEMP: parent,
+        MACHINEROOM_RUNS: runs,
+        MACHINEROOM_LANES_FILE: fakeLaneFile(parent),
+      })
+      expect(failResult.code).toBe(1)
+      records = readFileSync(join(runs, 'runs.jsonl'), 'utf8').trim().split(/\r?\n/).map((line) => JSON.parse(line))
+      expect(records.at(-1)).toMatchObject({ lane: 'fake', exitCode: 2, head: headBeforeFail })
+      expect(records.at(-1)).not.toHaveProperty('tests')
     } finally {
       remove(parent)
     }
@@ -704,6 +746,7 @@ describe('a queue that stops', () => {
       copyFileSync(fileURLToPath(new URL('fixtures/fake-lane.cjs', import.meta.url)), join(repo, 'run'))
       git(repo, ['add', 'run'])
       git(repo, ['commit', '-m', 'the fake lane program'])
+      const head = git(repo, ['rev-parse', 'HEAD']).trim()
       const lanes = laneFile(parent, {
         name: 'fake',
         worktree: join(parent, 'worktree'),
@@ -723,7 +766,8 @@ describe('a queue that stops', () => {
       }
       const records = readFileSync(join(runs, 'runs.jsonl'), 'utf8').trim().split(/\r?\n/).map((line) => JSON.parse(line))
       expect(records.length).toBeGreaterThanOrEqual(1)
-      expect(records.at(-1)).toMatchObject({ lane: 'fake', exitCode: 1, queueStatus: 'failed: the queue stopped' })
+      expect(records.at(-1)).toMatchObject({ lane: 'fake', exitCode: 1, queueStatus: 'failed: the queue stopped', head })
+      expect(records.at(-1)).not.toHaveProperty('tests')
     } finally {
       remove(parent)
     }
