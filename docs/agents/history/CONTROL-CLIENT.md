@@ -1,3 +1,15 @@
+# Control client: Storage and archive preview
+
+Task P217 adds three storage methods to `src/control/client.js`, `src/control/mock.js`, `CLIENT_METHODS` and `tests/control-contract.test.js`:
+
+| Method | Bridge route | Returns |
+| --- | --- | --- |
+| `storage()` | `GET /api/storage` | `{ runsFolder, projectRoot, kinds, totalBytes, worktrees }` |
+| `previewStorageArchive({ days })` | `POST /api/storage/preview` | `{ days, cutoff, count, totalBytes, files }` |
+| `archiveStorage({ days, confirmed = false })` | `POST /api/storage/archive` | `{ ok, days, count, totalBytes, moved }` |
+
+`days` defaults to `30` and must be an integer from `1` to `365` (`Choose 1 to 365 days.`). `archiveStorage` sends `confirmed: false` unless passed `confirmed: true`, and refuses unconfirmed writes with `Confirm the archive before moving files.`. Archiving moves the previewed logs and unreferenced recordings into `<runs>/archive/<YYYY-MM>/`, updates counts on subsequent reads and moves nothing on a repeat call with the same `days`.
+
 # Control client: MCP servers and tools
 
 This note documents the MCP server and tool methods of the control client, task U63. The older methods of the contract are below. The real client (`src/control/client.js`) calls the bridge routes in `server/index.js`, and the mock (`src/control/mock.js`) keeps the same data in memory. Panels use only this object and never call `fetch`.

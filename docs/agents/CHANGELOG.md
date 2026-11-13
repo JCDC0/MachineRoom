@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Storage in Settings shows counts and byte sizes by kind, lists clean merged worktrees with their cleanup command, previews archive candidates older than 1 to 365 days and moves confirmed files into month folders under `<runs>/archive` (P217).
 - Lane Update and Delete read the request body before the saved configuration, so a lane created meanwhile and its key count are kept.
 - The Removed lanes row sums each removed lane's rounded cents, so deleting lanes never moves the total.
 - Removed lanes adds each removed lane's rounded cents for the month and today, so deleting lanes no longer changes the total (P212).
