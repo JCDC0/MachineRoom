@@ -144,7 +144,7 @@ export default function Connect({
               <h2>Connect through the bridge</h2>
             </div>
             <p className="connect-hint">
-              Run <code className="mono">npm run serve -- up --root YOUR-PROJECT</code> in a terminal, then open the address it prints, or paste the bridge address below.
+              After <code className="mono">npm link</code>, run <code className="mono">machineroom YOUR-PROJECT</code> in a terminal. Or run <code className="mono">npm run serve -- up --root YOUR-PROJECT</code> in the MachineRoom folder. Then open the address it prints, or paste the bridge address below.
             </p>
             <div className="connect-field">
               <div className="connect-field-row">
@@ -195,14 +195,14 @@ export default function Connect({
 
           <section className="connect-card connect-choice">
             <div className="connect-card-head hud-header-strip">
-              <h2>Open the recorded replay</h2>
-              <span className="connect-tag mono">5 min run</span>
+              <h2>Replay what this page has seen</h2>
+              <span className="connect-tag mono">This visit</span>
             </div>
             <p className="connect-hint">
-              Inspect a recorded session with the timeline scrubber, run markers and speed controls.
+              Plays back what this page has seen since the first conversation, with the timeline scrubber, run markers and speed controls. For a sample run, take the tour.
             </p>
             <button type="button" className="connect-action" onClick={handleReplay} disabled={busy}>
-              Open the recorded replay
+              Open the replay
             </button>
           </section>
         </form>
