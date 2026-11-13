@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- A review merge sends its destination branch and head, and the bridge refuses it when the project switched branch or that branch moved; a fast forward asks for no message (P169).
 - README says lanes are made in the Agents tab and how to use npm.cmd when PowerShell refuses npm, and run-lane's missing-lane sentence points to the Agents tab (P173).
 - A queue keeps an explicit --test, and otherwise reads the test command from its worktree after each task, so a test script a task adds is run (P172).
 - README's Lanes section says a lane is made in the Agents tab from the family tree, and Settings only shows or removes lanes (P173).
@@ -13,6 +14,7 @@
 - The connect screen describes the replay as what this page has seen since the first conversation, with no fixed length, and keeps the tour as the sample (P171).
 - The connect screen's recovery line leads with machineroom YOUR-PROJECT and says to run the npm form in the MachineRoom folder (P171).
 - A queue keeps an explicit --test and otherwise reads the test command from the prepared worktree after each task, so a test script a task adds or one on the project head is run (P172).
+- Review merges carry the destination branch and head so a stale or switched branch refuses before any write, and fast-forward confirms hide the commit message field (P169).
 - The readiness review lists 3 blockers, 5 bug patches and 3 suggested features on the owner's path to daily use (P164).
 - machine-room doctor takes a folder first as --root and refuses both forms in one sentence (P168).
 - Doctor counts warnings in its summary line and stops after a failed project folder, so the one FAIL line is last (P168).

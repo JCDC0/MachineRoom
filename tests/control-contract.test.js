@@ -976,3 +976,98 @@ describe('the control client MCP routes', () => {
     await expect(client.callMcpTool({ server: 'filesystem' })).rejects.toThrow('Choose an MCP server and a tool.')
   })
 })
+
+describe('the control client review routes', () => {
+  function recorder(answer = { lanes: [], ok: true }) {
+    const calls = []
+    const fetchImpl = async (url, options = {}) => {
+      calls.push({ url, method: options.method, body: options.body })
+      return { ok: true, json: async () => answer }
+    }
+    return { calls, client: createClient({ baseUrl: 'http://127.0.0.1:9', fetchImpl }) }
+  }
+
+  it('sends destination branch and head with or without a message by strategy', async () => {
+    const { calls, client } = recorder()
+    const head = 'a'.repeat(40)
+    const baseHead = 'b'.repeat(40)
+    await client.reviews()
+    await client.mergeReview('opencode', { head, base: 'trunk', baseHead })
+    await client.mergeReview('hermes', { head, base: 'main', baseHead, message: 'Merge it' })
+    expect(calls).toEqual([
+      { url: 'http://127.0.0.1:9/api/control/reviews', method: 'GET', body: undefined },
+      {
+        url: 'http://127.0.0.1:9/api/control/reviews/opencode/merge',
+        method: 'POST',
+        body: JSON.stringify({ confirmed: true, head, base: 'trunk', baseHead }),
+      },
+      {
+        url: 'http://127.0.0.1:9/api/control/reviews/hermes/merge',
+        method: 'POST',
+        body: JSON.stringify({ confirmed: true, head, base: 'main', baseHead, message: 'Merge it' }),
+      },
+    ])
+  })
+
+  it('matches the review base, baseHead and strategy fields between bridge and mock', async () => {
+    const bridge = createBridge({
+      projectRoot: shared.repo,
+      briefsDir: join(shared.repo, 'docs', 'agents'),
+      port: 0,
+      env: {},
+    })
+    cleanups.push(() => bridge.stop())
+    const { url } = await bridge.start()
+    const bridgeClient = createClient({
+      baseUrl: url,
+      fetchImpl: (input, init = {}) =>
+        fetch(input, {
+          ...init,
+          headers: { ...init?.headers, Origin: 'http://localhost:5173' },
+        }),
+    })
+    const expectedHead = testGit(shared.repo, ['rev-parse', 'refs/heads/main']).trim()
+    const liveReviews = await bridgeClient.reviews()
+    const liveRow = liveReviews.find((entry) => entry.lane === 'opencode')
+    expect(liveRow).toMatchObject({
+      lane: 'opencode',
+      base: 'main',
+      baseHead: expectedHead,
+      strategy: 'merge-commit',
+    })
+
+    const mock = createMockClient({ latencyMs: 0 })
+    const gitState = await mock.gitState()
+    const mockReviews = await mock.reviews()
+    const hermes = mockReviews.find((entry) => entry.lane === 'hermes')
+    const agy = mockReviews.find((entry) => entry.lane === 'agy')
+    expect(hermes).toMatchObject({
+      lane: 'hermes',
+      base: 'main',
+      baseHead: gitState.head,
+      strategy: 'merge-commit',
+    })
+
+    await expect(
+      mock.mergeReview('hermes', { head: hermes.head, base: hermes.base, baseHead: '0'.repeat(40), message: 'Merge it' })
+    ).rejects.toThrow('The main branch moved since you read it, so refresh reviews first.')
+
+    await mock.switchBranch({ branch: 'feat/preview', confirmed: true })
+    await expect(
+      mock.mergeReview('hermes', { head: hermes.head, base: hermes.base, baseHead: hermes.baseHead, message: 'Merge it' })
+    ).rejects.toThrow('The main checkout is not on main.')
+
+    await mock.switchBranch({ branch: 'main', confirmed: true })
+    const merged = await mock.mergeReview('hermes', {
+      head: hermes.head,
+      base: hermes.base,
+      baseHead: hermes.baseHead,
+      message: 'Merge it',
+    })
+    expect(merged).toMatchObject({ ok: true, lane: 'hermes', head: hermes.head })
+
+    await expect(
+      mock.mergeReview('agy', { head: agy.head, base: agy.base, baseHead: agy.baseHead, message: 'Merge it' })
+    ).rejects.toThrow('The main branch moved since you read it, so refresh reviews first.')
+  })
+})

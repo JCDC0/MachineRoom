@@ -3,14 +3,17 @@ import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } fr
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { createElement } from 'react'
+import { act, createElement } from 'react'
 import { renderToString } from 'react-dom/server'
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import { beginRepoWrite, endRepoWrite, WRITE_IN_FLIGHT_PROBLEM } from '../server/git.js'
 import { createBridge } from '../server/index.js'
-import { codeCheckout, resetCodeCheckout } from '../server/reviews.js'
+import { codeCheckout, createReviewsApi, defaultGitRunner, resetCodeCheckout } from '../server/reviews.js'
+import { createClient } from '../src/control/client.js'
 import ReviewsPanel from '../src/ui/panels/ReviewsPanel.jsx'
 import { defaultMergeMessage, reviewRow } from '../src/ui/panels/reviews.js'
 import { makeTempDir as makeTempRoot } from './helpers/tempRoot.js'
+import { buttonWithText, click, settle, withDom } from './helpers/uiDom.js'
 
 const REPO_ROOT = resolve(fileURLToPath(import.meta.url), '..', '..')
 const REAL_TMP = tmpdir()
@@ -168,6 +171,8 @@ describe('review routes on another project', () => {
       worktree,
       branch: 'feat/x',
       base: 'trunk',
+      baseHead: git(project, ['rev-parse', 'refs/heads/trunk']).trim(),
+      strategy: 'fast-forward',
       ahead: 1,
       dirty: false,
       files: 1,
@@ -212,7 +217,7 @@ describe('review routes on another project', () => {
     const oldBase = git(project, ['rev-parse', 'HEAD']).trim()
     const { url } = await startBridge({ projectRoot: project, briefsDir })
 
-    const res = await mergeRequest(url, 'opencode', { confirmed: true, head, message: 'Merge the lane' })
+    const res = await mergeRequest(url, 'opencode', { confirmed: true, head, base: 'trunk', baseHead: oldBase })
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({ ok: true, lane: 'opencode', branch: 'feat/x', head, commit: head })
     expect(git(project, ['rev-parse', 'HEAD']).trim()).toBe(head)
@@ -220,7 +225,7 @@ describe('review routes on another project', () => {
     expect(git(project, ['status', '--porcelain'])).toBe('')
     expect(existsSync(join(project, 'extra.js'))).toBe(true)
 
-    const again = await mergeRequest(url, 'opencode', { confirmed: true, head, message: 'Merge the lane' })
+    const again = await mergeRequest(url, 'opencode', { confirmed: true, head, base: 'trunk', baseHead: head })
     expect(again.status).toBe(409)
     expect(await again.json()).toEqual({ error: 'Nothing to merge.' })
     expect(git(project, ['rev-parse', 'HEAD']).trim()).toBe(head)
@@ -235,7 +240,12 @@ describe('review routes on another project', () => {
     const laneHead = git(worktree, ['rev-parse', 'HEAD']).trim()
     const { url } = await startBridge({ projectRoot: project, briefsDir })
 
-    const res = await mergeRequest(url, 'opencode', { confirmed: true, head: laneHead, message: 'Merge the lane' })
+    const res = await mergeRequest(url, 'opencode', {
+      confirmed: true,
+      head: laneHead,
+      base: 'trunk',
+      baseHead: projectHead,
+    })
     const answer = await res.json()
     expect(res.status, JSON.stringify(answer)).toBe(409)
     expect(answer).toEqual({
@@ -263,12 +273,20 @@ describe('review routes on another project', () => {
   it('fast-forwards a detached lane worktree, as a run-lane task makes it', async () => {
     const { project, worktree, briefsDir } = makeProject({ detach: true })
     const head = git(worktree, ['rev-parse', 'HEAD']).trim()
+    const trunkHead = git(project, ['rev-parse', 'refs/heads/trunk']).trim()
     const { url } = await startBridge({ projectRoot: project, briefsDir })
 
     const list = await fetch(`${url}/api/control/reviews`).then((r) => r.json())
-    expect(list.lanes[0]).toMatchObject({ lane: 'opencode', branch: '', base: 'trunk', ahead: 1 })
+    expect(list.lanes[0]).toMatchObject({
+      lane: 'opencode',
+      branch: '',
+      base: 'trunk',
+      baseHead: trunkHead,
+      strategy: 'fast-forward',
+      ahead: 1,
+    })
 
-    const res = await mergeRequest(url, 'opencode', { confirmed: true, head, message: 'Merge the lane' })
+    const res = await mergeRequest(url, 'opencode', { confirmed: true, head, base: 'trunk', baseHead: trunkHead })
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({ ok: true, lane: 'opencode', branch: '', head, commit: head })
     expect(git(project, ['rev-parse', 'HEAD']).trim()).toBe(head)
@@ -337,6 +355,184 @@ describe('review routes on another project', () => {
       expect(entry.base === undefined || entry.base === 'main', entry.lane).toBe(true)
     }
   }, 60000)
+
+  it('refuses missing or invalid destination fields and checks branch state under the write lock before git writes', async () => {
+    const { project, worktree, briefsDir } = makeProject()
+    git(project, ['branch', 'release'])
+    const laneHead = git(worktree, ['rev-parse', 'HEAD']).trim()
+    const trunkHead = git(project, ['rev-parse', 'refs/heads/trunk']).trim()
+    const { url } = await startBridge({ projectRoot: project, briefsDir })
+
+    for (const body of [
+      { confirmed: true, head: laneHead },
+      { confirmed: true, head: laneHead, base: '', baseHead: trunkHead },
+      { confirmed: true, head: laneHead, base: 'trunk', baseHead: 'not-a-sha' },
+    ]) {
+      const bad = await mergeRequest(url, 'opencode', body)
+      expect(bad.status).toBe(400)
+      expect(await bad.json()).toEqual({ error: 'Send the destination branch and head you read.' })
+    }
+
+    const calls = []
+    const recordingRunner = async (cwd, args, opts) => {
+      calls.push(args)
+      return defaultGitRunner(cwd, args, opts)
+    }
+    const answers = []
+    let currentBody = { confirmed: true, head: laneHead, base: 'trunk', baseHead: trunkHead }
+    const api = createReviewsApi({
+      projectRoot: project,
+      briefsDir,
+      runsFolder: join(project, '..', 'runs'),
+      sendJson: (req, res, status, body) => answers.push({ status, body }),
+      readJsonBody: async () => currentBody,
+      orchestrators: () => null,
+      gitRunner: recordingRunner,
+      readRuns: () => [],
+    })
+    const postMerge = () =>
+      api.handle(
+        { method: 'POST', headers: { origin: 'http://localhost:5173' } },
+        {},
+        new URL('http://127.0.0.1/api/control/reviews/opencode/merge')
+      )
+
+    git(project, ['switch', 'release'])
+    const releaseHead = git(project, ['rev-parse', 'HEAD']).trim()
+    await postMerge()
+    expect(answers.at(-1)).toEqual({
+      status: 409,
+      body: { error: 'The project is on release now, not trunk, so refresh reviews first.' },
+    })
+    expect(calls.some((args) => args.includes('merge'))).toBe(false)
+    expect(git(project, ['rev-parse', 'refs/heads/release']).trim()).toBe(releaseHead)
+
+    git(project, ['switch', '--detach', 'HEAD'])
+    await postMerge()
+    expect(answers.at(-1)).toEqual({
+      status: 409,
+      body: { error: 'The project is not on a branch.' },
+    })
+    expect(calls.some((args) => args.includes('merge'))).toBe(false)
+
+    git(project, ['switch', 'trunk'])
+    writeFileSync(join(project, 'trunk-only.txt'), 'moved\n')
+    git(project, ['add', 'trunk-only.txt'])
+    git(project, ['commit', '-m', 'advance trunk'])
+    const movedTrunkHead = git(project, ['rev-parse', 'HEAD']).trim()
+    await postMerge()
+    expect(answers.at(-1)).toEqual({
+      status: 409,
+      body: { error: 'The trunk branch moved since you read it, so refresh reviews first.' },
+    })
+    expect(calls.some((args) => args.includes('merge'))).toBe(false)
+    expect(git(project, ['rev-parse', 'refs/heads/trunk']).trim()).toBe(movedTrunkHead)
+
+    const lockKey = beginRepoWrite(project)
+    expect(lockKey).not.toBeNull()
+    try {
+      currentBody = { confirmed: true, head: laneHead, base: 'trunk', baseHead: movedTrunkHead }
+      await postMerge()
+      expect(answers.at(-1)).toEqual({ status: 409, body: { error: WRITE_IN_FLIGHT_PROBLEM } })
+      expect(calls.some((args) => args.includes('merge'))).toBe(false)
+    } finally {
+      endRepoWrite(lockKey)
+    }
+  }, 40000)
+
+  it('refuses a trunk confirm card after a switch to release or trunk advance, hides message on fast-forward and merges a fresh card', async () => {
+    const { project, worktree, briefsDir } = makeProject()
+    const firstLaneHead = git(worktree, ['rev-parse', 'HEAD']).trim()
+    writeFileSync(join(worktree, 'second.js'), 'export const two = 2\n')
+    git(worktree, ['add', 'second.js'])
+    git(worktree, ['commit', '-m', 'second lane work'])
+    const laneHead = git(worktree, ['rev-parse', 'HEAD']).trim()
+    git(project, ['branch', 'release'])
+    const trunkStart = git(project, ['rev-parse', 'refs/heads/trunk']).trim()
+    const releaseStart = git(project, ['rev-parse', 'refs/heads/release']).trim()
+
+    const { url } = await startBridge({ projectRoot: project, briefsDir })
+    const rawClient = createClient({
+      baseUrl: url,
+      fetchImpl: (input, init = {}) =>
+        fetch(input, {
+          ...init,
+          headers: { ...init?.headers, Origin: 'http://localhost:5173' },
+        }),
+    })
+    let reviewsCount = 0
+    const client = {
+      ...rawClient,
+      reviews: async () => {
+        const list = await rawClient.reviews()
+        reviewsCount += 1
+        return list
+      },
+    }
+
+    async function waitFor(check) {
+      for (let i = 0; i < 80; i += 1) {
+        if (check()) return
+        await settle(25)
+      }
+      throw new Error('timed out waiting for UI update')
+    }
+
+    await withDom(async ({ container, root }) => {
+      await act(async () => {
+        root.render(createElement(ReviewsPanel, { client }))
+      })
+      await waitFor(() => container.querySelector('.review-merge-btn') !== null)
+
+      await click(root, container.querySelector('.review-merge-btn'))
+      const card = container.querySelector('.review-confirm-card')
+      expect(card).not.toBeNull()
+      expect(card.textContent).toContain('into trunk?')
+      expect(card.textContent).toContain("Fast-forward merge. The lane's commits are kept as they are.")
+      expect(card.querySelector('input')).toBeNull()
+
+      git(project, ['switch', 'release'])
+      await click(root, buttonWithText(card, 'Merge'))
+      await waitFor(() => card.querySelector('[role="alert"]') !== null)
+      expect(card.querySelector('[role="alert"]').textContent).toBe(
+        'The project is on release now, not trunk, so refresh reviews first.'
+      )
+      expect(git(project, ['rev-parse', 'refs/heads/release']).trim()).toBe(releaseStart)
+      expect(git(project, ['rev-parse', 'refs/heads/trunk']).trim()).toBe(trunkStart)
+
+      git(project, ['switch', 'trunk'])
+      git(project, ['merge', '--ff-only', firstLaneHead])
+      await click(root, buttonWithText(card, 'Merge'))
+      await waitFor(() =>
+        card.querySelector('[role="alert"]')?.textContent.includes('The trunk branch moved since you read it')
+      )
+      expect(card.querySelector('[role="alert"]').textContent).toBe(
+        'The trunk branch moved since you read it, so refresh reviews first.'
+      )
+      expect(git(project, ['rev-parse', 'refs/heads/trunk']).trim()).toBe(firstLaneHead)
+
+      const countBeforeRefresh = reviewsCount
+      await click(root, buttonWithText(container, 'Refresh'))
+      await waitFor(() => reviewsCount > countBeforeRefresh)
+
+      await click(root, container.querySelector('.review-merge-btn'))
+      const freshCard = container.querySelector('.review-confirm-card')
+      expect(freshCard).not.toBeNull()
+      expect(freshCard.querySelector('[role="alert"]')).toBeNull()
+      expect(freshCard.querySelector('input')).toBeNull()
+
+      const countBeforeMerge = reviewsCount
+      await click(root, buttonWithText(freshCard, 'Merge'))
+      await waitFor(
+        () => container.querySelector('.review-confirm-card') === null && reviewsCount > countBeforeMerge
+      )
+      await settle(0)
+      expect(container.querySelector('.review-merged-banner')?.textContent).toBe(
+        `Merged as ${laneHead.slice(0, 7)}.`
+      )
+      expect(git(project, ['rev-parse', 'refs/heads/trunk']).trim()).toBe(laneHead)
+    })
+  }, 40000)
 })
 
 describe('review panel helpers', () => {
