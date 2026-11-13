@@ -1,8 +1,10 @@
 # Changelog
 
 ## Unreleased
+- P259: README.md describes what each command prints, the up flags, the default sources, the runs folder and how to stop the room.
 - P253: the session timer, orchestrator room turn, tree retry and storage refresh tests wait for their condition instead of a fixed sleep.
 - P251: the waiting card counts working agents and names the session readers on a Watching line, and the Inspector says waiting for you when the transport does, through one shared rule.
+- P259: README.md fixes all 10 fresh-clone gaps, covering command output, the expected build warning, up flags, default sources, Ctrl+C stop, MACHINEROOM_RUNS, npm link, session agents and PowerShell syntax.
 - P257: a fresh clone installs, builds, passes the doctor and serves the room; README.md has 10 gaps to fix.
 - P251: the inspector's main orchestrator reads WAITING FOR YOU when the transport says waiting for you, while lanes and subs keep their state words.
 - P251: the waiting card counts only the orchestrators and lanes as ready and names the session readers on their own line.
