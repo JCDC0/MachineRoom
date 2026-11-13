@@ -80,11 +80,13 @@ export function printedRunsFolder(folder, env = process.env) {
     { prefix: roaming, label: '%APPDATA%' },
     { prefix: userProfile, label: '%USERPROFILE%' },
   ]
-  const candidates = [
-    { prefix: temp, label: '%TEMP%' },
-    ...(win32Path ? windowsCandidates : []),
+  const posixCandidates = [
     { prefix: stateHome, label: '$XDG_STATE_HOME' },
     { prefix: home, label: '~' },
+  ]
+  const candidates = [
+    { prefix: temp, label: '%TEMP%' },
+    ...(win32Path ? windowsCandidates : posixCandidates),
   ]
   let best = null
   for (const { prefix, label } of candidates) {
