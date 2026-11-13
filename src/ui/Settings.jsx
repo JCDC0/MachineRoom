@@ -6,6 +6,7 @@ import LanesSettings from './LanesSettings.jsx'
 import McpSettings from './McpSettings.jsx'
 import MusicPlayer from './MusicPlayer.jsx'
 import SearchSettings from './SearchSettings.jsx'
+import StorageSettings from './StorageSettings.jsx'
 import { store } from '../storage.js'
 import { RECORD_MINUTES_MAX, RECORD_MINUTES_MIN, clampRecordMinutes } from '../model/recordLimits.js'
 import { effectSettings, clampFileLimit, FILE_LIMIT_MAX, FILE_LIMIT_MIN, loadSettings, loadSoundSettings, saveSettings, saveSoundSettings } from './settings.js'
@@ -301,6 +302,7 @@ export default function Settings({ open = true, effects, onChange, onSettingsCha
         <KeysSettings client={client} />
         <McpSettings client={client} />
         <SearchSettings client={client} />
+        <StorageSettings client={client} />
       </div>
     </section>
   )
