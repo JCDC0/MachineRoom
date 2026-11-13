@@ -426,6 +426,24 @@ export function snapshotSink(player, setSnapshot, initial) {
   }
 }
 
+export function resetRunState(state) {
+  if (!state || typeof state !== 'object') return
+  for (const agent of state.agents?.values() ?? []) {
+    agent.status = 'idle'
+    agent.runId = null
+    agent.label = ''
+    agent.target = ''
+    agent.endedAt = 0
+    agent.startedAt = 0
+    agent.startedBy = null
+    agent.error = null
+    agent.calls?.clear()
+    agent.runWrites?.clear()
+    agent.focus = []
+    agent.version = (agent.version ?? 0) + 1
+  }
+}
+
 export function touchedFiles(activities) {
   const paths = []
   const seen = new Set()
@@ -1247,6 +1265,11 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
     }
     const handlers = {
       onStatus: (status) => player.setStatus(status),
+      onReset: () => {
+        pipeline.reset()
+        resetRunState(player.state)
+        player.addFiles([])
+      },
       onFrame: (frame) => {
         recorder?.push(frame)
         const activities = pipeline.push(frame)

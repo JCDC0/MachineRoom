@@ -38,7 +38,7 @@ export async function discoverBridge({ url, root, fetchImpl = fetch }) {
 export const REOPEN_START = 1000
 export const REOPEN_LIMIT = 15000
 
-export function openBridge({ url, since, onFrame, onTree, onStatus, EventSourceImpl = EventSource, setTimer = setTimeout, clearTimer = clearTimeout }) {
+export function openBridge({ url, since, onFrame, onTree, onStatus, onReset = () => {}, EventSourceImpl = EventSource, setTimer = setTimeout, clearTimer = clearTimeout }) {
   let source = null
   let timer = null
   let delay = REOPEN_START
@@ -73,6 +73,15 @@ export function openBridge({ url, since, onFrame, onTree, onStatus, EventSourceI
       timer = setTimer(open, delay)
       delay = Math.min(delay * 2, REOPEN_LIMIT)
     }
+    current.addEventListener('reset', (event) => {
+      let data = {}
+      try {
+        data = JSON.parse(event.data)
+      } catch {}
+      const start = readTreeStart(data)
+      lastId = start === null ? null : `${start}:0`
+      onReset(data)
+    })
     current.addEventListener('frame', (event) => {
       let frame
       try {

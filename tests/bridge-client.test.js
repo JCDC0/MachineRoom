@@ -15,8 +15,8 @@ class FakeSource {
     this.listeners.set(name, handler)
   }
 
-  emit(name, data) {
-    this.listeners.get(name)({ data })
+  emit(name, data, lastEventId = '') {
+    this.listeners.get(name)({ data, lastEventId })
   }
 
   close() {
@@ -279,11 +279,44 @@ describe('openBridge', () => {
       },
       clearTimer: () => {},
     })
-    sources.at(-1).emit('frame', JSON.stringify({ id: 7, type: 'heartbeat.run.log' }))
+    sources.at(-1).emit('frame', JSON.stringify({ id: 7, type: 'heartbeat.run.log' }), 'aaaabbbbccccdddd:7')
     sources.at(-1).readyState = 2
     sources.at(-1).onerror()
     timers.at(-1).fn()
-    expect(sources.at(-1).url).toBe('http://bridge/events?after=7&tree=folders')
+    expect(sources.at(-1).url).toBe('http://bridge/events?after=aaaabbbbccccdddd%3A7&tree=folders')
+    link.close()
+  })
+
+  it('takes a reset from the bridge, clears the page and asks after the new start', () => {
+    const timers = []
+    const sources = []
+    const resets = []
+    class Counting extends FakeSource {
+      constructor(url) {
+        super(url)
+        sources.push(this)
+      }
+    }
+    const link = openBridge({
+      url: 'http://bridge-reset',
+      EventSourceImpl: Counting,
+      onFrame: () => {},
+      onTree: () => {},
+      onStatus: () => {},
+      onReset: (event) => resets.push(event),
+      setTimer: (fn, ms) => {
+        timers.push({ fn, ms })
+        return timers.length
+      },
+      clearTimer: () => {},
+    })
+    sources.at(-1).emit('frame', JSON.stringify({ id: 4, type: 'heartbeat.run.status' }), 'aaaabbbbccccdddd:4')
+    sources.at(-1).emit('reset', JSON.stringify({ start: 'bbbbccccddddeeee' }))
+    expect(resets).toEqual([{ start: 'bbbbccccddddeeee' }])
+    sources.at(-1).readyState = 2
+    sources.at(-1).onerror()
+    timers.at(-1).fn()
+    expect(sources.at(-1).url).toBe('http://bridge-reset/events?after=bbbbccccddddeeee%3A0&tree=folders')
     link.close()
   })
 

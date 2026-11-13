@@ -2,7 +2,9 @@ import { appendFileSync, rmSync, writeFileSync } from 'node:fs'
 import { request as httpRequest } from 'node:http'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { buildActivities } from '../src/model/pipeline.js'
+import { buildActivities, createPipeline } from '../src/model/pipeline.js'
+import { apply, createState } from '../src/model/state.js'
+import { resetRunState } from '../src/Stage.jsx'
 import { getJson, readFrames, startLaneBridge, waitFor } from './helpers/bridge.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 
@@ -135,6 +137,7 @@ async function sleep(ms) {
 }
 
 const frameOf = (event) => JSON.parse(event.data)
+const seqOf = (id) => Number(String(id).split(':').pop())
 
 const SESSION_AGENT = { id: 'agent-session', key: 'session', name: 'Session', adapterType: 'claude_local', parser: 'claude' }
 const OPENCODE_SESSION = { id: 'agent-session', key: 'session', name: 'Session', adapterType: 'opencode_local', parser: 'opencode' }
@@ -186,7 +189,7 @@ describe('frames over SSE', () => {
     cleanups.push(() => replayed.close())
     const second = await replayed.next((event) => event.event === 'frame')
     const third = await replayed.next((event) => event.event === 'frame')
-    expect(Number(second.id)).toBeGreaterThan(Number(first.id))
+    expect(seqOf(second.id)).toBeGreaterThan(seqOf(first.id))
     expect(frameOf(second).payload.chunk).toContain('docs/b.md')
     expect(frameOf(third).payload.chunk).toContain('docs/c.md')
   })
@@ -241,9 +244,73 @@ describe('frames over SSE', () => {
 
     const again = await openSse(url, { 'Last-Event-ID': logs[0].id }, '?history=1')
     cleanups.push(() => again.close())
-    const next = await again.next((item) => item.event === 'frame')
-    expect(next.id).toBe(logs[1].id)
-    expect(frameOf(next)).toEqual(frameOf(logs[1]))
+    const first = await again.next((item) => item.event === 'reset' || item.event === 'frame')
+    expect(first.event).toBe('frame')
+    expect(first.id).toBe(logs[1].id)
+    expect(frameOf(first)).toEqual(frameOf(logs[1]))
+  })
+
+  it('sends a reset and the current state of a live run to a cursor from another bridge', async () => {
+    const { url, send } = await sourceBridge()
+    const first = await openSse(url)
+    cleanups.push(() => first.close())
+    send(sessionFrame('heartbeat.run.queued', { runId: 'r1' }))
+    await first.next((event) => event.event === 'frame' && frameOf(event).type === 'heartbeat.run.queued')
+    send(sessionFrame('heartbeat.run.status', { runId: 'r1', status: 'running' }))
+    const running = await first.next((event) => event.event === 'frame' && frameOf(event).payload?.status === 'running')
+    first.close()
+
+    const again = await openSse(url, { 'Last-Event-ID': 'ffffffffffffffff:1' })
+    cleanups.push(() => again.close())
+    const reset = await again.next((event) => event.event === 'reset' || event.event === 'frame')
+    expect(reset.event).toBe('reset')
+    const data = JSON.parse(reset.data)
+    expect(data.start).toMatch(/^[0-9a-f]{16}$/)
+    expect(data.start).not.toBe('ffffffffffffffff')
+    expect(running.id.startsWith(`${data.start}:`)).toBe(true)
+    const snapshot = frameOf(await again.next((event) => event.event === 'frame'))
+    expect(snapshot).toMatchObject({ type: 'heartbeat.run.status', payload: { runId: 'r1', status: 'running' } })
+  })
+
+  it('resets a reconnect when the run finish fell out of the kept frames', async () => {
+    const { url, send } = await sourceBridge()
+    const first = await openSse(url)
+    cleanups.push(() => first.close())
+    send(sessionFrame('heartbeat.run.queued', { runId: 'r1' }))
+    const queued = await first.next((event) => event.event === 'frame' && frameOf(event).type === 'heartbeat.run.queued')
+    send(sessionFrame('heartbeat.run.status', { runId: 'r1', status: 'running' }))
+    const running = await first.next((event) => event.event === 'frame' && frameOf(event).payload?.status === 'running')
+    first.close()
+
+    const agents = [{ id: SESSION_AGENT.id, key: SESSION_AGENT.key, name: SESSION_AGENT.name, parser: 'claude' }]
+    const pipeline = createPipeline({ agents, tree: { rootName: 'p', files: [], dirs: [] } })
+    const state = createState({ files: [], dirs: [], created: [] }, agents)
+    for (const event of [queued, running]) {
+      for (const activity of pipeline.push(frameOf(event))) apply(state, activity)
+    }
+    expect(state.agents.get(SESSION_AGENT.key).status).toBe('working')
+
+    send(sessionFrame('heartbeat.run.status', { runId: 'r1', status: 'succeeded' }))
+    for (let seq = 1; seq <= 510; seq += 1) send(sessionLog('filler', seq, ''))
+
+    const again = await openSse(url, { 'Last-Event-ID': running.id })
+    cleanups.push(() => again.close())
+    const reset = await again.next((event) => event.event === 'reset' || event.event === 'frame')
+    expect(reset.event).toBe('reset')
+    pipeline.reset()
+    resetRunState(state)
+    expect(state.agents.get(SESSION_AGENT.key).status).toBe('idle')
+
+    let replayed = 0
+    for (let index = 0; index < 600; index += 1) {
+      const event = await again.next((item) => item.event === 'frame')
+      const frame = frameOf(event)
+      replayed += 1
+      for (const activity of pipeline.push(frame)) apply(state, activity)
+      if (frame.payload?.runId === 'filler' && frame.payload?.seq === 510) break
+    }
+    expect(replayed).toBeGreaterThan(0)
+    expect(state.agents.get(SESSION_AGENT.key).status).not.toBe('working')
   })
 
   it('leaves no timer behind after stop', async () => {
