@@ -2126,3 +2126,48 @@ Write the file: one row per finding, with `fixed`, `partly` or `not fixed` and w
 **P248. Run the full suite on the review fixes (OpenCode).** Read this brief only. Change no file except your report. Use no subagents. Run every command in the foreground. Commit only your report, and stop at minute 25. Files: docs/agents/RUN-2026-11-13-SUITE-7.md.
 
 Run `npm test` once at `fdef59e2` or later. For every failing test, run its file alone twice and say whether it fails again. Write the file: the commit, the totals, each failure with its file, test name, error line and whether it repeated alone, and the time the run took. Do not fix anything.
+
+**P249. A lane run's conversation can be read from the bridge (OpenCode).** The owner said yes to a conversation view for each agent. This brief is its reading half; P250 builds the view on it. Read this brief only. Use no subagents. Run every command in the foreground. Commit each step as you finish it, and stop starting new work at minute 30. Files: src/model/conversation.js, server/runs.js, src/control/client.js, src/control/mock.js, tests/conversation.test.js, tests/bridge-routes.test.js, tests/control-contract.test.js, docs/agents/CHANGELOG.md, docs/agents/architecture/LIVE.md, docs/agents/history/CONTROL-CLIENT.md.
+
+1. `src/model/conversation.js` exports a pure `conversationFromLog(harness, text)`. It turns a run-lane log into a list of entries `{ role, text, tool, at }`:
+   - `role` is `prompt` for the task the runner gave the agent, `agent` for the agent's own words, `tool` for a tool call (`tool` holds its name, `text` its one-line label, as the activity labels read today), `result` for the run's end line, or `line` for anything it cannot read.
+   - Read how each parser in `src/model/parsers/` reads its harness's lines, and reuse those readers rather than writing new JSON handling. Cover `claude`, `opencode`, `codex` and `agy`; any other harness gives `line` entries.
+   - Keep at most the last 2,000 entries, cut each `text` to 4,000 characters, and mask keys with the existing key masker and home paths with `maskProfilePaths` from `src/briefs/run.js`.
+2. `GET /api/control/runs/conversation?lane=NAME&startedAt=ISO` finds that run's record, reads its log from the runs folder only, and answers `{ lane, startedAt, harness, running, entries }`.
+   - Refuse with one sentence: an unknown lane or run (404), and a log path that resolves outside the runs folder (400).
+   - It is a read, so the bridge's existing Host and Origin gate applies and no token is needed.
+   - A log over 8 MB is read from its last 8 MB, and the answer says `cut: true`.
+3. `runConversation({ lane, startedAt })` goes on the real client and the mock, with the contract suite.
+4. Tests, by what they prove:
+   - A Claude, an OpenCode and a Codex log, each from the existing parser fixtures, give the prompt, at least one agent entry and the tool calls in order.
+   - A key and a home path in the log are masked.
+   - A log path outside the runs folder is refused.
+   - An unknown run answers 404.
+   - The new tests must fail before your change.
+5. Run `node node_modules/vitest/vitest.mjs related --run src/model/conversation.js server/runs.js src/control/client.js src/control/mock.js` and `npm run build`. Report what passed.
+
+**P250. Open any lane's conversation, with Stop (OpenCode).** The owner said yes to a conversation view for each agent, where the owner can read it and stop the agent. Read this brief only. Start after P249 and P251 are merged. Use no subagents. Run every command in the foreground. Commit each step as you finish it, and stop starting new work at minute 30. Files: src/ui/LaneConversation.jsx, src/ui/laneConversation.js, src/ui/Hud.jsx, src/ui/Inspector.jsx, src/ui/FamilyTree.jsx, src/styles.css, tests/lane-conversation.test.js, tests/inspector-ui.test.js, tests/family-tree-ui.test.js, docs/agents/CHANGELOG.md, docs/agents/architecture/ROOM.md.
+
+1. A lane's row in the family tree gets the same chat button the orchestrator rows have, and the Inspector on a lane gets `Open conversation` under its log lines. Either one opens `LaneConversation` in the middle column of the lower half, where the orchestrator chat sits, at 900 pixels and wider. It has a breadcrumb `PROJECT / LANE / run TIME` and a Back control that returns to the chat. Read how the orchestrator chat is placed in `Hud.jsx` first, and reuse that placement.
+2. The view reads `runConversation` for the lane's newest run, with a picker of its last 10 runs from the runs list Stage already has.
+   - The prompt is first, folded to three lines with Show all.
+   - The agent's words are in the centred message column, in the chat's message style.
+   - Each tool call is one compact line in the agent's colour, and calls in a row fold under one `N tool calls` line.
+   - While the run is live, it reads again on each frame for that lane, at most once every 2 seconds, and keeps the view at the bottom unless the owner scrolled up.
+   - Put the folding and the read throttle in `laneConversation.js` as pure, tested functions.
+3. While the run is live, a Stop button in the view's header uses the existing P219 stop route and confirm card, so the lane's head gets its note as it does from Dispatch. When the run ends, the header says how it ended.
+4. Below 900 pixels the view opens as the same fixed panel the orchestrator chat uses there.
+5. Tests, by what they prove:
+   - The tree's chat button and the Inspector's button open the view for that lane.
+   - Ten tool calls in a row fold to one line and open on a click.
+   - A live run shows Stop, and confirming calls the stop route with the run's `startedAt`.
+   - A finished run shows no Stop.
+   - The throttle reads at most once in 2 seconds.
+6. Run `node node_modules/vitest/vitest.mjs related --run src/ui/LaneConversation.jsx src/ui/laneConversation.js src/ui/Hud.jsx src/ui/Inspector.jsx src/ui/FamilyTree.jsx` and `npm run build`. Report what passed.
+
+**P251. The waiting card and the orchestrator's state say what is true (OpenCode).** The owner chose both wordings. Read this brief only. Use no subagents. Run every command in the foreground. Commit each step as you finish it, and stop starting new work at minute 18. Files: src/ui/Waiting.jsx, src/ui/agentContext.js, src/ui/Inspector.jsx, tests/waiting.test.js, tests/inspector.test.js, tests/inspector-ui.test.js, docs/agents/CHANGELOG.md, docs/agents/architecture/ROOM.md.
+
+1. The waiting card counts only agents that can work: the orchestrators and the lanes. Session readers (the `Claude Code session` and `OpenCode session` agents; find how they are marked on the agent list) are named on their own line: `Watching Claude Code and OpenCode sessions.`, or the one that is there. With none of them, that line is left out. Example: `1 agent ready: Orchestrator.` then `Watching Claude Code and OpenCode sessions.`
+2. The Inspector's state for the main orchestrator reads `WAITING FOR YOU` when the transport would say `waiting for you` for it (read how `Transport.jsx` decides that, and share that decision rather than copy it). Lanes and subs keep their state words.
+3. Tests, by what they prove: the card with two session readers and one orchestrator says `1 agent ready: Orchestrator.` and the watching line; with no readers there is no watching line; an idle main orchestrator's Inspector state reads `WAITING FOR YOU` while an idle lane reads `IDLE`.
+4. Run `node node_modules/vitest/vitest.mjs related --run src/ui/Waiting.jsx src/ui/agentContext.js src/ui/Inspector.jsx` and `npm run build`. Report what passed.
