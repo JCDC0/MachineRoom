@@ -75,11 +75,14 @@ export function printedRunsFolder(folder, env = process.env) {
   const userProfile = readEnv(env, 'USERPROFILE') || (process.platform === 'win32' ? homeFallback : '')
   const stateHome = readEnv(env, 'XDG_STATE_HOME')
   const home = readEnv(env, 'HOME') || (process.platform !== 'win32' ? homeFallback : '')
-  const candidates = [
-    { prefix: temp, label: '%TEMP%' },
+  const windowsCandidates = [
     { prefix: local, label: '%LOCALAPPDATA%' },
     { prefix: roaming, label: '%APPDATA%' },
     { prefix: userProfile, label: '%USERPROFILE%' },
+  ]
+  const candidates = [
+    { prefix: temp, label: '%TEMP%' },
+    ...(win32Path ? windowsCandidates : []),
     { prefix: stateHome, label: '$XDG_STATE_HOME' },
     { prefix: home, label: '~' },
   ]

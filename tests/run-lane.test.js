@@ -2510,6 +2510,16 @@ describe('appendRunRecord', () => {
     ).toBe('$XDG_STATE_HOME/machineroom/runs')
   })
 
+  it('keeps the home label for a posix path when USERPROFILE is set too', () => {
+    expect(
+      printedRunsFolder('/home/me/custom-runs/run.log', {
+        HOME: '/home/me',
+        USERPROFILE: '/home/me',
+        TEMP: '/tmp',
+      })
+    ).toBe('~/custom-runs/run.log')
+  })
+
   it('picks the longest matching prefix (%LOCALAPPDATA% over %USERPROFILE%, and %TEMP% over both)', () => {
     const profile = 'C:\\Users\\me'
     const local = `${profile}\\AppData\\Local`
@@ -2570,8 +2580,7 @@ describe('appendRunRecord', () => {
     }
   })
 
-  // shortcut: fails on Ubuntu CI only (the log line is not printed as ~/...), Windows-only until the Linux case is traced.
-  it.skipIf(process.platform !== 'win32')('masks the printed log and record lines in startLane without changing written files or record paths', async () => {
+  it('masks the printed log and record lines in startLane without changing written files or record paths', async () => {
     const folder = makeTempDir('mr-start-masked-')
     const envKeys = ['MACHINEROOM_RUNS', 'TEMP', 'TMP', 'LOCALAPPDATA', 'USERPROFILE', 'HOME', 'XDG_STATE_HOME']
     const saved = Object.fromEntries(envKeys.map((key) => [key, process.env[key]]))
