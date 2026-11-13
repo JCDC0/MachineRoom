@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
   COMPACT_AFTER,
+  RECORD_BYTES_MAX,
+  RECORD_FRAMES_MAX,
   RECORD_MINUTES_DEFAULT,
   RECORD_MINUTES_MAX,
   RECORD_MINUTES_MIN,
@@ -274,6 +276,44 @@ describe('createSessionRecorder', () => {
     recorder.push(runFrame('heartbeat.run.status', 5000, { status: 'running' }))
     expect(timesOf(recorder)).toEqual([5000])
   })
+
+  it('keeps 20000 frames at one timestamp and marks the replay truncated', () => {
+    const recorder = createSessionRecorder()
+    const pushed = []
+    const first = runFrame('heartbeat.run.queued', 0)
+    pushed.push(first)
+    recorder.push(first)
+    for (let index = 0; index < 30000; index += 1) {
+      const frame = notice(0)
+      pushed.push(frame)
+      recorder.push(frame)
+    }
+    expect(recorder.frames()).toHaveLength(RECORD_FRAMES_MAX)
+    expect(recorder.frames()[0]).toBe(pushed[pushed.length - RECORD_FRAMES_MAX])
+    expect(recorder.stats().kept).toBe(RECORD_FRAMES_MAX)
+    expect(recorder.size()).toBeLessThanOrEqual(RECORD_BYTES_MAX)
+    expect(recorder.truncated()).toBe(true)
+    const replay = recorderToReplay(recorder, { agentsFile: AGENTS, treeFile: TREE })
+    expect(replay.frames).toHaveLength(RECORD_FRAMES_MAX)
+    expect(replay.truncated).toBe(true)
+  })
+
+  it('keeps the kept payload text under the ceiling when one frame is oversized', () => {
+    const recorder = createSessionRecorder()
+    const big = (ms, chars) => runFrame('heartbeat.run.log', ms, { chunk: 'x'.repeat(chars) })
+    recorder.push(runFrame('heartbeat.run.queued', 0))
+    for (let index = 0; index < 4; index += 1) recorder.push(big(1000 + index, 6 * 1024 * 1024))
+    expect(recorder.frames()).toHaveLength(3)
+    const keptSize = recorder.size()
+    expect(keptSize).toBeLessThanOrEqual(RECORD_BYTES_MAX)
+    recorder.push(big(2000, RECORD_BYTES_MAX + 1))
+    expect(recorder.frames()).toHaveLength(3)
+    expect(recorder.size()).toBe(keptSize)
+    expect(recorder.size()).toBeLessThanOrEqual(RECORD_BYTES_MAX)
+    expect(recorder.truncated()).toBe(true)
+    const replay = recorderToReplay(recorder, { agentsFile: AGENTS, treeFile: TREE })
+    expect(replay.truncated).toBe(true)
+  })
 })
 
 describe('recorderToReplay', () => {
@@ -311,5 +351,15 @@ describe('recorderToReplay', () => {
     recorderToReplay(recorder, { agentsFile: AGENTS, treeFile: TREE })
     expect(recorder.frames()[0]).toBe(before)
     expect(recorder.frames()[0].createdAt).toBe(at(0))
+  })
+
+  it('does not mark a normal feed truncated', () => {
+    const recorder = createSessionRecorder()
+    recorder.push(runFrame('heartbeat.run.queued', 0))
+    for (let index = 1; index <= 50; index += 1) recorder.push(notice(index * 1000))
+    expect(recorder.truncated()).toBe(false)
+    const replay = recorderToReplay(recorder, { agentsFile: AGENTS, treeFile: TREE })
+    expect(replay.truncated).toBe(false)
+    expect(replay.frames).toHaveLength(51)
   })
 })
