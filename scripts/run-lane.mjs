@@ -59,6 +59,66 @@ function lanesFile() {
     : join(lanesFolder(), 'lanes.json')
 }
 
+function lanesInFile(path = lanesFile()) {
+  try {
+    const json = JSON.parse(readFileSync(path, 'utf8'))
+    return Object.entries(json ?? {}).filter(([key]) => /^[A-Za-z0-9_-]+$/.test(key))
+  } catch {
+    return []
+  }
+}
+
+function exampleLane(entries) {
+  const usable = entries.find(([key, lane]) => key !== 'orchestrator' && lane?.retired !== true)
+  if (usable) return usable[0]
+  const live = entries.find(([, lane]) => lane?.retired !== true)
+  return live ? live[0] : (entries[0]?.[0] ?? 'lane')
+}
+
+export function helpLines() {
+  const entries = lanesInFile()
+  const path = lanesFile()
+  const names = entries.map(([key]) => key)
+  const example = exampleLane(entries)
+  return [
+    'Usage: npm run run-lane -- <lane> <brief...> [options]',
+    '',
+    'Forms:',
+    '  npm run run-lane -- <lane> <brief...>                            run a lane on one or more briefs',
+    '  npm run run-lane -- <lane> --project <folder> --task <text>      run one task in that project',
+    '  npm run run-lane -- <lane> --project <folder> --task-file <path> run the task in that file',
+    '  npm run run-lane -- <lane> --queue <path> --project <folder>     run a queue of tasks in that project',
+    '  npm run run-lane -- --list                                       print the last 10 runs',
+    '  npm run run-lane -- --stats [--since YYYY-MM-DD]                 print runs, minutes and cost per lane',
+    '  npm run run-lane -- --outcomes [--since YYYY-MM-DD]              print the merge table',
+    '  npm run run-lane -- --stop <lane>                                stop that lane and its processes',
+    '',
+    'Flags:',
+    '  --dry-run            print the command and start nothing',
+    '  --worktree           run a --project run in <project>/.worktrees/<lane>',
+    '  --allow-dirty        let a --project run start with uncommitted changes',
+    '  --model <id>         use this model for this run only',
+    '  --reasoning <level>  use this reasoning level for this run only',
+    '  --minutes <n>        stop the run after n minutes (100 by default)',
+    '  --started-by <id>    name the orchestrator that started the run',
+    '  --force              run a retired lane or a brief marked done',
+    '',
+    `Lanes: ${names.length > 0 ? names.join(', ') : 'none'}`,
+    `Lane file: ${printedRunsFolder(path)}`,
+    `Example: npm run run-lane -- ${example} <brief> --dry-run`,
+  ]
+}
+
+function printHelp(print) {
+  helpLines().forEach((line) => print(line))
+}
+
+function missingLaneText(laneKey, lanes, path) {
+  const names = Object.keys(lanes ?? {})
+  const held = names.length === 0 ? 'no lanes' : names.join(', ')
+  return `There is no lane named ${laneKey}. The lane file ${printedRunsFolder(path)} holds ${held}. Add a lane in the room's Settings.`
+}
+
 function stopProcess(pid, { kill = killTree, alive = processAlive } = {}) {
   if (kill({ pid })) return true
   return !alive(pid)
@@ -664,14 +724,16 @@ export function laneSpawn({ command, minutes = DEFAULT_MINUTES, model = '', effo
 export function printCommand(command, prompt, { mcpConfig = '', mcpServers = [] } = {}) {
   const printPath = (value) => (isAbsolute(value) || isWindowsPath(value) ? printedRunsFolder(value) : value)
   const shown = command.args.map((arg) => (arg === prompt ? `<prompt: ${prompt.length} characters>` : printPath(arg)))
+  const firstLine = String(prompt ?? '').split(/\r?\n/, 1)[0].trim()
   console.log(`file: ${printPath(command.file)}`)
   console.log(`args: ${JSON.stringify(shown)}`)
+  if (!command.args.includes(prompt)) console.log(`prompt: <prompt: ${prompt.length} characters>`)
+  console.log(`prompt: ${firstLine}`)
   console.log(`cwd: ${printPath(command.cwd)}`)
   if (mcpConfig && Array.isArray(mcpServers) && mcpServers.length > 0) {
     console.log(`mcp config: ${printedRunsFolder(mcpConfig)}`)
     console.log(`mcp servers: ${mcpServers.map((s) => s.name).join(', ')}`)
   }
-  if (!command.args.includes(prompt)) console.log(`prompt: <prompt: ${prompt.length} characters>`)
 }
 
 function codexLaneProgram(lane, env = process.env) {
@@ -861,7 +923,8 @@ function readOutcomes() {
 function listRuns() {
   const records = readRecords()
   if (records.length === 0) {
-    console.log('no runs recorded yet')
+    console.log(`No runs recorded yet. The runs folder is ${printedRunsFolder(runsFolder())}.`)
+    console.log('Start one with npm run run-lane -- <lane> <brief>. See --help for every form.')
     return 0
   }
   records.slice(-10).reverse().forEach((record) => console.log(runListLine(record)))
@@ -934,6 +997,7 @@ async function runQueueProject({ options, lane, lanes }) {
     console.log(`branch: ${branch}`)
     console.log(`tests: ${test || 'none, the project has no tests'}`)
     tasks.forEach((task, index) => console.log(`${index + 1}. ${task}`))
+    console.log('Dry run, nothing started.')
     return 0
   }
   const folder = runsFolder()
@@ -1051,9 +1115,20 @@ async function runQueueProject({ options, lane, lanes }) {
 
 async function main() {
   const argv = process.argv.slice(2)
+  if (argv.some((arg) => arg === '--help' || arg === '-h')) {
+    printHelp(console.log)
+    return 0
+  }
   const stop = stopArgument(argv)
   if (stop) return stopLane(stop)
-  const options = runOptions(argv)
+  let options
+  try {
+    options = runOptions(argv)
+  } catch (error) {
+    if (!String(error?.message ?? error).startsWith('Name a lane to run')) throw error
+    printHelp(console.error)
+    return 1
+  }
   if (options.list) return listRuns()
   if (options.stats) return statsRuns(options)
   if (options.outcomes) return outcomeRuns(options)
@@ -1075,7 +1150,7 @@ async function main() {
       item.role = typeof template?.role === 'string' ? template.role : ''
     }
   }
-  if (!Object.hasOwn(lanes, options.lane)) throw new Error(`There is no lane named ${options.lane}.`)
+  if (!Object.hasOwn(lanes, options.lane)) throw new Error(missingLaneText(options.lane, lanesJson, lanesPath))
   const lane = laneWithOverrides(lanes[options.lane], options)
   lanes[options.lane] = lane
   if (options.lane === 'orchestrator') {
@@ -1112,6 +1187,7 @@ async function main() {
       const mcpConfigPath = needsMcp ? join(folder, `${name}.mcp.json`) : ''
       const command = commandFor({ lane, prompt, env: process.env, usageFile, title: name, cwd: project, mcpConfig: mcpConfigPath })
       printCommand(command, prompt, { mcpConfig: mcpConfigPath, mcpServers: enabledServers })
+      console.log('Dry run, nothing started.')
       return 0
     }
 
@@ -1188,6 +1264,7 @@ async function main() {
       const from = start.from && start.from !== start.startBranch ? ` (the worktree was on ${start.from})` : ''
       console.log(`start branch: ${start.startBranch}${from}`)
     }
+    console.log('Dry run, nothing started.')
     return 0
   }
 

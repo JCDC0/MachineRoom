@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- run-lane prints a usage block for --help and -h and for a bare run, names the lanes in the lane file when one is missing, says where --list looked, and ends a dry run with the prompt's first line and `Dry run, nothing started.` (P167).
 - The claude sessions meta test moves the runs folder time after writing the meta file, so the reader re-lists it on Windows (P165).
 - A first-use run of the setup commands lists where a new owner gets stuck (P166).
 - The claude sessions test moves the runs folder time after writing a lane meta file, so the reader re-lists the folder and the test no longer races the file system's folder time (P165).
