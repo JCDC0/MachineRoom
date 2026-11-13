@@ -2322,3 +2322,30 @@ P261 found: the log's `thread.started` line carries `thread_id`; the rollout fil
 3. `server/lane-costs.js` fills `quota` from the newest record per provider that has one: `{ provider, windows, at }`, with `codex` as the provider. A window whose `resetsAt` has passed is left out.
 4. Tests, by what they prove: a rollout line gives the right windows; a run record gets `quota` from a fake rollout file under a temporary `CODEX_HOME`; a reading past its reset is left out; `chooseRoute` skips `codex` when the lane-costs reading is above `quotaSkipPercent`.
 5. Run `node node_modules/vitest/vitest.mjs related --run scripts/run-lane.mjs src/harnesses/codex.js server/lane-costs.js` and `npm run build`. Report what passed.
+
+**P272. A conversation's raw lines are masked as data, not text (OpenCode).** Read finding R31-1 in `docs/agents/AUDIT-2026-11-REVIEW-31.md` and this brief only. Use no subagents. Run every command in the foreground. Commit each step as you finish it, and stop starting new work at minute 25. Files: src/model/conversation.js, tests/conversation.test.js, docs/agents/CHANGELOG.md.
+
+1. Where `conversationFromLog` keeps a raw line (the fallback for a harness it cannot read, and an unknown event from one it can), a line that parses as JSON is masked as data: every string value goes through the key masker and `maskProfilePaths`, a field whose name says it holds a secret (key, token, secret, password, authorization) has its value replaced, and the safe object is serialized again. A line that is not JSON keeps today's masking.
+2. Tests, by what they prove: a native log line with a JSON-escaped Windows profile path (`C:\Users\NAME\...`) shows no `NAME`; an unknown event with an `OPENAI_API_KEY` field shows no value; the same for a Claude log's unknown event. Each must fail before your change.
+3. Run `node node_modules/vitest/vitest.mjs related --run src/model/conversation.js` and `npm run build`. Report what passed.
+
+**P273. Failover keeps the worktree check, the backup prompt and the backup's record (OpenCode).** Read findings R31-2, R31-3, R31-4 and R31-7 in `docs/agents/AUDIT-2026-11-REVIEW-31.md` and this brief only. Use no subagents. Run every command in the foreground. Commit each finding's fix as you finish it, and stop starting new work at minute 32. Files: scripts/run-lane.mjs, src/briefs/run.js, tests/run-failover.test.js, docs/agents/CHANGELOG.md.
+
+1. R31-2: before taking the backup lane's lock, apply the same `briefWorktreeProblems()` check the normal brief start uses to the backup's worktree. A refused backup prints the problem and the run stays failed.
+2. R31-3: the readiness retry passes `promptFor` along with `branchSuffix` and `failoverFrom`.
+3. R31-4: a project task or queue that fails over returns the backup's full result (its record, start head and branch), so the single-task check and the queue's bookkeeping use the backup's run. The queue keeps its metadata and base, and reports the branch the backup really used.
+4. R31-7: a spawn error (`result.error`, an empty log) counts as a failed start for the record's `startFailed` and for failover.
+5. Tests, by what they prove, one per finding, each failing before its fix, using the fake-harness pattern already in `tests/run-failover.test.js`.
+6. Run `node node_modules/vitest/vitest.mjs run tests/run-failover.test.js tests/run-lane.test.js tests/run-project.test.js` and `npm run build`. Report what passed.
+
+**P274. A native run that never finishes its answer is a failure (Codex).** Read finding R31-5 in `docs/agents/AUDIT-2026-11-REVIEW-31.md` and this brief only. Commit each step as you finish it, and stop at minute 25. Files: scripts/mr-agent.mjs, tests/mr-agent.test.js, docs/agents/CHANGELOG.md.
+
+1. After the one nudge, a second reply with no text and no tool call ends the run as a failure with exit code 1 and the result `The agent stopped without a final answer.` A run succeeds only through a reply with text and no tool call.
+2. Tests, by what they prove: a fake provider that answers a tool error, then two reasoning-only replies, makes the run exit 1 with that result; a final text reply still succeeds. The first must fail before your change.
+3. Run `npx.cmd vitest run tests/mr-agent.test.js` and `npm run build`. Report what passed.
+
+**P275. The folder tree is not reused while git's metadata watcher is down (native).** Read finding R31-6 in `docs/agents/AUDIT-2026-11-REVIEW-31.md` and this brief only. Commit each step as you finish it, and stop at minute 22. Files: server/index.js, tests/tree-read.test.js, docs/agents/CHANGELOG.md.
+
+1. `folderTreeReuseAllowed()` in `server/index.js` also answers false while `gitMetaDirty` is set or an expected git metadata watcher is missing. Read how the git metadata watchers are armed and how their error handler sets `gitMetaDirty` first.
+2. Test: with the project watcher armed and the git metadata watcher failed, a folder GET more than one second after the last read reads again. It must fail before your change.
+3. Run `node node_modules/vitest/vitest.mjs run tests/tree-read.test.js` and `npm run build`. Report what passed.
