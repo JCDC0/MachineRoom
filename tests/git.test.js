@@ -17,8 +17,10 @@ import {
   GIT_TIMEOUT_MS,
   GIT_WRITE_TIMEOUT_MS,
   LANE_RUN_OPEN_PROBLEM,
+  LOG_FAILED_PROBLEM,
   ORIGIN_BRANCH_PROBLEM,
   ORIGIN_SWITCH_PROBLEM,
+  REFS_FAILED_PROBLEM,
   STATUS_FAILED_PROBLEM,
   SWITCH_TIMEOUT_PROBLEM,
   TURN_RUNNING_PROBLEM,
@@ -336,6 +338,65 @@ describe('the git route reading state on a real repository', () => {
     expect(byPath['read me.md']).toBe('R')
     expect(byPath['tracked.txt']).toBe('D')
     expect(byPath['new notes.txt']).toBe('U')
+  })
+})
+
+describe('a failed git read is not a clean repository', () => {
+  function failingRunnerFor(command, makeError) {
+    return async (cwd, args, opts) => {
+      if (Array.isArray(args) && args[0] === command) {
+        throw makeError ? makeError() : new Error(`git ${command} failed`)
+      }
+      return defaultGitRunner(cwd, args, opts)
+    }
+  }
+
+  it('answers null counts and its sentence when the status read fails', async () => {
+    const repo = makeRepo()
+    const { client } = await startBridge({ projectRoot: repo, gitRunner: failingRunnerFor('status') })
+
+    const state = await client.gitState()
+    expect(state.git).toBe(true)
+    expect(state.dirty).toBeNull()
+    expect(state.changeCount).toBeNull()
+    expect(state.statusError).toBe(STATUS_FAILED_PROBLEM)
+  })
+
+  it('answers the same sentence when the status read times out', async () => {
+    const repo = makeRepo()
+    const { client } = await startBridge({
+      projectRoot: repo,
+      gitRunner: failingRunnerFor('status', () => {
+        const error = new Error('git timed out')
+        error.killed = true
+        return error
+      }),
+    })
+
+    const state = await client.gitState()
+    expect(state.dirty).toBeNull()
+    expect(state.changeCount).toBeNull()
+    expect(state.statusError).toBe(STATUS_FAILED_PROBLEM)
+  })
+
+  it('answers its sentence instead of an empty branch list when the ref read fails', async () => {
+    const repo = makeRepo()
+    const { client } = await startBridge({ projectRoot: repo, gitRunner: failingRunnerFor('for-each-ref') })
+
+    const state = await client.gitState()
+    expect(state.git).toBe(true)
+    expect(state.branches).toEqual([])
+    expect(state.refsError).toBe(REFS_FAILED_PROBLEM)
+  })
+
+  it('answers its sentence instead of an empty commit list when the log read fails', async () => {
+    const repo = makeRepo()
+    const { client } = await startBridge({ projectRoot: repo, gitRunner: failingRunnerFor('log') })
+
+    const state = await client.gitState()
+    expect(state.git).toBe(true)
+    expect(state.commits).toEqual([])
+    expect(state.logError).toBe(LOG_FAILED_PROBLEM)
   })
 })
 

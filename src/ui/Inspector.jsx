@@ -15,7 +15,8 @@ import {
   explorerView,
   formatBytes,
   formatTime,
-  gitGraphRows,
+  gitChangesView,
+  gitGraphView,
   inspectTarget,
   internetStatus,
   previewLines,
@@ -267,10 +268,11 @@ export default function Inspector({
     return found?.name || String(key)
   })
   const gitReady = item?.kind === 'git' && git?.git === true
-  const graphRows = gitReady ? gitGraphRows(git.commits) : []
+  const changesView = gitChangesView(gitReady ? git : null)
+  const graphView = gitGraphView(gitReady ? git : null)
+  const graphRows = graphView.rows
   const graphWidth = Math.max(1, ...graphRows.map((row) => row.width))
-  const changeRows = gitReady && Array.isArray(git.changes) ? git.changes : []
-  const changeCount = gitReady ? Number(git.changeCount ?? changeRows.length) || 0 : 0
+  const changeRows = changesView.rows
   const branchText = gitReady
     ? git.detached === true || !git.branch
       ? `Detached at ${shortSha(git.head) || 'HEAD'}`
@@ -468,8 +470,12 @@ export default function Inspector({
                 <dl className="mr-inspector-rows">
                   <Row label="Branch">{branchText}</Row>
                 </dl>
-                <h3 className="mr-inspector-subtitle mono">{`Changes ${changeCount}`}</h3>
-                {changeRows.length === 0 ? (
+                <h3 className="mr-inspector-subtitle mono">
+                  {changesView.count === null ? 'Changes' : `Changes ${changesView.count}`}
+                </h3>
+                {changesView.notice !== '' ? (
+                  <p className="mr-inspector-error mono">{changesView.notice}</p>
+                ) : changeRows.length === 0 ? (
                   <p className="mr-inspector-note mono">No uncommitted changes.</p>
                 ) : (
                   <ul className="mr-inspector-changes" aria-label="Changes">
@@ -495,7 +501,9 @@ export default function Inspector({
                   </ul>
                 )}
                 <h3 className="mr-inspector-subtitle mono">Graph</h3>
-                {graphRows.length === 0 ? (
+                {graphView.notice !== '' ? (
+                  <p className="mr-inspector-error mono">{graphView.notice}</p>
+                ) : graphRows.length === 0 ? (
                   <p className="mr-inspector-note mono">No commits.</p>
                 ) : (
                   <ol className="mr-inspector-graph" aria-label="Commit graph">

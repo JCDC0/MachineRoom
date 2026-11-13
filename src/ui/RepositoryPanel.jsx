@@ -6,7 +6,9 @@ import {
   defaultBranchFrom,
   isGitState,
   newBranchProblem,
+  repositoryBranchesNotice,
   repositoryHead,
+  repositoryStatusNotice,
   switchBlockReason,
   switchConfirmText,
 } from './repository.js'
@@ -194,6 +196,8 @@ export default function RepositoryPanel({ client = null, live = false, project =
 
   const rows = ready ? branchRows(state) : []
   const fromOptions = rows.map((row) => row.name)
+  const statusNotice = ready ? repositoryStatusNotice(state) : ''
+  const branchesNotice = ready ? repositoryBranchesNotice(state) : ''
 
   return (
     <section className="mr-repo" aria-label="Repository">
@@ -216,11 +220,18 @@ export default function RepositoryPanel({ client = null, live = false, project =
             <span className={`mr-repo-branch mono${state.detached === true ? ' is-detached' : ''}`}>
               {repositoryHead(state)}
             </span>
-            {state.dirty === true ? <span className="mr-repo-dirty mono">Uncommitted changes</span> : null}
+            {statusNotice === '' && state.dirty === true ? (
+              <span className="mr-repo-dirty mono">Uncommitted changes</span>
+            ) : null}
           </div>
+          {statusNotice !== '' ? <p className="mr-repo-error mono">{statusNotice}</p> : null}
           <div className="mr-repo-branches" aria-label="Branches">
             {rows.length === 0 ? (
-              <p className="mr-side-note">No branches.</p>
+              branchesNotice !== '' ? (
+                <p className="mr-repo-error mono">{branchesNotice}</p>
+              ) : (
+                <p className="mr-side-note">No branches.</p>
+              )
             ) : (
               rows.map((row) => (
                 <div className={`mr-repo-row${row.current ? ' is-current' : ''}`} key={row.name}>

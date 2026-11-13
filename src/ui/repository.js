@@ -39,8 +39,20 @@ function countOrNull(value) {
   return Math.floor(number)
 }
 
+export function repositoryStatusNotice(state) {
+  if (!isGitState(state)) return ''
+  return typeof state.statusError === 'string' ? state.statusError.trim() : ''
+}
+
+export function repositoryBranchesNotice(state) {
+  if (!isGitState(state)) return ''
+  return typeof state.refsError === 'string' ? state.refsError.trim() : ''
+}
+
 export function switchBlockReason(state, branch) {
   if (!isGitState(state)) return ''
+  const statusProblem = repositoryStatusNotice(state)
+  if (statusProblem !== '') return statusProblem
   if (state.dirty === true) return DIRTY_REASON
   if (branch?.worktree === true) return WORKTREE_REASON
   return ''

@@ -24,6 +24,8 @@ export const BRANCH_TAKEN_PROBLEM = 'That branch already exists.'
 export const BAD_FROM_BRANCH_PROBLEM = 'Choose a known branch to branch from.'
 export const NOT_GIT_PROBLEM = 'That folder is not a git repository.'
 export const STATUS_FAILED_PROBLEM = 'Could not check for uncommitted changes.'
+export const REFS_FAILED_PROBLEM = 'Could not read the branches.'
+export const LOG_FAILED_PROBLEM = 'Could not read the commits.'
 export const WRITE_IN_FLIGHT_PROBLEM = 'Another git change is running.'
 export const SWITCH_TIMEOUT_PROBLEM = 'The switch took too long, so it was stopped.'
 export const BRANCH_TIMEOUT_PROBLEM = 'Making the branch took too long, so it was stopped.'
@@ -213,23 +215,28 @@ export async function computeGitState(projectRoot, runner = defaultGitRunner) {
   }
 
   let changes = []
-  let changeCount = 0
+  let changeCount = null
+  let dirty = null
+  let statusError = ''
   try {
     const status = await runner(resolved, ['status', '--porcelain', '-z'], { timeout: GIT_TIMEOUT_MS })
     const parsed = parseStatus(status)
     changeCount = parsed.length
     changes = parsed.slice(0, MAX_CHANGES)
+    dirty = changeCount > 0
   } catch {
     changes = []
-    changeCount = 0
+    changeCount = null
+    dirty = null
+    statusError = STATUS_FAILED_PROBLEM
   }
-  const dirty = changeCount > 0
 
   const topLevel = await gitTopLevel(resolved, runner)
   const heldBranches = await otherWorktreeBranches(runner, topLevel)
 
   const branches = []
   const branchRefs = new Map()
+  let refsError = ''
   try {
     const format = '%(refname)%00%(objectname)%00%(upstream:short)%00%(upstream:track,nobracket)'
     const refsOut = await runner(resolved, ['for-each-ref', `--format=${format}`, 'refs/heads/'], { timeout: GIT_TIMEOUT_MS })
@@ -265,7 +272,9 @@ export async function computeGitState(projectRoot, runner = defaultGitRunner) {
         branchRefs.get(sha).push(name)
       }
     }
-  } catch {}
+  } catch {
+    refsError = REFS_FAILED_PROBLEM
+  }
 
   branches.sort((a, b) => a.name.localeCompare(b.name))
   for (const names of branchRefs.values()) {
@@ -274,6 +283,7 @@ export async function computeGitState(projectRoot, runner = defaultGitRunner) {
 
   const commits = []
   let truncated = false
+  let logError = ''
   try {
     if (branches.length > 0 || head) {
       const logArgs = [
@@ -303,7 +313,9 @@ export async function computeGitState(projectRoot, runner = defaultGitRunner) {
         })
       }
     }
-  } catch {}
+  } catch {
+    logError = LOG_FAILED_PROBLEM
+  }
 
   return {
     git: true,
@@ -313,6 +325,9 @@ export async function computeGitState(projectRoot, runner = defaultGitRunner) {
     dirty,
     changes,
     changeCount,
+    statusError,
+    refsError,
+    logError,
     branches,
     commits,
     truncated,

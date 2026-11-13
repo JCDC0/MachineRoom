@@ -185,6 +185,20 @@ export function gitGraphRows(commits = []) {
   return rows
 }
 
+export function gitChangesView(state) {
+  const notice = text(state?.statusError)
+  if (notice !== '') return { notice, count: null, rows: [] }
+  const rows = Array.isArray(state?.changes) ? state.changes : []
+  const value = Number(state?.changeCount ?? rows.length)
+  const count = Number.isFinite(value) && value >= 0 ? Math.floor(value) : rows.length
+  return { notice: '', count, rows }
+}
+
+export function gitGraphView(state) {
+  const notice = text(state?.logError)
+  return { notice, rows: notice === '' ? gitGraphRows(state?.commits) : [] }
+}
+
 export function effortForAgent({ key = '', harness = '', family = [], orchestrators = null } = {}) {
   const wanted = text(key)
   if (wanted === '') return 'default'

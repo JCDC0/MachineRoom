@@ -1,6 +1,7 @@
 import { act, createElement } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import RepositoryPanel from '../src/ui/RepositoryPanel.jsx'
+import Inspector from '../src/ui/Inspector.jsx'
 import Sidebar from '../src/ui/Sidebar.jsx'
 import { buttonWithText, click, settle, type, withDom } from './helpers/uiDom.js'
 
@@ -320,6 +321,30 @@ describe('the Repository section', () => {
     })
   })
 
+  it('shows the status sentence and no uncommitted line when the status read failed', async () => {
+    const client = makeClient(
+      gitState({ dirty: null, changeCount: null, statusError: 'Could not check for uncommitted changes.' })
+    )
+
+    await withDom(async ({ container, root }) => {
+      await mount(root, { client, live: true, project: 'C:\\work\\demo' })
+      expect(container.querySelector('.mr-repo-error').textContent).toBe('Could not check for uncommitted changes.')
+      expect(container.querySelector('.mr-repo-dirty')).toBeNull()
+      expect(container.textContent).not.toContain('Uncommitted changes')
+      expect(isDisabled(buttonWithText(rowByName(container, 'feat/login'), 'Switch'))).toBe(true)
+    })
+  })
+
+  it('shows the branch sentence instead of an empty branch list', async () => {
+    const client = makeClient(gitState({ branches: [], refsError: 'Could not read the branches.' }))
+
+    await withDom(async ({ container, root }) => {
+      await mount(root, { client, live: true, project: 'C:\\work\\demo' })
+      expect(container.querySelector('.mr-repo-branches').textContent).toContain('Could not read the branches.')
+      expect(container.textContent).not.toContain('No branches.')
+    })
+  })
+
   it('reads again every 60 seconds', async () => {
     vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] })
     try {
@@ -396,6 +421,50 @@ describe('the Repository section', () => {
       expect(list.querySelectorAll('.mr-repo-row')).toHaveLength(200)
       expect(rowByName(container, 'branch-000').className).toContain('is-current')
       expect(rowByName(container, 'branch-199')).not.toBeNull()
+    })
+  })
+})
+
+describe('the inspector git view after a failed read', () => {
+  function mountInspector(root, state) {
+    return act(async () => {
+      root.render(
+        createElement(Inspector, {
+          target: { kind: 'git', id: 'git' },
+          live: true,
+          bridge: true,
+          client: { gitState: async () => state },
+          lanes: [],
+          onClose: () => {},
+        })
+      )
+    })
+  }
+
+  it('shows the status sentence and no clean line', async () => {
+    const state = gitState({
+      dirty: null,
+      changeCount: null,
+      changes: [],
+      statusError: 'Could not check for uncommitted changes.',
+    })
+
+    await withDom(async ({ container, root }) => {
+      await mountInspector(root, state)
+      await settle()
+      expect(container.textContent).toContain('Could not check for uncommitted changes.')
+      expect(container.textContent).not.toContain('No uncommitted changes.')
+    })
+  })
+
+  it('shows the log sentence and no empty graph line', async () => {
+    const state = gitState({ commits: [], logError: 'Could not read the commits.' })
+
+    await withDom(async ({ container, root }) => {
+      await mountInspector(root, state)
+      await settle()
+      expect(container.textContent).toContain('Could not read the commits.')
+      expect(container.textContent).not.toContain('No commits.')
     })
   })
 })
