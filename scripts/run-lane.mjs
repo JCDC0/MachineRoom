@@ -654,7 +654,7 @@ function queueGit(project, branch, lane, { onSettled } = {}) {
   }
 }
 
-function writeProjectRecord({ record, folder, startHead, startBranch } = {}) {
+function writeProjectRecord({ record, folder, startHead, startBranch, tests = '' } = {}) {
   if (!record) return
   const git = projectRunGit({
     branch: gitRead(folder, ['branch', '--show-current']) ?? '',
@@ -663,6 +663,9 @@ function writeProjectRecord({ record, folder, startHead, startBranch } = {}) {
   })
   if (git.branch !== '') record.branch = git.branch
   record.commits = git.commits
+  const head = gitRead(folder, ['rev-parse', 'HEAD']) ?? ''
+  if (head !== '') record.head = head
+  if (tests === 'passed' || tests === 'failed' || tests === 'none') record.tests = tests
   appendRunRecord(record)
   console.log(`record: ${printedRunsFolder(runsFile())}`)
 }
@@ -1058,7 +1061,7 @@ async function runQueueProject({ options, lane, lanes }) {
             project: target.path, task, queue: { branch, index: number }, lockPath: lock,
             projectBranch: startBranch, deferRecord: true, base,
           })
-          pending = { record: run.record, folder: target.path, startHead: run.startHead, startBranch }
+          pending = { record: run.record, folder: target.path, startHead: run.startHead, startBranch, tests: '' }
           if (run.code !== 0 || run.killed) finishPending()
           return { code: run.code, killed: run.killed }
         },
@@ -1071,12 +1074,17 @@ async function runQueueProject({ options, lane, lanes }) {
             console.error(message)
             test = message
             testsFailed = true
+            if (pending) pending.tests = 'failed'
             return { ok: false }
           }
-          if (command === '') return { ok: true }
+          if (command === '') {
+            if (pending) pending.tests = 'none'
+            return { ok: true }
+          }
           test = command
           const outcome = await runTestCommand(command, target.path, options.minutes)
           testsFailed = outcome?.ok !== true
+          if (pending) pending.tests = testsFailed ? 'failed' : 'passed'
           return outcome
         },
       })
@@ -1086,6 +1094,7 @@ async function runQueueProject({ options, lane, lanes }) {
       if (pending) {
         finishPending('failed: the queue stopped')
       } else {
+        const failedHead = gitRead(target.path, ['rev-parse', 'HEAD']) || base || ''
         const failedRecord = laneRunRecord({
           lane: options.lane,
           briefs: [],
@@ -1102,6 +1111,7 @@ async function runQueueProject({ options, lane, lanes }) {
           log: null,
           branch,
           base,
+          ...(failedHead ? { head: failedHead } : {}),
           queue: { branch, index: 1 },
           project,
           task: tasks[0] || '',
@@ -1621,7 +1631,7 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
         startFailed: startFailure !== '' ? true : undefined,
         ...(start ? { startBranch: start.startBranch } : {}),
         ...(options.startedBy ? { startedBy: options.startedBy } : {}),
-        ...(project ? { project, task } : {}),
+        ...(project ? { project, task, head: gitRead(project, ['rev-parse', 'HEAD']) || undefined } : {}),
         ...(queue ? { queue } : {}),
       })
       if (startedBy) retryRecord.startedBy = startedBy
@@ -1658,7 +1668,7 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
       startFailed: startFailure !== '' ? true : undefined,
       ...(start ? { startBranch: start.startBranch } : {}),
       ...(options.startedBy ? { startedBy: options.startedBy } : {}),
-      ...(project ? { project, task } : {}),
+      ...(project ? { project, task, ...(!deferRecord ? { head: gitRead(project, ['rev-parse', 'HEAD']) || undefined } : {}) } : {}),
       ...(queue ? { queue } : {}),
     })
     if (project && deferRecord) {

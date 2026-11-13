@@ -29,6 +29,7 @@ export const DEFAULT_PATCH_LIMIT = 400 * 1024
 export const DEFAULT_REVIEW_CONCURRENCY = 4
 export const NOT_OWNER_PROBLEM = 'The caller is not the owner, so the lane was not merged.'
 export const MERGE_TIMEOUT_PROBLEM = 'The merge took too long, so it was stopped.'
+export const FAILED_CHECKS_PROBLEM = 'Checks failed on this head, so the lane was not merged.'
 let codeCheckoutPath = ''
 
 export function resetCodeCheckout() {
@@ -323,15 +324,44 @@ export function createReviewsApi({
     return runsFolder ? join(resolve(runsFolder), 'runs.jsonl') : runsFile()
   }
 
-  function lastRunFor(lane, runs = null) {
-    const list = runs ?? readRuns(recordsFile())
-    const matches = list.filter((record) => record && record.lane === lane)
-    if (matches.length === 0) return null
-    return matches.reduce((newest, record) => {
+  function runMatchesProject(record, worktree) {
+    const raw = typeof record?.project === 'string' ? record.project.trim() : ''
+    if (raw === '') return !onProject
+    const key = pathKey(raw)
+    if (!key) return false
+    if (worktree && key === pathKey(worktree)) return true
+    if (resolvedRoot && key === pathKey(resolvedRoot)) return true
+    return false
+  }
+
+  function newestRecord(records) {
+    if (records.length === 0) return null
+    return records.reduce((newest, record) => {
       const time = Number.isFinite(Date.parse(record.startedAt ?? '')) ? Date.parse(record.startedAt) : 0
       const best = Number.isFinite(Date.parse(newest.startedAt ?? '')) ? Date.parse(newest.startedAt) : 0
       return time >= best ? record : newest
     })
+  }
+
+  function projectRunsFor(lane, worktree, runs = null) {
+    const list = runs ?? readRuns(recordsFile())
+    return list.filter((record) => record && record.lane === lane && runMatchesProject(record, worktree))
+  }
+
+  function lastRunFor(lane, worktree, runs = null) {
+    return newestRecord(projectRunsFor(lane, worktree, runs))
+  }
+
+  function checkStateFor(lane, worktree, head, runs = null) {
+    const key = typeof head === 'string' ? head.trim().toLowerCase() : ''
+    if (!HEAD_PATTERN.test(key)) return 'unchecked'
+    const matches = projectRunsFor(lane, worktree, runs).filter(
+      (record) => typeof record.head === 'string' && record.head.trim().toLowerCase() === key
+    )
+    const latest = newestRecord(matches)
+    if (latest?.tests === 'passed') return 'passed'
+    if (latest?.tests === 'failed') return 'failed'
+    return 'unchecked'
   }
 
   function laneFolder(lanes, lane) {
@@ -405,7 +435,8 @@ export function createReviewsApi({
       files: stat.files.length,
       added: stat.added,
       deleted: stat.deleted,
-      lastRun: lastRunFor(lane, runs),
+      checks: checkStateFor(lane, worktree, head, runs),
+      lastRun: lastRunFor(lane, worktree, runs),
     }
   }
 
@@ -453,6 +484,9 @@ export function createReviewsApi({
     }
     if (laneHead !== head) {
       return { status: 409, body: { error: 'The lane moved since you read it. Read it again.' } }
+    }
+    if (checkStateFor(lane, worktree, laneHead) === 'failed') {
+      return { status: 409, body: { error: FAILED_CHECKS_PROBLEM } }
     }
     const laneStatus = await runGit(worktree, ['status', '--porcelain'])
     if (laneStatus.trim() !== '') {
@@ -561,6 +595,9 @@ export function createReviewsApi({
     }
     if (laneHead !== head) {
       return { status: 409, body: { error: 'The lane moved since you read it. Read it again.' } }
+    }
+    if (checkStateFor(lane, worktree, laneHead) === 'failed') {
+      return { status: 409, body: { error: FAILED_CHECKS_PROBLEM } }
     }
     const laneStatus = await runGit(worktree, ['status', '--porcelain'])
     if (laneStatus.trim() !== '') {

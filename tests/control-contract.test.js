@@ -1034,19 +1034,24 @@ describe('the control client review routes', () => {
       base: 'main',
       baseHead: expectedHead,
       strategy: 'merge-commit',
+      checks: 'unchecked',
     })
 
     const mock = createMockClient({ latencyMs: 0 })
     const gitState = await mock.gitState()
     const mockReviews = await mock.reviews()
     const hermes = mockReviews.find((entry) => entry.lane === 'hermes')
+    const opencode = mockReviews.find((entry) => entry.lane === 'opencode')
     const agy = mockReviews.find((entry) => entry.lane === 'agy')
     expect(hermes).toMatchObject({
       lane: 'hermes',
       base: 'main',
       baseHead: gitState.head,
       strategy: 'merge-commit',
+      checks: 'passed',
     })
+    expect(opencode?.checks).toBe('unchecked')
+    expect(agy?.checks).toBe('failed')
 
     await expect(
       mock.mergeReview('hermes', { head: hermes.head, base: hermes.base, baseHead: '0'.repeat(40), message: 'Merge it' })
@@ -1069,5 +1074,17 @@ describe('the control client review routes', () => {
     await expect(
       mock.mergeReview('agy', { head: agy.head, base: agy.base, baseHead: agy.baseHead, message: 'Merge it' })
     ).rejects.toThrow('The main branch moved since you read it, so refresh reviews first.')
+
+    const refreshed = await mock.reviews()
+    const agyFresh = refreshed.find((entry) => entry.lane === 'agy')
+    await expect(
+      mock.mergeReview('agy', {
+        head: agyFresh.head,
+        base: agyFresh.base,
+        baseHead: agyFresh.baseHead,
+        message: 'Merge it',
+      })
+    ).rejects.toThrow('Checks failed on this head, so the lane was not merged.')
+    expect((await mock.gitState()).head).toBe(merged.commit)
   })
 })

@@ -1,5 +1,24 @@
 export const MOVED_BRANCH_ERROR = 'The branch moved since you read the diff. Open it again.'
 
+export function normalizeChecks(checks) {
+  if (checks === 'passed' || checks === 'failed') return checks
+  return 'unchecked'
+}
+
+export function formatChecks(checks) {
+  const state = normalizeChecks(checks)
+  if (state === 'passed') return 'checks passed'
+  if (state === 'failed') return 'checks failed'
+  return 'unchecked'
+}
+
+export function formatChecksNotice(checks) {
+  const state = normalizeChecks(checks)
+  if (state === 'passed') return 'Checks passed for this head.'
+  if (state === 'failed') return 'Checks failed for this head.'
+  return 'Warning: checks are unchecked for this head.'
+}
+
 export function canMerge(review) {
   if (!review || typeof review !== 'object' || review.error) return false
   if (review.dirty) return false
@@ -63,6 +82,8 @@ export function reviewRow(review) {
       diffCountsText: '+0 -0',
       dirty: false,
       dirtyText: null,
+      checks: 'unchecked',
+      checksText: formatChecks('unchecked'),
       lastRunText: 'no run yet',
       error: null,
       canMerge: false,
@@ -95,6 +116,8 @@ export function reviewRow(review) {
       diffCountsText: null,
       dirty: false,
       dirtyText: null,
+      checks: null,
+      checksText: null,
       lastRunText: null,
       error: String(review.error),
       canMerge: false,
@@ -106,6 +129,7 @@ export function reviewRow(review) {
   const added = typeof review.added === 'number' && Number.isFinite(review.added) ? review.added : 0
   const deleted = typeof review.deleted === 'number' && Number.isFinite(review.deleted) ? review.deleted : 0
   const dirty = Boolean(review.dirty)
+  const checks = normalizeChecks(review.checks)
   const diffCountsText = `+${added} -${deleted}`
   const filesWord = files === 1 ? 'file' : 'files'
 
@@ -126,6 +150,8 @@ export function reviewRow(review) {
     diffCountsText,
     dirty,
     dirtyText: dirty ? 'uncommitted changes' : null,
+    checks,
+    checksText: formatChecks(checks),
     lastRunText: formatLastRun(review.lastRun),
     error: null,
     canMerge: canMerge(review),

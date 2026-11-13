@@ -1,7 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import { visibleText } from '../../model/paths.js'
 import { subscribeToNotices } from './notices.js'
-import { canMerge, defaultMergeMessage, mergeHead, patchLines, reviewRow } from './reviews.js'
+import { canMerge, defaultMergeMessage, formatChecksNotice, mergeHead, normalizeChecks, patchLines, reviewRow } from './reviews.js'
+
+function checksColor(checks) {
+  if (checks === 'failed') return 'var(--red)'
+  if (checks === 'passed') return 'var(--green)'
+  return 'var(--yellow)'
+}
 
 export function MergeConfirmCard({
   target,
@@ -18,11 +24,18 @@ export function MergeConfirmCard({
   if (!target) return null
   const base = target.base || 'main'
   const isFastForward = target.strategy === 'fast-forward'
+  const checks = normalizeChecks(target.checks)
   const laneName = target.branch ? `${target.lane}'s ${target.branch}` : `${target.lane}'s work`
   return (
     <div className="brief-confirm-card review-confirm-card" role="region" aria-label={`Confirm merge for ${target.lane}`}>
       <div className="brief-confirm-warning">
         {`Merge ${laneName} (${target.headShort}) into ${base}? It changes the project checkout and never pushes.`}
+      </div>
+      <div
+        className={`review-confirm-checks is-${checks} mono`}
+        style={{ fontSize: '11px', color: checksColor(checks) }}
+      >
+        {formatChecksNotice(checks)}
       </div>
       {isFastForward ? (
         <div className="review-last-run mono">
@@ -212,6 +225,7 @@ export default function ReviewsPanel({
       base: row.base || 'main',
       baseHead: row.baseHead,
       strategy: row.strategy,
+      checks: row.checks,
       head: result.head,
       headShort: result.head.slice(0, 7),
     })
@@ -323,8 +337,14 @@ export default function ReviewsPanel({
                     {!row.error && (
                       <span
                         className="review-row-actions"
-                        style={{ marginLeft: 'auto', display: 'flex', gap: 'var(--space)' }}
+                        style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 'var(--space)' }}
                       >
+                        <span
+                          className={`review-checks is-${row.checks} mono`}
+                          style={{ fontSize: '11px', color: checksColor(row.checks) }}
+                        >
+                          {row.checksText}
+                        </span>
                         <button
                           type="button"
                           className="review-expand-btn"

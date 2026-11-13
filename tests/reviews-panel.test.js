@@ -55,8 +55,21 @@ describe('reviews helpers', () => {
       filesText: '1 file +2 -0',
       dirty: false,
       dirtyText: null,
+      checks: 'unchecked',
+      checksText: 'unchecked',
       lastRunText: 'no run yet',
       error: null,
+      canMerge: true,
+    })
+
+    expect(reviewRow({ lane: 'hermes', branch: 'feat/p5', head: '1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d', ahead: 1, dirty: false, checks: 'passed' })).toMatchObject({
+      checks: 'passed',
+      checksText: 'checks passed',
+      canMerge: true,
+    })
+    expect(reviewRow({ lane: 'agy', branch: 'feat/t7', head: '3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f', ahead: 1, dirty: false, checks: 'failed' })).toMatchObject({
+      checks: 'failed',
+      checksText: 'checks failed',
       canMerge: true,
     })
 
@@ -95,6 +108,8 @@ describe('reviews helpers', () => {
       error: 'That worktree is missing.',
       canMerge: false,
       aheadText: null,
+      checks: null,
+      checksText: null,
       lastRunText: null,
     })
   })
@@ -297,6 +312,9 @@ describe('ReviewsPanel and ControlDrawer', () => {
     expect(html).toContain('feat/p5-recover-cut-tool-lines')
     expect(html).toContain('2 commits ahead')
     expect(html).toContain('uncommitted changes')
+    expect(html).toContain('checks passed')
+    expect(html).toContain('unchecked')
+    expect(html).toContain('checks failed')
     expect(html).toContain('12 min, $0.42, exit 0')
     expect(html).toContain('no run yet')
     expect(html).toContain('That worktree is missing.')
@@ -455,6 +473,80 @@ describe('ReviewsPanel and ControlDrawer', () => {
           message: "Merge hermes's feat/p5",
         },
       })
+    })
+  })
+
+  it('shows passed, failed and unchecked beside Merge and in the confirm card, keeping Merge enabled', async () => {
+    const laneHead = '1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d'
+    const baseHead = '9f8e7d6c5b4a39281706f5e4d3c2b1a09f8e7d6c'
+    const makeReview = (lane, checks) => ({
+      lane,
+      branch: `feat/${lane}`,
+      head: laneHead,
+      base: 'trunk',
+      baseHead,
+      strategy: 'fast-forward',
+      ahead: 1,
+      dirty: false,
+      files: 1,
+      added: 1,
+      deleted: 0,
+      checks,
+    })
+    const initialReviews = [
+      makeReview('hermes', 'passed'),
+      makeReview('opencode', 'unchecked'),
+      makeReview('agy', 'failed'),
+    ]
+    const mergedLanes = []
+    const client = {
+      reviews: async () => initialReviews,
+      mergeReview: async (lane) => {
+        if (lane === 'agy') throw new Error('Checks failed on this head, so the lane was not merged.')
+        mergedLanes.push(lane)
+        return { ok: true, lane, commit: laneHead }
+      },
+      subscribe: () => () => {},
+    }
+
+    await withDom(async ({ container, root }) => {
+      await act(async () => {
+        root.render(createElement(ReviewsPanel, { client, initialReviews }))
+      })
+
+      const checkBadges = container.querySelectorAll('.review-checks')
+      expect(checkBadges.map((el) => el.textContent.trim())).toEqual([
+        'checks passed',
+        'unchecked',
+        'checks failed',
+      ])
+      const mergeButtons = container.querySelectorAll('.review-merge-btn')
+      expect(mergeButtons).toHaveLength(3)
+
+      await click(root, mergeButtons[2])
+      let card = container.querySelector('.review-confirm-card')
+      expect(card.querySelector('.review-confirm-checks')?.textContent).toBe('Checks failed for this head.')
+      await click(root, buttonWithText(card, 'Merge'))
+      await settle()
+      expect(card.querySelector('[role="alert"]')?.textContent).toBe(
+        'Checks failed on this head, so the lane was not merged.'
+      )
+
+      await click(root, container.querySelectorAll('.review-merge-btn')[1])
+      card = container.querySelector('.review-confirm-card')
+      expect(card.querySelector('.review-confirm-checks')?.textContent).toBe(
+        'Warning: checks are unchecked for this head.'
+      )
+      await click(root, buttonWithText(card, 'Merge'))
+      await settle()
+      expect(mergedLanes).toEqual(['opencode'])
+
+      await click(root, container.querySelectorAll('.review-merge-btn')[0])
+      card = container.querySelector('.review-confirm-card')
+      expect(card.querySelector('.review-confirm-checks')?.textContent).toBe('Checks passed for this head.')
+      await click(root, buttonWithText(card, 'Merge'))
+      await settle()
+      expect(mergedLanes).toEqual(['opencode', 'hermes'])
     })
   })
 })
