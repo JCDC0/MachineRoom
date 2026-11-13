@@ -468,7 +468,7 @@ export function readOutcomeRecords(file) {
   return readJsonLines(file)
 }
 
-export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand, sendJson, readJsonBody, notify = () => {}, orchestrators = () => null, lanesFile = '', runsFolder = '', activeLanes = null, isLaneActive = null, onMessage = () => {}, platform = process.platform, list = listProcesses, stat = statSync }) {
+export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand, sendJson, readJsonBody, notify = () => {}, orchestrators = () => null, lanesSource = () => null, lanesFile = '', runsFolder = '', activeLanes = null, isLaneActive = null, onMessage = () => {}, platform = process.platform, list = listProcesses, stat = statSync }) {
   const resolvedRoot = projectRoot ? realPath(projectRoot) : ''
   const resolvedBriefs = briefsDir ? resolve(briefsDir) : resolvedRoot ? join(resolvedRoot, 'docs', 'agents') : ''
   const laneFile = lanesFile ? resolve(lanesFile) : join(lanesFolder(), 'lanes.json')
@@ -1091,12 +1091,33 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
           break
         }
       }
+      let liveRun = null
       if (!record) {
+        let open = []
+        try {
+          const source = typeof lanesSource === 'function' ? lanesSource() : lanesSource
+          open = source && typeof source.openRuns === 'function' ? source.openRuns() : []
+        } catch {
+          open = []
+        }
+        liveRun = (Array.isArray(open) ? open : []).find((item) => {
+          if (!item || item.lane !== lane) return false
+          if (item.startedAt === startedAt) return true
+          return Number.isFinite(wantedTime) && Date.parse(item.startedAt) === wantedTime
+        }) ?? null
+      }
+      if (!record && !liveRun) {
         sendJson(req, res, 404, { error: CONVERSATION_UNKNOWN_PROBLEM })
         return true
       }
       const folder = realPath(recordsDir())
-      const logPath = typeof record.log === 'string' && record.log.trim() !== '' ? realPath(record.log.trim()) : ''
+      let logPath = ''
+      if (liveRun) {
+        const name = typeof liveRun.name === 'string' ? liveRun.name.trim() : ''
+        logPath = name === '' ? '' : realPath(join(folder, `${name}.log`))
+      } else {
+        logPath = typeof record.log === 'string' && record.log.trim() !== '' ? realPath(record.log.trim()) : ''
+      }
       if (logPath !== '' && !pathInside(logPath, folder)) {
         sendJson(req, res, 400, { error: CONVERSATION_LOG_OUTSIDE_PROBLEM })
         return true
@@ -1112,24 +1133,27 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
       }
       let harness = ''
       try {
-        const lanes = readStartLanes({ lanesFile: laneFile, runsFolder: recordsDir() })
-        if (lanes && Object.hasOwn(lanes, lane) && lanes[lane] && typeof lanes[lane] === 'object') {
-          harness = typeof lanes[lane].cli?.harness === 'string' ? lanes[lane].cli.harness : ''
+        const startLanes = readStartLanes({ lanesFile: laneFile, runsFolder: recordsDir() })
+        if (startLanes && Object.hasOwn(startLanes, lane) && startLanes[lane] && typeof startLanes[lane] === 'object') {
+          harness = typeof startLanes[lane].cli?.harness === 'string' ? startLanes[lane].cli.harness : ''
         }
       } catch {}
-      let isRunning = false
-      for (const item of running.values()) {
-        if (item.entry.lane === lane && item.entry.startedAt === record.startedAt) {
-          isRunning = true
-          break
+      let isRunning = Boolean(liveRun)
+      if (record) {
+        for (const item of running.values()) {
+          if (item.entry.lane === lane && item.entry.startedAt === record.startedAt) {
+            isRunning = true
+            break
+          }
         }
       }
-      const prompt = conversationPrompt(record, readText('TASKS.md'))
+      const started = liveRun ? liveRun.startedAt : record.startedAt
+      const prompt = liveRun ? '' : conversationPrompt(record, readText('TASKS.md'))
       const entries = conversationFromLog(harness, log.text, prompt)
-      if (entries.length > 0 && entries[0].role === 'prompt') entries[0] = { ...entries[0], at: record.startedAt }
+      if (entries.length > 0 && entries[0].role === 'prompt') entries[0] = { ...entries[0], at: started }
       sendJson(req, res, 200, {
         lane,
-        startedAt: record.startedAt,
+        startedAt: started,
         harness,
         running: isRunning,
         entries,
