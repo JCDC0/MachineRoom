@@ -9,7 +9,7 @@ import {
 import { subscribeToNotices } from './notices.js'
 import { laneNeedsNetwork } from '../../model/online.js'
 import { TIERS } from '../../policy/route.js'
-import { PROJECT_CONFIRM_LIMIT, PROJECT_QUEUE_TEXT_LIMIT, cancelSplitRun, clearProjectDraft, clearSplitRun, planLaneTasks, projectCheckLine, projectDraftKey, projectRunBody, projectRunConfirm, projectRunLabel, projectRunLanes, projectSplitLabel, projectTaskProblem, projectWorktreeName, queueRecoveryAvailable, queueRecoveryMessage, queueRecoveryPlan, readProjectDraft, recordLine, resultWord, splitRunProgress, splitRunSnapshot, splitTasks, startSplitRun, subscribeSplitRun, timeSinceStart, writeProjectDraft } from './runs.js'
+import { PROJECT_CONFIRM_LIMIT, PROJECT_QUEUE_TEXT_LIMIT, cancelSplitRun, clearProjectDraft, clearSplitRun, planLaneTasks, projectCheckLine, projectDraftKey, projectFormNotice, projectRunBody, projectRunConfirm, projectRunLabel, projectRunLanes, projectSplitLabel, projectTaskProblem, projectWorktreeName, queueRecoveryAvailable, queueRecoveryMessage, queueRecoveryPlan, readProjectDraft, recordLine, resultWord, splitRunProgress, splitRunSnapshot, splitTasks, startSplitRun, subscribeSplitRun, timeSinceStart, writeProjectDraft } from './runs.js'
 import { formatTime } from '../inspector.js'
 
 function projectKey(value) {
@@ -71,6 +71,7 @@ export default function DispatchPanel({
   const [stopError, setStopError] = useState(null)
   const [projectName, setProjectName] = useState('')
   const [lanesMode, setLanesMode] = useState(false)
+  const [lanesKnown, setLanesKnown] = useState(false)
   const [projectLane, setProjectLane] = useState(() => (typeof client?.routeLane === 'function' ? 'auto' : ''))
   const [autoRoute, setAutoRoute] = useState({ text: '', answer: null, error: null })
   const [projectTask, setProjectTask] = useState('')
@@ -115,6 +116,7 @@ export default function DispatchPanel({
   const runLane = selectedBrief ? runLaneFor(selectedBrief, runsState.running, agents) : null
   const canRunBrief = typeof client?.startRun === 'function' && Boolean(runLane)
   const projectLanes = projectRunLanes(agents, runsState.running)
+  const projectFormLine = lanesKnown ? projectFormNotice({ lanesMode, lanes: projectLanes }) : ''
   const routeTasks = splitTasks(projectTask).map((task) => task.trim()).filter((task) => task !== '')
   const routeText = routeTasks.join('\n---\n')
   const routeAnswer = hasRouteLane && projectLane === 'auto' && autoRoute.text === routeText ? autoRoute.answer : null
@@ -279,15 +281,20 @@ export default function DispatchPanel({
   useEffect(() => {
     let alive = true
     async function loadHealth() {
+      function settle(lanes) {
+        if (!alive) return
+        setLanesMode(lanes)
+        setLanesKnown(true)
+      }
       if (typeof client?.health !== 'function') {
-        if (alive) setLanesMode(false)
+        settle(false)
         return
       }
       try {
         const health = await client.health()
-        if (alive) setLanesMode(health?.lanes === true)
+        settle(health?.lanes === true)
       } catch {
-        if (alive) setLanesMode(false)
+        settle(false)
       }
     }
     loadHealth()
@@ -720,7 +727,11 @@ export default function DispatchPanel({
 
   return (
     <div className="dispatch-form">
-      {lanesMode && projectLanes.length > 0 && (
+      {!lanesKnown ? null : projectFormLine ? (
+        <div className="panel-field project-run-section">
+          <div className="brief-state is-dim mono" role="status">{projectFormLine}</div>
+        </div>
+      ) : (
         <div className="panel-field project-run-section">
           <div className="panel-field-head">
             <label>Run on this project</label>

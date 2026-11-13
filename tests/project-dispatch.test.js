@@ -2,7 +2,9 @@ import { execFileSync } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { basename, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { act, createElement } from 'react'
 import { afterEach, describe, expect, it } from 'vitest'
+import DispatchPanel from '../src/ui/panels/DispatchPanel.jsx'
 import { createBridge } from '../server/index.js'
 import { activeLanesFileFor, writeActiveLanes } from '../server/active-lanes.js'
 import { runsFolder } from '../server/lanes-source.js'
@@ -11,13 +13,17 @@ import { BRIEF_PROJECT_PROBLEM, QUEUE_DIRTY_PROBLEM, RUN_KIND_PROBLEM, TASK_PROB
 import { worktreeFor } from '../src/briefs/run.js'
 import { createMockClient } from '../src/control/mock.js'
 import {
+  NO_CODE_LANE_FORM_LINE,
+  NO_LANES_FORM_LINE,
   PROJECT_CONFIRM_LIMIT,
+  projectFormNotice,
   projectRunConfirm,
   projectRunLanes,
   projectTaskProblem,
 } from '../src/ui/panels/runs.js'
 import { getJson, postJson, waitFor } from './helpers/bridge.js'
 import { makeTempDir } from './helpers/tempRoot.js'
+import { settle, withDom } from './helpers/uiDom.js'
 
 const REPO_ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)))
 const REAL_REPO_ROOT = realpathSync.native(REPO_ROOT)
@@ -650,6 +656,57 @@ describe('the project run helpers', () => {
     }
     expect(projectTaskProblem('x')).toBeNull()
     expect(projectTaskProblem('x'.repeat(4000))).toBeNull()
+  })
+})
+
+describe('Dispatch when it cannot show the project form', () => {
+  function formClient(lanes, agents) {
+    return {
+      health: async () => ({ lanes }),
+      agents: async () => agents,
+    }
+  }
+
+  async function renderForm(client, agents) {
+    let text = ''
+    let lanePicker = null
+    await withDom(async ({ container, root }) => {
+      await act(async () => {
+        root.render(createElement(DispatchPanel, { client, initialAgents: agents }))
+      })
+      await settle()
+      text = container.textContent
+      lanePicker = container.querySelector('#project-run-lane')
+    })
+    return { text, lanePicker }
+  }
+
+  it('chooses the sentence from lanes mode and the code lanes', () => {
+    expect(projectFormNotice({ lanesMode: false, lanes: [] })).toBe(NO_LANES_FORM_LINE)
+    expect(projectFormNotice({ lanesMode: true, lanes: [] })).toBe(NO_CODE_LANE_FORM_LINE)
+    expect(projectFormNotice({ lanesMode: true, lanes: [{ key: 'opencode' }] })).toBe('')
+  })
+
+  it('says a room without --lanes starts runs from one', async () => {
+    const { text, lanePicker } = await renderForm(formClient(false, []), [])
+    expect(text).toContain(NO_LANES_FORM_LINE)
+    expect(lanePicker).toBeNull()
+  })
+
+  it('says a lanes room has no code lane', async () => {
+    const { text, lanePicker } = await renderForm(formClient(true, []), [])
+    expect(text).toContain(NO_CODE_LANE_FORM_LINE)
+    expect(lanePicker).toBeNull()
+  })
+
+  it('shows the project form when a code lane is set up', async () => {
+    const agents = [
+      { id: 'agent-opencode', key: 'opencode', name: 'OpenCode', adapterType: 'opencode_local', role: null },
+    ]
+    const { text, lanePicker } = await renderForm(formClient(true, agents), agents)
+    expect(lanePicker).not.toBeNull()
+    expect(text).not.toContain(NO_LANES_FORM_LINE)
+    expect(text).not.toContain(NO_CODE_LANE_FORM_LINE)
   })
 })
 

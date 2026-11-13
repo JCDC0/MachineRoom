@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- P234: Dispatch says why it cannot show the project form, naming `--lanes` or a missing code lane.
+- P234: a replay with a live bridge says to switch to Live and shows no Connect button.
 - P230: an unreadable root is an error and an unreadable folder keeps its last files with a problem line; a failed git read keeps the git tree, and a plain tree checks for git every 60 seconds. The .git/index watch is still open.
 - P232: the transport state word shrinks clear of the spend, panel Refresh buttons match Team, and Days to keep stays on one line.
 - P229: session discovery reads the root slug's folder and its subfolder slugs, and the cwd check still drops sibling projects.

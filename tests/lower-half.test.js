@@ -1,6 +1,10 @@
+import { createElement } from 'react'
+import { renderToString } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
+import Hud from '../src/ui/Hud.jsx'
 import {
   REPLAY_LINE,
+  REPLAY_LIVE_LINE,
   currentSessionTitle,
   lowerBreadcrumb,
 } from '../src/ui/lowerHalf.js'
@@ -44,10 +48,48 @@ describe('the current conversation title', () => {
   })
 })
 
+function replayHtml(liveAvailable) {
+  const saved = globalThis.window
+  globalThis.window = {
+    innerWidth: 1200,
+    location: { search: '' },
+    localStorage: { getItem: () => null, setItem: () => {} },
+    addEventListener: () => {},
+    removeEventListener: () => {},
+  }
+  try {
+    return renderToString(
+      createElement(Hud, {
+        mode: 'replay',
+        snapshot: { position: 0, duration: 1, playing: false, speed: 1, agents: [] },
+        speeds: [1],
+        liveAvailable,
+      })
+    )
+  } finally {
+    if (saved === undefined) delete globalThis.window
+    else globalThis.window = saved
+  }
+}
+
 describe('the replay line', () => {
   it('names the recorded run and the Connect path', () => {
     expect(REPLAY_LINE).toBe(
       'This is a recorded run. Connect to your project to talk to the orchestrator.'
     )
+  })
+
+  it('points a connected replay to Live and shows no Connect button', () => {
+    const html = replayHtml(true)
+    expect(html).toContain(REPLAY_LIVE_LINE)
+    expect(html).toContain('This is a replay. Switch to Live to talk to the orchestrator.')
+    expect(html).not.toContain('hud-lower-connect')
+    expect(html).not.toContain('>Connect</button>')
+  })
+
+  it('keeps the recorded-run sentence and its Connect button with no bridge', () => {
+    const html = replayHtml(false)
+    expect(html).toContain(REPLAY_LINE)
+    expect(html).toContain('>Connect</button>')
   })
 })

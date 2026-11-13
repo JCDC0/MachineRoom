@@ -1,6 +1,14 @@
 export const REPLAY_LINE =
   'This is a recorded run. Connect to your project to talk to the orchestrator.'
 
+export const REPLAY_LIVE_LINE =
+  'This is a replay. Switch to Live to talk to the orchestrator.'
+
+export function replayFoot({ connected = false } = {}) {
+  if (connected) return { line: REPLAY_LIVE_LINE, connect: false }
+  return { line: REPLAY_LINE, connect: true }
+}
+
 function cleanTitle(value) {
   if (typeof value !== 'string') return ''
   return value.replace(/\s+/g, ' ').trim()
