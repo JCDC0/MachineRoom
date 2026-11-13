@@ -245,6 +245,8 @@ export function laneStatesFor({
   return { lanes, chosen }
 }
 
+export const RUN_READ_CHUNK_BYTES = 4 * 1024 * 1024
+
 const runRecordCaches = new Map()
 
 export function clearRunsCache() {
@@ -290,18 +292,24 @@ export function cachedRunRecords(file = runsFile()) {
   }
 
   try {
-    const length = stat.size - entry.offset
-    if (length > 0) {
-      const buffer = Buffer.alloc(length)
-      const got = readSync(fd, buffer, 0, length, entry.offset)
-      const text = entry.decoder.write(buffer.subarray(0, got))
-      const parts = (entry.tail + text).split(/\r?\n/)
-      entry.tail = parts.pop() ?? ''
-      for (const line of parts) {
-        if (!line.trim()) continue
-        try {
-          entry.records.push(JSON.parse(line))
-        } catch {}
+    let remaining = stat.size - entry.offset
+    if (remaining > 0) {
+      const buffer = Buffer.alloc(Math.min(remaining, RUN_READ_CHUNK_BYTES))
+      while (remaining > 0) {
+        const want = Math.min(remaining, buffer.length)
+        const got = readSync(fd, buffer, 0, want, entry.offset)
+        if (got <= 0) break
+        entry.offset += got
+        remaining -= got
+        const text = entry.decoder.write(buffer.subarray(0, got))
+        const parts = (entry.tail + text).split(/\r?\n/)
+        entry.tail = parts.pop() ?? ''
+        for (const line of parts) {
+          if (!line.trim()) continue
+          try {
+            entry.records.push(JSON.parse(line))
+          } catch {}
+        }
       }
       if (entry.tail.trim()) {
         try {
@@ -309,7 +317,6 @@ export function cachedRunRecords(file = runsFile()) {
           entry.tail = ''
         } catch {}
       }
-      entry.offset += got
     }
     entry.mtimeMs = stat.mtimeMs
   } finally {
