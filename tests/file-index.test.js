@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, readFileSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
@@ -19,6 +19,8 @@ const HERE_STRING = /(?<![\w'"@])@(['"])/g
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 const FIXTURES = join(ROOT, 'public', 'fixtures')
 const RECORDINGS = join(ROOT, 'public', 'recordings')
+// Lane runs add a recording each, so the local folder grows without bound; the newest ones keep the check current.
+const RECENT_RECORDINGS = 60
 
 function quotedValueEnd(text, at) {
   const quote = text.startsWith('\\"', at) ? '\\"' : text[at]
@@ -273,10 +275,13 @@ function difference(command, files, dirs, redirectWrites = true) {
   return { command, wanted, actual }
 }
 
-function runFiles(folder) {
+function runFiles(folder, newest = Infinity) {
   try {
-    return readdirSync(folder)
-      .filter((file) => file.endsWith('-run.jsonl'))
+    const names = readdirSync(folder).filter((file) => file.endsWith('-run.jsonl'))
+    const kept = Number.isFinite(newest)
+      ? names.map((file) => ({ file, at: statSync(join(folder, file)).mtimeMs })).sort((a, b) => b.at - a.at).slice(0, newest).map((item) => item.file)
+      : names
+    return kept
       .sort()
       .map((file) => ({ file, stem: file.slice(0, -'-run.jsonl'.length) }))
   } catch {
@@ -291,9 +296,9 @@ function readFirst(folder, names) {
   return null
 }
 
-function shellCommands(folder) {
+function shellCommands(folder, newest) {
   const commands = []
-  for (const { file, stem } of runFiles(folder)) {
+  for (const { file, stem } of runFiles(folder, newest)) {
     const frames = parseFrames(readFileSync(join(folder, file), 'utf8'))
     const agentsFile = readFirst(folder, [`${stem}-agents.json`, 'agents.json'])
     const treeFile = readFirst(folder, [`${stem}-tree.json`])
@@ -438,7 +443,7 @@ describe('touchesForCommand with the file index', () => {
   })
 
   it.skipIf(!existsSync(RECORDINGS))('matches the old walk on every shell command in the recordings', () => {
-    const commands = shellCommands(RECORDINGS)
+    const commands = shellCommands(RECORDINGS, RECENT_RECORDINGS)
     expect(commands.length).toBeGreaterThan(0)
     const differences = commands
       .map(({ command, tree }) => difference(command, tree.files, tree.dirs))
