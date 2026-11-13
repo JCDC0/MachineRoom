@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- machine-room doctor takes a folder first as --root and refuses both forms in one sentence (P168).
+- Doctor counts warnings in its summary line and stops after a failed project folder, so the one FAIL line is last (P168).
+- pack-check prints a usage line for --help and says in one line what a passing check read (P168).
+- README's Quick start has a First run block with the line each command prints when all is well (P168).
 - The claude sessions meta test moves the runs folder time after writing the meta file, so the reader re-lists it on Windows (P165).
 - A first-use run of the setup commands lists where a new owner gets stuck (P166).
 - The claude sessions test moves the runs folder time after writing a lane meta file, so the reader re-lists the folder and the test no longer races the file system's folder time (P165).
