@@ -430,6 +430,10 @@ export function createClient({
       const { lane = '', startedAt = '', confirmed = true } = laneOrOptions ?? {}
       return request('POST', '/api/control/runs/stop', { lane, startedAt, confirmed })
     },
+    projectSettings: () => request('GET', '/api/control/project-settings'),
+
+    saveProjectSettings: ({ checkCommand, confirmed = true } = {}) =>
+      request('POST', '/api/control/project-settings', { checkCommand, confirmed }),
 
     lanes: () => request('GET', '/api/lanes'),
 

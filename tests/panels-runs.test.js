@@ -17,6 +17,7 @@ import {
   projectRunBody,
   projectRunLabel,
   projectRunLanes,
+  projectCheckLine,
   projectSplitLabel,
   projectTaskProblem,
   projectWorktreeName,
@@ -32,7 +33,7 @@ import {
   startSplitRun,
   timeSinceStart,
 } from '../src/ui/panels/runs.js'
-import { buttonWithText, settle, withDom } from './helpers/uiDom.js'
+import { buttonWithText, settle, type, withDom } from './helpers/uiDom.js'
 
 describe('resultWord', () => {
   it('returns finished when exitCode is 0 and killed is false', () => {
@@ -587,6 +588,35 @@ describe('projectRunBody', () => {
   })
 })
 
+describe('projectRunBody with a check command', () => {
+  it('adds the command to a queue and to a single task', () => {
+    expect(projectRunBody({ tasks: ['One.', 'Two.'], worktree: true, checkCommand: ' node check.mjs ' })).toEqual({
+      tasks: ['One.', 'Two.'],
+      worktree: true,
+      checkCommand: 'node check.mjs',
+    })
+    expect(projectRunBody({ task: 'Fix it.', checkCommand: 'node check.mjs' })).toEqual({
+      task: 'Fix it.',
+      allowDirty: false,
+      checkCommand: 'node check.mjs',
+    })
+    expect(projectRunBody({ task: 'Fix it.', checkCommand: '   ' })).toEqual({
+      task: 'Fix it.',
+      allowDirty: false,
+    })
+  })
+})
+
+describe('projectCheckLine', () => {
+  it('names the command, npm test or no check', () => {
+    expect(projectCheckLine({ checkCommand: 'node check.mjs', hasTestScript: false })).toBe('Check: node check.mjs')
+    expect(projectCheckLine({ checkCommand: '', hasTestScript: true })).toBe('Check: npm test')
+    expect(projectCheckLine({ checkCommand: '', hasTestScript: false })).toBe(
+      'No check: this project has no npm test script.'
+    )
+  })
+})
+
 describe('projectRunLanes', () => {
   it('leaves out the sub orchestrators', () => {
     const agents = [
@@ -754,6 +784,60 @@ describe('queueRecoveryMessage', () => {
     expect(message).toContain("The record does not hold the queue's task list, so the tasks that did not run are not known.")
     expect(message).toContain('Missing from the record: the queue task list, how many tasks the queue held, the note.')
     expect(message).not.toContain('Write the docs')
+  })
+})
+
+describe('Dispatch project check command', () => {
+  it('fills the saved command and names it on the confirm card', async () => {
+    const saved = []
+    const started = []
+    const client = {
+      health: async () => ({ lanes: true }),
+      runs: async () => ({ running: [], recent: [], project: 'demo' }),
+      projectSettings: async () => ({ checkCommand: 'node scripts/check.mjs', hasTestScript: true }),
+      saveProjectSettings: async ({ checkCommand }) => {
+        saved.push(checkCommand)
+        return { checkCommand, hasTestScript: true }
+      },
+      startRun: async (lane, body) => {
+        started.push({ lane, body })
+        return { lane, queue: true, tasks: 1 }
+      },
+    }
+    await withDom(async ({ container, root }) => {
+      await act(async () => {
+        root.render(
+          createElement(DispatchPanel, {
+            client,
+            initialAgents: [{ key: 'opencode', name: 'OpenCode', adapterType: 'opencode_local', role: null }],
+          })
+        )
+      })
+      await settle()
+      const field = container.querySelector('#project-run-check')
+      expect(field).not.toBeNull()
+      expect(field.value).toBe('node scripts/check.mjs')
+      expect(container.textContent).toContain(
+        'Runs after each task; the task is committed only when it passes. Empty uses npm test when package.json has one.'
+      )
+
+      const lane = container.querySelector('#project-run-lane')
+      await type(root, lane, 'opencode')
+      await type(root, container.querySelector('#project-run-task'), 'Fix the typo.')
+      await act(async () => {
+        buttonWithText(container, 'Run').click()
+      })
+      await settle()
+      expect(container.textContent).toContain('Check: node scripts/check.mjs')
+
+      await act(async () => {
+        buttonWithText(container, 'Confirm').click()
+      })
+      await settle()
+      expect(saved).toEqual(['node scripts/check.mjs'])
+      expect(started).toHaveLength(1)
+      expect(started[0].body.checkCommand).toBe('node scripts/check.mjs')
+    })
   })
 })
 

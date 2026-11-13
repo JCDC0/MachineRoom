@@ -2,12 +2,14 @@
 
 ## Unreleased
 
+- Dispatch has a Check command field saved per project; a project run or queue passes it to run-lane as --test, and the confirm card names the check it will use.
 - Dispatch's running rows and the Inspector offer Stop with a confirm card; the bridge stops a matching run with --stop and tells the lane's sub orchestrator, else Main, as a note its next turn reads first.
 - Settings has a Storage section with sizes by kind, a preview of finished run logs and old recordings older than N days, and Archive, which moves exactly those into runs/archive/YYYY-MM and deletes nothing.
 - Repository has a branch filter and shows at most 200 rows, the current branch first, with Showing N of M branches.
 - A database that appears after the OpenCode reader starts is read from the start time, so the first conversation on a new install becomes frames; an existing database still skips its old history.
 - A failed status, branch or log read carries its own sentence, counts stay null, and Repository and the inspector show the sentence instead of a clean state.
 - Queue task records carry queueSize, and the record where a queue stopped carries queueRemaining, masked; Ask for recovery now lists those tasks.
+- Dispatch keeps a project check command, shows it on the confirm card, and passes it to the runner as --test.
 - The hands-on check was blocked: Codex's sandbox cannot read the Playwright browser folder, and the screenshot helper reports access denied as a missing browser.
 - A reported 0 reads as $0.00, a lane with no runs reads 0, and not reported appears only when runs gave no number (N16, the owner's word).
 - Repository filters its branch list by a case-insensitive text search, shows at most 200 rows with the current branch first and a `Showing N of M branches.` line, and the switch and create cards keep the branch picked (P225).

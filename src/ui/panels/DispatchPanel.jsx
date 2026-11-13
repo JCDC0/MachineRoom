@@ -9,7 +9,7 @@ import {
 import { subscribeToNotices } from './notices.js'
 import { laneNeedsNetwork } from '../../model/online.js'
 import { TIERS } from '../../policy/route.js'
-import { PROJECT_CONFIRM_LIMIT, PROJECT_QUEUE_TEXT_LIMIT, cancelSplitRun, clearSplitRun, planLaneTasks, projectRunBody, projectRunConfirm, projectRunLabel, projectRunLanes, projectSplitLabel, projectTaskProblem, projectWorktreeName, queueRecoveryAvailable, queueRecoveryMessage, queueRecoveryPlan, recordLine, resultWord, splitRunProgress, splitRunSnapshot, splitTasks, startSplitRun, subscribeSplitRun, timeSinceStart } from './runs.js'
+import { PROJECT_CONFIRM_LIMIT, PROJECT_QUEUE_TEXT_LIMIT, cancelSplitRun, clearSplitRun, planLaneTasks, projectCheckLine, projectRunBody, projectRunConfirm, projectRunLabel, projectRunLanes, projectSplitLabel, projectTaskProblem, projectWorktreeName, queueRecoveryAvailable, queueRecoveryMessage, queueRecoveryPlan, recordLine, resultWord, splitRunProgress, splitRunSnapshot, splitTasks, startSplitRun, subscribeSplitRun, timeSinceStart } from './runs.js'
 import { formatTime } from '../inspector.js'
 
 function projectKey(value) {
@@ -74,6 +74,8 @@ export default function DispatchPanel({
   const [projectLane, setProjectLane] = useState(() => (typeof client?.routeLane === 'function' ? 'auto' : ''))
   const [autoRoute, setAutoRoute] = useState({ text: '', answer: null, error: null })
   const [projectTask, setProjectTask] = useState('')
+  const [projectCheckCommand, setProjectCheckCommand] = useState('')
+  const [projectHasTestScript, setProjectHasTestScript] = useState(false)
   const [projectOwnWorktree, setProjectOwnWorktree] = useState(true)
   const [projectOneLanePerTask, setProjectOneLanePerTask] = useState(false)
   const [projectAllowDirty, setProjectAllowDirty] = useState(false)
@@ -101,6 +103,7 @@ export default function DispatchPanel({
 
   const hasBriefs = typeof client?.briefs === 'function'
   const hasRuns = typeof client?.runs === 'function'
+  const hasProjectSettings = typeof client?.projectSettings === 'function' && typeof client?.saveProjectSettings === 'function'
   const hasRouteLane = typeof client?.routeLane === 'function'
   const hasOrchestrator = typeof client?.sendOrchestrator === 'function'
   const canStopRun = typeof client?.stopRun === 'function'
@@ -289,6 +292,27 @@ export default function DispatchPanel({
       alive = false
     }
   }, [client])
+
+  useEffect(() => {
+    if (!hasProjectSettings) {
+      setProjectCheckCommand('')
+      setProjectHasTestScript(false)
+      return undefined
+    }
+    let alive = true
+    async function loadProjectSettings() {
+      try {
+        const answer = await client.projectSettings()
+        if (!alive) return
+        setProjectCheckCommand(typeof answer?.checkCommand === 'string' ? answer.checkCommand : '')
+        setProjectHasTestScript(answer?.hasTestScript === true)
+      } catch {}
+    }
+    loadProjectSettings()
+    return () => {
+      alive = false
+    }
+  }, [client, hasProjectSettings, projectName])
 
   useEffect(() => {
     return subscribeToNotices(client, 'agents', () => {
@@ -510,6 +534,19 @@ export default function DispatchPanel({
     setProjectError(null)
   }
 
+  async function saveProjectCheckCommand() {
+    if (!hasProjectSettings) return true
+    try {
+      const answer = await client.saveProjectSettings({ checkCommand: projectCheckCommand.trim() })
+      if (typeof answer?.checkCommand === 'string') setProjectCheckCommand(answer.checkCommand)
+      if (typeof answer?.hasTestScript === 'boolean') setProjectHasTestScript(answer.hasTestScript)
+      return true
+    } catch (err) {
+      setProjectError(err?.message || 'Could not save the check command.')
+      return false
+    }
+  }
+
   async function handleConfirmProjectRun() {
     if (projectSplitPlan) {
       if (projectSplitPlan.problem || projectSplitPlan.pairs.length === 0) {
@@ -518,8 +555,9 @@ export default function DispatchPanel({
       }
       if (typeof client?.startRun !== 'function') return
       setProjectError(null)
+      if (!(await saveProjectCheckCommand())) return
       splitProjectRef.current = projectName
-      const started = await startSplitRun({ client, pairs: projectSplitPlan.pairs })
+      const started = await startSplitRun({ client, pairs: projectSplitPlan.pairs, checkCommand: projectCheckCommand })
       if (!started) {
         splitProjectRef.current = ''
         setProjectError('The split run is already starting.')
@@ -549,11 +587,13 @@ export default function DispatchPanel({
     setProjectStarting(true)
     setProjectError(null)
     try {
+      if (!(await saveProjectCheckCommand())) return
       const run = projectRunBody({
         task: projectTask,
         tasks,
         allowDirty: projectAllowDirty,
         worktree: projectOwnWorktree,
+        checkCommand: projectCheckCommand,
       })
       await client.startRun(lane, run)
       setProjectShowConfirm(false)
@@ -697,6 +737,26 @@ export default function DispatchPanel({
             />
           </div>
 
+          {hasProjectSettings && (
+            <div className="panel-field">
+              <label htmlFor="project-run-check">Check command</label>
+              <input
+                id="project-run-check"
+                type="text"
+                value={projectCheckCommand}
+                maxLength={500}
+                placeholder="Empty uses npm test when package.json has one"
+                onChange={(event) => {
+                  setProjectCheckCommand(event.target.value)
+                  dismissProjectConfirm()
+                }}
+              />
+              <div className="brief-state is-dim mono">
+                Runs after each task; the task is committed only when it passes. Empty uses npm test when package.json has one.
+              </div>
+            </div>
+          )}
+
           <div className="panel-checkbox-field">
             <label>
               <input
@@ -832,6 +892,9 @@ export default function DispatchPanel({
               {!projectSplitPlan.problem && (
                 <>
                   <div className="brief-confirm-warning">
+                    {projectCheckLine({ checkCommand: projectCheckCommand, hasTestScript: projectHasTestScript })}
+                  </div>
+                  <div className="brief-confirm-warning">
                     Each task runs in its own worktree beside the project, on its own branch, never on main.
                   </div>
                   <div className="brief-confirm-warning">
@@ -908,6 +971,9 @@ export default function DispatchPanel({
                   {`Picked by the routing policy: ${routeAnswer.reason}`}
                 </div>
               )}
+              <div className="brief-confirm-warning">
+                {projectCheckLine({ checkCommand: projectCheckCommand, hasTestScript: projectHasTestScript })}
+              </div>
               {projectOwnWorktree && (
                 <div className="brief-confirm-warning">
                   {ownWorktreeName

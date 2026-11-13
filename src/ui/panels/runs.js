@@ -248,13 +248,14 @@ export function splitRunProgress(run) {
   return `Started ${pairs.length} tasks.`
 }
 
-export async function startSplitRun({ client, pairs, delay = PROJECT_SPLIT_DELAY } = {}) {
+export async function startSplitRun({ client, pairs, delay = PROJECT_SPLIT_DELAY, checkCommand } = {}) {
   if (splitRun.active) return false
   const list = (Array.isArray(pairs) ? pairs : []).filter(
     (pair) => pair && typeof pair === 'object' && typeof pair.lane === 'string' && typeof pair.task === 'string'
   )
   if (list.length === 0) return false
   if (typeof client?.startRun !== 'function') return false
+  const command = typeof checkCommand === 'string' ? checkCommand.trim() : ''
   splitCancelRequested = false
   splitWaitCancel = null
   publishSplitRun({ active: true, pairs: list, answers: [], failed: false, done: false, cancelled: false })
@@ -268,7 +269,11 @@ export async function startSplitRun({ client, pairs, delay = PROJECT_SPLIT_DELAY
     }
     const pair = list[index]
     try {
-      const answer = await client.startRun(pair.lane, { tasks: [pair.task], worktree: true })
+      const answer = await client.startRun(pair.lane, {
+        tasks: [pair.task],
+        worktree: true,
+        ...(command === '' ? {} : { checkCommand: command }),
+      })
       answers.push({ ok: true, message: runStartLine(answer) })
     } catch (err) {
       failed = true
@@ -439,15 +444,24 @@ export function projectWorktreeName(project, lane) {
   return `${name}/.worktrees/${key}`
 }
 
-export function projectRunBody({ task, tasks, allowDirty, worktree } = {}) {
+export function projectRunBody({ task, tasks, allowDirty, worktree, checkCommand } = {}) {
   const list = Array.isArray(tasks) ? tasks : []
+  const command = typeof checkCommand === 'string' ? checkCommand.trim() : ''
+  const check = command === '' ? {} : { checkCommand: command }
   if (list.length > 1) {
-    return { tasks: list, ...(worktree === true ? { worktree: true } : {}) }
+    return { tasks: list, ...(worktree === true ? { worktree: true } : {}), ...check }
   }
   const text = typeof task === 'string' ? task : ''
   // A single task in its own worktree runs as a queue of one, so it ends committed on a branch.
-  if (worktree === true) return { tasks: [text], worktree: true }
-  return { task: text, allowDirty: allowDirty === true }
+  if (worktree === true) return { tasks: [text], worktree: true, ...check }
+  return { task: text, allowDirty: allowDirty === true, ...check }
+}
+
+export function projectCheckLine({ checkCommand, hasTestScript } = {}) {
+  const command = typeof checkCommand === 'string' ? checkCommand.trim() : ''
+  if (command !== '') return `Check: ${command}`
+  if (hasTestScript === true) return 'Check: npm test'
+  return 'No check: this project has no npm test script.'
 }
 
 export function projectRunConfirm({ lane, project, task, tasks } = {}) {
