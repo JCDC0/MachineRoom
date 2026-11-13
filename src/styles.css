@@ -9030,7 +9030,7 @@ body:has(#hud-orchestrator-chat) .lens-waiting {
 @media (min-width: 900px) {
   .transport.is-live.has-orchestrator {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, auto) minmax(0, 1fr);
+    grid-template-columns: minmax(max-content, 1fr) minmax(0, auto) minmax(max-content, 1fr);
     column-gap: calc(var(--space) * 2);
   }
 

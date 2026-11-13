@@ -36,6 +36,11 @@ describe('the transport state word and the spend', () => {
     expect(pixels(gap)).toBeGreaterThanOrEqual(8)
   })
 
+  it('lets the side groups keep their width so the middle shrinks instead of being overlapped', () => {
+    const columns = rule('.transport.is-live.has-orchestrator')['grid-template-columns']
+    expect(columns).toBe('minmax(max-content, 1fr) minmax(0, auto) minmax(max-content, 1fr)')
+  })
+
   it('shrinks the state word before the chips and ends it in an ellipsis', () => {
     const button = rule('.transport-orchestrators > .transport-orchestrator')
     const shrink = Number(button.flex.split(/\s+/)[1])

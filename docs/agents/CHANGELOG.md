@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- The transport's side groups keep their own width, so at 1280 pixels the state word shrinks instead of the spend overlapping it (seen at 1280 by 800 after P232).
 
 - P235: one to four top folders sit on a wider ring turned clear of the orchestrator, and git labels that would overlap merge into one naming the count.
 - P228: the tree answer carries rootPath, and a live room places an absolute path only when it lies under it, case-insensitive on Windows; replays keep the name rule.
