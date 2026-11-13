@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Review 27 finds nothing open in the P194 merge: a dropped client is destroyed and a late joiner keeps its history.
 - A client dropped for its backlog is destroyed so its queued output is let go, and the writes made while a client connects are not held against the cap (P194).
 - A bridge stream client dropped for its backlog is destroyed, so its queued output is freed (P194).
 - A client may hold the backlog it connected with plus 8 MB, so a late joiner that reads all twelve kept one-MiB frames is not cut (P194).
