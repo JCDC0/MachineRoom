@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- P254: a folder-shaped /api/tree answers from the last tree while the watcher is armed, the last full read was clean and no read is due.
 - P255: AUDIT-2026-11-TESTS.md lists four tests that pass with their change undone, each proved in a scratch copy.
 - P252: AUDIT-2026-11-DOCS-2.md lists 17 doc sentences the code contradicts, with corrections; no route, flag or panel is unnamed.
 - P259: README.md describes what each command prints, the up flags, the default sources, the runs folder and how to stop the room.
@@ -11,6 +12,7 @@
 - P251: the inspector's main orchestrator reads WAITING FOR YOU when the transport says waiting for you, while lanes and subs keep their state words.
 - P251: the waiting card counts only the orchestrators and lanes as ready and names the session readers on their own line.
 - P253: the tree retry, sessions timer, storage archive refresh and four orchestrator room turn tests wait for their condition with a ten second bound instead of sleeping a fixed time.
+- P254: a folder-shaped tree answer reuses the last tree while the watcher is armed, the last full read was clean and no read is due; the plain answer keeps the one-second rule.
 - P248: the full suite passes at a01af28f, 5,189 passed and 4 skipped in 281 files.
 - P247: the check command keeps escaped quotes and refuses an unclosed one, and the bridge refuses shell syntax when the command is saved or a run starts.
 - P246: the archive checks the new file's real path lies in the archive folder before removing the source, and otherwise removes the copy and skips the file.
