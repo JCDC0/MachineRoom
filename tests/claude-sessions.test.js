@@ -316,6 +316,8 @@ describe('claude sessions reader', () => {
     const countBefore = frames.length
 
     writeFileSync(join(runs, 'claude-lane-1.meta.json'), `${JSON.stringify({ lane: 'claude', project: projectRoot, sessionId: 'sess-registered-first' })}\n`)
+    const later = new Date(Date.now() + 60000)
+    utimesSync(runs, later, later)
 
     appendFileSync(file, jsonLines([
       sessionLine('assistant', { role: 'assistant', content: [readUse('call-2', join(projectRoot, 'src', 'app.js'))] }, { sessionId: 'sess-registered-first' }, projectRoot),

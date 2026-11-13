@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The claude sessions test moves the runs folder time after writing a lane meta file, so the reader re-lists the folder and the test no longer races the file system's folder time (P165).
 - Compaction rules are masked when saved, and the chat masker replaces profile prefixes before it scans paths, so a profile folder with a space is masked (P161).
 - Project refusals in run-lane print the project masked, and ~ and $XDG_STATE_HOME label only posix paths, so a Windows path keeps its Windows label (P162).
 - A stop checks each descendant's current row and creation time before killing it, so a pid Windows reused for another process is skipped (P163).
