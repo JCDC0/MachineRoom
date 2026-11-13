@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- P250: a lane's tree row and its Inspector open its conversation in the lower half, with a run picker, folded tool calls, live reads and Stop; the route reads live runs too.
 - P275: folder-shaped tree reuse also waits for clean git metadata and every expected git metadata watcher, so an index or exclude change is read again.
 - P267: scale-live, scale-probe, screenshots, hand-run, history-audit, agy-prompt and run-recording answer --help and -h with their usage and exit 0 before any work; COMMANDS.md names them and the empty cases.
 - P274: a second empty reply after the nudge ends the native run with exit 1 and 'The agent stopped without a final answer.'
@@ -16,6 +17,8 @@
 - P271: a codex run record carries the newest rollout reading from the last 64 KB as `quota: { windows, at }`.
 - P271: lane costs answer the newest codex quota reading and leave out a window past its reset, so chooseRoute skips codex above `quotaSkipPercent`.
 - P267: scale-live, scale-probe, screenshots, hand-run, history-audit, agy-prompt and run-recording answer --help and -h with one usage line, and COMMANDS.md records their help forms and three missing empty or refusal cases.
+- P250: a lane's family tree row and its Inspector open a conversation view in the chat's place, with the run picker, folded prompt and tool calls, live reads and Stop.
+- P250: the conversation route reads a live run from the lanes source when it has no record, answers its log entries with running: true, and stops that run through the same route.
 - P260: a lane may name fallback; a brief run or project task that fails on a quota, rate limit, overload or failed start runs once on the backup lane on a -on-LANE branch.
 - P265: the chat's lane start passes the project's saved check command, and each AgentDock gets the full orchestrator list, so sub and sector rows show.
 - P264: ROOM.md, LIVE.md and COMMANDS.md take the 15 corrected sentences from the docs audit; rows 1 and 6 wait for P265.

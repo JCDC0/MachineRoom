@@ -290,7 +290,7 @@ describe('FamilyTree rows', () => {
       expect(laneUnder.querySelector('.mr-side-switch')).not.toBeNull()
       expect(laneUnder.querySelector('.mr-family-trash')).not.toBeNull()
       expect(laneUnder.querySelector('.mr-family-add')).not.toBeNull()
-      expect(laneUnder.querySelector('.mr-family-chat')).toBeNull()
+      expect(laneUnder.querySelector('.mr-family-chat')).not.toBeNull()
       expect(lane.querySelector('.mr-family-row').children.map((child) => String(child.className))).toEqual([
         'mr-family-indent',
         'mr-family-check',
@@ -358,7 +358,7 @@ describe('FamilyTree rows', () => {
     })
   })
 
-  it('opens the main and sub chats from their chat buttons', async () => {
+  it('opens the main, sub and lane conversations from their chat buttons', async () => {
     const { client } = makeClient()
     await withDom(async ({ container, dom, root }) => {
       await mount(root, client)
@@ -368,10 +368,17 @@ describe('FamilyTree rows', () => {
       }
       dom.window.addEventListener('machineroom:open-chat', onOpen)
       try {
-        expect(container.querySelectorAll('.mr-family-chat')).toHaveLength(2)
+        expect(container.querySelectorAll('.mr-family-chat')).toHaveLength(4)
         await click(root, rowByLabel(container, 'Orchestrator').querySelector('.mr-family-chat'))
         await click(root, rowByLabel(container, 'Frontend').querySelector('.mr-family-chat'))
-        expect(seen).toEqual([{ id: 'orchestrator' }, { id: 'frontend' }])
+        await click(root, rowByLabel(container, 'OpenCode').querySelector('.mr-family-chat'))
+        await click(root, rowByLabel(container, 'Claude').querySelector('.mr-family-chat'))
+        expect(seen).toEqual([
+          { id: 'orchestrator' },
+          { id: 'frontend' },
+          { lane: 'opencode' },
+          { lane: 'claude' },
+        ])
       } finally {
         dom.window.removeEventListener('machineroom:open-chat', onOpen)
       }

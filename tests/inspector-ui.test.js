@@ -128,6 +128,40 @@ describe('the inspector panel', () => {
     })
   })
 
+  it('opens a lane conversation from the button under its log lines', async () => {
+    const client = makeClient()
+    const onClose = vi.fn()
+    const opencode = {
+      key: 'opencode',
+      name: 'OpenCode',
+      harness: 'opencode',
+      model: 'deepseek',
+      status: 'idle',
+      openCalls: 0,
+    }
+
+    await withDom(async ({ container, root, window }) => {
+      const heard = []
+      window.addEventListener('machineroom:open-chat', (event) => heard.push(event.detail))
+      await mount(root, {
+        target: { kind: 'agent', id: 'opencode' },
+        live: true,
+        bridge: true,
+        client,
+        lanes: [opencode],
+        costs,
+        liveRuns: [],
+        tasks: [],
+        log: [{ agent: 'OpenCode', text: 'reading src/a.js', tone: 'normal' }],
+        onClose,
+      })
+
+      await click(root, buttonWithText(container, 'Open conversation'))
+      expect(heard).toEqual([{ lane: 'opencode' }])
+      expect(onClose).toHaveBeenCalledTimes(1)
+    })
+  })
+
   it('reads the main orchestrator as waiting for you while an idle lane stays idle', async () => {
     const client = makeClient()
     const idleLane = {

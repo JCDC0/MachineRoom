@@ -10,6 +10,7 @@ import Assistant from './Assistant.jsx'
 import Guide from './Guide.jsx'
 import Launcher from './Launcher.jsx'
 import OrchestratorChat from './OrchestratorChat.jsx'
+import LaneConversation from './LaneConversation.jsx'
 import Settings from './Settings.jsx'
 import SetupCard from './SetupCard.jsx'
 import Sidebar from './Sidebar.jsx'
@@ -145,6 +146,7 @@ export default function Hud({
   const [chatFocus, setChatFocus] = useState(0)
   const [chatTab, setChatTab] = useState('orchestrator')
   const [chatListOpen, setChatListOpen] = useState(false)
+  const [laneChat, setLaneChat] = useState(null)
   const [orchestratorList, setOrchestratorList] = useState([])
   const [sessionTitle, setSessionTitle] = useState('')
   const [idleOpen, setIdleOpen] = useState(false)
@@ -196,6 +198,9 @@ export default function Hud({
   const grouped = ladderGroups(list.rows, ladder)
   const nav = grouped ?? list
   const workingAgent = list.rows.find((row) => row.agent?.status === 'working')?.agent ?? null
+  const laneChatAgent = laneChat
+    ? (snapshot?.agents ?? []).find((agent) => agent.key === laneChat.lane) ?? null
+    : null
   const activeRows = list.rows.filter((row) => row.group !== 'idle')
   const idleRows = list.rows.filter((row) => row.group === 'idle')
   const listRef = useRef(nav)
@@ -316,8 +321,20 @@ export default function Hud({
 
   useEffect(() => {
     function onOpenChat(event) {
-      const id = event && event.detail ? event.detail.id : ''
+      const detail = event && event.detail ? event.detail : {}
+      const lane = typeof detail.lane === 'string' ? detail.lane.trim() : ''
+      if (lane) {
+        setLaneChat({
+          lane,
+          startedAt: typeof detail.startedAt === 'string' ? detail.startedAt : '',
+        })
+        setChatOpen(true)
+        setSessionsOpen(false)
+        return
+      }
+      const id = detail.id
       if (typeof id !== 'string' || !id) return
+      setLaneChat(null)
       setChatTab(id)
       setChatOpen(true)
       setSessionsOpen(false)
@@ -1010,8 +1027,24 @@ export default function Hud({
             )}
           </div>
           <div className="hud-lower-main">
-            <p className="hud-lower-crumb mono">{lowerBreadcrumb(project, sessionTitle)}</p>
-            {mode === 'replay' ? (
+            {!laneChat && <p className="hud-lower-crumb mono">{lowerBreadcrumb(project, sessionTitle)}</p>}
+            {laneChat ? (
+              <LaneConversation
+                client={client}
+                lane={laneChat.lane}
+                laneName={laneChatAgent?.name || laneChat.lane}
+                project={projectLabel}
+                lanes={snapshot?.agents ?? []}
+                liveRuns={liveRuns ?? []}
+                initialStartedAt={laneChat.startedAt}
+                inline
+                tick={log.length}
+                onBack={() => {
+                  setLaneChat(null)
+                  setChatOpen(true)
+                }}
+              />
+            ) : mode === 'replay' ? (
               <div className="hud-lower-replay">
                 <div className="hud-lower-log">
                   <EventLogBody entries={visibleLog} bodyRef={lowerFollow.ref} onScroll={lowerFollow.onScroll} />
@@ -1178,7 +1211,24 @@ export default function Hud({
         />
       )}
 
-      {client && chatAvailable && floatingChat && (
+      {client && laneChat && !wide && (
+        <LaneConversation
+          client={client}
+          lane={laneChat.lane}
+          laneName={laneChatAgent?.name || laneChat.lane}
+          project={projectLabel}
+          lanes={snapshot?.agents ?? []}
+          liveRuns={liveRuns ?? []}
+          initialStartedAt={laneChat.startedAt}
+          tick={log.length}
+          onBack={() => {
+            setLaneChat(null)
+            setChatOpen(true)
+          }}
+        />
+      )}
+
+      {client && chatAvailable && floatingChat && !laneChat && (
         <OrchestratorChat
           client={client}
           open={chatOpen}

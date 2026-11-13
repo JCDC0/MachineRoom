@@ -643,6 +643,7 @@ export function createBridge(options = {}) {
     sendJson,
     readJsonBody,
     orchestrators: () => orchestrators,
+    lanesSource: () => lanesSource,
     activeLanes: () => activeLanes,
     onMessage: sendAgentMessage,
     notify: (event) => {

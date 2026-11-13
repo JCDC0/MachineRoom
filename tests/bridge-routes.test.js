@@ -12,7 +12,7 @@ import { SINCE_PROBLEM } from '../src/briefs/run.js'
 import { createClient } from '../src/control/client.js'
 import { choice } from '../src/decider/wire.js'
 import { startFakeDecisions } from './fakeDecisions.js'
-import { getJson, postJson, startLaneBridge, waitFor } from './helpers/bridge.js'
+import { getJson, postJson, readFrames, startLaneBridge, waitFor } from './helpers/bridge.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 
 const KEY = 'sk-or-v1-' + '0123456789abcdef'.repeat(4)
@@ -385,6 +385,15 @@ const TINY_SLEEPER = [
   'setTimeout(() => {}, 60000)',
 ].join('\n')
 
+const TINY_STOPPER = [
+  'const args = process.argv.slice(2)',
+  "if (args[0] === '--stop') {",
+  "  console.log('stopped ' + args[1])",
+  '  process.exit(0)',
+  '}',
+  'setTimeout(() => {}, 60000)',
+].join('\n')
+
 function statsRecord({ lane, model = 'deepseek/v4.1-flash-1017', startedAt, minutes, costUsd = null, exitCode = 0 }) {
   return JSON.stringify({ lane, model, startedAt, minutes, exitCode, killed: false, costUsd })
 }
@@ -458,14 +467,14 @@ describe('run routes', () => {
     })
   }
 
-  async function startRunsBridge({ script = TINY_RUNNER, project = true } = {}) {
+  async function startRunsBridge({ script = TINY_RUNNER, project = true, runsDir = tempDir() } = {}) {
     const dir = tempDir()
     if (project) writeRunsProject(dir)
     const runnerPath = join(tempDir(), 'tiny-runner.mjs')
     writeFileSync(runnerPath, script)
     const started = await laneBridge({
       projectRoot: RUN_ROOM,
-      runsDir: tempDir(),
+      runsDir,
       bridge: {
         briefsDir: join(dir, 'docs', 'agents'),
         lanesFile: join(dir, 'docs', 'agents', 'lanes.json'),
@@ -1017,6 +1026,44 @@ describe('run routes', () => {
     expect(res.body.entries[0].role).toBe('prompt')
     expect(res.body.entries[0].text).toContain('Task B6: Late join replay.')
     expect(res.body.entries[0].text).toContain('Let the event stream send history.')
+  })
+
+  it('reads a live run from the lanes source when it has no record', async () => {
+    const tempDirRuns = useRunsTemp()
+    const folder = join(tempDirRuns, 'machineroom-runs')
+    const { url } = await startRunsBridge({ runsDir: folder, script: TINY_STOPPER })
+    const name = 'opencode-project-20261024-120000'
+    mkdirSync(folder, { recursive: true })
+    writeFileSync(join(folder, `${name}.log`), opencodeConversationLog())
+
+    const frames = await readFrames(url, (all) =>
+      all.some(
+        (frame) =>
+          frame.type === 'heartbeat.run.status' &&
+          frame.payload?.runId === `run-${name}` &&
+          frame.payload?.status === 'running'
+      )
+    )
+    const status = frames.find(
+      (frame) => frame.type === 'heartbeat.run.status' && frame.payload?.runId === `run-${name}`
+    )
+    const startedAt = status.payload.startedAt
+
+    const res = await getJson(conversationUrl(url, 'opencode', startedAt))
+    expect(res.status).toBe(200)
+    expect(res.body).toMatchObject({ lane: 'opencode', startedAt, harness: 'opencode', running: true })
+    expect(res.body.entries.filter((item) => item.role === 'tool').map((item) => [item.tool, item.text])).toEqual([
+      ['read', 'read scratch'],
+      ['search', 'glob scratch'],
+    ])
+
+    const stop = await getJson(`${url}/api/control/runs/stop`, {
+      method: 'POST',
+      headers: { Origin: new URL(url).origin, 'content-type': 'application/json' },
+      body: JSON.stringify({ lane: 'opencode', startedAt, confirmed: true }),
+    })
+    expect(stop.status).toBe(200)
+    expect(stop.body).toMatchObject({ ok: true, lane: 'opencode', startedAt, output: 'stopped opencode' })
   })
 
   it('answers 404 for an unknown run and an unknown lane', async () => {

@@ -58,6 +58,16 @@ function openChat(id) {
   window.dispatchEvent(event)
 }
 
+function openLaneChat(lane) {
+  if (typeof window === 'undefined' || typeof window.dispatchEvent !== 'function') return
+  const detail = { lane }
+  const event =
+    typeof window.CustomEvent === 'function'
+      ? new window.CustomEvent('machineroom:open-chat', { detail })
+      : { type: 'machineroom:open-chat', detail }
+  window.dispatchEvent(event)
+}
+
 function openSettings() {
   if (typeof window === 'undefined' || typeof window.dispatchEvent !== 'function') return
   const event =
@@ -2231,25 +2241,31 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
                 >
                   +
                 </button>
-                {node.kind === 'lane' ? null : (
-                  <button
-                    type="button"
-                    className="mr-family-chat"
-                    aria-label={`Open chat with ${node.label}`}
-                    title={`Open chat with ${node.label}`}
-                    onClick={() => openChat(node.id)}
-                  >
-                    <svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true" focusable="false">
-                      <path
-                        d="M2 2.5h8v5.5H6L3.5 10V8H2z"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="1"
-                        strokeLinejoin="round"
-                      />
-                    </svg>
-                  </button>
-                )}
+                <button
+                  type="button"
+                  className="mr-family-chat"
+                  aria-label={
+                    node.kind === 'lane'
+                      ? `Open conversation with ${node.label}`
+                      : `Open chat with ${node.label}`
+                  }
+                  title={
+                    node.kind === 'lane'
+                      ? `Open conversation with ${node.label}`
+                      : `Open chat with ${node.label}`
+                  }
+                  onClick={() => (node.kind === 'lane' ? openLaneChat(node.id) : openChat(node.id))}
+                >
+                  <svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true" focusable="false">
+                    <path
+                      d="M2 2.5h8v5.5H6L3.5 10V8H2z"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                </button>
               </span>
             </div>
           </div>
