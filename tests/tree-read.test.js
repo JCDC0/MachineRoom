@@ -1,7 +1,8 @@
+import { execFileSync } from 'node:child_process'
 import { mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { FOLDER_SHAPE, createBridge, packTree, treeReadDue } from '../server/index.js'
+import { FOLDER_SHAPE, GIT_RECHECK_MS, createBridge, packTree, treeReadDue } from '../server/index.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
@@ -568,5 +569,88 @@ describe('unreadable folders in the plain tree', () => {
     const health = await (await fetch(`${url}/api/health`)).json()
     expect(health.ok).toBe(true)
     expect(health.problems.some((line) => line.includes('sub/locked'))).toBe(true)
+  })
+})
+
+describe('git timeouts and plain-to-git transitions', () => {
+  it('keeps the git tree on a git timeout and tries git again on the next read', async () => {
+    const root = makeRoot()
+    execFileSync('git', ['init', '-b', 'main'], { cwd: root, stdio: 'ignore' })
+    writeFileSync(join(root, '.gitignore'), 'ignored.txt\n')
+    writeFileSync(join(root, 'kept.js'), '1\n')
+    writeFileSync(join(root, 'ignored.txt'), 'secret\n')
+    let calls = 0
+    const gitList = async () => {
+      calls += 1
+      if (calls === 1) return ['.gitignore', 'kept.js']
+      if (calls === 2) return null
+      return ['.gitignore', 'kept.js', 'next.js']
+    }
+    const bridge = createBridge({
+      projectRoot: root,
+      port: 0,
+      env: {},
+      debounceMs: 15,
+      pollMs: 15,
+      quietMs: 50,
+      gitList,
+      gitDeleted: () => Promise.resolve([]),
+    })
+    bridges.push(bridge)
+    const { url } = await bridge.start()
+    const first = await (await fetch(`${url}/api/tree`)).json()
+    expect(first.files).toEqual(['.gitignore', 'kept.js'])
+
+    const events = await openEvents(url, `?tree=1&since=${first.start}:1`)
+    try {
+      await wait(1100)
+      const duringTimeout = await (await fetch(`${url}/api/tree`)).json()
+      expect(duringTimeout.files).toEqual(['.gitignore', 'kept.js'])
+      const failedHealth = await (await fetch(`${url}/api/health`)).json()
+      expect(failedHealth.ok).toBe(true)
+      expect(failedHealth.problems.length).toBeGreaterThan(0)
+      expect(readTreeEvents(events.text())).toEqual([])
+
+      await wait(1100)
+      const recovered = await (await fetch(`${url}/api/tree`)).json()
+      expect(calls).toBeGreaterThanOrEqual(3)
+      expect(recovered.files).toEqual(['.gitignore', 'kept.js', 'next.js'])
+      const recoveredHealth = await (await fetch(`${url}/api/health`)).json()
+      expect(recoveredHealth.problems).toEqual([])
+    } finally {
+      await events.close()
+    }
+  })
+
+  it('reads a plain folder with git within the minute after git init', async () => {
+    expect(GIT_RECHECK_MS).toBe(60000)
+    const root = makeRoot()
+    mkdirSync(join(root, 'ignored'), { recursive: true })
+    writeFileSync(join(root, '.gitignore'), 'ignored/\n')
+    writeFileSync(join(root, 'keep.txt'), '1\n')
+    writeFileSync(join(root, 'ignored', 'secret.txt'), '2\n')
+
+    const bridge = createBridge({
+      projectRoot: root,
+      port: 0,
+      env: {},
+      debounceMs: 15,
+      pollMs: 15,
+      quietMs: 50,
+      gitRecheckMs: 80,
+    })
+    bridges.push(bridge)
+    const { url } = await bridge.start()
+    const before = await (await fetch(`${url}/api/tree`)).json()
+    expect(before.files).toEqual(['.gitignore', 'ignored/secret.txt', 'keep.txt'])
+
+    execFileSync('git', ['init', '-b', 'main'], { cwd: root, stdio: 'ignore' })
+    await waitFor(async () => {
+      const tree = await (await fetch(`${url}/api/tree`)).json()
+      return tree.files.length === 2 && !tree.files.includes('ignored/secret.txt')
+    })
+
+    const after = await (await fetch(`${url}/api/tree`)).json()
+    expect(after.files).toEqual(['.gitignore', 'keep.txt'])
   })
 })

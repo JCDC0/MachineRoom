@@ -78,6 +78,7 @@ const POLL_READ_GAP = 3
 const SKIP_DIRS = new Set(['.git', 'node_modules', 'dist', '.worktrees'])
 const TREE_MAX_BUFFER = 64 * 1024 * 1024
 const TREE_TIMEOUT_MS = 20000
+export const GIT_RECHECK_MS = 60000
 const PARTIAL_NAME_LIMIT = 50
 const PARTIAL_FULL_EVERY = 10
 const IGNORED_WATCH = /(^|[/\\])(\.git|node_modules|\.worktrees)([/\\]|$)/
@@ -121,8 +122,15 @@ function walkTree(projectRoot, listDir = readdirSync) {
 
 function runGitPaths(resolved, args) {
   return new Promise((resolveList) => {
+    let file
+    try {
+      file = gitPath()
+    } catch {
+      resolveList(null)
+      return
+    }
     execFile(
-      gitPath(),
+      file,
       ['-C', resolved, ...args],
       {
         encoding: 'utf8',
@@ -142,6 +150,47 @@ function runGitPaths(resolved, args) {
             .filter(Boolean)
             .map((line) => line.replace(/\\/g, '/'))
         )
+      }
+    )
+  })
+}
+
+function isGitWorkTree(resolved) {
+  return new Promise((resolveCheck) => {
+    let file
+    try {
+      file = gitPath()
+    } catch {
+      resolveCheck(null)
+      return
+    }
+    execFile(
+      file,
+      ['-C', resolved, 'rev-parse', '--is-inside-work-tree'],
+      {
+        encoding: 'utf8',
+        env: { ...process.env, GIT_CEILING_DIRECTORIES: dirname(resolved) },
+        timeout: TREE_TIMEOUT_MS,
+        windowsHide: true,
+      },
+      (error, stdout, stderr) => {
+        if (!error) {
+          const value = String(stdout ?? '').trim()
+          if (value === 'true') resolveCheck(true)
+          else if (value === 'false') resolveCheck(false)
+          else resolveCheck(null)
+          return
+        }
+        const message = String(stderr ?? '')
+        if (/not a git repository/i.test(message)) {
+          resolveCheck(false)
+          return
+        }
+        if (/cannot change to/i.test(message) && /no such file or directory/i.test(message)) {
+          resolveCheck(false)
+          return
+        }
+        resolveCheck(null)
       }
     )
   })
@@ -177,15 +226,27 @@ function dropDeleted(files, deleted) {
   return files.filter((file) => !gone.has(file))
 }
 
-export async function readTree(projectRoot, { listDir = readdirSync, gitList = gitListPaths, gitDeleted = gitDeletedPaths } = {}) {
+export async function readTree(
+  projectRoot,
+  { listDir = readdirSync, gitList = gitListPaths, gitDeleted = gitDeletedPaths, gitWorkTree = isGitWorkTree } = {}
+) {
   if (!projectRoot) return { root: '', files: [], created: [] }
   const resolved = resolve(projectRoot)
   const root = basename(resolved)
   const listedPromise = gitList(resolved, ['--cached', '--others', '--exclude-standard'])
   const deletedPromise = gitDeleted(resolved)
   const listed = await listedPromise
-  if (listed === null) return { ...walkTree(resolved, listDir), [PLAIN_TREE]: true }
+  if (listed === null) {
+    const inside = await gitWorkTree(resolved)
+    if (inside === false) {
+      return { ...walkTree(resolved, listDir), [PLAIN_TREE]: true }
+    }
+    throw new Error('Could not read the git file list.')
+  }
   const deleted = await deletedPromise
+  if (deleted === null) {
+    throw new Error('Could not read deleted files from git.')
+  }
   return { root, files: dropDeleted(listed, deleted).sort(), created: [] }
 }
 
@@ -497,11 +558,13 @@ export function trimHistory(history, now = Date.now) {
 export function createBridge(options = {}) {
   const projectRoot = options.projectRoot ?? process.env.PROJECT_ROOT ?? process.cwd()
   const listDir = options.listDir ?? readdirSync
+  const gitWorkTreeCheck = options.gitWorkTree ?? isGitWorkTree
   const treeReader =
     options.readTree ??
     ((root) =>
       readTree(root, {
         listDir,
+        gitWorkTree: gitWorkTreeCheck,
         ...(options.gitList ? { gitList: options.gitList } : {}),
         ...(options.gitDeleted ? { gitDeleted: options.gitDeleted } : {}),
       }))
@@ -515,6 +578,7 @@ export function createBridge(options = {}) {
   const quietMs = Number(options.quietMs ?? WATCH_QUIET_MS)
   const quietFullMs = Number(options.quietFullMs ?? QUIET_FULL_READ_MS)
   const treeBudgetMs = Number(options.treeBudgetMs ?? TREE_LAST_FILE_BUDGET_MS)
+  const gitRecheckMs = Number(options.gitRecheckMs ?? GIT_RECHECK_MS)
   const now = typeof options.now === 'function' ? options.now : Date.now
   const env = options.env ?? process.env
   const origins = namedOrigins(env.MACHINEROOM_ORIGINS)
@@ -857,6 +921,8 @@ export function createBridge(options = {}) {
   let lastReadChanged = false
   let watchFallback = false
   let treeNotGit = false
+  let plainCheckedAt = 0
+  let gitRecheckTimer = null
   let treePrimed = false
   const treeStart = randomBytes(8).toString('hex')
   let treeVersion = 0
@@ -1010,14 +1076,66 @@ export function createBridge(options = {}) {
     return [...merged].sort()
   }
 
+  function clearGitRecheck() {
+    if (gitRecheckTimer) {
+      clearTimeout(gitRecheckTimer)
+      gitRecheckTimer = null
+    }
+  }
+
+  async function recheckGitWorkTree() {
+    if (stopped || !treeNotGit) return
+    if (treeReading) {
+      scheduleGitRecheck()
+      return
+    }
+    let inside = null
+    try {
+      inside = await gitWorkTreeCheck(resolve(projectRoot))
+    } catch {
+      inside = null
+    }
+    if (stopped || !treeNotGit) return
+    if (inside === false) {
+      plainCheckedAt = now()
+      scheduleGitRecheck()
+      return
+    }
+    treeNotGit = false
+    clearGitRecheck()
+    checkTreeChange()
+  }
+
+  function scheduleGitRecheck() {
+    if (stopped || !treeNotGit || gitRecheckTimer) return
+    const delay = Math.max(1, gitRecheckMs - Math.max(0, now() - plainCheckedAt))
+    gitRecheckTimer = setTimeout(() => {
+      gitRecheckTimer = null
+      if (stopped || !treeNotGit) return
+      recheckGitWorkTree().catch(() => {})
+    }, delay)
+    gitRecheckTimer.unref?.()
+  }
+
   async function readWholeTree() {
     let tree
     try {
+      if (treeNotGit && now() - plainCheckedAt >= gitRecheckMs) {
+        treeNotGit = false
+        clearGitRecheck()
+      }
       if (treeNotGit) {
         tree = walkTree(projectRoot, listDir)
       } else {
         tree = await treeReader(projectRoot)
-        if (tree?.[PLAIN_TREE]) treeNotGit = true
+        if (tree?.[PLAIN_TREE]) {
+          treeNotGit = true
+          plainCheckedAt = now()
+          scheduleGitRecheck()
+        } else {
+          treeNotGit = false
+          clearGitRecheck()
+        }
       }
       if (typeof tree?.error === 'string' && tree.error) {
         throw new Error(tree.error)
@@ -1660,6 +1778,7 @@ export function createBridge(options = {}) {
       pollTimer = null
     }
     clearQuietRead()
+    clearGitRecheck()
     quietFullDue = false
     if (watcher) {
       try {

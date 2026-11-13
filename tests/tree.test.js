@@ -69,7 +69,7 @@ describe('readTree without git', () => {
     expect(files).toEqual(['readme.md', 'src/main.js'])
   })
 
-  it('walks the disk without waiting when the list fails', async () => {
+  it('walks the disk without waiting when git says the folder is not a work tree', async () => {
     const dir = makeTempDir('mr-tree-')
     try {
       writeFileSync(join(dir, 'kept.txt'), 'x')
@@ -77,10 +77,39 @@ describe('readTree without git', () => {
       const { files } = await readTree(dir, {
         gitList: () => Promise.resolve(null),
         gitDeleted: () => new Promise((settle) => setTimeout(() => settle([]), 500)),
+        gitWorkTree: () => Promise.resolve(false),
       })
       const elapsed = Date.now() - startedAt
       expect(elapsed).toBeLessThan(100)
       expect(files).toEqual(['kept.txt'])
+    } finally {
+      rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+    }
+  })
+
+  it('rejects instead of walking disk when git listing fails on a work tree or git check fails', async () => {
+    const dir = makeTempDir('mr-tree-')
+    try {
+      git(dir, ['init', '-b', 'main'])
+      writeFileSync(join(dir, '.gitignore'), 'ignored.txt\n')
+      writeFileSync(join(dir, 'kept.txt'), 'x')
+      writeFileSync(join(dir, 'ignored.txt'), 'x')
+      git(dir, ['add', '.gitignore', 'kept.txt'])
+
+      await expect(
+        readTree(dir, {
+          gitList: () => Promise.resolve(null),
+          gitDeleted: () => Promise.resolve([]),
+        })
+      ).rejects.toThrow()
+
+      await expect(
+        readTree(dir, {
+          gitList: () => Promise.resolve(null),
+          gitDeleted: () => Promise.resolve([]),
+          gitWorkTree: () => Promise.resolve(null),
+        })
+      ).rejects.toThrow()
     } finally {
       rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
     }
