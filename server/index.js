@@ -951,6 +951,7 @@ export function createBridge(options = {}) {
   let lastTreeAt = 0
   let lastTreeError = ''
   let lastTreeProblems = []
+  let lastFullReadOk = false
   let treeChangedAt = 0
   let lastReadMs = 0
   let lastReadEndAt = 0
@@ -1253,13 +1254,16 @@ export function createBridge(options = {}) {
       lastTreeError = ''
       const failedDirs = Array.isArray(tree.failed) ? tree.failed.filter((dir) => typeof dir === 'string' && dir !== '') : []
       if (failedDirs.length > 0) {
+        lastFullReadOk = false
         const files = mergeFailedSubtrees(tree.files, lastTree?.files, failedDirs)
         lastTreeProblems = failedDirs.map((dir) => `The tree could not read ${dir}.`)
         return { root: tree.root, files, created: Array.isArray(tree.created) ? tree.created : [] }
       }
+      lastFullReadOk = true
       lastTreeProblems = []
       return { root: tree.root, files: tree.files, created: Array.isArray(tree.created) ? tree.created : [] }
     } catch (error) {
+      lastFullReadOk = false
       lastTreeError = error instanceof Error ? error.message : String(error)
       lastTreeProblems = []
       if (gitMetaWait) await gitMetaWait.catch(() => {})
@@ -1394,9 +1398,19 @@ export function createBridge(options = {}) {
     startTreeRead().catch(() => {})
   }
 
+  function folderTreeReuseAllowed() {
+    if (!lastTree || !lastFullReadOk) return false
+    if (!watcher || watchFallback || pollTimer) return false
+    if (lastTreeError !== '' || lastTreeProblems.length > 0) return false
+    if (treeReading || treeDirty) return false
+    if (quietReadTimer || quietFullDue || treeRetryTimer) return false
+    return true
+  }
+
   function adoptInitialTree(tree) {
     if (!tree || !Array.isArray(tree.files)) return false
     const root = typeof tree.root === 'string' && tree.root ? tree.root : basename(resolve(projectRoot))
+    lastFullReadOk = !Array.isArray(tree.failed) || tree.failed.length === 0
     publishTree({
       root,
       files: tree.files,
@@ -1794,7 +1808,8 @@ export function createBridge(options = {}) {
     if (req.method === 'GET' && url.pathname === '/api/tree') {
       const wantsFolders = String(req.headers.accept ?? '').includes(`shape=${FOLDER_SHAPE}`)
       const recent = lastTree && Date.now() - lastTreeAt <= TREE_REUSE_MS
-      const tree = recent ? lastTree : await startTreeRead()
+      const reuse = recent || (wantsFolders && folderTreeReuseAllowed())
+      const tree = reuse ? lastTree : await startTreeRead()
       if (stopped) {
         res.destroy()
         return

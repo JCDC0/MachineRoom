@@ -86,7 +86,7 @@ function makeRoot() {
   return root
 }
 
-function startBridge({ readTree, root, debounceMs = 15, pollMs, quietMs }) {
+function startBridge({ readTree, root, debounceMs = 15, pollMs, quietMs, watchProject }) {
   const bridge = createBridge({
     projectRoot: root,
     port: 0,
@@ -95,6 +95,7 @@ function startBridge({ readTree, root, debounceMs = 15, pollMs, quietMs }) {
     pollMs,
     quietMs,
     readTree,
+    ...(watchProject ? { watchProject } : {}),
   })
   bridges.push(bridge)
   return { bridge, started: bridge.start() }
@@ -231,8 +232,11 @@ describe('the folder tree answer', () => {
       port: 0,
       env: {},
       debounceMs: 1000,
-      pollMs: 1000,
+      pollMs: 60000,
       quietMs: 60000,
+      watchProject: () => {
+        throw new Error('watch is off')
+      },
       readTree: async () => {
         reads += 1
         if (reads > 1) throw new Error('the read broke')
@@ -263,6 +267,93 @@ describe('the folder tree answer', () => {
     const answer = await pending
     expect(answer.body.version).toBe(1)
     expect(queued.reads).toHaveLength(1)
+  })
+
+  it('makes no new read for three folder asks seconds apart while the watcher is armed', async () => {
+    const root = makeRoot()
+    writeFileSync(join(root, 'a.js'), '1\n')
+    let reads = 0
+    const { started } = startBridge({
+      root,
+      debounceMs: 60000,
+      pollMs: 60000,
+      quietMs: 60000,
+      readTree: async () => {
+        reads += 1
+        return { root: 'project', files: ['a.js'], created: [] }
+      },
+    })
+    const { url } = await started
+    await waitFor(() => reads === 1)
+
+    const first = await folderTree(url)
+    expect(first.status).toBe(200)
+    expect(first.body.version).toBe(1)
+
+    await wait(1200)
+    const second = await folderTree(url)
+    expect(second.body).toEqual(first.body)
+
+    await wait(1200)
+    const third = await folderTree(url)
+    expect(third.body).toEqual(first.body)
+    expect(reads).toBe(1)
+  })
+
+  it('reads again for a folder ask after a full read failed', async () => {
+    const root = makeRoot()
+    let reads = 0
+    const { started } = startBridge({
+      root,
+      debounceMs: 60000,
+      pollMs: 60000,
+      quietMs: 60000,
+      watchProject: () => {
+        throw new Error('watch is off')
+      },
+      readTree: async () => {
+        reads += 1
+        if (reads === 2) throw new Error('the read broke')
+        return { root: 'project', files: ['a.js'], created: [] }
+      },
+    })
+    const { url } = await started
+    await waitFor(() => reads === 1)
+    await wait(1100)
+
+    const failed = await folderTree(url)
+    expect(failed.body.version).toBe(1)
+    expect(reads).toBe(2)
+    expect((await healthOf(url)).problems.join('\n')).toContain('the read broke')
+
+    const again = await folderTree(url)
+    expect(again.body.version).toBe(1)
+    expect(reads).toBe(3)
+  })
+
+  it('keeps the one-second rule for a folder ask while the bridge polls', async () => {
+    const root = makeRoot()
+    let reads = 0
+    const { started } = startBridge({
+      root,
+      debounceMs: 60000,
+      pollMs: 60000,
+      quietMs: 60000,
+      watchProject: () => {
+        throw new Error('watch is off')
+      },
+      readTree: async () => {
+        reads += 1
+        return { root: 'project', files: ['a.js'], created: [] }
+      },
+    })
+    const { url } = await started
+    await waitFor(() => reads === 1)
+    await wait(1100)
+
+    const first = await folderTree(url)
+    expect(first.body.version).toBe(1)
+    expect(reads).toBe(2)
   })
 })
 
