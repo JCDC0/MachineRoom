@@ -2208,3 +2208,9 @@ For each merge in `git log --first-parent --oneline 1bb54a0f..HEAD`, read the te
 **P258. Check every command against COMMANDS.md (native).** Read `docs/agents/architecture/COMMANDS.md` and this brief only. Change no file except your report. Commit only your report, and stop at minute 30. Files: docs/agents/RUN-2026-11-13-COMMANDS.md.
 
 For each command the doc lists, run its help form (`--help`, or no arguments where the doc says that prints usage). Run it with `MACHINEROOM_RUNS` set to a new empty folder under `%TEMP%`, and never run anything that starts a lane, pushes, merges, removes worktrees or calls a paid model. Compare what it prints with what the doc says: the flags, the defaults and the output lines. Write the file as a table: command, what the doc says, what it printed, and the one-sentence fix (doc or code). Delete the folder you made.
+
+**P259. The README says what a new owner will see (AGY).** Read `docs/agents/RUN-2026-11-13-FRESH-CLONE.md` (its README section) and this brief only. Commit each step as you finish it. Files: README.md, docs/agents/CHANGELOG.md.
+
+1. Fix README findings 1 to 10 of that report in `README.md`, in its own style: plain words, short sentences, no em dashes, PowerShell first. Say what each command prints in a sentence, not as a line count, and say the build's chunk-size warning is expected. Show `--port`, `--no-open`, `--no-sessions` and `--help` for `up`, and say that `up` turns on the lane and session sources by default and that Ctrl+C stops the room. Name `MACHINEROOM_RUNS` and where the runs folder is by default, using `%LOCALAPPDATA%`, never a real profile path.
+2. Check every command and flag you write against `node bin/machine-room.mjs --help` and `COMMANDS.md`, and keep the README under its current length plus 40 lines.
+3. Run `node node_modules/vitest/vitest.mjs run tests/docs.test.js` if it exists, and `npm run build`. Report what passed.
