@@ -64,20 +64,55 @@ export function laneCosts({ records = [], agents = [], now = Date.now() } = {}) 
     }
   }
 
-  const byAgent = []
+  const roster = []
+  const rosterKeys = new Set()
   for (const agent of Array.isArray(agents) ? agents : []) {
     if (!agent || typeof agent !== 'object') continue
     const agentId = String(agent.id ?? '')
     if (!agentId) continue
     const key = String(agent.key ?? '')
-    const total = key ? totals.get(key) : null
-    byAgent.push({
-      agentId,
-      agentName: String(agent.name ?? key ?? agentId),
+    if (key) rosterKeys.add(key)
+    roster.push({ agentId, key, name: String(agent.name ?? key ?? agentId) })
+  }
+
+  const byAgent = roster.map((agent) => {
+    const total = agent.key ? totals.get(agent.key) : null
+    return {
+      agentId: agent.agentId,
+      agentName: agent.name,
       costCents: Math.round((total?.cost ?? 0) * 100),
       todayCents: Math.round((total?.today ?? 0) * 100),
       inputTokens: total?.hasInput ? total.input : null,
       outputTokens: total?.hasOutput ? total.output : null,
+    }
+  })
+
+  let removed = null
+  for (const [lane, total] of totals) {
+    if (rosterKeys.has(lane)) continue
+    if (!removed) {
+      removed = { cost: 0, today: 0, input: 0, output: 0, hasInput: false, hasOutput: false }
+    }
+    removed.cost += total.cost
+    removed.today += total.today
+    if (total.hasInput) {
+      removed.input += total.input
+      removed.hasInput = true
+    }
+    if (total.hasOutput) {
+      removed.output += total.output
+      removed.hasOutput = true
+    }
+  }
+  const removedCents = removed ? Math.round(removed.cost * 100) : 0
+  if (removedCents > 0) {
+    byAgent.push({
+      agentId: 'removed-lanes',
+      agentName: 'Removed lanes',
+      costCents: removedCents,
+      todayCents: Math.round(removed.today * 100),
+      inputTokens: removed.hasInput ? removed.input : null,
+      outputTokens: removed.hasOutput ? removed.output : null,
     })
   }
 

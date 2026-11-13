@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Spent this month and today keep a deleted lane's spend, shown as one Removed lanes row after the other lanes (P203).
 - The third readiness pass lists seven panel problems, among them Retry and Auto acting on a target other than the one shown, and two features for the owner.
 - The queue branch and its log names carry milliseconds, so a second queue run started in the same second no longer stops on an existing branch.
 - runs.jsonl deltas are read in 4 MB chunks, and every caller gets the same frozen records instead of a copy on each read.
