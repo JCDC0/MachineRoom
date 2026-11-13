@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- A chat turn saves its exact log name with the conversation, and recovery after a restart records only that log, never another project's (P180).
 - New, open and fork refuse with one sentence when the saved list is full of pinned conversations, and keep the current conversation (P179).
 - The Claude sessions reader keeps the read position of a session file it forgot, so an unchanged old file is not replayed and an append reads only the new lines (P182).
 - The session recorder keeps at most 20,000 frames and about 20 MB of payload text beside its time window, and marks a replay it trimmed for size (P183).
@@ -9,6 +10,7 @@
 - The session recorder keeps at most 20,000 frames and about 20 MB of payload text beside its time window, trims the oldest first and marks a size-trimmed replay truncated (P183).
 - A forgotten idle Claude session file keeps its read position, so old tool calls are not replayed and an append reads only the new lines (P182).
 - A full saved list of pinned conversations answers 409 to a new, open or branch request and keeps the current conversation and its messages (P179).
+- Chat turns save their exact log name so restart recovery writes a stopped record only for that project's turn and skips ambiguous pre-change matches (P180).
 - The second readiness review lists 8 problems after days of use and 2 suggested features (P178).
 - A broken package.json stops a queue task with one masked sentence instead of a stand-in test command (P176).
 - A broken package.json stops a queue task with one masked sentence and no node command, and a dry run prints that sentence on its tests line (P176).
