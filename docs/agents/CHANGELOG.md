@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- A client dropped for its backlog is destroyed so its queued output is let go, and the writes made while a client connects are not held against the cap (P194).
+- A bridge stream client dropped for its backlog is destroyed, so its queued output is freed (P194).
+- A client may hold the backlog it connected with plus 8 MB, so a late joiner that reads all twelve kept one-MiB frames is not cut (P194).
 - Review 26 confirms review 25's six findings fixed and finds two in the stream cap, briefed as P194 (P193).
 - The full suite passed on the review 25 fixes: 275 files, 4989 tests passed, 4 skipped (P192).
 - Review checks keep the newest passed or failed result for a head across untested runs, and a failed queue task with uncommitted edits records no head, so a good earlier commit stays mergeable (P188).
