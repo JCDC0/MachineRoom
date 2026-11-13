@@ -57,7 +57,7 @@ export function dirSetFor(dirs) {
 }
 
 export function fileTouch(ctx, rawPath, tool) {
-  const relative = relativeTo(ctx.rootName, rawPath)
+  const relative = relativeTo(ctx.rootName, rawPath, ctx.rootPath)
   if (relative === null || relative === '') return { relative, touches: [] }
   const isDir = Boolean(dirSetFor(ctx.dirs)?.has(relative))
   if (tool === 'read' && isDir) {
@@ -68,7 +68,7 @@ export function fileTouch(ctx, rawPath, tool) {
 }
 
 export function folderTouch(ctx, raw) {
-  const relative = raw === undefined || raw === null || raw === '' ? '' : relativeTo(ctx.rootName, raw)
+  const relative = raw === undefined || raw === null || raw === '' ? '' : relativeTo(ctx.rootName, raw, ctx.rootPath)
   if (relative === null) return null
   return { path: relative, mode: 'list', kind: 'dir' }
 }

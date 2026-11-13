@@ -37,6 +37,24 @@ describe('relativeTo', () => {
     expect(relativeTo('', 'src/math.js')).toBe('src/math.js')
     expect(relativeTo('', '/etc/hosts')).toBeNull()
   })
+
+  it('treats another folder named like the project as outside when the full root is known', () => {
+    expect(relativeTo('project', 'D:\\work\\project\\src\\a.txt', 'C:\\work\\project')).toBeNull()
+    expect(relativeTo('project', 'D:/work/project/src/a.txt', 'C:\\work\\project')).toBeNull()
+  })
+
+  it('keeps a repeated root name inside the project when the full root is known', () => {
+    expect(relativeTo('project', 'C:\\work\\project\\src\\project\\a.txt', 'C:\\work\\project')).toBe('src/project/a.txt')
+  })
+
+  it('reads a Windows path in a different case as inside the project', () => {
+    expect(relativeTo('Project', 'c:/WORK/project/src/Project/a.txt', 'C:\\Work\\Project')).toBe('src/Project/a.txt')
+  })
+
+  it('keeps the old rule when the root path is not known', () => {
+    expect(relativeTo('project', 'D:\\other\\project\\a.txt')).toBe('a.txt')
+    expect(relativeTo('project', 'C:\\work\\project\\src\\project\\a.txt')).toBe('a.txt')
+  })
 })
 
 describe('ancestors', () => {
@@ -101,6 +119,11 @@ describe('makeTree', () => {
     const tree = makeTree({ root: 'demo', files: [...files].reverse(), created: [] })
     expect(tree.files).toEqual([...files].sort())
     expect(tree.dirs).toEqual(['', 'src', 'src/a', 'src/a/deep', 'src/b', 'src/b/deep', 'z'])
+  })
+
+  it('keeps the full root path when the bridge sends one', () => {
+    const tree = makeTree({ root: 'demo', rootPath: 'C:\\work\\demo', files: [], created: [] })
+    expect(tree.rootPath).toBe('C:\\work\\demo')
   })
 })
 

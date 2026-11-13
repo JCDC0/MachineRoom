@@ -32,7 +32,8 @@ export async function discoverBridge({ url, root, fetchImpl = fetch }) {
   const version = readTreeVersion(raw)
   rememberTreeVersion(url, version)
   rememberTreeStart(url, readTreeStart(raw))
-  return { agents: toAgents(agents), rootName: root ?? tree.root, files: tree.files, version }
+  const rootPath = typeof raw.rootPath === 'string' && raw.rootPath !== '' ? raw.rootPath : null
+  return { agents: toAgents(agents), rootName: root ?? tree.root, rootPath, files: tree.files, version }
 }
 
 export const REOPEN_START = 1000

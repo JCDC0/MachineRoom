@@ -5,6 +5,7 @@ import { createHermesParser } from '../src/model/parsers/hermes.js'
 import { createParser } from '../src/model/parsers/index.js'
 import { createOpencodeParser } from '../src/model/parsers/opencode.js'
 import { looksFailed } from '../src/model/parsers/common.js'
+import { buildActivities } from '../src/model/pipeline.js'
 import { unreadableLines } from '../src/model/parsers/unreadable.js'
 import { testContext } from './helpers.js'
 
@@ -63,6 +64,25 @@ describe('claude parser', () => {
     )
     expect(out[0].touches).toEqual([])
     expect(out[0].label).toBe('read SKILL.md')
+  })
+
+  it('ignores an absolute file in another folder with the project name when the root path is known', () => {
+    const parser = createClaudeParser({ ...ctx, rootPath: 'C:\\work\\agent-sandbox' })
+    const out = parser.push(
+      lines({ type: 'acpx.tool_call', name: 'Read D:\\elsewhere\\agent-sandbox\\secret.txt', toolCallId: 't4b', tag: 'tool_call_update' }),
+      4100
+    )
+    expect(out[0].touches).toEqual([])
+    expect(out[0].label).toBe('read secret.txt')
+  })
+
+  it('keeps a repeated root name inside the project when the root path is known', () => {
+    const parser = createClaudeParser({ ...ctx, rootPath: 'C:/work/agent-sandbox' })
+    const out = parser.push(
+      lines({ type: 'acpx.tool_call', name: 'Edit C:\\work\\agent-sandbox\\src\\agent-sandbox\\math.js', toolCallId: 't4c', tag: 'tool_call_update' }),
+      4200
+    )
+    expect(out[0].touches).toEqual([{ path: 'src/agent-sandbox/math.js', mode: 'write', kind: 'file' }])
   })
 
   it('waits for a line that arrives in two chunks', () => {
@@ -638,5 +658,37 @@ describe('looksFailed failure anchoring', () => {
     expect(looksFailed('not ok 1 - subtract numbers')).toBe(true)
     expect(looksFailed('[exit 1]')).toBe(true)
     expect(looksFailed('fatal: remote repository not found')).toBe(true)
+  })
+})
+
+describe('live pipeline root path', () => {
+  const agent = { id: 'a1', key: 'claude', name: 'Claude Code', parser: 'claude' }
+  const frame = (name, at) => ({
+    id: `frame-${at}`,
+    type: 'heartbeat.run.log',
+    createdAt: new Date(at).toISOString(),
+    payload: {
+      agentId: 'a1',
+      runId: 'r1',
+      stream: 'stdout',
+      seq: 1,
+      ts: new Date(at).toISOString(),
+      chunk: lines({ type: 'acpx.tool_call', name, toolCallId: 't9', tag: 'tool_call_update' }),
+    },
+  })
+
+  it('drops an absolute file in another folder with the project name', () => {
+    const tree = { rootName: 'agent-sandbox', rootPath: 'C:\\work\\agent-sandbox', files: [], dirs: [] }
+    const activities = buildActivities([frame('Read D:\\elsewhere\\agent-sandbox\\secret.txt', 5000)], { agents: [agent], tree })
+    expect(activities[0].touches).toEqual([])
+  })
+
+  it('keeps a repeated root name relative when the full root is known', () => {
+    const tree = { rootName: 'agent-sandbox', rootPath: 'C:/work/agent-sandbox', files: [], dirs: [] }
+    const activities = buildActivities(
+      [frame('Edit C:\\work\\agent-sandbox\\src\\agent-sandbox\\math.js', 6000)],
+      { agents: [agent], tree }
+    )
+    expect(activities[0].touches).toEqual([{ path: 'src/agent-sandbox/math.js', mode: 'write', kind: 'file' }])
   })
 })
