@@ -30,6 +30,43 @@ function recordTokens(record, name) {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null
 }
 
+function quotaWindows(quota) {
+  if (!quota || typeof quota !== 'object' || !Array.isArray(quota.windows)) return []
+  const windows = []
+  for (const window of quota.windows) {
+    if (!window || typeof window !== 'object' || Array.isArray(window)) continue
+    const label = typeof window.label === 'string' && window.label.trim() !== '' ? window.label.trim() : null
+    const usedPercent = typeof window.usedPercent === 'number' && Number.isFinite(window.usedPercent) ? window.usedPercent : null
+    if (label === null || usedPercent === null) continue
+    const reset = typeof window.resetsAt === 'string' && window.resetsAt.trim() !== '' ? Date.parse(window.resetsAt) : NaN
+    windows.push({
+      label,
+      usedPercent,
+      resetsAt: Number.isFinite(reset) ? new Date(reset).toISOString() : null,
+    })
+  }
+  return windows
+}
+
+function quotaRows(records, now) {
+  let newest = null
+  for (const record of Array.isArray(records) ? records : []) {
+    if (!record || typeof record !== 'object') continue
+    const windows = quotaWindows(record.quota)
+    if (windows.length === 0) continue
+    const at = Date.parse(record.quota?.at ?? record.startedAt)
+    if (!Number.isFinite(at)) continue
+    if (!newest || at >= newest.at) newest = { at, windows }
+  }
+  if (!newest) return []
+  const windows = newest.windows.filter((window) => {
+    const reset = window.resetsAt === null ? NaN : Date.parse(window.resetsAt)
+    return !Number.isFinite(reset) || reset > now
+  })
+  if (windows.length === 0) return []
+  return [{ provider: 'codex', windows, at: new Date(newest.at).toISOString() }]
+}
+
 export function laneCosts({ records = [], agents = [], now = Date.now() } = {}) {
   const from = monthStart(now)
   const to = nextMonth(from)
@@ -120,7 +157,7 @@ export function laneCosts({ records = [], agents = [], now = Date.now() } = {}) 
   return {
     summary: { spendCents, budgetCents: 0, utilizationPercent: null },
     byAgent,
-    quota: [],
+    quota: quotaRows(records, now),
   }
 }
 
