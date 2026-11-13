@@ -138,6 +138,7 @@ export function saveMcpPayload(draft) {
     url: draft?.transport === 'http' ? String(draft?.url ?? '').trim() : '',
     enabled: true,
     confirmed: true,
+    create: true,
   }
 }
 
