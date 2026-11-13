@@ -1219,13 +1219,13 @@ export function createOrchestrator({
       autocompactValue = saved.autocompactPercent
     }
     if (typeof saved.compactRules === 'string') {
-      compactRules = saved.compactRules.slice(0, COMPACT_RULES_LIMIT)
+      compactRules = maskText(saved.compactRules).slice(0, COMPACT_RULES_LIMIT)
     }
     if (typeof saved.contextTokens === 'number' && Number.isFinite(saved.contextTokens) && saved.contextTokens >= 0) {
       contextTokens = Math.round(saved.contextTokens)
     }
     contextWindow = resolveContextWindow(model, harness, windowOption, laneDetails())
-    if (typeof saved.summary === 'string' && saved.summary.trim() !== '') summary = saved.summary.trim()
+    if (typeof saved.summary === 'string' && saved.summary.trim() !== '') summary = maskText(saved.summary).trim()
     if (typeof saved.branchTranscript === 'string' && saved.branchTranscript.trim() !== '') {
       branchTranscript = maskText(saved.branchTranscript).slice(0, BRANCH_TRANSCRIPT_LIMIT)
     }
@@ -1242,7 +1242,7 @@ export function createOrchestrator({
       currentSessionId = saved.currentSessionId.trim()
     }
     if (typeof saved.currentTitle === 'string' && saved.currentTitle.trim() !== '') {
-      currentTitle = saved.currentTitle.trim()
+      currentTitle = maskText(saved.currentTitle).trim()
     }
     currentPinned = saved.currentPinned === true
     currentStarred = saved.currentStarred === true
@@ -1269,7 +1269,7 @@ export function createOrchestrator({
           archived: Boolean(item.archived),
           sessionId: typeof item.sessionId === 'string' ? item.sessionId : null,
           opencodeSessionId: typeof item.opencodeSessionId === 'string' ? item.opencodeSessionId : null,
-          summary: typeof item.summary === 'string' ? item.summary : '',
+          summary: typeof item.summary === 'string' ? maskText(item.summary) : '',
           branchTranscript: typeof item.branchTranscript === 'string'
             ? maskText(item.branchTranscript).slice(0, BRANCH_TRANSCRIPT_LIMIT)
             : '',
@@ -1989,7 +1989,7 @@ export function createOrchestrator({
         if (!stopped) setState(state === 'paused' ? 'paused' : 'idle')
         addMessage('room', COMPACT_FAILED_MESSAGE)
       } else {
-        summary = String(report ?? '').trim()
+        summary = maskText(String(report ?? '')).trim()
         sessionId = null
         contextTokens = null
         if (!stopped) setState(state === 'paused' ? 'paused' : 'idle')
@@ -2394,8 +2394,9 @@ export function createOrchestrator({
       if (typeof body.title !== 'string' || body.title.trim().length < 1 || body.title.trim().length > 80) {
         return { status: 400, body: { error: SESSION_TITLE_PROBLEM } }
       }
-      currentTitle = body.title.trim()
-      if (record) record.title = currentTitle
+      const title = maskText(body.title).trim().slice(0, 80)
+      currentTitle = title
+      if (record) record.title = title
     }
     if (body.pinned !== undefined) {
       if (typeof body.pinned !== 'boolean') return { status: 400, body: { error: SESSION_PINNED_PROBLEM } }
@@ -2449,7 +2450,7 @@ export function createOrchestrator({
       if (typeof body.title !== 'string' || body.title.trim().length < 1 || body.title.trim().length > 80) {
         return { status: 400, body: { error: SESSION_TITLE_PROBLEM } }
       }
-      session.title = body.title.trim()
+      session.title = maskText(body.title).trim().slice(0, 80)
       if (currentSessionId === sid) currentTitle = session.title
     }
     if (body.pinned !== undefined) {

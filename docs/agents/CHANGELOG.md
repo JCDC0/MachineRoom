@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Chat titles on rename, restored titles, compact rules, both summaries and compaction reports are masked for keys and profile paths before any cut (P151).
 - printedRunsFolder lives in server/printed-path.js, so the bridge no longer loads the runner script to mask a path (P148).
 - The room's check for a merge in progress runs git asynchronously, one at a time, so a slow git never freezes the bridge (P124, P145).
 - A brief's file list ignores Files markers only inside code fences and inline code, so prose apostrophes never hide it (P143).
