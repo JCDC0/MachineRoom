@@ -164,8 +164,9 @@ describe('laneCosts', () => {
 
     const cachedAgain = cachedRunRecords(file)
     expect(cachedAgain).toEqual(first)
-    expect(cachedAgain).not.toBe(first)
-    cachedAgain.push(record('opencode', '2026-10-24T10:00:00.000Z', 1.0))
+    expect(cachedAgain).toBe(first)
+    expect(() => cachedAgain.push(record('opencode', '2026-10-24T10:00:00.000Z', 1.0))).toThrow()
+    expect(() => { cachedAgain[0].costUsd = 9 }).toThrow()
     expect(cachedRunRecords(file).length).toBe(1)
 
     appendFileSync(file, JSON.stringify(record('opencode2', '2026-10-24T09:00:00.000Z', 0.25)) + '\n', 'utf8')

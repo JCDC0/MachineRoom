@@ -1,8 +1,8 @@
-import { appendFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
+import { appendFileSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { cachedRunRecords as cachedRunRecordsLaneCosts } from '../server/lane-costs.js'
-import { clearRunsCache, readAllRunRecords } from '../server/runs.js'
+import { RUN_READ_CHUNK_BYTES, clearRunsCache, readAllRunRecords } from '../server/runs.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 
 const cleanups = []
@@ -73,7 +73,7 @@ describe('shared runs.jsonl cache', () => {
     expect(afterMtimeBack).toEqual([rec2])
   })
 
-  it('gives each caller its own array so mutations do not change cached records', () => {
+  it('hands every caller the same frozen records, so no caller can change the cache', () => {
     const folder = tempDir()
     const file = join(folder, 'runs.jsonl')
     const rec = { lane: 'opencode', costUsd: 1 }
@@ -82,12 +82,12 @@ describe('shared runs.jsonl cache', () => {
     const callerOne = readAllRunRecords(file)
     expect(callerOne).toEqual([rec])
 
-    callerOne.push({ lane: 'rogue', costUsd: 999 })
-    callerOne.reverse()
+    expect(() => callerOne.push({ lane: 'rogue', costUsd: 999 })).toThrow()
+    expect(() => { callerOne[0].costUsd = 999 }).toThrow()
 
     const callerTwo = readAllRunRecords(file)
     expect(callerTwo).toEqual([rec])
-    expect(callerTwo).not.toBe(callerOne)
+    expect(callerTwo).toBe(callerOne)
   })
 
   it('shares the same cache between readAllRunRecords and lane costs cachedRunRecords', () => {
@@ -101,12 +101,77 @@ describe('shared runs.jsonl cache', () => {
 
     expect(fromRuns).toEqual([rec])
     expect(fromLaneCosts).toEqual([rec])
-    expect(fromRuns).not.toBe(fromLaneCosts)
+    expect(fromRuns).toBe(fromLaneCosts)
 
     const rec2 = { lane: 'opencode2', costUsd: 0.25 }
     appendFileSync(file, `${JSON.stringify(rec2)}\n`)
 
     const updatedFromLaneCosts = cachedRunRecordsLaneCosts(file)
     expect(updatedFromLaneCosts).toEqual([rec, rec2])
+  })
+
+  it('reads a 10 MB unread delta in chunks across cut lines and still appends as the file grows', () => {
+    const folder = tempDir()
+    const file = join(folder, 'runs.jsonl')
+    const seed = { lane: 'seed', step: 0 }
+    writeFileSync(file, `${JSON.stringify(seed)}\n`)
+    expect(readAllRunRecords(file)).toEqual([seed])
+
+    const filler = 'x'.repeat(2000)
+    const parts = []
+    let bytes = 0
+    let seq = 1
+    const pushLine = (record) => {
+      const line = `${JSON.stringify(record)}\n`
+      parts.push(line)
+      bytes += Buffer.byteLength(line)
+    }
+
+    while (bytes + 2100 < RUN_READ_CHUNK_BYTES - 100) {
+      pushLine({ lane: 'opencode', seq: seq++, note: filler })
+    }
+    const gapToFirstEdge = RUN_READ_CHUNK_BYTES - bytes - 25
+    pushLine({ lane: 'pad', seq: seq++, pad: 'p'.repeat(Math.max(1, gapToFirstEdge - 36)) })
+    const firstEdgeStart = bytes
+    pushLine({ lane: 'edge1', seq: seq++, note: 'cut-across-first-4mb-chunk-boundary-' + 'y'.repeat(120) })
+    const firstEdgeEnd = bytes
+    expect(firstEdgeStart).toBeLessThan(RUN_READ_CHUNK_BYTES)
+    expect(firstEdgeEnd).toBeGreaterThan(RUN_READ_CHUNK_BYTES)
+
+    while (bytes + 2100 < 2 * RUN_READ_CHUNK_BYTES - 100) {
+      pushLine({ lane: 'opencode', seq: seq++, note: filler })
+    }
+    const remToSecondEdge = 2 * RUN_READ_CHUNK_BYTES - bytes
+    const padBase = Buffer.byteLength(`${JSON.stringify({ lane: 'p', p: '' })}\n`)
+    const utf8Target = Buffer.byteLength('{"lane":"utf8","note":"') + 1
+    pushLine({ lane: 'p', p: 'a'.repeat(remToSecondEdge - utf8Target - padBase) })
+    expect(2 * RUN_READ_CHUNK_BYTES - bytes).toBe(utf8Target)
+    const secondEdgeStart = bytes
+    pushLine({ lane: 'utf8', note: '\u4e2d'.repeat(20) })
+    const secondEdgeEnd = bytes
+    expect(secondEdgeStart).toBeLessThan(2 * RUN_READ_CHUNK_BYTES)
+    expect(secondEdgeEnd).toBeGreaterThan(2 * RUN_READ_CHUNK_BYTES)
+
+    while (bytes <= 10 * 1024 * 1024) {
+      pushLine({ lane: 'opencode', seq: seq++, note: filler })
+    }
+
+    const delta = parts.join('')
+    expect(Buffer.byteLength(delta)).toBeGreaterThan(10 * 1024 * 1024)
+    appendFileSync(file, delta)
+
+    const chunked = readAllRunRecords(file)
+    const oneRead = readFileSync(file, 'utf8')
+      .split(/\r?\n/)
+      .filter((line) => line.trim() !== '')
+      .map((line) => JSON.parse(line))
+
+    expect(chunked).toEqual(oneRead)
+
+    const tail = { lane: 'after', seq: seq++ }
+    appendFileSync(file, `${JSON.stringify(tail)}\n`)
+    const afterGrow = readAllRunRecords(file)
+    expect(afterGrow.length).toBe(oneRead.length + 1)
+    expect(afterGrow.at(-1)).toEqual(tail)
   })
 })
