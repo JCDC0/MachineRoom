@@ -10,11 +10,13 @@ How to read this file: `Where things stand`, `Rules`, `Session start` and `The l
 
 Rewrite this section at every merge and before you end a session. Keep it under ten lines: what is pushed, what is unpushed, what runs, what waits on the owner, what is next.
 
-- 2026-11-13, evening: everything merged is pushed at `1bb54a0f`, CI green on Windows and Ubuntu (run 43406131394). Read CI first with `gh run list --limit 3 --repo JCDC0/MachineRoom`.
-- Today ran P151 to P212 and reviews 23 to 28 (review 28 R28-1 and R28-2 fixed by P211 and P212). Every finding of reviews 22 to 27 and of readiness passes 1 and 2 (except D5's archive boundary, part of F1) is fixed. Readiness pass 3 (`AUDIT-2026-11-READINESS-3.md`, Codex): P197-1 to P197-7 and its Dispatch history note are merged as P200 to P206 and P208.
-- Nothing runs at this rewrite. The full suite at `31f73519` passed (`RUN-2026-11-13-SUITE-6.md`).
-- The fleet at the owner's word: `opencode` to `opencode5` on DeepSeek V4.1 Flash at max reasoning, `codex` on GPT-6.1 Sol high (in rotation for briefs, not only reviews), `agy` and `agy2` on Gemini 4 Hydrogen XHigh, `agy3` on Hydrogen High. The owner said to ignore AGY's Argon orchestrator for now.
-- Open for the owner: N16 (an all-zero cost reads as not reported), the live room by eye, the release (P4), and seven suggested features, each waiting for a yes: a check command per project, the orchestrator preparing a merge, handing off a failed queue, storage cleanup preview with an archive boundary (F1), conversation export (F2), Stop a running lane from Dispatch, and a kept Dispatch draft per project.
+- 2026-11-13, night: everything merged is pushed at `6939dd82` (CI run 43438890851, read it first with `gh run list --limit 3 --repo JCDC0/MachineRoom`). The full suite at `a01af28f` passed (`RUN-2026-11-13-SUITE-7.md`, 5,189 passed).
+- Since `1bb54a0f`: P213 to P248. The owner said yes to the check command (P224, P241, P247), Ask to prepare (P215), failed-queue handoff (P216, P223, P243), storage cleanup (P217, P236, P240, P246), conversation export (P218), Stop a lane with a note to its head (P219), the branch filter (P225) and the Dispatch draft (P226). Readiness 4 (P213) is fixed by P220 to P222, P228 to P230, P237 and P238. Reviews 29 and 30 (Codex) are fixed by P240 to P247.
+- The hands-on check by eye is `RUN-2026-11-13-HANDS-ON-2.md`; its findings are fixed by P232 to P236, with the transport overlap fixed by hand after a look at 1280 by 800.
+- Nothing runs at this rewrite.
+- The fleet at the owner's word: `opencode` to `opencode5` on DeepSeek V4.1 Flash at max reasoning, `codex` on GPT-6.1 Sol high (briefs and reviews; its sandbox cannot run a browser or stop processes), `agy`, `agy2` and `agy3` on Gemini 4 Hydrogen (no `src/engine`, `src/styles.css`, `Stage.jsx` or `App.jsx`).
+- Open for the owner: two wording choices from the hands-on check (the waiting card counts session readers as agents; the transport says `waiting for you` where the inspector says `IDLE`), a per-lane conversation view with Stop (follows P219), the session source status feature (readiness 4 feature 1), and the release (P4).
+- Known and accepted: the archive's last race needs a local process swapping folders mid-move and no longer loses a source (P246); a folder-shaped `/api/tree` older than one second reads the tree again (review 30 finding 4); a UNC path in a check command needs doubled backslashes.
 - Push: the owner said "push commits" for the session of 2026-11-13. A new session asks again.
 
 ## Rules
