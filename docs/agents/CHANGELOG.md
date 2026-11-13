@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- P274: a native run fails when a second empty reply follows its nudge, instead of reporting an earlier message as a final answer.
 - P268: the git write test's request bound matches the client's write limit, and the bridge and tree waits under 10 seconds are raised to 10.
 - P269: AUDIT-2026-11-REVIEW-31.md lists seven findings in P249, P254, P260 and P263; R31-1 to R31-5 block a push.
 - P270: doctor with both a folder and --root prints only its refusal sentence and exits 1, without the usage block.
