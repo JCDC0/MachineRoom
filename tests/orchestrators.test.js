@@ -1054,9 +1054,19 @@ describe('the orchestrator registry', () => {
     const initialSessions = await getJson(`${rig.url}/api/orchestrator/sessions`)
     expect(initialSessions.status).toBe(200)
     expect(initialSessions.body).toEqual({
-      current: { id: 'current', title: null, startedAt: null, count: 0, pinned: false, starred: false, unread: false },
+      current: {
+        id: 'current',
+        sessionId: expect.any(String),
+        title: null,
+        startedAt: null,
+        count: 0,
+        pinned: false,
+        starred: false,
+        unread: false,
+      },
       sessions: [],
     })
+    expect(initialSessions.body.current.sessionId.length).toBeGreaterThan(0)
 
     const noOriginNew = await postJson(`${rig.url}/api/orchestrator/sessions/new`, { confirmed: true })
     expect(noOriginNew.status).toBe(403)
@@ -1072,12 +1082,16 @@ describe('the orchestrator registry', () => {
     const currentAfterSend = await getJson(`${rig.url}/api/orchestrator/sessions`)
     expect(currentAfterSend.body.current.title).toBe('Create initial database schema')
     expect(currentAfterSend.body.current.count).toBe(2)
+    expect(currentAfterSend.body.current.sessionId).toBe(initialSessions.body.current.sessionId)
 
     const newArchived = await pagePost(`${rig.url}/api/orchestrator/sessions/new`, { confirmed: true })
     expect(newArchived.status).toBe(200)
 
     const sessionsAfterNew = await getJson(`${rig.url}/api/orchestrator/sessions`)
     expect(sessionsAfterNew.body.current.count).toBe(0)
+    expect(sessionsAfterNew.body.current.sessionId).toEqual(expect.any(String))
+    expect(sessionsAfterNew.body.current.sessionId.length).toBeGreaterThan(0)
+    expect(sessionsAfterNew.body.current.sessionId).not.toBe(initialSessions.body.current.sessionId)
     expect(sessionsAfterNew.body.sessions).toHaveLength(1)
     const session1 = sessionsAfterNew.body.sessions[0]
     expect(session1.title).toBe('Create initial database schema')
@@ -1092,6 +1106,7 @@ describe('the orchestrator registry', () => {
     expect(new2.status).toBe(200)
     const sessionsAfterSecond = await getJson(`${rig.url}/api/orchestrator/sessions`)
     expect(sessionsAfterSecond.body.sessions).toHaveLength(2)
+    expect(sessionsAfterSecond.body.current.sessionId).not.toBe(sessionsAfterNew.body.current.sessionId)
 
     const singleSession = await getJson(`${rig.url}/api/orchestrator/sessions/${session1.id}`)
     expect(singleSession.status).toBe(200)
@@ -1126,6 +1141,9 @@ describe('the orchestrator registry', () => {
     const opened = await pagePost(`${rig.url}/api/orchestrator/sessions/${session1.id}/open`, { confirmed: true })
     expect(opened.status).toBe(200)
     expect((await getJson(`${rig.url}/api/orchestrator`)).body.messages).toHaveLength(2)
+    const sessionsAfterOpen = (await getJson(`${rig.url}/api/orchestrator/sessions`)).body
+    expect(sessionsAfterOpen.current.sessionId).toEqual(expect.any(String))
+    expect(sessionsAfterOpen.current.sessionId).not.toBe(sessionsAfterSecond.body.current.sessionId)
 
     const noOriginDelete = await postJson(`${rig.url}/api/orchestrator/sessions/${sessionsPinned[1].id}/delete`, { confirmed: true })
     expect(noOriginDelete.status).toBe(403)
@@ -1154,6 +1172,7 @@ describe('the orchestrator registry', () => {
       `${JSON.stringify({ project: files.projectRoot, sessionId: null, state: 'idle', messages, pending: [] })}\n`
     )
     const rig = await makeBridge(files)
+    const beforeBranch = (await getJson(`${rig.url}/api/orchestrator/sessions`)).body
 
     const noOrigin = await postJson(`${rig.url}/api/orchestrator/sessions/branch`, { index: 3, confirmed: true })
     expect(noOrigin.status).toBe(403)
@@ -1168,6 +1187,9 @@ describe('the orchestrator registry', () => {
     expect(branched.body).toMatchObject({ ok: true, title: 'First message (branch)', count: 3 })
 
     const sessions = (await getJson(`${rig.url}/api/orchestrator/sessions`)).body
+    expect(sessions.current.sessionId).toEqual(expect.any(String))
+    expect(sessions.current.sessionId.length).toBeGreaterThan(0)
+    expect(sessions.current.sessionId).not.toBe(beforeBranch.current.sessionId)
     expect(sessions.current.title).toBe('First message (branch)')
     expect(sessions.current.count).toBe(3)
     expect(sessions.sessions).toHaveLength(1)

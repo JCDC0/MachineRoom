@@ -2,11 +2,13 @@
 
 ## Unreleased
 
+- The current conversation carries a stable id that changes only on new, open and fork, so the 200-message cap no longer closes its menu (P157).
 - The merge check passes changed files to vitest related without a double dash, and fails when vitest finds no changed files, so the check runs tests again (P158).
 - A stop counts a process that already exited as stopped, so a run that ends after its harness dies no longer fails the stop (P156).
 - `--stop` counts a process that is already gone when the kill runs as stopped, so a run that finishes after its harness dies no longer makes the stop exit 1 (P156).
 
 - The merge check passes the changed files to vitest related without a double dash, passes a leading dash as ./NAME and fails when vitest reports no changed files (P158).
+- The live conversation carries a persistent session id across the 200-message cap so its sidebar menu stays open until new, open, or fork (P157).
 - Renamed titles, restored titles, compact rules and summaries, and a compaction report are masked before they are capped or saved (P151).
 - printedRunsFolder masks a posix path with ~ even when USERPROFILE is set, so the masked log line test runs on Linux again (P154).
 - The detail docs describe P143 to P148 and the Windows-only masked log test (P155).

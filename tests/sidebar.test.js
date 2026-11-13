@@ -1,10 +1,11 @@
-import { createElement } from 'react'
+import { act, createElement } from 'react'
 import { renderToString } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 import Hud from '../src/ui/Hud.jsx'
 import Sidebar from '../src/ui/Sidebar.jsx'
 import SidebarTabs from '../src/ui/SidebarTabs.jsx'
 import { WIDE_LAYOUT_MIN } from '../src/ui/agentStrip.js'
+import { click, settle, withDom } from './helpers/uiDom.js'
 import {
   agentCountLine,
   groupSessions,
@@ -20,6 +21,7 @@ import {
   sessionMenuActionForKey,
   sessionMenuItemForKey,
   sessionMenuItems,
+  sessionRowIdentity,
   sessionRows,
   sortSessionRows,
   waitForBridge,
@@ -431,5 +433,88 @@ describe('The folded menu entry', () => {
       if (savedWindow === undefined) delete globalThis.window
       else globalThis.window = savedWindow
     }
+  })
+})
+
+describe('current conversation identity in the sidebar', () => {
+  it('uses sessionId for the current row and falls back when absent', () => {
+    const first = groupSessions({
+      current: { id: 'current', sessionId: 'conv-1', title: 'Live one', startedAt: NOW, count: 200 },
+      sessions: [{ id: 'old-1', title: 'Archived', endedAt: NOW - DAY }],
+    })
+    expect(first.current.sessionId).toBe('conv-1')
+    const shifted = groupSessions({
+      current: { id: 'current', sessionId: 'conv-1', title: 'New title', startedAt: NOW + MINUTE, count: 200 },
+      sessions: [],
+    })
+    expect(sessionRowIdentity(first.current)).toBe('current:session:conv-1')
+    expect(sessionRowIdentity(shifted.current)).toBe('current:session:conv-1')
+
+    const rotated = groupSessions({
+      current: { id: 'current', sessionId: 'conv-2', title: 'New title', startedAt: NOW + MINUTE, count: 1 },
+      sessions: [],
+    })
+    expect(sessionRowIdentity(rotated.current)).toBe('current:session:conv-2')
+    expect(sessionRowIdentity(first.recent[0])).toBe('saved:old-1')
+
+    expect(
+      sessionRowIdentity({ id: 'current', title: 'Legacy', startedAt: NOW, current: true })
+    ).not.toBe(
+      sessionRowIdentity({ id: 'current', title: 'Legacy', startedAt: NOW + MINUTE, current: true })
+    )
+  })
+
+  it('keeps the current menu open when startedAt shifts at the cap and closes it when sessionId changes', async () => {
+    await withDom(async ({ container, dom, root }) => {
+      const listeners = new Set()
+      let updated = 0
+      const state = {
+        current: { id: 'current', sessionId: 'conv-1', title: 'Live one', startedAt: NOW, count: 200 },
+        sessions: [],
+      }
+      const client = {
+        projects: async () => ({ current: { path: 'C:\\project' }, recent: [] }),
+        orchestratorSessions: async () => JSON.parse(JSON.stringify(state)),
+        updateOrchestratorSession: async () => {
+          updated += 1
+          return { ok: true }
+        },
+        subscribe: (listener) => {
+          listeners.add(listener)
+          return () => listeners.delete(listener)
+        },
+      }
+      await act(async () => {
+        root.render(createElement(Sidebar, { client, live: true, project: 'C:\\project' }))
+      })
+      await settle()
+
+      const button = container.querySelector('button[aria-label="Actions for Live one"]')
+      expect(button).not.toBeNull()
+      await click(root, button)
+      expect(container.querySelector('.mr-side-menu')).not.toBeNull()
+
+      state.current = { id: 'current', sessionId: 'conv-1', title: 'Live one', startedAt: NOW + MINUTE, count: 200 }
+      for (const listener of [...listeners]) listener({ topic: 'orchestrator' })
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 260))
+      })
+      await settle()
+      expect(container.querySelector('.mr-side-menu')).not.toBeNull()
+
+      state.current = { id: 'current', sessionId: 'conv-2', title: 'Fresh one', startedAt: NOW + 2 * MINUTE, count: 0 }
+      for (const listener of [...listeners]) listener({ topic: 'orchestrator' })
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 260))
+      })
+      await settle()
+      expect(container.querySelector('.mr-side-menu')).toBeNull()
+
+      await act(async () => {
+        dom.window.dispatchEvent({ type: 'keydown', key: 'p', bubbles: true, cancelable: true })
+      })
+      await settle()
+      expect(updated).toBe(0)
+    })
   })
 })
