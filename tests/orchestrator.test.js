@@ -2501,6 +2501,99 @@ describe('the orchestrator chat file', () => {
     expect(readFileSync(file, 'utf8')).not.toContain(secret)
   })
 
+  it('masks a profile path and a key in a renamed current or saved title', async () => {
+    const rig = makeRig()
+    rig.send('First conversation')
+    await waitIdle(rig, 1)
+    const secret = 'sk-or-v1-' + 'q'.repeat(24)
+    const profile = process.env.USERPROFILE || process.env.HOME || homedir()
+    const rawTitle = `Trace ${join(profile, 'x')} ${secret}`
+    expect(rawTitle.length).toBeLessThanOrEqual(80)
+
+    const changed = rig.orchestrator.updateSession(CURRENT_SESSION_KEY, { title: rawTitle, confirmed: true })
+    expect(changed.status).toBe(200)
+    expect(changed.body.title).toContain('[key]')
+    expect(changed.body.title).not.toContain(secret)
+    expect(changed.body.title).not.toContain(profile)
+
+    expect(rig.orchestrator.newSession({ confirmed: true }).status).toBe(200)
+    const saved = rig.orchestrator.listSessions()[0]
+    expect(saved.title).toBe(changed.body.title)
+    const renamed = rig.orchestrator.updateSession(saved.id, { title: rawTitle, confirmed: true })
+    expect(renamed.status).toBe(200)
+    expect(renamed.body.title).toBe(changed.body.title)
+
+    const file = readFileSync(chatFileFor(rig.projectRoot, rig.runs), 'utf8')
+    expect(file).toContain('[key]')
+    expect(file).not.toContain(secret)
+    expect(file).not.toContain(profile)
+    expect(JSON.parse(file).sessions[0].title).toBe(changed.body.title)
+  })
+
+  it('masks a raw title, compact rules and both summaries in a chat file it restores', () => {
+    const rig = makeRig()
+    rig.orchestrator.close()
+    const secret = 'sk-or-v1-' + 'q'.repeat(24)
+    const profile = process.env.USERPROFILE || process.env.HOME || homedir()
+    const profilePath = join(profile, 'project', 'trace.log')
+    const rawTitle = `Trace ${profilePath} ${secret}`
+    const rawRules = `Rules at ${profilePath} for ${secret}`
+    const currentSummary = `Current summary at ${profilePath} for ${secret}`
+    const savedSummary = `Saved summary at ${profilePath} for ${secret}`
+    const file = chatFileFor(rig.projectRoot, rig.runs)
+    writeFileSync(
+      file,
+      `${JSON.stringify({
+        project: rig.projectRoot,
+        sessionId: null,
+        state: 'idle',
+        currentSessionId: 's1',
+        currentTitle: rawTitle,
+        compactRules: rawRules,
+        summary: currentSummary,
+        sessions: [
+          {
+            id: 's1',
+            title: rawTitle,
+            startedAt: '2026-11-13T12:00:00.000Z',
+            endedAt: '2026-11-13T12:00:00.000Z',
+            summary: savedSummary,
+            messages: [],
+          },
+        ],
+        messages: [],
+        pending: [],
+      })}\n`
+    )
+
+    const restored = restoreRig(rig)
+    const title = restored.orchestrator.currentSessionInfo().title
+    expect(title).toContain('[key]')
+    expect(title).not.toContain(secret)
+    expect(title).not.toContain(profile)
+    const rules = restored.answer().compactRules
+    expect(rules).toContain('[key]')
+    expect(rules).not.toContain(secret)
+    expect(rules).not.toContain(profile)
+
+    const afterRestore = JSON.parse(readFileSync(file, 'utf8'))
+    for (const text of [afterRestore.currentTitle, afterRestore.compactRules, afterRestore.summary, afterRestore.sessions[0].summary]) {
+      expect(text).toContain('[key]')
+      expect(text).not.toContain(secret)
+      expect(text).not.toContain(profile)
+    }
+
+    expect(restored.orchestrator.newSession({ confirmed: true }).status).toBe(200)
+    const afterSave = readFileSync(file, 'utf8')
+    expect(afterSave).not.toContain(secret)
+    expect(afterSave).not.toContain(profile)
+    const saved = JSON.parse(afterSave)
+    expect(saved.compactRules).toContain('[key]')
+    expect(saved.sessions[0].summary).toContain('[key]')
+    expect(saved.sessions[0].summary).not.toContain(secret)
+    expect(saved.sessions[0].summary).not.toContain(profile)
+  })
+
   it('masks a key in a work step of the current conversation', async () => {
     const rig = makeRig()
     const secret = 'sk-or-v1-' + 'q'.repeat(24)
