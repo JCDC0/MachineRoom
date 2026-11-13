@@ -59,6 +59,30 @@ describe('MetersPanel', () => {
     expect(html).toContain('500 in / 0 out')
   })
 
+  it('shows the removed lanes spend after the lanes in the roster', () => {
+    const costs = {
+      summary: { spendCents: 445, budgetCents: 0, utilizationPercent: null },
+      byAgent: [
+        ...COSTS.byAgent,
+        {
+          agentId: 'removed-lanes',
+          agentName: 'Removed lanes',
+          costCents: 40,
+          todayCents: 40,
+          inputTokens: 1000,
+          outputTokens: 200,
+        },
+      ],
+      quota: [],
+    }
+    const html = renderPanel(costs)
+    expect(html).toContain('Removed lanes')
+    expect(html).toContain('$4.45')
+    expect(html).toContain('$0.40')
+    expect(html).toContain('1.0k in / 200 out')
+    expect(html.indexOf('Removed lanes')).toBeGreaterThan(html.indexOf('New lane'))
+  })
+
   it('puts the spend note under the lane rows', () => {
     const html = renderPanel()
     expect(html).toContain(SPEND_NOTE)

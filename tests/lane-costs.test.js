@@ -79,9 +79,59 @@ describe('laneCosts', () => {
       { agentId: 'agent-opencode', agentName: 'OpenCode', costCents: 60, todayCents: 0, inputTokens: null, outputTokens: null },
       { agentId: 'agent-opencode2', agentName: 'OpenCode 2', costCents: 12, todayCents: 0, inputTokens: null, outputTokens: null },
       { agentId: 'agent-agy', agentName: 'agy', costCents: 0, todayCents: 0, inputTokens: null, outputTokens: null },
+      { agentId: 'removed-lanes', agentName: 'Removed lanes', costCents: 200, todayCents: 0, inputTokens: null, outputTokens: null },
     ])
-    expect(costs.summary).toEqual({ spendCents: 72, budgetCents: 0, utilizationPercent: null })
+    expect(costs.summary).toEqual({ spendCents: 272, budgetCents: 0, utilizationPercent: null })
     expect(costs.quota).toEqual([])
+  })
+
+  it('keeps a deleted lane spend in the total and shows it as removed lanes', () => {
+    const deleted = { id: 'agent-deleted', key: 'deleted', name: 'Deleted lane' }
+    const records = [
+      record('opencode', localTime(0, 9), 0.5),
+      record('deleted', localTime(0, 10), 0.4, { inputTokens: 1000, outputTokens: 200 }),
+    ]
+
+    const before = laneCosts({ records, agents: [...AGENTS, deleted], now: NOW })
+    const after = laneCosts({ records, agents: AGENTS, now: NOW })
+
+    expect(before.summary.spendCents).toBe(90)
+    expect(after.summary.spendCents).toBe(before.summary.spendCents)
+    expect(after.byAgent.at(-1)).toEqual({
+      agentId: 'removed-lanes',
+      agentName: 'Removed lanes',
+      costCents: 40,
+      todayCents: 40,
+      inputTokens: 1000,
+      outputTokens: 200,
+    })
+    const rowsTotal = after.byAgent.reduce((sum, row) => sum + row.costCents, 0)
+    expect(rowsTotal).toBe(after.summary.spendCents)
+  })
+
+  it('shows no removed lanes row when every recorded lane is in the roster', () => {
+    const costs = laneCosts({
+      records: [record('opencode', localTime(0, 9), 0.5)],
+      agents: AGENTS,
+      now: NOW,
+    })
+
+    expect(costs.byAgent.map((row) => row.agentId)).toEqual(['agent-opencode', 'agent-opencode2', 'agent-agy'])
+    expect(costs.summary.spendCents).toBe(50)
+  })
+
+  it('shows no removed lanes row for unmatched runs with no cost', () => {
+    const costs = laneCosts({
+      records: [
+        record('gone', localTime(0, 9), null, { inputTokens: 5000, outputTokens: 600 }),
+        record('gone2', localTime(0, 10), 0),
+      ],
+      agents: AGENTS,
+      now: NOW,
+    })
+
+    expect(costs.byAgent.some((row) => row.agentId === 'removed-lanes')).toBe(false)
+    expect(costs.summary.spendCents).toBe(0)
   })
 
   it('sums today per lane by the local calendar day and leaves yesterday out', () => {

@@ -2,12 +2,14 @@
 
 ## Unreleased
 
+- Runs of lanes no longer in the roster, deleted or retired, count in the totals and show as one Removed lanes row.
 - Auto routes every queued task and previews the highest tier's lane, Confirm sends that lane, and a lane taken meanwhile asks for a fresh preview instead of starting another.
 - The late-session meta test moves the runs folder time forward, as P165 did for the test above it, so Windows CI rereads the meta.
 - The runs folder is listed only when its change time moves or once a minute, and a finished log quiet for an hour leaves the ten-second check until it grows.
 - Retry under a reply sends to the conversation on screen, whatever To says now, so a sub's retry never goes to Main.
 - Retry under a reply sends the prompt to the conversation that owns that reply, so a changed To selection no longer redirects it and a sub's retry never goes to Main (P200).
 - Auto previews every task in the queue and Confirm starts the lane its card names, so a taken lane shows a refusal and needs a fresh preview (P201).
+- Spent this month and today keep a deleted lane's spend, shown as one Removed lanes row after the other lanes (P203).
 - The third readiness pass lists seven panel problems, among them Retry and Auto acting on a target other than the one shown, and two features for the owner.
 - The queue branch and its log names carry milliseconds, so a second queue run started in the same second no longer stops on an existing branch.
 - runs.jsonl deltas are read in 4 MB chunks, and every caller gets the same frozen records instead of a copy on each read.
