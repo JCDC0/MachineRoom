@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- P266: The four weak tests in storage, project-dispatch and machine-doctor now fail when their behaviour is undone, proved in `%TEMP%` scratch copies.
 - P255: AUDIT-2026-11-TESTS.md lists four tests that pass with their change undone, each proved in a scratch copy.
 - P252: AUDIT-2026-11-DOCS-2.md lists 17 doc sentences the code contradicts, with corrections; no route, flag or panel is unnamed.
 - P259: README.md describes what each command prints, the up flags, the default sources, the runs folder and how to stop the room.
