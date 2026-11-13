@@ -1889,3 +1889,22 @@ The three readiness audits read the commands, long use and the panels. Read what
 3. Dispatch's running rows and the Inspector's view of a running lane gain `Stop`, with a confirm card naming the lane, its task or briefs and its start time.
 4. Tests, by what they prove: the route stops a matching run and refuses a mismatch; the head's conversation gets the note and the next turn carries it; the Stop button sends the lane and start time it shows. Use the fake lane and runner the existing tests use, never a real harness.
 5. Run `node node_modules/vitest/vitest.mjs related --run server/runs.js server/orchestrator.js src/ui/panels/DispatchPanel.jsx src/ui/Inspector.jsx` and `npm run build`. Report what passed.
+
+**P220. A source that stops is said in the room (OpenCode).** Read finding P213-3 in `docs/agents/AUDIT-2026-11-READINESS-4.md` and this brief only. Use no subagents. Run every command in the foreground. Commit each step as you finish it, and stop starting new work at minute 25. Files: src/ui/healthNotice.js, src/ui/Hud.jsx, tests/health-notice.test.js, docs/agents/CHANGELOG.md, docs/agents/architecture/ROOM.md.
+
+1. When `/api/health` answers `ok: true` with a nonempty `problems` list, the existing health notice shows them through its existing text and details, one sentence per problem, and the room stays connected. Keep the current behaviour when `problems` is empty.
+2. Tests, by what they prove: a failed tree with `ok: true` shows its sentence; a stopped OpenCode reader shows its sentence; an empty list shows nothing. Each must fail before your change.
+3. Run `node node_modules/vitest/vitest.mjs related --run src/ui/healthNotice.js src/ui/Hud.jsx` and `npm run build`. Report what passed.
+
+**P221. A failed git read is never shown as a clean repository (OpenCode).** Read finding P213-2 in `docs/agents/AUDIT-2026-11-READINESS-4.md` and this brief only. Use no subagents. Run every command in the foreground. Commit each step as you finish it, and stop starting new work at minute 28. Files: server/git.js, src/ui/RepositoryPanel.jsx, src/ui/repository.js, src/ui/Inspector.jsx, src/ui/inspector.js, tests/git.test.js, tests/repository.test.js, tests/repository-panel-ui.test.js, docs/agents/CHANGELOG.md, docs/agents/architecture/ROOM.md.
+
+1. When the status read fails or times out, the git answer carries `statusError` with one sentence and leaves `dirty` and `changeCount` null, never false and 0. A failed branch or log read carries `refsError` or `logError` with one sentence instead of an empty list.
+2. The Repository section and the inspector's git view show that sentence in place of the clean state or the empty list, and never say there are no uncommitted changes when the status read failed.
+3. Tests, by what they prove: an injected status failure gives null counts and the sentence; an injected ref failure and an injected log failure each give their sentence; the panel shows the sentence and no clean line. Each must fail before your change.
+4. Run `node node_modules/vitest/vitest.mjs related --run server/git.js src/ui/RepositoryPanel.jsx src/ui/repository.js src/ui/Inspector.jsx` and `npm run build`. Report what passed.
+
+**P222. The first OpenCode conversation on a new install is shown (Codex).** Read finding P213-5 in `docs/agents/AUDIT-2026-11-READINESS-4.md` and this brief only. Do not commit: the runner commits your files. Stop at minute 28. Files: server/opencode-sessions.js, tests/opencode-sessions.test.js, docs/agents/CHANGELOG.md.
+
+1. The OpenCode session reader sets its startup time when it starts, whether or not the database exists. A database that already existed at start keeps today's rule: its old history is skipped. A database that first appears after start is read from the startup time, so messages made after the reader started become frames.
+2. Tests, by what they prove: a database created after start emits the first conversation's run; a database present at start still skips its old messages. The first must fail before your change.
+3. Run `npx.cmd vitest related --run server/opencode-sessions.js` and `npm.cmd run build`, and report what passed.
