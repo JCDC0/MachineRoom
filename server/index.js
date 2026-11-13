@@ -811,6 +811,7 @@ export function createBridge(options = {}) {
           worktree: await isGitCheckout(projectRoot),
           allowDirty: false,
           startedBy: 'orchestrator',
+          checkCommand: runs.readSavedCheckCommand(),
         })
       },
     })

@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- P265: a lane task sent from chat passes the project's saved check command to the runner as --test.
 - P254: a folder-shaped /api/tree answers from the last tree while the watcher is armed, the last full read was clean and no read is due.
 - P255: AUDIT-2026-11-TESTS.md lists four tests that pass with their change undone, each proved in a scratch copy.
 - P252: AUDIT-2026-11-DOCS-2.md lists 17 doc sentences the code contradicts, with corrections; no route, flag or panel is unnamed.
