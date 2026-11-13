@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- P240: the archive refuses a junction or link at the archive or month folder, never overwrites a destination, and moves only the previewed files that are still eligible.
 - P241: the check command is split into a program and arguments and run with shell false (npm through its own script on Windows), shell syntax is refused, a single task accepts --test and runs the check, and a crashed queue task records queueStatus.
 - P242: readActor refuses a runs start or stop with no Origin and no registry, closing the no-lanes bypass (review 29 finding 3).
 - P244: a failed or partial full tree read retries after 5 seconds, doubling to 60, until a clean read; the folder answer follows the same one-second reuse rule.
@@ -13,6 +14,7 @@
 - P241: the check command splits into a program and its arguments, starts without a shell, uses Node and npm's own JavaScript entry point for npm and npx on Windows, and refuses shell syntax before a run.
 - P241: `--test` works on a single project task with or without `--worktree`, and the check runs after the task.
 - P241: a queue task whose harness fails or is stopped records `queueStatus: failed` or `stopped` with `queueRemaining`.
+- P240: keep storage archive and month folders inside the real runs folder without overwriting existing files, and move only previewed `files` while reporting skipped entries.
 - P239: review 29 lists six push blockers and two smaller findings in P216 to P230.
 - P237: a change to .git/index or info/exclude, or a worktree's own, reads the tree through the existing reader; other .git writes stay ignored.
 - P238: Claude and OpenCode session run ids carry a token made per reader, so a restarted reader never merges two runs in a replay (D4).

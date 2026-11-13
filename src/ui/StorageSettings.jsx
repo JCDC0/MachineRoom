@@ -130,21 +130,29 @@ export default function StorageSettings({ client = null }) {
 
   async function runArchive() {
     if (!canArchive || !preview || busy) return
+    const files = (Array.isArray(preview.files) ? preview.files : [])
+      .map((item) => item?.name)
+      .filter((name) => typeof name === 'string' && name.length > 0)
     setBusy(true)
     setError('')
     setNotice('')
     try {
-      const result = await client.archiveStorage({ days: preview.days, confirmed: true })
+      const result = await client.archiveStorage({ days: preview.days, files, confirmed: true })
       if (!mountedRef.current) return
       const count = Number(result?.count ?? 0)
       const bytes = Number(result?.totalBytes ?? 0)
+      const skippedCount = Array.isArray(result?.skipped) ? result.skipped.length : 0
       setConfirmOpen(false)
       setPreview(null)
-      setNotice(
+      const movedText =
         count === 0
           ? 'No files were moved.'
           : `Moved ${count} ${count === 1 ? 'file' : 'files'} (${formatBytes(bytes)}) to archive.`
-      )
+      const skippedText =
+        skippedCount === 0
+          ? ''
+          : ` Skipped ${skippedCount} ${skippedCount === 1 ? 'file' : 'files'} no longer eligible.`
+      setNotice(`${movedText}${skippedText}`)
       await refreshSummary()
     } catch (failure) {
       if (!mountedRef.current) return

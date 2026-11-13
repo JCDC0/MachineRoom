@@ -1326,20 +1326,65 @@ describe('the control client review routes', () => {
       await expect(client.archiveStorage({ days: 30, confirmed: false })).rejects.toThrow(
         'Confirm the archive before moving files.'
       )
+      await expect(client.archiveStorage({ days: 30, confirmed: true })).rejects.toThrow(
+        'Choose the files to archive from a preview first.'
+      )
+      await expect(client.archiveStorage({ days: 30, files: [], confirmed: true })).rejects.toThrow(
+        'Choose the files to archive from a preview first.'
+      )
 
       const preview = await client.previewStorageArchive({ days: 30 })
       expect(Object.keys(preview).sort()).toEqual(['count', 'cutoff', 'days', 'files', 'totalBytes'])
       expect(preview.count).toBeGreaterThan(0)
       expect(preview.totalBytes).toBeGreaterThan(0)
 
-      const archived = await client.archiveStorage({ days: 30, confirmed: true })
-      expect(Object.keys(archived).sort()).toEqual(['count', 'days', 'moved', 'ok', 'totalBytes'])
+      const previewNames = preview.files.map((item) => item.name)
+      const firstOnly = [previewNames[0]]
+      const archived = await client.archiveStorage({ days: 30, files: firstOnly, confirmed: true })
+      expect(Object.keys(archived).sort()).toEqual(['count', 'days', 'moved', 'ok', 'skipped', 'totalBytes'])
       expect(archived.ok).toBe(true)
-      expect(archived.count).toBe(preview.count)
-      expect(archived.totalBytes).toBe(preview.totalBytes)
+      expect(archived.count).toBe(1)
+      expect(archived.totalBytes).toBe(preview.files[0].bytes)
+      expect(archived.moved.map((item) => item.name)).toEqual(firstOnly)
+      expect(archived.skipped).toEqual([])
 
-      const second = await client.archiveStorage({ days: 30, confirmed: true })
-      expect(second).toEqual({ ok: true, days: 30, count: 0, totalBytes: 0, moved: [] })
+      if (previewNames.length > 1) {
+        const rest = previewNames.slice(1)
+        const archivedRest = await client.archiveStorage({ days: 30, files: rest, confirmed: true })
+        expect(archivedRest.count).toBe(rest.length)
+      }
+
+      const second = await client.archiveStorage({ days: 30, files: firstOnly, confirmed: true })
+      expect(second).toEqual({
+        ok: true,
+        days: 30,
+        count: 0,
+        totalBytes: 0,
+        moved: [],
+        skipped: [{ name: firstOnly[0], reason: 'The file is no longer eligible.' }],
+      })
     }
+
+    const lateLog = join(runs, 'agy-20260926-100000-001.log')
+    const beforeLatePreview = await bridgeClient.previewStorageArchive({ days: 30 })
+    expect(beforeLatePreview.count).toBe(0)
+    writeFileSync(lateLog, 'became-old-after-preview')
+    utimesSync(lateLog, oldDate, oldDate)
+
+    await expect(
+      bridgeClient.archiveStorage({
+        days: 30,
+        files: ['agy-20260925-100000-001.log'],
+        confirmed: true,
+      })
+    ).resolves.toEqual({
+      ok: true,
+      days: 30,
+      count: 0,
+      totalBytes: 0,
+      moved: [],
+      skipped: [{ name: 'agy-20260925-100000-001.log', reason: 'The file is no longer eligible.' }],
+    })
+    expect((await bridgeClient.storage()).kinds.logs.count).toBe(1)
   })
 })
