@@ -1,7 +1,6 @@
-import { readdirSync } from 'node:fs'
-import { readFileSync } from 'node:fs'
-import { copyFile, lstat, mkdir, readdir, rename, unlink, utimes } from 'node:fs/promises'
-import { basename, dirname, join, resolve } from 'node:path'
+import { constants, readdirSync, readFileSync } from 'node:fs'
+import { copyFile, link, lstat, mkdir, readdir, realpath, stat, unlink, utimes } from 'node:fs/promises'
+import { basename, isAbsolute, join, relative, resolve } from 'node:path'
 import { WORKTREES_FOLDER } from '../src/briefs/run.js'
 import { isHolderAlive, readLaneLock } from '../scripts/lane-lock.mjs'
 import { cleanDecision, collectWorktrees } from '../scripts/worktrees.mjs'
@@ -19,6 +18,7 @@ export const DAYS_PROBLEM = 'Choose 1 to 365 days.'
 export const CONFIRM_PROBLEM = 'Confirm the archive before moving files.'
 export const ORIGIN_PROBLEM = 'Archiving storage needs a page Origin.'
 export const BUSY_PROBLEM = 'A storage archive is already running.'
+export const ARCHIVE_PATH_PROBLEM = 'The archive folder must stay inside the runs folder.'
 export const METHOD_PROBLEM = 'Use GET for /api/storage or POST for /api/storage/preview and /api/storage/archive.'
 
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -28,6 +28,8 @@ const LOG_SUFFIX = /^(.+)\.log$/i
 const CONVERSATION_FILE = /^orchestrator-.+\.json$/i
 const RECORDING_PART = /^(.+)-(run\.jsonl|agents\.json|tree\.json)$/i
 const RUN_TIMESTAMP_SUFFIX = /^(.+?)-\d{8}-\d{6}-\d{3}$/i
+const MONTH_FOLDER = /^\d{4}-\d{2}$/
+const NO_HARDLINK_CODES = new Set(['EXDEV', 'EPERM', 'ENOTSUP', 'ENOSYS', 'EOPNOTSUPP'])
 
 function refusal(message, status = 400) {
   const error = new Error(message)
@@ -105,6 +107,15 @@ function createLimiter(limit = STAT_CONCURRENCY) {
   }
 }
 
+async function lstatOrNull(filePath, lstatFn = lstat) {
+  try {
+    return await lstatFn(filePath)
+  } catch (error) {
+    if (error?.code === 'ENOENT' || error?.code === 'ENOTDIR') return null
+    throw error
+  }
+}
+
 async function statFileSafe(filePath, lstatFn = lstat) {
   try {
     const info = await lstatFn(filePath)
@@ -112,6 +123,161 @@ async function statFileSafe(filePath, lstatFn = lstat) {
   } catch {
     return null
   }
+}
+
+async function pathExists(filePath, lstatFn = lstat) {
+  try {
+    await lstatFn(filePath)
+    return true
+  } catch (error) {
+    if (error?.code === 'ENOENT' || error?.code === 'ENOTDIR') return false
+    return true
+  }
+}
+
+function isInsideDir(parentReal, childReal) {
+  const rel = relative(parentReal, childReal)
+  if (!rel || rel === '.' || isAbsolute(rel)) return false
+  const parts = rel.split(/[\\/]+/)
+  return parts[0] !== '..' && !parts.includes('..')
+}
+
+function isExpectedChild(parentReal, childReal, expectedName, platform = process.platform) {
+  const rel = relative(parentReal, childReal)
+  if (!rel || isAbsolute(rel)) return false
+  return platform === 'win32' ? rel.toLowerCase() === expectedName.toLowerCase() : rel === expectedName
+}
+
+async function realpathSafe(targetPath, realpathFn = realpath) {
+  try {
+    return await realpathFn(targetPath)
+  } catch {
+    throw refusal(ARCHIVE_PATH_PROBLEM, 400)
+  }
+}
+
+async function safePreviewMonthDir(runsDir, month, cache, platform = process.platform) {
+  if (cache.has(month)) return cache.get(month)
+  let resolved = null
+  try {
+    const runsInfo = await lstatOrNull(runsDir)
+    if (runsInfo) {
+      const realRunsDir = await realpath(runsDir)
+      const archiveDir = join(runsDir, ARCHIVE_DIR_NAME)
+      const archiveInfo = await lstatOrNull(archiveDir)
+      if (archiveInfo && !archiveInfo.isSymbolicLink() && archiveInfo.isDirectory()) {
+        const realArchiveDir = await realpath(archiveDir)
+        if (isExpectedChild(realRunsDir, realArchiveDir, ARCHIVE_DIR_NAME, platform)) {
+          const monthDir = join(realArchiveDir, month)
+          const monthInfo = await lstatOrNull(monthDir)
+          if (monthInfo && !monthInfo.isSymbolicLink() && monthInfo.isDirectory()) {
+            const realMonthDir = await realpath(monthDir)
+            if (isExpectedChild(realArchiveDir, realMonthDir, month, platform) && isInsideDir(realRunsDir, realMonthDir)) {
+              resolved = realMonthDir
+            }
+          }
+        }
+      }
+    }
+  } catch {
+    resolved = null
+  }
+  cache.set(month, resolved)
+  return resolved
+}
+
+async function verifyRealChildDir(parentReal, dirPath, expectedName, { lstatFn, realpathFn, platform, create = false }) {
+  let info = await lstatOrNull(dirPath, lstatFn)
+  if (!info) {
+    if (!create) return null
+    try {
+      await mkdir(dirPath)
+    } catch (error) {
+      if (error?.code !== 'EEXIST') throw error
+    }
+    info = await lstatOrNull(dirPath, lstatFn)
+  }
+  if (!info || info.isSymbolicLink() || !info.isDirectory()) {
+    throw refusal(ARCHIVE_PATH_PROBLEM, 400)
+  }
+  const realChild = await realpathSafe(dirPath, realpathFn)
+  if (!isExpectedChild(parentReal, realChild, expectedName, platform)) {
+    throw refusal(ARCHIVE_PATH_PROBLEM, 400)
+  }
+  return realChild
+}
+
+async function ensureSafeArchiveDirs(runsDir, months, options = {}) {
+  const verified = new Map()
+  if (!runsDir) return verified
+  const lstatFn = typeof options.lstatFn === 'function' ? options.lstatFn : lstat
+  const realpathFn = typeof options.realpathFn === 'function' ? options.realpathFn : realpath
+  const platform = options.platform ?? process.platform
+
+  let runsInfo = await lstatOrNull(runsDir, lstatFn)
+  if (!runsInfo) {
+    if (months.length === 0) return verified
+    await mkdir(runsDir, { recursive: true })
+    runsInfo = await lstatOrNull(runsDir, lstatFn)
+  }
+  if (!runsInfo) throw refusal(ARCHIVE_PATH_PROBLEM, 400)
+
+  const realRunsDir = await realpathSafe(runsDir, realpathFn)
+  let realRunsStat = null
+  try {
+    realRunsStat = await stat(realRunsDir)
+  } catch {
+    realRunsStat = null
+  }
+  if (!realRunsStat || !realRunsStat.isDirectory()) throw refusal(ARCHIVE_PATH_PROBLEM, 400)
+
+  const archiveDir = join(runsDir, ARCHIVE_DIR_NAME)
+  const existingArchive = await verifyRealChildDir(realRunsDir, archiveDir, ARCHIVE_DIR_NAME, {
+    lstatFn,
+    realpathFn,
+    platform,
+    create: false,
+  })
+  if (existingArchive) {
+    for (const month of months) {
+      if (!MONTH_FOLDER.test(month)) throw refusal(ARCHIVE_PATH_PROBLEM, 400)
+      const realMonth = await verifyRealChildDir(existingArchive, join(existingArchive, month), month, {
+        lstatFn,
+        realpathFn,
+        platform,
+        create: false,
+      })
+      if (realMonth) {
+        if (!isInsideDir(realRunsDir, realMonth)) throw refusal(ARCHIVE_PATH_PROBLEM, 400)
+        verified.set(month, realMonth)
+      }
+    }
+  }
+
+  if (months.length === 0) return verified
+
+  const realArchiveDir =
+    existingArchive ??
+    (await verifyRealChildDir(realRunsDir, archiveDir, ARCHIVE_DIR_NAME, {
+      lstatFn,
+      realpathFn,
+      platform,
+      create: true,
+    }))
+
+  for (const month of months) {
+    if (verified.has(month)) continue
+    if (!MONTH_FOLDER.test(month)) throw refusal(ARCHIVE_PATH_PROBLEM, 400)
+    const realMonth = await verifyRealChildDir(realArchiveDir, join(realArchiveDir, month), month, {
+      lstatFn,
+      realpathFn,
+      platform,
+      create: true,
+    })
+    if (!isInsideDir(realRunsDir, realMonth)) throw refusal(ARCHIVE_PATH_PROBLEM, 400)
+    verified.set(month, realMonth)
+  }
+  return verified
 }
 
 async function statDirEntries(dirPath, entries, lstatFn, limit) {
@@ -454,6 +620,28 @@ function indexRecordingNames(recordingsDir) {
   return names
 }
 
+async function buildGroupCandidates({ runsDir, groupFiles, month, kind, previewMonthCache, platform }) {
+  const archiveDir = `${ARCHIVE_DIR_NAME}/${month}`
+  const existingMonthDir = await safePreviewMonthDir(runsDir, month, previewMonthCache, platform)
+  const groupCandidates = []
+  for (const file of groupFiles) {
+    const destination = join(runsDir, ARCHIVE_DIR_NAME, month, file.name)
+    if (existingMonthDir && (await pathExists(join(existingMonthDir, file.name)))) {
+      return null
+    }
+    groupCandidates.push({
+      name: file.name,
+      kind,
+      bytes: file.bytes,
+      mtimeMs: file.mtimeMs,
+      archiveDir,
+      source: file.path,
+      destination,
+    })
+  }
+  return groupCandidates
+}
+
 export async function previewStorageArchive(options = {}) {
   const days = cleanArchiveDays(options.days)
   const nowMs = typeof options.now === 'function' ? options.now() : Date.now()
@@ -483,6 +671,8 @@ export async function previewStorageArchive(options = {}) {
     if (stem) recordsByStem.set(stem, record)
   }
 
+  const platform = options.platform ?? process.platform
+  const previewMonthCache = new Map()
   const candidateFiles = []
   const archivedStems = new Set()
 
@@ -498,26 +688,15 @@ export async function previewStorageArchive(options = {}) {
     if (newestMtimeMs >= cutoffMs || (recordMs !== null && recordMs >= cutoffMs)) continue
 
     const month = utcMonth(recordMs ?? newestMtimeMs)
-    const archiveDir = `${ARCHIVE_DIR_NAME}/${month}`
-    let groupReady = true
-    const groupCandidates = []
-    for (const file of groupFiles) {
-      const destination = join(scanned.runsDir, ARCHIVE_DIR_NAME, month, file.name)
-      if (await statFileSafe(destination)) {
-        groupReady = false
-        break
-      }
-      groupCandidates.push({
-        name: file.name,
-        kind: 'logs',
-        bytes: file.bytes,
-        mtimeMs: file.mtimeMs,
-        archiveDir,
-        source: file.path,
-        destination,
-      })
-    }
-    if (!groupReady) continue
+    const groupCandidates = await buildGroupCandidates({
+      runsDir: scanned.runsDir,
+      groupFiles,
+      month,
+      kind: 'logs',
+      previewMonthCache,
+      platform,
+    })
+    if (!groupCandidates) continue
     archivedStems.add(stem)
     candidateFiles.push(...groupCandidates)
   }
@@ -546,26 +725,15 @@ export async function previewStorageArchive(options = {}) {
     if (newestMtimeMs >= cutoffMs) continue
 
     const month = utcMonth(newestMtimeMs)
-    const archiveDir = `${ARCHIVE_DIR_NAME}/${month}`
-    let groupReady = true
-    const groupCandidates = []
-    for (const file of groupFiles) {
-      const destination = join(scanned.runsDir, ARCHIVE_DIR_NAME, month, file.name)
-      if (await statFileSafe(destination)) {
-        groupReady = false
-        break
-      }
-      groupCandidates.push({
-        name: file.name,
-        kind: 'recordings',
-        bytes: file.bytes,
-        mtimeMs: file.mtimeMs,
-        archiveDir,
-        source: file.path,
-        destination,
-      })
-    }
-    if (groupReady) candidateFiles.push(...groupCandidates)
+    const groupCandidates = await buildGroupCandidates({
+      runsDir: scanned.runsDir,
+      groupFiles,
+      month,
+      kind: 'recordings',
+      previewMonthCache,
+      platform,
+    })
+    if (groupCandidates) candidateFiles.push(...groupCandidates)
   }
 
   candidateFiles.sort((left, right) =>
@@ -588,32 +756,80 @@ export async function previewStorageArchive(options = {}) {
   }
 }
 
-async function moveFileSafe(source, destination) {
-  await mkdir(dirname(destination), { recursive: true })
-  try {
-    await rename(source, destination)
-    return
-  } catch (error) {
-    if (error?.code !== 'EXDEV') throw error
+/**
+ * Move one file into an existing destination directory without ever overwriting an existing target.
+ */
+export async function moveFileSafe(source, destination, options = {}) {
+  const linkFn = typeof options.linkFn === 'function' ? options.linkFn : link
+  const copyFileFn = typeof options.copyFileFn === 'function' ? options.copyFileFn : copyFile
+  const unlinkFn = typeof options.unlinkFn === 'function' ? options.unlinkFn : unlink
+  const lstatFn = typeof options.lstatFn === 'function' ? options.lstatFn : lstat
+  const utimesFn = typeof options.utimesFn === 'function' ? options.utimesFn : utimes
+
+  const info = await lstatFn(source)
+  if (!info.isFile()) {
+    throw refusal('Archive source is not a regular file.', 400)
   }
-  const info = await lstat(source)
-  await copyFile(source, destination)
-  await utimes(destination, info.atime, info.mtime)
-  await unlink(source)
+
+  let linked = false
+  try {
+    await linkFn(source, destination)
+    linked = true
+  } catch (error) {
+    if (!NO_HARDLINK_CODES.has(error?.code)) throw error
+  }
+
+  if (linked) {
+    try {
+      await unlinkFn(source)
+      return
+    } catch (error) {
+      await unlinkFn(destination).catch(() => {})
+      throw error
+    }
+  }
+
+  await copyFileFn(source, destination, constants.COPYFILE_EXCL)
+  try {
+    await utimesFn(destination, info.atime, info.mtime)
+    await unlinkFn(source)
+  } catch (error) {
+    await unlinkFn(destination).catch(() => {})
+    throw error
+  }
 }
 
 export async function applyStorageArchive(options = {}) {
   const preview = await previewStorageArchive(options)
+  const runsDir = resolvedOption(options.runsFolder)
+  const months = [...new Set(preview.files.map((item) => item.archiveDir.slice(`${ARCHIVE_DIR_NAME}/`.length)))]
+  const verifiedMonthDirs = await ensureSafeArchiveDirs(runsDir, months, {
+    platform: options.platform ?? process.platform,
+    realpathFn: options.realpathFn,
+  })
   const moved = []
   for (const item of preview.files) {
-    if (await statFileSafe(item.destination)) continue
-    await moveFileSafe(item.source, item.destination)
+    const month = item.archiveDir.slice(`${ARCHIVE_DIR_NAME}/`.length)
+    const monthDir = verifiedMonthDirs.get(month)
+    const destination = join(monthDir, item.name)
+    if (typeof options.beforeMove === 'function') {
+      await options.beforeMove(item, destination)
+    }
+    try {
+      await moveFileSafe(item.source, destination, {
+        linkFn: options.linkFn,
+        copyFileFn: options.copyFileFn,
+      })
+    } catch (error) {
+      if (error?.code === 'EEXIST') continue
+      throw error
+    }
     moved.push({
       name: item.name,
       kind: item.kind,
       bytes: item.bytes,
       archiveDir: item.archiveDir,
-      destination: item.destination,
+      destination,
     })
   }
   return {
@@ -719,6 +935,12 @@ export function createStorageApi({
       try {
         const result = await applyStorageArchive(sourceOptions({ days }))
         sendJson(req, res, 200, result)
+      } catch (error) {
+        if (error?.status) {
+          sendJson(req, res, error.status, { error: error.message })
+          return true
+        }
+        throw error
       } finally {
         archiving = false
       }

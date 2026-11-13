@@ -1,11 +1,12 @@
 import { execFileSync } from 'node:child_process'
-import { existsSync, mkdirSync, readFileSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs'
-import { lstat, readdir } from 'node:fs/promises'
+import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs'
+import { lstat, readdir, realpath } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { createBridge } from '../server/index.js'
 import {
+  ARCHIVE_PATH_PROBLEM,
   CONFIRM_PROBLEM,
   DAYS_PROBLEM,
   ORIGIN_PROBLEM,
@@ -13,6 +14,7 @@ import {
   applyStorageArchive,
   measureDirectoryBytes,
   measureStorage,
+  moveFileSafe,
   previewStorageArchive,
   worktreesCleanCommand,
 } from '../server/storage.js'
@@ -620,5 +622,188 @@ describe('server/storage', () => {
     expect(inFlight).toBe(0)
     expect(maxInFlight).toBe(STAT_CONCURRENCY)
     expect(singleBytes).toBe(agyBytes)
+  })
+
+  it('refuses archive when the archive folder is a junction or symbolic link and keeps the source file', async (ctx) => {
+    const fixture = buildSyntheticFixture()
+    const outsideDir = join(fixture.base, 'outside-archive')
+    mkdirSync(outsideDir, { recursive: true })
+    const linkPath = join(fixture.runs, 'archive')
+    try {
+      symlinkSync(outsideDir, linkPath, process.platform === 'win32' ? 'junction' : 'dir')
+    } catch (error) {
+      if (error?.code === 'EPERM' || error?.code === 'EACCES' || error?.code === 'ENOTSUP') {
+        ctx.skip()
+        return
+      }
+      throw error
+    }
+
+    const logPath = join(fixture.runs, 'agy-20260910-100000-001.log')
+    writeAgedFile(logPath, 'keep-me-in-runs', OLD_45_MS)
+
+    await expect(
+      applyStorageArchive({
+        runsFolder: fixture.runs,
+        projectRoot: fixture.project,
+        days: 30,
+        now: () => NOW_MS,
+      })
+    ).rejects.toThrow('The archive folder must stay inside the runs folder.')
+
+    expect(existsSync(logPath)).toBe(true)
+    expect(readFileSync(logPath, 'utf8')).toBe('keep-me-in-runs')
+    expect(readdirSync(outsideDir)).toEqual([])
+
+    const bridge = createBridge({
+      projectRoot: fixture.project,
+      runsFolder: fixture.runs,
+      now: () => NOW_MS,
+    })
+    const { url } = await bridge.start(0)
+    cleanups.push(() => bridge.stop())
+
+    const response = await fetch(`${url}/api/storage/archive`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Origin: 'http://localhost:5173' },
+      body: JSON.stringify({ days: 30, confirmed: true }),
+    })
+    expect(response.status).toBe(400)
+    expect(await response.json()).toEqual({ error: ARCHIVE_PATH_PROBLEM })
+    expect(existsSync(logPath)).toBe(true)
+    expect(readdirSync(outsideDir)).toEqual([])
+  })
+
+  it('refuses archive when realpath places the archive or month folder outside the real runs folder', async () => {
+    const fixture = buildSyntheticFixture()
+    const outsideDir = join(fixture.base, 'outside-real')
+    mkdirSync(outsideDir, { recursive: true })
+    mkdirSync(join(fixture.runs, 'archive', '2026-09'), { recursive: true })
+    const logPath = join(fixture.runs, 'agy-20260910-100000-001.log')
+    writeAgedFile(logPath, 'keep-outside-check', OLD_45_MS)
+
+    await expect(
+      applyStorageArchive({
+        runsFolder: fixture.runs,
+        projectRoot: fixture.project,
+        days: 30,
+        now: () => NOW_MS,
+        realpathFn: async (targetPath) => {
+          if (targetPath.endsWith('2026-09')) return outsideDir
+          return realpath(targetPath)
+        },
+      })
+    ).rejects.toThrow(ARCHIVE_PATH_PROBLEM)
+    expect(existsSync(logPath)).toBe(true)
+    expect(readdirSync(outsideDir)).toEqual([])
+  })
+
+  it('refuses archive when a month folder is a junction or symbolic link before moving any file', async (ctx) => {
+    const fixture = buildSyntheticFixture()
+    const outsideMonth = join(fixture.base, 'outside-month')
+    mkdirSync(outsideMonth, { recursive: true })
+    mkdirSync(join(fixture.runs, 'archive'), { recursive: true })
+    const monthLink = join(fixture.runs, 'archive', '2026-09')
+    try {
+      symlinkSync(outsideMonth, monthLink, process.platform === 'win32' ? 'junction' : 'dir')
+    } catch (error) {
+      if (error?.code === 'EPERM' || error?.code === 'EACCES' || error?.code === 'ENOTSUP') {
+        ctx.skip()
+        return
+      }
+      throw error
+    }
+
+    const old80Ms = NOW_MS - 80 * DAY_MS
+    const augLog = join(fixture.runs, 'agy-20260820-100000-001.log')
+    const sepLog = join(fixture.runs, 'agy-20260910-100000-001.log')
+    writeAgedFile(augLog, 'august-log', old80Ms)
+    writeAgedFile(sepLog, 'september-log', OLD_45_MS)
+
+    await expect(
+      applyStorageArchive({
+        runsFolder: fixture.runs,
+        projectRoot: fixture.project,
+        days: 30,
+        now: () => NOW_MS,
+      })
+    ).rejects.toThrow('The archive folder must stay inside the runs folder.')
+
+    expect(existsSync(augLog)).toBe(true)
+    expect(existsSync(sepLog)).toBe(true)
+    expect(readFileSync(augLog, 'utf8')).toBe('august-log')
+    expect(readFileSync(sepLog, 'utf8')).toBe('september-log')
+    expect(existsSync(join(fixture.runs, 'archive', '2026-08'))).toBe(false)
+    expect(readdirSync(outsideMonth)).toEqual([])
+  })
+
+  it('never overwrites an existing destination file or symlink', async () => {
+    const fixture = buildSyntheticFixture()
+    const source = join(fixture.runs, 'agy-20260910-100000-001.log')
+    const monthDir = join(fixture.runs, 'archive', '2026-09')
+    mkdirSync(monthDir, { recursive: true })
+    const destination = join(monthDir, 'agy-20260910-100000-001.log')
+    writeAgedFile(source, 'new-log-content', OLD_45_MS)
+    writeAgedFile(destination, 'existing-archive-content', OLD_45_MS)
+
+    await expect(moveFileSafe(source, destination)).rejects.toMatchObject({ code: 'EEXIST' })
+    expect(readFileSync(destination, 'utf8')).toBe('existing-archive-content')
+    expect(readFileSync(source, 'utf8')).toBe('new-log-content')
+
+    await expect(
+      moveFileSafe(source, destination, {
+        linkFn: async () => {
+          const error = new Error('cross device')
+          error.code = 'EXDEV'
+          throw error
+        },
+      })
+    ).rejects.toMatchObject({ code: 'EEXIST' })
+    expect(readFileSync(destination, 'utf8')).toBe('existing-archive-content')
+    expect(readFileSync(source, 'utf8')).toBe('new-log-content')
+
+    const raceLog = join(fixture.runs, 'agy-20260911-100000-001.log')
+    const raceDest = join(monthDir, 'agy-20260911-100000-001.log')
+    writeAgedFile(raceLog, 'race-source-content', OLD_45_MS)
+    const archived = await applyStorageArchive({
+      runsFolder: fixture.runs,
+      projectRoot: fixture.project,
+      days: 30,
+      now: () => NOW_MS,
+      beforeMove: async (item) => {
+        if (item.name === 'agy-20260911-100000-001.log') {
+          writeFileSync(raceDest, 'concurrent-existing')
+        }
+      },
+    })
+    expect(archived.count).toBe(0)
+    expect(archived.moved).toEqual([])
+    expect(readFileSync(raceDest, 'utf8')).toBe('concurrent-existing')
+    expect(readFileSync(raceLog, 'utf8')).toBe('race-source-content')
+
+    const symLog = join(fixture.runs, 'agy-20260912-100000-001.log')
+    const symDest = join(monthDir, 'agy-20260912-100000-001.log')
+    const outsideTarget = join(fixture.base, 'outside-file.txt')
+    writeAgedFile(symLog, 'sym-source', OLD_45_MS)
+    writeFileSync(outsideTarget, 'outside-keep')
+    let madeFileSym = false
+    try {
+      symlinkSync(outsideTarget, symDest, 'file')
+      madeFileSym = true
+    } catch (error) {
+      if (error?.code !== 'EPERM' && error?.code !== 'EACCES' && error?.code !== 'ENOTSUP') throw error
+    }
+    if (madeFileSym) {
+      const symResult = await applyStorageArchive({
+        runsFolder: fixture.runs,
+        projectRoot: fixture.project,
+        days: 30,
+        now: () => NOW_MS,
+      })
+      expect(symResult.count).toBe(0)
+      expect(lstatSync(symDest).isSymbolicLink()).toBe(true)
+      expect(readFileSync(outsideTarget, 'utf8')).toBe('outside-keep')
+      expect(readFileSync(symLog, 'utf8')).toBe('sym-source')
+    }
   })
 })
