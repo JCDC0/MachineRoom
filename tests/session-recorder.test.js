@@ -1,4 +1,7 @@
-import { describe, expect, it } from 'vitest'
+import { appendFileSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { afterEach, describe, expect, it } from 'vitest'
+import { claudeProjectSlug, createClaudeSessionsReader } from '../server/claude-sessions.js'
 import {
   COMPACT_AFTER,
   RECORD_BYTES_MAX,
@@ -10,10 +13,22 @@ import {
   createSessionRecorder,
   recorderToReplay,
 } from '../src/model/sessionRecorder.js'
+import { prepare } from '../src/model/source.js'
+import { makeTempDir } from './helpers/tempRoot.js'
 
 const BASE = Date.parse('2026-10-26T10:00:00.000Z')
 const MINUTE = 60000
 const TOOL_LINE = '{"type":"assistant","message":{"content":[{"type":"tool_use","id":"tool-1","name":"Read","input":{"file_path":"src/app.js"}}]}}\n'
+
+const cleanups = []
+
+afterEach(() => {
+  while (cleanups.length > 0) {
+    try {
+      cleanups.pop()()
+    } catch {}
+  }
+})
 
 let nextId = 1
 
@@ -44,6 +59,24 @@ const AGENTS = {
   agents: [{ id: 'agent-1', key: 'claude', name: 'Claude Code', parser: 'claude' }],
 }
 const TREE = { root: 'agent-sandbox', files: ['src/app.js'], created: [] }
+
+const SESSION_AGENTS = {
+  projectRoot: 'app',
+  agents: [{ id: 'agent-claude-session', key: 'claude-session', name: 'Claude Code session', parser: 'claude' }],
+}
+const SESSION_TREE = { root: 'app', files: ['src/a.js', 'src/b.js'], created: [] }
+
+function sessionSetup() {
+  const base = makeTempDir('mr-recorder-lifetimes-')
+  cleanups.push(() => rmSync(base, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }))
+  const projectRoot = join(base, 'work', 'app')
+  const home = join(base, 'home')
+  const runs = join(base, 'runs')
+  const folder = join(home, '.claude', 'projects', claudeProjectSlug(projectRoot))
+  mkdirSync(folder, { recursive: true })
+  mkdirSync(runs, { recursive: true })
+  return { projectRoot, home, runs, folder }
+}
 
 describe('clampRecordMinutes', () => {
   it('keeps the limits as they are', () => {
@@ -387,5 +420,61 @@ describe('recorderToReplay', () => {
     const replay = recorderToReplay(recorder, { agentsFile: AGENTS, treeFile: TREE })
     expect(replay.truncated).toBe(false)
     expect(replay.frames).toHaveLength(51)
+  })
+})
+
+describe('replay across reader lifetimes', () => {
+  it('gives two tool calls when one recorder keeps six frames from two reader lifetimes', () => {
+    const { projectRoot, home, runs, folder } = sessionSetup()
+    let clock = BASE
+    const now = () => (clock += 1000)
+    const file = join(folder, 'sess-1.jsonl')
+    writeFileSync(file, '')
+    const recorder = createSessionRecorder()
+
+    function jsonLines(items) {
+      return items.map((item) => `${JSON.stringify(item)}\n`).join('')
+    }
+
+    function line(type, content) {
+      return { type, message: { role: type, content }, cwd: projectRoot, sessionId: 'sess-1', timestamp: new Date(clock).toISOString() }
+    }
+
+    function readTool(id, path) {
+      return { type: 'tool_use', id, name: 'Read', input: { file_path: path } }
+    }
+
+    function readTurn(id) {
+      const frames = []
+      const reader = createClaudeSessionsReader({
+        projectRoot,
+        home,
+        runsFolder: runs,
+        now,
+        emit: (frame) => {
+          frames.push(frame)
+          recorder.push(frame)
+        },
+      })
+      cleanups.push(() => reader.stop())
+      reader.tick()
+      appendFileSync(file, jsonLines([
+        line('user', 'Go.'),
+        line('assistant', [readTool(id, join(projectRoot, 'src', `${id}.js`))]),
+      ]))
+      reader.tick()
+      return frames
+    }
+
+    expect(readTurn('a')).toHaveLength(3)
+    expect(readTurn('b')).toHaveLength(3)
+    expect(recorder.frames()).toHaveLength(6)
+
+    const replay = recorderToReplay(recorder, { agentsFile: SESSION_AGENTS, treeFile: SESSION_TREE })
+    const prepared = prepare({ frames: replay.frames, agentsFile: SESSION_AGENTS, treeFile: SESSION_TREE })
+    expect(prepared.activities.filter((activity) => activity.type === 'tool.start')).toHaveLength(2)
+
+    const runIds = new Set(recorder.frames().map((frame) => frame.payload.runId))
+    expect(runIds.size).toBe(2)
   })
 })

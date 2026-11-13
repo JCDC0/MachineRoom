@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto'
 import { closeSync, openSync, readFileSync, readdirSync, readSync, statSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
@@ -87,6 +88,7 @@ export function createClaudeSessionsReader(options = {}) {
   const projectRoot = resolve(options.projectRoot ?? process.cwd())
   const home = options.home ?? homedir()
   const runsFolder = options.runsFolder ? resolve(options.runsFolder) : ''
+  const token = randomBytes(4).toString('hex')
   const now = options.now ?? Date.now
   const quietMs = Number.isFinite(Number(options.quietMs)) ? Number(options.quietMs) : DEFAULT_QUIET_MS
   const idleMs = Number.isFinite(Number(options.idleMs)) ? Number(options.idleMs) : DEFAULT_IDLE_MS
@@ -224,7 +226,7 @@ export function createClaudeSessionsReader(options = {}) {
     if (session.run?.open) endRun(session, 'succeeded')
     const at = now()
     session.number += 1
-    const run = { runId: `${session.id}:${session.number}`, seq: 0, startedAt: at, lastGrowth: at, open: true, session: session.id }
+    const run = { runId: `${session.id}:${token}:${session.number}`, seq: 0, startedAt: at, lastGrowth: at, open: true, session: session.id }
     session.run = run
     send('heartbeat.run.queued', session, baseOf(run))
     send('heartbeat.run.status', session, {

@@ -111,6 +111,10 @@ function result(id, content = '', isError = false) {
   return { type: 'tool_result', tool_use_id: id, is_error: isError, content }
 }
 
+function runIdPattern(sessionId, number) {
+  return new RegExp(`^${sessionId}:[0-9a-f]{8}:${number}$`)
+}
+
 describe('claude sessions reader', () => {
   it('builds the project folder slug from every character that is not a letter or a digit', () => {
     const folder = join('scratch', 'work', 'my app', 'v2')
@@ -150,7 +154,10 @@ describe('claude sessions reader', () => {
     expect(frames[0].payload.session).toBe('sess-1')
     expect(logFrames(frames).every((frame) => frame.payload.session === 'sess-1')).toBe(true)
     expect(frames.at(-1).payload).toMatchObject({ status: 'succeeded', error: null })
-    expect(frames.map((frame) => frame.payload.runId)).toEqual(Array(7).fill('sess-1:1'))
+    const runIds = frames.map((frame) => frame.payload.runId)
+    expect(runIds).toHaveLength(7)
+    expect(new Set(runIds).size).toBe(1)
+    expect(runIds[0]).toMatch(runIdPattern('sess-1', 1))
     expect(logFrames(frames).map((frame) => frame.payload.seq)).toEqual([1, 2, 3, 4])
 
     const sent = chunks(frames)
@@ -165,6 +172,34 @@ describe('claude sessions reader', () => {
       expect(chunk).not.toHaveProperty('timestamp')
     }
     expect(JSON.stringify(sent)).not.toContain('Fix the failing test.')
+  })
+
+  it('gives two readers over one session file different run ids', () => {
+    const { projectRoot, home, runs, sessionsFolder } = setup()
+    const file = join(sessionsFolder, 'sess-1.jsonl')
+    writeFileSync(file, '')
+
+    function lifetime(id) {
+      const frames = []
+      const reader = makeReader({ projectRoot, home, runs, frames })
+      reader.tick()
+      appendFileSync(file, jsonLines([
+        sessionLine('user', { role: 'user', content: 'Go.' }, {}, projectRoot),
+        sessionLine('assistant', { role: 'assistant', content: [readUse(id, join(projectRoot, 'src', 'math.js'))] }, {}, projectRoot),
+      ]))
+      reader.tick()
+      return frames
+    }
+
+    const first = lifetime('t1')
+    const second = lifetime('t2')
+    expect(logFrames(first)).toHaveLength(1)
+    expect(logFrames(second)).toHaveLength(1)
+    const firstRun = first[0].payload.runId
+    const secondRun = second[0].payload.runId
+    expect(firstRun).toMatch(runIdPattern('sess-1', 1))
+    expect(secondRun).toMatch(runIdPattern('sess-1', 1))
+    expect(firstRun).not.toBe(secondRun)
   })
 
   it('cuts a tool result text to its first 2000 characters and keeps other items out', () => {
@@ -548,7 +583,7 @@ describe('claude sessions reader', () => {
       'heartbeat.run.status',
       'heartbeat.run.log',
     ])
-    expect(logFrames(frames)[0].payload.runId).toBe('sess-1:1')
+    expect(logFrames(frames)[0].payload.runId).toMatch(runIdPattern('sess-1', 1))
   })
 })
 
@@ -834,7 +869,8 @@ describe('sessions source', () => {
 
     const fresh = activities.slice(activityCount).filter((activity) => activity.type === 'tool.start')
     expect(fresh).toHaveLength(1)
-    expect(fresh[0]).toMatchObject({ id: 'fresh-1', runId: `${forgottenId}:2` })
+    expect(fresh[0]).toMatchObject({ id: 'fresh-1' })
+    expect(fresh[0].runId).toMatch(runIdPattern(forgottenId, 2))
   })
 
   it('drops finished subagent buffers from session.children once result is read', () => {

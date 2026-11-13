@@ -122,6 +122,10 @@ function chunkOf(frame) {
   return JSON.parse(frame.payload.chunk)
 }
 
+function runIdPattern(sessionId, number) {
+  return new RegExp(`^${sessionId}:[0-9a-f]{8}:${number}$`)
+}
+
 describe('the OpenCode session reader', () => {
   it('forgets a finished session after an hour without replaying it, and still reads what comes later', () => {
     const { dir, dbPath } = makeDatabase()
@@ -159,9 +163,39 @@ describe('the OpenCode session reader', () => {
     clock.value += 10000
     reader.tick()
     expect(frames.length).toBeGreaterThan(before)
-    expect(frames[before].payload.runId).toBe('ses-1:4')
+    expect(frames[before].payload.runId).toMatch(runIdPattern('ses-1', 4))
     expect(reader.sessions().has('ses-1')).toBe(true)
     expect(reader.forgotten().has('ses-1')).toBe(false)
+  })
+
+  it('gives two reader lifetimes over one database different run ids', () => {
+    const { dir, dbPath } = makeDatabase()
+    const projectRoot = join(dir, 'project')
+    const clock = { value: 5000 }
+    addSession(dbPath, { id: 'ses-1', directory: projectRoot, time: 1000 })
+
+    const first = startReader({ dbPath, projectRoot, runsFolder: join(dir, 'runs'), clock })
+    first.reader.tick()
+    addMessage(dbPath, { id: 'm-first', sessionId: 'ses-1', type: 'user', seq: 1, time: 2000 })
+    withDb(dbPath, (db) => {
+      db.prepare('UPDATE session_v2 SET time_updated = ? WHERE id = ?').run(2000, 'ses-1')
+    })
+    first.reader.tick()
+    const firstRun = statusFrames(first.frames)[0].payload.runId
+
+    clock.value += 1000
+    const second = startReader({ dbPath, projectRoot, runsFolder: join(dir, 'runs'), clock })
+    second.reader.tick()
+    addMessage(dbPath, { id: 'm-second', sessionId: 'ses-1', type: 'user', seq: 1, time: 3000 })
+    withDb(dbPath, (db) => {
+      db.prepare('UPDATE session_v2 SET time_updated = ? WHERE id = ?').run(3000, 'ses-1')
+    })
+    second.reader.tick()
+    const secondRun = statusFrames(second.frames)[0].payload.runId
+
+    expect(firstRun).toMatch(runIdPattern('ses-1', 1))
+    expect(secondRun).toMatch(runIdPattern('ses-1', 1))
+    expect(firstRun).not.toBe(secondRun)
   })
 
   it('caps the forgotten map at 200 entries and reads a dropped session reopened later (S39)', () => {
@@ -216,7 +250,7 @@ describe('the OpenCode session reader', () => {
     expect(reader.forgotten().has('ses-1')).toBe(false)
     const logs = logFrames(frames)
     expect(logs.some((f) => chunkOf(f).part?.id === 'call-reopen')).toBe(true)
-    expect(statusFrames(frames).at(-1).payload.runId).toBe('ses-1:3')
+    expect(statusFrames(frames).at(-1).payload.runId).toMatch(runIdPattern('ses-1', 3))
   })
 
   it('drops a session the database deleted on the full read and does not read it again', () => {
@@ -281,13 +315,15 @@ describe('the OpenCode session reader', () => {
       'heartbeat.run.log',
     ])
     expect(statusFrames(frames)[0].payload).toMatchObject({
-      runId: 'ses-1:1',
       agentId: 'agent-opencode-session',
       status: 'running',
       error: null,
     })
+    expect(statusFrames(frames)[0].payload.runId).toMatch(runIdPattern('ses-1', 1))
     const logs = logFrames(frames)
-    expect(logs.map((frame) => frame.payload.runId)).toEqual(['ses-1:1', 'ses-1:1'])
+    const runId = logs[0].payload.runId
+    expect(runId).toMatch(runIdPattern('ses-1', 1))
+    expect(logs.map((frame) => frame.payload.runId)).toEqual([runId, runId])
     expect(logs.map((frame) => frame.payload.seq)).toEqual([1, 2])
     expect(chunkOf(logs[0])).toMatchObject({
       type: 'tool_use',
@@ -306,7 +342,8 @@ describe('the OpenCode session reader', () => {
 
     addMessage(dbPath, { id: 'm-idle', sessionId: 'ses-1', type: 'idle', seq: 3, time: 2002, data: { outcome: 'succeeded' } })
     reader.tick()
-    expect(endFrame(frames).payload).toMatchObject({ runId: 'ses-1:1', status: 'succeeded', error: null })
+    expect(endFrame(frames).payload).toMatchObject({ status: 'succeeded', error: null })
+    expect(endFrame(frames).payload.runId).toMatch(runIdPattern('ses-1', 1))
   })
 
   it('sends an item once when its row updates across ticks', () => {
@@ -398,7 +435,7 @@ describe('the OpenCode session reader', () => {
     addSession(dbPath, { id: 'ses-child', parent: 'ses-root', directory: projectRoot, title: 'Explore' })
     addMessage(dbPath, { id: 'm-user', sessionId: 'ses-root', type: 'user', seq: 1, time: 2000 })
     reader.tick()
-    expect(statusFrames(frames)[0].payload.runId).toBe('ses-root:1')
+    expect(statusFrames(frames)[0].payload.runId).toMatch(runIdPattern('ses-root', 1))
 
     addMessage(dbPath, {
       id: 'm-child',
@@ -413,7 +450,7 @@ describe('the OpenCode session reader', () => {
     reader.tick()
 
     const [log] = logFrames(frames)
-    expect(log.payload.runId).toBe('ses-root:1')
+    expect(log.payload.runId).toMatch(runIdPattern('ses-root', 1))
     expect(chunkOf(log).sessionID).toBe('ses-child')
     expect(chunkOf(log).part.id).toBe('call-child-read')
     expect(statusFrames(frames)).toHaveLength(1)
@@ -428,7 +465,7 @@ describe('the OpenCode session reader', () => {
     addSession(dbPath, { id: 'ses-root', directory: projectRoot, time: 1000 })
     addMessage(dbPath, { id: 'm-user', sessionId: 'ses-root', type: 'user', seq: 1, time: 1000 })
     reader.tick()
-    expect(statusFrames(frames)[0].payload.runId).toBe('ses-root:1')
+    expect(statusFrames(frames)[0].payload.runId).toMatch(runIdPattern('ses-root', 1))
 
     addSession(dbPath, { id: 'ses-child', parent: 'ses-root', directory: projectRoot, title: 'Explore', time: 1000 })
     addMessage(dbPath, {
@@ -524,7 +561,7 @@ describe('the OpenCode session reader', () => {
     addMessage(dbPath, { id: 'm-user-2', sessionId: 'ses-1', type: 'user', seq: 4, time: 3000 })
     reader.tick()
     expect(frames.map((frame) => frame.type)).toEqual(['heartbeat.run.queued', 'heartbeat.run.status'])
-    expect(statusFrames(frames)[0].payload.runId).toBe('ses-1:4')
+    expect(statusFrames(frames)[0].payload.runId).toMatch(runIdPattern('ses-1', 4))
   })
 
   it('emits the first conversation from a database created after the reader starts', () => {
@@ -550,7 +587,7 @@ describe('the OpenCode session reader', () => {
     })
     reader.tick()
 
-    expect(statusFrames(frames)[0]?.payload.runId).toBe('ses-1:1')
+    expect(statusFrames(frames)[0]?.payload.runId).toMatch(runIdPattern('ses-1', 1))
     expect(logFrames(frames).map((frame) => chunkOf(frame).part.id)).toEqual(['call-first'])
   })
 
@@ -622,7 +659,8 @@ describe('the OpenCode session reader', () => {
 
     clock.value += 30000
     reader.tick()
-    expect(endFrame(frames).payload).toMatchObject({ runId: 'ses-1:1', status: 'succeeded', error: null })
+    expect(endFrame(frames).payload).toMatchObject({ status: 'succeeded', error: null })
+    expect(endFrame(frames).payload.runId).toMatch(runIdPattern('ses-1', 1))
   })
 
   it('ends a run failed when idle reports another outcome', () => {
@@ -637,7 +675,8 @@ describe('the OpenCode session reader', () => {
     addMessage(dbPath, { id: 'm-idle', sessionId: 'ses-1', type: 'idle', seq: 2, time: 2001, data: { outcome: 'cancelled' } })
     reader.tick()
 
-    expect(endFrame(frames).payload).toMatchObject({ runId: 'ses-1:1', status: 'failed', error: 'cancelled' })
+    expect(endFrame(frames).payload).toMatchObject({ status: 'failed', error: 'cancelled' })
+    expect(endFrame(frames).payload.runId).toMatch(runIdPattern('ses-1', 1))
   })
 
   it.runIf(process.platform === 'win32')('matches the project folder ignoring case on Windows', () => {
@@ -650,7 +689,7 @@ describe('the OpenCode session reader', () => {
     addMessage(dbPath, { id: 'm-user', sessionId: 'ses-1', type: 'user', seq: 1, time: 2000 })
     reader.tick()
 
-    expect(statusFrames(frames)[0].payload.runId).toBe('ses-1:1')
+    expect(statusFrames(frames)[0].payload.runId).toMatch(runIdPattern('ses-1', 1))
   })
 
   it('stops reading after stop', () => {
@@ -782,7 +821,7 @@ describe('the OpenCode session reader', () => {
     expect(reader.sessions().has('ses-drop')).toBe(true)
     expect(reader.forgotten().has('ses-drop')).toBe(false)
     expect(frames.length).toBeGreaterThan(before)
-    expect(frames[before].payload.runId).toBe('ses-drop:3')
+    expect(frames[before].payload.runId).toMatch(runIdPattern('ses-drop', 3))
   })
 
   it('asks session_v2 only for rows past the highest update time', () => {
@@ -818,7 +857,7 @@ describe('the OpenCode session reader', () => {
 
     expect(queries.at(-1)).toMatchObject({ rows: 1, since: 1000 })
     expect(frames.length).toBeGreaterThan(before)
-    expect(frames[before].payload.runId).toBe('ses-1:2')
+    expect(frames[before].payload.runId).toMatch(runIdPattern('ses-1', 2))
   })
 
   it('asks every 5 seconds while no run is open and every second while one is', () => {
