@@ -698,9 +698,11 @@ export function createClient({
       url = '',
       enabled = true,
       confirmed = false,
+      create,
     } = {}) => {
       const body = { name, transport, command, args, url, enabled, confirmed }
       if (env !== undefined) body.env = env
+      if (create === true) body.create = true
       return request('POST', '/api/mcp/servers', body)
     },
 

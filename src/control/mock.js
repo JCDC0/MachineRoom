@@ -2510,6 +2510,9 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
         if (draft?.confirmed !== true) throw new Error('Confirm saving the MCP server first.')
         const entry = cleanMcpServer(draft)
         const index = mcpServerState.findIndex((item) => item.name === entry.name)
+        if (index !== -1 && draft?.create === true) {
+          throw new Error(`The MCP server ${entry.name} is already saved.`)
+        }
         if (index === -1) {
           if (mcpServerState.length >= 20) throw new Error('At most 20 MCP servers are allowed.')
           mcpServerState.push(entry)
