@@ -179,6 +179,9 @@ describe('a stopped lane stays stopped', () => {
     expect(processAlive(grandchildPid)).toBe(true)
 
     const stopped = await runLane(['--stop', 'fake'], env)
+    if (stopped.code !== 0) {
+      console.log(`stop exited ${stopped.code}. stdout:\n${stopped.stdout}\nstderr:\n${stopped.stderr}`)
+    }
     expect(stopped.code).toBe(0)
     expect(stopped.stdout).toContain(`stopped: ${lock.child} (the harness)`)
     expect(stopped.stdout).toContain('leftover: stopped')
@@ -615,12 +618,52 @@ describe('stopLane creation time rules', () => {
             { pid: 200, ppid: 100, created: 9500 },
           ],
           kill: () => false,
+          alive: () => true,
         })
         expect(code).toBe(1)
       })
       expect(readFileSync(lockPath, 'utf8')).toContain('"pid":100')
       expect(lines).toContain('could not stop: 200 (the harness)')
       expect(lines).toContain('kept the fake lock: 2 processes could not be stopped, so the lane stays busy')
+    } finally {
+      console.log = log
+    }
+  })
+
+  it('treats a process that is gone by the time the kill runs as stopped', () => {
+    const { runs, env } = setup('mr-stop-gone-')
+    const lockPath = join(runs, 'fake.lock')
+    const worktreePath = 'C:\\fake\\worktree'
+    writeFileSync(lockPath, laneLockText({ pid: 100, child: 200, folder: worktreePath }))
+    const killed = []
+    const lines = []
+    const log = console.log
+    console.log = (msg) => lines.push(msg)
+    try {
+      withEnv(env, () => {
+        const code = stopLane('fake', {
+          platform: 'win32',
+          stat: () => ({ mtimeMs: 10000 }),
+          list: () => [
+            { pid: 100, ppid: 1, created: 9000 },
+            { pid: 200, ppid: 100, created: 9500 },
+            { pid: 300, ppid: 200, created: 9600 },
+            { pid: 400, ppid: 1, created: 9700, command: 'node C:\\fake\\worktree\\worker.js' },
+          ],
+          kill: ({ pid }) => {
+            killed.push(pid)
+            return false
+          },
+          alive: () => false,
+        })
+        expect(code).toBe(0)
+      })
+      expect(killed).toEqual([200, 100, 300, 400])
+      expect(lines).toContain('stopped: 200 (the harness)')
+      expect(lines).toContain('stopped: 100 (the run)')
+      expect(lines).toContain('leftover: stopped 300')
+      expect(lines).toContain('leftover: stopped 400')
+      expect(existsSync(lockPath)).toBe(false)
     } finally {
       console.log = log
     }
