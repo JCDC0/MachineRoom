@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- A reconnect resets when any frame between its cursor and the latest one is missing, and a reset replays the kept history once in sequence order (P191).
 - The session recorder clears each dropped slot, so a frame trimmed for time or size is freed at once (P189).
 - Every bridge stream write goes through one helper that ends a client whose pending output already passed 8 MB; one large write to a client that keeps up is not cut (P185).
 - The session recorder clears each dropped slot, so a trimmed frame is freed at once while the batched compaction stays (P189).
