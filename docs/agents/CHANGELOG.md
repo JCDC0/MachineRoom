@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Review 25 reads the readiness merges: six findings, briefed as P188 to P191 (P187).
 - The full suite passed on the readiness merges: 275 files, 4976 tests passed, 4 skipped (P186).
 - Live event ids carry the bridge's start, and a reconnect with a cursor from another bridge or past the kept history gets a reset and the live runs first, so a finished run is no longer left working (P181).
 - A chat turn saves its exact log name with the conversation, and recovery after a restart records only that log, never another project's (P180).
