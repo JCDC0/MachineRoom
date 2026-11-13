@@ -186,7 +186,7 @@ export function modelFor(lane, briefId) {
   return lane.models?.[briefId] ?? lane.model
 }
 
-export function buildPrompt({ briefs, laneKey, lanes, rules, version, agentDepth = 2 }) {
+export function buildPrompt({ briefs, laneKey, lanes, rules, version, agentDepth = 2, branchSuffix = '' }) {
   const lane = Object.hasOwn(lanes, laneKey) ? lanes[laneKey] : null
   if (!lane) throw new Error(`There is no lane named ${laneKey}.`)
   if (!Array.isArray(briefs) || briefs.length === 0) throw new Error('Choose at least one brief.')
@@ -198,7 +198,7 @@ export function buildPrompt({ briefs, laneKey, lanes, rules, version, agentDepth
   lines.push(`Model to select in ${lane.harness}: ${header}${hint}${reasoning}.`)
   lines.push('')
   lines.push(`You are ${lane.name}, one of the coding agents building MachineRoom in parallel. ${lane.role}`)
-  lines.push(`Your worktree is ${lane.worktree}. Run: git switch -c ${branchFor(briefs[0])} refs/heads/main`)
+  lines.push(`Your worktree is ${lane.worktree}. Run: git switch -c ${branchFor(briefs[0])}${branchSuffix} refs/heads/main`)
   lines.push('')
   lines.push(rules.about)
   lines.push('')

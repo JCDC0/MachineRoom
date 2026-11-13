@@ -541,6 +541,31 @@ export function laneStopProblem({ lane, pid, leftover = false } = {}) {
   return `The ${name} lane still has ${noun} ${holder}; stop it with npm run run-lane -- --stop ${name}.`
 }
 
+export function fallbackProblem({ laneKey, fallback, lanes } = {}) {
+  const name = typeof fallback === 'string' ? fallback.trim() : ''
+  if (name === '') return ''
+  const key = String(laneKey ?? '').trim()
+  if (name === key) return `The lane ${key} cannot name itself as its backup lane.`
+  if (name === 'orchestrator') return 'The orchestrator lane cannot be a backup lane.'
+  if (!lanes || typeof lanes !== 'object' || !Object.hasOwn(lanes, name)) return `The backup lane ${name} is not in lanes.json.`
+  if (lanes[name]?.retired === true) return `The backup lane ${name} is retired.`
+  return ''
+}
+
+export function failoverKind({ exitCode, limited, startFailed, killed = false } = {}) {
+  if (killed === true) return ''
+  if (exitCode === 0 && startFailed !== true) return ''
+  const kind = typeof limited === 'string' ? limited.trim() : ''
+  if (kind !== '') return kind
+  return startFailed === true ? 'start-failed' : ''
+}
+
+export function limitedFor(harness, log) {
+  if (!Object.hasOwn(harnessByKey, harness)) return ''
+  const descriptor = harnessByKey[harness]
+  return typeof descriptor.limited === 'function' ? descriptor.limited(String(log ?? '')) : ''
+}
+
 export function laneWithOverrides(lane, { model, reasoning } = {}) {
   if (!lane?.cli) return lane
   const next = { ...lane, cli: { ...lane.cli } }
@@ -1062,7 +1087,7 @@ export function maskedQueueTasks(tasks) {
   return (Array.isArray(tasks) ? tasks : []).map((task) => maskProfilePaths(maskKeys(String(task ?? '')).text).slice(0, RECORD_TEXT_LIMIT))
 }
 
-export function runRecord({ lane, briefs, model, reasoning, startedAt, minutes, exitCode, killed, costUsd, inputTokens, outputTokens, peakTokens, log, branch, commits, base, head, tests, project, task, startedBy, stoppedLeftovers, queue, startFailed, note, retried } = {}) {
+export function runRecord({ lane, briefs, model, reasoning, startedAt, minutes, exitCode, killed, costUsd, inputTokens, outputTokens, peakTokens, log, branch, commits, base, head, tests, project, task, startedBy, stoppedLeftovers, queue, startFailed, note, retried, failover, failoverFrom } = {}) {
   const record = {
     lane: String(lane ?? ''),
     briefs: Array.isArray(briefs) ? briefs.map(String) : [],
@@ -1098,6 +1123,15 @@ export function runRecord({ lane, briefs, model, reasoning, startedAt, minutes, 
   if (typeof startedBy === 'string' && startedBy.trim() !== '') record.startedBy = startedBy.trim()
   if (typeof project === 'string' && project.trim() !== '') record.project = project
   if (typeof task === 'string' && task !== '') record.task = maskKeys(task).text.slice(0, RECORD_TEXT_LIMIT)
+  if (failover && typeof failover === 'object' && !Array.isArray(failover)) {
+    const kind = typeof failover.kind === 'string' ? failover.kind.trim() : ''
+    const to = typeof failover.to === 'string' ? failover.to.trim() : ''
+    if (kind !== '' && to !== '') record.failover = { kind, to }
+  }
+  if (failoverFrom && typeof failoverFrom === 'object' && !Array.isArray(failoverFrom)) {
+    const lane = typeof failoverFrom.lane === 'string' ? failoverFrom.lane.trim() : ''
+    if (lane !== '') record.failoverFrom = { lane, startedAt: isoTime(failoverFrom.startedAt) }
+  }
   return record
 }
 
