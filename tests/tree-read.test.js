@@ -1,4 +1,4 @@
-import { rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { FOLDER_SHAPE, createBridge, packTree, treeReadDue } from '../server/index.js'
@@ -9,7 +9,7 @@ const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 async function waitFor(check, { timeoutMs = 5000, everyMs = 10 } = {}) {
   const deadline = Date.now() + timeoutMs
   for (;;) {
-    if (check()) return
+    if (await check()) return
     if (Date.now() > deadline) throw new Error('Timed out waiting for the tree read.')
     await wait(everyMs)
   }
@@ -463,5 +463,110 @@ describe('a file that leaves the project', () => {
     } finally {
       await events.close()
     }
+  })
+})
+
+describe('unreadable folders in the plain tree', () => {
+  it('reports an unreadable root error in health and keeps the last good tree', async () => {
+    const root = makeRoot()
+    writeFileSync(join(root, 'a.js'), '1\n')
+    let blockRoot = true
+    const listDir = (folder, options) => {
+      if (blockRoot && folder === root) throw Object.assign(new Error('permission denied'), { code: 'EACCES' })
+      return readdirSync(folder, options)
+    }
+    const initialFailBridge = createBridge({
+      projectRoot: root,
+      port: 0,
+      env: {},
+      debounceMs: 15,
+      pollMs: 15,
+      quietMs: 50,
+      listDir,
+    })
+    bridges.push(initialFailBridge)
+    const { url: failUrl } = await initialFailBridge.start()
+    await waitFor(async () => {
+      const health = await (await fetch(`${failUrl}/api/health`)).json()
+      return health.problems.length > 0
+    })
+    const initialHealth = await (await fetch(`${failUrl}/api/health`)).json()
+    expect(initialHealth.ok).toBe(true)
+    expect(initialHealth.problems.join('\n')).toContain('permission denied')
+
+    blockRoot = false
+    const recoverRoot = makeRoot()
+    writeFileSync(join(recoverRoot, 'kept.js'), '1\n')
+    let lockAfter = false
+    const recoverBridge = createBridge({
+      projectRoot: recoverRoot,
+      port: 0,
+      env: {},
+      debounceMs: 15,
+      pollMs: 15,
+      quietMs: 50,
+      listDir: (folder, options) => {
+        if (lockAfter && folder === recoverRoot) throw Object.assign(new Error('root locked'), { code: 'EACCES' })
+        return readdirSync(folder, options)
+      },
+    })
+    bridges.push(recoverBridge)
+    const { url } = await recoverBridge.start()
+    const before = await (await fetch(`${url}/api/tree`)).json()
+    expect(before.files).toEqual(['kept.js'])
+    const events = await openEvents(url, `?tree=1&since=${before.start}:1`)
+    try {
+      lockAfter = true
+      await wait(1100)
+      const after = await (await fetch(`${url}/api/tree`)).json()
+      expect(after.files).toEqual(['kept.js'])
+      const health = await (await fetch(`${url}/api/health`)).json()
+      expect(health.ok).toBe(true)
+      expect(health.problems.join('\n')).toContain('root locked')
+      expect(readTreeEvents(events.text())).toEqual([])
+    } finally {
+      await events.close()
+    }
+  })
+
+  it('keeps the old files of an unreadable child folder and names it in health problems', async () => {
+    const root = makeRoot()
+    mkdirSync(join(root, 'open'), { recursive: true })
+    mkdirSync(join(root, 'sub', 'locked', 'deep'), { recursive: true })
+    writeFileSync(join(root, 'open', 'a.js'), '1\n')
+    writeFileSync(join(root, 'sub', 'locked', 'b.js'), '2\n')
+    writeFileSync(join(root, 'sub', 'locked', 'deep', 'c.js'), '3\n')
+    let blockChild = false
+    const bridge = createBridge({
+      projectRoot: root,
+      port: 0,
+      env: {},
+      debounceMs: 15,
+      pollMs: 15,
+      quietMs: 50,
+      listDir: (folder, options) => {
+        if (blockChild && folder === join(root, 'sub', 'locked')) {
+          throw Object.assign(new Error('permission denied'), { code: 'EACCES' })
+        }
+        return readdirSync(folder, options)
+      },
+    })
+    bridges.push(bridge)
+    const { url } = await bridge.start()
+    const first = await (await fetch(`${url}/api/tree`)).json()
+    expect(first.files).toEqual(['open/a.js', 'sub/locked/b.js', 'sub/locked/deep/c.js'])
+
+    blockChild = true
+    writeFileSync(join(root, 'open', 'added.js'), '4\n')
+    await waitFor(async () => {
+      const health = await (await fetch(`${url}/api/health`)).json()
+      return health.problems.some((line) => line.includes('sub/locked'))
+    })
+
+    const tree = await (await fetch(`${url}/api/tree`)).json()
+    expect(tree.files).toEqual(['open/a.js', 'open/added.js', 'sub/locked/b.js', 'sub/locked/deep/c.js'])
+    const health = await (await fetch(`${url}/api/health`)).json()
+    expect(health.ok).toBe(true)
+    expect(health.problems.some((line) => line.includes('sub/locked'))).toBe(true)
   })
 })

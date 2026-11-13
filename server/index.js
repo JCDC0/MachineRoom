@@ -86,17 +86,23 @@ const AGENT_MESSAGE_KINDS = new Set(['order', 'report', 'dispatch', 'wake'])
 const PLAIN_TREE = Symbol('plainTree')
 const gzipAsync = promisify(gzipCallback)
 
-function walkFiles(listDir, currentDir, prefix = '', out = []) {
+function walkFiles(listDir, currentDir, prefix = '', out = [], failed = []) {
   let entries
-  try {
+  if (prefix === '') {
     entries = listDir(currentDir, { withFileTypes: true })
-  } catch {
-    return out
+  } else {
+    try {
+      entries = listDir(currentDir, { withFileTypes: true })
+    } catch (error) {
+      if (error?.code === 'ENOENT' || error?.code === 'ENOTDIR') return out
+      failed.push(prefix.slice(0, -1))
+      return out
+    }
   }
   for (const entry of entries) {
     if (entry.isDirectory()) {
       if (SKIP_DIRS.has(entry.name)) continue
-      walkFiles(listDir, join(currentDir, entry.name), `${prefix}${entry.name}/`, out)
+      walkFiles(listDir, join(currentDir, entry.name), `${prefix}${entry.name}/`, out, failed)
     } else if (entry.isFile()) {
       out.push(`${prefix}${entry.name}`)
     }
@@ -106,7 +112,11 @@ function walkFiles(listDir, currentDir, prefix = '', out = []) {
 
 function walkTree(projectRoot, listDir = readdirSync) {
   const resolved = resolve(projectRoot)
-  return { root: basename(resolved), files: walkFiles(listDir, resolved).sort(), created: [] }
+  const failed = []
+  const files = walkFiles(listDir, resolved, '', [], failed).sort()
+  const tree = { root: basename(resolved), files, created: [] }
+  if (failed.length > 0) tree.failed = failed
+  return tree
 }
 
 function runGitPaths(resolved, args) {
@@ -486,7 +496,15 @@ export function trimHistory(history, now = Date.now) {
 
 export function createBridge(options = {}) {
   const projectRoot = options.projectRoot ?? process.env.PROJECT_ROOT ?? process.cwd()
-  const treeReader = options.readTree ?? readTree
+  const listDir = options.listDir ?? readdirSync
+  const treeReader =
+    options.readTree ??
+    ((root) =>
+      readTree(root, {
+        listDir,
+        ...(options.gitList ? { gitList: options.gitList } : {}),
+        ...(options.gitDeleted ? { gitDeleted: options.gitDeleted } : {}),
+      }))
   const partialTreeReader = options.readTreePartial ?? readTreePartial
   const watchProject = options.watchProject ?? watch
   const packFolderTree = options.packTree ?? packTree
@@ -832,6 +850,7 @@ export function createBridge(options = {}) {
   let lastTree = null
   let lastTreeAt = 0
   let lastTreeError = ''
+  let lastTreeProblems = []
   let treeChangedAt = 0
   let lastReadMs = 0
   let lastReadEndAt = 0
@@ -898,6 +917,28 @@ export function createBridge(options = {}) {
     return { added, removed }
   }
 
+  function sendFolderPayload(req, res, answer) {
+    const wantsGzip = /(^|,)\s*gzip\b/i.test(String(req.headers['accept-encoding'] ?? ''))
+    if (!wantsGzip) {
+      res.writeHead(200, {
+        ...corsHeaders(req, isAllowed),
+        'Content-Type': 'application/json; charset=utf-8',
+        Vary: 'Origin',
+        'Content-Length': answer.payload.length,
+      })
+      res.end(answer.payload)
+      return
+    }
+    res.writeHead(200, {
+      ...corsHeaders(req, isAllowed),
+      'Content-Type': 'application/json; charset=utf-8',
+      'Content-Encoding': 'gzip',
+      Vary: 'Origin, Accept-Encoding',
+      'Content-Length': answer.gzipped.length,
+    })
+    res.end(answer.gzipped)
+  }
+
   function folderAnswerFor(tree) {
     const version = treeVersion
     if (folderAnswer && folderAnswer.version === version) return Promise.resolve(folderAnswer)
@@ -960,25 +1001,44 @@ export function createBridge(options = {}) {
     return true
   }
 
+  function mergeFailedSubtrees(nextFiles, previousFiles, failedDirs) {
+    if (!Array.isArray(previousFiles) || previousFiles.length === 0 || failedDirs.length === 0) return nextFiles
+    const merged = new Set(nextFiles)
+    for (const file of previousFiles) {
+      if (failedDirs.some((dir) => file === dir || file.startsWith(`${dir}/`))) merged.add(file)
+    }
+    return [...merged].sort()
+  }
+
   async function readWholeTree() {
     let tree
     try {
       if (treeNotGit) {
-        tree = walkTree(projectRoot)
+        tree = walkTree(projectRoot, listDir)
       } else {
         tree = await treeReader(projectRoot)
         if (tree?.[PLAIN_TREE]) treeNotGit = true
       }
+      if (typeof tree?.error === 'string' && tree.error) {
+        throw new Error(tree.error)
+      }
+      if (!tree || !Array.isArray(tree.files)) {
+        throw new Error('The tree read returned no file list.')
+      }
       lastTreeError = ''
+      const failedDirs = Array.isArray(tree.failed) ? tree.failed.filter((dir) => typeof dir === 'string' && dir !== '') : []
+      if (failedDirs.length > 0) {
+        const files = mergeFailedSubtrees(tree.files, lastTree?.files, failedDirs)
+        lastTreeProblems = failedDirs.map((dir) => `The tree could not read ${dir}.`)
+        return { root: tree.root, files, created: Array.isArray(tree.created) ? tree.created : [] }
+      }
+      lastTreeProblems = []
+      return { root: tree.root, files: tree.files, created: Array.isArray(tree.created) ? tree.created : [] }
     } catch (error) {
       lastTreeError = error instanceof Error ? error.message : String(error)
-      tree = { root: '', files: [], created: [] }
+      lastTreeProblems = []
+      return null
     }
-    if (!tree || !Array.isArray(tree.files)) {
-      if (!lastTreeError) lastTreeError = 'The tree read returned no file list.'
-      tree = { root: '', files: [], created: [] }
-    }
-    return tree
   }
 
   function clearQuietRead() {
@@ -1036,6 +1096,7 @@ export function createBridge(options = {}) {
       }
       if (tree) {
         lastTreeError = ''
+        lastTreeProblems = []
         partialStreak += 1
         usedPartial = true
       } else {
@@ -1043,6 +1104,10 @@ export function createBridge(options = {}) {
         tree = await readWholeTree()
       }
       if (stopped) return tree
+      if (!tree) {
+        changed = false
+        return lastTree
+      }
       changed = publishTree(tree)
       return tree
     })()
@@ -1388,6 +1453,7 @@ export function createBridge(options = {}) {
       // The page shows ok: false as a dead room, so only a room that cannot work sets it.
       const fatal = problems.length
       if (lastTreeError) problems.push(`The last tree read failed: ${lastTreeError}`)
+      for (const problem of lastTreeProblems) problems.push(problem)
       if (sessionsSource && typeof sessionsSource.problems === 'function') {
         for (const problem of sessionsSource.problems()) {
           problems.push(`The ${problem.name} source stopped: ${problem.message}`)
@@ -1434,8 +1500,26 @@ export function createBridge(options = {}) {
         const recent = lastTree && Date.now() - lastTreeAt <= TREE_REUSE_MS
         tree = recent ? lastTree : await startTreeRead()
       }
-      if (stopped || !tree) {
+      if (stopped) {
         res.destroy()
+        return
+      }
+      if (!tree) {
+        const fallback = { root: '', files: [], created: [] }
+        if (!wantsFolders) {
+          sendJson(req, res, 200, { ...fallback, start: treeStart })
+          return
+        }
+        const payload = Buffer.from(
+          JSON.stringify({ ...packFolderTree(fallback), created: fallback.created, version: 0, start: treeStart }),
+          'utf8'
+        )
+        const gzipped = await gzipAsync(payload)
+        if (stopped) {
+          res.destroy()
+          return
+        }
+        sendFolderPayload(req, res, { payload, gzipped })
         return
       }
       if (!wantsFolders) {
@@ -1447,25 +1531,7 @@ export function createBridge(options = {}) {
         res.destroy()
         return
       }
-      const wantsGzip = /(^|,)\s*gzip\b/i.test(String(req.headers['accept-encoding'] ?? ''))
-      if (!wantsGzip) {
-        res.writeHead(200, {
-          ...corsHeaders(req, isAllowed),
-          'Content-Type': 'application/json; charset=utf-8',
-          Vary: 'Origin',
-          'Content-Length': answer.payload.length,
-        })
-        res.end(answer.payload)
-        return
-      }
-      res.writeHead(200, {
-        ...corsHeaders(req, isAllowed),
-        'Content-Type': 'application/json; charset=utf-8',
-        'Content-Encoding': 'gzip',
-        Vary: 'Origin, Accept-Encoding',
-        'Content-Length': answer.gzipped.length,
-      })
-      res.end(answer.gzipped)
+      sendFolderPayload(req, res, answer)
       return
     }
 

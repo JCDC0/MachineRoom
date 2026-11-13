@@ -16,7 +16,7 @@ import {
   upArgs,
   upBlock,
 } from '../server/doctor.js'
-import { createBridge, FOLDER_SHAPE } from '../server/index.js'
+import { createBridge, FOLDER_SHAPE, readTree } from '../server/index.js'
 import { withLanePrograms } from './helpers/lanePrograms.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 
@@ -359,6 +359,20 @@ describe('the doctor project read', () => {
 
     expect(result.lines[1]).toBe('FAIL The project could not be read: The folder could not be listed.')
     expect(result.lines[1]).not.toContain(options.projectRoot)
+    expect(result.exitCode).toBe(1)
+  })
+
+  it('fails when readTree cannot read the root instead of reporting zero files', async () => {
+    const options = doctorOptions()
+    const listDir = () => {
+      throw Object.assign(new Error(`EACCES: permission denied, scandir '${options.projectRoot}'`), { code: 'EACCES' })
+    }
+    const readProject = (rootDir) => readTree(rootDir, { listDir })
+    const result = await runDoctorWithProject({ ...options, readProject })
+
+    expect(result.lines[1]).toBe('FAIL The project could not be read: The folder could not be listed.')
+    expect(result.lines[1]).not.toContain(options.projectRoot)
+    expect(result.tree).toBeNull()
     expect(result.exitCode).toBe(1)
   })
 

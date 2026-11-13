@@ -24,7 +24,7 @@ function entry(name, kind) {
 }
 
 describe('readTree without git', () => {
-  it('skips a folder it cannot read and keeps the rest', async () => {
+  it('reports a child folder it cannot read and keeps the rest', async () => {
     const dir = makeTempDir('mr-tree-')
     try {
       mkdirSync(join(dir, 'open'), { recursive: true })
@@ -38,21 +38,21 @@ describe('readTree without git', () => {
         if (folder.endsWith('gone')) throw Object.assign(new Error('no such folder'), { code: 'ENOENT' })
         return readdirSync(folder, options)
       }
-      const { files } = await readTree(dir, { listDir })
+      const { files, failed } = await readTree(dir, { listDir })
       expect(files).toEqual(['open/a.js', 'top.txt'])
+      expect(failed).toEqual(['locked'])
     } finally {
       rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
     }
   })
 
-  it('answers an empty list when the root itself cannot be read', async () => {
+  it('reports an error instead of an empty list when the root itself cannot be read', async () => {
     const dir = makeTempDir('mr-tree-')
     try {
       const listDir = () => {
         throw Object.assign(new Error('permission denied'), { code: 'EACCES' })
       }
-      const { files } = await readTree(dir, { listDir })
-      expect(files).toEqual([])
+      await expect(readTree(dir, { listDir })).rejects.toThrow('permission denied')
     } finally {
       rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
     }
