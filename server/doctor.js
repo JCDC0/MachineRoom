@@ -4,6 +4,7 @@ import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { readTree } from './index.js'
 import { lanesFolder, readAllLanes, runsFolder } from './lanes-source.js'
+import { printedRunsFolder } from './printed-path.js'
 import { programPath } from './programPath.js'
 
 const REPO_ROOT = resolve(fileURLToPath(import.meta.url), '..', '..')
@@ -67,16 +68,17 @@ function laneProgram(bin, env) {
   return { problem: null }
 }
 
-function folderLine(projectRoot) {
+function folderLine(projectRoot, env) {
   const folder = resolve(projectRoot)
+  const shown = printedRunsFolder(folder, env)
   let stats
   try {
     stats = statSync(folder)
   } catch {
-    return { ok: false, text: `The project folder ${folder} does not exist.` }
+    return { ok: false, text: `The project folder ${shown} does not exist.` }
   }
-  if (!stats.isDirectory()) return { ok: false, text: `The project folder ${folder} is not a folder.` }
-  return { ok: true, text: `The project folder ${folder} exists.` }
+  if (!stats.isDirectory()) return { ok: false, text: `The project folder ${shown} is not a folder.` }
+  return { ok: true, text: `The project folder ${shown} exists.` }
 }
 
 function insideGitRepository(projectRoot) {
@@ -96,7 +98,7 @@ function insideGitRepository(projectRoot) {
 function gitLines(projectRoot, env) {
   const found = programPath('git', { env })
   if (!found) return [{ ok: false, text: 'Git is not on the PATH.' }]
-  const lines = [{ ok: true, text: `Git is found at ${found}.` }]
+  const lines = [{ ok: true, text: `Git is found at ${printedRunsFolder(found, env)}.` }]
   const folder = resolve(projectRoot)
   let folderExists = false
   try {
@@ -111,53 +113,64 @@ function gitLines(projectRoot, env) {
   return lines
 }
 
-function viewerLine(dist) {
+function viewerLine(dist, env) {
   const index = join(dist, 'index.html')
-  if (isFile(index)) return { ok: true, text: `The built viewer is ready in ${dist}.` }
-  return { ok: false, text: `The built viewer is missing ${index}. Run npm run build in ${REPO_ROOT}.` }
+  if (isFile(index)) return { ok: true, text: `The built viewer is ready in ${printedRunsFolder(dist, env)}.` }
+  return {
+    ok: false,
+    text: `The built viewer is missing ${printedRunsFolder(index, env)}. Run npm run build in ${printedRunsFolder(REPO_ROOT, env)}.`,
+  }
 }
 
-function runsLine(folder) {
+function runsLine(folder, env) {
   const path = resolve(folder)
+  const shown = printedRunsFolder(path, env)
   try {
     const stats = statSync(path)
-    if (!stats.isDirectory()) return { ok: false, text: `The runs folder ${path} is not a folder.` }
+    if (!stats.isDirectory()) return { ok: false, text: `The runs folder ${shown} is not a folder.` }
   } catch {
     try {
       mkdirSync(path, { recursive: true })
     } catch {
-      return { ok: false, text: `The runs folder ${path} could not be made.` }
+      return { ok: false, text: `The runs folder ${shown} could not be made.` }
     }
   }
   try {
     accessSync(path, constants.W_OK)
   } catch {
-    return { ok: false, text: `The runs folder ${path} cannot be written to.` }
+    return { ok: false, text: `The runs folder ${shown} cannot be written to.` }
   }
-  return { ok: true, text: `The runs folder ${path} is ready.` }
+  return { ok: true, text: `The runs folder ${shown} is ready.` }
 }
 
-function readLaneFile(file) {
+function readLaneFile(file, env) {
+  const shown = printedRunsFolder(file, env)
   let text
   try {
     text = readFileSync(file, 'utf8')
   } catch {
-    return { problem: `The lane file ${file} could not be read.` }
+    return { problem: `The lane file ${shown} could not be read.` }
   }
   let lanes
   try {
     lanes = JSON.parse(text)
   } catch {
-    return { problem: `The lane file ${file} is not JSON.` }
+    return { problem: `The lane file ${shown} is not JSON.` }
   }
   if (!lanes || typeof lanes !== 'object' || Array.isArray(lanes)) {
-    return { problem: `The lane file ${file} is not a list of lanes.` }
+    return { problem: `The lane file ${shown} is not a list of lanes.` }
   }
   return { lanes }
 }
 
+function printedLaneBin(bin, env) {
+  const expanded = expand(bin, env)
+  if (expanded.missing || !isAbsolute(expanded.text)) return bin
+  return printedRunsFolder(expanded.text, env)
+}
+
 function laneLines(file, env, runsDir) {
-  const read = readLaneFile(file)
+  const read = readLaneFile(file, env)
   if (read.problem) return [{ ok: false, text: read.problem }]
   const lanes = readAllLanes({ lanesJson: read.lanes, runsFolder: runsDir })
   const lines = []
@@ -168,11 +181,11 @@ function laneLines(file, env, runsDir) {
     const name = typeof lane.name === 'string' && lane.name ? lane.name : key
     const found = laneProgram(lane.cli.bin, env)
     if (found.path) {
-      lines.push({ ok: true, text: `The ${name} lane starts from ${found.path}.` })
+      lines.push({ ok: true, text: `The ${name} lane starts from ${printedRunsFolder(found.path, env)}.` })
     } else if (found.problem) {
       lines.push({ ok: false, text: `The ${name} lane program cannot start. ${found.problem}` })
     } else {
-      lines.push({ ok: false, text: `The ${name} lane program was not found: ${lane.cli.bin}.` })
+      lines.push({ ok: false, text: `The ${name} lane program was not found: ${printedLaneBin(lane.cli.bin, env)}.` })
     }
   }
   return lines
@@ -195,12 +208,12 @@ export function runDoctor(options = {}) {
     lines.push(`${result.ok ? 'ok' : 'FAIL'} ${result.text}`)
   }
 
-  const folder = folderLine(settings.projectRoot)
+  const folder = folderLine(settings.projectRoot, env)
   add(folder)
   if (!folder.ok) return { exitCode: 1, lines, folderOk: false, warnings }
   for (const line of gitLines(settings.projectRoot, env)) add(line)
-  add(viewerLine(settings.dist))
-  add(runsLine(settings.runsFolder))
+  add(viewerLine(settings.dist, env))
+  add(runsLine(settings.runsFolder, env))
   for (const line of laneLines(settings.lanesFile, env, settings.runsFolder)) add(line)
 
   return { exitCode: ok ? 0 : 1, lines, folderOk: true, warnings }
