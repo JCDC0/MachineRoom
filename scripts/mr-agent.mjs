@@ -1455,7 +1455,7 @@ async function main() {
       const calls = toolCallsOf(message, `call_${step}`)
       if (calls.length === 0 && text === '') {
         if (nudged) {
-          finish(false, lastText)
+          finish(true, 'The agent stopped without a final answer.')
           return
         }
         nudged = true

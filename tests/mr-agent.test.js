@@ -358,6 +358,19 @@ describe('mr-agent', () => {
     expect(jsonLines(result.stdout).at(-1)).toMatchObject({ type: 'result', is_error: false, result: 'Finished.' })
   })
 
+  it('fails after two reasoning-only replies following a tool error', async () => {
+    const folder = tempDir()
+    const api = await startFakeApi((_body, index) => index === 0
+      ? chatAnswer({ text: 'Checking.', calls: [{ name: 'read_file', arguments: { path: 'missing.txt' } }] })
+      : chatAnswer({ reasoning: 'Still thinking.' }))
+    const result = await runAgent({ folder, api })
+    const lines = jsonLines(result.stdout)
+    expect(lines.find((line) => line.type === 'user')?.message.content[0].is_error).toBe(true)
+    expect(api.calls).toHaveLength(3)
+    expect(result.code).toBe(1)
+    expect(lines.at(-1)).toMatchObject({ type: 'result', is_error: true, result: 'The agent stopped without a final answer.' })
+  })
+
   it('reports a provider error in an answer as a failure and exits 1', async () => {
     const folder = tempDir()
     const api = await startFakeApi(() => ({
