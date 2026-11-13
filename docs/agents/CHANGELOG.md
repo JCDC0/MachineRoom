@@ -2,12 +2,15 @@
 
 ## Unreleased
 
+- A lane log that cannot be written and a run record that cannot be saved each print one sentence, the runner exits non-zero for a lost record, and the chat says when its run record was not saved (P184).
 - The session recorder clears each dropped slot, so a frame trimmed for time or size is freed at once (P189).
 - Every bridge stream write goes through one helper that ends a client whose pending output already passed 8 MB; one large write to a client that keeps up is not cut (P185).
 - The session recorder clears each dropped slot, so a trimmed frame is freed at once while the batched compaction stays (P189).
 - Review 25 reads the readiness merges: six findings, briefed as P188 to P191 (P187).
 - The full suite passed on the readiness merges: 275 files, 4976 tests passed, 4 skipped (P186).
 - Every bridge stream write checks the response's pending bytes, and a client past 8 MB is ended and dropped while the other clients keep their frames (P185).
+- A lane log that cannot be written says so once with the masked log and error code, the run still writes its record, and a failed record write says so and exits non-zero (P184).
+- A chat run record that cannot be saved adds one room message with the error code instead of being swallowed (P184).
 - Live event ids carry the bridge's start, and a reconnect with a cursor from another bridge or past the kept history gets a reset and the live runs first, so a finished run is no longer left working (P181).
 - A chat turn saves its exact log name with the conversation, and recovery after a restart records only that log, never another project's (P180).
 - New, open and fork refuse with one sentence when the saved list is full of pinned conversations, and keep the current conversation (P179).

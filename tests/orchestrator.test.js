@@ -2115,6 +2115,55 @@ describe('waking the orchestrator', () => {
     expect(readLines(join(runs, 'runs.jsonl')).at(-1)).toMatchObject({ exitCode: 0, killed: false })
   })
 
+  it('says in the room when a chat run record cannot be saved', async () => {
+    const base = makeTempDir('mr-record-fail-')
+    const runs = join(base, 'runs')
+    const projectRoot = join(base, 'project')
+    mkdirSync(runs, { recursive: true })
+    mkdirSync(projectRoot, { recursive: true })
+    const promptFile = join(base, 'orchestrator-agent.md')
+    writeFileSync(promptFile, PROMPT)
+    const child = new EventEmitter()
+    child.stdout = new PassThrough()
+    child.stderr = new PassThrough()
+    child.kill = () => {}
+    const error = new Error('no space left on device')
+    error.code = 'ENOSPC'
+    const orchestrator = createOrchestrator({
+      projectRoot,
+      runsFolder: runs,
+      lanes: LANES,
+      promptFile,
+      spawn: () => child,
+      appendRecord: () => {
+        throw error
+      },
+    })
+    cleanups.push(async () => {
+      orchestrator.close()
+      await sleep(20)
+      rmSync(base, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+    })
+
+    expect(orchestrator.send({ text: 'Save it', confirmed: true }).status).toBe(202)
+    child.stdout.write(JSON.stringify({ type: 'system', subtype: 'init', session_id: 'fake' }) + '\n')
+    child.stdout.write(
+      JSON.stringify({
+        type: 'result',
+        subtype: 'success',
+        result: 'All done.',
+        usage: { input_tokens: 12, output_tokens: 3 },
+      }) + '\n'
+    )
+    child.emit('close', 0)
+
+    await waitFor(() => orchestrator.answer().messages.some((message) => message.from === 'orchestrator'))
+    const said = orchestrator.answer().messages.filter((message) => message.text === 'The chat run record was not saved (ENOSPC).')
+    expect(said).toHaveLength(1)
+    expect(said[0].from).toBe('room')
+    expect(existsSync(join(runs, 'runs.jsonl'))).toBe(false)
+  })
+
   it('starts the waiting room turn when the hourly cap frees a slot', async () => {
     const base = makeTempDir('mr-room-cap-')
     const runs = join(base, 'runs')

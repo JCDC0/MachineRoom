@@ -1,6 +1,7 @@
 import { spawn, spawnSync } from 'node:child_process'
 import { copyFileSync, existsSync, mkdirSync, readFileSync, realpathSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
 import { delimiter, dirname, join, resolve } from 'node:path'
+import { Writable } from 'node:stream'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it, vi } from 'vitest'
 import { gitPath, programPath } from '../server/programPath.js'
@@ -2623,6 +2624,39 @@ describe('appendRunRecord', () => {
     }
   })
 
+  it('a failed append prints one sentence with the code, sets a non-zero exit code and writes nothing', () => {
+    const folder = makeTempDir('mr-append-failed-')
+    const savedExitCode = process.exitCode
+    try {
+      const runs = join(folder, 'runs')
+      mkdirSync(runs, { recursive: true })
+      const file = join(runs, 'runs.jsonl')
+      const messages = []
+      const error = new Error('no space left on device')
+      error.code = 'ENOSPC'
+
+      const written = appendRunRecord({ lane: 'hermes', exitCode: 0 }, {
+        env: { TEMP: folder },
+        print: (text) => messages.push(text),
+        file,
+        write: () => {
+          throw error
+        },
+      })
+
+      const sep = process.platform === 'win32' ? '\\' : '/'
+      expect(written).toBe(false)
+      expect(process.exitCode).toBe(1)
+      expect(messages).toEqual([
+        `The run record was not saved at %TEMP%${sep}runs${sep}runs.jsonl (ENOSPC); the run still ended.`,
+      ])
+      expect(existsSync(file)).toBe(false)
+    } finally {
+      process.exitCode = savedExitCode
+      rmSync(folder, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+    }
+  })
+
   it.skipIf(process.platform !== 'win32')('formats the printed path with %LOCALAPPDATA% when the runs folder is in LocalAppData', () => {
     const local = 'C:\\Users\\me\\AppData\\Local'
     const folder = `${local}\\MachineRoom\\runs`
@@ -2783,6 +2817,65 @@ describe('appendRunRecord', () => {
         if (saved[key] === undefined) delete process.env[key]
         else process.env[key] = saved[key]
       }
+      rmSync(folder, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+    }
+  })
+})
+
+describe('a lane log that cannot be written', () => {
+  it('says one sentence with the masked log and the code, and the run still writes its record', async () => {
+    const folder = makeTempDir('mr-log-error-')
+    const saved = process.env.MACHINEROOM_RUNS
+    const lines = []
+    const spy = vi.spyOn(console, 'log').mockImplementation((text) => lines.push(String(text)))
+    try {
+      const runs = join(folder, 'runs')
+      const project = join(folder, 'project')
+      mkdirSync(runs, { recursive: true })
+      mkdirSync(project, { recursive: true })
+      process.env.MACHINEROOM_RUNS = runs
+      writeFileSync(
+        join(project, 'run'),
+        "console.log('{\"type\":\"step_finish\",\"part\":{\"cost\":0,\"tokens\":{\"input\":1,\"output\":1}}}')\n"
+      )
+      const lane = {
+        name: 'test-opencode',
+        worktree: project,
+        cli: { harness: 'opencode', bin: process.execPath, model: 'fake/model' },
+      }
+      const failing = new Writable({
+        write(chunk, encoding, callback) {
+          const error = new Error('no space left on device')
+          error.code = 'ENOSPC'
+          callback(error)
+        },
+      })
+
+      const result = await startLane({
+        options: { lane: 'test-opencode', minutes: 1 },
+        lane,
+        lanes: { 'test-opencode': lane },
+        wanted: [],
+        prompt: 'test prompt',
+        logPath: join(runs, 'run-log-error.log'),
+        usageFile: join(runs, 'run-log-error.usage.json'),
+        name: 'run-log-error',
+        project,
+        task: 'task',
+        openLog: () => failing,
+      })
+
+      expect(result.code).toBe(0)
+      expect(lines.filter((line) => line.startsWith('The lane log '))).toEqual([
+        expect.stringMatching(/^The lane log %TEMP%.*run-log-error\.log could not be written \(ENOSPC\); the run goes on and its record is still saved\.$/),
+      ])
+      const records = readFileSync(join(runs, 'runs.jsonl'), 'utf8').trim().split(/\r?\n/).map((line) => JSON.parse(line))
+      expect(records).toHaveLength(1)
+      expect(records[0].exitCode).toBe(0)
+    } finally {
+      spy.mockRestore()
+      if (saved === undefined) delete process.env.MACHINEROOM_RUNS
+      else process.env.MACHINEROOM_RUNS = saved
       rmSync(folder, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
     }
   })

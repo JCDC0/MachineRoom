@@ -864,6 +864,13 @@ function recordLine(record) {
 This was task ${record.queueIndex ?? '?'} of a queue. The runner commits it on ${queue} only after the project's tests pass, a few seconds to minutes after this message; check git log on that branch before you review it.`
 }
 
+function recordNotSavedText(error) {
+  const code = typeof error?.code === 'string' && error.code
+    ? error.code
+    : (String(error?.message ?? error).trim() || 'no error code')
+  return `The chat run record was not saved (${code}).`
+}
+
 function enforceSessionLimit(list) {
   while (list.length > SESSIONS_LIMIT) {
     let oldestUnpinnedIndex = -1
@@ -937,6 +944,7 @@ export function createOrchestrator({
   approvalTimeoutMs = APPROVAL_TIMEOUT_MS,
   mergeWaitMs = ORCHESTRATOR_MERGE_WAIT_MS,
   gitTimeoutMs = GIT_OPERATION_TIMEOUT_MS,
+  appendRecord = (file, line) => appendFileSync(file, line),
 } = {}) {
   const token = typeof tokenOption === 'string' && tokenOption ? tokenOption : randomBytes(24).toString('base64url')
   const root = projectRoot ? resolve(projectRoot) : ''
@@ -1253,8 +1261,10 @@ export function createOrchestrator({
     const minutes = Math.max(0, Math.round(((endedAt - startedAt) / 60000) * 10) / 10)
     const record = runRecord({ lane: logPrefix, model, startedAt, minutes, exitCode: null, killed: true, log })
     try {
-      appendFileSync(join(folder, 'runs.jsonl'), `${JSON.stringify(record)}\n`)
-    } catch {}
+      appendRecord(join(folder, 'runs.jsonl'), `${JSON.stringify(record)}\n`)
+    } catch (error) {
+      addMessage('room', recordNotSavedText(error))
+    }
   }
 
   function restore() {
@@ -2068,8 +2078,10 @@ export function createOrchestrator({
       log: turn.logPath,
     })
     try {
-      appendFileSync(join(folder, 'runs.jsonl'), `${JSON.stringify(record)}\n`)
-    } catch {}
+      appendRecord(join(folder, 'runs.jsonl'), `${JSON.stringify(record)}\n`)
+    } catch (error) {
+      addMessage('room', recordNotSavedText(error))
+    }
     if (running === turn) running = null
     if (stopped) return
     settleWork(turn)
