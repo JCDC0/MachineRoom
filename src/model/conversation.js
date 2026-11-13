@@ -1,4 +1,4 @@
-import { maskKeys } from '../briefs/audit.js'
+import { KEY_MASK, maskKeys } from '../briefs/audit.js'
 import { maskProfilePaths } from '../briefs/run.js'
 import { terminalText } from '../harnesses/common.js'
 import { parseJson } from './parsers/common.js'
@@ -8,11 +8,31 @@ export const CONVERSATION_ENTRY_LIMIT = 2000
 export const CONVERSATION_TEXT_LIMIT = 4000
 
 const READERS = new Set(['claude', 'opencode', 'codex', 'agy'])
+const SECRET_FIELD = /(?:key|token|secret|password|authorization)/i
+
+function maskText(text) {
+  return maskProfilePaths(maskKeys(text).text)
+}
 
 function clean(value) {
   const text = String(value ?? '')
   if (text === '') return ''
-  return maskProfilePaths(maskKeys(terminalText(text)).text).slice(0, CONVERSATION_TEXT_LIMIT)
+  return maskText(terminalText(text)).slice(0, CONVERSATION_TEXT_LIMIT)
+}
+
+function maskData(value) {
+  if (typeof value === 'string') return maskText(value)
+  if (Array.isArray(value)) return value.map(maskData)
+  if (value === null || typeof value !== 'object') return value
+  const safe = {}
+  for (const [name, item] of Object.entries(value)) {
+    safe[name] = SECRET_FIELD.test(name) ? KEY_MASK : maskData(item)
+  }
+  return safe
+}
+
+function jsonLine(json) {
+  return clean(JSON.stringify(maskData(json))).trim()
 }
 
 function timeOf(json) {
@@ -107,7 +127,10 @@ export function conversationFromLog(harness, text, prompt = '') {
 
   if (!READERS.has(reader)) {
     for (const line of String(text ?? '').split(/\r?\n/)) {
-      const shown = clean(line.trim()).trim()
+      const trimmed = line.trim()
+      if (trimmed === '') continue
+      const json = parseJson(trimmed)
+      const shown = json && typeof json === 'object' ? jsonLine(json) : clean(trimmed).trim()
       if (shown !== '') entries.push(entry('line', shown, null, null))
     }
     return entries.slice(-CONVERSATION_ENTRY_LIMIT)
@@ -165,7 +188,7 @@ export function conversationFromLog(harness, text, prompt = '') {
       continue
     }
     if (!knownEvent(reader, json)) {
-      const shown = clean(line.trim()).trim()
+      const shown = jsonLine(json)
       if (shown !== '') entries.push(entry('line', shown, null, at))
     }
   }
