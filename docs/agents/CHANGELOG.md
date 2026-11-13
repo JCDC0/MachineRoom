@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- An OpenCode database that first appears after the bridge starts is read from the startup time, so the first conversation is shown (P222).
 - A health answer with ok true and source problems shows a red chip, A source looks stopped, with one sentence per problem, and the room stays connected.
 - A stopped or failed queue row offers Ask for recovery, which sends Main the branch, the failed task and what the record holds, asking it to inspect before continuing.
 - A source that stops, such as a failed tree read or a stopped OpenCode session reader, shows its sentence in the health chip while the bridge stays connected (P220).

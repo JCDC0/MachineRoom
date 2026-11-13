@@ -527,6 +527,33 @@ describe('the OpenCode session reader', () => {
     expect(statusFrames(frames)[0].payload.runId).toBe('ses-1:4')
   })
 
+  it('emits the first conversation from a database created after the reader starts', () => {
+    const dir = tempDir()
+    const dbPath = join(dir, 'opencode.db')
+    const projectRoot = join(dir, 'project')
+    const clock = { value: 5000 }
+    const { reader, frames } = startReader({ dbPath, projectRoot, runsFolder: join(dir, 'runs'), clock })
+
+    reader.tick()
+    expect(existsSync(dbPath)).toBe(false)
+
+    withDb(dbPath, createTables)
+    addSession(dbPath, { id: 'ses-1', directory: projectRoot, time: 5001 })
+    addMessage(dbPath, { id: 'm-user', sessionId: 'ses-1', type: 'user', seq: 1, time: 5001 })
+    addMessage(dbPath, {
+      id: 'm-assistant',
+      sessionId: 'ses-1',
+      type: 'assistant',
+      seq: 2,
+      time: 5002,
+      data: { content: [toolItem({ id: 'call-first', name: 'read', input: { path: 'src/a.js' } })] },
+    })
+    reader.tick()
+
+    expect(statusFrames(frames)[0]?.payload.runId).toBe('ses-1:1')
+    expect(logFrames(frames).map((frame) => chunkOf(frame).part.id)).toEqual(['call-first'])
+  })
+
   it('sends nothing and does not throw when there is no database', () => {
     const dir = tempDir()
     const dbPath = join(dir, 'missing', 'opencode.db')
