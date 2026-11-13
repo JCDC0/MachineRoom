@@ -1602,3 +1602,10 @@ Prefer what you confirmed by reading the code or by a command over a guess, and 
 1. An explicit `--test` is kept. Otherwise the queue reads the default test command from the prepared worktree after each task that ends well, so a test script that a task adds, or one already on the project's head when a worktree is reused, is found. Another lane edits run-lane's help text; change only the queue's test choice.
 2. Tests, by what they prove: a task that adds a `package.json` test script gets that script run after it; a reused worktree picks up a script on the project's head; `--test` wins over both.
 3. Run `node node_modules/vitest/vitest.mjs related --run scripts/run-lane.mjs src/briefs/queue.js` and `npm run build`. Report what passed.
+
+**P173. README and run-lane say where lanes are made, and how to run npm when PowerShell refuses it (OpenCode).** Read readiness findings R3 and the OWNER-ROOM #10 note in `docs/agents/AUDIT-2026-11-READINESS.md` and this brief only. Use no subagents. Run every command in the foreground. Commit each step as you finish it, and stop starting new work at minute 15. Files: README.md, scripts/run-lane.mjs, tests/run-lane.test.js, docs/agents/CHANGELOG.md.
+
+1. README's Lanes section says a lane is made in the Agents tab: open the family tree, press Add child on the orchestrator, and fill in the label, harness, model and effort. Settings only shows or removes lanes. Read `src/ui/FamilyTree.jsx` and `src/ui/Settings.jsx` to get the words right.
+2. README's First run block adds one short note for Windows PowerShell: when script policy refuses `npm`, use `npm.cmd` (and `npm.cmd link`); leave the execution policy as it is.
+3. run-lane's missing-lane sentence ends with `Add a lane in the room's Agents tab.` instead of Settings. Update its test.
+4. Run `node node_modules/vitest/vitest.mjs related --run scripts/run-lane.mjs` and `npm run build`. Report what passed.
