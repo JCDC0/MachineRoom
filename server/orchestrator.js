@@ -19,7 +19,7 @@ import { homedir, tmpdir } from 'node:os'
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { maskKeys } from '../src/briefs/audit.js'
-import { printedRunsFolder } from './printed-path.js'
+import { isWindowsPath, printedRunsFolder } from './printed-path.js'
 import { childEnvironment, mcpConfigForClaude, mcpConfigForOpencode, normalizeMcpServers, replyText, runRecord, summarizeRun } from '../src/briefs/run.js'
 import { defaultMode, legacyMode, modesFor } from '../src/control/modes.js'
 import { harnessByKey } from '../src/harnesses/index.js'
@@ -383,10 +383,41 @@ function profileEnv(env = process.env) {
   return copy
 }
 
+function profilePrefixes(resolvedEnv) {
+  const list = []
+  const add = (name, label) => {
+    const value = typeof resolvedEnv[name] === 'string' ? resolvedEnv[name].trim() : ''
+    if (!value) return
+    const body = value.length > 1 ? value.replace(/[\\/]+$/, '') : value
+    if (!body || list.some((item) => item.body === body)) return
+    list.push({ body, label, windows: isWindowsPath(body) })
+  }
+  add('TEMP', '%TEMP%')
+  add('TMP', '%TEMP%')
+  add('LOCALAPPDATA', '%LOCALAPPDATA%')
+  add('APPDATA', '%APPDATA%')
+  add('USERPROFILE', '%USERPROFILE%')
+  add('HOME', '~')
+  return list.sort((a, b) => b.body.length - a.body.length)
+}
+
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+function maskProfilePrefixes(text, resolvedEnv) {
+  let masked = text
+  for (const { body, label, windows } of profilePrefixes(resolvedEnv)) {
+    const pattern = new RegExp(`(?<![\\w:\\\\/.~-])${escapeRegExp(body)}(?=$|[\\\\/])`, windows ? 'gi' : 'g')
+    masked = masked.replace(pattern, label)
+  }
+  return masked
+}
+
 function maskProfilePaths(text, env = process.env) {
   if (typeof text !== 'string' || text === '' || !/[\\/]/.test(text)) return text
   const resolvedEnv = profileEnv(env)
-  return text.replace(PATH_TOKEN, (token) => {
+  return maskProfilePrefixes(text, resolvedEnv).replace(PATH_TOKEN, (token) => {
     const trail = token.match(PATH_TRAIL)?.[0] ?? ''
     const body = trail ? token.slice(0, -trail.length) : token
     let shown = ''

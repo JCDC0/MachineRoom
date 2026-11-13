@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- A profile folder whose name holds a space is masked in chat text too, because each known profile prefix is replaced with its label before path tokens are scanned (P161).
 - Compaction rules are masked for keys and profile paths when the owner saves them, so the answer and the chat file hold the masked rules (P161).
 - Review 23 reads today's merges: five findings, briefed as P161 to P163 (P160).
 - The full suite passed on today's merges: 274 files, 4917 tests passed, 4 skipped (P159).
