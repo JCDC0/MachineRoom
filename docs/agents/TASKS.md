@@ -1463,3 +1463,29 @@ Review, with `git show -m --first-parent SHA`, against the code around each chan
 
 1. Run `node scripts/test.mjs` once in the foreground.
 2. For each failing test, run its file alone twice. Write `docs/agents/RUN-2026-11-13-SUITE-2.md`: the commit, the totals, and one line per failure with its file, test name, first assertion line and whether it fails alone. Commit it.
+
+**P151. Every chat string the bridge saves is masked (OpenCode).** Read review 22's first finding in `docs/agents/AUDIT-2026-11-REVIEW-22.md` and this brief only. Use no subagents. Run every command in the foreground. Commit each step as you finish it, and stop starting new work at minute 18. Files: server/orchestrator.js, tests/orchestrator.test.js, docs/agents/CHANGELOG.md.
+
+1. In `server/orchestrator.js`, pass through `maskText` before any length cap: the current title and a saved session's title when the owner renames them, and on restore the current title, the compact rules and both summaries. Mask a compaction report before it becomes the summary. Change only these spots: another lane edits the conversation identity in the same file.
+2. Tests, by what they prove: a rename with a synthetic profile path and a fake key is saved masked; a chat file that holds a raw title, rules and summary is masked after restore and the next save.
+3. Run `node node_modules/vitest/vitest.mjs related --run server/orchestrator.js` and `npm run build`. Report what passed.
+
+**P152. Project errors and the queue summary in run-lane print masked paths (OpenCode).** Read review 22's third finding in `docs/agents/AUDIT-2026-11-REVIEW-22.md` and this brief only. Use no subagents. Run every command in the foreground. Commit each step as you finish it, and stop starting new work at minute 18. Files: scripts/run-lane.mjs, tests/run-lane.test.js, docs/agents/CHANGELOG.md.
+
+1. The missing-project, not-a-folder and not-a-git-repo errors name the project through `printedRunsFolder`. A finished queue with `--worktree` passes `printedRunsFolder(target.path)` to `formatQueueSummary`. The paths the runner uses do not change.
+2. A test for each route with the project below a profile folder and the runs folder elsewhere: the printed text holds the masked path and not the raw one. Mark a test Windows only with `it.skipIf(process.platform !== 'win32')` only if it uses `%LOCALAPPDATA%` or `%TEMP%`.
+3. Run `node node_modules/vitest/vitest.mjs run tests/run-lane.test.js` and `npm run build`. Report what passed.
+
+**P153. The current conversation keeps one identity while it grows (AGY).** Read review 22's fourth finding in `docs/agents/AUDIT-2026-11-REVIEW-22.md` and this brief only. Use no subagents. Run every command in the foreground. Commit each step as you finish it. Files: server/orchestrator.js, src/ui/sidebar.js, src/ui/Sidebar.jsx, tests/orchestrator.test.js, tests/sidebar.test.js, docs/agents/CHANGELOG.md.
+
+1. The bridge gives the current conversation a stable id that changes only on new, open and fork, and sends it with the sessions answer (as `sessionId` or in place of `startedAt` from the oldest kept message). It is saved with the chat so a restart keeps it. Change only the conversation identity in `server/orchestrator.js`: another lane edits the title and summary masking in the same file.
+2. `sessionRowIdentity` in `src/ui/sidebar.js` uses that id for the current row. The menu still closes when the conversation is switched, opened or forked.
+3. Tests, by what they prove: with 200 messages kept, one more report leaves the current row's identity and the open menu unchanged; a new conversation changes it.
+4. Run `node node_modules/vitest/vitest.mjs related --run server/orchestrator.js src/ui/sidebar.js src/ui/Sidebar.jsx` and `npm run build`. Report what passed.
+
+**P154. Trace why the masked log line test fails on Linux (OpenCode).** Read this brief only. Use no subagents. Run every command in the foreground. Commit each step as you finish it, and stop starting new work at minute 18. Files: tests/run-lane.test.js, server/printed-path.js, scripts/run-lane.mjs, tests/lane-env.test.js, tests/made-lane-defaults.test.js, tests/run-project.test.js, tests/run-queue.test.js, tests/run-worktree.test.js, docs/agents/CHANGELOG.md.
+
+1. The test `masks the printed log and record lines in startLane without changing written files or record paths` in `tests/run-lane.test.js` is Windows only since `0ad86747` (its `shortcut:` comment). On Ubuntu CI it failed: the printed lines did not include `log: ~/custom-runs/run-masked.log`. Read the test's environment (TEMP, HOME, USERPROFILE, LOCALAPPDATA, XDG_STATE_HOME) against `printedRunsFolder` in `server/printed-path.js` and the print sites in `startLane`. Find the cause by reading and by calling `printedRunsFolder` with posix-style paths and env in a Node one-liner. If `wsl` answers on this machine, run the test there too.
+2. If you find and fix the cause, remove the `skipIf` and the `shortcut:` comment. If you cannot prove it, leave the skip and write the likely cause in the changelog line.
+3. Remove the `printedRunsFolder` imports no test uses in the five other test files listed above.
+4. Run `node node_modules/vitest/vitest.mjs related --run server/printed-path.js scripts/run-lane.mjs` and `npm run build`. Report what passed.
