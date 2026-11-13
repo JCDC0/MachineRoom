@@ -1,4 +1,5 @@
 import { harnessByAdapter } from '../../harnesses/index.js'
+import { maskProfilePaths } from '../../briefs/run.js'
 
 export function resultWord(record) {
   if (record?.killed) return 'stopped'
@@ -140,13 +141,13 @@ export function queueRecoveryMessage(record, { project = '' } = {}) {
   lines.push(`Queue branch: ${plan.branch || 'not in the record'}`)
   if (plan.number === null) lines.push('Failed task: the record does not give its number.')
   else lines.push(`Failed task: task ${plan.number}.`)
-  lines.push(plan.task || 'The record does not hold the failed task text.')
+  lines.push(maskProfilePaths(plan.task) || 'The record does not hold the failed task text.')
   lines.push('')
   if (plan.remaining) {
     const label = plan.remaining.length === 1 ? 'task did not run' : 'tasks did not run'
     lines.push(`${plan.remaining.length} ${label}:`)
     plan.remaining.forEach((task, index) => {
-      lines.push(`${plan.number + index + 1}. ${task}`)
+      lines.push(`${plan.number + index + 1}. ${maskProfilePaths(task)}`)
     })
   } else if (plan.remainingCount !== null) {
     lines.push(`The record does not hold the queue's task list. It says ${plan.count} tasks were queued, so ${plan.remainingCount} did not run.`)
@@ -157,7 +158,7 @@ export function queueRecoveryMessage(record, { project = '' } = {}) {
     lines.push(`The record does not hold ${unknown.join(' or ')}, so the tasks that did not run are not known.`)
   }
   lines.push('')
-  lines.push(`Note: ${plan.note || 'the record has no note.'}`)
+  lines.push(`Note: ${maskProfilePaths(plan.note) || 'the record has no note.'}`)
   if (plan.missing.length > 0) lines.push(`Missing from the record: ${plan.missing.join(', ')}.`)
   lines.push('')
   lines.push("Inspect the uncommitted work in the lane's worktree first, report what you found, and propose how to continue. Do not discard changes and do not rerun the queue by itself.")

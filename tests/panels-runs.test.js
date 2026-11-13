@@ -1,4 +1,6 @@
 import { act, createElement } from 'react'
+import { homedir } from 'node:os'
+import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createClient } from '../src/control/client.js'
 import { createMockClient } from '../src/control/mock.js'
@@ -993,6 +995,25 @@ describe('queueRecoveryMessage with the runner record fields', () => {
     expect(message).toContain('1 task did not run:')
     expect(message).toContain('3. Write the third file.')
     expect(message).not.toContain('the queue task list')
+  })
+
+  it('hides a home folder in a record written before the change', () => {
+    const home = homedir()
+    const note = join(home, 'queue-notes', 'todo.txt')
+    const message = queueRecoveryMessage({
+      lane: 'opencode',
+      project: 'demo',
+      queue: 'machineroom/queue-opencode-20261113-120000-123',
+      queueIndex: 2,
+      queueSize: 3,
+      queueRemaining: [`Read ${note} first.`],
+      queueStatus: 'failed: tests',
+      task: 'Write the second file.',
+      note: 'The tests failed.',
+    })
+    expect(message).not.toContain(home)
+    expect(message).toContain(process.platform === 'win32' ? '%USERPROFILE%' : '~')
+    expect(message).toContain('3. Read ')
   })
 })
 
