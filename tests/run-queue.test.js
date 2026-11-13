@@ -7,7 +7,7 @@ import { commitMessage, formatQueueSummary, parseQueue, parseQueueArgs, runQueue
 import { DEFAULT_MINUTES } from '../src/briefs/run.js'
 import { gitPath } from '../server/programPath.js'
 import { releaseLaneLock } from '../scripts/lane-lock.mjs'
-import { takeProjectLock } from '../scripts/run-lane.mjs'
+import { takeProjectLock, printedRunsFolder } from '../scripts/run-lane.mjs'
 import { killTree } from '../server/processTree.js'
 import { makeTempDir, processTempRoot, removeTempDir } from './helpers/tempRoot.js'
 
@@ -474,7 +474,7 @@ describe('scripts/run-lane.mjs with --queue', { timeout: 30000 }, () => {
       writeFileSync(file, 'One task.\n')
       const result = await runLane(['opencode', '--project', folder, '--queue', file, '--dry-run'])
       expect(result.code).toBe(1)
-      expect(result.stderr).toContain(`The project folder ${folder} is not a git folder. A queue needs one.`)
+      expect(result.stderr).toContain(`The project folder ${printedRunsFolder(folder)} is not a git folder. A queue needs one.`)
       expect(result.stdout).not.toContain('branch:')
     } finally {
       remove(parent)

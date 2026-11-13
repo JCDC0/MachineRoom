@@ -319,7 +319,7 @@ describe('run-lane --worktree with one task', { timeout: 60000 }, () => {
     expect(git(path, ['rev-list', '--count', `${head}..HEAD`]).trim()).toBe('1')
     expect(git(path, ['status', '--porcelain']).trim()).toBe('')
     expect(git(path, ['show', '--format=', '--name-only', 'HEAD']).trim()).toBe('lane-note.txt')
-    expect(result.stdout).toContain(`The worktree ${path} stays on ${branch}.`)
+    expect(result.stdout).toContain(`The worktree ${printedRunsFolder(path, { ...process.env, TEMP: base })} stays on ${branch}.`)
     expect(git(project, ['branch', '--show-current']).trim()).toBe('main')
 
     const record = JSON.parse(readFileSync(join(runs, 'runs.jsonl'), 'utf8').trim())
