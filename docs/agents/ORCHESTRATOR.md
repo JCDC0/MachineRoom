@@ -10,9 +10,9 @@ How to read this file: `Where things stand`, `Rules`, `Session start` and `The l
 
 Rewrite this section at every merge and before you end a session. Keep it under ten lines: what is pushed, what is unpushed, what runs, what waits on the owner, what is next.
 
-- 2026-11-13, evening: pushed to `4f2f6c24`; merged and unpushed since: P196, P200 to P204, P206 to P208 (check `git log origin/main..main`). Read CI first with `gh run list --limit 3 --repo JCDC0/MachineRoom`; `4f2f6c24` was green on Ubuntu and failed one Windows claude-sessions test, fixed by P207.
-- Today ran P151 to P210 and reviews 23 to 27. Every finding of reviews 22 to 27 and of readiness passes 1 and 2 (except D5's archive boundary, part of F1) is fixed. Readiness pass 3 (`AUDIT-2026-11-READINESS-3.md`, Codex): P197-1 to P197-7 and its Dispatch history note are merged as P200 to P206 and P208.
-- Running at this rewrite: P209 (full suite, opencode) and P210 (review 28 of the batch, codex). Read both before the next push.
+- 2026-11-13, evening: everything merged is pushed at `1bb54a0f`, CI green on Windows and Ubuntu (run 43406131394). Read CI first with `gh run list --limit 3 --repo JCDC0/MachineRoom`.
+- Today ran P151 to P212 and reviews 23 to 28 (review 28 R28-1 and R28-2 fixed by P211 and P212). Every finding of reviews 22 to 27 and of readiness passes 1 and 2 (except D5's archive boundary, part of F1) is fixed. Readiness pass 3 (`AUDIT-2026-11-READINESS-3.md`, Codex): P197-1 to P197-7 and its Dispatch history note are merged as P200 to P206 and P208.
+- Nothing runs at this rewrite. The full suite at `31f73519` passed (`RUN-2026-11-13-SUITE-6.md`).
 - The fleet at the owner's word: `opencode` to `opencode5` on DeepSeek V4.1 Flash at max reasoning, `codex` on GPT-6.1 Sol high (in rotation for briefs, not only reviews), `agy` and `agy2` on Gemini 4 Hydrogen XHigh, `agy3` on Hydrogen High. The owner said to ignore AGY's Argon orchestrator for now.
 - Open for the owner: N16 (an all-zero cost reads as not reported), the live room by eye, the release (P4), and seven suggested features, each waiting for a yes: a check command per project, the orchestrator preparing a merge, handing off a failed queue, storage cleanup preview with an archive boundary (F1), conversation export (F2), Stop a running lane from Dispatch, and a kept Dispatch draft per project.
 - Push: the owner said "push commits" for the session of 2026-11-13. A new session asks again.
