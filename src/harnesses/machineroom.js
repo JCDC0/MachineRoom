@@ -43,6 +43,36 @@ function machineroomUsage(log) {
   }
 }
 
+function machineroomErrors(log) {
+  const texts = []
+  for (const line of String(log ?? '').split(/\r?\n/)) {
+    if (!line.trim()) continue
+    let item
+    try {
+      item = JSON.parse(line)
+    } catch {
+      continue
+    }
+    if (item?.type === 'result' && !item.parent_tool_use_id && item.is_error) {
+      texts.push([item.result, item.error?.message, typeof item.error === 'string' ? item.error : '', item.error?.type].filter((text) => typeof text === 'string' && text.trim() !== '').join(' '))
+      continue
+    }
+    if (item?.type === 'error') {
+      texts.push([item.message, item.error?.message, typeof item.error === 'string' ? item.error : '', item.error?.type].filter((text) => typeof text === 'string' && text.trim() !== '').join(' '))
+    }
+  }
+  return texts.filter((text) => text.trim() !== '')
+}
+
+function machineroomLimited(log) {
+  const text = machineroomErrors(log).join('\n')
+  if (!text) return ''
+  if (/insufficient (?:balance|credit|quota)|\b402\b|quota/i.test(text)) return 'quota'
+  if (/rate[_ -]?limit(?:ed|_error)?|\b429\b/i.test(text)) return 'rate-limit'
+  if (/overloaded|\b503\b|\b529\b/i.test(text)) return 'overloaded'
+  return ''
+}
+
 function scriptFile() {
   const url = new URL(['..', '..', 'scripts', 'mr-agent.mjs'].join('/'), import.meta.url)
   if (url.protocol !== 'file:') return 'scripts/mr-agent.mjs'
@@ -88,6 +118,9 @@ export const machineroomHarness = {
   },
   reply(log) {
     return machineroomReply(log)
+  },
+  limited(log) {
+    return machineroomLimited(log)
   },
   usage(log) {
     return machineroomUsage(log)

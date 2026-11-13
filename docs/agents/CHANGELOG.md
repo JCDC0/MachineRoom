@@ -1,6 +1,8 @@
 # Changelog
 
 ## Unreleased
+- P260: each harness descriptor answers `quota`, `rate-limit`, `overloaded` or `''` from the error lines it prints, and the runner refuses a fallback that is unknown, retired, the lane itself or the orchestrator.
+- P260: a brief run or a single project task that fails, hits a quota or rate limit, or fails to start moves once to its lane's `fallback` on a `-on-` branch, and both records carry `failover` and `failoverFrom`; a busy backup lane leaves the run failed.
 - P259: README.md describes what each command prints, the up flags, the default sources, the runs folder and how to stop the room.
 - P253: the session timer, orchestrator room turn, tree retry and storage refresh tests wait for their condition instead of a fixed sleep.
 - P251: the waiting card counts working agents and names the session readers on a Watching line, and the Inspector says waiting for you when the transport does, through one shared rule.

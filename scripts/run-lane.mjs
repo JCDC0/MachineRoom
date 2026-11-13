@@ -8,7 +8,7 @@ import { finished } from 'node:stream'
 import { fileURLToPath } from 'node:url'
 import { branchFor, briefFileList, buildPrompt, nextVersion, parseBriefs, parseRules } from '../src/briefs/briefs.js'
 import { formatQueueSummary, parseQueue, parseQueueArgs, runQueue } from '../src/briefs/queue.js'
-import { briefProblems, briefWorktreeProblems, checkCommandProblem, childEnvironment, commandFor, createLaneLog, DEFAULT_MINUTES, filterRunsSince, formatOutcomes, formatStats, formatSummary, laneCommandProblem, laneStats, laneStopProblem, laneWithOverrides, maskedQueueTasks, ORCHESTRATOR_LANE_PROBLEM, parseRunArgs, projectProblems, projectRunGit, readinessLine, retryStartProblem, runListLine, runRecord, sessionToolLines, splitCheckCommand, startFailureText, summarizeRun, unattendedPrompt, worktreeFor, WORKTREES_FOLDER } from '../src/briefs/run.js'
+import { briefProblems, briefWorktreeProblems, checkCommandProblem, childEnvironment, commandFor, createLaneLog, DEFAULT_MINUTES, fallbackProblem, failoverKind, filterRunsSince, formatOutcomes, formatStats, formatSummary, laneCommandProblem, laneStats, laneStopProblem, laneWithOverrides, limitedFor, maskedQueueTasks, ORCHESTRATOR_LANE_PROBLEM, parseRunArgs, projectProblems, projectRunGit, readinessLine, retryStartProblem, runListLine, runRecord, sessionToolLines, splitCheckCommand, startFailureText, summarizeRun, unattendedPrompt, worktreeFor, WORKTREES_FOLDER } from '../src/briefs/run.js'
 import { outcomeTable } from '../server/outcomes.js'
 import { readMainSubjectsSync } from '../server/runs.js'
 import { isLockHolderStale, killTree, descendantProcesses, leftoverProcesses, listProcesses } from '../server/processTree.js'
@@ -423,7 +423,7 @@ export function runnerCommitVersion(file = join(root, 'package.json')) {
   return nextVersion(JSON.parse(readFileSync(file, 'utf8')).version)
 }
 
-export function runnerCommit({ laneKey, worktree, briefs, version = runnerCommitVersion() } = {}) {
+export function runnerCommit({ laneKey, worktree, briefs, version = runnerCommitVersion(), branchSuffix = '' } = {}) {
   const list = Array.isArray(briefs) ? briefs : []
   const title = String(list[0]?.title ?? '').trim()
   const result = { ok: true, committed: false, leftOut: [], error: '' }
@@ -449,7 +449,7 @@ export function runnerCommit({ laneKey, worktree, briefs, version = runnerCommit
     console.log(`The runner could not commit the ${laneKey} lane's work: ${error}`)
     return { ok: false, committed: false, leftOut, error }
   }
-  const switched = run(['switch', '-c', branchFor(list[0])])
+  const switched = run(['switch', '-c', `${branchFor(list[0])}${branchSuffix}`])
   if (switched.error || switched.status !== 0) return fail(switched)
   const added = run(['add', '-A', '--', ...selected])
   if (added.error || added.status !== 0) return fail(added)
@@ -1256,6 +1256,11 @@ async function main() {
     console.log(`The ${options.lane} lane is retired.`)
     return 1
   }
+  const backupProblem = fallbackProblem({ laneKey: options.lane, fallback: lane.fallback, lanes })
+  if (backupProblem !== '') {
+    console.log(backupProblem)
+    return 1
+  }
   if (options.queue) return await runQueueProject({ options, lane, lanes })
   if (options.project && options.worktree) {
     return await runQueueProject({ options, lane, lanes })
@@ -1388,7 +1393,71 @@ async function main() {
   }
 }
 
-export async function startLane({ options, lane, lanes, wanted, prompt, logPath, usageFile, name, project = '', task = '', queue = null, lockPath = '', projectBranch = null, deferRecord = false, base = '', openLog = createWriteStream }) {
+function recordRoom(record, toolLines, lanes) {
+  try {
+    const written = writeRecording({ record, lanes, root, env: process.env, session: toolLines.session })
+    console.log(`room: /?recording=${written.name}`)
+    if (written.indexError) console.log(`index: not updated (${written.indexError})`)
+  } catch (error) {
+    console.log(`room: not recorded (${String(error?.message ?? error)})`)
+  }
+}
+
+async function startFailover({ laneKey, target, lanes, options, wanted, prompt, folder, project, task, deferRecord, openLog, failedRecord, failedStartBranch }) {
+  const fallbackLane = lanes?.[target]
+  if (!fallbackLane) return null
+  let lock
+  try {
+    refuseRunningLane(target, project ? '' : fallbackLane.worktree, folder)
+    lock = takeLaneLock(folder, target, project ? { worktree: project, projectRun: true } : { worktree: fallbackLane.worktree })
+  } catch {
+    console.log(`The backup lane ${target} is busy, so the run stays failed.`)
+    return null
+  }
+  try {
+    if (project) {
+      const base = String(failedRecord?.branch || failedStartBranch || '').trim()
+      if (base === '') {
+        console.log(`The backup lane ${target} has no branch to start from, so the run stays failed.`)
+        return null
+      }
+      const branch = `${base}-on-${target}`
+      if (gitRead(project, ['switch', '-c', branch]) === null) {
+        console.log(`The backup lane ${target} could not take the branch ${branch}, so the run stays failed.`)
+        return null
+      }
+    }
+    const fallbackName = project
+      ? `${target}-project-${stamp()}`
+      : `${target}-${wanted.map((brief) => brief.id).join('-')}-${stamp()}`
+    return await startLane({
+      options: { ...options, lane: target, failedOver: true },
+      lane: fallbackLane,
+      lanes,
+      wanted,
+      prompt,
+      logPath: join(folder, `${fallbackName}.log`),
+      usageFile: join(folder, `${fallbackName}.usage.json`),
+      name: fallbackName,
+      project,
+      task,
+      queue: null,
+      lockPath: lock,
+      deferRecord,
+      branchSuffix: `-on-${target}`,
+      failoverFrom: { lane: laneKey, startedAt: failedRecord?.startedAt },
+      openLog,
+    })
+  } finally {
+    releaseLaneLock(lock)
+  }
+}
+
+export async function startLane({ options, lane, lanes, wanted, prompt, logPath, usageFile, name, project = '', task = '', queue = null, lockPath = '', projectBranch = null, deferRecord = false, base = '', openLog = createWriteStream, branchSuffix = '', failoverFrom = null }) {
+  if (options?.failedOver !== true) {
+    const problem = fallbackProblem({ laneKey: options?.lane, fallback: lane?.fallback, lanes })
+    if (problem !== '') throw new Error(problem)
+  }
   let start = null
   if (!project) {
     const status = gitStatus(lane.worktree)
@@ -1630,7 +1699,7 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
     let commit = { ok: true, committed: false, leftOut: [], error: '' }
     if (!project && !killed && result.code === 0 && lane.cli?.commits === 'runner' && wanted.length > 0) {
       try {
-        commit = runnerCommit({ laneKey: options.lane, worktree: lane.worktree, briefs: wanted })
+        commit = runnerCommit({ laneKey: options.lane, worktree: lane.worktree, briefs: wanted, branchSuffix })
       } catch (error) {
         commit = { ok: false, committed: false, leftOut: [], error: String(error?.message ?? error) }
       }
@@ -1671,6 +1740,7 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
     const worktree = project || lane.worktree
     const logText = readLog(logPath)
     const summary = summarizeRun({ harness, log: logText, worktree })
+    const limited = limitedFor(harness, logText)
     formatSummary(summary).forEach((line) => console.log(line))
 
     const git = project
@@ -1719,6 +1789,7 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
         ...(options.startedBy ? { startedBy: options.startedBy } : {}),
         ...(project ? { project, task, head: gitRead(project, ['rev-parse', 'HEAD']) || undefined } : {}),
         ...(queue ? { queue } : {}),
+        ...(failoverFrom ? { failoverFrom } : {}),
       })
       if (startedBy) retryRecord.startedBy = startedBy
       if (appendRunRecord(retryRecord)) console.log(`record: ${printedRunsFolder(runsFile())}`)
@@ -1728,7 +1799,7 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
         lane, lanes, wanted, prompt,
         logPath: join(dirname(logPath), `${retryName}.log`),
         usageFile: join(dirname(usageFile), `${retryName}.usage.json`),
-        name: retryName, project, task, queue, lockPath, projectBranch, deferRecord, base: runBase, openLog,
+        name: retryName, project, task, queue, lockPath, projectBranch, deferRecord, base: runBase, openLog, branchSuffix, failoverFrom,
       })
     }
     const record = laneRunRecord({
@@ -1755,20 +1826,45 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
       ...(options.startedBy ? { startedBy: options.startedBy } : {}),
       ...(project ? { project, task, ...(!deferRecord ? { head: gitRead(project, ['rev-parse', 'HEAD']) || undefined } : {}) } : {}),
       ...(queue ? { queue } : {}),
+      ...(failoverFrom ? { failoverFrom } : {}),
     })
+    if (startedBy) record.startedBy = startedBy
+    const kind = failoverKind({ exitCode: result.code, limited, startFailed: startFailure !== '', killed })
+    const target = kind !== '' && typeof lane.fallback === 'string' ? lane.fallback.trim() : ''
+    if (target !== '' && options?.failedOver !== true) {
+      record.failover = { kind, to: target }
+      if (project && deferRecord) {
+        writeProjectRecord({ record, folder: project, startHead: projectStart.head, startBranch: projectStart.branch, tests: '' })
+      } else {
+        if (appendRunRecord(record)) console.log(`record: ${printedRunsFolder(runsFile())}`)
+        if (!project) recordRoom(record, toolLines, lanes)
+      }
+      console.log(`moving the run to ${target} because ${kind}`)
+      const fallbackRun = await startFailover({
+        laneKey: options.lane,
+        target,
+        lanes,
+        options,
+        wanted,
+        prompt,
+        folder,
+        project,
+        task,
+        deferRecord,
+        openLog,
+        failedRecord: record,
+        failedStartBranch: projectStart?.branch ?? '',
+      })
+      if (fallbackRun) return { code: fallbackRun.code ?? 1, killed: fallbackRun.killed === true }
+      if (project && deferRecord) return { code: result.code ?? 1, killed, record: null, startHead: projectStart.head, startBranch: projectStart.branch }
+      return { code: result.code ?? 1, killed }
+    }
     if (project && deferRecord) {
       return { code: result.code ?? 1, killed, record, startHead: projectStart.head, startBranch: projectStart.branch }
     }
-    if (startedBy) record.startedBy = startedBy
     if (appendRunRecord(record)) console.log(`record: ${printedRunsFolder(runsFile())}`)
     if (project) return { code: result.code ?? 1, killed }
-    try {
-      const written = writeRecording({ record, lanes, root, env: process.env, session: toolLines.session })
-      console.log(`room: /?recording=${written.name}`)
-      if (written.indexError) console.log(`index: not updated (${written.indexError})`)
-    } catch (error) {
-      console.log(`room: not recorded (${String(error?.message ?? error)})`)
-    }
+    recordRoom(record, toolLines, lanes)
     return { code: result.code ?? 1, killed }
   } finally {
     if (mcpConfigPath) {

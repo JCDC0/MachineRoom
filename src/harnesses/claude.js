@@ -20,8 +20,8 @@ function claudeReply(log) {
   return terminalText(words ?? '')
 }
 
-function claudeFailure(log) {
-  let failure = null
+function claudeErrorTexts(log) {
+  const texts = []
   for (const line of String(log ?? '').split(/\r?\n/)) {
     if (!line.trim()) continue
     let item
@@ -30,19 +30,29 @@ function claudeFailure(log) {
     } catch {
       continue
     }
-    if (item?.type !== 'result' || item.parent_tool_use_id) continue
-    if (!item.is_error) continue
-    const message =
-      typeof item.result === 'string' && item.result.trim()
-        ? item.result.trim()
-        : typeof item.error?.message === 'string' && item.error.message.trim()
-          ? item.error.message.trim()
-          : typeof item.error === 'string' && item.error.trim()
-            ? item.error.trim()
-            : null
-    if (message) failure = message
+    if (item?.type === 'result' && !item.parent_tool_use_id && item.is_error) {
+      texts.push([item.result, item.error?.message, typeof item.error === 'string' ? item.error : '', item.error?.type].filter((text) => typeof text === 'string' && text.trim() !== '').join(' '))
+      continue
+    }
+    if (item?.type === 'error' || (item?.type === 'system' && item.subtype === 'error')) {
+      texts.push([item.message, item.error?.message, typeof item.error === 'string' ? item.error : '', item.error?.type].filter((text) => typeof text === 'string' && text.trim() !== '').join(' '))
+    }
   }
-  return failure
+  return texts.filter((text) => text.trim() !== '')
+}
+
+function claudeFailure(log) {
+  const texts = claudeErrorTexts(log)
+  return texts.length > 0 ? texts[texts.length - 1] : null
+}
+
+function claudeLimited(log) {
+  const text = claudeErrorTexts(log).join('\n')
+  if (!text) return ''
+  if (/overloaded(?:_error)?|\b529\b/i.test(text)) return 'overloaded'
+  if (/rate[_ -]?limit(?:ed|_error)?|\b429\b/i.test(text)) return 'rate-limit'
+  if (/usage limit(?: reached)?|quota/i.test(text)) return 'quota'
+  return ''
 }
 
 function claudeUsage(log) {
@@ -117,6 +127,9 @@ export const claudeHarness = {
   },
   failure(log) {
     return claudeFailure(log)
+  },
+  limited(log) {
+    return claudeLimited(log)
   },
   usage(log) {
     return claudeUsage(log)

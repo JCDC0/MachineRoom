@@ -19,8 +19,8 @@ function opencodeReply(log) {
   return terminalText(words ?? '')
 }
 
-function opencodeFailure(log) {
-  let failure = null
+function opencodeErrors(log) {
+  const errors = []
   for (const line of String(log ?? '').split(/\r?\n/)) {
     if (!line.trim()) continue
     let item
@@ -37,10 +37,28 @@ function opencodeFailure(log) {
           ? item.error.trim()
           : typeof item.message === 'string' && item.message.trim()
             ? item.message.trim()
-            : null
-    if (message) failure = message
+            : ''
+    const type = typeof item.error?.type === 'string' ? item.error.type.trim() : ''
+    if (message !== '' || type !== '') errors.push({ message, text: [type, message].filter(Boolean).join(' ') })
   }
-  return failure
+  return errors
+}
+
+function opencodeFailure(log) {
+  const errors = opencodeErrors(log)
+  for (let index = errors.length - 1; index >= 0; index -= 1) {
+    if (errors[index].message !== '') return errors[index].message
+  }
+  return null
+}
+
+function opencodeLimited(log) {
+  const text = opencodeErrors(log).map((error) => error.text).join('\n')
+  if (!text) return ''
+  if (/insufficient balance|quota|usage limit/i.test(text)) return 'quota'
+  if (/rate[_ -]?limit(?:ed|_error)?|\b429\b/i.test(text)) return 'rate-limit'
+  if (/overloaded|\b503\b|\b529\b/i.test(text)) return 'overloaded'
+  return ''
 }
 
 function opencodeUsage(log) {
@@ -103,6 +121,9 @@ export const opencodeHarness = {
   },
   failure(log) {
     return opencodeFailure(log)
+  },
+  limited(log) {
+    return opencodeLimited(log)
   },
   usage(log) {
     return opencodeUsage(log)

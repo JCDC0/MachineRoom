@@ -276,6 +276,58 @@ describe('harness reports and usage', () => {
   })
 })
 
+describe('harness quota and rate limit errors', () => {
+  it('reads Claude error result lines and ignores agent text', () => {
+    const claude = harnessByKey.claude
+    expect(claude.limited(lines({ type: 'result', subtype: 'error', is_error: true, result: 'API Error: 429 Too Many Requests' }))).toBe('rate-limit')
+    expect(claude.limited(lines({ type: 'result', subtype: 'error', is_error: true, result: 'Claude AI usage limit reached|1760000000' }))).toBe('quota')
+    expect(claude.limited(lines({ type: 'result', subtype: 'error', is_error: true, result: 'API Error: 529 overloaded_error' }))).toBe('overloaded')
+    expect(claude.limited(lines({ type: 'result', subtype: 'error', is_error: true, error: { type: 'rate_limit_error', message: 'slow down' } }))).toBe('rate-limit')
+    expect(claude.limited(lines({ type: 'assistant', message: { content: [{ type: 'text', text: '429 usage limit reached overloaded' }] } }))).toBe('')
+    expect(claude.limited('')).toBe('')
+  })
+
+  it('reads Codex error lines and ignores agent text', () => {
+    const codex = harnessByKey.codex
+    expect(codex.limited(lines({ type: 'turn.failed', error: { message: "You've hit your usage limit." } }))).toBe('quota')
+    expect(codex.limited(lines({ type: 'error', message: 'Rate limit reached. Please try again in 5 minutes.' }))).toBe('rate-limit')
+    expect(codex.limited('ERROR: 429 Too Many Requests\n')).toBe('rate-limit')
+    expect(codex.limited(lines({ type: 'item.completed', item: { type: 'agent_message', text: 'ERROR: usage limit reached 429' } }))).toBe('')
+    expect(codex.limited('')).toBe('')
+  })
+
+  it('reads OpenCode error lines and ignores agent text', () => {
+    const opencode = harnessByKey.opencode
+    expect(opencode.limited(lines({ type: 'error', error: { type: 'provider.quota', message: 'Free usage limit reached.' } }))).toBe('quota')
+    expect(opencode.limited(lines({ type: 'error', error: { message: '429 Too Many Requests' } }))).toBe('rate-limit')
+    expect(opencode.limited(lines({ type: 'error', message: 'Insufficient balance for this provider.' }))).toBe('quota')
+    expect(opencode.limited(lines({ type: 'text', part: { text: '429 rate limit insufficient balance quota' } }))).toBe('')
+    expect(opencode.limited('')).toBe('')
+  })
+
+  it('reads AGY error lines and ignores agent text', () => {
+    const agy = harnessByKey.agy
+    expect(agy.limited(lines({ event: 'error', error: { message: 'RESOURCE_EXHAUSTED: quota exceeded' } }))).toBe('quota')
+    expect(agy.limited(lines({ event: 'error', message: '503 UNAVAILABLE' }))).toBe('overloaded')
+    expect(agy.limited(lines({ event: 'result', result: { response: 'RESOURCE_EXHAUSTED quota 503 UNAVAILABLE' } }))).toBe('')
+    expect(agy.limited('')).toBe('')
+  })
+
+  it('reads the native provider error result line and ignores tool output', () => {
+    const machineroom = harnessByKey.machineroom
+    expect(machineroom.limited(lines({ type: 'result', subtype: 'error', is_error: true, result: 'The API answered 429: rate limited.' }))).toBe('rate-limit')
+    expect(machineroom.limited(lines({ type: 'result', subtype: 'error', is_error: true, result: 'The API answered 402: payment required.' }))).toBe('quota')
+    expect(machineroom.limited(lines({ type: 'user', message: { content: [{ type: 'tool_result', is_error: true, content: '429 402' }] } }))).toBe('')
+    expect(machineroom.limited('')).toBe('')
+  })
+
+  it('gives each harness that can fail over a limited reader', () => {
+    for (const key of ['claude', 'codex', 'opencode', 'agy', 'machineroom']) {
+      expect(typeof harnessByKey[key].limited, key).toBe('function')
+    }
+  })
+})
+
 describe('harness MCP configuration', () => {
   it('builds Claude command with and without mcpConfig', () => {
     const cli = { bin: 'claude', model: 'opus' }

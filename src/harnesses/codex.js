@@ -19,6 +19,35 @@ function codexReply(log) {
   return terminalText(text ?? '')
 }
 
+function codexErrors(log) {
+  const texts = []
+  for (const line of String(log ?? '').split(/\r?\n/)) {
+    if (!line.trim()) continue
+    let item
+    try {
+      item = JSON.parse(line)
+    } catch {
+      if (/^(?:ERROR|Error|error)\b/.test(line.trim())) texts.push(line.trim())
+      continue
+    }
+    const failed = item?.type === 'error' || item?.type === 'turn.failed' || item?.type === 'stream_error'
+    const itemError = item?.item?.type === 'error'
+    if (!failed && !itemError) continue
+    const source = itemError ? item.item : item
+    texts.push([source.message, source.error?.message, typeof source.error === 'string' ? source.error : '', source.error?.type].filter((text) => typeof text === 'string' && text.trim() !== '').join(' '))
+  }
+  return texts.filter((text) => text.trim() !== '')
+}
+
+function codexLimited(log) {
+  const text = codexErrors(log).join('\n')
+  if (!text) return ''
+  if (/usage limit|quota/i.test(text)) return 'quota'
+  if (/rate[_ -]?limit(?:ed|_error)?|\b429\b/i.test(text)) return 'rate-limit'
+  if (/overloaded|\b503\b|\b529\b/i.test(text)) return 'overloaded'
+  return ''
+}
+
 function codexUsage(log) {
   const line = lastJsonLine(log, (item) => item?.type === 'turn.completed' && item?.usage) ?? lastJsonLine(log, (item) => item?.usage)
   const usage = line?.usage
@@ -57,6 +86,9 @@ export const codexHarness = {
   },
   reply(log) {
     return codexReply(log)
+  },
+  limited(log) {
+    return codexLimited(log)
   },
   usage(log) {
     return codexUsage(log)
