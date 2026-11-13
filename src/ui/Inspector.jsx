@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { basename, visibleText } from '../model/paths.js'
-import { agentContext } from './agentContext.js'
+import { agentContext, waitingForOwner } from './agentContext.js'
 import { orchestratorEntry, orchestratorId } from './agentStrip.js'
 import { isOrchestratorAgent } from './agentList.js'
 import { chatLines, normalizeChat } from './orchestratorChat.js'
@@ -143,6 +143,12 @@ export default function Inspector({
     tool: lane?.tool,
     label: context.command,
   })
+  const mainOrchestrator =
+    orchestratorAgent && !subOrchestrator && orchestratorId(item?.id).toLowerCase() === 'orchestrator'
+  const shownState =
+    mainOrchestrator && waitingForOwner(orchestrator)
+      ? { word: 'waiting for you', tool: '', command: '' }
+      : stateWord
   const effort = effortForAgent({
     key: context.key || item?.id,
     harness: context.harness,
@@ -419,12 +425,12 @@ export default function Inspector({
           <>
             <dl className="mr-inspector-rows">
               <Row label="State">
-                <span className={`mr-inspector-state is-${stateWord.word}`}>{stateWord.word}</span>
-                {stateWord.word === 'working' && stateWord.tool !== '' && (
-                  <span className="mr-inspector-tool">{` · ${stateWord.tool}`}</span>
+                <span className={`mr-inspector-state is-${shownState.word.split(' ')[0]}`}>{shownState.word}</span>
+                {shownState.word === 'working' && shownState.tool !== '' && (
+                  <span className="mr-inspector-tool">{` · ${shownState.tool}`}</span>
                 )}
-                {stateWord.word === 'working' && stateWord.command !== '' && (
-                  <span className="mr-inspector-command">{` · ${stateWord.command}`}</span>
+                {shownState.word === 'working' && shownState.command !== '' && (
+                  <span className="mr-inspector-command">{` · ${shownState.command}`}</span>
                 )}
               </Row>
               <Row label="Harness">{context.harness}</Row>

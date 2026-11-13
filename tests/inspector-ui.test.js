@@ -36,6 +36,7 @@ const orchestrators = [
     harness: 'claude',
     model: 'opus',
     effort: 'max',
+    state: 'working',
     contextTokens: 100,
     contextWindow: 1000,
   },
@@ -124,6 +125,55 @@ describe('the inspector panel', () => {
 
       await click(root, container.querySelector('.mr-inspector-close'))
       expect(onClose).toHaveBeenCalledTimes(2)
+    })
+  })
+
+  it('reads the main orchestrator as waiting for you while an idle lane stays idle', async () => {
+    const client = makeClient()
+    const idleLane = {
+      key: 'opencode',
+      name: 'OpenCode',
+      harness: 'opencode',
+      status: 'idle',
+      openCalls: 0,
+    }
+    const idleOrchestrator = {
+      key: 'orchestrator',
+      name: 'Orchestrator',
+      harness: 'claude',
+      status: 'idle',
+      openCalls: 0,
+    }
+
+    await withDom(async ({ container, root }) => {
+      await mount(root, {
+        target: { kind: 'agent', id: 'orchestrator' },
+        live: true,
+        bridge: true,
+        client,
+        lanes: [idleOrchestrator, idleLane],
+        costs,
+        liveRuns: [],
+        tasks: [],
+        log: [],
+        orchestrator: [{ id: 'orchestrator', name: 'Orchestrator', state: 'idle' }],
+      })
+      const waiting = container.querySelector('.mr-inspector-state')
+      expect(waiting.textContent.toUpperCase()).toBe('WAITING FOR YOU')
+      expect(waiting.className).toContain('is-waiting')
+
+      await mount(root, {
+        target: { kind: 'agent', id: 'opencode' },
+        live: true,
+        bridge: true,
+        client,
+        lanes: [idleLane],
+        costs,
+        liveRuns: [],
+        tasks: [],
+        log: [],
+      })
+      expect(container.querySelector('.mr-inspector-state').textContent.toUpperCase()).toBe('IDLE')
     })
   })
 

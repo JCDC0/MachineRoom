@@ -2,6 +2,40 @@ import { useEffect, useState } from 'react'
 import { wideLayout } from './agentStrip.js'
 import { listsOrchestrator } from './orchestratorChat.js'
 
+const READER_LABELS = {
+  'claude-session': 'Claude Code',
+  'opencode-session': 'OpenCode',
+}
+const READER_ORDER = ['Claude Code', 'OpenCode']
+
+function isSessionReader(agent) {
+  const key = String(agent?.key ?? '').trim().toLowerCase()
+  return agent?.sessionReader === true || key.endsWith('-session')
+}
+
+function readerLabel(agent) {
+  const key = String(agent?.key ?? '').trim().toLowerCase()
+  if (Object.hasOwn(READER_LABELS, key)) return READER_LABELS[key]
+  return String(agent?.name ?? '').trim().replace(/\s+session$/i, '')
+}
+
+function watchingText(readers) {
+  const labels = readers.map(readerLabel).filter(Boolean)
+  if (labels.length === 0) return ''
+  labels.sort((left, right) => {
+    const leftRank = READER_ORDER.indexOf(left)
+    const rightRank = READER_ORDER.indexOf(right)
+    const leftIndex = leftRank === -1 ? READER_ORDER.length : leftRank
+    const rightIndex = rightRank === -1 ? READER_ORDER.length : rightRank
+    return leftIndex - rightIndex
+  })
+  const joined =
+    labels.length === 1
+      ? labels[0]
+      : `${labels.slice(0, -1).join(', ')} and ${labels[labels.length - 1]}`
+  return `Watching ${joined} sessions.`
+}
+
 const STATUS_COPY = {
   connecting: {
     badge: 'Connecting',
@@ -57,13 +91,17 @@ export default function Waiting({ agents = [], status = 'connecting', orchestrat
         ? 'Nothing is running yet. Press / or click ORCHESTRATOR at the top, and the chat sits in the lower half, under the transport.'
         : 'Nothing is running yet. Press / or click ORCHESTRATOR at the top, and the chat opens at the bottom right.'
       : copy.detail
-  const names = agents.map((agent) => agent.name).filter(Boolean)
+  const roster = Array.isArray(agents) ? agents : []
+  const readers = roster.filter(isSessionReader)
+  const workers = roster.filter((agent) => !isSessionReader(agent))
+  const names = workers.map((agent) => agent.name).filter(Boolean)
   const agentSummary =
     names.length === 0
       ? 'No agents listed yet.'
       : names.length > 4
         ? `${names.length} agents ready.`
-        : `${names.length === 1 ? '1 agent ready' : `${names.length} agents ready`}: ${names.join(', ')}`
+        : `${names.length === 1 ? '1 agent ready' : `${names.length} agents ready`}: ${names.join(', ')}.`
+  const watching = watchingText(readers)
 
   return (
     <aside
@@ -84,6 +122,7 @@ export default function Waiting({ agents = [], status = 'connecting', orchestrat
           </h2>
           <p className="waiting-detail">{detail}</p>
           <p className="waiting-agents mono">{agentSummary}</p>
+          {watching !== '' && <p className="waiting-agents watching mono">{watching}</p>}
           {children && <div className="waiting-actions">{children}</div>}
         </div>
       </div>

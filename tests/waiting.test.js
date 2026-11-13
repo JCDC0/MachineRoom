@@ -97,3 +97,36 @@ describe('Waiting close button', () => {
     })
   })
 })
+
+describe('the waiting card agent count', () => {
+  it('counts only the orchestrator and names both session readers on their own line', () => {
+    const html = renderToString(
+      createElement(Waiting, {
+        status: 'live',
+        agents: [
+          { key: 'orchestrator', name: 'Orchestrator', status: 'idle' },
+          { key: 'claude-session', name: 'Claude Code session', sessionReader: true },
+          { key: 'opencode-session', name: 'OpenCode session', sessionReader: true },
+        ],
+      })
+    )
+    expect(html).toContain('1 agent ready: Orchestrator.')
+    expect(html).toContain('Watching Claude Code and OpenCode sessions.')
+    expect(html).not.toContain('3 agents ready')
+    expect(html).not.toContain('Claude Code session,')
+  })
+
+  it('leaves the watching line out when no session reader is listed', () => {
+    const html = renderToString(
+      createElement(Waiting, {
+        status: 'live',
+        agents: [
+          { key: 'orchestrator', name: 'Orchestrator', status: 'idle' },
+          { key: 'opencode', name: 'OpenCode', status: 'idle' },
+        ],
+      })
+    )
+    expect(html).toContain('2 agents ready: Orchestrator, OpenCode.')
+    expect(html).not.toContain('Watching')
+  })
+})

@@ -2,6 +2,8 @@ import { agentTasks } from '../model/liveTasks.js'
 import { visibleText } from '../model/paths.js'
 import { addressIn, addressUrl, consoleRows } from '../engine/terminals.js'
 import { isOrchestratorAgent } from './agentList.js'
+import { orchestratorStateWord } from './contextRing.js'
+import { hasWaitingApproval, orchestratorAnswerList } from './transportOrchestrators.js'
 
 export const DOCK_LOG_LIMIT = 12
 export const NOT_REPORTED = 'not reported'
@@ -214,6 +216,14 @@ function orchestratorRows(value) {
     return [value]
   }
   return []
+}
+
+export function waitingForOwner(orchestrator, id = 'orchestrator') {
+  const rows = orchestratorAnswerList(orchestrator)
+  if (rows.length === 0) return false
+  const wanted = clean(id).toLowerCase()
+  const main = rows.find((row) => clean(row.id).toLowerCase() === wanted) ?? null
+  return rows.some(hasWaitingApproval) || orchestratorStateWord(main?.state) === 'waiting for you'
 }
 
 function withOrchestratorData(selected, orchestrator) {

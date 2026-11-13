@@ -6,7 +6,8 @@ import {
   contextTone,
   orchestratorStateWord,
 } from './contextRing.js'
-import { OPEN_CHAT_EVENT, hasWaitingApproval, orchestratorAnswerList, orchestratorChips } from './transportOrchestrators.js'
+import { OPEN_CHAT_EVENT, hasWaitingApproval, orchestratorChips } from './transportOrchestrators.js'
+import { waitingForOwner } from './agentContext.js'
 import { inspectLane, lanePillTitle, lanePills } from './transportLanes.js'
 import { showCostBoard, spendText } from './transportSpend.js'
 
@@ -131,8 +132,7 @@ export default function Transport({ snapshot, speeds, markers = [], orchestrator
         </div>
       )
     }
-    const waiting =
-      hasWaitingApproval(main) || orchestratorAnswerList(orchestrators).some(hasWaitingApproval)
+    const waiting = hasWaitingApproval(main) || waitingForOwner(orchestrators)
     const state = waiting ? 'waiting for you' : orchestratorStateWord(main.state)
     const { chips, more } = orchestratorChips(orchestrators)
     const lanes =
