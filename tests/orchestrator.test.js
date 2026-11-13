@@ -2594,6 +2594,62 @@ describe('the orchestrator chat file', () => {
     expect(saved.sessions[0].summary).not.toContain(profile)
   })
 
+  it('masks a key and a profile path in compact rules saved live', () => {
+    const rig = makeRig()
+    const secret = 'sk-or-v1-' + 'q'.repeat(24)
+    const setting = 'OPENROUTER_API_KEY='
+    const profile = process.env.USERPROFILE || process.env.HOME || homedir()
+    const profilePath = join(profile, 'project', 'trace.log')
+    const rawRules = `Rules at ${profilePath} for ${setting}${secret}`
+
+    const saved = rig.orchestrator.setAutocompact({ rules: rawRules, confirmed: true })
+    expect(saved.status).toBe(200)
+    expect(saved.body.compactRules).toContain('[key]')
+    expect(saved.body.compactRules).not.toContain(secret)
+    expect(saved.body.compactRules).not.toContain(profile)
+    expect(rig.answer().compactRules).toBe(saved.body.compactRules)
+
+    const file = readFileSync(chatFileFor(rig.projectRoot, rig.runs), 'utf8')
+    expect(file).toContain('[key]')
+    expect(file).not.toContain(secret)
+    expect(file).not.toContain(profile)
+    expect(JSON.parse(file).compactRules).toBe(saved.body.compactRules)
+  })
+
+  it('masks a quoted Windows profile path with a space and leaves a word that only starts like it', () => {
+    const fleet = { ...LANES, opencode: { name: 'OpenCode', cli: { harness: 'opencode', bin: 'opencode', model: 'x' } } }
+    const rig = makeRig({ lanes: fleet })
+    const original = process.env.USERPROFILE
+    const profile = 'C:\\Users\\Some Name'
+    const near = 'C:\\Users\\Some Namesake\\x.log'
+    process.env.USERPROFILE = profile
+    let message
+    try {
+      message = rig.orchestrator.recordAgentMessage({
+        from: 'orchestrator',
+        to: 'opencode',
+        kind: 'report',
+        text: `Trace "${profile}\\project\\x.log" and "c:\\users\\some name\\x.log" and ${near}`,
+        lanes: fleet,
+      })
+    } finally {
+      if (original === undefined) delete process.env.USERPROFILE
+      else process.env.USERPROFILE = original
+    }
+    expect(message).toBeTruthy()
+    expect(message.agent.text).toContain('"%USERPROFILE%\\project\\x.log"')
+    expect(message.agent.text).toContain('"%USERPROFILE%\\x.log"')
+    expect(message.agent.text).toContain(near)
+    expect(message.agent.text).not.toContain(`${profile}\\project`)
+    expect(message.agent.text).not.toContain(`${profile}\\x.log`)
+    expect(message.agent.text).not.toContain('some name')
+    const file = readFileSync(chatFileFor(rig.projectRoot, rig.runs), 'utf8')
+    expect(file).toContain('%USERPROFILE%')
+    expect(file).not.toContain('some name')
+    expect(file).toContain('Some Namesake')
+    expect(JSON.parse(file).messages.at(-1).agent.text).toBe(message.agent.text)
+  })
+
   it('masks a key in a work step of the current conversation', async () => {
     const rig = makeRig()
     const secret = 'sk-or-v1-' + 'q'.repeat(24)

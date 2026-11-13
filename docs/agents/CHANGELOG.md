@@ -2,11 +2,14 @@
 
 ## Unreleased
 
+- Compaction rules are masked when saved, and the chat masker replaces profile prefixes before it scans paths, so a profile folder with a space is masked (P161).
 - Project refusals in run-lane print the project masked, and ~ and $XDG_STATE_HOME label only posix paths, so a Windows path keeps its Windows label (P162).
 - A stop checks each descendant's current row and creation time before killing it, so a pid Windows reused for another process is skipped (P163).
 - A lane stop skips killing a captured descendant whose pid is gone or whose creation time changed, counting it as stopped from one shared process list (P163).
 - run-lane's project and queue refusals print a dirty project folder with profile folders masked (P162).
 - printedRunsFolder offers $XDG_STATE_HOME and ~ only to posix paths, so a Windows path below a longer Windows HOME keeps %USERPROFILE% (P162).
+- A profile folder whose name holds a space is masked in chat text too, because each known profile prefix is replaced with its label before path tokens are scanned (P161).
+- Compaction rules are masked for keys and profile paths when the owner saves them, so the answer and the chat file hold the masked rules (P161).
 - Review 23 reads today's merges: five findings, briefed as P161 to P163 (P160).
 - The full suite passed on today's merges: 274 files, 4917 tests passed, 4 skipped (P159).
 - The current conversation carries a stable id that changes only on new, open and fork, so the 200-message cap no longer closes its menu (P157).
