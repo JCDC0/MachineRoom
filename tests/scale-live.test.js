@@ -3,7 +3,7 @@ import { existsSync, rmSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { pathsInTreeEvent, parseLiveArgs, runScaleLive } from '../scripts/scale-live.mjs'
+import { pathsInTreeEvent, LIVE_USAGE, parseLiveArgs, runScaleLive } from '../scripts/scale-live.mjs'
 import { gitPath } from '../server/programPath.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 
@@ -38,6 +38,28 @@ describe('parseLiveArgs', () => {
   it('refuses --server with no folder or with a flag', () => {
     expect(() => parseLiveArgs(['--server'])).toThrow('--server needs a folder.')
     expect(() => parseLiveArgs(['--server', '--tree-only'])).toThrow('--server needs a folder.')
+  })
+})
+
+describe('the live scale help', () => {
+  it('prints the usage for --help and -h before it builds a tree', () => {
+    const temp = makeTempDir('mr-scale-live-help-')
+    try {
+      for (const flag of ['--help', '-h']) {
+        const result = spawnSync(process.execPath, [join(REPO_ROOT, 'scripts', 'scale-live.mjs'), flag], {
+          cwd: REPO_ROOT,
+          encoding: 'utf8',
+          env: { ...process.env, TEMP: temp, TMP: temp },
+          windowsHide: true,
+        })
+        expect(result.status, flag).toBe(0)
+        expect(result.stdout.trim(), flag).toBe(LIVE_USAGE)
+        expect(result.stderr, flag).toBe('')
+      }
+      expect(existsSync(join(temp, 'machineroom-scale'))).toBe(false)
+    } finally {
+      rmSync(temp, { recursive: true, force: true, maxRetries: 5 })
+    }
   })
 })
 

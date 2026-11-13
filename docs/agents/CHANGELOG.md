@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- P267: scale-live, scale-probe, screenshots, hand-run, history-audit, agy-prompt and run-recording answer --help and -h with one usage line, and COMMANDS.md records their help forms and three missing empty or refusal cases.
 - P260: a lane may name fallback; a brief run or project task that fails on a quota, rate limit, overload or failed start runs once on the backup lane on a -on-LANE branch.
 - P265: the chat's lane start passes the project's saved check command, and each AgentDock gets the full orchestrator list, so sub and sector rows show.
 - P264: ROOM.md, LIVE.md and COMMANDS.md take the 15 corrected sentences from the docs audit; rows 1 and 6 wait for P265.

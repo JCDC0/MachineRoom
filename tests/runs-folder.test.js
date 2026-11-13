@@ -1,5 +1,7 @@
+import { spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { migrateRunsFolder, runsFolder } from '../server/lanes-source.js'
 import { createRunsApi, laneStatesFor } from '../server/runs.js'
@@ -8,8 +10,10 @@ import { runsFolderDefault as orchestratorRunsFolder } from '../server/orchestra
 import { runsFolderDefault as orchestratorsRunsFolder } from '../server/orchestrators.js'
 import { mcpRunsDir } from '../scripts/mcp-bridge.mjs'
 import { runsFolderFrom as agentRunsFolder } from '../scripts/mr-agent.mjs'
-import { runsFile as recordingRunsFile } from '../scripts/run-recording.mjs'
+import { RUN_RECORDING_USAGE, runsFile as recordingRunsFile } from '../scripts/run-recording.mjs'
 import { makeTempDir, removeTempDir } from './helpers/tempRoot.js'
+
+const RECORDING_SCRIPT = fileURLToPath(new URL('../scripts/run-recording.mjs', import.meta.url))
 
 const made = []
 
@@ -105,6 +109,25 @@ describe('the callers of the runs folder', () => {
     expect(mcpRunsDir(env)).toBe(resolve(named))
     expect(agentRunsFolder(env)).toBe(resolve(named))
     expect(recordingRunsFile(env)).toBe(join(resolve(named), 'runs.jsonl'))
+  })
+})
+
+describe('run-recording help', () => {
+  it('prints the usage for --help and -h without reading runs or writing a recording', () => {
+    const runs = tempDir('mr-run-recording-help-')
+    for (const flag of ['--help', '-h']) {
+      const result = spawnSync(process.execPath, [RECORDING_SCRIPT, flag], {
+        encoding: 'utf8',
+        env: { ...process.env, MACHINEROOM_RUNS: runs },
+        windowsHide: true,
+      })
+
+      expect(result.status, flag).toBe(0)
+      expect(result.stdout.trim(), flag).toBe(RUN_RECORDING_USAGE)
+      expect(result.stderr, flag).toBe('')
+      expect(result.stdout, flag).not.toContain('recording:')
+    }
+    expect(existsSync(join(runs, 'runs.jsonl'))).toBe(false)
   })
 })
 

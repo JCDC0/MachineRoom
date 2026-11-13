@@ -12,6 +12,8 @@ const DEFAULT_OUT = join(ROOT, 'docs', 'images')
 const VIEWPORT = { width: 1600, height: 1000 }
 const FILE_LIMIT = 400 * 1024
 
+export const SCREENSHOTS_USAGE = 'Usage: npm run screenshots -- [--port 5180] [--out docs/images]'
+
 function valueOf(name, fallback) {
   const args = process.argv.slice(2)
   for (let index = 0; index < args.length; index += 1) {
@@ -236,6 +238,10 @@ async function capture(page, outFolder, name) {
 }
 
 async function main() {
+  if (process.argv.includes('--help') || process.argv.includes('-h')) {
+    console.log(SCREENSHOTS_USAGE)
+    return
+  }
   const port = Number(valueOf('--port', DEFAULT_PORT))
   const outFolder = resolve(valueOf('--out', DEFAULT_OUT))
   if (!Number.isInteger(port) || port <= 0) throw new Error('Pass a whole port with --port.')

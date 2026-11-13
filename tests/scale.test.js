@@ -1,11 +1,15 @@
-import { existsSync, writeFileSync } from 'node:fs'
+import { spawnSync } from 'node:child_process'
+import { existsSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { afterEach, beforeAll, describe, expect, it } from 'vitest'
 import { readTree, treeEvent } from '../server/index.js'
 import { planFolderView } from '../src/model/folderView.js'
-import { BUDGET, DEFAULTS, fakeListDir, makeScaleTree, parseProbeArgs, replayDigest, replaySources, runProbe } from '../scripts/scale-probe.mjs'
+import { BUDGET, DEFAULTS, PROBE_USAGE, fakeListDir, makeScaleTree, parseProbeArgs, replayDigest, replaySources, runProbe } from '../scripts/scale-probe.mjs'
 import { getJson, startLaneBridge, waitForBridge } from './helpers/bridge.js'
 import { makeTempDir } from './helpers/tempRoot.js'
+
+const PROBE_SCRIPT = fileURLToPath(new URL('../scripts/scale-probe.mjs', import.meta.url))
 
 const MEASURED_MS = {
   'planFolderView, first call': 49,
@@ -57,6 +61,27 @@ describe('the probe options and replays', () => {
     for (const result of results) {
       expect(result.plans).toBe(result.activities)
       expect(result.layouts).toBeGreaterThan(0)
+    }
+  })
+})
+
+describe('the probe help', () => {
+  it('prints the usage for --help and -h before it times a stage', () => {
+    const temp = makeTempDir('mr-scale-probe-help-')
+    try {
+      for (const flag of ['--help', '-h']) {
+        const result = spawnSync(process.execPath, [PROBE_SCRIPT, flag], {
+          encoding: 'utf8',
+          env: { ...process.env, TEMP: temp, TMP: temp },
+          windowsHide: true,
+        })
+        expect(result.status, flag).toBe(0)
+        expect(result.stdout.trim(), flag).toBe(PROBE_USAGE)
+        expect(result.stderr, flag).toBe('')
+      }
+      expect(readdirSync(temp).filter((name) => name.startsWith('machineroom-scale-probe-'))).toEqual([])
+    } finally {
+      rmSync(temp, { recursive: true, force: true, maxRetries: 5 })
     }
   })
 })

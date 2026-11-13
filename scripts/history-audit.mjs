@@ -11,11 +11,17 @@ const PRIVATE_NAMES = String(process.env.MACHINEROOM_AUDIT_PRIVATE ?? '').split(
 const TRACKED = '(tracked)'
 const HISTORY_ARGS = ['log', '-p', '--no-color', '--no-ext-diff', '--no-textconv', 'refs/heads/main', '--tags']
 
+export const AUDIT_USAGE = 'Usage: npm run history-audit -- [--json]'
+
 export function parseAuditArgs(argv) {
-  const options = { json: false, from: '' }
+  const options = { json: false, from: '', help: false }
   const args = (Array.isArray(argv) ? argv : []).map(String)
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index]
+    if (arg === '--help' || arg === '-h') {
+      options.help = true
+      continue
+    }
     if (arg === '--json') {
       options.json = true
       continue
@@ -202,6 +208,10 @@ async function main() {
   } catch (problem) {
     process.stderr.write(`${problem?.message ?? problem}\n`)
     process.exitCode = 1
+    return
+  }
+  if (options.help) {
+    process.stdout.write(`${AUDIT_USAGE}\n`)
     return
   }
   const findings = []

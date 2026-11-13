@@ -39,7 +39,12 @@ export {
 }
 
 export const BUDGET = { frame: 16, load: 1000, event: 2 * 1024 * 1024, firstEvent: 1024 * 1024 }
+export const PROBE_USAGE = 'Usage: npm run scale-probe -- [--files N] [--folders N] [--seed N] [--replay]'
 const gzipAsync = promisify(gzipCallback)
+
+function helpRequested(argv) {
+  return argv.includes('--help') || argv.includes('-h')
+}
 
 export function fakeListDir(rootDir, files) {
   const listing = new Map([[rootDir, new Map()]])
@@ -449,19 +454,23 @@ export function parseProbeArgs(argv) {
 
 const isMain = process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href
 if (isMain) {
-  try {
-    const options = parseProbeArgs(process.argv.slice(2))
-    if (options.replay) {
-      const results = replaySources().map(replayDigest)
-      for (const result of results) console.log(`${result.name}  ${result.activities} activities  ${result.plans} plans  ${result.layouts} layouts  ${Object.entries(result.digest).map(([name, value]) => `${name} ${value}`).join('  ')}`)
-      console.log(`${results.length} replays`)
-    } else {
-      const { settings, rows } = await runProbe(options)
-      console.log(`scale probe: ${settings.files} files in ${settings.folders} folders, up to ${settings.depth} deep, seed ${settings.seed}`)
-      console.log(formatRows(rows))
+  if (helpRequested(process.argv.slice(2))) {
+    console.log(PROBE_USAGE)
+  } else {
+    try {
+      const options = parseProbeArgs(process.argv.slice(2))
+      if (options.replay) {
+        const results = replaySources().map(replayDigest)
+        for (const result of results) console.log(`${result.name}  ${result.activities} activities  ${result.plans} plans  ${result.layouts} layouts  ${Object.entries(result.digest).map(([name, value]) => `${name} ${value}`).join('  ')}`)
+        console.log(`${results.length} replays`)
+      } else {
+        const { settings, rows } = await runProbe(options)
+        console.log(`scale probe: ${settings.files} files in ${settings.folders} folders, up to ${settings.depth} deep, seed ${settings.seed}`)
+        console.log(formatRows(rows))
+      }
+    } catch (error) {
+      console.error(error.message)
+      process.exitCode = 1
     }
-  } catch (error) {
-    console.error(error.message)
-    process.exitCode = 1
   }
 }

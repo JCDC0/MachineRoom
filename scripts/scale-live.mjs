@@ -38,6 +38,13 @@ export const LIVE_BUDGET = {
 const REVIEW_LANE = 'opencode'
 const REVIEW_BRANCH = 'p19-review'
 
+export const LIVE_USAGE =
+  'Usage: npm run scale-live -- [--files N] [--folders N] [--seed N] [--quiet-ms N] [--server FOLDER] [--tree-only] [--keep]'
+
+function helpRequested(argv) {
+  return argv.includes('--help') || argv.includes('-h')
+}
+
 export const MIN_FREE_BYTES = 2 * 1024 * 1024 * 1024
 const BURST_TICK_MS = 50
 const GIT_TIMEOUT_MS = 30 * 60 * 1000
@@ -893,6 +900,8 @@ const isMain = process.argv[1] && import.meta.url === pathToFileURL(resolve(proc
 if (isMain) {
   if (process.argv[2] === '--bridge-child') {
     runBridgeChild(process.argv[3], process.argv[4]).catch(() => process.exit(1))
+  } else if (helpRequested(process.argv.slice(2))) {
+    console.log(LIVE_USAGE)
   } else {
     try {
       const options = parseLiveArgs(process.argv.slice(2))

@@ -7,6 +7,8 @@ import { lanesFolder, runsFolder } from '../server/lanes-source.js'
 
 const root = resolve(fileURLToPath(import.meta.url), '..', '..')
 
+export const RUN_RECORDING_USAGE = 'Usage: npm run run-recording -- 1'
+
 function refusal(message) {
   return new Error(message)
 }
@@ -37,7 +39,12 @@ function position(argv) {
 }
 
 function main() {
-  const index = position(process.argv.slice(2))
+  const argv = process.argv.slice(2)
+  if (argv.includes('--help') || argv.includes('-h')) {
+    console.log(RUN_RECORDING_USAGE)
+    return
+  }
+  const index = position(argv)
   const list = readRecords()
   if (list.length === 0) throw refusal('No runs are recorded yet.')
   if (index > list.length) throw refusal(`There is no run at position ${index}. The list holds ${list.length}.`)

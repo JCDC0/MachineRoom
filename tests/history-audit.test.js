@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { countLeaks, findLeaks, LEAK_KINDS, maskKeys } from '../src/briefs/audit.js'
-import { historyArgsFrom, parseAuditArgs, readHistory } from '../scripts/history-audit.mjs'
+import { AUDIT_USAGE, historyArgsFrom, parseAuditArgs, readHistory } from '../scripts/history-audit.mjs'
 import { makeTempDir } from './helpers/tempRoot.js'
 
 const SCRIPT = fileURLToPath(new URL('../scripts/history-audit.mjs', import.meta.url))
@@ -30,6 +30,22 @@ function git(args, cwd) {
   if (result.status !== 0) throw new Error(`git ${args.join(' ')} failed: ${result.stderr}`)
   return result.stdout
 }
+
+describe('the audit help', () => {
+  it('prints the usage for --help and -h without reading history or tracked files', () => {
+    const dir = makeTempDir('mr-audit-help-')
+    try {
+      for (const flag of ['--help', '-h']) {
+        const result = spawnSync(process.execPath, [SCRIPT, flag], { cwd: dir, encoding: 'utf8', windowsHide: true })
+        expect(result.status, flag).toBe(0)
+        expect(result.stdout.trim(), flag).toBe(AUDIT_USAGE)
+        expect(result.stderr, flag).toBe('')
+      }
+    } finally {
+      rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+    }
+  })
+})
 
 describe('findLeaks keys', () => {
   it('finds an sk token and never shows the token', () => {
@@ -200,11 +216,12 @@ describe('findLeaks output', () => {
 })
 
 describe('audit arguments', () => {
-  it('reads --json and --from', () => {
-    expect(parseAuditArgs([])).toEqual({ json: false, from: '' })
-    expect(parseAuditArgs(['--json'])).toEqual({ json: true, from: '' })
-    expect(parseAuditArgs(['--json', '--from', 'main'])).toEqual({ json: true, from: 'main' })
-    expect(parseAuditArgs(['--from=abc123'])).toEqual({ json: false, from: 'abc123' })
+  it('reads --json, --from and --help', () => {
+    expect(parseAuditArgs([])).toEqual({ json: false, from: '', help: false })
+    expect(parseAuditArgs(['--json'])).toEqual({ json: true, from: '', help: false })
+    expect(parseAuditArgs(['--json', '--from', 'main'])).toEqual({ json: true, from: 'main', help: false })
+    expect(parseAuditArgs(['--from=abc123'])).toEqual({ json: false, from: 'abc123', help: false })
+    expect(parseAuditArgs(['--help'])).toEqual({ json: false, from: '', help: true })
   })
 
   it('refuses a missing or unknown option', () => {

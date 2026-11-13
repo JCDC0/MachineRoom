@@ -14,6 +14,13 @@ const docs = join(root, 'docs', 'agents')
 const MINUTES_PROBLEM = '--minutes needs a number from 1 to 600.'
 const MAIN_PROBLEM = 'The worktree is on main. Pass --branch.'
 const OPTIONS = ['minutes', 'model', 'branch', 'exit']
+export const HAND_RUN_USAGE =
+  'Usage: npm run hand-run -- LANE ID [--minutes N] [--branch NAME] [--model NAME] [--exit N]'
+
+function helpRequested(argv) {
+  const args = Array.isArray(argv) ? argv.map((value) => String(value)) : []
+  return args.includes('--help') || args.includes('-h')
+}
 
 function failure(sentence) {
   return { code: 1, lines: [sentence] }
@@ -90,6 +97,7 @@ function commitsOf(worktree) {
 }
 
 export function handRun({ argv = [], lanes, briefs, runsPath = runsFile(), now = Date.now() } = {}) {
+  if (helpRequested(argv)) return { code: 0, lines: [HAND_RUN_USAGE] }
   let options
   try {
     options = parseHandArgs(argv)
@@ -155,6 +163,10 @@ export function handRun({ argv = [], lanes, briefs, runsPath = runsFile(), now =
 }
 
 function main(argv) {
+  if (helpRequested(argv)) {
+    console.log(HAND_RUN_USAGE)
+    return 0
+  }
   let lanes
   let briefs
   try {
