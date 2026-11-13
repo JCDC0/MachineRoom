@@ -251,15 +251,23 @@ describe('frames over SSE', () => {
     expect(frameOf(first)).toEqual(frameOf(logs[1]))
   })
 
-  it('sends a reset and the current state of a live run to a cursor from another bridge', async () => {
+  it('sends a reset, then the queued and running frames in order, and the run ends running', async () => {
     const { url, send } = await sourceBridge()
     const first = await openSse(url)
     cleanups.push(() => first.close())
     send(sessionFrame('heartbeat.run.queued', { runId: 'r1' }))
-    await first.next((event) => event.event === 'frame' && frameOf(event).type === 'heartbeat.run.queued')
+    const queued = await first.next((event) => event.event === 'frame' && frameOf(event).type === 'heartbeat.run.queued')
     send(sessionFrame('heartbeat.run.status', { runId: 'r1', status: 'running' }))
     const running = await first.next((event) => event.event === 'frame' && frameOf(event).payload?.status === 'running')
     first.close()
+
+    const agents = [{ id: SESSION_AGENT.id, key: SESSION_AGENT.key, name: SESSION_AGENT.name, parser: 'claude' }]
+    const pipeline = createPipeline({ agents, tree: { rootName: 'p', files: [], dirs: [] } })
+    const state = createState({ files: [], dirs: [], created: [] }, agents)
+    for (const event of [queued, running]) {
+      for (const activity of pipeline.push(frameOf(event))) apply(state, activity)
+    }
+    expect(state.agents.get(SESSION_AGENT.key).status).toBe('working')
 
     const again = await openSse(url, { 'Last-Event-ID': 'ffffffffffffffff:1' })
     cleanups.push(() => again.close())
@@ -268,9 +276,23 @@ describe('frames over SSE', () => {
     const data = JSON.parse(reset.data)
     expect(data.start).toMatch(/^[0-9a-f]{16}$/)
     expect(data.start).not.toBe('ffffffffffffffff')
-    expect(running.id.startsWith(`${data.start}:`)).toBe(true)
-    const snapshot = frameOf(await again.next((event) => event.event === 'frame'))
-    expect(snapshot).toMatchObject({ type: 'heartbeat.run.status', payload: { runId: 'r1', status: 'running' } })
+    pipeline.reset()
+    resetRunState(state)
+
+    const replayed = []
+    for (;;) {
+      let event
+      try {
+        event = await again.next((item) => item.event === 'frame', 300)
+      } catch {
+        break
+      }
+      replayed.push(frameOf(event))
+      for (const activity of pipeline.push(frameOf(event))) apply(state, activity)
+    }
+    expect(replayed.map((frame) => frame.type)).toEqual(['heartbeat.run.queued', 'heartbeat.run.status'])
+    expect(replayed[1].payload).toMatchObject({ runId: 'r1', status: 'running' })
+    expect(state.agents.get(SESSION_AGENT.key).status).toBe('working')
   })
 
   it('resets a reconnect when the run finish fell out of the kept frames', async () => {
@@ -558,9 +580,14 @@ describe('eventResetNeeded', () => {
   it('resets when the next kept frame skips ahead', () => {
     expect(eventResetNeeded([{ seq: 8 }, { seq: 9 }], `${start}:5`, start, 9)).toBe(true)
   })
-  it('does not reset when the cursor is current or the next frame follows it', () => {
+  it('resets when a pinned start is consecutive but a later frame is missing', () => {
+    const history = [{ seq: 2, pinned: true }, ...Array.from({ length: 6 }, (_, index) => ({ seq: 15 + index }))]
+    expect(eventResetNeeded(history, `${start}:1`, start, 20)).toBe(true)
+  })
+  it('does not reset when the cursor is current or every frame after it was kept', () => {
     expect(eventResetNeeded([], `${start}:9`, start, 9)).toBe(false)
     expect(eventResetNeeded([{ seq: 6 }, { seq: 7 }], `${start}:5`, start, 7)).toBe(false)
+    expect(eventResetNeeded([{ seq: 6 }, { seq: 7 }, { seq: 8 }], `${start}:5`, start, 8)).toBe(false)
   })
   it('resets for a cursor from another bridge', () => {
     expect(eventResetNeeded([{ seq: 1 }], 'other:1', start, 1)).toBe(true)

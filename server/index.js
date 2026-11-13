@@ -407,17 +407,13 @@ export function eventResetNeeded(history, lastEventId, start, latestSeq) {
   const seq = readEventCursor(lastEventId, start)
   if (seq === null) return true
   if (seq > latestSeq) return true
-  const next = history.find((item) => item.seq > seq)
-  return seq < latestSeq && (!next || next.seq !== seq + 1)
-}
-
-export function currentRunFrames(history) {
-  const latest = new Map()
+  let expected = seq + 1
   for (const item of history) {
-    if (item.runId === undefined || item.runId === null || !item.pinned) continue
-    latest.set(item.runId, item)
+    if (item.seq <= seq) continue
+    if (item.seq !== expected) return true
+    expected += 1
   }
-  return [...latest.values()]
+  return expected <= latestSeq
 }
 
 export const SSE_PENDING_LIMIT = 8 * 1024 * 1024
@@ -1468,7 +1464,6 @@ export function createBridge(options = {}) {
       if (lastEventId) {
         if (eventResetNeeded(history, lastEventId, treeStart, nextId)) {
           sseWriter.write(res, `event: reset\ndata: ${JSON.stringify({ start: treeStart })}\n\n`)
-          for (const entry of currentRunFrames(history)) writeSseFrame(res, entry)
           for (const entry of history) writeSseFrame(res, entry)
         } else {
           const seq = readEventCursor(lastEventId, treeStart)
