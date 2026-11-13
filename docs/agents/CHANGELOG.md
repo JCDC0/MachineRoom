@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- The connect screen describes the replay as what this page has seen since the first conversation, with no fixed length, and keeps the tour as the sample (P171).
+- The connect screen's recovery line leads with machineroom YOUR-PROJECT and says to run the npm form in the MachineRoom folder (P171).
 - The readiness review lists 3 blockers, 5 bug patches and 3 suggested features on the owner's path to daily use (P164).
 - The claude sessions meta test moves the runs folder time after writing the meta file, so the reader re-lists it on Windows (P165).
 - A first-use run of the setup commands lists where a new owner gets stuck (P166).

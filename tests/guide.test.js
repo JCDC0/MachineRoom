@@ -338,11 +338,25 @@ describe('first boot and Connect tour entry', () => {
     const tourPos = html.indexOf('>Take the tour</button>')
     const bridgePos = html.indexOf('Connect through the bridge')
     const demoPos = html.indexOf('Watch the demo')
-    const replayPos = html.indexOf('Open the recorded replay')
+    const replayPos = html.indexOf('Replay what this page has seen')
     expect(tourPos).toBeGreaterThan(-1)
     expect(tourPos).toBeLessThan(bridgePos)
     expect(tourPos).toBeLessThan(demoPos)
     expect(tourPos).toBeLessThan(replayPos)
+  })
+
+  it('describes the replay as what this page has seen and leads recovery with machineroom', () => {
+    const html = renderToString(createElement(Connect, { firstBoot: false }))
+    expect(html).toContain('Replay what this page has seen')
+    expect(html).toContain('This visit')
+    expect(html).not.toContain('5 min run')
+    expect(html).toContain('Plays back what this page has seen since the first conversation')
+    expect(html).toContain('For a sample run, take the tour.')
+    expect(html).toContain('machineroom YOUR-PROJECT')
+    expect(html).toContain('in the MachineRoom folder')
+    expect(html.indexOf('machineroom YOUR-PROJECT')).toBeLessThan(
+      html.indexOf('npm run serve -- up --root YOUR-PROJECT')
+    )
   })
 
   it('starts the replay when Take the tour is clicked', async () => {
