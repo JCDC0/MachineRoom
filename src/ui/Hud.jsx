@@ -457,6 +457,11 @@ export default function Hud({
         id: current?.id ?? id,
         autocompact: on,
       }))
+      setOrchestratorList((list) =>
+        list.map((row) =>
+          row?.id === id ? { ...row, ...(answer && typeof answer === 'object' ? answer : {}), id: row.id, autocompact: on } : row,
+        ),
+      )
       return { ok: true }
     } catch (error) {
       return {
