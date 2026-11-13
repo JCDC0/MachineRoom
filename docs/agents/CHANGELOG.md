@@ -2,10 +2,12 @@
 
 ## Unreleased
 
+- P229: session discovery reads the root slug's folder and its subfolder slugs, and the cwd check still drops sibling projects.
 - P226: Dispatch keeps each project's task, lane and check command for the page's life, with Discard draft.
 - P231: chromePath names an unreadable Playwright folder, masked, with its error code.
 - The screenshot helper says when it could not read the Playwright folder, names the folder masked with the error code, and keeps the no Chromium sentence only when the folder was read (P231).
 - Dispatch keeps a task, lane and check command draft for each project for the life of the page, clears it after a successful start, and offers Discard draft with one confirm (P226).
+- Claude sessions started in a subfolder of the room's project are shown, and a sibling project whose slug only shares the root's prefix stays hidden (P229).
 - Dispatch has a Check command field saved per project; a project run or queue passes it to run-lane as --test, and the confirm card names the check it will use.
 - Dispatch's running rows and the Inspector offer Stop with a confirm card; the bridge stops a matching run with --stop and tells the lane's sub orchestrator, else Main, as a note its next turn reads first.
 - Settings has a Storage section with sizes by kind, a preview of finished run logs and old recordings older than N days, and Archive, which moves exactly those into runs/archive/YYYY-MM and deletes nothing.
