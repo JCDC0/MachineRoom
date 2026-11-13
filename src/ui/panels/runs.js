@@ -101,8 +101,11 @@ export function queueRecoveryPlan(record, { project = '' } = {}) {
   const heldTask = typeof source.task === 'string' ? source.task.trim() : ''
   const task = list && number !== null && list[number - 1] ? list[number - 1] : heldTask
   const note = typeof source.note === 'string' ? source.note.trim() : ''
-  const remaining = list && number !== null ? list.slice(number) : null
-  const count = Number.isInteger(source.tasks) && source.tasks > 0
+  const recorded = Array.isArray(source.queueRemaining) ? queueTaskList({ tasks: source.queueRemaining }) : null
+  const remaining = recorded ?? (list && number !== null ? list.slice(number) : null)
+  const count = Number.isInteger(source.queueSize) && source.queueSize > 0
+    ? source.queueSize
+    : Number.isInteger(source.tasks) && source.tasks > 0
     ? source.tasks
     : (list ? list.length : null)
   const remainingCount = remaining
@@ -112,7 +115,7 @@ export function queueRecoveryPlan(record, { project = '' } = {}) {
   if (!branch) missing.push('the queue branch')
   if (number === null) missing.push('the failed task number')
   if (!task) missing.push('the failed task')
-  if (!list) missing.push('the queue task list')
+  if (!list && !recorded) missing.push('the queue task list')
   if (count === null) missing.push('how many tasks the queue held')
   if (!note) missing.push('the note')
   return {
@@ -126,7 +129,7 @@ export function queueRecoveryPlan(record, { project = '' } = {}) {
     remainingCount,
     count,
     note,
-    hasTasks: list !== null,
+    hasTasks: list !== null || recorded !== null,
     missing,
   }
 }

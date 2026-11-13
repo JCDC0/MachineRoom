@@ -890,3 +890,22 @@ describe('mock client runs lifecycle', () => {
     expect(runs.recent[0].worktree).toBe(true)
   })
 })
+
+describe('queueRecoveryMessage with the runner record fields', () => {
+  it('lists the tasks the runner recorded as not run', () => {
+    const message = queueRecoveryMessage({
+      lane: 'opencode',
+      project: 'C:/work/app',
+      queue: 'machineroom/queue-opencode-20261113-120000-123',
+      queueIndex: 2,
+      queueSize: 3,
+      queueRemaining: ['Write the third file.'],
+      queueStatus: 'failed: tests',
+      task: 'Write the second file.',
+      note: 'The tests failed.',
+    })
+    expect(message).toContain('1 task did not run:')
+    expect(message).toContain('3. Write the third file.')
+    expect(message).not.toContain('the queue task list')
+  })
+})

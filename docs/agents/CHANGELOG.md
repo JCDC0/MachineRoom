@@ -2,10 +2,12 @@
 
 ## Unreleased
 
+- Queue task records carry queueSize, and the record where a queue stopped carries queueRemaining, masked; Ask for recovery now lists those tasks.
 - The hands-on check was blocked: Codex's sandbox cannot read the Playwright browser folder, and the screenshot helper reports access denied as a missing browser.
 - A reported 0 reads as $0.00, a lane with no runs reads 0, and not reported appears only when runs gave no number (N16, the owner's word).
 - Reviews offers Ask to prepare on a refused fast forward or a branch ahead of a destination that moved on, and sends Main the lane, branch, full head and destination after a confirm.
 - A health answer with ok true and source problems shows a red chip, A source looks stopped, with one sentence per problem, and the room stays connected.
+- Every queue task's record carries `queueSize`, and the record where a queue stops carries `queueRemaining`, the masked text of each later task cut to 200 characters (P223).
 - A stopped or failed queue row offers Ask for recovery, which sends Main the branch, the failed task and what the record holds, asking it to inspect before continuing.
 - A source that stops, such as a failed tree read or a stopped OpenCode session reader, shows its sentence in the health chip while the bridge stays connected (P220).
 - A conversation's menu has Export (E), which saves its title, project, summary and saved messages as one Markdown file.
