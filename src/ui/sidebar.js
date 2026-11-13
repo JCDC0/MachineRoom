@@ -129,6 +129,7 @@ function isPinned(source) {
 function sessionEntry(source, group, current) {
   return {
     id: typeof source.id === 'string' ? source.id : '',
+    sessionId: typeof source.sessionId === 'string' ? source.sessionId.trim() : '',
     title: sessionTitle(source.title),
     startedAt: source.startedAt ?? null,
     endedAt: current ? null : source.endedAt ?? null,
@@ -146,6 +147,8 @@ function sessionEntry(source, group, current) {
 export function sessionRowIdentity(row) {
   if (!row || typeof row !== 'object') return ''
   if (row.current !== true) return typeof row.id === 'string' && row.id ? `saved:${row.id}` : ''
+  const sessionId = typeof row.sessionId === 'string' ? row.sessionId.trim() : ''
+  if (sessionId) return `current:session:${sessionId}`
   if (typeof row.id === 'string' && row.id && row.id !== 'current') return `current:${row.id}`
   return `current:${stamp(row.startedAt)}:${sessionTitle(row.title)}`
 }
