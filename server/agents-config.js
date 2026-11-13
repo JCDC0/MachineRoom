@@ -5,6 +5,7 @@ import { readEndpoints } from './endpoints.js'
 import { MODELS, modelsFor } from './models.js'
 import { programPath } from './programPath.js'
 import { readLanes, runsFolder } from './lanes-source.js'
+import { cachedRunRecords } from './runs.js'
 import { harnessByKey } from '../src/harnesses/index.js'
 import { harnessUnavailableProblem, modelUnavailableProblem } from './model-list.js'
 import { machineroomModels, modelAllowed, readHarnessModelsCache } from './harness-models.js'
@@ -204,23 +205,86 @@ function readRemovedList(value) {
   return list
 }
 
+function keyParts(key) {
+  const text = typeof key === 'string' ? key.trim() : ''
+  if (HARNESS_KEYS.includes(text)) return { harness: text, number: 1 }
+  const match = /^([a-z][a-z0-9]*?)-?(\d+)$/.exec(text)
+  if (!match || !HARNESS_KEYS.includes(match[1])) return null
+  return { harness: match[1], number: Number(match[2]) }
+}
+
+function raiseAllocated(allocated, harness, number) {
+  if (!Number.isInteger(number) || number < 1) return
+  if (number > (allocated[harness] ?? 0)) allocated[harness] = number
+}
+
+function readAllocatedList(value) {
+  const allocated = {}
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return allocated
+  for (const [harness, number] of Object.entries(value)) {
+    if (!harness || !Number.isInteger(number) || number < 1) continue
+    allocated[harness] = number
+  }
+  return allocated
+}
+
+function allocatedFromEntries(agents) {
+  const allocated = {}
+  for (const agent of agents ?? []) {
+    const parts = keyParts(agent?.key)
+    if (parts) raiseAllocated(allocated, parts.harness, parts.number)
+  }
+  return allocated
+}
+
+function allocatedFromRecords(runsDir) {
+  const allocated = {}
+  let records = []
+  try {
+    records = cachedRunRecords(join(runsDir, 'runs.jsonl'))
+  } catch {
+    return allocated
+  }
+  for (const record of records) {
+    const parts = keyParts(record?.lane)
+    if (parts) raiseAllocated(allocated, parts.harness, parts.number)
+  }
+  return allocated
+}
+
+function mergedAllocated(...lists) {
+  const merged = {}
+  for (const allocated of lists) {
+    for (const [harness, number] of Object.entries(allocated ?? {})) {
+      raiseAllocated(merged, harness, number)
+    }
+  }
+  return merged
+}
+
 export function readAgentsConfig(runsDir) {
   const file = agentsConfigFile(runsDir)
   try {
-    if (!existsSync(file)) return { agents: [], removed: [] }
+    if (!existsSync(file)) return { agents: [], removed: [], allocated: allocatedFromRecords(runsDir) }
     const text = readFileSync(file, 'utf8')
     const parsed = JSON.parse(text)
     if (parsed && Array.isArray(parsed.agents)) {
+      const agents = parsed.agents.filter(
+        (a) => a && typeof a === 'object' && typeof a.key === 'string' && a.key.trim()
+      )
       return {
-        agents: parsed.agents.filter(
-          (a) => a && typeof a === 'object' && typeof a.key === 'string' && a.key.trim()
-        ),
+        agents,
         removed: readRemovedList(parsed.removed),
+        allocated: mergedAllocated(
+          readAllocatedList(parsed.allocated),
+          allocatedFromEntries(agents),
+          allocatedFromRecords(runsDir)
+        ),
       }
     }
-    return { agents: [], removed: [] }
+    return { agents: [], removed: [], allocated: allocatedFromRecords(runsDir) }
   } catch {
-    return { agents: [], removed: [] }
+    return { agents: [], removed: [], allocated: allocatedFromRecords(runsDir) }
   }
 }
 
@@ -241,28 +305,29 @@ export function saveAgentsConfig(runsDir, config, { rename = renameSync } = {}) 
   }
 }
 
-export function nextFreeKey(harness, lanesJson = {}, existingAgents = []) {
+export function nextFreeKey(harness, lanesJson = {}, existingAgents = [], allocated = {}) {
   const prefix = `${harness}-`
   const regex = new RegExp(`^${harness}-?(\\d+)$`)
-  const takenNumbers = new Set()
   const allKeys = new Set([
     ...Object.keys(lanesJson ?? {}),
     ...(existingAgents ?? []).map((a) => a?.key).filter(Boolean),
   ])
+  let highest = 0
 
   for (const key of allKeys) {
     if (key === harness) {
-      takenNumbers.add(1)
+      highest = Math.max(highest, 1)
       continue
     }
     const match = regex.exec(key)
-    if (match) {
-      takenNumbers.add(Number(match[1]))
-    }
+    if (match) highest = Math.max(highest, Number(match[1]))
   }
 
-  let num = 1
-  while (takenNumbers.has(num) || allKeys.has(`${prefix}${num}`)) {
+  const kept = Number(allocated?.[harness])
+  if (Number.isInteger(kept) && kept > highest) highest = kept
+
+  let num = highest + 1
+  while (allKeys.has(`${prefix}${num}`)) {
     num += 1
   }
   return `${prefix}${num}`
@@ -360,7 +425,7 @@ export function moveRemovedLanesToProject({ projectRoot, runsFolder: folder = ru
     if (!hidden.includes(key)) hidden.push(key)
   }
   writeHiddenLanes(file, hidden)
-  saveAgentsConfig(folder, { agents: config.agents, removed: [] })
+  saveAgentsConfig(folder, { agents: config.agents, removed: [], allocated: config.allocated })
   if (typeof print === 'function') {
     print(`Moved ${moved.join(', ')} from the removed list to this project's hidden lanes.`)
   }
@@ -420,12 +485,15 @@ export function createAgentLane(body, {
     effort = effortText
   }
 
-  const { agents, removed } = readAgentsConfig(runs)
+  const { agents, removed, allocated } = readAgentsConfig(runs)
   if (agents.length >= MAX_AGENTS) {
     return { ok: false, status: 400, error: MAX_AGENTS_PROBLEM }
   }
 
-  const key = nextFreeKey(harness, baseLanes, agents)
+  const key = nextFreeKey(harness, baseLanes, agents, allocated)
+  const nextAllocated = { ...allocated }
+  const madeParts = keyParts(key)
+  if (madeParts) raiseAllocated(nextAllocated, madeParts.harness, madeParts.number)
   const newAgent = {
     key,
     name,
@@ -437,7 +505,7 @@ export function createAgentLane(body, {
   }
 
   agents.push(newAgent)
-  saveAgentsConfig(runs, { agents, removed })
+  saveAgentsConfig(runs, { agents, removed, allocated: nextAllocated })
 
   const active = typeof activeLanes === 'function' ? activeLanes() : activeLanes
   if (active && typeof active.addActiveLane === 'function') {
@@ -523,7 +591,7 @@ export function createAgentsConfigApi(options = {}) {
         return true
       }
 
-      const { agents, removed } = readAgentsConfig(runsDir)
+      const { agents, removed, allocated } = readAgentsConfig(runsDir)
       const agent = agents.find((a) => a.key === key)
       if (!agent) {
         sendJson(req, res, 404, { error: laneNotFoundProblem(key) })
@@ -601,7 +669,7 @@ export function createAgentsConfigApi(options = {}) {
         }
       }
 
-      saveAgentsConfig(runsDir, { agents, removed })
+      saveAgentsConfig(runsDir, { agents, removed, allocated })
 
       if (typeof notify === 'function') {
         notify({ topic: 'agents' })
@@ -660,7 +728,7 @@ export function createAgentsConfigApi(options = {}) {
           writeHiddenLanes(hiddenFile, hidden.filter((entry) => entry !== key))
         }
       }
-      saveAgentsConfig(runsDir, { agents, removed: config.removed })
+      saveAgentsConfig(runsDir, { agents, removed: config.removed, allocated: config.allocated })
 
       const active = typeof activeLanes === 'function' ? activeLanes() : activeLanes
       if (active && typeof active.isChosen === 'function' && active.isChosen()) {

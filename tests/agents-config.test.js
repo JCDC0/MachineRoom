@@ -190,6 +190,11 @@ describe('key generation', () => {
     const existing = [{ key: 'claude-2' }]
     expect(nextFreeKey('claude', SAMPLE_LANES, existing)).toBe('claude-3')
   })
+
+  it('takes the number after the highest one handed out', () => {
+    expect(nextFreeKey('opencode', SAMPLE_LANES, [], { opencode: 5 })).toBe('opencode-6')
+    expect(nextFreeKey('opencode', SAMPLE_LANES, [{ key: 'opencode-7' }], { opencode: 5 })).toBe('opencode-8')
+  })
 })
 
 describe('merged list and template copying', () => {
@@ -239,7 +244,7 @@ describe('merged list and template copying', () => {
   it('reads a saved removed list and still keeps those lanes in readAllLanes', () => {
     const runs = tempDir('mr-removed-')
     saveAgentsConfig(runs, { agents: [], removed: ['claude', '', 'orchestrator', 'claude'] })
-    expect(readAgentsConfig(runs)).toEqual({ agents: [], removed: ['claude'] })
+    expect(readAgentsConfig(runs)).toEqual({ agents: [], removed: ['claude'], allocated: {} })
 
     const all = readAllLanes({ lanesJson: SAMPLE_LANES, runsFolder: runs })
     expect(Object.hasOwn(all, 'claude')).toBe(true)
@@ -757,6 +762,105 @@ describe('POST /api/lanes/:key/delete', () => {
 
     const lanesRes = await client.lanes()
     expect(lanesRes.lanes.some((l) => l.key === created.key)).toBe(false)
+  })
+
+  it('does not give a deleted lane key to a new lane', async () => {
+    const { client, runsFolder } = await startBridgeRig()
+    const first = await client.createLane({
+      name: 'First OpenCode',
+      harness: 'opencode',
+      model: 'opencode-go/deepseek-v4.1-flash',
+      confirmed: true,
+    })
+    expect(first.key).toBe('opencode-3')
+
+    await client.deleteLane({ key: first.key, confirmed: true })
+
+    const second = await client.createLane({
+      name: 'Second OpenCode',
+      harness: 'opencode',
+      model: 'opencode-go/deepseek-v4.1-flash',
+      confirmed: true,
+    })
+    expect(second.key).toBe('opencode-4')
+    expect(readAgentsConfig(runsFolder).agents.map((agent) => agent.key)).toEqual(['opencode-4'])
+    expect(readAgentsConfig(runsFolder).allocated.opencode).toBe(4)
+  })
+
+  it('keeps the deleted key out of use after a bridge restart and keeps existing keys', async () => {
+    const projectRoot = gitProject('mr-proj-restart-')
+    const runsFolder = tempDir('mr-runs-restart-')
+    const firstBridge = await startBridgeRig({ projectRoot, runsFolder })
+    const first = await firstBridge.client.createLane({
+      name: 'First OpenCode',
+      harness: 'opencode',
+      model: 'opencode-go/deepseek-v4.1-flash',
+      confirmed: true,
+    })
+    const kept = await firstBridge.client.createLane({
+      name: 'Kept Claude',
+      harness: 'claude',
+      model: 'claude-haiku-5-5',
+      confirmed: true,
+    })
+    expect(first.key).toBe('opencode-3')
+    expect(kept.key).toBe('claude-2')
+
+    await firstBridge.client.deleteLane({ key: first.key, confirmed: true })
+    await firstBridge.bridge.stop()
+
+    const secondBridge = await startBridgeRig({ projectRoot, runsFolder })
+    expect(readAgentsConfig(runsFolder).agents.map((agent) => agent.key)).toEqual(['claude-2'])
+
+    const remade = await secondBridge.client.createLane({
+      name: 'Second OpenCode',
+      harness: 'opencode',
+      model: 'opencode-go/deepseek-v4.1-flash',
+      confirmed: true,
+    })
+    expect(remade.key).toBe('opencode-4')
+
+    const next = await secondBridge.client.createLane({
+      name: 'Next Claude',
+      harness: 'claude',
+      model: 'claude-haiku-5-5',
+      confirmed: true,
+    })
+    expect(next.key).toBe('claude-3')
+    expect(readAgentsConfig(runsFolder).agents.map((agent) => agent.key)).toEqual([
+      'claude-2',
+      'opencode-4',
+      'claude-3',
+    ])
+  })
+
+  it('starts an old configuration from its entries and kept run records', async () => {
+    const runs = tempDir('mr-runs-floor-')
+    saveAgentsConfig(runs, {
+      agents: [
+        {
+          key: 'claude-2',
+          name: 'Saved Claude',
+          harness: 'claude',
+          model: 'claude-haiku-5-5',
+          createdAt: '2026-10-25T10:00:00.000Z',
+        },
+      ],
+    })
+    writeFileSync(
+      join(runs, 'runs.jsonl'),
+      `${JSON.stringify({ lane: 'claude-5', startedAt: '2026-10-25T10:00:00.000Z' })}\n`
+    )
+
+    const { client } = await startBridgeRig({ runsFolder: runs })
+    const created = await client.createLane({
+      name: 'From Records',
+      harness: 'claude',
+      model: 'claude-haiku-5-5',
+      confirmed: true,
+    })
+    expect(created.key).toBe('claude-6')
+    expect(readAgentsConfig(runs).allocated).toEqual({ claude: 6 })
   })
 
   it('sends agents notice on create, update and delete', async () => {
