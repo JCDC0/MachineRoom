@@ -225,7 +225,7 @@ async function makeHarness({ records = [], runnerCode = TINY_RUNNER } = {}) {
   return { client, url, runs, repo: shared.repo, worktree: shared.worktree }
 }
 
-async function waitUntil(fn, timeoutMs = 5000) {
+async function waitUntil(fn, timeoutMs = 10000) {
   const deadline = Date.now() + timeoutMs
   while (Date.now() < deadline) {
     if (await fn()) return

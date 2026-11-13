@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- P268: the git write tests allow 30 seconds for a read and 140 seconds for a switch or a new branch, and the bridge and tree waits allow 10 seconds, so heavy load no longer aborts them.
 - P260: a lane may name fallback; a brief run or project task that fails on a quota, rate limit, overload or failed start runs once on the backup lane on a -on-LANE branch.
 - P265: the chat's lane start passes the project's saved check command, and each AgentDock gets the full orchestrator list, so sub and sector rows show.
 - P264: ROOM.md, LIVE.md and COMMANDS.md take the 15 corrected sentences from the docs audit; rows 1 and 6 wait for P265.

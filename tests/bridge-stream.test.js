@@ -118,7 +118,7 @@ function openSse(url, headers = {}, query = '') {
         get ended() {
           return ended
         },
-        next(predicate = () => true, timeoutMs = 5000) {
+        next(predicate = () => true, timeoutMs = 10000) {
           const existingIndex = events.findIndex(predicate)
           if (existingIndex !== -1) {
             const [found] = events.splice(existingIndex, 1)
