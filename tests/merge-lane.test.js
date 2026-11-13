@@ -350,7 +350,7 @@ describe('failing check aborts merge', () => {
 })
 
 describe('runChecks', () => {
-  it('holds -- right before the first file in the vitest related command', async () => {
+  it('passes the changed files to vitest related with no double dash', async () => {
     const executed = []
     await runChecks({
       root: templateRoot,
@@ -362,9 +362,43 @@ describe('runChecks', () => {
     })
     const vitestCheck = executed.find((cmd) => cmd.includes('related'))
     expect(vitestCheck).toBeDefined()
-    const firstFileIndex = vitestCheck.indexOf('src/feature.js')
-    expect(firstFileIndex).toBeGreaterThan(0)
-    expect(vitestCheck[firstFileIndex - 1]).toBe('--')
+    expect(vitestCheck).not.toContain('--')
+    expect(vitestCheck.slice(-2)).toEqual(['src/feature.js', 'src/other.js'])
+  })
+
+  it('passes a changed file that starts with a dash as ./NAME', async () => {
+    const executed = []
+    await runChecks({
+      root: templateRoot,
+      changedFiles: ['-x.js', 'src/feature.js'],
+      runCommand: async (command) => {
+        executed.push(command)
+        return { ok: true, output: '' }
+      },
+    })
+    const vitestCheck = executed.find((cmd) => cmd.includes('related'))
+    expect(vitestCheck).toContain('./-x.js')
+    expect(vitestCheck).not.toContain('-x.js')
+  })
+
+  it('fails the check when vitest related reports no changed files', async () => {
+    const results = await runChecks({
+      root: templateRoot,
+      changedFiles: ['src/feature.js'],
+      runCommand: async () => ({ ok: true, output: 'No changed files found, exiting with code 0\n' }),
+    })
+    expect(results).toHaveLength(1)
+    expect(results[0].name).toBe('vitest related')
+    expect(results[0].ok).toBe(false)
+  })
+
+  it('passes when vitest related finds no affected test files for a docs change', async () => {
+    const results = await runChecks({
+      root: templateRoot,
+      changedFiles: ['docs/agents/CHANGELOG.md'],
+      runCommand: async () => ({ ok: true, output: 'No affected test files found, exiting with code 0\n' }),
+    })
+    expect(results.every((result) => result.ok)).toBe(true)
   })
 })
 

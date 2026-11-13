@@ -348,10 +348,11 @@ export async function runChecks({
   const npmCli = npmCliPath(env, execPath)
 
   const checks = []
+  const relatedFiles = changedFiles.map((file) => (file.startsWith('-') ? `./${file}` : file))
 
   checks.push({
     name: 'vitest related',
-    command: [execPath, actualVitest, 'related', '--run', '--', ...changedFiles],
+    command: [execPath, actualVitest, 'related', '--run', ...relatedFiles],
     timeoutMs: TEST_TIMEOUT_MS,
   })
 
@@ -392,8 +393,11 @@ export async function runChecks({
   const results = []
   for (const check of checks) {
     const result = await runCommand(check.command, { cwd: root, env, timeoutMs: check.timeoutMs })
-    results.push({ name: check.name, ok: result.ok, output: result.output ?? '' })
-    if (!result.ok) break
+    const output = result.output ?? ''
+    const ranNothing = output.includes('No changed files found')
+    const ok = result.ok && !ranNothing
+    results.push({ name: check.name, ok, output })
+    if (!ok) break
   }
   return results
 }

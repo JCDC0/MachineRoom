@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The merge check passes the changed files to vitest related without a double dash, passes a leading dash as ./NAME and fails when vitest reports no changed files (P158).
 - Renamed titles, restored titles, compact rules and summaries, and a compaction report are masked before they are capped or saved (P151).
 - printedRunsFolder masks a posix path with ~ even when USERPROFILE is set, so the masked log line test runs on Linux again (P154).
 - The detail docs describe P143 to P148 and the Windows-only masked log test (P155).
