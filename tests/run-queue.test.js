@@ -972,6 +972,7 @@ describe('a queue that stops', () => {
       expect(records[1]).toMatchObject({
         lane: 'fake',
         exitCode: 3,
+        queueStatus: 'failed',
         queueIndex: 2,
         queueSize: 3,
         queueRemaining: ['The third task waits.'],

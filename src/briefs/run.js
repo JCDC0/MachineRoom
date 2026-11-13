@@ -302,6 +302,41 @@ export function worktreeProblems({ worktree, project } = {}) {
   return []
 }
 
+export const CHECK_SHELL_PROBLEM = 'The check command cannot use shell syntax; put it in an npm script.'
+
+export function checkCommandProblem(command) {
+  const text = String(command ?? '')
+  return /[|&;<>`]|\$\(|%[^%\r\n]+%/.test(text) ? CHECK_SHELL_PROBLEM : ''
+}
+
+export function splitCheckCommand(command) {
+  const text = String(command ?? '').trim()
+  if (text === '') return []
+  const parts = []
+  let current = ''
+  let started = false
+  let quoted = false
+  for (const character of text) {
+    if (character === '"') {
+      quoted = !quoted
+      started = true
+      continue
+    }
+    if (!quoted && /\s/.test(character)) {
+      if (started) {
+        parts.push(current)
+        current = ''
+        started = false
+      }
+      continue
+    }
+    current += character
+    started = true
+  }
+  if (started) parts.push(current)
+  return parts
+}
+
 export function parseRunArgs(argv) {
   const args = (Array.isArray(argv) ? argv : []).map((value) => String(value))
   const briefs = []
@@ -319,6 +354,7 @@ export function parseRunArgs(argv) {
   let allowDirty = false
   let worktree = false
   let startedBy = ''
+  let test = ''
   const overrides = {}
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index]
@@ -400,6 +436,15 @@ export function parseRunArgs(argv) {
       startedBy = value
       continue
     }
+    if (arg === '--test' || arg.startsWith('--test=')) {
+      const value = arg === '--test' ? args[index + 1] : arg.slice('--test='.length)
+      if (arg === '--test') index += 1
+      if (typeof value !== 'string' || value.trim() === '') throw new Error('--test needs a command.')
+      const problem = checkCommandProblem(value)
+      if (problem !== '') throw new Error(problem)
+      test = value
+      continue
+    }
     if (arg.startsWith('-')) throw new Error(`Unknown option ${arg}.`)
     if (arg === '') continue
     if (!lane) lane = arg
@@ -425,9 +470,11 @@ export function parseRunArgs(argv) {
       project,
       ...(task ? { task } : {}),
       ...(taskFile ? { taskFile } : {}),
+      ...(test ? { test } : {}),
       ...(allowDirty ? { allowDirty: true } : {}),
     }
   }
+  if (test !== '') throw new Error('--test needs a --project task.')
   if (briefs.length === 0) throw new Error('Name at least one brief id.')
   return { lane, briefs, dryRun, minutes, list, ...(force ? { force: true } : {}), ...overrides, ...(startedBy ? { startedBy } : {}) }
 }

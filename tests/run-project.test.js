@@ -12,6 +12,7 @@ import { releaseLaneLock } from '../scripts/lane-lock.mjs'
 import { laneRunRecord, laneStartProblem, laneWorktreeStart, projectLockName, takeProjectLock, printedRunsFolder } from '../scripts/run-lane.mjs'
 import {
   childEnvironment,
+  CHECK_SHELL_PROBLEM,
   commandFor,
   DEFAULT_MINUTES,
   laneLockPids,
@@ -154,6 +155,14 @@ describe('parseRunArgs for another project', () => {
     expect(parseRunArgs(['opencode', '--project', 'C:\\GitHub\\Other', '--task-file', 'task.md'])).toMatchObject({
       project: 'C:\\GitHub\\Other', taskFile: 'task.md',
     })
+  })
+
+  it('takes the check command for a single task and refuses shell syntax', () => {
+    expect(parseRunArgs(['opencode', '--project', 'C:\\GitHub\\Other', '--task', 'Fix it.', '--test', 'npm test'])).toMatchObject({
+      project: 'C:\\GitHub\\Other', task: 'Fix it.', test: 'npm test',
+    })
+    expect(() => parseRunArgs(['opencode', '--project', 'C:\\GitHub\\Other', '--task', 'Fix it.', '--test', 'npm test && rm x']))
+      .toThrow(CHECK_SHELL_PROBLEM)
   })
 
   it('refuses a brief id and a project together', () => {

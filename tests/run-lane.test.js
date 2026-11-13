@@ -7,7 +7,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { gitPath, programPath } from '../server/programPath.js'
 import { saveAgentsConfig } from '../server/agents-config.js'
 import { projectLanesFileFor, writeHiddenLanes } from '../server/active-lanes.js'
-import { briefProblems, briefWorktreeProblems, commandFor, DEFAULT_MINUTES, filterRunsSince, laneCommandProblem, readinessLine, retryStartProblem, SINCE_PROBLEM, startFailureText, worktreeFor, formatOutcomes, formatStats, formatSummary, laneLockPids, laneLockText, laneStats, laneStopProblem, laneWithOverrides, nextTestStep, parseRunArgs, projectRunGit, runListLine, runRecord, sessionToolLines, summarizeRun, UNATTENDED_NOTE, unattendedPrompt } from '../src/briefs/run.js'
+import { briefProblems, briefWorktreeProblems, CHECK_SHELL_PROBLEM, checkCommandProblem, commandFor, DEFAULT_MINUTES, filterRunsSince, laneCommandProblem, readinessLine, retryStartProblem, SINCE_PROBLEM, splitCheckCommand, startFailureText, worktreeFor, formatOutcomes, formatStats, formatSummary, laneLockPids, laneLockText, laneStats, laneStopProblem, laneWithOverrides, nextTestStep, parseRunArgs, projectRunGit, runListLine, runRecord, sessionToolLines, summarizeRun, UNATTENDED_NOTE, unattendedPrompt } from '../src/briefs/run.js'
 import { branchFor, briefFileList, parseBriefs } from '../src/briefs/briefs.js'
 import { harnessByKey } from '../src/harnesses/index.js'
 import { appendRunRecord, printCommand, printedRunsFolder, projectLockName, runnerCommitVersion, sessionStartedBy, startLane, takeProjectLock } from '../scripts/run-lane.mjs'
@@ -197,6 +197,20 @@ describe('parseRunArgs', () => {
     })
     expect(parseRunArgs(['hermes', 'W3a'])).not.toHaveProperty('force')
     expect(parseRunArgs(['hermes', 'W3a', '--dry-run', '--force'])).toMatchObject({ dryRun: true, force: true })
+  })
+})
+
+describe('the check command', () => {
+  it('splits npm test -- --runInBand into its parts', () => {
+    expect(splitCheckCommand('npm test -- --runInBand')).toEqual(['npm', 'test', '--', '--runInBand'])
+    expect(splitCheckCommand('node -e "process.exit(1)"')).toEqual(['node', '-e', 'process.exit(1)'])
+  })
+
+  it('refuses shell syntax with one sentence', () => {
+    for (const command of ['npm test && rm x', 'npm test | tee out', 'npm test; rm x', 'npm test > out', 'npm test < in', 'npm test `whoami`', 'npm test $(pwd)', 'npm test %PATH%']) {
+      expect(checkCommandProblem(command)).toBe(CHECK_SHELL_PROBLEM)
+    }
+    expect(checkCommandProblem('npm test -- --runInBand')).toBe('')
   })
 })
 
@@ -2203,8 +2217,8 @@ describe('the record of a project run on a git project', { timeout: 30000 }, () 
       expect(record.project).toBe(realpathSync.native(project))
       expect(record.branch).toBe('')
       expect(record.commits).toEqual([])
-      expect(record.head).toBe(gitIn(project, ['rev-parse', 'HEAD']))
-      expect(record).not.toHaveProperty('tests')
+      expect(record).not.toHaveProperty('head')
+      expect(record.tests).toBe('passed')
       expect(gitIn(project, ['branch', '--show-current'])).toBe('main')
     } finally {
       rmSync(base, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })

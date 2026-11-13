@@ -3,12 +3,12 @@ import { spawn, spawnSync } from 'node:child_process'
 import { createHash, randomUUID } from 'node:crypto'
 import { appendFileSync, createWriteStream, existsSync, lstatSync, mkdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
-import { dirname, isAbsolute, join, resolve } from 'node:path'
+import { basename, dirname, isAbsolute, join, resolve } from 'node:path'
 import { finished } from 'node:stream'
 import { fileURLToPath } from 'node:url'
 import { branchFor, briefFileList, buildPrompt, nextVersion, parseBriefs, parseRules } from '../src/briefs/briefs.js'
 import { formatQueueSummary, parseQueue, parseQueueArgs, runQueue } from '../src/briefs/queue.js'
-import { briefProblems, briefWorktreeProblems, childEnvironment, commandFor, createLaneLog, DEFAULT_MINUTES, filterRunsSince, formatOutcomes, formatStats, formatSummary, laneCommandProblem, laneStats, laneStopProblem, laneWithOverrides, maskedQueueTasks, ORCHESTRATOR_LANE_PROBLEM, parseRunArgs, projectProblems, projectRunGit, readinessLine, retryStartProblem, runListLine, runRecord, sessionToolLines, startFailureText, summarizeRun, unattendedPrompt, worktreeFor, WORKTREES_FOLDER } from '../src/briefs/run.js'
+import { briefProblems, briefWorktreeProblems, checkCommandProblem, childEnvironment, commandFor, createLaneLog, DEFAULT_MINUTES, filterRunsSince, formatOutcomes, formatStats, formatSummary, laneCommandProblem, laneStats, laneStopProblem, laneWithOverrides, maskedQueueTasks, ORCHESTRATOR_LANE_PROBLEM, parseRunArgs, projectProblems, projectRunGit, readinessLine, retryStartProblem, runListLine, runRecord, sessionToolLines, splitCheckCommand, startFailureText, summarizeRun, unattendedPrompt, worktreeFor, WORKTREES_FOLDER } from '../src/briefs/run.js'
 import { outcomeTable } from '../server/outcomes.js'
 import { readMainSubjectsSync } from '../server/runs.js'
 import { isLockHolderStale, killTree, descendantProcesses, leftoverProcesses, listProcesses } from '../server/processTree.js'
@@ -121,6 +121,7 @@ export function helpLines() {
     '  --model <id>         use this model for this run only',
     '  --reasoning <level>  use this reasoning level for this run only',
     '  --minutes <n>        stop the run after n minutes (100 by default)',
+    '  --test <command>     run this check after each task, or npm test when the package has one',
     '  --started-by <id>    name the orchestrator that started the run',
     '  --force              run a retired lane or a brief marked done',
     '',
@@ -605,13 +606,33 @@ function testCommandFor(project, given) {
   }
 }
 
+function checkSpawn(command) {
+  const problem = checkCommandProblem(command)
+  if (problem !== '') throw new Error(problem)
+  const parts = splitCheckCommand(command)
+  if (parts.length === 0) throw new Error('The check command is empty.')
+  const program = parts[0]
+  const args = parts.slice(1)
+  if (process.platform !== 'win32' || !/^(npm|npx)$/i.test(program)) return { file: program, args }
+  const cliName = program.toLowerCase() === 'npm' ? 'npm-cli.js' : 'npx-cli.js'
+  const candidates = []
+  const npmExecPath = typeof process.env.npm_execpath === 'string' ? process.env.npm_execpath.trim() : ''
+  if (npmExecPath !== '' && basename(npmExecPath) === cliName) candidates.push(npmExecPath)
+  const nodeFolder = dirname(process.execPath)
+  candidates.push(join(nodeFolder, 'node_modules', 'npm', 'bin', cliName))
+  candidates.push(join(nodeFolder, '..', 'lib', 'node_modules', 'npm', 'bin', cliName))
+  const cli = candidates.find((candidate) => existsSync(candidate))
+  return cli ? { file: process.execPath, args: [cli, ...args] } : { file: program, args }
+}
+
 function runTestCommand(command, cwd, minutes) {
   return new Promise((done) => {
     let child
     try {
-      child = spawn(command, [], {
+      const spawnSpec = checkSpawn(command)
+      child = spawn(spawnSpec.file, spawnSpec.args, {
         cwd,
-        shell: true,
+        shell: false,
         windowsHide: true,
         env: childEnvironment(process.env, cwd),
         stdio: ['ignore', 'inherit', 'inherit'],
@@ -634,6 +655,20 @@ function runTestCommand(command, cwd, minutes) {
       done({ ok: !killed && code === 0, code, killed })
     })
   })
+}
+
+async function projectCheck({ project, given, minutes }) {
+  let command
+  try {
+    command = projectTestCommand(project, given)
+  } catch (error) {
+    const message = String(error?.message ?? error)
+    console.error(message)
+    return { command: message, ok: false, ran: false }
+  }
+  if (command === '') return { command: '', ok: true, ran: false }
+  const outcome = await runTestCommand(command, project, minutes)
+  return { command, ok: outcome?.ok === true, ran: true, outcome }
 }
 
 function queueGit(project, branch, lane, { onSettled } = {}) {
@@ -996,6 +1031,11 @@ function printProjectRefusals(problems, project) {
 }
 
 async function runQueueProject({ options, lane, lanes }) {
+  const givenTest = typeof options.test === 'string' ? options.test.trim() : ''
+  if (givenTest !== '') {
+    const problem = checkCommandProblem(givenTest)
+    if (problem !== '') throw new Error(problem)
+  }
   const project = projectFolder(options.project)
   if (!gitCheckout(project)) throw new Error(`The project folder ${printedRunsFolder(project)} is not a git folder. A queue needs one.`)
   const problems = projectRefusals(project, lanes, options.allowDirty === true && !options.queue)
@@ -1088,30 +1128,15 @@ async function runQueueProject({ options, lane, lanes }) {
             projectBranch: startBranch, deferRecord: true, base,
           })
           pending = { record: run.record, folder: target.path, startHead: run.startHead, startBranch, tests: '' }
-          if (run.code !== 0 || run.killed) finishPending('', true)
+          if (run.code !== 0 || run.killed) finishPending(run.killed ? 'stopped' : 'failed', true)
           return { code: run.code, killed: run.killed }
         },
         runTests: async () => {
-          let command
-          try {
-            command = projectTestCommand(target.path, options.test)
-          } catch (error) {
-            const message = String(error?.message ?? error)
-            console.error(message)
-            test = message
-            testsFailed = true
-            if (pending) pending.tests = 'failed'
-            return { ok: false }
-          }
-          if (command === '') {
-            if (pending) pending.tests = 'none'
-            return { ok: true }
-          }
-          test = command
-          const outcome = await runTestCommand(command, target.path, options.minutes)
-          testsFailed = outcome?.ok !== true
-          if (pending) pending.tests = testsFailed ? 'failed' : 'passed'
-          return outcome
+          const check = await projectCheck({ project: target.path, given: options.test, minutes: options.minutes })
+          test = check.command
+          testsFailed = !check.ok
+          if (pending) pending.tests = check.command === '' ? 'none' : (check.ok ? 'passed' : 'failed')
+          return { ok: check.ok }
         },
       })
       formatQueueSummary({ branch: result.branch, results: result.results, tests: test, worktree: options.worktree ? printedRunsFolder(target.path) : '' }).forEach((line) => console.log(line))
@@ -1256,7 +1281,9 @@ async function main() {
       const needsMcp = enabledServers.length > 0 && (harness === 'claude' || harness === 'opencode')
       const mcpConfigPath = needsMcp ? join(folder, `${name}.mcp.json`) : ''
       const command = commandFor({ lane, prompt, env: process.env, usageFile, title: name, cwd: project, mcpConfig: mcpConfigPath })
+      const test = testCommandFor(project, options.test)
       printCommand(command, prompt, { mcpConfig: mcpConfigPath, mcpServers: enabledServers })
+      console.log(`tests: ${test || 'none, the project has no tests'}`)
       console.log('Dry run, nothing started.')
       return 0
     }
@@ -1272,8 +1299,20 @@ async function main() {
       throw error
     }
     try {
-      const run = await startLane({ options, lane, lanes, wanted: [], prompt, logPath, usageFile, name, project, task, lockPath: lock })
-      return run.code
+      const run = await startLane({ options, lane, lanes, wanted: [], prompt, logPath, usageFile, name, project, task, lockPath: lock, deferRecord: true })
+      let code = run.code
+      let tests = ''
+      if (run.code === 0 && run.killed !== true) {
+        const check = await projectCheck({ project, given: options.test, minutes: options.minutes })
+        tests = check.command === '' ? 'none' : (check.ok ? 'passed' : 'failed')
+        console.log(`tests: ${check.command || 'none, the project has no tests'}`)
+        if (!check.ok) {
+          run.record.exitCode = 1
+          code = 1
+        }
+      }
+      writeProjectRecord({ record: run.record, folder: project, startHead: run.startHead, startBranch: run.startBranch, tests })
+      return code
     } finally {
       releaseLaneLock(lock)
       releaseLaneLock(projectLock)
