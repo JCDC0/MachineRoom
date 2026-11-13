@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- P265: the agent dock receives the full orchestrator list, so a sub shows its lanes, scope and restriction and a lane shows its sector.
 - P265: a lane task sent from chat passes the project's saved check command to the runner as --test.
 - P254: a folder-shaped /api/tree answers from the last tree while the watcher is armed, the last full read was clean and no read is due.
 - P255: AUDIT-2026-11-TESTS.md lists four tests that pass with their change undone, each proved in a scratch copy.

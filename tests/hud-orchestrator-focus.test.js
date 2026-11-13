@@ -23,6 +23,19 @@ const LIST = [
   { id: 'frontend', name: 'Frontend', state: 'idle' },
 ]
 
+const TWO = [
+  { id: 'orchestrator', name: 'Orchestrator', state: 'idle' },
+  {
+    id: 'frontend',
+    name: 'Frontend',
+    state: 'idle',
+    lanes: ['opencode'],
+    scope: ['src/ui/**'],
+    restricted: true,
+    setBy: 'owner',
+  },
+]
+
 function makeClient() {
   return {
     orchestrators: async () => LIST,
@@ -41,12 +54,12 @@ function orchestratorButton(container) {
   )
 }
 
-async function mount(root, client) {
+async function mount(root, client, { orchestrators = LIST, ...props } = {}) {
   await act(async () => {
     root.render(
       createElement(
         OrchestratorsContext.Provider,
-        { value: LIST },
+        { value: orchestrators },
         createElement(Hud, {
           snapshot: SNAPSHOT,
           project: 'app',
@@ -56,6 +69,7 @@ async function mount(root, client) {
           health: { ok: true, orchestrator: true },
           speeds: [1],
           onMode: () => {},
+          ...props,
         })
       )
     )
@@ -110,6 +124,30 @@ describe('the ORCHESTRATOR control at 900 pixels and wider', () => {
 
       expect(scrolled).toBe(1)
       expect(dom.document.activeElement).toBe(input)
+    })
+  })
+
+  it('shows a sub dock the lanes, scope, restriction and setter from the full orchestrator list', async () => {
+    await withDom(async ({ container, dom, root }) => {
+      dom.window.localStorage.setItem('machineroom.guide', '1')
+      dom.window.innerWidth = 1200
+      await mount(root, makeClient(), {
+        orchestrators: TWO,
+        focused: { key: 'sub-frontend', name: 'Frontend', status: 'idle' },
+      })
+
+      const dock = container.querySelector('.agent-dock')
+      expect(dock).not.toBeNull()
+      const text = dock.textContent
+      expect(text).toContain('Frontend')
+      expect(text).toContain('Lanes')
+      expect(text).toContain('opencode')
+      expect(text).toContain('Scope')
+      expect(text).toContain('src/ui/**')
+      expect(text).toContain('Restricted')
+      expect(text).toContain('yes')
+      expect(text).toContain('Set by')
+      expect(text).toContain('owner')
     })
   })
 })

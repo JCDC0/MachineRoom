@@ -904,7 +904,7 @@ export default function Hud({
             liveRuns={liveRuns}
             tasks={tasks}
             log={log}
-            orchestrator={orchestratorInfo}
+            orchestrator={orchestratorList}
             client={client}
             onFocus={onFocus}
             onToggleTerminal={onToggleTerminal}
@@ -1058,7 +1058,7 @@ export default function Hud({
                   liveRuns={liveRuns}
                   tasks={tasks}
                   log={log}
-                  orchestrator={orchestratorInfo}
+                  orchestrator={orchestratorList}
                   client={client}
                   onFocus={onFocus}
                   onToggleTerminal={onToggleTerminal}
