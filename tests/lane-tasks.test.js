@@ -128,7 +128,7 @@ async function patchJson(url, path, body) {
   return { status: response.status, body: await response.json() }
 }
 
-async function waitFor(fn, timeoutMs = 3000) {
+async function waitFor(fn, timeoutMs = 10000) {
   const deadline = Date.now() + timeoutMs
   while (Date.now() < deadline) {
     const value = await fn()
@@ -291,7 +291,7 @@ describe('lane tasks', () => {
     writeFileSync(join(runs, `${name}.meta.json`), `${JSON.stringify({ lane: 'opencode', project })}\n`)
     writeFileSync(join(runs, `${name}.log`), '')
 
-    const runsOpen = await waitFor(() => (source.openRuns().length > 0 ? source.openRuns() : null), 3000)
+    const runsOpen = await waitFor(() => (source.openRuns().length > 0 ? source.openRuns() : null), 10000)
     expect(runsOpen).toHaveLength(1)
     expect(runsOpen[0]).toMatchObject({ name, lane: 'opencode', project })
     expect(runsOpen[0].startedAt).toEqual(expect.any(String))

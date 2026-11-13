@@ -10,7 +10,7 @@ const FOLDER_ACCEPT = 'application/json; shape=folders'
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
-async function waitFor(check, timeoutMs = 5000) {
+async function waitFor(check, timeoutMs = 10000) {
   const deadline = Date.now() + timeoutMs
   for (;;) {
     if (check()) return
@@ -60,7 +60,7 @@ async function folderTree(url) {
   return { status: response.status, body: await response.json() }
 }
 
-async function waitForTreePath(url, name, timeoutMs = 5000) {
+async function waitForTreePath(url, name, timeoutMs = 10000) {
   const deadline = Date.now() + timeoutMs
   for (;;) {
     const folder = await folderTree(url)

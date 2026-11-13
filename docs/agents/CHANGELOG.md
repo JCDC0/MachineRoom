@@ -1,9 +1,11 @@
 # Changelog
 
 ## Unreleased
+- P268: the git write test's request bound matches the client's write limit, and the bridge and tree waits under 10 seconds are raised to 10.
 - P269: AUDIT-2026-11-REVIEW-31.md lists seven findings in P249, P254, P260 and P263; R31-1 to R31-5 block a push.
 - P270: doctor with both a folder and --root prints only its refusal sentence and exits 1, without the usage block.
 - P270: the doctor's double-folder refusal prints only its one sentence and exits 1, with no usage block.
+- P268: the git write tests allow 30 seconds for a read and 140 seconds for a switch or a new branch, and the bridge and tree waits allow 10 seconds, so heavy load no longer aborts them.
 - P260: a lane may name fallback; a brief run or project task that fails on a quota, rate limit, overload or failed start runs once on the backup lane on a -on-LANE branch.
 - P265: the chat's lane start passes the project's saved check command, and each AgentDock gets the full orchestrator list, so sub and sector rows show.
 - P264: ROOM.md, LIVE.md and COMMANDS.md take the 15 corrected sentences from the docs audit; rows 1 and 6 wait for P265.

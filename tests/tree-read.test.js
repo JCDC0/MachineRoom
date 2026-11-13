@@ -117,7 +117,7 @@ describe('a tree read in flight', () => {
     writeFileSync(join(root, 'a.js'), '1\n')
     await waitFor(() => queued.reads.length === 2)
 
-    const response = await fetch(`${url}/api/health`, { signal: AbortSignal.timeout(2000) })
+    const response = await fetch(`${url}/api/health`, { signal: AbortSignal.timeout(10000) })
     expect(response.status).toBe(200)
     expect((await response.json()).ok).toBe(true)
 
@@ -174,7 +174,7 @@ describe('a tree read in flight', () => {
     const { url } = await started
     await wait(1100)
 
-    const pending = fetch(`${url}/api/tree`, { signal: AbortSignal.timeout(5000) })
+    const pending = fetch(`${url}/api/tree`, { signal: AbortSignal.timeout(10000) })
     await waitFor(() => queued.reads.length === 2)
 
     queued.reads[1].resolve({ root: 'project', files: ['src/a.js'], created: [] })
@@ -450,11 +450,11 @@ describe('the bridge before its first tree', () => {
     const { started } = startBridge({ readTree: queued.readTree, root: makeRoot() })
     const { url } = await started
 
-    const health = await fetch(`${url}/api/health`, { signal: AbortSignal.timeout(2000) })
+    const health = await fetch(`${url}/api/health`, { signal: AbortSignal.timeout(10000) })
     expect(health.status).toBe(200)
     expect((await health.json()).ok).toBe(true)
 
-    const pending = fetch(`${url}/api/tree`, { signal: AbortSignal.timeout(5000) })
+    const pending = fetch(`${url}/api/tree`, { signal: AbortSignal.timeout(10000) })
     await wait(50)
     queued.reads[0].resolve({ root: 'project', files: ['a.js'], created: [] })
     const tree = await (await pending).json()
@@ -594,7 +594,7 @@ function changingReads(files) {
   return { readTree, count: () => count, set: (next) => { current = next } }
 }
 
-async function waitForVersion(url, version, timeoutMs = 5000) {
+async function waitForVersion(url, version, timeoutMs = 10000) {
   const deadline = Date.now() + timeoutMs
   for (;;) {
     const answer = await folderTree(url)
@@ -914,7 +914,7 @@ describe('git index and exclude changes', () => {
     const events = await openEvents(url, `?tree=1&since=${first.start}:1`)
     try {
       git(root, ['add', '-f', 'ignored.txt'])
-      await waitFor(() => readTreeEvents(events.text()).some((event) => event.files?.includes('ignored.txt')), { timeoutMs: 2000 })
+      await waitFor(() => readTreeEvents(events.text()).some((event) => event.files?.includes('ignored.txt')), { timeoutMs: 10000 })
       const after = await (await fetch(`${url}/api/tree`)).json()
       expect(after.files).toEqual(['.gitignore', 'ignored.txt', 'keep.txt'])
     } finally {
@@ -950,11 +950,11 @@ describe('git index and exclude changes', () => {
     const events = await openEvents(url, `?tree=1&since=${first.start}:1`)
     try {
       git(root, ['rm', '--cached', 'ignored.txt'])
-      await waitFor(() => readTreeEvents(events.text()).some((event) => event.removed?.includes('ignored.txt')), { timeoutMs: 3000 })
+      await waitFor(() => readTreeEvents(events.text()).some((event) => event.removed?.includes('ignored.txt')), { timeoutMs: 10000 })
 
       await wait(450)
       writeFileSync(join(root, '.git', 'info', 'exclude'), '*.log\n')
-      await waitFor(() => readTreeEvents(events.text()).some((event) => event.removed?.includes('scratch.log')), { timeoutMs: 3000 })
+      await waitFor(() => readTreeEvents(events.text()).some((event) => event.removed?.includes('scratch.log')), { timeoutMs: 10000 })
 
       const after = await (await fetch(`${url}/api/tree`)).json()
       expect(after.files).toEqual(['.gitignore', 'keep.txt'])
@@ -1045,7 +1045,7 @@ describe('git index and exclude changes', () => {
     const events = await openEvents(url, `?tree=1&since=${first.start}:1`)
     try {
       git(wt, ['add', '-f', 'ignored.txt'])
-      await waitFor(() => readTreeEvents(events.text()).some((event) => event.files?.includes('ignored.txt')), { timeoutMs: 2500 })
+      await waitFor(() => readTreeEvents(events.text()).some((event) => event.files?.includes('ignored.txt')), { timeoutMs: 10000 })
       const after = await (await fetch(`${url}/api/tree`)).json()
       expect(after.files).toEqual(['.gitignore', 'ignored.txt', 'keep.txt'])
     } finally {

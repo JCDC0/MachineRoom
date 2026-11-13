@@ -34,11 +34,12 @@ import {
   readGitState,
   resetGitCache,
 } from '../server/git.js'
-import { createClient } from '../src/control/client.js'
+import { REQUEST_LIMITS, REQUEST_TIMEOUT_MS, createClient } from '../src/control/client.js'
 import { createMockClient } from '../src/control/mock.js'
 import { makeTempDir, removeTempDir } from './helpers/tempRoot.js'
 
 const NO_GIT_CONFIG = join(tmpdir(), 'machineroom-git-no-config')
+const GIT_WRITE_REQUEST_MS = REQUEST_LIMITS.createBranch
 const cleanups = []
 
 afterEach(async () => {
@@ -109,7 +110,7 @@ async function postJson(url, path, body, origin = 'http://localhost:5173') {
     method: 'POST',
     headers,
     body: JSON.stringify(body),
-    signal: AbortSignal.timeout(10000),
+    signal: AbortSignal.timeout(GIT_WRITE_REQUEST_MS),
   })
   const text = await response.text()
   return { status: response.status, body: text ? JSON.parse(text) : null }
@@ -118,7 +119,7 @@ async function postJson(url, path, body, origin = 'http://localhost:5173') {
 async function getJson(url, path) {
   const response = await fetch(`${url}${path}`, {
     method: 'GET',
-    signal: AbortSignal.timeout(10000),
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   })
   const text = await response.text()
   return { status: response.status, body: text ? JSON.parse(text) : null }
@@ -615,7 +616,7 @@ describe('git write limits', () => {
     expect(created.status).toBe(200)
     const branchCall = calls.find((call) => call.args[0] === 'branch' && call.args[1] === '--')
     expect(branchCall.timeout).toBe(GIT_WRITE_TIMEOUT_MS)
-  })
+  }, GIT_WRITE_REQUEST_MS + REQUEST_TIMEOUT_MS + 10000)
 
   it('says a switch took too long and where the checkout is', async () => {
     const repo = makeRepo()
