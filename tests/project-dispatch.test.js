@@ -10,6 +10,7 @@ import { activeLanesFileFor, writeActiveLanes } from '../server/active-lanes.js'
 import { runsFolder } from '../server/lanes-source.js'
 import { gitPath } from '../server/programPath.js'
 import { BRIEF_PROJECT_PROBLEM, QUEUE_DIRTY_PROBLEM, RUN_KIND_PROBLEM, TASK_PROBLEM, TASK_SEPARATOR_PROBLEM, TASKS_PROBLEM, createRunsApi, writeQueue } from '../server/runs.js'
+import { parseQueueArgs } from '../src/briefs/queue.js'
 import { worktreeFor, CHECK_SHELL_PROBLEM } from '../src/briefs/run.js'
 import { createMockClient } from '../src/control/mock.js'
 import {
@@ -449,6 +450,7 @@ describe('the runs route with a queue', () => {
       const args = await waitFor(() => readArgs(out), { what: 'the runner arguments' })
       expect(args).toContain('--test')
       expect(args[args.indexOf('--test') + 1]).toBe('node scripts/check.mjs')
+      expect(parseQueueArgs(args)).toMatchObject({ test: 'node scripts/check.mjs' })
       await waitFor(async () => (await getJson(`${url}/api/control/runs`)).body.running.length === 0, { what: 'the run to end' })
     } finally {
       if (previous === undefined) delete process.env.TEMP
@@ -702,6 +704,8 @@ describe('Dispatch when it cannot show the project form', () => {
   }
 
   it('chooses the sentence from lanes mode and the code lanes', () => {
+    expect(NO_LANES_FORM_LINE).toBe('Runs start from a room opened with --lanes: npm run serve -- up --lanes.')
+    expect(NO_CODE_LANE_FORM_LINE).toBe('No code lane is set up. Add one in Agents, Build a team.')
     expect(projectFormNotice({ lanesMode: false, lanes: [] })).toBe(NO_LANES_FORM_LINE)
     expect(projectFormNotice({ lanesMode: true, lanes: [] })).toBe(NO_CODE_LANE_FORM_LINE)
     expect(projectFormNotice({ lanesMode: true, lanes: [{ key: 'opencode' }] })).toBe('')
