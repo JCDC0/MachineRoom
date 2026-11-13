@@ -7,7 +7,7 @@ import { commitMessage, formatQueueSummary, parseQueue, parseQueueArgs, runQueue
 import { DEFAULT_MINUTES } from '../src/briefs/run.js'
 import { gitPath } from '../server/programPath.js'
 import { releaseLaneLock } from '../scripts/lane-lock.mjs'
-import { takeProjectLock, printedRunsFolder } from '../scripts/run-lane.mjs'
+import { takeProjectLock } from '../scripts/run-lane.mjs'
 import { killTree } from '../server/processTree.js'
 import { makeTempDir, processTempRoot, removeTempDir } from './helpers/tempRoot.js'
 

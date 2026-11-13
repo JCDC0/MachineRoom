@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- printedRunsFolder masks a posix path with ~ even when USERPROFILE is set, because the Windows labels apply only to Windows paths (P154).
+- The masked log and record line test runs on Linux again, with a case for USERPROFILE on a posix path, and two test files no longer import printedRunsFolder unused (P154).
 - printedRunsFolder lives in server/printed-path.js, so the bridge no longer loads the runner script to mask a path (P148).
 - The room's check for a merge in progress runs git asynchronously, one at a time, so a slow git never freezes the bridge (P124, P145).
 - A brief's file list ignores Files markers only inside code fences and inline code, so prose apostrophes never hide it (P143).
