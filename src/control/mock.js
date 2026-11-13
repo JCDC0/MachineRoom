@@ -327,7 +327,7 @@ const SAMPLE_REVIEW_PATCH = [
 
 const SAMPLE_REVIEW_DIFF_FILES = [{ path: 'src/control/client.js', added: 2, deleted: 0 }]
 
-const SAMPLE_MERGE_COMMIT = '4f3c9a1b7d2e8f0a6c5b4d3e2f1a0b9c8d7e6f5a'
+const SAMPLE_MERGE_COMMIT = '5e4d3c2b1a0f9e8d7c6b5a4f3e2d1c0b9a8f7e6d'
 
 export const MOCK_PROJECTS = {
   current: {
@@ -443,6 +443,9 @@ const SAMPLE_REVIEWS = {
     worktree: 'C:\\GitHub\\MachineRoom-hermes',
     branch: 'feat/p5-recover-cut-tool-lines',
     head: '1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d',
+    base: 'main',
+    baseHead: '4f3c9a1b7d2e8f0a6c5b4d3e2f1a0b9c8d7e6f5a',
+    strategy: 'merge-commit',
     ahead: 2,
     commits: ['9f1c2a3 P5: take the tool name from the broken line', '4b7d0e8 P5: map the grep line to search'],
     dirty: false,
@@ -456,6 +459,9 @@ const SAMPLE_REVIEWS = {
     worktree: 'C:\\GitHub\\MachineRoom-opencode',
     branch: 'feat/w3a-read-the-lane',
     head: '2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e',
+    base: 'main',
+    baseHead: '4f3c9a1b7d2e8f0a6c5b4d3e2f1a0b9c8d7e6f5a',
+    strategy: 'merge-commit',
     ahead: 1,
     commits: ['6c49a75 0.1.47: Start a lane on a brief from the bridge'],
     dirty: true,
@@ -482,6 +488,9 @@ const SAMPLE_REVIEWS = {
     worktree: 'C:\\GitHub\\MachineRoom-agy',
     branch: 'feat/t7-run-a-brief',
     head: '3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f',
+    base: 'main',
+    baseHead: '4f3c9a1b7d2e8f0a6c5b4d3e2f1a0b9c8d7e6f5a',
+    strategy: 'merge-commit',
     ahead: 3,
     commits: ['c3a1b2e T7: add the Run now button', '5d6e7f8 T7: confirm card before a run', '0a1b2c3 T7: list the runs under the brief'],
     dirty: false,
@@ -2189,7 +2198,19 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
         return { ok: true, lanes: clone(lanes) }
       }),
 
-    reviews: () => call('reviews', () => Object.values(reviewState)),
+    reviews: () =>
+      call('reviews', () => {
+        if (!gitState.branch) throw new Error('The project is not on a branch.')
+        return Object.values(reviewState).map((entry) => ({
+          ...clone(entry),
+          ...(entry.strategy === 'fast-forward'
+            ? { base: gitState.branch, baseHead: gitState.head }
+            : {
+                base: 'main',
+                baseHead: gitState.branches.find((b) => b.name === 'main')?.head ?? gitState.head,
+              }),
+        }))
+      }),
 
     reviewDiff: (lane) =>
       call('reviewDiff', () => {
@@ -2211,25 +2232,62 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
         if (!review) throw new Error('Choose a lane from the list.')
         const confirmed = Object.hasOwn(options, 'confirmed') ? options.confirmed : true
         if (confirmed !== true) throw new Error('Confirm the merge first.')
+        const onProject = review.strategy === 'fast-forward'
+        if (typeof options.head !== 'string' || !/^[0-9a-fA-F]{40}$/.test(options.head)) {
+          throw new Error(
+            onProject
+              ? 'Send the lane head, destination branch and destination head you read.'
+              : 'Send the head you read and a message of one line.'
+          )
+        }
         if (
-          typeof options.head !== 'string' ||
-          !/^[0-9a-fA-F]{40}$/.test(options.head) ||
-          typeof options.message !== 'string' ||
-          options.message.length < 1 ||
-          options.message.length > 200 ||
-          /[\r\n]/.test(options.message)
+          !onProject &&
+          (typeof options.message !== 'string' ||
+            options.message.length < 1 ||
+            options.message.length > 200 ||
+            /[\r\n]/.test(options.message))
         ) {
           throw new Error('Send the head you read and a message of one line.')
+        }
+        if (
+          typeof options.base !== 'string' ||
+          options.base.trim().length < 1 ||
+          options.base.trim() !== options.base ||
+          /[\r\n]/.test(options.base) ||
+          typeof options.baseHead !== 'string' ||
+          !/^[0-9a-fA-F]{40}$/.test(options.baseHead)
+        ) {
+          throw new Error('Send the destination branch and head you read.')
+        }
+        const currentBranch = gitState.branch || ''
+        if (!currentBranch) throw new Error('The project is not on a branch.')
+        const currentHead =
+          onProject || currentBranch === 'main'
+            ? gitState.head
+            : gitState.branches.find((b) => b.name === 'main')?.head ?? ''
+        if (currentBranch !== options.base) {
+          if (!onProject && options.base === 'main') {
+            throw new Error('The main checkout is not on main.')
+          }
+          throw new Error(`The project is on ${currentBranch} now, not ${options.base}, so refresh reviews first.`)
+        }
+        if (currentHead !== options.baseHead) {
+          throw new Error(`The ${options.base} branch moved since you read it, so refresh reviews first.`)
         }
         if (options.head !== review.head) throw new Error('The lane moved since you read it. Read it again.')
         if (review.dirty) throw new Error('The lane has uncommitted changes.')
         if (review.ahead === 0) throw new Error('Nothing to merge.')
+        const commit = onProject ? review.head : SAMPLE_MERGE_COMMIT
+        gitState.head = commit
+        const branchRow = gitState.branches.find((b) => b.name === currentBranch)
+        if (branchRow) branchRow.head = commit
         review.ahead = 0
         review.commits = []
         review.files = 0
         review.added = 0
         review.deleted = 0
-        return { ok: true, lane: review.lane, branch: review.branch, head: review.head, commit: SAMPLE_MERGE_COMMIT }
+        emit({ topic: 'git' })
+        return { ok: true, lane: review.lane, branch: review.branch, head: review.head, commit }
       }),
 
     askPlanner: (goal) =>

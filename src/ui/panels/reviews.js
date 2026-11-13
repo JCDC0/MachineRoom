@@ -52,6 +52,8 @@ export function reviewRow(review) {
       head: '',
       headShort: '',
       base: '',
+      baseHead: '',
+      strategy: 'merge-commit',
       ahead: 0,
       aheadText: '0 commits ahead',
       files: 0,
@@ -72,6 +74,8 @@ export function reviewRow(review) {
   const head = typeof review.head === 'string' ? review.head : ''
   const headShort = head.slice(0, 7)
   const base = typeof review.base === 'string' ? review.base : ''
+  const baseHead = typeof review.baseHead === 'string' ? review.baseHead : ''
+  const strategy = review.strategy === 'fast-forward' ? 'fast-forward' : 'merge-commit'
 
   if (review.error) {
     return {
@@ -80,6 +84,8 @@ export function reviewRow(review) {
       head,
       headShort,
       base,
+      baseHead,
+      strategy,
       ahead: 0,
       aheadText: null,
       files: 0,
@@ -109,6 +115,8 @@ export function reviewRow(review) {
     head,
     headShort,
     base,
+    baseHead,
+    strategy,
     ahead,
     aheadText: `${ahead} ${ahead === 1 ? 'commit' : 'commits'} ahead`,
     files,

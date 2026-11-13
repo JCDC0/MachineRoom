@@ -17,28 +17,35 @@ export function MergeConfirmCard({
 }) {
   if (!target) return null
   const base = target.base || 'main'
+  const isFastForward = target.strategy === 'fast-forward'
   const laneName = target.branch ? `${target.lane}'s ${target.branch}` : `${target.lane}'s work`
   return (
     <div className="brief-confirm-card review-confirm-card" role="region" aria-label={`Confirm merge for ${target.lane}`}>
       <div className="brief-confirm-warning">
         {`Merge ${laneName} (${target.headShort}) into ${base}? It changes the project checkout and never pushes.`}
       </div>
-      <div className="panel-field review-message-field">
-        <label htmlFor={`merge-msg-${target.lane}`}>Message</label>
-        <input
-          id={`merge-msg-${target.lane}`}
-          type="text"
-          className="mono"
-          value={message}
-          onChange={(e) => onMessageChange(e.target.value)}
-          disabled={merging}
-        />
-      </div>
+      {isFastForward ? (
+        <div className="review-last-run mono">
+          {"Fast-forward merge. The lane's commits are kept as they are."}
+        </div>
+      ) : (
+        <div className="panel-field review-message-field">
+          <label htmlFor={`merge-msg-${target.lane}`}>Message</label>
+          <input
+            id={`merge-msg-${target.lane}`}
+            type="text"
+            className="mono"
+            value={message}
+            onChange={(e) => onMessageChange(e.target.value)}
+            disabled={merging}
+          />
+        </div>
+      )}
       <div className="brief-confirm-actions">
         <button
           type="button"
           className="brief-confirm-btn"
-          disabled={merging || !messageValid}
+          disabled={merging || (!isFastForward && !messageValid)}
           onClick={onConfirm}
         >
           {merging ? 'Merging' : 'Merge'}
@@ -198,14 +205,17 @@ export default function ReviewsPanel({
       return
     }
     clearMoved(row.lane)
+    const isFastForward = row.strategy === 'fast-forward'
     setConfirmTarget({
       lane: row.lane,
       branch: row.branch,
       base: row.base || 'main',
+      baseHead: row.baseHead,
+      strategy: row.strategy,
       head: result.head,
       headShort: result.head.slice(0, 7),
     })
-    setMergeMessage(defaultMergeMessage(review))
+    setMergeMessage(isFastForward ? '' : defaultMergeMessage(review))
     setMergeError(null)
     setMergeConflictFiles([])
   }
@@ -218,11 +228,13 @@ export default function ReviewsPanel({
     setMergeConflictFiles([])
   }
 
+  const isFastForwardConfirm = confirmTarget?.strategy === 'fast-forward'
   const isMessageValid =
-    typeof mergeMessage === 'string' &&
-    mergeMessage.length >= 1 &&
-    mergeMessage.length <= 200 &&
-    !/[\r\n]/.test(mergeMessage)
+    isFastForwardConfirm ||
+    (typeof mergeMessage === 'string' &&
+      mergeMessage.length >= 1 &&
+      mergeMessage.length <= 200 &&
+      !/[\r\n]/.test(mergeMessage))
 
   async function handleConfirmMerge() {
     if (merging || !confirmTarget || !isMessageValid || typeof client?.mergeReview !== 'function') {
@@ -232,10 +244,15 @@ export default function ReviewsPanel({
     setMergeError(null)
     setMergeConflictFiles([])
     try {
-      const result = await client.mergeReview(confirmTarget.lane, {
+      const options = {
         head: confirmTarget.head,
-        message: mergeMessage,
-      })
+        base: confirmTarget.base,
+        baseHead: confirmTarget.baseHead,
+      }
+      if (!isFastForwardConfirm) {
+        options.message = mergeMessage
+      }
+      const result = await client.mergeReview(confirmTarget.lane, options)
       const commitShort = typeof result?.commit === 'string' ? result.commit.slice(0, 7) : ''
       const text = `Merged as ${commitShort}.`
       setMergeSuccessByLane((prev) => ({ ...prev, [confirmTarget.lane]: text }))
