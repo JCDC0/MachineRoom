@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { appendFileSync, cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -178,6 +178,7 @@ describe('review routes on another project', () => {
       files: 1,
       added: 1,
       deleted: 0,
+      checks: 'unchecked',
       lastRun: null,
     })
     expect(entry.head).toBe(git(worktree, ['rev-parse', 'HEAD']).trim())
@@ -187,14 +188,125 @@ describe('review routes on another project', () => {
   }, 40000)
 
   it('reads the last run from the bridge runs folder', async () => {
-    const { project, briefsDir } = makeProject()
+    const { project, worktree, briefsDir } = makeProject()
     const runs = join(project, '..', 'runs')
     mkdirSync(runs, { recursive: true })
-    writeFileSync(join(runs, 'runs.jsonl'), `${JSON.stringify({ lane: 'opencode', briefs: [], startedAt: '2026-11-04T00:00:00.000Z', exitCode: 0 })}
+    writeFileSync(join(runs, 'runs.jsonl'), `${JSON.stringify({ lane: 'opencode', project: worktree, briefs: [], startedAt: '2026-11-04T00:00:00.000Z', exitCode: 0 })}
 `)
     const { url } = await startBridge({ projectRoot: project, briefsDir })
     const { lanes } = await (await fetch(`${url}/api/control/reviews`)).json()
     expect(lanes[0].lastRun).toMatchObject({ lane: 'opencode', startedAt: '2026-11-04T00:00:00.000Z' })
+  }, 40000)
+
+  it('matches lastRun by project when two projects share one lane and counts brief runs for MachineRoom only', async () => {
+    const { base, room, project, worktree, briefsDir } = makeProject()
+    const projectB = join(base, 'project-b')
+    const worktreeB = join(projectB, '.worktrees', 'opencode')
+    const roomWorktree = join(base, 'room-wt')
+    cpSync(templateProject, projectB, { recursive: true })
+    writeFileSync(join(projectB, '.git', 'info', 'exclude'), '/.worktrees/\n')
+    git(projectB, ['worktree', 'add', worktreeB, 'feat/x'])
+    writeFileSync(
+      join(briefsDir, 'lanes.json'),
+      JSON.stringify({ opencode: { name: 'OpenCode', worktree: roomWorktree } })
+    )
+    git(room, ['add', 'docs/agents/lanes.json'])
+    git(room, ['commit', '-m', 'set lane worktree'])
+    git(room, ['worktree', 'add', '-b', 'feat/room-work', roomWorktree, 'main'])
+
+    const runs = join(base, 'runs')
+    mkdirSync(runs, { recursive: true })
+    const runA = { lane: 'opencode', project: worktree, briefs: [], startedAt: '2026-11-04T00:00:00.000Z', exitCode: 0 }
+    const briefRun = { lane: 'opencode', briefs: ['P177'], startedAt: '2026-11-05T00:00:00.000Z', exitCode: 0 }
+    const runB = { lane: 'opencode', project: worktreeB, briefs: [], startedAt: '2026-11-06T00:00:00.000Z', exitCode: 0 }
+    writeFileSync(
+      join(runs, 'runs.jsonl'),
+      `${[runA, briefRun, runB].map((entry) => JSON.stringify(entry)).join('\n')}\n`
+    )
+
+    const a = await startBridge({ projectRoot: project, briefsDir })
+    const b = await startBridge({ projectRoot: projectB, briefsDir })
+    const r = await startBridge({ projectRoot: room, briefsDir })
+
+    const reviewsA = await (await fetch(`${a.url}/api/control/reviews`)).json()
+    const reviewsB = await (await fetch(`${b.url}/api/control/reviews`)).json()
+    const reviewsRoom = await (await fetch(`${r.url}/api/control/reviews`)).json()
+
+    expect(reviewsA.lanes[0].lastRun).toMatchObject({ startedAt: runA.startedAt })
+    expect(reviewsB.lanes[0].lastRun).toMatchObject({ startedAt: runB.startedAt })
+    expect(reviewsRoom.lanes[0].lastRun).toMatchObject({ briefs: ['P177'], startedAt: briefRun.startedAt })
+
+    writeFileSync(join(roomWorktree, 'room-file.txt'), 'room change\n')
+    git(roomWorktree, ['add', 'room-file.txt'])
+    git(roomWorktree, ['commit', '-m', 'room lane work'])
+    const roomLaneHead = git(roomWorktree, ['rev-parse', 'HEAD']).trim()
+    const roomMainHead = git(room, ['rev-parse', 'refs/heads/main']).trim()
+    appendFileSync(
+      join(runs, 'runs.jsonl'),
+      `${JSON.stringify({ lane: 'opencode', head: roomLaneHead, tests: 'failed', startedAt: '2026-11-07T00:00:00.000Z', exitCode: 1 })}\n`
+    )
+    const roomRefused = await mergeRequest(r.url, 'opencode', {
+      confirmed: true,
+      head: roomLaneHead,
+      base: 'main',
+      baseHead: roomMainHead,
+      message: 'Merge opencode',
+    })
+    expect(roomRefused.status).toBe(409)
+    expect((await roomRefused.json()).error).toBe('Checks failed on this head, so the lane was not merged.')
+    expect(git(room, ['rev-parse', 'refs/heads/main']).trim()).toBe(roomMainHead)
+  }, 40000)
+
+  it('reports passed, failed and unchecked for the exact head and refuses a failed head merge', async () => {
+    const { base, project, worktree, briefsDir } = makeProject()
+    const runs = join(base, 'runs')
+    mkdirSync(runs, { recursive: true })
+    const trunkStart = git(project, ['rev-parse', 'refs/heads/trunk']).trim()
+    const head1 = git(worktree, ['rev-parse', 'HEAD']).trim()
+    const { url } = await startBridge({ projectRoot: project, briefsDir })
+
+    const addRun = (entry) => {
+      appendFileSync(join(runs, 'runs.jsonl'), `${JSON.stringify(entry)}\n`)
+    }
+
+    addRun({ lane: 'opencode', project: worktree, head: head1, tests: 'none', exitCode: 0, startedAt: '2026-11-05T00:00:00.000Z' })
+    expect((await (await fetch(`${url}/api/control/reviews`)).json()).lanes[0].checks).toBe('unchecked')
+
+    addRun({ lane: 'opencode', project: worktree, head: head1, exitCode: 0, startedAt: '2026-11-05T00:01:00.000Z' })
+    expect((await (await fetch(`${url}/api/control/reviews`)).json()).lanes[0].checks).toBe('unchecked')
+
+    addRun({ lane: 'opencode', project: worktree, head: '0'.repeat(40), tests: 'passed', exitCode: 0, startedAt: '2026-11-05T00:02:00.000Z' })
+    expect((await (await fetch(`${url}/api/control/reviews`)).json()).lanes[0].checks).toBe('unchecked')
+
+    addRun({ lane: 'opencode', project: worktree, head: head1, tests: 'failed', exitCode: 1, startedAt: '2026-11-05T00:03:00.000Z' })
+    expect((await (await fetch(`${url}/api/control/reviews`)).json()).lanes[0].checks).toBe('failed')
+
+    const refused = await mergeRequest(url, 'opencode', { confirmed: true, head: head1, base: 'trunk', baseHead: trunkStart })
+    expect(refused.status).toBe(409)
+    expect((await refused.json()).error).toBe('Checks failed on this head, so the lane was not merged.')
+    expect(git(project, ['rev-parse', 'refs/heads/trunk']).trim()).toBe(trunkStart)
+
+    writeFileSync(join(worktree, 'second.js'), 'export const second = 2\n')
+    git(worktree, ['add', 'second.js'])
+    git(worktree, ['commit', '-m', 'second commit'])
+    const head2 = git(worktree, ['rev-parse', 'HEAD']).trim()
+    addRun({ lane: 'opencode', project: worktree, head: head2, tests: 'none', exitCode: 0, startedAt: '2026-11-05T00:04:00.000Z' })
+    expect((await (await fetch(`${url}/api/control/reviews`)).json()).lanes[0].checks).toBe('unchecked')
+    const uncheckedOk = await mergeRequest(url, 'opencode', { confirmed: true, head: head2, base: 'trunk', baseHead: trunkStart })
+    expect(uncheckedOk.status).toBe(200)
+    expect(git(project, ['rev-parse', 'refs/heads/trunk']).trim()).toBe(head2)
+
+    writeFileSync(join(worktree, 'more.js'), 'export const more = 3\n')
+    git(worktree, ['add', 'more.js'])
+    git(worktree, ['commit', '-m', 'third commit'])
+    const head3 = git(worktree, ['rev-parse', 'HEAD']).trim()
+    expect((await (await fetch(`${url}/api/control/reviews`)).json()).lanes[0].checks).toBe('unchecked')
+
+    addRun({ lane: 'opencode', project: worktree, head: head3, tests: 'passed', exitCode: 0, startedAt: '2026-11-05T00:05:00.000Z' })
+    expect((await (await fetch(`${url}/api/control/reviews`)).json()).lanes[0].checks).toBe('passed')
+    const passedOk = await mergeRequest(url, 'opencode', { confirmed: true, head: head3, base: 'trunk', baseHead: head2 })
+    expect(passedOk.status).toBe(200)
+    expect(git(project, ['rev-parse', 'refs/heads/trunk']).trim()).toBe(head3)
   }, 40000)
 
   it('answers the diff of the lane against the project branch', async () => {
