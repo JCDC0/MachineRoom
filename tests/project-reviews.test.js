@@ -309,6 +309,86 @@ describe('review routes on another project', () => {
     expect(git(project, ['rev-parse', 'refs/heads/trunk']).trim()).toBe(head3)
   }, 40000)
 
+  it('keeps a failed or passed check when an untested retry follows and refuses both merge paths', async () => {
+    const { base, room, project, worktree, briefsDir } = makeProject()
+    const roomWorktree = join(base, 'room-wt')
+    writeFileSync(
+      join(briefsDir, 'lanes.json'),
+      JSON.stringify({ opencode: { name: 'OpenCode', worktree: roomWorktree } })
+    )
+    git(room, ['add', 'docs/agents/lanes.json'])
+    git(room, ['commit', '-m', 'set lane worktree'])
+    git(room, ['worktree', 'add', '-b', 'feat/room-work', roomWorktree, 'main'])
+    writeFileSync(join(roomWorktree, 'room-file.txt'), 'room change\n')
+    git(roomWorktree, ['add', 'room-file.txt'])
+    git(roomWorktree, ['commit', '-m', 'room lane work'])
+
+    const runs = join(base, 'runs')
+    mkdirSync(runs, { recursive: true })
+    const trunkStart = git(project, ['rev-parse', 'refs/heads/trunk']).trim()
+    const projectHead = git(worktree, ['rev-parse', 'HEAD']).trim()
+    const roomHead = git(roomWorktree, ['rev-parse', 'HEAD']).trim()
+    const roomMainStart = git(room, ['rev-parse', 'refs/heads/main']).trim()
+
+    writeFileSync(
+      join(runs, 'runs.jsonl'),
+      `${[
+        { lane: 'opencode', project: worktree, head: projectHead, tests: 'failed', exitCode: 1, startedAt: '2026-11-05T00:00:00.000Z' },
+        { lane: 'opencode', project: worktree, head: projectHead, retried: true, exitCode: 1, startedAt: '2026-11-05T00:01:00.000Z' },
+        { lane: 'opencode', project: worktree, head: projectHead, tests: 'none', exitCode: 0, startedAt: '2026-11-05T00:02:00.000Z' },
+        { lane: 'opencode', head: roomHead, tests: 'failed', exitCode: 1, startedAt: '2026-11-06T00:00:00.000Z' },
+        { lane: 'opencode', head: roomHead, retried: true, exitCode: 1, startedAt: '2026-11-06T00:01:00.000Z' },
+      ].map((entry) => JSON.stringify(entry)).join('\n')}\n`
+    )
+
+    const ffBridge = await startBridge({ projectRoot: project, briefsDir })
+    const ffReviews = await (await fetch(`${ffBridge.url}/api/control/reviews`)).json()
+    expect(ffReviews.lanes[0].strategy).toBe('fast-forward')
+    expect(ffReviews.lanes[0].checks).toBe('failed')
+    expect(ffReviews.lanes[0].lastRun).toMatchObject({ startedAt: '2026-11-05T00:02:00.000Z' })
+
+    const ffRefused = await mergeRequest(ffBridge.url, 'opencode', {
+      confirmed: true,
+      head: projectHead,
+      base: 'trunk',
+      baseHead: trunkStart,
+    })
+    expect(ffRefused.status).toBe(409)
+    expect((await ffRefused.json()).error).toBe('Checks failed on this head, so the lane was not merged.')
+    expect(git(project, ['rev-parse', 'refs/heads/trunk']).trim()).toBe(trunkStart)
+
+    const mcBridge = await startBridge({ projectRoot: room, briefsDir })
+    const mcReviews = await (await fetch(`${mcBridge.url}/api/control/reviews`)).json()
+    expect(mcReviews.lanes[0].strategy).toBe('merge-commit')
+    expect(mcReviews.lanes[0].checks).toBe('failed')
+    expect(mcReviews.lanes[0].lastRun).toMatchObject({ startedAt: '2026-11-06T00:01:00.000Z' })
+
+    const mcRefused = await mergeRequest(mcBridge.url, 'opencode', {
+      confirmed: true,
+      head: roomHead,
+      base: 'main',
+      baseHead: roomMainStart,
+      message: 'Merge opencode',
+    })
+    expect(mcRefused.status).toBe(409)
+    expect((await mcRefused.json()).error).toBe('Checks failed on this head, so the lane was not merged.')
+    expect(git(room, ['rev-parse', 'refs/heads/main']).trim()).toBe(roomMainStart)
+
+    writeFileSync(join(worktree, 'passed.js'), 'export const passed = true\n')
+    git(worktree, ['add', 'passed.js'])
+    git(worktree, ['commit', '-m', 'passed commit'])
+    const passedHead = git(worktree, ['rev-parse', 'HEAD']).trim()
+    appendFileSync(
+      join(runs, 'runs.jsonl'),
+      `${[
+        { lane: 'opencode', project: worktree, head: passedHead, tests: 'passed', exitCode: 0, startedAt: '2026-11-05T00:03:00.000Z' },
+        { lane: 'opencode', project: worktree, head: passedHead, retried: true, exitCode: 1, startedAt: '2026-11-05T00:04:00.000Z' },
+      ].map((entry) => JSON.stringify(entry)).join('\n')}\n`
+    )
+    const afterPass = await (await fetch(`${ffBridge.url}/api/control/reviews`)).json()
+    expect(afterPass.lanes[0].checks).toBe('passed')
+  }, 40000)
+
   it('answers the diff of the lane against the project branch', async () => {
     const { project, briefsDir } = makeProject()
     const { url } = await startBridge({ projectRoot: project, briefsDir })

@@ -356,7 +356,10 @@ export function createReviewsApi({
     const key = typeof head === 'string' ? head.trim().toLowerCase() : ''
     if (!HEAD_PATTERN.test(key)) return 'unchecked'
     const matches = projectRunsFor(lane, worktree, runs).filter(
-      (record) => typeof record.head === 'string' && record.head.trim().toLowerCase() === key
+      (record) =>
+        typeof record.head === 'string' &&
+        record.head.trim().toLowerCase() === key &&
+        (record.tests === 'passed' || record.tests === 'failed')
     )
     const latest = newestRecord(matches)
     if (latest?.tests === 'passed') return 'passed'

@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Review checks keep the newest passed or failed result for a head across untested runs, and a failed queue task with uncommitted edits records no head, so a good earlier commit stays mergeable (P188).
 - A reconnect resets when any frame between its cursor and the newest is missing, and a reset replays the kept history once in order, so a running agent is not left queued (P191).
 - A forgotten Claude session keeps its run number, so an append after it was forgotten reaches the room as a new run (P190).
 - A lane log that cannot be written and a run record that cannot be saved each print one sentence, the runner exits non-zero for a lost record, and the chat says when its run record was not saved (P184).
@@ -10,6 +11,8 @@
 - Every bridge stream write goes through one helper that ends a client whose pending output already passed 8 MB; one large write to a client that keeps up is not cut (P185).
 - The session recorder clears each dropped slot, so a trimmed frame is freed at once while the batched compaction stays (P189).
 - A forgotten Claude session keeps its run number, so an append after eviction continues at the next run and the live pipeline shows its new tool call (P190).
+- Review checks keep the newest passed or failed result across untested runs, and both merge paths keep refusing a failed head (P188).
+- Failed queue tasks whose working tree differs from HEAD keep `tests: 'failed'` and omit `head`, so discarding their edits leaves the prior passing commit mergeable (P188).
 - Review 25 reads the readiness merges: six findings, briefed as P188 to P191 (P187).
 - The full suite passed on the readiness merges: 275 files, 4976 tests passed, 4 skipped (P186).
 - Every bridge stream write checks the response's pending bytes, and a client past 8 MB is ended and dropped while the other clients keep their frames (P185).
