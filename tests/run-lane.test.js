@@ -2705,3 +2705,115 @@ describe('run-lane session attribution', () => {
     }
   })
 })
+
+describe('project paths in run-lane output', { timeout: 30000 }, () => {
+  const FAKE_LANE = fileURLToPath(new URL('fixtures/fake-lane.cjs', import.meta.url))
+
+  function gitIn(folder, args) {
+    const result = spawnSync(gitPath(), ['-c', 'user.name=MachineRoom Test', '-c', 'user.email=test@example.invalid', '-c', 'commit.gpgsign=false', ...args], {
+      cwd: folder,
+      encoding: 'utf8',
+      windowsHide: true,
+    })
+    if (result.error) throw result.error
+    if (result.status !== 0) throw new Error(`git ${args.join(' ')} failed: ${String(result.stderr ?? '').trim()}`)
+    return String(result.stdout ?? '').trim()
+  }
+
+  function setupMaskedProject(base) {
+    const profile = join(base, 'profile')
+    const runs = join(base, 'runs')
+    mkdirSync(profile, { recursive: true })
+    mkdirSync(runs, { recursive: true })
+    const lanesFile = join(base, 'lanes.json')
+    writeFileSync(lanesFile, `${JSON.stringify({
+      opencode: {
+        name: 'Fake lane',
+        cli: { harness: 'opencode', bin: process.execPath, model: 'opencode/fake' },
+      },
+    }, null, 2)}\n`)
+    const env = {
+      MACHINEROOM_LANES_FILE: lanesFile,
+      MACHINEROOM_RUNS: runs,
+      TEMP: base,
+      TMP: base,
+      HOME: profile,
+      ...(process.platform === 'win32' ? { USERPROFILE: profile } : {}),
+      GIT_AUTHOR_NAME: 'MachineRoom Test',
+      GIT_AUTHOR_EMAIL: 'test@example.invalid',
+      GIT_COMMITTER_NAME: 'MachineRoom Test',
+      GIT_COMMITTER_EMAIL: 'test@example.invalid',
+    }
+    const label = process.platform === 'win32' ? '%USERPROFILE%' : '~'
+    return { profile, runs, env, shown: (path) => `${label}${path.slice(profile.length)}` }
+  }
+
+  it('masks a missing project folder below a profile folder', async () => {
+    const base = makeTempDir('machine-room-missing-project-mask-')
+    try {
+      const { profile, env, shown } = setupMaskedProject(base)
+      const project = join(profile, 'missing')
+      const result = await runLane(['opencode', '--project', project, '--task', 'Fix it.'], env)
+      expect(result.code, result.stdout + result.stderr).toBe(1)
+      expect(result.stderr).toContain(`The project folder ${shown(project)} does not exist.`)
+      expect(result.stderr).not.toContain(project)
+    } finally {
+      rmSync(base, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+    }
+  })
+
+  it('masks a file that is not a project folder below a profile folder', async () => {
+    const base = makeTempDir('machine-room-not-folder-mask-')
+    try {
+      const { profile, env, shown } = setupMaskedProject(base)
+      const project = join(profile, 'notes.txt')
+      writeFileSync(project, 'not a folder\n')
+      const result = await runLane(['opencode', '--project', project, '--task', 'Fix it.'], env)
+      expect(result.code, result.stdout + result.stderr).toBe(1)
+      expect(result.stderr).toContain(`The project folder ${shown(project)} is not a folder.`)
+      expect(result.stderr).not.toContain(project)
+    } finally {
+      rmSync(base, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+    }
+  })
+
+  it('masks a project folder that is not a git folder below a profile folder', async () => {
+    const base = makeTempDir('machine-room-not-git-mask-')
+    try {
+      const { profile, env, shown } = setupMaskedProject(base)
+      const project = join(profile, 'plain')
+      mkdirSync(project)
+      const queue = join(base, 'queue.txt')
+      writeFileSync(queue, 'Write the lane note.\n')
+      const result = await runLane(['opencode', '--project', project, '--queue', queue], env)
+      expect(result.code, result.stdout + result.stderr).toBe(1)
+      expect(result.stderr).toContain(`The project folder ${shown(project)} is not a git folder. A queue needs one.`)
+      expect(result.stderr).not.toContain(project)
+    } finally {
+      rmSync(base, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+    }
+  })
+
+  it('masks the worktree path in a finished queue summary', async () => {
+    const base = makeTempDir('machine-room-queue-summary-mask-')
+    try {
+      const { profile, env, shown } = setupMaskedProject(base)
+      const project = join(profile, 'Other')
+      mkdirSync(project)
+      gitIn(project, ['init', '-q', '-b', 'main'])
+      writeFileSync(join(project, 'readme.txt'), 'start\n')
+      copyFileSync(FAKE_LANE, join(project, 'run'))
+      gitIn(project, ['add', '-A'])
+      gitIn(project, ['commit', '-q', '-m', 'Start the project'])
+      const queue = join(base, 'queue.txt')
+      writeFileSync(queue, 'Write the lane note.\n')
+      const result = await runLane(['opencode', '--project', project, '--queue', queue, '--worktree'], env)
+      expect(result.code, result.stdout + result.stderr).toBe(0)
+      const worktree = join(project, '.worktrees', 'opencode')
+      expect(result.stdout).toContain(`The worktree ${shown(worktree)} stays on`)
+      expect(result.stdout).not.toContain(worktree)
+    } finally {
+      rmSync(base, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+    }
+  })
+})
