@@ -433,6 +433,47 @@ describe('the control client contract', () => {
     })
   })
 
+  it('reads one run conversation on the bridge and the mock', async () => {
+    const startedAt = '2026-10-24T12:00:00.000Z'
+    const { client } = await makeHarness({
+      records: [{ ...record('opencode', ['B6'], { task: 'Read the notes.' }), startedAt }],
+    })
+    const listed = await client.runs()
+    const item = listed.recent.find((entry) => entry.lane === 'opencode')
+    writeFileSync(
+      item.log,
+      `${[
+        JSON.stringify({
+          type: 'tool_use',
+          part: { id: 'call_1', tool: 'read', state: { status: 'completed', input: { path: 'notes.txt' } } },
+        }),
+        JSON.stringify({ type: 'text', part: { text: 'The notes are short.' } }),
+        JSON.stringify({ type: 'step_finish', part: { reason: 'stop' } }),
+      ].join('\n')}\n`
+    )
+
+    const conversation = await client.runConversation({ lane: 'opencode', startedAt })
+    expect(conversation).toMatchObject({ lane: 'opencode', startedAt, harness: 'opencode', running: false })
+    expect(conversation.entries[0]).toMatchObject({ role: 'prompt', text: 'Read the notes.' })
+    expect(conversation.entries.filter((entry) => entry.role === 'tool').map((entry) => entry.text)).toEqual([
+      'read notes.txt',
+    ])
+    await expect(client.runConversation({ lane: 'opencode', startedAt: '2020-01-01T00:00:00.000Z' })).rejects.toThrow(
+      'No run of that lane started at that time.'
+    )
+
+    const mock = createMockClient({ latencyMs: 0, runMs: 1000 })
+    const mockRun = await mock.startRun('opencode', ['B6'])
+    const mockConversation = await mock.runConversation({ lane: 'opencode', startedAt: mockRun.startedAt })
+    expect(mockConversation).toMatchObject({ lane: 'opencode', startedAt: mockRun.startedAt, harness: 'opencode' })
+    expect(mockConversation.entries.map((entry) => entry.role)).toContain('prompt')
+    expect(mockConversation.entries.map((entry) => entry.role)).toContain('tool')
+    await expect(mock.runConversation({ lane: 'opencode', startedAt: '2020-01-01T00:00:00.000Z' })).rejects.toThrow(
+      'No run of that lane started at that time.'
+    )
+    await mock.stopRun({ lane: 'opencode', startedAt: mockRun.startedAt, confirmed: true })
+  })
+
   it('asks the planner and reads the plan through the lane records only', async () => {
     const { client } = await makeHarness()
     await expect(client.askPlanner('Split the work into briefs.')).rejects.toThrow(PLAN_REFUSAL)

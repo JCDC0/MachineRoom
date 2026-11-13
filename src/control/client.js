@@ -192,6 +192,12 @@ export function createClient({
 
     runs: () => request('GET', '/api/control/runs'),
 
+    runConversation: ({ lane = '', startedAt = '' } = {}) =>
+      request(
+        'GET',
+        `/api/control/runs/conversation?lane=${encodeURIComponent(lane)}&startedAt=${encodeURIComponent(startedAt)}`
+      ),
+
     runStats: ({ since } = {}) => {
       const query = since ? `?since=${encodeURIComponent(since)}` : ''
       return request('GET', `/api/control/runs/stats${query}`)
