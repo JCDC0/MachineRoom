@@ -1,0 +1,27 @@
+# Test audit, November 2026
+
+Read `git log --first-parent --oneline 1bb54a0f..HEAD`: 61 commits, 34 of them changed a test file. Scanned the test changes for all 34 commits and read the bodies of the tests that looked weak. Undo proofs ran in a throwaway copy of `HEAD` under `%TEMP%`, with the worktree's `node_modules` linked in. No proof changed the worktree.
+
+| Test file and name | Why it cannot fail | How proved | Smallest real assertion |
+| --- | --- | --- | --- |
+| `tests/storage.test.js`: archives exact previewed files into archive/YYYY-MM, keeps everything else, and moves nothing a second time | The test passes every name the preview returned as `files: previewNames`. If `applyStorageArchive` ignored the request and moved every preview file, the count, the bytes and the moved names would all still match. The expected count and bytes are the preview's own values. | Proved. In the scratch copy, changed `toMove` to `preview.files`, so `requestedSet` was ignored. The test passed: 1 passed, 12 skipped. | Pass one preview name, expect `moved` to hold only that name and `count` to be 1, then assert the other preview files still exist in the runs folder. |
+| `tests/project-dispatch.test.js`: passes the saved check command to the queue as --test | The bridge is started with `runnerCommand` pointing at `writeRunner`, a fake that writes `process.argv` to a file. The test never starts `scripts/run-lane.mjs` and never calls `parseRunArgs`. A real runner that rejects `--test` still passes. | Proved. In the scratch copy, made the `--test` branch of `parseRunArgs` in `src/briefs/run.js` throw `--test is not supported.`. The test passed: 1 passed, 35 skipped. | Start the real runner once on a scratch project with `--test` and a fake lane, or assert `parseRunArgs` returns the command for the flag in this test as well as in `tests/run-project.test.js`. |
+| `tests/machine-doctor.test.js`: passes the folder, git, the runs folder and the lane programs; checks the runs folder MACHINEROOM_RUNS names; fails a project path that is a file; fails when the built viewer is missing and names the build command; fails a lane program that was not found; fails a runs path that is a file; takes the folder first and ends without a warning inside a git repository; stops after a failed project folder so that one block is the last line | Each expected path is built with `printedRunsFolder(...)`, the same helper the doctor uses to print the line. When the helper returns its input, the expected string and the printed string agree. | Proved. In the scratch copy, changed `printedRunsFolder` to return `String(folder ?? '')`. Of 37 tests, 36 passed; the only failure was masks the profile folder in every path it prints. | Assert the literal mask, or assert `not.toContain(profile)`, as the mask test does. For example expect the line to contain `%USERPROFILE%` or `%TEMP%`, not the profile string built by the test. |
+| `tests/project-dispatch.test.js`: chooses the sentence from lanes mode and the code lanes; says a room without --lanes starts runs from one; says a lanes room has no code lane | The expected sentences are the constants `NO_LANES_FORM_LINE` and `NO_CODE_LANE_FORM_LINE`, imported from the module under test. The tests never assert the words. If both constants held the same wrong sentence, every assertion would pass and both rooms would show the same message. | Proved. In the scratch copy, set both constants to `Same sentence.`. The whole describe passed: 4 passed, 32 skipped. | Assert both literals once, for example `expect(NO_LANES_FORM_LINE).toBe('Runs start from a room opened with --lanes: npm run serve -- up --lanes.')` and the matching sentence for `NO_CODE_LANE_FORM_LINE`. |
+
+## Checked and held
+
+These tests did have a way to fail.
+
+- `tests/run-worktree.test.js`: runs --test after the task and records that it passed. It starts the real `runLane`, runs a real `npm test` script that writes `check-ran.txt`, and checks the record. This is the integration cover the P224 fake runner test lacks.
+- `tests/tree-read.test.js`: reads again by itself and clears the health problem, with no file event or tree GET. It advances fake timers, reads the real bridge health, and asserts the new file arrives and `reads` reaches 2.
+- `tests/paths.test.js`: the P228 tests pass paths outside the project and assert `null`, or a repeated root name and assert the relative path. They do not echo a value the test built.
+- `tests/storage.test.js`: keeps at most 64 lstat calls in flight. A sequential walk would give `maxInFlight` 1 and fail the `STAT_CONCURRENCY` assertion.
+- `tests/session-recorder.test.js`: gives two tool calls when one recorder keeps six frames from two reader lifetimes. It asserts two distinct run ids, so a constant salt fails.
+
+## What this audit did not do
+
+- Did not run the full suite. The house rules reserve it for the orchestrator.
+- Did not change a test. The smallest assertions above are proposals, not edits.
+- Did not prove the doctor row by reverting the whole P233 commit. The proof reverts only the masking helper, which is the part the circular assertions cannot see.
+- Did not check the tests by eye in a browser.
