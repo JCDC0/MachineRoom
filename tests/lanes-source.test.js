@@ -1062,6 +1062,163 @@ describe('the idle lane source', () => {
     expect(source.agents.map((agent) => agent.key)).toContain('opencode2')
     expect(reads).toBe(2)
   })
+
+  it('drops an old finished log from the watched set after an hour without growth and picks it up when it grows', () => {
+    const base = tempDir()
+    const runs = join(base, 'runs')
+    mkdirSync(runs, { recursive: true })
+    const worktree = join(base, 'MachineRoom-opencode3')
+    const lanes = lanesFor({ opencode: worktree })
+    const logPath = join(runs, 'opencode-S6a-20261024-170000.log')
+    writeFileSync(logPath, `${toolLine(`${worktree}\\src\\old.js`, { id: 'old' })}\n`)
+    let current = Date.now()
+    const past = new Date(current - 120000)
+    utimesSync(logPath, past, past)
+    writeFileSync(join(runs, 'runs.jsonl'), `${JSON.stringify({ lane: 'opencode', log: logPath, exitCode: 0, killed: false })}\n`)
+
+    const stats = []
+    const frames = []
+    const source = createLanesSource({
+      folder: runs,
+      lanes,
+      quietMs: 600000,
+      pollMs: 20,
+      scanMs: 2000,
+      laggingPollMs: 10000,
+      now: () => current,
+      statFile: (path) => {
+        stats.push(path)
+        return statSync(path)
+      },
+      watchFolder: quietWatch(() => {}),
+      onFrame: (frame) => frames.push(frame),
+    })
+    cleanups.push(() => source.stop())
+    source.start()
+
+    current += 10000
+    source.tick()
+    expect(stats).toEqual([logPath])
+    expect(frames).toEqual([])
+
+    current += 60 * 60 * 1000
+    source.tick()
+    stats.length = 0
+
+    for (let index = 0; index < 5; index += 1) {
+      current += 10000
+      source.tick()
+    }
+    expect(stats).toEqual([])
+
+    appendFileSync(logPath, `${toolLine(`${worktree}\\src\\new.js`, { id: 'new' })}\n`)
+    current += 5000
+    source.tick()
+    expect(frames).toEqual([])
+
+    current += 5000
+    source.tick()
+    expect(logFrames(frames)).toHaveLength(2)
+    expect(endFrame(frames).payload).toMatchObject({ status: 'succeeded', error: null })
+  })
+
+  it('keeps an old startup log without a record in the watched set past an hour until a record arrives', () => {
+    const base = tempDir()
+    const runs = join(base, 'runs')
+    mkdirSync(runs, { recursive: true })
+    const worktree = join(base, 'MachineRoom-opencode3')
+    const lanes = lanesFor({ opencode: worktree })
+    const logPath = join(runs, 'opencode-S6a-20261024-170500.log')
+    writeFileSync(logPath, `${toolLine(`${worktree}\\src\\old.js`, { id: 'old' })}\n`)
+    let current = Date.now()
+    const past = new Date(current - 2 * 60 * 60 * 1000)
+    utimesSync(logPath, past, past)
+
+    const stats = []
+    const source = createLanesSource({
+      folder: runs,
+      lanes,
+      quietMs: 600000,
+      pollMs: 20,
+      scanMs: 2000,
+      laggingPollMs: 10000,
+      now: () => current,
+      statFile: (path) => {
+        stats.push(path)
+        return statSync(path)
+      },
+      watchFolder: quietWatch(() => {}),
+    })
+    cleanups.push(() => source.stop())
+    source.start()
+
+    current += 10000
+    source.tick()
+    current += 10000
+    source.tick()
+    expect(stats).toEqual([logPath, logPath])
+
+    writeFileSync(join(runs, 'runs.jsonl'), `${JSON.stringify({ lane: 'opencode', log: logPath, exitCode: 0, killed: false })}\n`)
+    current += 10000
+    source.tick()
+    stats.length = 0
+
+    for (let index = 0; index < 3; index += 1) {
+      current += 10000
+      source.tick()
+    }
+    expect(stats).toEqual([])
+  })
+
+  it('drops an hour-old finished log at startup and picks it up on the next folder-change list when it grows', () => {
+    const base = tempDir()
+    const runs = join(base, 'runs')
+    mkdirSync(runs, { recursive: true })
+    const worktree = join(base, 'MachineRoom-opencode3')
+    const lanes = lanesFor({ opencode: worktree })
+    const logPath = join(runs, 'opencode-S6a-20261024-171000.log')
+    writeFileSync(logPath, `${toolLine(`${worktree}\\src\\old.js`, { id: 'old' })}\n`)
+    let current = Date.now()
+    const oldLogTime = new Date(current - 2 * 60 * 60 * 1000)
+    utimesSync(logPath, oldLogTime, oldLogTime)
+    writeFileSync(join(runs, 'runs.jsonl'), `${JSON.stringify({ lane: 'opencode', log: logPath, exitCode: 0, killed: false })}\n`)
+    const oldFolderTime = new Date(current - 10000)
+    utimesSync(runs, oldFolderTime, oldFolderTime)
+
+    const stats = []
+    const frames = []
+    const source = createLanesSource({
+      folder: runs,
+      lanes,
+      quietMs: 600000,
+      pollMs: 20,
+      scanMs: 2000,
+      laggingPollMs: 10000,
+      now: () => current,
+      statFile: (path) => {
+        stats.push(path)
+        return statSync(path)
+      },
+      watchFolder: quietWatch(() => {}),
+      onFrame: (frame) => frames.push(frame),
+    })
+    cleanups.push(() => source.stop())
+    source.start()
+
+    for (let index = 0; index < 3; index += 1) {
+      current += 10000
+      source.tick()
+    }
+    expect(stats).toEqual([])
+    expect(frames).toEqual([])
+
+    appendFileSync(logPath, `${toolLine(`${worktree}\\src\\reborn.js`, { id: 'reborn' })}\n`)
+    writeFileSync(join(runs, 'note.tmp'), '')
+    current += 2000
+    source.tick()
+    expect(logFrames(frames)).toHaveLength(2)
+    expect(endFrame(frames).payload).toMatchObject({ status: 'succeeded', error: null })
+  })
 })
 
 describe('the runs folder', () => {

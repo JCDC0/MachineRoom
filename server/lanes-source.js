@@ -19,6 +19,7 @@ const DEFAULT_POLL_MS = 200
 const DEFAULT_PRIME_MS = 60 * 1000
 const DEFAULT_SCAN_MS = 2000
 const DEFAULT_FULL_LIST_MS = 60 * 1000
+const DEFAULT_LAGGING_DROP_MS = 60 * 60 * 1000
 const READ_CHUNK = 64 * 1024
 const MAX_PARTIAL = 8 * 1024 * 1024
 const QUIET_KEPT = 50
@@ -375,6 +376,7 @@ export function createLanesSource(options = {}) {
   const pollMs = Number(options.pollMs ?? DEFAULT_POLL_MS)
   const scanMs = Number(options.scanMs ?? DEFAULT_SCAN_MS)
   const fullListMs = Number(options.fullListMs ?? DEFAULT_FULL_LIST_MS)
+  const laggingDropMs = Number(options.laggingDropMs ?? DEFAULT_LAGGING_DROP_MS)
   const primeMs = Number(options.primeMs ?? DEFAULT_PRIME_MS)
   const laggingPollMs = Number(options.laggingPollMs ?? 10000)
   const now = options.now ?? Date.now
@@ -390,6 +392,7 @@ export function createLanesSource(options = {}) {
   const quiet = new Map()
   const seen = new Set()
   const lagging = new Map()
+  const dropped = new Map()
   const pendingChecks = new Set()
   const recordsCache = createRecordsCache(recordsFile)
   let watcher = null
@@ -538,25 +541,53 @@ export function createLanesSource(options = {}) {
     const present = new Set()
     let agentMap = null
     const getAgentMap = () => (agentMap ??= new Map(allAgents().map((agent) => [agent.key, agent])))
+    let records = null
+    const getRecords = () => (records ??= recordsCache.read())
     for (const entry of entries) {
       if (!entry.isFile() || !entry.name.endsWith('.log')) continue
       const path = join(folder, entry.name)
       const key = pathKey(path)
       present.add(key)
       if (lagging.has(key)) continue
-      if (seen.has(key)) continue
-      if (!primed) {
+      if (dropped.has(key)) {
+        const info = dropped.get(key)
+        let size
         try {
-          const stat = statSync(path)
-          if (current - stat.mtimeMs > primeMs) {
-            lagging.set(key, { name: entry.name, path, size: stat.size, checkedAt: current })
+          size = statFile(path).size
+        } catch {
+          dropped.delete(key)
+          continue
+        }
+        if (size <= info.size) continue
+        dropped.delete(key)
+      } else {
+        if (seen.has(key)) continue
+        if (!primed) {
+          try {
+            const stat = statSync(path)
+            if (current - stat.mtimeMs > primeMs) {
+              if (current - stat.mtimeMs >= laggingDropMs && getRecords().has(key)) {
+                dropped.set(key, { size: stat.size })
+              } else {
+                lagging.set(key, {
+                  name: entry.name,
+                  path,
+                  size: stat.size,
+                  lastGrowth: stat.mtimeMs,
+                  checkedAt: current,
+                })
+              }
+              continue
+            }
+          } catch {
             continue
           }
-        } catch {
-          continue
         }
       }
       adoptLog(entry.name, path, getAgentMap)
+    }
+    for (const key of dropped.keys()) {
+      if (!present.has(key)) dropped.delete(key)
     }
     for (const key of lagging.keys()) {
       if (!present.has(key)) lagging.delete(key)
@@ -568,6 +599,8 @@ export function createLanesSource(options = {}) {
     const current = now()
     let agentMap = null
     const getAgentMap = () => (agentMap ??= new Map(allAgents().map((agent) => [agent.key, agent])))
+    let records = null
+    const getRecords = () => (records ??= recordsCache.read())
     for (const [key, info] of [...lagging.entries()]) {
       const isNamed = pendingChecks.has(key)
       const isTime = current - info.checkedAt >= laggingPollMs
@@ -581,9 +614,15 @@ export function createLanesSource(options = {}) {
         lagging.delete(key)
         continue
       }
-      if (size <= info.size) continue
-      lagging.delete(key)
-      adoptLog(info.name, info.path, getAgentMap)
+      if (size > info.size) {
+        lagging.delete(key)
+        adoptLog(info.name, info.path, getAgentMap)
+        continue
+      }
+      if (current - info.lastGrowth >= laggingDropMs && getRecords().has(key)) {
+        lagging.delete(key)
+        dropped.set(key, { size })
+      }
     }
   }
 
@@ -815,7 +854,7 @@ export function createLanesSource(options = {}) {
           const file = String(filename)
           const key = pathKey(join(folder, file))
           pendingChecks.add(key)
-          if (eventType === 'rename' && file.endsWith('.log') && !seen.has(key) && !lagging.has(key)) {
+          if (eventType === 'rename' && file.endsWith('.log') && !seen.has(key) && !lagging.has(key) && !dropped.has(key)) {
             listWanted = true
           }
         } else if (eventType === 'rename') {
@@ -844,6 +883,7 @@ export function createLanesSource(options = {}) {
     active.clear()
     quiet.clear()
     lagging.clear()
+    dropped.clear()
     seen.clear()
     sameRepo.clear()
     pendingChecks.clear()
