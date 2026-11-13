@@ -604,13 +604,18 @@ export function createClient({
     reviewDiff: (lane) =>
       request('GET', `/api/control/reviews/${encodeURIComponent(lane ?? '')}/diff`, undefined, REQUEST_LIMITS.reviewDiff),
 
-    mergeReview: (lane, { head, message } = {}) =>
-      request(
+    mergeReview: (lane, { head, base, baseHead, message } = {}) => {
+      const body = { confirmed: true, head }
+      if (base !== undefined) body.base = base
+      if (baseHead !== undefined) body.baseHead = baseHead
+      if (message !== undefined) body.message = message
+      return request(
         'POST',
         `/api/control/reviews/${encodeURIComponent(lane ?? '')}/merge`,
-        { confirmed: true, head, message },
+        body,
         REQUEST_LIMITS.mergeReview
-      ),
+      )
+    },
 
     askPlanner: (goal) => request('POST', '/api/control/plans', { goal, confirmed: true }, REQUEST_LIMITS.askPlanner),
 

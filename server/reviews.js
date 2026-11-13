@@ -343,17 +343,45 @@ export function createReviewsApi({
     return null
   }
 
+  function destinationMismatch(currentBranch, currentHead, expectedBase, expectedBaseHead) {
+    if (currentBranch !== expectedBase) {
+      if (!onProject && expectedBase === 'main') {
+        return 'The main checkout is not on main.'
+      }
+      const current = currentBranch || 'no branch'
+      return `The project is on ${current} now, not ${expectedBase}, so refresh reviews first.`
+    }
+    if (currentHead !== expectedBaseHead) {
+      return `The ${expectedBase} branch moved since you read it, so refresh reviews first.`
+    }
+    return ''
+  }
+
   async function projectBase() {
     try {
       const branch = (await runGit(resolvedRoot, ['symbolic-ref', '--short', 'HEAD'])).trim()
-      return branch ? { ref: `refs/heads/${branch}`, name: branch } : null
+      if (!branch) return null
+      const head = (await runGit(resolvedRoot, ['rev-parse', `refs/heads/${branch}`])).trim()
+      return head ? { ref: `refs/heads/${branch}`, name: branch, head } : null
     } catch {
       return null
     }
   }
 
+  async function mainBase() {
+    let head = ''
+    if (resolvedRoot && inGitWorkTree(resolvedRoot)) {
+      try {
+        head = (await runGit(resolvedRoot, ['rev-parse', MAIN_REF])).trim()
+      } catch {
+        head = ''
+      }
+    }
+    return { ...MAIN_BASE, head }
+  }
+
   async function baseFor() {
-    return onProject ? projectBase() : MAIN_BASE
+    return onProject ? projectBase() : mainBase()
   }
 
   async function laneReview(lane, worktree, base, runs = null) {
@@ -369,6 +397,8 @@ export function createReviewsApi({
       branch,
       head,
       base: base.name,
+      baseHead: base.head,
+      strategy: onProject ? 'fast-forward' : 'merge-commit',
       ahead: commits.length,
       commits: commits.slice(0, COMMIT_LIMIT),
       dirty: status.trim() !== '',
@@ -396,14 +426,16 @@ export function createReviewsApi({
     }
   }
 
-  async function mergeLane(lane, worktree, head, message) {
+  async function mergeLane(lane, worktree, head, message, expectedBase, expectedBaseHead) {
     if (!resolvedRoot) {
       return { status: 500, body: { error: 'The bridge could not read the main checkout.' } }
     }
 
     const mainBranch = (await runGit(resolvedRoot, ['branch', '--show-current'])).trim()
-    if (mainBranch !== 'main') {
-      return { status: 409, body: { error: 'The main checkout is not on main.' } }
+    const mainHead = mainBranch === 'main' ? (await runGit(resolvedRoot, ['rev-parse', 'HEAD'])).trim() : ''
+    const mismatch = destinationMismatch(mainBranch, mainHead, expectedBase, expectedBaseHead)
+    if (mismatch) {
+      return { status: 409, body: { error: mismatch } }
     }
     const mainStatus = await runGit(resolvedRoot, ['status', '--porcelain', '--untracked-files=no'])
     if (mainStatus.trim() !== '') {
@@ -500,7 +532,7 @@ export function createReviewsApi({
     return { status: 200, body: { ok: true, lane, branch, head: laneHead, commit } }
   }
 
-  async function fastForwardLane(lane, worktree, head) {
+  async function fastForwardLane(lane, worktree, head, expectedBase, expectedBaseHead) {
     if (!resolvedRoot) {
       return { status: 500, body: { error: 'The bridge could not read the project folder.' } }
     }
@@ -508,6 +540,10 @@ export function createReviewsApi({
     const base = await projectBase()
     if (!base) {
       return { status: 409, body: { error: 'The project is not on a branch.' } }
+    }
+    const mismatch = destinationMismatch(base.name, base.head, expectedBase, expectedBaseHead)
+    if (mismatch) {
+      return { status: 409, body: { error: mismatch } }
     }
     const projectStatus = await runGit(resolvedRoot, ['status', '--porcelain', '--untracked-files=no'])
     if (projectStatus.trim() !== '') {
@@ -605,16 +641,10 @@ export function createReviewsApi({
         sendJson(req, res, 404, { error: 'Choose a lane from the list.' })
         return true
       }
-      if (onProject && !existsSync(worktree)) {
+      if (!existsSync(worktree)) {
         sendJson(req, res, 404, { error: 'That worktree is missing.' })
         return true
       }
-      const base = await baseFor()
-      if (!base) {
-        sendJson(req, res, 409, { error: 'The project is not on a branch.' })
-        return true
-      }
-
       if (mergeRoute) {
         if (typeof readJsonBody !== 'function') {
           sendJson(req, res, 500, { error: 'The bridge cannot read a request body.' })
@@ -627,16 +657,33 @@ export function createReviewsApi({
           return true
         }
         const head = body.head
+        const baseName = body.base
+        const baseHead = body.baseHead
         const message = body.message
+        if (typeof head !== 'string' || !HEAD_PATTERN.test(head)) {
+          sendJson(req, res, 400, {
+            error: onProject
+              ? 'Send the lane head, destination branch and destination head you read.'
+              : 'Send the head you read and a message of one line.',
+          })
+          return true
+        }
         if (
-          typeof head !== 'string' ||
-          !HEAD_PATTERN.test(head) ||
-          typeof message !== 'string' ||
-          message.length < 1 ||
-          message.length > MESSAGE_LIMIT ||
-          /[\r\n]/.test(message)
+          !onProject &&
+          (typeof message !== 'string' || message.length < 1 || message.length > MESSAGE_LIMIT || /[\r\n]/.test(message))
         ) {
           sendJson(req, res, 400, { error: 'Send the head you read and a message of one line.' })
+          return true
+        }
+        if (
+          typeof baseName !== 'string' ||
+          baseName.trim().length < 1 ||
+          baseName.trim() !== baseName ||
+          /[\r\n]/.test(baseName) ||
+          typeof baseHead !== 'string' ||
+          !HEAD_PATTERN.test(baseHead)
+        ) {
+          sendJson(req, res, 400, { error: 'Send the destination branch and head you read.' })
           return true
         }
         if (merging) {
@@ -652,8 +699,8 @@ export function createReviewsApi({
         let answer
         try {
           answer = onProject
-            ? await fastForwardLane(lane, worktree, head)
-            : await mergeLane(lane, worktree, head, message)
+            ? await fastForwardLane(lane, worktree, head, baseName, baseHead)
+            : await mergeLane(lane, worktree, head, message, baseName, baseHead)
           if (answer.status === 200) {
             invalidateGitCache(resolvedRoot)
             notify({ topic: 'git' })
@@ -665,6 +712,12 @@ export function createReviewsApi({
           endRepoWrite(lockKey)
         }
         sendJson(req, res, answer.status, answer.body)
+        return true
+      }
+
+      const base = await baseFor()
+      if (!base) {
+        sendJson(req, res, 409, { error: 'The project is not on a branch.' })
         return true
       }
 

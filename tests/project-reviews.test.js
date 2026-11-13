@@ -168,6 +168,8 @@ describe('review routes on another project', () => {
       worktree,
       branch: 'feat/x',
       base: 'trunk',
+      baseHead: git(project, ['rev-parse', 'refs/heads/trunk']).trim(),
+      strategy: 'fast-forward',
       ahead: 1,
       dirty: false,
       files: 1,
@@ -212,7 +214,7 @@ describe('review routes on another project', () => {
     const oldBase = git(project, ['rev-parse', 'HEAD']).trim()
     const { url } = await startBridge({ projectRoot: project, briefsDir })
 
-    const res = await mergeRequest(url, 'opencode', { confirmed: true, head, message: 'Merge the lane' })
+    const res = await mergeRequest(url, 'opencode', { confirmed: true, head, base: 'trunk', baseHead: oldBase })
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({ ok: true, lane: 'opencode', branch: 'feat/x', head, commit: head })
     expect(git(project, ['rev-parse', 'HEAD']).trim()).toBe(head)
@@ -220,7 +222,7 @@ describe('review routes on another project', () => {
     expect(git(project, ['status', '--porcelain'])).toBe('')
     expect(existsSync(join(project, 'extra.js'))).toBe(true)
 
-    const again = await mergeRequest(url, 'opencode', { confirmed: true, head, message: 'Merge the lane' })
+    const again = await mergeRequest(url, 'opencode', { confirmed: true, head, base: 'trunk', baseHead: head })
     expect(again.status).toBe(409)
     expect(await again.json()).toEqual({ error: 'Nothing to merge.' })
     expect(git(project, ['rev-parse', 'HEAD']).trim()).toBe(head)
@@ -235,7 +237,12 @@ describe('review routes on another project', () => {
     const laneHead = git(worktree, ['rev-parse', 'HEAD']).trim()
     const { url } = await startBridge({ projectRoot: project, briefsDir })
 
-    const res = await mergeRequest(url, 'opencode', { confirmed: true, head: laneHead, message: 'Merge the lane' })
+    const res = await mergeRequest(url, 'opencode', {
+      confirmed: true,
+      head: laneHead,
+      base: 'trunk',
+      baseHead: projectHead,
+    })
     const answer = await res.json()
     expect(res.status, JSON.stringify(answer)).toBe(409)
     expect(answer).toEqual({
@@ -263,12 +270,20 @@ describe('review routes on another project', () => {
   it('fast-forwards a detached lane worktree, as a run-lane task makes it', async () => {
     const { project, worktree, briefsDir } = makeProject({ detach: true })
     const head = git(worktree, ['rev-parse', 'HEAD']).trim()
+    const trunkHead = git(project, ['rev-parse', 'refs/heads/trunk']).trim()
     const { url } = await startBridge({ projectRoot: project, briefsDir })
 
     const list = await fetch(`${url}/api/control/reviews`).then((r) => r.json())
-    expect(list.lanes[0]).toMatchObject({ lane: 'opencode', branch: '', base: 'trunk', ahead: 1 })
+    expect(list.lanes[0]).toMatchObject({
+      lane: 'opencode',
+      branch: '',
+      base: 'trunk',
+      baseHead: trunkHead,
+      strategy: 'fast-forward',
+      ahead: 1,
+    })
 
-    const res = await mergeRequest(url, 'opencode', { confirmed: true, head, message: 'Merge the lane' })
+    const res = await mergeRequest(url, 'opencode', { confirmed: true, head, base: 'trunk', baseHead: trunkHead })
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({ ok: true, lane: 'opencode', branch: '', head, commit: head })
     expect(git(project, ['rev-parse', 'HEAD']).trim()).toBe(head)
