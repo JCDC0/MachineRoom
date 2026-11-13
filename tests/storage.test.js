@@ -9,6 +9,9 @@ import {
   ARCHIVE_PATH_PROBLEM,
   CONFIRM_PROBLEM,
   DAYS_PROBLEM,
+  DESTINATION_EXISTS_REASON,
+  FILES_PROBLEM,
+  NOT_ELIGIBLE_REASON,
   ORIGIN_PROBLEM,
   STAT_CONCURRENCY,
   applyStorageArchive,
@@ -343,17 +346,20 @@ describe('server/storage', () => {
       'orphan-agents.json',
     ])
 
+    const previewNames = preview.files.map((item) => item.name)
     const archived = await applyStorageArchive({
       runsFolder: fixture.runs,
       projectRoot: fixture.project,
       days: 30,
+      files: previewNames,
       now: () => NOW_MS,
     })
 
     expect(archived.ok).toBe(true)
     expect(archived.count).toBe(preview.count)
     expect(archived.totalBytes).toBe(preview.totalBytes)
-    expect(archived.moved.map((item) => item.name).sort()).toEqual(preview.files.map((item) => item.name).sort())
+    expect(archived.moved.map((item) => item.name).sort()).toEqual(previewNames.slice().sort())
+    expect(archived.skipped).toEqual([])
 
     expect(existsSync(join(fixture.runs, 'agy-20260910-100000-001.log'))).toBe(false)
     expect(existsSync(join(fixture.runs, 'agy-20260910-100000-001.meta.json'))).toBe(false)
@@ -374,9 +380,17 @@ describe('server/storage', () => {
       runsFolder: fixture.runs,
       projectRoot: fixture.project,
       days: 30,
+      files: previewNames,
       now: () => NOW_MS,
     })
-    expect(second).toEqual({ ok: true, days: 30, count: 0, totalBytes: 0, moved: [] })
+    expect(second).toEqual({
+      ok: true,
+      days: 30,
+      count: 0,
+      totalBytes: 0,
+      moved: [],
+      skipped: previewNames.map((name) => ({ name, reason: NOT_ELIGIBLE_REASON })),
+    })
   })
 
   it('lists real clean merged worktrees via git without deleting them', async () => {
@@ -465,25 +479,58 @@ describe('server/storage', () => {
     expect(unconfirmed.status).toBe(400)
     expect(await unconfirmed.json()).toEqual({ error: CONFIRM_PROBLEM })
 
-    const archiveOk = await fetch(`${url}/api/storage/archive`, {
+    const missingFiles = await fetch(`${url}/api/storage/archive`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Origin: 'http://localhost:5173' },
       body: JSON.stringify({ days: 30, confirmed: true }),
+    })
+    expect(missingFiles.status).toBe(400)
+    expect(await missingFiles.json()).toEqual({ error: FILES_PROBLEM })
+
+    const emptyFiles = await fetch(`${url}/api/storage/archive`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Origin: 'http://localhost:5173' },
+      body: JSON.stringify({ days: 30, files: [], confirmed: true }),
+    })
+    expect(emptyFiles.status).toBe(400)
+    expect(await emptyFiles.json()).toEqual({ error: FILES_PROBLEM })
+
+    const badFiles = await fetch(`${url}/api/storage/archive`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Origin: 'http://localhost:5173' },
+      body: JSON.stringify({ days: 30, files: ['../escape.log'], confirmed: true }),
+    })
+    expect(badFiles.status).toBe(400)
+    expect(await badFiles.json()).toEqual({ error: FILES_PROBLEM })
+
+    const previewNames = previewBody.files.map((item) => item.name)
+    const archiveOk = await fetch(`${url}/api/storage/archive`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Origin: 'http://localhost:5173' },
+      body: JSON.stringify({ days: 30, files: previewNames, confirmed: true }),
     })
     expect(archiveOk.status).toBe(200)
     const archivedBody = await archiveOk.json()
     expect(archivedBody.ok).toBe(true)
     expect(archivedBody.count).toBe(1)
     expect(archivedBody.totalBytes).toBe(bytes)
+    expect(archivedBody.skipped).toEqual([])
     expect(existsSync(join(fixture.runs, 'archive', '2026-09', 'agy-20260915-100000-001.log'))).toBe(true)
 
     const secondArchive = await fetch(`${url}/api/storage/archive`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Origin: 'http://localhost:5173' },
-      body: JSON.stringify({ days: 30, confirmed: true }),
+      body: JSON.stringify({ days: 30, files: previewNames, confirmed: true }),
     })
     expect(secondArchive.status).toBe(200)
-    expect(await secondArchive.json()).toEqual({ ok: true, days: 30, count: 0, totalBytes: 0, moved: [] })
+    expect(await secondArchive.json()).toEqual({
+      ok: true,
+      days: 30,
+      count: 0,
+      totalBytes: 0,
+      moved: [],
+      skipped: previewNames.map((name) => ({ name, reason: NOT_ELIGIBLE_REASON })),
+    })
   })
 
   it('matches the sequential walk byte totals across nested folders and skipped symbolic links, and counts failed reads as 0', async () => {
@@ -647,9 +694,10 @@ describe('server/storage', () => {
         runsFolder: fixture.runs,
         projectRoot: fixture.project,
         days: 30,
+        files: ['agy-20260910-100000-001.log'],
         now: () => NOW_MS,
       })
-    ).rejects.toThrow('The archive folder must stay inside the runs folder.')
+    ).rejects.toThrow(ARCHIVE_PATH_PROBLEM)
 
     expect(existsSync(logPath)).toBe(true)
     expect(readFileSync(logPath, 'utf8')).toBe('keep-me-in-runs')
@@ -666,7 +714,7 @@ describe('server/storage', () => {
     const response = await fetch(`${url}/api/storage/archive`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Origin: 'http://localhost:5173' },
-      body: JSON.stringify({ days: 30, confirmed: true }),
+      body: JSON.stringify({ days: 30, files: ['agy-20260910-100000-001.log'], confirmed: true }),
     })
     expect(response.status).toBe(400)
     expect(await response.json()).toEqual({ error: ARCHIVE_PATH_PROBLEM })
@@ -687,6 +735,7 @@ describe('server/storage', () => {
         runsFolder: fixture.runs,
         projectRoot: fixture.project,
         days: 30,
+        files: ['agy-20260910-100000-001.log'],
         now: () => NOW_MS,
         realpathFn: async (targetPath) => {
           if (targetPath.endsWith('2026-09')) return outsideDir
@@ -725,9 +774,10 @@ describe('server/storage', () => {
         runsFolder: fixture.runs,
         projectRoot: fixture.project,
         days: 30,
+        files: ['agy-20260820-100000-001.log', 'agy-20260910-100000-001.log'],
         now: () => NOW_MS,
       })
-    ).rejects.toThrow('The archive folder must stay inside the runs folder.')
+    ).rejects.toThrow(ARCHIVE_PATH_PROBLEM)
 
     expect(existsSync(augLog)).toBe(true)
     expect(existsSync(sepLog)).toBe(true)
@@ -769,6 +819,7 @@ describe('server/storage', () => {
       runsFolder: fixture.runs,
       projectRoot: fixture.project,
       days: 30,
+      files: ['agy-20260911-100000-001.log'],
       now: () => NOW_MS,
       beforeMove: async (item) => {
         if (item.name === 'agy-20260911-100000-001.log') {
@@ -778,6 +829,9 @@ describe('server/storage', () => {
     })
     expect(archived.count).toBe(0)
     expect(archived.moved).toEqual([])
+    expect(archived.skipped).toEqual([
+      { name: 'agy-20260911-100000-001.log', reason: DESTINATION_EXISTS_REASON },
+    ])
     expect(readFileSync(raceDest, 'utf8')).toBe('concurrent-existing')
     expect(readFileSync(raceLog, 'utf8')).toBe('race-source-content')
 
@@ -798,12 +852,81 @@ describe('server/storage', () => {
         runsFolder: fixture.runs,
         projectRoot: fixture.project,
         days: 30,
+        files: ['agy-20260912-100000-001.log'],
         now: () => NOW_MS,
       })
       expect(symResult.count).toBe(0)
+      expect(symResult.skipped).toEqual([
+        { name: 'agy-20260912-100000-001.log', reason: NOT_ELIGIBLE_REASON },
+      ])
       expect(lstatSync(symDest).isSymbolicLink()).toBe(true)
       expect(readFileSync(outsideTarget, 'utf8')).toBe('outside-keep')
       expect(readFileSync(symLog, 'utf8')).toBe('sym-source')
     }
+  })
+
+  it('refuses archive with no files and moves only files in both the request and a fresh preview', async () => {
+    const fixture = buildSyntheticFixture()
+    const firstLog = join(fixture.runs, 'agy-20260910-100000-001.log')
+    const secondLog = join(fixture.runs, 'agy-20260915-100000-001.log')
+    const thirdLog = join(fixture.runs, 'agy-20260920-100000-001.log')
+    const firstBytes = writeAgedFile(firstLog, 'first-old', OLD_45_MS)
+    writeAgedFile(secondLog, 'became-eligible-later', RECENT_5_MS)
+    writeAgedFile(thirdLog, 'became-ineligible-later', OLD_45_MS)
+
+    const preview = await previewStorageArchive({
+      runsFolder: fixture.runs,
+      projectRoot: fixture.project,
+      days: 30,
+      now: () => NOW_MS,
+    })
+    expect(preview.files.map((item) => item.name).sort()).toEqual([
+      'agy-20260910-100000-001.log',
+      'agy-20260920-100000-001.log',
+    ])
+
+    const oldDate = new Date(OLD_45_MS)
+    const recentDate = new Date(RECENT_5_MS)
+    utimesSync(secondLog, oldDate, oldDate)
+    utimesSync(thirdLog, recentDate, recentDate)
+
+    await expect(
+      applyStorageArchive({
+        runsFolder: fixture.runs,
+        projectRoot: fixture.project,
+        days: 30,
+        now: () => NOW_MS,
+      })
+    ).rejects.toThrow()
+
+    await expect(
+      applyStorageArchive({
+        runsFolder: fixture.runs,
+        projectRoot: fixture.project,
+        days: 30,
+        files: [],
+        now: () => NOW_MS,
+      })
+    ).rejects.toThrow()
+
+    const archived = await applyStorageArchive({
+      runsFolder: fixture.runs,
+      projectRoot: fixture.project,
+      days: 30,
+      files: preview.files.map((item) => item.name),
+      now: () => NOW_MS,
+    })
+
+    expect(archived.ok).toBe(true)
+    expect(archived.count).toBe(1)
+    expect(archived.totalBytes).toBe(firstBytes)
+    expect(archived.moved.map((item) => item.name)).toEqual(['agy-20260910-100000-001.log'])
+    expect(archived.skipped).toEqual([
+      { name: 'agy-20260920-100000-001.log', reason: 'The file is no longer eligible.' },
+    ])
+    expect(existsSync(join(fixture.runs, 'archive', '2026-09', 'agy-20260910-100000-001.log'))).toBe(true)
+    expect(existsSync(secondLog)).toBe(true)
+    expect(existsSync(join(fixture.runs, 'archive', '2026-09', 'agy-20260915-100000-001.log'))).toBe(false)
+    expect(existsSync(thirdLog)).toBe(true)
   })
 })

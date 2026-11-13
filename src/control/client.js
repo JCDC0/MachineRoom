@@ -750,13 +750,12 @@ export function createClient({
     previewStorageArchive: ({ days } = {}) =>
       request('POST', '/api/storage/preview', days === undefined ? {} : { days }, REQUEST_LIMITS.previewStorageArchive),
 
-    archiveStorage: ({ days, confirmed = false } = {}) =>
-      request(
-        'POST',
-        '/api/storage/archive',
-        days === undefined ? { confirmed } : { days, confirmed },
-        REQUEST_LIMITS.archiveStorage
-      ),
+    archiveStorage: ({ days, files, confirmed = false } = {}) => {
+      const body = { confirmed }
+      if (days !== undefined) body.days = days
+      if (files !== undefined) body.files = files
+      return request('POST', '/api/storage/archive', body, REQUEST_LIMITS.archiveStorage)
+    },
 
     subscribe(listener) {
       listeners.add(listener)

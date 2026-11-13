@@ -16,9 +16,12 @@ const DIR_STAT_FLUSH_SIZE = 256
 
 export const DAYS_PROBLEM = 'Choose 1 to 365 days.'
 export const CONFIRM_PROBLEM = 'Confirm the archive before moving files.'
+export const FILES_PROBLEM = 'Choose the files to archive from a preview first.'
 export const ORIGIN_PROBLEM = 'Archiving storage needs a page Origin.'
 export const BUSY_PROBLEM = 'A storage archive is already running.'
 export const ARCHIVE_PATH_PROBLEM = 'The archive folder must stay inside the runs folder.'
+export const NOT_ELIGIBLE_REASON = 'The file is no longer eligible.'
+export const DESTINATION_EXISTS_REASON = 'The destination already exists.'
 export const METHOD_PROBLEM = 'Use GET for /api/storage or POST for /api/storage/preview and /api/storage/archive.'
 
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -48,6 +51,25 @@ export function cleanArchiveDays(value) {
     return value
   }
   throw refusal(DAYS_PROBLEM, 400)
+}
+
+export function cleanArchiveFiles(value) {
+  if (!Array.isArray(value) || value.length === 0) {
+    throw refusal(FILES_PROBLEM, 400)
+  }
+  const unique = []
+  const seen = new Set()
+  for (const entry of value) {
+    if (typeof entry !== 'string') throw refusal(FILES_PROBLEM, 400)
+    const name = entry.trim()
+    if (!name || name !== entry || name.includes('/') || name.includes('\\') || name.includes('\0') || name === '.' || name === '..') {
+      throw refusal(FILES_PROBLEM, 400)
+    }
+    if (seen.has(name)) continue
+    seen.add(name)
+    unique.push(name)
+  }
+  return unique
 }
 
 export function worktreesCleanCommand(projectRoot) {
@@ -800,15 +822,23 @@ export async function moveFileSafe(source, destination, options = {}) {
 }
 
 export async function applyStorageArchive(options = {}) {
+  const requestedFiles = cleanArchiveFiles(options.files)
   const preview = await previewStorageArchive(options)
+  const requestedSet = new Set(requestedFiles)
+  const previewByName = new Map(preview.files.map((item) => [item.name, item]))
+  const toMove = preview.files.filter((item) => requestedSet.has(item.name))
+  const skipped = requestedFiles
+    .filter((name) => !previewByName.has(name))
+    .map((name) => ({ name, reason: NOT_ELIGIBLE_REASON }))
+
   const runsDir = resolvedOption(options.runsFolder)
-  const months = [...new Set(preview.files.map((item) => item.archiveDir.slice(`${ARCHIVE_DIR_NAME}/`.length)))]
+  const months = [...new Set(toMove.map((item) => item.archiveDir.slice(`${ARCHIVE_DIR_NAME}/`.length)))]
   const verifiedMonthDirs = await ensureSafeArchiveDirs(runsDir, months, {
     platform: options.platform ?? process.platform,
     realpathFn: options.realpathFn,
   })
   const moved = []
-  for (const item of preview.files) {
+  for (const item of toMove) {
     const month = item.archiveDir.slice(`${ARCHIVE_DIR_NAME}/`.length)
     const monthDir = verifiedMonthDirs.get(month)
     const destination = join(monthDir, item.name)
@@ -821,7 +851,14 @@ export async function applyStorageArchive(options = {}) {
         copyFileFn: options.copyFileFn,
       })
     } catch (error) {
-      if (error?.code === 'EEXIST') continue
+      if (error?.code === 'EEXIST') {
+        skipped.push({ name: item.name, reason: DESTINATION_EXISTS_REASON })
+        continue
+      }
+      if (error?.code === 'ENOENT') {
+        skipped.push({ name: item.name, reason: NOT_ELIGIBLE_REASON })
+        continue
+      }
       throw error
     }
     moved.push({
@@ -838,6 +875,7 @@ export async function applyStorageArchive(options = {}) {
     count: moved.length,
     totalBytes: moved.reduce((sum, item) => sum + item.bytes, 0),
     moved,
+    skipped,
   }
 }
 
@@ -921,8 +959,10 @@ export function createStorageApi({
         return true
       }
       let days
+      let files
       try {
         days = cleanArchiveDays(body.days)
+        files = cleanArchiveFiles(body.files)
       } catch (error) {
         sendJson(req, res, error.status ?? 400, { error: error.message })
         return true
@@ -933,7 +973,7 @@ export function createStorageApi({
       }
       archiving = true
       try {
-        const result = await applyStorageArchive(sourceOptions({ days }))
+        const result = await applyStorageArchive(sourceOptions({ days, files }))
         sendJson(req, res, 200, result)
       } catch (error) {
         if (error?.status) {

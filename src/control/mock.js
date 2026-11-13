@@ -764,6 +764,24 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
     }
     return { cleanDays, cutoffMs, matches, toPreviewItem, toMovedItem }
   }
+
+  function cleanMockArchiveFiles(value) {
+    const problem = 'Choose the files to archive from a preview first.'
+    if (!Array.isArray(value) || value.length === 0) throw new Error(problem)
+    const unique = []
+    const seen = new Set()
+    for (const entry of value) {
+      if (typeof entry !== 'string') throw new Error(problem)
+      const name = entry.trim()
+      if (!name || name !== entry || name.includes('/') || name.includes('\\') || name.includes('\0') || name === '.' || name === '..') {
+        throw new Error(problem)
+      }
+      if (seen.has(name)) continue
+      seen.add(name)
+      unique.push(name)
+    }
+    return unique
+  }
   const subChats = new Map()
   const familyLabels = new Map()
   const keySlots = new Map()
@@ -2889,20 +2907,28 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
         }
       }),
 
-    archiveStorage: ({ days, confirmed = false } = {}) =>
+    archiveStorage: ({ days, files, confirmed = false } = {}) =>
       call('archiveStorage', () => {
         if (confirmed !== true) throw new Error('Confirm the archive before moving files.')
         const { cleanDays, matches, toMovedItem } = selectMockArchive(days)
-        const movedSet = new Set(matches)
+        const requestedFiles = cleanMockArchiveFiles(files)
+        const requestedSet = new Set(requestedFiles)
+        const matchedByName = new Map(matches.map((item) => [item.name, item]))
+        const movedItems = matches.filter((item) => requestedSet.has(item.name))
+        const movedSet = new Set(movedItems)
         mockStorage.logs = mockStorage.logs.filter((item) => !movedSet.has(item))
         mockStorage.recordings = mockStorage.recordings.filter((item) => !movedSet.has(item))
-        const moved = matches.map(toMovedItem)
+        const moved = movedItems.map(toMovedItem)
+        const skipped = requestedFiles
+          .filter((name) => !matchedByName.has(name))
+          .map((name) => ({ name, reason: 'The file is no longer eligible.' }))
         return {
           ok: true,
           days: cleanDays,
           count: moved.length,
           totalBytes: moved.reduce((sum, item) => sum + item.bytes, 0),
           moved,
+          skipped,
         }
       }),
 
