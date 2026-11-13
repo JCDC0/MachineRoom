@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The late-session meta test moves the runs folder time forward, as P165 did for the test above it, so Windows CI rereads the meta.
 - The runs folder is listed only when its change time moves or once a minute, and a finished log quiet for an hour leaves the ten-second check until it grows.
 - Retry under a reply sends to the conversation on screen, whatever To says now, so a sub's retry never goes to Main.
 - Retry under a reply sends the prompt to the conversation that owns that reply, so a changed To selection no longer redirects it and a sub's retry never goes to Main (P200).

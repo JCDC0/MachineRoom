@@ -339,6 +339,8 @@ describe('claude sessions reader', () => {
     reader.tick()
 
     writeFileSync(join(runs, 'claude-S7a-20261024-130000.meta.json'), `${JSON.stringify({ lane: 'claude', project: projectRoot, sessionId: 'sess-late' })}\n`)
+    const later = new Date(Date.now() + 60000)
+    utimesSync(runs, later, later)
     writeFileSync(join(sessionsFolder, 'sess-late.jsonl'), jsonLines([
       sessionLine('user', { role: 'user', content: 'A new turn.' }, { sessionId: 'sess-late' }, projectRoot),
       sessionLine('assistant', { role: 'assistant', content: [readUse('late-1', join(projectRoot, 'src', 'math.js'))] }, { sessionId: 'sess-late' }, projectRoot),
