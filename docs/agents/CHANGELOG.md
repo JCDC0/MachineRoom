@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- P243: a queue record's remaining tasks and the recovery message mask profile and home paths as well as keys.
 - P241: the check command is split into a program and arguments and run with shell false (npm through its own script on Windows), shell syntax is refused, a single task accepts --test and runs the check, and a crashed queue task records queueStatus.
 - P242: readActor refuses a runs start or stop with no Origin and no registry, closing the no-lanes bypass (review 29 finding 3).
 - P244: a failed or partial full tree read retries after 5 seconds, doubling to 60, until a clean read; the folder answer follows the same one-second reuse rule.

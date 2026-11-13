@@ -1,5 +1,6 @@
 import { spawn, spawnSync } from 'node:child_process'
 import { copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs'
+import { homedir } from 'node:os'
 import { basename, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterAll, describe, expect, it } from 'vitest'
@@ -1034,6 +1035,39 @@ describe('a queue that stops', () => {
       const records = readFileSync(join(runs, 'runs.jsonl'), 'utf8').trim().split(/\r?\n/).map((line) => JSON.parse(line))
       expect(records.at(-1).queueRemaining).toEqual(['Use OPENROUTER_API_KEY=[key] in the last task.'])
       expect(JSON.stringify(records.at(-1))).not.toContain(key)
+    } finally {
+      remove(parent)
+    }
+  }, 60000)
+
+  it('hides the home folder in a task that did not run', async () => {
+    const parent = makeTempDir('machine-room-queue-')
+    try {
+      const repo = initRepo(parent)
+      const runs = join(parent, 'machineroom-runs')
+      const file = join(parent, 'queue.txt')
+      const home = homedir()
+      const note = join(home, 'queue-notes', 'todo.txt')
+      writeFileSync(file, `First task.\n---\nBreak the second task.\n---\nRead ${note} in the last task.\n`)
+      failingLane(repo, 'Break the second task.')
+      git(repo, ['add', 'run'])
+      git(repo, ['commit', '-m', 'the fake lane program'])
+      const lanes = laneFile(parent, {
+        name: 'fake',
+        worktree: join(parent, 'worktree'),
+        cli: { harness: 'opencode', bin: process.execPath, model: 'opencode/fake' },
+      })
+      const result = await runLane(['fake', '--project', repo, '--queue', file], {
+        TEMP: parent,
+        MACHINEROOM_RUNS: runs,
+        MACHINEROOM_LANES_FILE: lanes,
+      })
+      expect(result.code).toBe(1)
+      const records = readFileSync(join(runs, 'runs.jsonl'), 'utf8').trim().split(/\r?\n/).map((line) => JSON.parse(line))
+      expect(records.at(-1).queueRemaining).toHaveLength(1)
+      expect(records.at(-1).queueRemaining[0]).not.toContain(home)
+      expect(records.at(-1).queueRemaining[0]).toContain(process.platform === 'win32' ? '%USERPROFILE%' : '~')
+      expect(JSON.stringify(records.at(-1))).not.toContain(home)
     } finally {
       remove(parent)
     }
