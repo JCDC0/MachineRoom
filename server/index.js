@@ -420,19 +420,20 @@ export const SSE_PENDING_LIMIT = 8 * 1024 * 1024
 
 export function createSseWriter({ limit = SSE_PENDING_LIMIT, onDrop = null } = {}) {
   const dropped = new WeakSet()
+  const allowances = new WeakMap()
 
   function drop(res) {
     if (!res || dropped.has(res)) return
     dropped.add(res)
     if (typeof onDrop === 'function') onDrop(res)
     try {
-      res.end()
+      res.destroy()
     } catch {}
   }
 
-  function write(res, text) {
+  function write(res, text, { connect = false } = {}) {
     if (!res || dropped.has(res)) return false
-    if ((res.writableLength ?? 0) > limit) {
+    if (!connect && (res.writableLength ?? 0) > (allowances.get(res) ?? limit)) {
       drop(res)
       return false
     }
@@ -446,7 +447,12 @@ export function createSseWriter({ limit = SSE_PENDING_LIMIT, onDrop = null } = {
     return ok
   }
 
-  return { write, drop, isDropped: (res) => !res || dropped.has(res) }
+  function allowBacklog(res) {
+    if (!res || dropped.has(res)) return
+    allowances.set(res, (res.writableLength ?? 0) + limit)
+  }
+
+  return { write, allowBacklog, drop, isDropped: (res) => !res || dropped.has(res) }
 }
 
 export function trimHistory(history, now = Date.now) {
@@ -833,8 +839,8 @@ export function createBridge(options = {}) {
   let maskTimer = null
   let parserByAgentId = new Map()
 
-  function writeSseFrame(res, entry) {
-    sseWriter.write(res, `id: ${entry.id}\nevent: frame\ndata: ${entry.data}\n\n`)
+  function writeSseFrame(res, entry, options) {
+    sseWriter.write(res, `id: ${entry.id}\nevent: frame\ndata: ${entry.data}\n\n`, options)
   }
 
   function writeSseChange(res, event) {
@@ -1463,17 +1469,17 @@ export function createBridge(options = {}) {
       const wantsHistory = url.searchParams.get('history') === '1'
       if (lastEventId) {
         if (eventResetNeeded(history, lastEventId, treeStart, nextId)) {
-          sseWriter.write(res, `event: reset\ndata: ${JSON.stringify({ start: treeStart })}\n\n`)
-          for (const entry of history) writeSseFrame(res, entry)
+          sseWriter.write(res, `event: reset\ndata: ${JSON.stringify({ start: treeStart })}\n\n`, { connect: true })
+          for (const entry of history) writeSseFrame(res, entry, { connect: true })
         } else {
           const seq = readEventCursor(lastEventId, treeStart)
           for (const entry of history) {
-            if (entry.seq > seq) writeSseFrame(res, entry)
+            if (entry.seq > seq) writeSseFrame(res, entry, { connect: true })
           }
         }
       } else if (wantsHistory) {
         for (const entry of history) {
-          writeSseFrame(res, entry)
+          writeSseFrame(res, entry, { connect: true })
         }
       }
 
@@ -1491,14 +1497,14 @@ export function createBridge(options = {}) {
             if (changes !== null) {
               treeClientVersion.set(res, treeVersion)
               if ((changes.added.length > 0 || changes.removed.length > 0) && lastTree) {
-                sseWriter.write(res, treeDeltaEvent(lastTree.root, changes.added, changes.removed, treeVersion, treeStart))
+                sseWriter.write(res, treeDeltaEvent(lastTree.root, changes.added, changes.removed, treeVersion, treeStart), { connect: true })
               }
             } else if (lastTree) {
-              sseWriter.write(res, treeEvent(lastTree, null, folderClients.has(res) ? FOLDER_SHAPE : null, treeVersion, treeStart))
+              sseWriter.write(res, treeEvent(lastTree, null, folderClients.has(res) ? FOLDER_SHAPE : null, treeVersion, treeStart), { connect: true })
               treeClientVersion.set(res, treeVersion)
             }
           } else if (lastTree) {
-            sseWriter.write(res, treeEvent(lastTree, null, folderClients.has(res) ? FOLDER_SHAPE : null, treeVersion, treeStart))
+            sseWriter.write(res, treeEvent(lastTree, null, folderClients.has(res) ? FOLDER_SHAPE : null, treeVersion, treeStart), { connect: true })
             treeClientVersion.set(res, treeVersion)
           }
         }
@@ -1508,6 +1514,7 @@ export function createBridge(options = {}) {
         treeClients.delete(res)
         folderClients.delete(res)
       })
+      sseWriter.allowBacklog(res)
       return
     }
 

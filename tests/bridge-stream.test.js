@@ -1,6 +1,7 @@
 import { appendFileSync, rmSync, writeFileSync } from 'node:fs'
-import { request as httpRequest } from 'node:http'
+import { request as httpRequest, ServerResponse } from 'node:http'
 import { join } from 'node:path'
+import { Duplex } from 'node:stream'
 import { afterEach, describe, expect, it } from 'vitest'
 import { buildActivities, createPipeline } from '../src/model/pipeline.js'
 import { apply, createState } from '../src/model/state.js'
@@ -95,6 +96,7 @@ function openSse(url, headers = {}, query = '') {
 
   return new Promise((resolveOpen, rejectOpen) => {
     req = httpRequest(`${url}/events${query}`, { headers }, (res) => {
+      let ended = false
       res.setEncoding('utf8')
       res.on('data', (chunk) => {
         buffer += chunk
@@ -106,7 +108,16 @@ function openSse(url, headers = {}, query = '') {
           pushEvent(parseSseBlock(trimmed))
         }
       })
+      res.on('end', () => {
+        ended = true
+      })
+      res.on('close', () => {
+        ended = true
+      })
       resolveOpen({
+        get ended() {
+          return ended
+        },
         next(predicate = () => true, timeoutMs = 5000) {
           const existingIndex = events.findIndex(predicate)
           if (existingIndex !== -1) {
@@ -598,6 +609,7 @@ function fakeSseClient({ drain = true } = {}) {
   const res = {
     writableLength: 0,
     ended: false,
+    destroyed: false,
     writes: [],
     write(text) {
       res.writes.push(text)
@@ -608,12 +620,42 @@ function fakeSseClient({ drain = true } = {}) {
     end() {
       res.ended = true
     },
+    destroy() {
+      res.destroyed = true
+    },
   }
   return res
 }
 
+function stalledServerResponse() {
+  const socket = new Duplex({ read() {}, write() {} })
+  const res = new ServerResponse({ method: 'GET', httpVersionMajor: 1, httpVersionMinor: 1, headers: {} })
+  res.assignSocket(socket)
+  res.writeHead(200, { 'Content-Type': 'text/event-stream; charset=utf-8' })
+  res.flushHeaders()
+  return { res, socket }
+}
+
 describe('the SSE pending limit', () => {
-  it('ends a response whose write returns false and never drains once its pending bytes pass the cap', () => {
+  it('destroys the response and its socket when a stalled write passes the cap', () => {
+    const dropped = []
+    const writer = createSseWriter({ onDrop: (res) => dropped.push(res) })
+    const { res, socket } = stalledServerResponse()
+    const chunk = 'x'.repeat(1024 * 1024)
+
+    let writes = 0
+    while (!writer.isDropped(res) && writes < 20) {
+      writer.write(res, chunk)
+      writes += 1
+    }
+
+    expect(writer.isDropped(res)).toBe(true)
+    expect(dropped).toEqual([res])
+    expect(res.writableEnded).toBe(false)
+    expect(socket.destroyed).toBe(true)
+  })
+
+  it('destroys a response whose write returns false and never drains once its pending bytes pass the cap', () => {
     const dropped = []
     const writer = createSseWriter({ onDrop: (res) => dropped.push(res) })
     const stuck = fakeSseClient({ drain: false })
@@ -622,10 +664,11 @@ describe('the SSE pending limit', () => {
 
     for (let index = 0; index <= under; index += 1) {
       expect(writer.write(stuck, chunk)).toBe(false)
-      expect(stuck.ended).toBe(false)
+      expect(stuck.destroyed).toBe(false)
     }
     expect(writer.write(stuck, chunk)).toBe(false)
-    expect(stuck.ended).toBe(true)
+    expect(stuck.destroyed).toBe(true)
+    expect(stuck.ended).toBe(false)
     expect(dropped).toEqual([stuck])
 
     expect(writer.write(stuck, chunk)).toBe(false)
@@ -636,18 +679,34 @@ describe('the SSE pending limit', () => {
     const writer = createSseWriter()
     const fresh = fakeSseClient({ drain: false })
     writer.write(fresh, 'x'.repeat(SSE_PENDING_LIMIT + 1024))
-    expect(fresh.ended).toBe(false)
+    expect(fresh.destroyed).toBe(false)
   })
 
-  it('does not end a client that drains what it writes', () => {
+  it('does not drop a client that drains what it writes', () => {
     const writer = createSseWriter()
     const normal = fakeSseClient()
 
     for (let index = 0; index < 20; index += 1) {
       expect(writer.write(normal, 'x'.repeat(1024 * 1024))).toBe(true)
     }
-    expect(normal.ended).toBe(false)
+    expect(normal.destroyed).toBe(false)
     expect(normal.writes).toHaveLength(20)
+  })
+
+  it('does not check the writes a client connects with against the cap, and allows their backlog plus the cap after them', () => {
+    const writer = createSseWriter({ limit: 1000 })
+    const res = fakeSseClient({ drain: false })
+    writer.write(res, 'x'.repeat(1500))
+    writer.write(res, 'x'.repeat(1500), { connect: true })
+    expect(res.destroyed).toBe(false)
+
+    writer.allowBacklog(res)
+    writer.write(res, 'x'.repeat(900))
+    expect(res.destroyed).toBe(false)
+    writer.write(res, 'x'.repeat(200))
+    expect(res.destroyed).toBe(false)
+    expect(writer.write(res, 'x'.repeat(100))).toBe(false)
+    expect(res.destroyed).toBe(true)
   })
 
   it('keeps sending frames to the other clients when one is dropped', () => {
@@ -667,9 +726,9 @@ describe('the SSE pending limit', () => {
       for (const client of clients) writer.write(client, frame(seq))
     }
 
-    expect(stuck.ended).toBe(true)
+    expect(stuck.destroyed).toBe(true)
     expect(clients.has(stuck)).toBe(false)
-    expect(first.ended).toBe(false)
+    expect(first.destroyed).toBe(false)
     expect(first.writes).toHaveLength(9)
     expect(second.writes).toHaveLength(9)
   })
@@ -692,5 +751,27 @@ describe('the SSE pending limit', () => {
     }
     expect(last).not.toBeNull()
     expect(frameOf(last).payload.chunk).toHaveLength(chunk.length)
+  })
+
+  it('sends every kept one-MiB frame to a late joiner that reads, and does not cut it', async () => {
+    const { url, send } = await sourceBridge()
+    const chunk = 'x'.repeat(1024 * 1024)
+    for (let seq = 1; seq <= 12; seq += 1) send(sessionLog('late', seq, chunk))
+
+    const late = await openSse(url, {}, '?history=1')
+    cleanups.push(() => late.close())
+    const seen = []
+    for (let seq = 1; seq <= 12; seq += 1) {
+      const event = await late.next((item) => item.event === 'frame' && frameOf(item).payload?.seq === seq, 15000)
+      expect(frameOf(event).payload.chunk).toHaveLength(chunk.length)
+      seen.push(frameOf(event).payload.seq)
+    }
+    expect(seen).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12])
+    expect(late.ended).toBe(false)
+
+    send(sessionLog('late', 13, 'small'))
+    const live = await late.next((item) => item.event === 'frame' && frameOf(item).payload?.seq === 13)
+    expect(frameOf(live).payload.chunk).toBe('small')
+    expect(late.ended).toBe(false)
   })
 })
