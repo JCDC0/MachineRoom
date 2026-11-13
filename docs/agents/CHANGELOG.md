@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- P232: the transport's state word ends in an ellipsis with its full text in its title, and keeps 8 pixels from the spend.
+- P232: Meters, Reviews and Tasks put Refresh at the Team button's size and type from one `.panel-toolbar > button` rule.
+- P232: the Settings Storage `Days to keep` label stays on one line beside its number box.
 - P231: chromePath names an unreadable Playwright folder, masked, with its error code.
 - The screenshot helper says when it could not read the Playwright folder, names the folder masked with the error code, and keeps the no Chromium sentence only when the folder was read (P231).
 - Dispatch has a Check command field saved per project; a project run or queue passes it to run-lane as --test, and the confirm card names the check it will use.

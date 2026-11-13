@@ -166,6 +166,7 @@ export default function Transport({ snapshot, speeds, markers = [], orchestrator
             type="button"
             className="transport-orchestrator"
             aria-label={`Orchestrator ${state}. Open the conversation`}
+            title={state}
             onClick={openConversation}
           >
             <span className="transport-orchestrator-title mono">Orchestrator</span>
