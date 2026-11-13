@@ -28,8 +28,47 @@ function withoutDots(path) {
   return kept.join('/')
 }
 
-export function relativeTo(rootName, rawPath) {
+function foldAbsolute(path) {
+  const drive = /^[A-Za-z]:/.test(path)
+  const rooted = drive || path.startsWith('/')
+  if (!rooted) return withoutDots(path)
+  const body = path.replace(/^[A-Za-z]:/, '').replace(/^\/+/, '')
+  const folded = withoutDots(body)
+  if (folded === null) return null
+  if (drive) return folded ? `${path.slice(0, 2)}/${folded}` : `${path.slice(0, 2)}/`
+  return folded ? `/${folded}` : '/'
+}
+
+function fullRoot(rootPath) {
+  const path = foldAbsolute(normalise(rootPath))
+  if (path === null) return ''
+  const trimmed = path.replace(/\/+$/, '')
+  if (trimmed === '') return path
+  return /^[A-Za-z]:$/.test(trimmed) ? `${trimmed}/` : trimmed
+}
+
+function underRoot(root, path) {
+  const windows = /^[A-Za-z]:\//.test(root)
+  const wanted = windows ? root.toLowerCase() : root
+  const found = windows ? path.toLowerCase() : path
+  if (found === wanted) return ''
+  const prefix = wanted.endsWith('/') ? wanted : `${wanted}/`
+  if (!found.startsWith(prefix)) return null
+  return path.slice(prefix.length)
+}
+
+export function relativeTo(rootName, rawPath, rootPath = '') {
   const path = normalise(rawPath).replace(/^\.\//, '')
+  const full = typeof rootPath === 'string' ? fullRoot(rootPath) : ''
+  if (full) {
+    if (path.startsWith('~')) return null
+    if (DRIVE.test(path) || path.startsWith('/')) {
+      const folded = foldAbsolute(path)
+      if (folded === null) return null
+      return underRoot(full, folded)
+    }
+    return withoutDots(path)
+  }
   const lower = path.toLowerCase()
   const root = String(rootName ?? '').toLowerCase()
   if (root) {
@@ -104,6 +143,7 @@ export function makeTree(raw) {
   }
   return {
     rootName: raw.root,
+    rootPath: typeof raw.rootPath === 'string' && raw.rootPath !== '' ? raw.rootPath : null,
     files,
     created: raw.created ?? [],
     dirs: [...dirs].sort(),

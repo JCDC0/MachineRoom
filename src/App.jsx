@@ -22,7 +22,7 @@ async function loadSimulated(params) {
 
 async function loadBridge(params, url) {
   const found = await discoverBridge({ url, root: params.get('root') })
-  const tree = makeTree({ root: found.rootName, files: found.files, created: [] })
+  const tree = makeTree({ root: found.rootName, rootPath: found.rootPath, files: found.files, created: [] })
   return { agents: found.agents, tree, activities: [], live: { bridge: url } }
 }
 

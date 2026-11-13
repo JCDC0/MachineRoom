@@ -363,15 +363,23 @@ describe('discoverBridge', () => {
       { id: 'a1', key: 'claude', name: 'Claude Code', adapterType: 'claude_local', parser: 'claude' },
       { id: 'a2', key: 'agy', name: 'agy', adapterType: 'process', parser: 'agy' },
     ],
-    'http://bridge/api/tree': { root: 'agent-sandbox', files: ['src/math.js'], created: [] },
+    'http://bridge/api/tree': { root: 'agent-sandbox', rootPath: 'C:\\work\\agent-sandbox', files: ['src/math.js'], created: [] },
   }
   const fetchImpl = async (url) => reply(answers[url])()
 
   it('returns the agents, the file list and the root name', async () => {
     const found = await discoverBridge({ url: 'http://bridge', fetchImpl })
     expect(found.rootName).toBe('agent-sandbox')
+    expect(found.rootPath).toBe('C:\\work\\agent-sandbox')
     expect(found.files).toEqual(['src/math.js'])
     expect(found.agents.map((agent) => agent.parser)).toEqual(['claude', 'agy'])
+  })
+
+  it('answers no root path when the tree does not carry one', async () => {
+    const plain = async (url) =>
+      reply(url === 'http://bridge/api/tree' ? { root: 'agent-sandbox', files: ['src/math.js'], created: [] } : answers[url])()
+    const found = await discoverBridge({ url: 'http://bridge', fetchImpl: plain })
+    expect(found.rootPath).toBeNull()
   })
 
   it('lets the caller override the root name', async () => {

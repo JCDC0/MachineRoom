@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- P228: the tree answer carries rootPath, and a live room places an absolute path only when it lies under it, case-insensitive on Windows; replays keep the name rule.
 - P239: review 29 lists six push blockers and two smaller findings in P216 to P230.
 - P237: a change to .git/index or info/exclude, or a worktree's own, reads the tree through the existing reader; other .git writes stay ignored.
 - P238: Claude and OpenCode session run ids carry a token made per reader, so a restarted reader never merges two runs in a replay (D4).
@@ -14,6 +15,7 @@
 - P236: storage usage reads folder entries with at most 64 lstat calls in flight across the whole scan and measures worktree folders side by side.
 - P238: a session reader's run id carries a token made when the reader is created, so a replay of two reader lifetimes keeps both runs' tool calls.
 - P237: changes to .git/index or .git/info/exclude (including a worktree's git folder) trigger a full tree read through the existing reader while other .git writes stay ignored.
+- P228: the bridge's tree answer carries the project's full root path, and a live absolute touch is inside only under that path, so another folder named like the project is never drawn on its card.
 - P230: an unreadable root is an error and an unreadable folder keeps its last files with a problem line; a failed git read keeps the git tree, and a plain tree checks for git every 60 seconds. The .git/index watch is still open.
 - P232: the transport state word shrinks clear of the spend, panel Refresh buttons match Team, and Days to keep stays on one line.
 - P229: session discovery reads the root slug's folder and its subfolder slugs, and the cwd check still drops sibling projects.

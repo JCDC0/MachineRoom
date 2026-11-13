@@ -584,6 +584,7 @@ export function trimHistory(history, now = Date.now) {
 
 export function createBridge(options = {}) {
   const projectRoot = options.projectRoot ?? process.env.PROJECT_ROOT ?? process.cwd()
+  const projectRootPath = resolve(projectRoot)
   const listDir = options.listDir ?? readdirSync
   const gitWorkTreeCheck = options.gitWorkTree ?? isGitWorkTree
   const gitDirCheck = options.gitDir ?? readGitDirs
@@ -1043,7 +1044,7 @@ export function createBridge(options = {}) {
     if (folderAnswer && folderAnswer.version === version) return Promise.resolve(folderAnswer)
     if (folderBuild && folderBuild.version === version) return folderBuild.promise
     const build = (async () => {
-      const body = { ...packFolderTree(tree), created: tree.created, version, start: treeStart }
+      const body = { ...packFolderTree(tree), rootPath: projectRootPath, created: tree.created, version, start: treeStart }
       const payload = Buffer.from(JSON.stringify(body), 'utf8')
       const gzipped = await gzipAsync(payload)
       const answer = { version, body, payload, gzipped }
@@ -1783,7 +1784,7 @@ export function createBridge(options = {}) {
           return
         }
         const payload = Buffer.from(
-          JSON.stringify({ ...packFolderTree(fallback), created: fallback.created, version: 0, start: treeStart }),
+          JSON.stringify({ ...packFolderTree(fallback), rootPath: projectRootPath, created: fallback.created, version: 0, start: treeStart }),
           'utf8'
         )
         const gzipped = await gzipAsync(payload)

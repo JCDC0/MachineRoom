@@ -16,7 +16,7 @@ export function orderAgents(agents) {
 }
 
 export function makeContext(tree) {
-  return { rootName: tree.rootName, files: tree.files, dirs: tree.dirs }
+  return { rootName: tree.rootName, rootPath: tree.rootPath, files: tree.files, dirs: tree.dirs }
 }
 
 const RUN_END = new Set(['succeeded', 'failed', 'cancelled', 'timed_out'])
