@@ -1506,3 +1506,10 @@ Review, with `git show -m --first-parent SHA`, against the code around each chan
 1. Do P153's steps. P153 stopped because `tests/orchestrators.test.js` checks the empty sessions answer with `toEqual`. Update that assertion, and the mock and its contract test if they shape the same answer, to carry the new stable id. Keep `startedAt` as it is: add the id as its own field.
 2. P151 is merged and edits the title and summary lines of `server/orchestrator.js`; start from current main and change only the conversation identity there.
 3. Run `node node_modules/vitest/vitest.mjs related --run server/orchestrator.js src/ui/sidebar.js src/ui/Sidebar.jsx src/control/mock.js` and `npm run build`. Report what passed.
+
+**P158. The merge check's related tests run again (OpenCode).** Read this brief only. Use no subagents. Run every command in the foreground. Commit each step as you finish it, and stop starting new work at minute 15. Files: scripts/merge-lane.mjs, tests/merge-lane.test.js, docs/agents/CHANGELOG.md, docs/agents/architecture/COMMANDS.md.
+
+1. Since `a192ffd4`, `runChecks` in `scripts/merge-lane.mjs` runs `vitest related --run -- FILES`. With the `--`, vitest 5 sees no files, prints `No changed files found, exiting with code 0` and passes, so the check has run no test since 2026-11-11. Check it: `node node_modules/vitest/vitest.mjs related --run -- scripts/run-lane.mjs` runs nothing, and without `--` it runs the related files.
+2. Drop the `--`. Keep the reason it was added: a changed file whose name starts with `-` is passed as `./NAME`. A check whose output says `No changed files found` fails with that sentence, so a silent skip can never pass again. A change with only docs still passes.
+3. Replace the test from `a192ffd4` with tests by what they prove: no `--` before the files; a file named `-x.js` is passed as `./-x.js`; an output of `No changed files found` fails the check. Correct COMMANDS.md if it describes the command.
+4. Run `node node_modules/vitest/vitest.mjs related --run scripts/merge-lane.mjs` and `npm run build`. Report what passed and how many test files the related run ran.
