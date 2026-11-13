@@ -645,6 +645,107 @@ describe('review routes on another project', () => {
       expect(git(project, ['rev-parse', 'refs/heads/trunk']).trim()).toBe(laneHead)
     })
   }, 40000)
+
+  it('shows check state in the confirm card, refuses a failed head, and merges unchecked with warning or passed', async () => {
+    const { base, project, worktree, briefsDir } = makeProject()
+    const runs = join(base, 'runs')
+    mkdirSync(runs, { recursive: true })
+    const trunkStart = git(project, ['rev-parse', 'refs/heads/trunk']).trim()
+    const head1 = git(worktree, ['rev-parse', 'HEAD']).trim()
+    const addRun = (entry) => {
+      appendFileSync(join(runs, 'runs.jsonl'), `${JSON.stringify(entry)}\n`)
+    }
+    addRun({ lane: 'opencode', project: worktree, head: head1, tests: 'failed', exitCode: 1, startedAt: '2026-11-05T00:00:00.000Z' })
+
+    const { url } = await startBridge({ projectRoot: project, briefsDir })
+    const rawClient = createClient({
+      baseUrl: url,
+      fetchImpl: (input, init = {}) =>
+        fetch(input, {
+          ...init,
+          headers: { ...init?.headers, Origin: 'http://localhost:5173' },
+        }),
+    })
+    let reviewsCount = 0
+    const client = {
+      ...rawClient,
+      reviews: async () => {
+        const list = await rawClient.reviews()
+        reviewsCount += 1
+        return list
+      },
+    }
+
+    async function waitFor(check) {
+      for (let i = 0; i < 80; i += 1) {
+        if (check()) return
+        await settle(25)
+      }
+      throw new Error('timed out waiting for UI update')
+    }
+
+    await withDom(async ({ container, root }) => {
+      await act(async () => {
+        root.render(createElement(ReviewsPanel, { client }))
+      })
+      await waitFor(() => container.querySelector('.review-merge-btn') !== null)
+      expect(container.querySelector('.review-checks')?.textContent).toBe('checks failed')
+
+      await click(root, container.querySelector('.review-merge-btn'))
+      let card = container.querySelector('.review-confirm-card')
+      expect(card.querySelector('.review-confirm-checks')?.textContent).toBe('Checks failed for this head.')
+      await click(root, buttonWithText(card, 'Merge'))
+      await waitFor(() => card.querySelector('[role="alert"]') !== null)
+      expect(card.querySelector('[role="alert"]').textContent).toBe(
+        'Checks failed on this head, so the lane was not merged.'
+      )
+      expect(git(project, ['rev-parse', 'refs/heads/trunk']).trim()).toBe(trunkStart)
+
+      writeFileSync(join(worktree, 'second.js'), 'export const two = 2\n')
+      git(worktree, ['add', 'second.js'])
+      git(worktree, ['commit', '-m', 'second commit'])
+      const head2 = git(worktree, ['rev-parse', 'HEAD']).trim()
+      addRun({ lane: 'opencode', project: worktree, head: head2, tests: 'none', exitCode: 0, startedAt: '2026-11-05T00:01:00.000Z' })
+
+      let beforeRefresh = reviewsCount
+      await click(root, buttonWithText(container, 'Refresh'))
+      await waitFor(() => reviewsCount > beforeRefresh)
+      expect(container.querySelector('.review-checks')?.textContent).toBe('unchecked')
+
+      await click(root, container.querySelector('.review-merge-btn'))
+      card = container.querySelector('.review-confirm-card')
+      expect(card.querySelector('.review-confirm-checks')?.textContent).toBe(
+        'Warning: checks are unchecked for this head.'
+      )
+      let beforeMerge = reviewsCount
+      await click(root, buttonWithText(card, 'Merge'))
+      await waitFor(
+        () => container.querySelector('.review-confirm-card') === null && reviewsCount > beforeMerge
+      )
+      expect(git(project, ['rev-parse', 'refs/heads/trunk']).trim()).toBe(head2)
+
+      writeFileSync(join(worktree, 'third.js'), 'export const three = 3\n')
+      git(worktree, ['add', 'third.js'])
+      git(worktree, ['commit', '-m', 'third commit'])
+      const head3 = git(worktree, ['rev-parse', 'HEAD']).trim()
+      addRun({ lane: 'opencode', project: worktree, head: head3, tests: 'passed', exitCode: 0, startedAt: '2026-11-05T00:02:00.000Z' })
+
+      beforeRefresh = reviewsCount
+      await click(root, buttonWithText(container, 'Refresh'))
+      await waitFor(() => reviewsCount > beforeRefresh)
+      expect(container.querySelector('.review-checks')?.textContent).toBe('checks passed')
+
+      await click(root, container.querySelector('.review-merge-btn'))
+      card = container.querySelector('.review-confirm-card')
+      expect(card.querySelector('.review-confirm-checks')?.textContent).toBe('Checks passed for this head.')
+      beforeMerge = reviewsCount
+      await click(root, buttonWithText(card, 'Merge'))
+      await waitFor(
+        () => container.querySelector('.review-confirm-card') === null && reviewsCount > beforeMerge
+      )
+      expect(git(project, ['rev-parse', 'refs/heads/trunk']).trim()).toBe(head3)
+    })
+  }, 40000)
 })
 
 describe('review panel helpers', () => {
