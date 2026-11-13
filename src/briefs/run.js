@@ -934,6 +934,12 @@ function tokenField(value) {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? Math.round(value) : null
 }
 
+const RECORD_TEXT_LIMIT = 200
+
+export function maskedQueueTasks(tasks) {
+  return (Array.isArray(tasks) ? tasks : []).map((task) => maskKeys(String(task ?? '')).text.slice(0, RECORD_TEXT_LIMIT))
+}
+
 export function runRecord({ lane, briefs, model, reasoning, startedAt, minutes, exitCode, killed, costUsd, inputTokens, outputTokens, peakTokens, log, branch, commits, base, head, tests, project, task, startedBy, stoppedLeftovers, queue, startFailed, note, retried } = {}) {
   const record = {
     lane: String(lane ?? ''),
@@ -960,6 +966,8 @@ export function runRecord({ lane, briefs, model, reasoning, startedAt, minutes, 
     record.branch = queueBranch
     record.queue = queueBranch
     if (Number.isInteger(queue?.index)) record.queueIndex = queue.index
+    if (Number.isInteger(queue?.size) && queue.size > 0) record.queueSize = queue.size
+    if (Array.isArray(queue?.remaining)) record.queueRemaining = maskedQueueTasks(queue.remaining)
   }
   if (Number.isInteger(stoppedLeftovers) && stoppedLeftovers > 0) record.stoppedLeftovers = stoppedLeftovers
   if (startFailed === true) record.startFailed = true
@@ -967,7 +975,7 @@ export function runRecord({ lane, briefs, model, reasoning, startedAt, minutes, 
   if (typeof note === 'string' && note.trim() !== '') record.note = note.trim().slice(0, 200)
   if (typeof startedBy === 'string' && startedBy.trim() !== '') record.startedBy = startedBy.trim()
   if (typeof project === 'string' && project.trim() !== '') record.project = project
-  if (typeof task === 'string' && task !== '') record.task = maskKeys(task).text.slice(0, 200)
+  if (typeof task === 'string' && task !== '') record.task = maskKeys(task).text.slice(0, RECORD_TEXT_LIMIT)
   return record
 }
 

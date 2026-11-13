@@ -663,6 +663,17 @@ describe('a queue that stops', () => {
     return file
   }
 
+  function failingLane(folder, failText) {
+    writeFileSync(join(folder, 'run'), [
+      "const { writeFileSync } = require('node:fs')",
+      "const args = process.argv.join(' ')",
+      "writeFileSync('lane-note.txt', 'The fake lane wrote this file.\\n')",
+      `if (args.includes(${JSON.stringify(failText)})) process.exit(3)`,
+      "console.log(JSON.stringify({ type: 'text', timestamp: Date.now(), sessionID: 'ses_fake', part: { id: 'prt_fake', type: 'text', text: 'done' } }))",
+      '',
+    ].join('\n'))
+  }
+
   it('refuses a lane with no command line before it makes the queue branch', async () => {
     const parent = makeTempDir('machine-room-queue-')
     try {
@@ -710,7 +721,7 @@ describe('a queue that stops', () => {
       expect(result.code).toBe(1)
       expect(result.stdout).toContain('1. failed: tests')
       const records = readFileSync(join(runs, 'runs.jsonl'), 'utf8').trim().split(/\r?\n/).map((line) => JSON.parse(line))
-      expect(records.at(-1)).toMatchObject({ lane: 'fake', exitCode: 1, queueStatus: 'failed: tests', base: head, tests: 'failed' })
+      expect(records.at(-1)).toMatchObject({ lane: 'fake', exitCode: 1, queueStatus: 'failed: tests', base: head, tests: 'failed', queueSize: 1, queueRemaining: [] })
       expect(records.at(-1)).not.toHaveProperty('head')
       expect(records.at(-1).commits).toEqual([])
       const meta = JSON.parse(readFileSync(records.at(-1).log.replace(/\.log$/i, '.meta.json'), 'utf8'))
@@ -926,8 +937,102 @@ describe('a queue that stops', () => {
       }
       const records = readFileSync(join(runs, 'runs.jsonl'), 'utf8').trim().split(/\r?\n/).map((line) => JSON.parse(line))
       expect(records.length).toBeGreaterThanOrEqual(1)
-      expect(records.at(-1)).toMatchObject({ lane: 'fake', exitCode: 1, queueStatus: 'failed: the queue stopped', head })
+      expect(records.at(-1)).toMatchObject({ lane: 'fake', exitCode: 1, queueStatus: 'failed: the queue stopped', head, queueSize: 1, queueRemaining: [] })
       expect(records.at(-1)).not.toHaveProperty('tests')
+    } finally {
+      remove(parent)
+    }
+  }, 60000)
+
+  it('records queueSize on every task and the tasks left after a failed one', async () => {
+    const parent = makeTempDir('machine-room-queue-')
+    try {
+      const repo = initRepo(parent)
+      const runs = join(parent, 'machineroom-runs')
+      const file = join(parent, 'queue.txt')
+      writeFileSync(file, 'First task.\n---\nBreak the second task.\n---\nThe third task waits.\n')
+      failingLane(repo, 'Break the second task.')
+      git(repo, ['add', 'run'])
+      git(repo, ['commit', '-m', 'the fake lane program'])
+      const lanes = laneFile(parent, {
+        name: 'fake',
+        worktree: join(parent, 'worktree'),
+        cli: { harness: 'opencode', bin: process.execPath, model: 'opencode/fake' },
+      })
+      const result = await runLane(['fake', '--project', repo, '--queue', file], {
+        TEMP: parent,
+        MACHINEROOM_RUNS: runs,
+        MACHINEROOM_LANES_FILE: lanes,
+      })
+      expect(result.code).toBe(1)
+      const records = readFileSync(join(runs, 'runs.jsonl'), 'utf8').trim().split(/\r?\n/).map((line) => JSON.parse(line))
+      expect(records).toHaveLength(2)
+      expect(records[0]).toMatchObject({ lane: 'fake', queueIndex: 1, queueSize: 3 })
+      expect(records[0]).not.toHaveProperty('queueRemaining')
+      expect(records[1]).toMatchObject({
+        lane: 'fake',
+        exitCode: 3,
+        queueIndex: 2,
+        queueSize: 3,
+        queueRemaining: ['The third task waits.'],
+      })
+    } finally {
+      remove(parent)
+    }
+  }, 60000)
+
+  it('records no queueRemaining when the queue ends well', async () => {
+    const parent = makeTempDir('machine-room-queue-')
+    try {
+      const repo = initRepo(parent)
+      const runs = join(parent, 'machineroom-runs')
+      const file = join(parent, 'queue.txt')
+      writeFileSync(file, 'First task.\n---\nSecond task.\n')
+      writeFakeLane(repo)
+      git(repo, ['add', '-A'])
+      git(repo, ['commit', '-m', 'the fake lane program'])
+      const result = await runLane(['fake', '--project', repo, '--queue', file], {
+        TEMP: parent,
+        MACHINEROOM_RUNS: runs,
+        MACHINEROOM_LANES_FILE: fakeLaneFile(parent),
+      })
+      expect(result.code).toBe(0)
+      const records = readFileSync(join(runs, 'runs.jsonl'), 'utf8').trim().split(/\r?\n/).map((line) => JSON.parse(line))
+      expect(records).toHaveLength(2)
+      for (const record of records) {
+        expect(record.queueSize).toBe(2)
+        expect(record).not.toHaveProperty('queueRemaining')
+      }
+    } finally {
+      remove(parent)
+    }
+  }, 60000)
+
+  it('masks a key in a task that did not run', async () => {
+    const parent = makeTempDir('machine-room-queue-')
+    try {
+      const repo = initRepo(parent)
+      const runs = join(parent, 'machineroom-runs')
+      const file = join(parent, 'queue.txt')
+      const key = `sk-${'a'.repeat(32)}`
+      writeFileSync(file, `First task.\n---\nBreak the second task.\n---\nUse OPENROUTER_API_KEY=${key} in the last task.\n`)
+      failingLane(repo, 'Break the second task.')
+      git(repo, ['add', 'run'])
+      git(repo, ['commit', '-m', 'the fake lane program'])
+      const lanes = laneFile(parent, {
+        name: 'fake',
+        worktree: join(parent, 'worktree'),
+        cli: { harness: 'opencode', bin: process.execPath, model: 'opencode/fake' },
+      })
+      const result = await runLane(['fake', '--project', repo, '--queue', file], {
+        TEMP: parent,
+        MACHINEROOM_RUNS: runs,
+        MACHINEROOM_LANES_FILE: lanes,
+      })
+      expect(result.code).toBe(1)
+      const records = readFileSync(join(runs, 'runs.jsonl'), 'utf8').trim().split(/\r?\n/).map((line) => JSON.parse(line))
+      expect(records.at(-1).queueRemaining).toEqual(['Use OPENROUTER_API_KEY=[key] in the last task.'])
+      expect(JSON.stringify(records.at(-1))).not.toContain(key)
     } finally {
       remove(parent)
     }

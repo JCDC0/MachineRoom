@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Every queue task's record carries `queueSize`, and the record where a queue stops carries `queueRemaining`, the masked text of each later task cut to 200 characters (P223).
 - A stopped or failed queue row offers Ask for recovery, which sends Main the branch, the failed task and what the record holds, asking it to inspect before continuing.
 - A conversation's menu has Export (E), which saves its title, project, summary and saved messages as one Markdown file.
 - The fourth readiness pass lists eight live-room problems on another project, among them outside files matched by folder name and failed git reads shown as clean.

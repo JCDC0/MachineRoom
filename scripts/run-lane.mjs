@@ -8,7 +8,7 @@ import { finished } from 'node:stream'
 import { fileURLToPath } from 'node:url'
 import { branchFor, briefFileList, buildPrompt, nextVersion, parseBriefs, parseRules } from '../src/briefs/briefs.js'
 import { formatQueueSummary, parseQueue, parseQueueArgs, runQueue } from '../src/briefs/queue.js'
-import { briefProblems, briefWorktreeProblems, childEnvironment, commandFor, createLaneLog, DEFAULT_MINUTES, filterRunsSince, formatOutcomes, formatStats, formatSummary, laneCommandProblem, laneStats, laneStopProblem, laneWithOverrides, ORCHESTRATOR_LANE_PROBLEM, parseRunArgs, projectProblems, projectRunGit, readinessLine, retryStartProblem, runListLine, runRecord, sessionToolLines, startFailureText, summarizeRun, unattendedPrompt, worktreeFor, WORKTREES_FOLDER } from '../src/briefs/run.js'
+import { briefProblems, briefWorktreeProblems, childEnvironment, commandFor, createLaneLog, DEFAULT_MINUTES, filterRunsSince, formatOutcomes, formatStats, formatSummary, laneCommandProblem, laneStats, laneStopProblem, laneWithOverrides, maskedQueueTasks, ORCHESTRATOR_LANE_PROBLEM, parseRunArgs, projectProblems, projectRunGit, readinessLine, retryStartProblem, runListLine, runRecord, sessionToolLines, startFailureText, summarizeRun, unattendedPrompt, worktreeFor, WORKTREES_FOLDER } from '../src/briefs/run.js'
 import { outcomeTable } from '../server/outcomes.js'
 import { readMainSubjectsSync } from '../server/runs.js'
 import { isLockHolderStale, killTree, descendantProcesses, leftoverProcesses, listProcesses } from '../server/processTree.js'
@@ -1057,7 +1057,7 @@ async function runQueueProject({ options, lane, lanes }) {
     let pending = null
     let testsFailed = false
     const queueStartedAt = Date.now()
-    const finishPending = (status = '') => {
+    const finishPending = (status = '', stopped = false) => {
       if (!pending) return
       const item = pending
       pending = null
@@ -1065,6 +1065,10 @@ async function runQueueProject({ options, lane, lanes }) {
       if (queueStatus !== '') {
         item.record.queueStatus = queueStatus
         if (queueStatus === 'failed: tests') item.record.exitCode = 1
+      }
+      if (stopped || queueStatus !== '') {
+        const number = Number.isInteger(item.record.queueIndex) ? item.record.queueIndex : 1
+        item.record.queueRemaining = maskedQueueTasks(tasks.slice(number))
       }
       writeProjectRecord(item)
     }
@@ -1080,11 +1084,11 @@ async function runQueueProject({ options, lane, lanes }) {
           const usageFile = join(folder, `${name}.usage.json`)
           const run = await startLane({
             options, lane, lanes, wanted: [], prompt, logPath, usageFile, name,
-            project: target.path, task, queue: { branch, index: number }, lockPath: lock,
+            project: target.path, task, queue: { branch, index: number, size: tasks.length }, lockPath: lock,
             projectBranch: startBranch, deferRecord: true, base,
           })
           pending = { record: run.record, folder: target.path, startHead: run.startHead, startBranch, tests: '' }
-          if (run.code !== 0 || run.killed) finishPending()
+          if (run.code !== 0 || run.killed) finishPending('', true)
           return { code: run.code, killed: run.killed }
         },
         runTests: async () => {
@@ -1134,7 +1138,7 @@ async function runQueueProject({ options, lane, lanes }) {
           branch,
           base,
           ...(failedHead ? { head: failedHead } : {}),
-          queue: { branch, index: 1 },
+          queue: { branch, index: 1, size: tasks.length, remaining: tasks.slice(1) },
           project,
           task: tasks[0] || '',
           startedBy: options.startedBy || '',
