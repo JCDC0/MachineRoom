@@ -33,6 +33,7 @@ import { createRunsApi, isGitCheckout } from './runs.js'
 import { createTeamsApi } from './teams.js'
 import { createSearchApi } from './search.js'
 import { createSessionsSource } from './sessions-source.js'
+import { createStorageApi } from './storage.js'
 import { gitPath } from './programPath.js'
 import { createStaticHandler } from './static.js'
 
@@ -783,6 +784,20 @@ export function createBridge(options = {}) {
     ttlMs: options.gitTtlMs,
   })
   const filesApi = createFilesApi({ projectRoot, sendJson })
+  const storageApi = createStorageApi({
+    runsFolder: bridgeRunsFolder,
+    projectRoot,
+    recordingsFolder: options.recordingsFolder,
+    sendJson,
+    readJsonBody,
+    lanesSource: () => lanesSource,
+    runs: () => runs,
+    now: options.now,
+    collectWorktreesFn: options.collectWorktrees,
+    listProcessesFn: options.listProcesses,
+    isHolderAliveFn: options.isHolderAlive,
+    platform: options.platform,
+  })
   const networkApi = createNetworkApi({
     sendJson,
     connector: options.networkConnector,
@@ -1351,6 +1366,7 @@ export function createBridge(options = {}) {
     if (await teamsApi.handle(req, res, url)) return
     if (await gitApi.handle(req, res, url)) return
     if (await filesApi.handle(req, res, url)) return
+    if (await storageApi.handle(req, res, url)) return
     if (await networkApi.handle(req, res, url)) return
 
     if (req.method === 'GET' && url.pathname === '/api/health') {
