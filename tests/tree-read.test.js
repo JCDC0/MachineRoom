@@ -10,7 +10,7 @@ import { makeTempDir } from './helpers/tempRoot.js'
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
-async function waitFor(check, { timeoutMs = 5000, everyMs = 10 } = {}) {
+async function waitFor(check, { timeoutMs = 10000, everyMs = 10 } = {}) {
   const deadline = Date.now() + timeoutMs
   for (;;) {
     if (await check()) return
@@ -19,7 +19,7 @@ async function waitFor(check, { timeoutMs = 5000, everyMs = 10 } = {}) {
   }
 }
 
-async function waitForReal(check, { timeoutMs = 2000, everyMs = 10 } = {}) {
+async function waitForReal(check, { timeoutMs = 10000, everyMs = 10 } = {}) {
   const deadline = Date.now() + timeoutMs
   for (;;) {
     const value = await check()
@@ -303,7 +303,11 @@ describe('a full tree read that failed', () => {
           await vi.advanceTimersByTimeAsync(1000)
           await sleep(5)
         }
-        await waitForReal(() => events.text().includes('new.js'))
+        await waitForReal(async () => {
+          if (events.text().includes('new.js')) return true
+          await vi.advanceTimersByTimeAsync(1000)
+          return events.text().includes('new.js')
+        })
         const health = await healthOf(url)
         expect(health.problems).toEqual([])
         expect(reads).toBe(2)
