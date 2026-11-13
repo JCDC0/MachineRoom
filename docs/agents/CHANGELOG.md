@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- P244: a failed full tree read reads again after 5 seconds, doubling to at most 60, until a full read with no unreadable folders, and the folder-shaped tree answer follows the plain one's age rule.
 - P239: review 29 lists six push blockers and two smaller findings in P216 to P230.
 - P237: a change to .git/index or info/exclude, or a worktree's own, reads the tree through the existing reader; other .git writes stay ignored.
 - P238: Claude and OpenCode session run ids carry a token made per reader, so a restarted reader never merges two runs in a replay (D4).
