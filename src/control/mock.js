@@ -452,6 +452,7 @@ const SAMPLE_REVIEWS = {
     files: 1,
     added: 2,
     deleted: 0,
+    checks: 'passed',
     lastRun: null,
   },
   opencode: {
@@ -468,6 +469,7 @@ const SAMPLE_REVIEWS = {
     files: 1,
     added: 2,
     deleted: 0,
+    checks: 'unchecked',
     lastRun: {
       lane: 'opencode',
       briefs: ['W3a'],
@@ -497,6 +499,7 @@ const SAMPLE_REVIEWS = {
     files: 1,
     added: 2,
     deleted: 0,
+    checks: 'failed',
     lastRun: null,
   },
 }
@@ -2275,6 +2278,9 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
           throw new Error(`The ${options.base} branch moved since you read it, so refresh reviews first.`)
         }
         if (options.head !== review.head) throw new Error('The lane moved since you read it. Read it again.')
+        if (review.checks === 'failed') {
+          throw new Error('Checks failed on this head, so the lane was not merged.')
+        }
         if (review.dirty) throw new Error('The lane has uncommitted changes.')
         if (review.ahead === 0) throw new Error('Nothing to merge.')
         const commit = onProject ? review.head : SAMPLE_MERGE_COMMIT
