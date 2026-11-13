@@ -44,12 +44,13 @@ export function laneCosts({ records = [], agents = [], now = Date.now() } = {}) 
     if (!Number.isFinite(started) || started < from || started >= to) continue
     let total = totals.get(lane)
     if (!total) {
-      total = { cost: 0, today: 0, input: 0, output: 0, hasInput: false, hasOutput: false }
+      total = { cost: 0, today: 0, hasCost: false, input: 0, output: 0, hasInput: false, hasOutput: false }
       totals.set(lane, total)
     }
     const cost = recordCost(record)
     if (cost !== null) {
       total.cost += cost
+      total.hasCost = true
       if (started >= today) total.today += cost
     }
     const input = recordTokens(record, 'inputTokens')
@@ -80,10 +81,10 @@ export function laneCosts({ records = [], agents = [], now = Date.now() } = {}) 
     return {
       agentId: agent.agentId,
       agentName: agent.name,
-      costCents: Math.round((total?.cost ?? 0) * 100),
-      todayCents: Math.round((total?.today ?? 0) * 100),
-      inputTokens: total?.hasInput ? total.input : null,
-      outputTokens: total?.hasOutput ? total.output : null,
+      costCents: total ? (total.hasCost ? Math.round(total.cost * 100) : null) : 0,
+      todayCents: total ? (total.hasCost ? Math.round(total.today * 100) : null) : 0,
+      inputTokens: total ? (total.hasInput ? total.input : null) : 0,
+      outputTokens: total ? (total.hasOutput ? total.output : null) : 0,
     }
   })
 

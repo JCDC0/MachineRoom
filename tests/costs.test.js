@@ -37,7 +37,7 @@ describe('costBoard rows', () => {
     expect(board.rows.map((row) => [row.key, row.costCents, row.todayCents, row.reported])).toEqual([
       ['opencode', 350, 125, true],
       ['agy', 40, 0, true],
-      ['claude', null, null, false],
+      ['claude', 0, 0, true],
     ])
   })
 
@@ -74,20 +74,20 @@ describe('costBoard rows', () => {
     })
   })
 
-  it('marks a row that reports nothing as not reported', () => {
+  it('keeps a row that reports 0 as reported', () => {
     const board = costBoard(
-      { byAgent: [{ agentId: 'agent-agy', agentName: 'agy', costCents: 0, inputTokens: 0, outputTokens: 0 }] },
+      { byAgent: [{ agentId: 'agent-agy', agentName: 'agy', costCents: 0, todayCents: 0, inputTokens: 0, outputTokens: 0 }] },
       [{ id: 'agent-agy', key: 'agy', name: 'agy' }],
     )
     expect(board.rows[0]).toEqual({
       key: 'agy',
       agentId: 'agent-agy',
       name: 'agy',
-      costCents: null,
-      todayCents: null,
-      inputTokens: null,
-      outputTokens: null,
-      reported: false,
+      costCents: 0,
+      todayCents: 0,
+      inputTokens: 0,
+      outputTokens: 0,
+      reported: true,
       share: null,
     })
   })
