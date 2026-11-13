@@ -37,6 +37,7 @@ import {
   SESSION_PENDING_PROBLEM,
   SESSION_ARCHIVED_PROBLEM,
   SESSION_UNREAD_PROBLEM,
+  SESSIONS_FULL_PROBLEM,
   AUTOCOMPACT_PROBLEM,
   APPROVAL_PROMPT_TOOL,
   COMPACT_KEEP_PROBLEM,
@@ -357,6 +358,37 @@ function restoreRig(rig, { mode = 'reply', file = 'calls-restored.jsonl' } = {})
 function stateFile(rig) {
   const file = readdirSync(rig.runs).find((name) => /^orchestrator-[0-9a-f]{8}\.json$/.test(name))
   return JSON.parse(readFileSync(join(rig.runs, file), 'utf8'))
+}
+
+function seedChat(rig, { sessions, messages = [] }) {
+  const file = chatFileFor(rig.projectRoot, rig.runs)
+  rig.orchestrator.close()
+  const state = JSON.parse(readFileSync(file, 'utf8'))
+  state.sessions = sessions
+  state.messages = messages
+  state.currentSessionId = null
+  state.currentTitle = null
+  state.summary = ''
+  state.pending = []
+  state.state = 'idle'
+  writeFileSync(file, JSON.stringify(state, null, 2))
+  return file
+}
+
+function pinnedSession(index, baseTime) {
+  const startedAt = new Date(baseTime + index * 60000).toISOString()
+  return {
+    id: `pinned-${index}`,
+    title: `Pinned ${index}`,
+    startedAt,
+    endedAt: new Date(baseTime + index * 60000 + 30000).toISOString(),
+    pinned: true,
+    starred: false,
+    sessionId: `ses_${index}`,
+    opencodeSessionId: null,
+    summary: '',
+    messages: [{ id: `pinned-message-${index}`, from: 'owner', text: `Pinned ${index}`, at: startedAt }],
+  }
 }
 
 function emitterChild() {
@@ -3444,6 +3476,119 @@ describe('orchestrator reasoning effort and sessions', () => {
     expect(list.some((s) => s.id === 'sess-0')).toBe(true)
     expect(list.some((s) => s.id === 'sess-1')).toBe(false)
   }, 30000)
+
+  it('refuses a new session when the saved list is full of pinned conversations', () => {
+    const rig = makeRig()
+    const baseTime = Date.now() - 100000000
+    const currentAt = new Date().toISOString()
+    seedChat(rig, {
+      sessions: Array.from({ length: 50 }, (_, index) => pinnedSession(index, baseTime)),
+      messages: [
+        { id: 'current-owner', from: 'owner', text: 'Keep this conversation', at: currentAt },
+        { id: 'current-reply', from: 'orchestrator', text: 'Reply: Keep this conversation', at: currentAt },
+      ],
+    })
+    const restored = restoreRig(rig)
+    expect(restored.orchestrator.listSessions()).toHaveLength(50)
+    expect(restored.orchestrator.answer().messages).toHaveLength(2)
+
+    expect(restored.orchestrator.newSession({ confirmed: true })).toEqual({
+      status: 409,
+      body: { error: SESSIONS_FULL_PROBLEM },
+    })
+    expect(restored.orchestrator.answer().messages.map((m) => m.id)).toEqual([
+      'current-owner',
+      'current-reply',
+    ])
+    expect(restored.orchestrator.currentSessionInfo()).toMatchObject({
+      title: 'Keep this conversation',
+      count: 2,
+    })
+    const list = restored.orchestrator.listSessions()
+    expect(list).toHaveLength(50)
+    expect(list.some((s) => s.title === 'Keep this conversation')).toBe(false)
+  })
+
+  it('drops an older unpinned conversation to archive when the rest are pinned', () => {
+    const rig = makeRig()
+    const baseTime = Date.now() - 100000000
+    const currentAt = new Date().toISOString()
+    const older = {
+      ...pinnedSession(0, baseTime),
+      id: 'older-unpinned',
+      title: 'Older unpinned',
+      startedAt: new Date(baseTime - 60000).toISOString(),
+      endedAt: new Date(baseTime - 30000).toISOString(),
+      pinned: false,
+      sessionId: 'ses_older',
+      messages: [
+        {
+          id: 'older-message',
+          from: 'owner',
+          text: 'Older unpinned',
+          at: new Date(baseTime - 60000).toISOString(),
+        },
+      ],
+    }
+    seedChat(rig, {
+      sessions: [...Array.from({ length: 49 }, (_, index) => pinnedSession(index, baseTime)), older],
+      messages: [{ id: 'current-owner', from: 'owner', text: 'Keep this conversation', at: currentAt }],
+    })
+    const restored = restoreRig(rig)
+    expect(restored.orchestrator.listSessions()).toHaveLength(50)
+
+    expect(restored.orchestrator.newSession({ confirmed: true }).status).toBe(200)
+    const list = restored.orchestrator.listSessions()
+    expect(list).toHaveLength(50)
+    expect(list.some((s) => s.id === 'older-unpinned')).toBe(false)
+    expect(list.some((s) => s.title === 'Keep this conversation')).toBe(true)
+    expect(restored.orchestrator.answer().messages).toHaveLength(0)
+  })
+
+  it('refuses to open or branch when the saved list is full of pinned conversations', () => {
+    const rig = makeRig()
+    const baseTime = Date.now() - 100000000
+    const currentAt = new Date().toISOString()
+    seedChat(rig, {
+      sessions: Array.from({ length: 50 }, (_, index) => pinnedSession(index, baseTime)),
+      messages: [
+        { id: 'current-owner', from: 'owner', text: 'Keep this conversation', at: currentAt },
+        { id: 'current-reply', from: 'orchestrator', text: 'Reply: Keep this conversation', at: currentAt },
+      ],
+    })
+    const restored = restoreRig(rig)
+    const before = restored.orchestrator.currentSessionInfo()
+
+    expect(restored.orchestrator.openSession('pinned-7', { confirmed: true })).toEqual({
+      status: 409,
+      body: { error: SESSIONS_FULL_PROBLEM },
+    })
+    expect(restored.orchestrator.answer().messages.map((m) => m.id)).toEqual([
+      'current-owner',
+      'current-reply',
+    ])
+    expect(restored.orchestrator.currentSessionInfo()).toMatchObject({
+      sessionId: before.sessionId,
+      title: 'Keep this conversation',
+      count: 2,
+    })
+
+    expect(restored.orchestrator.branchSession({ index: 2, confirmed: true })).toEqual({
+      status: 409,
+      body: { error: SESSIONS_FULL_PROBLEM },
+    })
+    expect(restored.orchestrator.answer().messages.map((m) => m.id)).toEqual([
+      'current-owner',
+      'current-reply',
+    ])
+    expect(restored.orchestrator.currentSessionInfo()).toMatchObject({
+      sessionId: before.sessionId,
+      title: 'Keep this conversation',
+      count: 2,
+    })
+    expect(restored.orchestrator.listSessions()).toHaveLength(50)
+    expect(restored.orchestrator.listSessions().some((s) => s.title.endsWith('(branch)'))).toBe(false)
+  })
 
   it('keeps a quoted transcript inside the prompt budget', () => {
     const sample = quotedTranscript([

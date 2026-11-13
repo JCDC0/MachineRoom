@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- A full saved list of pinned conversations answers 409 to a new, open or branch request and keeps the current conversation and its messages (P179).
 - The second readiness review lists 8 problems after days of use and 2 suggested features (P178).
 - A broken package.json stops a queue task with one masked sentence instead of a stand-in test command (P176).
 - A broken package.json stops a queue task with one masked sentence and no node command, and a dry run prints that sentence on its tests line (P176).
