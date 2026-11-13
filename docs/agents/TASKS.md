@@ -2122,3 +2122,7 @@ Write the file: one row per finding, with `fixed`, `partly` or `not fixed` and w
    - Saving `npm test && npm run build` is refused with 400 and the runner's sentence.
    - Each must fail before your change.
 4. Run `node node_modules/vitest/vitest.mjs related --run src/briefs/run.js server/project-settings.js server/runs.js` and `npm run build`. Report what passed.
+
+**P248. Run the full suite on the review fixes (OpenCode).** Read this brief only. Change no file except your report. Use no subagents. Run every command in the foreground. Commit only your report, and stop at minute 25. Files: docs/agents/RUN-2026-11-13-SUITE-7.md.
+
+Run `npm test` once at `fdef59e2` or later. For every failing test, run its file alone twice and say whether it fails again. Write the file: the commit, the totals, each failure with its file, test name, error line and whether it repeated alone, and the time the run took. Do not fix anything.
