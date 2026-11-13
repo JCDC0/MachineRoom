@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The screenshot helper says when it could not read the Playwright folder, names the folder masked with the error code, and keeps the no Chromium sentence only when the folder was read (P231).
 - Dispatch has a Check command field saved per project; a project run or queue passes it to run-lane as --test, and the confirm card names the check it will use.
 - Dispatch's running rows and the Inspector offer Stop with a confirm card; the bridge stops a matching run with --stop and tells the lane's sub orchestrator, else Main, as a note its next turn reads first.
 - Settings has a Storage section with sizes by kind, a preview of finished run logs and old recordings older than N days, and Archive, which moves exactly those into runs/archive/YYYY-MM and deletes nothing.
