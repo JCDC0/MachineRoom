@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { basename, join, resolve } from 'node:path'
@@ -75,6 +76,7 @@ const DEFAULT_RETENTION_MS = 60 * 60 * 1000
 export function createOpencodeSessionsReader(options = {}) {
   const rootKey = pathKey(options.projectRoot)
   const runs = resolve(String(options.runsFolder || defaultRunsFolder()))
+  const token = randomBytes(4).toString('hex')
   const dbPath = options.dbPath ? resolve(String(options.dbPath)) : defaultDbPath()
   const rawQuiet = Number(options.quietMs)
   const quietMs = Number.isFinite(rawQuiet) ? rawQuiet : DEFAULT_QUIET_MS
@@ -296,7 +298,7 @@ export function createOpencodeSessionsReader(options = {}) {
 
   function createRun(rootId, row) {
     const at = now()
-    const runId = `${rootId}:${row.seq ?? row.id}`
+    const runId = `${rootId}:${token}:${row.seq ?? row.id}`
     const run = {
       runId,
       rootId,
