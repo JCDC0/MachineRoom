@@ -1494,3 +1494,9 @@ Review, with `git show -m --first-parent SHA`, against the code around each chan
 
 1. Read the merges since `2061a5a6` with `git log --first-parent --oneline 2061a5a6..HEAD` and `git show -m --first-parent`: P143 (a brief's file list ignores only code), P144 (project paths masked in run-lane output), P145 (the merge check no longer blocks the bridge), P146 (two load tests wait for state) and P148 (`server/printed-path.js`). Bring the five files in line with the code. Add to `LIMITS.md` that the masked log line test in `tests/run-lane.test.js` runs on Windows only until its Linux case is traced.
 2. Plain words, short sentences, no em dashes. Where a doc disagrees with the code, the code wins. Change nothing that is already right.
+
+**P156. The stop test that fails now and then (OpenCode).** Read this brief only. Use no subagents. Run every command in the foreground. Commit each step as you finish it, and stop starting new work at minute 18. Files: tests/run-lane-stop.test.js, scripts/run-lane.mjs, docs/agents/CHANGELOG.md.
+
+1. `--stop kills the run, the harness and the grandchild before it writes` in `tests/run-lane-stop.test.js` failed once at line 182 (`expect(stopped.code).toBe(0)`) during P151's related run, then passed alone. Run the file alone ten times and note each result. Print `stopped.stdout` and `stopped.stderr` when the code is not 0 so a failure says why.
+2. Find why `--stop` can exit non-zero: read the stop path in `scripts/run-lane.mjs` against the test's timing. Fix the cause in the test if the test races, or in the stop path if a real stop can fail the same way. Do not raise a timeout to hide it.
+3. Run the file ten times again and report both counts. Run `node node_modules/vitest/vitest.mjs related --run scripts/run-lane.mjs` and `npm run build` if you changed the script. Report what passed.
