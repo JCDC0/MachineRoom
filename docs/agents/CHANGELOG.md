@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- P269: AUDIT-2026-11-REVIEW-31.md lists seven findings in P249, P254, P260 and P263; R31-1 to R31-5 block a push.
 - P270: doctor with both a folder and --root prints only its refusal sentence and exits 1, without the usage block.
 - P270: the doctor's double-folder refusal prints only its one sentence and exits 1, with no usage block.
 - P260: a lane may name fallback; a brief run or project task that fails on a quota, rate limit, overload or failed start runs once on the backup lane on a -on-LANE branch.
