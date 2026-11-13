@@ -542,13 +542,37 @@ describe('scripts/run-lane.mjs with --queue', { timeout: 30000 }, () => {
       })
       expect(result.code).toBe(1)
       expect(result.stdout).toContain('1. failed: tests')
-      expect(result.stderr).toContain('package.json')
-      expect(result.stderr).toContain('could not be read or parsed')
+      const masked = printedRunsFolder(join(repo, 'package.json'), { TEMP: parent, TMP: parent })
+      const output = `${result.stdout}\n${result.stderr}`
+      expect(output).toContain(`The package.json at ${masked} could not be read, so the tests cannot run.`)
+      expect(output).not.toContain(process.execPath)
       expect(git(repo, ['rev-parse', 'HEAD']).trim()).toBe(before)
     } finally {
       remove(parent)
     }
   }, 60000)
+
+  it('prints the broken package.json sentence on a dry run tests line', async () => {
+    const parent = makeTempDir('machine-room-queue-')
+    try {
+      const repo = initRepo(parent)
+      writeFileSync(join(repo, 'package.json'), '{ not json\n')
+      git(repo, ['add', '-A'])
+      git(repo, ['commit', '-m', 'Break the package file'])
+      const file = join(parent, 'queue.txt')
+      writeFileSync(file, 'Break the package file.\n')
+      const result = await runLane(['fake', '--project', repo, '--queue', file, '--dry-run'], {
+        TEMP: parent,
+        MACHINEROOM_LANES_FILE: fakeLaneFile(parent),
+      })
+      expect(result.code).toBe(0)
+      const masked = printedRunsFolder(join(repo, 'package.json'), { TEMP: parent, TMP: parent })
+      expect(result.stdout).toContain(`tests: The package.json at ${masked} could not be read, so the tests cannot run.`)
+      expect(result.stdout).not.toContain(process.execPath)
+    } finally {
+      remove(parent)
+    }
+  })
 
   it('refuses --queue with a task, a task file, --allow-dirty or a brief id', async () => {
     const parent = makeTempDir('machine-room-queue-')
