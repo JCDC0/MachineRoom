@@ -244,9 +244,6 @@ export async function readTree(
     throw new Error('Could not read the git file list.')
   }
   const deleted = await deletedPromise
-  if (deleted === null) {
-    throw new Error('Could not read deleted files from git.')
-  }
   return { root, files: dropDeleted(listed, deleted).sort(), created: [] }
 }
 
