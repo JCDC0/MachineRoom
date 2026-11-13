@@ -94,7 +94,7 @@ function removeRecordings(names, indexBefore, existed) {
   else rmSync(join(RECORDINGS, 'index.json'), { force: true })
 }
 
-async function runFailover({ laneKey, lane, lanes, runs, prompt = 'Do it.', name = 'failover' }) {
+async function runFailover({ laneKey, lane, lanes, runs, prompt = 'Do it.', promptFor = null, name = 'failover' }) {
   const saved = process.env.MACHINEROOM_RUNS
   process.env.MACHINEROOM_RUNS = runs
   const indexPath = join(RECORDINGS, 'index.json')
@@ -109,6 +109,7 @@ async function runFailover({ laneKey, lane, lanes, runs, prompt = 'Do it.', name
       lanes,
       wanted: [BRIEF],
       prompt,
+      promptFor,
       logPath: join(runs, `${name}.log`),
       usageFile: join(runs, `${name}.usage.json`),
       name,
@@ -150,6 +151,52 @@ describe('a lane that hits its quota hands its run to a backup lane', { timeout:
       expect(count(failCount)).toBe(1)
       expect(count(okCount)).toBe(1)
       expect(logs.join('\n')).toContain('moving the run to agy because rate-limit')
+    } finally {
+      rmSync(base, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+    }
+  })
+
+  it('keeps the backup prompt when a readiness retry moves the run', async () => {
+    const base = makeTempDir('machine-room-failover-ready-')
+    try {
+      const first = join(base, 'first')
+      const backup = join(base, 'backup')
+      const runs = join(base, 'runs')
+      const readyCount = join(base, 'ready-count.txt')
+      const okCount = join(base, 'ok-count.txt')
+      const promptFile = join(base, 'backup-prompt.txt')
+      const readyScript = [
+        "const { appendFileSync } = require('node:fs')",
+        `appendFileSync(${JSON.stringify(readyCount)}, 'x')`,
+        "console.log('Standalone server exited before reporting readiness')",
+        'process.exit(1)',
+        '',
+      ].join('\n')
+      const okPromptScript = [
+        "const { appendFileSync, writeFileSync } = require('node:fs')",
+        `appendFileSync(${JSON.stringify(okCount)}, 'x')`,
+        `writeFileSync(${JSON.stringify(promptFile)}, process.argv[process.argv.length - 1])`,
+        "writeFileSync('note.txt', 'done\\n')",
+        "console.log('{\"type\":\"step_finish\",\"part\":{\"cost\":0,\"tokens\":{\"input\":1,\"output\":1}}}')",
+        '',
+      ].join('\n')
+      makeRepo(first, readyScript)
+      makeRepo(backup, okPromptScript)
+      mkdirSync(runs, { recursive: true })
+      const lanes = {
+        opencode: { name: 'Fail lane', worktree: first, fallback: 'agy', forbidden: [], cli: { harness: 'opencode', bin: process.execPath, model: 'fake/fail', commits: 'runner' } },
+        agy: { name: 'Backup lane', worktree: backup, forbidden: [], cli: { harness: 'opencode', bin: process.execPath, model: 'fake/ok', commits: 'runner' } },
+      }
+      const promptFor = (laneKey, branchSuffix = '') => buildPrompt({ briefs: [BRIEF], laneKey, lanes, rules: { about: '', rules: [] }, version: '0.1.1', branchSuffix })
+      const { result, logs } = await runFailover({ laneKey: 'opencode', lane: lanes.opencode, lanes, runs, prompt: promptFor('opencode'), promptFor })
+      expect(result.code, logs.join('\n')).toBe(0)
+      expect(count(readyCount)).toBe(2)
+      expect(count(okCount)).toBe(1)
+      const prompt = readFileSync(promptFile, 'utf8')
+      expect(prompt).toContain(`Your worktree is ${backup}.`)
+      expect(prompt).toContain(`${branchFor(BRIEF)}-on-agy`)
+      expect(prompt).not.toContain(`Your worktree is ${first}.`)
+      expect(logs.join('\n')).toContain('moving the run to agy because start-failed')
     } finally {
       rmSync(base, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
     }

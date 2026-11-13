@@ -1801,7 +1801,7 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
         lane, lanes, wanted, prompt,
         logPath: join(dirname(logPath), `${retryName}.log`),
         usageFile: join(dirname(usageFile), `${retryName}.usage.json`),
-        name: retryName, project, task, queue, lockPath, projectBranch, deferRecord, base: runBase, openLog, branchSuffix, failoverFrom,
+        name: retryName, project, task, queue, lockPath, projectBranch, deferRecord, base: runBase, openLog, branchSuffix, failoverFrom, promptFor,
       })
     }
     const record = laneRunRecord({
