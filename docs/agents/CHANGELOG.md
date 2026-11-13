@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Auto previews every task in the queue and Confirm starts the lane its card names, so a taken lane shows a refusal and needs a fresh preview (P201).
 - The third readiness pass lists seven panel problems, among them Retry and Auto acting on a target other than the one shown, and two features for the owner.
 - The queue branch and its log names carry milliseconds, so a second queue run started in the same second no longer stops on an existing branch.
 - runs.jsonl deltas are read in 4 MB chunks, and every caller gets the same frozen records instead of a copy on each read.

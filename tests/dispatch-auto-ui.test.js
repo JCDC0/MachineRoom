@@ -87,7 +87,102 @@ describe('DispatchPanel auto lane', () => {
         buttonWithText(container, 'Confirm').click()
       })
       await settleTimers()
-      expect(calls.start).toEqual([{ lane: 'auto', body: { tasks: ['One.'], worktree: true } }])
+      expect(calls.start).toEqual([{ lane: 'opencode2', body: { tasks: ['One.'], worktree: true } }])
+    })
+  })
+
+  it('previews the highest tier across every task in the queue', async () => {
+    vi.useFakeTimers()
+    const { client, calls } = makeClient()
+    client.routeLane = async (body) => {
+      calls.route.push(body)
+      if (body.task === 'Large one.') {
+        return {
+          lane: 'opencode',
+          tier: 'large',
+          reason: 'The large tier runs opencode at max.',
+          skipped: [],
+        }
+      }
+      return { lane: 'opencode2', tier: 'small', reason: REASON, skipped: [] }
+    }
+    await withDom(async ({ container, root }) => {
+      await act(async () => {
+        root.render(createElement(DispatchPanel, { client, initialAgents: AGENTS }))
+      })
+      await settleTimers()
+
+      await typeInto(container.querySelector('#project-run-task'), 'Small one.\n---\nLarge one.')
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(400)
+      })
+      expect(calls.route).toEqual([{ task: 'Small one.' }, { task: 'Large one.' }])
+      expect(container.textContent).toContain('Auto: opencode. The large tier runs opencode at max.')
+
+      await act(async () => {
+        buttonWithText(container, 'Run 2 tasks in order').click()
+      })
+      expect(container.textContent).toContain('Lane: opencode')
+    })
+  })
+
+  it('sends the lane the card names on Confirm', async () => {
+    vi.useFakeTimers()
+    const { client, calls } = makeClient()
+    await withDom(async ({ container, root }) => {
+      await act(async () => {
+        root.render(createElement(DispatchPanel, { client, initialAgents: AGENTS }))
+      })
+      await settleTimers()
+
+      await typeInto(container.querySelector('#project-run-task'), 'One.')
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(400)
+      })
+      await act(async () => {
+        buttonWithText(container, 'Run').click()
+      })
+      expect(container.textContent).toContain('Lane: opencode2')
+
+      await act(async () => {
+        buttonWithText(container, 'Confirm').click()
+      })
+      await settleTimers()
+      expect(calls.start).toEqual([{ lane: 'opencode2', body: { tasks: ['One.'], worktree: true } }])
+    })
+  })
+
+  it('shows the refusal and starts nothing when the previewed lane is taken', async () => {
+    vi.useFakeTimers()
+    const { client, calls } = makeClient()
+    client.startRun = async (lane, body) => {
+      calls.start.push({ lane, body })
+      throw new Error('That lane is already running.')
+    }
+    await withDom(async ({ container, root }) => {
+      await act(async () => {
+        root.render(createElement(DispatchPanel, { client, initialAgents: AGENTS }))
+      })
+      await settleTimers()
+
+      await typeInto(container.querySelector('#project-run-task'), 'One.')
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(400)
+      })
+      await act(async () => {
+        buttonWithText(container, 'Run').click()
+      })
+      await act(async () => {
+        buttonWithText(container, 'Confirm').click()
+      })
+      await settleTimers()
+
+      expect(calls.start).toEqual([{ lane: 'opencode2', body: { tasks: ['One.'], worktree: true } }])
+      expect(container.textContent).toContain('That lane is already running.')
+      expect(container.textContent).toContain('Preview the route again.')
+      expect(buttonWithText(container, 'Preview again')).not.toBeNull()
+      const confirm = buttonWithText(container, 'Confirm')
+      expect(confirm.disabled === true || confirm.getAttribute('disabled') !== null).toBe(true)
     })
   })
 

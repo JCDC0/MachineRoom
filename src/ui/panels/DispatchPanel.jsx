@@ -8,6 +8,7 @@ import {
 } from './briefs.js'
 import { subscribeToNotices } from './notices.js'
 import { laneNeedsNetwork } from '../../model/online.js'
+import { TIERS } from '../../policy/route.js'
 import { PROJECT_CONFIRM_LIMIT, PROJECT_QUEUE_TEXT_LIMIT, cancelSplitRun, clearSplitRun, planLaneTasks, projectRunBody, projectRunConfirm, projectRunLabel, projectRunLanes, projectSplitLabel, projectTaskProblem, projectWorktreeName, recordLine, resultWord, splitRunProgress, splitRunSnapshot, splitTasks, startSplitRun, subscribeSplitRun, timeSinceStart } from './runs.js'
 
 function projectKey(value) {
@@ -57,9 +58,12 @@ export default function DispatchPanel({
   const [projectAllowDirty, setProjectAllowDirty] = useState(false)
   const [projectShowConfirm, setProjectShowConfirm] = useState(false)
   const [projectSplitPlan, setProjectSplitPlan] = useState(null)
+  const [projectConfirmLane, setProjectConfirmLane] = useState('')
+  const [projectNeedsPreview, setProjectNeedsPreview] = useState(false)
   const [projectStarting, setProjectStarting] = useState(false)
   const [projectError, setProjectError] = useState(null)
   const [networkOnline, setNetworkOnline] = useState(true)
+  const [routeNonce, setRouteNonce] = useState(0)
 
   const splitRun = useSyncExternalStore(subscribeSplitRun, splitRunSnapshot, splitRunSnapshot)
   const splitAnswers = splitRun.answers
@@ -79,9 +83,10 @@ export default function DispatchPanel({
   const runLane = selectedBrief ? runLaneFor(selectedBrief, runsState.running, agents) : null
   const canRunBrief = typeof client?.startRun === 'function' && Boolean(runLane)
   const projectLanes = projectRunLanes(agents, runsState.running)
-  const routeTask = (splitTasks(projectTask)[0] ?? '').trim()
-  const routeAnswer = hasRouteLane && projectLane === 'auto' && autoRoute.text === routeTask ? autoRoute.answer : null
-  const routeError = hasRouteLane && projectLane === 'auto' && autoRoute.text === routeTask ? autoRoute.error : null
+  const routeTasks = splitTasks(projectTask).map((task) => task.trim()).filter((task) => task !== '')
+  const routeText = routeTasks.join('\n---\n')
+  const routeAnswer = hasRouteLane && projectLane === 'auto' && autoRoute.text === routeText ? autoRoute.answer : null
+  const routeError = hasRouteLane && projectLane === 'auto' && autoRoute.text === routeText ? autoRoute.error : null
   const effectiveLane = projectLane === 'auto' ? routeAnswer?.lane ?? '' : projectLane
   const projectLaneRunning = projectLanes.some((lane) => lane.key === effectiveLane && lane.running)
 
@@ -203,8 +208,8 @@ export default function DispatchPanel({
 
   useEffect(() => {
     if (!hasRouteLane || projectLane !== 'auto') return
-    const first = splitTasks(projectTask)[0] ?? ''
-    const text = first.trim()
+    const tasks = splitTasks(projectTask).map((task) => task.trim()).filter((task) => task !== '')
+    const text = tasks.join('\n---\n')
     if (text === '') {
       routeReqRef.current += 1
       setAutoRoute({ text: '', answer: null, error: null })
@@ -213,8 +218,17 @@ export default function DispatchPanel({
     const reqId = ++routeReqRef.current
     const timer = setTimeout(async () => {
       try {
-        const answer = await client.routeLane({ task: text })
+        const answers = await Promise.all(tasks.map((task) => client.routeLane({ task })))
         if (routeReqRef.current !== reqId) return
+        let answer = answers[0] ?? null
+        let rank = -1
+        for (const item of answers) {
+          const next = TIERS.indexOf(item?.tier)
+          if (next > rank) {
+            answer = item
+            rank = next
+          }
+        }
         setAutoRoute({ text, answer, error: null })
       } catch (err) {
         if (routeReqRef.current !== reqId) return
@@ -222,7 +236,7 @@ export default function DispatchPanel({
       }
     }, 400)
     return () => clearTimeout(timer)
-  }, [client, hasRouteLane, projectLane, projectTask])
+  }, [client, hasRouteLane, projectLane, projectTask, routeNonce])
 
   useEffect(() => {
     let alive = true
@@ -379,6 +393,8 @@ export default function DispatchPanel({
   function dismissProjectConfirm() {
     setProjectShowConfirm(false)
     setProjectSplitPlan(null)
+    setProjectConfirmLane('')
+    setProjectNeedsPreview(false)
     if (!splitActive) clearSplitRun()
     setProjectError(null)
   }
@@ -392,6 +408,8 @@ export default function DispatchPanel({
     const plan = split ? planLaneTasks(tasks, projectLanes, routeAnswer) : null
     clearSplitRun()
     setProjectSplitPlan(plan)
+    setProjectConfirmLane(split ? '' : effectiveLane)
+    setProjectNeedsPreview(false)
     setProjectShowConfirm(true)
     setProjectError(null)
   }
@@ -415,11 +433,20 @@ export default function DispatchPanel({
 
     const tasks = splitTasks(projectTask)
     const problem = projectTaskProblem(tasks)
-    if (projectLaneRunning) {
-      setProjectError('That lane is already running.')
+    const lane = projectConfirmLane
+    const laneRunning = projectLanes.some((item) => item.key === lane && item.running)
+    if (projectNeedsPreview) return
+    if (laneRunning) {
+      if (projectLane === 'auto') {
+        setProjectError('That lane is already running. Preview the route again.')
+        setAutoRoute({ text: '', answer: null, error: null })
+        setProjectNeedsPreview(true)
+      } else {
+        setProjectError('That lane is already running.')
+      }
       return
     }
-    if (!projectLane || problem || typeof client?.startRun !== 'function') {
+    if (!lane || problem || typeof client?.startRun !== 'function') {
       if (problem) setProjectError(problem)
       return
     }
@@ -432,13 +459,22 @@ export default function DispatchPanel({
         allowDirty: projectAllowDirty,
         worktree: projectOwnWorktree,
       })
-      await client.startRun(projectLane, run)
+      await client.startRun(lane, run)
       setProjectShowConfirm(false)
+      setProjectConfirmLane('')
+      setProjectNeedsPreview(false)
       setProjectTask('')
       setProjectAllowDirty(false)
       loadRuns()
     } catch (err) {
-      setProjectError(err.message || 'Could not start run.')
+      const message = err.message || 'Could not start run.'
+      if (message === 'That lane is already running.' && projectLane === 'auto') {
+        setProjectError(`${message} Preview the route again.`)
+        setAutoRoute({ text: '', answer: null, error: null })
+        setProjectNeedsPreview(true)
+      } else {
+        setProjectError(message)
+      }
     } finally {
       setProjectStarting(false)
     }
@@ -481,12 +517,12 @@ export default function DispatchPanel({
   const projectTasks = splitTasks(projectTask)
   const projectQueue = projectTasks.length > 1
   const projectConfirm = projectRunConfirm({
-    lane: effectiveLane,
+    lane: projectConfirmLane,
     project: projectName,
     task: projectTask,
     tasks: projectTasks,
   })
-  const ownWorktreeName = projectOwnWorktree ? projectWorktreeName(projectName, effectiveLane) : ''
+  const ownWorktreeName = projectOwnWorktree ? projectWorktreeName(projectName, projectConfirmLane) : ''
   const projectProblem = projectTaskProblem(projectTasks)
   const projectSplitRun = projectOneLanePerTask && projectTasks.length > 1
   const projectSplitTaskCount = projectSplitPlan?.pairs.length || projectTasks.length
@@ -802,18 +838,31 @@ export default function DispatchPanel({
                 <button
                   type="button"
                   className="brief-confirm-btn"
-                  disabled={projectStarting}
+                  disabled={projectStarting || projectNeedsPreview}
                   onClick={handleConfirmProjectRun}
                 >
                   {projectStarting ? 'Starting' : 'Confirm'}
                 </button>
+                {projectNeedsPreview && (
+                  <button
+                    type="button"
+                    className="brief-cancel-btn"
+                    onClick={() => {
+                      dismissProjectConfirm()
+                      setRouteNonce((count) => count + 1)
+                    }}
+                  >
+                    Preview again
+                  </button>
+                )}
                 <button
                   type="button"
                   className="brief-cancel-btn"
                   disabled={projectStarting}
                   onClick={() => {
-                    setProjectShowConfirm(false)
-                    setProjectError(null)
+                    const refresh = projectNeedsPreview
+                    dismissProjectConfirm()
+                    if (refresh) setRouteNonce((count) => count + 1)
                   }}
                 >
                   Cancel
