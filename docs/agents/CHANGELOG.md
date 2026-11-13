@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- P248: the full suite passes at a01af28f, 5,189 passed and 4 skipped in 281 files.
 - P247: the check command keeps escaped quotes and refuses an unclosed one, and the bridge refuses shell syntax when the command is saved or a run starts.
 - P246: the archive checks the new file's real path lies in the archive folder before removing the source, and otherwise removes the copy and skips the file.
 - P247: the bridge refuses shell syntax and an unclosed quote when the check command is saved or a Dispatch start uses it, with the runner's sentence.
