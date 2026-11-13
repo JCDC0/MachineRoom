@@ -35,8 +35,9 @@ function baseEnvironment() {
   return env
 }
 
-function chatAnswer({ text = '', calls = [], usage = null } = {}) {
+function chatAnswer({ text = '', calls = [], usage = null, reasoning = '' } = {}) {
   const message = { role: 'assistant', content: text === '' ? null : text }
+  if (reasoning !== '') message.reasoning = reasoning
   if (calls.length > 0) {
     message.tool_calls = calls.map((call, index) => ({
       id: call.id ?? `call_${index}`,
@@ -337,6 +338,55 @@ describe('mr-agent', () => {
     expect(final.is_error).toBe(true)
     expect(final.result).toContain('401')
     expect(final.result).not.toContain('test-key')
+  })
+
+  it('nudges an empty reply and goes on to its next tool call', async () => {
+    const folder = tempDir()
+    const api = await startFakeApi((_body, index) => {
+      if (index === 0) return chatAnswer({})
+      if (index === 1) return chatAnswer({ calls: [{ name: 'write_file', arguments: { path: 'out.txt', content: 'made\n' } }] })
+      return chatAnswer({ text: 'Finished.' })
+    })
+    const result = await runAgent({ folder, api })
+    expect(result.code).toBe(0)
+    expect(api.calls).toHaveLength(3)
+    expect(api.calls[1].body.messages.at(-1)).toEqual({
+      role: 'user',
+      content: 'Continue with the task. Use tools, or say you are done.',
+    })
+    expect(readFileSync(join(folder, 'out.txt'), 'utf8')).toBe('made\n')
+    expect(jsonLines(result.stdout).at(-1)).toMatchObject({ type: 'result', is_error: false, result: 'Finished.' })
+  })
+
+  it('reports a provider error in an answer as a failure and exits 1', async () => {
+    const folder = tempDir()
+    const api = await startFakeApi(() => ({
+      status: 200,
+      body: {
+        choices: [{ index: 0, message: { role: 'assistant', content: null }, finish_reason: 'error' }],
+        error: { message: 'The provider failed.', code: 502 },
+      },
+    }))
+    const result = await runAgent({ folder, api })
+    expect(result.code).toBe(1)
+    expect(api.calls).toHaveLength(1)
+    const final = jsonLines(result.stdout).at(-1)
+    expect(final).toMatchObject({ type: 'result', is_error: true, result: 'The provider failed.' })
+  })
+
+  it('uses the last message as the result text after a reasoning-only reply', async () => {
+    const folder = tempDir()
+    const api = await startFakeApi((_body, index) => {
+      if (index === 0) {
+        return chatAnswer({ text: 'First message.', calls: [{ name: 'list_dir', arguments: { path: '.' } }] })
+      }
+      if (index === 1) return chatAnswer({ reasoning: 'Still thinking about the task.' })
+      return chatAnswer({ text: 'Last message.' })
+    })
+    const result = await runAgent({ folder, api })
+    expect(result.code).toBe(0)
+    expect(api.calls).toHaveLength(3)
+    expect(jsonLines(result.stdout).at(-1)).toMatchObject({ type: 'result', is_error: false, result: 'Last message.' })
   })
 
   it('goes on after one damaged answer with damagedAnswers 1', async () => {
