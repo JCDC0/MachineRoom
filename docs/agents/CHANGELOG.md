@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- P273: a project task or queue that fails over returns the backup's record, start head and branch, so its check and bookkeeping use the backup's run.
 - P273: a harness program that cannot start counts as a failed start, so the run moves to its backup lane and its record says why.
 - P273: a readiness retry keeps the backup prompt builder, so a failover after the retry gives the backup its own worktree and branch.
 - P268: the git write test's request bound matches the client's write limit, and the bridge and tree waits under 10 seconds are raised to 10.

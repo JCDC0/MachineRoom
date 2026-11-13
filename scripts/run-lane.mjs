@@ -1127,7 +1127,7 @@ async function runQueueProject({ options, lane, lanes }) {
             project: target.path, task, queue: { branch, index: number, size: tasks.length }, lockPath: lock,
             projectBranch: startBranch, deferRecord: true, base,
           })
-          pending = { record: run.record, folder: target.path, startHead: run.startHead, startBranch, tests: '' }
+          pending = { record: run.record, folder: target.path, startHead: run.startHead ?? startHead, startBranch, tests: '' }
           if (run.code !== 0 || run.killed) finishPending(run.killed ? 'stopped' : 'failed', true)
           return { code: run.code, killed: run.killed }
         },
@@ -1139,7 +1139,8 @@ async function runQueueProject({ options, lane, lanes }) {
           return { ok: check.ok }
         },
       })
-      formatQueueSummary({ branch: result.branch, results: result.results, tests: test, worktree: options.worktree ? printedRunsFolder(target.path) : '' }).forEach((line) => console.log(line))
+      const usedBranch = gitRead(target.path, ['branch', '--show-current']) || result.branch
+      formatQueueSummary({ branch: usedBranch, results: result.results, tests: test, worktree: options.worktree ? printedRunsFolder(target.path) : '' }).forEach((line) => console.log(line))
       return result.results.some((item) => item.status.startsWith('failed')) ? 1 : 0
     } catch (error) {
       if (pending) {
@@ -1405,7 +1406,7 @@ function recordRoom(record, toolLines, lanes) {
   }
 }
 
-async function startFailover({ laneKey, target, lanes, options, wanted, prompt, promptFor = null, folder, project, task, deferRecord, openLog, failedRecord, failedStartBranch }) {
+async function startFailover({ laneKey, target, lanes, options, wanted, prompt, promptFor = null, folder, project, task, queue = null, base = '', deferRecord, openLog, failedRecord, failedStartBranch }) {
   const fallbackLane = lanes?.[target]
   if (!fallbackLane) return null
   let lock
@@ -1416,14 +1417,15 @@ async function startFailover({ laneKey, target, lanes, options, wanted, prompt, 
     console.log(`The backup lane ${target} is busy, so the run stays failed.`)
     return null
   }
+  let branchBefore = ''
   try {
     if (project) {
-      const base = String(failedRecord?.branch || failedStartBranch || '').trim()
-      if (base === '') {
+      branchBefore = String(failedRecord?.branch || failedStartBranch || '').trim()
+      if (branchBefore === '') {
         console.log(`The backup lane ${target} has no branch to start from, so the run stays failed.`)
         return null
       }
-      const branch = `${base}-on-${target}`
+      const branch = `${branchBefore}-on-${target}`
       if (gitRead(project, ['switch', '-c', branch]) === null) {
         console.log(`The backup lane ${target} could not take the branch ${branch}, so the run stays failed.`)
         return null
@@ -1443,9 +1445,11 @@ async function startFailover({ laneKey, target, lanes, options, wanted, prompt, 
       name: fallbackName,
       project,
       task,
-      queue: null,
+      queue,
       lockPath: lock,
+      projectBranch: project ? branchBefore : null,
       deferRecord,
+      base,
       branchSuffix: `-on-${target}`,
       failoverFrom: { lane: laneKey, startedAt: failedRecord?.startedAt },
       openLog,
@@ -1855,12 +1859,14 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
         folder,
         project,
         task,
+        queue,
+        base: runBase,
         deferRecord,
         openLog,
         failedRecord: record,
         failedStartBranch: projectStart?.branch ?? '',
       })
-      if (fallbackRun) return { code: fallbackRun.code ?? 1, killed: fallbackRun.killed === true }
+      if (fallbackRun) return fallbackRun
       if (project && deferRecord) return { code: result.code ?? 1, killed, record: null, startHead: projectStart.head, startBranch: projectStart.branch }
       return { code: result.code ?? 1, killed }
     }
