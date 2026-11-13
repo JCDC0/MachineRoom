@@ -27,6 +27,8 @@ You need Node 24 or newer, git, a browser with WebGL, and Claude Code, OpenCode 
 
 ### First run
 
+On Windows PowerShell, use `npm.cmd` instead of `npm` when the script policy refuses it, and `npm.cmd link` to link. Leave the execution policy as it is.
+
 Run these in the MachineRoom folder.
 
 ```
@@ -35,13 +37,9 @@ npm run build
 npm run serve -- doctor
 ```
 
-On Windows PowerShell, use `npm.cmd` instead of `npm` when the script policy refuses it, and `npm.cmd link` to link. Leave the execution policy as it is.
-
-Each command prints one line when all is well.
-
-- `npm install` prints `added N packages`, or `up to date` when the packages are already there.
-- `npm run build` prints `built in` and the time.
-- `npm run serve -- doctor` prints `All checks passed.` If the folder is not a git repository, it prints `All checks passed, 1 warning.` and still exits 0.
+- `npm install` installs the packages and prints the summary (`added N packages` or `up to date`), plus npm funding and audit notes.
+- `npm run build` writes the built viewer, prints the asset list, `built in` with the time, and an expected Vite chunk-size warning (`Some chunks are larger than 500 kB`).
+- `npm run serve -- doctor` checks the folder, project files, git, built viewer, runs folder and lane programs, then prints a Dispatch tip and `All checks passed.` If the folder is not a git repository, it prints `All checks passed, 1 warning.` and still exits 0.
 
 Link the command once:
 
@@ -49,23 +47,46 @@ Link the command once:
 npm link
 ```
 
-Then, from any project folder:
+This binds the global `machineroom` command to the current clone folder. Moving or deleting that folder breaks `machineroom` until you run `npm.cmd unlink -g machine-room` (or `npm unlink -g machine-room`) and link again.
+
+Then, from any project folder (`FOLDER` is optional and defaults to the current folder):
 
 ```
-machineroom FOLDER
+machineroom [FOLDER]
 ```
 
-It prints `MachineRoom is running.` and the address. Without `npm link`, run this in the MachineRoom folder:
+Without `npm link`, run this in the MachineRoom folder (`--root` is optional and defaults to the current folder or `PROJECT_ROOT`):
 
 ```
 npm run serve -- up --root FOLDER --open
 ```
 
-It prints the same line.
+Both run the doctor checks, turn on the lane and session sources by default, and start the viewer and bridge on port `5174`. They print the doctor lines, `All checks passed.`, `MachineRoom is running.`, the process id and port, the room address (`machine-room: open http://...`) and a Dispatch tip. Press `Ctrl+C` in the terminal to stop the room.
 
-The room opens in your browser on that folder after a short check of the project, git and the lane programs. Run `npm run build` again in the MachineRoom folder after you pull a new version.
+`machineroom` opens the browser unless you pass `--no-open`. `npm run serve -- up` keeps the browser closed unless you pass `--open`. Passing `--no-open` still prints `machine-room: open http://...` in the terminal.
 
-No project at hand? Open `/?replay&fixture=scenario-i&tour` on the room's address to take the demo tour.
+Common flags for `up`:
+
+```
+npm run serve -- up --port 5180 --no-open --no-sessions
+npm run serve -- up --help
+```
+
+- `--root <folder>`: project folder (`PROJECT_ROOT`), optional.
+- `--port <n>`: port to listen on (`PORT`, default `5174`).
+- `--no-open`: keep the browser closed (`machineroom` also accepts `--port`, `--no-open`, `--no-sessions` and `--help`).
+- `--open`: open the room in the default browser.
+- `--no-sessions`: keep the session source off (`up` turns on both the lane and session sources by default).
+- `--dist <folder>`: built viewer folder (default `dist` beside `bin`).
+- `--help`: show all commands and options (`npm run serve -- --help`).
+
+Without `up`, bare `npm run serve` skips the doctor checks and leaves both sources off unless you pass `--lanes` (`MACHINEROOM_LANES=1`) or `--sessions` (`MACHINEROOM_SESSIONS=1`).
+
+Run `npm run build` again in the MachineRoom folder after you pull a new version.
+
+No project at hand? Run `npm run serve -- up --open` (or `machineroom`) in the MachineRoom folder, then open `/?replay&fixture=scenario-i&tour` on the room's address to take the demo tour.
+
+The room writes run logs, locks and orchestrator state (`orchestrator-<hash>.json` and `orchestrator-<hash>.lock`) inside the runs folder. By default that is `%LOCALAPPDATA%\MachineRoom\runs` on Windows, or `$XDG_STATE_HOME/machineroom/runs` or `~/.local/state/machineroom/runs` elsewhere. Set `MACHINEROOM_RUNS` to change it: in PowerShell `$env:MACHINEROOM_RUNS = "$env:TEMP\machineroom-runs"`, or `MACHINEROOM_RUNS=/path/to/runs` in bash.
 
 ![One touched card, close up](docs/images/closeup.png)
 
@@ -77,11 +98,11 @@ The control drawer open on Dispatch.
 
 ## Lanes
 
-A new room has the orchestrator and no lane. Make a lane in the Agents tab: open the family tree, press Add child on the orchestrator, and fill in the label, harness, model and effort. Each lane runs in its own harness on the owner's account.
+A new room starts with the orchestrator and no custom lane. While the session source is on (the default for `up`), the room also lists `Claude Code session` and `OpenCode session`. Make a lane in the Agents tab: open the family tree, press Add child on the orchestrator, and fill in the label, harness, model and effort. Each lane runs in its own harness on the owner's account.
 
 Settings only shows or removes lanes. Remove from project hides a lane in that project. Delete everywhere removes a lane you made across all projects.
 
-`MACHINEROOM_LANES_DIR` points a room at another lane list, which is how MachineRoom's own development runs its lanes.
+`MACHINEROOM_LANES_DIR` points a room at another lane list, which is how MachineRoom's own development runs its lanes. In PowerShell, set `$env:MACHINEROOM_LANES_DIR = "docs/agents"` (or `MACHINEROOM_LANES_DIR=docs/agents` in bash).
 
 ## Learn more
 
