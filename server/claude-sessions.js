@@ -93,13 +93,17 @@ export function createClaudeSessionsReader(options = {}) {
   const idlePollMs = Number.isFinite(Number(options.idlePollMs)) ? Number(options.idlePollMs) : Math.min(idleMs, DEFAULT_IDLE_POLL_MS)
   const emit = options.emit ?? (() => {})
   const listFolder = typeof options.listFolder === 'function' ? options.listFolder : (dir) => readdirSync(dir, { withFileTypes: true })
-  const projectsFolder = join(home, '.claude', 'projects', claudeProjectSlug(projectRoot))
+  const listProjects = typeof options.listProjects === 'function' ? options.listProjects : (dir) => readdirSync(dir, { withFileTypes: true })
+  const projectsRoot = join(home, '.claude', 'projects')
+  const projectSlug = claudeProjectSlug(projectRoot)
   const sessions = new Map()
   const evicted = new Map()
   const forgotten = new Map()
   const metaFiles = new Map()
   let metaNames = null
   let metaFolderStamp = null
+  let projectFolders = null
+  let projectFoldersStamp = null
   let lastEvictedCheck = 0
   let primed = false
   let stopped = false
@@ -127,6 +131,36 @@ export function createClaudeSessionsReader(options = {}) {
       names.push(entry.name)
     }
     return names
+  }
+
+  function projectsFolderStamp() {
+    try {
+      const stat = statSync(projectsRoot, { bigint: true })
+      return String(stat.mtimeNs ?? stat.mtimeMs)
+    } catch {
+      return null
+    }
+  }
+
+  function projectFolderNames() {
+    const stamp = projectsFolderStamp()
+    if (projectFolders === null || stamp === null || stamp !== projectFoldersStamp) {
+      let entries
+      try {
+        entries = listProjects(projectsRoot)
+      } catch {
+        entries = []
+      }
+      const folders = []
+      for (const entry of entries) {
+        if (!entry.isDirectory()) continue
+        if (entry.name !== projectSlug && !entry.name.startsWith(`${projectSlug}-`)) continue
+        folders.push(join(projectsRoot, entry.name))
+      }
+      projectFolders = folders
+      projectFoldersStamp = stamp
+    }
+    return projectFolders
   }
 
   function skippedSessions() {
@@ -324,7 +358,7 @@ export function createClaudeSessionsReader(options = {}) {
     const callId = childCallId(json)
     if (!callId) return
     if (session.children.has(agentId)) return
-    const stream = newStream(join(projectsFolder, session.id, 'subagents', `agent-${agentId}.jsonl`), 0)
+    const stream = newStream(join(session.folder, session.id, 'subagents', `agent-${agentId}.jsonl`), 0)
     const child = { agentId, callId, stream, finished: false }
     session.children.set(agentId, child)
     readChild(session, child)
@@ -363,48 +397,50 @@ export function createClaudeSessionsReader(options = {}) {
   }
 
   function scan(skippedIds) {
-    let entries
-    try {
-      entries = readdirSync(projectsFolder, { withFileTypes: true })
-    } catch {
-      return
-    }
     const skipped = skippedIds ?? skippedSessions()
     const seen = new Set()
-    for (const entry of entries) {
-      if (!entry.isFile() || !entry.name.endsWith('.jsonl')) continue
-      const id = entry.name.slice(0, -6)
-      seen.add(id)
-      if (sessions.has(id) || evicted.has(id)) continue
-      const path = join(projectsFolder, entry.name)
-      const mark = forgotten.get(id)
-      let size = 0
-      if (!mark && !primed) {
-        try {
-          size = statSync(path).size
-        } catch {
-          size = 0
-        }
-      }
-      forgotten.delete(id)
-      if (skipped.has(id)) {
-        sessions.set(id, { id, path, skipped: true, stream: null, offset: mark?.offset ?? size, children: new Map(), number: 0, run: null, lastGrowth: now() })
+    for (const folder of projectFolderNames()) {
+      let entries
+      try {
+        entries = readdirSync(folder, { withFileTypes: true })
+      } catch {
         continue
       }
-      if (mark) {
-        let current = 0
-        try {
-          current = statSync(path).size
-        } catch {
-          current = 0
+      for (const entry of entries) {
+        if (!entry.isFile() || !entry.name.endsWith('.jsonl')) continue
+        const id = entry.name.slice(0, -6)
+        seen.add(id)
+        if (sessions.has(id) || evicted.has(id)) continue
+        const path = join(folder, entry.name)
+        const mark = forgotten.get(id)
+        let size = 0
+        if (!mark && !primed) {
+          try {
+            size = statSync(path).size
+          } catch {
+            size = 0
+          }
         }
-        if (current === mark.offset) {
-          forgotten.set(id, { path, offset: mark.offset, number: mark.number ?? 0 })
+        forgotten.delete(id)
+        if (skipped.has(id)) {
+          sessions.set(id, { id, path, folder, skipped: true, stream: null, offset: mark?.offset ?? size, children: new Map(), number: 0, run: null, lastGrowth: now() })
           continue
         }
-        size = current < mark.offset ? 0 : mark.offset
+        if (mark) {
+          let current = 0
+          try {
+            current = statSync(path).size
+          } catch {
+            current = 0
+          }
+          if (current === mark.offset) {
+            forgotten.set(id, { path, offset: mark.offset, number: mark.number ?? 0 })
+            continue
+          }
+          size = current < mark.offset ? 0 : mark.offset
+        }
+        sessions.set(id, { id, path, folder, skipped: false, stream: newStream(path, size), offset: size, children: new Map(), number: mark?.number ?? 0, run: null, lastGrowth: now() })
       }
-      sessions.set(id, { id, path, skipped: false, stream: newStream(path, size), offset: size, children: new Map(), number: mark?.number ?? 0, run: null, lastGrowth: now() })
     }
     for (const id of forgotten.keys()) {
       if (!seen.has(id) && !sessions.has(id) && !evicted.has(id)) forgotten.delete(id)
@@ -418,6 +454,7 @@ export function createClaudeSessionsReader(options = {}) {
     evicted.set(id, {
       id,
       path: session.path,
+      folder: session.folder,
       offset: session.stream ? session.stream.offset : session.offset ?? 0,
       number: session.number ?? 0,
       skipped: Boolean(session.skipped),
@@ -449,6 +486,7 @@ export function createClaudeSessionsReader(options = {}) {
         sessions.set(id, {
           id,
           path: entry.path,
+          folder: entry.folder,
           skipped: false,
           stream: newStream(entry.path, entry.offset),
           offset: entry.offset,
@@ -506,6 +544,8 @@ export function createClaudeSessionsReader(options = {}) {
     metaFiles.clear()
     metaNames = null
     metaFolderStamp = null
+    projectFolders = null
+    projectFoldersStamp = null
   }
 
   return { agent: AGENT, agents: [AGENT], tick, stop, sessions: () => sessions, evicted: () => evicted, metaFiles: () => metaFiles }

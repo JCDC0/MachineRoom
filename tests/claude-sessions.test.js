@@ -70,7 +70,7 @@ function jsonLines(items) {
   return items.map((item) => `${JSON.stringify(item)}\n`).join('')
 }
 
-function makeReader({ projectRoot, home, runs, frames, now, quietMs, idleMs, idlePollMs, listFolder }) {
+function makeReader({ projectRoot, home, runs, frames, now, quietMs, idleMs, idlePollMs, listFolder, listProjects }) {
   const reader = createClaudeSessionsReader({
     projectRoot,
     home,
@@ -80,6 +80,7 @@ function makeReader({ projectRoot, home, runs, frames, now, quietMs, idleMs, idl
     idleMs,
     idlePollMs,
     listFolder,
+    listProjects,
     emit: (frame) => frames.push(frame),
   })
   cleanups.push(() => reader.stop())
@@ -433,6 +434,83 @@ describe('claude sessions reader', () => {
       'heartbeat.run.log',
     ])
     expect(chunks(frames)[0].message.content[0].id).toBe('in-1')
+  })
+
+  it('reads a session started in a subfolder of the project', () => {
+    const { projectRoot, home, runs } = setup()
+    const frames = []
+    const reader = makeReader({ projectRoot, home, runs, frames })
+    reader.tick()
+
+    const packageFolder = join(projectRoot, 'packages', 'web')
+    mkdirSync(packageFolder, { recursive: true })
+    const packageSessions = join(home, '.claude', 'projects', claudeProjectSlug(packageFolder))
+    mkdirSync(packageSessions, { recursive: true })
+    writeFileSync(join(packageSessions, 'sess-sub.jsonl'), jsonLines([
+      sessionLine('user', { role: 'user', content: 'Build the page.' }, { cwd: packageFolder, sessionId: 'sess-sub' }, projectRoot),
+      sessionLine('assistant', { role: 'assistant', content: [readUse('sub-1', join(packageFolder, 'src', 'page.js'))] }, { cwd: packageFolder, sessionId: 'sess-sub' }, projectRoot),
+    ]))
+    reader.tick()
+
+    expect(logFrames(frames)).toHaveLength(1)
+    expect(chunks(frames)[0].message.content[0].id).toBe('sub-1')
+    expect(statusFrames(frames)[0].payload.session).toBe('sess-sub')
+    expect(reader.sessions().get('sess-sub')).toMatchObject({ skipped: false })
+  })
+
+  it('shows the root session and not a sibling whose slug starts with the root slug', () => {
+    const { base, projectRoot, home, runs, sessionsFolder } = setup()
+    const frames = []
+    const reader = makeReader({ projectRoot, home, runs, frames })
+    reader.tick()
+
+    const siblingRoot = join(base, 'work', 'app-old')
+    const siblingSessions = join(home, '.claude', 'projects', claudeProjectSlug(siblingRoot))
+    mkdirSync(siblingSessions, { recursive: true })
+    writeFileSync(join(siblingSessions, 'sess-sibling.jsonl'), jsonLines([
+      sessionLine('user', { role: 'user', content: 'Sibling work.' }, { cwd: siblingRoot, sessionId: 'sess-sibling' }, projectRoot),
+      sessionLine('assistant', { role: 'assistant', content: [readUse('sib-1', join(siblingRoot, 'src', 'old.js'))] }, { cwd: siblingRoot, sessionId: 'sess-sibling' }, projectRoot),
+    ]))
+    writeFileSync(join(sessionsFolder, 'sess-root.jsonl'), jsonLines([
+      sessionLine('user', { role: 'user', content: 'Root work.' }, { sessionId: 'sess-root' }, projectRoot),
+      sessionLine('assistant', { role: 'assistant', content: [readUse('root-1', join(projectRoot, 'src', 'app.js'))] }, { sessionId: 'sess-root' }, projectRoot),
+    ]))
+    const later = new Date(Date.now() + 60000)
+    utimesSync(join(home, '.claude', 'projects'), later, later)
+    reader.tick()
+
+    expect(reader.sessions().has('sess-sibling')).toBe(true)
+    expect(reader.sessions().get('sess-sibling').run).toBeNull()
+    expect(chunks(frames).map((chunk) => chunk.message.content[0].id)).toEqual(['root-1'])
+    expect(JSON.stringify(frames)).not.toContain('sess-sibling')
+  })
+
+  it('lists the project folders only when the projects folder change time moves', () => {
+    const { projectRoot, home, runs } = setup()
+    const projectsRoot = join(home, '.claude', 'projects')
+    let lists = 0
+    const reader = makeReader({
+      projectRoot,
+      home,
+      runs,
+      frames: [],
+      listProjects: (dir) => {
+        lists += 1
+        return readdirSync(dir, { withFileTypes: true })
+      },
+    })
+
+    reader.tick()
+    expect(lists).toBe(1)
+    reader.tick()
+    reader.tick()
+    expect(lists).toBe(1)
+
+    mkdirSync(join(projectsRoot, `${claudeProjectSlug(projectRoot)}-later`), { recursive: true })
+    const later = new Date(Date.now() + 60000)
+    utimesSync(projectsRoot, later, later)
+    reader.tick()
+    expect(lists).toBe(2)
   })
 
   it('ends a run that stops growing after the quiet time', () => {
