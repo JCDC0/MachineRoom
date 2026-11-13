@@ -12,6 +12,8 @@ export const DEFAULT_ARCHIVE_DAYS = 30
 export const MIN_ARCHIVE_DAYS = 1
 export const MAX_ARCHIVE_DAYS = 365
 export const ARCHIVE_DIR_NAME = 'archive'
+export const STAT_CONCURRENCY = 64
+const DIR_STAT_FLUSH_SIZE = 256
 
 export const DAYS_PROBLEM = 'Choose 1 to 365 days.'
 export const CONFIRM_PROBLEM = 'Confirm the archive before moving files.'
@@ -53,13 +55,70 @@ export function worktreesCleanCommand(projectRoot) {
   return `npm run worktrees -- --project ${flag} --clean`
 }
 
-async function statFileSafe(filePath) {
+function createLimiter(limit = STAT_CONCURRENCY) {
+  const maxActive = Number.isInteger(limit) && limit > 0 ? limit : STAT_CONCURRENCY
+  let active = 0
+  const queue = []
+  let head = 0
+
+  function drain() {
+    while (active < maxActive && head < queue.length) {
+      const entry = queue[head]
+      queue[head] = undefined
+      head += 1
+      if (head === queue.length) {
+        queue.length = 0
+        head = 0
+      } else if (head >= 1024 && head * 2 >= queue.length) {
+        queue.splice(0, head)
+        head = 0
+      }
+      active += 1
+      let pending
+      try {
+        pending = Promise.resolve(entry.task())
+      } catch (error) {
+        active -= 1
+        entry.reject(error)
+        continue
+      }
+      pending.then(
+        (value) => {
+          active -= 1
+          drain()
+          entry.resolve(value)
+        },
+        (error) => {
+          active -= 1
+          drain()
+          entry.reject(error)
+        }
+      )
+    }
+  }
+
+  return function runLimited(task) {
+    return new Promise((resolve, reject) => {
+      queue.push({ task, resolve, reject })
+      drain()
+    })
+  }
+}
+
+async function statFileSafe(filePath, lstatFn = lstat) {
   try {
-    const info = await lstat(filePath)
-    return info.isFile() ? info : null
+    const info = await lstatFn(filePath)
+    return info && typeof info.isFile === 'function' && info.isFile() ? info : null
   } catch {
     return null
   }
+}
+
+async function statDirEntries(dirPath, entries, lstatFn, limit) {
+  if (entries.length === 0) return []
+  return Promise.all(
+    entries.map((entry) => limit(() => statFileSafe(join(dirPath, entry.name), lstatFn)))
+  )
 }
 
 async function readDirentsSafe(dirPath) {
@@ -71,9 +130,23 @@ async function readDirentsSafe(dirPath) {
   }
 }
 
-async function measureDirectoryBytes(dirPath) {
+export async function measureDirectoryBytes(dirPath, options = {}) {
+  if (!dirPath) return 0
+  const lstatFn = typeof options.lstatFn === 'function' ? options.lstatFn : lstat
+  const limit = typeof options.limit === 'function' ? options.limit : createLimiter(STAT_CONCURRENCY)
   let bytes = 0
   const stack = [dirPath]
+  const pending = []
+
+  async function flushPending() {
+    if (pending.length === 0) return
+    const batch = pending.splice(0, pending.length)
+    const infos = await Promise.all(batch)
+    for (const info of infos) {
+      if (info) bytes += info.size
+    }
+  }
+
   while (stack.length > 0) {
     const current = stack.pop()
     const entries = await readDirentsSafe(current)
@@ -85,11 +158,14 @@ async function measureDirectoryBytes(dirPath) {
         continue
       }
       if (entry.isFile()) {
-        const info = await statFileSafe(fullPath)
-        if (info) bytes += info.size
+        pending.push(limit(() => statFileSafe(fullPath, lstatFn)))
       }
     }
+    if (pending.length >= DIR_STAT_FLUSH_SIZE) {
+      await flushPending()
+    }
   }
+  await flushPending()
   return bytes
 }
 
@@ -172,23 +248,16 @@ function resolveFolders(options = {}) {
   return { runsDir, projectDir, recordingsDir, worktreesDir }
 }
 
-async function scanStorage(options = {}) {
-  const { runsDir, projectDir, recordingsDir, worktreesDir } = resolveFolders(options)
-  const logGroups = new Map()
-  const recordingGroups = new Map()
-  const worktreeSizes = new Map()
-  const counts = {
-    logs: { count: 0, bytes: 0 },
-    recordings: { count: 0, bytes: 0 },
-    conversations: { count: 0, bytes: 0 },
-    worktrees: { count: 0, bytes: 0 },
-  }
-
-  for (const entry of await readDirentsSafe(runsDir)) {
-    if (entry.isSymbolicLink() || !entry.isFile() || entry.name.startsWith('.') || entry.name.endsWith('.tmp')) continue
-    const filePath = join(runsDir, entry.name)
-    const info = await statFileSafe(filePath)
+async function scanRunsFolder(runsDir, { counts, logGroups, lstatFn, limit }) {
+  const entries = (await readDirentsSafe(runsDir)).filter(
+    (entry) => !entry.isSymbolicLink() && entry.isFile() && !entry.name.startsWith('.') && !entry.name.endsWith('.tmp')
+  )
+  const infos = await statDirEntries(runsDir, entries, lstatFn, limit)
+  for (let index = 0; index < entries.length; index += 1) {
+    const info = infos[index]
     if (!info) continue
+    const entry = entries[index]
+    const filePath = join(runsDir, entry.name)
     const part = runLogPart(entry.name)
     if (part) {
       counts.logs.count += 1
@@ -203,13 +272,23 @@ async function scanStorage(options = {}) {
       counts.conversations.bytes += info.size
     }
   }
+}
 
-  for (const entry of await readDirentsSafe(recordingsDir)) {
-    if (entry.isSymbolicLink() || !entry.isFile()) continue
-    if (entry.name === 'index.json' || entry.name.startsWith('.') || entry.name.endsWith('.tmp')) continue
-    const filePath = join(recordingsDir, entry.name)
-    const info = await statFileSafe(filePath)
+async function scanRecordingsFolder(recordingsDir, { counts, recordingGroups, lstatFn, limit }) {
+  const entries = (await readDirentsSafe(recordingsDir)).filter(
+    (entry) =>
+      !entry.isSymbolicLink() &&
+      entry.isFile() &&
+      entry.name !== 'index.json' &&
+      !entry.name.startsWith('.') &&
+      !entry.name.endsWith('.tmp')
+  )
+  const infos = await statDirEntries(recordingsDir, entries, lstatFn, limit)
+  for (let index = 0; index < entries.length; index += 1) {
+    const info = infos[index]
     if (!info) continue
+    const entry = entries[index]
+    const filePath = join(recordingsDir, entry.name)
     counts.recordings.count += 1
     counts.recordings.bytes += info.size
     const stem = recordingStemOf(entry.name)
@@ -217,15 +296,45 @@ async function scanStorage(options = {}) {
     group.push({ name: entry.name, path: filePath, bytes: info.size, mtimeMs: info.mtimeMs })
     recordingGroups.set(stem, group)
   }
+}
 
-  for (const entry of await readDirentsSafe(worktreesDir)) {
-    if (entry.isSymbolicLink() || !entry.isDirectory() || entry.name.startsWith('.')) continue
-    const entryPath = join(worktreesDir, entry.name)
-    const bytes = await measureDirectoryBytes(entryPath)
+async function scanWorktreesFolder(worktreesDir, { counts, worktreeSizes, lstatFn, limit }) {
+  const entries = (await readDirentsSafe(worktreesDir)).filter(
+    (entry) => !entry.isSymbolicLink() && entry.isDirectory() && !entry.name.startsWith('.')
+  )
+  const measured = await Promise.all(
+    entries.map(async (entry) => {
+      const entryPath = join(worktreesDir, entry.name)
+      const bytes = await measureDirectoryBytes(entryPath, { lstatFn, limit })
+      return { path: resolve(entryPath), bytes }
+    })
+  )
+  for (const item of measured) {
     counts.worktrees.count += 1
-    counts.worktrees.bytes += bytes
-    worktreeSizes.set(resolve(entryPath), bytes)
+    counts.worktrees.bytes += item.bytes
+    worktreeSizes.set(item.path, item.bytes)
   }
+}
+
+async function scanStorage(options = {}) {
+  const { runsDir, projectDir, recordingsDir, worktreesDir } = resolveFolders(options)
+  const lstatFn = typeof options.lstatFn === 'function' ? options.lstatFn : lstat
+  const limit = createLimiter(STAT_CONCURRENCY)
+  const logGroups = new Map()
+  const recordingGroups = new Map()
+  const worktreeSizes = new Map()
+  const counts = {
+    logs: { count: 0, bytes: 0 },
+    recordings: { count: 0, bytes: 0 },
+    conversations: { count: 0, bytes: 0 },
+    worktrees: { count: 0, bytes: 0 },
+  }
+
+  await Promise.all([
+    scanRunsFolder(runsDir, { counts, logGroups, lstatFn, limit }),
+    scanRecordingsFolder(recordingsDir, { counts, recordingGroups, lstatFn, limit }),
+    scanWorktreesFolder(worktreesDir, { counts, worktreeSizes, lstatFn, limit }),
+  ])
 
   return { runsDir, projectDir, recordingsDir, worktreesDir, counts, logGroups, recordingGroups, worktreeSizes }
 }
