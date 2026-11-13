@@ -11,7 +11,9 @@ import {
   SESSION_LIMIT,
   SESSION_SORTS,
   cleanText,
+  conversationMarkdown,
   copyGitInit,
+  exportFileName,
   loadSessionSort,
   normalizeSessionSort,
   normalizeSidebarTab,
@@ -31,6 +33,28 @@ const GROUP_LABEL = { pinned: 'Pinned', recent: 'Recent', archived: 'Archived' }
 
 function messageOf(error) {
   return error instanceof Error && error.message ? error.message : 'The bridge refused the change.'
+}
+
+function saveMarkdownFile(name, text) {
+  const doc = globalThis.document
+  const BlobType = globalThis.Blob
+  const url = globalThis.URL
+  if (!doc || typeof BlobType !== 'function' || typeof url?.createObjectURL !== 'function') return false
+  const href = url.createObjectURL(new BlobType([text], { type: 'text/markdown;charset=utf-8' }))
+  const link = doc.createElement('a')
+  link.href = href
+  link.download = name
+  link.rel = 'noopener'
+  doc.body.appendChild(link)
+  try {
+    link.click()
+  } finally {
+    doc.body.removeChild(link)
+    globalThis.setTimeout(() => {
+      if (typeof url.revokeObjectURL === 'function') url.revokeObjectURL(href)
+    }, 0)
+  }
+  return true
 }
 
 function NoGitHint() {
@@ -356,6 +380,8 @@ export function Sidebar({ client = null, live = false, project = '', tasks = nul
       startRename(row)
     } else if (item.action === 'fork') {
       forkSession(row)
+    } else if (item.action === 'export') {
+      exportSession(row)
     } else if (item.action === 'unread') {
       setFlag(row, { unread: true })
     } else if (item.action === 'archive') {
@@ -406,6 +432,45 @@ export function Sidebar({ client = null, live = false, project = '', tasks = nul
       setPreview(null)
       setShowAll(false)
       await refreshSessions()
+    } catch (error) {
+      setActionError(messageOf(error))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function exportSession(row) {
+    if (!row || busy) return
+    setBusy(true)
+    setActionError('')
+    try {
+      let answer
+      if (row.current) {
+        if (typeof client?.orchestrator !== 'function') {
+          throw new Error('This bridge cannot show this conversation.')
+        }
+        answer = await client.orchestrator()
+      } else {
+        if (!row.id) throw new Error('This conversation has no session.')
+        if (typeof client?.orchestratorSession !== 'function') {
+          throw new Error('This bridge cannot show a conversation.')
+        }
+        answer = await client.orchestratorSession({ id: ORCHESTRATOR_ID, session: row.id })
+      }
+      const title = sessionTitle(answer?.title ?? row.title)
+      const startedAt = answer?.startedAt ?? row.startedAt
+      const markdown = conversationMarkdown(
+        {
+          title,
+          startedAt,
+          summary: answer?.summary ?? row.summary ?? '',
+          messages: Array.isArray(answer?.messages) ? answer.messages : [],
+        },
+        { project: currentPath || project }
+      )
+      if (!saveMarkdownFile(exportFileName(title, startedAt), markdown)) {
+        throw new Error('This browser cannot save the file.')
+      }
     } catch (error) {
       setActionError(messageOf(error))
     } finally {

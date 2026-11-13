@@ -222,6 +222,7 @@ export const SESSION_MENU_KEYS = Object.freeze({
   pin: 'P',
   rename: 'R',
   fork: 'F',
+  export: 'E',
   unread: 'U',
   archive: 'A',
   delete: 'D',
@@ -255,6 +256,13 @@ export function sessionMenuItems(row, { busy = false } = {}) {
       key: SESSION_MENU_KEYS.fork,
       disabled: busy || noMessages,
       reason: 'This conversation has no messages to fork.',
+    },
+    {
+      action: 'export',
+      label: 'Export',
+      key: SESSION_MENU_KEYS.export,
+      disabled: busy || noMessages,
+      reason: 'This conversation has no messages to export.',
     },
     {
       action: 'unread',
@@ -367,6 +375,59 @@ export function previewLines(answer, limit = PREVIEW_LIMIT) {
   }
   const cap = Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : PREVIEW_LIMIT
   return lines.slice(-cap)
+}
+
+export const EXPORT_MESSAGE_LIMIT = 200
+const UNSAFE_FILENAME = /[<>:"/\\|?*\u0000-\u001F]/g
+
+function exportTime(value) {
+  const at = stamp(value)
+  if (!at) return ''
+  return `${new Date(at).toISOString().slice(0, 16).replace('T', ' ')} UTC`
+}
+
+export function exportFileName(title, startedAt) {
+  const name = sessionTitle(title)
+    .replace(UNSAFE_FILENAME, '-')
+    .replace(/\s+/g, ' ')
+    .replace(/[. ]+$/g, '')
+    .trim()
+  const at = stamp(startedAt)
+  const date = at ? new Date(at).toISOString().slice(0, 10) : 'undated'
+  return `${name || 'Conversation'} ${date}.md`
+}
+
+export function conversationMarkdown(conversation, { project = '', limit = EXPORT_MESSAGE_LIMIT } = {}) {
+  const source = conversation && typeof conversation === 'object' ? conversation : {}
+  const messages = []
+  for (const message of Array.isArray(source.messages) ? source.messages : []) {
+    if (!message || typeof message !== 'object') continue
+    const text = visibleText(message.text)
+    if (!text) continue
+    const raw = typeof message.from === 'string' ? message.from : ''
+    const role = raw === 'owner' || raw === 'room'
+      ? raw
+      : raw.startsWith('sub:')
+        ? `sub ${cleanText(raw.slice(4), 40)}`.trim()
+        : 'orchestrator'
+    messages.push({ role, at: exportTime(message.at), text })
+  }
+  const cap = Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : EXPORT_MESSAGE_LIMIT
+  const kept = messages.slice(-cap)
+  const lines = [
+    `# ${sessionTitle(source.title)}`,
+    '',
+    `Project: ${projectName({ path: project })}`,
+    `Started: ${exportTime(source.startedAt) || 'not recorded'}`,
+    `Messages: ${kept.length} (the room keeps at most ${EXPORT_MESSAGE_LIMIT} per conversation).`,
+    '',
+  ]
+  const summary = visibleText(source.summary)
+  if (summary) lines.push('## Summary', '', summary, '')
+  for (const message of kept) {
+    lines.push(`### ${message.role}${message.at ? ` at ${message.at}` : ''}`, '', message.text, '')
+  }
+  return `${lines.join('\n').trimEnd()}\n`
 }
 
 export async function waitForBridge(

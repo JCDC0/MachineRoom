@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- A conversation's `...` menu exports its saved title, project, start time, summary and messages as a Markdown file, and E runs it while the menu is open (P218).
 - Lane Update and Delete read the request body before the saved configuration, so a lane created meanwhile and its key count are kept.
 - The Removed lanes row sums each removed lane's rounded cents, so deleting lanes never moves the total.
 - Removed lanes adds each removed lane's rounded cents for the month and today, so deleting lanes no longer changes the total (P212).
