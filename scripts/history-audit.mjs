@@ -11,7 +11,7 @@ const PRIVATE_NAMES = String(process.env.MACHINEROOM_AUDIT_PRIVATE ?? '').split(
 const TRACKED = '(tracked)'
 const HISTORY_ARGS = ['log', '-p', '--no-color', '--no-ext-diff', '--no-textconv', 'refs/heads/main', '--tags']
 
-export const AUDIT_USAGE = 'Usage: npm run history-audit -- [--json]'
+export const AUDIT_USAGE = 'Usage: npm run history-audit -- [--from REF] [--json]'
 
 export function parseAuditArgs(argv) {
   const options = { json: false, from: '', help: false }
