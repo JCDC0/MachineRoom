@@ -384,6 +384,15 @@ export default function Inspector({
     onClose()
   }
 
+  function openLaneConversation() {
+    if (typeof window === 'undefined' || typeof window.dispatchEvent !== 'function') return
+    const detail = { lane: item.id }
+    if (typeof window.CustomEvent === 'function') {
+      window.dispatchEvent(new window.CustomEvent(OPEN_CHAT_EVENT, { detail }))
+    }
+    onClose()
+  }
+
   async function handleConfirmStop() {
     if (!canStopRunning) return
     setStoppingRun(true)
@@ -522,6 +531,12 @@ export default function Inspector({
                 ))
               )}
             </ol>
+
+            {!orchestratorAgent && bridge && client && (
+              <button type="button" className="mr-inspector-action mono" onClick={openLaneConversation}>
+                Open conversation
+              </button>
+            )}
 
             {orchestratorAgent && bridge && (
               <section className="mr-inspector-chat" aria-label="Orchestrator chat">

@@ -972,24 +972,41 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
     if (!wantedStart) {
       return { status: 400, body: { error: STOP_TIME_PROBLEM } }
     }
-    const item = running.get(targetLane)
+    let item = running.get(targetLane)
+    let sourceRun = null
     if (!item) {
-      return { status: 409, body: { error: `No run is running on ${targetLane}.` } }
+      let open = []
+      try {
+        const source = typeof lanesSource === 'function' ? lanesSource() : lanesSource
+        open = source && typeof source.openRuns === 'function' ? source.openRuns() : []
+      } catch {
+        open = []
+      }
+      const wantedTime = Date.parse(wantedStart)
+      sourceRun = (Array.isArray(open) ? open : []).find((run) => {
+        if (!run || run.lane !== targetLane) return false
+        if (run.startedAt === wantedStart) return true
+        return Number.isFinite(wantedTime) && Date.parse(run.startedAt) === wantedTime
+      }) ?? null
+      if (!sourceRun) {
+        return { status: 409, body: { error: `No run is running on ${targetLane}.` } }
+      }
+    } else {
+      if (item.entry.startedAt !== wantedStart) {
+        return { status: 409, body: { error: STOP_MISMATCH_PROBLEM } }
+      }
+      if (item.stopping) {
+        return { status: 409, body: { error: STOP_BUSY_PROBLEM } }
+      }
+      item.stopping = true
+      item.stoppedByOwner = true
     }
-    if (item.entry.startedAt !== wantedStart) {
-      return { status: 409, body: { error: STOP_MISMATCH_PROBLEM } }
-    }
-    if (item.stopping) {
-      return { status: 409, body: { error: STOP_BUSY_PROBLEM } }
-    }
-    item.stopping = true
-    item.stoppedByOwner = true
-    const result = await runStopCommand(targetLane, Boolean(item.project))
+    const result = await runStopCommand(targetLane, Boolean(item?.project))
     if (stopped) {
       return { status: 500, body: { error: 'The bridge stopped.' } }
     }
     if (!result.ok) {
-      if (running.get(targetLane) === item) {
+      if (item && running.get(targetLane) === item) {
         item.stopping = false
         item.stoppedByOwner = false
       }
@@ -998,7 +1015,7 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
         body: { error: result.error, ...(result.output ? { output: result.output } : {}) },
       }
     }
-    if (running.get(targetLane) === item && !item.closed) {
+    if (item && running.get(targetLane) === item && !item.closed) {
       await waitForItemClose(item, STOP_SETTLE_MS)
       if (!item.closed && running.get(targetLane) === item) {
         if (item.child?.pid) killTree(item.child)
@@ -1011,8 +1028,12 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
       }
     }
     const stoppedAt = new Date().toISOString()
-    notifyHeadStop(item, targetLane, stoppedAt)
-    return { status: 200, body: { ok: true, lane: targetLane, startedAt: wantedStart, output: result.output } }
+    const noticeItem = item ?? { entry: { lane: targetLane, briefs: [], startedAt: sourceRun.startedAt }, task: '' }
+    notifyHeadStop(noticeItem, targetLane, stoppedAt)
+    return {
+      status: 200,
+      body: { ok: true, lane: targetLane, startedAt: sourceRun ? sourceRun.startedAt : wantedStart, output: result.output },
+    }
   }
 
   function stopAll() {

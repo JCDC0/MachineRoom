@@ -5536,6 +5536,146 @@ body:has(#hud-orchestrator-chat) .lens-waiting {
   pointer-events: auto;
 }
 
+.mr-lane-conv-head {
+  gap: 8px;
+}
+
+.mr-lane-conv-crumb {
+  flex: 1 1 auto;
+  margin: 0;
+  overflow: hidden;
+  color: rgb(255 255 255 / 0.7);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mr-lane-conv-tools {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mr-lane-conv-picker {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: rgb(255 255 255 / 0.55);
+  font-size: 10px;
+}
+
+.mr-lane-conv-select {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 4px 6px;
+  border: 1px solid rgb(255 255 255 / 0.24);
+  border-radius: 2px;
+  background: #000;
+  color: var(--white);
+  font-size: 11px;
+}
+
+.mr-lane-conv-stop {
+  flex: 0 0 auto;
+  padding: 4px 12px;
+  border: 1px solid var(--red);
+  border-radius: 2px;
+  background: transparent;
+  color: var(--red);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.mr-lane-conv-stop:hover:not(:disabled) {
+  background: rgb(255 42 42 / 0.12);
+}
+
+.mr-lane-conv-outcome {
+  flex: 0 0 auto;
+  color: rgb(255 255 255 / 0.55);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.mr-lane-conv-prompt {
+  padding: 8px;
+  border: 1px solid rgb(255 255 255 / 0.18);
+  background: rgb(255 255 255 / 0.04);
+}
+
+.mr-lane-conv-prompt-text {
+  margin: 0;
+  color: rgb(255 255 255 / 0.82);
+  font-size: 12px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.mr-lane-conv-prompt-text.is-folded {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.mr-lane-conv-more {
+  margin-top: 6px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--yellow);
+  font-size: 10px;
+  text-decoration: underline;
+}
+
+.mr-lane-conv-tool,
+.mr-lane-conv-line,
+.mr-lane-conv-result {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.mr-lane-conv-tool {
+  padding-left: 8px;
+  border-left: 2px solid currentColor;
+}
+
+.mr-lane-conv-line {
+  color: rgb(255 255 255 / 0.55);
+}
+
+.mr-lane-conv-result {
+  color: rgb(255 255 255 / 0.55);
+}
+
+.mr-lane-conv-tool-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.mr-lane-conv-tool-fold {
+  align-self: flex-start;
+  padding: 2px 6px;
+  border: 1px solid currentColor;
+  border-radius: 2px;
+  background: transparent;
+  font-size: 10px;
+}
+
+.mr-lane-conv-tool-fold:hover:not(:disabled) {
+  background: rgb(255 255 255 / 0.06);
+}
+
 .mr-orch:not(.is-inline).is-mode-plan {
   outline: 1px dashed rgb(255 255 255 / 0.75);
   outline-offset: -1px;

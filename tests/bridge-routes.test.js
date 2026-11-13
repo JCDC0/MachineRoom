@@ -385,6 +385,15 @@ const TINY_SLEEPER = [
   'setTimeout(() => {}, 60000)',
 ].join('\n')
 
+const TINY_STOPPER = [
+  'const args = process.argv.slice(2)',
+  "if (args[0] === '--stop') {",
+  "  console.log('stopped ' + args[1])",
+  '  process.exit(0)',
+  '}',
+  'setTimeout(() => {}, 60000)',
+].join('\n')
+
 function statsRecord({ lane, model = 'deepseek/v4.1-flash-1017', startedAt, minutes, costUsd = null, exitCode = 0 }) {
   return JSON.stringify({ lane, model, startedAt, minutes, exitCode, killed: false, costUsd })
 }
@@ -1022,7 +1031,7 @@ describe('run routes', () => {
   it('reads a live run from the lanes source when it has no record', async () => {
     const tempDirRuns = useRunsTemp()
     const folder = join(tempDirRuns, 'machineroom-runs')
-    const { url } = await startRunsBridge({ runsDir: folder })
+    const { url } = await startRunsBridge({ runsDir: folder, script: TINY_STOPPER })
     const name = 'opencode-project-20261024-120000'
     mkdirSync(folder, { recursive: true })
     writeFileSync(join(folder, `${name}.log`), opencodeConversationLog())
@@ -1047,6 +1056,14 @@ describe('run routes', () => {
       ['read', 'read scratch'],
       ['search', 'glob scratch'],
     ])
+
+    const stop = await getJson(`${url}/api/control/runs/stop`, {
+      method: 'POST',
+      headers: { Origin: new URL(url).origin, 'content-type': 'application/json' },
+      body: JSON.stringify({ lane: 'opencode', startedAt, confirmed: true }),
+    })
+    expect(stop.status).toBe(200)
+    expect(stop.body).toMatchObject({ ok: true, lane: 'opencode', startedAt, output: 'stopped opencode' })
   })
 
   it('answers 404 for an unknown run and an unknown lane', async () => {
