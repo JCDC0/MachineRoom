@@ -939,6 +939,7 @@ export function createBridge(options = {}) {
   let stopped = false
   let watcher = null
   let gitWatchers = []
+  let gitWatchersExpected = 0
   let gitMeta = null
   let gitMetaDirty = true
   let gitMetaPromise = null
@@ -1180,6 +1181,20 @@ export function createBridge(options = {}) {
       } catch {}
     }
     gitWatchers = []
+    gitWatchersExpected = 0
+  }
+
+  function gitMetaWatchersMissing() {
+    if (!gitMeta) return false
+    return gitWatchers.length < gitWatchersExpected
+  }
+
+  function isFolderQuietly(folder) {
+    try {
+      return statSync(folder).isDirectory()
+    } catch {
+      return false
+    }
   }
 
   function ensureGitMeta() {
@@ -1402,6 +1417,7 @@ export function createBridge(options = {}) {
   function folderTreeReuseAllowed() {
     if (!lastTree || !lastFullReadOk) return false
     if (!watcher || watchFallback || pollTimer) return false
+    if (gitMetaDirty || gitMetaWatchersMissing()) return false
     if (lastTreeError !== '' || lastTreeProblems.length > 0) return false
     if (treeReading || treeDirty) return false
     if (quietReadTimer || quietFullDue || treeRetryTimer) return false
@@ -1462,13 +1478,16 @@ export function createBridge(options = {}) {
   function armGitWatchers() {
     if (stopped || !watcher || !gitMeta || gitWatchers.length > 0) return
     const watched = []
-    const indexWatcher = armOneGitWatcher(gitMeta.gitDir, 'index')
-    if (indexWatcher) watched.push(indexWatcher)
-    for (const infoDir of gitMeta.infoDirs) {
-      const excludeWatcher = armOneGitWatcher(infoDir, 'exclude')
-      if (excludeWatcher) watched.push(excludeWatcher)
+    let expected = 0
+    const arm = (folder, targetName) => {
+      if (isFolderQuietly(folder)) expected += 1
+      const current = armOneGitWatcher(folder, targetName)
+      if (current) watched.push(current)
     }
+    arm(gitMeta.gitDir, 'index')
+    for (const infoDir of gitMeta.infoDirs) arm(infoDir, 'exclude')
     gitWatchers = watched
+    gitWatchersExpected = expected
   }
 
   function noteWatchName(filename) {
