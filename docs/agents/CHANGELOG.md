@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- A queue keeps an explicit --test and otherwise reads the test command from the prepared worktree after each task, so a test script a task adds or one on the project head is run (P172).
 - The readiness review lists 3 blockers, 5 bug patches and 3 suggested features on the owner's path to daily use (P164).
 - The claude sessions meta test moves the runs folder time after writing the meta file, so the reader re-lists it on Windows (P165).
 - A first-use run of the setup commands lists where a new owner gets stuck (P166).
