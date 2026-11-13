@@ -2,9 +2,11 @@
 
 ## Unreleased
 
+- A stopped or failed queue row offers Ask for recovery, which sends Main the branch, the failed task and what the record holds, asking it to inspect before continuing.
 - A conversation's menu has Export (E), which saves its title, project, summary and saved messages as one Markdown file.
 - The fourth readiness pass lists eight live-room problems on another project, among them outside files matched by folder name and failed git reads shown as clean.
 - A conversation's `...` menu exports its saved title, project, start time, summary and messages as a Markdown file, and E runs it while the menu is open (P218).
+- Dispatch offers Ask for recovery on a stopped or failed queue row, and Confirm sends the failed task, the tasks that did not run and the record's missing parts to Main (P216).
 - Lane Update and Delete read the request body before the saved configuration, so a lane created meanwhile and its key count are kept.
 - The Removed lanes row sums each removed lane's rounded cents, so deleting lanes never moves the total.
 - Removed lanes adds each removed lane's rounded cents for the month and today, so deleting lanes no longer changes the total (P212).

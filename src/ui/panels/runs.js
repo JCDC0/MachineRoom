@@ -65,6 +65,102 @@ export function recordLine(record) {
   return parts.join(' | ')
 }
 
+export function queueRecoveryAvailable(record) {
+  if (!record || typeof record !== 'object') return false
+  if (!record.queue) return false
+  const status = singleLine(record.queueStatus)
+  if (status === '') return false
+  return /\b(failed|stopped)\b/i.test(status)
+}
+
+export function projectFolderName(value) {
+  const folder = typeof value === 'string' ? value.trim().replace(/[\\/]+$/, '') : ''
+  if (!folder) return ''
+  const cut = Math.max(folder.lastIndexOf('/'), folder.lastIndexOf('\\'))
+  const name = (cut === -1 ? folder : folder.slice(cut + 1)).trim()
+  if (!name || name === '.' || name === '..' || /^[a-zA-Z]:$/.test(name)) return ''
+  return name
+}
+
+function queueTaskList(record) {
+  const list = Array.isArray(record?.tasks) ? record.tasks : (Array.isArray(record?.queueTasks) ? record.queueTasks : null)
+  if (!list) return null
+  return list
+    .filter((task) => typeof task === 'string' && task.trim() !== '')
+    .map((task) => task.trim())
+}
+
+export function queueRecoveryPlan(record, { project = '' } = {}) {
+  const source = record && typeof record === 'object' ? record : {}
+  const lane = singleLine(source.lane) || 'unknown lane'
+  const folder = projectFolderName(source.project) || projectFolderName(project) || 'this project'
+  const queueBranch = typeof source.queue === 'string' ? source.queue.trim() : ''
+  const branch = queueBranch || (typeof source.branch === 'string' ? source.branch.trim() : '')
+  const number = Number.isInteger(source.queueIndex) && source.queueIndex > 0 ? source.queueIndex : null
+  const list = queueTaskList(source)
+  const heldTask = typeof source.task === 'string' ? source.task.trim() : ''
+  const task = list && number !== null && list[number - 1] ? list[number - 1] : heldTask
+  const note = typeof source.note === 'string' ? source.note.trim() : ''
+  const remaining = list && number !== null ? list.slice(number) : null
+  const count = Number.isInteger(source.tasks) && source.tasks > 0
+    ? source.tasks
+    : (list ? list.length : null)
+  const remainingCount = remaining
+    ? remaining.length
+    : (count !== null && number !== null ? Math.max(count - number, 0) : null)
+  const missing = []
+  if (!branch) missing.push('the queue branch')
+  if (number === null) missing.push('the failed task number')
+  if (!task) missing.push('the failed task')
+  if (!list) missing.push('the queue task list')
+  if (count === null) missing.push('how many tasks the queue held')
+  if (!note) missing.push('the note')
+  return {
+    lane,
+    project: folder,
+    branch,
+    number,
+    task,
+    firstLine: firstLine(task),
+    remaining,
+    remainingCount,
+    count,
+    note,
+    hasTasks: list !== null,
+    missing,
+  }
+}
+
+export function queueRecoveryMessage(record, { project = '' } = {}) {
+  const plan = queueRecoveryPlan(record, { project })
+  const lines = [`Recovery for the ${plan.lane} lane on ${plan.project}.`, '']
+  lines.push(`Queue branch: ${plan.branch || 'not in the record'}`)
+  if (plan.number === null) lines.push('Failed task: the record does not give its number.')
+  else lines.push(`Failed task: task ${plan.number}.`)
+  lines.push(plan.task || 'The record does not hold the failed task text.')
+  lines.push('')
+  if (plan.remaining) {
+    const label = plan.remaining.length === 1 ? 'task did not run' : 'tasks did not run'
+    lines.push(`${plan.remaining.length} ${label}:`)
+    plan.remaining.forEach((task, index) => {
+      lines.push(`${plan.number + index + 1}. ${task}`)
+    })
+  } else if (plan.remainingCount !== null) {
+    lines.push(`The record does not hold the queue's task list. It says ${plan.count} tasks were queued, so ${plan.remainingCount} did not run.`)
+  } else {
+    const unknown = []
+    if (!plan.hasTasks) unknown.push("the queue's task list")
+    if (plan.number === null) unknown.push("the failed task's number")
+    lines.push(`The record does not hold ${unknown.join(' or ')}, so the tasks that did not run are not known.`)
+  }
+  lines.push('')
+  lines.push(`Note: ${plan.note || 'the record has no note.'}`)
+  if (plan.missing.length > 0) lines.push(`Missing from the record: ${plan.missing.join(', ')}.`)
+  lines.push('')
+  lines.push("Inspect the uncommitted work in the lane's worktree first, report what you found, and propose how to continue. Do not discard changes and do not rerun the queue by itself.")
+  return lines.join('\n')
+}
+
 export function runStartLine(answer) {
   if (!answer || typeof answer !== 'object') return 'The bridge sent no answer.'
   const lane = typeof answer.lane === 'string' && answer.lane.trim() ? answer.lane.trim() : 'The run'
