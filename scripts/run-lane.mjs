@@ -59,14 +59,19 @@ function lanesFile() {
     : join(lanesFolder(), 'lanes.json')
 }
 
-function stopLeftovers({ worktree, childPid = 0, label = 'leftover', excludePids = [], list = listProcesses, kill = killTree } = {}) {
+function stopProcess(pid, { kill = killTree, alive = processAlive } = {}) {
+  if (kill({ pid })) return true
+  return !alive(pid)
+}
+
+function stopLeftovers({ worktree, childPid = 0, label = 'leftover', excludePids = [], list = listProcesses, kill = killTree, alive = processAlive } = {}) {
   const folder = String(worktree ?? '').trim()
   if (!folder && !(childPid > 0)) return { found: 0, stopped: 0, failed: 0 }
   const found = leftoverProcesses(list(), { childPid, worktree: folder, ownPid: process.pid, excludePids })
   let stopped = 0
   let failed = 0
   for (const item of found) {
-    if (kill({ pid: item.pid })) {
+    if (stopProcess(item.pid, { kill, alive })) {
       console.log(`${label}: stopped ${item.pid}`)
       stopped += 1
     } else {
@@ -83,12 +88,11 @@ function harnessDescendants(childPid, { excludePids = [], processes = null } = {
 }
 
 function stopDescendants(descendants, options = 'leftover') {
-  const { label = 'leftover', kill = killTree } = typeof options === 'string' ? { label: options } : options ?? {}
+  const { label = 'leftover', kill = killTree, alive = processAlive } = typeof options === 'string' ? { label: options } : options ?? {}
   let stopped = 0
   let failed = 0
   for (const item of Array.isArray(descendants) ? descendants : []) {
-    const killed = kill({ pid: item.pid })
-    if (killed || !processAlive(item.pid)) {
+    if (stopProcess(item.pid, { kill, alive })) {
       console.log(`${label}: stopped ${item.pid}`)
       stopped += 1
     } else {
@@ -133,7 +137,7 @@ function lockText(path) {
   }
 }
 
-export function stopLane(laneKey, { platform = process.platform, list = listProcesses, kill = killTree, stat = statSync } = {}) {
+export function stopLane(laneKey, { platform = process.platform, list = listProcesses, kill = killTree, stat = statSync, alive = processAlive } = {}) {
   const folder = runsFolder()
   const path = join(folder, `${laneKey}.lock`)
   const before = lockText(path)
@@ -161,7 +165,7 @@ export function stopLane(laneKey, { platform = process.platform, list = listProc
     if (isStranger(pid)) {
       console.log(`stale: ${pid} was not this run`)
     } else if (platform !== 'win32' || processes.length === 0 || byPid.has(pid)) {
-      if (kill({ pid })) {
+      if (stopProcess(pid, { kill, alive })) {
         console.log(`stopped: ${pid} (${name})`)
         stopped += 1
       } else {
@@ -170,11 +174,11 @@ export function stopLane(laneKey, { platform = process.platform, list = listProc
       }
     }
   }
-  const descendantsResult = stopDescendants(descendants, { kill })
+  const descendantsResult = stopDescendants(descendants, { kill, alive })
   stopped += descendantsResult.stopped
   failed += descendantsResult.failed
   const byName = holder.projectRun !== true
-  const leftovers = stopLeftovers({ worktree: byName ? worktree : '', excludePids: [holder.pid ?? 0], list, kill })
+  const leftovers = stopLeftovers({ worktree: byName ? worktree : '', excludePids: [holder.pid ?? 0], list, kill, alive })
   stopped += leftovers.stopped
   failed += leftovers.failed
   if (stopped === 0 && leftovers.found === 0 && descendants.length === 0 && failed === 0) {

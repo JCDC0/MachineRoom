@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- `--stop` counts a process that is already gone when the kill runs as stopped, so a run that finishes after its harness dies no longer makes the stop exit 1 (P156).
+
 - Renamed titles, restored titles, compact rules and summaries, and a compaction report are masked before they are capped or saved (P151).
 - printedRunsFolder masks a posix path with ~ even when USERPROFILE is set, so the masked log line test runs on Linux again (P154).
 - The detail docs describe P143 to P148 and the Windows-only masked log test (P155).
