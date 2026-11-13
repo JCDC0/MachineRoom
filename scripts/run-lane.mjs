@@ -586,6 +586,16 @@ function resolvedLanes(lanes) {
   }))
 }
 
+function folderCheckFor(lanes) {
+  return {
+    mainCheckout: realPath(mainCheckout()),
+    lanes: resolvedLanes(lanes),
+    home: realPath(homedir()),
+    temp: realPath(process.env.TEMP || tmpdir()),
+    runs: realPath(runsFolder()),
+  }
+}
+
 function projectTestCommand(project, given) {
   if (typeof given === 'string' && given.trim() !== '') return given
   const file = join(project, 'package.json')
@@ -1239,7 +1249,7 @@ async function runQueueProject({ options, lane, lanes }) {
             project: target.path, task, queue: { branch, index: number, size: tasks.length }, lockPath: lock,
             projectBranch: startBranch, deferRecord: true, base,
           })
-          pending = { record: run.record, folder: target.path, startHead: run.startHead, startBranch, tests: '' }
+          pending = { record: run.record, folder: target.path, startHead: run.startHead ?? startHead, startBranch, tests: '' }
           if (run.code !== 0 || run.killed) finishPending(run.killed ? 'stopped' : 'failed', true)
           return { code: run.code, killed: run.killed }
         },
@@ -1251,7 +1261,8 @@ async function runQueueProject({ options, lane, lanes }) {
           return { ok: check.ok }
         },
       })
-      formatQueueSummary({ branch: result.branch, results: result.results, tests: test, worktree: options.worktree ? printedRunsFolder(target.path) : '' }).forEach((line) => console.log(line))
+      const usedBranch = gitRead(target.path, ['branch', '--show-current']) || result.branch
+      formatQueueSummary({ branch: usedBranch, results: result.results, tests: test, worktree: options.worktree ? printedRunsFolder(target.path) : '' }).forEach((line) => console.log(line))
       return result.results.some((item) => item.status.startsWith('failed')) ? 1 : 0
     } catch (error) {
       if (pending) {
@@ -1441,19 +1452,17 @@ async function main() {
     return 1
   }
 
+  const folderCheck = folderCheckFor(lanes)
   const folderProblems = briefWorktreeProblems({
     worktree: typeof lane.worktree === 'string' && lane.worktree.trim() !== '' ? realPath(lane.worktree) : '',
     laneKey: options.lane,
-    mainCheckout: realPath(mainCheckout()),
-    lanes: resolvedLanes(lanes),
-    home: realPath(homedir()),
-    temp: realPath(process.env.TEMP || tmpdir()),
-    runs: realPath(runsFolder()),
+    ...folderCheck,
   })
   if (folderProblems.length > 0) {
     folderProblems.forEach((sentence) => console.log(sentence))
     return 1
   }
+  options.folderCheck = folderCheck
 
   const briefs = parseBriefs(read('TASKS.md'))
   const problems = briefProblems({
@@ -1517,9 +1526,17 @@ function recordRoom(record, toolLines, lanes) {
   }
 }
 
-async function startFailover({ laneKey, target, lanes, options, wanted, prompt, promptFor = null, folder, project, task, deferRecord, openLog, failedRecord, failedStartBranch }) {
+async function startFailover({ laneKey, target, lanes, options, wanted, prompt, promptFor = null, folder, project, task, queue = null, base = '', deferRecord, openLog, failedRecord, failedStartBranch }) {
   const fallbackLane = lanes?.[target]
   if (!fallbackLane) return null
+  if (!project) {
+    const worktree = typeof fallbackLane.worktree === 'string' && fallbackLane.worktree.trim() !== '' ? realPath(fallbackLane.worktree) : ''
+    const problems = briefWorktreeProblems({ worktree, laneKey: target, ...(options?.folderCheck ?? folderCheckFor(lanes)) })
+    if (problems.length > 0) {
+      problems.forEach((sentence) => console.log(sentence))
+      return null
+    }
+  }
   let lock
   try {
     refuseRunningLane(target, project ? '' : fallbackLane.worktree, folder)
@@ -1528,14 +1545,15 @@ async function startFailover({ laneKey, target, lanes, options, wanted, prompt, 
     console.log(`The backup lane ${target} is busy, so the run stays failed.`)
     return null
   }
+  let branchBefore = ''
   try {
     if (project) {
-      const base = String(failedRecord?.branch || failedStartBranch || '').trim()
-      if (base === '') {
+      branchBefore = String(failedRecord?.branch || failedStartBranch || '').trim()
+      if (branchBefore === '') {
         console.log(`The backup lane ${target} has no branch to start from, so the run stays failed.`)
         return null
       }
-      const branch = `${base}-on-${target}`
+      const branch = `${branchBefore}-on-${target}`
       if (gitRead(project, ['switch', '-c', branch]) === null) {
         console.log(`The backup lane ${target} could not take the branch ${branch}, so the run stays failed.`)
         return null
@@ -1555,9 +1573,11 @@ async function startFailover({ laneKey, target, lanes, options, wanted, prompt, 
       name: fallbackName,
       project,
       task,
-      queue: null,
+      queue,
       lockPath: lock,
+      projectBranch: project ? branchBefore : null,
       deferRecord,
+      base,
       branchSuffix: `-on-${target}`,
       failoverFrom: { lane: laneKey, startedAt: failedRecord?.startedAt },
       openLog,
@@ -1869,9 +1889,11 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
           commits: (gitRead(lane.worktree, ['log', '--oneline', 'refs/heads/main..HEAD']) ?? '').split(/\r?\n/).filter(Boolean),
         }
 
-    const startFailed = result.code !== 0 && summary.toolCalls === 0 && minutes < 1
-    const startFailure = startFailed ? startFailureText({ harness, log: logText }) : ''
-    if (startFailure !== '') console.log(`start failed: ${startFailure}`)
+    const startFailed = (Boolean(result.error) || result.code !== 0) && summary.toolCalls === 0 && minutes < 1
+    const startFailure = startFailed
+      ? (result.error ? `The harness did not start (${errorCode(result.error)}).` : startFailureText({ harness, log: logText }))
+      : ''
+    if (startFailure !== '' && !result.error) console.log(`start failed: ${startFailure}`)
     const retryProblem = retryStartProblem({
       exitCode: result.code,
       minutes,
@@ -1915,7 +1937,7 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
         lane, lanes, wanted, prompt,
         logPath: join(dirname(logPath), `${retryName}.log`),
         usageFile: join(dirname(usageFile), `${retryName}.usage.json`),
-        name: retryName, project, task, queue, lockPath, projectBranch, deferRecord, base: runBase, openLog, branchSuffix, failoverFrom,
+        name: retryName, project, task, queue, lockPath, projectBranch, deferRecord, base: runBase, openLog, branchSuffix, failoverFrom, promptFor,
       })
     }
     const record = laneRunRecord({
@@ -1968,12 +1990,14 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
         folder,
         project,
         task,
+        queue,
+        base: runBase,
         deferRecord,
         openLog,
         failedRecord: record,
         failedStartBranch: projectStart?.branch ?? '',
       })
-      if (fallbackRun) return { code: fallbackRun.code ?? 1, killed: fallbackRun.killed === true }
+      if (fallbackRun) return fallbackRun
       if (project && deferRecord) return { code: result.code ?? 1, killed, record: null, startHead: projectStart.head, startBranch: projectStart.branch }
       return { code: result.code ?? 1, killed }
     }

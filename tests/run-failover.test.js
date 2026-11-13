@@ -1,6 +1,6 @@
 import { spawn, spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
-import { basename, join } from 'node:path'
+import { basename, dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it, vi } from 'vitest'
 import { branchFor, buildPrompt } from '../src/briefs/briefs.js'
@@ -94,21 +94,23 @@ function removeRecordings(names, indexBefore, existed) {
   else rmSync(join(RECORDINGS, 'index.json'), { force: true })
 }
 
-async function runFailover({ laneKey, lane, lanes, runs, prompt = 'Do it.', name = 'failover' }) {
+async function runFailover({ laneKey, lane, lanes, runs, prompt = 'Do it.', promptFor = null, name = 'failover' }) {
   const saved = process.env.MACHINEROOM_RUNS
   process.env.MACHINEROOM_RUNS = runs
   const indexPath = join(RECORDINGS, 'index.json')
   const recordingsExisted = existsSync(RECORDINGS)
   const indexBefore = existsSync(indexPath) ? readFileSync(indexPath, 'utf8') : null
   const logs = []
+  const check = { mainCheckout: dirname(runs), lanes, home: join(dirname(runs), 'home'), temp: join(dirname(runs), 'temp'), runs }
   const spy = vi.spyOn(console, 'log').mockImplementation((line) => logs.push(String(line)))
   try {
     const result = await startLane({
-      options: { lane: laneKey, minutes: 1 },
+      options: { lane: laneKey, minutes: 1, folderCheck: check },
       lane,
       lanes,
       wanted: [BRIEF],
       prompt,
+      promptFor,
       logPath: join(runs, `${name}.log`),
       usageFile: join(runs, `${name}.usage.json`),
       name,
@@ -126,8 +128,8 @@ describe('a lane that hits its quota hands its run to a backup lane', { timeout:
   it('starts the same brief once on the backup lane with a -on- branch and links both records', async () => {
     const base = makeTempDir('machine-room-failover-')
     try {
-      const first = join(base, 'first')
-      const backup = join(base, 'backup')
+      const first = join(base, '.worktrees', 'first')
+      const backup = join(base, '.worktrees', 'backup')
       const runs = join(base, 'runs')
       const failCount = join(base, 'fail-count.txt')
       const okCount = join(base, 'ok-count.txt')
@@ -155,12 +157,87 @@ describe('a lane that hits its quota hands its run to a backup lane', { timeout:
     }
   })
 
+  it('keeps the backup prompt when a readiness retry moves the run', async () => {
+    const base = makeTempDir('machine-room-failover-ready-')
+    try {
+      const first = join(base, '.worktrees', 'first')
+      const backup = join(base, '.worktrees', 'backup')
+      const runs = join(base, 'runs')
+      const readyCount = join(base, 'ready-count.txt')
+      const okCount = join(base, 'ok-count.txt')
+      const promptFile = join(base, 'backup-prompt.txt')
+      const readyScript = [
+        "const { appendFileSync } = require('node:fs')",
+        `appendFileSync(${JSON.stringify(readyCount)}, 'x')`,
+        "console.log('Standalone server exited before reporting readiness')",
+        'process.exit(1)',
+        '',
+      ].join('\n')
+      const okPromptScript = [
+        "const { appendFileSync, writeFileSync } = require('node:fs')",
+        `appendFileSync(${JSON.stringify(okCount)}, 'x')`,
+        `writeFileSync(${JSON.stringify(promptFile)}, process.argv[process.argv.length - 1])`,
+        "writeFileSync('note.txt', 'done\\n')",
+        "console.log('{\"type\":\"step_finish\",\"part\":{\"cost\":0,\"tokens\":{\"input\":1,\"output\":1}}}')",
+        '',
+      ].join('\n')
+      makeRepo(first, readyScript)
+      makeRepo(backup, okPromptScript)
+      mkdirSync(runs, { recursive: true })
+      const lanes = {
+        opencode: { name: 'Fail lane', worktree: first, fallback: 'agy', forbidden: [], cli: { harness: 'opencode', bin: process.execPath, model: 'fake/fail', commits: 'runner' } },
+        agy: { name: 'Backup lane', worktree: backup, forbidden: [], cli: { harness: 'opencode', bin: process.execPath, model: 'fake/ok', commits: 'runner' } },
+      }
+      const promptFor = (laneKey, branchSuffix = '') => buildPrompt({ briefs: [BRIEF], laneKey, lanes, rules: { about: '', rules: [] }, version: '0.1.1', branchSuffix })
+      const { result, logs } = await runFailover({ laneKey: 'opencode', lane: lanes.opencode, lanes, runs, prompt: promptFor('opencode'), promptFor })
+      expect(result.code, logs.join('\n')).toBe(0)
+      expect(count(readyCount)).toBe(2)
+      expect(count(okCount)).toBe(1)
+      const prompt = readFileSync(promptFile, 'utf8')
+      expect(prompt).toContain(`Your worktree is ${backup}.`)
+      expect(prompt).toContain(`${branchFor(BRIEF)}-on-agy`)
+      expect(prompt).not.toContain(`Your worktree is ${first}.`)
+      expect(logs.join('\n')).toContain('moving the run to agy because start-failed')
+    } finally {
+      rmSync(base, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+    }
+  })
+
+  it('moves the run when the harness program cannot start at all', async () => {
+    const base = makeTempDir('machine-room-failover-spawn-')
+    try {
+      const first = join(base, '.worktrees', 'first')
+      const backup = join(base, '.worktrees', 'backup')
+      const runs = join(base, 'runs')
+      const okCount = join(base, 'ok-count.txt')
+      makeRepo(first)
+      makeRepo(backup, okScript(okCount, 'note.txt'))
+      mkdirSync(runs, { recursive: true })
+      const lanes = {
+        opencode: { name: 'Missing lane', worktree: first, fallback: 'agy', cli: { harness: 'opencode', bin: join(base, 'no-such-harness.exe'), model: 'fake/missing', commits: 'runner' } },
+        agy: { name: 'Backup lane', worktree: backup, cli: { harness: 'opencode', bin: process.execPath, model: 'fake/ok', commits: 'runner' } },
+      }
+      const { result, logs } = await runFailover({ laneKey: 'opencode', lane: lanes.opencode, lanes, runs })
+      expect(result.code, logs.join('\n')).toBe(0)
+      const records = readRecords(runs)
+      expect(records).toHaveLength(2)
+      expect(records[0].startFailed).toBe(true)
+      expect(records[0].failover).toEqual({ kind: 'start-failed', to: 'agy' })
+      expect(records[1].lane).toBe('agy')
+      expect(records[1].failoverFrom.lane).toBe('opencode')
+      expect(count(okCount)).toBe(1)
+      expect(logs.join('\n')).toContain('moving the run to agy because start-failed')
+    } finally {
+      rmSync(base, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+    }
+  })
+
   it('does not move again when the backup run also fails', async () => {
     const base = makeTempDir('machine-room-failover-again-')
     try {
-      const first = join(base, 'first')
-      const backup = join(base, 'backup')
-      const third = join(base, 'third')
+      const first = join(base, '.worktrees', 'first')
+      const backup = join(base, '.worktrees', 'backup')
+      const third = join(base, '.worktrees', 'third')
       const runs = join(base, 'runs')
       const failCount = join(base, 'fail-count.txt')
       const backupCount = join(base, 'backup-count.txt')
@@ -253,11 +330,125 @@ describe('a lane that hits its quota hands its run to a backup lane', { timeout:
     }
   })
 
+  it('returns the backup record and start state to a deferred project task', async () => {
+    const base = makeTempDir('machine-room-failover-deferred-')
+    try {
+      const project = join(base, 'project')
+      const runs = join(base, 'runs')
+      const okCount = join(base, 'ok-count.txt')
+      mkdirSync(runs, { recursive: true })
+      const script = [
+        "const { appendFileSync, writeFileSync } = require('node:fs')",
+        "const title = process.argv.includes('--title') ? process.argv[process.argv.indexOf('--title') + 1] : ''",
+        "if (title.startsWith('agy-project-')) {",
+        `  appendFileSync(${JSON.stringify(okCount)}, 'x')`,
+        "  writeFileSync('note.txt', 'done\\n')",
+        "  console.log('{\"type\":\"step_finish\",\"part\":{\"cost\":0,\"tokens\":{\"input\":1,\"output\":1}}}')",
+        '} else {',
+        "  console.log(JSON.stringify({ type: 'error', error: { type: 'provider.rate_limit', message: '429 Too Many Requests' } }))",
+        '  process.exit(1)',
+        '}',
+        '',
+      ].join('\n')
+      makeRepo(project, script)
+      const lanes = {
+        opencode: { name: 'Fail lane', worktree: join(base, 'first'), fallback: 'agy', cli: { harness: 'opencode', bin: process.execPath, model: 'fake/fail' } },
+        agy: { name: 'Backup lane', worktree: join(base, 'backup'), cli: { harness: 'opencode', bin: process.execPath, model: 'fake/ok' } },
+      }
+      const saved = process.env.MACHINEROOM_RUNS
+      const logs = []
+      const spy = vi.spyOn(console, 'log').mockImplementation((line) => logs.push(String(line)))
+      process.env.MACHINEROOM_RUNS = runs
+      let result
+      try {
+        result = await startLane({
+          options: { lane: 'opencode', minutes: 1 },
+          lane: lanes.opencode,
+          lanes,
+          wanted: [],
+          prompt: 'Do it.',
+          logPath: join(runs, 'deferred-project.log'),
+          usageFile: join(runs, 'deferred-project.usage.json'),
+          name: 'deferred-project',
+          project,
+          task: 'Do it.',
+          deferRecord: true,
+        })
+      } finally {
+        spy.mockRestore()
+        if (saved === undefined) delete process.env.MACHINEROOM_RUNS
+        else process.env.MACHINEROOM_RUNS = saved
+      }
+      expect(result.code, logs.join('\n')).toBe(0)
+      expect(result.record).toMatchObject({ lane: 'agy', branch: 'main-on-agy' })
+      expect(result.startBranch).toBe('main')
+      expect(result.startHead).toMatch(/^[0-9a-f]{40}$/)
+      const records = readRecords(runs)
+      expect(records).toHaveLength(1)
+      expect(records[0].failover).toEqual({ kind: 'rate-limit', to: 'agy' })
+      expect(gitIn(project, ['branch', '--show-current'])).toBe('main-on-agy')
+      expect(count(okCount)).toBe(1)
+    } finally {
+      rmSync(base, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+    }
+  })
+
+  it('keeps a queue record and its summary on the branch the backup used', async () => {
+    const base = makeTempDir('machine-room-failover-queue-')
+    try {
+      const project = join(base, 'project')
+      const runs = join(base, 'runs')
+      const okCount = join(base, 'ok-count.txt')
+      mkdirSync(runs, { recursive: true })
+      const script = [
+        "const { appendFileSync, writeFileSync } = require('node:fs')",
+        "const title = process.argv.includes('--title') ? process.argv[process.argv.indexOf('--title') + 1] : ''",
+        "if (title.startsWith('agy-project-')) {",
+        `  appendFileSync(${JSON.stringify(okCount)}, 'x')`,
+        "  writeFileSync('note.txt', 'done\\n')",
+        "  console.log('{\"type\":\"step_finish\",\"part\":{\"cost\":0,\"tokens\":{\"input\":1,\"output\":1}}}')",
+        '} else {',
+        "  console.log(JSON.stringify({ type: 'error', error: { type: 'provider.rate_limit', message: '429 Too Many Requests' } }))",
+        '  process.exit(1)',
+        '}',
+        '',
+      ].join('\n')
+      makeRepo(project, script)
+      const baseHead = gitIn(project, ['rev-parse', 'HEAD'])
+      const lanes = {
+        opencode: { name: 'Fail lane', worktree: join(base, 'first'), fallback: 'agy', cli: { harness: 'opencode', bin: process.execPath, model: 'fake/fail' } },
+        agy: { name: 'Backup lane', worktree: join(base, 'backup'), cli: { harness: 'opencode', bin: process.execPath, model: 'fake/ok' } },
+      }
+      const lanesFile = join(base, 'lanes.json')
+      writeFileSync(lanesFile, `${JSON.stringify(lanes, null, 2)}\n`)
+      const queueFile = join(base, 'queue.txt')
+      writeFileSync(queueFile, 'Do the task.\n')
+      const result = await runLane(['opencode', '--project', project, '--queue', queueFile], {
+        MACHINEROOM_RUNS: runs,
+        MACHINEROOM_LANES_FILE: lanesFile,
+      })
+      expect(result.code, `${result.stdout}\n${result.stderr}`).toBe(0)
+      const records = readRecords(runs)
+      expect(records).toHaveLength(2)
+      expect(records[0].failover).toEqual({ kind: 'rate-limit', to: 'agy' })
+      expect(records[1]).toMatchObject({ lane: 'agy', queueIndex: 1, queueSize: 1, base: baseHead })
+      expect(records[1].branch).toMatch(/-on-agy$/)
+      expect(records[1].queue).toMatch(/^machineroom\/queue-opencode-/)
+      expect(records[1].queue).not.toMatch(/-on-agy$/)
+      expect(records[1].commits).toHaveLength(1)
+      expect(gitIn(project, ['branch', '--show-current'])).toBe(records[1].branch)
+      expect(result.stdout).toContain(`branch: ${records[1].branch}`)
+      expect(count(okCount)).toBe(1)
+    } finally {
+      rmSync(base, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+    }
+  })
+
   it('leaves the run failed with one sentence when the backup lane is busy', async () => {
     const base = makeTempDir('machine-room-failover-busy-')
     try {
-      const first = join(base, 'first')
-      const backup = join(base, 'backup')
+      const first = join(base, '.worktrees', 'first')
+      const backup = join(base, '.worktrees', 'backup')
       const runs = join(base, 'runs')
       const failCount = join(base, 'fail-count.txt')
       const okCount = join(base, 'ok-count.txt')
@@ -276,6 +467,37 @@ describe('a lane that hits its quota hands its run to a backup lane', { timeout:
       expect(records[0].failover).toEqual({ kind: 'rate-limit', to: 'agy' })
       expect(count(okCount)).toBe(0)
       expect(logs).toContain('The backup lane agy is busy, so the run stays failed.')
+    } finally {
+      rmSync(base, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+    }
+  })
+
+  it('refuses a backup whose worktree is the main checkout', async () => {
+    const base = makeTempDir('machine-room-failover-main-')
+    try {
+      const first = join(base, '.worktrees', 'first')
+      const runs = join(base, 'runs')
+      const failCount = join(runs, 'fail-count.txt')
+      const okCount = join(runs, 'ok-count.txt')
+      makeRepo(base)
+      writeFileSync(join(base, '.gitignore'), '.worktrees/\nruns/\n')
+      gitIn(base, ['add', '-A'])
+      gitIn(base, ['commit', '-q', '-m', 'Ignore the lane folders and runs'])
+      makeRepo(first, failScript(failCount))
+      mkdirSync(runs, { recursive: true })
+      const lanes = {
+        opencode: { name: 'Fail lane', worktree: first, fallback: 'agy', cli: { harness: 'opencode', bin: process.execPath, model: 'fake/fail', commits: 'runner' } },
+        agy: { name: 'Backup lane', worktree: base, cli: { harness: 'opencode', bin: process.execPath, model: 'fake/ok', commits: 'runner' } },
+      }
+      const { result, logs } = await runFailover({ laneKey: 'opencode', lane: lanes.opencode, lanes, runs })
+      expect(result.code).toBe(1)
+      const records = readRecords(runs)
+      expect(records).toHaveLength(1)
+      expect(records[0].failover).toEqual({ kind: 'rate-limit', to: 'agy' })
+      expect(count(okCount)).toBe(0)
+      expect(logs).toContain(`The lane worktree ${base} is the main checkout, so the runner will not start there.`)
+      expect(gitIn(base, ['branch', '--show-current'])).toBe('main')
+      expect(gitIn(base, ['status', '--porcelain'])).toBe('')
     } finally {
       rmSync(base, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
     }

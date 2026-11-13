@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- P273: a backup lane passes the brief worktree check, a retry keeps the backup prompt, a project failover returns the backup's record and branch, and a spawn error counts as a failed start.
 - P272: a raw JSON line in a lane conversation is parsed and masked field by field, so escaped home paths and named secrets never reach the route.
 - P250: a lane's tree row and its Inspector open its conversation in the lower half, with a run picker, folded tool calls, live reads and Stop; the route reads live runs too.
 - P275: folder-shaped tree reuse also waits for clean git metadata and every expected git metadata watcher, so an index or exclude change is read again.
@@ -10,6 +11,10 @@
 - P274: a native run fails when a second empty reply follows its nudge, instead of reporting an earlier message as a final answer.
 - P275: a folder-shaped /api/tree stops reusing the last tree while git metadata is dirty or a git metadata watcher is missing, so it reads again.
 - P272: a JSON line kept as a raw conversation entry is masked as data, so an escaped profile path and a key, token or secret field show no value.
+- P273: a backup lane whose worktree is the main checkout or another lane's is refused with the problem, and the run stays failed.
+- P273: a project task or queue that fails over returns the backup's record, start head and branch, so its check and bookkeeping use the backup's run.
+- P273: a harness program that cannot start counts as a failed start, so the run moves to its backup lane and its record says why.
+- P273: a readiness retry keeps the backup prompt builder, so a failover after the retry gives the backup its own worktree and branch.
 - P268: the git write test's request bound matches the client's write limit, and the bridge and tree waits under 10 seconds are raised to 10.
 - P269: AUDIT-2026-11-REVIEW-31.md lists seven findings in P249, P254, P260 and P263; R31-1 to R31-5 block a push.
 - P270: doctor with both a folder and --root prints only its refusal sentence and exits 1, without the usage block.
