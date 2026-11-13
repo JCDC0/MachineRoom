@@ -1427,7 +1427,7 @@ describe('run-lane first use', () => {
     }
   })
 
-  it('ends a dry run with the prompt first line and the nothing-started line', async () => {
+  it('ends a dry run with the nothing-started line and keeps the prompt hidden', async () => {
     const folder = makeTempDir('machine-room-dry-run-first-line-')
     try {
       const project = join(folder, 'project')
@@ -1444,8 +1444,31 @@ describe('run-lane first use', () => {
       const lines = result.stdout.trim().split(/\r?\n/)
       expect(lines.at(-1)).toBe('Dry run, nothing started.')
       expect(result.stdout).toContain('characters>')
-      expect(result.stdout.indexOf('prompt: Fix it first.')).toBeGreaterThan(result.stdout.indexOf('characters>'))
+      expect(result.stdout).not.toContain('Fix it first.')
       expect(result.stdout).not.toContain('Then stop.')
+    } finally {
+      rmSync(folder, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+    }
+  })
+
+  it('keeps --help and -h as task text when --task takes the value', async () => {
+    const folder = makeTempDir('machine-room-help-task-')
+    try {
+      const project = join(folder, 'project')
+      mkdirSync(project, { recursive: true })
+      const init = spawnSync(gitPath(), ['init'], { cwd: project, encoding: 'utf8', windowsHide: true })
+      expect(init.status).toBe(0)
+      for (const task of ['--help', '-h']) {
+        const result = await runLane(['opencode', '--project', project, '--task', task, '--dry-run'], {
+          MACHINEROOM_LANES_FILE: lanesFileUnderWorktrees(folder),
+          MACHINEROOM_RUNS: join(folder, 'runs'),
+          TEMP: folder,
+          TMP: folder,
+        })
+        expect(result.code, result.stderr).toBe(0)
+        expect(result.stdout).toContain('Dry run, nothing started.')
+        expect(result.stdout).not.toContain('Usage: npm run run-lane')
+      }
     } finally {
       rmSync(folder, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
     }
@@ -1480,7 +1503,6 @@ describe('printCommand', () => {
         expect(log.mock.calls.map(([line]) => line)).toEqual([
           `file: ${shown}`,
           `args: ${JSON.stringify(['-p', `<prompt: ${prompt.length} characters>`, '--mcp-config', '%LOCALAPPDATA%\\MachineRoom\\runs\\run.mcp.json', '--usage-file', '%LOCALAPPDATA%\\MachineRoom\\runs\\run.usage.json', '--model', 'fake/model'])}`,
-          `prompt: ${prompt}`,
           'cwd: %USERPROFILE%\\project',
           'mcp config: %LOCALAPPDATA%\\MachineRoom\\runs\\run.mcp.json',
           'mcp servers: browser',

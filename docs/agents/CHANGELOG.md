@@ -3,6 +3,10 @@
 ## Unreleased
 
 - Review 24 reads the merges since the last push: four findings, briefed as P175 (P174).
+- A dry run prints the command and `Dry run, nothing started.` without the prompt's first line (P175).
+- A queue fails a task when its existing package.json cannot be read or parsed instead of committing it without a test run (P175).
+- run-lane reads --help and -h only where an option is expected, so a value taken by --task stays task text (P175).
+- README's npm run serve fallback passes --open, so the room opens in the browser as it says (P175).
 - A review merge sends its destination branch and head, and the bridge refuses it when the project switched branch or that branch moved; a fast forward asks for no message (P169).
 - README says lanes are made in the Agents tab and how to use npm.cmd when PowerShell refuses npm, and run-lane's missing-lane sentence points to the Agents tab (P173).
 - A queue keeps an explicit --test, and otherwise reads the test command from its worktree after each task, so a test script a task adds is run (P172).
