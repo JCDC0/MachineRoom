@@ -3,6 +3,7 @@ import {
   BRANCH_EMPTY_PROBLEM,
   BRANCH_EXISTS_PROBLEM,
   BRANCH_FROM_PROBLEM,
+  BRANCH_LIST_LIMIT,
   BRANCH_NAME_PROBLEM,
   DIRTY_REASON,
   WORKTREE_REASON,
@@ -18,6 +19,7 @@ import {
   switchBlockReason,
   switchConfirmText,
   validBranchName,
+  visibleBranches,
 } from '../src/ui/repository.js'
 import { gitChangesView, gitGraphView } from '../src/ui/inspector.js'
 
@@ -128,6 +130,57 @@ describe('the branch rows', () => {
     expect(rows).toHaveLength(200)
     expect(rows[0].current).toBe(true)
     expect(rows[199].name).toBe('branch-199')
+  })
+})
+
+describe('the visible branch list', () => {
+  function manyBranches(count, currentIndex = 0) {
+    return Array.from({ length: count }, (_, index) => ({
+      name: `branch-${String(index).padStart(5, '0')}`,
+      current: index === currentIndex,
+      worktree: false,
+      ahead: 0,
+      behind: 0,
+    }))
+  }
+
+  it('cuts ten thousand branches to two hundred and says how many', () => {
+    const rows = branchRows(gitState({ branches: manyBranches(10000) }))
+    const visible = visibleBranches(rows, '')
+    expect(visible.rows).toHaveLength(BRANCH_LIST_LIMIT)
+    expect(visible.line).toBe('Showing 200 of 10000 branches.')
+  })
+
+  it('finds a branch past the first two hundred', () => {
+    const rows = branchRows(gitState({ branches: manyBranches(10000) }))
+    const visible = visibleBranches(rows, 'branch-09999')
+    expect(visible.rows.map((row) => row.name)).toEqual(['branch-09999'])
+    expect(visible.line).toBe('Showing 1 of 10000 branches.')
+  })
+
+  it('puts the current branch first when it matches', () => {
+    const rows = branchRows(gitState({ branches: manyBranches(10000, 5000) }))
+    const visible = visibleBranches(rows, 'branch')
+    expect(visible.rows).toHaveLength(BRANCH_LIST_LIMIT)
+    expect(visible.rows[0].name).toBe('branch-05000')
+    expect(visible.rows[0].current).toBe(true)
+  })
+
+  it('matches without regard to case', () => {
+    const rows = branchRows(gitState())
+    expect(visibleBranches(rows, 'FEAT/LO').rows.map((row) => row.name)).toEqual(['feat/login'])
+  })
+
+  it('does not show the count when it neither cuts nor filters', () => {
+    const visible = visibleBranches(branchRows(gitState()), '')
+    expect(visible.rows.map((row) => row.name)).toEqual(['main', 'feat/login', 'feat/held'])
+    expect(visible.line).toBe('')
+  })
+
+  it('counts the matches against every branch', () => {
+    const visible = visibleBranches(branchRows(gitState()), 'feat')
+    expect(visible.rows.map((row) => row.name)).toEqual(['feat/login', 'feat/held'])
+    expect(visible.line).toBe('Showing 2 of 3 branches.')
   })
 })
 

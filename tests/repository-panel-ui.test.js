@@ -179,7 +179,7 @@ describe('the Repository section', () => {
       const options = container.querySelector('.mr-repo-select').querySelectorAll('option')
       expect(options.map((option) => option.textContent)).toEqual(['main', 'feat/login', 'feat/held'])
 
-      await type(root, container.querySelector('.mr-repo-input'), 'feat/new')
+      await type(root, container.querySelector('.mr-repo-form').querySelector('.mr-repo-input'), 'feat/new')
       await submit(root, form)
       expect(container.querySelector('.mr-repo-confirm-text').textContent).toBe(
         'Create feat/new from main? The new branch is made without switching to it.'
@@ -211,7 +211,7 @@ describe('the Repository section', () => {
       await mount(root, { client, live: true, project: 'C:\\work\\demo' })
 
       await click(root, buttonWithText(container, 'New branch'))
-      await type(root, container.querySelector('.mr-repo-input'), 'main')
+      await type(root, container.querySelector('.mr-repo-form').querySelector('.mr-repo-input'), 'main')
       await submit(root, container.querySelector('.mr-repo-form'))
 
       const form = container.querySelector('.mr-repo-form')
@@ -228,7 +228,7 @@ describe('the Repository section', () => {
       await mount(root, { client, live: true, project: 'C:\\work\\demo' })
 
       await click(root, buttonWithText(container, 'New branch'))
-      await type(root, container.querySelector('.mr-repo-input'), 'feat/next')
+      await type(root, container.querySelector('.mr-repo-form').querySelector('.mr-repo-input'), 'feat/next')
       await type(root, container.querySelector('.mr-repo-select'), 'feat/login')
       await submit(root, container.querySelector('.mr-repo-form'))
 
@@ -252,7 +252,7 @@ describe('the Repository section', () => {
     await withDom(async ({ container, root }) => {
       await mount(root, { client, live: true, project: 'C:\\work\\demo' })
       await click(root, buttonWithText(container, 'New branch'))
-      await type(root, container.querySelector('.mr-repo-input'), 'feat/new')
+      await type(root, container.querySelector('.mr-repo-form').querySelector('.mr-repo-input'), 'feat/new')
       await submit(root, container.querySelector('.mr-repo-form'))
       await click(root, container.querySelector('.mr-repo-confirm-btn.is-primary'))
       await settle()
@@ -421,6 +421,109 @@ describe('the Repository section', () => {
       expect(list.querySelectorAll('.mr-repo-row')).toHaveLength(200)
       expect(rowByName(container, 'branch-000').className).toContain('is-current')
       expect(rowByName(container, 'branch-199')).not.toBeNull()
+    })
+  })
+
+  it('cuts ten thousand branches to at most two hundred rows and says how many', async () => {
+    const branches = Array.from({ length: 10000 }, (_, index) => ({
+      name: `branch-${String(index).padStart(5, '0')}`,
+      current: index === 5000,
+      worktree: false,
+      ahead: 0,
+      behind: 0,
+    }))
+    const client = makeClient(gitState({ branch: 'branch-05000', branches }))
+
+    await withDom(async ({ container, root }) => {
+      await mount(root, { client, live: true, project: 'C:\\work\\demo' })
+      const list = container.querySelector('.mr-repo-branches')
+      expect(list.querySelectorAll('.mr-repo-row').length).toBeLessThanOrEqual(200)
+      expect(container.querySelector('.mr-repo-count').textContent).toBe('Showing 200 of 10000 branches.')
+      expect(list.querySelector('.mr-repo-name').textContent).toBe('branch-05000')
+      expect(list.querySelector('.mr-repo-row').className).toContain('is-current')
+
+      await type(root, container.querySelector('.mr-repo-filter').querySelector('input'), 'BRANCH-05000')
+      await settle()
+      const filtered = container.querySelector('.mr-repo-branches')
+      expect(filtered.querySelectorAll('.mr-repo-row')).toHaveLength(1)
+      expect(filtered.querySelector('.mr-repo-name').textContent).toBe('branch-05000')
+      expect(container.querySelector('.mr-repo-count').textContent).toBe('Showing 1 of 10000 branches.')
+    })
+  })
+
+  it('finds a branch past the first two hundred with the filter', async () => {
+    const branches = Array.from({ length: 10000 }, (_, index) => ({
+      name: `branch-${String(index).padStart(5, '0')}`,
+      current: index === 0,
+      worktree: false,
+      ahead: 0,
+      behind: 0,
+    }))
+    const client = makeClient(gitState({ branches }))
+
+    await withDom(async ({ container, root }) => {
+      await mount(root, { client, live: true, project: 'C:\\work\\demo' })
+      expect(rowByName(container, 'branch-09999')).toBeNull()
+
+      await type(root, container.querySelector('.mr-repo-filter').querySelector('input'), 'branch-09999')
+      await settle()
+
+      expect(rowByName(container, 'branch-09999')).not.toBeNull()
+      expect(container.querySelectorAll('.mr-repo-row')).toHaveLength(1)
+      expect(container.querySelector('.mr-repo-count').textContent).toBe('Showing 1 of 10000 branches.')
+    })
+  })
+
+  it('keeps the branch picked from a filtered list in the switch confirm', async () => {
+    const branches = Array.from({ length: 10000 }, (_, index) => ({
+      name: index === 0 ? 'main' : `branch-${String(index).padStart(5, '0')}`,
+      current: index === 0,
+      worktree: false,
+      ahead: 0,
+      behind: 0,
+    }))
+    branches[9999] = { name: 'feat/target', current: false, worktree: false, ahead: 0, behind: 0 }
+    const client = makeClient(gitState({ branches }))
+
+    await withDom(async ({ container, root }) => {
+      await mount(root, { client, live: true, project: 'C:\\work\\demo' })
+      await type(root, container.querySelector('.mr-repo-filter').querySelector('input'), 'feat/tar')
+      await settle()
+
+      const target = rowByName(container, 'feat/target')
+      expect(target).not.toBeNull()
+      await click(root, buttonWithText(target, 'Switch'))
+      expect(container.querySelector('.mr-repo-confirm-text').textContent).toBe(
+        'Switch demo to feat/target? New lanes start from it and reviews compare against it.'
+      )
+
+      await click(root, container.querySelector('.mr-repo-confirm-btn.is-primary'))
+      await settle()
+      expect(client.calls.switchBranch).toEqual([{ branch: 'feat/target', confirmed: true }])
+    })
+  })
+
+  it('keeps every branch in the create form while the list is filtered', async () => {
+    const client = makeClient(gitState())
+
+    await withDom(async ({ container, root }) => {
+      await mount(root, { client, live: true, project: 'C:\\work\\demo' })
+      await type(root, container.querySelector('.mr-repo-filter').querySelector('input'), 'zzz')
+      await settle()
+      expect(container.querySelector('.mr-repo-count').textContent).toBe('Showing 0 of 3 branches.')
+      expect(container.querySelectorAll('.mr-repo-row')).toHaveLength(0)
+
+      await click(root, buttonWithText(container, 'New branch'))
+      const options = container.querySelector('.mr-repo-select').querySelectorAll('option')
+      expect(options.map((option) => option.textContent)).toEqual(['main', 'feat/login', 'feat/held'])
+
+      await type(root, container.querySelector('.mr-repo-form').querySelector('.mr-repo-input'), 'feat/next')
+      await type(root, container.querySelector('.mr-repo-select'), 'feat/login')
+      await submit(root, container.querySelector('.mr-repo-form'))
+
+      expect(container.querySelector('.mr-repo-confirm-text').textContent).toBe(
+        'Create feat/next from feat/login? The new branch is made without switching to it.'
+      )
     })
   })
 })

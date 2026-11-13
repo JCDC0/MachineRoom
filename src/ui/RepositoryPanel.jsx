@@ -11,6 +11,7 @@ import {
   repositoryStatusNotice,
   switchBlockReason,
   switchConfirmText,
+  visibleBranches,
 } from './repository.js'
 
 function messageOf(error) {
@@ -29,6 +30,7 @@ export default function RepositoryPanel({ client = null, live = false, project =
   const [name, setName] = useState('')
   const [from, setFrom] = useState('')
   const [formError, setFormError] = useState('')
+  const [filter, setFilter] = useState('')
   const requestRef = useRef(0)
 
   const refresh = useCallback(async () => {
@@ -198,6 +200,7 @@ export default function RepositoryPanel({ client = null, live = false, project =
   const fromOptions = rows.map((row) => row.name)
   const statusNotice = ready ? repositoryStatusNotice(state) : ''
   const branchesNotice = ready ? repositoryBranchesNotice(state) : ''
+  const visible = visibleBranches(rows, filter)
 
   return (
     <section className="mr-repo" aria-label="Repository">
@@ -225,6 +228,18 @@ export default function RepositoryPanel({ client = null, live = false, project =
             ) : null}
           </div>
           {statusNotice !== '' ? <p className="mr-repo-error mono">{statusNotice}</p> : null}
+          {rows.length > 0 ? (
+            <label className="mr-repo-field mr-repo-filter">
+              <span className="mr-repo-label mono">Filter</span>
+              <input
+                className="mr-repo-input mono"
+                value={filter}
+                aria-label="Filter branches"
+                placeholder="Filter branches"
+                onChange={(event) => setFilter(event.target.value)}
+              />
+            </label>
+          ) : null}
           <div className="mr-repo-branches" aria-label="Branches">
             {rows.length === 0 ? (
               branchesNotice !== '' ? (
@@ -233,7 +248,7 @@ export default function RepositoryPanel({ client = null, live = false, project =
                 <p className="mr-side-note">No branches.</p>
               )
             ) : (
-              rows.map((row) => (
+              visible.rows.map((row) => (
                 <div className={`mr-repo-row${row.current ? ' is-current' : ''}`} key={row.name}>
                   <span className="mr-repo-name mono" title={row.name}>
                     {row.name}
@@ -262,6 +277,7 @@ export default function RepositoryPanel({ client = null, live = false, project =
               ))
             )}
           </div>
+          {visible.line ? <p className="mr-side-note mr-repo-count">{visible.line}</p> : null}
           <div className="mr-repo-actions">
             <button type="button" className="mr-repo-new" onClick={toggleForm} disabled={busy !== ''}>
               New branch

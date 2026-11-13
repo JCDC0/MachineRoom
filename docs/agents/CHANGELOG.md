@@ -2,11 +2,13 @@
 
 ## Unreleased
 
+- Repository has a branch filter and shows at most 200 rows, the current branch first, with Showing N of M branches.
 - A database that appears after the OpenCode reader starts is read from the start time, so the first conversation on a new install becomes frames; an existing database still skips its old history.
 - A failed status, branch or log read carries its own sentence, counts stay null, and Repository and the inspector show the sentence instead of a clean state.
 - Queue task records carry queueSize, and the record where a queue stopped carries queueRemaining, masked; Ask for recovery now lists those tasks.
 - The hands-on check was blocked: Codex's sandbox cannot read the Playwright browser folder, and the screenshot helper reports access denied as a missing browser.
 - A reported 0 reads as $0.00, a lane with no runs reads 0, and not reported appears only when runs gave no number (N16, the owner's word).
+- Repository filters its branch list by a case-insensitive text search, shows at most 200 rows with the current branch first and a `Showing N of M branches.` line, and the switch and create cards keep the branch picked (P225).
 - Reviews offers Ask to prepare on a refused fast forward or a branch ahead of a destination that moved on, and sends Main the lane, branch, full head and destination after a confirm.
 - An OpenCode database that first appears after the bridge starts is read from the startup time, so the first conversation is shown (P222).
 - A health answer with ok true and source problems shows a red chip, A source looks stopped, with one sentence per problem, and the room stays connected.
