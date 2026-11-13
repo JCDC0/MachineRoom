@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The full suite passed on today's merges: 274 files, 4917 tests passed, 4 skipped (P159).
 - The current conversation carries a stable id that changes only on new, open and fork, so the 200-message cap no longer closes its menu (P157).
 - The merge check passes changed files to vitest related without a double dash, and fails when vitest finds no changed files, so the check runs tests again (P158).
 - A stop counts a process that already exited as stopped, so a run that ends after its harness dies no longer fails the stop (P156).
