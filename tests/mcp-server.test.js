@@ -36,6 +36,7 @@ import {
   cleanMcpServer,
   listAllMcpTools,
   listMcpServerTools,
+  mcpExistsProblem,
   mcpFile,
   mcpServerProblem,
   readMcpServers,
@@ -459,6 +460,21 @@ describe('MCP server registry', () => {
     const refused = upsertMcpServer(runsDir, { ...first, name: 'bad name' })
     expect(refused).toEqual({ ok: false, problem: MCP_NAME_PROBLEM })
     expect(readMcpServers(runsDir)).toHaveLength(2)
+  })
+
+  it('refuses an already saved name when create is true and keeps the saved entry', () => {
+    const runsDir = useTempDir('mr-mcp-runs-')
+    const first = { name: 'one', transport: 'stdio', command: 'node', args: ['one.mjs'], env: { KEY: 'keep' }, enabled: false }
+    expect(upsertMcpServer(runsDir, { ...first, create: true })).toMatchObject({ ok: true, servers: [{ name: 'one' }] })
+    const duplicate = upsertMcpServer(runsDir, {
+      name: 'one',
+      transport: 'http',
+      url: 'https://other.example/mcp',
+      enabled: true,
+      create: true,
+    })
+    expect(duplicate).toEqual({ ok: false, conflict: true, problem: mcpExistsProblem('one') })
+    expect(readMcpServers(runsDir)).toEqual([{ ...first, url: '' }])
   })
 
   it('removes a server and reports one that is not there', () => {
@@ -981,6 +997,54 @@ describe('/api/mcp routes', () => {
     expect(changed.body.servers).toHaveLength(1)
     expect(changed.body.servers[0].enabled).toBe(false)
     expect(readMcpServers(runsDir)).toHaveLength(1)
+  })
+
+  it('refuses a saved name with 409 when create is true while leaving updates working', async () => {
+    const { url, runsDir } = await startMcpBridge()
+    const created = await pagePost(url, '/api/mcp/servers', {
+      name: 'files',
+      transport: 'http',
+      url: 'https://saved.example/mcp',
+      env: { SECRET: 'keep' },
+      enabled: false,
+      confirmed: true,
+      create: true,
+    })
+    expect(created.status).toBe(200)
+
+    const refused = await pagePost(url, '/api/mcp/servers', {
+      name: 'files',
+      transport: 'stdio',
+      command: 'node',
+      args: ['other.mjs'],
+      enabled: true,
+      confirmed: true,
+      create: true,
+    })
+    expect(refused.status).toBe(409)
+    expect(refused.body).toEqual({ error: 'The MCP server files is already saved.' })
+    expect(readMcpServers(runsDir)).toEqual([
+      {
+        name: 'files',
+        transport: 'http',
+        command: '',
+        args: [],
+        env: { SECRET: 'keep' },
+        url: 'https://saved.example/mcp',
+        enabled: false,
+      },
+    ])
+
+    const toggled = await pagePost(url, '/api/mcp/servers', {
+      name: 'files',
+      transport: 'http',
+      url: 'https://saved.example/mcp',
+      enabled: true,
+      confirmed: true,
+    })
+    expect(toggled.status).toBe(200)
+    expect(toggled.body.server.enabled).toBe(true)
+    expect(readMcpServers(runsDir)[0].env).toEqual({ SECRET: 'keep' })
   })
 
   it('deletes a server behind a confirmation and answers 404 for one that is gone', async () => {
