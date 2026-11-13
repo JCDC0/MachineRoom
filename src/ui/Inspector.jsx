@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { basename, visibleText } from '../model/paths.js'
 import { agentContext } from './agentContext.js'
 import { orchestratorEntry, orchestratorId } from './agentStrip.js'
 import { isOrchestratorAgent } from './agentList.js'
 import { chatLines, normalizeChat } from './orchestratorChat.js'
+import { subscribeToNotices } from './panels/notices.js'
 import { OPEN_CHAT_EVENT } from './transportOrchestrators.js'
 import {
   CONTEXT_NOT_REPORTED,
@@ -50,6 +51,35 @@ function titleOf(target, lane, tree) {
     return target.id === '' ? tree?.rootName || 'Project' : basename(target.id)
   }
   return basename(target.id) || target.id
+}
+
+function runningEntryFor(running, ...ids) {
+  if (!Array.isArray(running)) return null
+  const targets = ids
+    .map((id) => String(id ?? '').trim().toLowerCase())
+    .filter(Boolean)
+  if (targets.length === 0) return null
+  return running.find((entry) => targets.includes(String(entry?.lane ?? '').trim().toLowerCase())) ?? null
+}
+
+function runningWorkInfo(entry, fallbackTask = '') {
+  const briefs = Array.isArray(entry?.briefs) ? entry.briefs.filter(Boolean) : []
+  if (briefs.length > 0) return { label: 'Briefs', text: briefs.join(' ') }
+  if (entry?.queue) {
+    const text =
+      entry.tasks === 1 && typeof entry?.task === 'string' && entry.task.trim()
+        ? entry.task.trim()
+        : `${entry.tasks} task${entry.tasks === 1 ? '' : 's'} in order`
+    return { label: 'Task', text }
+  }
+  const task = typeof entry?.task === 'string' && entry.task.trim() ? entry.task.trim() : fallbackTask
+  return { label: 'Task', text: task || 'none' }
+}
+
+function stopStartedText(startedAt) {
+  if (!startedAt) return 'not reported'
+  const formatted = formatTime(startedAt, '')
+  return formatted && formatted !== startedAt ? `${formatted} (${startedAt})` : startedAt
 }
 
 export default function Inspector({
@@ -122,8 +152,20 @@ export default function Inspector({
   const [preview, setPreview] = useState(null)
   const [connection, setConnection] = useState(null)
   const [chat, setChat] = useState(null)
+  const [runs, setRuns] = useState(null)
+  const [confirmStop, setConfirmStop] = useState(false)
+  const [stoppingRun, setStoppingRun] = useState(false)
+  const [stopError, setStopError] = useState('')
   const [git, setGit] = useState(null)
   const [gitError, setGitError] = useState('')
+  const mountedRef = useRef(true)
+
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
 
   useEffect(() => {
     if (item?.kind !== 'file' || !bridge || !client || typeof client.fileInfo !== 'function') {
@@ -251,6 +293,43 @@ export default function Inspector({
     }
   }, [item?.kind, item?.id, orchestratorAgent, bridge, client])
 
+  useEffect(() => {
+    if (item?.kind !== 'agent' || orchestratorAgent || !bridge || !client || typeof client.runs !== 'function') {
+      setRuns(null)
+      return undefined
+    }
+    let active = true
+    let ticket = 0
+    async function readRuns() {
+      ticket += 1
+      const mine = ticket
+      try {
+        const answer = await client.runs()
+        if (active && mine === ticket) {
+          setRuns(Array.isArray(answer?.running) ? answer.running : [])
+        }
+      } catch {
+        if (active && mine === ticket) setRuns(null)
+      }
+    }
+    readRuns()
+    const unsubscribe = subscribeToNotices(client, 'runs', readRuns, 50)
+    return () => {
+      active = false
+      unsubscribe()
+    }
+  }, [item?.kind, item?.id, orchestratorAgent, bridge, client])
+
+  const runningRun = !orchestratorAgent
+    ? runningEntryFor(runs, lane?.key, context.key, item?.id)
+    : null
+
+  useEffect(() => {
+    setConfirmStop(false)
+    setStopError('')
+    setStoppingRun(false)
+  }, [item?.id, runningRun?.lane, runningRun?.startedAt])
+
   const folderView = useMemo(
     () => (item?.kind === 'folder' ? explorerView(item.id, tree ?? {}) : { rows: [], total: 0, more: false }),
     [item?.kind, item?.id, tree]
@@ -279,6 +358,15 @@ export default function Inspector({
 
   if (!item) return null
 
+  const canStopRunning =
+    bridge &&
+    !orchestratorAgent &&
+    Boolean(runningRun?.startedAt) &&
+    typeof client?.stopRun === 'function'
+  const runningWork = canStopRunning
+    ? runningWorkInfo(runningRun, context.task !== 'none' ? context.task : '')
+    : null
+
   function openChat() {
     if (typeof window === 'undefined' || typeof window.dispatchEvent !== 'function') return
     const detail = { id: orchestratorId(context.key || item.id) }
@@ -286,6 +374,32 @@ export default function Inspector({
       window.dispatchEvent(new window.CustomEvent(OPEN_CHAT_EVENT, { detail }))
     }
     onClose()
+  }
+
+  async function handleConfirmStop() {
+    if (!canStopRunning) return
+    setStoppingRun(true)
+    setStopError('')
+    try {
+      await client.stopRun({
+        lane: runningRun.lane,
+        startedAt: runningRun.startedAt,
+        confirmed: true,
+      })
+      if (!mountedRef.current) return
+      setConfirmStop(false)
+      if (typeof client.runs === 'function') {
+        try {
+          const answer = await client.runs()
+          if (mountedRef.current) setRuns(Array.isArray(answer?.running) ? answer.running : [])
+        } catch {}
+      }
+    } catch (failure) {
+      if (!mountedRef.current) return
+      setStopError(failure?.message || 'Could not stop the run.')
+    } finally {
+      if (mountedRef.current) setStoppingRun(false)
+    }
   }
 
   return (
@@ -325,6 +439,68 @@ export default function Inspector({
               {live && <Row label="Cost">{context.cost}</Row>}
               <Row label="Tokens">{context.tokens}</Row>
             </dl>
+
+            {canStopRunning && (
+              <div className="mr-inspector-run-stop">
+                {!confirmStop ? (
+                  <button
+                    type="button"
+                    className="mr-inspector-action mono"
+                    onClick={() => {
+                      setConfirmStop(true)
+                      setStopError('')
+                    }}
+                  >
+                    Stop
+                  </button>
+                ) : (
+                  <div
+                    className="brief-confirm-card"
+                    role="region"
+                    aria-label={`Confirm stop ${runningRun.lane}`}
+                  >
+                    <div className="brief-confirm-meta mono">
+                      <span className="brief-confirm-lane">Lane: {runningRun.lane}</span>
+                      <span className="brief-confirm-model">
+                        {runningWork.label}: {runningWork.text}
+                      </span>
+                      <span className="brief-confirm-id">
+                        Started: {stopStartedText(runningRun.startedAt)}
+                      </span>
+                    </div>
+                    <div className="brief-confirm-warning">
+                      This stops the running lane and tells its orchestrator.
+                    </div>
+                    <div className="brief-confirm-actions">
+                      <button
+                        type="button"
+                        className="brief-confirm-btn"
+                        disabled={stoppingRun}
+                        onClick={handleConfirmStop}
+                      >
+                        {stoppingRun ? 'Stopping' : 'Confirm'}
+                      </button>
+                      <button
+                        type="button"
+                        className="brief-cancel-btn"
+                        disabled={stoppingRun}
+                        onClick={() => {
+                          setConfirmStop(false)
+                          setStopError('')
+                        }}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                    {stopError && (
+                      <div className="brief-confirm-error mono" role="alert">
+                        {stopError}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
 
             <h3 className="mr-inspector-subtitle mono">Last 12 log lines</h3>
             <ol className="mr-inspector-log" aria-label="Recent log lines">

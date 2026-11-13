@@ -401,4 +401,141 @@ describe('the inspector panel', () => {
       expect(container.textContent).not.toContain('Changes')
     })
   })
+
+  it('shows Stop for a running lane, confirms with its work and start time, and sends them', async () => {
+    const startedAt = '2026-10-24T12:15:00.000Z'
+    let currentRunning = [
+      { lane: 'opencode', briefs: ['B6', 'U4'], startedAt, lastLines: [] },
+    ]
+    const stopCalls = []
+    const client = makeClient({
+      runs: async () => ({ running: currentRunning, recent: [], project: 'MachineRoom' }),
+      stopRun: async (payload) => {
+        stopCalls.push(payload)
+        currentRunning = currentRunning.filter((entry) => entry.lane !== payload.lane)
+        return { ok: true, lane: payload.lane, startedAt: payload.startedAt, output: `stopped: ${payload.lane}` }
+      },
+    })
+
+    const runningLane = {
+      key: 'opencode',
+      name: 'OpenCode',
+      harness: 'opencode',
+      model: 'deepseek',
+      status: 'working',
+      openCalls: 0,
+    }
+
+    await withDom(async ({ container, root }) => {
+      await mount(root, {
+        target: { kind: 'agent', id: 'opencode' },
+        live: true,
+        bridge: true,
+        client,
+        lanes: [runningLane],
+        costs,
+        log: [],
+      })
+
+      const stopButton = buttonWithText(container, 'Stop')
+      expect(stopButton).not.toBeNull()
+      await click(root, stopButton)
+      await settle(10)
+
+      const card = container.querySelector('.brief-confirm-card')
+      expect(card).not.toBeNull()
+      expect(card.textContent).toContain('Lane: opencode')
+      expect(card.textContent).toContain('Briefs: B6 U4')
+      expect(card.textContent).toContain(startedAt)
+      expect(stopCalls).toEqual([])
+
+      await click(root, buttonWithText(card, 'Cancel'))
+      await settle(10)
+      expect(container.querySelector('.brief-confirm-card')).toBeNull()
+
+      await click(root, buttonWithText(container, 'Stop'))
+      await settle(10)
+      await click(root, buttonWithText(container.querySelector('.brief-confirm-card'), 'Confirm'))
+      await settle(15)
+
+      expect(stopCalls).toEqual([{ lane: 'opencode', startedAt, confirmed: true }])
+      expect(buttonWithText(container, 'Stop')).toBeNull()
+    })
+  })
+
+  it('hides Stop for an idle lane or orchestrator and shows a stop error on failure', async () => {
+    const startedAt = '2026-10-24T12:20:00.000Z'
+    const client = makeClient({
+      runs: async () => ({
+        running: [{ lane: 'opencode', briefs: [], task: 'Clean the status row.', startedAt, lastLines: [] }],
+        recent: [],
+        project: 'MachineRoom',
+      }),
+      stopRun: async () => {
+        throw new Error('That start time does not match the running run.')
+      },
+    })
+    const opencode = {
+      key: 'opencode',
+      name: 'OpenCode',
+      harness: 'opencode',
+      model: 'deepseek',
+      status: 'working',
+      openCalls: 0,
+    }
+    const hermes = {
+      key: 'hermes',
+      name: 'Hermes',
+      harness: 'hermes',
+      model: 'gpt',
+      status: 'idle',
+      openCalls: 0,
+    }
+
+    await withDom(async ({ container, root }) => {
+      await mount(root, {
+        target: { kind: 'agent', id: 'hermes' },
+        live: true,
+        bridge: true,
+        client,
+        lanes: [opencode, hermes],
+        costs,
+        log: [],
+      })
+      expect(buttonWithText(container, 'Stop')).toBeNull()
+
+      await mount(root, {
+        target: { kind: 'agent', id: 'orchestrator' },
+        live: true,
+        bridge: true,
+        client,
+        lanes: [lane, opencode],
+        orchestrator: orchestrators,
+        costs,
+        log: [],
+      })
+      expect(buttonWithText(container, 'Stop')).toBeNull()
+
+      await mount(root, {
+        target: { kind: 'agent', id: 'opencode' },
+        live: true,
+        bridge: true,
+        client,
+        lanes: [opencode],
+        costs,
+        log: [],
+      })
+
+      await click(root, buttonWithText(container, 'Stop'))
+      await settle(10)
+      const card = container.querySelector('.brief-confirm-card')
+      expect(card.textContent).toContain('Lane: opencode')
+      expect(card.textContent).toContain('Task: Clean the status row.')
+      expect(card.textContent).toContain(startedAt)
+
+      await click(root, buttonWithText(card, 'Confirm'))
+      await settle(15)
+      expect(card.querySelector('[role="alert"]').textContent).toBe('That start time does not match the running run.')
+    })
+  })
 })
