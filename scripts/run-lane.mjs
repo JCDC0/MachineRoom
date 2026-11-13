@@ -116,7 +116,7 @@ function printHelp(print) {
 function missingLaneText(laneKey, lanes, path) {
   const names = Object.keys(lanes ?? {})
   const held = names.length === 0 ? 'no lanes' : names.join(', ')
-  return `There is no lane named ${laneKey}. The lane file ${printedRunsFolder(path)} holds ${held}. Add a lane in the room's Settings.`
+  return `There is no lane named ${laneKey}. The lane file ${printedRunsFolder(path)} holds ${held}. Add a lane in the room's Agents tab.`
 }
 
 function stopProcess(pid, { kill = killTree, alive = processAlive } = {}) {

@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- README's Lanes section says a lane is made in the Agents tab from the family tree, and Settings only shows or removes lanes (P173).
+- README's First run block tells Windows PowerShell to use npm.cmd and npm.cmd link when the script policy refuses npm (P173).
+- run-lane's missing-lane line sends the owner to the room's Agents tab (P173).
 - run-lane has --help, lists the lane file and its lanes when a lane is missing, says where --list looked, and ends a dry run with Dry run, nothing started (P167).
 - doctor takes a folder, counts warnings in its last line and stops at a missing folder; pack-check has a usage line and says what it read; README has a First run block (P168).
 - The connect screen's replay card names the replay of this visit with no fixed length, and its recovery line leads with machineroom YOUR-PROJECT (P171).
