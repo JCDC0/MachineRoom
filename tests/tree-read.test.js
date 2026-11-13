@@ -335,7 +335,7 @@ describe('a full tree read that failed', () => {
       bridges.push(bridge)
       const { url } = await bridge.start()
       await waitForReal(async () => (await healthOf(url)).problems.length > 0)
-      await sleep(100)
+      await waitForReal(() => vi.getTimerCount() === 1, { timeoutMs: 10000 })
       expect(vi.getTimerCount()).toBe(1)
 
       await bridge.stop()
