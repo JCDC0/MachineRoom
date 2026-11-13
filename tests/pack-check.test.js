@@ -1,8 +1,19 @@
+import { spawnSync } from 'node:child_process'
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { findPackProblems, isForbidden, readPackReport, runPack, RUNTIME_READS, SPAWNED_SCRIPTS, walkImports } from '../scripts/pack-check.mjs'
+import {
+  findPackProblems,
+  isForbidden,
+  PACK_CHECK_USAGE,
+  packCheck,
+  readPackReport,
+  runPack,
+  RUNTIME_READS,
+  SPAWNED_SCRIPTS,
+  walkImports,
+} from '../scripts/pack-check.mjs'
 import { makeTempDir } from './helpers/tempRoot.js'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
@@ -119,6 +130,37 @@ describe('runtime reads', () => {
   it('lists the scripts the bridge spawns', () => {
     expect(SPAWNED_SCRIPTS).toContain('scripts/run-lane.mjs')
     expect(SPAWNED_SCRIPTS).toContain('scripts/mr-agent.mjs')
+  })
+})
+
+describe('pack-check output', () => {
+  it('prints a usage line for --help without running the check', () => {
+    const run = spawnSync(process.execPath, [join(root, 'scripts', 'pack-check.mjs'), '--help'], {
+      encoding: 'utf8',
+      timeout: 10000,
+    })
+
+    expect(run.status).toBe(0)
+    expect(run.stdout.trim()).toBe(PACK_CHECK_USAGE)
+    expect(run.stderr).toBe('')
+  })
+
+  it('says what a passing check read', () => {
+    const walked = walkImports(['bin/machine-room.mjs', ...SPAWNED_SCRIPTS], root)
+    const files = [...new Set([...walked.files, ...RUNTIME_READS, ...SPAWNED_SCRIPTS])]
+    const run = () => ({
+      status: 0,
+      stdout: JSON.stringify([{ files: files.map((path) => ({ path })), entryCount: files.length, size: 2048 }]),
+    })
+
+    const result = packCheck(root, { run })
+
+    expect(result.code).toBe(0)
+    expect(result.lines).toHaveLength(2)
+    expect(result.lines[0]).toBe(`Pack check passed: ${files.length} files, 2.0 kB packed.`)
+    expect(result.lines[1]).toBe(
+      'The check read the pack list, every import, the run-time reads, the spawned scripts and the files that must not ship.'
+    )
   })
 })
 

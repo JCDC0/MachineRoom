@@ -25,18 +25,41 @@ After a minute without input, the menu and the transport slide away, the lens fi
 
 You need Node 24 or newer, git, a browser with WebGL, and Claude Code, OpenCode or AGY signed in, or a Direct API key.
 
+### First run
+
+Run these in the MachineRoom folder.
+
 ```
-cd <MachineRoom folder>
 npm install
 npm run build
+npm run serve -- doctor
+```
+
+Each command prints one line when all is well.
+
+- `npm install` prints `added N packages`, or `up to date` when the packages are already there.
+- `npm run build` prints `built in` and the time.
+- `npm run serve -- doctor` prints `All checks passed.` If the folder is not a git repository, it prints `All checks passed, 1 warning.` and still exits 0.
+
+Link the command once:
+
+```
 npm link
 ```
 
 Then, from any project folder:
 
 ```
-machineroom
+machineroom FOLDER
 ```
+
+It prints `MachineRoom is running.` and the address. Without `npm link`, run this in the MachineRoom folder:
+
+```
+npm run serve -- up --root FOLDER
+```
+
+It prints the same line.
 
 The room opens in your browser on that folder after a short check of the project, git and the lane programs. Run `npm run build` again in the MachineRoom folder after you pull a new version.
 

@@ -8,6 +8,8 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const ENTRY = 'bin/machine-room.mjs'
 const PACK_TIME_LIMIT_MS = 60000
 
+export const PACK_CHECK_USAGE = 'Usage: npm run pack-check -- [--help]'
+
 function toPosix(path) {
   return path.split(sep).join('/')
 }
@@ -211,8 +213,8 @@ function readPackedFile(stdout, destination) {
   return resolve(destination, entry.filename)
 }
 
-export function packCheck(root = ROOT) {
-  const result = runPack(root)
+export function packCheck(root = ROOT, { run = runPack } = {}) {
+  const result = run(root)
   if (result.error || result.status !== 0) {
     return { code: 1, lines: ['npm pack did not finish.'] }
   }
@@ -233,11 +235,18 @@ export function packCheck(root = ROOT) {
   if (problems.length > 0) return { code: 1, lines: problems }
   return {
     code: 0,
-    lines: [`Pack check passed: ${report.count} files, ${formatSize(report.size)} packed.`],
+    lines: [
+      `Pack check passed: ${report.count} files, ${formatSize(report.size)} packed.`,
+      'The check read the pack list, every import, the run-time reads, the spawned scripts and the files that must not ship.',
+    ],
   }
 }
 
 if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.meta.url) {
+  if (process.argv.includes('--help') || process.argv.includes('-h')) {
+    console.log(PACK_CHECK_USAGE)
+    process.exit(0)
+  }
   const result = packCheck(ROOT)
   const write = result.code === 0 ? console.log : console.error
   for (const line of result.lines) write(line)

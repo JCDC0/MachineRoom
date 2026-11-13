@@ -11,6 +11,12 @@ const VARIABLE = /%([A-Za-z_][A-Za-z0-9_]*)%/g
 
 export const ALL_CHECKS_PASSED = 'All checks passed.'
 export const NEXT_STEP = 'Press C in the room for Dispatch.'
+
+export function checksPassedLine(warnings = 0) {
+  const count = Number.isInteger(warnings) && warnings > 0 ? warnings : 0
+  if (count === 0) return ALL_CHECKS_PASSED
+  return `All checks passed, ${count} ${count === 1 ? 'warning' : 'warnings'}.`
+}
 export const PROJECT_READ_LIMIT_MS = 10000
 const PROJECT_READ_TIMEOUT = 'The folder did not answer in time.'
 const PROJECT_READ_FAILED = 'The folder could not be listed.'
@@ -177,9 +183,11 @@ export function runDoctor(options = {}) {
   const settings = doctorSettings(options, env)
   const lines = []
   let ok = true
+  let warnings = 0
 
   function add(result) {
     if (result.warn) {
+      warnings += 1
       lines.push(`warn ${result.text}`)
       return
     }
@@ -189,12 +197,13 @@ export function runDoctor(options = {}) {
 
   const folder = folderLine(settings.projectRoot)
   add(folder)
+  if (!folder.ok) return { exitCode: 1, lines, folderOk: false, warnings }
   for (const line of gitLines(settings.projectRoot, env)) add(line)
   add(viewerLine(settings.dist))
   add(runsLine(settings.runsFolder))
   for (const line of laneLines(settings.lanesFile, env, settings.runsFolder)) add(line)
 
-  return { exitCode: ok ? 0 : 1, lines, folderOk: folder.ok }
+  return { exitCode: ok ? 0 : 1, lines, folderOk: true, warnings }
 }
 
 export function projectCounts(files) {
