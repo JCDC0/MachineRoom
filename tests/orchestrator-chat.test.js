@@ -740,6 +740,74 @@ describe('message actions', () => {
     })
   })
 
+  it('retries a Main reply to Main after To changes to a lane', async () => {
+    const chat = { state: 'idle', messages: LINES.map((line) => ({ id: line.id, from: line.from, text: line.text })) }
+    const lanes = [{ key: 'opencode', name: 'OpenCode', cli: { bin: 'opencode' } }]
+    const calls = []
+    const client = {
+      ...fakeClient(chat),
+      sendOrchestrator: async (text, options) => {
+        calls.push({ text, options })
+        return { id: 'message-2' }
+      },
+    }
+    await withDom(async ({ container, root }) => {
+      await act(async () => {
+        root.render(createElement(OrchestratorChat, { client, inline: true, initialChat: chat, lanes }))
+      })
+      await act(async () => {})
+      const toSelect = container.querySelector('select[aria-label="To"]')
+      await act(async () => {
+        toSelect.value = 'opencode'
+        toSelect.dispatchEvent({ type: 'change', bubbles: true })
+      })
+      expect(toSelect.value).toBe('opencode')
+      const lines = container.querySelectorAll('.mr-orch-line')
+      await click(root, buttonWithText(lines[5], 'Retry'))
+      expect(calls).toEqual([{ text: 'Third', options: {} }])
+    })
+  })
+
+  it('retries a sub reply to that sub, never to Main', async () => {
+    const list = [
+      { id: 'orchestrator', name: 'Main', state: 'idle' },
+      { id: 'sub-1', name: 'Team 1', state: 'idle' },
+    ]
+    const subChat = {
+      state: 'idle',
+      messages: [
+        { id: 'm1', from: 'owner', text: 'Build it.' },
+        { id: 'm2', from: 'orchestrator', text: 'Done.' },
+      ],
+    }
+    const calls = []
+    const client = {
+      ...fakeClient({ state: 'idle', messages: [] }),
+      orchestrator: async (id) => (id === 'sub-1' ? subChat : { state: 'idle', messages: [] }),
+      sendOrchestrator: async (text, options) => {
+        calls.push({ text, options })
+        return { id: 'm3' }
+      },
+    }
+    await withDom(async ({ container, root }) => {
+      await act(async () => {
+        root.render(
+          createElement(OrchestratorChat, {
+            client,
+            inline: true,
+            initialOrchestrators: list,
+            initialSelected: 'sub-1',
+          })
+        )
+      })
+      await act(async () => {})
+      const lines = container.querySelectorAll('.mr-orch-line')
+      expect(lines).toHaveLength(2)
+      await click(root, buttonWithText(lines[1], 'Retry'))
+      expect(calls).toEqual([{ text: 'Build it.', options: { id: 'sub-1' } }])
+    })
+  })
+
   it('refuses a retry while a turn runs', async () => {
     const chat = { state: 'working', messages: LINES.map((line) => ({ id: line.id, from: line.from, text: line.text })) }
     const calls = []

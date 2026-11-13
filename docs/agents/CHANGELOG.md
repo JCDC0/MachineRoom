@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Retry under a reply sends the prompt to the conversation that owns that reply, so a changed To selection no longer redirects it and a sub's retry never goes to Main (P200).
 - The third readiness pass lists seven panel problems, among them Retry and Auto acting on a target other than the one shown, and two features for the owner.
 - The queue branch and its log names carry milliseconds, so a second queue run started in the same second no longer stops on an existing branch.
 - runs.jsonl deltas are read in 4 MB chunks, and every caller gets the same frozen records instead of a copy on each read.

@@ -822,7 +822,7 @@ export default function OrchestratorChat({
       return
     }
     if (!target || sending) return
-    await deliver(target.text)
+    await deliver(target.text, selected)
   }
 
   async function branchMessage(line, index) {
