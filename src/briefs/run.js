@@ -302,6 +302,41 @@ export function worktreeProblems({ worktree, project } = {}) {
   return []
 }
 
+export const CHECK_SHELL_PROBLEM = 'The check command cannot use shell syntax; put it in an npm script.'
+
+export function checkCommandProblem(command) {
+  const text = String(command ?? '')
+  return /[|&;<>`]|\$\(|%[^%\r\n]+%/.test(text) ? CHECK_SHELL_PROBLEM : ''
+}
+
+export function splitCheckCommand(command) {
+  const text = String(command ?? '').trim()
+  if (text === '') return []
+  const parts = []
+  let current = ''
+  let started = false
+  let quoted = false
+  for (const character of text) {
+    if (character === '"') {
+      quoted = !quoted
+      started = true
+      continue
+    }
+    if (!quoted && /\s/.test(character)) {
+      if (started) {
+        parts.push(current)
+        current = ''
+        started = false
+      }
+      continue
+    }
+    current += character
+    started = true
+  }
+  if (started) parts.push(current)
+  return parts
+}
+
 export function parseRunArgs(argv) {
   const args = (Array.isArray(argv) ? argv : []).map((value) => String(value))
   const briefs = []
