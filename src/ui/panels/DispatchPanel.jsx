@@ -10,10 +10,28 @@ import { subscribeToNotices } from './notices.js'
 import { laneNeedsNetwork } from '../../model/online.js'
 import { TIERS } from '../../policy/route.js'
 import { PROJECT_CONFIRM_LIMIT, PROJECT_QUEUE_TEXT_LIMIT, cancelSplitRun, clearSplitRun, planLaneTasks, projectRunBody, projectRunConfirm, projectRunLabel, projectRunLanes, projectSplitLabel, projectTaskProblem, projectWorktreeName, recordLine, resultWord, splitRunProgress, splitRunSnapshot, splitTasks, startSplitRun, subscribeSplitRun, timeSinceStart } from './runs.js'
+import { formatTime } from '../inspector.js'
 
 function projectKey(value) {
   if (typeof value !== 'string') return ''
   return value.trim().replace(/[\\/]+$/, '').toLowerCase()
+}
+
+function runWorkText(entry) {
+  if (entry?.queue) {
+    return entry.tasks === 1 && typeof entry?.task === 'string' && entry.task.trim()
+      ? entry.task.trim()
+      : `${entry.tasks} task${entry.tasks === 1 ? '' : 's'} in order`
+  }
+  if (typeof entry?.task === 'string' && entry.task.trim()) return entry.task.trim()
+  if (Array.isArray(entry?.briefs) && entry.briefs.length > 0) return entry.briefs.join(' ')
+  return 'none'
+}
+
+function stopStartedLabel(startedAt) {
+  if (!startedAt) return 'not reported'
+  const formatted = formatTime(startedAt, '')
+  return formatted && formatted !== startedAt ? `${formatted} (${startedAt})` : startedAt
 }
 
 export default function DispatchPanel({
@@ -48,6 +66,9 @@ export default function DispatchPanel({
   const [runsState, setRunsState] = useState({ running: [], recent: [] })
   const [runsLoading, setRunsLoading] = useState(() => typeof client?.runs === 'function')
   const [runsError, setRunsError] = useState(null)
+  const [stopTarget, setStopTarget] = useState(null)
+  const [stoppingRun, setStoppingRun] = useState(false)
+  const [stopError, setStopError] = useState(null)
   const [projectName, setProjectName] = useState('')
   const [lanesMode, setLanesMode] = useState(false)
   const [projectLane, setProjectLane] = useState(() => (typeof client?.routeLane === 'function' ? 'auto' : ''))
@@ -78,6 +99,7 @@ export default function DispatchPanel({
   const hasBriefs = typeof client?.briefs === 'function'
   const hasRuns = typeof client?.runs === 'function'
   const hasRouteLane = typeof client?.routeLane === 'function'
+  const canStopRun = typeof client?.stopRun === 'function'
 
   const selectedBrief = briefs.find((item) => item.id === selectedBriefId)
   const runLane = selectedBrief ? runLaneFor(selectedBrief, runsState.running, agents) : null
@@ -142,6 +164,43 @@ export default function DispatchPanel({
       setRunsError(err.message || 'Could not load runs.')
     } finally {
       setRunsLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (!stopTarget) return
+    const stillRunning = runsState.running.some(
+      (entry) => entry.lane === stopTarget.lane && entry.startedAt === stopTarget.startedAt
+    )
+    if (!stillRunning) {
+      setStopTarget(null)
+      setStopError(null)
+    }
+  }, [runsState.running, stopTarget])
+
+  function openStopConfirm(entry) {
+    setStopTarget({ lane: entry.lane, startedAt: entry.startedAt })
+    setStopError(null)
+  }
+
+  async function handleConfirmStop(entry) {
+    if (typeof client?.stopRun !== 'function') return
+    setStoppingRun(true)
+    setStopError(null)
+    try {
+      await client.stopRun({
+        lane: entry.lane,
+        startedAt: entry.startedAt,
+        confirmed: true,
+      })
+      if (!mountedRef.current) return
+      setStopTarget(null)
+      await loadRuns()
+    } catch (err) {
+      if (!mountedRef.current) return
+      setStopError(err.message || 'Could not stop the run.')
+    } finally {
+      if (mountedRef.current) setStoppingRun(false)
     }
   }
 
@@ -1050,29 +1109,84 @@ export default function DispatchPanel({
             <div className="runs-state is-dim mono">No runs yet.</div>
           ) : (
             <div className="runs-list">
-              {runsState.running.map((entry, index) => (
-                <div
-                  key={`running-${entry.lane}-${entry.startedAt || index}`}
-                  className="runs-entry is-running"
-                >
-                  <div className="runs-entry-head mono">
-                    <span className="runs-entry-lane">{entry.lane}</span>
-                    <span className="runs-entry-briefs">
-                      {entry.queue
-                        ? `${entry.tasks} task${entry.tasks === 1 ? '' : 's'} in order`
-                        : Array.isArray(entry.briefs) && entry.briefs.length > 0
-                          ? entry.briefs.join(' ')
-                          : 'none'}
-                    </span>
-                    <span className="runs-entry-time">{timeSinceStart(entry.startedAt)}</span>
+              {runsState.running.map((entry, index) => {
+                const rowConfirmOpen =
+                  stopTarget &&
+                  stopTarget.lane === entry.lane &&
+                  stopTarget.startedAt === entry.startedAt
+                const rowWork = runWorkText(entry)
+                const workField =
+                  Array.isArray(entry.briefs) && entry.briefs.length > 0 ? 'Briefs' : 'Task'
+                return (
+                  <div
+                    key={`running-${entry.lane}-${entry.startedAt || index}`}
+                    className="runs-entry is-running"
+                  >
+                    <div className="runs-entry-head mono">
+                      <span className="runs-entry-lane">{entry.lane}</span>
+                      <span className="runs-entry-briefs">{rowWork}</span>
+                      <span className="runs-entry-time">{timeSinceStart(entry.startedAt)}</span>
+                      {canStopRun && entry.startedAt && (
+                        <button
+                          type="button"
+                          className="brief-cancel-btn"
+                          disabled={stoppingRun || rowConfirmOpen}
+                          onClick={() => openStopConfirm(entry)}
+                        >
+                          Stop
+                        </button>
+                      )}
+                    </div>
+                    {rowConfirmOpen && (
+                      <div
+                        className="brief-confirm-card"
+                        role="region"
+                        aria-label={`Confirm stop ${entry.lane}`}
+                      >
+                        <div className="brief-confirm-meta mono">
+                          <span className="brief-confirm-lane">Lane: {entry.lane}</span>
+                          <span className="brief-confirm-model">{workField}: {rowWork}</span>
+                          <span className="brief-confirm-id">Started: {stopStartedLabel(entry.startedAt)}</span>
+                        </div>
+                        <div className="brief-confirm-warning">
+                          This stops the running lane and tells its orchestrator.
+                        </div>
+                        <div className="brief-confirm-actions">
+                          <button
+                            type="button"
+                            className="brief-confirm-btn"
+                            disabled={stoppingRun}
+                            onClick={() => handleConfirmStop(entry)}
+                          >
+                            {stoppingRun ? 'Stopping' : 'Confirm'}
+                          </button>
+                          <button
+                            type="button"
+                            className="brief-cancel-btn"
+                            disabled={stoppingRun}
+                            onClick={() => {
+                              setStopTarget(null)
+                              setStopError(null)
+                            }}
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                        {stopError && (
+                          <div className="brief-confirm-error mono" role="alert">
+                            {stopError}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    {Array.isArray(entry.lastLines) && entry.lastLines.length > 0 && (
+                      <pre className="runs-entry-lines mono is-dim">
+                        {entry.lastLines.join('\n')}
+                      </pre>
+                    )}
                   </div>
-                  {Array.isArray(entry.lastLines) && entry.lastLines.length > 0 && (
-                    <pre className="runs-entry-lines mono is-dim">
-                      {entry.lastLines.join('\n')}
-                    </pre>
-                  )}
-                </div>
-              ))}
+                )
+              })}
               {runsState.recent.map((record, index) => (
                 <div
                   key={`recent-${record.lane}-${record.startedAt || index}`}
