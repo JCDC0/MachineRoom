@@ -1576,3 +1576,29 @@ Prefer what you confirmed by reading the code or by a command over a guess, and 
 3. `npm run pack-check -- --help` prints a usage line and exits 0 without running the check. A passing check also says what it checked in one line.
 4. README's Quick start gets a short First run block: `npm install`, `npm run build`, `npm run serve -- doctor`, `machineroom FOLDER` (or `npm run serve -- up --root FOLDER`), each with the one line it prints when all is well. Plain words, short sentences, no em dashes.
 5. Tests in the listed test files for steps 1 to 3. Run `node node_modules/vitest/vitest.mjs related --run bin/machine-room.mjs server/doctor.js scripts/pack-check.mjs` and `npm run build`. Report what passed.
+
+**P169. A merge lands only on the branch its card named (AGY).** Read readiness findings R1 and Q4 in `docs/agents/AUDIT-2026-11-READINESS.md` and this brief only. Use no subagents. Run every command in the foreground. Commit each step as you finish it. Files: server/reviews.js, src/control/client.js, src/control/mock.js, src/ui/panels/ReviewsPanel.jsx, src/ui/panels/reviews.js, tests/project-reviews.test.js, tests/bridge-reviews.test.js, tests/reviews-panel.test.js, tests/control-contract.test.js, docs/agents/CHANGELOG.md.
+
+1. Each review row carries its destination branch, that branch's head and the merge strategy (`fast-forward` on another project, `merge-commit` on MachineRoom). The merge request sends the destination branch and head beside the lane head. Under the existing write lock, the server refuses with one sentence, before any git write, when the project is now on another branch or that branch moved.
+2. The confirm card hides the message field for a fast forward and says the lane's commits are kept as they are; the MachineRoom merge commit keeps its message field. The mock and the contract test follow the new fields.
+3. Tests, by what they prove: a card for `trunk` confirmed after a switch to `release` is refused and `release` does not move; a card confirmed after `trunk` advanced is refused; a fresh card merges; a fast-forward card has no message field.
+4. Run `node node_modules/vitest/vitest.mjs related --run server/reviews.js src/control/client.js src/control/mock.js src/ui/panels/ReviewsPanel.jsx src/ui/panels/reviews.js` and `npm run build`. Report what passed.
+
+**P170. A merge never offers a head whose checks failed (AGY).** Read readiness findings R2 and Q2 in `docs/agents/AUDIT-2026-11-READINESS.md`, the brief for P169 and this brief only. Use no subagents. Run every command in the foreground. Commit each step as you finish it. Files: server/reviews.js, src/ui/panels/ReviewsPanel.jsx, src/ui/panels/reviews.js, tests/project-reviews.test.js, tests/reviews-panel.test.js, docs/agents/CHANGELOG.md.
+
+1. `lastRunFor` matches the run's project to the reviewed project (a brief run counts for MachineRoom only), so a lane used on two projects shows each project its own last run. Test two projects sharing one lane.
+2. Each review row carries a check state for its exact head: `passed` when the matching run's tests passed at that head, `failed` when they failed, `unchecked` otherwise. A clean worktree or a zero harness exit is not `passed`. The server refuses a merge whose head is `failed` with one sentence. The confirm card says the check state in one line, and `unchecked` reads as a warning. The Merge button stays as it is.
+3. Tests, by what they prove: a failed head is refused and the branch does not move; an unchecked head merges with the warning in the card; a passed head merges.
+4. Run `node node_modules/vitest/vitest.mjs related --run server/reviews.js src/ui/panels/ReviewsPanel.jsx src/ui/panels/reviews.js` and `npm run build`. Report what passed.
+
+**P171. The connect screen's replay and recovery lines say what they do (OpenCode).** Read readiness findings Q3 and Q5 in `docs/agents/AUDIT-2026-11-READINESS.md` and this brief only. Use no subagents. Run every command in the foreground. Commit each step as you finish it, and stop starting new work at minute 15. Files: src/ui/Connect.jsx, tests/guide.test.js, tests/startup.test.js, docs/agents/CHANGELOG.md, docs/agents/architecture/ROOM.md.
+
+1. The replay entry on the connect screen says it replays what this page has seen, with no fixed duration. The tour stays the sample entry point. Change only the words.
+2. The recovery line leads with `machineroom YOUR-PROJECT`, and the npm form says to run it in the MachineRoom folder.
+3. Update the tests that read these lines. Run `node node_modules/vitest/vitest.mjs related --run src/ui/Connect.jsx` and `npm run build`. Report what passed.
+
+**P172. A queue finds its test command after each task (OpenCode).** Read readiness finding Q1 in `docs/agents/AUDIT-2026-11-READINESS.md` and this brief only. Use no subagents. Run every command in the foreground. Commit each step as you finish it, and stop starting new work at minute 18. Files: scripts/run-lane.mjs, src/briefs/queue.js, tests/run-queue.test.js, tests/run-worktree.test.js, docs/agents/CHANGELOG.md.
+
+1. An explicit `--test` is kept. Otherwise the queue reads the default test command from the prepared worktree after each task that ends well, so a test script that a task adds, or one already on the project's head when a worktree is reused, is found. Another lane edits run-lane's help text; change only the queue's test choice.
+2. Tests, by what they prove: a task that adds a `package.json` test script gets that script run after it; a reused worktree picks up a script on the project's head; `--test` wins over both.
+3. Run `node node_modules/vitest/vitest.mjs related --run scripts/run-lane.mjs src/briefs/queue.js` and `npm run build`. Report what passed.
