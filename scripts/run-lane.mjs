@@ -35,6 +35,10 @@ function stamp(date = new Date()) {
   return `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}-${pad(date.getHours())}${pad(date.getMinutes())}${pad(date.getSeconds())}`
 }
 
+function queueStamp(date = new Date()) {
+  return `${stamp(date)}-${String(date.getMilliseconds()).padStart(3, '0')}`
+}
+
 function runsFile(env = process.env) {
   return join(runsFolder(env), 'runs.jsonl')
 }
@@ -1013,8 +1017,8 @@ async function runQueueProject({ options, lane, lanes }) {
   } else {
     tasks = [readTask(options)]
   }
-  const queueStamp = stamp()
-  const branch = `machineroom/queue-${options.lane}-${queueStamp}`
+  const queueId = queueStamp()
+  const branch = `machineroom/queue-${options.lane}-${queueId}`
   if (options.dryRun) {
     const plan = options.worktree ? worktreePlan(project, options.lane) : { path: project, made: false }
     const test = testCommandFor(project, options.test)
@@ -1071,7 +1075,7 @@ async function runQueueProject({ options, lane, lanes }) {
         runTask: async (task, number) => {
           console.log(`task ${number} of ${tasks.length}`)
           const prompt = unattendedPrompt(task)
-          const name = `${options.lane}-queue-${queueStamp}-${number}`
+          const name = `${options.lane}-queue-${queueId}-${number}`
           const logPath = join(folder, `${name}.log`)
           const usageFile = join(folder, `${name}.usage.json`)
           const run = await startLane({
