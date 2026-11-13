@@ -18,6 +18,7 @@ const DEFAULT_QUIET_MS = 10 * 60 * 1000
 const DEFAULT_POLL_MS = 200
 const DEFAULT_PRIME_MS = 60 * 1000
 const DEFAULT_SCAN_MS = 2000
+const DEFAULT_FULL_LIST_MS = 60 * 1000
 const READ_CHUNK = 64 * 1024
 const MAX_PARTIAL = 8 * 1024 * 1024
 const QUIET_KEPT = 50
@@ -373,6 +374,7 @@ export function createLanesSource(options = {}) {
   const quietMs = Number(options.quietMs ?? DEFAULT_QUIET_MS)
   const pollMs = Number(options.pollMs ?? DEFAULT_POLL_MS)
   const scanMs = Number(options.scanMs ?? DEFAULT_SCAN_MS)
+  const fullListMs = Number(options.fullListMs ?? DEFAULT_FULL_LIST_MS)
   const primeMs = Number(options.primeMs ?? DEFAULT_PRIME_MS)
   const laggingPollMs = Number(options.laggingPollMs ?? 10000)
   const now = options.now ?? Date.now
@@ -380,6 +382,7 @@ export function createLanesSource(options = {}) {
   const listFolder = typeof options.listFolder === 'function' ? options.listFolder : (dir) => readdirSync(dir, { withFileTypes: true })
   const watchFolder = typeof options.watchFolder === 'function' ? options.watchFolder : watch
   const statFile = typeof options.statFile === 'function' ? options.statFile : statSync
+  const statFolder = typeof options.statFolder === 'function' ? options.statFolder : statSync
   const lockPlatform = options.platform ?? process.platform
   const listRunningProcesses = typeof options.list === 'function' ? options.list : listProcesses
   const statLock = typeof options.stat === 'function' ? options.stat : statSync
@@ -393,7 +396,11 @@ export function createLanesSource(options = {}) {
   let timer = null
   let scanTimer = null
   let lastScanAt = 0
+  let lastListAt = 0
+  let lastFolderStamp = null
+  let hasListed = false
   let scanWanted = false
+  let listWanted = false
   let stopped = false
   let ticking = false
   let primed = false
@@ -482,68 +489,102 @@ export function createLanesSource(options = {}) {
     readNew(run)
   }
 
+  function runsFolderStamp() {
+    try {
+      const stat = statFolder(folder, { bigint: true })
+      return String(stat.mtimeNs ?? stat.mtimeMs)
+    } catch {
+      return null
+    }
+  }
+
+  function adoptLog(name, path, getAgentMap) {
+    const key = pathKey(path)
+    if (seen.has(key)) return
+    const agent = agentFor(name, getAgentMap())
+    if (!agent) {
+      seen.add(key)
+      return
+    }
+    const meta = metaFor(path)
+    const metaProject = meta?.project ?? ''
+    const ownProject = metaProject !== '' && pathKey(metaProject) === pathKey(roomRoot)
+    if (metaProject !== '' && !ownProject && !inRoomRepo(metaProject)) {
+      seen.add(key)
+      return
+    }
+    if (metaProject === '' && !worktreeRunsShown) {
+      seen.add(key)
+      return
+    }
+    seen.add(key)
+    beginRun(name.slice(0, -4), path, agent, Boolean(ownProject), metaProject, meta?.startedBy ?? null)
+  }
+
   function scan() {
+    const current = now()
+    const stamp = runsFolderStamp()
+    if (hasListed && !listWanted && stamp !== null && stamp === lastFolderStamp && current - lastListAt < fullListMs) return
     let entries
     try {
       entries = listFolder(folder)
     } catch {
       return
     }
-    const map = new Map(allAgents().map((agent) => [agent.key, agent]))
+    listWanted = false
+    lastFolderStamp = stamp
+    lastListAt = current
+    hasListed = true
+    const present = new Set()
+    let agentMap = null
+    const getAgentMap = () => (agentMap ??= new Map(allAgents().map((agent) => [agent.key, agent])))
     for (const entry of entries) {
       if (!entry.isFile() || !entry.name.endsWith('.log')) continue
       const path = join(folder, entry.name)
       const key = pathKey(path)
-      if (lagging.has(key)) {
-        const info = lagging.get(key)
-        const isNamed = pendingChecks.has(key)
-        const isTime = now() - info.checkedAt >= laggingPollMs
-        if (!isNamed && !isTime) continue
-        pendingChecks.delete(key)
-        info.checkedAt = now()
-        let size
+      present.add(key)
+      if (lagging.has(key)) continue
+      if (seen.has(key)) continue
+      if (!primed) {
         try {
-          size = statSync(path).size
-        } catch {
-          lagging.delete(key)
-          continue
-        }
-        if (size <= info.size) continue
-        lagging.delete(key)
-      } else {
-        if (seen.has(key)) continue
-        if (!primed) {
-          try {
-            const stat = statSync(path)
-            if (now() - stat.mtimeMs > primeMs) {
-              lagging.set(key, { size: stat.size, checkedAt: now() })
-              continue
-            }
-          } catch {
+          const stat = statSync(path)
+          if (current - stat.mtimeMs > primeMs) {
+            lagging.set(key, { name: entry.name, path, size: stat.size, checkedAt: current })
             continue
           }
+        } catch {
+          continue
         }
       }
-      const agent = agentFor(entry.name, map)
-      if (!agent) {
-        seen.add(key)
-        continue
-      }
-      const meta = metaFor(path)
-      const metaProject = meta?.project ?? ''
-      const ownProject = metaProject !== '' && pathKey(metaProject) === pathKey(roomRoot)
-      if (metaProject !== '' && !ownProject && !inRoomRepo(metaProject)) {
-        seen.add(key)
-        continue
-      }
-      if (metaProject === '' && !worktreeRunsShown) {
-        seen.add(key)
-        continue
-      }
-      seen.add(key)
-      beginRun(entry.name.slice(0, -4), path, agent, Boolean(ownProject), metaProject, meta?.startedBy ?? null)
+      adoptLog(entry.name, path, getAgentMap)
     }
-    pendingChecks.clear()
+    for (const key of lagging.keys()) {
+      if (!present.has(key)) lagging.delete(key)
+    }
+  }
+
+  function checkLagging() {
+    if (lagging.size === 0) return
+    const current = now()
+    let agentMap = null
+    const getAgentMap = () => (agentMap ??= new Map(allAgents().map((agent) => [agent.key, agent])))
+    for (const [key, info] of [...lagging.entries()]) {
+      const isNamed = pendingChecks.has(key)
+      const isTime = current - info.checkedAt >= laggingPollMs
+      if (!isNamed && !isTime) continue
+      pendingChecks.delete(key)
+      info.checkedAt = current
+      let size
+      try {
+        size = statFile(info.path).size
+      } catch {
+        lagging.delete(key)
+        continue
+      }
+      if (size <= info.size) continue
+      lagging.delete(key)
+      adoptLog(info.name, info.path, getAgentMap)
+    }
   }
 
   function reset(run) {
@@ -727,12 +768,14 @@ export function createLanesSource(options = {}) {
         lastScanAt = now()
         scanWanted = false
       }
+      checkLagging()
       for (const run of [...quiet.values()]) {
         const named = pendingChecks.has(run.key)
         if (!scanning && !named) continue
         pendingChecks.delete(run.key)
         checkQuietRun(run)
       }
+      pendingChecks.clear()
       if (active.size === 0) return
       const records = recordsCache.read()
       let checkLock = null
@@ -764,10 +807,20 @@ export function createLanesSource(options = {}) {
     primed = true
     lastScanAt = now()
     scanWanted = false
+    listWanted = false
     try {
-      watcher = watchFolder(folder, (_eventType, filename) => {
+      watcher = watchFolder(folder, (eventType, filename) => {
         scanWanted = true
-        if (filename) pendingChecks.add(pathKey(join(folder, String(filename))))
+        if (filename) {
+          const file = String(filename)
+          const key = pathKey(join(folder, file))
+          pendingChecks.add(key)
+          if (eventType === 'rename' && file.endsWith('.log') && !seen.has(key) && !lagging.has(key)) {
+            listWanted = true
+          }
+        } else if (eventType === 'rename') {
+          listWanted = true
+        }
         tick()
       })
       watcher.on('error', () => {
@@ -794,6 +847,10 @@ export function createLanesSource(options = {}) {
     seen.clear()
     sameRepo.clear()
     pendingChecks.clear()
+    lastFolderStamp = null
+    lastListAt = 0
+    hasListed = false
+    listWanted = false
     if (scanTimer) {
       clearInterval(scanTimer)
       scanTimer = null
