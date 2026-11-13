@@ -7,6 +7,8 @@ export const RECORD_MINUTES_MAX = 240
 const MINUTE_MS = 60000
 const RUN_FRAME = 'heartbeat.run.'
 export const COMPACT_AFTER = 1024
+export const RECORD_FRAMES_MAX = 20000
+export const RECORD_BYTES_MAX = 20 * 1024 * 1024
 
 function asNumber(value) {
   if (typeof value === 'number') return value
@@ -33,17 +35,42 @@ function isActivity(frame) {
   return typeof payload.runId === 'string' || typeof payload.agentId === 'string'
 }
 
+function payloadSize(frame) {
+  try {
+    const text = JSON.stringify(frame?.payload ?? null)
+    return typeof text === 'string' ? text.length : 0
+  } catch {
+    return 0
+  }
+}
+
 export function createSessionRecorder({ minutes = RECORD_MINUTES_DEFAULT } = {}) {
   let limit = clampRecordMinutes(minutes)
   let active = false
   let newest = null
   let kept = []
   let head = 0
+  let bytes = 0
+  let sizeTrimmed = false
+
+  function dropHead() {
+    bytes -= kept[head].bytes
+    head += 1
+  }
 
   function trim() {
-    if (newest === null) return
-    const from = newest - limit * MINUTE_MS
-    while (head < kept.length && kept[head].time < from) head += 1
+    if (newest !== null) {
+      const from = newest - limit * MINUTE_MS
+      while (head < kept.length && kept[head].time < from) dropHead()
+    }
+    while (kept.length - head > RECORD_FRAMES_MAX) {
+      sizeTrimmed = true
+      dropHead()
+    }
+    while (bytes > RECORD_BYTES_MAX && head < kept.length) {
+      sizeTrimmed = true
+      dropHead()
+    }
     if (head > COMPACT_AFTER) {
       kept = kept.slice(head)
       head = 0
@@ -57,18 +84,25 @@ export function createSessionRecorder({ minutes = RECORD_MINUTES_DEFAULT } = {})
       if (!isActivity(frame)) return false
       active = true
     }
+    const size = payloadSize(frame)
+    if (newest === null || time > newest) newest = time
+    if (size > RECORD_BYTES_MAX) {
+      sizeTrimmed = true
+      trim()
+      return true
+    }
     const last = kept.length > head ? kept[kept.length - 1].time : null
     if (last !== null && time < last) {
       if (head > 0) {
         kept = kept.slice(head)
         head = 0
       }
-      kept.push({ time, frame })
+      kept.push({ time, frame, bytes: size })
       kept.sort((a, b) => a.time - b.time)
     } else {
-      kept.push({ time, frame })
+      kept.push({ time, frame, bytes: size })
     }
-    if (newest === null || time > newest) newest = time
+    bytes += size
     trim()
     return true
   }
@@ -86,6 +120,8 @@ export function createSessionRecorder({ minutes = RECORD_MINUTES_DEFAULT } = {})
     newest = null
     kept = []
     head = 0
+    bytes = 0
+    sizeTrimmed = false
   }
 
   function setMinutes(next) {
@@ -102,7 +138,15 @@ export function createSessionRecorder({ minutes = RECORD_MINUTES_DEFAULT } = {})
     return { kept: kept.length - head, slots: kept.length }
   }
 
-  return { push, frames, started, clear, setMinutes, minutes: () => limit, span, stats }
+  function size() {
+    return bytes
+  }
+
+  function truncated() {
+    return sizeTrimmed
+  }
+
+  return { push, frames, started, clear, setMinutes, minutes: () => limit, span, stats, size, truncated }
 }
 
 function shiftFrame(frame, from) {
@@ -121,9 +165,11 @@ export function recorderToReplay(recorder, { agentsFile, treeFile } = {}) {
   const frames = recorder && typeof recorder.frames === 'function' ? recorder.frames() : []
   if (frames.length === 0) return null
   const oldest = timeOf(frames[0])
-  return prepare({
+  const replay = prepare({
     frames: frames.map((frame) => shiftFrame(frame, oldest)),
     agentsFile,
     treeFile,
   })
+  const truncated = recorder && typeof recorder.truncated === 'function' ? recorder.truncated() : false
+  return { ...replay, truncated }
 }
