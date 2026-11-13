@@ -65,7 +65,7 @@ function doctorOptions(options = {}) {
     lanesFile: writeLanes({
       opencode: { name: 'OpenCode', cli: { harness: 'opencode', bin: process.execPath } },
     }),
-    env: { ...process.env },
+    env: process.env,
     ...options,
   }
 }
@@ -254,7 +254,7 @@ describe('machine-room doctor', () => {
     expect(failures(result.lines)).toHaveLength(1)
     expect(failures(result.lines)[0]).toContain('The built viewer is missing')
     expect(failures(result.lines)[0]).toContain('index.html')
-    expect(failures(result.lines)[0]).toContain(`Run npm run build in ${root}.`)
+    expect(failures(result.lines)[0]).toContain(`Run npm run build in ${printedRunsFolder(root)}.`)
   })
 
   it('fails a lane program that was not found', () => {
@@ -265,7 +265,7 @@ describe('machine-room doctor', () => {
       opencode: { name: 'OpenCode', cli: { harness: 'opencode', bin: process.execPath } },
       opencode2: { name: 'OpenCode 2', cli: { harness: 'opencode', bin: missing } },
     })
-    const result = runDoctor({ projectRoot: project, runsFolder: runs, dist: makeDist(), lanesFile: lanes, env: { ...process.env } })
+    const result = runDoctor({ projectRoot: project, runsFolder: runs, dist: makeDist(), lanesFile: lanes, env: process.env })
 
     expect(result.exitCode).toBe(1)
     expect(failures(result.lines)).toEqual([

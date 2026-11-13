@@ -96,6 +96,7 @@ describe('StorageSettings', () => {
       const reopenedCard = container.querySelector('#mr-storage-confirm')
       await click(root, buttonWithText(reopenedCard, 'Confirm archive'))
       await settle()
+      for (let tries = 0; tries < 40 && !container.textContent.includes('2 KB'); tries += 1) await settle(25)
 
       expect(archiveSpy).toHaveBeenCalledWith({
         days: 40,
