@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process'
 import { existsSync, mkdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -129,7 +130,7 @@ describe('machine-room doctor', () => {
       opencode: { name: 'OpenCode', cli: { harness: 'opencode', bin: process.execPath } },
       claude: { name: 'Claude Code', cli: { harness: 'claude', bin: '%NODE_BIN%' } },
     })
-    const env = { ...process.env, NODE_BIN: process.execPath }
+    const env = { ...process.env, NODE_BIN: process.execPath, TEMP: process.env.TEMP || tmpdir() }
     const result = runDoctor({
       projectRoot: project,
       runsFolder: runs,
@@ -146,6 +147,8 @@ describe('machine-room doctor', () => {
     expect(result.lines[2]).toBe('warn This folder is not a git repository. Source control stays empty. Run git init here to fill it.')
     expect(result.lines[3]).toContain('The built viewer is ready')
     expect(result.lines[4]).toBe(`ok The runs folder ${printedRunsFolder(runs, env)} is ready.`)
+    expect(result.lines[4]).toContain('%TEMP%')
+    expect(result.lines[4]).not.toContain(runs)
     expect(result.lines[5]).toContain('The OpenCode lane starts from')
     expect(result.lines[6]).toContain('The Claude Code lane starts from')
     expect(statSync(runs).isDirectory()).toBe(true)
@@ -190,11 +193,14 @@ describe('machine-room doctor', () => {
     const project = makeFolder('machine-room-doctor-project-')
     const runs = join(makeFolder('machine-room-doctor-runs-'), 'named-runs')
     const lanes = writeLanes({})
-    const env = { ...process.env, MACHINEROOM_RUNS: runs }
+    const env = { ...process.env, MACHINEROOM_RUNS: runs, TEMP: process.env.TEMP || tmpdir() }
 
     expect(doctorSettings({}, env).runsFolder).toBe(resolve(runs))
     const result = runDoctor({ projectRoot: project, dist: makeDist(), lanesFile: lanes, env })
     expect(result.lines).toContain(`ok The runs folder ${printedRunsFolder(runs, env)} is ready.`)
+    const runsLine = result.lines.find((line) => line.startsWith('ok The runs folder '))
+    expect(runsLine).toContain('%TEMP%')
+    expect(runsLine).not.toContain(runs)
   })
 
   it('fails a project folder that does not exist', () => {
@@ -214,6 +220,8 @@ describe('machine-room doctor', () => {
 
     expect(result.exitCode).toBe(1)
     expect(failures(result.lines)).toEqual([`FAIL The project folder ${printedRunsFolder(file)} is not a folder.`])
+    expect(failures(result.lines)[0]).toContain('%TEMP%')
+    expect(failures(result.lines)[0]).not.toContain(file)
   })
 
   it('fails when git is not on the PATH', () => {
@@ -248,13 +256,16 @@ describe('machine-room doctor', () => {
   })
 
   it('fails when the built viewer is missing and names the build command', () => {
-    const result = doctor({ dist: makeDist(false) })
+    const dist = makeDist(false)
+    const result = doctor({ dist })
 
     expect(result.exitCode).toBe(1)
     expect(failures(result.lines)).toHaveLength(1)
     expect(failures(result.lines)[0]).toContain('The built viewer is missing')
     expect(failures(result.lines)[0]).toContain('index.html')
     expect(failures(result.lines)[0]).toContain(`Run npm run build in ${printedRunsFolder(root)}.`)
+    expect(failures(result.lines)[0]).toContain('%TEMP%')
+    expect(failures(result.lines)[0]).not.toContain(dist)
   })
 
   it('fails a lane program that was not found', () => {
@@ -271,6 +282,8 @@ describe('machine-room doctor', () => {
     expect(failures(result.lines)).toEqual([
       `FAIL The OpenCode 2 lane program was not found: ${printedRunsFolder(missing)}.`,
     ])
+    expect(failures(result.lines)[0]).toContain('%TEMP%')
+    expect(failures(result.lines)[0]).not.toContain(missing)
   })
 
   it('fails a lane program whose environment variable is not set', () => {
@@ -333,6 +346,8 @@ describe('machine-room doctor', () => {
 
     expect(result.exitCode).toBe(1)
     expect(failures(result.lines)).toEqual([`FAIL The runs folder ${printedRunsFolder(file)} is not a folder.`])
+    expect(failures(result.lines)[0]).toContain('%TEMP%')
+    expect(failures(result.lines)[0]).not.toContain(file)
   })
 })
 
@@ -496,15 +511,17 @@ describe('the machine-room doctor command', () => {
   })
 
   it('takes the folder first and ends without a warning inside a git repository', async () => {
-    const project = makeFolder('machine-room-doctor-project-')
-    mkdirSync(join(project, '.git'))
     const temp = makeFolder('machine-room-doctor-temp-')
+    const project = join(temp, 'project')
+    mkdirSync(join(project, '.git'), { recursive: true })
     const env = childEnv(temp)
     const run = await runBin(['doctor', project, '--dist', makeDist()], env)
 
     expect(run.code).toBe(0)
     expect(run.stderr).toBe('')
     expect(run.stdout).toContain(`ok The project folder ${printedRunsFolder(project, env)} exists.`)
+    expect(run.stdout).toContain('%TEMP%')
+    expect(run.stdout).not.toContain(project)
     const lines = run.stdout.trim().split(/\r?\n/)
     expect(lines.slice(-2)).toEqual([NEXT_STEP, ALL_CHECKS_PASSED])
   })
@@ -524,9 +541,8 @@ describe('the machine-room doctor command', () => {
   })
 
   it('stops after a failed project folder so that one block is the last line', async () => {
-    const project = makeFolder('machine-room-doctor-project-')
     const temp = makeFolder('machine-room-doctor-temp-')
-    const missing = join(project, 'missing')
+    const missing = join(temp, 'project', 'missing')
     const env = childEnv(temp)
     const run = await runBin(['doctor', '--root', missing, '--dist', makeDist()], env)
 
@@ -535,6 +551,8 @@ describe('the machine-room doctor command', () => {
     expect(run.stdout.trim().split(/\r?\n/)).toEqual([
       `FAIL The project folder ${printedRunsFolder(missing, env)} does not exist.`,
     ])
+    expect(run.stdout).toContain('%TEMP%')
+    expect(run.stdout).not.toContain(missing)
   })
 
   it('prints its help', async () => {

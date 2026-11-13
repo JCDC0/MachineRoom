@@ -1,10 +1,12 @@
 # Changelog
 
 ## Unreleased
+- P266: storage, dispatch and doctor tests assert the partial archive, the queue's --test parse, both notice sentences and the literal %TEMP% mask.
 - P263: an empty reply gets one nudge before it ends the run, a provider error exits 1, and the result is the agent's last message.
 - P249: GET /api/control/runs/conversation turns a lane run's log into prompt, agent, tool and result entries, masked, from the runs folder only.
 - P254: a folder-shaped /api/tree answers from the last tree while the watcher is armed, the last full read was clean and no read is due.
 - P263: the native agent nudges an empty or reasoning-only reply once, reports a provider error in an answer as a failure, and uses the last message as its result text.
+- P266: The four weak tests in storage, project-dispatch and machine-doctor now fail when their behaviour is undone, proved in `%TEMP%` scratch copies.
 - P255: AUDIT-2026-11-TESTS.md lists four tests that pass with their change undone, each proved in a scratch copy.
 - P252: AUDIT-2026-11-DOCS-2.md lists 17 doc sentences the code contradicts, with corrections; no route, flag or panel is unnamed.
 - P259: README.md describes what each command prints, the up flags, the default sources, the runs folder and how to stop the room.
