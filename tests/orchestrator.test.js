@@ -2959,6 +2959,10 @@ describe('the orchestrator chat file', () => {
     )
     const log = join(rig.runs, 'orchestrator-chat-20261025-120000-000.log')
     writeFileSync(log, 'a log\n')
+    writeFileSync(
+      join(rig.runs, 'orchestrator-chat-20261025-120000-000.meta.json'),
+      `${JSON.stringify({ project: rig.projectRoot, sessionId: 'session-1' })}\n`
+    )
     const restored = restoreRig(rig)
     expect(restored.answer().state).toBe('idle')
     expect(restored.answer().messages.at(-1)).toMatchObject({ from: 'room', text: RESTART_MESSAGE })
@@ -2966,6 +2970,171 @@ describe('the orchestrator chat file', () => {
     expect(records).toHaveLength(1)
     expect(records[0]).toMatchObject({ lane: 'orchestrator', log, exitCode: null, killed: true })
     expect(records[0].startedAt).toBe(new Date(2026, 9, 25, 12, 0, 0, 0).toISOString())
+  })
+
+  it('saves the active turn log name and recovers only that log when two projects share a runs folder', () => {
+    const base = makeTempDir('mr-shared-recovery-')
+    const runs = join(base, 'runs')
+    const projectA = join(base, 'project-a')
+    const projectB = join(base, 'project-b')
+    mkdirSync(runs, { recursive: true })
+    mkdirSync(projectA, { recursive: true })
+    mkdirSync(projectB, { recursive: true })
+    const promptFile = join(base, 'orchestrator-agent.md')
+    writeFileSync(promptFile, PROMPT)
+    const tA = new Date(2026, 9, 25, 12, 0, 0, 0).getTime()
+    const tB = new Date(2026, 9, 25, 12, 5, 0, 0).getTime()
+    let orchA = createOrchestrator({
+      projectRoot: projectA,
+      runsFolder: runs,
+      lanes: LANES,
+      promptFile,
+      now: () => tA,
+      spawn: () => emitterChild(),
+    })
+    let orchB = null
+    let restoredA = null
+    cleanups.push(async () => {
+      orchA?.close()
+      orchB?.close()
+      restoredA?.close()
+      await sleep(20)
+      rmSync(base, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+    })
+
+    expect(orchA.send({ text: 'Job A', confirmed: true }).status).toBe(202)
+    const chatA = JSON.parse(readFileSync(chatFileFor(projectA, runs), 'utf8'))
+    expect(chatA.state).toBe('working')
+    expect(chatA.turnLog).toBe('orchestrator-chat-20261025-120000-000.log')
+    orchA.close()
+    orchA = null
+
+    orchB = createOrchestrator({
+      projectRoot: projectB,
+      runsFolder: runs,
+      lanes: LANES,
+      promptFile,
+      now: () => tB,
+      spawn: () => emitterChild(),
+    })
+    expect(orchB.send({ text: 'Job B', confirmed: true }).status).toBe(202)
+    const chatB = JSON.parse(readFileSync(chatFileFor(projectB, runs), 'utf8'))
+    expect(chatB.state).toBe('working')
+    expect(chatB.turnLog).toBe('orchestrator-chat-20261025-120500-000.log')
+    expect(readLines(join(runs, 'runs.jsonl'))).toHaveLength(0)
+
+    restoredA = createOrchestrator({
+      projectRoot: projectA,
+      runsFolder: runs,
+      lanes: LANES,
+      promptFile,
+      spawn: () => emitterChild(),
+    })
+    expect(restoredA.answer().state).toBe('idle')
+    expect(restoredA.answer().messages.at(-1)).toMatchObject({ from: 'room', text: RESTART_MESSAGE })
+    const afterA = JSON.parse(readFileSync(chatFileFor(projectA, runs), 'utf8'))
+    expect(afterA.turnLog).toBeNull()
+
+    const logA = join(runs, 'orchestrator-chat-20261025-120000-000.log')
+    const logB = join(runs, 'orchestrator-chat-20261025-120500-000.log')
+    const records = readLines(join(runs, 'runs.jsonl'))
+    expect(records).toHaveLength(1)
+    expect(records[0]).toMatchObject({ lane: 'orchestrator', log: logA, exitCode: null, killed: true })
+    expect(records[0].startedAt).toBe(new Date(tA).toISOString())
+    expect(records.some((record) => record.log === logB)).toBe(false)
+  })
+
+  it('writes no record when a saved turn log is missing even if another project has an unfinished log', () => {
+    const rig = makeRig()
+    rig.orchestrator.close()
+    const file = chatFileFor(rig.projectRoot, rig.runs)
+    writeFileSync(
+      file,
+      `${JSON.stringify({
+        project: rig.projectRoot,
+        sessionId: 'session-1',
+        state: 'working',
+        turnLog: 'orchestrator-chat-20261025-120000-000.log',
+        messages: [{ id: 'm1', from: 'owner', text: 'Build it', at: '2026-10-25T12:00:00.000Z' }],
+        pending: [],
+      })}\n`
+    )
+    writeFileSync(join(rig.runs, 'orchestrator-chat-20261025-120500-000.log'), 'other log\n')
+    writeFileSync(
+      join(rig.runs, 'orchestrator-chat-20261025-120500-000.meta.json'),
+      `${JSON.stringify({ project: join(rig.base, 'other-project'), sessionId: 'session-2' })}\n`
+    )
+    const restored = restoreRig(rig)
+    expect(restored.answer().state).toBe('idle')
+    expect(restored.answer().messages.at(-1)).toMatchObject({ from: 'room', text: RESTART_MESSAGE })
+    expect(recordsOf(rig)).toHaveLength(0)
+  })
+
+  it('filters old chat file recovery by metadata project and skips ambiguous or unattributed matches', () => {
+    const rig = makeRig()
+    rig.orchestrator.close()
+    const file = chatFileFor(rig.projectRoot, rig.runs)
+    const oldChat = {
+      project: rig.projectRoot,
+      sessionId: 'session-1',
+      state: 'working',
+      messages: [{ id: 'm1', from: 'owner', text: 'Build it', at: '2026-10-25T12:00:00.000Z' }],
+      pending: [],
+    }
+    writeFileSync(file, `${JSON.stringify(oldChat)}\n`)
+
+    const ownLog = join(rig.runs, 'orchestrator-chat-20261025-120000-000.log')
+    const otherLog = join(rig.runs, 'orchestrator-chat-20261025-120500-000.log')
+    const noMetaLog = join(rig.runs, 'orchestrator-chat-20261025-121000-000.log')
+    writeFileSync(ownLog, 'own\n')
+    writeFileSync(
+      join(rig.runs, 'orchestrator-chat-20261025-120000-000.meta.json'),
+      `${JSON.stringify({ project: rig.projectRoot, sessionId: 'session-1' })}\n`
+    )
+    writeFileSync(otherLog, 'other\n')
+    writeFileSync(
+      join(rig.runs, 'orchestrator-chat-20261025-120500-000.meta.json'),
+      `${JSON.stringify({ project: join(rig.base, 'other-project'), sessionId: 'session-2' })}\n`
+    )
+    writeFileSync(noMetaLog, 'no meta\n')
+
+    const first = restoreRig(rig)
+    expect(first.answer().state).toBe('idle')
+    expect(recordsOf(rig)).toHaveLength(1)
+    expect(recordsOf(rig)[0]).toMatchObject({ lane: 'orchestrator', log: ownLog, exitCode: null, killed: true })
+    first.orchestrator.close()
+
+    rmSync(join(rig.runs, 'runs.jsonl'), { force: true })
+    writeFileSync(file, `${JSON.stringify(oldChat)}\n`)
+    const secondOwnLog = join(rig.runs, 'orchestrator-chat-20261025-121500-000.log')
+    writeFileSync(secondOwnLog, 'second own\n')
+    writeFileSync(
+      join(rig.runs, 'orchestrator-chat-20261025-121500-000.meta.json'),
+      `${JSON.stringify({ project: rig.projectRoot, sessionId: 'session-1' })}\n`
+    )
+
+    const second = restoreRig(rig)
+    expect(second.answer().state).toBe('idle')
+    expect(second.answer().messages.at(-1)).toMatchObject({ from: 'room', text: RESTART_MESSAGE })
+    expect(recordsOf(rig)).toHaveLength(0)
+    second.orchestrator.close()
+
+    rmSync(ownLog, { force: true })
+    rmSync(join(rig.runs, 'orchestrator-chat-20261025-120000-000.meta.json'), { force: true })
+    rmSync(secondOwnLog, { force: true })
+    rmSync(join(rig.runs, 'orchestrator-chat-20261025-121500-000.meta.json'), { force: true })
+    writeFileSync(file, `${JSON.stringify(oldChat)}\n`)
+
+    const third = restoreRig(rig)
+    expect(third.answer().state).toBe('idle')
+    expect(recordsOf(rig)).toHaveLength(0)
+  })
+
+  it('clears the saved turn log after a turn completes', async () => {
+    const rig = makeRig()
+    rig.send('Quick job')
+    await waitIdle(rig, 1)
+    expect(stateFile(rig).turnLog).toBeNull()
   })
 
   it('saves the room turn times and drops the ones older than the hour', async () => {

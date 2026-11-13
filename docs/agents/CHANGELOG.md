@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Chat turns save their exact log name so restart recovery writes a stopped record only for that project's turn and skips ambiguous pre-change matches (P180).
 - The second readiness review lists 8 problems after days of use and 2 suggested features (P178).
 - A broken package.json stops a queue task with one masked sentence instead of a stand-in test command (P176).
 - A broken package.json stops a queue task with one masked sentence and no node command, and a dry run prints that sentence on its tests line (P176).

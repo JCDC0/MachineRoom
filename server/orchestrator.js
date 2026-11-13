@@ -1092,11 +1092,13 @@ export function createOrchestrator({
       const waiting = pending
         .filter((message) => message.from === 'owner' || message.from === 'room' || message.from === ORCHESTRATOR_KEY || (typeof message.from === 'string' && message.from.startsWith('sub:')))
         .map((message) => message.id)
+      const turnLog = state === 'working' && running && !running.done ? running.logFile : null
       const saved = {
         project: root,
         harness,
         sessionId,
         state,
+        turnLog,
         model,
         messages,
         pending: waiting,
@@ -1175,20 +1177,61 @@ export function createOrchestrator({
     } catch {}
   }
 
-  function newestTurnLog() {
+  function metaProjectFor(logPath) {
+    try {
+      const meta = JSON.parse(readFileSync(String(logPath).replace(/\.log$/i, '.meta.json'), 'utf8'))
+      if (!meta || typeof meta !== 'object' || Array.isArray(meta)) return ''
+      return typeof meta.project === 'string' ? meta.project.trim() : ''
+    } catch {
+      return ''
+    }
+  }
+
+  function isLogFile(path) {
+    try {
+      return statSync(path).isFile()
+    } catch {
+      return false
+    }
+  }
+
+  function validTurnLogName(value) {
+    if (typeof value !== 'string' || !value || /[\\/]/.test(value) || basename(value) !== value) return ''
+    if (!value.startsWith(`${logPrefix}-chat-`) || !TURN_LOG.test(value)) return ''
+    return value
+  }
+
+  function recoverTurnLog(saved) {
+    if (saved && Object.hasOwn(saved, 'turnLog')) {
+      const name = validTurnLogName(saved.turnLog)
+      if (!name) return null
+      const candidate = join(folder, name)
+      if (!isLogFile(candidate)) return null
+      const metaProject = metaProjectFor(candidate)
+      if (metaProject && (!root || pathKey(metaProject) !== pathKey(root))) return null
+      return candidate
+    }
+    if (!root) return null
+    const ownProject = pathKey(root)
     let names
     try {
       names = readdirSync(folder).filter((name) => name.startsWith(`${logPrefix}-chat-`) && TURN_LOG.test(name))
     } catch {
       return null
     }
-    if (names.length === 0) return null
-    names.sort()
-    return join(folder, names[names.length - 1])
+    const matches = []
+    for (const name of names) {
+      const candidate = join(folder, name)
+      if (!isLogFile(candidate)) continue
+      const metaProject = metaProjectFor(candidate)
+      if (!metaProject || pathKey(metaProject) !== ownProject) continue
+      matches.push(candidate)
+    }
+    return matches.length === 1 ? matches[0] : null
   }
 
-  function recordStoppedTurn() {
-    const log = newestTurnLog()
+  function recordStoppedTurn(saved) {
+    const log = recoverTurnLog(saved)
     if (!log) return
     if (recordFor(basename(log).replace(/\.log$/i, ''))) return
     let endedAt = now()
@@ -1336,7 +1379,7 @@ export function createOrchestrator({
     if (saved.state === 'working') {
       messages.push({ id: randomUUID(), from: 'room', text: maskText(RESTART_MESSAGE), at: iso(now()) })
       while (messages.length > ORCHESTRATOR_CHAT_LIMIT) messages.shift()
-      recordStoppedTurn()
+      recordStoppedTurn(saved)
     }
     const waitingIds = Array.isArray(saved.pending) ? saved.pending : []
     for (const id of waitingIds) {
@@ -1726,7 +1769,8 @@ export function createOrchestrator({
     }
     const startedAt = now()
     const logName = `${logPrefix}-chat-${stamp(startedAt)}`
-    const logPath = join(folder, `${logName}.log`)
+    const logFile = `${logName}.log`
+    const logPath = join(folder, logFile)
     const metaPath = join(folder, `${logName}.meta.json`)
     const enabledServers = enabledMcpServersFor(folder)
     const turnMode = mode ?? legacyMode(harness)
@@ -1736,10 +1780,11 @@ export function createOrchestrator({
     const needsOpencodeConfig = harness === 'opencode' && (needsMcp || turnMode === 'edits' || turnMode === 'plan')
     const mcpConfigPath = needsMcp || needsOpencodeConfig ? join(folder, `${logName}.mcp.json`) : ''
     let mcpEnv = null
-    const turn = { startedAt, logPath, metaPath, mcpConfigPath, killed: false, done: false, started: false, provisionalSessionId: first ? sessionId : null, child: null, timer: null, compacting: compaction, stderr: '', anchorId: turnMessages[0]?.id ?? '', steps: [], parser: null }
+    const turn = { startedAt, logFile, logPath, metaPath, mcpConfigPath, killed: false, done: false, started: false, provisionalSessionId: first ? sessionId : null, child: null, timer: null, compacting: compaction, stderr: '', anchorId: turnMessages[0]?.id ?? '', steps: [], parser: null }
     turn.parser = compaction ? null : stepParserFor(harness)
     running = turn
-    setState('working')
+    if (state === 'working') persist()
+    else setState('working')
     try {
       mkdirSync(folder, { recursive: true })
       mkdirSync(scratchFolder, { recursive: true })
@@ -1870,6 +1915,9 @@ export function createOrchestrator({
         mcpEnv = { ...(mcpEnv || {}), ...cmd.env }
       }
     }
+    try {
+      closeSync(openSync(logPath, 'w'))
+    } catch {}
     const stream = createWriteStream(logPath)
     stream.on('error', () => {})
     turn.timer = setTimeout(() => {
