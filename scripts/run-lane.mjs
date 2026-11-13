@@ -1756,9 +1756,11 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
           commits: (gitRead(lane.worktree, ['log', '--oneline', 'refs/heads/main..HEAD']) ?? '').split(/\r?\n/).filter(Boolean),
         }
 
-    const startFailed = result.code !== 0 && summary.toolCalls === 0 && minutes < 1
-    const startFailure = startFailed ? startFailureText({ harness, log: logText }) : ''
-    if (startFailure !== '') console.log(`start failed: ${startFailure}`)
+    const startFailed = (Boolean(result.error) || result.code !== 0) && summary.toolCalls === 0 && minutes < 1
+    const startFailure = startFailed
+      ? (result.error ? `The harness did not start (${errorCode(result.error)}).` : startFailureText({ harness, log: logText }))
+      : ''
+    if (startFailure !== '' && !result.error) console.log(`start failed: ${startFailure}`)
     const retryProblem = retryStartProblem({
       exitCode: result.code,
       minutes,

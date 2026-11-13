@@ -202,6 +202,35 @@ describe('a lane that hits its quota hands its run to a backup lane', { timeout:
     }
   })
 
+  it('moves the run when the harness program cannot start at all', async () => {
+    const base = makeTempDir('machine-room-failover-spawn-')
+    try {
+      const first = join(base, 'first')
+      const backup = join(base, 'backup')
+      const runs = join(base, 'runs')
+      const okCount = join(base, 'ok-count.txt')
+      makeRepo(first)
+      makeRepo(backup, okScript(okCount, 'note.txt'))
+      mkdirSync(runs, { recursive: true })
+      const lanes = {
+        opencode: { name: 'Missing lane', worktree: first, fallback: 'agy', cli: { harness: 'opencode', bin: join(base, 'no-such-harness.exe'), model: 'fake/missing', commits: 'runner' } },
+        agy: { name: 'Backup lane', worktree: backup, cli: { harness: 'opencode', bin: process.execPath, model: 'fake/ok', commits: 'runner' } },
+      }
+      const { result, logs } = await runFailover({ laneKey: 'opencode', lane: lanes.opencode, lanes, runs })
+      expect(result.code, logs.join('\n')).toBe(0)
+      const records = readRecords(runs)
+      expect(records).toHaveLength(2)
+      expect(records[0].startFailed).toBe(true)
+      expect(records[0].failover).toEqual({ kind: 'start-failed', to: 'agy' })
+      expect(records[1].lane).toBe('agy')
+      expect(records[1].failoverFrom.lane).toBe('opencode')
+      expect(count(okCount)).toBe(1)
+      expect(logs.join('\n')).toContain('moving the run to agy because start-failed')
+    } finally {
+      rmSync(base, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+    }
+  })
+
   it('does not move again when the backup run also fails', async () => {
     const base = makeTempDir('machine-room-failover-again-')
     try {
