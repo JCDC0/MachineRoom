@@ -1184,4 +1184,76 @@ describe('the control client review routes', () => {
     ).rejects.toThrow('Checks failed on this head, so the lane was not merged.')
     expect((await mock.gitState()).head).toBe(merged.commit)
   })
+
+  it('matches the storage usage, preview and archive contract between bridge and mock', async () => {
+    const { utimesSync } = await import('node:fs')
+    const base = makeTempDir('mr-contract-storage-')
+    cleanups.push(() => rmSync(base, { recursive: true, force: true }))
+    const repo = join(base, 'repo')
+    const runs = join(base, 'runs')
+    mkdirSync(repo, { recursive: true })
+    mkdirSync(runs, { recursive: true })
+    testGit(repo, ['init', '-b', 'main'])
+    testGit(repo, ['config', 'user.name', 'MachineRoom Test'])
+    testGit(repo, ['config', 'user.email', 'test@example.invalid'])
+    writeFileSync(join(repo, 'README.md'), 'init\n')
+    testGit(repo, ['add', '.'])
+    testGit(repo, ['commit', '-m', 'init'])
+    mkdirSync(join(repo, '.worktrees'), { recursive: true })
+    testGit(repo, ['worktree', 'add', '-b', 'feat/done', join(repo, '.worktrees', 'agy')])
+
+    const nowMs = Date.UTC(2026, 10, 13, 12, 0, 0)
+    const oldDate = new Date(nowMs - 45 * 24 * 60 * 60 * 1000)
+    const oldLog = join(runs, 'agy-20260925-100000-001.log')
+    writeFileSync(oldLog, 'old-run-log')
+    utimesSync(oldLog, oldDate, oldDate)
+    writeFileSync(join(runs, 'orchestrator-abc.json'), '{"messages":[]}')
+
+    const bridge = createBridge({
+      projectRoot: repo,
+      runsFolder: runs,
+      now: () => nowMs,
+      port: 0,
+      env: {},
+    })
+    cleanups.push(() => bridge.stop())
+    const { url } = await bridge.start()
+    const bridgeClient = createClient({
+      baseUrl: url,
+      fetchImpl: (input, init = {}) =>
+        fetch(input, {
+          ...init,
+          headers: { ...init?.headers, Origin: 'http://localhost:5173' },
+        }),
+    })
+    const mock = createMockClient({ latencyMs: 0, now: () => nowMs })
+
+    for (const client of [bridgeClient, mock]) {
+      const initial = await client.storage()
+      expect(Object.keys(initial).sort()).toEqual(['kinds', 'projectRoot', 'runsFolder', 'totalBytes', 'worktrees'])
+      expect(Object.keys(initial.kinds).sort()).toEqual(['conversations', 'logs', 'recordings', 'worktrees'])
+      expect(Object.keys(initial.worktrees).sort()).toEqual(['bytes', 'clean', 'command', 'count'])
+      expect(initial.worktrees.clean.length).toBeGreaterThanOrEqual(1)
+      expect(initial.worktrees.command).toContain('--clean')
+
+      await expect(client.previewStorageArchive({ days: 0 })).rejects.toThrow('Choose 1 to 365 days.')
+      await expect(client.archiveStorage({ days: 30, confirmed: false })).rejects.toThrow(
+        'Confirm the archive before moving files.'
+      )
+
+      const preview = await client.previewStorageArchive({ days: 30 })
+      expect(Object.keys(preview).sort()).toEqual(['count', 'cutoff', 'days', 'files', 'totalBytes'])
+      expect(preview.count).toBeGreaterThan(0)
+      expect(preview.totalBytes).toBeGreaterThan(0)
+
+      const archived = await client.archiveStorage({ days: 30, confirmed: true })
+      expect(Object.keys(archived).sort()).toEqual(['count', 'days', 'moved', 'ok', 'totalBytes'])
+      expect(archived.ok).toBe(true)
+      expect(archived.count).toBe(preview.count)
+      expect(archived.totalBytes).toBe(preview.totalBytes)
+
+      const second = await client.archiveStorage({ days: 30, confirmed: true })
+      expect(second).toEqual({ ok: true, days: 30, count: 0, totalBytes: 0, moved: [] })
+    }
+  })
 })

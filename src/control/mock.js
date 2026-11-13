@@ -105,6 +105,9 @@ export const CLIENT_METHODS = [
   'createBranch',
   'fileInfo',
   'network',
+  'storage',
+  'previewStorageArchive',
+  'archiveStorage',
   'subscribe',
 ]
 
@@ -677,6 +680,74 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
   let ladder = readLadder(SAMPLE_LADDER, { lanes: MOCK_LANE_KEYS }).ladder
   const networkOnline = true
   let searchChoice = { provider: '', url: '', keyName: '' }
+  let mockStorage = {
+    logs: [
+      { name: 'agy-20260925-100000-001.log', kind: 'logs', bytes: 2048, ageDays: 45 },
+      { name: 'agy-20260925-100000-001.meta.json', kind: 'logs', bytes: 1536, ageDays: 45 },
+      { name: 'agy-20260925-100000-001.usage.json', kind: 'logs', bytes: 1024, ageDays: 45 },
+      { name: 'opencode-20261111-100000-001.log', kind: 'logs', bytes: 2048, ageDays: 2 },
+    ],
+    recordings: [
+      { name: 'demo-run.jsonl', kind: 'recordings', bytes: 8192, kept: true, ageDays: 2 },
+      { name: 'demo-agents.json', kind: 'recordings', bytes: 4096, kept: true, ageDays: 2 },
+      { name: 'demo-tree.json', kind: 'recordings', bytes: 6144, kept: true, ageDays: 2 },
+    ],
+    conversations: [
+      { name: 'orchestrator-mock.json', bytes: 3072 },
+      { name: 'orchestrator-mock-sub1.json', bytes: 1024 },
+    ],
+    worktrees: {
+      count: 2,
+      bytes: 16384,
+      clean: [
+        {
+          lane: 'opencode-2',
+          branch: 'feat/merged-sample',
+          path: 'MachineRoom/.worktrees/opencode-2',
+          bytes: 8192,
+        },
+      ],
+      command: 'npm run worktrees -- --project MachineRoom --clean',
+    },
+  }
+
+  function selectMockArchive(days) {
+    const cleanDays = days === undefined ? 30 : days
+    if (typeof cleanDays !== 'number' || !Number.isInteger(cleanDays) || cleanDays < 1 || cleanDays > 365) {
+      throw new Error('Choose 1 to 365 days.')
+    }
+    const currentMs = now()
+    const cutoffMs = currentMs - cleanDays * 24 * 60 * 60 * 1000
+    const matches = [
+      ...mockStorage.logs.filter((item) => item.ageDays >= cleanDays),
+      ...mockStorage.recordings.filter((item) => !item.kept && item.ageDays >= cleanDays),
+    ]
+    const toPreviewItem = (item) => {
+      const mtimeMs = currentMs - item.ageDays * 24 * 60 * 60 * 1000
+      const archiveDir = `archive/${new Date(mtimeMs).toISOString().slice(0, 7)}`
+      return {
+        name: item.name,
+        kind: item.kind,
+        bytes: item.bytes,
+        mtimeMs,
+        archiveDir,
+        source: `MachineRoom/runs/${item.name}`,
+        destination: `MachineRoom/runs/${archiveDir}/${item.name}`,
+      }
+    }
+    const toMovedItem = (item) => {
+      const mtimeMs = currentMs - item.ageDays * 24 * 60 * 60 * 1000
+      const archiveDir = `archive/${new Date(mtimeMs).toISOString().slice(0, 7)}`
+      return {
+        name: item.name,
+        kind: item.kind,
+        bytes: item.bytes,
+        archiveDir,
+        destination: `MachineRoom/runs/${archiveDir}/${item.name}`,
+      }
+    }
+    return { cleanDays, cutoffMs, matches, toPreviewItem, toMovedItem }
+  }
   const subChats = new Map()
   const familyLabels = new Map()
   const keySlots = new Map()
@@ -2672,6 +2743,56 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
         online: networkOnline,
         checkedAt: new Date(now()).toISOString(),
       })),
+
+    storage: () =>
+      call('storage', () => {
+        const logsBytes = mockStorage.logs.reduce((sum, item) => sum + item.bytes, 0)
+        const recordingsBytes = mockStorage.recordings.reduce((sum, item) => sum + item.bytes, 0)
+        const conversationsBytes = mockStorage.conversations.reduce((sum, item) => sum + item.bytes, 0)
+        const worktreesBytes = mockStorage.worktrees.bytes
+        return {
+          runsFolder: 'MachineRoom/runs',
+          projectRoot: 'MachineRoom',
+          kinds: {
+            logs: { count: mockStorage.logs.length, bytes: logsBytes },
+            recordings: { count: mockStorage.recordings.length, bytes: recordingsBytes },
+            conversations: { count: mockStorage.conversations.length, bytes: conversationsBytes },
+            worktrees: { count: mockStorage.worktrees.count, bytes: worktreesBytes },
+          },
+          totalBytes: logsBytes + recordingsBytes + conversationsBytes + worktreesBytes,
+          worktrees: clone(mockStorage.worktrees),
+        }
+      }),
+
+    previewStorageArchive: ({ days } = {}) =>
+      call('previewStorageArchive', () => {
+        const { cleanDays, cutoffMs, matches, toPreviewItem } = selectMockArchive(days)
+        const files = matches.map(toPreviewItem)
+        return {
+          days: cleanDays,
+          cutoff: new Date(cutoffMs).toISOString(),
+          count: files.length,
+          totalBytes: files.reduce((sum, item) => sum + item.bytes, 0),
+          files,
+        }
+      }),
+
+    archiveStorage: ({ days, confirmed = false } = {}) =>
+      call('archiveStorage', () => {
+        if (confirmed !== true) throw new Error('Confirm the archive before moving files.')
+        const { cleanDays, matches, toMovedItem } = selectMockArchive(days)
+        const movedSet = new Set(matches)
+        mockStorage.logs = mockStorage.logs.filter((item) => !movedSet.has(item))
+        mockStorage.recordings = mockStorage.recordings.filter((item) => !movedSet.has(item))
+        const moved = matches.map(toMovedItem)
+        return {
+          ok: true,
+          days: cleanDays,
+          count: moved.length,
+          totalBytes: moved.reduce((sum, item) => sum + item.bytes, 0),
+          moved,
+        }
+      }),
 
     subscribe(listener) {
       listeners.add(listener)
