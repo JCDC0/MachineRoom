@@ -1,4 +1,4 @@
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:http'
 import { connect } from 'node:net'
 import { basename, join, resolve } from 'node:path'
@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createBridge } from '../server/index.js'
 import { extractReplyText } from '../server/assistant.js'
 import { activeLanesFileFor, writeActiveLanes } from '../server/active-lanes.js'
-import { NO_TOKEN_PROBLEM } from '../server/runs.js'
+import { CONVERSATION_LOG_OUTSIDE_PROBLEM, CONVERSATION_UNKNOWN_PROBLEM, NO_TOKEN_PROBLEM } from '../server/runs.js'
 import { SINCE_PROBLEM } from '../src/briefs/run.js'
 import { createClient } from '../src/control/client.js'
 import { choice } from '../src/decider/wire.js'
@@ -957,6 +957,113 @@ describe('run routes', () => {
       },
       { what: 'the runner to stop' }
     )
+  })
+
+  function writeConversationRun(folder, record) {
+    mkdirSync(folder, { recursive: true })
+    writeFileSync(join(folder, 'runs.jsonl'), `${JSON.stringify(record)}\n`)
+  }
+
+  function conversationUrl(url, lane, startedAt) {
+    return `${url}/api/control/runs/conversation?lane=${encodeURIComponent(lane)}&startedAt=${encodeURIComponent(startedAt)}`
+  }
+
+  function opencodeConversationLog() {
+    return `${readFileSync(new URL('./fixtures/opencode-run-json.jsonl', import.meta.url), 'utf8')}${JSON.stringify({
+      type: 'step_finish',
+      part: { type: 'step-finish', reason: 'stop' },
+    })}\n`
+  }
+
+  it('reads a run conversation from its record and log', async () => {
+    const tempDirRuns = useRunsTemp()
+    const { url } = await startRunsBridge()
+    const folder = join(tempDirRuns, 'machineroom-runs')
+    const startedAt = '2026-10-24T12:00:00.000Z'
+    const log = join(folder, 'opencode-project-20261024-120000.log')
+    mkdirSync(folder, { recursive: true })
+    writeFileSync(log, opencodeConversationLog())
+    writeConversationRun(folder, {
+      lane: 'opencode',
+      briefs: [],
+      startedAt,
+      task: 'List the files.',
+      log,
+    })
+
+    const res = await getJson(conversationUrl(url, 'opencode', startedAt))
+    expect(res.status).toBe(200)
+    expect(res.body).toMatchObject({ lane: 'opencode', startedAt, harness: 'opencode', running: false })
+    expect(res.body.entries[0]).toEqual({ role: 'prompt', text: 'List the files.', tool: null, at: startedAt })
+    expect(res.body.entries.filter((item) => item.role === 'tool').map((item) => [item.tool, item.text])).toEqual([
+      ['read', 'read scratch'],
+      ['search', 'glob scratch'],
+    ])
+    expect(res.body.entries.at(-1)).toMatchObject({ role: 'result', text: 'The run ended.' })
+  })
+
+  it('writes the brief text as the prompt for a brief run', async () => {
+    const tempDirRuns = useRunsTemp()
+    const { url } = await startRunsBridge()
+    const folder = join(tempDirRuns, 'machineroom-runs')
+    const startedAt = '2026-10-24T12:00:00.000Z'
+    const log = join(folder, 'opencode-B6-20261024-120000.log')
+    mkdirSync(folder, { recursive: true })
+    writeFileSync(log, opencodeConversationLog())
+    writeConversationRun(folder, { lane: 'opencode', briefs: ['B6'], startedAt, log })
+
+    const res = await getJson(conversationUrl(url, 'opencode', startedAt))
+    expect(res.status).toBe(200)
+    expect(res.body.entries[0].role).toBe('prompt')
+    expect(res.body.entries[0].text).toContain('Task B6: Late join replay.')
+    expect(res.body.entries[0].text).toContain('Let the event stream send history.')
+  })
+
+  it('answers 404 for an unknown run and an unknown lane', async () => {
+    const tempDirRuns = useRunsTemp()
+    const { url } = await startRunsBridge()
+    const folder = join(tempDirRuns, 'machineroom-runs')
+    const startedAt = '2026-10-24T12:00:00.000Z'
+    writeConversationRun(folder, { lane: 'opencode', briefs: [], startedAt, log: join(folder, 'missing.log') })
+
+    const unknownTime = await getJson(conversationUrl(url, 'opencode', '2026-10-25T12:00:00.000Z'))
+    expect(unknownTime.status).toBe(404)
+    expect(unknownTime.body).toEqual({ error: CONVERSATION_UNKNOWN_PROBLEM })
+
+    const unknownLane = await getJson(conversationUrl(url, 'nobody', startedAt))
+    expect(unknownLane.status).toBe(404)
+    expect(unknownLane.body).toEqual({ error: CONVERSATION_UNKNOWN_PROBLEM })
+  })
+
+  it('refuses a log outside the runs folder', async () => {
+    const tempDirRuns = useRunsTemp()
+    const { url } = await startRunsBridge()
+    const folder = join(tempDirRuns, 'machineroom-runs')
+    const startedAt = '2026-10-24T12:00:00.000Z'
+    const outside = join(tempDirRuns, 'outside.log')
+    mkdirSync(folder, { recursive: true })
+    writeFileSync(outside, opencodeConversationLog())
+    writeConversationRun(folder, { lane: 'opencode', briefs: [], startedAt, log: outside })
+
+    const res = await getJson(conversationUrl(url, 'opencode', startedAt))
+    expect(res.status).toBe(400)
+    expect(res.body).toEqual({ error: CONVERSATION_LOG_OUTSIDE_PROBLEM })
+  })
+
+  it('reads the last 8 MB of a large log and says it was cut', async () => {
+    const tempDirRuns = useRunsTemp()
+    const { url } = await startRunsBridge()
+    const folder = join(tempDirRuns, 'machineroom-runs')
+    const startedAt = '2026-10-24T12:00:00.000Z'
+    const log = join(folder, 'opencode-project-20261024-120000.log')
+    mkdirSync(folder, { recursive: true })
+    writeFileSync(log, `${'x'.repeat(8 * 1024 * 1024)}\n${opencodeConversationLog()}`)
+    writeConversationRun(folder, { lane: 'opencode', briefs: [], startedAt, log })
+
+    const res = await getJson(conversationUrl(url, 'opencode', startedAt))
+    expect(res.status).toBe(200)
+    expect(res.body.cut).toBe(true)
+    expect(res.body.entries.some((item) => item.role === 'tool' && item.text === 'read scratch')).toBe(true)
   })
 })
 

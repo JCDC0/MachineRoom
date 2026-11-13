@@ -32,6 +32,7 @@ export const CLIENT_METHODS = [
   'briefs',
   'briefPrompt',
   'runs',
+  'runConversation',
   'runStats',
   'outcomes',
   'liveRuns',
@@ -1151,6 +1152,39 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
       }),
 
     runs: () => call('runs', () => runsState),
+
+    runConversation: ({ lane, startedAt } = {}) =>
+      call('runConversation', () => {
+        const wantedLane = typeof lane === 'string' ? lane.trim() : ''
+        const wantedStart = typeof startedAt === 'string' ? startedAt.trim() : ''
+        const live = runsState.running.find((item) => item.lane === wantedLane && item.startedAt === wantedStart)
+        const run = live ?? runsState.recent.find((item) => item.lane === wantedLane && item.startedAt === wantedStart)
+        if (!run) throw new Error('No run of that lane started at that time.')
+        const harness = SAMPLE_LANES[wantedLane]?.cli?.harness ?? ''
+        const prompt =
+          typeof run.task === 'string' && run.task.trim() !== ''
+            ? run.task
+            : Array.isArray(run.briefs) && run.briefs.length > 0
+              ? `Task ${run.briefs.join(', ')}.`
+              : ''
+        const entries = []
+        if (prompt !== '') entries.push({ role: 'prompt', text: prompt, tool: null, at: run.startedAt })
+        entries.push({ role: 'agent', text: 'Read the task and started on it.', tool: null, at: run.startedAt })
+        entries.push({ role: 'tool', text: '$ npm test', tool: 'shell', at: run.startedAt })
+        entries.push({
+          role: 'result',
+          text: run.exitCode === 0 ? 'The run ended.' : 'The run failed.',
+          tool: null,
+          at: run.startedAt,
+        })
+        return {
+          lane: wantedLane,
+          startedAt: run.startedAt,
+          harness,
+          running: Boolean(live),
+          entries,
+        }
+      }),
 
     runStats: ({ since } = {}) =>
       call('runStats', () => {
