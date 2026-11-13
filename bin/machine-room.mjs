@@ -2,13 +2,13 @@
 import { statSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { ALL_CHECKS_PASSED, NEXT_STEP, openBrowser, runDoctorWithProject, upBlock } from '../server/doctor.js'
+import { ALL_CHECKS_PASSED, NEXT_STEP, checksPassedLine, openBrowser, runDoctorWithProject, upBlock } from '../server/doctor.js'
 import { createBridge } from '../server/index.js'
 
 const USAGE = [
   'Usage: machine-room [options]',
   '       machine-room up [options]',
-  '       machine-room doctor [options]',
+  '       machine-room doctor [FOLDER] [options]',
   '',
   'Commands:',
   '  up                  run the doctor checks, then serve the room with the lane and session sources on',
@@ -47,8 +47,9 @@ const FLAGS = {
 
 const SOME_CHECKS_FAILED = 'Some checks failed. The room opens anyway.'
 
-function parseArgs(argv, names = OPTION_NAMES) {
+function parseArgs(argv, names = OPTION_NAMES, { folder = false } = {}) {
   const options = { help: false }
+  let firstFolder
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index]
     if (arg === '--help' || arg === '-h') {
@@ -61,7 +62,14 @@ function parseArgs(argv, names = OPTION_NAMES) {
       options[FLAGS[flag]] = true
       continue
     }
-    if (!Object.hasOwn(names, flag)) throw new Error(`Unknown option ${flag}.`)
+    if (!Object.hasOwn(names, flag)) {
+      if (folder && !arg.startsWith('-')) {
+        if (firstFolder !== undefined) throw new Error(`Unknown option ${arg}.`)
+        firstFolder = arg
+        continue
+      }
+      throw new Error(`Unknown option ${flag}.`)
+    }
     let value
     if (equals === -1) {
       index += 1
@@ -71,6 +79,10 @@ function parseArgs(argv, names = OPTION_NAMES) {
     }
     if (value === undefined || value === '') throw new Error(`Missing a value for ${flag}.`)
     options[names[flag]] = value
+  }
+  if (firstFolder !== undefined) {
+    if (options.projectRoot !== undefined) throw new Error('Give the project folder once, as FOLDER or --root FOLDER.')
+    options.projectRoot = firstFolder
   }
   return options
 }
@@ -221,7 +233,7 @@ const names = command === 'doctor' ? DOCTOR_OPTION_NAMES : OPTION_NAMES
 
 let options
 try {
-  options = parseArgs(command === 'serve' ? argv : argv.slice(1), names)
+  options = parseArgs(command === 'serve' ? argv : argv.slice(1), names, { folder: command === 'doctor' })
 } catch (error) {
   console.error(error.message)
   console.error(USAGE)
@@ -237,7 +249,7 @@ if (command === 'doctor') {
   const result = await runDoctorWithProject(options)
   for (const line of result.lines) console.log(line)
   if (result.exitCode === 0) {
-    console.log(ALL_CHECKS_PASSED)
+    console.log(checksPassedLine(result.warnings))
     console.log(NEXT_STEP)
   }
   process.exitCode = result.exitCode

@@ -7,6 +7,7 @@ import {
   ALL_CHECKS_PASSED,
   NEXT_STEP,
   PROJECT_READ_LIMIT_MS,
+  checksPassedLine,
   doctorSettings,
   openBrowser,
   openCommand,
@@ -296,6 +297,21 @@ describe('machine-room doctor', () => {
   })
 })
 
+describe('the doctor summary', () => {
+  it('names the number of warnings and keeps the plain line for none', () => {
+    expect(checksPassedLine(0)).toBe(ALL_CHECKS_PASSED)
+    expect(checksPassedLine(1)).toBe('All checks passed, 1 warning.')
+    expect(checksPassedLine(2)).toBe('All checks passed, 2 warnings.')
+  })
+
+  it('counts a warning without failing the checks', () => {
+    const result = doctor()
+
+    expect(result.exitCode).toBe(0)
+    expect(result.warnings).toBe(1)
+  })
+})
+
 describe('the doctor project read', () => {
   it('reads the project with the reader /api/tree uses', async () => {
     const options = doctorOptions()
@@ -414,26 +430,54 @@ describe('the machine-room doctor command', () => {
     expect(run.stderr).toBe('')
     const lines = run.stdout.trim().split(/\r?\n/)
     expect(lines.length).toBeGreaterThan(3)
-    expect(lines.every((line) => /^(ok|warn) /.test(line) || line === ALL_CHECKS_PASSED || line === NEXT_STEP)).toBe(true)
+    expect(lines.every((line) => /^(ok|warn) /.test(line) || line === checksPassedLine(1) || line === NEXT_STEP)).toBe(true)
     expect(lines).toContain(
       'warn This folder is not a git repository. Source control stays empty. Run git init here to fill it.'
     )
     expect(lines[1]).toBe('ok The project holds 0 files in 0 folders.')
-    expect(lines.slice(-2)).toEqual([ALL_CHECKS_PASSED, NEXT_STEP])
+    expect(lines.slice(-2)).toEqual([checksPassedLine(1), NEXT_STEP])
     const runs = process.platform === 'win32'
       ? join(temp, 'localappdata', 'MachineRoom', 'runs')
       : join(temp, 'state', 'machineroom', 'runs')
     expect(existsSync(runs)).toBe(true)
   })
 
-  it('exits 1 on a failed check', async () => {
+  it('takes the folder first and ends without a warning inside a git repository', async () => {
+    const project = makeFolder('machine-room-doctor-project-')
+    mkdirSync(join(project, '.git'))
+    const temp = makeFolder('machine-room-doctor-temp-')
+    const run = await runBin(['doctor', project, '--dist', makeDist()], childEnv(temp))
+
+    expect(run.code).toBe(0)
+    expect(run.stderr).toBe('')
+    expect(run.stdout).toContain(`ok The project folder ${project} exists.`)
+    const lines = run.stdout.trim().split(/\r?\n/)
+    expect(lines.slice(-2)).toEqual([ALL_CHECKS_PASSED, NEXT_STEP])
+  })
+
+  it('refuses a folder and --root together in one sentence', async () => {
     const project = makeFolder('machine-room-doctor-project-')
     const temp = makeFolder('machine-room-doctor-temp-')
-    const run = await runBin(['doctor', '--root', join(project, 'missing'), '--dist', makeDist()], childEnv(temp))
+    const runs = [
+      await runBin(['doctor', project, '--root', project, '--dist', makeDist()], childEnv(temp)),
+      await runBin(['doctor', '--root', project, project, '--dist', makeDist()], childEnv(temp)),
+    ]
+
+    for (const run of runs) {
+      expect(run.code).toBe(1)
+      expect(run.stderr.trim().split(/\r?\n/)[0]).toBe('Give the project folder once, as FOLDER or --root FOLDER.')
+    }
+  })
+
+  it('stops after a failed project folder so that one block is the last line', async () => {
+    const project = makeFolder('machine-room-doctor-project-')
+    const temp = makeFolder('machine-room-doctor-temp-')
+    const missing = join(project, 'missing')
+    const run = await runBin(['doctor', '--root', missing, '--dist', makeDist()], childEnv(temp))
 
     expect(run.code).toBe(1)
-    expect(run.stdout).toContain('FAIL The project folder')
-    expect(run.stdout).toContain('does not exist.')
+    expect(run.stderr).toBe('')
+    expect(run.stdout.trim().split(/\r?\n/)).toEqual([`FAIL The project folder ${missing} does not exist.`])
   })
 
   it('prints its help', async () => {
