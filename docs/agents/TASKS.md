@@ -1561,3 +1561,18 @@ Prefer what you confirmed by reading the code or by a command over a guess, and 
 
 1. Set `MACHINEROOM_RUNS` to a new folder under `%TEMP%` for every command, and never start a bridge with `--lanes` on the testbench runs folder. Run, in order, the commands README gives a new owner that do not start a server: `npm run serve -- doctor` on this checkout and on `C:\GitHub\MachineRoomTestProject`, `npm run pack-check`, `npm run run-lane -- --list`, `npm run run-lane -- opencode --project C:\GitHub\MachineRoomTestProject --task "Say hello." --dry-run`, and each command's help or usage line.
 2. Write the file: one row per command with what it printed in short, whether a new owner would know what to do next, and anything wrong, unclear or missing. End with the five changes that would help a new owner most. Stop every process you started. Commit the file.
+
+**P167. run-lane helps a new owner (OpenCode).** Read `docs/agents/RUN-2026-11-13-FIRST-USE.md` and this brief only. Use no subagents. Run every command in the foreground. Commit each step as you finish it, and stop starting new work at minute 18. Files: scripts/run-lane.mjs, tests/run-lane.test.js, docs/agents/CHANGELOG.md, docs/agents/architecture/COMMANDS.md.
+
+1. `npm run run-lane -- --help` and `-h` print a usage block and exit 0: the forms (a brief, `--project` with `--task` or `--task-file`, `--queue`, `--list`, `--stats`, `--outcomes`, `--stop`) and the common flags, each in one short line. A bare run with no lane prints the same block on stderr and exits 1. Replace the retired `hermes` example with a lane from the lane file in use.
+2. `There is no lane named X.` adds the lane names in the lane file in use and its path, masked with `printedRunsFolder`, and says a lane is added in the room's Settings.
+3. `--list` with no runs says which runs folder it read, masked, and how to start a run. A dry run ends with `Dry run, nothing started.` and prints the first line of the prompt after the character count.
+4. A test for each. Run `node node_modules/vitest/vitest.mjs related --run scripts/run-lane.mjs` and `npm run build`. Report what passed.
+
+**P168. doctor, pack-check and README for a new owner (OpenCode).** Read `docs/agents/RUN-2026-11-13-FIRST-USE.md` and this brief only. Use no subagents. Run every command in the foreground. Commit each step as you finish it, and stop starting new work at minute 18. Files: bin/machine-room.mjs, server/doctor.js, scripts/pack-check.mjs, tests/doctor.test.js, tests/serve-cli.test.js, tests/pack-check.test.js, README.md, docs/agents/CHANGELOG.md, docs/agents/architecture/COMMANDS.md.
+
+1. `machine-room doctor FOLDER` takes the folder as `--root FOLDER`, as `machineroom FOLDER` does. Giving both is refused with one sentence.
+2. When a check warns, doctor ends with `All checks passed, 1 warning.` (or N warnings) instead of `All checks passed.`; the exit code stays 0. When the project folder fails, the checks after it that read the project are skipped, so the one real block is the last thing printed.
+3. `npm run pack-check -- --help` prints a usage line and exits 0 without running the check. A passing check also says what it checked in one line.
+4. README's Quick start gets a short First run block: `npm install`, `npm run build`, `npm run serve -- doctor`, `machineroom FOLDER` (or `npm run serve -- up --root FOLDER`), each with the one line it prints when all is well. Plain words, short sentences, no em dashes.
+5. Tests in the listed test files (create one if missing) for steps 1 to 3. Run `node node_modules/vitest/vitest.mjs related --run bin/machine-room.mjs server/doctor.js scripts/pack-check.mjs` and `npm run build`. Report what passed.
