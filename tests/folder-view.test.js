@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
 import { viewInput } from '../src/engine/cards.js'
 import { BULK_FOLDERS, MAX_CHILD_CARDS, MAX_FOLDER_ITEMS, isBulkFolder, planFolderView } from '../src/model/folderView.js'
+import { SMALL_CHILD_TURN, SMALL_RADIUS, layoutRing, ringOf } from '../src/engine/ring.js'
 import { apply, createState } from '../src/model/state.js'
 import { loadRecording, loadScenario } from './helpers.js'
 
@@ -655,6 +656,57 @@ describe('planFolderView', () => {
     })
 
     expect(second).toEqual(first)
+  })
+})
+
+describe('a small project ring', () => {
+  const width = 446
+  const height = 154
+
+  function smallEntries() {
+    return [
+      { path: '', width, height: 100 },
+      { path: 'src', width, height },
+      { path: 'lib', width, height },
+      { path: 'test', width, height },
+      { path: 'src/child', width, height },
+    ]
+  }
+
+  it('gives three top-level folders and one child positions no closer than a card width', () => {
+    const entries = smallEntries()
+    const placed = layoutRing(entries, { small: true })
+    const spots = entries.map((entry) => ({ path: entry.path, at: placed.get(entry.path) }))
+
+    for (let i = 0; i < spots.length; i += 1) {
+      for (let j = i + 1; j < spots.length; j += 1) {
+        const a = spots[i].at
+        const b = spots[j].at
+        const apart = Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z)
+        expect(apart, `${spots[i].path} and ${spots[j].path}`).toBeGreaterThanOrEqual(width)
+      }
+    }
+
+    for (const path of ['src', 'lib', 'test']) {
+      expect(ringOf(placed.get(path)).radius).toBeCloseTo(SMALL_RADIUS, 6)
+      expect(ringOf(placed.get(path)).angle).not.toBeCloseTo(0, 6)
+    }
+    const child = ringOf(placed.get('src/child'))
+    const parent = ringOf(placed.get('src'))
+    expect(child.radius).toBeGreaterThan(parent.radius)
+    expect(child.angle).toBeCloseTo(parent.angle + SMALL_CHILD_TURN, 6)
+  })
+
+  it('leaves a project of five folders on the old ring', () => {
+    const entries = [
+      { path: '', width, height: 100 },
+      ...['one', 'two', 'three', 'four', 'five'].map((path) => ({ path, width, height })),
+    ]
+    const plain = layoutRing(entries)
+    const asked = layoutRing(entries, { small: true })
+
+    expect([...asked]).toEqual([...plain])
+    expect(ringOf(asked.get('five')).angle).toBeCloseTo(0, 6)
   })
 })
 

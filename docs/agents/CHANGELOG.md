@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- P235: one to four top folders sit on a wider ring turned clear of the orchestrator, and git labels that would overlap merge into one naming the count.
 - P228: the tree answer carries rootPath, and a live room places an absolute path only when it lies under it, case-insensitive on Windows; replays keep the name rule.
 - P239: review 29 lists six push blockers and two smaller findings in P216 to P230.
 - P237: a change to .git/index or info/exclude, or a worktree's own, reads the tree through the existing reader; other .git writes stay ignored.
@@ -16,6 +17,9 @@
 - P238: a session reader's run id carries a token made when the reader is created, so a replay of two reader lifetimes keeps both runs' tool calls.
 - P237: changes to .git/index or .git/info/exclude (including a worktree's git folder) trigger a full tree read through the existing reader while other .git writes stay ignored.
 - P228: the bridge's tree answer carries the project's full root path, and a live absolute touch is inside only under that path, so another folder named like the project is never drawn on its card.
+- P235: a project of one to four folders starts its card ring off the camera axis, turns each child card off its parent's line, and backs the overview off until no card is drawn more than twice another's size.
+- P235: git labels whose screen positions would overlap merge into one label, `main +4`, with every branch name in its title and every branch counted.
+
 - P230: an unreadable root is an error and an unreadable folder keeps its last files with a problem line; a failed git read keeps the git tree, and a plain tree checks for git every 60 seconds. The .git/index watch is still open.
 - P232: the transport state word shrinks clear of the spend, panel Refresh buttons match Team, and Days to keep stays on one line.
 - P229: session discovery reads the root slug's folder and its subfolder slugs, and the cwd check still drops sibling projects.

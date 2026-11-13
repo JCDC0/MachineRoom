@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 import { describe, expect, it, vi } from 'vitest'
-import { ANCHOR_DIST, FIT_MIN, FOV, IDLE_SPIN, OVERVIEW, PARK_EASE_MS, createCameraRig, fitView, projectPoint, viewBasis } from '../src/engine/camera.js'
+import { ANCHOR_DIST, FIT_MIN, FOV, IDLE_SPIN, OVERVIEW, PARK_EASE_MS, createCameraRig, distanceForRatio, fitView, projectPoint, viewBasis } from '../src/engine/camera.js'
 
 const dot = (a, b) => a.x * b.x + a.y * b.y + a.z * b.z
 
@@ -633,6 +633,26 @@ describe('projectPoint', () => {
 
     expect(projectPoint(camera, { x: 0, y: 0, z: 500 }, 800, 600)).toBeNull()
     expect(projectPoint(camera, { x: 100, y: 20, z: 500 }, 800, 600)).toBeNull()
+  })
+})
+
+describe('distanceForRatio', () => {
+  it('backs off until the nearest and farthest point differ by no more than the ratio', () => {
+    const { back } = viewBasis(OVERVIEW.yaw, OVERVIEW.pitch)
+    const center = { x: 0, y: 200, z: 0 }
+    const near = { x: center.x + back.x * 1000, y: center.y + back.y * 1000, z: center.z + back.z * 1000 }
+    const far = { x: center.x - back.x * 500, y: center.y - back.y * 500, z: center.z - back.z * 500 }
+    const dist = distanceForRatio([near, far], { center })
+    expect(dist).toBeCloseTo(2500, 6)
+    const nearDistance = dist - 1000
+    const farDistance = dist + 500
+    expect(farDistance / nearDistance).toBeCloseTo(2, 6)
+  })
+
+  it('asks for no more distance when every point sits at the middle', () => {
+    expect(distanceForRatio([{ x: 0, y: 200, z: 0 }], { center: { x: 0, y: 200, z: 0 } })).toBe(0)
+    expect(distanceForRatio([], { center: { x: 0, y: 200, z: 0 } })).toBe(0)
+    expect(distanceForRatio([{ x: 0, y: 200, z: 0 }], { ratio: 1 })).toBe(0)
   })
 })
 

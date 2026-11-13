@@ -23,6 +23,10 @@ export const FAN_STEP = 0.22
 export const FAN_LIMIT = 0.9
 export const CARD_GAP = 40
 export const SPRAY_LIFT = 140
+export const SMALL_TOP = 4
+export const SMALL_TURN = 0.3
+export const SMALL_RADIUS = 900
+export const SMALL_CHILD_TURN = 0.5
 
 const TURNS = Math.PI * 2
 
@@ -89,6 +93,17 @@ export function ringAngle(index, count) {
   const total = Math.max(1, Math.floor(Number(count) || 0))
   const slot = clamp(Math.floor(Number(index) || 0), 0, total - 1)
   return (slot / total) * TURNS
+}
+
+export function smallRingAngle(index, count) {
+  const total = Math.max(1, Math.floor(Number(count) || 0))
+  const slot = clamp(Math.floor(Number(index) || 0), 0, total - 1)
+  return ((slot + SMALL_TURN) / total) * TURNS
+}
+
+export function smallRing(count) {
+  const total = Math.floor(Number(count) || 0)
+  return total >= 1 && total <= SMALL_TOP
 }
 
 export function ringPoint(radius, angle, y = RING_CENTER.y) {
@@ -176,10 +191,15 @@ function lifted(spot, sprayed, path) {
 }
 
 export function layoutRing(entries, options = {}) {
-  const { previous, sprayed } = options
+  const { previous, sprayed, small } = options
   const model = buildModel(entries)
   const { nodes, children, root } = model
   const positions = new Map()
+  const tops = children.get('')
+  const ringCount = Math.min(RING_MAX_TOP, tops.length)
+  const ringTops = tops.slice(0, ringCount)
+  const overflow = tops.slice(RING_MAX_TOP)
+  const smallRingNow = small === true && smallRing(ringCount)
   const rootSpot = {
     x: ROOT_PLACE.x,
     y: RING_CENTER.y - ROOT_DROP - root.height / 2,
@@ -187,16 +207,13 @@ export function layoutRing(entries, options = {}) {
   }
   positions.set('', tagPosition(rootSpot, root, 'root'))
 
-  const tops = children.get('')
-  const ringCount = Math.min(RING_MAX_TOP, tops.length)
-  const ringTops = tops.slice(0, ringCount)
-  const overflow = tops.slice(RING_MAX_TOP)
-  const radius = ringRadius(ringCount, ringTops.map((path) => nodes.get(path)))
-  const ringSlot = `radius:${radius.toFixed(3)}`
+  const radius = Math.max(ringRadius(ringCount, ringTops.map((path) => nodes.get(path))), smallRingNow ? SMALL_RADIUS : 0)
+  const ringSlot = `radius:${radius.toFixed(3)}${smallRingNow ? ':small' : ''}`
   ringTops.forEach((path, index) => {
     const node = nodes.get(path)
     const slot = `${ringSlot}>${index}/${ringCount}${sprayedAt(sprayed, path) ? ':spray' : ''}`
-    const spot = tagPosition(ringPoint(radius, ringAngle(index, ringCount)), node, slot)
+    const angle = smallRingNow ? smallRingAngle(index, ringCount) : ringAngle(index, ringCount)
+    const spot = tagPosition(ringPoint(radius, angle), node, slot)
     positions.set(path, keepPlace(previous, path, lifted(spot, sprayed, path)))
   })
   overflow.forEach((path, index) => {
@@ -216,7 +233,8 @@ export function layoutRing(entries, options = {}) {
       const node = nodes.get(path)
       const off = shotgunOffset(index, kids.length)
       const slot = `${parent.slot}>${index}/${kids.length}${sprayedAt(sprayed, path) ? ':spray' : ''}`
-      const angle = parentSpot.angle + off.angleOffset
+      const turn = smallRingNow ? SMALL_CHILD_TURN : 0
+      const angle = parentSpot.angle + off.angleOffset + turn
       const spot = tagPosition(ringPoint(parentSpot.radius + off.radiusStep, angle), node, slot)
       positions.set(path, keepPlace(previous, path, lifted(spot, sprayed, path)))
       queue.push(path)

@@ -635,6 +635,7 @@ describe('the camera hold on a live room', () => {
     const files = []
     for (let index = 0; index < 10; index += 1) files.push(`src/file-${index}.js`)
     files.push('docs/b.md')
+    for (let index = 0; index < 24; index += 1) files.push(`root-${index}.md`)
     const { room } = await makeRoom(files, ['claude'])
     expect(room.anchor('src')).toBe(true)
     tickRoom(2)
