@@ -65,9 +65,9 @@ Open now:
    - The version 7 audit (`AUDIT-2026-10-V7.md`): X1 to X13 are fixed by Q12a to Q12h, Q13a, Q13b and S41. The sector gate stays advisory until each sub has its own token.
    - The UI audit (`AUDIT-2026-10-UI.md`): all 20 findings are fixed, the 10 at the time and N1 to N10 by U6 to U12, U14 and U19.
    - The delta audit (`AUDIT-2026-10-DELTA.md`): D1 to D8 are fixed by Q1a to Q1f.
-   - Reviews 13 and 15 to 18: every blocking finding is fixed by P102 to P123. Review 16's smaller finding on the merge check is P124, still open.
+   - Reviews 13 and 15 to 18: every blocking finding is fixed by P102 to P123. Review 16's smaller finding on the merge check is fixed by P124 and P145. Reviews 19 to 23 are closed: their findings are fixed by P125 to P163.
    - The version 9 audit's Y4 and Y7 stay as they are: Y4 is the rule O24 chose and Y7 is H17's design.
-4. The last batch before the shutdown is open: P124 (the merge check no longer blocks the bridge), P125 (a project switch reads a lane lock the way the runner does), P126 (review 19 reads the merges since review 18), P127 (the detail docs catch up with P113 to P123), P128 (the file-index test follows the new append rule), P129 (two tests that fail only under load), P130 (the plan and the core guide say what is open) and P131 (tests for a lane task started from the chat).
+4. Daily use (`AUDIT-2026-11-READINESS.md`, P164): R1 and Q4 run as P169, R2 and Q2 as P170 after it, Q3 and Q5 as P171, Q1 as P172. R3, the rest of Q5 and the README line on making lanes wait for P168, which rewrites the Quick start. The three suggested features wait for the owner. The first-use run (`RUN-2026-11-13-FIRST-USE.md`, P166) is briefed as P167 and P168.
 
 S20, U92 and U93, the project's branches and the git tree above the INTERNET sphere, were checked in a browser on 2026-10-30: the section, Switch, New branch, Show the tree and `0`, at 1280 by 800 only.
 
