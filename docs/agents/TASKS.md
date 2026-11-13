@@ -2205,7 +2205,7 @@ For each merge in `git log --first-parent --oneline 1bb54a0f..HEAD`, read the te
 2. Read `/api/health`, `/api/tree` and `/api/agents` from the running room with a plain HTTP client, and record what each says.
 3. Write the file: every command you ran, with the time it took and whether it did what the README says. Name every step where the README is wrong, unclear or missing something, and every error or warning, with its text and any profile path masked. Stop every process you started, delete the clone and the runs folder, and say so.
 
-**P258. Check every command against COMMANDS.md (native).** Read `docs/agents/architecture/COMMANDS.md` and this brief only. Change no file except your report. Commit only your report, and stop at minute 30. Files: docs/agents/RUN-2026-11-13-COMMANDS.md.
+**P258. Check every command against COMMANDS.md (OpenCode).** Read `docs/agents/architecture/COMMANDS.md` and this brief only. Change no file except your report. Commit only your report, and stop at minute 30. Files: docs/agents/RUN-2026-11-13-COMMANDS.md.
 
 For each command the doc lists, run its help form (`--help`, or no arguments where the doc says that prints usage). Run it with `MACHINEROOM_RUNS` set to a new empty folder under `%TEMP%`, and never run anything that starts a lane, pushes, merges, removes worktrees or calls a paid model. Compare what it prints with what the doc says: the flags, the defaults and the output lines. Write the file as a table: command, what the doc says, what it printed, and the one-sentence fix (doc or code). Delete the folder you made.
 
@@ -2214,3 +2214,55 @@ For each command the doc lists, run its help form (`--help`, or no arguments whe
 1. Fix README findings 1 to 10 of that report in `README.md`, in its own style: plain words, short sentences, no em dashes, PowerShell first. Say what each command prints in a sentence, not as a line count, and say the build's chunk-size warning is expected. Show `--port`, `--no-open`, `--no-sessions` and `--help` for `up`, and say that `up` turns on the lane and session sources by default and that Ctrl+C stops the room. Name `MACHINEROOM_RUNS` and where the runs folder is by default, using `%LOCALAPPDATA%`, never a real profile path.
 2. Check every command and flag you write against `node bin/machine-room.mjs --help` and `COMMANDS.md`, and keep the README under its current length plus 40 lines.
 3. Run `node node_modules/vitest/vitest.mjs run tests/docs.test.js` if it exists, and `npm run build`. Report what passed.
+
+**P260. A lane that hits its quota hands its run to a backup lane (OpenCode).** The owner said yes to lane failover. Read this brief only. Use no subagents. Run every command in the foreground. Commit each step as you finish it, and stop starting new work at minute 32. Files: scripts/run-lane.mjs, src/briefs/run.js, src/harnesses/claude.js, src/harnesses/opencode.js, src/harnesses/codex.js, src/harnesses/agy.js, src/harnesses/machineroom.js, tests/run-lane.test.js, tests/run-failover.test.js, tests/harnesses.test.js, docs/agents/CHANGELOG.md, docs/agents/architecture/COMMANDS.md.
+
+1. Each harness descriptor gets `limited(log)`. It answers `quota`, `rate-limit`, `overloaded` or `''` from the run's log text. Base it on the errors each harness really prints; read the descriptor's existing `failure(log)` first and extend it, don't duplicate it:
+   - Claude: usage limit reached, `rate_limit_error`, `overloaded_error`, HTTP 429 and 529.
+   - Codex: its usage limit and rate limit messages.
+   - OpenCode: 429, rate limit, insufficient balance or quota.
+   - AGY: `RESOURCE_EXHAUSTED`, quota, 503 and `UNAVAILABLE`.
+   - The native harness: the provider's 429 and 402.
+   Only match lines the harness printed as errors, never the agent's own text or tool output.
+2. A lane in `lanes.json` may name `fallback`: another lane's key. The runner refuses at start, with one sentence, a fallback that is unknown, retired, the lane itself, or the orchestrator.
+3. When a brief run or a single project task ends with exit code not 0, `limited` answers non-empty or the start failed (the existing `startFailed` test), and its lane has a `fallback`, the runner does four things:
+   - It writes the failed run's record with `failover: { kind, to }`.
+   - It prints `moving the run to LANE because KIND`.
+   - It starts the same briefs or task once on the fallback lane, on a new branch named like the first with `-on-LANE` added, so it never meets the failed run's branch.
+   - It marks the second record `failoverFrom: { lane, startedAt }`.
+   A run that is itself a failover never fails over again. A fallback lane whose lock is held is skipped with the sentence `The backup lane LANE is busy, so the run stays failed.` Queues are left alone; their recovery stays with P216.
+4. Tests, by what they prove:
+   - Each harness's `limited` reads a real error line and ignores the same words in agent text.
+   - A brief run whose fake harness prints a 429 and exits 1 starts once on the fallback lane with the `-on-` branch and both records linked.
+   - A failover run that fails again does not move.
+   - A busy fallback leaves the run failed with the sentence.
+   - A bad `fallback` is refused at start.
+   - Use the fake-harness pattern the existing run-lane tests use.
+5. Run `node node_modules/vitest/vitest.mjs related --run scripts/run-lane.mjs src/briefs/run.js src/harnesses/claude.js src/harnesses/opencode.js src/harnesses/codex.js src/harnesses/agy.js src/harnesses/machineroom.js` and `npm run build`. Report what passed.
+
+**P261. The room reads each provider's quota from the runs (AGY).** The owner said yes to real quota readings, so routing can skip a provider near its limit. Read `src/policy/route.js` (`providerOver`) and `src/model/costs.js` (the quota rows) and this brief only. Commit each step as you finish it. Files: server/lane-costs.js, src/harnesses/codex.js, src/harnesses/claude.js, tests/lane-costs.test.js, tests/quota-read.test.js, docs/agents/CHANGELOG.md, docs/agents/architecture/LIVE.md.
+
+1. Look at real lane logs first. Open at most five recent `codex-*.log` files, and any Claude logs, in the testbench runs folder; never open `keys.json`. Find the rate-limit fields each harness prints (Codex's token-count events carry `rate_limits` with a used percent, a window length and a reset time). In the report, write what each harness gives, with one sample line where every value but the field names is replaced.
+2. Each harness descriptor that prints such fields gets `quotaFrom(line)`. It answers `{ windows: [{ label, usedPercent, resetsAt }] }` or null.
+3. `server/lane-costs.js` fills `quota` with the newest reading per provider from the runs' logs, through the existing records cache. Read only the last 64 KB of each run's log, and only the newest run per lane. Each entry is `{ provider, windows, at }`, with the provider name the routing policy uses for that harness (`docs/agents/policy.json` names `opencode` and `antigravity`; use the harness key for the others). A reading older than its window's reset time is left out.
+4. Tests, by what they prove: a Codex log line gives the right window; a reading past its reset is left out; `chooseRoute` skips a provider whose reading is above `quotaSkipPercent` (test this through `lane-costs` output, not a hand-built list).
+5. Run `node node_modules/vitest/vitest.mjs related --run server/lane-costs.js src/harnesses/codex.js src/harnesses/claude.js` and `npm run build`. Report what passed.
+
+**P262. Choose a backup lane, and see a run move (OpenCode).** The owner said yes to lane failover. Read this brief only. Start after P250 and P260 are merged. Use no subagents. Run every command in the foreground. Commit each step as you finish it, and stop starting new work at minute 32. Files: server/agents-config.js, server/runs.js, src/ui/FamilyTree.jsx, src/ui/Inspector.jsx, src/ui/panels/DispatchPanel.jsx, src/ui/panels/runs.js, src/control/client.js, src/control/mock.js, tests/agents-config.test.js, tests/family-tree-ui.test.js, tests/project-dispatch.test.js, tests/inspector-ui.test.js, tests/control-contract.test.js, docs/agents/CHANGELOG.md, docs/agents/architecture/ROOM.md, docs/agents/architecture/LIVE.md.
+
+1. The lane editor in the family tree gets `Backup lane`, a select of the other active lanes, with `None` as the first choice. It is saved through the existing lane save as `fallback`, with the same refusals as P260.
+2. Dispatch's project form gets `Model for this run` under the lane, listing the chosen lane's models (as the lane editor lists them), with `The lane's model` as the default. A choice reaches the runner as `--model`. The confirm card names the model, and names the backup lane when the lane has one.
+3. When the bridge reads a new run record that carries `failover`, it adds a room message for that lane's head through the same `addNote` that P219's stop uses: `LANE hit KIND and its run moved to BACKUP.` The Inspector on either lane shows `Moved to BACKUP: KIND` or `Taken over from LANE: KIND` under its state.
+4. Tests, by what they prove:
+   - The backup lane saves and reads back, and a bad one is refused.
+   - A chosen model reaches the run body.
+   - A record with `failover` adds exactly one note, even when read twice.
+   - The Inspector shows both lines.
+5. Run `node node_modules/vitest/vitest.mjs related --run server/agents-config.js server/runs.js src/ui/FamilyTree.jsx src/ui/Inspector.jsx src/ui/panels/DispatchPanel.jsx src/control/client.js src/control/mock.js` and `npm run build`. Report what passed.
+
+**P263. The native agent keeps working until its task is done (OpenCode).** Twice tonight the native lane on P258 ended its run as a success after a few minutes with no file written. The logs end with a tool result followed directly by the final `result` line, and its `result` text is the agent's first sentence. Read this brief and the end of the two logs (`native-P258-*.log` in the testbench runs folder) only. Use no subagents. Run every command in the foreground. Commit each step as you finish it, and stop starting new work at minute 25. Files: scripts/mr-agent.mjs, tests/mr-agent.test.js, docs/agents/CHANGELOG.md.
+
+1. Find why `scripts/mr-agent.mjs` leaves its loop after a tool result. Likely causes: an empty assistant reply, a reply that holds only reasoning, a provider error read as a stop, or a turn limit. Say which, with the log line that proves it.
+2. Fix the loop. An empty or reasoning-only reply gets one nudge (`Continue with the task. Use tools, or say you are done.`) and then counts as the end. A provider error is reported as a failure with exit code 1, never as a success. The final `result` text is the agent's last message, not its first.
+3. Tests, by what they prove: with a fake provider that returns an empty reply once and then a tool call, the loop goes on; a provider error exits 1; the result text is the last message. Each must fail before your change.
+4. Run `node node_modules/vitest/vitest.mjs related --run scripts/mr-agent.mjs` and `npm run build`. Report what passed.
