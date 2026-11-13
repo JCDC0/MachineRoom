@@ -2171,3 +2171,40 @@ Run `npm test` once at `fdef59e2` or later. For every failing test, run its file
 2. The Inspector's state for the main orchestrator reads `WAITING FOR YOU` when the transport would say `waiting for you` for it (read how `Transport.jsx` decides that, and share that decision rather than copy it). Lanes and subs keep their state words.
 3. Tests, by what they prove: the card with two session readers and one orchestrator says `1 agent ready: Orchestrator.` and the watching line; with no readers there is no watching line; an idle main orchestrator's Inspector state reads `WAITING FOR YOU` while an idle lane reads `IDLE`.
 4. Run `node node_modules/vitest/vitest.mjs related --run src/ui/Waiting.jsx src/ui/agentContext.js src/ui/Inspector.jsx` and `npm run build`. Report what passed.
+
+**P252. Check the detail docs against the code (Codex).** Read `docs/agents/OWNER.md` and this brief only. Change no code. Do not commit: the runner commits your file. Stop at minute 35. Files: docs/agents/AUDIT-2026-11-DOCS-2.md.
+
+Read `docs/agents/architecture/ROOM.md`, `LIVE.md` and `COMMANDS.md` against the code at `HEAD`. Spend most of your time on what changed since `1bb54a0f` (`git log --first-parent --oneline 1bb54a0f..HEAD`). For every sentence that the code contradicts, give the doc line, what the code does instead with its `file:line`, and the corrected sentence in the docs' style (plain words, short sentences, no em dashes). Also list any route, flag or panel added since `1bb54a0f` that no doc names. Write the file as one table, ordered by how much a reader would be misled.
+
+**P253. Tests wait for what they check instead of sleeping (OpenCode).** Read this brief only. Use no subagents. Run every command in the foreground. Commit each step as you finish it, and stop starting new work at minute 30. Files: tests/*.test.js except tests/bridge-routes.test.js, tests/control-contract.test.js, tests/conversation.test.js, tests/waiting.test.js, tests/inspector.test.js and tests/inspector-ui.test.js; docs/agents/CHANGELOG.md.
+
+1. Twice today a test failed only under load because it slept a fixed time and then asserted something another task had not finished: the tree retry timer and the storage usage refresh. Find tests that do the same: a `sleep`, `setTimeout` or `settle(N)` with N above 0, followed by an assertion on state that something asynchronous sets. Also find tests whose own timeout is under 10 seconds and that start processes.
+2. Change each one to wait for its condition with the waiting helper its file already uses (or `waitFor` from `tests/helpers/bridge.js`), with a bound of at least 10 seconds. Never change product code, and never weaken an assertion.
+3. Commit in groups of at most 10 files. Run each changed file alone after the change.
+4. Report every file changed and what each wait now waits for, and any case you left alone and why.
+
+**P254. The folder tree answer is reused while the watcher is healthy (OpenCode).** Read finding 4 in `docs/agents/AUDIT-2026-11-REVIEW-30.md` and this brief only. Use no subagents. Run every command in the foreground. Commit each step as you finish it, and stop starting new work at minute 22. Files: server/index.js, tests/tree-read.test.js, docs/agents/CHANGELOG.md, docs/agents/architecture/LIVE.md.
+
+1. A folder-shaped `/api/tree` answers from the last tree, without a new read, while all three hold: the file watcher is armed (not polling), the last full read succeeded with no unreadable folders, and no read is due. In any other case it keeps today's one-second rule. The plain `/api/tree` keeps today's one-second rule. P244's retry stays as it is.
+2. Tests, by what they prove: with a healthy watcher, three folder GETs a few seconds apart make no new read; after a failed read, a folder GET reads again; on polling, a folder GET older than one second reads again. The first must fail before your change.
+3. Run `node node_modules/vitest/vitest.mjs related --run server/index.js` and `npm run build`. Report what passed.
+
+**P255. Find the tests that cannot fail (OpenCode).** Read this brief only. Change no file except your report. Use no subagents. Run every command in the foreground. Commit only your report, and stop at minute 30. Files: docs/agents/AUDIT-2026-11-TESTS.md.
+
+For each merge in `git log --first-parent --oneline 1bb54a0f..HEAD`, read the tests it added or changed. Find tests that would pass with the change undone: a fake that records the call but never runs the real code (as P224's dispatch test did with the runner), an assertion on a value the test itself built, a `toBeTruthy` on a string that is always set, or a check inside a branch that never runs. Where you can, prove it by undoing the change in a scratch copy under `%TEMP%` and running the test there; never undo it in the worktree. Write the file as a table: test file and name, why it cannot fail, how you proved it (or `inferred`), and the smallest real assertion.
+
+**P256. Measure the room's large-project paths after this batch (AGY).** Read `docs/agents/architecture/LIMITS.md` and this brief only. Change no file except your report. Commit only your report. Files: docs/agents/RUN-2026-11-13-SCALE.md.
+
+1. Set `MACHINEROOM_RUNS` to a new empty folder under `%TEMP%` for every command, never the testbench or the owner's runs folder, and never use port 5173.
+2. Run `npm run scale-probe` and `npm run scale-live` as `COMMANDS.md` describes them. Run each twice.
+3. Write the file: each number beside the one `LIMITS.md` gives, and the change in percent. Flag any path more than 20 percent slower, and say which merge since `1bb54a0f` most likely caused it (P236, P237, P240, P244 and P246 touched the tree and storage paths). Stop every process you started and say so.
+
+**P257. Start the room from a fresh clone (AGY).** Read `docs/agents/OWNER.md`, `README.md` and this brief only. Change no repository file except your report. Commit only your report. Files: docs/agents/RUN-2026-11-13-FRESH-CLONE.md.
+
+1. Clone this repository's `main` into a new folder under `%TEMP%` (`git clone --branch main` from the checkout's own path). Then follow `README.md` exactly as a new owner would: install, build, the doctor and `up` with `--no-open` on port 5196, with `MACHINEROOM_RUNS` set to a new empty folder under `%TEMP%`, and without `--lanes`. Never start a lane, an orchestrator turn or a paid model call.
+2. Read `/api/health`, `/api/tree` and `/api/agents` from the running room with a plain HTTP client, and record what each says.
+3. Write the file: every command you ran, with the time it took and whether it did what the README says. Name every step where the README is wrong, unclear or missing something, and every error or warning, with its text and any profile path masked. Stop every process you started, delete the clone and the runs folder, and say so.
+
+**P258. Check every command against COMMANDS.md (native).** Read `docs/agents/architecture/COMMANDS.md` and this brief only. Change no file except your report. Commit only your report, and stop at minute 30. Files: docs/agents/RUN-2026-11-13-COMMANDS.md.
+
+For each command the doc lists, run its help form (`--help`, or no arguments where the doc says that prints usage). Run it with `MACHINEROOM_RUNS` set to a new empty folder under `%TEMP%`, and never run anything that starts a lane, pushes, merges, removes worktrees or calls a paid model. Compare what it prints with what the doc says: the flags, the defaults and the output lines. Write the file as a table: command, what the doc says, what it printed, and the one-sentence fix (doc or code). Delete the folder you made.
