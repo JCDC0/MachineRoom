@@ -8,6 +8,8 @@ import { WIDE_LAYOUT_MIN } from '../src/ui/agentStrip.js'
 import { click, settle, withDom } from './helpers/uiDom.js'
 import {
   agentCountLine,
+  conversationMarkdown,
+  exportFileName,
   groupSessions,
   laneChoice,
   laneSummary,
@@ -196,6 +198,7 @@ describe('the conversation menu', () => {
       ['Pin', 'P'],
       ['Rename', 'R'],
       ['Fork', 'F'],
+      ['Export', 'E'],
       ['Mark as unread', 'U'],
       ['Archive', 'A'],
       ['Delete', 'D'],
@@ -213,6 +216,13 @@ describe('the conversation menu', () => {
     expect(current.find((item) => item.action === 'unread').disabled).toBe(false)
     expect(sessionMenuActionForKey(current, 'a')).toBeNull()
     expect(sessionMenuActionForKey(current, 'f').action).toBe('fork')
+    expect(sessionMenuActionForKey(current, 'e').action).toBe('export')
+    const empty = sessionMenuItems({ id: 's2', title: 'Empty', count: 0 })
+    expect(sessionMenuActionForKey(empty, 'e')).toBeNull()
+    expect(sessionMenuItemForKey(empty, 'e')).toMatchObject({
+      disabled: true,
+      reason: 'This conversation has no messages to export.',
+    })
     for (const item of current) {
       expect(sessionMenuItemForKey(current, item.key.toLowerCase())).toBe(item)
     }
@@ -279,6 +289,52 @@ describe('preview lines', () => {
     expect(lines[1]).toMatchObject({ from: 'sub frontend', text: 'Done' })
     expect(lines[2]).toMatchObject({ from: 'room' })
     expect(lines[3]).toMatchObject({ from: 'orchestrator' })
+  })
+})
+
+describe('conversation export', () => {
+  it('writes the title, project, start, summary and two messages with roles and times', () => {
+    const text = conversationMarkdown(
+      {
+        title: 'Alpha export',
+        startedAt: '2026-10-25T12:00:00.000Z',
+        summary: 'The bridge is green.',
+        apiKey: 'secret',
+        messages: [
+          { id: 'm1', from: 'owner', text: 'Please export this.', at: '2026-10-25T12:01:00.000Z', key: 'secret' },
+          { id: 'm2', from: 'orchestrator', text: 'Done.', at: '2026-10-25T12:02:00.000Z' },
+        ],
+      },
+      { project: 'C:\\GitHub\\MachineRoom' }
+    )
+    expect(text).toBe(
+      [
+        '# Alpha export',
+        '',
+        'Project: MachineRoom',
+        'Started: 2026-10-25 12:00 UTC',
+        'Messages: 2 (the room keeps at most 200 per conversation).',
+        '',
+        '## Summary',
+        '',
+        'The bridge is green.',
+        '',
+        '### owner at 2026-10-25 12:01 UTC',
+        '',
+        'Please export this.',
+        '',
+        '### orchestrator at 2026-10-25 12:02 UTC',
+        '',
+        'Done.',
+        '',
+      ].join('\n')
+    )
+    expect(text).not.toContain('secret')
+  })
+
+  it('names the file after a title with slashes and its start date', () => {
+    expect(exportFileName('Q4 / plan', '2026-10-25T12:00:00.000Z')).toBe('Q4 - plan 2026-10-25.md')
+    expect(exportFileName('', null)).toBe('Untitled conversation undated.md')
   })
 })
 

@@ -145,14 +145,49 @@ describe('the conversation menu', () => {
       await mount(root, makeClient())
       await openMenu(root, container, 'Alpha')
 
-      expect(container.querySelectorAll('[role="menuitem"]')).toHaveLength(6)
+      expect(container.querySelectorAll('[role="menuitem"]')).toHaveLength(7)
       expect(container.querySelector('.mr-side-menu').textContent).toContain('Pin')
+      expect(container.querySelector('.mr-side-menu').textContent).toContain('Export')
       expect(container.querySelector('.mr-side-menu').textContent).toContain('Mark as unread')
       expect(container.querySelector('.mr-side-menu-key').textContent).toBe('P')
+      expect(menuItem(container, 'Export').querySelector('.mr-side-menu-key').textContent).toBe('E')
 
       await press(root, dom.window, 'Escape')
       expect(container.querySelector('.mr-side-menu')).toBeNull()
     })
+  })
+
+  it('exports a saved conversation from E as one Markdown download', async () => {
+    const original = URL.createObjectURL
+    const blobs = []
+    URL.createObjectURL = (blob) => {
+      blobs.push(blob)
+      return 'blob:export'
+    }
+    try {
+      await withDom(async ({ container, dom, root }) => {
+        const client = makeClient()
+        const reads = []
+        client.orchestratorSession = async (payload) => {
+          reads.push(payload)
+          return { title: 'Alpha', summary: 'Two messages.', messages: messages(2) }
+        }
+        await mount(root, client)
+        await openMenu(root, container, 'Alpha')
+        await press(root, dom.window, 'e')
+
+        expect(reads).toEqual([{ id: 'orchestrator', session: 'alpha' }])
+        expect(container.querySelector('.mr-side-menu')).toBeNull()
+        expect(blobs).toHaveLength(1)
+        const text = await blobs[0].text()
+        expect(text).toContain('# Alpha')
+        expect(text).toContain('Messages: 2')
+        expect(text).toContain('## Summary')
+        expect(text).toContain('Two messages.')
+      })
+    } finally {
+      URL.createObjectURL = original
+    }
   })
 
   it('runs Pin, Rename, Fork, Mark as unread, Archive and Delete from their keys', async () => {
@@ -394,7 +429,7 @@ describe('the conversation menu', () => {
       await mount(root, client)
       await openMenu(root, container, 'Live one')
 
-      for (const key of ['p', 'r', 'f', 'u', 'a', 'd']) {
+      for (const key of ['p', 'r', 'f', 'e', 'u', 'a', 'd']) {
         await press(root, dom.window, key)
         expect(container.querySelector('.mr-side-menu')).not.toBeNull()
       }
