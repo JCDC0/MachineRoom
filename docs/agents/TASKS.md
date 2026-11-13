@@ -1713,3 +1713,12 @@ Review, with `git show -m --first-parent SHA`, against the code around each chan
 2. On a reset, the bridge sends the reset event and then the kept history once, in sequence order. Remove the separate `currentRunFrames` send if nothing else needs it, since the history already holds the pinned run starts.
 3. Tests, by what they prove: cursor 1 with pinned start 2 and frames 15 onward resets; after a reset of a run that was queued then running, the final state through the real pipeline and state reducer is running.
 4. Run `node node_modules/vitest/vitest.mjs related --run server/index.js` and `npm run build`. Report what passed.
+
+**P192. Run the full suite on the review 25 fixes (OpenCode).** Read this brief only. Change no file except your report. Stop at minute 18. Files: docs/agents/RUN-2026-11-13-SUITE-5.md.
+
+1. Run `node scripts/test.mjs` once in the foreground.
+2. For each failing test, run its file alone twice. Write `docs/agents/RUN-2026-11-13-SUITE-5.md`: the commit, the totals, and one line per failure with its file, test name, first assertion line and whether it fails alone. Commit it.
+
+**P193. Review the review 25 fixes (Codex).** Read `docs/agents/OWNER.md`, `docs/agents/AUDIT-2026-11-REVIEW-25.md` and this brief only. Change no code. Do not commit: the runner commits your file. Stop at minute 18. Files: docs/agents/AUDIT-2026-11-REVIEW-26.md.
+
+Review, with `git show -m --first-parent SHA`, against the code around each change: the merges of P185 (an SSE client past 8 MB of backlog is ended; the check runs before each write), P189 (the recorder clears dropped slots), P184 (log and record write failures are said), P190 (a forgotten Claude session keeps its run number), P191 (reset on any missing frame, history replayed once in order) and P188 (check results kept across untested runs; a failed dirty queue task records no head). Find each with `git log --first-parent --oneline -12`. Say for each of review 25's R1 to R6 whether it is fixed. Hunt for: a client cut while it keeps up, or never cut while stuck; a reset on every normal reconnect; a passed head recorded while its tree was dirty; a failure that still writes no sentence or exits 0; a test that cannot fail. Write the file: a table of at most 6 findings, the most harmful first, each with `file:line`, what goes wrong and when, the smallest fix, and whether it blocks a push. An empty table with what you checked is a good answer.
