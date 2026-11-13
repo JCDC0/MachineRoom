@@ -70,6 +70,8 @@ export function isAllowedHost(host) {
 const HISTORY_LIMIT = 500
 const TREE_VERSIONS_KEPT = 4
 const TREE_REUSE_MS = 1000
+const TREE_RETRY_BASE_MS = 5000
+const TREE_RETRY_MAX_MS = 60000
 const WATCH_QUIET_MS = 2000
 const WATCH_BURST_QUIET_MS = 300
 const QUIET_FULL_READ_MS = 30000
@@ -965,6 +967,8 @@ export function createBridge(options = {}) {
   let treeDirty = false
   let quietReadTimer = null
   let quietFullDue = false
+  let treeRetryTimer = null
+  let treeRetryMs = 0
   let folderAnswer = null
   let folderBuild = null
   const unreadable = createUnreadableCounter()
@@ -1282,6 +1286,25 @@ export function createBridge(options = {}) {
     }, quietFullMs)
   }
 
+  function clearTreeRetry() {
+    if (treeRetryTimer) {
+      clearTimeout(treeRetryTimer)
+      treeRetryTimer = null
+    }
+    treeRetryMs = 0
+  }
+
+  function scheduleTreeRetry() {
+    if (stopped || treeRetryTimer) return
+    treeRetryMs = treeRetryMs === 0 ? TREE_RETRY_BASE_MS : Math.min(treeRetryMs * 2, TREE_RETRY_MAX_MS)
+    treeRetryTimer = setTimeout(() => {
+      treeRetryTimer = null
+      if (stopped) return
+      quietFullDue = true
+      startTreeRead().catch(() => {})
+    }, treeRetryMs)
+  }
+
   function startTreeRead() {
     if (stopped) return Promise.resolve(null)
     if (treeReading) return treeReading
@@ -1352,6 +1375,10 @@ export function createBridge(options = {}) {
       if (treeDirty && !pollTimer && !watchFallback) beginPolling(false)
       if (usedPartial) scheduleQuietRead()
       else clearQuietRead()
+      if (!usedPartial) {
+        if (lastTreeError !== '' || lastTreeProblems.length > 0) scheduleTreeRetry()
+        else clearTreeRetry()
+      }
       if (quietFullDue && !stopped) startTreeRead().catch(() => {})
     }
     read.then(done, done)
@@ -1766,13 +1793,8 @@ export function createBridge(options = {}) {
 
     if (req.method === 'GET' && url.pathname === '/api/tree') {
       const wantsFolders = String(req.headers.accept ?? '').includes(`shape=${FOLDER_SHAPE}`)
-      let tree
-      if (wantsFolders) {
-        tree = lastTree ?? (await startTreeRead())
-      } else {
-        const recent = lastTree && Date.now() - lastTreeAt <= TREE_REUSE_MS
-        tree = recent ? lastTree : await startTreeRead()
-      }
+      const recent = lastTree && Date.now() - lastTreeAt <= TREE_REUSE_MS
+      const tree = recent ? lastTree : await startTreeRead()
       if (stopped) {
         res.destroy()
         return
@@ -1933,6 +1955,7 @@ export function createBridge(options = {}) {
       pollTimer = null
     }
     clearQuietRead()
+    clearTreeRetry()
     clearGitRecheck()
     quietFullDue = false
     if (watcher) {

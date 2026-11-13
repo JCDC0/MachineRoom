@@ -1,8 +1,10 @@
 import { execFileSync } from 'node:child_process'
 import { mkdirSync, readdirSync, rmSync, watch, writeFileSync } from 'node:fs'
+import { get } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
+import { setTimeout as sleep } from 'node:timers/promises'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { FOLDER_SHAPE, GIT_RECHECK_MS, createBridge, packTree, readTree, readTreePartial, treeReadDue } from '../server/index.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 
@@ -15,6 +17,32 @@ async function waitFor(check, { timeoutMs = 5000, everyMs = 10 } = {}) {
     if (Date.now() > deadline) throw new Error('Timed out waiting for the tree read.')
     await wait(everyMs)
   }
+}
+
+async function waitForReal(check, { timeoutMs = 2000, everyMs = 10 } = {}) {
+  const deadline = Date.now() + timeoutMs
+  for (;;) {
+    const value = await check()
+    if (value) return value
+    if (Date.now() > deadline) throw new Error('Timed out waiting for the bridge.')
+    await sleep(everyMs)
+  }
+}
+
+async function healthOf(url) {
+  return new Promise((resolveHealth, rejectHealth) => {
+    get(`${url}/api/health`, (response) => {
+      const chunks = []
+      response.on('data', (chunk) => chunks.push(chunk))
+      response.on('end', () => {
+        try {
+          resolveHealth(JSON.parse(Buffer.concat(chunks).toString('utf8')))
+        } catch (error) {
+          rejectHealth(error)
+        }
+      })
+    }).on('error', rejectHealth)
+  })
 }
 
 function queuedReads() {
@@ -194,7 +222,7 @@ describe('the folder tree answer', () => {
     expect(packs).toBe(1)
   })
 
-  it('answers a folder ask from the last tree at any age and starts no read', async () => {
+  it('answers a folder ask from the last tree while the fresh read fails', async () => {
     const root = makeRoot()
     writeFileSync(join(root, 'a.js'), '1\n')
     let reads = 0
@@ -207,6 +235,7 @@ describe('the folder tree answer', () => {
       quietMs: 60000,
       readTree: async () => {
         reads += 1
+        if (reads > 1) throw new Error('the read broke')
         return { root: 'project', files: ['a.js'], created: [] }
       },
     })
@@ -217,7 +246,9 @@ describe('the folder tree answer', () => {
     await wait(1100)
     const answer = await folderTree(url)
     expect(answer.body.version).toBe(1)
-    expect(reads).toBe(1)
+    expect(reads).toBe(2)
+    const health = await healthOf(url)
+    expect(health.problems.join('\n')).toContain('the read broke')
   })
 
   it('waits for the read in flight and starts no other', async () => {
@@ -232,6 +263,89 @@ describe('the folder tree answer', () => {
     const answer = await pending
     expect(answer.body.version).toBe(1)
     expect(queued.reads).toHaveLength(1)
+  })
+})
+
+describe('a full tree read that failed', () => {
+  it('reads again by itself and clears the health problem, with no file event or tree GET', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    try {
+      const root = makeRoot()
+      let files = ['old.js']
+      let reads = 0
+      const bridge = createBridge({
+        projectRoot: root,
+        port: 0,
+        env: {},
+        debounceMs: 60000,
+        pollMs: 60000,
+        quietMs: 60000,
+        readTree: async () => {
+          reads += 1
+          if (reads === 1) throw new Error('the read broke')
+          return { root: 'project', files: [...files], created: [] }
+        },
+      })
+      bridges.push(bridge)
+      const { url } = await bridge.start()
+      const events = await openEvents(url, '?tree=1')
+      try {
+        const failed = await waitForReal(async () => {
+          const health = await healthOf(url)
+          return health.problems.length > 0 ? health : null
+        })
+        expect(failed.problems.join('\n')).toContain('the read broke')
+        expect(reads).toBe(1)
+        expect(events.text()).not.toContain('new.js')
+        files = ['old.js', 'new.js']
+
+        for (let step = 0; step < 20 && !events.text().includes('new.js'); step += 1) {
+          await vi.advanceTimersByTimeAsync(1000)
+          await sleep(5)
+        }
+        await waitForReal(() => events.text().includes('new.js'))
+        const health = await healthOf(url)
+        expect(health.problems).toEqual([])
+        expect(reads).toBe(2)
+      } finally {
+        await events.close()
+      }
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('leaves no timer after shutdown and starts no read from the timer', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    try {
+      const root = makeRoot()
+      let reads = 0
+      const bridge = createBridge({
+        projectRoot: root,
+        port: 0,
+        env: {},
+        debounceMs: 60000,
+        pollMs: 60000,
+        quietMs: 60000,
+        readTree: async () => {
+          reads += 1
+          throw new Error('the read broke')
+        },
+      })
+      bridges.push(bridge)
+      const { url } = await bridge.start()
+      await waitForReal(async () => (await healthOf(url)).problems.length > 0)
+      await sleep(100)
+      expect(vi.getTimerCount()).toBe(1)
+
+      await bridge.stop()
+      expect(vi.getTimerCount()).toBe(0)
+      await vi.advanceTimersByTimeAsync(120000)
+      await sleep(50)
+      expect(reads).toBe(1)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })
 
