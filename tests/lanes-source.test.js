@@ -789,14 +789,18 @@ describe('the idle lane source', () => {
     }
   }
 
-  it('lists the runs folder on a watcher event and the fallback, not on every tick', () => {
+  it('lists an unchanged runs folder only after the safety net, and relists after the folder changes', () => {
     const base = tempDir()
     const runs = join(base, 'runs')
+    mkdirSync(runs, { recursive: true })
+    const past = new Date(Date.now() - 10000)
+    utimesSync(runs, past, past)
     const worktree = join(base, 'MachineRoom-opencode3')
     const lanes = lanesFor({ opencode: worktree })
     let lists = 0
     let current = 1_000_000
     let fire = null
+    const frames = []
     const source = createLanesSource({
       folder: runs,
       lanes,
@@ -811,25 +815,41 @@ describe('the idle lane source', () => {
       watchFolder: quietWatch((callback) => {
         fire = callback
       }),
+      onFrame: (frame) => frames.push(frame),
     })
     cleanups.push(() => source.stop())
     source.start()
     expect(lists).toBe(1)
 
-    for (let index = 0; index < 100; index += 1) {
-      current += 5
+    for (let index = 0; index < 10; index += 1) {
+      current += 2000
       source.tick()
     }
+    fire(null, null)
     expect(lists).toBe(1)
 
-    fire(null, null)
+    writeFileSync(join(runs, 'opencode-S6a-20261024-145500.log'), `${toolLine(`${worktree}\\src\\a.js`)}\n`)
+    fire('change', null)
     expect(lists).toBe(2)
+    expect(logFrames(frames)).toHaveLength(1)
+
+    for (let index = 0; index < 29; index += 1) {
+      current += 2000
+      source.tick()
+    }
+    expect(lists).toBe(2)
+
+    current += 2000
+    source.tick()
+    expect(lists).toBe(3)
   })
 
   it('shows a log made with no watcher event within the fallback', () => {
     const base = tempDir()
     const runs = join(base, 'runs')
     mkdirSync(runs, { recursive: true })
+    const past = new Date(Date.now() - 10000)
+    utimesSync(runs, past, past)
     const worktree = join(base, 'MachineRoom-opencode3')
     const lanes = lanesFor({ opencode: worktree })
     let current = 1_000_000
@@ -861,10 +881,13 @@ describe('the idle lane source', () => {
     const base = tempDir()
     const runs = join(base, 'runs')
     mkdirSync(runs, { recursive: true })
+    const past = new Date(Date.now() - 10000)
+    utimesSync(runs, past, past)
     const worktree = join(base, 'MachineRoom-opencode3')
     const lanes = lanesFor({ opencode: worktree })
     let lists = 0
     let current = 1_000_000
+    let fire = null
     const frames = []
     const source = createLanesSource({
       folder: runs,
@@ -877,7 +900,9 @@ describe('the idle lane source', () => {
         lists += 1
         return readdirSync(dir, { withFileTypes: true })
       },
-      watchFolder: quietWatch(() => {}),
+      watchFolder: quietWatch((callback) => {
+        fire = callback
+      }),
       onFrame: (frame) => frames.push(frame),
     })
     cleanups.push(() => source.stop())
@@ -891,6 +916,7 @@ describe('the idle lane source', () => {
     const listed = lists
 
     appendFileSync(logPath, `${toolLine(`${worktree}\\src\\b.js`, { id: 'second' })}\n`)
+    fire('change', basename(logPath))
     current += 200
     source.tick()
     expect(logFrames(frames)).toHaveLength(2)
@@ -1035,6 +1061,163 @@ describe('the idle lane source', () => {
     )
     expect(source.agents.map((agent) => agent.key)).toContain('opencode2')
     expect(reads).toBe(2)
+  })
+
+  it('drops an old finished log from the watched set after an hour without growth and picks it up when it grows', () => {
+    const base = tempDir()
+    const runs = join(base, 'runs')
+    mkdirSync(runs, { recursive: true })
+    const worktree = join(base, 'MachineRoom-opencode3')
+    const lanes = lanesFor({ opencode: worktree })
+    const logPath = join(runs, 'opencode-S6a-20261024-170000.log')
+    writeFileSync(logPath, `${toolLine(`${worktree}\\src\\old.js`, { id: 'old' })}\n`)
+    let current = Date.now()
+    const past = new Date(current - 120000)
+    utimesSync(logPath, past, past)
+    writeFileSync(join(runs, 'runs.jsonl'), `${JSON.stringify({ lane: 'opencode', log: logPath, exitCode: 0, killed: false })}\n`)
+
+    const stats = []
+    const frames = []
+    const source = createLanesSource({
+      folder: runs,
+      lanes,
+      quietMs: 600000,
+      pollMs: 20,
+      scanMs: 2000,
+      laggingPollMs: 10000,
+      now: () => current,
+      statFile: (path) => {
+        stats.push(path)
+        return statSync(path)
+      },
+      watchFolder: quietWatch(() => {}),
+      onFrame: (frame) => frames.push(frame),
+    })
+    cleanups.push(() => source.stop())
+    source.start()
+
+    current += 10000
+    source.tick()
+    expect(stats).toEqual([logPath])
+    expect(frames).toEqual([])
+
+    current += 60 * 60 * 1000
+    source.tick()
+    stats.length = 0
+
+    for (let index = 0; index < 5; index += 1) {
+      current += 10000
+      source.tick()
+    }
+    expect(stats).toEqual([])
+
+    appendFileSync(logPath, `${toolLine(`${worktree}\\src\\new.js`, { id: 'new' })}\n`)
+    current += 5000
+    source.tick()
+    expect(frames).toEqual([])
+
+    current += 5000
+    source.tick()
+    expect(logFrames(frames)).toHaveLength(2)
+    expect(endFrame(frames).payload).toMatchObject({ status: 'succeeded', error: null })
+  })
+
+  it('keeps an old startup log without a record in the watched set past an hour until a record arrives', () => {
+    const base = tempDir()
+    const runs = join(base, 'runs')
+    mkdirSync(runs, { recursive: true })
+    const worktree = join(base, 'MachineRoom-opencode3')
+    const lanes = lanesFor({ opencode: worktree })
+    const logPath = join(runs, 'opencode-S6a-20261024-170500.log')
+    writeFileSync(logPath, `${toolLine(`${worktree}\\src\\old.js`, { id: 'old' })}\n`)
+    let current = Date.now()
+    const past = new Date(current - 2 * 60 * 60 * 1000)
+    utimesSync(logPath, past, past)
+
+    const stats = []
+    const source = createLanesSource({
+      folder: runs,
+      lanes,
+      quietMs: 600000,
+      pollMs: 20,
+      scanMs: 2000,
+      laggingPollMs: 10000,
+      now: () => current,
+      statFile: (path) => {
+        stats.push(path)
+        return statSync(path)
+      },
+      watchFolder: quietWatch(() => {}),
+    })
+    cleanups.push(() => source.stop())
+    source.start()
+
+    current += 10000
+    source.tick()
+    current += 10000
+    source.tick()
+    expect(stats).toEqual([logPath, logPath])
+
+    writeFileSync(join(runs, 'runs.jsonl'), `${JSON.stringify({ lane: 'opencode', log: logPath, exitCode: 0, killed: false })}\n`)
+    current += 10000
+    source.tick()
+    stats.length = 0
+
+    for (let index = 0; index < 3; index += 1) {
+      current += 10000
+      source.tick()
+    }
+    expect(stats).toEqual([])
+  })
+
+  it('drops an hour-old finished log at startup and picks it up on the next folder-change list when it grows', () => {
+    const base = tempDir()
+    const runs = join(base, 'runs')
+    mkdirSync(runs, { recursive: true })
+    const worktree = join(base, 'MachineRoom-opencode3')
+    const lanes = lanesFor({ opencode: worktree })
+    const logPath = join(runs, 'opencode-S6a-20261024-171000.log')
+    writeFileSync(logPath, `${toolLine(`${worktree}\\src\\old.js`, { id: 'old' })}\n`)
+    let current = Date.now()
+    const oldLogTime = new Date(current - 2 * 60 * 60 * 1000)
+    utimesSync(logPath, oldLogTime, oldLogTime)
+    writeFileSync(join(runs, 'runs.jsonl'), `${JSON.stringify({ lane: 'opencode', log: logPath, exitCode: 0, killed: false })}\n`)
+    const oldFolderTime = new Date(current - 10000)
+    utimesSync(runs, oldFolderTime, oldFolderTime)
+
+    const stats = []
+    const frames = []
+    const source = createLanesSource({
+      folder: runs,
+      lanes,
+      quietMs: 600000,
+      pollMs: 20,
+      scanMs: 2000,
+      laggingPollMs: 10000,
+      now: () => current,
+      statFile: (path) => {
+        stats.push(path)
+        return statSync(path)
+      },
+      watchFolder: quietWatch(() => {}),
+      onFrame: (frame) => frames.push(frame),
+    })
+    cleanups.push(() => source.stop())
+    source.start()
+
+    for (let index = 0; index < 3; index += 1) {
+      current += 10000
+      source.tick()
+    }
+    expect(stats).toEqual([])
+    expect(frames).toEqual([])
+
+    appendFileSync(logPath, `${toolLine(`${worktree}\\src\\reborn.js`, { id: 'reborn' })}\n`)
+    writeFileSync(join(runs, 'note.tmp'), '')
+    current += 2000
+    source.tick()
+    expect(logFrames(frames)).toHaveLength(2)
+    expect(endFrame(frames).payload).toMatchObject({ status: 'succeeded', error: null })
   })
 })
 

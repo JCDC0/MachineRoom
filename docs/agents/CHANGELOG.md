@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The runs folder is listed only when its change time moves or once a minute, and a finished log quiet for an hour leaves the ten-second check until it grows.
 - Retry under a reply sends to the conversation on screen, whatever To says now, so a sub's retry never goes to Main.
 - Retry under a reply sends the prompt to the conversation that owns that reply, so a changed To selection no longer redirects it and a sub's retry never goes to Main (P200).
 - The third readiness pass lists seven panel problems, among them Retry and Auto acting on a target other than the one shown, and two features for the owner.
@@ -10,6 +11,7 @@
 - Review 27 finds nothing open in the P194 merge: a dropped client is destroyed and a late joiner keeps its history.
 - The shared `runs.jsonl` cache reads unread deltas in 4 MB chunks and carries cut lines across chunks instead of allocating one buffer for the whole unread file, and hands every caller the same frozen records instead of a copy of the whole history on each read (P195).
 - A queue branch name carries milliseconds, so two queue runs of one lane started in the same second no longer collide and the second records its lane's exit code (P199).
+- The lane source lists the runs folder only when its change time moves or after 60 seconds, and drops finished startup logs unchanged for an hour from its 10 second checks while picking them up on the next list if they grow (P196).
 - A client dropped for its backlog is destroyed so its queued output is let go, and the writes made while a client connects are not held against the cap (P194).
 - A bridge stream client dropped for its backlog is destroyed, so its queued output is freed (P194).
 - A client may hold the backlog it connected with plus 8 MB, so a late joiner that reads all twelve kept one-MiB frames is not cut (P194).
