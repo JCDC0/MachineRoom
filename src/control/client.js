@@ -419,6 +419,11 @@ export function createClient({
       return request('POST', '/api/control/runs', { lane, ...body, confirmed: true })
     },
 
+    projectSettings: () => request('GET', '/api/control/project-settings'),
+
+    saveProjectSettings: ({ checkCommand, confirmed = true } = {}) =>
+      request('POST', '/api/control/project-settings', { checkCommand, confirmed }),
+
     lanes: () => request('GET', '/api/lanes'),
 
     harnesses: () => request('GET', '/api/harnesses'),

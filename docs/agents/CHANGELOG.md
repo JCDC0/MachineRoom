@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Dispatch keeps a project check command, shows it on the confirm card, and passes it to the runner as --test.
 - The hands-on check was blocked: Codex's sandbox cannot read the Playwright browser folder, and the screenshot helper reports access denied as a missing browser.
 - A reported 0 reads as $0.00, a lane with no runs reads 0, and not reported appears only when runs gave no number (N16, the owner's word).
 - Reviews offers Ask to prepare on a refused fast forward or a branch ahead of a destination that moved on, and sends Main the lane, branch, full head and destination after a confirm.

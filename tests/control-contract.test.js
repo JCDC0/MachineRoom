@@ -239,6 +239,18 @@ describe('the control client contract', () => {
     for (const name of CLIENT_METHODS) expect(typeof client[name], `bridge ${name}`).toBe('function')
   })
 
+  it('saves, reads back and clears the project check command', async () => {
+    const { client } = await makeHarness()
+    expect(await client.projectSettings()).toEqual({ checkCommand: '', hasTestScript: true })
+    expect(await client.saveProjectSettings({ checkCommand: 'node scripts/check.mjs' })).toEqual({
+      checkCommand: 'node scripts/check.mjs',
+      hasTestScript: true,
+    })
+    expect(await client.projectSettings()).toEqual({ checkCommand: 'node scripts/check.mjs', hasTestScript: true })
+    expect(await client.saveProjectSettings({ checkCommand: '' })).toEqual({ checkCommand: '', hasTestScript: true })
+    expect(await client.projectSettings()).toEqual({ checkCommand: '', hasTestScript: true })
+  })
+
   it('lists the lanes with the spend from the run records', async () => {
     const { client } = await makeHarness({ records: [record('opencode', ['B6'])] })
     const agents = await client.agents()

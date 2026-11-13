@@ -56,6 +56,8 @@ export const CLIENT_METHODS = [
   'deleteOrchestratorSession',
   'setLadder',
   'startRun',
+  'projectSettings',
+  'saveProjectSettings',
   'lanes',
   'harnesses',
   'harnessModels',
@@ -132,6 +134,7 @@ const TASKS_PROBLEM = 'Write one to twenty tasks, each 1 to 4000 characters.'
 const TASK_SEPARATOR_PROBLEM = 'A task cannot hold a line of only ---.'
 const RUN_KIND_PROBLEM = 'Send a task, a queue or briefs, not more than one.'
 const QUEUE_DIRTY_PROBLEM = 'A queue needs a clean project.'
+const CHECK_COMMAND_PROBLEM = 'Write the check command as one line of 1 to 500 characters.'
 const clone = (value) => JSON.parse(JSON.stringify(value))
 const slug = (name) => String(name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
 
@@ -143,6 +146,16 @@ function tasksProblem(tasks) {
     if (text.length < 1 || text.length > 4000) return TASKS_PROBLEM
     if (task.split(/\r?\n/).some((line) => line.trim() === '---')) return TASK_SEPARATOR_PROBLEM
   }
+  return null
+}
+
+function checkCommandValueProblem(value) {
+  if (value === undefined || value === null) return null
+  if (typeof value !== 'string') return CHECK_COMMAND_PROBLEM
+  const text = value.trim()
+  if (text === '') return null
+  if (text.length > 500) return CHECK_COMMAND_PROBLEM
+  if (/[\r\n]/.test(text)) return CHECK_COMMAND_PROBLEM
   return null
 }
 
@@ -658,6 +671,7 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
   }
   const listeners = new Set()
   const runsState = { project: 'MachineRoom', running: [], recent: [] }
+  let projectSettingsState = { checkCommand: '', hasTestScript: true }
   const reviewState = clone(SAMPLE_REVIEWS)
   let endpointState = clone(SAMPLE_ENDPOINTS)
   let modelPinState = []
@@ -1709,6 +1723,22 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
           emit({ topic: 'runs' })
         }, runMs)
         return entry
+      }),
+
+    projectSettings: () =>
+      call('projectSettings', () => ({ ...projectSettingsState })),
+
+    saveProjectSettings: (options = {}) =>
+      call('saveProjectSettings', () => {
+        const { checkCommand, confirmed = true } = options
+        if (confirmed !== true) throw new Error('Confirm the check command first.')
+        const problem = checkCommandValueProblem(checkCommand)
+        if (problem) throw new Error(problem)
+        projectSettingsState = {
+          ...projectSettingsState,
+          checkCommand: typeof checkCommand === 'string' ? checkCommand.trim() : '',
+        }
+        return { ...projectSettingsState }
       }),
 
     lanes: () =>

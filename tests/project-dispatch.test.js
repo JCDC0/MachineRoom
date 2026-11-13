@@ -411,6 +411,43 @@ describe('the runs route with a queue', () => {
     }
   })
 
+  it('passes the saved check command to the queue as --test', async () => {
+    const project = gitProject('mr-project-dispatch-')
+    const runnerDir = tempDir('mr-project-runner-')
+    const out = join(runnerDir, 'args.json')
+    const temp = tempDir('mr-project-temp-')
+    const { url } = await startBridge({ projectRoot: project, runnerPath: writeRunner(runnerDir, out, 400) })
+    const previous = process.env.TEMP
+    const previousRuns = process.env.MACHINEROOM_RUNS
+    process.env.TEMP = temp
+    process.env.MACHINEROOM_RUNS = join(temp, 'machineroom-runs')
+    try {
+      const saved = await fetch(`${url}/api/control/project-settings`, {
+        method: 'POST',
+        headers: { origin: 'http://localhost:5173', 'content-type': 'application/json' },
+        body: JSON.stringify({ checkCommand: 'node scripts/check.mjs', confirmed: true }),
+      })
+      expect(saved.status).toBe(200)
+
+      const res = await postJson(`${url}/api/control/runs`, {
+        lane: 'opencode',
+        tasks: ['Fix the typo.'],
+        confirmed: true,
+      })
+      expect(res.status).toBe(202)
+
+      const args = await waitFor(() => readArgs(out), { what: 'the runner arguments' })
+      expect(args).toContain('--test')
+      expect(args[args.indexOf('--test') + 1]).toBe('node scripts/check.mjs')
+      await waitFor(async () => (await getJson(`${url}/api/control/runs`)).body.running.length === 0, { what: 'the run to end' })
+    } finally {
+      if (previous === undefined) delete process.env.TEMP
+      else process.env.TEMP = previous
+      if (previousRuns === undefined) delete process.env.MACHINEROOM_RUNS
+      else process.env.MACHINEROOM_RUNS = previousRuns
+    }
+  })
+
   it('accepts twenty tasks of 4000 characters', async () => {
     const project = gitProject('mr-project-dispatch-')
     const runnerDir = tempDir('mr-project-runner-')

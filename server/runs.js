@@ -14,6 +14,7 @@ import { gitPath } from './programPath.js'
 import { killTree, listProcesses, treeSpawnOptions } from './processTree.js'
 import { createLaneLockCheck, laneAgents, lanesFolder, readAllLanes, runsFolder as defaultRunsFolder } from './lanes-source.js'
 import { NO_ACTIVE_CHOICE_PROBLEM, activeLanesFileFor, hiddenLaneProblem, projectLanesFileFor, readActiveLanesChoice, readHiddenLanes } from './active-lanes.js'
+import { checkCommandProblem, createProjectSettingsApi, readProjectCheckCommand } from './project-settings.js'
 
 export const RECENT_LIMIT = 20
 export const LAST_LINE_LIMIT = 5
@@ -386,6 +387,13 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
   const recordsPath = () => join(recordsDir(), 'runs.jsonl')
   const outcomesPath = () => join(recordsDir(), 'outcomes.jsonl')
   const command = runnerCommand ?? { file: process.execPath, args: ['scripts/run-lane.mjs'] }
+  const projectSettings = createProjectSettingsApi({
+    projectRoot: resolvedRoot,
+    runsFolder: recordsDir,
+    sendJson,
+    readJsonBody,
+    notify,
+  })
   const running = new Map()
   let stopped = false
   let rootCommonDirPromise = null
@@ -558,13 +566,15 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
     return null
   }
 
-  async function startProjectTask({ lane = '', task = '', worktree = false, allowDirty = false, startedBy = '' } = {}) {
+  async function startProjectTask({ lane = '', task = '', worktree = false, allowDirty = false, startedBy = '', checkCommand = '' } = {}) {
     const lanesText = readPath(laneFile)
     if (lanesText === null) return { status: 404, body: { error: 'The brief files are missing.' } }
     const lanes = readStartLanes({ lanesFile: laneFile, runsFolder: recordsDir() })
     if (!lanes || typeof lanes !== 'object' || Array.isArray(lanes)) {
       return { status: 400, body: { error: 'The lane file is not valid.' } }
     }
+    const checkProblem = checkCommandProblem(checkCommand)
+    if (checkProblem) return { status: 400, body: { error: checkProblem } }
     const laneProblem = laneStartProblem(lane, lanes)
     if (laneProblem) return { status: laneProblem.status, body: { error: laneProblem.error } }
     if (typeof task !== 'string' || task.trim().length < 1 || task.length > TASK_LIMIT) {
@@ -597,7 +607,7 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
     let entry
     try {
       const reasoning = lanes[lane]?.effort || ''
-      entry = startRun(lane, [], { project: resolvedRoot, task, allowDirty, worktree }, startedBy, reasoning)
+      entry = startRun(lane, [], { project: resolvedRoot, task, allowDirty, worktree, checkCommand }, startedBy, reasoning)
     } catch {
       return { status: 500, body: { error: 'The bridge could not start that run.' } }
     }
@@ -673,6 +683,7 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
     }
     const startedArgs = startedBy ? ['--started-by', startedBy] : []
     const reasoningArgs = reasoning ? ['--reasoning', reasoning] : []
+    const testArgs = projectRun?.checkCommand ? ['--test', projectRun.checkCommand] : []
     const item = {
       entry,
       tail: '',
@@ -682,7 +693,7 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
     }
     const args = projectRun
       ? projectRun.queue
-        ? [...command.args, lane, '--project', projectRun.project, ...(projectRun.worktree ? ['--worktree'] : []), '--queue', projectRun.queue, ...startedArgs, ...reasoningArgs]
+        ? [...command.args, lane, '--project', projectRun.project, ...(projectRun.worktree ? ['--worktree'] : []), '--queue', projectRun.queue, ...testArgs, ...startedArgs, ...reasoningArgs]
         : [
             ...command.args,
             lane,
@@ -692,6 +703,7 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
             projectRun.task,
             ...(projectRun.worktree ? ['--worktree'] : []),
             ...(projectRun.allowDirty ? ['--allow-dirty'] : []),
+            ...testArgs,
             ...startedArgs,
             ...reasoningArgs,
           ]
@@ -779,6 +791,7 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
   async function handle(req, res, url) {
     const path = url.pathname
     const method = req.method ?? 'GET'
+    if (await projectSettings.handle(req, res, url)) return true
     if (path === '/api/control/runs/outcomes') {
       if (method !== 'GET') {
         sendJson(req, res, 405, { error: 'Method not allowed.' })
@@ -841,6 +854,18 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
     if (!projectRun && !(await inThisRepository())) {
       sendJson(req, res, 400, { error: BRIEF_PROJECT_PROBLEM })
       return true
+    }
+    let checkCommand = ''
+    if (projectRun) {
+      const given = Object.hasOwn(body, 'checkCommand')
+        ? body.checkCommand
+        : readProjectCheckCommand(resolvedRoot, recordsDir())
+      const checkProblem = checkCommandProblem(given)
+      if (checkProblem) {
+        sendJson(req, res, 400, { error: checkProblem })
+        return true
+      }
+      checkCommand = typeof given === 'string' ? given.trim() : ''
     }
     let lanes
     let tasksText = null
@@ -958,7 +983,7 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
     }
 
     if (projectRun && !hasTasks) {
-      const started = await startProjectTask({ lane, task, worktree, allowDirty, startedBy })
+      const started = await startProjectTask({ lane, task, worktree, allowDirty, startedBy, checkCommand })
       sendJson(
         req,
         res,
@@ -1020,7 +1045,7 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
         lane,
         briefs,
         projectRun
-          ? { project: resolvedRoot, task, allowDirty, queue: queueFile, taskCount, worktree }
+          ? { project: resolvedRoot, task, allowDirty, queue: queueFile, taskCount, worktree, checkCommand }
           : null,
         startedBy,
         reasoning
