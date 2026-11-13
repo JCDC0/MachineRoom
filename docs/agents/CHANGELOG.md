@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The detail docs describe P143 to P148 and the Windows-only masked log test (P155).
 - run-lane's missing, non-folder and non-git project errors and a finished queue's worktree summary print the project with profile folders masked (P152).
 - run-lane's missing, non-folder and non-git project errors and a finished queue's worktree summary print the project with profile folders masked (P152).
 - printedRunsFolder lives in server/printed-path.js, so the bridge no longer loads the runner script to mask a path (P148).
