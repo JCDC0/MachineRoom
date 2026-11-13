@@ -895,6 +895,46 @@ describe('the control client MCP routes', () => {
     ])
   })
 
+  it('passes create: true on saveMcpServer only when given', async () => {
+    const { calls, client } = recorder({ ok: true })
+    await client.saveMcpServer({
+      name: 'notes',
+      transport: 'stdio',
+      command: 'node',
+      confirmed: true,
+      create: true,
+    })
+    await client.saveMcpServer({
+      name: 'notes',
+      transport: 'stdio',
+      command: 'node',
+      enabled: false,
+      confirmed: true,
+      create: false,
+    })
+    expect(calls.map((call) => JSON.parse(call.body))).toEqual([
+      {
+        name: 'notes',
+        transport: 'stdio',
+        command: 'node',
+        args: [],
+        url: '',
+        enabled: true,
+        confirmed: true,
+        create: true,
+      },
+      {
+        name: 'notes',
+        transport: 'stdio',
+        command: 'node',
+        args: [],
+        url: '',
+        enabled: false,
+        confirmed: true,
+      },
+    ])
+  })
+
   it('saves, lists and deletes MCP servers on the mock with an mcp notice', async () => {
     const client = createMockClient({ latencyMs: 0 })
     const notices = []
@@ -973,7 +1013,64 @@ describe('the control client MCP routes', () => {
     await expect(
       client.saveMcpServer({ name: 'notes', transport: 'http', url: 'ftp://127.0.0.1/mcp', confirmed: true })
     ).rejects.toThrow('An http server needs an http or https address.')
+    await expect(
+      client.saveMcpServer({ name: 'docs', transport: 'stdio', command: 'node', confirmed: true, create: true })
+    ).rejects.toThrow('The MCP server docs is already saved.')
     await expect(client.callMcpTool({ server: 'filesystem' })).rejects.toThrow('Choose an MCP server and a tool.')
+  })
+
+  it('refuses an already saved MCP server with create: true and keeps updates working on both clients', async () => {
+    const mock = createMockClient({ latencyMs: 0 })
+    const { client: bridgeClient } = await makeHarness()
+    for (const [label, client] of [
+      ['mock', mock],
+      ['bridge', bridgeClient],
+    ]) {
+      await client.saveMcpServer({
+        name: 'notes',
+        transport: 'stdio',
+        command: 'node',
+        args: ['notes.mjs'],
+        enabled: false,
+        confirmed: true,
+        create: true,
+      })
+      const notices = []
+      const stop = client.subscribe((event) => notices.push(event))
+      await expect(
+        client.saveMcpServer({
+          name: 'notes',
+          transport: 'http',
+          url: 'https://other.example/mcp',
+          enabled: true,
+          confirmed: true,
+          create: true,
+        }),
+        `${label} create refusal`
+      ).rejects.toThrow('The MCP server notes is already saved.')
+      if (label === 'mock') expect(notices).toEqual([])
+      stop()
+
+      const list = (await client.mcpServers()).servers
+      const saved = list.find((entry) => entry.name === 'notes')
+      expect(saved, `${label} saved entry`).toMatchObject({
+        name: 'notes',
+        transport: 'stdio',
+        command: 'node',
+        args: ['notes.mjs'],
+        enabled: false,
+      })
+
+      const toggled = await client.saveMcpServer({
+        name: 'notes',
+        transport: 'stdio',
+        command: 'node',
+        args: ['notes.mjs'],
+        enabled: true,
+        confirmed: true,
+      })
+      expect(toggled.server.enabled, `${label} toggle`).toBe(true)
+    }
   })
 })
 

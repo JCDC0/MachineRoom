@@ -2,10 +2,12 @@
 
 ## Unreleased
 
+- Add MCP server sends create, and the bridge and the mock refuse a saved name with one sentence and change nothing; on and off still updates.
 - The runs list answers only the room's own project, and a finished row keeps a project run's task and a failed run's note and queue or test status.
 - Replace key saves to the clicked endpoint's own key slot and names it on the card, and a row it cannot serve shows the button disabled with the reason.
 - The agent configuration keeps the highest lane number handed out per harness, seeded from its entries and the run records, so a new lane never takes a deleted lane's key and its records.
 - Runs of lanes no longer in the roster, deleted or retired, count in the totals and show as one Removed lanes row.
+- Add MCP server sends create: true through the control client, the bridge (409) and the mock refuse an existing server name with one sentence naming it, and toggling on or off still updates (P208).
 - Auto routes every queued task and previews the highest tier's lane, Confirm sends that lane, and a lane taken meanwhile asks for a fresh preview instead of starting another.
 - Dispatch scopes GET /api/control/runs to the room's project and shows each project run's first task line, failure note, queue status and test status on finished rows.
 - The late-session meta test moves the runs folder time forward, as P165 did for the test above it, so Windows CI rereads the meta.

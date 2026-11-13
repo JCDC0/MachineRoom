@@ -24,7 +24,8 @@ import McpSettings, {
   toggleMcpPayload,
 } from '../src/ui/McpSettings.jsx'
 import Settings from '../src/ui/Settings.jsx'
-import { buttonWithText, click, withDom } from './helpers/uiDom.js'
+import { createMockClient } from '../src/control/mock.js'
+import { buttonWithText, click, settle, withDom } from './helpers/uiDom.js'
 
 function isDisabled(node) {
   return node.disabled === true || node.getAttribute('disabled') !== null
@@ -176,6 +177,7 @@ describe('the MCP settings helpers', () => {
       url: '',
       enabled: true,
       confirmed: true,
+      create: true,
     })
     expect(saveMcpPayload({ name: 'remote', transport: 'http', command: 'npx', args: 'x', url: ' https://mcp.example/rpc ' })).toEqual({
       name: 'remote',
@@ -185,6 +187,7 @@ describe('the MCP settings helpers', () => {
       url: 'https://mcp.example/rpc',
       enabled: true,
       confirmed: true,
+      create: true,
     })
     expect(saveMcpPayload({ name: 'docs', transport: 'stdio', command: 'npx' }).env).toBeUndefined()
   })
@@ -273,6 +276,7 @@ describe('the MCP settings panel', () => {
       await click(root, row.querySelector('[role="switch"]'))
       expect(calls.save).toHaveLength(1)
       expect(calls.save[0]).toMatchObject({ name: 'docs', transport: 'stdio', enabled: false, confirmed: true })
+      expect(calls.save[0].create).toBeUndefined()
       expect(container.textContent).toContain('docs is off.')
     })
   })
@@ -344,9 +348,43 @@ describe('the MCP settings panel', () => {
           url: '',
           enabled: true,
           confirmed: true,
+          create: true,
         },
       ])
       expect(container.textContent).toContain('Added files.')
+    })
+  })
+
+  it('refuses adding an already saved name, shows the sentence, and keeps toggle working', async () => {
+    const client = createMockClient({ latencyMs: 0 })
+    await withDom(async ({ container, root }) => {
+      await mount(root, {
+        client,
+        initialDraft: { name: 'docs', transport: 'stdio', command: 'node', args: 'fake.mjs' },
+      })
+      await settle(10)
+      const docsRow = () => container.querySelectorAll('.mr-mcp-server')[1]
+      await click(root, docsRow().querySelector('[role="switch"]'))
+      await settle(10)
+      expect(docsRow().querySelector('[role="switch"]').getAttribute('aria-checked')).toBe('false')
+
+      await submit(root, container.querySelector('.mr-mcp-form'))
+      await settle(10)
+      const errorNotice = container.querySelector('.mr-mcp-form').querySelector('.mr-mcp-state.is-error')
+      expect(errorNotice?.textContent).toBe('The MCP server docs is already saved.')
+      expect(container.textContent).not.toContain('Added docs.')
+      expect(container.querySelector('#mr-mcp-name').value).toBe('docs')
+      expect((await client.mcpServers()).servers.find((entry) => entry.name === 'docs')).toMatchObject({
+        name: 'docs',
+        transport: 'http',
+        url: 'http://127.0.0.1:8787/mcp',
+        enabled: false,
+      })
+
+      await click(root, docsRow().querySelector('[role="switch"]'))
+      await settle(10)
+      expect(docsRow().querySelector('[role="switch"]').getAttribute('aria-checked')).toBe('true')
+      expect(container.textContent).toContain('docs is on.')
     })
   })
 

@@ -64,6 +64,10 @@ function httpUrl(value) {
   return url.protocol === 'http:' || url.protocol === 'https:'
 }
 
+export function mcpExistsProblem(name) {
+  return `The MCP server ${name} is already saved.`
+}
+
 export function mcpFile(runsDir) {
   return join(runsDir, 'mcp.json')
 }
@@ -160,6 +164,9 @@ export function upsertMcpServer(runsDir, entry) {
   const servers = readMcpServers(runsDir)
   const index = servers.findIndex((item) => item.name === entry.name.trim())
   const saved = index === -1 ? null : servers[index]
+  if (entry.create === true && saved) {
+    return { ok: false, conflict: true, problem: mcpExistsProblem(saved.name) }
+  }
   const merged = saved && entry.env === undefined ? { ...entry, env: saved.env } : entry
   const server = cleanMcpServer(merged)
   if (index === -1) servers.push(server)
@@ -558,7 +565,7 @@ export function createMcpApi(options = {}) {
       }
       const answer = upsertMcpServer(runsDir, body)
       if (!answer.ok) {
-        sendJson(req, res, 400, { error: answer.problem })
+        sendJson(req, res, answer.conflict ? 409 : 400, { error: answer.problem })
         return true
       }
       if (typeof notify === 'function') notify({ topic: 'mcp' })
