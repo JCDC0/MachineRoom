@@ -4,8 +4,10 @@ import { connect } from 'node:net'
 import { basename, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { createBridge } from '../server/index.js'
 import { extractReplyText } from '../server/assistant.js'
 import { activeLanesFileFor, writeActiveLanes } from '../server/active-lanes.js'
+import { NO_TOKEN_PROBLEM } from '../server/runs.js'
 import { SINCE_PROBLEM } from '../src/briefs/run.js'
 import { createClient } from '../src/control/client.js'
 import { choice } from '../src/decider/wire.js'
@@ -724,6 +726,91 @@ describe('run routes', () => {
     const noToken = await postJson(`${url}/api/control/runs/stop`, { lane: 'opencode', startedAt: '2026-11-13T00:00:00.000Z', confirmed: true })
     expect(noToken.status).toBe(403)
     expect(noToken.body).toEqual({ error: 'A request with no Origin needs a valid orchestrator token.' })
+  })
+
+  it('refuses run start and stop with no Origin on a bridge without --lanes while allowing a page Origin', async () => {
+    useRunsTemp()
+    const dir = tempDir()
+    writeRunsProject(dir)
+    const projectDir = tempDir()
+    const runsDir = tempDir()
+    writeActiveLanes(activeLanesFileFor(projectDir, runsDir), ['opencode', 'opencode2'])
+    const runnerPath = join(tempDir(), 'plain-runner.mjs')
+    writeFileSync(
+      runnerPath,
+      [
+        "if (process.argv[2] === '--stop') { console.log('stopped'); process.exit(0) }",
+        'setTimeout(() => {}, 60000)',
+      ].join('\n')
+    )
+    const bridge = createBridge({
+      projectRoot: projectDir,
+      briefsDir: join(dir, 'docs', 'agents'),
+      lanesFile: join(dir, 'docs', 'agents', 'lanes.json'),
+      runsFolder: runsDir,
+      runnerCommand: { file: process.execPath, args: [runnerPath] },
+      port: 0,
+      env: {},
+    })
+    cleanups.push(() => bridge.stop())
+    const { url } = await bridge.start()
+    expect(bridge.orchestrators()).toBeNull()
+
+    const noOriginStart = await postJson(`${url}/api/control/runs`, {
+      lane: 'opencode',
+      task: 'Fix it.',
+      confirmed: true,
+    })
+    expect(noOriginStart.status).toBe(403)
+    expect(noOriginStart.body).toEqual({ error: NO_TOKEN_PROBLEM })
+
+    const noOriginAuto = await postJson(`${url}/api/control/runs`, {
+      task: 'Fix it.',
+      confirmed: true,
+    })
+    expect(noOriginAuto.status).toBe(403)
+    expect(noOriginAuto.body).toEqual({ error: NO_TOKEN_PROBLEM })
+
+    const noOriginStopIdle = await postJson(`${url}/api/control/runs/stop`, {
+      lane: 'opencode',
+      startedAt: '2026-11-13T00:00:00.000Z',
+      confirmed: true,
+    })
+    expect(noOriginStopIdle.status).toBe(403)
+    expect(noOriginStopIdle.body).toEqual({ error: NO_TOKEN_PROBLEM })
+
+    const pageStart = await getJson(`${url}/api/control/runs`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', origin: url },
+      body: JSON.stringify({ lane: 'opencode', task: 'Fix it.', confirmed: true }),
+    })
+    expect(pageStart.status).toBe(202)
+    expect(pageStart.body.lane).toBe('opencode')
+    await waitFor(
+      async () => (await getJson(`${url}/api/control/runs`)).body.running.length === 1,
+      { what: 'the plain bridge run to start' }
+    )
+
+    const noOriginStopLive = await postJson(`${url}/api/control/runs/stop`, {
+      lane: 'opencode',
+      startedAt: pageStart.body.startedAt,
+      confirmed: true,
+    })
+    expect(noOriginStopLive.status).toBe(403)
+    expect(noOriginStopLive.body).toEqual({ error: NO_TOKEN_PROBLEM })
+
+    const pageStop = await getJson(`${url}/api/control/runs/stop`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', origin: url },
+      body: JSON.stringify({ lane: 'opencode', startedAt: pageStart.body.startedAt, confirmed: true }),
+    })
+    expect(pageStop.status).toBe(200)
+    expect(pageStop.body).toMatchObject({
+      ok: true,
+      lane: 'opencode',
+      startedAt: pageStart.body.startedAt,
+      output: 'stopped',
+    })
   })
 
   it('starts the runner with an argument list, keeps the last five lines and records the run when it ends', async () => {

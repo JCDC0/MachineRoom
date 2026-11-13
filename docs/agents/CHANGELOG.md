@@ -1,12 +1,14 @@
 # Changelog
 
 ## Unreleased
+- P242: readActor refuses a runs start or stop with no Origin and no registry, closing the no-lanes bypass (review 29 finding 3).
 - P244: a failed or partial full tree read retries after 5 seconds, doubling to 60, until a clean read; the folder answer follows the same one-second reuse rule.
 - The transport's side groups keep their own width, so at 1280 pixels the state word shrinks instead of the spend overlapping it (seen at 1280 by 800 after P232).
 - P235: one to four top folders sit on a wider ring turned clear of the orchestrator, and git labels that would overlap merge into one naming the count.
 - P228: the tree answer carries rootPath, and a live room places an absolute path only when it lies under it, case-insensitive on Windows; replays keep the name rule.
 
 - P244: a failed full tree read reads again after 5 seconds, doubling to at most 60, until a full read with no unreadable folders, and the folder-shaped tree answer follows the plain one's age rule.
+- `readActor` in `server/runs.js` refuses no-Origin requests without an orchestrator registry with 403 and `NO_TOKEN_PROBLEM` on run start and stop (P242).
 - P239: review 29 lists six push blockers and two smaller findings in P216 to P230.
 - P237: a change to .git/index or info/exclude, or a worktree's own, reads the tree through the existing reader; other .git writes stay ignored.
 - P238: Claude and OpenCode session run ids carry a token made per reader, so a restarted reader never merges two runs in a replay (D4).

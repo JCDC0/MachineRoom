@@ -21,9 +21,13 @@ import {
   projectRunLanes,
   projectTaskProblem,
 } from '../src/ui/panels/runs.js'
-import { getJson, postJson, waitFor } from './helpers/bridge.js'
+import { getJson, waitFor } from './helpers/bridge.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 import { settle, withDom } from './helpers/uiDom.js'
+
+function postJson(url, body) {
+  return getJson(url, { method: 'POST', headers: { 'content-type': 'application/json', origin: new URL(url).origin }, body: JSON.stringify(body) })
+}
 
 const REPO_ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)))
 const REAL_REPO_ROOT = realpathSync.native(REPO_ROOT)

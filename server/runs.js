@@ -492,7 +492,7 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
     const registry = typeof orchestrators === 'function' ? orchestrators() : null
     const page = Boolean(req.headers.origin)
     if (!page) {
-      if (!registry) return { registry: null, page, actor: '', startedBy: '', sector: null, missingSector: false }
+      if (!registry) return { status: 403, error: NO_TOKEN_PROBLEM }
       const tokenHeader = req.headers['x-machineroom-orchestrator']
       const token = typeof tokenHeader === 'string' ? tokenHeader.trim() : Array.isArray(tokenHeader) ? tokenHeader[0].trim() : ''
       const actor = registry.idForToken(token)
