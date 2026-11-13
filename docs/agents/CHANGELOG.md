@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- POST /api/control/runs/stop stops a running lane by matching start time through the runner, tells the lane's sector orchestrator or Main with a saved room note carried on its next turn, and Dispatch running rows and the Inspector add Stop with a confirm card (P219).
 - Lane Update and Delete read the request body before the saved configuration, so a lane created meanwhile and its key count are kept.
 - The Removed lanes row sums each removed lane's rounded cents, so deleting lanes never moves the total.
 - Removed lanes adds each removed lane's rounded cents for the month and today, so deleting lanes no longer changes the total (P212).
