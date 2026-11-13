@@ -1,10 +1,12 @@
 # Changelog
 
 ## Unreleased
+- P275: folder-shaped tree reuse also waits for clean git metadata and every expected git metadata watcher, so an index or exclude change is read again.
 - P267: scale-live, scale-probe, screenshots, hand-run, history-audit, agy-prompt and run-recording answer --help and -h with their usage and exit 0 before any work; COMMANDS.md names them and the empty cases.
 - P274: a second empty reply after the nudge ends the native run with exit 1 and 'The agent stopped without a final answer.'
 - P271: a codex run's record carries the rate-limit windows from Codex's rollout file, found by thread id; lane costs answer the newest live reading so routing can skip codex.
 - P274: a native run fails when a second empty reply follows its nudge, instead of reporting an earlier message as a final answer.
+- P275: a folder-shaped /api/tree stops reusing the last tree while git metadata is dirty or a git metadata watcher is missing, so it reads again.
 - P268: the git write test's request bound matches the client's write limit, and the bridge and tree waits under 10 seconds are raised to 10.
 - P269: AUDIT-2026-11-REVIEW-31.md lists seven findings in P249, P254, P260 and P263; R31-1 to R31-5 block a push.
 - P270: doctor with both a folder and --root prints only its refusal sentence and exits 1, without the usage block.

@@ -300,6 +300,59 @@ describe('the folder tree answer', () => {
     expect(reads).toBe(1)
   })
 
+  it('reads again for a folder ask after a git metadata watcher failed', async () => {
+    const root = makeRoot()
+    writeFileSync(join(root, 'a.js'), '1\n')
+    const gitDir = join(root, 'gitdir')
+    const infoDir = join(gitDir, 'info')
+    mkdirSync(infoDir, { recursive: true })
+    const stubs = []
+    let reads = 0
+    const bridge = createBridge({
+      projectRoot: root,
+      port: 0,
+      env: {},
+      debounceMs: 60000,
+      pollMs: 60000,
+      quietMs: 60000,
+      gitDir: async () => ({ gitDir, infoDirs: [infoDir] }),
+      watchProject: (folder, watchOptions, listener) => {
+        if (resolve(folder) === resolve(root)) return watch(folder, watchOptions, listener)
+        const stub = {
+          handlers: [],
+          on(event, handler) {
+            if (event === 'error') this.handlers.push(handler)
+            return this
+          },
+          close() {},
+          fail() {
+            for (const handler of this.handlers) handler(new Error('watch is off'))
+          },
+        }
+        stubs.push(stub)
+        return stub
+      },
+      readTree: async () => {
+        reads += 1
+        return { root: 'project', files: ['a.js'], created: [] }
+      },
+    })
+    bridges.push(bridge)
+    const { url } = await bridge.start()
+    await waitFor(() => reads === 1)
+    await waitFor(() => stubs.length === 2)
+
+    const first = await folderTree(url)
+    expect(first.status).toBe(200)
+    expect(first.body.version).toBe(1)
+
+    stubs[0].fail()
+    await wait(1200)
+    const second = await folderTree(url)
+    expect(second.status).toBe(200)
+    expect(reads).toBe(2)
+  })
+
   it('reads again for a folder ask after a full read failed', async () => {
     const root = makeRoot()
     let reads = 0
