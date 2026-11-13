@@ -2347,5 +2347,5 @@ P261 found: the log's `thread.started` line carries `thread_id`; the rollout fil
 **P275. The folder tree is not reused while git's metadata watcher is down (native).** Read finding R31-6 in `docs/agents/AUDIT-2026-11-REVIEW-31.md` and this brief only. Commit each step as you finish it, and stop at minute 22. Files: server/index.js, tests/tree-read.test.js, docs/agents/CHANGELOG.md.
 
 1. `folderTreeReuseAllowed()` in `server/index.js` also answers false while `gitMetaDirty` is set or an expected git metadata watcher is missing. Read how the git metadata watchers are armed and how their error handler sets `gitMetaDirty` first.
-2. Test: with the project watcher armed and the git metadata watcher failed, a folder GET more than one second after the last read reads again. It must fail before your change.
+2. Test: with the project watcher armed and the git metadata watcher failed, a folder GET more than one second after the last read reads again. It must fail before your change. `gitMetaDirty` starts true and is cleared by a later read, so P254's healthy-watcher test (three folder GETs, one read) must still pass; if it does not, gate on the watcher's failure instead.
 3. Run `node node_modules/vitest/vitest.mjs run tests/tree-read.test.js` and `npm run build`. Report what passed.
