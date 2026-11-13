@@ -2023,3 +2023,27 @@ The three readiness audits read the commands, long use and the panels. Read what
 1. A session reader's run id carries a token made once when the reader is created, `SESSION:TOKEN:NUMBER` (eight hex characters from `randomBytes(4)`), so a restarted reader never reuses a run id the page has already seen. Do the same in the OpenCode reader if it builds its run ids the same way. First grep `server` and `src` for code that parses these run ids, and change it with them if any does.
 2. Tests, by what they prove: two reader lifetimes over the same session file give different run ids; six frames kept by one recorder from two lifetimes give two tool calls after `recorderToReplay` and `prepare`, not one. The second must fail before your change.
 3. Run `node node_modules/vitest/vitest.mjs related --run server/claude-sessions.js server/opencode-sessions.js` and `npm run build`. Report what passed.
+
+**P239. Review the batch since the last push (Codex).** Read `docs/agents/OWNER.md` and this brief only. Change no code. Do not commit: the runner commits your file. Stop at minute 35. Files: docs/agents/AUDIT-2026-11-REVIEW-29.md.
+
+Review the merges listed by `git log --first-parent --oneline 1bb54a0f..4224921d`, using `git show -m --first-parent SHA` and reading the code around each change. Spend most of your time on the ones that write, move or run things:
+- P219: the stop route and the note to the head.
+- P217: the storage preview and the archive, which moves files.
+- P224: the saved check command, which reaches the runner as `--test`.
+- P218: conversation export.
+- P216 and P223: queue recovery and `queueRemaining`.
+- P215: Ask to prepare.
+- The P230 merge: tree read failures and the git recheck.
+- P229: session folders by slug prefix.
+
+Hunt for:
+- A write route that a page from another Origin, or a request with no Origin and no token, can reach.
+- A saved check command that runs through a shell, or with arguments the owner did not type, or in a folder other than the lane's worktree.
+- An archive that can overwrite, delete, or move a file outside the runs folder, or a file a running lane still writes.
+- An export or a recovery message that carries an unmasked key or a home path.
+- A stop that ends a lane other than the one named, or tells the wrong head.
+- A tree read failure that empties the room or never recovers.
+- A sibling project's sessions shown.
+- A test that cannot fail.
+
+Write the file: a table of at most 8 findings, the most harmful first. Give each its `file:line`, what goes wrong and when, the smallest fix, and whether it blocks a push. An empty table that lists what you checked is a good answer.
