@@ -56,6 +56,7 @@ export const CLIENT_METHODS = [
   'deleteOrchestratorSession',
   'setLadder',
   'startRun',
+  'stopRun',
   'lanes',
   'harnesses',
   'harnessModels',
@@ -658,6 +659,7 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
   }
   const listeners = new Set()
   const runsState = { project: 'MachineRoom', running: [], recent: [] }
+  const runningMeta = new Map()
   const reviewState = clone(SAMPLE_REVIEWS)
   let endpointState = clone(SAMPLE_ENDPOINTS)
   let modelPinState = []
@@ -1671,14 +1673,18 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
         if (queue) {
           entry.queue = true
           entry.tasks = tasks.length
+          if (tasks.length === 1) entry.task = String(tasks[0]).replace(/\s+/g, ' ').trim().slice(0, 140)
+        } else if (projectRun && task) {
+          entry.task = String(task).replace(/\s+/g, ' ').trim().slice(0, 140)
         }
         runsState.running.push(entry)
         emit({ topic: 'runs' })
         const liveRun = startLiveRun(lane)
-        setTimeout(() => {
+        const timer = setTimeout(() => {
           const index = runsState.running.indexOf(entry)
           if (index === -1) return
           runsState.running.splice(index, 1)
+          runningMeta.delete(entry)
           endLiveRun(liveRun)
           const record = {
             lane,
@@ -1708,7 +1714,83 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
           if (runsState.recent.length > RUN_RECENT_LIMIT) runsState.recent.pop()
           emit({ topic: 'runs' })
         }, runMs)
+        runningMeta.set(entry, { liveRun, timer, projectRun, worktree, queue, task, tasksLength: tasks.length })
         return entry
+      }),
+
+    stopRun: (laneOrOptions = {}, startedAtOption, options = {}) =>
+      call('stopRun', () => {
+        const input = typeof laneOrOptions === 'string'
+          ? { lane: laneOrOptions, startedAt: startedAtOption, confirmed: Object.hasOwn(options, 'confirmed') ? options.confirmed : true }
+          : (laneOrOptions ?? {})
+        const confirmed = Object.hasOwn(input, 'confirmed') ? input.confirmed : true
+        if (confirmed !== true) throw new Error('Confirm the stop first.')
+        const lane = typeof input.lane === 'string' ? input.lane.trim() : ''
+        if (!lane || !/^[A-Za-z0-9_-]+$/.test(lane)) throw new Error('Choose a lane to stop.')
+        const startedAt = typeof input.startedAt === 'string' ? input.startedAt.trim() : ''
+        if (!startedAt) throw new Error('Include the run start time to stop.')
+        const index = runsState.running.findIndex((item) => item.lane === lane)
+        if (index === -1) throw new Error(`No run is running on ${lane}.`)
+        const entry = runsState.running[index]
+        if (entry.startedAt !== startedAt) throw new Error('That start time does not match the running run.')
+        runsState.running.splice(index, 1)
+        const meta = runningMeta.get(entry)
+        if (meta) {
+          runningMeta.delete(entry)
+          if (meta.timer) clearTimeout(meta.timer)
+          if (meta.liveRun) endLiveRun(meta.liveRun)
+        }
+        const info = SAMPLE_LANES[lane]
+        const record = {
+          lane,
+          briefs: [...entry.briefs],
+          model: typeof info?.cli?.model === 'string' && info.cli.model ? info.cli.model : null,
+          reasoning: info?.reasoning ? String(info.reasoning) : null,
+          startedAt: entry.startedAt,
+          minutes: 0,
+          exitCode: 1,
+          killed: true,
+          note: 'stopped by the owner',
+          costUsd: null,
+          log: null,
+          branch: '',
+          commits: [],
+        }
+        if (meta?.projectRun) {
+          record.project = 'MachineRoom'
+          if (meta.worktree) record.worktree = true
+          if (meta.queue) {
+            record.queue = true
+            record.tasks = meta.tasksLength
+          } else if (meta.task) {
+            record.task = meta.task.slice(0, 200)
+          }
+        }
+        runsState.recent.unshift(record)
+        if (runsState.recent.length > RUN_RECENT_LIMIT) runsState.recent.pop()
+        emit({ topic: 'runs' })
+        const sub = ladder.subs.find((s) => s.lanes.includes(lane))
+        const headId = sub ? sub.id : 'orchestrator'
+        const chat = chatStore(headId)
+        const stoppedAt = new Date(now()).toISOString()
+        const taskLabel = entry.briefs.length > 0
+          ? entry.briefs.join(' ')
+          : entry.task || (entry.queue ? `${entry.tasks} task${entry.tasks === 1 ? '' : 's'} in order` : 'current work')
+        orchestratorMessageCounter += 1
+        chat.messages.push({
+          id: `orchestrator-message-${orchestratorMessageCounter}`,
+          from: 'room',
+          text: `The owner stopped ${lane}'s run on ${taskLabel} at ${stoppedAt}.`,
+          at: stoppedAt,
+        })
+        while (chat.messages.length > 200) chat.messages.shift()
+        emit({ topic: 'orchestrator', id: headId })
+        return {
+          ok: true,
+          lane,
+          startedAt,
+          output: `stopped: ${lane} (PID 1000)`,
+        }
       }),
 
     lanes: () =>

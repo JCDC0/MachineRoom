@@ -42,6 +42,7 @@ const TINY_RUNNER = [
   "import { tmpdir } from 'node:os'",
   "import { join } from 'node:path'",
   'const args = process.argv.slice(2)',
+  "if (args[0] === '--stop') { console.log('stopped: ' + args[1] + ' (PID 4242)'); process.exit(0) }",
   "console.log('args ' + args.join(' '))",
   "for (let i = 1; i <= 7; i += 1) console.log('line ' + i)",
   'await new Promise((done) => setTimeout(done, 300))',
@@ -50,6 +51,8 @@ const TINY_RUNNER = [
   "const record = { lane: args[0], briefs: args.slice(1), model: null, reasoning: null, startedAt: new Date().toISOString(), minutes: 0, exitCode: 0, killed: false, costUsd: 0.2, log: null, branch: '', commits: [] }",
   "appendFileSync(join(folder, 'runs.jsonl'), JSON.stringify(record) + '\\n')",
 ].join('\n')
+
+const SLOW_RUNNER = TINY_RUNNER.replace('setTimeout(done, 300)', 'setTimeout(done, 4000)')
 
 const SMALL = { files: 1, hasTests: true, clarity: 'clear', reversible: true, touchesSecrets: false, touchesDeploy: false }
 
@@ -177,7 +180,7 @@ function writeRuns(runs, records) {
   writeFileSync(join(runs, 'runs.jsonl'), `${records.map((entry) => JSON.stringify(entry)).join('\n')}\n`)
 }
 
-async function makeHarness({ records = [] } = {}) {
+async function makeHarness({ records = [], runnerCode = TINY_RUNNER } = {}) {
   const base = tempDir('mr-contract-runs-')
   const runs = join(base, 'machineroom-runs')
   mkdirSync(runs, { recursive: true })
@@ -188,7 +191,7 @@ async function makeHarness({ records = [] } = {}) {
   if (withLogs.length > 0) writeRuns(runs, withLogs)
   const runnerDir = tempDir('mr-contract-runner-')
   const runnerPath = join(runnerDir, 'tiny-runner.mjs')
-  writeFileSync(runnerPath, TINY_RUNNER)
+  writeFileSync(runnerPath, runnerCode)
   useTemp(base)
   const previousLanesDir = process.env.MACHINEROOM_LANES_DIR
   process.env.MACHINEROOM_LANES_DIR = join(shared.repo, 'docs', 'agents')
@@ -363,6 +366,59 @@ describe('the control client contract', () => {
     await expect(client.startRun('nobody', ['B6'])).rejects.toThrow('Choose a lane from the list.')
     await expect(client.startRun('opencode', [])).rejects.toThrow('Choose one to five briefs.')
     await expect(client.startRun('opencode', ['ZZ9'])).rejects.toThrow('Choose a brief from the list.')
+  })
+
+  it('stops a running run by exact start time and refuses a mismatch on bridge and mock', async () => {
+    const { client } = await makeHarness({ runnerCode: SLOW_RUNNER })
+    const entry = await client.startRun('opencode', ['B6'])
+    await expect(
+      client.stopRun({ lane: 'opencode', startedAt: '2020-01-01T00:00:00.000Z', confirmed: true })
+    ).rejects.toThrow('That start time does not match the running run.')
+    await expect(
+      client.stopRun({ lane: 'opencode', startedAt: entry.startedAt, confirmed: false })
+    ).rejects.toThrow('Confirm the stop first.')
+
+    const stopped = await client.stopRun({ lane: 'opencode', startedAt: entry.startedAt, confirmed: true })
+    expect(stopped).toEqual({
+      ok: true,
+      lane: 'opencode',
+      startedAt: entry.startedAt,
+      output: 'stopped: opencode (PID 4242)',
+    })
+    const state = await client.runs()
+    expect(state.running).toEqual([])
+    expect(state.recent.find((item) => item.lane === 'opencode' && item.startedAt === entry.startedAt)).toMatchObject({
+      lane: 'opencode',
+      killed: true,
+      note: 'stopped by the owner',
+    })
+    await expect(client.stopRun({ lane: 'opencode', startedAt: entry.startedAt, confirmed: true })).rejects.toThrow(
+      'No run is running on opencode.'
+    )
+
+    const mock = createMockClient({ latencyMs: 0, runMs: 500 })
+    const mockSubRun = await mock.startRun('opencode2', { task: 'Fix stop dialog.' })
+    await expect(
+      mock.stopRun({ lane: 'opencode2', startedAt: '2020-01-01T00:00:00.000Z', confirmed: true })
+    ).rejects.toThrow('That start time does not match the running run.')
+    const mockStopped = await mock.stopRun({ lane: 'opencode2', startedAt: mockSubRun.startedAt, confirmed: true })
+    expect(mockStopped).toMatchObject({ ok: true, lane: 'opencode2', startedAt: mockSubRun.startedAt })
+    const mockRuns = await mock.runs()
+    expect(mockRuns.running).toEqual([])
+    expect(mockRuns.recent[0]).toMatchObject({ lane: 'opencode2', killed: true, note: 'stopped by the owner' })
+    const frontendChat = await mock.orchestrator('frontend')
+    expect(frontendChat.messages.at(-1)).toMatchObject({
+      from: 'room',
+      text: expect.stringMatching(/^The owner stopped opencode2's run on Fix stop dialog\. at .+\.$/),
+    })
+
+    const mockMainRun = await mock.startRun('opencode', ['B6'])
+    await mock.stopRun({ lane: 'opencode', startedAt: mockMainRun.startedAt, confirmed: true })
+    const mainChat = await mock.orchestrator('orchestrator')
+    expect(mainChat.messages.at(-1)).toMatchObject({
+      from: 'room',
+      text: expect.stringMatching(/^The owner stopped opencode's run on B6 at .+\.$/),
+    })
   })
 
   it('asks the planner and reads the plan through the lane records only', async () => {
@@ -587,6 +643,24 @@ describe('the control client orchestrator routes', () => {
       ['POST', 'http://127.0.0.1:9/api/orchestrator/messages', { text: 'Go', id: 'frontend', confirmed: true }],
       ['POST', 'http://127.0.0.1:9/api/orchestrator/stop', { confirmed: true }],
       ['POST', 'http://127.0.0.1:9/api/orchestrator/stop', { confirmed: true, id: 'frontend' }],
+    ])
+  })
+
+  it('sends /api/control/runs/stop with lane, startedAt and confirmed', async () => {
+    const { calls, client } = recorder({ ok: true })
+    await client.stopRun({ lane: 'opencode', startedAt: '2026-10-24T12:00:00.000Z' })
+    await client.stopRun('opencode2', '2026-10-24T12:05:00.000Z', { confirmed: false })
+    expect(calls.map((call) => [call.method, call.url, JSON.parse(call.body ?? 'null')])).toEqual([
+      [
+        'POST',
+        'http://127.0.0.1:9/api/control/runs/stop',
+        { lane: 'opencode', startedAt: '2026-10-24T12:00:00.000Z', confirmed: true },
+      ],
+      [
+        'POST',
+        'http://127.0.0.1:9/api/control/runs/stop',
+        { lane: 'opencode2', startedAt: '2026-10-24T12:05:00.000Z', confirmed: false },
+      ],
     ])
   })
 
