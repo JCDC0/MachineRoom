@@ -3800,6 +3800,14 @@ body:has(#hud-orchestrator-chat) .lens-waiting {
   border-bottom: 1px solid var(--line);
 }
 
+.panel-toolbar > button {
+  white-space: nowrap;
+  padding: 4px var(--space);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
 .panel-count {
   font-size: 12px;
   color: rgb(255 255 255 / 0.7);
@@ -9023,6 +9031,7 @@ body:has(#hud-orchestrator-chat) .lens-waiting {
   .transport.is-live.has-orchestrator {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(0, auto) minmax(0, 1fr);
+    column-gap: calc(var(--space) * 2);
   }
 
   .transport-orchestrators {
@@ -9042,6 +9051,8 @@ body:has(#hud-orchestrator-chat) .lens-waiting {
     display: inline-flex;
     align-items: baseline;
     gap: 10px;
+    flex: 0 10 auto;
+    min-width: 0;
     padding: 0;
     border: 0;
     background: none;
@@ -9059,11 +9070,16 @@ body:has(#hud-orchestrator-chat) .lens-waiting {
   }
 
   .transport-orchestrator .transport-orchestrator-title {
+    flex: none;
     font-size: 11px;
     letter-spacing: 0.12em;
   }
 
   .transport-orchestrator .transport-orchestrator-state {
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
     font-size: 11px;
     letter-spacing: 0.04em;
     color: var(--white);
@@ -9946,6 +9962,11 @@ body:has(#hud-orchestrator-chat) .lens-waiting {
   align-items: center;
   justify-content: space-between;
   gap: var(--space);
+}
+
+.mr-search-row:has(> input[type='number']) > .hud-settings-label {
+  flex: none;
+  white-space: nowrap;
 }
 
 .mr-search-row.is-stack {

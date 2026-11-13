@@ -2,8 +2,12 @@
 
 ## Unreleased
 
+- P232: the transport state word shrinks clear of the spend, panel Refresh buttons match Team, and Days to keep stays on one line.
 - P229: session discovery reads the root slug's folder and its subfolder slugs, and the cwd check still drops sibling projects.
 - P226: Dispatch keeps each project's task, lane and check command for the page's life, with Discard draft.
+- P232: the transport's state word ends in an ellipsis with its full text in its title, and keeps 8 pixels from the spend.
+- P232: Meters, Reviews and Tasks put Refresh at the Team button's size and type from one `.panel-toolbar > button` rule.
+- P232: the Settings Storage `Days to keep` label stays on one line beside its number box.
 - P231: chromePath names an unreadable Playwright folder, masked, with its error code.
 - The screenshot helper says when it could not read the Playwright folder, names the folder masked with the error code, and keeps the no Chromium sentence only when the folder was read (P231).
 - Dispatch keeps a task, lane and check command draft for each project for the life of the page, clears it after a successful start, and offers Discard draft with one confirm (P226).
