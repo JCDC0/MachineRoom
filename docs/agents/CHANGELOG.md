@@ -2,7 +2,9 @@
 
 ## Unreleased
 
+- The session recorder clears each dropped slot, so a frame trimmed for time or size is freed at once (P189).
 - Every bridge stream write goes through one helper that ends a client whose pending output already passed 8 MB; one large write to a client that keeps up is not cut (P185).
+- The session recorder clears each dropped slot, so a trimmed frame is freed at once while the batched compaction stays (P189).
 - Review 25 reads the readiness merges: six findings, briefed as P188 to P191 (P187).
 - The full suite passed on the readiness merges: 275 files, 4976 tests passed, 4 skipped (P186).
 - Every bridge stream write checks the response's pending bytes, and a client past 8 MB is ended and dropped while the other clients keep their frames (P185).
