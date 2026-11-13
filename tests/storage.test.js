@@ -1,5 +1,6 @@
 import { execFileSync } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs'
+import { lstat, readdir } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -8,7 +9,9 @@ import {
   CONFIRM_PROBLEM,
   DAYS_PROBLEM,
   ORIGIN_PROBLEM,
+  STAT_CONCURRENCY,
   applyStorageArchive,
+  measureDirectoryBytes,
   measureStorage,
   previewStorageArchive,
   worktreesCleanCommand,
@@ -74,6 +77,36 @@ function buildSyntheticFixture() {
   mkdirSync(join(worktrees, 'agy'), { recursive: true })
   mkdirSync(join(worktrees, 'codex'), { recursive: true })
   return { base, project, runs, recordings, worktrees }
+}
+
+async function sequentialWalkBytes(dirPath) {
+  let bytes = 0
+  const stack = [dirPath]
+  while (stack.length > 0) {
+    const current = stack.pop()
+    let entries
+    try {
+      entries = await readdir(current, { withFileTypes: true })
+    } catch {
+      entries = []
+    }
+    for (const entry of entries) {
+      if (entry.isSymbolicLink()) continue
+      const fullPath = join(current, entry.name)
+      if (entry.isDirectory()) {
+        stack.push(fullPath)
+        continue
+      }
+      if (entry.isFile()) {
+        try {
+          const info = await lstat(fullPath)
+          if (info.isFile()) bytes += info.size
+        } catch {
+        }
+      }
+    }
+  }
+  return bytes
 }
 
 describe('server/storage', () => {
@@ -449,5 +482,143 @@ describe('server/storage', () => {
     })
     expect(secondArchive.status).toBe(200)
     expect(await secondArchive.json()).toEqual({ ok: true, days: 30, count: 0, totalBytes: 0, moved: [] })
+  })
+
+  it('matches the sequential walk byte totals across nested folders and skipped symbolic links, and counts failed reads as 0', async () => {
+    const fixture = buildSyntheticFixture()
+    const opencodeWt = join(fixture.worktrees, 'opencode')
+    mkdirSync(opencodeWt, { recursive: true })
+
+    const outsideDir = join(fixture.base, 'outside-target')
+    mkdirSync(outsideDir, { recursive: true })
+    writeAgedFile(join(outsideDir, 'linked.bin'), 'z'.repeat(4096), NOW_MS)
+
+    let expectedWorktreeBytes = 0
+    const agyRoot = join(fixture.worktrees, 'agy')
+    expectedWorktreeBytes += writeAgedFile(join(agyRoot, 'root.txt'), 'alpha', NOW_MS)
+    expectedWorktreeBytes += writeAgedFile(join(agyRoot, 'src', 'index.js'), 'export const a = 1\n', NOW_MS)
+    expectedWorktreeBytes += writeAgedFile(join(agyRoot, 'src', 'deep', 'leaf', 'data.json'), '{"ok":true}', NOW_MS)
+    mkdirSync(join(agyRoot, 'empty', 'nested'), { recursive: true })
+    symlinkSync(
+      outsideDir,
+      join(agyRoot, 'src', 'linked-modules'),
+      process.platform === 'win32' ? 'junction' : 'dir'
+    )
+
+    const codexRoot = join(fixture.worktrees, 'codex')
+    for (let i = 0; i < 40; i += 1) {
+      expectedWorktreeBytes += writeAgedFile(join(codexRoot, `mod-${i % 4}`, `f-${i}.txt`), 'x'.repeat(10 + i), NOW_MS)
+    }
+
+    const failingFile = join(opencodeWt, 'a', 'broken.txt')
+    const nonFilePath = join(opencodeWt, 'a', 'special.txt')
+    const failingBytes = writeAgedFile(failingFile, 'secret-unreadable', NOW_MS)
+    const nonFileBytes = writeAgedFile(nonFilePath, 'not-a-regular-file', NOW_MS)
+    const keptOpenCodeBytes = writeAgedFile(join(opencodeWt, 'a', 'b', 'kept.txt'), 'kept-bytes', NOW_MS)
+    expectedWorktreeBytes += failingBytes + nonFileBytes + keptOpenCodeBytes
+
+    const agySequential = await sequentialWalkBytes(agyRoot)
+    const codexSequential = await sequentialWalkBytes(codexRoot)
+    const opencodeSequential = await sequentialWalkBytes(opencodeWt)
+    expect(agySequential + codexSequential + opencodeSequential).toBe(expectedWorktreeBytes)
+
+    expect(await measureDirectoryBytes(agyRoot)).toBe(agySequential)
+    expect(await measureDirectoryBytes(codexRoot)).toBe(codexSequential)
+    expect(await measureDirectoryBytes(opencodeWt)).toBe(opencodeSequential)
+
+    const summary = await measureStorage({
+      runsFolder: fixture.runs,
+      projectRoot: fixture.project,
+      collectWorktreesFn: () => ({ worktrees: [] }),
+    })
+    expect(summary.kinds.worktrees).toEqual({ count: 3, bytes: expectedWorktreeBytes })
+    expect(summary.worktrees.bytes).toBe(expectedWorktreeBytes)
+    expect(summary.totalBytes).toBe(expectedWorktreeBytes)
+
+    const withFailureSummary = await measureStorage({
+      runsFolder: fixture.runs,
+      projectRoot: fixture.project,
+      collectWorktreesFn: () => ({ worktrees: [] }),
+      lstatFn: async (filePath) => {
+        if (filePath === failingFile) throw new Error('EACCES')
+        if (filePath === nonFilePath) return { isFile: () => false, size: 9999 }
+        return lstat(filePath)
+      },
+    })
+    expect(withFailureSummary.kinds.worktrees).toEqual({
+      count: 3,
+      bytes: expectedWorktreeBytes - failingBytes - nonFileBytes,
+    })
+  })
+
+  it('keeps at most 64 lstat calls in flight across the whole scan and standalone directory reads', async () => {
+    expect(STAT_CONCURRENCY).toBe(64)
+    const fixture = buildSyntheticFixture()
+    let expectedRunsBytes = 0
+    for (let i = 0; i < 70; i += 1) {
+      expectedRunsBytes += writeAgedFile(join(fixture.runs, `agy-20261101-100000-${String(i).padStart(3, '0')}.log`), 'run-log', NOW_MS)
+    }
+    let expectedRecBytes = 0
+    for (let i = 0; i < 30; i += 1) {
+      expectedRecBytes += writeAgedFile(join(fixture.recordings, `rec-${i}-agents.json`), '{}', NOW_MS)
+    }
+    let expectedWtBytes = 0
+    let agyBytes = 0
+    for (let f = 0; f < 70; f += 1) {
+      agyBytes += writeAgedFile(join(fixture.worktrees, 'agy', 'dir-0', `file-${f}.txt`), '12345678', NOW_MS)
+    }
+    for (let d = 1; d < 4; d += 1) {
+      for (let f = 0; f < 10; f += 1) {
+        agyBytes += writeAgedFile(join(fixture.worktrees, 'agy', `dir-${d}`, `file-${f}.txt`), '12345678', NOW_MS)
+      }
+    }
+    expectedWtBytes += agyBytes
+    for (const wt of ['codex', 'opencode', 'lane-4', 'lane-5', 'lane-6']) {
+      for (let d = 0; d < 4; d += 1) {
+        for (let f = 0; f < 20; f += 1) {
+          expectedWtBytes += writeAgedFile(join(fixture.worktrees, wt, `dir-${d}`, `file-${f}.txt`), '12345678', NOW_MS)
+        }
+      }
+    }
+
+    let inFlight = 0
+    let maxInFlight = 0
+    let calls = 0
+    const trackedLstat = async (filePath) => {
+      calls += 1
+      inFlight += 1
+      if (inFlight > maxInFlight) maxInFlight = inFlight
+      try {
+        await new Promise((resolve) => setTimeout(resolve, 15))
+        return await lstat(filePath)
+      } finally {
+        inFlight -= 1
+      }
+    }
+
+    const summary = await measureStorage({
+      runsFolder: fixture.runs,
+      projectRoot: fixture.project,
+      collectWorktreesFn: () => ({ worktrees: [] }),
+      lstatFn: trackedLstat,
+    })
+
+    expect(calls).toBe(70 + 30 + 100 + 5 * 4 * 20)
+    expect(inFlight).toBe(0)
+    expect(maxInFlight).toBe(STAT_CONCURRENCY)
+    expect(summary.kinds.logs.bytes).toBe(expectedRunsBytes)
+    expect(summary.kinds.recordings.bytes).toBe(expectedRecBytes)
+    expect(summary.kinds.worktrees).toEqual({ count: 6, bytes: expectedWtBytes })
+    expect(summary.totalBytes).toBe(expectedRunsBytes + expectedRecBytes + expectedWtBytes)
+
+    inFlight = 0
+    maxInFlight = 0
+    calls = 0
+    const standaloneWt = join(fixture.worktrees, 'agy')
+    const singleBytes = await measureDirectoryBytes(standaloneWt, { lstatFn: trackedLstat })
+    expect(calls).toBe(100)
+    expect(inFlight).toBe(0)
+    expect(maxInFlight).toBe(STAT_CONCURRENCY)
+    expect(singleBytes).toBe(agyBytes)
   })
 })
