@@ -48,6 +48,38 @@ function codexLimited(log) {
   return ''
 }
 
+function isoReset(value) {
+  if (value === null || value === undefined || value === '') return null
+  const number = typeof value === 'number' ? value : Number(value)
+  if (Number.isFinite(number)) {
+    const date = new Date(number > 1e12 ? number : number * 1000)
+    return Number.isNaN(date.getTime()) ? null : date.toISOString()
+  }
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? null : date.toISOString()
+}
+
+function quotaFrom(line) {
+  let item
+  try {
+    item = JSON.parse(String(line ?? ''))
+  } catch {
+    return null
+  }
+  if (item?.type !== 'event_msg' || item?.payload?.type !== 'token_count') return null
+  const limits = item.payload.rate_limits
+  if (!limits || typeof limits !== 'object') return null
+  const windows = []
+  for (const label of ['primary', 'secondary']) {
+    const source = limits[label]
+    if (!source || typeof source !== 'object') continue
+    if (typeof source.used_percent !== 'number' || !Number.isFinite(source.used_percent)) continue
+    const resetsAt = isoReset(source.resets_at)
+    windows.push({ label, usedPercent: source.used_percent, resetsAt })
+  }
+  return windows.length > 0 ? { windows } : null
+}
+
 function codexUsage(log) {
   const line = lastJsonLine(log, (item) => item?.type === 'turn.completed' && item?.usage) ?? lastJsonLine(log, (item) => item?.usage)
   const usage = line?.usage
@@ -81,6 +113,7 @@ export const codexHarness = {
   readLine() {
     return jsonLineReader(createCodexParser)
   },
+  quotaFrom,
   report(log) {
     return headLines(codexReply(log))
   },

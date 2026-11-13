@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { createBridge } from '../server/index.js'
 import { activeLanesFileFor, writeActiveLanes } from '../server/active-lanes.js'
 import { cachedRunRecords, laneCosts, readLaneCosts } from '../server/lane-costs.js'
+import { chooseRoute } from '../src/policy/route.js'
 import { boardLines } from '../src/engine/board.js'
 import { costBoard } from '../src/model/costs.js'
 import { makeTempDir } from './helpers/tempRoot.js'
@@ -322,6 +323,92 @@ describe('laneCosts', () => {
     const costs = readLaneCosts({ agents: AGENTS, file, now: NOW })
     expect(costs.byAgent.map((row) => row.costCents)).toEqual([50, 25, 0])
     expect(costs.summary.spendCents).toBe(75)
+  })
+})
+
+describe('laneCosts quota', () => {
+  const future = '2026-10-24T18:00:00.000Z'
+  const past = '2026-10-24T10:00:00.000Z'
+  const at = '2026-10-24T11:00:00.000Z'
+
+  it('fills the newest reading per provider and leaves out a window past its reset', () => {
+    const costs = laneCosts({
+      records: [
+        record('codex', at, 0, {
+          quota: {
+            at,
+            windows: [
+              { label: 'primary', usedPercent: 95, resetsAt: future },
+              { label: 'secondary', usedPercent: 20, resetsAt: past },
+            ],
+          },
+        }),
+      ],
+      agents: AGENTS,
+      now: NOW,
+    })
+
+    expect(costs.quota).toEqual([
+      { provider: 'codex', windows: [{ label: 'primary', usedPercent: 95, resetsAt: future }], at },
+    ])
+  })
+
+  it('leaves the provider out when every window has passed its reset', () => {
+    const costs = laneCosts({
+      records: [
+        record('codex', at, 0, {
+          quota: { at, windows: [{ label: 'primary', usedPercent: 95, resetsAt: past }] },
+        }),
+      ],
+      agents: AGENTS,
+      now: NOW,
+    })
+
+    expect(costs.quota).toEqual([])
+  })
+
+  it('reads the newest record when an older one carries a higher reading', () => {
+    const costs = laneCosts({
+      records: [
+        record('codex', '2026-10-24T10:00:00.000Z', 0, {
+          quota: { at: '2026-10-24T10:00:00.000Z', windows: [{ label: 'primary', usedPercent: 80, resetsAt: future }] },
+        }),
+        record('codex', '2026-10-24T11:00:00.000Z', 0, {
+          quota: { at, windows: [{ label: 'primary', usedPercent: 12, resetsAt: future }] },
+        }),
+      ],
+      agents: AGENTS,
+      now: NOW,
+    })
+
+    expect(costs.quota[0].windows).toEqual([{ label: 'primary', usedPercent: 12, resetsAt: future }])
+  })
+
+  it('makes chooseRoute skip codex when its lane-costs reading is above quotaSkipPercent', () => {
+    const policy = {
+      tiers: {
+        small: [
+          { lane: 'codex', model: 'gpt-6.1-sol', reasoning: 'high', provider: 'codex' },
+          { lane: 'opencode', model: 'opencode-go/deepseek-v4.1-flash', reasoning: 'max', provider: 'opencode' },
+        ],
+        medium: [{ lane: 'owner', model: null, reasoning: null, provider: null }],
+        large: [{ lane: 'owner', model: null, reasoning: null, provider: null }],
+      },
+      limits: { runUsd: 0.25, issueUsd: 1, agentMonthlyUsd: 10, companyMonthlyUsd: 30, maxTurnsPerRun: 200, timeoutSec: 3600 },
+      quotaSkipPercent: 90,
+    }
+    const costs = laneCosts({
+      records: [
+        record('codex', at, 0, {
+          quota: { at, windows: [{ label: 'primary', usedPercent: 95, resetsAt: future }] },
+        }),
+      ],
+      agents: AGENTS,
+      now: NOW,
+    })
+    const profile = { clarity: 'clear', files: 1, hasTests: true, newTest: false }
+
+    expect(chooseRoute({ policy, profile, quotas: costs.quota }).choice.lane).toBe('opencode')
   })
 })
 

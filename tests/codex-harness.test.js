@@ -321,6 +321,34 @@ describe('codex parser with fixture lines', () => {
   })
 })
 
+describe('codex harness quota', () => {
+  it('reads the primary and secondary windows from a token_count line', () => {
+    const reset = Date.UTC(2026, 10, 14) / 1000
+    const line = JSON.stringify({
+      type: 'event_msg',
+      payload: {
+        type: 'token_count',
+        rate_limits: {
+          primary: { used_percent: 12.5, window_minutes: 300, resets_at: reset },
+          secondary: { used_percent: 47, window_minutes: 10080, resets_at: reset + 86400 },
+        },
+      },
+    })
+    expect(codexHarness.quotaFrom(line)).toEqual({
+      windows: [
+        { label: 'primary', usedPercent: 12.5, resetsAt: new Date(reset * 1000).toISOString() },
+        { label: 'secondary', usedPercent: 47, resetsAt: new Date((reset + 86400) * 1000).toISOString() },
+      ],
+    })
+  })
+
+  it('answers null for a line that carries no token count', () => {
+    expect(codexHarness.quotaFrom(JSON.stringify({ type: 'thread.started', thread_id: 'thread-1' }))).toBeNull()
+    expect(codexHarness.quotaFrom(JSON.stringify({ type: 'event_msg', payload: { type: 'agent_message' } }))).toBeNull()
+    expect(codexHarness.quotaFrom('not json')).toBeNull()
+  })
+})
+
 describe('codex harness report and usage', () => {
   it('reads reply and report from agent_message item', () => {
     const log = lines(
