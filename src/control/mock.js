@@ -1812,12 +1812,38 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
         return { endpoint: clone(endpoint), endpoints: clone(endpointState) }
       }),
 
-    quickEndpoint: ({ provider, key, confirmed = true } = {}) =>
+    quickEndpoint: ({ provider, key, name, keyName, confirmed = true } = {}) =>
       call('quickEndpoint', () => {
         if (confirmed !== true) throw new Error('Confirm saving the key first.')
         const preset = MOCK_PROVIDERS.find((entry) => entry.name === provider && entry.baseUrl !== '')
         if (!preset) throw new Error('Choose a provider from the list.')
         if (typeof key !== 'string' || key.length < 1 || key.length > 500) throw new Error('Write the key.')
+        const target = typeof name === 'string' ? name.trim() : ''
+        if (target !== '') {
+          const existing = endpointState.find((entry) => entry.name === target)
+          if (!existing) throw new Error('The endpoint was not found.')
+          if (existing.provider !== provider) {
+            throw new Error('The key can only be replaced on the endpoint it belongs to.')
+          }
+          if (existing.keyName === '' || keyName !== existing.keyName) {
+            throw new Error('This endpoint has no key slot to replace.')
+          }
+          if (endpointState.some((entry) => entry.name !== existing.name && entry.keyName === existing.keyName)) {
+            throw new Error('That key slot is shared with another endpoint.')
+          }
+          keySlots.set(existing.keyName, key)
+          emit({ topic: 'family' })
+          return {
+            endpoint: {
+              name: existing.name,
+              provider: existing.provider,
+              baseUrl: existing.baseUrl,
+              keyName: existing.keyName,
+              models: existing.models.length,
+            },
+            endpoints: clone(endpointState),
+          }
+        }
         keySlots.set(preset.name, key)
         const endpoint = {
           name: preset.name,

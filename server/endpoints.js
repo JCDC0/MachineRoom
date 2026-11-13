@@ -50,6 +50,9 @@ export const QUICK_ORIGIN_PROBLEM = 'A request to save a Direct API key needs a 
 export const QUICK_CONFIRM_PROBLEM = 'Confirm saving the Direct API key first.'
 export const QUICK_KEY_PROBLEM = 'The key must be 1 to 500 characters.'
 export const QUICK_KEY_SAVE_PROBLEM = 'The Direct API key could not be saved.'
+export const REPLACE_KEY_PROVIDER_PROBLEM = 'The key can only be replaced on the endpoint it belongs to.'
+export const REPLACE_KEY_SLOT_PROBLEM = 'This endpoint has no key slot to replace.'
+export const REPLACE_KEY_SHARED_PROBLEM = 'That key slot is shared with another endpoint.'
 export const PIN_PROBLEM = 'A pin is a model name of at most 200 characters.'
 export const PIN_ORIGIN_PROBLEM = 'A change to the model pins needs a page Origin.'
 
@@ -450,6 +453,52 @@ export function createEndpointsApi(options = {}) {
       const key = typeof body.key === 'string' ? body.key : ''
       if (key.length < 1 || key.length > 500) {
         sendJson(req, res, 400, { error: QUICK_KEY_PROBLEM })
+        return true
+      }
+      const targetName = typeof body.name === 'string' ? body.name.trim() : ''
+      if (targetName !== '') {
+        if (!ENDPOINT_NAME_PATTERN.test(targetName)) {
+          sendJson(req, res, 400, { error: NAME_PROBLEM })
+          return true
+        }
+        if (preset.baseUrl === '') {
+          sendJson(req, res, 400, { error: REPLACE_KEY_PROVIDER_PROBLEM })
+          return true
+        }
+        const endpoints = readEndpoints(runsDir)
+        const existing = endpoints.find((entry) => entry.name === targetName)
+        if (!existing) {
+          sendJson(req, res, 404, { error: ENDPOINT_NOT_FOUND_PROBLEM })
+          return true
+        }
+        if (existing.provider !== providerName) {
+          sendJson(req, res, 400, { error: REPLACE_KEY_PROVIDER_PROBLEM })
+          return true
+        }
+        const keyName = typeof body.keyName === 'string' ? body.keyName.trim() : ''
+        if (keyName === '' || keyName !== existing.keyName) {
+          sendJson(req, res, 400, { error: REPLACE_KEY_SLOT_PROBLEM })
+          return true
+        }
+        if (endpoints.some((entry) => entry.name !== existing.name && entry.keyName === keyName)) {
+          sendJson(req, res, 400, { error: REPLACE_KEY_SHARED_PROBLEM })
+          return true
+        }
+        const savedKey = await writeEndpointKey(runsDir, keyName, key)
+        if (!savedKey) {
+          sendJson(req, res, 500, { error: QUICK_KEY_SAVE_PROBLEM })
+          return true
+        }
+        if (typeof notify === 'function') notify({ topic: 'family' })
+        sendJson(req, res, 200, {
+          endpoint: {
+            name: existing.name,
+            provider: existing.provider,
+            baseUrl: existing.baseUrl,
+            keyName,
+            models: existing.models.length,
+          },
+        })
         return true
       }
       const name = quickEndpointName(providerName)

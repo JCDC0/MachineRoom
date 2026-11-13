@@ -17,6 +17,9 @@ export const ENDPOINT_MODELS_PROBLEM = 'Models must be a list of 0 to 1000 ids.'
 export const ENDPOINT_MAX_PROBLEM = 'At most 20 endpoints are allowed.'
 export const QUICK_PROVIDER_PROBLEM = 'Choose a provider from the list.'
 export const QUICK_KEY_PROBLEM = 'Write the key.'
+export const REPLACE_KEY_NO_PRESET_PROBLEM = 'This endpoint has no provider preset to replace its key.'
+export const REPLACE_KEY_NO_SLOT_PROBLEM = 'This endpoint has no key slot to replace.'
+export const REPLACE_KEY_SHARED_SLOT_PROBLEM = 'This endpoint key slot is shared with another endpoint.'
 
 export function baseUrlForProvider(providers, name) {
   const found = (Array.isArray(providers) ? providers : []).find((entry) => entry?.name === name)
@@ -48,9 +51,25 @@ export function quickKeyProblem(provider, key) {
   return null
 }
 
-export function quickConfirmText(provider) {
-  const name = typeof provider === 'string' && provider.trim() ? provider.trim() : 'provider'
-  return `Save the ${name} key and load its models?`
+export function quickConfirmText(provider, endpointName = '') {
+  const name = typeof endpointName === 'string' ? endpointName.trim() : ''
+  if (name !== '') return `Save the ${name} key?`
+  const providerName = typeof provider === 'string' && provider.trim() ? provider.trim() : 'provider'
+  return `Save the ${providerName} key and load its models?`
+}
+
+export function replaceKeyProblem(endpoint, endpoints = [], presets = []) {
+  const provider = typeof endpoint?.provider === 'string' ? endpoint.provider.trim() : ''
+  if (!(Array.isArray(presets) ? presets : []).some((entry) => entry?.name === provider)) {
+    return REPLACE_KEY_NO_PRESET_PROBLEM
+  }
+  const slot = typeof endpoint?.keyName === 'string' ? endpoint.keyName.trim() : ''
+  if (slot === '') return REPLACE_KEY_NO_SLOT_PROBLEM
+  const shared = (Array.isArray(endpoints) ? endpoints : []).some(
+    (entry) => entry?.name !== endpoint?.name && entry?.keyName === slot
+  )
+  if (shared) return REPLACE_KEY_SHARED_SLOT_PROBLEM
+  return null
 }
 
 export function modelsFromText(text) {
@@ -153,6 +172,7 @@ export default function EndpointsPanel({ client, initialEndpoints = null, initia
   const [quickKey, setQuickKey] = useState('')
   const [quickNotice, setQuickNotice] = useState({ text: '', error: false })
   const [quickConfirm, setQuickConfirm] = useState(null)
+  const [quickTarget, setQuickTarget] = useState(null)
   const [quickBusy, setQuickBusy] = useState(false)
   const [formOpen, setFormOpen] = useState(Boolean(initialOpen))
   const [name, setName] = useState('')
@@ -322,13 +342,17 @@ export default function EndpointsPanel({ client, initialEndpoints = null, initia
   }
 
   function askQuick() {
-    const problem = quickKeyProblem(quickProvider, quickKey)
+    const problem = quickKeyProblem(quickTarget ? quickTarget.name : quickProvider, quickKey)
     if (problem) {
       setQuickNotice({ text: problem, error: true })
       return
     }
     setQuickNotice({ text: '', error: false })
-    setQuickConfirm({ provider: quickProvider, key: quickKey })
+    setQuickConfirm({
+      provider: quickProvider,
+      key: quickKey,
+      ...(quickTarget ? { name: quickTarget.name, keyName: quickTarget.keyName } : {}),
+    })
   }
 
   async function saveQuick(next) {
@@ -345,6 +369,7 @@ export default function EndpointsPanel({ client, initialEndpoints = null, initia
         provider: next.provider,
         key: next.key,
         confirmed: true,
+        ...(next.name ? { name: next.name, keyName: next.keyName } : {}),
       })
     } catch (err) {
       setQuickNotice({ text: err?.message || 'Could not save the key.', error: true })
@@ -353,23 +378,36 @@ export default function EndpointsPanel({ client, initialEndpoints = null, initia
       return
     }
     setQuickKey('')
-    setQuickNotice({ text: quickSavedText(answer, next.provider), error: Boolean(answer?.error) })
+    const error = typeof answer?.error === 'string' ? answer.error.trim() : ''
+    setQuickNotice({
+      text: error || (next.name ? `Saved the ${next.name} key.` : quickSavedText(answer, next.provider)),
+      error: Boolean(error),
+    })
     setQuickBusy(false)
     setQuickConfirm(null)
+    setQuickTarget(null)
     await loadData({ reloadFailed: 'The key was saved, but the list could not be read.' })
   }
 
   function replaceKey(endpoint) {
-    const selected = endpoint.provider || endpoint.name
-    if (!quickList.some((entry) => entry.name === selected)) {
-      setQuickNotice({ text: 'This endpoint has no provider preset.', error: true })
+    const problem = replaceKeyProblem(endpoint, endpoints, quickList)
+    if (problem) {
+      setQuickNotice({ text: problem, error: true })
       return
     }
-    setQuickProvider(selected)
+    setQuickProvider(endpoint.provider)
     setQuickKey('')
     setQuickConfirm(null)
     setQuickNotice({ text: '', error: false })
+    setQuickTarget({ name: endpoint.name, keyName: endpoint.keyName })
     if (quickKeyRef.current?.focus) quickKeyRef.current.focus()
+  }
+
+  function clearQuickTarget() {
+    setQuickTarget(null)
+    setQuickKey('')
+    setQuickConfirm(null)
+    setQuickNotice({ text: '', error: false })
   }
 
   async function askDelete(endpoint) {
@@ -459,9 +497,10 @@ export default function EndpointsPanel({ client, initialEndpoints = null, initia
           <select
             id="endpoints-quick-provider"
             value={quickProvider}
-            disabled={quickBusy || quickList.length === 0}
+            disabled={quickBusy || quickList.length === 0 || Boolean(quickTarget)}
             onChange={(event) => {
               setQuickProvider(event.target.value)
+              setQuickTarget(null)
               setQuickNotice({ text: '', error: false })
               setQuickConfirm(null)
             }}
@@ -503,6 +542,15 @@ export default function EndpointsPanel({ client, initialEndpoints = null, initia
         ) : null}
       </div>
 
+      {quickTarget ? (
+        <p className="endpoints-note mono">
+          Replacing the key for {quickTarget.name}.{' '}
+          <button type="button" className="hud-settings-switch" disabled={quickBusy} onClick={clearQuickTarget}>
+            Cancel
+          </button>
+        </p>
+      ) : null}
+
       {quickNotice.text ? (
         <p className={`endpoints-note mono${quickNotice.error ? ' endpoints-error' : ''}`} role={quickNotice.error ? 'alert' : undefined}>
           {quickNotice.text}
@@ -517,52 +565,56 @@ export default function EndpointsPanel({ client, initialEndpoints = null, initia
         <p className="endpoints-note mono">No endpoints yet.</p>
       ) : null}
 
-      {endpoints.map((endpoint) => (
-        <div key={endpoint.name} className="endpoints-row">
-          <div className="endpoints-row-head">
-            <span className="endpoints-name">{endpoint.name}</span>
-            <span className="endpoints-meta mono">{endpoint.provider}</span>
+      {endpoints.map((endpoint) => {
+        const keyProblem = replaceKeyProblem(endpoint, endpoints, quickList)
+        return (
+          <div key={endpoint.name} className="endpoints-row">
+            <div className="endpoints-row-head">
+              <span className="endpoints-name">{endpoint.name}</span>
+              <span className="endpoints-meta mono">{endpoint.provider}</span>
+            </div>
+            <div className="endpoints-meta mono">{endpointCount(endpoint.models)}</div>
+            <ModelPicker
+              label="Model list"
+              ariaLabel={`Models for ${endpoint.name}`}
+              value={pickedModel[endpoint.name] ?? ''}
+              choices={endpoint.models}
+              details={Array.isArray(endpoint.modelDetails) ? endpoint.modelDetails : []}
+              client={client}
+              onChange={(model) => setPickedModel((current) => ({ ...current, [endpoint.name]: model }))}
+              placeholder={endpointCount(endpoint.models)}
+              emptyText="No models saved."
+            />
+            <div className="endpoints-actions">
+              <button
+                type="button"
+                className="hud-settings-switch"
+                disabled={busy}
+                onClick={() => refreshModels(endpoint)}
+              >
+                Refresh models
+              </button>
+              <button
+                type="button"
+                className="hud-settings-switch"
+                disabled={busy || keyProblem !== null}
+                onClick={() => replaceKey(endpoint)}
+              >
+                Replace key
+              </button>
+              <button
+                type="button"
+                className="hud-settings-switch"
+                disabled={busy}
+                onClick={() => askDelete(endpoint)}
+              >
+                Delete
+              </button>
+            </div>
+            {keyProblem ? <p className="endpoints-note mono">{keyProblem}</p> : null}
           </div>
-          <div className="endpoints-meta mono">{endpointCount(endpoint.models)}</div>
-          <ModelPicker
-            label="Model list"
-            ariaLabel={`Models for ${endpoint.name}`}
-            value={pickedModel[endpoint.name] ?? ''}
-            choices={endpoint.models}
-            details={Array.isArray(endpoint.modelDetails) ? endpoint.modelDetails : []}
-            client={client}
-            onChange={(model) => setPickedModel((current) => ({ ...current, [endpoint.name]: model }))}
-            placeholder={endpointCount(endpoint.models)}
-            emptyText="No models saved."
-          />
-          <div className="endpoints-actions">
-            <button
-              type="button"
-              className="hud-settings-switch"
-              disabled={busy}
-              onClick={() => refreshModels(endpoint)}
-            >
-              Refresh models
-            </button>
-            <button
-              type="button"
-              className="hud-settings-switch"
-              disabled={busy}
-              onClick={() => replaceKey(endpoint)}
-            >
-              Replace key
-            </button>
-            <button
-              type="button"
-              className="hud-settings-switch"
-              disabled={busy}
-              onClick={() => askDelete(endpoint)}
-            >
-              Delete
-            </button>
-          </div>
-        </div>
-      ))}
+        )
+      })}
 
       <button
         type="button"
@@ -656,7 +708,7 @@ export default function EndpointsPanel({ client, initialEndpoints = null, initia
 
       {quickConfirm ? (
         <div ref={quickConfirmRef} className="brief-confirm-card endpoints-confirm">
-          <p className="brief-confirm-warning">{quickConfirmText(quickConfirm.provider)}</p>
+          <p className="brief-confirm-warning">{quickConfirmText(quickConfirm.provider, quickConfirm.name)}</p>
           <div className="brief-confirm-actions">
             <button
               type="button"
