@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- P258: RUN-2026-11-13-COMMANDS.md runs each command's help form; seven lack --help and four doc lines miss an empty or refusal case.
 - P266: storage, dispatch and doctor tests assert the partial archive, the queue's --test parse, both notice sentences and the literal %TEMP% mask.
 - P263: an empty reply gets one nudge before it ends the run, a provider error exits 1, and the result is the agent's last message.
 - P249: GET /api/control/runs/conversation turns a lane run's log into prompt, agent, tool and result entries, masked, from the runs folder only.
