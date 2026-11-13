@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { tmpdir } from 'node:os'
+import { PassThrough } from 'node:stream'
 import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
@@ -176,6 +177,59 @@ async function getJson(url, options = {}) {
   const res = await fetch(url, options)
   const text = await res.text()
   return { status: res.status, body: text ? JSON.parse(text) : null }
+}
+
+function overlapApi(runsFolder, projectRoot) {
+  const held = new Map()
+  const api = createAgentsConfigApi({
+    runsFolder,
+    projectRoot,
+    lanes: SAMPLE_LANES,
+    sendJson: (req, res, status, body) => {
+      req.reply = { status, body }
+    },
+    readJsonBody: (req) => {
+      const hold = held.get(req)
+      if (hold) {
+        hold.markRead()
+        return hold.body
+      }
+      return Promise.resolve(req.body)
+    },
+  })
+  return { api, held }
+}
+
+function heldDeleteRequest(api, held, path) {
+  const req = new PassThrough()
+  req.method = 'POST'
+  req.headers = { origin: 'http://localhost:5173' }
+  let markRead
+  const read = new Promise((resolve) => {
+    markRead = resolve
+  })
+  const body = new Promise((resolve) => {
+    const chunks = []
+    req.on('data', (chunk) => chunks.push(chunk))
+    req.on('end', () => resolve(JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}')))
+  })
+  held.set(req, { markRead, body })
+  const done = api.handle(req, {}, new URL(path, 'http://localhost:5173'))
+  return { req, read, done }
+}
+
+async function sendBody(api, path, body) {
+  const req = { method: 'POST', headers: { origin: 'http://localhost:5173' }, body }
+  await api.handle(req, {}, new URL(path, 'http://localhost:5173'))
+  return req.reply
+}
+
+const OLD_OPENCODE = {
+  key: 'opencode-2',
+  name: 'Old OpenCode',
+  harness: 'opencode',
+  model: 'opencode-go/deepseek-v4.1-flash',
+  createdAt: '2026-10-25T10:00:00.000Z',
 }
 
 describe('key generation', () => {
@@ -930,6 +984,79 @@ describe('POST /api/lanes/:key/delete', () => {
     await waitFor(() => notices.some((n) => n.topic === 'family'), {
       what: 'family notice on delete',
     })
+  })
+})
+
+describe('overlapping lane writes', () => {
+  it('keeps a lane created while a delete holds its body open', async () => {
+    const runs = tempDir('mr-overlap-delete-')
+    saveAgentsConfig(runs, { agents: [{ ...OLD_OPENCODE }] })
+    const { api, held } = overlapApi(runs, gitProject('mr-overlap-delete-proj-'))
+
+    const deleting = heldDeleteRequest(api, held, '/api/lanes/opencode-2/delete')
+    await deleting.read
+
+    const created = await sendBody(api, '/api/lanes/create', {
+      name: 'New OpenCode',
+      harness: 'opencode',
+      model: 'opencode-go/deepseek-v4.1-flash',
+      confirmed: true,
+    })
+    expect(created.status).toBe(200)
+    expect(created.body.key).toBe('opencode-3')
+
+    deleting.req.end(JSON.stringify({ confirmed: true }))
+    await deleting.done
+    expect(deleting.req.reply.status).toBe(200)
+
+    const config = readAgentsConfig(runs)
+    expect(config.agents.map((agent) => agent.key)).toEqual(['opencode-3'])
+    expect(config.allocated.opencode).toBe(3)
+
+    const next = await sendBody(api, '/api/lanes/create', {
+      name: 'Next OpenCode',
+      harness: 'opencode',
+      model: 'opencode-go/deepseek-v4.1-flash',
+      confirmed: true,
+    })
+    expect(next.body.key).toBe('opencode-4')
+    expect(readAgentsConfig(runs).allocated.opencode).toBe(4)
+  })
+
+  it('keeps a lane created while an update holds its body open', async () => {
+    const runs = tempDir('mr-overlap-update-')
+    saveAgentsConfig(runs, { agents: [{ ...OLD_OPENCODE }] })
+    const { api, held } = overlapApi(runs, gitProject('mr-overlap-update-proj-'))
+
+    const updating = heldDeleteRequest(api, held, '/api/lanes/opencode-2/update')
+    await updating.read
+
+    const created = await sendBody(api, '/api/lanes/create', {
+      name: 'New OpenCode',
+      harness: 'opencode',
+      model: 'opencode-go/deepseek-v4.1-flash',
+      confirmed: true,
+    })
+    expect(created.status).toBe(200)
+    expect(created.body.key).toBe('opencode-3')
+
+    updating.req.end(JSON.stringify({ name: 'Renamed OpenCode', confirmed: true }))
+    await updating.done
+    expect(updating.req.reply.status).toBe(200)
+
+    const config = readAgentsConfig(runs)
+    expect(config.agents.map((agent) => agent.key)).toEqual(['opencode-2', 'opencode-3'])
+    expect(config.agents.find((agent) => agent.key === 'opencode-2').name).toBe('Renamed OpenCode')
+    expect(config.allocated.opencode).toBe(3)
+
+    const next = await sendBody(api, '/api/lanes/create', {
+      name: 'Next OpenCode',
+      harness: 'opencode',
+      model: 'opencode-go/deepseek-v4.1-flash',
+      confirmed: true,
+    })
+    expect(next.body.key).toBe('opencode-4')
+    expect(readAgentsConfig(runs).allocated.opencode).toBe(4)
   })
 })
 

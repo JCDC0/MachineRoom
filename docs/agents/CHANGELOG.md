@@ -2,8 +2,10 @@
 
 ## Unreleased
 
+- Lane Update and Delete read the request body before the saved configuration, so a lane created meanwhile and its key count are kept.
 - The Removed lanes row sums each removed lane's rounded cents, so deleting lanes never moves the total.
 - Removed lanes adds each removed lane's rounded cents for the month and today, so deleting lanes no longer changes the total (P212).
+- An update or delete reads the saved lane configuration after its request body, so a lane created while that body is held open is kept and its key is not reused (P211).
 - Review 28 finds overlapping lane writes can lose a new lane and reuse its key, and removed lanes round their spend differently.
 - The full suite passes at 31f73519: 5026 passed, 4 skipped, no failure.
 - Add MCP server sends create, and the bridge and the mock refuse a saved name with one sentence and change nothing; on and off still updates.
