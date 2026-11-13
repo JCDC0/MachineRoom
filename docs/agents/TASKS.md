@@ -2086,3 +2086,20 @@ Write the file: a table of at most 8 findings, the most harmful first. Give each
 2. The folder-shaped `/api/tree` answer is the same age rule as the plain one: a stale `lastTree` while a read is failing still answers, but `/api/health` keeps the problem until a read succeeds.
 3. Tests, by what they prove: with a reader that fails once and then succeeds, and with no file event or new GET, the new file appears and the health problem clears; shutdown leaves no timer. Use fake timers. Each must fail before your change.
 4. Run `node node_modules/vitest/vitest.mjs related --run server/index.js` and `npm run build`. Report what passed.
+
+**P245. Check the review 29 fixes (Codex).** Read `docs/agents/AUDIT-2026-11-REVIEW-29.md` and this brief only. Change no code. Do not commit: the runner commits your file. Stop at minute 30. Files: docs/agents/AUDIT-2026-11-REVIEW-30.md.
+
+For each finding 1 to 7 of review 29, read its fix with `git show -m --first-parent SHA` and the code around it, then say whether it is fixed, partly fixed or not fixed:
+- Finding 1 and finding 7: P240.
+- Findings 2, 4 and 6: P241.
+- Finding 3: P242.
+- Finding 5: P244.
+
+Find each merge's SHA with `git log --first-parent --oneline 4224921d..HEAD`. Repeat your synthetic case where you can. Then look at what each fix could break:
+- A check command the owner may type today that the new refusal or splitting now rejects or runs differently, such as quoted paths, `npm run check`, or `node --test`.
+- A route the page or a script still calls with no Origin.
+- An archive that now refuses on a normal Windows runs folder under `%LOCALAPPDATA%`.
+- A retry timer that runs while the room is idle and healthy.
+- Whether the folder-shaped `/api/tree` now reads the whole tree on every request after the first second, and what that costs on a large project.
+
+Write the file: one row per finding, with `fixed`, `partly` or `not fixed` and why, then a table of at most 5 new findings, most harmful first. Give each new finding its `file:line`, the case, the smallest fix, and whether it blocks a push.
