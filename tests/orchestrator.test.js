@@ -3216,6 +3216,76 @@ describe('orchestrator reasoning effort and sessions', () => {
     })
   })
 
+  it('keeps the current conversation id across restarts and the 200-message cap and rotates it on new, open, and branch', async () => {
+    const rig = makeRig()
+    const initialId = rig.orchestrator.currentSessionInfo().sessionId
+    expect(typeof initialId).toBe('string')
+    expect(initialId.length).toBeGreaterThan(0)
+
+    rig.send('Start conversation')
+    await waitIdle(rig, 1)
+    expect(rig.orchestrator.currentSessionInfo().sessionId).toBe(initialId)
+
+    expect(rig.orchestrator.updateSession(CURRENT_SESSION_KEY, { title: 'Pinned name', confirmed: true }).status).toBe(200)
+    expect(rig.orchestrator.currentSessionInfo().sessionId).toBe(initialId)
+    rig.orchestrator.close()
+
+    const file = chatFileFor(rig.projectRoot, rig.runs)
+    const saved = JSON.parse(readFileSync(file, 'utf8'))
+    expect(saved.currentConversationId).toBe(initialId)
+    const padded = []
+    for (let index = 0; index < 198; index += 1) {
+      const at = new Date(Date.UTC(2026, 9, 20, 0, Math.floor(index / 60), index % 60)).toISOString()
+      padded.push({
+        id: `pad-${index}`,
+        from: index % 2 === 0 ? 'owner' : 'orchestrator',
+        text: `History ${index}`,
+        at,
+      })
+    }
+    saved.messages = [...padded, ...saved.messages]
+    writeFileSync(file, `${JSON.stringify(saved)}\n`)
+
+    const restored = restoreRig(rig)
+    expect(restored.orchestrator.answer().messages).toHaveLength(200)
+    const beforeCap = restored.orchestrator.currentSessionInfo()
+    expect(beforeCap.sessionId).toBe(initialId)
+
+    restored.orchestrator.send({ text: 'Turn past limit', confirmed: true })
+    await waitIdle(restored, 1)
+    const afterCap = restored.orchestrator.currentSessionInfo()
+    expect(restored.orchestrator.answer().messages).toHaveLength(200)
+    expect(afterCap.startedAt).not.toBe(beforeCap.startedAt)
+    expect(afterCap.sessionId).toBe(initialId)
+
+    expect(restored.orchestrator.newSession({ confirmed: true }).status).toBe(200)
+    const afterNew = restored.orchestrator.currentSessionInfo().sessionId
+    expect(typeof afterNew).toBe('string')
+    expect(afterNew.length).toBeGreaterThan(0)
+    expect(afterNew).not.toBe(initialId)
+
+    restored.orchestrator.send({ text: 'Second conversation', confirmed: true })
+    await waitIdle(restored, 2)
+    expect(restored.orchestrator.currentSessionInfo().sessionId).toBe(afterNew)
+
+    const firstArchived = restored.orchestrator.listSessions()[0]
+    expect(restored.orchestrator.openSession(firstArchived.id, { confirmed: true }).status).toBe(200)
+    const afterOpen = restored.orchestrator.currentSessionInfo().sessionId
+    expect(typeof afterOpen).toBe('string')
+    expect(afterOpen.length).toBeGreaterThan(0)
+    expect(afterOpen).not.toBe(afterNew)
+    expect(afterOpen).not.toBe(initialId)
+
+    const branchResult = restored.orchestrator.branchSession({ index: 1, confirmed: true })
+    expect(branchResult.status).toBe(200)
+    const afterBranch = restored.orchestrator.currentSessionInfo().sessionId
+    expect(typeof afterBranch).toBe('string')
+    expect(afterBranch.length).toBeGreaterThan(0)
+    expect(afterBranch).not.toBe(afterOpen)
+    expect(afterBranch).not.toBe(afterNew)
+    expect(afterBranch).not.toBe(initialId)
+  })
+
   it('refuses a session switch while messages wait and archives a conversation with no owner line', async () => {
     const rig = makeRig()
     rig.send('Start')

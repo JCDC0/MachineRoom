@@ -947,6 +947,7 @@ export function createOrchestrator({
   let compactRules = ''
   let effort = null
   let mode = null
+  let currentConversationId = randomUUID()
   let currentSessionId = null
   let currentTitle = null
   let currentPinned = false
@@ -1078,6 +1079,7 @@ export function createOrchestrator({
         autocompactPercent: autocompactMode === 'percent' ? autocompactValue : Math.round((autocompactValue / contextWindow) * 100),
         effort,
         ...(mode ? { mode } : {}),
+        currentConversationId,
         currentSessionId,
         currentTitle,
         currentPinned,
@@ -1237,6 +1239,9 @@ export function createOrchestrator({
     }
     if (typeof saved.mode === 'string' && modesFor(harness).some((entry) => entry.id === saved.mode.trim())) {
       mode = saved.mode.trim()
+    }
+    if (typeof saved.currentConversationId === 'string' && saved.currentConversationId.trim() !== '') {
+      currentConversationId = saved.currentConversationId.trim()
     }
     if (typeof saved.currentSessionId === 'string' && saved.currentSessionId.trim() !== '') {
       currentSessionId = saved.currentSessionId.trim()
@@ -2312,6 +2317,7 @@ export function createOrchestrator({
     const title = `${baseTitle.slice(0, Math.max(0, 80 - suffix.length))}${suffix}`
     archiveCurrentSession()
     branchTranscript = harness === 'claude' || harness === 'opencode' ? quotedTranscript(kept) : ''
+    currentConversationId = randomUUID()
     currentSessionId = null
     currentTitle = title
     messages.length = 0
@@ -2330,6 +2336,7 @@ export function createOrchestrator({
     if (running && !running.done) return { status: 409, body: { error: COMPACT_RUNNING_PROBLEM } }
     if (pending.length > 0) return { status: 409, body: { error: SESSION_PENDING_PROBLEM } }
     archiveCurrentSession()
+    currentConversationId = randomUUID()
     currentSessionId = null
     currentTitle = null
     messages.length = 0
@@ -2350,6 +2357,7 @@ export function createOrchestrator({
     const target = sessions.find((s) => s.id === sid)
     if (!target) return { status: 404, body: { error: NO_SESSION_ID_PROBLEM } }
     archiveCurrentSession()
+    currentConversationId = randomUUID()
     currentSessionId = target.id
     currentTitle = target.title
     currentPinned = target.pinned === true
@@ -2543,6 +2551,7 @@ export function createOrchestrator({
     const record = currentSessionId ? sessions.find((s) => s.id === currentSessionId) : null
     return {
       id: CURRENT_SESSION_KEY,
+      sessionId: currentConversationId,
       title,
       startedAt: messages[0]?.at ?? null,
       count: messages.length,
