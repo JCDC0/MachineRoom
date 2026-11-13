@@ -432,6 +432,9 @@ describe('review routes on another project', () => {
     const laneHead = git(worktree, ['rev-parse', 'HEAD']).trim()
     const { url } = await startBridge({ projectRoot: project, briefsDir })
 
+    const list = await fetch(`${url}/api/control/reviews`).then((r) => r.json())
+    expect(list.lanes[0]).toMatchObject({ lane: 'opencode', ahead: 1, behind: 1 })
+
     const res = await mergeRequest(url, 'opencode', {
       confirmed: true,
       head: laneHead,

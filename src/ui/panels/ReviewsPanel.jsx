@@ -1,7 +1,18 @@
 import { useEffect, useRef, useState } from 'react'
 import { visibleText } from '../../model/paths.js'
 import { subscribeToNotices } from './notices.js'
-import { canMerge, defaultMergeMessage, formatChecksNotice, mergeHead, normalizeChecks, patchLines, reviewRow } from './reviews.js'
+import {
+  canAskMain,
+  canMerge,
+  defaultMergeMessage,
+  formatChecksNotice,
+  isFastForwardRefusal,
+  mergeHead,
+  normalizeChecks,
+  patchLines,
+  prepareMergeMessage,
+  reviewRow,
+} from './reviews.js'
 
 function checksColor(checks) {
   if (checks === 'failed') return 'var(--red)'
@@ -93,6 +104,44 @@ export function MergeConfirmCard({
   )
 }
 
+export function PrepareConfirmCard({ target, sending, onConfirm, onCancel }) {
+  if (!target) return null
+  const branch = target.branch || 'its work'
+  const base = target.base || 'main'
+  return (
+    <div
+      className="brief-confirm-card review-confirm-card review-prepare-card"
+      role="region"
+      aria-label={`Confirm prepare for ${target.lane}`}
+    >
+      <div className="brief-confirm-warning">
+        {`Ask Main to prepare ${target.lane}'s ${branch} (${target.headShort}) into ${base}?`}
+      </div>
+      <div className="review-last-run mono">
+        {"Main rebases or merges the branch onto the destination in the lane's worktree, runs the project's checks and reports. It does not merge into the destination."}
+      </div>
+      <div className="brief-confirm-actions">
+        <button
+          type="button"
+          className="brief-confirm-btn"
+          disabled={sending}
+          onClick={onConfirm}
+        >
+          {sending ? 'Sending' : 'Send'}
+        </button>
+        <button
+          type="button"
+          className="brief-cancel-btn"
+          disabled={sending}
+          onClick={onCancel}
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
+  )
+}
+
 export default function ReviewsPanel({
   client,
   initialReviews = null,
@@ -117,6 +166,27 @@ export default function ReviewsPanel({
   const [mergeConflictFiles, setMergeConflictFiles] = useState([])
   const [mergeSuccessByLane, setMergeSuccessByLane] = useState({})
   const [movedByLane, setMovedByLane] = useState({})
+
+  const [prepareTarget, setPrepareTarget] = useState(null)
+  const [preparing, setPreparing] = useState(false)
+  const [prepareErrorByLane, setPrepareErrorByLane] = useState({})
+  const [prepareSentByLane, setPrepareSentByLane] = useState({})
+  const [refusedByLane, setRefusedByLane] = useState({})
+
+  function clearPrepareNotice(lane) {
+    setPrepareErrorByLane((prev) => {
+      if (!Object.hasOwn(prev, lane)) return prev
+      const next = { ...prev }
+      delete next[lane]
+      return next
+    })
+    setPrepareSentByLane((prev) => {
+      if (!Object.hasOwn(prev, lane)) return prev
+      const next = { ...prev }
+      delete next[lane]
+      return next
+    })
+  }
 
   function clearMoved(lane) {
     setMovedByLane((prev) => {
@@ -242,6 +312,64 @@ export default function ReviewsPanel({
     setMergeConflictFiles([])
   }
 
+  function handleOpenPrepare(event, review, row) {
+    event.stopPropagation()
+    if (merging || preparing) return
+    if (!canAskMain(client)) return
+    if (prepareTarget?.lane === row.lane) {
+      setPrepareTarget(null)
+      return
+    }
+    const result = mergeHead(row, diff)
+    if (result.error) {
+      setMovedByLane((prev) => ({ ...prev, [row.lane]: result.error }))
+      setPrepareTarget((current) => (current?.lane === row.lane ? null : current))
+      return
+    }
+    clearMoved(row.lane)
+    setConfirmTarget((current) => (current?.lane === row.lane ? null : current))
+    setMergeError(null)
+    setMergeConflictFiles([])
+    clearPrepareNotice(row.lane)
+    setPrepareTarget({
+      lane: row.lane,
+      branch: row.branch,
+      base: row.base || 'main',
+      head: result.head,
+      headShort: result.head.slice(0, 7),
+    })
+  }
+
+  function handleCancelPrepare() {
+    if (preparing) return
+    setPrepareTarget(null)
+  }
+
+  async function handleConfirmPrepare() {
+    if (preparing || !prepareTarget || !canAskMain(client)) return
+    const target = prepareTarget
+    const text = prepareMergeMessage(target)
+    if (!text) return
+    setPreparing(true)
+    clearPrepareNotice(target.lane)
+    try {
+      await client.sendOrchestrator(text)
+      if (!mountedRef.current) return
+      setPrepareSentByLane((prev) => ({ ...prev, [target.lane]: 'Sent to Main.' }))
+      setPrepareTarget(null)
+    } catch (err) {
+      if (!mountedRef.current) return
+      setPrepareErrorByLane((prev) => ({
+        ...prev,
+        [target.lane]: err?.message || 'Could not send to Main.',
+      }))
+    } finally {
+      if (mountedRef.current) {
+        setPreparing(false)
+      }
+    }
+  }
+
   const isFastForwardConfirm = confirmTarget?.strategy === 'fast-forward'
   const isMessageValid =
     isFastForwardConfirm ||
@@ -254,30 +382,41 @@ export default function ReviewsPanel({
     if (merging || !confirmTarget || !isMessageValid || typeof client?.mergeReview !== 'function') {
       return
     }
+    const target = confirmTarget
     setMerging(true)
     setMergeError(null)
     setMergeConflictFiles([])
     try {
       const options = {
-        head: confirmTarget.head,
-        base: confirmTarget.base,
-        baseHead: confirmTarget.baseHead,
+        head: target.head,
+        base: target.base,
+        baseHead: target.baseHead,
       }
       if (!isFastForwardConfirm) {
         options.message = mergeMessage
       }
-      const result = await client.mergeReview(confirmTarget.lane, options)
+      const result = await client.mergeReview(target.lane, options)
       if (!mountedRef.current) return
       const commitShort = typeof result?.commit === 'string' ? result.commit.slice(0, 7) : ''
       const text = `Merged as ${commitShort}.`
-      setMergeSuccessByLane((prev) => ({ ...prev, [confirmTarget.lane]: text }))
+      setMergeSuccessByLane((prev) => ({ ...prev, [target.lane]: text }))
+      setRefusedByLane((prev) => {
+        if (!Object.hasOwn(prev, target.lane)) return prev
+        const next = { ...prev }
+        delete next[target.lane]
+        return next
+      })
       setConfirmTarget(null)
       setMergeMessage('')
       await loadReviews({ isInitial: false })
     } catch (err) {
       if (!mountedRef.current) return
-      setMergeError(err.message || 'Could not merge lane.')
+      const message = err.message || 'Could not merge lane.'
+      setMergeError(message)
       setMergeConflictFiles(Array.isArray(err?.files) ? err.files : [])
+      if (target.strategy === 'fast-forward' && isFastForwardRefusal(message)) {
+        setRefusedByLane((prev) => ({ ...prev, [target.lane]: target.head }))
+      }
     } finally {
       if (mountedRef.current) {
         setMerging(false)
@@ -323,7 +462,15 @@ export default function ReviewsPanel({
             const row = reviewRow(review)
             const isSelected = selectedLane === row.lane
             const isConfirmOpen = confirmTarget?.lane === row.lane
+            const isPrepareOpen = prepareTarget?.lane === row.lane
             const mergedBanner = mergeSuccessByLane[row.lane]
+            const refusedHead = refusedByLane[row.lane]
+            const showPrepare =
+              !row.error &&
+              canAskMain(client) &&
+              (row.behindDestination || (Boolean(row.head) && refusedHead === row.head))
+            const prepareSent = prepareSentByLane[row.lane]
+            const prepareError = prepareErrorByLane[row.lane]
 
             return (
               <div
@@ -356,6 +503,15 @@ export default function ReviewsPanel({
                         >
                           {isSelected ? 'Hide' : 'Diff'}
                         </button>
+                        {showPrepare && (
+                          <button
+                            type="button"
+                            className="review-prepare-btn"
+                            onClick={(e) => handleOpenPrepare(e, review, row)}
+                          >
+                            Ask to prepare
+                          </button>
+                        )}
                         {row.canMerge && (
                           <button
                             type="button"
@@ -390,6 +546,16 @@ export default function ReviewsPanel({
                           {movedByLane[row.lane]}
                         </div>
                       )}
+                      {prepareSent && (
+                        <div className="review-prepare-sent mono" role="status">
+                          {prepareSent}
+                        </div>
+                      )}
+                      {prepareError && (
+                        <div className="review-error mono" role="alert">
+                          {prepareError}
+                        </div>
+                      )}
                     </>
                   )}
                 </div>
@@ -398,6 +564,15 @@ export default function ReviewsPanel({
                   <div className="review-merged-banner mono" role="status">
                     {mergedBanner}
                   </div>
+                )}
+
+                {isPrepareOpen && (
+                  <PrepareConfirmCard
+                    target={prepareTarget}
+                    sending={preparing}
+                    onConfirm={handleConfirmPrepare}
+                    onCancel={handleCancelPrepare}
+                  />
                 )}
 
                 {isConfirmOpen && (

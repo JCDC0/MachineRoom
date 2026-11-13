@@ -422,6 +422,7 @@ export function createReviewsApi({
     const head = (await runGit(worktree, ['rev-parse', 'HEAD'])).trim()
     const log = await runGit(worktree, ['log', '--oneline', `${base.ref}..HEAD`])
     const commits = log.split(/\r?\n/).filter(Boolean)
+    const behind = Number.parseInt((await runGit(worktree, ['rev-list', '--count', `HEAD..${base.ref}`])).trim(), 10)
     const status = await runGit(worktree, ['status', '--porcelain'])
     const stat = parseNumstat(await runGit(worktree, ['diff', '--no-ext-diff', '--no-textconv', '--numstat', `${base.ref}...HEAD`]))
     return {
@@ -433,6 +434,7 @@ export function createReviewsApi({
       baseHead: base.head,
       strategy: onProject ? 'fast-forward' : 'merge-commit',
       ahead: commits.length,
+      behind: Number.isFinite(behind) ? behind : null,
       commits: commits.slice(0, COMMIT_LIMIT),
       dirty: status.trim() !== '',
       files: stat.files.length,
