@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Add MCP server sends create: true through the control client, the bridge (409) and the mock refuse an existing server name with one sentence naming it, and toggling on or off still updates (P208).
 - Auto routes every queued task and previews the highest tier's lane, Confirm sends that lane, and a lane taken meanwhile asks for a fresh preview instead of starting another.
 - The late-session meta test moves the runs folder time forward, as P165 did for the test above it, so Windows CI rereads the meta.
 - The runs folder is listed only when its change time moves or once a minute, and a finished log quiet for an hour leaves the ten-second check until it grows.
