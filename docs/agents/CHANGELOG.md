@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The lane source lists the runs folder only when its change time moves or after 60 seconds, and drops finished startup logs unchanged for an hour from its 10 second checks while picking them up on the next list if they grow (P196).
 - A client dropped for its backlog is destroyed so its queued output is let go, and the writes made while a client connects are not held against the cap (P194).
 - A bridge stream client dropped for its backlog is destroyed, so its queued output is freed (P194).
 - A client may hold the backlog it connected with plus 8 MB, so a late joiner that reads all twelve kept one-MiB frames is not cut (P194).
