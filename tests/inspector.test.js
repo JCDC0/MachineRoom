@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { waitingForOwner } from '../src/ui/agentContext.js'
 import {
   EXPLORER_LIMIT,
   agentStateWord,
@@ -55,6 +56,26 @@ describe('the inspector state word', () => {
     expect(agentStateWord({ status: 'cancelled' }).word).toBe('failed')
     expect(agentStateWord({ status: 'done' }).word).toBe('done')
     expect(agentStateWord({ status: 'finished' }).word).toBe('done')
+  })
+})
+
+describe('the orchestrator waiting state', () => {
+  it('reads waiting for you when the transport would: idle, or an approval on any orchestrator', () => {
+    expect(waitingForOwner(null)).toBe(false)
+    expect(waitingForOwner([])).toBe(false)
+    expect(waitingForOwner([{ id: 'orchestrator', state: 'working' }])).toBe(false)
+    expect(waitingForOwner([{ id: 'orchestrator', state: 'idle' }])).toBe(true)
+    expect(waitingForOwner([{ id: 'orchestrator' }])).toBe(true)
+    expect(
+      waitingForOwner([{ id: 'orchestrator', state: 'working', approvals: [{ approvalId: 'a1' }] }])
+    ).toBe(true)
+    expect(
+      waitingForOwner([
+        { id: 'orchestrator', state: 'working' },
+        { id: 'frontend', approvals: [{ approvalId: 'a1' }] },
+      ])
+    ).toBe(true)
+    expect(waitingForOwner({ orchestrators: [{ id: 'orchestrator', state: 'idle' }] })).toBe(true)
   })
 })
 

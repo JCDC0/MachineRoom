@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- P251: the inspector's main orchestrator reads WAITING FOR YOU when the transport says waiting for you, while lanes and subs keep their state words.
 - P251: the waiting card counts only the orchestrators and lanes as ready and names the session readers on their own line.
 - P248: the full suite passes at a01af28f, 5,189 passed and 4 skipped in 281 files.
 - P247: the check command keeps escaped quotes and refuses an unclosed one, and the bridge refuses shell syntax when the command is saved or a run starts.
