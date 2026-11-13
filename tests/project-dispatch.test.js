@@ -738,3 +738,158 @@ describe('GET /api/control/runs project scoping', () => {
     expect(body.last.map((record) => record.lane).sort()).toEqual(['agy', 'claude'])
   })
 })
+
+function writeStopAwareRunner(dir, startOut, stopOut, { waitMs = 5000, stopExit = 0, stopText = 'stopped: 123 (the run)' } = {}) {
+  const path = join(dir, 'stop-runner.mjs')
+  const lines = [
+    "import { writeFileSync } from 'node:fs'",
+    'const args = process.argv.slice(2)',
+    "if (args[0] === '--stop') {",
+    `  writeFileSync(${JSON.stringify(stopOut)}, JSON.stringify(args))`,
+    `  console.log(${JSON.stringify(stopText)})`,
+    stopExit !== 0 ? `  process.exit(${stopExit})` : '  process.exit(0)',
+    '}',
+    `writeFileSync(${JSON.stringify(startOut)}, JSON.stringify(args))`,
+    "console.log('running ' + args[0])",
+    `await new Promise((resolve) => setTimeout(resolve, ${waitMs}))`,
+  ]
+  writeFileSync(path, lines.join('\n'))
+  return path
+}
+
+describe('POST /api/control/runs/stop', () => {
+  it('stops a matching run via --stop and answers what the stop printed', async () => {
+    const project = tempDir('mr-stop-project-')
+    const runnerDir = tempDir('mr-stop-runner-')
+    const startOut = join(runnerDir, 'start-args.json')
+    const stopOut = join(runnerDir, 'stop-args.json')
+    const runnerPath = writeStopAwareRunner(runnerDir, startOut, stopOut, {
+      waitMs: 5000,
+      stopText: 'stopped: 42 (the harness)',
+    })
+    const { url } = await startBridge({ projectRoot: project, runnerPath })
+
+    const started = await postJson(`${url}/api/control/runs`, {
+      lane: 'opencode',
+      task: 'Fix the flaky test.',
+      allowDirty: true,
+      confirmed: true,
+    })
+    expect(started.status).toBe(202)
+    await waitFor(() => readArgs(startOut), { what: 'the lane run to start' })
+
+    const before = await getJson(`${url}/api/control/runs`)
+    expect(before.body.running).toHaveLength(1)
+    expect(before.body.running[0]).toMatchObject({
+      lane: 'opencode',
+      startedAt: started.body.startedAt,
+      task: 'Fix the flaky test.',
+    })
+
+    const stopped = await postJson(`${url}/api/control/runs/stop`, {
+      lane: 'opencode',
+      startedAt: started.body.startedAt,
+      confirmed: true,
+    })
+    expect(stopped.status).toBe(200)
+    expect(stopped.body).toEqual({
+      ok: true,
+      lane: 'opencode',
+      startedAt: started.body.startedAt,
+      output: 'stopped: 42 (the harness)',
+    })
+    expect(readArgs(stopOut)).toEqual(['--stop', 'opencode'])
+
+    const after = await getJson(`${url}/api/control/runs`)
+    expect(after.body.running).toEqual([])
+    const records = readFileSync(join(runsFolder(), 'runs.jsonl'), 'utf8')
+      .trim()
+      .split(/\r?\n/)
+      .map((line) => JSON.parse(line))
+    expect(records.at(-1)).toMatchObject({
+      lane: 'opencode',
+      startedAt: started.body.startedAt,
+      killed: true,
+      task: 'Fix the flaky test.',
+    })
+  })
+
+  it('refuses a mismatched start time, an unconfirmed request, a finished run and a bad origin', async () => {
+    const project = tempDir('mr-stop-refuse-')
+    const runnerDir = tempDir('mr-stop-runner-')
+    const startOut = join(runnerDir, 'start-args.json')
+    const stopOut = join(runnerDir, 'stop-args.json')
+    const runnerPath = writeStopAwareRunner(runnerDir, startOut, stopOut, { waitMs: 5000 })
+    const { url } = await startBridge({ projectRoot: project, runnerPath })
+
+    const idle = await postJson(`${url}/api/control/runs/stop`, {
+      lane: 'opencode',
+      startedAt: '2026-11-13T10:00:00.000Z',
+      confirmed: true,
+    })
+    expect(idle.status).toBe(409)
+    expect(idle.body).toEqual({ error: 'No run is running on opencode.' })
+
+    const started = await postJson(`${url}/api/control/runs`, {
+      lane: 'opencode',
+      task: 'Refactor it.',
+      allowDirty: true,
+      confirmed: true,
+    })
+    expect(started.status).toBe(202)
+    await waitFor(() => readArgs(startOut), { what: 'the run to begin' })
+
+    const unconfirmed = await postJson(`${url}/api/control/runs/stop`, {
+      lane: 'opencode',
+      startedAt: started.body.startedAt,
+      confirmed: false,
+    })
+    expect(unconfirmed.status).toBe(400)
+    expect(unconfirmed.body).toEqual({ error: 'Confirm the stop first.' })
+
+    const mismatch = await postJson(`${url}/api/control/runs/stop`, {
+      lane: 'opencode',
+      startedAt: '2026-11-13T00:00:00.000Z',
+      confirmed: true,
+    })
+    expect(mismatch.status).toBe(409)
+    expect(mismatch.body).toEqual({ error: 'That start time does not match the running run.' })
+
+    const badOrigin = await fetch(`${url}/api/control/runs/stop`, {
+      method: 'POST',
+      headers: {
+        Origin: 'https://evil.example',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        lane: 'opencode',
+        startedAt: started.body.startedAt,
+        confirmed: true,
+      }),
+    })
+    expect(badOrigin.status).toBe(403)
+    expect(readArgs(stopOut)).toBeNull()
+
+    const allowedOrigin = await fetch(`${url}/api/control/runs/stop`, {
+      method: 'POST',
+      headers: {
+        Origin: 'http://localhost:5173',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        lane: 'opencode',
+        startedAt: started.body.startedAt,
+        confirmed: true,
+      }),
+    })
+    expect(allowedOrigin.status).toBe(200)
+
+    const finished = await postJson(`${url}/api/control/runs/stop`, {
+      lane: 'opencode',
+      startedAt: started.body.startedAt,
+      confirmed: true,
+    })
+    expect(finished.status).toBe(409)
+    expect(finished.body).toEqual({ error: 'No run is running on opencode.' })
+  })
+})
