@@ -179,6 +179,38 @@ export const PROJECT_QUEUE_TEXT_LIMIT = PROJECT_TASK_LIMIT * PROJECT_TASK_COUNT_
 export const PROJECT_CONFIRM_LIMIT = 120
 export const PROJECT_SPLIT_DELAY = 3000
 
+const projectDrafts = new Map()
+
+export function projectDraftKey(project) {
+  if (typeof project !== 'string') return ''
+  return project.trim().replace(/[\\/]+$/, '').toLowerCase()
+}
+
+export function readProjectDraft(project) {
+  const key = projectDraftKey(project)
+  if (!key) return null
+  const draft = projectDrafts.get(key)
+  return draft ? { ...draft } : null
+}
+
+export function writeProjectDraft(project, patch) {
+  const key = projectDraftKey(project)
+  if (!key || !patch || typeof patch !== 'object') return false
+  const next = { ...(projectDrafts.get(key) ?? {}) }
+  if (typeof patch.task === 'string') next.task = patch.task
+  if (typeof patch.lane === 'string') next.lane = patch.lane
+  if (typeof patch.checkCommand === 'string') next.checkCommand = patch.checkCommand
+  if (Object.keys(next).length === 0) return false
+  projectDrafts.set(key, next)
+  return true
+}
+
+export function clearProjectDraft(project) {
+  const key = projectDraftKey(project)
+  if (!key) return false
+  return projectDrafts.delete(key)
+}
+
 const EMPTY_SPLIT_RUN = Object.freeze({ active: false, pairs: [], answers: [], failed: false, done: false, cancelled: false })
 let splitRun = EMPTY_SPLIT_RUN
 let splitCancelRequested = false

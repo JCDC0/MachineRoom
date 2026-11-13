@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Dispatch keeps a task, lane and check command draft for each project for the life of the page, clears it after a successful start, and offers Discard draft with one confirm (P226).
 - Dispatch has a Check command field saved per project; a project run or queue passes it to run-lane as --test, and the confirm card names the check it will use.
 - Dispatch's running rows and the Inspector offer Stop with a confirm card; the bridge stops a matching run with --stop and tells the lane's sub orchestrator, else Main, as a note its next turn reads first.
 - Settings has a Storage section with sizes by kind, a preview of finished run logs and old recordings older than N days, and Archive, which moves exactly those into runs/archive/YYYY-MM and deletes nothing.
