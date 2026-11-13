@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Repository filters its branch list by a case-insensitive text search, shows at most 200 rows with the current branch first and a `Showing N of M branches.` line, and the switch and create cards keep the branch picked (P225).
 - Reviews offers Ask to prepare on a refused fast forward or a branch ahead of a destination that moved on, and sends Main the lane, branch, full head and destination after a confirm.
 - A health answer with ok true and source problems shows a red chip, A source looks stopped, with one sentence per problem, and the room stays connected.
 - A stopped or failed queue row offers Ask for recovery, which sends Main the branch, the failed task and what the record holds, asking it to inspect before continuing.
