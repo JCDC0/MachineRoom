@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url'
 import { branchFor, briefFileList, buildPrompt, nextVersion, parseBriefs, parseRules } from '../src/briefs/briefs.js'
 import { commitAuthorFor, formatQueueSummary, parseQueue, parseQueueArgs, runQueue } from '../src/briefs/queue.js'
 import { maskKeys } from '../src/briefs/audit.js'
-import { briefProblems, briefWorktreeProblems, checkCommandLines, checkCommandProblem, childEnvironment, commandFor, createLaneLog, DEFAULT_MINUTES, fallbackProblem, failoverKind, filterRunsSince, formatOutcomes, formatStats, formatSummary, laneCommandProblem, laneLockStartedAt, laneLockText, laneStats, laneStopProblem, laneWithOverrides, limitedFor, maskProfilePaths, maskedQueueTasks, ORCHESTRATOR_LANE_PROBLEM, parseRunArgs, projectProblems, projectRunGit, readinessLine, retryStartProblem, runListLine, runRecord, sessionToolLines, splitCheckCommand, startFailureText, summarizeRun, unattendedPrompt, worktreeFor, WORKTREES_FOLDER } from '../src/briefs/run.js'
+import { briefProblems, briefWorktreeProblems, checkCommandLines, checkCommandProblem, childEnvironment, commandFor, createLaneLog, DEFAULT_MINUTES, fallbackProblem, failoverKind, filterRunsSince, formatOutcomes, formatStats, formatSummary, laneCommandProblem, laneLockStartedAt, laneLockText, laneModeProblem, laneStats, laneStopProblem, laneWithOverrides, limitedFor, maskProfilePaths, maskedQueueTasks, ORCHESTRATOR_LANE_PROBLEM, parseRunArgs, projectProblems, projectRunGit, readinessLine, retryStartProblem, runListLine, runRecord, sessionToolLines, splitCheckCommand, startFailureText, summarizeRun, unattendedPrompt, worktreeFor, WORKTREES_FOLDER } from '../src/briefs/run.js'
 import { outcomeTable } from '../server/outcomes.js'
 import { readMainSubjectsSync } from '../server/runs.js'
 import { isLockHolderStale, killTree, descendantProcesses, leftoverProcesses, listProcesses } from '../server/processTree.js'
@@ -123,6 +123,7 @@ export function helpLines() {
     '  --worktree           run a --project run in <project>/.worktrees/<lane>',
     '  --allow-dirty        let a --project run start with uncommitted changes',
     '  --model <id>         use this model for this run only',
+    '  --mode <mode>        use this permission mode for this run only',
     '  --reasoning <level>  use this reasoning level for this run only',
     '  --minutes <n>        stop the run after n minutes (100 by default)',
     '  --test <command>     run this check after each task; repeat for more, or npm test when the package has one',
@@ -657,9 +658,21 @@ function runOptions(argv) {
   const started = startedByOption(argv)
   const timed = startedAtOption(started.args)
   const worktree = timed.args.includes('--worktree')
-  const options = parseQueueArgs(timed.args.filter((arg) => arg !== '--worktree'))
+  const queueArgs = timed.args.filter((arg) => arg !== '--worktree')
+  let mode
+  for (let index = 0; index < queueArgs.length; index += 1) {
+    if (queueArgs[index] === '--mode' || queueArgs[index].startsWith('--mode=')) {
+      const separate = queueArgs[index] === '--mode'
+      mode = separate ? queueArgs[index + 1] : queueArgs[index].slice(7)
+      if (!mode || mode.startsWith('-')) throw new Error('--mode needs a permission mode.')
+      queueArgs.splice(index, separate ? 2 : 1)
+      index -= 1
+    }
+  }
+  const options = parseQueueArgs(queueArgs)
   return {
     ...options,
+    ...(mode !== undefined ? { mode } : {}),
     ...(started.startedBy ? { startedBy: started.startedBy } : {}),
     ...(timed.startedAt ? { startedAt: timed.startedAt } : {}),
     ...(worktree ? { worktree: true } : {}),
@@ -1415,6 +1428,7 @@ async function runQueueProject({ options, lane, lanes }) {
           lane: options.lane,
           briefs: [],
           model: lane?.cli?.model || null,
+          mode: lane?.cli?.mode,
           reasoning: lane?.reasoning ?? null,
           startedAt: queueStartedAt,
           minutes: 0,
@@ -1458,7 +1472,7 @@ async function runQueueProject({ options, lane, lanes }) {
 
 const VALUE_FLAGS = new Set([
   '--project', '--task', '--task-file', '--since', '--minutes', '--started-by',
-  '--started-at', '--model', '--reasoning', '--queue', '--test',
+  '--started-at', '--model', '--reasoning', '--mode', '--queue', '--test',
 ])
 
 function helpRequested(argv) {
@@ -1513,6 +1527,8 @@ async function main() {
   if (!Object.hasOwn(lanes, options.lane)) throw new Error(missingLaneText(options.lane, lanesJson, lanesPath))
   const lane = laneWithOverrides(lanes[options.lane], options)
   lanes[options.lane] = lane
+  const modeProblem = laneModeProblem(lane, options.lane)
+  if (modeProblem) throw new Error(modeProblem)
   if (options.lane === 'orchestrator') {
     console.log(ORCHESTRATOR_LANE_PROBLEM)
     return 1
@@ -1671,8 +1687,13 @@ function recordRoom(record, toolLines, lanes) {
 }
 
 async function startFailover({ laneKey, target, lanes, options, wanted, prompt, promptFor = null, folder, project, task, queue = null, base = '', deferRecord, openLog, failedRecord, failedStartBranch, onStart = null }) {
-  const fallbackLane = lanes?.[target]
+  const fallbackLane = laneWithOverrides(lanes?.[target], { mode: options.mode })
   if (!fallbackLane) return null
+  const modeProblem = laneModeProblem(fallbackLane, target)
+  if (modeProblem) {
+    console.log(modeProblem)
+    return null
+  }
   if (!project) {
     const worktree = typeof fallbackLane.worktree === 'string' && fallbackLane.worktree.trim() !== '' ? realPath(fallbackLane.worktree) : ''
     const problems = briefWorktreeProblems({ worktree, laneKey: target, ...(options?.folderCheck ?? folderCheckFor(lanes)) })
@@ -2060,6 +2081,7 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
         lane: options.lane,
         briefs: project ? [] : wanted.map((brief) => brief.id),
         model: lane.cli.model,
+        mode: lane.cli.mode,
         reasoning: lane.reasoning ?? null,
         startedAt,
         minutes,
@@ -2097,6 +2119,7 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
       lane: options.lane,
       briefs: project ? [] : wanted.map((brief) => brief.id),
       model: lane.cli.model,
+      mode: lane.cli.mode,
       reasoning: lane.reasoning ?? null,
       startedAt,
       minutes,
