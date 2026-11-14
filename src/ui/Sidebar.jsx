@@ -35,6 +35,17 @@ function messageOf(error) {
   return error instanceof Error && error.message ? error.message : 'The bridge refused the change.'
 }
 
+async function readLaneCatalogue(client) {
+  if (typeof client?.lanes !== 'function') return []
+  try {
+    const answer = await client.lanes()
+    if (Array.isArray(answer)) return answer
+    return Array.isArray(answer?.lanes) ? answer.lanes : []
+  } catch {
+    return []
+  }
+}
+
 function saveMarkdownFile(name, text) {
   const doc = globalThis.document
   const BlobType = globalThis.Blob
@@ -84,6 +95,7 @@ export function Sidebar({ client = null, live = false, project = '', tasks = nul
   const [tab, setTab] = useState(() => normalizeSidebarTab(loadSettings().sidebarTab))
   const [projects, setProjects] = useState(null)
   const [sessions, setSessions] = useState(null)
+  const [lanes, setLanes] = useState([])
   const [sessionsError, setSessionsError] = useState(false)
   const [readError, setReadError] = useState('')
   const [actionError, setActionError] = useState('')
@@ -234,8 +246,9 @@ export function Sidebar({ client = null, live = false, project = '', tasks = nul
     try {
       if (row.current) {
         if (typeof client?.orchestrator !== 'function') throw new Error('This bridge cannot show this conversation.')
-        const answer = await client.orchestrator()
+        const [answer, laneList] = await Promise.all([client.orchestrator(), readLaneCatalogue(client)])
         if (previewReqRef.current !== ticket) return
+        setLanes(laneList)
         setPreview({
           loading: false,
           current: true,
@@ -250,8 +263,12 @@ export function Sidebar({ client = null, live = false, project = '', tasks = nul
       if (typeof client?.orchestratorSession !== 'function') {
         throw new Error('This bridge cannot show a conversation.')
       }
-      const answer = await client.orchestratorSession({ id: ORCHESTRATOR_ID, session: row.id })
+      const [answer, laneList] = await Promise.all([
+        client.orchestratorSession({ id: ORCHESTRATOR_ID, session: row.id }),
+        readLaneCatalogue(client),
+      ])
       if (previewReqRef.current !== ticket) return
+      setLanes(laneList)
       setPreview({
         loading: false,
         current: false,
@@ -598,7 +615,7 @@ export function Sidebar({ client = null, live = false, project = '', tasks = nul
   )
   const projectLabel = currentProject ? projectName(currentProject) : fallbackName
   const title = preview ? sessionTitle(preview.title) : ''
-  const lines = preview && !preview.loading ? previewLines(preview) : []
+  const lines = preview && !preview.loading ? previewLines(preview, undefined, { lanes }) : []
 
   function renderSessionRow(row) {
     if (renaming && renaming.id === row.id) {
