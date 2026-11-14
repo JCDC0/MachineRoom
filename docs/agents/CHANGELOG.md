@@ -2,6 +2,7 @@
 
 ## Unreleased
 - P306: a saved check holds up to 4 commands, one per line, and the settings field and the mock refuse a fifth.
+- P306: --test may repeat in both parsers, and the bridge sends one --test per line of a saved check.
 - P304: the failed record is written once when the backup throws, a refused backup records refused: true, and the room note says the backup could not start.
 - P304: a deferred project run writes its failed record once when the backup throws, and its queue writes no generic record.
 - P304: a refused backup records `refused: true` and its room note says the backup could not start, so only a started backup reads as a move.

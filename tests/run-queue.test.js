@@ -225,6 +225,13 @@ describe('parseQueueArgs', () => {
     expect(parseQueueArgs(['opencode', '--project', 'C:\\work', '--queue', 'queue.txt', '--test', 'npm test', '--minutes', '20'])).toEqual({
       lane: 'opencode', briefs: [], project: 'C:\\work', queue: 'queue.txt', test: 'npm test', dryRun: false, minutes: 20,
     })
+    expect(parseQueueArgs(['opencode', '--project', 'C:\\work', '--queue', 'queue.txt', '--test', 'npm test', '--test', 'npm run check'])).toMatchObject({
+      test: 'npm test\nnpm run check',
+    })
+    expect(() => parseQueueArgs([
+      'opencode', '--project', 'C:\\work', '--queue', 'queue.txt',
+      '--test', 'one', '--test', 'two', '--test', 'three', '--test', 'four', '--test', 'five',
+    ])).toThrow('A check holds at most 4 commands, one per line.')
     expect(parseQueueArgs(['--queue=queue.txt', '--project=C:\\work', 'opencode', '--dry-run'])).toMatchObject({
       lane: 'opencode', dryRun: true, minutes: DEFAULT_MINUTES,
     })

@@ -391,7 +391,7 @@ export function parseRunArgs(argv) {
   let worktree = false
   let startedBy = ''
   let startedAt = ''
-  let test = ''
+  const testLines = []
   const overrides = {}
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index]
@@ -486,13 +486,18 @@ export function parseRunArgs(argv) {
       if (typeof value !== 'string' || value.trim() === '') throw new Error('--test needs a command.')
       const problem = checkCommandProblem(value)
       if (problem !== '') throw new Error(problem)
-      test = value
+      testLines.push(...checkCommandLines(value))
       continue
     }
     if (arg.startsWith('-')) throw new Error(`Unknown option ${arg}.`)
     if (arg === '') continue
     if (!lane) lane = arg
     else briefs.push(arg)
+  }
+  const test = testLines.join('\n')
+  if (test !== '') {
+    const problem = checkCommandProblem(test)
+    if (problem !== '') throw new Error(problem)
   }
   if (list) return { lane, briefs, dryRun, minutes, list, ...(since ? { since } : {}) }
   if (stats) return { lane, briefs, dryRun, minutes, list, stats, ...(since ? { since } : {}) }

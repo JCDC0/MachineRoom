@@ -552,6 +552,45 @@ describe('the runs route with a queue', () => {
     }
   })
 
+  it('sends one --test per line for a two-line saved check', async () => {
+    const project = gitProject('mr-project-dispatch-')
+    const runnerDir = tempDir('mr-project-runner-')
+    const out = join(runnerDir, 'args.json')
+    const temp = tempDir('mr-project-temp-')
+    const { url } = await startBridge({ projectRoot: project, runnerPath: writeRunner(runnerDir, out, 400) })
+    const previous = process.env.TEMP
+    const previousRuns = process.env.MACHINEROOM_RUNS
+    process.env.TEMP = temp
+    process.env.MACHINEROOM_RUNS = join(temp, 'machineroom-runs')
+    try {
+      const saved = await fetch(`${url}/api/control/project-settings`, {
+        method: 'POST',
+        headers: { origin: 'http://localhost:5173', 'content-type': 'application/json' },
+        body: JSON.stringify({ checkCommand: 'npm test\nnpm run check', confirmed: true }),
+      })
+      expect(saved.status).toBe(200)
+
+      const res = await postJson(`${url}/api/control/runs`, {
+        lane: 'opencode',
+        tasks: ['Fix the typo.'],
+        confirmed: true,
+      })
+      expect(res.status).toBe(202)
+
+      const args = await waitFor(() => readArgs(out), { what: 'the runner arguments' })
+      const first = args.indexOf('--test')
+      expect(first).toBeGreaterThan(-1)
+      expect(args.slice(first, first + 4)).toEqual(['--test', 'npm test', '--test', 'npm run check'])
+      expect(args.filter((arg) => arg === '--test')).toHaveLength(2)
+      await waitFor(async () => (await getJson(`${url}/api/control/runs`)).body.running.length === 0, { what: 'the run to end' })
+    } finally {
+      if (previous === undefined) delete process.env.TEMP
+      else process.env.TEMP = previous
+      if (previousRuns === undefined) delete process.env.MACHINEROOM_RUNS
+      else process.env.MACHINEROOM_RUNS = previousRuns
+    }
+  })
+
   it('refuses a queue start whose check command uses shell syntax', async () => {
     const project = gitProject('mr-project-dispatch-')
     const runnerDir = tempDir('mr-project-runner-')
