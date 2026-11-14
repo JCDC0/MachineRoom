@@ -2879,3 +2879,17 @@ A lane reads its replies mid-run, P341 to P343. P335 to P337 let a lane send. A 
 4. The digests: find which fixture changed and why. A fixture that really holds a touch outside the project gets its digest in `tests/scenario-e.test.js` updated, with the fixture and the path named in your report. A digest that changed for another reason is a defect of yours: fix it.
 5. `tests/outside-paths.test.js` still proves what P339 asked (marked and listed; not for project and worktree paths; masked; seek; the limit of 20) and gains one test per harness parser.
 6. Run `node node_modules/vitest/vitest.mjs run tests/outside-paths.test.js tests/scenario-e.test.js tests/pipeline.test.js tests/state.test.js tests/inspector.test.js tests/parsers.test.js` and then `node node_modules/vitest/vitest.mjs related --run src/model/pipeline.js src/model/parsers/common.js src/model/state.js`, and report the counts.
+
+**P347. Review 36: lane messages, lane modes and the effort fix (Codex, GPT-6.1 Sol).** Read this brief only. This is a review: change no source file and no test. Your sandbox keeps git read-only. Write the file `docs/agents/AUDIT-2026-11-REVIEW-36.md` in your worktree; your reply is not the report, and a review with no file is a failed run. Never run `npm install`; the worktree has no `node_modules`, so a test you want to run is `node ../../node_modules/vitest/vitest.mjs run FILE` from your worktree, and a test that cannot run in your sandbox is not a finding. Stop reading at minute 22 and write the file.
+
+Read the merged work with `git diff bde6c710..refs/heads/main -- server src scripts tests` (P335 to P338, P340 and P345), and the four branches that are not merged yet, each with `git diff refs/heads/main...refs/heads/NAME`: `feat/p341-the-bridge-keeps` (a lane's inbox), `feat/p342-a-lane-and` (the prompt lines), `feat/p343-the-bridge-starts` (a run start names a mode) and `feat/p344-lane-modes-get` (the lane mode tests). The briefs are P335 to P345 at the end of `docs/agents/TASKS.md`.
+
+Look for defects that matter, in this order:
+
+1. The lane ticket (`server/runs.js`, `server/orchestrators.js`, `server/index.js`): can a page, another lane, an ended run or a request with no ticket send or read as a lane; can a ticket outlive its run (a failed start, a stop, a bridge stop, a failover to a backup lane); does the ticket or a message reach a record, a log the bridge writes, a response or a notice; can a lane wake an orchestrator more than 4 times a run; does an inbox grow without a limit.
+2. Lane modes (`src/briefs/run.js`, `scripts/run-lane.mjs`, `src/harnesses/claude.js`, `server/runs.js`): a path where a mode is named and the harness still runs with every permission; a mode that passes the bridge's check and fails the runner's; a queue or failover run that drops the mode; a default that changed for a lane with no mode.
+3. The effort fix (`server/orchestrator.js`): a harness that now gets a `reasoning` value it does not take; a saved effort that is lost on load.
+4. Tests that would pass with their change undone.
+5. A sentence in `docs/agents/HIERARCHY.md`, `architecture/LIVE.md`, `architecture/COMMANDS.md` or `FREE-HIERARCHY.md` that the code contradicts.
+
+The file: one section per finding, numbered R36-1 on, most serious first, each with the file and line, what happens, how to see it (a request or a command) and the smallest fix. At most 12 findings. End with one line per area you read and found sound. Write only what you checked in the code; a guess is marked as a guess.
