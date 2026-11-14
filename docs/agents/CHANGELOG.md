@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- P318: the play worktree move runs checkout with `--no-overwrite-ignore` so an ignored local file stays intact and answers failed on collision.
 - Review 34 lists nine findings in the batch since review 33 and seventeen doc sentences the code contradicts (P312).
 - The doctor and every orchestrator find the Codex app's codex.exe when codex is not on PATH, as lanes already did (P311).
 - P311: `codexProgramFor` answers the Codex app's newest program for a bare `codex` bin when codex is not on PATH, and run-lane uses it.
