@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import { existsSync, mkdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { tmpdir } from 'node:os'
 import { PassThrough } from 'node:stream'
@@ -449,6 +449,64 @@ describe('Codex app availability', () => {
       env: { LOCALAPPDATA: localAppData, PATH: '', Path: '' },
       platform: 'win32',
     })).toBe(true)
+  })
+
+  it.runIf(process.platform === 'win32')('skips a junction hash folder in the Codex app bin', () => {
+    const localAppData = tempDir('mr-codex-app-junction-')
+    const binDir = join(localAppData, 'OpenAI', 'Codex', 'bin')
+    mkdirSync(binDir, { recursive: true })
+    const outsideDir = tempDir('mr-codex-app-outside-')
+    const outsideExe = join(outsideDir, 'codex.exe')
+    writeFileSync(outsideExe, '')
+    utimesSync(outsideExe, new Date(5000), new Date(5000))
+    symlinkSync(outsideDir, join(binDir, 'fedcba9876543210'), 'junction')
+
+    expect(codexAppProgram({ env: { LOCALAPPDATA: localAppData }, platform: 'win32' })).toBeNull()
+
+    const realExe = join(binDir, '0123456789abcdef', 'codex.exe')
+    mkdirSync(dirname(realExe), { recursive: true })
+    writeFileSync(realExe, '')
+    utimesSync(realExe, new Date(1000), new Date(1000))
+
+    expect(codexAppProgram({ env: { LOCALAPPDATA: localAppData }, platform: 'win32' })).toBe(realExe)
+  })
+
+  it.runIf(process.platform === 'win32')('skips a linked codex.exe in the Codex app bin', () => {
+    const localAppData = tempDir('mr-codex-app-file-link-')
+    const binDir = join(localAppData, 'OpenAI', 'Codex', 'bin')
+    const outsideDir = tempDir('mr-codex-app-outside-file-')
+    const outsideExe = join(outsideDir, 'codex.exe')
+    writeFileSync(outsideExe, '')
+    utimesSync(outsideExe, new Date(5000), new Date(5000))
+    const linkedDir = join(binDir, 'fedcba9876543210')
+    mkdirSync(linkedDir, { recursive: true })
+    symlinkSync(outsideExe, join(linkedDir, 'codex.exe'), 'file')
+
+    expect(codexAppProgram({ env: { LOCALAPPDATA: localAppData }, platform: 'win32' })).toBeNull()
+
+    const realExe = join(binDir, '0123456789abcdef', 'codex.exe')
+    mkdirSync(dirname(realExe), { recursive: true })
+    writeFileSync(realExe, '')
+    utimesSync(realExe, new Date(1000), new Date(1000))
+
+    expect(codexAppProgram({ env: { LOCALAPPDATA: localAppData }, platform: 'win32' })).toBe(realExe)
+  })
+
+  it('skips a codex.exe whose real path is outside the Codex app bin folder', () => {
+    const localAppData = tempDir('mr-codex-app-outside-real-')
+    const binDir = join(localAppData, 'OpenAI', 'Codex', 'bin')
+    const outsideDir = tempDir('mr-codex-app-outside-target-')
+    const outsideExe = join(outsideDir, 'codex.exe')
+    writeFileSync(outsideExe, '')
+    const candidate = join(binDir, '0123456789abcdef', 'codex.exe')
+    mkdirSync(dirname(candidate), { recursive: true })
+    writeFileSync(candidate, '')
+
+    expect(codexAppProgram({
+      env: { LOCALAPPDATA: localAppData },
+      platform: 'win32',
+      realPath: (target) => (target === candidate ? outsideExe : realpathSync.native(target)),
+    })).toBeNull()
   })
 })
 
