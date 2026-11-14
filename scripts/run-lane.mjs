@@ -283,8 +283,8 @@ function takeRunLock(folder, laneKey, options, startedAt) {
 
 function differentRunText(laneKey, path, startedAt) {
   if (startedAt === '') return ''
-  const current = laneLockStartedAt(lockText(path))
-  if (current !== '' && current === startedAt) return ''
+  const current = Date.parse(laneLockStartedAt(lockText(path)))
+  if (Number.isFinite(current) && current === Date.parse(startedAt)) return ''
   return `The ${laneKey} lane is running a different run now, so nothing was stopped.`
 }
 

@@ -6,7 +6,7 @@ import { StringDecoder } from 'node:string_decoder'
 import { fileURLToPath } from 'node:url'
 import { isHolderAlive } from '../scripts/lane-lock.mjs'
 import { agentsFile, createRunLineReader, failureText } from '../src/briefs/recording.js'
-import { laneLockPids } from '../src/briefs/run.js'
+import { laneLockPids, laneLockStartedAt } from '../src/briefs/run.js'
 import { activeLanesFileFor, readActiveLanesChoice } from './active-lanes.js'
 import { readAllLanes } from './agents-config.js'
 import { listProcesses } from './processTree.js'
@@ -458,8 +458,18 @@ export function createLanesSource(options = {}) {
     return sameRepo.get(key)
   }
 
+  function lockStartedAt(key) {
+    if (!key) return NaN
+    try {
+      return Date.parse(laneLockStartedAt(readFileSync(join(folder, `${key}.lock`), 'utf8')))
+    } catch {
+      return NaN
+    }
+  }
+
   function beginRun(name, path, agent, keepPaths = false, project = '', startedBy = null) {
-    const startedAt = now()
+    const locked = lockStartedAt(agent?.key)
+    const startedAt = Number.isFinite(locked) && locked <= now() ? locked : now()
     const run = {
       name,
       path,
