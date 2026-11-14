@@ -2707,3 +2707,24 @@ The ladder (`docs/agents/HIERARCHY.md`, O1 to O8) is built and tested, and the d
 2. Answer, each with `file:line`: where a sub orchestrator's turn runs and whether it can change Lowbeam's main checkout; where the sector branch `machineroom/sector-ID` is made and by whom; whether Reviews can show or merge a sector branch; what happens to a lane branch a sub merged into its sector branch; whether two subs can start lanes that change the same file; and what the owner sees in the room for each step.
 3. List each gap that would break Lowbeam's rules or lose work, ordered by severity, with the smallest fix and whether it needs the owner's yes as a feature.
 4. End with a short go or no-go for a supervised trial with one sub orchestrator and two lanes, and the steps the owner would take.
+
+Review 35 (`docs/agents/AUDIT-2026-11-REVIEW-35.md`) fixes, P328 to P330. OpenCode stays in the fleet (the owner, 2026-11-15).
+
+**P328. A brief run's commit text is masked on disk, and a refused backup keeps the failed head (OpenCode).** Read findings R35-1 and R35-2 in `docs/agents/AUDIT-2026-11-REVIEW-35.md` and this brief only. Use no subagents. Run every command in the foreground. Commit each step as you finish it, and stop starting new work at minute 28. Files: scripts/run-lane.mjs (only where a brief run builds `commits`, and `writeProjectRecord`), tests/run-lane.test.js, tests/run-failover.test.js, docs/agents/CHANGELOG.md.
+
+1. R35-1: a brief run's `commits` go through `maskProfilePaths(maskKeys(line).text)`, as `projectRunGit` does, before the record is written.
+2. R35-2: when `keepGit` is true, `writeProjectRecord` keeps the failed run's captured head too and does not read HEAD from the folder.
+3. Tests, each failing before your change: a brief run whose lane commit subject holds a fake key (built from parts) and a `C:\Users\NAME\notes.txt` path is masked in `runs.jsonl`; a backup that commits and then throws leaves the failed record's head on the failed run's commit. Set GIT_AUTHOR_* and GIT_COMMITTER_* in every git call the tests make, and run them once with `GIT_CONFIG_GLOBAL=/dev/null` in bash.
+4. Run `node node_modules/vitest/vitest.mjs run tests/run-lane.test.js tests/run-failover.test.js` and report the counts.
+
+**P329. The room lists GPT-6.1 Terra for Codex (OpenCode).** Read finding R35-3 in `docs/agents/AUDIT-2026-11-REVIEW-35.md` and this brief only. Use no subagents. Run every command in the foreground. Commit each step as you finish it, and stop starting new work at minute 20. Files: server/model-list.js, tests/agents-config.test.js, docs/agents/CHANGELOG.md.
+
+1. Add `{ id: 'gpt-6.1-terra', label: 'GPT-6.1 Terra', harness: 'codex', ... }` beside Sol, with the tier and `free` value Sol has.
+2. Update the codex list expectation in `tests/agents-config.test.js` and add one assertion that `modelAllowed('codex', 'gpt-6.1-terra')` is true.
+3. Run `node node_modules/vitest/vitest.mjs run tests/agents-config.test.js` and report the counts.
+
+**P330. A stop keeps the lock when its process list misses the run (OpenCode).** Read finding R35-4 in `docs/agents/AUDIT-2026-11-REVIEW-35.md` and this brief only. Use no subagents. Run every command in the foreground. Commit each step as you finish it, and stop starting new work at minute 25. Files: scripts/run-lane.mjs (only `stopLane`), tests/run-lane-stop.test.js, docs/agents/CHANGELOG.md.
+
+1. When the snapshot is not empty but holds neither the lock holder's run pid nor its child pid while that pid is alive, the stop counts it as failed, prints `could not see the LANE run in the process list, so the lock stays`, and keeps the lock.
+2. Test, failing before your change: a non-empty snapshot without the holder's pids, with the pid alive, leaves the lock in place and exits non-zero.
+3. Run `node node_modules/vitest/vitest.mjs run tests/run-lane-stop.test.js` and report the counts.
