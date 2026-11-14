@@ -14,7 +14,7 @@ Rewrite this section at every merge and before you end a session. Keep it under 
 - Since `12c25524`: P249 to P319, except P256 (scale rerun, waits for a quiet machine) and P276 (rejected). Reviews 31 to 34 are closed; R34-4 is accepted as a limit. P310 made test helpers wait for `close`, and P311 lets the doctor and orchestrators find the Codex app's `codex.exe`.
 - Lowbeam runs through MachineRoom (`TRIAL-LOWBEAM.md`). The first task merged through Reviews as `f3255a3` (0.12.56), and Reviews moves `.worktrees/play` (P309). Never push Lowbeam.
 - Nothing runs at this rewrite. `opencode6` sits on P103's old branch with 4 unmerged commits; leave it until the owner looks. `opencode8` to `opencode10` are retired.
-- The fleet: `opencode` to `opencode5` and `opencode7` on DeepSeek V4.1 Flash (the owner's OpenCode Go plan ends 2026-11-15 and may not renew), `agy` and `agy2` on Hydrogen XHigh, `codex` on GPT-6.1 Terra high, `native` and `native2` for reports.
+- The fleet: `opencode` to `opencode5` and `opencode7` on DeepSeek V4.1 Flash (the owner's OpenCode Go plan has 6% of its monthly use left on 2026-11-15, ends 2026-11-17 and may not renew), `agy` and `agy2` on Hydrogen XHigh, `codex` on GPT-6.1 Terra high, `native` and `native2` for reports.
 - Known and accepted: the play line for a dirty play worktree names the old `main`; after a queue failover the branch check accepts the branch the backup ended on; a stop counts an already gone leftover as stopped.
 - Push: the owner gave a standing yes for this work on 2026-11-14. A new session asks again.
 
