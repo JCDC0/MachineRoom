@@ -1058,6 +1058,10 @@ export function createOrchestrator({
     const id = typeof value === 'string' ? value.trim() : ''
     if (!id) return ''
     if (id === ORCHESTRATOR_KEY || id === 'owner') return id
+    if (id.startsWith('lane:')) {
+      const laneKey = id.slice(5)
+      return laneKey && records && typeof records === 'object' && Object.hasOwn(records, laneKey) ? id : ''
+    }
     const subId = subIdOf(id)
     if (subId) return subExists(subId) ? id : ''
     if (records && typeof records === 'object' && Object.hasOwn(records, id)) return id
@@ -1474,14 +1478,15 @@ export function createOrchestrator({
     if (!safeFrom || !safeTo) return null
     const resolveName = (k) => {
       if (!k) return ''
-      if (k === 'orchestrator' || k === ORCHESTRATOR_KEY) {
+      const key = typeof k === 'string' && k.startsWith('lane:') ? k.slice(5) : k
+      if (key === 'orchestrator' || key === ORCHESTRATOR_KEY) {
         return allLanes?.[ORCHESTRATOR_KEY]?.name || 'Orchestrator'
       }
-      if (typeof k === 'string' && k.startsWith('sub-')) {
-        const subId = k.slice(4)
-        return allLanes?.[k]?.name || allLanes?.[subId]?.name || `Sub ${subId}`
+      if (typeof key === 'string' && key.startsWith('sub-')) {
+        const subId = key.slice(4)
+        return allLanes?.[key]?.name || allLanes?.[subId]?.name || `Sub ${subId}`
       }
-      return allLanes?.[k]?.name || k
+      return allLanes?.[key]?.name || key
     }
     const fromName = maskText(String(resolveName(safeFrom) ?? ''))
     const toName = maskText(String(resolveName(safeTo) ?? ''))

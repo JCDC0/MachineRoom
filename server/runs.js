@@ -1,4 +1,5 @@
 import { execFile, spawn, spawnSync } from 'node:child_process'
+import { randomBytes } from 'node:crypto'
 import { appendFileSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, readSync, realpathSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { basename, dirname, join, resolve } from 'node:path'
@@ -471,7 +472,7 @@ export function readOutcomeRecords(file) {
   return readJsonLines(file)
 }
 
-export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand, sendJson, readJsonBody, notify = () => {}, orchestrators = () => null, lanesSource = () => null, lanesFile = '', runsFolder = '', activeLanes = null, isLaneActive = null, onMessage = () => {}, platform = process.platform, list = listProcesses, stat = statSync }) {
+export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand, sendJson, readJsonBody, notify = () => {}, orchestrators = () => null, lanesSource = () => null, lanesFile = '', runsFolder = '', activeLanes = null, isLaneActive = null, onMessage = () => {}, platform = process.platform, list = listProcesses, stat = statSync, bridgeUrl = '' }) {
   const resolvedRoot = projectRoot ? realPath(projectRoot) : ''
   const resolvedBriefs = briefsDir ? resolve(briefsDir) : resolvedRoot ? join(resolvedRoot, 'docs', 'agents') : ''
   const laneFile = lanesFile ? resolve(lanesFile) : join(lanesFolder(), 'lanes.json')
@@ -489,8 +490,14 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
     notify,
   })
   const running = new Map()
+  const laneTickets = new Map()
   let stopped = false
   let rootCommonDirPromise = null
+
+  function bridgeAddress() {
+    const value = typeof bridgeUrl === 'function' ? bridgeUrl() : bridgeUrl
+    return typeof value === 'string' ? value.trim() : ''
+  }
 
   function rootCommonDir() {
     if (!rootCommonDirPromise) {
@@ -742,6 +749,7 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
 
   function finish(item) {
     if (running.get(item.entry.lane) !== item) return
+    if (item.ticket) laneTickets.delete(item.ticket)
     flushTail(item)
     running.delete(item.entry.lane)
     if (stopped) return
@@ -787,6 +795,7 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
 
   function startRun(lane, briefs, projectRun = null, startedBy = '', reasoning = '', model = '') {
     const entry = { lane, briefs: [...briefs], startedAt: new Date().toISOString(), lastLines: [] }
+    const ticket = randomBytes(16).toString('hex')
     if (projectRun?.queue) {
       entry.queue = true
       entry.tasks = projectRun.taskCount
@@ -800,6 +809,7 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
     const modelArgs = chosenModel ? ['--model', chosenModel] : []
     const item = {
       entry,
+      ticket,
       tail: '',
       project: projectRun?.project || '',
       task: projectRun?.task || '',
@@ -830,6 +840,7 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
             entry.startedAt,
           ]
       : [...command.args, lane, ...briefs, ...startedArgs, '--started-at', entry.startedAt]
+    laneTickets.set(ticket, { lane, startedBy, startedAt: entry.startedAt })
     const child = spawn(command.file, args, {
       cwd: projectRun ? REPO_ROOT : resolvedRoot || undefined,
       shell: false,
@@ -838,6 +849,8 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
       env: {
         ...process.env,
         MACHINEROOM_RUNS: recordsDir(),
+        MACHINEROOM_LANE_TICKET: ticket,
+        MACHINEROOM_BRIDGE: bridgeAddress(),
         ...(lanesFile && projectRun ? { MACHINEROOM_LANES_FILE: laneFile } : {}),
       },
       ...treeSpawnOptions(),
@@ -1094,6 +1107,7 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
 
   function stopAll() {
     stopped = true
+    laneTickets.clear()
     for (const item of running.values()) {
       if (item.child?.pid) killTree(item.child)
     }
@@ -1539,5 +1553,11 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
     startRun,
     startProjectTask,
     readSavedCheckCommand,
+    laneTicket: (value) => {
+      const ticket = typeof value === 'string' ? value.trim() : ''
+      if (!ticket) return null
+      const held = laneTickets.get(ticket)
+      return held ? { lane: held.lane, startedBy: held.startedBy, startedAt: held.startedAt } : null
+    },
   }
 }

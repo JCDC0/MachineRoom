@@ -46,6 +46,9 @@ export const PAGE_MESSAGE_PROBLEM = 'A page cannot send a message as the orchest
 export const ORCHESTRATOR_TARGET_PROBLEM = 'The orchestrator sends a message to a sub orchestrator.'
 export const MESSAGE_FROM_PROBLEM = 'A message comes from the owner or the orchestrator.'
 export const NO_TOKEN_PROBLEM = 'A request with no Origin needs a valid orchestrator token.'
+export const LANE_ENDED_PROBLEM = 'That lane run has ended or is not known.'
+export const LANE_LIMIT_PROBLEM = 'This lane run has sent its 4 messages.'
+export const LANE_MESSAGE_LIMIT = 4
 export const MAIN_LADDER_PROBLEM = 'A ladder change needs the main orchestrator\'s token.'
 export const MAIN_MESSAGE_PROBLEM = 'A message to a sub needs the main orchestrator\'s token.'
 export const OWNER_COMPACT_PROBLEM = 'A request with no Origin cannot compact an orchestrator.'
@@ -216,6 +219,7 @@ export function createOrchestrators({
   isWorking,
   startLaneTask,
   harnessAvailable = isHarnessAvailable,
+  laneTicket,
 } = {}) {
   const root = projectRoot ? resolve(projectRoot) : ''
   const folder = resolve(runsFolder)
@@ -584,9 +588,35 @@ export function createOrchestrators({
   }
 
   const sentMessages = new Map()
+  const laneSent = new Map()
   const clock = typeof now === 'function' ? now : Date.now
 
-  async function message(body, page, tokenValue = '') {
+  async function message(body, page, tokenValue = '', laneTicketValue = '') {
+    const ticketValue = typeof laneTicketValue === 'string' ? laneTicketValue.trim() : ''
+    if (!page && !tokenValue && ticketValue) {
+      const held = typeof laneTicket === 'function' ? laneTicket(ticketValue) : null
+      if (!held) return { status: 403, body: { error: LANE_ENDED_PROBLEM } }
+      const text = typeof body.text === 'string' ? body.text.trim() : ''
+      if (text.length < 1 || text.length > ORCHESTRATOR_MESSAGE_LIMIT) {
+        return { status: 400, body: { error: MESSAGE_PROBLEM } }
+      }
+      const hasTarget = typeof body.to === 'string' && body.to.trim() !== ''
+      const starter = typeof held.startedBy === 'string' ? held.startedBy.trim() : ''
+      const target = hasTarget
+        ? body.to.trim()
+        : starter && instances.has(starter)
+          ? starter
+          : ORCHESTRATOR_KEY
+      if (!instances.has(target)) return { status: 404, body: { error: NO_ORCHESTRATOR_PROBLEM } }
+      const sentCount = laneSent.get(ticketValue) ?? 0
+      if (sentCount >= LANE_MESSAGE_LIMIT) return { status: 429, body: { error: LANE_LIMIT_PROBLEM } }
+      const sender = `lane:${held.lane}`
+      const delivered = instances.get(target).deliver(sender, text)
+      if (!delivered) return { status: 500, body: { error: 'The message did not reach that orchestrator.' } }
+      laneSent.set(ticketValue, sentCount + 1)
+      announce(sender, agentKey(target), 'message', text)
+      return { status: 202, body: { id: delivered?.id ?? null } }
+    }
     const actor = page ? null : idForToken(tokenValue)
     if (!page && !actor) return { status: 403, body: { error: NO_TOKEN_PROBLEM } }
     const hasTo = typeof body.to === 'string' && body.to.trim() !== ''
@@ -807,7 +837,9 @@ export function createOrchestrators({
       if (method !== 'POST') return methodNotAllowed(req, res)
       const body = await readJsonBody(req, res)
       if (body === null) return true
-      const out = await message(body, page, token)
+      const laneHeader = req.headers['x-machineroom-lane']
+      const laneValue = typeof laneHeader === 'string' ? laneHeader.trim() : Array.isArray(laneHeader) ? laneHeader[0].trim() : ''
+      const out = await message(body, page, token, laneValue)
       sendJson(req, res, out.status, out.body)
       return true
     }

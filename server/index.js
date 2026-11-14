@@ -647,6 +647,7 @@ export function createBridge(options = {}) {
     lanesSource: () => lanesSource,
     activeLanes: () => activeLanes,
     onMessage: sendAgentMessage,
+    bridgeUrl: () => (servingPort ? `http://127.0.0.1:${servingPort}` : ''),
     notify: (event) => {
       for (const client of clients) writeSseChange(client, event)
     },
@@ -806,6 +807,7 @@ export function createBridge(options = {}) {
         const fromRuns = runs && typeof runs.isRunning === 'function' ? runs.isRunning(key) : false
         return fromSource || fromRuns
       },
+      laneTicket: (value) => (runs && typeof runs.laneTicket === 'function' ? runs.laneTicket(value) : null),
       startLaneTask: async (lane, taskText) => {
         if (!runs || typeof runs.startProjectTask !== 'function') throw new Error('The runner is not available.')
         return runs.startProjectTask({
