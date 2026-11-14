@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- A lane is told to read its replies mid-run and how to message another running lane, and a sub is told how to answer one (P342).
 - A lane run the bridge started gets its ticket and the bridge address, and its prompt says how to message its coordinator (P336).
 - A lane's message shows the lane's name in the chat and in a conversation preview, or its key when the lane is unknown (P337).
 - A lane's message shows the lane's name in the chat and in a conversation preview, or its key when the lane is unknown (P337).

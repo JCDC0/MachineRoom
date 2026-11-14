@@ -110,7 +110,7 @@ describe('commandFor', () => {
   })
 })
 
-const LANE_MESSAGE_PARAGRAPH = 'You may send your coordinator a short message while you work, for a question or a blocker: POST $MACHINEROOM_BRIDGE/api/orchestrator/messages with the header X-MachineRoom-Lane: $MACHINEROOM_LANE_TICKET and the JSON body {"text": "..."}. Read both values from your environment; never print the ticket. You get no reply during this run, so keep working on what you can, and send at most 4.'
+const LANE_MESSAGE_PARAGRAPH = 'You may send your coordinator a short message while you work, for a question or a blocker: POST $MACHINEROOM_BRIDGE/api/orchestrator/messages with the header X-MachineRoom-Lane: $MACHINEROOM_LANE_TICKET and the JSON body {"text": "..."}. Read both values from your environment; never print the ticket. Send at most 4. A reply does not interrupt you: read your replies with GET on the same address and header, which answers {"messages": [{"from", "text", "at"}]}, after you ask and once more before you finish. Keep working on what you can meanwhile. To message another lane that is running, add "to": "lane:KEY".'
 const TICKET_VALUE = '9f8e7d6c5b4a39281706f5e4d3c2b1a0'
 const BRIDGE_VALUE = 'http://127.0.0.1:5999'
 

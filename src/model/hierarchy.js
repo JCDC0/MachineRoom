@@ -298,6 +298,7 @@ export function subPrompt(sub, parent, ladder, agentDepth = 2) {
     'Your lanes do not talk. They report when their run ends.',
     `Your siblings: ${siblingLine}.`,
     'To message any orchestrator, POST {{BRIDGE}}/api/orchestrator/messages with { "to": "ID", "text": "..." } and the X-MachineRoom-Orchestrator header.',
+    'A lane may message you while it runs, as lane:KEY. To answer it while it still runs, POST {{BRIDGE}}/api/orchestrator/messages with { "to": "lane:KEY", "text": "..." }; a 409 means its run has ended, so start a follow-up run.',
     `Your scope: ${scopeLine}.`,
     ruleLine,
     `Your sector branch is \`machineroom/sector-${id}\`.`,
