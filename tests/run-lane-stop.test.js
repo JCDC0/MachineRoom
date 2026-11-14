@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { descendantProcesses, killTree, leftoverProcesses, listProcesses } from '../server/processTree.js'
 import { readLaneLock, releaseLaneLock, takeLaneLock, processAlive } from '../scripts/lane-lock.mjs'
 import { isResultLine, startLane, stopLane } from '../scripts/run-lane.mjs'
-import { laneLockText } from '../src/briefs/run.js'
+import { laneLockStartedAt, laneLockText } from '../src/briefs/run.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 
 const RUN_LANE_SCRIPT = fileURLToPath(new URL('../scripts/run-lane.mjs', import.meta.url))
@@ -140,6 +140,15 @@ function writeFakeHangingResultHarness(project, started, { holdMs = 8000 } = {})
   ].join('\n'))
 }
 
+function startIdleProcess() {
+  const child = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 60000)'], {
+    stdio: 'ignore',
+    windowsHide: true,
+  })
+  cleanups.push(() => killTree(child))
+  return child
+}
+
 function setup(prefix, laneKey = 'fake') {
   const base = tempDir(prefix)
   const project = join(base, 'lane')
@@ -176,6 +185,8 @@ describe('a stopped lane stays stopped', () => {
     expect(lock.child).toBeGreaterThan(0)
     expect(lock.folder).toBe(project)
     expect(lock.projectRun).toBe(true)
+    const lockStart = laneLockStartedAt(readFileSync(join(runs, 'fake.lock'), 'utf8'))
+    expect(lockStart).not.toBe('')
     expect(processAlive(grandchildPid)).toBe(true)
 
     const stopped = await runLane(['--stop', 'fake'], env)
@@ -227,6 +238,7 @@ describe('a stopped lane stays stopped', () => {
       const record = JSON.parse(readFileSync(join(runs, 'runs.jsonl'), 'utf8').trim())
       expect(record.lane).toBe('fake')
       expect(record.killed).toBe(true)
+      expect(record.startedAt).toBe(laneLockStartedAt(readFileSync(lock, 'utf8')))
     } finally {
       releaseLaneLock(lock)
       if (previous === undefined) delete process.env.MACHINEROOM_RUNS
@@ -338,6 +350,37 @@ describe('a stopped lane stays stopped', () => {
       try {
         process.kill(grandchildPid)
       } catch {}
+  }, 30000)
+
+  it('refuses a stop that names an older start time and leaves the newer run alive', async () => {
+    const { worktree, runs, env } = setup('mr-run-older-')
+    const live = startIdleProcess()
+    expect(await waitUntil(() => processAlive(live.pid), 5000), 'the run did not start').toBe(true)
+    const current = new Date().toISOString()
+    const older = new Date(Date.now() - 60000).toISOString()
+    writeFileSync(join(runs, 'fake.lock'), laneLockText({ pid: live.pid, folder: worktree, startedAt: current }))
+
+    const refused = await runLane(['--stop', 'fake', '--started-at', older], env)
+    expect(refused.code).toBe(1)
+    expect(refused.stdout).toContain('The fake lane is running a different run now, so nothing was stopped.')
+    expect(processAlive(live.pid)).toBe(true)
+    expect(existsSync(join(runs, 'fake.lock'))).toBe(true)
+  }, 30000)
+
+  it('stops the run a stop names by its start time', async () => {
+    const { worktree, runs, env } = setup('mr-run-current-')
+    const live = startIdleProcess()
+    expect(await waitUntil(() => processAlive(live.pid), 5000), 'the run did not start').toBe(true)
+    const current = new Date().toISOString()
+    writeFileSync(join(runs, 'fake.lock'), laneLockText({ pid: live.pid, folder: worktree, startedAt: current }))
+
+    const stopped = await runLane(['--stop', 'fake', '--started-at', current], env)
+    if (stopped.code !== 0) {
+      console.log(`stop exited ${stopped.code}. stdout:\n${stopped.stdout}\nstderr:\n${stopped.stderr}`)
+    }
+    expect(stopped.code).toBe(0)
+    expect(await waitUntil(() => !processAlive(live.pid), 5000), `the run ${live.pid} is still alive`).toBe(true)
+    expect(existsSync(join(runs, 'fake.lock'))).toBe(false)
   }, 30000)
 })
 
