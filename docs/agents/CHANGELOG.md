@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- LADDER-READINESS.md finds the ladder a no-go on Lowbeam until sub turns leave the main checkout and sector branches reach Reviews, and lists the bugs that need no feature yes (P327).
 - A stop counts a leftover only when it killed it; a gone or reused pid prints its own line (P322).
 - P322: a stop counts only the leftovers it killed, so a gone pid prints `leftover: PID had already ended` and a reused pid prints `stale: PID was not this run` with `stopped` at 0.
 - The docs match review 34: lane commits during a task, the check limits, refused backups, two new limits, the Lowbeam trial ran, and the codex lane on GPT-6.1 Terra high (P319).
