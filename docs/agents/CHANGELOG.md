@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- P319: ARCHITECTURE.md adds reviews 32 to 34 to the closed list, with P285 to P288, P302 to P305 and P313 to P319 as their fixes.
 - P319: TRIAL-LOWBEAM.md says the trial ran, the six October worktrees were removed with their branches kept, the first task merged as f3255a3 (0.12.56), and Reviews moves the play worktree itself since P309.
 - P319: LIMITS.md records the accepted R34-4 rollout race and says a Windows check line starts only a real program or npm or npx, so a pnpm or yarn shim fails to start.
 - P319: LIVE.md and CONTROL-CLIENT.md say a check holds up to 4 non-empty commands and 500 characters in all, a refused backup's note says it could not start, and the first read of the records posts no note for old failovers.
