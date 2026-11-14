@@ -9,7 +9,7 @@ import {
 import { subscribeToNotices } from './notices.js'
 import { laneNeedsNetwork } from '../../model/online.js'
 import { TIERS } from '../../policy/route.js'
-import { PROJECT_CONFIRM_LIMIT, PROJECT_QUEUE_TEXT_LIMIT, cancelSplitRun, clearProjectDraft, clearSplitRun, planLaneTasks, projectCheckLine, projectDraftKey, projectFormNotice, projectRunBody, projectRunConfirm, projectRunLabel, projectRunLanes, projectSplitLabel, projectTaskProblem, projectWorktreeName, queueRecoveryAvailable, queueRecoveryMessage, queueRecoveryPlan, readProjectDraft, recordLine, resultWord, splitRunProgress, splitRunSnapshot, splitTasks, startSplitRun, subscribeSplitRun, timeSinceStart, writeProjectDraft } from './runs.js'
+import { PROJECT_CONFIRM_LIMIT, PROJECT_QUEUE_TEXT_LIMIT, cancelSplitRun, clearProjectDraft, clearSplitRun, planLaneTasks, projectCheckLine, projectDraftKey, projectFormNotice, projectRunBody, projectRunConfirm, projectRunLabel, projectRunLanes, projectSplitLabel, projectSplitWorktreeLine, projectTaskProblem, projectWorktreeLine, queueRecoveryAvailable, queueRecoveryMessage, queueRecoveryPlan, readProjectDraft, recordLine, resultWord, splitRunProgress, splitRunSnapshot, splitTasks, startSplitRun, subscribeSplitRun, timeSinceStart, writeProjectDraft } from './runs.js'
 import { formatTime } from '../inspector.js'
 
 function projectKey(value) {
@@ -89,6 +89,7 @@ export default function DispatchPanel({
   const [projectDiscardConfirm, setProjectDiscardConfirm] = useState(false)
   const [projectDraftPresent, setProjectDraftPresent] = useState(false)
   const [networkOnline, setNetworkOnline] = useState(true)
+  const [projectGitState, setProjectGitState] = useState(null)
   const [routeNonce, setRouteNonce] = useState(0)
   const [recoveryKey, setRecoveryKey] = useState('')
   const [recoverySending, setRecoverySending] = useState(false)
@@ -103,6 +104,7 @@ export default function DispatchPanel({
   const loadedProjectRef = useRef('')
   const promptReqRef = useRef(0)
   const routeReqRef = useRef(0)
+  const gitReqRef = useRef(0)
   const promptBoxRef = useRef(null)
 
   const hasBriefs = typeof client?.briefs === 'function'
@@ -258,6 +260,22 @@ export default function DispatchPanel({
     }
   }
 
+  async function loadProjectGitState() {
+    if (typeof client?.gitState !== 'function') {
+      setProjectGitState(null)
+      return
+    }
+    const reqId = ++gitReqRef.current
+    try {
+      const answer = await client.gitState()
+      if (!mountedRef.current || gitReqRef.current !== reqId) return
+      setProjectGitState(answer && typeof answer === 'object' ? answer : null)
+    } catch {
+      if (!mountedRef.current || gitReqRef.current !== reqId) return
+      setProjectGitState(null)
+    }
+  }
+
   useEffect(() => {
     loadData()
     if (typeof client?.briefs === 'function') {
@@ -352,6 +370,17 @@ export default function DispatchPanel({
     return subscribeToNotices(client, 'runs', () => {
       loadRuns()
     })
+  }, [client])
+
+  useEffect(() => {
+    loadProjectGitState()
+    const unsubscribe = subscribeToNotices(client, 'git', () => {
+      loadProjectGitState()
+    })
+    return () => {
+      gitReqRef.current += 1
+      unsubscribe()
+    }
   }, [client])
 
   useEffect(() => {
@@ -575,6 +604,7 @@ export default function DispatchPanel({
     setProjectNeedsPreview(false)
     setProjectShowConfirm(true)
     setProjectError(null)
+    loadProjectGitState()
   }
 
   async function saveProjectCheckCommand() {
@@ -708,7 +738,6 @@ export default function DispatchPanel({
     task: projectTask,
     tasks: projectTasks,
   })
-  const ownWorktreeName = projectOwnWorktree ? projectWorktreeName(projectName, projectConfirmLane) : ''
   const projectProblem = projectTaskProblem(projectTasks)
   const projectSplitRun = projectOneLanePerTask && projectTasks.length > 1
   const projectSplitTaskCount = projectSplitPlan?.pairs.length || projectTasks.length
@@ -981,7 +1010,7 @@ export default function DispatchPanel({
                     {projectCheckLine({ checkCommand: projectCheckCommand, hasTestScript: projectHasTestScript })}
                   </div>
                   <div className="brief-confirm-warning">
-                    Each task runs in its own worktree beside the project, on its own branch, never on main.
+                    {projectSplitWorktreeLine(projectGitState)}
                   </div>
                   <div className="brief-confirm-warning">
                     This starts {projectSplitTaskCount} agents on this computer three seconds apart and spends money.
@@ -1062,16 +1091,14 @@ export default function DispatchPanel({
               </div>
               {projectOwnWorktree && (
                 <div className="brief-confirm-warning">
-                  {ownWorktreeName
-                    ? `The lane works in ${ownWorktreeName} beside the project, on its own branch, never on main.`
-                    : 'The lane works in its own worktree beside the project, on its own branch, never on main.'}
+                  {projectWorktreeLine({ lane: projectConfirm.lane, gitState: projectGitState })}
                 </div>
               )}
               {projectQueue && (
                 <div className="brief-confirm-warning">
                   The tasks run one after another on a new branch
                   {projectOwnWorktree ? ' in its own worktree' : ' in the project'}, each committed when the
-                  project's tests pass, stopping at the first failure, never on main and never pushed.
+                  project's tests pass, stopping at the first failure, and never pushed.
                 </div>
               )}
               <div className="brief-confirm-warning">

@@ -24,7 +24,7 @@ import {
 } from '../src/ui/panels/runs.js'
 import { getJson, waitFor } from './helpers/bridge.js'
 import { makeTempDir } from './helpers/tempRoot.js'
-import { settle, withDom } from './helpers/uiDom.js'
+import { buttonWithText, settle, type, withDom } from './helpers/uiDom.js'
 
 function postJson(url, body) {
   return getJson(url, { method: 'POST', headers: { 'content-type': 'application/json', origin: new URL(url).origin }, body: JSON.stringify(body) })
@@ -803,6 +803,156 @@ describe('Dispatch when it cannot show the project form', () => {
     expect(lanePicker).not.toBeNull()
     expect(text).not.toContain(NO_LANES_FORM_LINE)
     expect(text).not.toContain(NO_CODE_LANE_FORM_LINE)
+  })
+})
+
+describe('Dispatch Own worktree confirm card', () => {
+  const AGENTS = [
+    { id: 'agent-opencode', key: 'opencode', name: 'OpenCode', adapterType: 'opencode_local', role: null },
+    { id: 'agent-opencode2', key: 'opencode2', name: 'OpenCode 2', adapterType: 'opencode_local', role: null },
+  ]
+
+  function makeConfirmClient({ gitState } = {}) {
+    return {
+      health: async () => ({ lanes: true }),
+      agents: async () => AGENTS,
+      runs: async () => ({ running: [], recent: [], project: 'demo' }),
+      startRun: async (lane) => ({ lane, queue: true, tasks: 1 }),
+      ...(gitState ? { gitState } : {}),
+    }
+  }
+
+  async function mountPanel(root, client) {
+    await act(async () => {
+      root.render(createElement(DispatchPanel, { client, initialAgents: AGENTS }))
+    })
+    await settle()
+  }
+
+  async function chooseLane(container, lane) {
+    const select = container.querySelector('#project-run-lane')
+    await act(async () => {
+      select.value = lane
+      select.dispatchEvent({ type: 'change', bubbles: true })
+    })
+  }
+
+  it('names .worktrees/opencode and the checked-out branch work without beside the project or never on main', async () => {
+    const client = makeConfirmClient({
+      gitState: async () => ({ git: true, branch: 'work', detached: false, head: '4f3c9a1b7d2e' }),
+    })
+    await withDom(async ({ container, root }) => {
+      await mountPanel(root, client)
+      await chooseLane(container, 'opencode')
+      await type(root, container.querySelector('#project-run-task'), 'Fix the typo.')
+      await act(async () => {
+        buttonWithText(container, 'Run').click()
+      })
+      await settle()
+      const card = container.querySelector('.brief-confirm-card')
+      expect(card).not.toBeNull()
+      expect(card.textContent).toContain('.worktrees/opencode')
+      expect(card.textContent).toContain('work')
+      expect(card.textContent).toContain(
+        'The lane works in its own worktree, .worktrees/opencode inside the project, on a new branch from work.'
+      )
+      expect(card.textContent).not.toContain('beside the project')
+      expect(card.textContent).not.toContain('never on main')
+    })
+  })
+
+  it('reads the branch checked out when the confirm card opens', async () => {
+    let branch = 'main'
+    const client = makeConfirmClient({
+      gitState: async () => ({ git: true, branch, detached: false, head: '4f3c9a1b7d2e' }),
+    })
+    await withDom(async ({ container, root }) => {
+      await mountPanel(root, client)
+      branch = 'work'
+      await chooseLane(container, 'opencode')
+      await type(root, container.querySelector('#project-run-task'), 'Fix the typo.')
+      await act(async () => {
+        buttonWithText(container, 'Run').click()
+      })
+      await settle()
+      const card = container.querySelector('.brief-confirm-card')
+      expect(card.textContent).toContain(
+        'The lane works in its own worktree, .worktrees/opencode inside the project, on a new branch from work.'
+      )
+    })
+  })
+
+  it('falls back when gitState is unavailable and names a detached HEAD', async () => {
+    await withDom(async ({ container, root }) => {
+      await mountPanel(root, makeConfirmClient())
+      await chooseLane(container, 'opencode')
+      await type(root, container.querySelector('#project-run-task'), 'Fix the typo.')
+      await act(async () => {
+        buttonWithText(container, 'Run').click()
+      })
+      await settle()
+      const card = container.querySelector('.brief-confirm-card')
+      expect(card.textContent).toContain(
+        "The lane works in its own worktree, .worktrees/opencode inside the project, on a new branch from the project's current branch."
+      )
+    })
+
+    const detachedClient = makeConfirmClient({
+      gitState: async () => ({ git: true, branch: null, detached: true, head: '4f3c9a1b7d2e' }),
+    })
+    await withDom(async ({ container, root }) => {
+      await mountPanel(root, detachedClient)
+      await chooseLane(container, 'opencode')
+      await type(root, container.querySelector('#project-run-task'), 'Fix the typo.')
+      await act(async () => {
+        buttonWithText(container, 'Run').click()
+      })
+      await settle()
+      const card = container.querySelector('.brief-confirm-card')
+      expect(card.textContent).toContain(
+        'The lane works in its own worktree, .worktrees/opencode inside the project, on a new branch from detached HEAD 4f3c9a1.'
+      )
+    })
+  })
+
+  it('drops beside the project and never on main on queue and split confirm cards', async () => {
+    const client = makeConfirmClient({
+      gitState: async () => ({ git: true, branch: 'work', detached: false, head: '4f3c9a1b7d2e' }),
+    })
+    await withDom(async ({ container, root }) => {
+      await mountPanel(root, client)
+      await chooseLane(container, 'opencode')
+      await type(root, container.querySelector('#project-run-task'), 'One.\n---\nTwo.')
+      await act(async () => {
+        buttonWithText(container, 'Run 2 tasks in order').click()
+      })
+      await settle()
+      const card = container.querySelector('.brief-confirm-card')
+      expect(card.textContent).toContain(
+        'The lane works in its own worktree, .worktrees/opencode inside the project, on a new branch from work.'
+      )
+      expect(card.textContent).not.toContain('beside the project')
+      expect(card.textContent).not.toContain('never on main')
+
+      const oneLane = container
+        .querySelectorAll('label')
+        .find((label) => label.textContent.includes('One lane per task'))
+      const checkbox = oneLane.querySelector('input')
+      await act(async () => {
+        checkbox.checked = true
+        checkbox.click()
+      })
+      await act(async () => {
+        buttonWithText(container, 'Run 2 tasks on 2 lanes').click()
+      })
+      await settle()
+      const splitCard = container.querySelector('.brief-confirm-card')
+      expect(splitCard.textContent).toContain(
+        'Each task runs in its own worktree inside the project, on a new branch from work.'
+      )
+      expect(splitCard.textContent).not.toContain('beside the project')
+      expect(splitCard.textContent).not.toContain('never on main')
+    })
   })
 })
 

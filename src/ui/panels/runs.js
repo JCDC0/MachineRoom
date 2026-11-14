@@ -488,6 +488,35 @@ export function projectWorktreeName(project, lane) {
   return `${name}/.worktrees/${key}`
 }
 
+export function projectWorktreeBase(gitState) {
+  if (!gitState || typeof gitState !== 'object' || gitState.git === false) {
+    return "the project's current branch"
+  }
+  const branch = typeof gitState.branch === 'string' ? gitState.branch.trim() : ''
+  if (gitState.detached !== true && branch !== '') {
+    return branch
+  }
+  if (gitState.detached === true) {
+    const head = typeof gitState.head === 'string' ? gitState.head.trim() : ''
+    const short = head.length > 7 ? head.slice(0, 7) : head
+    if (short !== '') return `detached HEAD ${short}`
+  }
+  return "the project's current branch"
+}
+
+export function projectWorktreeLine({ lane, gitState } = {}) {
+  const key = typeof lane === 'string' ? lane.trim() : ''
+  const base = projectWorktreeBase(gitState)
+  const where = key
+    ? `its own worktree, .worktrees/${key} inside the project`
+    : 'its own worktree inside the project'
+  return `The lane works in ${where}, on a new branch from ${base}.`
+}
+
+export function projectSplitWorktreeLine(gitState) {
+  return `Each task runs in its own worktree inside the project, on a new branch from ${projectWorktreeBase(gitState)}.`
+}
+
 export function projectRunBody({ task, tasks, allowDirty, worktree, checkCommand } = {}) {
   const list = Array.isArray(tasks) ? tasks : []
   const command = typeof checkCommand === 'string' ? checkCommand.trim() : ''
