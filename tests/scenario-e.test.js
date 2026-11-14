@@ -5,7 +5,7 @@ import { loadScenario } from './helpers.js'
 
 const OTHER_FIXTURES = {
   'fixtures/sandbox': {
-    activities: 'd0953d03899647e6',
+    activities: '4e1d0649be6925a9',
     plans: '6dab246be0dc06a2',
     layouts: 'cb9a4332076900b8',
   },
@@ -20,12 +20,12 @@ const OTHER_FIXTURES = {
     layouts: '28237138c87c28bf',
   },
   'fixtures/scenario-c': {
-    activities: 'e6dc4d8a1b46b1d2',
+    activities: '394bd8e0fe7863bc',
     plans: '209e2edc80cfd82f',
     layouts: 'cf9437e37f63146d',
   },
   'fixtures/scenario-d': {
-    activities: '2fab820498862bc2',
+    activities: 'b5b12e98ea6c1c52',
     plans: '895e32dddf24ede1',
     layouts: '76e5d528b7944672',
   },
