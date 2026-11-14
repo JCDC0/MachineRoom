@@ -109,6 +109,7 @@ describe('sameSnapshot', () => {
     expect(sameSnapshot(snapshot(), snapshot({ agents: [agent({ status: 'working' })] }))).toBe(false)
     expect(sameSnapshot(snapshot(), snapshot({ agents: [agent({ name: 'Other' })] }))).toBe(false)
     expect(sameSnapshot(snapshot(), snapshot({ agents: [agent({ harness: 'claude' })] }))).toBe(false)
+    expect(sameSnapshot(snapshot(), snapshot({ agents: [agent({ outsideCount: 1 })] }))).toBe(false)
     expect(sameSnapshot(snapshot(), snapshot({ agents: [] }))).toBe(false)
   })
 

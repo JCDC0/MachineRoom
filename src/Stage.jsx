@@ -371,6 +371,7 @@ function sameAgent(left, right) {
     left.status === right.status &&
     left.label === right.label &&
     left.runs === right.runs &&
+    (left.outsideCount ?? 0) === (right.outsideCount ?? 0) &&
     left.parent === right.parent &&
     left.depth === right.depth
   )

@@ -172,6 +172,7 @@ export function createLivePlayer({ tree, agents, onActivity = () => {} }) {
           runs: agent.runs,
           parent: agent.parent ?? null,
           depth: agent.depth ?? 0,
+          ...(agent.outsidePaths?.length > 0 ? { outsidePaths: agent.outsidePaths.map((entry) => ({ ...entry })), outsideCount: agent.outsideCount } : {}),
         })),
       }
     },

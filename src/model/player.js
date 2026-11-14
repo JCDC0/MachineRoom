@@ -106,6 +106,7 @@ export function createPlayer({ activities, tree, agents, idleCapMs = 4000, tailM
           runs: agent.runs,
           parent: agent.parent ?? null,
           depth: agent.depth ?? 0,
+          ...(agent.outsidePaths?.length > 0 ? { outsidePaths: agent.outsidePaths.map((entry) => ({ ...entry })), outsideCount: agent.outsideCount } : {}),
         })),
       }
     },

@@ -487,3 +487,20 @@ describe('outside-project path tracking', () => {
     expect('outside' in starts[2]).toBe(false)
   })
 })
+
+describe('the snapshot the Inspector reads', () => {
+  test('carries the outside paths of an agent, and no field for an agent with none', () => {
+    const frames = makeFrames([{ name: 'Read', path: '/etc/first.conf' }])
+    const activities = buildActivities(frames, { agents: [AGENT], tree: TREE })
+    const player = createPlayer({ activities, tree: TREE, agents: [AGENT] })
+
+    expect(Object.hasOwn(player.snapshot().agents[0], 'outsidePaths')).toBe(false)
+    expect(Object.hasOwn(player.snapshot().agents[0], 'outsideCount')).toBe(false)
+
+    player.seek(player.duration)
+    const shown = player.snapshot().agents.find((agent) => agent.key === AGENT.key)
+    expect(shown.outsideCount).toBe(1)
+    expect(shown.outsidePaths).toEqual([{ path: '/etc/first.conf', kind: 'read' }])
+    expect(shown.outsidePaths).not.toBe(player.state.agents.get(AGENT.key).outsidePaths)
+  })
+})
