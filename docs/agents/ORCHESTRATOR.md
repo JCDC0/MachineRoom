@@ -10,12 +10,13 @@ How to read this file: `Where things stand`, `Rules`, `Session start` and `The l
 
 Rewrite this section at every merge and before you end a session. Keep it under ten lines: what is pushed, what is unpushed, what runs, what waits on the owner, what is next.
 
-- 2026-11-15, early: review 34 (P312, Codex on GPT-6.1 Sol high) and its fixes P313 to P319 are merged. Pushed state before them: `be648e0f`, CI green. Read CI first with `gh run list --limit 3 --repo JCDC0/MachineRoom`.
-- Since `12c25524`: P249 to P319, except P256 (scale rerun, waits for a quiet machine) and P276 (rejected). Reviews 31 to 34 are closed; R34-4 is accepted as a limit. P310 made test helpers wait for `close`, and P311 lets the doctor and orchestrators find the Codex app's `codex.exe`.
-- Lowbeam runs through MachineRoom (`TRIAL-LOWBEAM.md`). The first task merged through Reviews as `f3255a3` (0.12.56), and Reviews moves `.worktrees/play` (P309). Never push Lowbeam.
+- 2026-11-15, morning: P320 to P334 are merged on top of the push at `e73b43c6`. Read CI first with `gh run list --limit 3 --repo JCDC0/MachineRoom`.
+- Since `12c25524`: P249 to P334, except P256 (scale rerun, waits for a quiet machine) and P276 (rejected). Reviews 31 to 35 are closed; R34-4 is accepted as a limit. Reports: `CODEX-ORCHESTRATOR.md` (P326), `LADDER-READINESS.md` (P327) and `OPENCODE-RETIREMENT.md` (P325, not acted on: the owner keeps OpenCode).
+- The free hierarchy, the owner's goal (any harness coordinates any other, they message each other, the owner watches file access; worktrees are a workflow choice and modes guard the edges): P331 lets any harness be a sub, P332 gives Codex Plan and Auto modes, P333 lets any orchestrator message any other (6 per 10 minutes per sender), P334 tests a Codex sub ladder end to end. A Codex turn in `workspace-write` reaches 127.0.0.1 (probe, 2026-11-15). Next: a lane may message its coordinator mid-run; then a supervised live ladder on Lowbeam.
+- Lowbeam runs through MachineRoom (`TRIAL-LOWBEAM.md`); Reviews moves `.worktrees/play` (P309). Never push Lowbeam.
 - Nothing runs at this rewrite. `opencode6` sits on P103's old branch with 4 unmerged commits; leave it until the owner looks. `opencode8` to `opencode10` are retired.
-- The fleet: `opencode` to `opencode5` and `opencode7` on DeepSeek V4.1 Flash (the owner's OpenCode Go plan has 6% of its monthly use left on 2026-11-15, ends 2026-11-17 and may not renew), `agy` and `agy2` on Hydrogen XHigh, `codex` on GPT-6.1 Terra high, `native` and `native2` for reports.
-- Known and accepted: the play line for a dirty play worktree names the old `main`; after a queue failover the branch check accepts the branch the backup ended on; a stop counts an already gone leftover as stopped.
+- The fleet: `opencode` to `opencode5` and `opencode7` on DeepSeek V4.1 Flash (the owner keeps OpenCode; its plan ends 2026-11-17), `agy` and `agy2` on Hydrogen XHigh, `agy3` on Argon High when asked, `codex` on GPT-6.1 Terra high, `native` and `native2` for reports.
+- Known and accepted: after a queue failover the branch check accepts any branch ending `-on-BACKUP`; the main orchestrator's messages count toward the 6 per 10 minutes.
 - Push: the owner gave a standing yes for this work on 2026-11-14. A new session asks again.
 
 ## Rules
