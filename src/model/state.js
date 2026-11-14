@@ -2,9 +2,11 @@ import { ancestors, dirname } from './paths.js'
 
 const LINE_LIMIT = 80
 export const CALL_LIMIT = 500
+export const OUTSIDE_PATH_LIMIT = 20
 export const MAX_DEPTH = 3
 export const MAX_DEPTH_ALLOWED = 4
 export const CHILD_LIFE_MS = 7500
+const OUTSIDE_KINDS = new Set(['read', 'write', 'edit'])
 
 export function depthLimitOf(value) {
   const raw = value !== null && typeof value === 'object' ? value.depth ?? value.limit : value
@@ -42,9 +44,24 @@ function makeAgent(key, name, parent = null, depth = 0, runId = null, source = n
     calls: new Map(),
     runWrites: new Set(),
     focus: [],
+    outsidePaths: [],
+    outsideCount: 0,
     parent,
     depth,
   }
+}
+
+function rememberOutsidePath(agent, activity) {
+  if (activity.outside !== true) return
+  const path = typeof activity.outsidePath === 'string' ? activity.outsidePath : ''
+  if (path === '') return
+  const kind = OUTSIDE_KINDS.has(activity.tool) ? activity.tool : null
+  if (!kind) return
+  agent.outsideCount += 1
+  const index = agent.outsidePaths.findIndex((entry) => entry.path === path)
+  if (index !== -1) agent.outsidePaths.splice(index, 1)
+  agent.outsidePaths.unshift({ path, kind })
+  if (agent.outsidePaths.length > OUTSIDE_PATH_LIMIT) agent.outsidePaths.length = OUTSIDE_PATH_LIMIT
 }
 
 export function createState(tree, agents) {
@@ -229,6 +246,7 @@ export function apply(state, activity) {
       if (agent.calls.size > CALL_LIMIT) agent.calls.delete(agent.calls.keys().next().value)
       say(agent, activity.label)
       activity.touches.forEach((touch) => applyTouch(state, agent, touch))
+      rememberOutsidePath(agent, activity)
       if (activity.touches.length > 0) {
         agent.focus = activity.touches.map((touch) => touch.path)
         remember(state, agent.focus, activity.time)

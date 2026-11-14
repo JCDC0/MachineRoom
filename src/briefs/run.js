@@ -1,4 +1,5 @@
-import { basename } from '../model/paths.js'
+import { basename, maskProfilePaths } from '../model/paths.js'
+export { maskProfilePaths }
 import { finiteNumber, summaryOf } from '../harnesses/common.js'
 import { harnessByKey } from '../harnesses/index.js'
 import { modesFor } from '../control/modes.js'
@@ -1131,57 +1132,6 @@ function quotaField(quota) {
 }
 
 const RECORD_TEXT_LIMIT = 200
-
-const PROFILE_PATH_NAMES = [
-  ['TEMP', '%TEMP%'],
-  ['TMP', '%TEMP%'],
-  ['LOCALAPPDATA', '%LOCALAPPDATA%'],
-  ['APPDATA', '%APPDATA%'],
-  ['USERPROFILE', '%USERPROFILE%'],
-  ['XDG_STATE_HOME', '$XDG_STATE_HOME'],
-  ['HOME', '~'],
-]
-
-const PROFILE_PATH_FALLBACKS = [
-  { pattern: /[A-Za-z]:[\\/]Users[\\/][^\\/\r\n"'<>|]+[\\/]AppData[\\/]Local[\\/]Temp/gi, label: '%TEMP%' },
-  { pattern: /[A-Za-z]:[\\/]Users[\\/][^\\/\r\n"'<>|]+[\\/]AppData[\\/]Local/gi, label: '%LOCALAPPDATA%' },
-  { pattern: /[A-Za-z]:[\\/]Users[\\/][^\\/\r\n"'<>|]+[\\/]AppData[\\/]Roaming/gi, label: '%APPDATA%' },
-  { pattern: /[A-Za-z]:[\\/]Users[\\/][^\\/\r\n"'<>|]+/gi, label: '%USERPROFILE%' },
-  { pattern: /(?<![\w:/])\/(?:home|Users|root)\/[^/\r\n"'<>|]+/g, label: '~' },
-]
-
-function escapeProfilePath(value) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-}
-
-function profilePathPrefixes() {
-  if (typeof process === 'undefined' || !process.env) return []
-  const seen = new Set()
-  const list = []
-  for (const [name, label] of PROFILE_PATH_NAMES) {
-    const raw = typeof process.env[name] === 'string' ? process.env[name].trim() : ''
-    const value = raw.length > 1 ? raw.replace(/[\\/]+$/, '') : raw
-    if (value === '' || /^[\\/]+$/.test(value) || /^[A-Za-z]:$/.test(value) || seen.has(value)) continue
-    seen.add(value)
-    const windows = /^[A-Za-z]:[\\/]/.test(value) || value.startsWith('\\\\')
-    list.push({ value, label: label === '~' && windows ? '%USERPROFILE%' : label, windows })
-  }
-  return list.sort((one, two) => two.value.length - one.value.length)
-}
-
-export function maskProfilePaths(text) {
-  const source = typeof text === 'string' ? text : String(text ?? '')
-  if (source === '' || !/[\\/]/.test(source)) return source
-  let masked = source
-  for (const { value, label, windows } of profilePathPrefixes()) {
-    const pattern = new RegExp(`(?<![\\w:\\\\/.~-])${escapeProfilePath(value)}(?=$|[\\\\/])`, windows ? 'gi' : 'g')
-    masked = masked.replace(pattern, label)
-  }
-  for (const { pattern, label } of PROFILE_PATH_FALLBACKS) {
-    masked = masked.replace(pattern, label)
-  }
-  return masked
-}
 
 export function maskedQueueTasks(tasks) {
   return (Array.isArray(tasks) ? tasks : []).map((task) => maskProfilePaths(maskKeys(String(task ?? '')).text).slice(0, RECORD_TEXT_LIMIT))

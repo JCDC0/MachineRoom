@@ -74,12 +74,23 @@ function folderTouch(ctx, raw) {
   return { path: relative, mode: 'list', kind: 'dir' }
 }
 
+function fileInfoFor(ctx, kind, update) {
+  const mode = kind === 'read' ? 'read' : 'write'
+  const touches = []
+  let outsidePath
+  for (const path of locationPaths(update)) {
+    const touched = fileTouch(ctx, path, mode)
+    touches.push(...touched.touches)
+    if (!outsidePath && touched.outsidePath) outsidePath = touched.outsidePath
+  }
+  return { touches, outsidePath: touches.length > 0 ? undefined : outsidePath }
+}
+
 function touchesFor(ctx, kind, update) {
   if (kind === 'execute') return commandTouch(ctx, commandOf(update))
   if (kind === 'search') return locationPaths(update).map((path) => folderTouch(ctx, path)).filter(Boolean)
   if (!FILE_KINDS.has(kind)) return []
-  const mode = kind === 'read' ? 'read' : 'write'
-  return locationPaths(update).flatMap((path) => fileTouch(ctx, path, mode).touches)
+  return fileInfoFor(ctx, kind, update).touches
 }
 
 function titleOf(update, call) {
@@ -169,7 +180,14 @@ export function createAcpParser(ctx) {
   function startCall(call, update, time) {
     if (call.started) return
     call.started = true
-    const activity = toolStart({ time, id: call.id, tool: call.tool, label: labelOf(ctx, call, update), touches: call.touches })
+    const activity = toolStart({
+      time,
+      id: call.id,
+      tool: call.tool,
+      label: labelOf(ctx, call, update),
+      touches: call.touches,
+      outsidePath: call.outsidePath,
+    })
     out.push(call.owner ? { ...activity, agent: call.owner.key } : activity)
   }
 
@@ -191,6 +209,7 @@ export function createAcpParser(ctx) {
         input: {},
         tool: 'other',
         touches: [],
+        outsidePath: undefined,
       }
       calls.set(id, call)
     }
@@ -201,11 +220,18 @@ export function createAcpParser(ctx) {
     if (update.rawInput && typeof update.rawInput === 'object') call.input = { ...call.input, ...update.rawInput }
     call.kind = kindOf(update, call)
     call.tool = TOOL_BY_KIND[call.kind]
-    call.touches = touchesFor(ctx, call.kind, update)
+    if (FILE_KINDS.has(call.kind)) {
+      const info = fileInfoFor(ctx, call.kind, update)
+      call.touches = info.touches
+      call.outsidePath = info.outsidePath
+    } else {
+      call.touches = touchesFor(ctx, call.kind, update)
+      call.outsidePath = undefined
+    }
     const finished = DONE.has(call.status)
     const described = typeof call.input.description === 'string' && call.input.description.trim() !== ''
     const wantsDescription = call.name === 'subagent' && !described
-    const ready = (!FILE_KINDS.has(call.kind) && !wantsDescription) || call.touches.length > 0 || finished
+    const ready = (!FILE_KINDS.has(call.kind) && !wantsDescription) || call.touches.length > 0 || Boolean(call.outsidePath) || finished
     if (ready) startCall(call, update, time)
     if (!finished || call.ended) return
     call.ended = true

@@ -20,12 +20,14 @@ export function createHermesParser(ctx) {
     const startTime = time - Math.round(Number(seconds) * 1000)
     const ok = !mark || (exit !== undefined && Number(exit) === 0)
     let touches = []
+    let outsidePath
     let label = `${verb} ${shorten(detail)}`
     if (tool === 'read' || tool === 'write' || tool === 'edit') {
       const bare = !/[\\/]/.test(detail)
       const named = resolveKnown(detail, ctx.files, bare ? near : undefined)
       const touched = fileTouch(ctx, named, tool)
       touches = touched.touches
+      outsidePath = touched.outsidePath
       if (touched.relative && (indexFor(ctx.files).has(touched.relative) || dirname(touched.relative) !== '')) {
         near = dirname(touched.relative)
       }
@@ -39,7 +41,7 @@ export function createHermesParser(ctx) {
     } else if (tool === 'web') {
       label = `web ${verb === 'fetch' ? 'fetch' : 'search'} ${shorten(detail)}`
     }
-    out.push(toolStart({ time: startTime, id, tool, label, touches }))
+    out.push(toolStart({ time: startTime, id, tool, label, touches, outsidePath }))
     out.push(toolEnd({ time, id, ok }))
     if (verb === 'delegate') {
       const parent = ctx.agentKey ?? 'agent'

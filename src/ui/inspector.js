@@ -13,6 +13,7 @@ export const CONNECTION_UNKNOWN = 'Connection not reported'
 const RUNNING = new Set(['working', 'running'])
 const FAILED = new Set(['error', 'failed', 'cancelled', 'timed_out', 'terminated'])
 const DONE = new Set(['done', 'finished', 'succeeded', 'complete', 'completed'])
+const OUTSIDE_KINDS = new Set(['read', 'write', 'edit'])
 
 function text(value) {
   return typeof value === 'string' ? visibleText(value).trim() : ''
@@ -257,4 +258,19 @@ export function previewLines(info) {
   if (info.binary === true) return { notice: BINARY_FILE, text: '' }
   const text = typeof info.text === 'string' ? info.text : ''
   return { notice: info.truncated === true ? TOO_LARGE : '', text }
+}
+
+export function outsidePathView(agent) {
+  const raw = Array.isArray(agent?.outsidePaths) ? agent.outsidePaths : []
+  const items = []
+  for (const entry of raw) {
+    if (!entry || typeof entry !== 'object') continue
+    const path = text(entry.path)
+    const kind = text(entry.kind).toLowerCase()
+    if (path === '' || !OUTSIDE_KINDS.has(kind)) continue
+    items.push({ path, kind })
+  }
+  const rawCount = Number(agent?.outsideCount)
+  const count = Number.isFinite(rawCount) && rawCount > items.length ? Math.floor(rawCount) : items.length
+  return { count, items }
 }

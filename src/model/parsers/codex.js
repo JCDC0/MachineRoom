@@ -10,10 +10,10 @@ export function createCodexParser(ctx) {
   let counter = 0
   const parentKey = ctx?.agentKey ?? 'agent'
 
-  function startCall(id, tool, label, touches, time) {
+  function startCall(id, tool, label, touches, time, outsidePath) {
     const call = { id, tool, label, touches, started: true }
     calls.set(id, call)
-    out.push({ ...toolStart({ time, id, tool, label, touches }), agent: parentKey })
+    out.push({ ...toolStart({ time, id, tool, label, touches, outsidePath }), agent: parentKey })
   }
 
   function endCall(id, ok, time) {
@@ -49,6 +49,7 @@ export function createCodexParser(ctx) {
       const touches = []
       let firstRel = null
       let firstRaw = null
+      let outsidePath
       let tool = 'edit'
       for (const change of changes) {
         const rawPath = change.path ?? change.file
@@ -57,13 +58,14 @@ export function createCodexParser(ctx) {
         if (tool !== 'write' && changeTool === 'write') tool = 'write'
         const touched = fileTouch(ctx, rawPath, changeTool)
         touches.push(...touched.touches)
+        if (!outsidePath && touched.outsidePath) outsidePath = touched.outsidePath
         if (firstRel === null) {
           firstRel = touched.relative
           firstRaw = rawPath
         }
       }
       const label = firstRaw ? labelFor(tool, firstRel, firstRaw) : 'edit file'
-      startCall(id, tool, label, touches, time)
+      startCall(id, tool, label, touches, time, outsidePath)
     }
     if (isComplete) {
       const ok = item.status !== 'failed' && item.status !== 'error' && !item.error

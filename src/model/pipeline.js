@@ -16,7 +16,14 @@ export function orderAgents(agents) {
 }
 
 export function makeContext(tree) {
-  return { rootName: tree.rootName, rootPath: tree.rootPath, files: tree.files, dirs: tree.dirs }
+  const worktrees = Array.isArray(tree.worktrees) ? tree.worktrees.filter((item) => typeof item === 'string' && item !== '') : []
+  return {
+    rootName: tree.rootName,
+    rootPath: tree.rootPath,
+    files: tree.files,
+    dirs: tree.dirs,
+    ...(worktrees.length > 0 ? { worktrees } : {}),
+  }
 }
 
 const RUN_END = new Set(['succeeded', 'failed', 'cancelled', 'timed_out'])
@@ -25,6 +32,7 @@ const MESSAGE_KINDS = new Set(['order', 'report', 'dispatch', 'wake'])
 function textOf(value) {
   return typeof value === 'string' ? value.trim() : ''
 }
+
 export const SEEN_LIMIT = 20000
 export const ENDED_LIMIT = 1000
 export const RUN_IDLE_MS = 30 * 60000
@@ -116,7 +124,7 @@ export function createPipeline({ agents, tree }) {
       } else if (RUN_END.has(payload.status)) {
         const entry = parsers.get(runId)
         if (entry) {
-          entry.parser.flush(time).forEach((activity) => emit(activity))
+          entry.parser.flush(time).forEach(emit)
           parsers.delete(runId)
         }
         lastRunTime.delete(runId)
@@ -132,12 +140,17 @@ export function createPipeline({ agents, tree }) {
       if (ended.has(runId)) return []
       let entry = parsers.get(runId)
       if (!entry) {
-        entry = { parser: createParser(agent, { ...ctx, agentKey: agent.key }), agent, runId }
+        const worktree = textOf(agent.worktree)
+        entry = {
+          parser: createParser(agent, { ...ctx, agentKey: agent.key, ...(worktree ? { worktree } : {}) }),
+          agent,
+          runId,
+        }
         parsers.set(runId, entry)
       }
       const chunkTime = Date.parse(payload.ts ?? frame.createdAt)
       lastRunTime.set(runId, chunkTime)
-      entry.parser.push(payload.chunk, chunkTime).forEach((activity) => emit(activity))
+      entry.parser.push(payload.chunk, chunkTime).forEach(emit)
     } else if (frame.type === 'heartbeat.run.event' && payload.level === 'error') {
       if (!once(`${runId}:error:${payload.seq}`)) return []
       if (lastRunTime.has(runId)) lastRunTime.set(runId, time)

@@ -20,6 +20,7 @@ import {
   gitGraphView,
   inspectTarget,
   internetStatus,
+  outsidePathView,
   previewLines,
   touchRows,
 } from './inspector.js'
@@ -137,6 +138,7 @@ export default function Inspector({
     log,
     orchestrator: subOrchestrator ? null : orchestrator,
   })
+  const outside = useMemo(() => outsidePathView(lane?.outsidePaths?.length ? lane : context), [lane, context])
   const stateWord = agentStateWord({
     status: lane?.status ?? context.status,
     openCalls: lane?.openCalls,
@@ -564,6 +566,25 @@ export default function Inspector({
                 ))
               )}
             </ol>
+
+            {outside.items.length > 0 && (
+              <>
+                <h3 className="mr-inspector-subtitle mono">Outside the project {outside.count}</h3>
+                <ul className="mr-inspector-touches" aria-label="Outside the project">
+                  {outside.items.map((entry) => (
+                    <li
+                      className={`mr-inspector-touch ${entry.kind === 'read' ? 'is-read' : 'is-write'} mono`}
+                      key={entry.path}
+                    >
+                      <span className="mr-inspector-touch-agent" title={entry.path}>
+                        {entry.path}
+                      </span>
+                      <span className="mr-inspector-touch-mode">{entry.kind}</span>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
 
             {!orchestratorAgent && bridge && client && (
               <button type="button" className="mr-inspector-action mono" onClick={openLaneConversation}>

@@ -1,12 +1,14 @@
 # Changelog
 
 ## Unreleased
+- A read, write or edit of an absolute path outside the project and its lane worktrees is marked on the activity, kept per agent and listed in the agent's Inspector under Outside the project, with the home folder masked (P339, P346).
 - Lane modes are tested per harness and written in COMMANDS.md, and a harness with no modes refuses one with a plain sentence (P344).
 - A run start request may name a mode: the bridge checks it with the runner's own check and passes --mode to the runner (P343).
 - A lane's prompt says how to read its replies and message another lane, and a sub's instructions say how to answer a lane while it runs (P342).
 - An orchestrator or a running lane may message a running lane, and the lane reads its inbox with its ticket, so a lane gets replies while it works (P341).
 - A turn on Codex, the native harness or another harness with a command descriptor passes the orchestrator's effort, and each harness takes its own effort levels, so a Codex sub on high or xhigh runs that way (P345).
 - Codex and native orchestrator turns pass their saved effort to the harness, and Codex accepts xhigh (P345).
+- `fileTouch` and each harness parser mark absolute outside-project file touches through `toolStart` with `maskProfilePaths` in `src/model/paths.js` and no second reader in `src/model/pipeline.js`, state keeps per-agent counts and the last 20 distinct paths newest first, and the agent Inspector lists them under Outside the project (P339, P346).
 - The owner's test tree (a Codex sub over two AGY lanes, a native sub over three OpenCode lanes) is proven in tests/owner-tree.test.js, and FREE-HIERARCHY.md says what the free hierarchy does today and how to build the tree in the room (P340).
 - A lane run takes a permission mode with --mode or the lane's cli.mode: Claude lanes get plan, edits, auto or bypass, Codex and AGY lanes pass theirs, and a mode the harness lacks is refused before anything starts (P338).
 - A lane run takes messages from an orchestrator, a sub or another lane, and reads them mid-run with its ticket, oldest first, the newest 20 kept (P341).
