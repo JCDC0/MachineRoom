@@ -340,6 +340,11 @@ export function stopLane(laneKey, { platform = process.platform, list = listProc
   })
   stopped += descendantsResult.stopped
   failed += descendantsResult.failed
+  const afterKill = lockText(path)
+  if (afterKill.trim() !== '' && afterKill !== before) {
+    console.log(`kept the ${laneKey} lock: a newer run took it while the stop ran`)
+    return 0
+  }
   const byName = holder.projectRun !== true
   const leftovers = stopLeftovers({
     worktree: byName ? worktree : '',

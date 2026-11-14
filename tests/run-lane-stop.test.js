@@ -743,6 +743,42 @@ describe('stopLane creation time rules', () => {
     }
   })
 
+  it('leaves a process in the worktree alone when a newer run takes the lock before the leftover search', () => {
+    const { runs, env } = setup('mr-stop-newer-leftover-')
+    const lockPath = join(runs, 'fake.lock')
+    const worktreePath = 'C:\\fake\\worktree'
+    writeFileSync(lockPath, laneLockText({ pid: 100, child: 200, folder: worktreePath }))
+    const killed = []
+    const lines = []
+    const log = console.log
+    console.log = (msg) => lines.push(msg)
+    try {
+      withEnv(env, () => {
+        const code = stopLane('fake', {
+          platform: 'win32',
+          stat: () => ({ mtimeMs: 10000 }),
+          list: () => [
+            { pid: 100, ppid: 1, created: 9000 },
+            { pid: 200, ppid: 100, created: 9500 },
+            { pid: 400, ppid: 1, created: 9900, command: 'node C:\\fake\\worktree\\worker.js' },
+          ],
+          kill: ({ pid }) => {
+            killed.push(pid)
+            if (pid === 200) writeFileSync(lockPath, laneLockText({ pid: 300, child: 400, folder: worktreePath }))
+            return true
+          },
+        })
+        expect(code).toBe(0)
+      })
+      expect(killed).toEqual([200, 100])
+      expect(lines).not.toContain('leftover: stopped 400')
+      expect(lines).toContain('kept the fake lock: a newer run took it while the stop ran')
+      expect(readFileSync(lockPath, 'utf8')).toContain('"pid":300')
+    } finally {
+      console.log = log
+    }
+  })
+
   it('stops a project run by its descendants and leaves a process that only names the project', () => {
     const { runs, env } = setup('mr-stop-project-')
     const lockPath = join(runs, 'fake.lock')
