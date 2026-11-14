@@ -60,10 +60,12 @@ export function createAgyParser(ctx) {
     const [tool, field] = Object.hasOwn(TOOLS, step.tool_name) ? TOOLS[step.tool_name] : ['other', null]
     const value = field ? step.tool_info?.parameters?.[field] : null
     let touches = []
+    let outsidePath
     let label = step.tool_name ?? 'tool'
     if (value && (tool === 'read' || tool === 'write' || tool === 'edit')) {
       const touched = fileTouch(ctx, value, tool)
       touches = touched.touches
+      outsidePath = touched.outsidePath
       label = labelFor(tool, touched.relative, value)
     } else if (value && tool === 'shell') {
       touches = commandTouch(ctx, value)
@@ -96,7 +98,7 @@ export function createAgyParser(ctx) {
     const err = typeof step.tool_info?.error === 'string' ? step.tool_info.error.trim() : ''
     if (err) label = `${label}: ${shorten(err)}`
     calls.set(id, label)
-    out.push(credit(entry, toolStart({ time, id, tool, label, touches })))
+    out.push(credit(entry, toolStart({ time, id, tool, label, touches, outsidePath })))
   }
 
   function newChild() {

@@ -1,4 +1,4 @@
-import { relativeTo } from '../paths.js'
+import { maskProfilePaths, normalise, relativeTo } from '../paths.js'
 import { touchesForCommand } from '../commands.js'
 
 const FAILURE = /(?:^|\n)\s*(?:[✖×]\s|not ok\b|FAIL(?:ED)?\b|\[exit [1-9]\d*\]|fatal:|\+?\s*CategoryInfo|Exception\b)/
@@ -56,9 +56,26 @@ export function dirSetFor(dirs) {
   return held.set
 }
 
+function isAbsolutePath(rawPath) {
+  const clean = normalise(rawPath).trim()
+  return /^[A-Za-z]:\//.test(clean) || clean.startsWith('/')
+}
+
+function inWorktree(ctx, rawPath) {
+  if (typeof ctx?.worktree === 'string' && ctx.worktree !== '' && relativeTo('', rawPath, ctx.worktree) !== null) return true
+  if (!Array.isArray(ctx?.worktrees)) return false
+  return ctx.worktrees.some((worktree) => typeof worktree === 'string' && worktree !== '' && relativeTo('', rawPath, worktree) !== null)
+}
+
 export function fileTouch(ctx, rawPath, tool) {
   const relative = relativeTo(ctx.rootName, rawPath, ctx.rootPath)
-  if (relative === null || relative === '') return { relative, touches: [] }
+  if (relative === null) {
+    if (isAbsolutePath(rawPath) && !inWorktree(ctx, rawPath)) {
+      return { relative, touches: [], outsidePath: maskProfilePaths(String(rawPath).trim()) }
+    }
+    return { relative, touches: [] }
+  }
+  if (relative === '') return { relative, touches: [] }
   const isDir = Boolean(dirSetFor(ctx.dirs)?.has(relative))
   if (tool === 'read' && isDir) {
     return { relative, touches: [{ path: relative, mode: 'list', kind: 'dir' }] }
@@ -77,8 +94,13 @@ export function commandTouch(ctx, command) {
   return touchesForCommand(command, ctx.files, ctx.dirs)
 }
 
-export function toolStart({ time, id, tool, label, touches }) {
-  return { time, type: 'tool.start', id, tool, label, touches }
+export function toolStart({ time, id, tool, label, touches, outsidePath }) {
+  const activity = { time, type: 'tool.start', id, tool, label, touches }
+  if (typeof outsidePath === 'string' && outsidePath !== '' && (!Array.isArray(touches) || touches.length === 0)) {
+    activity.outside = true
+    activity.outsidePath = outsidePath
+  }
+  return activity
 }
 
 export function toolEnd({ time, id, ok, label, error }) {

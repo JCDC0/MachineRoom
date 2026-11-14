@@ -71,6 +71,7 @@ export function createOpencodeParser(ctx) {
     const tool = mcp ? 'mcp' : Object.hasOwn(TOOLS, lower) ? TOOLS[lower] : 'other'
     const callId = id ?? `opencode-${(counter += 1)}`
     let touches = []
+    let outsidePath
     let label = `${name} ${shorten(JSON.stringify(input), 48)}`
     if (tool === 'mcp') {
       const shown = mcpLabelOf(lower, input)
@@ -87,6 +88,7 @@ export function createOpencodeParser(ctx) {
       if (raw) {
         const touched = fileTouch(ctx, raw, tool)
         touches = touched.touches
+        outsidePath = touched.outsidePath
         label = labelFor(tool, touched.relative, raw)
       }
     } else if (tool === 'shell') {
@@ -110,7 +112,7 @@ export function createOpencodeParser(ctx) {
       label = description ? `subagent: ${description}` : 'subagent'
     }
     const failed = status === 'error' || (tool === 'shell' && looksFailed(output))
-    out.push(toolStart({ time: time - 300, id: callId, tool, label, touches }))
+    out.push(toolStart({ time: time - 300, id: callId, tool, label, touches, outsidePath }))
     out.push(toolEnd({ time, id: callId, ok: !failed }))
     if (name === 'subagent') {
       const parent = ctx.agentKey ?? 'agent'

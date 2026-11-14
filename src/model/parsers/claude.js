@@ -47,10 +47,12 @@ export function createClaudeParser(ctx) {
     if (call.started) return
     call.started = true
     let touches = []
+    let outsidePath
     let label = call.name
     if (FILE_KINDS.has(call.kind) && call.path) {
       const found = fileTouch(ctx, call.path, call.kind)
       touches = found.touches
+      outsidePath = found.outsidePath
       label = labelFor(call.kind, found.relative, call.path)
     } else if (call.kind === 'shell') {
       touches = commandTouch(ctx, call.command ?? '')
@@ -58,7 +60,7 @@ export function createClaudeParser(ctx) {
     } else if (call.kind === 'mcp') {
       label = mcpLabelOf(String(call.name ?? '').toLowerCase(), call.input ?? {})
     }
-    out.push({ ...toolStart({ time, id: call.id, tool: call.kind, label, touches }), agent: call.owner ?? parentKey })
+    out.push({ ...toolStart({ time, id: call.id, tool: call.kind, label, touches, outsidePath }), agent: call.owner ?? parentKey })
   }
 
   function ownerOf(parentId) {
@@ -96,6 +98,7 @@ export function createClaudeParser(ctx) {
     const call = { id, name, owner, input, kind: 'other', path: null, command: null, started: false, task: false, background: false }
     calls.set(id, call)
     let touches = []
+    let outsidePath
     let label = name || 'tool'
     if (STREAM_FILES.has(lower)) {
       call.kind = lower === 'read' ? 'read' : lower === 'write' ? 'write' : 'edit'
@@ -103,6 +106,7 @@ export function createClaudeParser(ctx) {
       if (typeof raw === 'string' && raw !== '') {
         const found = fileTouch(ctx, raw, call.kind)
         touches = found.touches
+        outsidePath = found.outsidePath
         label = labelFor(call.kind, found.relative, raw)
       } else {
         label = `${call.kind} file`
@@ -139,7 +143,7 @@ export function createClaudeParser(ctx) {
       if (input.run_in_background === true) call.background = true
       label = description ? `task: ${shorten(description)}` : 'task'
     }
-    out.push({ ...toolStart({ time, id, tool: call.kind, label, touches }), agent: owner })
+    out.push({ ...toolStart({ time, id, tool: call.kind, label, touches, outsidePath }), agent: owner })
     if (STREAM_TASKS.has(lower)) {
       call.task = true
       const description = typeof input.description === 'string' ? input.description.trim() : ''

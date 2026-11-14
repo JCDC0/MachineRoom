@@ -39,16 +39,26 @@ export function createCopilotParser(ctx) {
     out.push({ time, type: 'run.end', ok, agent: parentKey })
   }
 
-  function startCall(id, tool, label, touches, time) {
+  function startCall(id, tool, label, touches, time, outsidePath) {
     ensureRunStart(time)
     const call = { id, tool, label, touches, started: true }
     calls.set(id, call)
-    out.push({ ...toolStart({ time, id, tool, label, touches }), agent: parentKey })
+    out.push({ ...toolStart({ time, id, tool, label, touches, outsidePath }), agent: parentKey })
   }
 
   function endCall(id, ok, time) {
     calls.delete(id)
     out.push({ ...toolEnd({ time, id, ok }), agent: parentKey })
+  }
+
+  function fileCall(path, tool) {
+    const touched = fileTouch(ctx, path, tool)
+    return {
+      tool,
+      label: labelFor(tool, touched.relative, path),
+      touches: touched.touches,
+      outsidePath: touched.outsidePath,
+    }
   }
 
   function classifyTool(name, rawArgs) {
@@ -70,33 +80,9 @@ export function createCopilotParser(ctx) {
         touches: [],
       }
     }
-    if (/read|view/.test(toolName)) {
-      const path = String(args.path ?? args.file ?? args.file_path ?? '')
-      const touched = fileTouch(ctx, path, 'read')
-      return {
-        tool: 'read',
-        label: labelFor('read', touched.relative, path),
-        touches: touched.touches,
-      }
-    }
-    if (/write|create/.test(toolName)) {
-      const path = String(args.path ?? args.file ?? args.file_path ?? '')
-      const touched = fileTouch(ctx, path, 'write')
-      return {
-        tool: 'write',
-        label: labelFor('write', touched.relative, path),
-        touches: touched.touches,
-      }
-    }
-    if (/edit|patch|update/.test(toolName)) {
-      const path = String(args.path ?? args.file ?? args.file_path ?? '')
-      const touched = fileTouch(ctx, path, 'edit')
-      return {
-        tool: 'edit',
-        label: labelFor('edit', touched.relative, path),
-        touches: touched.touches,
-      }
-    }
+    if (/read|view/.test(toolName)) return fileCall(String(args.path ?? args.file ?? args.file_path ?? ''), 'read')
+    if (/write|create/.test(toolName)) return fileCall(String(args.path ?? args.file ?? args.file_path ?? ''), 'write')
+    if (/edit|patch|update/.test(toolName)) return fileCall(String(args.path ?? args.file ?? args.file_path ?? ''), 'edit')
     return {
       tool: 'other',
       label: shorten(name || 'tool'),
@@ -122,13 +108,13 @@ export function createCopilotParser(ctx) {
     const id = String(json.toolCallId ?? json.id ?? `copilot-${(counter += 1)}`)
     if (isStart) {
       const name = json.toolName ?? json.name ?? json.tool
-      const { tool, label, touches } = classifyTool(name, json.parameters ?? json.arguments ?? json.input)
-      startCall(id, tool, label, touches, time)
+      const { tool, label, touches, outsidePath } = classifyTool(name, json.parameters ?? json.arguments ?? json.input)
+      startCall(id, tool, label, touches, time, outsidePath)
     } else if (isComplete) {
       if (!calls.has(id)) {
         const name = json.toolName ?? json.name ?? json.tool
-        const { tool, label, touches } = classifyTool(name, json.parameters ?? json.arguments ?? json.input)
-        startCall(id, tool, label, touches, time)
+        const { tool, label, touches, outsidePath } = classifyTool(name, json.parameters ?? json.arguments ?? json.input)
+        startCall(id, tool, label, touches, time, outsidePath)
       }
       const exitCode = json.exit_code
       let ok = true
@@ -158,32 +144,12 @@ export function createCopilotParser(ctx) {
       return
     }
 
-    match = PLAIN_READ.exec(line)
-    if (match) {
-      const path = match[1].trim()
-      const touched = fileTouch(ctx, path, 'read')
+    for (const [pattern, tool] of [[PLAIN_READ, 'read'], [PLAIN_WRITE, 'write'], [PLAIN_EDIT, 'edit']]) {
+      match = pattern.exec(line)
+      if (!match) continue
+      const call = fileCall(match[1].trim(), tool)
       const id = `copilot-${(counter += 1)}`
-      startCall(id, 'read', labelFor('read', touched.relative, path), touched.touches, time)
-      endCall(id, true, time)
-      return
-    }
-
-    match = PLAIN_WRITE.exec(line)
-    if (match) {
-      const path = match[1].trim()
-      const touched = fileTouch(ctx, path, 'write')
-      const id = `copilot-${(counter += 1)}`
-      startCall(id, 'write', labelFor('write', touched.relative, path), touched.touches, time)
-      endCall(id, true, time)
-      return
-    }
-
-    match = PLAIN_EDIT.exec(line)
-    if (match) {
-      const path = match[1].trim()
-      const touched = fileTouch(ctx, path, 'edit')
-      const id = `copilot-${(counter += 1)}`
-      startCall(id, 'edit', labelFor('edit', touched.relative, path), touched.touches, time)
+      startCall(id, call.tool, call.label, call.touches, time, call.outsidePath)
       endCall(id, true, time)
       return
     }
