@@ -27,6 +27,8 @@ import { createBridge } from '../server/index.js'
 import { createClient } from '../src/control/client.js'
 import { MOCK_LANE_KEYS, createMockClient } from '../src/control/mock.js'
 import { makeTempDir } from './helpers/tempRoot.js'
+import { isHarnessAvailable } from '../server/agents-config.js'
+const assumeInstalled = (key, options) => key === 'claude' || key === 'opencode' || isHarnessAvailable(key, options)
 
 const cleanups = []
 
@@ -97,6 +99,7 @@ async function startTestBridge({
 
   const bridge = createBridge({
     port: 0,
+    orchestratorHarnessAvailable: assumeInstalled,
     projectRoot,
     runsFolder,
     lanesFile,

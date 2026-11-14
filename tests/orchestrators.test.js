@@ -34,6 +34,8 @@ import { gitPath } from '../server/programPath.js'
 import { parseRunArgs, runRecord } from '../src/briefs/run.js'
 import { getJson, postJson, readFrames } from './helpers/bridge.js'
 import { makeTempDir, removeTempDir } from './helpers/tempRoot.js'
+import { isHarnessAvailable } from '../server/agents-config.js'
+const assumeInstalled = (key, options) => key === 'claude' || key === 'opencode' || isHarnessAvailable(key, options)
 
 const REPO_ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)))
 const PROMPT = 'project={{PROJECT}}\nmachineroom={{MACHINEROOM}}\nruns={{RUNS}}\nbridge={{BRIDGE}}'
@@ -234,6 +236,7 @@ function makeRig(files, extra = {}) {
     promptFile: files.promptFile,
     bridgeUrl: () => 'http://127.0.0.1:5999',
     onNotice: () => {},
+    harnessAvailable: assumeInstalled,
     ...rest,
   })
   cleanups.push(() => registry.close())
@@ -250,6 +253,7 @@ function bridgeOptions(files, extra = {}) {
     orchestratorPrompt: files.promptFile,
     lanesSource: { folder: files.runs, lanes: LANES, pollMs: 20, quietMs: 60000 },
     orchestratorSpawn: files.spawnFake,
+    orchestratorHarnessAvailable: assumeInstalled,
     ...extra,
   }
 }

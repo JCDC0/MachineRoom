@@ -593,7 +593,7 @@ describe('a lane that hits its quota hands its run to a backup lane', { timeout:
         '    ;;',
         'esac',
         '',
-      ].join('\n'))
+      ].join('\n'), { mode: 0o755 })
       const lanes = {
         opencode: { name: 'Fail lane', worktree: join(base, 'first'), fallback: 'agy', cli: { harness: 'opencode', bin: process.execPath, model: 'fake/fail' } },
         agy: { name: 'Backup lane', worktree: join(base, 'backup'), cli: { harness: 'not-a-harness', bin: process.execPath, model: 'fake/ok' } },

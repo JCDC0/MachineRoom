@@ -59,6 +59,8 @@ import { briefProblems } from '../src/briefs/run.js'
 import { gitPath } from '../server/programPath.js'
 import { getJson } from './helpers/bridge.js'
 import { makeTempDir } from './helpers/tempRoot.js'
+import { isHarnessAvailable } from '../server/agents-config.js'
+const assumeInstalled = (key, options) => key === 'claude' || key === 'opencode' || isHarnessAvailable(key, options)
 
 function pagePostJson(url, body) {
   return getJson(url, {
@@ -4691,6 +4693,7 @@ describe('stopping a running lane tells its head orchestrator', () => {
     const bridge = createBridge({
       projectRoot,
       port: 0,
+      orchestratorHarnessAvailable: assumeInstalled,
       env: {},
       runsFolder: runs,
       lanesFile,

@@ -788,6 +788,7 @@ export function createBridge(options = {}) {
       runsFolder: resolve(options.orchestratorFolder ?? lanesSourceObject.folder ?? runsFolder()),
       lanes: lanesConfig,
       spawn: options.orchestratorSpawn,
+      ...(typeof options.orchestratorHarnessAvailable === 'function' ? { harnessAvailable: options.orchestratorHarnessAvailable } : {}),
       now: options.now,
       promptFile: options.orchestratorPrompt,
       bridgeUrl: () => (servingPort ? `http://127.0.0.1:${servingPort}` : ''),

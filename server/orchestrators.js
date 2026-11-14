@@ -215,6 +215,7 @@ export function createOrchestrators({
   approvalTimeoutMs = APPROVAL_TIMEOUT_MS,
   isWorking,
   startLaneTask,
+  harnessAvailable = isHarnessAvailable,
 } = {}) {
   const root = projectRoot ? resolve(projectRoot) : ''
   const folder = resolve(runsFolder)
@@ -735,7 +736,7 @@ export function createOrchestrators({
       const unavailable = []
       for (const sub of next.ladder.subs) {
         const harness = harnessFor(sub)
-        if (!known.has(harness) || !isHarnessAvailable(harness, { lanes: allLanes, endpoints })) {
+        if (!known.has(harness) || !harnessAvailable(harness, { lanes: allLanes, endpoints })) {
           const problem = harnessUnavailableProblem(harness)
           if (!unavailable.includes(problem)) unavailable.push(problem)
         }
