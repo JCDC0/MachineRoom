@@ -2395,3 +2395,31 @@ For each merge in `git log --first-parent --oneline 12c25524..HEAD`, read the te
 1. `runListLine` in `src/briefs/run.js` adds `| moved to LANE (KIND)` to a record with `failover`, and `| taken over from LANE` to a record with `failoverFrom`.
 2. Tests, by what they prove: a record with `failover: { kind: 'quota', to: 'agy' }` lists with `moved to agy (quota)`; one with `failoverFrom: { lane: 'opencode' }` lists with `taken over from opencode`; a record with neither lists as today. The first two must fail before your change.
 3. Run `node node_modules/vitest/vitest.mjs run tests/run-lane.test.js` and `npm run build`. Report what passed.
+
+**P285. A stop ends only the run it names (OpenCode).** Read finding R32-1 in `docs/agents/AUDIT-2026-11-REVIEW-32.md` and this brief only. Use no subagents. Run every command in the foreground. Commit each step as you finish it, and stop starting new work at minute 30. Files: src/briefs/run.js, scripts/run-lane.mjs, server/runs.js, tests/run-lane-stop.test.js, tests/project-dispatch.test.js, docs/agents/CHANGELOG.md, docs/agents/architecture/COMMANDS.md.
+
+1. `laneLockText` also writes the run's `startedAt` (ISO), and the runner passes it when it takes a lane lock for a run.
+2. `npm run run-lane -- --stop LANE --started-at ISO` reads the lock just before it kills anything and refuses, with one sentence and exit 1, when the lock's `startedAt` is missing or differs: `The LANE lane is running a different run now, so nothing was stopped.` Without `--started-at` it behaves as today.
+3. The bridge's stop route passes `--started-at` with the start time the owner confirmed, for runs it started and for runs it found in the lanes source.
+4. Tests, by what they prove: a stop naming an older start time leaves the newer run's process alive and prints the sentence; a stop naming the current start time ends it; the bridge's stop sends `--started-at`. The first must fail before your change.
+5. Run `node node_modules/vitest/vitest.mjs run tests/run-lane-stop.test.js tests/project-dispatch.test.js` and `npm run build`. Report what passed.
+
+**P286. A queue keeps its failed record, and a quota read never costs a record (OpenCode).** Read findings R32-2, R32-3 and R32-5 in `docs/agents/AUDIT-2026-11-REVIEW-32.md` and this brief only. Use no subagents. Run every command in the foreground. Commit each finding's fix as you finish it, and stop starting new work at minute 30. Files: scripts/run-lane.mjs, tests/run-failover.test.js, tests/quota-read.test.js, docs/agents/CHANGELOG.md.
+
+1. R32-2: when a queue task's backup is refused (busy, worktree problem or branch), `startLane` returns the failed record, and the queue writes it once after its bookkeeping and reports the failed task. No exception.
+2. R32-3: `findCodexRollout` resolves the sessions folder and the candidate with `realPath` and refuses a candidate outside the sessions folder or one that is a symbolic link (`lstatSync`).
+3. R32-5: `readCodexQuota` catches a read error, closes the descriptor and answers null.
+4. Tests, by what they prove, one per finding, each failing before its fix: a queue whose backup is busy records the failed task and ends without throwing; a rollout link pointing outside the sessions folder gives no quota; a read that throws gives null and the run record is still written.
+5. Run `node node_modules/vitest/vitest.mjs run tests/run-failover.test.js tests/quota-read.test.js tests/run-queue.test.js` (skip any file that does not exist) and `npm run build`. Report what passed.
+
+**P287. The conversation view shows only the run it names (Codex).** Read finding R32-4 in `docs/agents/AUDIT-2026-11-REVIEW-32.md` and this brief only. Commit each step as you finish it, and stop at minute 25. Files: src/ui/LaneConversation.jsx, tests/lane-conversation.test.js, docs/agents/CHANGELOG.md.
+
+1. A conversation answer or error whose lane and start time are not the ones selected now is ignored. Choosing another run clears the shown conversation and its running state until the new answer arrives, so Stop never shows for a run that is not selected.
+2. Test, by what it proves: with a slow answer for run A and a fast one for run B, choosing A then B shows B's entries and B's state when A's answer arrives last. It must fail before your change.
+3. Run `npx.cmd vitest run tests/lane-conversation.test.js` and `npm run build`. Report what passed.
+
+**P288. Every parsed JSON value in a conversation is masked (OpenCode).** Start after P279 is merged. Read finding R32-6 in `docs/agents/AUDIT-2026-11-REVIEW-32.md` and this brief only. Use no subagents. Run every command in the foreground. Commit each step as you finish it, and stop starting new work at minute 18. Files: src/model/conversation.js, tests/conversation.test.js, docs/agents/CHANGELOG.md.
+
+1. Where `conversationFromLog` keeps a raw line that parses as JSON, mask the parsed value before serializing it, whatever its type: a string, a number, an array or an object. A line that does not parse keeps today's text masking.
+2. Test, by what it proves: a raw line that is a JSON string holding `C:\\Users\\NAME\\project` shows no `NAME`, for a harness the reader knows and for one it does not. It must fail before your change.
+3. Run `node node_modules/vitest/vitest.mjs related --run src/model/conversation.js` and `npm run build`. Report what passed.
