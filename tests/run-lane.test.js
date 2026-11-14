@@ -110,11 +110,33 @@ describe('commandFor', () => {
   })
 })
 
+const LANE_MESSAGE_PARAGRAPH = 'You may send your coordinator a short message while you work, for a question or a blocker: POST $MACHINEROOM_BRIDGE/api/orchestrator/messages with the header X-MachineRoom-Lane: $MACHINEROOM_LANE_TICKET and the JSON body {"text": "..."}. Read both values from your environment; never print the ticket. You get no reply during this run, so keep working on what you can, and send at most 4.'
+const TICKET_VALUE = '9f8e7d6c5b4a39281706f5e4d3c2b1a0'
+const BRIDGE_VALUE = 'http://127.0.0.1:5999'
+
 describe('unattendedPrompt', () => {
   it('adds the note after two newlines', () => {
     expect(unattendedPrompt('Do it.')).toBe(`Do it.\n\n${UNATTENDED_NOTE}`)
     expect(UNATTENDED_NOTE).toMatch(/^You are running unattended/)
     expect(UNATTENDED_NOTE).toMatch(/Nobody can answer a question\./)
+  })
+
+  it('adds the message paragraph when the runner has the ticket and the bridge', () => {
+    const text = unattendedPrompt('Do it.', { MACHINEROOM_LANE_TICKET: TICKET_VALUE, MACHINEROOM_BRIDGE: BRIDGE_VALUE })
+    expect(text).toBe(`Do it.\n\n${LANE_MESSAGE_PARAGRAPH}\n\n${UNATTENDED_NOTE}`)
+  })
+
+  it('never holds the ticket value or the bridge address', () => {
+    const text = unattendedPrompt('Do it.', { MACHINEROOM_LANE_TICKET: TICKET_VALUE, MACHINEROOM_BRIDGE: BRIDGE_VALUE })
+    expect(text).not.toContain(TICKET_VALUE)
+    expect(text).not.toContain(BRIDGE_VALUE)
+  })
+
+  it('leaves the prompt unchanged when either value is missing', () => {
+    expect(unattendedPrompt('Do it.', { MACHINEROOM_LANE_TICKET: TICKET_VALUE })).toBe(`Do it.\n\n${UNATTENDED_NOTE}`)
+    expect(unattendedPrompt('Do it.', { MACHINEROOM_BRIDGE: BRIDGE_VALUE })).toBe(`Do it.\n\n${UNATTENDED_NOTE}`)
+    expect(unattendedPrompt('Do it.', { MACHINEROOM_LANE_TICKET: TICKET_VALUE, MACHINEROOM_BRIDGE: '  ' })).toBe(`Do it.\n\n${UNATTENDED_NOTE}`)
+    expect(unattendedPrompt('Do it.', {})).toBe(`Do it.\n\n${UNATTENDED_NOTE}`)
   })
 })
 
@@ -2773,6 +2795,69 @@ describe('a runner lane commit', () => {
       expect(run.record.commits).toEqual([])
     } finally {
       rmSync(run.folder, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+    }
+  })
+})
+
+describe('the lane ticket in the harness environment', () => {
+  function envScript() {
+    return [
+      "const { writeFileSync } = require('node:fs')",
+      "writeFileSync('lane-note.txt', 'done\\n')",
+      "writeFileSync('seen.json', JSON.stringify({ ticket: process.env.MACHINEROOM_LANE_TICKET ?? null, bridge: process.env.MACHINEROOM_BRIDGE ?? null, runs: process.env.MACHINEROOM_RUNS ?? null }))",
+      "console.log('{\"type\":\"step_finish\",\"part\":{\"cost\":0,\"tokens\":{\"input\":1,\"output\":1}}}')",
+      '',
+    ].join('\n')
+  }
+
+  const previous = {}
+
+  function takeRunnerEnv() {
+    for (const name of ['MACHINEROOM_LANE_TICKET', 'MACHINEROOM_BRIDGE']) {
+      previous[name] = process.env[name]
+      delete process.env[name]
+    }
+  }
+
+  function giveBackRunnerEnv() {
+    for (const name of Object.keys(previous)) {
+      if (previous[name] === undefined) delete process.env[name]
+      else process.env[name] = previous[name]
+    }
+  }
+
+  it('hands the harness the ticket and the bridge when the runner has them', async () => {
+    takeRunnerEnv()
+    process.env.MACHINEROOM_LANE_TICKET = TICKET_VALUE
+    process.env.MACHINEROOM_BRIDGE = BRIDGE_VALUE
+    try {
+      const run = await runRunnerLane({ name: 'runner-lane-ticket', script: envScript() })
+      try {
+        const seen = JSON.parse(readFileSync(join(run.repo, 'seen.json'), 'utf8'))
+        expect(seen.ticket).toBe(TICKET_VALUE)
+        expect(seen.bridge).toBe(BRIDGE_VALUE)
+        expect(seen.runs).toBe(join(run.folder, 'runs'))
+      } finally {
+        rmSync(run.folder, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+      }
+    } finally {
+      giveBackRunnerEnv()
+    }
+  })
+
+  it('hands the harness neither when the runner has not', async () => {
+    takeRunnerEnv()
+    try {
+      const run = await runRunnerLane({ name: 'runner-lane-no-ticket', script: envScript() })
+      try {
+        const seen = JSON.parse(readFileSync(join(run.repo, 'seen.json'), 'utf8'))
+        expect(seen.ticket).toBeNull()
+        expect(seen.bridge).toBeNull()
+      } finally {
+        rmSync(run.folder, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+      }
+    } finally {
+      giveBackRunnerEnv()
     }
   })
 })
