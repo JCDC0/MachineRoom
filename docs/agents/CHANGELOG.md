@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- Lane modes are tested per harness and written in COMMANDS.md, and a harness with no modes refuses one with a plain sentence (P344).
 - A run start request may name a mode: the bridge checks it with the runner's own check and passes --mode to the runner (P343).
 - A lane's prompt says how to read its replies and message another lane, and a sub's instructions say how to answer a lane while it runs (P342).
 - An orchestrator or a running lane may message a running lane, and the lane reads its inbox with its ticket, so a lane gets replies while it works (P341).

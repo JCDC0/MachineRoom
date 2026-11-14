@@ -49,6 +49,7 @@ export function laneModeProblem(lane, laneKey) {
   if (mode === undefined) return ''
   const harness = lane?.cli?.harness
   const modes = modesFor(harness).map((item) => item.id)
+  if (modes.length === 0) return `The ${laneKey} lane has no permission modes, so it cannot run in ${mode} mode.`
   if (!modes.includes(mode)) return `The ${mode} mode is not one ${laneKey}'s harness has. It has: ${modes.join(', ')}.`
   if (mode === 'ask') return 'A lane run has nobody to ask, so the ask mode is for orchestrators only.'
   if (harness === 'opencode' && (mode === 'plan' || mode === 'edits')) return `OpenCode lanes cannot use ${mode} mode because it needs a permission config.`
