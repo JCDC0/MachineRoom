@@ -2893,3 +2893,32 @@ Look for defects that matter, in this order:
 5. A sentence in `docs/agents/HIERARCHY.md`, `architecture/LIVE.md`, `architecture/COMMANDS.md` or `FREE-HIERARCHY.md` that the code contradicts.
 
 The file: one section per finding, numbered R36-1 on, most serious first, each with the file and line, what happens, how to see it (a request or a command) and the smallest fix. At most 12 findings. End with one line per area you read and found sound. Write only what you checked in the code; a guess is marked as a guess.
+
+Review 36 fixes, P348 to P351. GPT-6.1 Sol read P335 to P345 (`docs/agents/AUDIT-2026-11-REVIEW-36.md`). R36-4 was fixed at the P343 merge, and R36-8 and R36-9 are doc fixes by the orchestrator. Each brief below: read the brief and its findings in the review file only, use no subagents, run every command in the foreground, put new tests in the new file named, commit each step as you finish it, stop starting new work at minute 14 and do not run the full suite.
+
+**P348. A lane's ticket never shows in output, a log or a record (OpenCode).** Fixes R36-1. Files: server/runs.js (only where runner output becomes `lastLines` and a record's `note`), src/briefs/audit.js (the masker), src/briefs/run.js (only `createLaneLog`), tests/lane-ticket-mask.test.js (new), docs/agents/CHANGELOG.md.
+
+1. The bridge masks the run's own ticket value in every line it keeps or sends from that run's runner: `lastLines`, the tail, a failed start's `note`. Split chunks count: a ticket cut across two chunks is still masked.
+2. `maskKeys` masks the value after `X-MachineRoom-Lane:` and after `MACHINEROOM_LANE_TICKET=`, so the runner's log and every other masked text lose it.
+3. Tests, each failing before your change: a fake runner that prints the header with its ticket, and one that prints the bare ticket, leave no ticket in `GET /api/control/runs`, in the run's record or in the lane log; a ticket split across two chunks is masked.
+4. Run `node node_modules/vitest/vitest.mjs run tests/lane-ticket-mask.test.js tests/project-dispatch.test.js tests/audit.test.js` and report the counts.
+
+**P349. A failover run gets no ticket of the failed lane and keeps its mode (OpenCode).** Fixes R36-2 and R36-3. Files: scripts/run-lane.mjs (only `startFailover` and the env a backup's harness gets), tests/failover-ticket-mode.test.js (new), docs/agents/architecture/COMMANDS.md (one sentence), docs/agents/CHANGELOG.md.
+
+1. The backup lane's harness gets neither `MACHINEROOM_LANE_TICKET` nor `MACHINEROOM_BRIDGE`, and its prompt has no message paragraph: the ticket names the failed lane, so the backup does not message until the bridge can give it its own.
+2. The backup runs in the failed run's effective mode, whether that came from `--mode` or from the primary lane's `cli.mode`. If the backup's harness does not have that mode, the failover is refused with the mode sentence and the backup does not start with more permission than the primary had.
+3. Tests, each failing before your change: a primary with `cli.mode` `plan` and a Claude backup with no mode gives a backup command with `--permission-mode plan`; a backup whose harness lacks the mode does not start; the backup's harness env has neither variable and its prompt has no message paragraph. Build the rig the way `tests/run-failover.test.js` does.
+4. Run `node node_modules/vitest/vitest.mjs run tests/failover-ticket-mode.test.js tests/run-failover.test.js tests/lane-mode.test.js` and report the counts.
+
+**P350. An orchestrator keeps its lane messages over a restart and drops an effort its new harness lacks (OpenCode).** Fixes R36-5 and R36-6. Files: server/orchestrator.js (only `knownSender`, the pending-message loader and `setHarness`), tests/orchestrator-lane-restore.test.js (new), docs/agents/CHANGELOG.md.
+
+1. A saved message from `lane:KEY`, in the current conversation, a saved session or `pending`, is restored when KEY is a known lane, as a bare lane key is today.
+2. `setHarness` keeps the effort only when the new harness's list has it, else clears it before saving.
+3. Tests, each failing before your change: a current, an archived and a pending `lane:worker` message survive a reload; Claude on `max` switched to Codex starts a turn with no `model_reasoning_effort`; an effort both harnesses take is kept.
+4. Run `node node_modules/vitest/vitest.mjs run tests/orchestrator-lane-restore.test.js tests/orchestrator-effort.test.js tests/orchestrator.test.js` and report the counts.
+
+**P351. The sidebar preview knows the lanes (OpenCode).** Fixes R36-7. Files: src/ui/Sidebar.jsx (only where it calls `previewLines`), src/ui/sidebar.js (only if the call needs it), tests/sidebar-preview-ui.test.js, docs/agents/CHANGELOG.md. Change no style.
+
+1. The Sidebar passes the lanes it already has to `previewLines`, so a preview of a message from `lane:opencode` shows the lane's label. An unknown lane still shows its key.
+2. A test through the real component, failing before your change: a preview with a `lane:KEY` message and the Sidebar's real lanes shows the label.
+3. Run `node node_modules/vitest/vitest.mjs run tests/sidebar-preview-ui.test.js tests/sidebar.test.js` and report the counts.
