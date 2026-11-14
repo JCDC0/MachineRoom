@@ -109,6 +109,7 @@ export const claudeHarness = {
   laneName: 'Claude Code',
   defaultProgram: 'claude',
   adapterType: 'claude_local',
+  commitAuthor: { label: 'Claude', address: 'noreply@anthropic.com' },
   createParser: createClaudeParser,
   command({ cli, prompt, env = {}, folder, sessionId, mcpConfig } = {}) {
     const args = ['-p', prompt, '--output-format', 'stream-json', '--verbose', '--model', cli.model, '--dangerously-skip-permissions']

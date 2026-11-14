@@ -125,6 +125,7 @@ function scanLine(line, profileName, privateNames) {
     const address = match[0].toLowerCase()
     if (ALLOWED_EMAILS.has(address)) return
     if (address.endsWith(ALLOWED_EMAIL_DOMAIN)) return
+    if (/^no-?reply@/.test(address)) return
     const domain = address.slice(address.lastIndexOf('@') + 1)
     if (isExampleDomain(domain) || isVersionDomain(domain)) return
     found.push({ kind: 'email', index: match.index, sample: windowAround(line, match.index, match[0].length) })

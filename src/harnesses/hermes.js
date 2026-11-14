@@ -13,6 +13,7 @@ export const hermesHarness = {
   laneName: 'Hermes',
   defaultProgram: '%LOCALAPPDATA%\\hermes\\bin\\hermes.exe',
   adapterType: 'hermes_local',
+  commitAuthor: { label: 'Hermes', address: 'noreply@nousresearch.com' },
   createParser: createHermesParser,
   command({ cli, prompt, env = {}, folder, usageFile, reasoning } = {}) {
     const args = ['-z', prompt, '-m', cli.model, '--provider', cli.provider]

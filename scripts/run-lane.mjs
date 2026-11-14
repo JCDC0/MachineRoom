@@ -7,13 +7,14 @@ import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:pat
 import { finished } from 'node:stream'
 import { fileURLToPath } from 'node:url'
 import { branchFor, briefFileList, buildPrompt, nextVersion, parseBriefs, parseRules } from '../src/briefs/briefs.js'
-import { formatQueueSummary, parseQueue, parseQueueArgs, runQueue } from '../src/briefs/queue.js'
+import { commitAuthorFor, formatQueueSummary, parseQueue, parseQueueArgs, runQueue } from '../src/briefs/queue.js'
 import { briefProblems, briefWorktreeProblems, checkCommandProblem, childEnvironment, commandFor, createLaneLog, DEFAULT_MINUTES, fallbackProblem, failoverKind, filterRunsSince, formatOutcomes, formatStats, formatSummary, laneCommandProblem, laneLockStartedAt, laneLockText, laneStats, laneStopProblem, laneWithOverrides, limitedFor, maskedQueueTasks, ORCHESTRATOR_LANE_PROBLEM, parseRunArgs, projectProblems, projectRunGit, readinessLine, retryStartProblem, runListLine, runRecord, sessionToolLines, splitCheckCommand, startFailureText, summarizeRun, unattendedPrompt, worktreeFor, WORKTREES_FOLDER } from '../src/briefs/run.js'
 import { outcomeTable } from '../server/outcomes.js'
 import { readMainSubjectsSync } from '../server/runs.js'
 import { isLockHolderStale, killTree, descendantProcesses, leftoverProcesses, listProcesses } from '../server/processTree.js'
 import { codexAppProgram } from '../server/agents-config.js'
 import { codexHarness } from '../src/harnesses/codex.js'
+import { harnessByKey } from '../src/harnesses/index.js'
 import { gitPath, programPath } from '../server/programPath.js'
 import { isWindowsPath, printedRunsFolder, realPath } from '../server/printed-path.js'
 import { lanesFolder, readAllLanes, runsFolder } from '../server/lanes-source.js'
@@ -767,6 +768,7 @@ function queueGit(project, branch, lane, { onSettled } = {}) {
       if (text.trim() === '') settle()
       return text
     },
+    head: () => String(run(['rev-parse', 'HEAD']).stdout ?? '').trim(),
     add: () => {
       run(['add', '-A'])
     },
@@ -1320,6 +1322,7 @@ async function runQueueProject({ options, lane, lanes }) {
       const result = await runQueue({
         tasks,
         git: queueGit(target.path, branch, options.lane, { onSettled: finishPending }),
+        author: commitAuthorFor(harnessByKey[lane?.cli?.harness], lane?.cli?.model),
         runTask: async (task, number) => {
           console.log(`task ${number} of ${tasks.length}`)
           const prompt = unattendedPrompt(task)

@@ -1,7 +1,9 @@
 # Changelog
 
 ## Unreleased
-- The history audit allows the OpenCode and OpenAI noreply addresses that co-author trailers use, beside the Anthropic and GitHub ones.
+- P308: a queue task where the lane committed keeps those commits and records the newest sha, and the queue's own commit ends with a Co-Authored-By trailer for the lane's harness and model.
+- The history audit allows any `noreply@` or `no-reply@` address, which co-author trailers use, beside the Anthropic and GitHub ones.
+- P308: a queue keeps the commits its lane made when the tree is clean and signs its own queue commits with the harness `Co-Authored-By` trailer.
 - P304: the failed record is written once when the backup throws, a refused backup records refused: true, and the room note says the backup could not start.
 - P304: a deferred project run writes its failed record once when the backup throws, and its queue writes no generic record.
 - P304: a refused backup records `refused: true` and its room note says the backup could not start, so only a started backup reads as a move.

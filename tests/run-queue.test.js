@@ -4,8 +4,9 @@ import { homedir } from 'node:os'
 import { basename, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterAll, describe, expect, it } from 'vitest'
-import { commitMessage, formatQueueSummary, parseQueue, parseQueueArgs, runQueue, QUEUE_SUBJECT_LIMIT, QUEUE_TASK_LIMIT, QUEUE_TASK_TEXT_LIMIT } from '../src/briefs/queue.js'
+import { commitAuthorFor, commitMessage, formatQueueSummary, parseQueue, parseQueueArgs, runQueue, QUEUE_SUBJECT_LIMIT, QUEUE_TASK_LIMIT, QUEUE_TASK_TEXT_LIMIT } from '../src/briefs/queue.js'
 import { DEFAULT_MINUTES } from '../src/briefs/run.js'
+import { harnessByKey } from '../src/harnesses/index.js'
 import { gitPath } from '../server/programPath.js'
 import { createReviewsApi } from '../server/reviews.js'
 import { releaseLaneLock } from '../scripts/lane-lock.mjs'
@@ -120,6 +121,7 @@ function adapter(folder, branch = QUEUE_BRANCH, lane = 'opencode') {
       git(folder, ['switch', '-c', name])
     },
     status: () => git(folder, ['status', '--porcelain']),
+    head: () => git(folder, ['rev-parse', 'HEAD']).trim(),
     add: () => {
       git(folder, ['add', '-A'])
     },
@@ -213,6 +215,18 @@ describe('commitMessage', () => {
     expect(message.split('\n')[0]).toBe('a'.repeat(QUEUE_SUBJECT_LIMIT))
     expect(message).toContain('Task 1 of 1, run by MachineRoom on the hermes lane.')
   })
+
+  it('ends the message with the harness trailer', () => {
+    expect(commitMessage('Add the parser', 1, 1, 'opencode', { label: 'OpenCode', address: 'noreply@opencode.ai', model: 'opencode/fake' })).toBe(
+      'Add the parser\n\nTask 1 of 1, run by MachineRoom on the opencode lane.\n\nCo-Authored-By: OpenCode (opencode/fake) <noreply@opencode.ai>'
+    )
+  })
+
+  it('leaves the trailer off without an author and when the model is unknown', () => {
+    expect(commitMessage('Add the parser', 1, 1, 'acp')).toBe('Add the parser\n\nTask 1 of 1, run by MachineRoom on the acp lane.')
+    const message = commitMessage('Add the parser', 1, 1, 'opencode', { label: 'OpenCode', address: 'noreply@opencode.ai', model: '' })
+    expect(message.endsWith('Co-Authored-By: OpenCode <noreply@opencode.ai>')).toBe(true)
+  })
 })
 
 describe('parseQueueArgs', () => {
@@ -265,6 +279,85 @@ describe('runQueue', { timeout: 30000 }, () => {
       expect(log).toContain('Add one')
       expect(log).toContain('Task 1 of 3, run by MachineRoom on the opencode lane.')
       expect(log).toContain('Task 3 of 3, run by MachineRoom on the opencode lane.')
+    } finally {
+      remove(parent)
+    }
+  })
+
+  it('keeps the commit the lane made and records its sha', async () => {
+    const parent = makeTempDir('machine-room-queue-')
+    try {
+      const repo = initRepo(parent)
+      let laneSha = ''
+      const result = await runQueue({
+        tasks: ['Commit it yourself'],
+        git: adapter(repo),
+        runTask: async () => {
+          writeFileSync(join(repo, 'lane-file.txt'), 'The lane wrote and committed this.\n')
+          git(repo, ['add', '-A'])
+          git(repo, ['commit', '-m', '0.4.0: Let the lane commit'])
+          laneSha = git(repo, ['rev-parse', 'HEAD']).trim()
+          return { code: 0 }
+        },
+        runTests: async () => ({ ok: true }),
+      })
+
+      expect(result.results).toEqual([{ number: 1, task: 'Commit it yourself', status: 'committed', sha: laneSha }])
+      expect(git(repo, ['rev-list', '--count', `refs/heads/main..refs/heads/${QUEUE_BRANCH}`]).trim()).toBe('1')
+      expect(git(repo, ['rev-parse', `refs/heads/${QUEUE_BRANCH}`]).trim()).toBe(laneSha)
+      expect(git(repo, ['log', '-1', '--format=%s']).trim()).toBe('0.4.0: Let the lane commit')
+      expect(git(repo, ['log', '-1', '--format=%B'])).not.toContain('Task 1 of 1')
+    } finally {
+      remove(parent)
+    }
+  })
+
+  it('commits the rest when the lane committed and left more changes', async () => {
+    const parent = makeTempDir('machine-room-queue-')
+    try {
+      const repo = initRepo(parent)
+      const result = await runQueue({
+        tasks: ['Finish the work'],
+        git: adapter(repo),
+        runTask: async () => {
+          writeFileSync(join(repo, 'lane-file.txt'), 'The lane wrote and committed this.\n')
+          git(repo, ['add', '-A'])
+          git(repo, ['commit', '-m', '0.4.0: Let the lane commit'])
+          writeFileSync(join(repo, 'rest.txt'), 'The lane left this.\n')
+          return { code: 0 }
+        },
+        runTests: async () => ({ ok: true }),
+      })
+
+      expect(result.results.map((item) => item.status)).toEqual(['committed'])
+      expect(git(repo, ['rev-list', '--count', `refs/heads/main..refs/heads/${QUEUE_BRANCH}`]).trim()).toBe('2')
+      expect(git(repo, ['log', '-1', '--format=%s']).trim()).toBe('Finish the work')
+      expect(git(repo, ['show', 'HEAD:rest.txt']).trim()).toBe('The lane left this.')
+      expect(git(repo, ['log', '-2', '--format=%s']).trim().split(/\r?\n/)).toEqual(['Finish the work', '0.4.0: Let the lane commit'])
+    } finally {
+      remove(parent)
+    }
+  })
+
+  it('signs its own commit with the harness trailer', async () => {
+    const parent = makeTempDir('machine-room-queue-')
+    try {
+      const repo = initRepo(parent)
+      const result = await runQueue({
+        tasks: ['Leave the change to the queue'],
+        git: adapter(repo),
+        author: commitAuthorFor(harnessByKey.opencode, 'opencode/fake'),
+        runTask: async () => {
+          writeFileSync(join(repo, 'lane-file.txt'), 'The lane left this.\n')
+          return { code: 0 }
+        },
+        runTests: async () => ({ ok: true }),
+      })
+
+      expect(result.results.map((item) => item.status)).toEqual(['committed'])
+      const message = git(repo, ['log', '-1', '--format=%B']).trim()
+      expect(message).toContain('Task 1 of 1, run by MachineRoom on the opencode lane.')
+      expect(message.endsWith('Co-Authored-By: OpenCode (opencode/fake) <noreply@opencode.ai>')).toBe(true)
     } finally {
       remove(parent)
     }
@@ -519,6 +612,67 @@ describe('scripts/run-lane.mjs with --queue', { timeout: 30000 }, () => {
       expect(result.stdout).toContain('tests: node explicit-test.cjs')
       expect(git(repo, ['show', 'HEAD:explicit-ran.txt']).trim()).toBe('yes')
       expect(existsSync(join(repo, 'auto-ran.txt'))).toBe(false)
+    } finally {
+      remove(parent)
+    }
+  }, 60000)
+
+  it('keeps the commit the fake lane made and records its sha', async () => {
+    const parent = makeTempDir('machine-room-queue-')
+    try {
+      const repo = initRepo(parent)
+      const runs = join(parent, 'machineroom-runs')
+      const file = join(parent, 'queue.txt')
+      writeFileSync(file, 'Let the lane commit.\n')
+      const gitFile = JSON.stringify(gitPath())
+      writeFileSync(join(repo, 'run'), [
+        "const { writeFileSync } = require('node:fs')",
+        "const { spawnSync } = require('node:child_process')",
+        "writeFileSync('lane-commit.txt', 'The fake lane committed this.\\n')",
+        `const added = spawnSync(${gitFile}, ['add', '-A'], { encoding: 'utf8' })`,
+        `const made = spawnSync(${gitFile}, ['-c', 'user.name=Fake Lane', '-c', 'user.email=lane@example.com', 'commit', '-m', '0.4.0: The fake lane commits'], { encoding: 'utf8' })`,
+        'if (added.status !== 0 || made.status !== 0) process.exit(2)',
+        "console.log(JSON.stringify({ type: 'text', timestamp: Date.now(), sessionID: 'ses_fake', part: { id: 'prt_1', type: 'text', text: 'done' } }))",
+        '',
+      ].join('\n'))
+      git(repo, ['add', 'run'])
+      git(repo, ['commit', '-m', 'the fake lane program'])
+      const result = await runLane(['fake', '--project', repo, '--queue', file], {
+        TEMP: parent,
+        MACHINEROOM_RUNS: runs,
+        MACHINEROOM_LANES_FILE: fakeLaneFile(parent),
+      })
+      expect(result.code).toBe(0)
+      expect(result.stdout).toContain(`1. committed ${git(repo, ['rev-parse', 'HEAD']).trim()}`)
+      expect(git(repo, ['rev-list', '--count', 'refs/heads/main..HEAD']).trim()).toBe('1')
+      expect(git(repo, ['log', '-1', '--format=%s']).trim()).toBe('0.4.0: The fake lane commits')
+      expect(git(repo, ['log', '-1', '--format=%B'])).not.toContain('Task 1 of 1')
+      expect(git(repo, ['status', '--porcelain']).trim()).toBe('')
+    } finally {
+      remove(parent)
+    }
+  }, 60000)
+
+  it('signs the queue commit with the fake lane harness trailer', async () => {
+    const parent = makeTempDir('machine-room-queue-')
+    try {
+      const repo = initRepo(parent)
+      const runs = join(parent, 'machineroom-runs')
+      const file = join(parent, 'queue.txt')
+      writeFileSync(file, 'Leave the change to the queue.\n')
+      writeFakeLane(repo)
+      git(repo, ['add', '-A'])
+      git(repo, ['commit', '-m', 'the fake lane program'])
+      const result = await runLane(['fake', '--project', repo, '--queue', file], {
+        TEMP: parent,
+        MACHINEROOM_RUNS: runs,
+        MACHINEROOM_LANES_FILE: fakeLaneFile(parent),
+      })
+      expect(result.code).toBe(0)
+      expect(result.stdout).toContain('1. committed')
+      const message = git(repo, ['log', '-1', '--format=%B']).trim()
+      expect(message).toContain('Task 1 of 1, run by MachineRoom on the fake lane.')
+      expect(message.endsWith('Co-Authored-By: OpenCode (opencode/fake) <noreply@opencode.ai>')).toBe(true)
     } finally {
       remove(parent)
     }

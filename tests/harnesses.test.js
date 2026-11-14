@@ -68,6 +68,19 @@ describe('harness registry', () => {
     }
   })
 
+  it('names the agent that signs a queue commit', () => {
+    expect(harnessByKey.claude.commitAuthor).toEqual({ label: 'Claude', address: 'noreply@anthropic.com' })
+    expect(harnessByKey.opencode.commitAuthor).toEqual({ label: 'OpenCode', address: 'noreply@opencode.ai' })
+    expect(harnessByKey.codex.commitAuthor).toEqual({ label: 'Codex', address: 'noreply@openai.com' })
+    expect(harnessByKey.acp.commitAuthor).toBeUndefined()
+    for (const harness of HARNESSES) {
+      if (!harness.commitAuthor) continue
+      expect(typeof harness.commitAuthor.label, harness.key).toBe('string')
+      expect(harness.commitAuthor.label.trim(), harness.key).not.toBe('')
+      expect(harness.commitAuthor.address, harness.key).toMatch(/^noreply@[a-z0-9.-]+$/)
+    }
+  })
+
   it('builds a command from the lane cli block and the folder', () => {
     for (const harness of HARNESSES) {
       const command = harness.command({

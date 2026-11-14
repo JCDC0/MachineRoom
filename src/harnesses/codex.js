@@ -97,6 +97,7 @@ export const codexHarness = {
   laneName: 'Codex',
   defaultProgram: 'codex',
   adapterType: 'codex_local',
+  commitAuthor: { label: 'Codex', address: 'noreply@openai.com' },
   createParser: createCodexParser,
   command({ cli, prompt, env = {}, folder, reasoning } = {}) {
     const effort = reasoning ?? cli?.effort
