@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- P290: the stop test keeps its fake grandchild alive for 30 seconds and waits until it is alive and listed under the harness before the stop.
 - P290: the subfolder session test ticks the reader until the session appears, with a 15 second bound.
 - P290: the candidate build test asks for a new free port and retries when another process takes the port before the check.
 - P289: CODE.md gains a line for each file under src, server, scripts, bin and tests that it did not name.
