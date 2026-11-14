@@ -107,7 +107,7 @@ Settings only shows or removes lanes. Remove from project hides a lane in that p
 
 `MACHINEROOM_LANES_DIR` points a room at another lane list, which is how MachineRoom's own development runs its lanes. In PowerShell, set `$env:MACHINEROOM_LANES_DIR = "docs/agents"` (or `MACHINEROOM_LANES_DIR=docs/agents` in bash).
 
-A lane can name a backup lane with `fallback` in the lane file (`lanes.json`). When a brief run or a single project task fails with a quota, rate limit or overload error, or fails to start, `npm run run-lane` moves that run once to the backup lane. Queues do not move, and a busy backup lane leaves the run failed.
+A lane can name a backup lane with `fallback` in the lane file (`lanes.json`). When a brief run or a single project task fails with a quota, rate limit or overload error, or fails to start, `npm run run-lane` moves that run once to the backup lane. In a queue, each task can move on its own. A busy backup lane leaves the run failed.
 
 Run `npm run run-lane -- --list` to print the last 10 runs. A run that moved carries `| moved to LANE (KIND)`, and the backup run carries `| taken over from LANE`.
 
