@@ -409,7 +409,7 @@ describe('subPrompt', () => {
     expect(text).toContain(
       'To message any orchestrator, POST {{BRIDGE}}/api/orchestrator/messages with { "to": "ID", "text": "..." } and the X-MachineRoom-Orchestrator header.',
     )
-    expect(text).toContain('Your lanes do not talk. They report when their run ends.')
+    expect(text).toContain('Your lanes report when their run ends.')
   })
 
   it('asks for the report as the reply and never through the messages route', () => {

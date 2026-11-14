@@ -27,7 +27,7 @@ function laneMessageNote(env) {
   const source = env && typeof env === 'object' ? env : {}
   const value = (name) => (typeof source[name] === 'string' ? source[name].trim() : '')
   if (value('MACHINEROOM_LANE_TICKET') === '' || value('MACHINEROOM_BRIDGE') === '') return ''
-  return 'You may send your coordinator a short message while you work, for a question or a blocker: POST $MACHINEROOM_BRIDGE/api/orchestrator/messages with the header X-MachineRoom-Lane: $MACHINEROOM_LANE_TICKET and the JSON body {"text": "..."}. Read both values from your environment; never print the ticket. You get no reply during this run, so keep working on what you can, and send at most 4.'
+  return 'You may send your coordinator a short message while you work, for a question or a blocker: POST $MACHINEROOM_BRIDGE/api/orchestrator/messages with the header X-MachineRoom-Lane: $MACHINEROOM_LANE_TICKET and the JSON body {"text": "..."}. Read both values from your environment; never print the ticket. Send at most 4. A reply does not interrupt you: read your replies with GET on the same address and header, which answers {"messages": [{"from", "text", "at"}]}, after you ask and once more before you finish. Keep working on what you can meanwhile. To message another lane that is running, add "to": "lane:KEY".'
 }
 
 export function unattendedPrompt(prompt, env = {}) {

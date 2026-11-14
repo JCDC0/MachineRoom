@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- A lane's prompt says how to read its replies and message another lane, and a sub's instructions say how to answer a lane while it runs (P342).
 - An orchestrator or a running lane may message a running lane, and the lane reads its inbox with its ticket, so a lane gets replies while it works (P341).
 - A turn on Codex, the native harness or another harness with a command descriptor passes the orchestrator's effort, and each harness takes its own effort levels, so a Codex sub on high or xhigh runs that way (P345).
 - Codex and native orchestrator turns pass their saved effort to the harness, and Codex accepts xhigh (P345).
@@ -8,6 +9,7 @@
 - A lane run takes a permission mode with --mode or the lane's cli.mode: Claude lanes get plan, edits, auto or bypass, Codex and AGY lanes pass theirs, and a mode the harness lacks is refused before anything starts (P338).
 - A lane run takes messages from an orchestrator, a sub or another lane, and reads them mid-run with its ticket, oldest first, the newest 20 kept (P341).
 - A lane run the bridge started may message the orchestrator that started it, or any orchestrator, with its run's ticket: at most 4 per run, shown in the Team view (P335).
+- A lane is told to read its replies mid-run and how to message another running lane, and a sub is told how to answer one (P342).
 - A lane run the bridge started gets its ticket and the bridge address, and its prompt says how to message its coordinator (P336).
 - A lane's message shows the lane's name in the chat and in a conversation preview, or its key when the lane is unknown (P337).
 - A lane's message shows the lane's name in the chat and in a conversation preview, or its key when the lane is unknown (P337).
