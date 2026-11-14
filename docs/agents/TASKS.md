@@ -2495,3 +2495,17 @@ Let BASE be the commit that added `docs/agents/AUDIT-2026-11-REVIEW-32.md` (`git
 1. Run `npm test` once in your worktree on `main`.
 2. For each failing test, run its file alone. A test that passes alone is a load flake; one that fails alone is a real failure.
 3. Write the report: the totals, each failure with its file, its message and whether it passed alone, and the run time.
+
+**P300. A failed-over project run keeps its branch and commits in its record (OpenCode).** Read this brief only. Use no subagents. Run every command in the foreground. Commit each step as you finish it, and stop starting new work at minute 25. Files: scripts/run-lane.mjs, tests/run-failover.test.js, docs/agents/CHANGELOG.md.
+
+Since P286, when a project run with a deferred record fails over and the backup starts, `startLane` in `scripts/run-lane.mjs` writes the failed record with `appendRunRecord` after the backup returns, with only `head`. Before P286 it went through `writeProjectRecord`, which also set `branch` and `commits` from the project's git state.
+
+1. Read the failed run's branch and commits (`gitRead(project, ['branch', '--show-current'])` and the log from `projectStart.head`, as `writeProjectRecord` does through `projectRunGit`) at the same moment `failedHead` is read, before the backup starts, and put them on the failed record when it is written. A refused backup keeps today's path, where the queue writes the record.
+2. Test, by what it proves: a project run whose lane fails over to a backup that starts writes the failed record with the branch the failed run was on. It must fail before your change.
+3. Run `node node_modules/vitest/vitest.mjs run tests/run-failover.test.js tests/run-queue.test.js` and `npm run build`. Report what passed.
+
+**P301. The folder tree test proves the poll guard (OpenCode).** Read row 2 of `docs/agents/AUDIT-2026-11-TESTS-2.md` and this brief only. Use no subagents. Run every command in the foreground. Commit each step as you finish it, and stop starting new work at minute 25. Files: server/index.js, tests/tree-read.test.js, docs/agents/AUDIT-2026-11-TESTS-2.md, docs/agents/CHANGELOG.md.
+
+1. Change the test `keeps the one-second rule for a folder ask while the bridge polls` so the bridge has a working watcher and a poll timer at once, and a folder ask reads again only because of the poll. If the bridge cannot reach that state through its options, add the smallest option to `createBridge` that lets a test arm the poll beside a watcher, and use it only in the test.
+2. Prove it: with `pollTimer` taken out of `folderTreeReuseAllowed` the test fails, and with it in the test passes. Say how you proved it.
+3. Mark row 2 fixed in the audit file, add one changelog line, and run `node node_modules/vitest/vitest.mjs run tests/tree-read.test.js` and `npm run build`. Report what passed.
