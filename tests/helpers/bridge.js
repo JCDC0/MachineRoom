@@ -83,6 +83,69 @@ export async function waitFor(check, { timeoutMs = 10000, everyMs = 25, what = '
   }
 }
 
+export async function openRunWatch(url) {
+  const controller = new AbortController()
+  const response = await fetch(`${url}/events`, { signal: controller.signal })
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+  let timedOut = false
+  let timer = null
+
+  async function nextNotice() {
+    for (;;) {
+      const cut = buffer.indexOf('\n\n')
+      if (cut !== -1) {
+        const block = buffer.slice(0, cut)
+        buffer = buffer.slice(cut + 2)
+        const lines = block.split(/\r?\n/)
+        if (!lines.includes('event: change')) continue
+        const data = lines.find((line) => line.startsWith('data: '))
+        if (!data) continue
+        return JSON.parse(data.slice(6))
+      }
+      const { value, done } = await reader.read()
+      if (done) return null
+      buffer += decoder.decode(value, { stream: true })
+    }
+  }
+
+  return {
+    async waitForEnd(routeUrl, { lane = '', startedAt = '', timeoutMs = 15000, what = 'the run to end' } = {}) {
+      timer = setTimeout(() => {
+        timedOut = true
+        controller.abort()
+      }, timeoutMs)
+      timer.unref?.()
+      try {
+        for (;;) {
+          const notice = await nextNotice()
+          if (notice === null) throw new Error(`The event stream ended before ${what}.`)
+          if (notice?.topic !== 'runs') continue
+          const { body } = await getJson(`${routeUrl}/api/control/runs`)
+          const running = Array.isArray(body?.running) ? body.running : []
+          const stillRunning = running.some(
+            (item) => item?.startedAt === startedAt && (lane === '' || item?.lane === lane)
+          )
+          if (!stillRunning) {
+            const recent = Array.isArray(body?.recent) ? body.recent : []
+            return recent.some((item) => item?.startedAt === startedAt && (lane === '' || item?.lane === lane))
+          }
+        }
+      } catch (error) {
+        if (timedOut) throw new Error(`Timed out waiting for ${what}.`)
+        throw error
+      } finally {
+        clearTimeout(timer)
+      }
+    },
+    close() {
+      controller.abort()
+      reader.cancel().catch(() => {})
+    },
+  }
+}
+
 export async function waitForBridge(url) {
   return waitFor(
     async () => {

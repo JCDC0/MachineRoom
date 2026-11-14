@@ -24,7 +24,7 @@ import {
   projectRunLanes,
   projectTaskProblem,
 } from '../src/ui/panels/runs.js'
-import { getJson, waitFor } from './helpers/bridge.js'
+import { getJson, openRunWatch, waitFor } from './helpers/bridge.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 import { buttonWithText, click, settle, type, withDom } from './helpers/uiDom.js'
 
@@ -480,6 +480,7 @@ describe('the runs route with a queue', () => {
     const out = join(runnerDir, 'args.json')
     const temp = tempDir('mr-project-temp-')
     const { url } = await startBridge({ projectRoot: project, runnerPath: writeRunner(runnerDir, out, 400) })
+    const run = await openRunWatch(url)
     const previous = process.env.TEMP
     const previousRuns = process.env.MACHINEROOM_RUNS
     process.env.TEMP = temp
@@ -505,9 +506,11 @@ describe('the runs route with a queue', () => {
         { what: 'the queue entry' }
       )
       expect(entry).toMatchObject({ lane: 'opencode', briefs: [], queue: true, tasks: 2 })
-      await waitFor(async () => (await getJson(`${url}/api/control/runs`)).body.running.length === 0, { what: 'the run to end' })
+      await run.waitForEnd(url, { lane: 'opencode', startedAt: res.body.startedAt })
+      expect((await getJson(`${url}/api/control/runs`)).body.running).toHaveLength(0)
       expect(queueFiles(join(temp, 'machineroom-runs'))).toHaveLength(1)
     } finally {
+      run.close()
       if (previous === undefined) delete process.env.TEMP
       else process.env.TEMP = previous
       if (previousRuns === undefined) delete process.env.MACHINEROOM_RUNS
