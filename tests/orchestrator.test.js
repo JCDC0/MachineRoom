@@ -232,7 +232,7 @@ const FAKE_AGENT_SCRIPT = [
   'if (exitCode !== 0) process.exitCode = exitCode',
 ].join('\n')
 
-function makeRig({ prompt = PROMPT, mode = 'reply', lanes = LANES, harness = 'claude', model = '', bin = '', contextWindow = 0, harnesses = undefined, project = true, id = undefined, mergeWaitMs = undefined, gitSpawn = undefined, gitTimeoutMs = undefined, env = undefined, platform = undefined } = {}) {
+function makeRig({ prompt = PROMPT, mode = 'reply', lanes = LANES, harness = 'claude', model = '', bin = '', contextWindow = 0, harnesses = undefined, project = true, id = undefined, mergeWaitMs = undefined, gitSpawn = undefined, gitTimeoutMs = undefined, env = undefined, platform = undefined, extraInstructions = undefined } = {}) {
   const base = makeTempDir('mr-orchestrator-')
   const runs = join(base, 'runs')
   const projectRoot = project ? join(base, 'project') : ''
@@ -292,6 +292,7 @@ function makeRig({ prompt = PROMPT, mode = 'reply', lanes = LANES, harness = 'cl
     },
     ...(harnesses ? { harnesses } : {}),
     ...(mergeWaitMs ? { mergeWaitMs } : {}),
+    ...(extraInstructions ? { extraInstructions } : {}),
     ...(gitSpawn ? { gitSpawn } : {}),
     ...(gitTimeoutMs ? { gitTimeoutMs } : {}),
   })
@@ -765,6 +766,15 @@ describe('one orchestrator turn', () => {
     expect(instruction).toContain(`Send the header X-MachineRoom-Orchestrator: ${rig.orchestrator.token}`)
     expect(instruction).toContain('Spawn subagents at most 2 levels deep. A subagent at depth 2 spawns none.')
     expect(instruction.split(/\.\s+/)).toHaveLength(6)
+  })
+
+  it('fills the bridge address in the instruction lines a sub adds', async () => {
+    const rig = makeRig({ extraInstructions: () => 'To message any orchestrator, POST {{BRIDGE}}/api/orchestrator/messages.' })
+    rig.send('Hello')
+    await waitIdle(rig, 1)
+    const instruction = valueAfter(rig.calls()[0].args, '--append-system-prompt')
+    expect(instruction).toContain('POST http://127.0.0.1:5999/api/orchestrator/messages.')
+    expect(instruction).not.toContain('{{BRIDGE}}')
   })
 
   it('fills the scratch folder in the guide and makes it before the turn', async () => {

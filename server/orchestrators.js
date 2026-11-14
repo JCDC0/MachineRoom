@@ -399,10 +399,11 @@ export function createOrchestrators({
         if (!instances.has(config.id)) return
         const trimmed = typeof text === 'string' ? text.trim() : ''
         if (trimmed === NO_REPORT || trimmed === NO_NEW_REPORT) return
-        const parent = instances.get(ORCHESTRATOR_KEY)
+        const parentKey = typeof sub.parent === 'string' && sub.parent.trim() ? sub.parent.trim() : ORCHESTRATOR_KEY
+        const parent = instances.get(parentKey)
         if (!parent) return
         const delivered = parent.deliver(`sub:${config.id}`, text)
-        if (delivered) announce(agentKey(config.id), ORCHESTRATOR_KEY, 'report', trimmed)
+        if (delivered) announce(agentKey(config.id), agentKey(parentKey), 'report', trimmed)
       },
       outsideFiles: (record) => {
         if (sub.restricted !== true) return []
@@ -581,18 +582,18 @@ export function createOrchestrators({
     return null
   }
 
+  const sentMessages = new Map()
+  const clock = typeof now === 'function' ? now : Date.now
+
   async function message(body, page, tokenValue = '') {
-    if (!page) {
-      const actor = idForToken(tokenValue)
-      if (!actor) return { status: 403, body: { error: NO_TOKEN_PROBLEM } }
-      if (actor !== ORCHESTRATOR_KEY) return { status: 403, body: { error: MAIN_MESSAGE_PROBLEM } }
-    }
-    const target =
-      typeof body.to === 'string' && body.to.trim()
-        ? body.to.trim()
-        : typeof body.id === 'string' && body.id.trim()
-          ? body.id.trim()
-          : ORCHESTRATOR_KEY
+    const actor = page ? null : idForToken(tokenValue)
+    if (!page && !actor) return { status: 403, body: { error: NO_TOKEN_PROBLEM } }
+    const hasTo = typeof body.to === 'string' && body.to.trim() !== ''
+    const target = hasTo
+      ? body.to.trim()
+      : typeof body.id === 'string' && body.id.trim()
+        ? body.id.trim()
+        : ORCHESTRATOR_KEY
     if (!instances.has(target)) {
       const currentLanes = typeof lanes === 'function' ? lanes() : (lanes ?? {})
       const isLaneTarget = Object.hasOwn(currentLanes, target) || eligibleLaneKeys().includes(target)
@@ -636,18 +637,36 @@ export function createOrchestrators({
           : 'orchestrator'
         : body.from
     if (from === 'owner' && !page) return { status: 403, body: { error: OWNER_MESSAGE_PROBLEM } }
-    if (from === 'orchestrator') {
-      if (page) return { status: 403, body: { error: PAGE_MESSAGE_PROBLEM } }
-      if (id === ORCHESTRATOR_KEY) return { status: 400, body: { error: ORCHESTRATOR_TARGET_PROBLEM } }
-      if (body.confirmed !== true) return { status: 400, body: { error: CONFIRM_MESSAGE_PROBLEM } }
+    if (!page) {
+      if (from !== 'orchestrator' && from !== actor && from !== `sub:${actor}`) {
+        return { status: 400, body: { error: MESSAGE_FROM_PROBLEM } }
+      }
+      if (id === actor) return { status: 400, body: { error: ORCHESTRATOR_TARGET_PROBLEM } }
+      if (body.confirmed === false || (!hasTo && body.from === 'orchestrator' && body.confirmed !== true)) {
+        return { status: 400, body: { error: CONFIRM_MESSAGE_PROBLEM } }
+      }
       const text = typeof body.text === 'string' ? body.text.trim() : ''
       if (text.length < 1 || text.length > ORCHESTRATOR_MESSAGE_LIMIT) {
         return { status: 400, body: { error: MESSAGE_PROBLEM } }
       }
-      const sent = instance.deliver('orchestrator', text)
-      if (sent) announce(ORCHESTRATOR_KEY, agentKey(id), 'order', text)
+      const at = clock()
+      const cutoff = at - 10 * 60 * 1000
+      const recent = (sentMessages.get(actor) ?? []).filter((time) => time > cutoff)
+      if (recent.length >= 6) {
+        sentMessages.set(actor, recent)
+        return {
+          status: 429,
+          body: { error: 'Too many messages from this orchestrator. Wait, or ask the owner.' },
+        }
+      }
+      recent.push(at)
+      sentMessages.set(actor, recent)
+      const sender = actor === ORCHESTRATOR_KEY ? ORCHESTRATOR_KEY : `sub:${actor}`
+      const sent = instance.deliver(sender, text)
+      if (sent) announce(agentKey(actor), agentKey(id), 'message', text)
       return { status: 202, body: { id: sent?.id ?? null } }
     }
+    if (from === 'orchestrator') return { status: 403, body: { error: PAGE_MESSAGE_PROBLEM } }
     if (from !== 'owner') return { status: 400, body: { error: MESSAGE_FROM_PROBLEM } }
     return instance.send(body)
   }

@@ -1874,7 +1874,8 @@ export function createOrchestrator({
       token,
       scratchFolder
     )
-    const extra = typeof extraInstructions === 'function' ? extraInstructions() : extraInstructions
+    const extraText = typeof extraInstructions === 'function' ? extraInstructions() : extraInstructions
+    const extra = typeof extraText === 'string' ? extraText.replaceAll('{{BRIDGE}}', bridgeAddress ?? '') : extraText
     const joined = extra ? `${baseInstruction}\n\n${extra}` : baseInstruction
     const depthLine = agentDepthLine(readAgentDepth(folder).limit)
     const instruction = `${joined.replace(SPAWN_DEPTH_LINE, '').replace(/\n{3,}/g, '\n\n').trimEnd()}\n\n${depthLine}`
