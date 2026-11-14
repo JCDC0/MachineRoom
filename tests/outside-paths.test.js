@@ -229,4 +229,261 @@ describe('outside-project path tracking', () => {
     expect(html).toContain('read')
     expect(html.indexOf('/etc/hosts')).toBeLessThan(html.indexOf('C:\\Windows\\x.txt'))
   })
+
+  function runChunks(agent, lines, tree = TREE) {
+    const frames = [
+      {
+        id: `${agent.key}-start`,
+        createdAt: '2026-11-15T02:00:00.000Z',
+        type: 'heartbeat.run.status',
+        payload: { agentId: agent.id, runId: `${agent.key}-run`, status: 'running' },
+      },
+      ...lines.map((line, index) => ({
+        id: `${agent.key}-log-${index + 1}`,
+        createdAt: new Date(Date.UTC(2026, 10, 15, 2, 0, index + 1)).toISOString(),
+        type: 'heartbeat.run.log',
+        payload: {
+          agentId: agent.id,
+          runId: `${agent.key}-run`,
+          stream: 'stdout',
+          seq: index + 1,
+          ts: new Date(Date.UTC(2026, 10, 15, 2, 0, index + 1)).toISOString(),
+          chunk: `${line}\n`,
+        },
+      })),
+      {
+        id: `${agent.key}-end`,
+        createdAt: '2026-11-15T02:05:00.000Z',
+        type: 'heartbeat.run.status',
+        payload: { agentId: agent.id, runId: `${agent.key}-run`, status: 'succeeded' },
+      },
+    ]
+    return buildActivities(frames, { agents: [agent], tree }).filter((item) => item.type === 'tool.start')
+  }
+
+  test('ignores relative paths, agent.worktree paths and tree.worktrees paths', () => {
+    const agyAgent = {
+      id: 'agent-wt',
+      key: 'agy',
+      name: 'AGY',
+      harness: 'agy',
+      parser: 'agy',
+      adapterType: 'process',
+      worktree: 'C:\\Worktrees\\agy-lane',
+    }
+    const treeWithWorktrees = {
+      ...TREE,
+      worktrees: ['C:\\Worktrees\\shared-lane'],
+    }
+    const lineFor = (stepIndex, path) => JSON.stringify({
+      event: 'step_update',
+      step_update: {
+        conversation_id: 'conv-wt',
+        step_index: stepIndex,
+        step_type: 'tool',
+        tool_name: 'read_file',
+        state: 'DONE',
+        tool_info: { parameters: { Path: path } },
+      },
+    })
+    const starts = runChunks(
+      agyAgent,
+      [
+        lineFor(1, 'src/app.js'),
+        lineFor(2, 'C:\\Worktrees\\agy-lane\\src\\index.js'),
+        lineFor(3, 'C:\\Worktrees\\shared-lane\\src\\other.js'),
+        lineFor(4, 'C:\\Worktrees\\stray-lane\\secret.txt'),
+      ],
+      treeWithWorktrees,
+    )
+    expect(starts).toHaveLength(4)
+    expect('outside' in starts[0]).toBe(false)
+    expect('outside' in starts[1]).toBe(false)
+    expect('outside' in starts[2]).toBe(false)
+    expect(starts[3].outside).toBe(true)
+    expect(starts[3].outsidePath).toBe('C:\\Worktrees\\stray-lane\\secret.txt')
+  })
+
+  test('claude parser marks outside acpx file touches and leaves relative ones unmarked', () => {
+    const agent = { id: 'h-claude', key: 'claude', name: 'Claude', harness: 'claude', parser: 'claude', adapterType: 'claude_local' }
+    const starts = runChunks(agent, [
+      JSON.stringify({ type: 'acpx.tool_call', toolCallId: 'c1', name: 'Read /etc/claude.conf', status: 'completed' }),
+      JSON.stringify({ type: 'acpx.tool_call', toolCallId: 'c2', name: 'Edit src/app.js', status: 'completed' }),
+    ])
+    expect(starts).toHaveLength(2)
+    expect(starts[0]).toMatchObject({ tool: 'read', outside: true, outsidePath: '/etc/claude.conf', touches: [] })
+    expect('outside' in starts[1]).toBe(false)
+    expect('outsidePath' in starts[1]).toBe(false)
+  })
+
+  test('machineroom parser marks outside touches and leaves project ones unmarked', () => {
+    const agent = { id: 'h-mr', key: 'machineroom', name: 'MachineRoom', harness: 'machineroom', parser: 'machineroom', adapterType: 'machineroom_local' }
+    const starts = runChunks(agent, [
+      JSON.stringify({
+        type: 'assistant',
+        message: { content: [{ type: 'tool_use', id: 'mr1', name: 'Read', input: { file_path: '/etc/machineroom.conf' } }] },
+      }),
+      JSON.stringify({
+        type: 'assistant',
+        message: { content: [{ type: 'tool_use', id: 'mr2', name: 'Write', input: { file_path: 'C:\\GitHub\\MachineRoom\\src\\app.js' } }] },
+      }),
+    ])
+    expect(starts).toHaveLength(2)
+    expect(starts[0]).toMatchObject({ tool: 'read', outside: true, outsidePath: '/etc/machineroom.conf', touches: [] })
+    expect('outside' in starts[1]).toBe(false)
+  })
+
+  test('hermes parser marks outside touches with normalised masked paths', () => {
+    const user = os.userInfo().username
+    const agent = { id: 'h-hermes', key: 'hermes', name: 'Hermes', harness: 'hermes', parser: 'hermes', adapterType: 'hermes_local' }
+    const starts = runChunks(agent, [
+      `  ┊ - write     C:\\Users\\${user}\\note.md  0.4s`,
+      '  ┊ - read      src/app.js  0.2s',
+    ])
+    expect(starts).toHaveLength(2)
+    expect(starts[0]).toMatchObject({ tool: 'write', outside: true, outsidePath: '%USERPROFILE%/note.md', touches: [] })
+    expect(starts[0].outsidePath).not.toContain(user)
+    expect('outside' in starts[1]).toBe(false)
+  })
+
+  test('opencode parser marks outside touches and masks the user profile', () => {
+    const user = os.userInfo().username
+    const agent = { id: 'h-opencode', key: 'opencode', name: 'OpenCode', harness: 'opencode', parser: 'opencode', adapterType: 'opencode_local' }
+    const starts = runChunks(agent, [
+      JSON.stringify({
+        type: 'tool_use',
+        part: { id: 'oc1', tool: 'read', state: { status: 'completed', input: { path: `C:\\Users\\${user}\\AGENTS.md` } } },
+      }),
+      JSON.stringify({
+        type: 'tool_use',
+        part: { id: 'oc2', tool: 'edit', state: { status: 'completed', input: { path: 'C:\\GitHub\\MachineRoom\\src\\app.js' } } },
+      }),
+    ])
+    expect(starts).toHaveLength(2)
+    expect(starts[0]).toMatchObject({ tool: 'read', outside: true, outsidePath: '%USERPROFILE%\\AGENTS.md', touches: [] })
+    expect(starts[0].outsidePath).not.toContain(user)
+    expect('outside' in starts[1]).toBe(false)
+  })
+
+  test('agy parser marks outside touches and leaves project paths unmarked', () => {
+    const agent = { id: 'h-agy', key: 'agy', name: 'AGY', harness: 'agy', parser: 'agy', adapterType: 'process' }
+    const starts = runChunks(agent, [
+      JSON.stringify({
+        event: 'step_update',
+        step_update: {
+          conversation_id: 'agy-conv',
+          step_index: 1,
+          step_type: 'tool',
+          tool_name: 'view_file',
+          state: 'DONE',
+          tool_info: { parameters: { AbsolutePath: '/etc/agy.conf' } },
+        },
+      }),
+      JSON.stringify({
+        event: 'step_update',
+        step_update: {
+          conversation_id: 'agy-conv',
+          step_index: 2,
+          step_type: 'tool',
+          tool_name: 'edit_file',
+          state: 'DONE',
+          tool_info: { parameters: { Path: 'C:\\GitHub\\MachineRoom\\src\\app.js' } },
+        },
+      }),
+    ])
+    expect(starts).toHaveLength(2)
+    expect(starts[0]).toMatchObject({ tool: 'read', outside: true, outsidePath: '/etc/agy.conf', touches: [] })
+    expect('outside' in starts[1]).toBe(false)
+  })
+
+  test('acp parser marks outside touches when an update arrives', () => {
+    const agent = { id: 'h-acp', key: 'acp', name: 'ACP', harness: 'acp', parser: 'acp', adapterType: 'acp_local' }
+    const starts = runChunks(agent, [
+      JSON.stringify({
+        method: 'session/update',
+        params: {
+          sessionId: 'acp-1',
+          update: {
+            sessionUpdate: 'tool_call',
+            toolCallId: 'acp-call-1',
+            kind: 'edit',
+            status: 'in_progress',
+            locations: ['C:\\Windows\\acp.ini'],
+          },
+        },
+      }),
+      JSON.stringify({
+        method: 'session/update',
+        params: {
+          sessionId: 'acp-1',
+          update: {
+            sessionUpdate: 'tool_call_update',
+            toolCallId: 'acp-call-1',
+            status: 'completed',
+          },
+        },
+      }),
+      JSON.stringify({
+        method: 'session/update',
+        params: {
+          sessionId: 'acp-1',
+          update: {
+            sessionUpdate: 'tool_call',
+            toolCallId: 'acp-call-2',
+            kind: 'read',
+            status: 'completed',
+            locations: ['C:\\GitHub\\MachineRoom\\src\\app.js'],
+          },
+        },
+      }),
+    ])
+    expect(starts).toHaveLength(2)
+    expect(starts[0]).toMatchObject({ tool: 'edit', outside: true, outsidePath: 'C:\\Windows\\acp.ini', touches: [] })
+    expect('outside' in starts[1]).toBe(false)
+  })
+
+  test('codex parser marks outside file changes and leaves project changes unmarked', () => {
+    const agent = { id: 'h-codex', key: 'codex', name: 'Codex', harness: 'codex', parser: 'codex', adapterType: 'codex_local' }
+    const starts = runChunks(agent, [
+      JSON.stringify({
+        type: 'item.completed',
+        item: {
+          id: 'fc-1',
+          type: 'file_change',
+          changes: [{ path: '/etc/codex.conf', kind: 'update' }],
+          status: 'completed',
+        },
+      }),
+      JSON.stringify({
+        type: 'item.completed',
+        item: {
+          id: 'fc-2',
+          type: 'file_change',
+          changes: [{ path: 'C:\\GitHub\\MachineRoom\\src\\app.js', kind: 'update' }],
+          status: 'completed',
+        },
+      }),
+    ])
+    expect(starts).toHaveLength(2)
+    expect(starts[0]).toMatchObject({ tool: 'edit', outside: true, outsidePath: '/etc/codex.conf', touches: [] })
+    expect('outside' in starts[1]).toBe(false)
+  })
+
+  test('copilot parser marks outside JSON and plain file touches', () => {
+    const agent = { id: 'h-copilot', key: 'copilot', name: 'Copilot', harness: 'copilot', parser: 'copilot', adapterType: 'copilot_local' }
+    const starts = runChunks(agent, [
+      JSON.stringify({
+        type: 'tool.execution_start',
+        toolCallId: 'cp-1',
+        toolName: 'read_file',
+        arguments: { path: '/etc/copilot.json' },
+      }),
+      'Writing file: C:\\Windows\\copilot.log',
+      'Reading file: src/app.js',
+    ])
+    expect(starts).toHaveLength(3)
+    expect(starts[0]).toMatchObject({ tool: 'read', outside: true, outsidePath: '/etc/copilot.json', touches: [] })
+    expect(starts[1]).toMatchObject({ tool: 'write', outside: true, outsidePath: 'C:\\Windows\\copilot.log', touches: [] })
+    expect('outside' in starts[2]).toBe(false)
+  })
 })
