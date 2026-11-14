@@ -1030,6 +1030,20 @@ describe('a failover record read by the bridge', () => {
       expect(answer.status).toBe(200)
     }
     expect(notes).toEqual(['opencode hit quota and its run moved to agy.'])
+    appendFileSync(
+      join(runs, 'runs.jsonl'),
+      `${JSON.stringify({
+        lane: 'codex',
+        startedAt: '2026-11-14T11:00:00.000Z',
+        failover: { kind: 'rate-limit', to: 'agy', refused: true },
+      })}\n`
+    )
+    await api.handle({ method: 'GET', headers: {} }, {}, new URL('http://127.0.0.1/api/control/runs'))
+    expect(answer.status).toBe(200)
+    expect(notes).toEqual([
+      'opencode hit quota and its run moved to agy.',
+      'codex hit rate-limit and its backup agy could not start.',
+    ])
   })
 })
 
