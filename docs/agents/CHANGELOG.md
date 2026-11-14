@@ -1,7 +1,7 @@
 # Changelog
 
 ## Unreleased
-- P294: a project run refuses to reuse .worktrees/LANE when it is on a named branch with commits not in the project, naming the branch and the count; a detached worktree keeps its check.
+- P300: a failed-over project run writes the branch and commits the failed run had on its failed record, taken before the backup starts, and the backup starts from that branch.- P294: a project run refuses to reuse .worktrees/LANE when it is on a named branch with commits not in the project, naming the branch and the count; a detached worktree keeps its check.
 - P297: ROOM.md, LIVE.md and COMMANDS.md say what the lane conversation, the cost board, failover, quota and the tree reuse do now, and the audit table records each row's status.
 - P262: the family tree editor sets a lane's backup lane, Dispatch can choose a model for one project run and names the backup lane, and a failover adds one room note and shows on both lanes.
 - P295: eleven tests assert literal text or the real call instead of the imported constant, and the git watcher test proves a failed rewatch reads again; row 2 needs a product change.
