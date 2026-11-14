@@ -71,6 +71,7 @@ describe('project settings file', () => {
     expect(checkCommandProblem('npm test\n\nnpm run check\n')).toBeNull()
     expect(checkCommandProblem('one\ntwo\nthree\nfour')).toBeNull()
     expect(checkCommandProblem('one\ntwo\nthree\nfour\nfive')).toBe(CHECK_COMMAND_COUNT_PROBLEM)
+    expect(checkCommandProblem('one\rtwo\rthree\rfour\rfive')).toBe(CHECK_COMMAND_COUNT_PROBLEM)
     expect(checkCommandProblem('one\n\n\n\n\n')).toBeNull()
   })
 
@@ -129,6 +130,17 @@ describe('the project settings route', () => {
     const res = await postSettings(url, { checkCommand: 'npm test && npm run build', confirmed: true })
     expect(res.status).toBe(400)
     expect(await res.json()).toEqual({ error: CHECK_SHELL_PROBLEM })
+
+    const read = await (await fetch(`${url}/api/control/project-settings`)).json()
+    expect(read).toEqual({ checkCommand: '', hasTestScript: true })
+  })
+
+  it('refuses a carriage return inside a quoted argument and never saves it', async () => {
+    const { url } = await startBridge()
+    const quoted = 'powershell -NoProfile -Command "Write-Output first\rWrite-Output second"'
+    const res = await postSettings(url, { checkCommand: quoted, confirmed: true })
+    expect(res.status).toBe(400)
+    expect(await res.json()).toEqual({ error: CHECK_QUOTE_PROBLEM })
 
     const read = await (await fetch(`${url}/api/control/project-settings`)).json()
     expect(read).toEqual({ checkCommand: '', hasTestScript: true })

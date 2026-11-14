@@ -322,7 +322,7 @@ function quoteIsOpen(text) {
 
 export function checkCommandLines(command) {
   return String(command ?? '')
-    .split(/\r?\n/)
+    .split(/\r\n|\r|\n/)
     .map((line) => line.trim())
     .filter((line) => line !== '')
 }
