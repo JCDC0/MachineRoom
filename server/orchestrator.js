@@ -25,7 +25,7 @@ import { defaultMode, legacyMode, modesFor } from '../src/control/modes.js'
 import { harnessByKey } from '../src/harnesses/index.js'
 import { agentDepthLine } from '../src/model/hierarchy.js'
 import { readAgentDepth } from './agent-depth.js'
-import { harnessUnavailableProblem, isHarnessAvailable, modelUnavailableProblem } from './agents-config.js'
+import { codexProgramFor, harnessUnavailableProblem, isHarnessAvailable, modelUnavailableProblem } from './agents-config.js'
 import { readEndpoints } from './endpoints.js'
 import { modelAllowed } from './harness-models.js'
 import { DEFAULT_CONTEXT_WINDOW, MODELS, resolveContextWindow } from './models.js'
@@ -923,6 +923,8 @@ export function createOrchestrator({
   lanes = {},
   spawn: spawnChild = spawn,
   gitSpawn: spawnGit = spawn,
+  env = process.env,
+  platform = process.platform,
   now = Date.now,
   onNotice = () => {},
   promptFile = PROMPT_FILE,
@@ -958,12 +960,22 @@ export function createOrchestrator({
   let harness = harnessOption || String(lane.cli.harness ?? 'claude')
   let model = modelOption ? String(modelOption) : String(lane.cli.model ?? (harness === 'opencode' ? DEFAULT_OPENCODE_MODEL : 'opus'))
   function binFor(name) {
-    if (binOption) return String(binOption)
-    if (lane.cli.harness === name && lane.cli.bin) return String(lane.cli.bin)
-    for (const entry of Object.values(lanes ?? {})) {
-      if (entry?.cli?.harness === name && entry.cli.bin) return String(entry.cli.bin)
+    if (binOption) {
+      const chosen = String(binOption)
+      return codexProgramFor(name, chosen, { env, platform }) ?? chosen
     }
-    return name
+    let bin = ''
+    if (lane.cli.harness === name && lane.cli.bin) bin = String(lane.cli.bin)
+    else {
+      for (const entry of Object.values(lanes ?? {})) {
+        if (entry?.cli?.harness === name && entry.cli.bin) {
+          bin = String(entry.cli.bin)
+          break
+        }
+      }
+      if (!bin) bin = name
+    }
+    return codexProgramFor(name, bin, { env, platform }) ?? bin
   }
   function laneDetails() {
     const endpoints = readEndpoints(folder)

@@ -15,6 +15,7 @@ import {
   ORIGIN_CREATE_PROBLEM,
   buildMadeLane,
   codexAppProgram,
+  codexProgramFor,
   createAgentsConfigApi,
   effortUnavailableProblem,
   isHarnessAvailable,
@@ -392,6 +393,41 @@ describe('Codex app availability', () => {
     expect(codexAppProgram({ env: { LOCALAPPDATA: localAppData }, platform: 'win32' })).toBeNull()
     expect(codexAppProgram({ env: {}, platform: 'win32' })).toBeNull()
     expect(codexAppProgram({ env: { LOCALAPPDATA: localAppData }, platform: 'linux' })).toBeNull()
+  })
+
+  it('answers the newest app program for codex or an empty bin when codex is not on PATH', () => {
+    const localAppData = tempDir('mr-codex-helper-')
+    const older = join(localAppData, 'OpenAI', 'Codex', 'bin', '0123456789abcdef', 'codex.exe')
+    const newer = join(localAppData, 'OpenAI', 'Codex', 'bin', 'fedcba9876543210', 'codex.exe')
+    mkdirSync(dirname(older), { recursive: true })
+    mkdirSync(dirname(newer), { recursive: true })
+    writeFileSync(older, '')
+    writeFileSync(newer, '')
+    utimesSync(older, new Date(1000), new Date(1000))
+    utimesSync(newer, new Date(2000), new Date(2000))
+    const env = { LOCALAPPDATA: localAppData, PATH: '', Path: '' }
+
+    expect(codexProgramFor('codex', 'codex', { env, platform: 'win32' })).toBe(newer)
+    expect(codexProgramFor('codex', '', { env, platform: 'win32' })).toBe(newer)
+  })
+
+  it('answers null for a full path, another harness or codex on PATH', () => {
+    const localAppData = tempDir('mr-codex-helper-null-')
+    const program = join(localAppData, 'OpenAI', 'Codex', 'bin', '0123456789abcdef', 'codex.exe')
+    mkdirSync(dirname(program), { recursive: true })
+    writeFileSync(program, '')
+    const env = { LOCALAPPDATA: localAppData, PATH: '', Path: '' }
+
+    expect(codexProgramFor('codex', program, { env, platform: 'win32' })).toBeNull()
+    expect(codexProgramFor('claude', 'codex', { env, platform: 'win32' })).toBeNull()
+
+    const bin = join(tempDir('mr-codex-helper-path-'), 'bin')
+    mkdirSync(bin, { recursive: true })
+    writeFileSync(join(bin, 'codex.exe'), '')
+    expect(codexProgramFor('codex', 'codex', {
+      env: { ...env, PATH: bin, Path: bin },
+      platform: 'win32',
+    })).toBeNull()
   })
 
   it('marks a Codex lane available when its app program is installed', () => {

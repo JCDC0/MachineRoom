@@ -19,6 +19,7 @@ import {
 } from '../server/doctor.js'
 import { createBridge, FOLDER_SHAPE, readTree } from '../server/index.js'
 import { printedRunsFolder } from '../server/printed-path.js'
+import { gitPath } from '../server/programPath.js'
 import { withLanePrograms } from './helpers/lanePrograms.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 
@@ -284,6 +285,32 @@ describe('machine-room doctor', () => {
     ])
     expect(failures(result.lines)[0]).toContain('%TEMP%')
     expect(failures(result.lines)[0]).not.toContain(missing)
+  })
+
+  it('starts a Codex lane from the app program when codex is not on PATH', () => {
+    const project = makeFolder('machine-room-doctor-project-')
+    const runs = join(makeFolder('machine-room-doctor-runs-'), 'machineroom-runs')
+    const localAppData = makeFolder('machine-room-doctor-codex-')
+    const program = join(localAppData, 'OpenAI', 'Codex', 'bin', '0123456789abcdef', 'codex.exe')
+    mkdirSync(dirname(program), { recursive: true })
+    writeFileSync(program, '')
+    const gitFolder = dirname(gitPath())
+    const env = { ...process.env, LOCALAPPDATA: localAppData, PATH: gitFolder, Path: gitFolder }
+    const lanes = writeLanes({
+      codex: { name: 'Codex', cli: { harness: 'codex', bin: 'codex' } },
+    })
+    const result = runDoctor({
+      projectRoot: project,
+      runsFolder: runs,
+      dist: makeDist(),
+      lanesFile: lanes,
+      env,
+      platform: 'win32',
+    })
+
+    expect(result.exitCode).toBe(0)
+    expect(failures(result.lines)).toEqual([])
+    expect(result.lines).toContain(`ok The Codex lane starts from ${printedRunsFolder(program, env)}.`)
   })
 
   it('fails a lane program whose environment variable is not set', () => {

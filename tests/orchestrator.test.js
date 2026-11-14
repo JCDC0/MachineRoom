@@ -2,7 +2,7 @@ import { spawn, spawnSync } from 'node:child_process'
 import { EventEmitter } from 'node:events'
 import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { basename, join, resolve } from 'node:path'
+import { basename, dirname, join, resolve } from 'node:path'
 import { PassThrough } from 'node:stream'
 import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -93,6 +93,13 @@ const LANES = { orchestrator: ORCHESTRATOR_LANE }
 const OPENCODE_LANES = { orchestrator: OPENCODE_LANE }
 const AGY_LANES = { orchestrator: AGY_LANE }
 const MACHINEROOM_LANES = { orchestrator: MACHINEROOM_LANE }
+const CODEX_LANES = {
+  orchestrator: {
+    name: 'Orchestrator',
+    harness: 'Codex',
+    cli: { harness: 'codex', bin: 'codex', model: 'gpt-6.1-sol' },
+  },
+}
 const PROMPT = 'project={{PROJECT}}\nmachineroom={{MACHINEROOM}}\nruns={{RUNS}}\nbridge={{BRIDGE}}'
 
 const FAKE_CLAUDE = [
@@ -225,7 +232,7 @@ const FAKE_AGENT_SCRIPT = [
   'if (exitCode !== 0) process.exitCode = exitCode',
 ].join('\n')
 
-function makeRig({ prompt = PROMPT, mode = 'reply', lanes = LANES, harness = 'claude', model = '', contextWindow = 0, harnesses = undefined, project = true, id = undefined, mergeWaitMs = undefined, gitSpawn = undefined, gitTimeoutMs = undefined } = {}) {
+function makeRig({ prompt = PROMPT, mode = 'reply', lanes = LANES, harness = 'claude', model = '', bin = '', contextWindow = 0, harnesses = undefined, project = true, id = undefined, mergeWaitMs = undefined, gitSpawn = undefined, gitTimeoutMs = undefined, env = undefined, platform = undefined } = {}) {
   const base = makeTempDir('mr-orchestrator-')
   const runs = join(base, 'runs')
   const projectRoot = project ? join(base, 'project') : ''
@@ -272,9 +279,12 @@ function makeRig({ prompt = PROMPT, mode = 'reply', lanes = LANES, harness = 'cl
     lanes,
     harness,
     model,
+    bin,
     contextWindow,
     spawn: spawnFake,
     promptFile,
+    env,
+    platform,
     bridgeUrl: () => 'http://127.0.0.1:5999',
     onNotice: (event) => notices.push(event),
     onMasked: (count) => {
@@ -607,6 +617,37 @@ describe('one orchestrator turn', () => {
     await waitIdle(rig, 1)
     expect(rig.answer().messages[0].work.state).toBeUndefined()
     expect(rig.answer().messages[0].work.steps).toHaveLength(2)
+  })
+
+  it('starts a Codex orchestrator from the app program when codex is not on PATH', async () => {
+    const localAppData = makeTempDir('mr-orchestrator-codex-')
+    cleanups.push(() => rmSync(localAppData, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }))
+    const program = join(localAppData, 'OpenAI', 'Codex', 'bin', '0123456789abcdef', 'codex.exe')
+    mkdirSync(dirname(program), { recursive: true })
+    writeFileSync(program, '')
+    const env = { ...process.env, LOCALAPPDATA: localAppData, PATH: '', Path: '' }
+    const rig = makeRig({ harness: 'codex', lanes: CODEX_LANES, env, platform: 'win32' })
+
+    rig.send('Build the room.')
+    await waitIdle(rig, 1)
+
+    expect(rig.spawned[0].file).toBe(program)
+    expect(rig.spawned[0].args.slice(0, 2)).toEqual(['exec', '--json'])
+  })
+
+  it('starts a Codex sub orchestrator from the app program when its bin is codex', async () => {
+    const localAppData = makeTempDir('mr-sub-orchestrator-codex-')
+    cleanups.push(() => rmSync(localAppData, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }))
+    const program = join(localAppData, 'OpenAI', 'Codex', 'bin', '0123456789abcdef', 'codex.exe')
+    mkdirSync(dirname(program), { recursive: true })
+    writeFileSync(program, '')
+    const env = { ...process.env, LOCALAPPDATA: localAppData, PATH: '', Path: '' }
+    const rig = makeRig({ id: 'codexsub', harness: 'codex', lanes: CODEX_LANES, bin: 'codex', env, platform: 'win32' })
+
+    rig.send('Build the room.')
+    await waitIdle(rig, 1)
+
+    expect(rig.spawned[0].file).toBe(program)
   })
 
   it('runs an OpenCode turn with the instructions first, then the same session', async () => {

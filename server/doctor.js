@@ -3,6 +3,7 @@ import { accessSync, constants, mkdirSync, readFileSync, statSync } from 'node:f
 import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { readTree } from './index.js'
+import { codexProgramFor } from './agents-config.js'
 import { lanesFolder, readAllLanes, runsFolder } from './lanes-source.js'
 import { printedRunsFolder } from './printed-path.js'
 import { programPath } from './programPath.js'
@@ -53,7 +54,9 @@ function isFile(path) {
   }
 }
 
-function laneProgram(bin, env) {
+function laneProgram(bin, env, harness, platform) {
+  const codex = codexProgramFor(harness, bin, { env, platform })
+  if (codex) return { path: codex }
   const expanded = expand(bin, env)
   if (expanded.missing) return { problem: `The environment variable ${expanded.missing} is not set.` }
   const path = expanded.text
@@ -169,7 +172,7 @@ function printedLaneBin(bin, env) {
   return printedRunsFolder(expanded.text, env)
 }
 
-function laneLines(file, env, runsDir) {
+function laneLines(file, env, runsDir, platform) {
   const read = readLaneFile(file, env)
   if (read.problem) return [{ ok: false, text: read.problem }]
   const lanes = readAllLanes({ lanesJson: read.lanes, runsFolder: runsDir })
@@ -179,7 +182,7 @@ function laneLines(file, env, runsDir) {
     if (lane.retired === true) continue
     if (!lane.cli || typeof lane.cli !== 'object' || typeof lane.cli.bin !== 'string' || lane.cli.bin === '') continue
     const name = typeof lane.name === 'string' && lane.name ? lane.name : key
-    const found = laneProgram(lane.cli.bin, env)
+    const found = laneProgram(lane.cli.bin, env, lane.cli.harness, platform)
     if (found.path) {
       lines.push({ ok: true, text: `The ${name} lane starts from ${printedRunsFolder(found.path, env)}.` })
     } else if (found.problem) {
@@ -193,6 +196,7 @@ function laneLines(file, env, runsDir) {
 
 export function runDoctor(options = {}) {
   const env = options.env ?? process.env
+  const platform = options.platform ?? process.platform
   const settings = doctorSettings(options, env)
   const lines = []
   let ok = true
@@ -214,7 +218,7 @@ export function runDoctor(options = {}) {
   for (const line of gitLines(settings.projectRoot, env)) add(line)
   add(viewerLine(settings.dist, env))
   add(runsLine(settings.runsFolder, env))
-  for (const line of laneLines(settings.lanesFile, env, settings.runsFolder)) add(line)
+  for (const line of laneLines(settings.lanesFile, env, settings.runsFolder, platform)) add(line)
 
   return { exitCode: ok ? 0 : 1, lines, folderOk: true, warnings }
 }
