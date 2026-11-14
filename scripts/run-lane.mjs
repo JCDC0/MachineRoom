@@ -2061,6 +2061,17 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
     if (target !== '' && options?.failedOver !== true) {
       record.failover = { kind, to: target }
       const failedHead = project && deferRecord ? gitRead(project, ['rev-parse', 'HEAD']) || '' : ''
+      const failedGit = project && deferRecord
+        ? projectRunGit({
+            branch: gitRead(project, ['branch', '--show-current']) ?? '',
+            startBranch: projectStart.branch,
+            commits: projectStart.head ? gitRead(project, ['log', '--oneline', `${projectStart.head}..HEAD`]) ?? '' : '',
+          })
+        : null
+      if (failedGit) {
+        if (failedGit.branch !== '') record.branch = failedGit.branch
+        record.commits = failedGit.commits
+      }
       if (!(project && deferRecord)) {
         if (appendRunRecord(record)) console.log(`record: ${printedRunsFolder(runsFile())}`)
         if (!project) recordRoom(record, toolLines, lanes)

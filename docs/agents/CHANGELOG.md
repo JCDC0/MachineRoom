@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- P300: a project run that fails over reads its branch and commits before the backup starts and keeps them on its failed record.
 - P302: a lane lock names its run's log, and the lanes source takes the lock's start time only for that log, so a Stop on an old log names no live run.
 - P305: readCodexQuota opens the rollout without following a link where the platform allows, and answers null when the opened file is not the one it checked.
 - P301: the poll test runs a bridge with a watcher and a poll timer at once, through a test-only pollBesideWatcher option, so it fails when the poll guard is taken out.
@@ -14,6 +15,7 @@
 - P298: review 33 reads P285 to P297 and lists five findings; R33-1 to R33-3 block the push.
 - P301: the folder tree poll test runs a working watcher and a poll timer at once, so dropping `pollTimer` from `folderTreeReuseAllowed` makes it fail.
 - P294: a project run refuses to reuse .worktrees/LANE when it is on a named branch with commits not in the project, naming the branch and the count; a detached worktree keeps its check.
+- P300: a failed-over project run writes the branch and commits the failed run had on its failed record, taken before the backup starts, and the backup starts from that branch.- P294: a project run refuses to reuse .worktrees/LANE when it is on a named branch with commits not in the project, naming the branch and the count; a detached worktree keeps its check.
 - P297: ROOM.md, LIVE.md and COMMANDS.md say what the lane conversation, the cost board, failover, quota and the tree reuse do now, and the audit table records each row's status.
 - P262: the family tree editor sets a lane's backup lane, Dispatch can choose a model for one project run and names the backup lane, and a failover adds one room note and shows on both lanes.
 - P295: eleven tests assert literal text or the real call instead of the imported constant, and the git watcher test proves a failed rewatch reads again; row 2 needs a product change.
