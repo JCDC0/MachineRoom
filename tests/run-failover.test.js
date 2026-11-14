@@ -444,6 +444,49 @@ describe('a lane that hits its quota hands its run to a backup lane', { timeout:
     }
   })
 
+  it('records the failed task when a queue backup is busy', async () => {
+    const base = makeTempDir('machine-room-failover-queue-busy-')
+    try {
+      const project = join(base, 'project')
+      const runs = join(base, 'runs')
+      const failCount = join(base, 'fail-count.txt')
+      const okCount = join(base, 'ok-count.txt')
+      mkdirSync(runs, { recursive: true })
+      makeRepo(project, failScript(failCount))
+      writeFileSync(join(runs, 'agy.lock'), laneLockText({ pid: process.pid, folder: join(base, 'backup') }))
+      const lanes = {
+        opencode: { name: 'Fail lane', worktree: join(base, 'first'), fallback: 'agy', cli: { harness: 'opencode', bin: process.execPath, model: 'fake/fail' } },
+        agy: { name: 'Backup lane', worktree: join(base, 'backup'), cli: { harness: 'opencode', bin: process.execPath, model: 'fake/ok' } },
+      }
+      const lanesFile = join(base, 'lanes.json')
+      writeFileSync(lanesFile, `${JSON.stringify(lanes, null, 2)}\n`)
+      const queueFile = join(base, 'queue.txt')
+      writeFileSync(queueFile, 'Do the task.\n')
+      const result = await runLane(['opencode', '--project', project, '--queue', queueFile], {
+        MACHINEROOM_RUNS: runs,
+        MACHINEROOM_LANES_FILE: lanesFile,
+      })
+      expect(result.code).toBe(1)
+      const records = readRecords(runs)
+      expect(records).toHaveLength(1)
+      expect(records[0]).toMatchObject({
+        lane: 'opencode',
+        exitCode: 1,
+        queueStatus: 'failed',
+        queueIndex: 1,
+        queueSize: 1,
+        queueRemaining: [],
+        failover: { kind: 'rate-limit', to: 'agy' },
+      })
+      expect(result.stdout).toContain('The backup lane agy is busy, so the run stays failed.')
+      expect(result.stdout).toContain('1. failed: lane exit 1')
+      expect(result.stderr).not.toContain('TypeError')
+      expect(count(okCount)).toBe(0)
+    } finally {
+      rmSync(base, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+    }
+  })
+
   it('leaves the run failed with one sentence when the backup lane is busy', async () => {
     const base = makeTempDir('machine-room-failover-busy-')
     try {

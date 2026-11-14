@@ -1972,9 +1972,8 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
     const target = kind !== '' && typeof lane.fallback === 'string' ? lane.fallback.trim() : ''
     if (target !== '' && options?.failedOver !== true) {
       record.failover = { kind, to: target }
-      if (project && deferRecord) {
-        writeProjectRecord({ record, folder: project, startHead: projectStart.head, startBranch: projectStart.branch, tests: '' })
-      } else {
+      const failedHead = project && deferRecord ? gitRead(project, ['rev-parse', 'HEAD']) || '' : ''
+      if (!(project && deferRecord)) {
         if (appendRunRecord(record)) console.log(`record: ${printedRunsFolder(runsFile())}`)
         if (!project) recordRoom(record, toolLines, lanes)
       }
@@ -1997,8 +1996,14 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
         failedRecord: record,
         failedStartBranch: projectStart?.branch ?? '',
       })
-      if (fallbackRun) return fallbackRun
-      if (project && deferRecord) return { code: result.code ?? 1, killed, record: null, startHead: projectStart.head, startBranch: projectStart.branch }
+      if (fallbackRun) {
+        if (project && deferRecord) {
+          if (failedHead !== '') record.head = failedHead
+          if (appendRunRecord(record)) console.log(`record: ${printedRunsFolder(runsFile())}`)
+        }
+        return fallbackRun
+      }
+      if (project && deferRecord) return { code: result.code ?? 1, killed, record, startHead: projectStart.head, startBranch: projectStart.branch }
       return { code: result.code ?? 1, killed }
     }
     if (project && deferRecord) {
