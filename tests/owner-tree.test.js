@@ -363,6 +363,23 @@ async function postAsPage(url, path, body) {
   })
 }
 
+async function waitUntil(fn, { timeoutMs = 20000, intervalMs = 50, what = 'condition' } = {}) {
+  const deadline = Date.now() + timeoutMs
+  let lastError = null
+  while (Date.now() < deadline) {
+    try {
+      const value = await fn()
+      if (value) return value
+      lastError = null
+    } catch (error) {
+      lastError = error
+    }
+    await new Promise((resolve) => setTimeout(resolve, intervalMs))
+  }
+  if (lastError) throw lastError
+  throw new Error(`Timed out after ${timeoutMs}ms waiting for ${what}`)
+}
+
 async function setupOwnerTreeRig() {
   const { root, project, runs, git } = makeProject()
   const orchScript = join(root, 'fake-orchestrator.mjs')
@@ -546,11 +563,26 @@ describe("the owner's test tree", () => {
     expect(existsSync(join(worktreeFor(project, 'agy1'), 'agy-work.txt'))).toBe(true)
     expect(existsSync(join(worktreeFor(project, 'opencode1'), 'opencode-work.txt'))).toBe(true)
 
-    const [mainState, codexState, nativeState] = await Promise.all([
-      getJson(`${url}/api/orchestrator`),
-      getJson(`${url}/api/orchestrator?id=codex-sub`),
-      getJson(`${url}/api/orchestrator?id=native-sub`),
-    ])
+    const { mainState, codexState, nativeState } = await waitUntil(
+      async () => {
+        const [m, c, n] = await Promise.all([
+          getJson(`${url}/api/orchestrator`),
+          getJson(`${url}/api/orchestrator?id=codex-sub`),
+          getJson(`${url}/api/orchestrator?id=native-sub`),
+        ])
+        const mainReady =
+          m.body.messages.some((msg) => msg.from === 'sub:codex-sub' && msg.text.includes('FINAL_CODEX_REPORT')) &&
+          m.body.messages.some((msg) => msg.from === 'sub:native-sub' && msg.text.includes('FINAL_NATIVE_REPORT'))
+        const codexReady =
+          c.body.messages.some((msg) => msg.from === 'room' && msg.text.includes('agy1') && msg.text.includes('ended: succeeded')) &&
+          c.body.messages.some((msg) => msg.from === 'sub:native-sub' && msg.text.includes('PEER_FROM_NATIVE'))
+        const nativeReady =
+          n.body.messages.some((msg) => msg.from === 'room' && msg.text.includes('opencode1') && msg.text.includes('ended: succeeded')) &&
+          n.body.messages.some((msg) => msg.from === 'sub:codex-sub' && msg.text.includes('PEER_FROM_CODEX'))
+        return mainReady && codexReady && nativeReady ? { mainState: m, codexState: c, nativeState: n } : null
+      },
+      { timeoutMs: 20000, what: 'orchestrator state stores wake, peer, and final reports' },
+    )
 
     expect(
       codexState.body.messages.some((m) => m.from === 'room' && m.text.includes('agy1') && m.text.includes('ended: succeeded')),
@@ -618,7 +650,19 @@ describe("the owner's test tree", () => {
       { timeoutMs: 20000, what: 'lane report reaches main orchestrator in simple form' },
     )
 
-    const mainState = await getJson(`${url}/api/orchestrator`)
+    const mainState = await waitUntil(
+      async () => {
+        const m = await getJson(`${url}/api/orchestrator`)
+        const hasWake = m.body.messages.some(
+          (msg) => msg.from === 'room' && msg.text.includes('opencode1') && msg.text.includes('ended: succeeded'),
+        )
+        const hasAck = m.body.messages.some(
+          (msg) => msg.from === 'orchestrator' && msg.text.includes('MAIN_SIMPLE_ACK'),
+        )
+        return hasWake && hasAck ? m : null
+      },
+      { timeoutMs: 20000, what: 'main orchestrator persists wake and MAIN_SIMPLE_ACK' },
+    )
     expect(
       mainState.body.messages.some(
         (m) => m.from === 'room' && m.text.includes('opencode1') && m.text.includes('ended: succeeded'),
