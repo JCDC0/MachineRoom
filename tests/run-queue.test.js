@@ -121,6 +121,7 @@ function adapter(folder, branch = QUEUE_BRANCH, lane = 'opencode') {
       git(folder, ['switch', '-c', name])
     },
     status: () => git(folder, ['status', '--porcelain']),
+    currentBranch: () => git(folder, ['branch', '--show-current']).trim(),
     head: () => git(folder, ['rev-parse', 'HEAD']).trim(),
     add: () => {
       git(folder, ['add', '-A'])
@@ -751,6 +752,86 @@ describe('scripts/run-lane.mjs with --queue', { timeout: 30000 }, () => {
       const message = git(repo, ['log', '-1', '--format=%B']).trim()
       expect(message).toContain('Task 1 of 1, run by MachineRoom on the fake lane.')
       expect(message.endsWith('Co-Authored-By: OpenCode (opencode/fake) <noreply@opencode.ai>')).toBe(true)
+    } finally {
+      remove(parent)
+    }
+  }, 60000)
+
+  it('fails the task when the lane leaves the queue branch', async () => {
+    const parent = makeTempDir('machine-room-queue-')
+    try {
+      const repo = initRepo(parent)
+      const runs = join(parent, 'machineroom-runs')
+      const file = join(parent, 'queue.txt')
+      writeFileSync(file, 'Switch the branch.\n---\nSecond task.\n')
+      writeFileSync(join(repo, 'run'), [
+        "const { writeFileSync } = require('node:fs')",
+        "const { spawnSync } = require('node:child_process')",
+        `spawnSync(${JSON.stringify(gitPath())}, ['switch', '-c', 'elsewhere'], { stdio: 'ignore' })`,
+        "writeFileSync('lane-note.txt', 'The fake lane wrote this.\\n')",
+        "console.log(JSON.stringify({ type: 'text', timestamp: Date.now(), sessionID: 'ses_fake', part: { id: 'prt_1', type: 'text', text: 'done' } }))",
+        '',
+      ].join('\n'))
+      git(repo, ['add', '-A'])
+      git(repo, ['commit', '-m', 'the fake lane program'])
+      const result = await runLane(['fake', '--project', repo, '--queue', file], {
+        TEMP: parent,
+        MACHINEROOM_RUNS: runs,
+        MACHINEROOM_LANES_FILE: fakeLaneFile(parent),
+      })
+      expect(result.code).toBe(1)
+      expect(result.stdout).toContain('1. failed: the lane left the queue branch for elsewhere')
+      expect(result.stdout).toContain('2. not run')
+      expect(git(repo, ['branch', '--show-current']).trim()).toBe('elsewhere')
+      expect(git(repo, ['rev-list', '--count', 'refs/heads/main..elsewhere']).trim()).toBe('0')
+      const records = readFileSync(join(runs, 'runs.jsonl'), 'utf8').trim().split(/\r?\n/).map((line) => JSON.parse(line))
+      expect(records.at(-1).queueStatus).toBe('failed: the lane left the queue branch for elsewhere')
+    } finally {
+      remove(parent)
+    }
+  }, 60000)
+
+  it('signs the queue commit with the backup lane harness after a failover', async () => {
+    const parent = makeTempDir('machine-room-queue-')
+    try {
+      const repo = initRepo(parent)
+      const runs = join(parent, 'machineroom-runs')
+      const file = join(parent, 'queue.txt')
+      writeFileSync(file, 'Leave the change to the backup lane.\n')
+      writeFileSync(join(repo, 'run'), [
+        "console.log(JSON.stringify({ type: 'error', error: { type: 'provider.rate_limit', message: '429 Too Many Requests' } }))",
+        'process.exit(1)',
+        '',
+      ].join('\n'))
+      writeFileSync(join(repo, 'exec'), [
+        "const { writeFileSync } = require('node:fs')",
+        "writeFileSync('backup-note.txt', 'The backup lane wrote this.\\n')",
+        "console.log(JSON.stringify({ type: 'item.completed', item: { type: 'agent_message', text: 'done' } }))",
+        '',
+      ].join('\n'))
+      git(repo, ['add', '-A'])
+      git(repo, ['commit', '-m', 'the fake lanes'])
+      const lanesFile = join(parent, 'lanes.json')
+      writeFileSync(lanesFile, `${JSON.stringify({
+        opencode: { name: 'OpenCode lane', worktree: join(parent, 'worktree'), fallback: 'codex', cli: { harness: 'opencode', bin: process.execPath, model: 'opencode/fake' } },
+        codex: { name: 'Codex lane', worktree: join(parent, 'backup-worktree'), cli: { harness: 'codex', bin: process.execPath, model: 'codex/fake' } },
+      }, null, 2)}\n`)
+      const result = await runLane(['opencode', '--project', repo, '--queue', file], {
+        TEMP: parent,
+        MACHINEROOM_RUNS: runs,
+        MACHINEROOM_LANES_FILE: lanesFile,
+      })
+      expect(result.code, `${result.stdout}\n${result.stderr}`).toBe(0)
+      expect(result.stdout).toContain('1. committed')
+      const message = git(repo, ['log', '-1', '--format=%B']).trim()
+      expect(message).toContain('Task 1 of 1, run by MachineRoom on the opencode lane.')
+      expect(message.endsWith('Co-Authored-By: Codex (codex/fake) <noreply@openai.com>')).toBe(true)
+      expect(message).not.toContain('OpenCode')
+      const records = readFileSync(join(runs, 'runs.jsonl'), 'utf8').trim().split(/\r?\n/).map((line) => JSON.parse(line))
+      expect(records).toHaveLength(2)
+      expect(records[0].failover).toEqual({ kind: 'rate-limit', to: 'codex' })
+      expect(records[1].lane).toBe('codex')
+      expect(git(repo, ['show', 'HEAD:backup-note.txt']).trim()).toBe('The backup lane wrote this.')
     } finally {
       remove(parent)
     }

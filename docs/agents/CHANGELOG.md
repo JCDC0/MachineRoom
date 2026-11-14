@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- A refused backup keeps the failed run's branch and commits, a queue signs each task with the lane and model that did it, and a lane that leaves the queue branch fails its task (P314).
 - Commit subjects on a run record are masked for keys and profile paths when saved and again in the runs response (P316).
 - The play move keeps ignored local files, and the Codex app lookup skips linked folders, linked programs and paths outside its bin folder (P318).
 - A stop takes leftover processes only from the list it took before the lock check, matched by pid and start time, so a newer run in the same worktree is left alone (P313).
@@ -14,6 +15,9 @@
 - P318: the play worktree move runs checkout with `--no-overwrite-ignore` so an ignored local file stays intact and answers failed on collision.
 - P316: `projectRunGit` masks a key or a profile path in each commit subject before a run record stores it.
 - P316: GET /api/control/runs masks the commits of every record it returns, including records written before the change.
+- P314: a failed-over project run whose backup is refused or throws after making its branch keeps the branch and commits captured before the backup started, and its deferred writer keeps them.
+- P314: a queue picks the commit author for each task from the run that succeeded for it, so a task that failed over is signed with the backup lane's harness and model.
+- P314: after each task a queue checks the worktree is still on the queue branch and fails the task and stops when the lane left it.
 - Review 34 lists nine findings in the batch since review 33 and seventeen doc sentences the code contradicts (P312).
 - The doctor and every orchestrator find the Codex app's codex.exe when codex is not on PATH, as lanes already did (P311).
 - P311: `codexProgramFor` answers the Codex app's newest program for a bare `codex` bin when codex is not on PATH, and run-lane uses it.

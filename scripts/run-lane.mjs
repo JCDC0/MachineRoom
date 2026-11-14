@@ -809,6 +809,7 @@ function queueGit(project, branch, lane, { onSettled } = {}) {
       if (text.trim() === '') settle()
       return text
     },
+    currentBranch: () => String(run(['branch', '--show-current']).stdout ?? '').trim(),
     head: () => String(run(['rev-parse', 'HEAD']).stdout ?? '').trim(),
     add: () => {
       run(['add', '-A'])
@@ -822,15 +823,17 @@ function queueGit(project, branch, lane, { onSettled } = {}) {
   }
 }
 
-function writeProjectRecord({ record, folder, startHead, startBranch, tests = '' } = {}) {
+function writeProjectRecord({ record, folder, startHead, startBranch, tests = '', keepGit = false } = {}) {
   if (!record) return
-  const git = projectRunGit({
-    branch: gitRead(folder, ['branch', '--show-current']) ?? '',
-    startBranch,
-    commits: startHead ? gitRead(folder, ['log', '--oneline', `${startHead}..HEAD`]) ?? '' : '',
-  })
-  if (git.branch !== '') record.branch = git.branch
-  record.commits = git.commits
+  if (!keepGit) {
+    const git = projectRunGit({
+      branch: gitRead(folder, ['branch', '--show-current']) ?? '',
+      startBranch,
+      commits: startHead ? gitRead(folder, ['log', '--oneline', `${startHead}..HEAD`]) ?? '' : '',
+    })
+    if (git.branch !== '') record.branch = git.branch
+    record.commits = git.commits
+  }
   const head = gitRead(folder, ['rev-parse', 'HEAD']) ?? ''
   const testedDiffers = (tests === 'failed' || tests === 'passed') && gitRead(folder, ['status', '--porcelain']) !== ''
   if (head !== '' && !testedDiffers) record.head = head
@@ -1359,6 +1362,11 @@ async function runQueueProject({ options, lane, lanes }) {
       writeProjectRecord(item)
     }
     try {
+      const authorForRecord = (record) => {
+        const key = typeof record?.lane === 'string' ? record.lane : ''
+        const used = key !== '' && lanes[key] ? lanes[key] : lane
+        return commitAuthorFor(harnessByKey[used?.cli?.harness], record?.model ?? used?.cli?.model)
+      }
       const result = await runQueue({
         tasks,
         git: queueGit(target.path, branch, options.lane, { onSettled: finishPending }),
@@ -1374,9 +1382,11 @@ async function runQueueProject({ options, lane, lanes }) {
             project: target.path, task, queue: { branch, index: number, size: tasks.length }, lockPath: lock,
             projectBranch: startBranch, deferRecord: true, base,
           })
-          pending = { record: run.record, folder: target.path, startHead: run.startHead ?? startHead, startBranch, tests: '' }
+          pending = { record: run.record, folder: target.path, startHead: run.startHead ?? startHead, startBranch, tests: '', keepGit: run.keepGit === true }
           if (run.code !== 0 || run.killed) finishPending(run.killed ? 'stopped' : 'failed', true)
-          return { code: run.code, killed: run.killed }
+          const failedOver = Boolean(run.record?.failoverFrom)
+          const expectedBranch = failedOver ? (gitRead(target.path, ['branch', '--show-current']) || branch) : branch
+          return { code: run.code, killed: run.killed, author: authorForRecord(run.record), branch: expectedBranch }
         },
         runTests: async () => {
           const check = await projectCheck({ project: target.path, given: options.test, minutes: options.minutes })
@@ -1386,6 +1396,8 @@ async function runQueueProject({ options, lane, lanes }) {
           return { ok: check.ok }
         },
       })
+      const stoppedTask = result.results.find((item) => item.status.startsWith('failed'))
+      if (pending && stoppedTask) finishPending(stoppedTask.status, true)
       const usedBranch = gitRead(target.path, ['branch', '--show-current']) || result.branch
       formatQueueSummary({ branch: usedBranch, results: result.results, tests: test, worktree: options.worktree ? printedRunsFolder(target.path) : '' }).forEach((line) => console.log(line))
       return result.results.some((item) => item.status.startsWith('failed')) ? 1 : 0
@@ -1565,7 +1577,7 @@ async function main() {
           code = 1
         }
       }
-      writeProjectRecord({ record: run.record, folder: project, startHead: run.startHead, startBranch: run.startBranch, tests })
+      writeProjectRecord({ record: run.record, folder: project, startHead: run.startHead, startBranch: run.startBranch, tests, keepGit: run.keepGit === true })
       return code
     } finally {
       releaseLaneLock(lock)
@@ -2156,7 +2168,7 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
           throw error
         }
         console.log(`The backup lane ${target} could not start (${errorCode(error)}), so the run stays failed.`)
-        return { code: result.code ?? 1, killed, record, startHead: projectStart.head, startBranch: projectStart.branch }
+        return { code: result.code ?? 1, killed, record, startHead: projectStart.head, startBranch: projectStart.branch, keepGit: true }
       }
       if (fallbackRun) {
         if (deferredProject) {
@@ -2165,7 +2177,7 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
         }
         return fallbackRun
       }
-      if (deferredProject) return { code: result.code ?? 1, killed, record, startHead: projectStart.head, startBranch: projectStart.branch }
+      if (deferredProject) return { code: result.code ?? 1, killed, record, startHead: projectStart.head, startBranch: projectStart.branch, keepGit: true }
       writeFailedRecord()
       return { code: result.code ?? 1, killed }
     }

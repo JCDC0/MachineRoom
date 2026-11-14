@@ -156,6 +156,13 @@ export async function runQueue({ tasks, runTask, runTests, git, author = null } 
       stopped = true
       continue
     }
+    const expectedBranch = typeof run?.branch === 'string' && run.branch !== '' ? run.branch : branch
+    const onBranch = typeof git.currentBranch === 'function' ? String(await git.currentBranch()).trim() : expectedBranch
+    if (onBranch !== expectedBranch) {
+      results.push({ number, task, status: `failed: the lane left the queue branch for ${onBranch === '' ? 'no branch' : onBranch}` })
+      stopped = true
+      continue
+    }
     if (typeof runTests === 'function') {
       const tests = await runTests(task, number)
       if (tests?.ok !== true) {
@@ -173,7 +180,8 @@ export async function runQueue({ tasks, runTask, runTests, git, author = null } 
       continue
     }
     await git.add()
-    const sha = String(await git.commit(commitMessage(task, number, list.length, lane, author)))
+    const taskAuthor = run !== null && typeof run === 'object' && Object.hasOwn(run, 'author') ? run.author : author
+    const sha = String(await git.commit(commitMessage(task, number, list.length, lane, taskAuthor)))
     results.push({ number, task, status: 'committed', sha })
   }
   return { branch, results }

@@ -14,12 +14,19 @@ const RUN_LANE_SCRIPT = fileURLToPath(new URL('../scripts/run-lane.mjs', import.
 const RECORDINGS = join(REPO_ROOT, 'public', 'recordings')
 const BRIEF = { id: 'P260X', title: 'A failover run', text: 'Do it.\n\nFiles: note.txt\n' }
 const FAILOVER_BRANCH = `${branchFor(BRIEF)}-on-agy`
+const GIT_IDENTITY = {
+  GIT_AUTHOR_NAME: 'MachineRoom Test',
+  GIT_AUTHOR_EMAIL: 'test@example.invalid',
+  GIT_COMMITTER_NAME: 'MachineRoom Test',
+  GIT_COMMITTER_EMAIL: 'test@example.invalid',
+}
 
 function gitIn(folder, args) {
-  const result = spawnSync(gitPath(), ['-c', 'user.name=MachineRoom Test', '-c', 'user.email=test@example.invalid', '-c', 'commit.gpgsign=false', ...args], {
+  const result = spawnSync(gitPath(), ['-c', 'commit.gpgsign=false', ...args], {
     cwd: folder,
     encoding: 'utf8',
     windowsHide: true,
+    env: { ...process.env, ...GIT_IDENTITY },
   })
   if (result.error) throw result.error
   if (result.status !== 0) throw new Error(`git ${args.join(' ')} failed in ${folder}: ${String(result.stderr ?? '').trim()}`)
@@ -53,6 +60,23 @@ function okScript(counter, file) {
     `mkdirSync(dirname(join(process.cwd(), ${JSON.stringify(file)})), { recursive: true })`,
     `writeFileSync(join(process.cwd(), ${JSON.stringify(file)}), 'done\\n')`,
     "console.log('{\"type\":\"step_finish\",\"part\":{\"cost\":0,\"tokens\":{\"input\":1,\"output\":1}}}')",
+    '',
+  ].join('\n')
+}
+
+function commitThenFailScript(counter) {
+  return [
+    "const { appendFileSync, writeFileSync } = require('node:fs')",
+    "const { spawnSync } = require('node:child_process')",
+    `const git = ${JSON.stringify(gitPath() || 'git')}`,
+    `const env = { ...process.env, ...${JSON.stringify(GIT_IDENTITY)} }`,
+    `appendFileSync(${JSON.stringify(counter)}, 'x')`,
+    "spawnSync(git, ['switch', '-c', 'work-x'], { stdio: 'ignore', env })",
+    "writeFileSync('note.txt', 'work\\n')",
+    "spawnSync(git, ['add', '-A'], { stdio: 'ignore', env })",
+    "spawnSync(git, ['-c', 'commit.gpgsign=false', 'commit', '-m', 'Write the note'], { stdio: 'ignore', env })",
+    "console.log(JSON.stringify({ type: 'error', error: { type: 'provider.rate_limit', message: '429 Too Many Requests' } }))",
+    'process.exit(1)',
     '',
   ].join('\n')
 }
@@ -460,10 +484,11 @@ describe('a lane that hits its quota hands its run to a backup lane', { timeout:
         "  writeFileSync('note.txt', 'done\\n')",
         "  console.log('{\"type\":\"step_finish\",\"part\":{\"cost\":0,\"tokens\":{\"input\":1,\"output\":1}}}')",
         '} else {',
-        `  spawnSync(${JSON.stringify(git)}, ['switch', '-c', 'work-x'], { stdio: 'ignore' })`,
+        `  const env = { ...process.env, ...${JSON.stringify(GIT_IDENTITY)} }`,
+        `  spawnSync(${JSON.stringify(git)}, ['switch', '-c', 'work-x'], { stdio: 'ignore', env })`,
         "  writeFileSync('note.txt', 'work\\n')",
-        `  spawnSync(${JSON.stringify(git)}, ['add', '-A'], { stdio: 'ignore' })`,
-        `  spawnSync(${JSON.stringify(git)}, ['-c', 'user.name=MachineRoom Test', '-c', 'user.email=test@example.invalid', '-c', 'commit.gpgsign=false', 'commit', '-m', 'Write the note'], { stdio: 'ignore' })`,
+        `  spawnSync(${JSON.stringify(git)}, ['add', '-A'], { stdio: 'ignore', env })`,
+        `  spawnSync(${JSON.stringify(git)}, ['-c', 'commit.gpgsign=false', 'commit', '-m', 'Write the note'], { stdio: 'ignore', env })`,
         "  console.log(JSON.stringify({ type: 'error', error: { type: 'provider.rate_limit', message: '429 Too Many Requests' } }))",
         '  process.exit(1)',
         '}',
@@ -491,6 +516,44 @@ describe('a lane that hits its quota hands its run to a backup lane', { timeout:
       expect(records[1].branch).toBe('work-x-on-agy')
       expect(gitIn(project, ['branch', '--show-current'])).toBe('work-x-on-agy')
       expect(count(okCount)).toBe(1)
+    } finally {
+      rmSync(base, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+    }
+  })
+
+  it('keeps the failed branch and commits when the backup throws after making its branch', async () => {
+    const base = makeTempDir('machine-room-failover-queue-refused-')
+    try {
+      const project = join(base, 'project')
+      const runs = join(base, 'runs')
+      const failCount = join(base, 'fail-count.txt')
+      const okCount = join(base, 'ok-count.txt')
+      mkdirSync(runs, { recursive: true })
+      makeRepo(project, commitThenFailScript(failCount))
+      const lanes = {
+        opencode: { name: 'Fail lane', worktree: join(base, 'first'), fallback: 'agy', cli: { harness: 'opencode', bin: process.execPath, model: 'fake/fail' } },
+        agy: { name: 'Backup lane', worktree: join(base, 'backup'), cli: { harness: 'not-a-harness', bin: process.execPath, model: 'fake/ok' } },
+      }
+      const lanesFile = join(base, 'lanes.json')
+      writeFileSync(lanesFile, `${JSON.stringify(lanes, null, 2)}\n`)
+      const queueFile = join(base, 'queue.txt')
+      writeFileSync(queueFile, 'Do the task.\n')
+      const result = await runLane(['opencode', '--project', project, '--queue', queueFile], {
+        MACHINEROOM_RUNS: runs,
+        MACHINEROOM_LANES_FILE: lanesFile,
+      })
+      expect(result.code, `${result.stdout}\n${result.stderr}`).toBe(1)
+      const records = readRecords(runs)
+      expect(records).toHaveLength(1)
+      expect(records[0].failover).toEqual({ kind: 'rate-limit', to: 'agy', refused: true })
+      expect(records[0].branch).toBe('work-x')
+      expect(records[0].commits).toHaveLength(1)
+      expect(records[0].commits[0]).toContain('Write the note')
+      expect(gitIn(project, ['branch', '--show-current'])).toBe('work-x-on-agy')
+      expect(result.stdout).toContain('The backup lane agy could not start')
+      expect(result.stderr).not.toContain('TypeError')
+      expect(count(failCount)).toBe(1)
+      expect(count(okCount)).toBe(0)
     } finally {
       rmSync(base, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
     }
