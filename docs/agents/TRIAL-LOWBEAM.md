@@ -1,6 +1,6 @@
 ﻿# Lowbeam trial and move
 
-This is a plan, not a trial run. Lowbeam was read on 2026-11-14 at `main` 2a58f96. The owner chose MachineRoom lanes and Reviews for Lowbeam. Keep the play worktree and port 8041. Do not remove or reuse an old worktree until its owner has looked at it.
+This was the plan for the trial, and the trial ran. The six October worktrees were removed with their branches kept. The first task merged through Reviews as `f3255a3` (0.12.56). Since P309 Reviews moves `.worktrees\play` itself because hooks stay off. Lowbeam was read on 2026-11-14 at `main` 2a58f96. The owner chose MachineRoom lanes and Reviews for Lowbeam. Keep the play worktree and port 8041.
 
 ## Old worktrees
 
@@ -63,7 +63,7 @@ npm run build
 npm run serve -- up --root C:\GitHub\Lowbeam --open
 ```
 
-`up` enables lane and session sources (`bin/machine-room.mjs:215`). In the family tree add code lanes `codex` and `opencode2`, each using the owner's corresponding installed harness and subscription. These names do not collide with any of the seven existing Lowbeam worktree names above, even if all are kept. Add only subscriptions the owner actually uses. New lanes are made in the family tree (`src/ui/panels/AgentBuilder.jsx:6`); the bundled file starts with only the orchestrator (`config/lanes.json:1`).
+`up` enables lane and session sources (`bin/machine-room.mjs:215`). In the family tree add code lanes `codex` and `opencode2`, each using the owner's corresponding installed harness and subscription. These names do not collide with the six October worktree names above, whose branches are kept. Add only subscriptions the owner actually uses. New lanes are made in the family tree (`src/ui/panels/AgentBuilder.jsx:6`); the bundled file starts with only the orchestrator (`config/lanes.json:1`).
 
 Keep Lowbeam on `main` and clean. Dispatch a single small task with **Own worktree**, one lane at a time. The path is `C:\GitHub\Lowbeam\.worktrees\<lane>`, and the queue branch starts from the project's current HEAD (`src/briefs/run.js:288`, `scripts/run-lane.mjs:517`, `server/runs.js:797`). Dispatch refuses a dirty project for this path (`server/runs.js:1395`, `src/ui/panels/DispatchPanel.jsx:882`). The confirmation currently calls the worktree beside the project and says never on main; that wording is inaccurate (`src/ui/panels/DispatchPanel.jsx:1063`). Do not reuse the six old names: a clean named branch with unmerged commits can be detached for reuse (`scripts/run-lane.mjs:525`).
 

@@ -1210,7 +1210,7 @@ describe('Dispatch confirm card with multiple check commands', () => {
       expect(field.tagName).toBe('TEXTAREA')
       expect(field.getAttribute('rows')).toBe('2')
       expect(container.textContent).toContain(
-        'One command per line, run in order after each task; the task is committed only when all pass. Empty uses npm test when package.json has one.'
+        'One command per line, run in order after each task; the queue commits what is left only when all pass. Empty uses npm test when package.json has one.'
       )
 
       await type(root, field, 'npm test\nnpm run check\nnpm run build')

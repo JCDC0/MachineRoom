@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- The docs match review 34: lane commits during a task, the check limits, refused backups, two new limits, the Lowbeam trial ran, and the codex lane on GPT-6.1 Terra high (P319).
 - A refused backup keeps the failed run's branch and commits, a queue signs each task with the lane and model that did it, and a lane that leaves the queue branch fails its task (P314).
 - Commit subjects on a run record are masked for keys and profile paths when saved and again in the runs response (P316).
 - The play move keeps ignored local files, and the Codex app lookup skips linked folders, linked programs and paths outside its bin folder (P318).
@@ -18,6 +19,12 @@
 - P314: a failed-over project run whose backup is refused or throws after making its branch keeps the branch and commits captured before the backup started, and its deferred writer keeps them.
 - P314: a queue picks the commit author for each task from the run that succeeded for it, so a task that failed over is signed with the backup lane's harness and model.
 - P314: after each task a queue checks the worktree is still on the queue branch and fails the task and stops when the lane left it.
+- P319: the codex lane runs gpt-6.1-terra at high effort, with a hint that the owner chose GPT-6.1 Terra at high effort on 2026-11-13.
+- P319: ARCHITECTURE.md adds reviews 32 to 34 to the closed list, with P285 to P288, P302 to P305 and P313 to P319 as their fixes.
+- P319: TRIAL-LOWBEAM.md says the trial ran, the six October worktrees were removed with their branches kept, the first task merged as f3255a3 (0.12.56), and Reviews moves the play worktree itself since P309.
+- P319: LIMITS.md records the accepted R34-4 rollout race and says a Windows check line starts only a real program or npm or npx, so a pnpm or yarn shim fails to start.
+- P319: LIVE.md and CONTROL-CLIENT.md say a check holds up to 4 non-empty commands and 500 characters in all, a refused backup's note says it could not start, and the first read of the records posts no note for old failovers.
+- P319: COMMANDS.md, ROOM.md and the Dispatch check hint say a lane may commit during its task and only the queue's own commit waits for every check to pass.
 - Review 34 lists nine findings in the batch since review 33 and seventeen doc sentences the code contradicts (P312).
 - The doctor and every orchestrator find the Codex app's codex.exe when codex is not on PATH, as lanes already did (P311).
 - P311: `codexProgramFor` answers the Codex app's newest program for a bare `codex` bin when codex is not on PATH, and run-lane uses it.
