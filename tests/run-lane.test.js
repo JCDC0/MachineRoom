@@ -1296,7 +1296,7 @@ function runTestScript(extra) {
       clearTimeout(timer)
       rejectRun(error)
     })
-    child.once('exit', (code) => {
+    child.once('close', (code) => {
       clearTimeout(timer)
       resolveRun({ code, stdout, stderr })
     })
@@ -1409,7 +1409,7 @@ function runLane(args, env = {}) {
       clearTimeout(timer)
       rejectRun(error)
     })
-    child.once('exit', (code) => {
+    child.once('close', (code) => {
       clearTimeout(timer)
       resolveRun({ code, stdout, stderr })
     })

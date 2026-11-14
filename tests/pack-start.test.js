@@ -39,7 +39,7 @@ function openAddress(child) {
       clearTimeout(timer)
       settle(match[1])
     })
-    child.once('exit', (code) => {
+    child.once('close', (code) => {
       clearTimeout(timer)
       fail(new Error(`machine-room exited with ${code} before it printed its address.`))
     })

@@ -1,6 +1,8 @@
 # Changelog
 
 ## Unreleased
+- Test helpers that read a child's output resolve on close, not exit, so stdout is complete on Linux (P310).
+- P310: the test helpers that collect a child's stdout and stderr resolve on `close`, so they read the whole output on Ubuntu CI.
 - P309: after a Reviews merge, a clean detached .worktrees/play moves to the merged commit with hooks still off, and Reviews says whether it moved.
 - P309: a successful Reviews merge moves a clean detached `.worktrees/play` worktree to the merged commit with hooks off and answers play moved, dirty, not detached or failed.
 - P309: Reviews shows what happened to the play worktree under the merged line.

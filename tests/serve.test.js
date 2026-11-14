@@ -145,7 +145,7 @@ function waitForStartLine(child) {
     child.stderr.on('data', (chunk) => {
       errors += chunk
     })
-    child.once('exit', (code) => {
+    child.once('close', (code) => {
       clearTimeout(timer)
       rejectLine(new Error(`the bin exited ${code}. stderr: ${errors}`))
     })

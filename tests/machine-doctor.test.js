@@ -114,7 +114,7 @@ function runBin(args, env, bin = BIN) {
       clearTimeout(timer)
       rejectRun(error)
     })
-    child.once('exit', (code) => {
+    child.once('close', (code) => {
       clearTimeout(timer)
       resolveRun({ code, stdout: String(stdout ?? ''), stderr: String(stderr ?? '') })
     })
