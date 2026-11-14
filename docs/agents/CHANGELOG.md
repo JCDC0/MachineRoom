@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- P289: CODE.md adds one line for each of the 314 unnamed files across src, server, scripts and tests, with zero lines removed.
 - P287: a late conversation answer for another run is ignored, and choosing a run clears the view, so Stop never shows for a run that is not selected.
 - P281: ARCHITECTURE.md's Open work names reviews 29 to 31, the docs and test audits, failover, Codex quota and the conversation view; DOCUMENTS.md lists 31 files it had missed.
 - P287: the lane conversation clears on a run change and ignores answers and errors for another lane or run.
