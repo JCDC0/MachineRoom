@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process'
-import { mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, realpathSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { harnessByKey } from '../src/harnesses/index.js'
@@ -7,12 +7,27 @@ import { gitPath } from '../server/programPath.js'
 import { quotaForRun, readCodexQuota, startLane } from '../scripts/run-lane.mjs'
 import { makeTempDir } from './helpers/tempRoot.js'
 
-const readFault = vi.hoisted(() => ({ fail: false }))
+const readFault = vi.hoisted(() => ({
+  fail: false,
+  beforeOpen: null,
+  openedFds: [],
+  closedFds: [],
+}))
 
 vi.mock('node:fs', async (importOriginal) => {
   const actual = await importOriginal()
   return {
     ...actual,
+    openSync: (...args) => {
+      if (typeof readFault.beforeOpen === 'function') readFault.beforeOpen(...args)
+      const fd = actual.openSync(...args)
+      readFault.openedFds.push(fd)
+      return fd
+    },
+    closeSync: (fd) => {
+      readFault.closedFds.push(fd)
+      return actual.closeSync(fd)
+    },
     readSync: (...args) => {
       if (readFault.fail) throw new Error('The rollout read failed.')
       return actual.readSync(...args)
@@ -25,6 +40,10 @@ const RESET = Date.UTC(2026, 10, 14) / 1000
 const cleanups = []
 
 afterEach(async () => {
+  readFault.fail = false
+  readFault.beforeOpen = null
+  readFault.openedFds = []
+  readFault.closedFds = []
   while (cleanups.length > 0) {
     const fn = cleanups.pop()
     await fn()
@@ -193,6 +212,65 @@ describe('the codex rollout read', () => {
     const log = `${JSON.stringify({ type: 'thread.started', thread_id: 'thread-7' })}\n`
     expect(readCodexQuota(outside)).not.toBeNull()
     expect(quotaForRun({ harness: 'codex', log, env: { CODEX_HOME: folder }, startedAt: now.getTime(), now: now.getTime() })).toBeNull()
+  })
+
+  function runWithRolloutReplacedBeforeOpen(prefix, threadId, replace) {
+    const folder = tempDir(prefix)
+    const now = new Date(2026, 10, 14, 12, 0, 0)
+    const day = join(folder, 'sessions', '2026', '11', '14')
+    mkdirSync(day, { recursive: true })
+    const rollout = join(day, `rollout-2026-11-14T12-00-00-${threadId}.jsonl`)
+    writeFileSync(rollout, `${JSON.stringify({ type: 'session_meta', pad: 'a'.repeat(512) })}\n`)
+    const realRollout = realpathSync.native(rollout)
+    const outside = join(folder, 'outside-rollout.jsonl')
+    writeFileSync(outside, `${tokenLine(91, RESET)}\n`)
+    const log = `${JSON.stringify({ type: 'thread.started', thread_id: threadId })}\n`
+    let replaced = false
+    readFault.openedFds = []
+    readFault.closedFds = []
+    readFault.beforeOpen = (target) => {
+      if (replaced || target !== realRollout) return
+      replaced = true
+      replace(realRollout, outside)
+    }
+    try {
+      const result = quotaForRun({ harness: 'codex', log, env: { CODEX_HOME: folder }, startedAt: now.getTime(), now: now.getTime() })
+      return { result, replaced }
+    } finally {
+      readFault.beforeOpen = null
+    }
+  }
+
+  it('gives no quota when the rollout is replaced with a different file before open', () => {
+    const { result, replaced } = runWithRolloutReplacedBeforeOpen('machine-room-rollout-race-file-', 'thread-8', (target, outside) => {
+      renameSync(outside, target)
+    })
+    expect(result).toBeNull()
+    expect(replaced).toBe(true)
+    expect(readFault.openedFds).toHaveLength(1)
+    expect(readFault.closedFds).toEqual(readFault.openedFds)
+  })
+
+  it('gives no quota when the rollout is replaced with a symbolic link before open', () => {
+    const { result, replaced } = runWithRolloutReplacedBeforeOpen('machine-room-rollout-race-link-', 'thread-9', (target, outside) => {
+      rmSync(target)
+      symlinkSync(outside, target, 'file')
+    })
+    expect(result).toBeNull()
+    expect(replaced).toBe(true)
+    expect(readFault.closedFds).toEqual(readFault.openedFds)
+  })
+
+  it('gives no quota when readCodexQuota receives a symbolic link directly', () => {
+    const folder = tempDir('machine-room-rollout-direct-link-')
+    const outside = join(folder, 'outside-rollout.jsonl')
+    writeFileSync(outside, `${tokenLine(22, RESET)}\n`)
+    const link = join(folder, 'rollout-link.jsonl')
+    symlinkSync(outside, link, 'file')
+    readFault.openedFds = []
+    readFault.closedFds = []
+    expect(readCodexQuota(link)).toBeNull()
+    expect(readFault.openedFds).toEqual([])
   })
 })
 
