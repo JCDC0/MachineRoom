@@ -5,6 +5,7 @@
 - P306: --test may repeat in both parsers, and the bridge sends one --test per line of a saved check.
 - P306: the runner runs a check's commands in order, stops at the first that fails, and names each one passed or failed in its log and summary.
 - P306: COMMANDS.md and LIVE.md say a check holds up to four commands, one per line, run in order, and the bridge sends one --test per line.
+- P306: CONTROL-CLIENT.md says checkCommand reaches run-lane as one --test per line and the mock takes up to four commands.
 - P304: the failed record is written once when the backup throws, a refused backup records refused: true, and the room note says the backup could not start.
 - P304: a deferred project run writes its failed record once when the backup throws, and its queue writes no generic record.
 - P304: a refused backup records `refused: true` and its room note says the backup could not start, so only a started backup reads as a move.
