@@ -1,6 +1,6 @@
 import { spawn, spawnSync } from 'node:child_process'
 import { copyFileSync, existsSync, mkdirSync, readFileSync, realpathSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
-import { delimiter, dirname, join, resolve } from 'node:path'
+import { basename, delimiter, dirname, join, resolve } from 'node:path'
 import { Writable } from 'node:stream'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it, vi } from 'vitest'
@@ -2294,6 +2294,122 @@ describe('the record of a project run on a git project', { timeout: 30000 }, () 
       expect(record.tests).toBe('passed')
       expect(gitIn(project, ['branch', '--show-current'])).toBe('main')
     } finally {
+      rmSync(base, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+    }
+  })
+})
+
+describe('a brief run record', { timeout: 30000 }, () => {
+  const GIT_IDENTITY = {
+    GIT_AUTHOR_NAME: 'MachineRoom Test',
+    GIT_AUTHOR_EMAIL: 'test@example.invalid',
+    GIT_COMMITTER_NAME: 'MachineRoom Test',
+    GIT_COMMITTER_EMAIL: 'test@example.invalid',
+  }
+  const RECORDINGS = join(REPO_ROOT, 'public', 'recordings')
+
+  function briefWithFreeWorktreeBranch() {
+    return parseBriefs(TASKS_MARKDOWN).find((brief) => {
+      const found = spawnSync(gitPath(), ['rev-parse', '--verify', '--quiet', `refs/heads/${branchFor(brief)}`], {
+        cwd: REPO_ROOT,
+        windowsHide: true,
+      })
+      return found.status !== 0
+    })
+  }
+
+  function gitIn(folder, args) {
+    const result = spawnSync(gitPath(), ['-c', 'commit.gpgsign=false', ...args], {
+      cwd: folder,
+      encoding: 'utf8',
+      windowsHide: true,
+      env: { ...process.env, ...GIT_IDENTITY },
+    })
+    if (result.error) throw result.error
+    if (result.status !== 0) throw new Error(`git ${args.join(' ')} failed in ${folder}: ${String(result.stderr ?? '').trim()}`)
+    return String(result.stdout ?? '').trim()
+  }
+
+  function readRecords(runs) {
+    const path = join(runs, 'runs.jsonl')
+    if (!existsSync(path)) return []
+    return readFileSync(path, 'utf8').trim().split(/\r?\n/).filter(Boolean).map((line) => JSON.parse(line))
+  }
+
+  function removeRecordings(runs, indexBefore, existed) {
+    for (const record of readRecords(runs)) {
+      const name = basename(String(record.log ?? '')).replace(/\.log$/i, '')
+      if (name === '') continue
+      for (const suffix of ['run.jsonl', 'agents.json', 'tree.json']) {
+        rmSync(join(RECORDINGS, `${name}-${suffix}`), { force: true })
+      }
+    }
+    if (existed !== true) {
+      rmSync(RECORDINGS, { recursive: true, force: true })
+      return
+    }
+    if (indexBefore !== null) writeFileSync(join(RECORDINGS, 'index.json'), indexBefore)
+    else rmSync(join(RECORDINGS, 'index.json'), { force: true })
+  }
+
+  it('masks a key and a home path in a lane commit subject before it is saved', async (context) => {
+    const brief = briefWithFreeWorktreeBranch()
+    if (!brief) {
+      context.skip()
+      return
+    }
+    const base = makeTempDir('machine-room-brief-record-')
+    const lane = join(checkoutRoot(), '.worktrees', `p328-brief-${process.pid}`)
+    const runs = join(base, 'runs')
+    const indexPath = join(RECORDINGS, 'index.json')
+    const recordingsExisted = existsSync(RECORDINGS)
+    const indexBefore = existsSync(indexPath) ? readFileSync(indexPath, 'utf8') : null
+    try {
+      rmSync(lane, { recursive: true, force: true })
+      mkdirSync(lane, { recursive: true })
+      mkdirSync(runs, { recursive: true })
+      const fakeKey = ['sk', 'live', 'P328', 'not', 'a', 'real', 'key', '0123456789'].join('-')
+      const homePath = ['C:', 'Users', 'NAME', 'notes.txt'].join('\\')
+      const subject = `Write ${fakeKey} at ${homePath}`
+      const script = [
+        "import { writeFileSync } from 'node:fs'",
+        "import { spawnSync } from 'node:child_process'",
+        `const git = ${JSON.stringify(gitPath() || 'git')}`,
+        `const env = { ...process.env, ...${JSON.stringify(GIT_IDENTITY)} }`,
+        `const subject = ${JSON.stringify(subject)}`,
+        "writeFileSync('lane-note.txt', 'The fake lane wrote this file.' + String.fromCharCode(10))",
+        "spawnSync(git, ['add', '-A'], { stdio: 'ignore', env })",
+        "spawnSync(git, ['-c', 'commit.gpgsign=false', 'commit', '-q', '-m', subject], { stdio: 'ignore', env })",
+        "console.log(JSON.stringify({ type: 'step_finish', part: { cost: 0, tokens: { input: 1, output: 1 } } }))",
+        '',
+      ].join('\n')
+      gitIn(lane, ['init', '-q', '-b', 'main'])
+      writeFileSync(join(lane, 'package.json'), '{"type":"module"}\n')
+      writeFileSync(join(lane, 'run'), script)
+      gitIn(lane, ['add', '-A'])
+      gitIn(lane, ['commit', '-q', '-m', 'Start the lane repository'])
+      const lanesFile = join(base, 'lanes.json')
+      writeFileSync(lanesFile, `${JSON.stringify({
+        opencode: { name: 'Fake brief lane', worktree: lane, forbidden: [], cli: { harness: 'opencode', bin: process.execPath, model: 'opencode/fake' } },
+      }, null, 2)}\n`)
+      const result = await runLane(['opencode', brief.id, '--force', '--minutes', '1'], {
+        MACHINEROOM_RUNS: runs,
+        MACHINEROOM_LANES_FILE: lanesFile,
+        TEMP: base,
+        ...GIT_IDENTITY,
+      })
+      expect(result.code, `${result.stdout}\n${result.stderr}`).toBe(0)
+      const text = readFileSync(join(runs, 'runs.jsonl'), 'utf8')
+      expect(text).not.toContain(fakeKey)
+      const record = readRecords(runs).at(-1)
+      expect(record.commits).toHaveLength(1)
+      expect(record.commits[0]).toContain('[key]')
+      expect(record.commits[0]).toContain('%USERPROFILE%\\notes.txt')
+      expect(record.commits[0]).not.toContain(fakeKey)
+      expect(record.commits[0]).not.toContain(homePath)
+    } finally {
+      removeRecordings(runs, indexBefore, recordingsExisted)
+      rmSync(lane, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
       rmSync(base, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
     }
   })
