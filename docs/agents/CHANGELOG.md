@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- P278: RUN-2026-11-14-SUITE.md at d54e3a38: 5263 tests passed, one load flake in run-lane-stop that passes alone.
 - P284: run-lane --list adds 'moved to LANE (KIND)' to a run that failed over and 'taken over from LANE' to the backup's run.
 - P287: a late conversation answer for another run is ignored, and choosing a run clears the view, so Stop never shows for a run that is not selected.
 - P281: ARCHITECTURE.md's Open work names reviews 29 to 31, the docs and test audits, failover, Codex quota and the conversation view; DOCUMENTS.md lists 31 files it had missed.
