@@ -17,6 +17,7 @@ After a minute without input, the menu and the transport slide away, the lens fi
 - Watch your own Claude Code and OpenCode sessions live on the project.
 - Ask the orchestrator for work and let it plan, start and follow the runs.
 - Run tasks on lanes, each in its own git worktree.
+- Open any lane's conversation from its row in Agents or its Inspector, with Stop while it runs.
 - Review a lane's branch and merge it when it passes.
 - Replay a recorded run.
 - See the cost per lane for this month.
@@ -100,9 +101,15 @@ The control drawer open on Dispatch.
 
 A new room starts with the orchestrator and no custom lane. While the session source is on (the default for `up`), the room also lists `Claude Code session` and `OpenCode session`. Make a lane in the Agents tab: open the family tree, press Add child on the orchestrator, and fill in the label, harness, model and effort. Each lane runs in its own harness on the owner's account.
 
+Open a lane's conversation from the chat button on its row in Agents or Open conversation in its Inspector. It loads the lane's newest run with a picker for its last 10 runs, updates while the run is live, and shows Stop while it runs.
+
 Settings only shows or removes lanes. Remove from project hides a lane in that project. Delete everywhere removes a lane you made across all projects.
 
 `MACHINEROOM_LANES_DIR` points a room at another lane list, which is how MachineRoom's own development runs its lanes. In PowerShell, set `$env:MACHINEROOM_LANES_DIR = "docs/agents"` (or `MACHINEROOM_LANES_DIR=docs/agents` in bash).
+
+A lane can name a backup lane with `fallback` in the lane file (`lanes.json`). When a brief run or a single project task fails with a quota, rate limit or overload error, or fails to start, `npm run run-lane` moves that run once to the backup lane. In a queue, each task can move on its own. A busy backup lane leaves the run failed.
+
+Run `npm run run-lane -- --list` to print the last 10 runs. A run that moved carries `| moved to LANE (KIND)`, and the backup run carries `| taken over from LANE`.
 
 ## Learn more
 
