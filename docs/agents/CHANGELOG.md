@@ -1,6 +1,8 @@
 # Changelog
 
 ## Unreleased
+- P285: a lane lock carries the run's start time, and `--stop LANE --started-at ISO` refuses with `The LANE lane is running a different run now, so nothing was stopped.` and exit 1 when the lock names another run or no start time.
+- P285: the bridge passes the confirmed start time when it starts a run and when it stops one, so a stop ends only the run it names.
 - P278: RUN-2026-11-14-SUITE.md at d54e3a38: 5263 tests passed, one load flake in run-lane-stop that passes alone.
 - P284: run-lane --list adds 'moved to LANE (KIND)' to a run that failed over and 'taken over from LANE' to the backup's run.
 - P287: a late conversation answer for another run is ignored, and choosing a run clears the view, so Stop never shows for a run that is not selected.

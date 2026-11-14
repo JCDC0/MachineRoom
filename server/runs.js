@@ -796,7 +796,7 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
     }
     const args = projectRun
       ? projectRun.queue
-        ? [...command.args, lane, '--project', projectRun.project, ...(projectRun.worktree ? ['--worktree'] : []), '--queue', projectRun.queue, ...testArgs, ...startedArgs, ...reasoningArgs]
+        ? [...command.args, lane, '--project', projectRun.project, ...(projectRun.worktree ? ['--worktree'] : []), '--queue', projectRun.queue, ...testArgs, ...startedArgs, ...reasoningArgs, '--started-at', entry.startedAt]
         : [
             ...command.args,
             lane,
@@ -809,8 +809,10 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
             ...testArgs,
             ...startedArgs,
             ...reasoningArgs,
+            '--started-at',
+            entry.startedAt,
           ]
-      : [...command.args, lane, ...briefs, ...startedArgs]
+      : [...command.args, lane, ...briefs, ...startedArgs, '--started-at', entry.startedAt]
     const child = spawn(command.file, args, {
       cwd: projectRun ? REPO_ROOT : resolvedRoot || undefined,
       shell: false,
@@ -890,9 +892,10 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
     })
   }
 
-  function runStopCommand(lane, projectRun) {
+  function runStopCommand(lane, projectRun, startedAt = '') {
     return new Promise((resolveStop) => {
-      const args = [...command.args, '--stop', lane]
+      const startArgs = startedAt ? ['--started-at', startedAt] : []
+      const args = [...command.args, '--stop', lane, ...startArgs]
       let stdout = ''
       let stderr = ''
       let settled = false
@@ -1001,7 +1004,7 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
       item.stopping = true
       item.stoppedByOwner = true
     }
-    const result = await runStopCommand(targetLane, Boolean(item?.project))
+    const result = await runStopCommand(targetLane, Boolean(item?.project), wantedStart)
     if (stopped) {
       return { status: 500, body: { error: 'The bridge stopped.' } }
     }
