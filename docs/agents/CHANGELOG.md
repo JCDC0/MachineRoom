@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- P299: the full suite on main at 8652616e passed on the first try: 287 files, 5294 passed, 4 skipped, in 226 seconds.
 - P298: review 33 reads P285 to P297 and lists five findings; R33-1 to R33-3 block the push.
 - P294: a project run refuses to reuse .worktrees/LANE when it is on a named branch with commits not in the project, naming the branch and the count; a detached worktree keeps its check.
 - P297: ROOM.md, LIVE.md and COMMANDS.md say what the lane conversation, the cost board, failover, quota and the tree reuse do now, and the audit table records each row's status.
