@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- P321: after a failover a queue expects the backup's branch `BEFORE-on-BACKUP` and fails the task when the backup ends elsewhere.
 - The docs match review 34: lane commits during a task, the check limits, refused backups, two new limits, the Lowbeam trial ran, and the codex lane on GPT-6.1 Terra high (P319).
 - A refused backup keeps the failed run's branch and commits, a queue signs each task with the lane and model that did it, and a lane that leaves the queue branch fails its task (P314).
 - Commit subjects on a run record are masked for keys and profile paths when saved and again in the runs response (P316).

@@ -1384,9 +1384,8 @@ async function runQueueProject({ options, lane, lanes }) {
           })
           pending = { record: run.record, folder: target.path, startHead: run.startHead ?? startHead, startBranch, tests: '', keepGit: run.keepGit === true }
           if (run.code !== 0 || run.killed) finishPending(run.killed ? 'stopped' : 'failed', true)
-          const failedOver = Boolean(run.record?.failoverFrom)
-          const expectedBranch = failedOver ? (gitRead(target.path, ['branch', '--show-current']) || branch) : branch
-          return { code: run.code, killed: run.killed, author: authorForRecord(run.record), branch: expectedBranch }
+          const backupLane = run.record?.failoverFrom ? String(run.record?.lane ?? '').trim() : ''
+          return { code: run.code, killed: run.killed, author: authorForRecord(run.record), backupLane }
         },
         runTests: async () => {
           const check = await projectCheck({ project: target.path, given: options.test, minutes: options.minutes })
