@@ -1,12 +1,14 @@
 # Changelog
 
 ## Unreleased
+- P284: run-lane --list adds 'moved to LANE (KIND)' to a run that failed over and 'taken over from LANE' to the backup's run.
 - P287: a late conversation answer for another run is ignored, and choosing a run clears the view, so Stop never shows for a run that is not selected.
 - P281: ARCHITECTURE.md's Open work names reviews 29 to 31, the docs and test audits, failover, Codex quota and the conversation view; DOCUMENTS.md lists 31 files it had missed.
 - P287: the lane conversation clears on a run change and ignores answers and errors for another lane or run.
 - P277: AUDIT-2026-11-REVIEW-32.md confirms the review 31 fixes and lists six findings; R32-1, R32-2, R32-3 and R32-6 block a push.
 - P281: ARCHITECTURE.md's Open work now names reviews 29 to 31 and their fixes, the docs and test audits, lane failover, Codex quota readings and the per-lane conversation view.
 - P281: DOCUMENTS.md now lists all 31 newer audits, reviews and run reports in docs/agents.
+- P284: the run list marks a run that moved with `| moved to LANE (KIND)` and a run that took over another lane with `| taken over from LANE`.
 - P273: a backup lane passes the brief worktree check, a retry keeps the backup prompt, a project failover returns the backup's record and branch, and a spawn error counts as a failed start.
 - P272: a raw JSON line in a lane conversation is parsed and masked field by field, so escaped home paths and named secrets never reach the route.
 - P250: a lane's tree row and its Inspector open its conversation in the lower half, with a run picker, folded tool calls, live reads and Stop; the route reads live runs too.
