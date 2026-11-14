@@ -1363,7 +1363,7 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
     let model = ''
     if (Object.hasOwn(body, 'model') && body.model !== null && body.model !== undefined && body.model !== '') {
       if (typeof body.model !== 'string') {
-        sendJson(req, res, 400, { error: modelUnavailableProblem(String(body.model), '') })
+        sendJson(req, res, 400, { error: 'Choose a model from the lane list.' })
         return true
       }
       model = body.model.trim()

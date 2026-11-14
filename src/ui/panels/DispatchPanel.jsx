@@ -136,6 +136,10 @@ export default function DispatchPanel({
   })
 
   useEffect(() => {
+    setProjectModel('')
+  }, [effectiveLane])
+
+  useEffect(() => {
     if (typeof client?.laneBackups !== 'function') return undefined
     let active = true
     Promise.resolve(client.laneBackups())
