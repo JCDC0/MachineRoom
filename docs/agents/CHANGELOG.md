@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- P291: AUDIT-2026-11-TRIAL-PLAN.md finds six of eight plan claims true and lists nine steps the room cannot do today on another project.
 - P292: README.md names the lane conversation view with Stop, a lane's backup lane and the moved marks in run-lane --list.
 - P292: README.md adds lane conversations from Agents or Inspector with Stop, backup lanes via fallback and run-lane --list failover marks.
 - P289: CODE.md gains a line for each file under src, server, scripts, bin and tests that it did not name.
