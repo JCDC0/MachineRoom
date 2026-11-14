@@ -12,6 +12,8 @@ import {
   branchChanges,
   CONFIRM_LADDER_PROBLEM,
   createOrchestrators,
+  LANE_ENDED_PROBLEM,
+  LANE_LIMIT_PROBLEM,
   MAIN_LADDER_PROBLEM,
   MAIN_MESSAGE_PROBLEM,
   NO_ORCHESTRATOR_PROBLEM,
@@ -101,6 +103,15 @@ const RUNNER = [
   "const target = String(args.shift() ?? '')",
   "appendFileSync(target, JSON.stringify(args) + '\\n')",
   "console.log('args ' + args.join(' '))",
+].join('\n')
+
+const LANE_RUNNER = [
+  "import { appendFileSync, existsSync } from 'node:fs'",
+  'const args = process.argv.slice(2)',
+  "const calls = String(args[0] ?? '')",
+  "const release = String(args[1] ?? '')",
+  "appendFileSync(calls, JSON.stringify({ args: args.slice(2), ticket: process.env.MACHINEROOM_LANE_TICKET ?? '', bridge: process.env.MACHINEROOM_BRIDGE ?? '' }) + '\\n')",
+  "while (release && !existsSync(release)) await new Promise((done) => setTimeout(done, 20))",
 ].join('\n')
 
 const cleanups = []
@@ -326,6 +337,22 @@ function tokenPost(url, body, token = '') {
     },
     body: JSON.stringify(body),
   })
+}
+
+function lanePost(url, ticket, body) {
+  return getJson(url, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'X-MachineRoom-Lane': ticket },
+    body: JSON.stringify(body),
+  })
+}
+
+function holdLaneRunner(files) {
+  const runner = join(files.base, 'lane-runner.mjs')
+  const calls = join(files.base, 'lane-runner.jsonl')
+  const release = join(files.base, 'lane-release')
+  writeFileSync(runner, LANE_RUNNER)
+  return { runnerCommand: { file: process.execPath, args: [runner, calls, release] }, calls, release }
 }
 
 describe('branchChanges', () => {
@@ -2594,5 +2621,126 @@ describe('ladder save harness availability', () => {
     })
     expect(saved.status).toBe(200)
     expect(saved.body.ladder.subs[0]).toMatchObject({ id: 'backend', harness: 'codex', model: 'gpt-5-codex' })
+  })
+})
+
+describe('a lane message mid-run', () => {
+  it('reaches the orchestrator that started the run from lane:KEY', async () => {
+    const files = makeBase({ ladder: { subs: [FRONTEND] } })
+    const { runnerCommand, calls, release } = holdLaneRunner(files)
+    const rig = await makeBridge(files, { runnerCommand })
+    const started = await pagePost(`${rig.url}/api/control/runs`, {
+      lane: 'opencode',
+      task: 'Fix the typo.',
+      startedBy: 'frontend',
+      confirmed: true,
+    })
+    expect(started.status).toBe(202)
+    const call = await waitFor(() => readLines(calls)[0], 15000, 'the lane runner')
+    expect(call.ticket).toMatch(/^[0-9a-f]{32}$/)
+    expect(call.bridge).toBe(rig.url)
+
+    const sent = await lanePost(`${rig.url}/api/orchestrator/messages`, call.ticket, {
+      text: 'Which header should I use?',
+    })
+    expect(sent.status).toBe(202)
+    await waitFor(
+      () => rig.chat('frontend')?.messages.some((message) => message.from === 'lane:opencode' && message.text === 'Which header should I use?'),
+      15000,
+      'frontend to receive the lane message'
+    )
+    const team = rig.chat('orchestrator').messages.filter((message) => message.from === 'agent' && message.agent?.from === 'lane:opencode')
+    expect(team).toEqual([
+      expect.objectContaining({
+        agent: expect.objectContaining({
+          to: 'sub-frontend',
+          kind: 'message',
+          text: 'Which header should I use?',
+        }),
+      }),
+    ])
+    writeFileSync(release, 'go\n')
+  })
+
+  it('reaches another orchestrator named by to', async () => {
+    const BACKEND = {
+      id: 'backend',
+      name: 'Backend',
+      harness: 'claude',
+      model: 'sonnet',
+      lanes: ['opencode2'],
+      scope: ['server/**'],
+      restricted: true,
+      setBy: 'owner',
+    }
+    const files = makeBase({ ladder: { subs: [FRONTEND, BACKEND] } })
+    const { runnerCommand, calls, release } = holdLaneRunner(files)
+    const rig = await makeBridge(files, { runnerCommand })
+    const started = await pagePost(`${rig.url}/api/control/runs`, {
+      lane: 'opencode',
+      task: 'Fix the typo.',
+      startedBy: 'frontend',
+      confirmed: true,
+    })
+    expect(started.status).toBe(202)
+    const call = await waitFor(() => readLines(calls)[0], 15000, 'the lane runner')
+
+    const sent = await lanePost(`${rig.url}/api/orchestrator/messages`, call.ticket, {
+      to: 'backend',
+      text: 'The endpoint needs a new field.',
+    })
+    expect(sent.status).toBe(202)
+    await waitFor(
+      () => rig.chat('backend')?.messages.some((message) => message.from === 'lane:opencode' && message.text === 'The endpoint needs a new field.'),
+      15000,
+      'backend to receive the lane message'
+    )
+    writeFileSync(release, 'go\n')
+  })
+
+  it('refuses a ticket once the run ends', async () => {
+    const files = makeBase()
+    const { runnerCommand, calls, release } = holdLaneRunner(files)
+    const rig = await makeBridge(files, { runnerCommand })
+    const started = await pagePost(`${rig.url}/api/control/runs`, {
+      lane: 'opencode',
+      task: 'Fix the typo.',
+      confirmed: true,
+    })
+    expect(started.status).toBe(202)
+    const call = await waitFor(() => readLines(calls)[0], 15000, 'the lane runner')
+
+    writeFileSync(release, 'go\n')
+    await waitFor(
+      async () => (await getJson(`${rig.url}/api/control/runs`)).body.running.length === 0,
+      15000,
+      'the run to end'
+    )
+
+    const after = await lanePost(`${rig.url}/api/orchestrator/messages`, call.ticket, { text: 'Still working.' })
+    expect(after.status).toBe(403)
+    expect(after.body).toEqual({ error: LANE_ENDED_PROBLEM })
+  })
+
+  it('allows four messages from one ticket and refuses the fifth', async () => {
+    const files = makeBase()
+    const { runnerCommand, calls, release } = holdLaneRunner(files)
+    const rig = await makeBridge(files, { runnerCommand })
+    const started = await pagePost(`${rig.url}/api/control/runs`, {
+      lane: 'opencode',
+      task: 'Fix the typo.',
+      confirmed: true,
+    })
+    expect(started.status).toBe(202)
+    const call = await waitFor(() => readLines(calls)[0], 15000, 'the lane runner')
+
+    for (let index = 1; index <= 4; index += 1) {
+      const sent = await lanePost(`${rig.url}/api/orchestrator/messages`, call.ticket, { text: `Ping ${index}` })
+      expect(sent.status, String(index)).toBe(202)
+    }
+    const fifth = await lanePost(`${rig.url}/api/orchestrator/messages`, call.ticket, { text: 'Ping 5' })
+    expect(fifth.status).toBe(429)
+    expect(fifth.body).toEqual({ error: LANE_LIMIT_PROBLEM })
+    writeFileSync(release, 'go\n')
   })
 })
