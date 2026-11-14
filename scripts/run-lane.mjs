@@ -3,7 +3,7 @@ import { spawn, spawnSync } from 'node:child_process'
 import { createHash, randomUUID } from 'node:crypto'
 import { appendFileSync, closeSync, createWriteStream, existsSync, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
-import { basename, dirname, isAbsolute, join, resolve } from 'node:path'
+import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import { finished } from 'node:stream'
 import { fileURLToPath } from 'node:url'
 import { branchFor, briefFileList, buildPrompt, nextVersion, parseBriefs, parseRules } from '../src/briefs/briefs.js'
@@ -1024,6 +1024,7 @@ function codexMonthFolders({ env, startedAt, now }) {
 function findCodexRollout({ threadId, env, startedAt, now }) {
   if (!/^[A-Za-z0-9-]+$/.test(threadId)) return ''
   const suffix = `-${threadId}.jsonl`
+  const sessions = realPath(join(codexHome(env), 'sessions'))
   for (const monthFolder of codexMonthFolders({ env, startedAt, now })) {
     let days
     try {
@@ -1040,7 +1041,19 @@ function findCodexRollout({ threadId, env, startedAt, now }) {
         continue
       }
       const match = files.find((name) => name.startsWith('rollout-') && name.endsWith(suffix))
-      if (match) return join(monthFolder, day, match)
+      if (!match) continue
+      const candidate = join(monthFolder, day, match)
+      let stat
+      try {
+        stat = lstatSync(candidate)
+      } catch {
+        continue
+      }
+      if (stat.isSymbolicLink()) continue
+      const file = realPath(candidate)
+      const inside = relative(sessions, file)
+      if (inside === '' || inside.startsWith('..') || isAbsolute(inside)) continue
+      return file
     }
   }
   return ''
@@ -1076,8 +1089,12 @@ export function readCodexQuota(file, limit = CODEX_ROLLOUT_TAIL_BYTES) {
       if (reading) newest = reading
     }
     return newest
+  } catch {
+    return null
   } finally {
-    closeSync(fd)
+    try {
+      closeSync(fd)
+    } catch {}
   }
 }
 
@@ -2030,9 +2047,8 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
     const target = kind !== '' && typeof lane.fallback === 'string' ? lane.fallback.trim() : ''
     if (target !== '' && options?.failedOver !== true) {
       record.failover = { kind, to: target }
-      if (project && deferRecord) {
-        writeProjectRecord({ record, folder: project, startHead: projectStart.head, startBranch: projectStart.branch, tests: '' })
-      } else {
+      const failedHead = project && deferRecord ? gitRead(project, ['rev-parse', 'HEAD']) || '' : ''
+      if (!(project && deferRecord)) {
         if (appendRunRecord(record)) console.log(`record: ${printedRunsFolder(runsFile())}`)
         if (!project) recordRoom(record, toolLines, lanes)
       }
@@ -2055,8 +2071,14 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
         failedRecord: record,
         failedStartBranch: projectStart?.branch ?? '',
       })
-      if (fallbackRun) return fallbackRun
-      if (project && deferRecord) return { code: result.code ?? 1, killed, record: null, startHead: projectStart.head, startBranch: projectStart.branch }
+      if (fallbackRun) {
+        if (project && deferRecord) {
+          if (failedHead !== '') record.head = failedHead
+          if (appendRunRecord(record)) console.log(`record: ${printedRunsFolder(runsFile())}`)
+        }
+        return fallbackRun
+      }
+      if (project && deferRecord) return { code: result.code ?? 1, killed, record, startHead: projectStart.head, startBranch: projectStart.branch }
       return { code: result.code ?? 1, killed }
     }
     if (project && deferRecord) {

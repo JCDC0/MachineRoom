@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- P286: a queue task whose backup is refused keeps its failed record and the queue ends without throwing; a Codex rollout outside the sessions folder or a link gives no quota; a quota read error answers null.
 - P296: TRIAL-LOWBEAM.md plans Lowbeam's move to MachineRoom lanes and Reviews, with the six old worktrees, the guide rules to replace, three first tasks and the room's limits, each checked against the code.
 - P285: a lane lock names its run start, and a stop with --started-at refuses a different run; the bridge passes the confirmed start time, and the lanes source takes it from the lock.
 - P282: AUDIT-2026-11-DOCS-3.md lists 14 doc sentences this week's code contradicts, with corrections; every new route, flag and record field is named.
@@ -8,6 +9,9 @@
 - P291: AUDIT-2026-11-TRIAL-PLAN.md finds six of eight plan claims true and lists nine steps the room cannot do today on another project.
 - P292: README.md names the lane conversation view with Stop, a lane's backup lane and the moved marks in run-lane --list.
 - P292: README.md adds lane conversations from Agents or Inspector with Stop, backup lanes via fallback and run-lane --list failover marks.
+- P286: a Codex quota read error answers null and the run record is still written.
+- P286: a Codex rollout outside the sessions folder or a symbolic link gives no quota.
+- P286: a queue keeps the failed record when its backup is refused, and reports the failed task without an exception.
 - P289: CODE.md gains a line for each file under src, server, scripts, bin and tests that it did not name.
 - P280: TRIAL-ULOLTRIS.md gives the command, the check command, worktree mode, three candidate tasks from ulolTris's own next steps and what would count as a room failure.
 - P279: a secret-named field is masked only when it holds a string, so token counts show and keys stay hidden.
