@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- P295: eleven tests assert literal text or the real call instead of the imported constant, and the git watcher test proves a failed rewatch reads again; row 2 needs a product change.
 - P293: with Own worktree the confirm card names .worktrees/LANE inside the project and the branch the project has checked out, and drops beside the project and never on main.
 - P290: the candidate build test retries on a fresh port when another process takes it, the subfolder session test waits up to 15 seconds, and the stop test keeps its grandchild alive until the stop lists it.
 - P288: a conversation line that parses as JSON is masked whatever its type, so a string, number or array line shows no profile name.
@@ -9,6 +10,7 @@
 - P285: a lane lock names its run start, and a stop with --started-at refuses a different run; the bridge passes the confirmed start time, and the lanes source takes it from the lock.
 - P282: AUDIT-2026-11-DOCS-3.md lists 14 doc sentences this week's code contradicts, with corrections; every new route, flag and record field is named.
 - P293: DispatchPanel confirm cards name .worktrees/LANE inside the project and the checked-out branch from gitState(), dropping beside the project and never on main.
+- P295: 11 of 12 weak tests in AUDIT-2026-11-TESTS-2.md now assert real checks and fail when undone; the polling-with-watcher row is blocked without a server change.
 - P283: AUDIT-2026-11-TESTS-2.md lists 12 tests since 12c25524 that pass with their change undone, nine proved in a scratch copy.
 - P291: AUDIT-2026-11-TRIAL-PLAN.md finds six of eight plan claims true and lists nine steps the room cannot do today on another project.
 - P292: README.md names the lane conversation view with Stop, a lane's backup lane and the moved marks in run-lane --list.

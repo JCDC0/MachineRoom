@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url'
 import { afterEach, beforeAll, describe, expect, it } from 'vitest'
 import { readTree, treeEvent } from '../server/index.js'
 import { planFolderView } from '../src/model/folderView.js'
-import { BUDGET, DEFAULTS, PROBE_USAGE, fakeListDir, makeScaleTree, parseProbeArgs, replayDigest, replaySources, runProbe } from '../scripts/scale-probe.mjs'
+import { BUDGET, DEFAULTS, fakeListDir, makeScaleTree, parseProbeArgs, replayDigest, replaySources, runProbe } from '../scripts/scale-probe.mjs'
 import { getJson, startLaneBridge, waitForBridge } from './helpers/bridge.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 
@@ -76,7 +76,7 @@ describe('the probe help', () => {
           windowsHide: true,
         })
         expect(result.status, flag).toBe(0)
-        expect(result.stdout.trim(), flag).toBe(PROBE_USAGE)
+        expect(result.stdout.trim(), flag).toBe('Usage: npm run scale-probe -- [--files N] [--folders N] [--seed N] [--replay]')
         expect(result.stderr, flag).toBe('')
       }
       expect(readdirSync(temp).filter((name) => name.startsWith('machineroom-scale-probe-'))).toEqual([])

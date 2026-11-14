@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { CONVERSATION_ENTRY_LIMIT, CONVERSATION_TEXT_LIMIT, conversationFromLog } from '../src/model/conversation.js'
+import { conversationFromLog } from '../src/model/conversation.js'
 
 const lines = (...items) => `${items.map((item) => (typeof item === 'string' ? item : JSON.stringify(item))).join('\n')}\n`
 
@@ -188,13 +188,11 @@ describe('a conversation read from a lane log', () => {
   })
 
   it('keeps the last 2000 entries and cuts each text to 4000 characters', () => {
-    const many = Array.from({ length: CONVERSATION_ENTRY_LIMIT + 100 }, (_, index) => `line ${index + 1}`).join('\n')
+    const many = Array.from({ length: 2100 }, (_, index) => `line ${index + 1}`).join('\n')
     const kept = conversationFromLog('hermes', many)
-    expect(kept).toHaveLength(CONVERSATION_ENTRY_LIMIT)
+    expect(kept).toHaveLength(2000)
     expect(kept[0].text).toBe('line 101')
-    expect(kept.at(-1).text).toBe(`line ${CONVERSATION_ENTRY_LIMIT + 100}`)
-    expect(conversationFromLog('hermes', 'x'.repeat(CONVERSATION_TEXT_LIMIT + 500))[0].text).toHaveLength(
-      CONVERSATION_TEXT_LIMIT
-    )
+    expect(kept.at(-1).text).toBe('line 2100')
+    expect(conversationFromLog('hermes', 'x'.repeat(4500))[0].text).toHaveLength(4000)
   })
 })

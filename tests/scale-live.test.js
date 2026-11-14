@@ -3,7 +3,7 @@ import { existsSync, rmSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { pathsInTreeEvent, LIVE_USAGE, parseLiveArgs, runScaleLive } from '../scripts/scale-live.mjs'
+import { pathsInTreeEvent, parseLiveArgs, runScaleLive } from '../scripts/scale-live.mjs'
 import { gitPath } from '../server/programPath.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 
@@ -53,7 +53,9 @@ describe('the live scale help', () => {
           windowsHide: true,
         })
         expect(result.status, flag).toBe(0)
-        expect(result.stdout.trim(), flag).toBe(LIVE_USAGE)
+        expect(result.stdout.trim(), flag).toBe(
+          'Usage: npm run scale-live -- [--files N] [--folders N] [--seed N] [--quiet-ms N] [--server FOLDER] [--tree-only] [--keep]'
+        )
         expect(result.stderr, flag).toBe('')
       }
       expect(existsSync(join(temp, 'machineroom-scale'))).toBe(false)

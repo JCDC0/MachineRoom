@@ -3,7 +3,7 @@ import { existsSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { SCREENSHOTS_USAGE, chromePath } from '../scripts/screenshots.mjs'
+import { chromePath } from '../scripts/screenshots.mjs'
 import { makeTempDir } from './helpers/tempRoot.js'
 
 const SCRIPT = fileURLToPath(new URL('../scripts/screenshots.mjs', import.meta.url))
@@ -21,7 +21,7 @@ describe('screenshots help', () => {
           windowsHide: true,
         })
         expect(result.status, flag).toBe(0)
-        expect(result.stdout.trim(), flag).toBe(SCREENSHOTS_USAGE)
+        expect(result.stdout.trim(), flag).toBe('Usage: npm run screenshots -- [--port 5180] [--out docs/images]')
         expect(result.stderr, flag).toBe('')
       }
       expect(existsSync(out)).toBe(false)

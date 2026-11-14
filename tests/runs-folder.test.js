@@ -10,7 +10,7 @@ import { runsFolderDefault as orchestratorRunsFolder } from '../server/orchestra
 import { runsFolderDefault as orchestratorsRunsFolder } from '../server/orchestrators.js'
 import { mcpRunsDir } from '../scripts/mcp-bridge.mjs'
 import { runsFolderFrom as agentRunsFolder } from '../scripts/mr-agent.mjs'
-import { RUN_RECORDING_USAGE, runsFile as recordingRunsFile } from '../scripts/run-recording.mjs'
+import { runsFile as recordingRunsFile } from '../scripts/run-recording.mjs'
 import { makeTempDir, removeTempDir } from './helpers/tempRoot.js'
 
 const RECORDING_SCRIPT = fileURLToPath(new URL('../scripts/run-recording.mjs', import.meta.url))
@@ -123,7 +123,7 @@ describe('run-recording help', () => {
       })
 
       expect(result.status, flag).toBe(0)
-      expect(result.stdout.trim(), flag).toBe(RUN_RECORDING_USAGE)
+      expect(result.stdout.trim(), flag).toBe('Usage: npm run run-recording -- 1')
       expect(result.stderr, flag).toBe('')
       expect(result.stdout, flag).not.toContain('recording:')
     }

@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { HAND_RUN_USAGE, handRun } from '../scripts/hand-run.mjs'
+import { handRun } from '../scripts/hand-run.mjs'
 import { parseBriefs } from '../src/briefs/briefs.js'
 import { outcomeTable } from '../server/outcomes.js'
 import { readAllRunRecords, readOutcomeRecords } from '../server/runs.js'
@@ -101,7 +101,9 @@ describe('hand-run help', () => {
       })
 
       expect(result.status, flag).toBe(0)
-      expect(result.stdout.trim(), flag).toBe(HAND_RUN_USAGE)
+      expect(result.stdout.trim(), flag).toBe(
+        'Usage: npm run hand-run -- LANE ID [--minutes N] [--branch NAME] [--model NAME] [--exit N]'
+      )
       expect(result.stderr, flag).toBe('')
       expect(existsSync(runsPathFor(temp)), flag).toBe(false)
     }
