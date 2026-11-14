@@ -91,6 +91,7 @@ Every file in this folder, and what it is for:
 - `CONTROL-PLANE.md`: plan. The control plane design from the Paperclip era; parts are replaced by the lane records.
 - `DECIDER-EVAL.md`: current. How to compare decision models with `npm run decide-eval`.
 - `FLAKY-2026-11.md`: history. The November 2026 hunt of the flaky tests on main, with each cause and its fix.
+- `FREE-HIERARCHY.md`: current. The owner's free hierarchy goal, what works and does not yet, and the test tree runbook.
 - `HARNESSES.md`: plan. The harness registry and the steps H1 to H15, with what is built.
 - `HIERARCHY.md`: plan. The sub-orchestrator ladder and its sectors, with what is built.
 - `HOUSE-RULES.md`: prompt the code reads. The rules in every lane prompt.
