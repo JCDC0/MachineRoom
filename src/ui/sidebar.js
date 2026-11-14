@@ -354,8 +354,24 @@ export function laneChoice(lanes, { add = [], remove = [] } = {}) {
   return list.map((lane) => lane.key).filter((key) => chosen.has(key))
 }
 
-export function previewLines(answer, limit = PREVIEW_LIMIT) {
+function laneEntry(lanes, key) {
+  if (Array.isArray(lanes)) {
+    return lanes.find((lane) => lane && lane.key === key) ?? null
+  }
+  if (Array.isArray(lanes?.lanes)) {
+    return lanes.lanes.find((lane) => lane && lane.key === key) ?? null
+  }
+  return lanes && typeof lanes === 'object' ? lanes[key] ?? null : null
+}
+
+function laneLabel(lanes, key) {
+  const lane = laneEntry(lanes, key)
+  return cleanText(lane?.label, 80) || cleanText(lane?.name, 80) || cleanText(key, 80)
+}
+
+export function previewLines(answer, limit = PREVIEW_LIMIT, options = {}) {
   const list = answer && Array.isArray(answer.messages) ? answer.messages : []
+  const lanes = options?.lanes ?? answer?.lanes ?? {}
   const lines = []
   for (const message of list) {
     if (!message || typeof message !== 'object') continue
@@ -366,7 +382,11 @@ export function previewLines(answer, limit = PREVIEW_LIMIT) {
       ? raw
       : raw.startsWith('sub:')
         ? `sub ${cleanText(raw.slice(4), 40)}`.trim()
-        : 'orchestrator'
+        : raw.startsWith('lane:')
+          ? laneLabel(lanes, raw.slice(5))
+          : laneEntry(lanes, raw)
+            ? laneLabel(lanes, raw)
+            : 'orchestrator'
     lines.push({
       id: String(message.id ?? `${from}-${lines.length}`),
       from,

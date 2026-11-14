@@ -201,6 +201,24 @@ function subLabel(value) {
   return id ? `Sub ${id}` : ''
 }
 
+function laneEntry(lanes, key) {
+  const source = typeof lanes === 'function' ? lanes() : lanes
+  if (Array.isArray(source)) {
+    return source.find((lane) => lane && lane.key === key) ?? null
+  }
+  if (Array.isArray(source?.lanes)) {
+    return source.lanes.find((lane) => lane && lane.key === key) ?? null
+  }
+  return source && typeof source === 'object' ? source[key] ?? null : null
+}
+
+function laneText(lane, names, key) {
+  const named = cleanLabel(lane?.label) || cleanLabel(lane?.name)
+  if (named) return named
+  const mapped = typeof names?.get === 'function' ? names.get(key) : names?.[key]
+  return cleanLabel(mapped) || cleanLabel(key)
+}
+
 function sourceTags(source, names) {
   if (source === 'owner' || source === 'orchestrator' || source === 'room') {
     return { from: source, who: source }
@@ -222,12 +240,7 @@ export function agentColor(key, lanes = {}) {
   if (key === 'orchestrator' || (typeof key === 'string' && key.startsWith('sub-'))) {
     return ORCHESTRATOR_COLOR
   }
-  const laneObj =
-    typeof lanes === 'function'
-      ? lanes()[key]
-      : Array.isArray(lanes)
-        ? lanes.find((l) => l.key === key)
-        : lanes?.[key]
+  const laneObj = laneEntry(lanes, key)
   if (laneObj?.color) return laneObj.color
   let hash = 0
   const str = String(key)
@@ -249,17 +262,7 @@ export function formatAgentLine({ from, to, kind, text = '', lanes = {}, names =
         `Sub ${subId}`
       )
     }
-    const laneObj =
-      typeof lanes === 'function'
-        ? lanes()[key]
-        : Array.isArray(lanes)
-          ? lanes.find((l) => l.key === key)
-          : lanes?.[key]
-    return (
-      laneObj?.name ||
-      (typeof names?.get === 'function' ? names.get(key) : names?.[key]) ||
-      key
-    )
+    return laneText(laneEntry(lanes, key), names, key)
   }
   const sender = nameOf(from)
   const receiver = nameOf(to)
@@ -314,12 +317,7 @@ export function chatLines(chat, limit = ORCH_MAX_LINES, options = {}) {
     }
     const label = source.startsWith('sub:') ? subLabel(source.slice(4)) : ''
     const laneKey = source.startsWith('lane:') ? source.slice(5) : source
-    const laneObj =
-      typeof lanes === 'function'
-        ? lanes()[laneKey]
-        : Array.isArray(lanes)
-          ? lanes.find((l) => l.key === laneKey)
-          : lanes?.[laneKey]
+    const laneObj = laneEntry(lanes, laneKey)
     const isLane =
       !label &&
       source !== 'main' &&
@@ -327,9 +325,7 @@ export function chatLines(chat, limit = ORCH_MAX_LINES, options = {}) {
       !FROM_VALUES.has(source) &&
       (Boolean(laneObj) || source.startsWith('lane:'))
     const from = label ? 'sub' : isLane ? 'lane' : FROM_VALUES.has(source) ? source : 'orchestrator'
-    const laneName = isLane
-      ? laneObj?.name || (typeof names?.get === 'function' ? names.get(laneKey) : names?.[laneKey]) || laneKey
-      : ''
+    const laneName = isLane ? laneText(laneObj, names, laneKey) : ''
     const work = normalizeWork(message.work)
     lines.push({
       id: String(message.id ?? `${from}-${lines.length}`),
