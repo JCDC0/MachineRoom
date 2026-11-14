@@ -2,7 +2,7 @@ import { harnessUnavailableProblem, modelUnavailableProblem, resolveContextWindo
 import { outcomeTable } from '../../server/outcomes.js'
 import { branchFor, buildPrompt, modelFor, parseBriefs } from '../briefs/briefs.js'
 import { briefMarkdown, planPrompt } from '../briefs/plan.js'
-import { SINCE_PROBLEM, dayStart, laneStats } from '../briefs/run.js'
+import { SINCE_PROBLEM, dayStart, fallbackProblem, laneStats } from '../briefs/run.js'
 import { defaultMode, legacyMode, modesFor } from './modes.js'
 import { readLadder } from '../model/hierarchy.js'
 import { chooseRoute, routeLane } from '../policy/route.js'
@@ -61,6 +61,7 @@ export const CLIENT_METHODS = [
   'projectSettings',
   'saveProjectSettings',
   'lanes',
+  'laneBackups',
   'harnesses',
   'harnessModels',
   'providers',
@@ -1953,6 +1954,15 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
         chosen: Boolean(state.chosenLanes),
       })),
 
+    laneBackups: () =>
+      call('laneBackups', () => {
+        const backups = {}
+        for (const lane of state.lanes) {
+          if (typeof lane.fallback === 'string' && lane.fallback.trim()) backups[lane.key] = lane.fallback.trim()
+        }
+        return backups
+      }),
+
     harnesses: () =>
       call('harnesses', () => [
         {
@@ -2185,7 +2195,7 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
         return { ...entry }
       }),
 
-    updateLane: ({ key, name, model, effort, confirmed = true } = {}) =>
+    updateLane: ({ key, name, model, effort, fallback, confirmed = true } = {}) =>
       call('updateLane', () => {
         if (confirmed !== true) throw new Error('Confirm updating the lane first.')
         const lane = state.lanes.find((l) => l.key === key)
@@ -2210,6 +2220,14 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
         if (effort !== undefined) {
           if (effort && (!found || !found.efforts.includes(effort))) throw new Error(`The effort ${effort} is not available for ${lane.harness}.`)
           lane.effort = effort || null
+        }
+        if (fallback !== undefined) {
+          const wanted = fallback === null ? '' : String(fallback).trim()
+          const lanes = Object.fromEntries(state.lanes.map((item) => [item.key, item]))
+          const problem = fallbackProblem({ laneKey: key, fallback: wanted, lanes })
+          if (problem) throw new Error(problem)
+          if (wanted) lane.fallback = wanted
+          else delete lane.fallback
         }
         emit({ topic: 'agents' })
         return { ...lane }

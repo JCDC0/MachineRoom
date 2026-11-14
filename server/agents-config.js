@@ -9,6 +9,7 @@ import { cachedRunRecords } from './runs.js'
 import { harnessByKey } from '../src/harnesses/index.js'
 import { harnessUnavailableProblem, modelUnavailableProblem } from './model-list.js'
 import { machineroomModels, modelAllowed, readHarnessModelsCache } from './harness-models.js'
+import { fallbackProblem } from '../src/briefs/run.js'
 
 export const MAX_AGENTS = 30
 export const HARNESS_KEYS = ['claude', 'opencode', 'agy', 'acp', 'machineroom', 'codex', 'copilot']
@@ -380,6 +381,7 @@ export function buildMadeLane(agent, lanesJson = {}) {
     reasoning: agent.effort ?? null,
     cli,
     notes: template?.notes ? [...template.notes] : [],
+    ...(typeof agent.fallback === 'string' && agent.fallback.trim() ? { fallback: agent.fallback.trim() } : {}),
     createdAt: agent.createdAt,
   }
 }
@@ -546,6 +548,21 @@ export function createAgentsConfigApi(options = {}) {
       return true
     }
 
+    if (path === '/api/lanes/backups') {
+      if (method !== 'GET') {
+        sendJson(req, res, 405, { error: 'Method not allowed.' })
+        return true
+      }
+      const all = readAllLanes({ lanesJson: getBaseLanes(), runsFolder: runsDir })
+      const backups = {}
+      for (const [key, lane] of Object.entries(all)) {
+        const fallback = typeof lane?.fallback === 'string' ? lane.fallback.trim() : ''
+        if (fallback) backups[key] = fallback
+      }
+      sendJson(req, res, 200, { backups })
+      return true
+    }
+
     if (path === '/api/lanes/create') {
       if (method !== 'POST') {
         sendJson(req, res, 405, { error: 'Method not allowed.' })
@@ -667,6 +684,18 @@ export function createAgentsConfigApi(options = {}) {
         } else {
           agent.effort = null
         }
+      }
+
+      if (body.fallback !== undefined) {
+        const fallback = body.fallback === null ? '' : String(body.fallback).trim()
+        const allLanes = readAllLanes({ lanesJson: baseLanes, agents, runsFolder: runsDir })
+        const problem = fallbackProblem({ laneKey: key, fallback, lanes: allLanes })
+        if (problem) {
+          sendJson(req, res, 400, { error: problem })
+          return true
+        }
+        if (fallback) agent.fallback = fallback
+        else delete agent.fallback
       }
 
       saveAgentsConfig(runsDir, { agents, removed, allocated })

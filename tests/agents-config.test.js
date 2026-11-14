@@ -624,6 +624,35 @@ describe('POST /api/lanes/:key/update', () => {
     expect(updated.model).toBe('claude-sonnet-5-5')
     expect(updated.effort).toBe('high')
   })
+
+  it('saves a backup lane, reads it back, clears it, and refuses a bad one', async () => {
+    const { client, runsFolder } = await startBridgeRig()
+    const created = await client.createLane({
+      name: 'Backup Lane',
+      harness: 'claude',
+      model: 'claude-haiku-5-5',
+      confirmed: true,
+    })
+
+    const saved = await client.updateLane({ key: created.key, fallback: 'opencode', confirmed: true })
+    expect(saved.fallback).toBe('opencode')
+    expect(await client.laneBackups()).toMatchObject({ [created.key]: 'opencode' })
+    const file = join(runsFolder, 'agents.json')
+    expect(JSON.parse(readFileSync(file, 'utf8')).agents.find((agent) => agent.key === created.key).fallback).toBe('opencode')
+
+    for (const [fallback, sentence] of [
+      [created.key, `The lane ${created.key} cannot name itself as its backup lane.`],
+      ['orchestrator', 'The orchestrator lane cannot be a backup lane.'],
+      ['nope', 'The backup lane nope is not in lanes.json.'],
+    ]) {
+      await expect(client.updateLane({ key: created.key, fallback, confirmed: true })).rejects.toThrow(sentence)
+    }
+    expect(await client.laneBackups()).toMatchObject({ [created.key]: 'opencode' })
+
+    const cleared = await client.updateLane({ key: created.key, fallback: null, confirmed: true })
+    expect(cleared.fallback).toBeUndefined()
+    expect(await client.laneBackups()).not.toHaveProperty(created.key)
+  })
 })
 
 describe('POST /api/lanes/:key/delete', () => {
@@ -1137,9 +1166,14 @@ describe('mock client integration', () => {
     const updated = await mock.updateLane({
       key: 'claude-2',
       name: 'Updated Mock',
+      fallback: 'opencode',
       confirmed: true,
     })
     expect(updated.name).toBe('Updated Mock')
+    expect(await mock.laneBackups()).toEqual({ 'claude-2': 'opencode' })
+    await expect(mock.updateLane({ key: 'claude-2', fallback: 'claude-2', confirmed: true })).rejects.toThrow(
+      'The lane claude-2 cannot name itself as its backup lane.'
+    )
 
     const del = await mock.deleteLane({ key: 'claude-2', confirmed: true })
     expect(del.ok).toBe(true)
