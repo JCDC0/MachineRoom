@@ -12,7 +12,7 @@ import { briefProblems, briefWorktreeProblems, checkCommandLines, checkCommandPr
 import { outcomeTable } from '../server/outcomes.js'
 import { readMainSubjectsSync } from '../server/runs.js'
 import { isLockHolderStale, killTree, descendantProcesses, leftoverProcesses, listProcesses } from '../server/processTree.js'
-import { codexAppProgram } from '../server/agents-config.js'
+import { codexProgramFor } from '../server/agents-config.js'
 import { codexHarness } from '../src/harnesses/codex.js'
 import { harnessByKey } from '../src/harnesses/index.js'
 import { gitPath, programPath } from '../server/programPath.js'
@@ -894,9 +894,8 @@ export function printCommand(command, prompt, { mcpConfig = '', mcpServers = [] 
 
 function codexLaneProgram(lane, env = process.env) {
   const bin = lane?.cli?.bin
-  if (lane?.cli?.harness !== 'codex' || (bin !== undefined && bin !== null && bin !== 'codex')) return { lane, program: null }
-  if (programPath('codex', { env })) return { lane, program: null }
-  const program = codexAppProgram({ env })
+  if (lane?.cli?.harness !== 'codex') return { lane, program: null }
+  const program = codexProgramFor('codex', bin, { env })
   return program ? { lane: { ...lane, cli: { ...lane.cli, bin: program } }, program } : { lane, program: null }
 }
 

@@ -108,6 +108,13 @@ export function codexAppProgram({ env = process.env, platform = process.platform
   return newest?.program ?? null
 }
 
+export function codexProgramFor(harness, bin, { env = process.env, platform = process.platform } = {}) {
+  if (harness !== 'codex') return null
+  if (bin !== undefined && bin !== null && bin !== '' && bin !== 'codex') return null
+  if (programPath('codex', { env, platform })) return null
+  return codexAppProgram({ env, platform })
+}
+
 export function isHarnessAvailable(harnessKey, { lanes = {}, env = process.env, platform = process.platform, endpoints = [] } = {}) {
   if (harnessKey === 'machineroom') {
     if (Array.isArray(endpoints) && endpoints.length > 0) return true
