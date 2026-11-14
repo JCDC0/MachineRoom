@@ -149,13 +149,33 @@ function stopProcess(pid, { kill = killTree, alive = processAlive } = {}) {
   return !alive(pid)
 }
 
-function stopLeftovers({ worktree, childPid = 0, label = 'leftover', excludePids = [], list = listProcesses, kill = killTree, alive = processAlive, processes = null } = {}) {
+function stopLeftovers({ worktree, childPid = 0, label = 'leftover', excludePids = [], list = listProcesses, kill = killTree, alive = processAlive, processes = null, current = null, snapshotOnly = false } = {}) {
   const folder = String(worktree ?? '').trim()
   if (!folder && !(childPid > 0)) return { found: 0, stopped: 0, failed: 0 }
-  const found = leftoverProcesses(Array.isArray(processes) ? processes : list(), { childPid, worktree: folder, ownPid: process.pid, excludePids })
+  const snapshot = Array.isArray(processes) ? processes : null
+  if (snapshotOnly && (snapshot === null || snapshot.length === 0)) {
+    console.log(`${label}: no process snapshot, so nothing was stopped by worktree`)
+    return { found: 0, stopped: 0, failed: 0 }
+  }
+  const found = leftoverProcesses(snapshot ?? list(), { childPid, worktree: folder, ownPid: process.pid, excludePids })
+  if (found.length === 0) return { found: 0, stopped: 0, failed: 0 }
+  const currentByPid = snapshotOnly ? new Map((Array.isArray(current) ? current : list()).map((row) => [row.pid, row])) : null
   let stopped = 0
   let failed = 0
   for (const item of found) {
+    if (currentByPid && currentByPid.size > 0) {
+      const now = currentByPid.get(item.pid)
+      if (!now) {
+        console.log(`${label}: stopped ${item.pid}`)
+        stopped += 1
+        continue
+      }
+      if (typeof item.created === 'number' && Number.isFinite(item.created) && now.created !== item.created) {
+        console.log(`stale: ${item.pid} was not this run`)
+        stopped += 1
+        continue
+      }
+    }
     if (stopProcess(item.pid, { kill, alive })) {
       console.log(`${label}: stopped ${item.pid}`)
       stopped += 1
@@ -353,7 +373,9 @@ export function stopLane(laneKey, { platform = process.platform, list = listProc
     list,
     kill,
     alive,
-    processes: descendantsResult.processes,
+    processes,
+    current: descendantsResult.processes,
+    snapshotOnly: true,
   })
   stopped += leftovers.stopped
   failed += leftovers.failed
