@@ -960,7 +960,10 @@ export function createOrchestrator({
   let harness = harnessOption || String(lane.cli.harness ?? 'claude')
   let model = modelOption ? String(modelOption) : String(lane.cli.model ?? (harness === 'opencode' ? DEFAULT_OPENCODE_MODEL : 'opus'))
   function binFor(name) {
-    if (binOption) return String(binOption)
+    if (binOption) {
+      const chosen = String(binOption)
+      return codexProgramFor(name, chosen, { env, platform }) ?? chosen
+    }
     let bin = ''
     if (lane.cli.harness === name && lane.cli.bin) bin = String(lane.cli.bin)
     else {
