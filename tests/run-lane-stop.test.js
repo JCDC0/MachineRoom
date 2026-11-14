@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
 import { descendantProcesses, killTree, leftoverProcesses, listProcesses } from '../server/processTree.js'
 import { readLaneLock, releaseLaneLock, takeLaneLock, processAlive } from '../scripts/lane-lock.mjs'
-import { isResultLine, startLane, stopLane } from '../scripts/run-lane.mjs'
+import { isResultLine, startLane, stopLane, stopLeftovers } from '../scripts/run-lane.mjs'
 import { laneLockLog, laneLockStartedAt, laneLockText } from '../src/briefs/run.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 
@@ -1027,5 +1027,60 @@ describe('stopLane creation time rules', () => {
     expect(lines).not.toContain('leftover: stopped 600')
     expect(existsSync(lockPath)).toBe(false)
     expect(listCalls).toBe(2)
+  })
+})
+
+describe('stopLeftovers counts only what it stopped', () => {
+  function captureLines(fn) {
+    const lines = []
+    const log = console.log
+    console.log = (msg) => lines.push(msg)
+    try {
+      return { result: fn(), lines }
+    } finally {
+      console.log = log
+    }
+  }
+
+  it('prints a gone leftover as already ended and does not count it stopped', () => {
+    const killed = []
+    const { result, lines } = captureLines(() =>
+      stopLeftovers({
+        worktree: 'C:\\fake\\worktree',
+        processes: [{ pid: 400, ppid: 1, created: 9700, command: 'node C:\\fake\\worktree\\worker.js' }],
+        current: [{ pid: 999, ppid: 1, created: 5000 }],
+        snapshotOnly: true,
+        kill: ({ pid }) => {
+          killed.push(pid)
+          return true
+        },
+      }),
+    )
+    expect(result.found).toBe(1)
+    expect(result.stopped).toBe(0)
+    expect(killed).toEqual([])
+    expect(lines).toContain('leftover: 400 had already ended')
+    expect(lines).not.toContain('leftover: stopped 400')
+  })
+
+  it('prints a reused pid as stale and does not count it stopped', () => {
+    const killed = []
+    const { result, lines } = captureLines(() =>
+      stopLeftovers({
+        worktree: 'C:\\fake\\worktree',
+        processes: [{ pid: 500, ppid: 1, created: 9800, command: 'node C:\\fake\\worktree\\helper.js' }],
+        current: [{ pid: 500, ppid: 1, created: 9950, command: 'node C:\\fake\\worktree\\helper.js' }],
+        snapshotOnly: true,
+        kill: ({ pid }) => {
+          killed.push(pid)
+          return true
+        },
+      }),
+    )
+    expect(result.found).toBe(1)
+    expect(result.stopped).toBe(0)
+    expect(killed).toEqual([])
+    expect(lines).toContain('stale: 500 was not this run')
+    expect(lines).not.toContain('leftover: stopped 500')
   })
 })
