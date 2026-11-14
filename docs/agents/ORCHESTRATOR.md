@@ -16,7 +16,7 @@ Rewrite this section at every merge and before you end a session. Keep it under 
 - Nothing runs at this rewrite.
 - The fleet at the owner's word: `opencode` to `opencode5` on DeepSeek V4.1 Flash, `agy` and `agy2` on Hydrogen, `codex` on GPT-6.1 Terra high (reviews and single-file briefs; its sandbox cannot stop processes), `native` and `native2` for reports.
 - Open for the owner: two check commands in one check field and the queue's commit format for projects like Lowbeam (features); the Lowbeam row of the workspace guide.
-- Known and accepted: a backup that spawns and fails at once still shows as moved (its own record shows the failed start); the history audit flags `OPENAI_API_KEY: value` in `tests/conversation.test.js`, a test fixture.
+- Known and accepted: a backup that spawns and fails at once still shows as moved (its own record shows the failed start); the history audit flags a key setting in `tests/conversation.test.js` (6b34de1a), a test fixture with no real key.
 - Push: the owner gave a standing yes for this work on 2026-11-14. A new session asks again.
 
 ## Rules

@@ -13,7 +13,7 @@ const USER_PATH = /[A-Za-z]:[\\/]Users[\\/](<[^<>\s]{1,64}>|\$env:[A-Za-z_][A-Za
 
 const PLACEHOLDER = /^(?:your[-_ ]?(?:key|token|api[-_ ]?key).*|your[-_ ]?api.*|x{3,}|changeme|change[-_ ]?me|placeholder|redacted|example.*|todo|none|null|secret|key|\*+|\$\{.*\}|\$[A-Za-z_][A-Za-z0-9_]*)$/i
 
-const ALLOWED_EMAILS = new Set(['noreply@anthropic.com', 'noreply@github.com'])
+const ALLOWED_EMAILS = new Set(['noreply@anthropic.com', 'noreply@github.com', 'noreply@opencode.ai', 'noreply@openai.com'])
 const ALLOWED_EMAIL_DOMAIN = '@users.noreply.github.com'
 
 const PLACEHOLDER_USER_FOLDERS = new Set([

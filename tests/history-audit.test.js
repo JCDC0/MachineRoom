@@ -112,6 +112,8 @@ describe('findLeaks addresses and paths', () => {
   it('allows the addresses that may leave', () => {
     expect(findLeaks('noreply@anthropic.com')).toEqual([])
     expect(findLeaks('noreply@github.com')).toEqual([])
+    expect(findLeaks('noreply@opencode.ai')).toEqual([])
+    expect(findLeaks('noreply@openai.com')).toEqual([])
     expect(findLeaks('1234+someone@users.noreply.github.com')).toEqual([])
     expect(findLeaks('NoReply@Anthropic.COM')).toEqual([])
   })
