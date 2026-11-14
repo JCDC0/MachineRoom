@@ -1220,7 +1220,7 @@ export function projectRunGit({ branch, startBranch, commits } = {}) {
   const lines = Array.isArray(commits) ? commits : String(commits ?? '').split(/\r?\n/)
   return {
     branch: ended !== '' && ended !== started ? ended : '',
-    commits: lines.map((line) => String(line ?? '').trim()).filter(Boolean),
+    commits: lines.map((line) => maskProfilePaths(maskKeys(String(line ?? '').trim()).text)).filter(Boolean),
   }
 }
 

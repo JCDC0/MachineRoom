@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- Commit subjects on a run record are masked for keys and profile paths when saved and again in the runs response (P316).
 - The play move keeps ignored local files, and the Codex app lookup skips linked folders, linked programs and paths outside its bin folder (P318).
 - A stop takes leftover processes only from the list it took before the lock check, matched by pid and start time, so a newer run in the same worktree is left alone (P313).
 - A bare carriage return ends a check line, so it counts toward the four commands (P317).
@@ -11,6 +12,8 @@
 - P313: a stop matches each leftover by pid and creation time, so a reused pid is not killed, and the stop test covers a newer run that takes the lock inside the leftover list.
 - P318: codexAppProgram skips symbolic links and junctions for the bin folder, hash folders and codex.exe, and skips programs resolving outside OpenAI\Codex\bin.
 - P318: the play worktree move runs checkout with `--no-overwrite-ignore` so an ignored local file stays intact and answers failed on collision.
+- P316: `projectRunGit` masks a key or a profile path in each commit subject before a run record stores it.
+- P316: GET /api/control/runs masks the commits of every record it returns, including records written before the change.
 - Review 34 lists nine findings in the batch since review 33 and seventeen doc sentences the code contradicts (P312).
 - The doctor and every orchestrator find the Codex app's codex.exe when codex is not on PATH, as lanes already did (P311).
 - P311: `codexProgramFor` answers the Codex app's newest program for a bare `codex` bin when codex is not on PATH, and run-lane uses it.
