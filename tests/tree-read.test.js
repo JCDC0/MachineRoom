@@ -308,6 +308,8 @@ describe('the folder tree answer', () => {
     mkdirSync(infoDir, { recursive: true })
     const stubs = []
     let reads = 0
+    let gitDirCalls = 0
+    let gitRewatchBlocked = false
     const bridge = createBridge({
       projectRoot: root,
       port: 0,
@@ -315,9 +317,15 @@ describe('the folder tree answer', () => {
       debounceMs: 60000,
       pollMs: 60000,
       quietMs: 60000,
-      gitDir: async () => ({ gitDir, infoDirs: [infoDir] }),
+      gitDir: async () => {
+        gitDirCalls += 1
+        return { gitDir, infoDirs: [infoDir] }
+      },
       watchProject: (folder, watchOptions, listener) => {
         if (resolve(folder) === resolve(root)) return watch(folder, watchOptions, listener)
+        if (gitRewatchBlocked && resolve(folder) === resolve(gitDir)) {
+          throw new Error('watch is off')
+        }
         const stub = {
           handlers: [],
           on(event, handler) {
@@ -346,11 +354,19 @@ describe('the folder tree answer', () => {
     expect(first.status).toBe(200)
     expect(first.body.version).toBe(1)
 
+    gitRewatchBlocked = true
     stubs[0].fail()
     await wait(1200)
     const second = await folderTree(url)
     expect(second.status).toBe(200)
     expect(reads).toBe(2)
+    expect(gitDirCalls).toBe(2)
+
+    await wait(1200)
+    const third = await folderTree(url)
+    expect(third.status).toBe(200)
+    expect(reads).toBe(3)
+    expect(gitDirCalls).toBe(2)
   })
 
   it('reads again for a folder ask after a full read failed', async () => {
