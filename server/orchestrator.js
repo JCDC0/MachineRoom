@@ -25,7 +25,7 @@ import { defaultMode, legacyMode, modesFor } from '../src/control/modes.js'
 import { harnessByKey } from '../src/harnesses/index.js'
 import { agentDepthLine } from '../src/model/hierarchy.js'
 import { readAgentDepth } from './agent-depth.js'
-import { codexProgramFor, harnessUnavailableProblem, isHarnessAvailable, modelUnavailableProblem } from './agents-config.js'
+import { HARNESS_EFFORTS, codexProgramFor, harnessUnavailableProblem, isHarnessAvailable, modelUnavailableProblem } from './agents-config.js'
 import { readEndpoints } from './endpoints.js'
 import { modelAllowed } from './harness-models.js'
 import { DEFAULT_CONTEXT_WINDOW, MODELS, resolveContextWindow } from './models.js'
@@ -95,8 +95,7 @@ export const SESSIONS_LIMIT = 50
 export const SESSION_MESSAGES_LIMIT = 200
 export const SESSIONS_FULL_PROBLEM = 'The saved list is full of pinned conversations. Unpin or delete one to save this conversation.'
 export const TURN_STEP_LIMIT = 100
-export const CLAUDE_EFFORT_LEVELS = ['low', 'medium', 'high', 'xhigh', 'max']
-export const OPENCODE_EFFORT_LEVELS = ['low', 'medium', 'high', 'max']
+const effortLevelsFor = (harness) => HARNESS_EFFORTS[harness]?.length ? HARNESS_EFFORTS[harness] : HARNESS_EFFORTS.opencode
 export const NO_PROJECT_PROBLEM = 'The bridge has no project folder, so the orchestrator has nothing to work on.'
 export const MESSAGE_PROBLEM = 'Write a message from 1 to 8000 characters.'
 export const CHAT_SAVE_PROBLEM = 'The chat file could not be saved.'
@@ -1343,7 +1342,7 @@ export function createOrchestrator({
       branchTranscript = maskText(saved.branchTranscript).slice(0, BRANCH_TRANSCRIPT_LIMIT)
     }
     if (saved.effort === null || typeof saved.effort === 'string') {
-      const allowed = harness === 'claude' ? CLAUDE_EFFORT_LEVELS : OPENCODE_EFFORT_LEVELS
+      const allowed = effortLevelsFor(harness)
       if (saved.effort === null || allowed.includes(saved.effort.trim())) {
         effort = saved.effort ? saved.effort.trim() : null
       }
@@ -1952,6 +1951,7 @@ export function createOrchestrator({
         title: logName,
         mcpConfig: mcpConfigPath,
         mode: turnMode,
+        reasoning: effort,
         bridgeUrl: bridgeAddress,
         orchestratorId: key,
         token,
@@ -2370,7 +2370,7 @@ export function createOrchestrator({
   function setEffort(body) {
     if (body?.confirmed !== true) return { status: 400, body: { error: CONFIRM_EFFORT_PROBLEM } }
     if (running && !running.done) return { status: 409, body: { error: COMPACT_RUNNING_PROBLEM } }
-    const allowed = harness === 'claude' ? CLAUDE_EFFORT_LEVELS : OPENCODE_EFFORT_LEVELS
+    const allowed = effortLevelsFor(harness)
     if (body.effort === null) {
       effort = null
     } else if (typeof body.effort === 'string' && allowed.includes(body.effort.trim())) {

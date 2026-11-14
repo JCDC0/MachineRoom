@@ -1,6 +1,8 @@
 # Changelog
 
 ## Unreleased
+- A turn on Codex, the native harness or another harness with a command descriptor passes the orchestrator's effort, and each harness takes its own effort levels, so a Codex sub on high or xhigh runs that way (P345).
+- Codex and native orchestrator turns pass their saved effort to the harness, and Codex accepts xhigh (P345).
 - The owner's test tree (a Codex sub over two AGY lanes, a native sub over three OpenCode lanes) is proven in tests/owner-tree.test.js, and FREE-HIERARCHY.md says what the free hierarchy does today and how to build the tree in the room (P340).
 - A lane run takes a permission mode with --mode or the lane's cli.mode: Claude lanes get plan, edits, auto or bypass, Codex and AGY lanes pass theirs, and a mode the harness lacks is refused before anything starts (P338).
 - A lane run the bridge started may message the orchestrator that started it, or any orchestrator, with its run's ticket: at most 4 per run, shown in the Team view (P335).
