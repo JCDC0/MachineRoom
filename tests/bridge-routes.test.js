@@ -372,7 +372,7 @@ const TINY_RUNNER = [
   "mkdirSync(folder, { recursive: true })",
   'const briefs = []',
   'for (let i = 1; i < args.length; i += 1) {',
-  "  if (args[i] === '--started-by') { i += 1; continue }",
+  "  if (args[i] === '--started-by' || args[i] === '--started-at') { i += 1; continue }",
   '  briefs.push(args[i])',
   '}',
   "const record = { lane: args[0], briefs, model: null, reasoning: null, startedAt: new Date().toISOString(), minutes: 0, exitCode: 0, killed: false, costUsd: null, log: null, branch: '', commits: [] }",

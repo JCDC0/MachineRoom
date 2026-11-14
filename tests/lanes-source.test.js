@@ -1272,6 +1272,24 @@ describe('the lane source carries the session that started a run', () => {
     expect(queued.payload.startedBy).toEqual(startedBy)
     expect(source.openRuns()[0].startedBy).toEqual(startedBy)
   })
+
+  it('takes a run start time from its lane lock, so a stop can name that run', async () => {
+    const base = tempDir()
+    const runs = join(base, 'runs')
+    const main = join(base, 'MachineRoom')
+    mkdirSync(runs, { recursive: true })
+    mkdirSync(main, { recursive: true })
+    git(main, ['init'])
+    git(main, ['commit', '--allow-empty', '-m', 'base'])
+    const lanes = lanesFor({ opencode: join(base, 'MachineRoom-opencode') })
+    const { source } = startSource({ runs, projectRoot: main, repoRoot: main, lanes })
+    const lockedAt = new Date(Date.now() - 60000).toISOString()
+    writeFileSync(join(runs, 'opencode.lock'), JSON.stringify({ pid: process.pid, startedAt: lockedAt }))
+    writeFileSync(join(runs, 'opencode-P85-20261112-220000.log'), `${toolLine('src/a.js')}
+`)
+    await waitFor(() => source.openRuns().length === 1, { what: 'the open run' })
+    expect(source.openRuns()[0].startedAt).toBe(lockedAt)
+  })
 })
 
 describe('lane lock stale checks in the lane source', () => {

@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- P285: a lane lock names its run start, and a stop with --started-at refuses a different run; the bridge passes the confirmed start time, and the lanes source takes it from the lock.
 - P282: AUDIT-2026-11-DOCS-3.md lists 14 doc sentences this week's code contradicts, with corrections; every new route, flag and record field is named.
 - P283: AUDIT-2026-11-TESTS-2.md lists 12 tests since 12c25524 that pass with their change undone, nine proved in a scratch copy.
 - P291: AUDIT-2026-11-TRIAL-PLAN.md finds six of eight plan claims true and lists nine steps the room cannot do today on another project.
@@ -9,6 +10,8 @@
 - P289: CODE.md gains a line for each file under src, server, scripts, bin and tests that it did not name.
 - P280: TRIAL-ULOLTRIS.md gives the command, the check command, worktree mode, three candidate tasks from ulolTris's own next steps and what would count as a room failure.
 - P279: a secret-named field is masked only when it holds a string, so token counts show and keys stay hidden.
+- P285: a lane lock carries the run's start time, and `--stop LANE --started-at ISO` refuses with `The LANE lane is running a different run now, so nothing was stopped.` and exit 1 when the lock names another run or no start time.
+- P285: the bridge passes the confirmed start time when it starts a run and when it stops one, so a stop ends only the run it names.
 - P278: RUN-2026-11-14-SUITE.md at d54e3a38: 5263 tests passed, one load flake in run-lane-stop that passes alone.
 - P284: run-lane --list adds 'moved to LANE (KIND)' to a run that failed over and 'taken over from LANE' to the backup's run.
 - P289: CODE.md adds one line for each of the 314 unnamed files across src, server, scripts and tests, with zero lines removed.

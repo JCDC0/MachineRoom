@@ -8,7 +8,7 @@ import { finished } from 'node:stream'
 import { fileURLToPath } from 'node:url'
 import { branchFor, briefFileList, buildPrompt, nextVersion, parseBriefs, parseRules } from '../src/briefs/briefs.js'
 import { formatQueueSummary, parseQueue, parseQueueArgs, runQueue } from '../src/briefs/queue.js'
-import { briefProblems, briefWorktreeProblems, checkCommandProblem, childEnvironment, commandFor, createLaneLog, DEFAULT_MINUTES, fallbackProblem, failoverKind, filterRunsSince, formatOutcomes, formatStats, formatSummary, laneCommandProblem, laneStats, laneStopProblem, laneWithOverrides, limitedFor, maskedQueueTasks, ORCHESTRATOR_LANE_PROBLEM, parseRunArgs, projectProblems, projectRunGit, readinessLine, retryStartProblem, runListLine, runRecord, sessionToolLines, splitCheckCommand, startFailureText, summarizeRun, unattendedPrompt, worktreeFor, WORKTREES_FOLDER } from '../src/briefs/run.js'
+import { briefProblems, briefWorktreeProblems, checkCommandProblem, childEnvironment, commandFor, createLaneLog, DEFAULT_MINUTES, fallbackProblem, failoverKind, filterRunsSince, formatOutcomes, formatStats, formatSummary, laneCommandProblem, laneLockStartedAt, laneLockText, laneStats, laneStopProblem, laneWithOverrides, limitedFor, maskedQueueTasks, ORCHESTRATOR_LANE_PROBLEM, parseRunArgs, projectProblems, projectRunGit, readinessLine, retryStartProblem, runListLine, runRecord, sessionToolLines, splitCheckCommand, startFailureText, summarizeRun, unattendedPrompt, worktreeFor, WORKTREES_FOLDER } from '../src/briefs/run.js'
 import { outcomeTable } from '../server/outcomes.js'
 import { readMainSubjectsSync } from '../server/runs.js'
 import { isLockHolderStale, killTree, descendantProcesses, leftoverProcesses, listProcesses } from '../server/processTree.js'
@@ -114,6 +114,7 @@ export function helpLines() {
     '  npm run run-lane -- --stats [--since YYYY-MM-DD]                 print runs, minutes and cost per lane',
     '  npm run run-lane -- --outcomes [--since YYYY-MM-DD]              print the merge table',
     '  npm run run-lane -- --stop <lane>                                stop that lane and its processes',
+    '  npm run run-lane -- --stop <lane> --started-at <ISO>             stop only the run that started at that time',
     '',
     'Flags:',
     '  --dry-run            print the command and start nothing',
@@ -246,6 +247,14 @@ function stopArgument(argv) {
   return lane
 }
 
+function stopStartedAt(argv) {
+  const index = argv.findIndex((arg) => arg === '--started-at' || arg.startsWith('--started-at='))
+  if (index === -1) return ''
+  const arg = argv[index]
+  const value = arg === '--started-at' ? argv[index + 1] : arg.slice('--started-at='.length)
+  return typeof value === 'string' ? value.trim() : ''
+}
+
 function lockText(path) {
   try {
     return readFileSync(path, 'utf8')
@@ -254,7 +263,32 @@ function lockText(path) {
   }
 }
 
-export function stopLane(laneKey, { platform = process.platform, list = listProcesses, kill = killTree, stat = statSync, alive = processAlive } = {}) {
+function laneStartTime(options) {
+  const given = typeof options?.startedAt === 'string' ? Date.parse(options.startedAt) : options?.startedAt
+  return Number.isFinite(given) && given > 0 ? given : Date.now()
+}
+
+function writeLockStart(path, startedAt) {
+  const holder = readLaneLock(path)
+  if (holder.pid !== process.pid) return false
+  writeFileSync(path, laneLockText({ pid: holder.pid, child: holder.child, folder: holder.folder, projectRun: holder.projectRun, startedAt }))
+  return true
+}
+
+function takeRunLock(folder, laneKey, options, startedAt) {
+  const path = takeLaneLock(folder, laneKey, options)
+  writeLockStart(path, startedAt)
+  return path
+}
+
+function differentRunText(laneKey, path, startedAt) {
+  if (startedAt === '') return ''
+  const current = Date.parse(laneLockStartedAt(lockText(path)))
+  if (Number.isFinite(current) && current === Date.parse(startedAt)) return ''
+  return `The ${laneKey} lane is running a different run now, so nothing was stopped.`
+}
+
+export function stopLane(laneKey, { platform = process.platform, list = listProcesses, kill = killTree, stat = statSync, alive = processAlive, startedAt = '' } = {}) {
   const folder = runsFolder()
   const path = join(folder, `${laneKey}.lock`)
   const before = lockText(path)
@@ -275,6 +309,11 @@ export function stopLane(laneKey, { platform = process.platform, list = listProc
   const rootPid = Number.isInteger(holder.child) && holder.child > 0 ? holder.child : holder.pid
   const isStranger = (pid) => isLockHolderStale(pid, lockMtime, { platform, processes: byPid })
   const descendants = isStranger(rootPid) ? [] : harnessDescendants(rootPid, { excludePids: [holder.pid ?? 0], processes })
+  const differentRun = differentRunText(laneKey, path, startedAt)
+  if (differentRun !== '') {
+    console.log(differentRun)
+    return 1
+  }
   let stopped = 0
   let failed = 0
   let listStale = false
@@ -566,15 +605,27 @@ function startedByOption(argv) {
   return { args, startedBy: value }
 }
 
+function startedAtOption(argv) {
+  const index = argv.findIndex((arg) => arg === '--started-at' || arg.startsWith('--started-at='))
+  if (index === -1) return { args: argv, startedAt: '' }
+  const arg = argv[index]
+  const value = arg === '--started-at' ? argv[index + 1] : arg.slice('--started-at='.length)
+  if (typeof value !== 'string' || value.trim() === '') throw new Error('--started-at needs a start time.')
+  const args = [...argv.slice(0, index), ...(arg === '--started-at' ? argv.slice(index + 2) : argv.slice(index + 1))]
+  return { args, startedAt: value.trim() }
+}
+
 function runOptions(argv) {
   const queued = argv.some((arg) => arg === '--queue' || arg.startsWith('--queue='))
   if (!queued) return parseRunArgs(argv)
   const started = startedByOption(argv)
-  const worktree = started.args.includes('--worktree')
-  const options = parseQueueArgs(started.args.filter((arg) => arg !== '--worktree'))
+  const timed = startedAtOption(started.args)
+  const worktree = timed.args.includes('--worktree')
+  const options = parseQueueArgs(timed.args.filter((arg) => arg !== '--worktree'))
   return {
     ...options,
     ...(started.startedBy ? { startedBy: started.startedBy } : {}),
+    ...(timed.startedAt ? { startedAt: timed.startedAt } : {}),
     ...(worktree ? { worktree: true } : {}),
   }
 }
@@ -1200,9 +1251,10 @@ async function runQueueProject({ options, lane, lanes }) {
   const lockTarget = options.worktree ? worktreeFor(project, options.lane) || project : project
   refuseRunningLane(options.lane, options.worktree ? lockTarget : '', folder)
   const projectLock = takeProjectLock(folder, lockTarget)
+  const startedAt = laneStartTime(options)
   let lock
   try {
-    lock = takeLaneLock(folder, options.lane, { worktree: lockTarget, projectRun: !options.worktree })
+    lock = takeRunLock(folder, options.lane, { worktree: lockTarget, projectRun: !options.worktree }, startedAt)
   } catch (error) {
     releaseLaneLock(projectLock)
     throw error
@@ -1316,7 +1368,7 @@ async function runQueueProject({ options, lane, lanes }) {
 
 const VALUE_FLAGS = new Set([
   '--project', '--task', '--task-file', '--since', '--minutes', '--started-by',
-  '--model', '--reasoning', '--queue', '--test',
+  '--started-at', '--model', '--reasoning', '--queue', '--test',
 ])
 
 function helpRequested(argv) {
@@ -1338,7 +1390,7 @@ async function main() {
     return 0
   }
   const stop = stopArgument(argv)
-  if (stop) return stopLane(stop)
+  if (stop) return stopLane(stop, { startedAt: stopStartedAt(argv) })
   let options
   try {
     options = runOptions(argv)
@@ -1419,15 +1471,16 @@ async function main() {
     mkdirSync(folder, { recursive: true })
     refuseRunningLane(options.lane, '', folder)
     const projectLock = takeProjectLock(folder, project)
+    const startedAt = laneStartTime(options)
     let lock
     try {
-      lock = takeLaneLock(folder, options.lane, { worktree: project, projectRun: true })
+      lock = takeRunLock(folder, options.lane, { worktree: project, projectRun: true }, startedAt)
     } catch (error) {
       releaseLaneLock(projectLock)
       throw error
     }
     try {
-      const run = await startLane({ options, lane, lanes, wanted: [], prompt, logPath, usageFile, name, project, task, lockPath: lock, deferRecord: true })
+      const run = await startLane({ options, lane, lanes, wanted: [], prompt, logPath, usageFile, name, project, task, lockPath: lock, deferRecord: true, startedAt })
       let code = run.code
       let tests = ''
       if (run.code === 0 && run.killed !== true) {
@@ -1507,9 +1560,10 @@ async function main() {
 
   mkdirSync(folder, { recursive: true })
   refuseRunningLane(options.lane, lane.worktree, folder)
-  const lock = takeLaneLock(folder, options.lane, { worktree: lane.worktree })
+  const startedAt = laneStartTime(options)
+  const lock = takeRunLock(folder, options.lane, { worktree: lane.worktree }, startedAt)
   try {
-    const run = await startLane({ options, lane, lanes, wanted, prompt, promptFor, logPath, usageFile, name, lockPath: lock })
+    const run = await startLane({ options, lane, lanes, wanted, prompt, promptFor, logPath, usageFile, name, lockPath: lock, startedAt })
     return run.code
   } finally {
     releaseLaneLock(lock)
@@ -1537,10 +1591,11 @@ async function startFailover({ laneKey, target, lanes, options, wanted, prompt, 
       return null
     }
   }
+  const startedAt = Date.now()
   let lock
   try {
     refuseRunningLane(target, project ? '' : fallbackLane.worktree, folder)
-    lock = takeLaneLock(folder, target, project ? { worktree: project, projectRun: true } : { worktree: fallbackLane.worktree })
+    lock = takeRunLock(folder, target, project ? { worktree: project, projectRun: true } : { worktree: fallbackLane.worktree }, startedAt)
   } catch {
     console.log(`The backup lane ${target} is busy, so the run stays failed.`)
     return null
@@ -1581,13 +1636,14 @@ async function startFailover({ laneKey, target, lanes, options, wanted, prompt, 
       branchSuffix: `-on-${target}`,
       failoverFrom: { lane: laneKey, startedAt: failedRecord?.startedAt },
       openLog,
+      startedAt,
     })
   } finally {
     releaseLaneLock(lock)
   }
 }
 
-export async function startLane({ options, lane, lanes, wanted, prompt, logPath, usageFile, name, project = '', task = '', queue = null, lockPath = '', projectBranch = null, deferRecord = false, base = '', openLog = createWriteStream, branchSuffix = '', failoverFrom = null, promptFor = null }) {
+export async function startLane({ options, lane, lanes, wanted, prompt, logPath, usageFile, name, project = '', task = '', queue = null, lockPath = '', projectBranch = null, deferRecord = false, base = '', openLog = createWriteStream, branchSuffix = '', failoverFrom = null, promptFor = null, startedAt: givenStartedAt = null }) {
   if (options?.failedOver !== true) {
     const problem = fallbackProblem({ laneKey: options?.lane, fallback: lane?.fallback, lanes })
     if (problem !== '') throw new Error(problem)
@@ -1658,7 +1714,7 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
       },
       runId: name,
     })
-    const startedAt = Date.now()
+    const startedAt = Number.isFinite(Number(givenStartedAt)) && Number(givenStartedAt) > 0 ? Number(givenStartedAt) : Date.now()
     const projectStart = project
       ? {
           branch: typeof projectBranch === 'string' ? projectBranch : gitRead(project, ['branch', '--show-current']) ?? '',
@@ -1683,7 +1739,9 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
       endpoints,
     })
     const child = spawn(spawnSpec.file, spawnSpec.args, { cwd: command.cwd, env: childEnv, stdio: spawnSpec.input ? ['pipe', 'pipe', 'pipe'] : ['ignore', 'pipe', 'pipe'], windowsHide: true })
+    const lockStart = queue && lockPath ? laneLockStartedAt(lockText(lockPath)) || startedAt : startedAt
     if (lockPath) writeLaneChild(lockPath, child.pid)
+    if (lockPath) writeLockStart(lockPath, lockStart)
     if (spawnSpec.input && child.stdin) {
       child.stdin.on('error', () => {})
       child.stdin.end(prompt)

@@ -378,6 +378,7 @@ export function parseRunArgs(argv) {
   let allowDirty = false
   let worktree = false
   let startedBy = ''
+  let startedAt = ''
   let test = ''
   const overrides = {}
   for (let index = 0; index < args.length; index += 1) {
@@ -460,6 +461,13 @@ export function parseRunArgs(argv) {
       startedBy = value
       continue
     }
+    if (arg === '--started-at' || arg.startsWith('--started-at=')) {
+      const value = arg === '--started-at' ? args[index + 1] : arg.slice('--started-at='.length)
+      if (arg === '--started-at') index += 1
+      if (typeof value !== 'string' || value.trim() === '') throw new Error('--started-at needs a start time.')
+      startedAt = value.trim()
+      continue
+    }
     if (arg === '--test' || arg.startsWith('--test=')) {
       const value = arg === '--test' ? args[index + 1] : arg.slice('--test='.length)
       if (arg === '--test') index += 1
@@ -496,14 +504,15 @@ export function parseRunArgs(argv) {
       ...(taskFile ? { taskFile } : {}),
       ...(test ? { test } : {}),
       ...(allowDirty ? { allowDirty: true } : {}),
+      ...(startedAt ? { startedAt } : {}),
     }
   }
   if (test !== '') throw new Error('--test needs a --project task.')
   if (briefs.length === 0) throw new Error('Name at least one brief id.')
-  return { lane, briefs, dryRun, minutes, list, ...(force ? { force: true } : {}), ...overrides, ...(startedBy ? { startedBy } : {}) }
+  return { lane, briefs, dryRun, minutes, list, ...(force ? { force: true } : {}), ...overrides, ...(startedBy ? { startedBy } : {}), ...(startedAt ? { startedAt } : {}) }
 }
 
-export function laneLockText({ pid, child, folder, projectRun } = {}) {
+export function laneLockText({ pid, child, folder, projectRun, startedAt } = {}) {
   const own = Number.isInteger(pid) && pid > 0 ? pid : 0
   if (own === 0) return ''
   const entry = { pid: own }
@@ -511,7 +520,22 @@ export function laneLockText({ pid, child, folder, projectRun } = {}) {
   const name = typeof folder === 'string' ? folder.trim() : ''
   if (name !== '') entry.folder = name
   if (projectRun === true) entry.projectRun = true
+  const start = isoTime(startedAt)
+  if (start !== null) entry.startedAt = start
   return `${JSON.stringify(entry)}\n`
+}
+
+export function laneLockStartedAt(text) {
+  const raw = String(text ?? '').trim()
+  if (!raw.startsWith('{')) return ''
+  let parsed
+  try {
+    parsed = JSON.parse(raw)
+  } catch {
+    return ''
+  }
+  const startedAt = typeof parsed?.startedAt === 'string' ? parsed.startedAt.trim() : ''
+  return isoTime(startedAt) === null ? '' : startedAt
 }
 
 export function laneLockPids(text) {

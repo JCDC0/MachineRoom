@@ -200,7 +200,7 @@ describe('the runs route with a task', () => {
     expect(res.body.project).toBeUndefined()
 
     const args = await waitFor(() => readArgs(out), { what: 'the runner arguments' })
-    expect(args).toEqual(['opencode', '--project', project, '--task', 'Fix the typo.'])
+    expect(args).toEqual(['opencode', '--project', project, '--task', 'Fix the typo.', '--started-at', res.body.startedAt])
     await waitFor(async () => (await getJson(`${url}/api/control/runs`)).body.running.length === 0, { what: 'the run to end' })
   })
 
@@ -225,7 +225,7 @@ describe('the runs route with a task', () => {
     const res = await postJson(`${url}/api/control/runs`, { lane: 'opencode', task: 'Fix it.', worktree: true, confirmed: true })
     expect(res.status).toBe(202)
     const args = await waitFor(() => readArgs(out), { what: 'the runner arguments' })
-    expect(args).toEqual(['opencode', '--project', project, '--task', 'Fix it.', '--worktree'])
+    expect(args).toEqual(['opencode', '--project', project, '--task', 'Fix it.', '--worktree', '--started-at', res.body.startedAt])
     await waitFor(async () => (await getJson(`${url}/api/control/runs`)).body.running.length === 0, { what: 'the run to end' })
   })
 
@@ -238,7 +238,7 @@ describe('the runs route with a task', () => {
     const res = await postJson(`${url}/api/control/runs`, { lane: 'opencode', task: 'Fix it.', allowDirty: true, confirmed: true })
     expect(res.status).toBe(202)
     const args = await waitFor(() => readArgs(out), { what: 'the runner arguments' })
-    expect(args).toEqual(['opencode', '--project', project, '--task', 'Fix it.', '--allow-dirty'])
+    expect(args).toEqual(['opencode', '--project', project, '--task', 'Fix it.', '--allow-dirty', '--started-at', res.body.startedAt])
     await waitFor(async () => (await getJson(`${url}/api/control/runs`)).body.running.length === 0, { what: 'the run to end' })
   })
 
@@ -259,7 +259,7 @@ describe('the runs route with a task', () => {
     const last = await postJson(`${url}/api/control/runs`, { lane: 'opencode', task: 'x'.repeat(4000), confirmed: true })
     expect(last.status).toBe(202)
     const args = await waitFor(() => readArgs(out), { what: 'the runner arguments' })
-    expect(args).toEqual(['opencode', '--project', project, '--task', 'x'.repeat(4000)])
+    expect(args).toEqual(['opencode', '--project', project, '--task', 'x'.repeat(4000), '--started-at', last.body.startedAt])
     await waitFor(async () => (await getJson(`${url}/api/control/runs`)).body.running.length === 0, { what: 'the run to end' })
   })
 
@@ -280,7 +280,7 @@ describe('the runs route with a task', () => {
     const allowed = await postJson(`${url}/api/control/runs`, { lane: 'opencode', task: 'Fix it.', allowDirty: true, confirmed: true })
     expect(allowed.status).toBe(202)
     const args = await waitFor(() => readArgs(out), { what: 'the runner arguments' })
-    expect(args).toEqual(['opencode', '--project', project, '--task', 'Fix it.', '--allow-dirty'])
+    expect(args).toEqual(['opencode', '--project', project, '--task', 'Fix it.', '--allow-dirty', '--started-at', allowed.body.startedAt])
     await waitFor(async () => (await getJson(`${url}/api/control/runs`)).body.running.length === 0, { what: 'the run to end' })
   })
 
@@ -522,7 +522,7 @@ describe('the runs route with a queue', () => {
       const args = await waitFor(() => readArgs(out), { what: 'the runner arguments' })
       expect(args).toContain('--test')
       expect(args[args.indexOf('--test') + 1]).toBe('node scripts/check.mjs')
-      expect(parseQueueArgs(args)).toMatchObject({ test: 'node scripts/check.mjs' })
+      expect(parseQueueArgs(args.filter((arg, index) => arg !== '--started-at' && args[index - 1] !== '--started-at'))).toMatchObject({ test: 'node scripts/check.mjs' })
       await waitFor(async () => (await getJson(`${url}/api/control/runs`)).body.running.length === 0, { what: 'the run to end' })
     } finally {
       if (previous === undefined) delete process.env.TEMP
@@ -988,7 +988,7 @@ describe('POST /api/control/runs/stop', () => {
       startedAt: started.body.startedAt,
       output: 'stopped: 42 (the harness)',
     })
-    expect(readArgs(stopOut)).toEqual(['--stop', 'opencode'])
+    expect(readArgs(stopOut)).toEqual(['--stop', 'opencode', '--started-at', started.body.startedAt])
 
     const after = await getJson(`${url}/api/control/runs`)
     expect(after.body.running).toEqual([])
@@ -1002,6 +1002,39 @@ describe('POST /api/control/runs/stop', () => {
       killed: true,
       task: 'Fix the flaky test.',
     })
+  })
+
+  it('passes the confirmed start time to a stop for a run found in the lanes source', async () => {
+    const project = tempDir('mr-stop-source-')
+    const runnerDir = tempDir('mr-stop-runner-')
+    const stopOut = join(runnerDir, 'stop-args.json')
+    const runnerPath = writeStopAwareRunner(runnerDir, join(runnerDir, 'start-args.json'), stopOut)
+    const runs = runsFolder()
+    mkdirSync(runs, { recursive: true })
+    const startedAt = '2026-11-14T09:00:00.000Z'
+    let answer = null
+    const api = createRunsApi({
+      projectRoot: project,
+      runnerCommand: { file: process.execPath, args: [runnerPath] },
+      sendJson: (req, res, status, body) => {
+        answer = { status, body }
+      },
+      readJsonBody: async () => ({ lane: 'opencode', startedAt, confirmed: true }),
+      runsFolder: runs,
+      lanesFile: join(REPO_ROOT, 'docs', 'agents', 'lanes.json'),
+      lanesSource: () => ({ openRuns: () => [{ lane: 'opencode', startedAt, project: null }] }),
+      activeLanes: { isChosen: () => true, isLaneActive: () => true },
+    })
+    cleanups.push(() => api.stopAll())
+    const handled = await api.handle(
+      { method: 'POST', headers: { origin: 'http://localhost:5173' } },
+      {},
+      new URL('http://127.0.0.1/api/control/runs/stop')
+    )
+    expect(handled).toBe(true)
+    expect(answer.status).toBe(200)
+    expect(answer.body).toMatchObject({ ok: true, lane: 'opencode', startedAt })
+    expect(readArgs(stopOut)).toEqual(['--stop', 'opencode', '--started-at', startedAt])
   })
 
   it('refuses a mismatched start time, an unconfirmed request, a finished run and a bad origin', async () => {
