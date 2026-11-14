@@ -1720,12 +1720,12 @@ describe('starting lanes from a sub orchestrator', () => {
     }, subToken)
     expect(inside.status).toBe(202)
     await waitFor(() => readLines(runnerCalls).length === 1)
-    expect(readLines(runnerCalls)[0].slice(-2)).toEqual(['--started-by', 'frontend'])
+    expect(readLines(runnerCalls)[0].slice(-4, -2)).toEqual(['--started-by', 'frontend'])
 
     const main = await tokenPost(`${rig.url}/api/control/runs`, { lane: 'opencode2', task: 'Fix it.', confirmed: true }, mainToken)
     expect(main.status).toBe(202)
     await waitFor(() => readLines(runnerCalls).length === 2)
-    expect(readLines(runnerCalls)[1].slice(-2)).toEqual(['--started-by', 'orchestrator'])
+    expect(readLines(runnerCalls)[1].slice(-4, -2)).toEqual(['--started-by', 'orchestrator'])
   })
 
   it('sends one dispatch frame from the starter to the lane it starts', async () => {
@@ -1848,7 +1848,7 @@ describe('starting lanes from a sub orchestrator', () => {
     })
     expect(page.status).toBe(202)
     await waitFor(() => readLines(runnerCalls).length === 1)
-    expect(readLines(runnerCalls)[0].slice(-2)).toEqual(['--started-by', 'orchestrator'])
+    expect(readLines(runnerCalls)[0].slice(-4, -2)).toEqual(['--started-by', 'orchestrator'])
 
     const unknownPage = await pagePost(`${rig.url}/api/control/runs`, {
       lane: 'opencode',
@@ -1994,7 +1994,7 @@ describe('a run the main starts on a sub lane', () => {
     }, mainToken)
     expect(named.status).toBe(202)
     await waitFor(() => readLines(rig.runnerCalls).length === 1)
-    expect(readLines(rig.runnerCalls)[0].slice(-2)).toEqual(['--started-by', 'frontend'])
+    expect(readLines(rig.runnerCalls)[0].slice(-4, -2)).toEqual(['--started-by', 'frontend'])
 
     const unnamed = await tokenPost(`${rig.url}/api/control/runs`, {
       lane: 'opencode2',
@@ -2003,7 +2003,7 @@ describe('a run the main starts on a sub lane', () => {
     }, mainToken)
     expect(unnamed.status).toBe(202)
     await waitFor(() => readLines(rig.runnerCalls).length === 2)
-    expect(readLines(rig.runnerCalls)[1].slice(-2)).toEqual(['--started-by', 'backend'])
+    expect(readLines(rig.runnerCalls)[1].slice(-4, -2)).toEqual(['--started-by', 'backend'])
     await waitFor(async () => {
       const state = await fetch(`${rig.url}/api/control/runs`).then((reply) => reply.json())
       return !state.running.some((run) => run.lane === 'opencode')
@@ -2020,7 +2020,7 @@ describe('a run the main starts on a sub lane', () => {
     })
     expect(pageRun.status).toBe(202)
     await waitFor(() => readLines(rig.runnerCalls).length === 3)
-    expect(readLines(rig.runnerCalls)[2].slice(-2)).toEqual(['--started-by', 'frontend'])
+    expect(readLines(rig.runnerCalls)[2].slice(-4, -2)).toEqual(['--started-by', 'frontend'])
   })
 
   it('refuses a no-Origin request whose token names an orchestrator with no sector', async () => {
@@ -2044,7 +2044,7 @@ describe('a run the main starts on a sub lane', () => {
     const res = await pagePost(`${rig.url}/api/control/runs`, { lane: 'opencode', task: 'Fix it.', confirmed: true })
     expect(res.status).toBe(202)
     await waitFor(() => readLines(rig.runnerCalls).length === 1)
-    expect(readLines(rig.runnerCalls)[0].slice(-2)).toEqual(['--started-by', 'frontend'])
+    expect(readLines(rig.runnerCalls)[0].slice(-4, -2)).toEqual(['--started-by', 'frontend'])
   })
 
   it('routes a run with no lane only among the lanes of the sub the token names', async () => {

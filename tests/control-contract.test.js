@@ -48,7 +48,7 @@ const TINY_RUNNER = [
   'await new Promise((done) => setTimeout(done, 300))',
   "const folder = join(process.env.TEMP || tmpdir(), 'machineroom-runs')",
   "mkdirSync(folder, { recursive: true })",
-  "const record = { lane: args[0], briefs: args.slice(1), model: null, reasoning: null, startedAt: new Date().toISOString(), minutes: 0, exitCode: 0, killed: false, costUsd: 0.2, log: null, branch: '', commits: [] }",
+  "const record = { lane: args[0], briefs: args.slice(1).filter((arg, i, all) => arg !== '--started-at' && all[i - 1] !== '--started-at'), model: null, reasoning: null, startedAt: new Date().toISOString(), minutes: 0, exitCode: 0, killed: false, costUsd: 0.2, log: null, branch: '', commits: [] }",
   "appendFileSync(join(folder, 'runs.jsonl'), JSON.stringify(record) + '\\n')",
 ].join('\n')
 

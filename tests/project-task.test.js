@@ -100,7 +100,7 @@ describe('startProjectTask', () => {
     const calls = await waitFor(() => (readCalls(callsFile).length === 1 ? readCalls(callsFile) : null), {
       what: 'runner arguments',
     })
-    expect(calls[0]).toEqual(['opencode', '--project', project, '--task', 'Fix the typo.', '--worktree'])
+    expect(calls[0]).toEqual(['opencode', '--project', project, '--task', 'Fix the typo.', '--worktree', '--started-at', expect.any(String)])
     await waitFor(() => !api.isRunning('opencode'), { what: 'the run to end' })
   })
 
@@ -116,7 +116,7 @@ describe('startProjectTask', () => {
     const calls = await waitFor(() => (readCalls(callsFile).length === 1 ? readCalls(callsFile) : null), {
       what: 'runner arguments',
     })
-    expect(calls[0]).toEqual(['opencode', '--project', project, '--task', 'Fix the typo.'])
+    expect(calls[0]).toEqual(['opencode', '--project', project, '--task', 'Fix the typo.', '--started-at', expect.any(String)])
     expect(calls[0]).not.toContain('--worktree')
     await waitFor(() => !api.isRunning('opencode'), { what: 'the run to end' })
 
@@ -261,6 +261,8 @@ describe('startProjectTask', () => {
       'Fix the typo.',
       '--started-by',
       'orchestrator',
+      '--started-at',
+      expect.any(String),
     ])
     await waitFor(() => !api.isRunning('opencode'), { what: 'the first run to end' })
 
@@ -269,7 +271,7 @@ describe('startProjectTask', () => {
     const nextCalls = await waitFor(() => (readCalls(callsFile).length === 2 ? readCalls(callsFile) : null), {
       what: 'second runner call',
     })
-    expect(nextCalls[1]).toEqual(['opencode', '--project', project, '--task', 'Second task.'])
+    expect(nextCalls[1]).toEqual(['opencode', '--project', project, '--task', 'Second task.', '--started-at', expect.any(String)])
     expect(messages).toHaveLength(1)
     await waitFor(() => !api.isRunning('opencode'), { what: 'the second run to end' })
   })
@@ -323,6 +325,8 @@ describe('startProjectTask', () => {
       '--worktree',
       '--started-by',
       'orchestrator',
+      '--started-at',
+      expect.any(String),
     ])
     await waitFor(async () => (await getJson(`${url}/api/control/runs`)).body.running.length === 0, {
       what: 'chat dispatch run to end',
