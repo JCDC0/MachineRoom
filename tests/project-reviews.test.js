@@ -514,6 +514,29 @@ describe('review routes on another project', () => {
     expect(git(play, ['rev-parse', 'HEAD']).trim()).toBe(secondHead)
   }, 40000)
 
+  it('keeps an ignored config.json in play when the merged commit tracks it and answers failed', async () => {
+    const { project, worktree, briefsDir } = makeProject()
+    const play = join(project, '.worktrees', 'play')
+    const oldHead = git(project, ['rev-parse', 'refs/heads/trunk']).trim()
+    appendFileSync(join(project, '.git', 'info', 'exclude'), 'config.json\n')
+    writeFileSync(join(worktree, 'config.json'), '{"from":"lane"}\n')
+    git(worktree, ['add', '-f', 'config.json'])
+    git(worktree, ['commit', '-m', 'track config'])
+    const head = git(worktree, ['rev-parse', 'HEAD']).trim()
+    git(project, ['worktree', 'add', '--detach', play, 'trunk'])
+    writeFileSync(join(play, 'config.json'), '{"local":true}\n')
+    expect(git(play, ['status', '--porcelain'])).toBe('')
+    const { url } = await startBridge({ projectRoot: project, briefsDir })
+
+    const res = await mergeRequest(url, 'opencode', { confirmed: true, head, base: 'trunk', baseHead: oldHead })
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body).toEqual({ ok: true, lane: 'opencode', branch: 'feat/x', head, commit: head, play: 'failed' })
+    expect(readFileSync(join(play, 'config.json'), 'utf8')).toBe('{"local":true}\n')
+    expect(git(play, ['rev-parse', 'HEAD']).trim()).toBe(oldHead)
+    expect(git(play, ['branch', '--show-current'])).toBe('')
+  }, 40000)
+
   it('refuses a merge when the project branch moved on and says to rebase', async () => {
     const { project, worktree, briefsDir } = makeProject()
     writeFileSync(join(project, 'notes.txt'), 'changed on the project\n')

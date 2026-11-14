@@ -1,5 +1,5 @@
-import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
-import { dirname, isAbsolute, join, resolve } from 'node:path'
+import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
+import { dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import { projectLanesFileFor, readHiddenLanes, writeHiddenLanes } from './active-lanes.js'
 import { readEndpoints } from './endpoints.js'
 import { MODELS, modelsFor } from './models.js'
@@ -83,12 +83,23 @@ function isProgram(path) {
   }
 }
 
-export function codexAppProgram({ env = process.env, platform = process.platform, listDir = readdirSync, statFile = statSync } = {}) {
+export function codexAppProgram({
+  env = process.env,
+  platform = process.platform,
+  listDir = readdirSync,
+  statFile = statSync,
+  lstatFile = lstatSync,
+  realPath = realpathSync.native,
+} = {}) {
   if (platform !== 'win32' || typeof env?.LOCALAPPDATA !== 'string' || env.LOCALAPPDATA === '') return null
   const binDir = join(env.LOCALAPPDATA, 'OpenAI', 'Codex', 'bin')
   let folders
+  let realBinDir
   try {
+    const binStat = lstatFile(binDir)
+    if (binStat.isSymbolicLink() || !binStat.isDirectory()) return null
     folders = listDir(binDir)
+    realBinDir = realPath(binDir)
   } catch {
     return null
   }
@@ -97,9 +108,17 @@ export function codexAppProgram({ env = process.env, platform = process.platform
   for (const folder of folders) {
     if (typeof folder !== 'string') continue
     if (!CODEX_VERSION_FOLDER.test(folder)) continue
-    const program = join(binDir, folder, 'codex.exe')
+    const folderDir = join(binDir, folder)
+    const program = join(folderDir, 'codex.exe')
     try {
-      const file = statFile(program)
+      const folderStat = lstatFile(folderDir)
+      if (folderStat.isSymbolicLink() || !folderStat.isDirectory()) continue
+      const linkStat = lstatFile(program)
+      if (linkStat.isSymbolicLink() || !linkStat.isFile()) continue
+      const resolvedProgram = realPath(program)
+      const inside = relative(realBinDir, resolvedProgram)
+      if (!inside || isAbsolute(inside) || inside.split(/[\\/]+/).includes('..')) continue
+      const file = statFile === statSync ? linkStat : statFile(program)
       const modified = Number(file.mtimeMs)
       if (!file.isFile() || !Number.isFinite(modified)) continue
       if (!newest || modified > newest.modified) newest = { program, modified }

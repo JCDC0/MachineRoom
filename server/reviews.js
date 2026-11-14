@@ -442,7 +442,7 @@ export function createReviewsApi({
       if (branch) return { play: 'not detached' }
       const status = await runGit(play, ['status', '--porcelain'])
       if (status.trim() !== '') return { play: 'dirty' }
-      await runGit(play, ['checkout', '--detach', commit], { timeout: GIT_WRITE_TIMEOUT_MS })
+      await runGit(play, ['checkout', '--no-overwrite-ignore', '--detach', commit], { timeout: GIT_WRITE_TIMEOUT_MS })
       return { play: 'moved' }
     } catch {
       return { play: 'failed' }

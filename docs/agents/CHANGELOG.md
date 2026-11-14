@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- The play move keeps ignored local files, and the Codex app lookup skips linked folders, linked programs and paths outside its bin folder (P318).
 - A stop takes leftover processes only from the list it took before the lock check, matched by pid and start time, so a newer run in the same worktree is left alone (P313).
 - A bare carriage return ends a check line, so it counts toward the four commands (P317).
 - A refused backup reads as one that could not start in --list and the Inspector (P315).
@@ -8,6 +9,8 @@
 - P317: a bare carriage return ends a check line in the saved setting, `--test` and the mock, so a quoted argument cannot hide a second command.
 - P313: a stop takes its leftover targets only from the process list read before its lock check, so a newer run's harness stays alive, and says so in one line when that list is missing.
 - P313: a stop matches each leftover by pid and creation time, so a reused pid is not killed, and the stop test covers a newer run that takes the lock inside the leftover list.
+- P318: codexAppProgram skips symbolic links and junctions for the bin folder, hash folders and codex.exe, and skips programs resolving outside OpenAI\Codex\bin.
+- P318: the play worktree move runs checkout with `--no-overwrite-ignore` so an ignored local file stays intact and answers failed on collision.
 - Review 34 lists nine findings in the batch since review 33 and seventeen doc sentences the code contradicts (P312).
 - The doctor and every orchestrator find the Codex app's codex.exe when codex is not on PATH, as lanes already did (P311).
 - P311: `codexProgramFor` answers the Codex app's newest program for a bare `codex` bin when codex is not on PATH, and run-lane uses it.
