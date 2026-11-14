@@ -99,11 +99,11 @@ export const codexHarness = {
   adapterType: 'codex_local',
   commitAuthor: { label: 'Codex', address: 'noreply@openai.com' },
   createParser: createCodexParser,
-  command({ cli, prompt, env = {}, folder, reasoning } = {}) {
+  command({ cli, prompt, env = {}, folder, reasoning, mode } = {}) {
     const effort = reasoning ?? cli?.effort
     const args = ['exec', '--json']
     if (cli?.model) args.push('--model', String(cli.model))
-    args.push('--sandbox', 'workspace-write', '--skip-git-repo-check')
+    args.push('--sandbox', mode === 'plan' ? 'read-only' : 'workspace-write', '--skip-git-repo-check')
     if (effort) args.push('-c', `model_reasoning_effort=${effort}`)
     for (const dir of Array.isArray(cli?.addDirs) ? cli.addDirs : []) {
       if (typeof dir === 'string') args.push('--add-dir', expandBin(dir, env))

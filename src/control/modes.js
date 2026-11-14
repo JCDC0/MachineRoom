@@ -12,6 +12,7 @@ const LISTS = {
   claude: ['plan', 'ask', 'edits', 'auto', 'bypass'],
   machineroom: ['plan', 'ask', 'edits', 'auto', 'bypass'],
   opencode: ['plan', 'edits', 'auto'],
+  codex: ['plan', 'auto'],
   agy: ['plan', 'edits', 'auto', 'bypass'],
 }
 
@@ -20,6 +21,7 @@ const LEGACY = {
   agy: 'bypass',
   machineroom: 'bypass',
   opencode: 'auto',
+  codex: 'auto',
 }
 
 export function modesFor(harness) {

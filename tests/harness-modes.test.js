@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { commandFor } from '../src/briefs/run.js'
 import { agyHarness } from '../src/harnesses/agy.js'
+import { codexHarness } from '../src/harnesses/codex.js'
 import { machineroomHarness } from '../src/harnesses/machineroom.js'
 
 const lanes = JSON.parse(readFileSync(new URL('../docs/agents/lanes.json', import.meta.url), 'utf8'))
@@ -9,6 +10,13 @@ const env = { LOCALAPPDATA: 'C:\\Users\\<name>\\AppData\\Local', APPDATA: 'C:\\U
 const cli = { bin: 'agy', model: 'gemini-3.8-flash-high' }
 
 describe('the harness permission modes', () => {
+  it('runs Codex Plan in a read-only sandbox and Auto in a workspace sandbox', () => {
+    for (const [mode, sandbox] of [['plan', 'read-only'], ['auto', 'workspace-write'], ['bypass', 'workspace-write']]) {
+      const args = codexHarness.command({ cli: {}, prompt: 'Do it.', mode }).args
+      expect(args.slice(args.indexOf('--sandbox'), args.indexOf('--sandbox') + 2)).toEqual(['--sandbox', sandbox])
+    }
+  })
+
   it('passes the AGY mode in place of the skip flag and keeps a lane run unchanged', () => {
     for (const [mode, flag] of [['plan', 'plan'], ['edits', 'accept-edits'], ['auto', 'auto']]) {
       const command = agyHarness.command({ cli, prompt: 'Do it.', mode })
