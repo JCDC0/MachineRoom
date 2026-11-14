@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { countLeaks, findLeaks, LEAK_KINDS, maskKeys } from '../src/briefs/audit.js'
-import { AUDIT_USAGE, historyArgsFrom, parseAuditArgs, readHistory } from '../scripts/history-audit.mjs'
+import { historyArgsFrom, parseAuditArgs, readHistory } from '../scripts/history-audit.mjs'
 import { makeTempDir } from './helpers/tempRoot.js'
 
 const SCRIPT = fileURLToPath(new URL('../scripts/history-audit.mjs', import.meta.url))
@@ -38,7 +38,7 @@ describe('the audit help', () => {
       for (const flag of ['--help', '-h']) {
         const result = spawnSync(process.execPath, [SCRIPT, flag], { cwd: dir, encoding: 'utf8', windowsHide: true })
         expect(result.status, flag).toBe(0)
-        expect(result.stdout.trim(), flag).toBe(AUDIT_USAGE)
+        expect(result.stdout.trim(), flag).toBe('Usage: npm run history-audit -- [--from REF] [--json]')
         expect(result.stderr, flag).toBe('')
       }
     } finally {
