@@ -1,6 +1,9 @@
 # Changelog
 
 ## Unreleased
+- P302: a lane lock also names the log of its run, and the runner writes it beside the start time.
+- P302: the lanes source takes a run's start time from the lock only when the lock names that log, so an old log found after a newer run keeps now and a Stop from the room cannot name the newer run.
+- P302: LIVE.md says the lane lock's start time applies only to the log it names.
 - P298: review 33 reads P285 to P297 and lists five findings; R33-1 to R33-3 block the push.
 - P294: a project run refuses to reuse .worktrees/LANE when it is on a named branch with commits not in the project, naming the branch and the count; a detached worktree keeps its check.
 - P297: ROOM.md, LIVE.md and COMMANDS.md say what the lane conversation, the cost board, failover, quota and the tree reuse do now, and the audit table records each row's status.

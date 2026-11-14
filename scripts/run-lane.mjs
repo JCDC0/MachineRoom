@@ -268,16 +268,16 @@ function laneStartTime(options) {
   return Number.isFinite(given) && given > 0 ? given : Date.now()
 }
 
-function writeLockStart(path, startedAt) {
+function writeLockStart(path, startedAt, log = '') {
   const holder = readLaneLock(path)
   if (holder.pid !== process.pid) return false
-  writeFileSync(path, laneLockText({ pid: holder.pid, child: holder.child, folder: holder.folder, projectRun: holder.projectRun, startedAt }))
+  writeFileSync(path, laneLockText({ pid: holder.pid, child: holder.child, folder: holder.folder, projectRun: holder.projectRun, startedAt, log }))
   return true
 }
 
-function takeRunLock(folder, laneKey, options, startedAt) {
+function takeRunLock(folder, laneKey, options, startedAt, log = '') {
   const path = takeLaneLock(folder, laneKey, options)
-  writeLockStart(path, startedAt)
+  writeLockStart(path, startedAt, log)
   return path
 }
 
@@ -1493,7 +1493,7 @@ async function main() {
     const startedAt = laneStartTime(options)
     let lock
     try {
-      lock = takeRunLock(folder, options.lane, { worktree: project, projectRun: true }, startedAt)
+      lock = takeRunLock(folder, options.lane, { worktree: project, projectRun: true }, startedAt, basename(logPath))
     } catch (error) {
       releaseLaneLock(projectLock)
       throw error
@@ -1580,7 +1580,7 @@ async function main() {
   mkdirSync(folder, { recursive: true })
   refuseRunningLane(options.lane, lane.worktree, folder)
   const startedAt = laneStartTime(options)
-  const lock = takeRunLock(folder, options.lane, { worktree: lane.worktree }, startedAt)
+  const lock = takeRunLock(folder, options.lane, { worktree: lane.worktree }, startedAt, basename(logPath))
   try {
     const run = await startLane({ options, lane, lanes, wanted, prompt, promptFor, logPath, usageFile, name, lockPath: lock, startedAt })
     return run.code
@@ -1611,10 +1611,13 @@ async function startFailover({ laneKey, target, lanes, options, wanted, prompt, 
     }
   }
   const startedAt = Date.now()
+  const fallbackName = project
+    ? `${target}-project-${stamp()}`
+    : `${target}-${wanted.map((brief) => brief.id).join('-')}-${stamp()}`
   let lock
   try {
     refuseRunningLane(target, project ? '' : fallbackLane.worktree, folder)
-    lock = takeRunLock(folder, target, project ? { worktree: project, projectRun: true } : { worktree: fallbackLane.worktree }, startedAt)
+    lock = takeRunLock(folder, target, project ? { worktree: project, projectRun: true } : { worktree: fallbackLane.worktree }, startedAt, `${fallbackName}.log`)
   } catch {
     console.log(`The backup lane ${target} is busy, so the run stays failed.`)
     return null
@@ -1633,9 +1636,6 @@ async function startFailover({ laneKey, target, lanes, options, wanted, prompt, 
         return null
       }
     }
-    const fallbackName = project
-      ? `${target}-project-${stamp()}`
-      : `${target}-${wanted.map((brief) => brief.id).join('-')}-${stamp()}`
     return await startLane({
       options: { ...options, lane: target, failedOver: true },
       lane: fallbackLane,
@@ -1760,7 +1760,7 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
     const child = spawn(spawnSpec.file, spawnSpec.args, { cwd: command.cwd, env: childEnv, stdio: spawnSpec.input ? ['pipe', 'pipe', 'pipe'] : ['ignore', 'pipe', 'pipe'], windowsHide: true })
     const lockStart = queue && lockPath ? laneLockStartedAt(lockText(lockPath)) || startedAt : startedAt
     if (lockPath) writeLaneChild(lockPath, child.pid)
-    if (lockPath) writeLockStart(lockPath, lockStart)
+    if (lockPath) writeLockStart(lockPath, lockStart, basename(logPath))
     if (spawnSpec.input && child.stdin) {
       child.stdin.on('error', () => {})
       child.stdin.end(prompt)
