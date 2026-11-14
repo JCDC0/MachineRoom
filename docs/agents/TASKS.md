@@ -2485,3 +2485,13 @@ Write the plan the owner will follow, with `file:line` in MachineRoom for every 
 1. For rows 1 to 14 and the unnamed parts in row 18, check the row against the code at `HEAD` once more, then replace the doc sentence with the corrected one. These lines are long: change only the sentence the row names, and keep the docs' style (plain words, short sentences, no em dashes).
 2. Add a `Status` column to the audit table: `fixed in P297` or `no change`.
 3. Run `node node_modules/vitest/vitest.mjs run tests/briefs.test.js` and report what passed.
+
+**P298. Review the batch since review 32 (Codex).** Read this brief only. Change no code. Do not commit: the runner commits your file. Stop at minute 35. Files: docs/agents/AUDIT-2026-11-REVIEW-33.md.
+
+Let BASE be the commit that added `docs/agents/AUDIT-2026-11-REVIEW-32.md` (`git log --format=%h --diff-filter=A -1 -- docs/agents/AUDIT-2026-11-REVIEW-32.md`). Review `git diff BASE..HEAD` (`git log --first-parent --oneline BASE..HEAD`). Check that each review 32 finding is really fixed: R32-1 by P285, R32-2, R32-3 and R32-5 by P286, R32-4 by P287, R32-6 by P288. Then review what else changed: P262's backup lane choice and model choice in Dispatch, P290's test waits, P293's confirm card, P295's test changes, and the docs of P282, P292 and P297. Look for: a stop that ends a run other than the one the owner confirmed, including a run started from the command line and found in the lanes source; a failed record written twice or lost; a Codex rollout read outside the sessions folder; a key or home path reaching a response, record or conversation entry; and a test that would still pass with its change undone. Write the file as a table ordered by severity: finding, `file:line`, a concrete failure, the smallest fix, and whether it blocks a push.
+
+**P299. Run the full suite on main (OpenCode).** Read this brief only. Change no file except your report. Use no subagents. Run every command in the foreground. Commit only your report, and stop at minute 30. Files: docs/agents/RUN-2026-11-14-SUITE-2.md.
+
+1. Run `npm test` once in your worktree on `main`.
+2. For each failing test, run its file alone. A test that passes alone is a load flake; one that fails alone is a real failure.
+3. Write the report: the totals, each failure with its file, its message and whether it passed alone, and the run time.
