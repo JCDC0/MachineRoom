@@ -89,7 +89,7 @@ curl -s -X POST -H "Content-Type: application/json" -H "X-MachineRoom-Orchestrat
 - To message any orchestrator, `POST {{BRIDGE}}/api/orchestrator/messages` with `{ "to": "ID", "text": "..." }` and the `X-MachineRoom-Orchestrator` header.
 - Any orchestrator may message any other orchestrator (`orchestrator` or a sub id), never itself, at most 6 times in 10 minutes.
 - A sub's turn answer still goes to its parent as `sub:<id>`.
-- A lane does not talk. It reports when its run ends, as a room message in the chat of the orchestrator named by `startedBy`.
+- A lane reports when its run ends, as a room message in the chat of the orchestrator named by `startedBy`. A lane run the room started may also message you while it runs, as `lane:KEY`, at most 4 times a run. To answer it while it still runs, `POST {{BRIDGE}}/api/orchestrator/messages` with `{ "to": "lane:KEY", "text": "..." }`; a 409 means its run has ended, so start a follow-up run.
 - A harness subagent inside a turn answers only that turn, as a tool result.
 
 ## Propose an agent

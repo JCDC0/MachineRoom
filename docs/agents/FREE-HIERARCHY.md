@@ -12,7 +12,7 @@ The owner wants a free hierarchy of coding agents in one project:
 1. Any harness coordinates any other:
    - Ladder data, live updates, 3D sector arcs, sub shapes, chat tabs, autocompact, and per-orchestrator tokens (`X-MachineRoom-Orchestrator` with 403 refusal outside sector lanes): `O1` (0.1.282, `src/model/hierarchy.js`), `O2` (0.1.305), `O3` (0.1.295), `O4` (0.1.291), `O5` (0.1.311), `O6` (0.1.298), `O7` (0.1.316), `O8` (0.1.356), `server/runs.js`.
    - Native Direct API harness (`machineroom` / `scripts/mr-agent.mjs`), `Direct API` panel in `Settings`, GPT-6.1 Terra (`gpt-6.1-terra`) for Codex, any available harness in sub forms (`Direct API` label in `src/ui/ladderForm.js`) with 400 refusal if unavailable, plus ladder tests: `H5`, `H10`, `H17`, `U85`, `P329`, `P331`, `P334`, `P340` (`tests/owner-tree.test.js`).
-   - Still limited on `main`: `FamilyTree.jsx` has no per-sub `scope` or `restricted` fields (`subFromForm` in `ladderForm.js` reads them, UI hardcodes `['**']` and `false`). `server/orchestrator.js` drops `effort` on `codex` and `machineroom` subs. `server/model-list.js` does not list `z-ai/glm-5.3-flash` statically, so add a `Direct API` key first. Built-in non-custom `agy` lanes are skipped by `server/active-lanes.js`.
+   - Still limited on `main`: `FamilyTree.jsx` has no per-sub `scope` or `restricted` fields (`subFromForm` in `ladderForm.js` reads them, UI hardcodes `['**']` and `false`). A Codex or native sub's turn uses its effort since `P345`. `server/model-list.js` does not list `z-ai/glm-5.3-flash` statically, so add a `Direct API` key first. Built-in non-custom `agy` lanes are skipped by `server/active-lanes.js`.
 2. They message each other:
    - Any orchestrator can message any other (`POST /api/orchestrator/messages`, capped at 6 per 10 minutes per sender), shown in the `Team` tab: `P333`.
    - Lane end reports wake only the `startedBy` orchestrator: `O2` (0.1.305), `O8` (0.1.356).
@@ -24,9 +24,15 @@ The owner wants a free hierarchy of coding agents in one project:
    - Main and sub orchestrators enforce modes in `src/control/modes.js`; Codex orchestrators support `Plan` and `Auto` (`P332`).
 
 ## What Does Not Work Yet
-- A lane receives nothing mid-run and cannot reply until its run finishes (`P335` to `P337` are briefs only).
-- Lane modes are P338 (`src/control/modes.js` defines lane mode lists, `server/runs.js` passes no mode yet).
-- A touch outside the project is P339 (no cross-project file guard or watch exists yet).
+- Nothing interrupts a lane run: a run is one call, so a lane gets a reply only when it reads its inbox (`P341`), and the main orchestrator's instructions name the reply form since review 36.
+- A failover backup does not message: the ticket names the failed lane (`P349`).
+- OpenCode lanes take no `plan` or `edits` mode, because those need a permission config the runner does not write yet. The room has no control for a lane's mode yet: name it in the lane's `cli.mode`, with `--mode`, or in the run start request (`P338`, `P343`).
+- A touch outside the project is shown, not stopped (`P346`). The modes are the guard, and only the native harness refuses a path outside its folder by itself.
+
+## Added on 2026-11-15
+- A lane run the room started messages its coordinator, any orchestrator or another running lane while it works, at most 4 times, and reads its replies with its ticket: `P335`, `P336`, `P337`, `P341`, `P342`.
+- A lane run takes a permission mode: `P338`, `P343`, `P344`.
+- An agent's Inspector lists the paths it touched outside the project, under `Outside the project`: `P339`, `P346`.
 
 ## Runbook: Build and Run the Owner's Test Tree
 Target tree: Main on `claude` (`claude-opus-5-5`, `high`); Sub 1 on `codex` (`gpt-6.1-terra`, `high`) with 2 AGY lanes (`gemini-4-hydrogen-xhigh`); Sub 2 on `machineroom` (GLM 5.3 Flash) with 3 OpenCode lanes. Simple form: no subs, all lanes under Main.
@@ -40,7 +46,7 @@ Target tree: Main on `claude` (`claude-opus-5-5`, `high`); Sub 1 on `codex` (`gp
 Open the `Agents` sidebar tab and open `Agents` (`FamilyTree`):
 1. Click `Edit Orchestrator`. Select `Claude Code`, `Model` `Claude Opus 5.5` (`claude-opus-5-5`), and `Effort` `high`. Click `Save` and confirm.
 2. Add the 2 AGY lanes and 3 OpenCode lanes: click `+` (`Add child to ...`), fill `Label`, click harness pill `AGY` with `Model` `Gemini 4 Hydrogen (XHigh)` (`gemini-4-hydrogen-xhigh`), or pill `OpenCode` with `Model` `opencode-go/deepseek-v4.1-flash`, set `Effort`, click `Create`, and confirm `Create`. Keep `Turn on <label>` enabled for each lane.
-3. Check `Select <label>` for the 2 AGY lanes and click `Add sub orchestrator`. Enter `Name`, pick `Sub orchestrator harness` `Codex` (`codex`), `Sub orchestrator model` `GPT-6.1 Terra` (`gpt-6.1-terra`), and `Sub orchestrator effort` `high` (note UI stores this, server ignores Codex sub effort today). Click `Create` and confirm.
+3. Check `Select <label>` for the 2 AGY lanes and click `Add sub orchestrator`. Enter `Name`, pick `Sub orchestrator harness` `Codex` (`codex`), `Sub orchestrator model` `GPT-6.1 Terra` (`gpt-6.1-terra`), and `Sub orchestrator effort` `high`. Click `Create` and confirm.
 4. Check `Select <label>` for the 3 OpenCode lanes and click `Add sub orchestrator`. Enter `Name`, pick `Sub orchestrator harness` `Direct API` (`machineroom`), pick the loaded `z-ai/glm-5.3-flash` entry in `Sub orchestrator model`, click `Create`, and confirm.
 5. Reassign later via `Edit <sub label>` -> `Agents under <label>` -> `Save agents`. To test the simple form, click `Delete <sub label>` (or `Remove`) and confirm so all lanes report to Main.
 
