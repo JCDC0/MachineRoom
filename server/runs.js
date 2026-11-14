@@ -6,7 +6,7 @@ import { basename, dirname, join, resolve } from 'node:path'
 import { StringDecoder } from 'node:string_decoder'
 import { fileURLToPath } from 'node:url'
 import { parseBriefs } from '../src/briefs/briefs.js'
-import { maskKeys } from '../src/briefs/audit.js'
+import { KEY_MASK, maskKeys } from '../src/briefs/audit.js'
 import { SINCE_PROBLEM, checkCommandLines, dayStart, laneModeProblem as runnerModeProblem, laneStats, laneWithOverrides, maskProfilePaths, pathInside, projectProblems, runRecord, worktreeFor } from '../src/briefs/run.js'
 import { profileFromBrief, profileFromTask } from '../src/policy/profile.js'
 import { readPolicy, routeLane, tierFor, TIERS } from '../src/policy/route.js'
@@ -775,9 +775,15 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
     return false
   }
 
+  function maskRunText(text, ticket) {
+    if (typeof text !== 'string' || text === '') return ''
+    const masked = maskKeys(text).text
+    return ticket ? masked.split(ticket).join(KEY_MASK) : masked
+  }
+
   function recordRefusal(item, exitCode) {
     if (hasRecordForLaneSince(item.entry.lane, item.entry.startedAt)) return
-    const note = item.entry.lastLines.join(' ').trim()
+    const note = maskRunText(item.entry.lastLines.join(' ').trim(), item.ticket)
     const record = runRecord({
       lane: item.entry.lane,
       briefs: item.entry.briefs,
@@ -865,8 +871,8 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
     item.child = child
     running.set(lane, item)
     const take = (chunk) => {
-      item.tail += chunk.toString('utf8')
-      const parts = item.tail.split(/\r?\n/)
+      const masked = maskRunText(item.tail + chunk.toString('utf8'), ticket)
+      const parts = masked.split(/\r?\n/)
       item.tail = parts.pop() ?? ''
       for (const line of parts) {
         entry.lastLines.push(line)
@@ -885,7 +891,7 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
     child.stdout?.on('data', take)
     child.stderr?.on('data', take)
     child.on('error', (error) => {
-      entry.lastLines.push(`start failed: ${String(error?.message ?? error)}`)
+      entry.lastLines.push(maskRunText(`start failed: ${String(error?.message ?? error)}`, ticket))
       if (entry.lastLines.length > LAST_LINE_LIMIT) entry.lastLines.shift()
       flushTail(item)
       if (!stopped) recordRefusal(item, 1)

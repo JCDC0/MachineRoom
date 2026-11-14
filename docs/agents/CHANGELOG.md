@@ -1,6 +1,8 @@
 # Changelog
 
 ## Unreleased
+- The bridge masks a run's own ticket in its runner output, the tail and a failed start's note, split chunks included (P348).
+- `maskKeys` masks the value after `X-MachineRoom-Lane:` and `MACHINEROOM_LANE_TICKET=`, and the lane log drops the bare ticket too (P348).
 - A read, write or edit of an absolute path outside the project and its lane worktrees is marked on the activity, kept per agent and listed in the agent's Inspector under Outside the project, with the home folder masked (P339, P346).
 - Lane modes are tested per harness and written in COMMANDS.md, and a harness with no modes refuses one with a plain sentence (P344).
 - A run start request may name a mode: the bridge checks it with the runner's own check and passes --mode to the runner (P343).
