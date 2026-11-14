@@ -411,7 +411,7 @@ describe('Codex app availability', () => {
     expect(codexProgramFor('codex', '', { env, platform: 'win32' })).toBe(newer)
   })
 
-  it('answers null for a full path, another harness or codex on PATH', () => {
+  it('answers null for a full path or another harness', () => {
     const localAppData = tempDir('mr-codex-helper-null-')
     const program = join(localAppData, 'OpenAI', 'Codex', 'bin', '0123456789abcdef', 'codex.exe')
     mkdirSync(dirname(program), { recursive: true })
@@ -420,6 +420,14 @@ describe('Codex app availability', () => {
 
     expect(codexProgramFor('codex', program, { env, platform: 'win32' })).toBeNull()
     expect(codexProgramFor('claude', 'codex', { env, platform: 'win32' })).toBeNull()
+  })
+
+  it.runIf(process.platform === 'win32')('answers null when codex is on PATH', () => {
+    const localAppData = tempDir('mr-codex-helper-onpath-')
+    const program = join(localAppData, 'OpenAI', 'Codex', 'bin', '0123456789abcdef', 'codex.exe')
+    mkdirSync(dirname(program), { recursive: true })
+    writeFileSync(program, '')
+    const env = { LOCALAPPDATA: localAppData, PATH: '', Path: '' }
 
     const bin = join(tempDir('mr-codex-helper-path-'), 'bin')
     mkdirSync(bin, { recursive: true })
