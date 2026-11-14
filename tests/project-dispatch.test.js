@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { basename, join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { act, createElement } from 'react'
@@ -840,16 +840,21 @@ describe('Dispatch when it cannot show the project form', () => {
 })
 
 describe('a failover record read by the bridge', () => {
-  it('adds one room note for the lane head even when the runs list is read twice', async () => {
+  it('adds one room note for a new failover even when the runs list is read twice, and none for an old one', async () => {
     const runs = tempDir('mr-failover-note-')
     writeFileSync(
       join(runs, 'runs.jsonl'),
       `${JSON.stringify({
+        lane: 'codex',
+        startedAt: '2026-11-13T10:00:00.000Z',
+        failover: { kind: 'quota', to: 'opencode' },
+      })}\n`
+    )
+    const later = `${JSON.stringify({
         lane: 'opencode',
         startedAt: '2026-11-14T10:00:00.000Z',
         failover: { kind: 'quota', to: 'agy' },
       })}\n`
-    )
     const notes = []
     const head = { addNote: (text) => notes.push(text) }
     let answer = null
@@ -866,6 +871,10 @@ describe('a failover record read by the bridge', () => {
       readJsonBody: async () => ({}),
       activeLanes: { isChosen: () => true, isLaneActive: () => true },
     })
+    await api.handle({ method: 'GET', headers: {} }, {}, new URL('http://127.0.0.1/api/control/runs'))
+    expect(answer.status).toBe(200)
+    expect(notes).toEqual([])
+    appendFileSync(join(runs, 'runs.jsonl'), later)
     for (let index = 0; index < 2; index += 1) {
       await api.handle({ method: 'GET', headers: {} }, {}, new URL('http://127.0.0.1/api/control/runs'))
       expect(answer.status).toBe(200)

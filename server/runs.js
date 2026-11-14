@@ -988,8 +988,11 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
   }
 
   const notedFailovers = new Set()
+  let failoversSeen = false
 
   function noteFailovers(records) {
+    const quiet = !failoversSeen
+    failoversSeen = true
     for (const record of Array.isArray(records) ? records : []) {
       const failover = record?.failover
       if (!failover || typeof failover !== 'object' || Array.isArray(failover)) continue
@@ -1000,7 +1003,7 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
       const mark = `${lane}\u0000${record.startedAt ?? ''}\u0000${kind}\u0000${to}`
       if (notedFailovers.has(mark)) continue
       notedFailovers.add(mark)
-      notifyLaneHead(lane, `${lane} hit ${kind} and its run moved to ${to}.`)
+      if (!quiet) notifyLaneHead(lane, `${lane} hit ${kind} and its run moved to ${to}.`)
     }
   }
 
