@@ -195,3 +195,54 @@ describe('the codex rollout read', () => {
     expect(quotaForRun({ harness: 'codex', log, env: { CODEX_HOME: folder }, startedAt: now.getTime(), now: now.getTime() })).toBeNull()
   })
 })
+
+describe('a codex rollout read that throws', () => {
+  it('answers null and still writes the run record', async () => {
+    const base = tempDir('machine-room-quota-read-')
+    const worktree = join(base, 'repo')
+    makeRepo(worktree)
+    const runs = join(base, 'runs')
+    const codexHome = join(base, 'codex')
+    mkdirSync(runs, { recursive: true })
+    mkdirSync(codexHome, { recursive: true })
+    const script = writeFake(base, `${tokenLine(22, RESET)}\n`)
+    const previousRuns = process.env.MACHINEROOM_RUNS
+    const previousHome = process.env.CODEX_HOME
+    const previousCommand = harnessByKey.codex.command
+    process.env.MACHINEROOM_RUNS = runs
+    process.env.CODEX_HOME = codexHome
+    harnessByKey.codex.command = ({ folder }) => ({
+      file: process.execPath,
+      args: [script],
+      cwd: folder,
+      env: { CODEX_HOME: codexHome },
+    })
+    cleanups.push(() => {
+      readFault.fail = false
+      harnessByKey.codex.command = previousCommand
+      if (previousRuns === undefined) delete process.env.MACHINEROOM_RUNS
+      else process.env.MACHINEROOM_RUNS = previousRuns
+      if (previousHome === undefined) delete process.env.CODEX_HOME
+      else process.env.CODEX_HOME = previousHome
+    })
+    readFault.fail = true
+    try {
+      const result = await startLane({
+        options: { lane: 'test-codex', minutes: 1 },
+        lane: { name: 'test-codex', worktree, cli: { harness: 'codex', bin: process.execPath, model: 'fake/model' } },
+        lanes: {},
+        wanted: [{ id: 'T99', title: 'Quota', text: 'Do it.\n' }],
+        prompt: 'Do it.',
+        logPath: join(runs, 'run.log'),
+        usageFile: join(runs, 'run.usage.json'),
+        name: 'run-quota-read',
+      })
+      expect(result.code).toBe(0)
+    } finally {
+      readFault.fail = false
+    }
+    const saved = JSON.parse(readFileSync(join(runs, 'runs.jsonl'), 'utf8').trim().split(/\r?\n/).at(-1))
+    expect(saved.lane).toBe('test-codex')
+    expect(saved).not.toHaveProperty('quota')
+  }, 30000)
+})

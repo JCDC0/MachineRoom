@@ -1038,8 +1038,12 @@ export function readCodexQuota(file, limit = CODEX_ROLLOUT_TAIL_BYTES) {
       if (reading) newest = reading
     }
     return newest
+  } catch {
+    return null
   } finally {
-    closeSync(fd)
+    try {
+      closeSync(fd)
+    } catch {}
   }
 }
 

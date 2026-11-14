@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- P286: a Codex quota read error answers null and the run record is still written.
 - P286: a Codex rollout outside the sessions folder or a symbolic link gives no quota.
 - P286: a queue keeps the failed record when its backup is refused, and reports the failed task without an exception.
 - P289: CODE.md gains a line for each file under src, server, scripts, bin and tests that it did not name.
