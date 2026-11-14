@@ -114,6 +114,17 @@ function freePort() {
   })
 }
 
+async function onFreePort(run, attempts = 3) {
+  for (let attempt = 1; ; attempt += 1) {
+    const port = await freePort()
+    try {
+      return await run(port)
+    } catch (error) {
+      if (attempt >= attempts || error?.message !== `Port ${port} is in use. Pass --port.`) throw error
+    }
+  }
+}
+
 function waitForText(child, marker, timeoutMs = 15000) {
   return new Promise((settle, fail) => {
     let seen = ''
@@ -375,16 +386,15 @@ describe('runCandidate', () => {
   it('prints the last 20 build lines and exits 1', async () => {
     const { base, worktree } = makeLaneRepo()
     writeLanes(base, worktree)
-    const port = await freePort()
     const script = "for (let i = 1; i <= 25; i += 1) console.log('build line ' + i); process.exit(1)"
     const errors = []
-    const code = await runCandidate({
+    const code = await onFreePort((port) => runCandidate({
       argv: ['lane', '--port', String(port)],
       cwd: base,
       env: buildEnv([process.execPath, '-e', script]),
       log: () => {},
       error: (line) => errors.push(line),
-    })
+    }))
     expect(code).toBe(1)
     const text = errors.join('\n')
     expect(text).toContain('The build failed.')
