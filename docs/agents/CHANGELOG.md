@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- The queue dispatch test waits on the bridge's run end notice instead of polling the runs route for ten seconds, and five runs in a row passed 51 of 51 (P323).
 - The docs match review 34: lane commits during a task, the check limits, refused backups, two new limits, the Lowbeam trial ran, and the codex lane on GPT-6.1 Terra high (P319).
 - A refused backup keeps the failed run's branch and commits, a queue signs each task with the lane and model that did it, and a lane that leaves the queue branch fails its task (P314).
 - Commit subjects on a run record are masked for keys and profile paths when saved and again in the runs response (P316).
