@@ -2643,3 +2643,49 @@ Leave the rows about stop (R34-1), refused backups (R34-7, R34-9) and queue auth
 5. ARCHITECTURE.md Open work: reviews 32 to 34 join the closed list, with review 34's fixes P313 to P319.
 6. lanes.json codex lane: model `gpt-6.1-terra`, effort `high`, and a modelHint saying the owner chose GPT-6.1 Terra at high effort on 2026-11-13.
 7. Run `node node_modules/vitest/vitest.mjs run tests/panels-runs.test.js tests/briefs.test.js` and report the counts.
+
+The last OpenCode batch, P320 to P325 (2026-11-15). The owner's OpenCode Go plan ends on 2026-11-17 and OpenCode leaves the fleet after this batch. P325 maps what depends on it.
+
+**P320. The play line names the play worktree's own head (OpenCode).** Read this brief only. Use no subagents. Run every command in the foreground. Commit each step as you finish it, and stop starting new work at minute 25. Files: server/reviews.js (only `movePlayWorktree`), src/ui/panels/ReviewsPanel.jsx (only `playNotice` and its caller), tests/project-reviews.test.js, tests/reviews-panel.test.js, docs/agents/architecture/ROOM.md, docs/agents/architecture/LIVE.md, docs/agents/CHANGELOG.md.
+
+A dirty play worktree answers `play: 'dirty'`, and Reviews says `The play worktree has changes, so it stayed on OLD.` with OLD taken from the destination's old head, not from play.
+
+1. `movePlayWorktree` adds `playHead` (play's `git rev-parse HEAD`) to the `dirty` and `not detached` answers, and the merge answer carries it. `playNotice` names that head, cut to 7 characters, and falls back to the sentence with no SHA when it is missing.
+2. Tests, each failing before your change: a dirty play worktree on a commit other than the old main is named by its own head in the answer and the line. Set a git identity in the test's git calls and run them once with `GIT_CONFIG_GLOBAL=/dev/null` in bash.
+3. Remove the accepted exception about the old `main` from nothing but ROOM.md and LIVE.md's sentence about this line. Run `node node_modules/vitest/vitest.mjs run tests/project-reviews.test.js tests/reviews-panel.test.js` and report the counts.
+
+**P321. After a queue failover the branch check expects the backup's branch (OpenCode).** Read this brief only. Use no subagents. Run every command in the foreground. Commit each step as you finish it, and stop starting new work at minute 28. Files: src/briefs/queue.js (only `runQueue`), scripts/run-lane.mjs (only the `runTask` callback in `runQueueProject`), tests/run-queue.test.js, tests/run-failover.test.js, docs/agents/CHANGELOG.md.
+
+P314 made the queue fail a task when the lane leaves the queue branch. After a failover it reads the current branch and accepts whatever it is. A backup branch is always named `BEFORE-on-BACKUP` (`scripts/run-lane.mjs`, `${branchBefore}-on-${target}`), where BEFORE is the branch the task started on.
+
+1. `runQueue` reads the current branch before each task. The `runTask` callback returns `backupLane` (the backup lane's key) when the task failed over, and no branch of its own. The queue then expects `BEFORE-on-BACKUP` after a failover and BEFORE otherwise.
+2. Tests, each failing before your change: a backup that ends on a third branch fails its task with `failed: the lane left the queue branch for NAME`; a backup that stays on `BEFORE-on-BACKUP` commits as before, including when the queue started on a branch that is not `machineroom/queue-...` (the existing `work-x` case). Set GIT_AUTHOR_* and GIT_COMMITTER_* in the tests' git calls and run them once with `GIT_CONFIG_GLOBAL=/dev/null` in bash.
+3. Run `node node_modules/vitest/vitest.mjs run tests/run-queue.test.js tests/run-failover.test.js` and report the counts.
+
+**P322. A stop counts only what it stopped (OpenCode).** Read this brief only. Use no subagents. Run every command in the foreground. Commit each step as you finish it, and stop starting new work at minute 22. Files: scripts/run-lane.mjs (only `stopLeftovers`), tests/run-lane-stop.test.js, docs/agents/CHANGELOG.md.
+
+P313's `stopLeftovers` adds a leftover to `stopped` when its pid is already gone, and when its pid now belongs to another process (`stale: PID was not this run`).
+
+1. A gone leftover prints `leftover: PID had already ended` and a reused pid prints `stale: PID was not this run`; neither counts as stopped. `Nothing was running for the LANE lane.` still prints when nothing was stopped, found or failed.
+2. Tests, each failing before your change: a gone leftover and a reused pid each leave `stopped` at 0 and print their line.
+3. Run `node node_modules/vitest/vitest.mjs run tests/run-lane-stop.test.js` and report the counts.
+
+**P323. The queue dispatch test waits for its run without a fixed ten seconds (OpenCode).** Read this brief only. Use no subagents. Run every command in the foreground. Never weaken an assertion. Commit each step as you finish it, and stop starting new work at minute 28. Files: tests/project-dispatch.test.js, tests/helpers/bridge.js, docs/agents/architecture/LIMITS.md, docs/agents/CHANGELOG.md.
+
+On 2026-11-15 `tests/project-dispatch.test.js > the runs route with a queue > writes the queue file and starts run-lane with --queue` failed once with `Timed out waiting for the run to end.` (`waitFor` in `tests/helpers/bridge.js`) while seven lanes ran on the machine, and passed on a rerun.
+
+1. Find what the test waits for and why it can take over ten seconds under load: read the fake runner it starts and the route's end path. Report the cause in one paragraph.
+2. Make the wait end on the event the test needs (the run's end notice or record) rather than on a short fixed limit. When a limit stays, it is the file's other run waits' limit, never shorter.
+3. Run the file five times in a row with `node node_modules/vitest/vitest.mjs run tests/project-dispatch.test.js` and report each count. Add one line to the test-flake limit in LIMITS.md.
+
+**P324. Review the fixes from review 34 (OpenCode).** Read this brief only. Change no code. Use no subagents. Run every command in the foreground. Commit only your report, and stop at minute 32. Files: docs/agents/AUDIT-2026-11-REVIEW-35.md.
+
+Let BASE be the commit that added `docs/agents/AUDIT-2026-11-REVIEW-34.md` (`git log --format=%h --diff-filter=A -1 -- docs/agents/AUDIT-2026-11-REVIEW-34.md`). Review `git diff BASE..HEAD`. Check that each review 34 finding is fixed: R34-1 by P313, R34-2 and R34-5 by P318, R34-3 by P316, R34-6 by P317, R34-7 and R34-8 by P314, R34-9 by P315, the doc rows by P319, and R34-4 recorded in LIMITS.md. For each fix, name the test that proves it and say whether that test would still pass with the fix undone (read the code path; do not edit files to check). Look also for a key or home path reaching a record or response, a stop that ends another run, and a merge of the play worktree that loses a local file. Write the file as a table ordered by severity: finding, `file:line`, a concrete failure, the smallest fix, and whether it blocks a push. End with one line per review 34 finding: fixed, partly fixed, or open.
+
+**P325. Map what depends on OpenCode before it leaves the fleet (OpenCode).** Read this brief only. Change no code. Use no subagents. Run every command in the foreground. Commit only your report, and stop at minute 32. Files: docs/agents/OPENCODE-RETIREMENT.md.
+
+The owner is removing OpenCode from the fleet after 2026-11-17. The lanes that stay are `codex` (GPT-6.1 Terra high), `agy` and `agy2` (Gemini 4 Hydrogen XHigh), the Claude Code lanes, and `native` and `native2` (MachineRoom's own harness on OpenRouter, DeepSeek V4.1 Flash only).
+
+1. Search the repository (`git grep -n -i opencode`, leaving out `docs/agents/TASKS.md`, `docs/agents/CHANGELOG.md`, the audit files and `docs/agents/history/`) and sort every hit into three tables: fleet config (`docs/agents/lanes.json`, `docs/agents/policy.json`, `fallback` entries, lane notes), orchestrator rules and docs that tell the orchestrator to use OpenCode lanes (`ORCHESTRATOR.md`, `HOUSE-RULES.md`, `PLAN.md` and others), and product code (the OpenCode harness, the sessions source, the orchestrator's OpenCode support, defaults such as `DEFAULT_OPENCODE_MODEL`, the assistant router).
+2. For each fleet and docs row, give `file:line`, what it does today, and a proposed replacement from the lanes that stay. For each product code row, say what a user who still runs OpenCode would lose if it were removed, and mark it `keep` unless it only serves this fleet.
+3. End with the smallest ordered list of changes that retires OpenCode from the fleet without removing OpenCode support from the product.
