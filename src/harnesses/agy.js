@@ -67,6 +67,7 @@ export const agyHarness = {
   laneName: 'agy',
   defaultProgram: '%LOCALAPPDATA%\\agy\\bin\\agy.exe',
   adapterType: 'process',
+  commitAuthor: { label: 'AGY', address: 'noreply@google.com' },
   parserByAdapter: false,
   createParser: createAgyParser,
   command({ cli, prompt, env = {}, folder, mode } = {}) {

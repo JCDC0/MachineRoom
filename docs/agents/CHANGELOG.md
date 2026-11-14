@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- P308: a queue keeps the commits its lane made when the tree is clean and signs its own queue commits with the harness `Co-Authored-By` trailer.
 - P304: the failed record is written once when the backup throws, a refused backup records refused: true, and the room note says the backup could not start.
 - P304: a deferred project run writes its failed record once when the backup throws, and its queue writes no generic record.
 - P304: a refused backup records `refused: true` and its room note says the backup could not start, so only a started backup reads as a move.

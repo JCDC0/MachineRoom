@@ -101,6 +101,7 @@ export const opencodeHarness = {
   laneName: 'OpenCode',
   defaultProgram: '%APPDATA%\\npm\\node_modules\\@opencode\\cli\\bin\\opencode.exe',
   adapterType: 'opencode_local',
+  commitAuthor: { label: 'OpenCode', address: 'noreply@opencode.ai' },
   createParser: createOpencodeParser,
   command({ cli, prompt, env = {}, folder, title, reasoning, mcpConfig } = {}) {
     const model = reasoning ? `${cli.model}#${reasoning}` : cli.model

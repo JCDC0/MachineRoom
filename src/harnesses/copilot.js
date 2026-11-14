@@ -35,6 +35,7 @@ export const copilotHarness = {
   laneName: 'GitHub Copilot',
   defaultProgram: 'copilot',
   adapterType: 'copilot_local',
+  commitAuthor: { label: 'GitHub Copilot', address: 'noreply@github.com' },
   createParser: createCopilotParser,
   command({ cli, prompt, env = {}, folder, reasoning } = {}) {
     const args = ['-p', prompt, '--allow-all-tools']

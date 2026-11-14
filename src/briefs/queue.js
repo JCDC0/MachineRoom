@@ -30,11 +30,28 @@ export function parseQueue(text) {
   return tasks
 }
 
-export function commitMessage(task, index, count, lane) {
+export function commitAuthorFor(harness, model = '') {
+  const author = harness?.commitAuthor
+  const label = String(author?.label ?? '').trim()
+  const address = String(author?.address ?? '').trim()
+  if (label === '' || address === '') return null
+  return { label, address, model: String(model ?? '').trim() }
+}
+
+export function commitTrailer(author) {
+  const label = String(author?.label ?? '').trim()
+  const address = String(author?.address ?? '').trim()
+  if (label === '' || address === '') return ''
+  const model = String(author?.model ?? '').trim()
+  return `Co-Authored-By: ${label}${model === '' ? '' : ` (${model})`} <${address}>`
+}
+
+export function commitMessage(task, index, count, lane, author = null) {
   const first = String(task ?? '').split(/\r?\n/)[0].trim()
   const subject = (first === '' ? `Task ${index}` : first).slice(0, QUEUE_SUBJECT_LIMIT)
   const body = `Task ${index} of ${count}, run by MachineRoom on the ${lane} lane.`
-  return `${subject}\n\n${body}`
+  const trailer = commitTrailer(author)
+  return `${subject}\n\n${body}${trailer === '' ? '' : `\n\n${trailer}`}`
 }
 
 export function parseQueueArgs(argv) {
@@ -97,7 +114,7 @@ export function parseQueueArgs(argv) {
   return options
 }
 
-export async function runQueue({ tasks, runTask, runTests, git } = {}) {
+export async function runQueue({ tasks, runTask, runTests, git, author = null } = {}) {
   const list = Array.isArray(tasks) ? tasks : []
   const branch = String(git?.branch ?? '')
   const lane = String(git?.lane ?? '')
@@ -109,6 +126,7 @@ export async function runQueue({ tasks, runTask, runTests, git } = {}) {
   if (await git.exists(branch)) throw new Error(`The branch ${branch} already exists. Pick another name or delete it first.`)
   if (String(await git.status()).trim() !== '') throw new Error('The project has uncommitted changes. A queue needs a clean start.')
   await git.create(branch)
+  const head = async () => (typeof git.head === 'function' ? String(await git.head()).trim() : '')
   let stopped = false
   for (let offset = 0; offset < list.length; offset += 1) {
     const number = offset + 1
@@ -117,6 +135,7 @@ export async function runQueue({ tasks, runTask, runTests, git } = {}) {
       results.push({ number, task, status: 'not run' })
       continue
     }
+    const startHead = await head()
     const run = await runTask(task, number)
     if (run?.killed === true) {
       results.push({ number, task, status: 'failed: lane killed' })
@@ -136,12 +155,16 @@ export async function runQueue({ tasks, runTask, runTests, git } = {}) {
         continue
       }
     }
+    const endHead = await head()
+    const moved = startHead !== '' && endHead !== '' && endHead !== startHead
     if (String(await git.status()).trim() === '') {
-      results.push({ number, task, status: 'no change' })
+      results.push(moved
+        ? { number, task, status: 'committed', sha: endHead }
+        : { number, task, status: 'no change' })
       continue
     }
     await git.add()
-    const sha = String(await git.commit(commitMessage(task, number, list.length, lane)))
+    const sha = String(await git.commit(commitMessage(task, number, list.length, lane, author)))
     results.push({ number, task, status: 'committed', sha })
   }
   return { branch, results }
