@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- Review 35 confirms every review 34 fix has a test that fails with it undone, and finds four more: R35-1 to R35-4 (P324).
 - The queue dispatch test waits on the bridge's run end notice instead of a ten second poll (P323).
 - After a failover a queue expects the task's start branch with -on-BACKUP and fails a task that ends on another branch (P321).
 - When the play worktree stays, Reviews names the commit play is on, not the old main (P320).
