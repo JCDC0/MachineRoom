@@ -1,5 +1,5 @@
 import { harnessByAdapter } from '../../harnesses/index.js'
-import { maskProfilePaths } from '../../briefs/run.js'
+import { checkCommandLines, maskProfilePaths } from '../../briefs/run.js'
 
 export function resultWord(record) {
   if (record?.killed) return 'stopped'
@@ -533,8 +533,9 @@ export function projectRunBody({ task, tasks, allowDirty, worktree, checkCommand
 }
 
 export function projectCheckLine({ checkCommand, hasTestScript } = {}) {
-  const command = typeof checkCommand === 'string' ? checkCommand.trim() : ''
-  if (command !== '') return `Check: ${command}`
+  const lines = typeof checkCommand === 'string' ? checkCommandLines(checkCommand) : []
+  if (lines.length === 1) return `Check: ${lines[0]}`
+  if (lines.length > 1) return `Check: ${lines.join(', then ')}.`
   if (hasTestScript === true) return 'Check: npm test'
   return 'No check: this project has no npm test script.'
 }
