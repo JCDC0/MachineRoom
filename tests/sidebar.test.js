@@ -290,6 +290,17 @@ describe('preview lines', () => {
     expect(lines[2]).toMatchObject({ from: 'room' })
     expect(lines[3]).toMatchObject({ from: 'orchestrator' })
   })
+
+  it('names a lane message from the lane list and falls back to the key', () => {
+    const lines = previewLines({
+      lanes: [{ key: 'opencode', name: 'OpenCode' }],
+      messages: [
+        { id: '1', from: 'lane:opencode', text: 'Tests fixed.' },
+        { id: '2', from: 'lane:ghost', text: 'Blocked.' },
+      ],
+    })
+    expect(lines.map((line) => line.from)).toEqual(['OpenCode', 'ghost'])
+  })
 })
 
 describe('conversation export', () => {

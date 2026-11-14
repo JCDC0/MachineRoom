@@ -1,6 +1,8 @@
 # Changelog
 
 ## Unreleased
+- A lane's message shows the lane's name in the chat and in a conversation preview, or its key when the lane is unknown (P337).
+- A lane's message shows the lane's name in the chat and in a conversation preview, or its key when the lane is unknown (P337).
 - Any orchestrator may message any other with its token, capped at 6 messages per 10 minutes per sender, shown in the Team view; a sub's added instructions get the real bridge address (P333).
 - The sub form offers every harness the room can start, the room draws each sub with its own harness, and a ladder naming an unavailable harness is refused (P331).
 - A brief run masks keys and profile paths in its commit text before the record is written, and a refused backup keeps the failed run's head (P328).

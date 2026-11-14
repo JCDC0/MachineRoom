@@ -1158,6 +1158,33 @@ describe('talking to a lane and seeing agent messages', () => {
     })
   })
 
+  it('shows a lane message by the lane name from the lanes answer', () => {
+    const chat = {
+      state: 'idle',
+      messages: [{ id: '1', from: 'lane:opencode', text: 'Tests fixed and passing.' }],
+    }
+    const html = renderToString(
+      createElement(OrchestratorChat, {
+        open: true,
+        client: fakeClient(chat),
+        initialChat: chat,
+        lanes: { lanes: [{ key: 'opencode', name: 'OpenCode', color: '#ff8c1a' }] },
+      })
+    )
+    expect(html).toContain('class="mr-orch-line is-lane"')
+    expect(html).toContain('>OpenCode</span>')
+    expect(html).toContain('color:#ff8c1a')
+  })
+
+  it('shows an unknown lane key as the sender', () => {
+    const lines = chatLines(
+      { messages: [{ id: '1', from: 'lane:ghost', text: 'Blocked.' }] },
+      10,
+      { lanes: { lanes: [{ key: 'opencode', name: 'OpenCode' }] } }
+    )
+    expect(lines[0]).toMatchObject({ from: 'lane', lane: 'ghost', laneName: 'ghost' })
+  })
+
   it('displays lane reply under lane name and colour', async () => {
     const lanes = [{ key: 'opencode', name: 'OpenCode', color: '#ff8c1a', cli: { bin: 'opencode' } }]
     const chat = {
