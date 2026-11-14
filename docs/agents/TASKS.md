@@ -2349,3 +2349,49 @@ P261 found: the log's `thread.started` line carries `thread_id`; the rollout fil
 1. `folderTreeReuseAllowed()` in `server/index.js` also answers false while `gitMetaDirty` is set or an expected git metadata watcher is missing. Read how the git metadata watchers are armed and how their error handler sets `gitMetaDirty` first.
 2. Test: with the project watcher armed and the git metadata watcher failed, a folder GET more than one second after the last read reads again. It must fail before your change. `gitMetaDirty` starts true and is cleared by a later read, so P254's healthy-watcher test (three folder GETs, one read) must still pass; if it does not, gate on the watcher's failure instead.
 3. Run `node node_modules/vitest/vitest.mjs run tests/tree-read.test.js` and `npm run build`. Report what passed.
+
+**P276. The page stays window-high at 1280x800 (OpenCode).** Read this brief only. Use no subagents. Run every command in the foreground. Commit each step as you finish it, and stop starting new work at minute 28. Files: src/styles.css, src/ui/Hud.jsx, tests/layout-css.test.js, docs/agents/CHANGELOG.md, docs/agents/architecture/ROOM.md.
+
+1. ARCHITECTURE.md says the page is one menu row, the lens and the lower half in a window-high frame, so it does not scroll at 900 pixels and wider. In a live room at 1280x800, `document.documentElement.scrollHeight` is 1548 and the lower half starts at y=837, below the window. Builds from before P250 do the same, so it is older. Find which rule lets the frame grow past the window height (read the frame, lens and lower-half rules in `src/styles.css` and the wrapper elements in `Hud.jsx`), and fix that rule so the lens and the lower half share the window height at 900 pixels and wider. Change no layout below 900 pixels.
+2. Test in `tests/layout-css.test.js`, by what it proves: the frame's height rule at 900 pixels and wider is bounded by the window (for example `100dvh` or `100vh` with no `min-height` larger than it). It must fail before your change.
+3. Run `node node_modules/vitest/vitest.mjs run tests/layout-css.test.js` and `npm run build`. Report what passed, the rule that caused it and the line you changed.
+
+**P277. Review the batch since review 31 (Codex).** Read this brief only. Change no code. Do not commit: the runner commits your file. Stop at minute 35. Files: docs/agents/AUDIT-2026-11-REVIEW-32.md.
+
+Review `git diff 1122d2cf..HEAD` (`git log --first-parent --oneline 1122d2cf..HEAD`). Check that each review 31 finding is really fixed: R31-1 by P272, R31-2, R31-3, R31-4 and R31-7 by P273, R31-5 by P274, R31-6 by P275. Then review what else changed: P250's conversation view and its stop of a run started from the command line (`server/runs.js`, the stop route), P271's Codex quota read (it opens a file under the owner's home folder), P267's help forms and P270's refusal. Look for: a path read outside the runs folder or the Codex sessions folder, a key or home path reaching a response or record, a stop that ends the wrong run or a run the owner did not start from this room, and a failover that runs twice or on the wrong worktree. Write the file as a table ordered by severity: finding, `file:line`, a concrete failure, the smallest fix, and whether it blocks a push.
+
+**P278. Run the full suite on main (OpenCode).** Read this brief only. Change no file except your report. Use no subagents. Run every command in the foreground. Commit only your report, and stop at minute 30. Files: docs/agents/RUN-2026-11-14-SUITE.md.
+
+1. Run `npm test` once in your worktree on `main`.
+2. For each failing test, run its file alone. A test that passes alone is a load flake; one that fails alone is a real failure.
+3. Write the file: the totals, then a table of every failing test with its file, its error's first line, whether it passed alone, and for a real failure the merge that most likely caused it (`git log --first-parent --oneline 12c25524..HEAD`).
+
+**P279. A conversation masks secret fields only where they hold text (OpenCode).** Read this brief only. Use no subagents. Run every command in the foreground. Commit each step as you finish it, and stop starting new work at minute 18. Files: src/model/conversation.js, tests/conversation.test.js, docs/agents/CHANGELOG.md.
+
+1. P272 replaces the value of every field whose name matches `key`, `token`, `secret`, `password` or `authorization`, so counts like `input_tokens: 120` show as masked. Replace only string values of those fields; numbers, booleans and null keep their value, and objects and arrays are still walked.
+2. Tests, by what they prove: `input_tokens: 120` shows 120; `api_key: "sk-..."` is still masked; a nested `{ auth: { token: "x" } }` is still masked. The first must fail before your change.
+3. Run `node node_modules/vitest/vitest.mjs related --run src/model/conversation.js` and `npm run build`. Report what passed.
+
+**P280. Plan the ulolTris trial (AGY).** The owner accepted a real-project trial on ulolTris before a release. Read `docs/agents/OWNER.md`, `docs/agents/architecture/ROOM.md` (Dispatch and the project form), `C:\GitHub\ulolTris\AGENTS.md` and this brief only. Read ulolTris; never change, commit, push or start anything in it. Change no MachineRoom file except your report. Commit only your report. Files: docs/agents/TRIAL-ULOLTRIS.md.
+
+Write the plan the owner will follow to give MachineRoom one real task on ulolTris: the command that opens the room on it; the check command the room will use (ulolTris's own test command, as its AGENTS.md gives it); whether the task runs in a lane worktree or in the folder, and why (ulolTris is worked by several agents; say how the room keeps out of their files); three small candidate tasks taken from ulolTris's own open work, each with the files it touches and how the owner can see it worked (ulolTris serves on port 8123); what the room should show at each step; and what would count as a failure of MachineRoom rather than of the task. Name any step the room cannot do today.
+
+**P281. The core guide names this week's work (AGY).** Read `docs/agents/ARCHITECTURE.md`, `docs/agents/architecture/DOCUMENTS.md` and this brief only. Change only docs. Commit each step as you finish it. Files: docs/agents/ARCHITECTURE.md, docs/agents/architecture/DOCUMENTS.md, docs/agents/CHANGELOG.md.
+
+1. ARCHITECTURE.md's Open work ends at review 18. Add, in its style (plain words, short sentences, no em dashes), one sentence each for: reviews 29, 30 and 31 and the briefs that fixed them (read the top of each `AUDIT-2026-11-REVIEW-*.md`), the docs audit `AUDIT-2026-11-DOCS-2.md` and the test audit `AUDIT-2026-11-TESTS.md`, lane failover (P260, P273) and Codex quota readings (P271), and the per-lane conversation view (P249, P250).
+2. DOCUMENTS.md lists every file in `docs/agents`. Add every file there that it does not name (`ls docs/agents`), with one line each on what it is for.
+3. Keep ARCHITECTURE.md's Version line as it is.
+
+**P282. Check the detail docs against this week's code (native).** Read this brief only. Change no code. Commit only your report, and stop at minute 30. Files: docs/agents/AUDIT-2026-11-DOCS-3.md.
+
+Read `docs/agents/architecture/ROOM.md`, `LIVE.md` and `COMMANDS.md` against the code at `HEAD`, only for what changed since `12c25524` (`git log --first-parent --oneline 12c25524..HEAD`): the conversation route and view, failover and `fallback`, Codex quota in records and lane costs, tree reuse, the help forms, and the native agent's nudge. For every sentence the code contradicts, give the doc line, what the code does with its `file:line`, and the corrected sentence in the docs' style. List any route, flag, record field or panel added since `12c25524` that no doc names. Write the file as one table.
+
+**P283. Find this week's tests that cannot fail (native).** Read this brief only. Change no file except your report. Commit only your report, and stop at minute 30. Files: docs/agents/AUDIT-2026-11-TESTS-2.md.
+
+For each merge in `git log --first-parent --oneline 12c25524..HEAD`, read the tests it added or changed. Find tests that would pass with the change undone: a fake that records a call but never runs the real code, an assertion on a value the code under test stamped itself (P250's run picker test checked `run.lane === 'opencode'` on runs the function had just labelled `opencode`), a `toBeTruthy` on a value always set, or a check inside a branch that never runs. Where you can, prove it in a scratch copy under `%TEMP%`, never in the worktree. Write the file as a table: test file and name, why it cannot fail, how you proved it (or `inferred`), and the smallest real assertion.
+
+**P284. The run list marks a run that moved (OpenCode).** Read this brief only. Use no subagents. Run every command in the foreground. Commit each step as you finish it, and stop starting new work at minute 18. Files: src/briefs/run.js, tests/run-lane.test.js, docs/agents/architecture/COMMANDS.md, docs/agents/CHANGELOG.md.
+
+1. `runListLine` in `src/briefs/run.js` adds `| moved to LANE (KIND)` to a record with `failover`, and `| taken over from LANE` to a record with `failoverFrom`.
+2. Tests, by what they prove: a record with `failover: { kind: 'quota', to: 'agy' }` lists with `moved to agy (quota)`; one with `failoverFrom: { lane: 'opencode' }` lists with `taken over from opencode`; a record with neither lists as today. The first two must fail before your change.
+3. Run `node node_modules/vitest/vitest.mjs run tests/run-lane.test.js` and `npm run build`. Report what passed.
