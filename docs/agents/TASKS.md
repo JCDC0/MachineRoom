@@ -2423,3 +2423,10 @@ For each merge in `git log --first-parent --oneline 12c25524..HEAD`, read the te
 1. Where `conversationFromLog` keeps a raw line that parses as JSON, mask the parsed value before serializing it, whatever its type: a string, a number, an array or an object. A line that does not parse keeps today's text masking.
 2. Test, by what it proves: a raw line that is a JSON string holding `C:\\Users\\NAME\\project` shows no `NAME`, for a harness the reader knows and for one it does not. It must fail before your change.
 3. Run `node node_modules/vitest/vitest.mjs related --run src/model/conversation.js` and `npm run build`. Report what passed.
+
+**P289. CODE.md lists every file (AGY).** Read `docs/agents/architecture/CODE.md` and this brief only. Change only docs. Commit each step as you finish it. Files: docs/agents/architecture/CODE.md, docs/agents/CHANGELOG.md.
+
+1. CODE.md gives one line per file of the code. List every file under `src/`, `server/`, `scripts/`, `bin/` and `tests/` that CODE.md does not name (`git ls-files src server scripts bin tests`). This week's `src/model/conversation.js`, `src/ui/LaneConversation.jsx`, `src/ui/laneConversation.js`, `tests/quota-read.test.js`, `tests/run-failover.test.js` and `tests/lane-conversation.test.js` are among them.
+2. Add one line for each, in the section and order CODE.md uses, saying what the file owns, in its style: plain words, short sentences, no em dashes. Read each file's exports and first lines before writing its line.
+3. Remove any line that names a file that no longer exists.
+4. Report how many lines you added and removed.
