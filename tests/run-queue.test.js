@@ -239,6 +239,13 @@ describe('parseQueueArgs', () => {
     expect(parseQueueArgs(['opencode', '--project', 'C:\\work', '--queue', 'queue.txt', '--test', 'npm test', '--minutes', '20'])).toEqual({
       lane: 'opencode', briefs: [], project: 'C:\\work', queue: 'queue.txt', test: 'npm test', dryRun: false, minutes: 20,
     })
+    expect(parseQueueArgs(['opencode', '--project', 'C:\\work', '--queue', 'queue.txt', '--test', 'npm test', '--test', 'npm run check'])).toMatchObject({
+      test: 'npm test\nnpm run check',
+    })
+    expect(() => parseQueueArgs([
+      'opencode', '--project', 'C:\\work', '--queue', 'queue.txt',
+      '--test', 'one', '--test', 'two', '--test', 'three', '--test', 'four', '--test', 'five',
+    ])).toThrow('A check holds at most 4 commands, one per line.')
     expect(parseQueueArgs(['--queue=queue.txt', '--project=C:\\work', 'opencode', '--dry-run'])).toMatchObject({
       lane: 'opencode', dryRun: true, minutes: DEFAULT_MINUTES,
     })
@@ -609,9 +616,80 @@ describe('scripts/run-lane.mjs with --queue', { timeout: 30000 }, () => {
       })
       expect(result.code).toBe(0)
       expect(result.stdout).toContain('1. committed')
-      expect(result.stdout).toContain('tests: node explicit-test.cjs')
+      expect(result.stdout).toContain('check 1 of 1 passed: node explicit-test.cjs')
+      expect(result.stdout).toContain('tests: node explicit-test.cjs passed')
       expect(git(repo, ['show', 'HEAD:explicit-ran.txt']).trim()).toBe('yes')
       expect(existsSync(join(repo, 'auto-ran.txt'))).toBe(false)
+    } finally {
+      remove(parent)
+    }
+  }, 60000)
+
+  it('runs two checks in order and stops at the failing second one', async () => {
+    const parent = makeTempDir('machine-room-queue-')
+    try {
+      const repo = initRepo(parent)
+      const runs = join(parent, 'machineroom-runs')
+      const file = join(parent, 'queue.txt')
+      writeFileSync(file, 'Write the lane note.\n')
+      writeFileSync(join(repo, 'first-check.cjs'), "require('node:fs').writeFileSync('first-ran.txt', 'yes')\n")
+      writeFakeLane(repo)
+      git(repo, ['add', '-A'])
+      git(repo, ['commit', '-m', 'the fake lane and its checks'])
+      const head = git(repo, ['rev-parse', 'HEAD']).trim()
+      const result = await runLane([
+        'fake', '--project', repo, '--queue', file,
+        '--test', 'node first-check.cjs',
+        '--test', 'node -e "process.exit(1)"',
+      ], {
+        TEMP: parent,
+        MACHINEROOM_RUNS: runs,
+        MACHINEROOM_LANES_FILE: fakeLaneFile(parent),
+      })
+      expect(result.code).toBe(1)
+      expect(result.stdout).toContain('check 1 of 2 passed: node first-check.cjs')
+      expect(result.stdout).toContain('check 2 of 2 failed: node -e "process.exit(1)"')
+      expect(result.stdout).toContain('tests: node first-check.cjs passed, node -e "process.exit(1)" failed')
+      expect(result.stdout).toContain('1. failed: tests')
+      expect(existsSync(join(repo, 'first-ran.txt'))).toBe(true)
+      expect(git(repo, ['rev-parse', 'HEAD']).trim()).toBe(head)
+      const records = readFileSync(join(runs, 'runs.jsonl'), 'utf8').trim().split(/\r?\n/).map((line) => JSON.parse(line))
+      expect(records.at(-1)).toMatchObject({ lane: 'fake', exitCode: 1, queueStatus: 'failed: tests', tests: 'failed' })
+      expect(records.at(-1)).not.toHaveProperty('head')
+    } finally {
+      remove(parent)
+    }
+  }, 60000)
+
+  it('commits a task when both checks pass', async () => {
+    const parent = makeTempDir('machine-room-queue-')
+    try {
+      const repo = initRepo(parent)
+      const runs = join(parent, 'machineroom-runs')
+      const file = join(parent, 'queue.txt')
+      writeFileSync(file, 'Write the lane note.\n')
+      writeFileSync(join(repo, 'first-check.cjs'), "require('node:fs').writeFileSync('first-ran.txt', 'yes')\n")
+      writeFileSync(join(repo, 'second-check.cjs'), "require('node:fs').writeFileSync('second-ran.txt', 'yes')\n")
+      writeFakeLane(repo)
+      git(repo, ['add', '-A'])
+      git(repo, ['commit', '-m', 'the fake lane and its checks'])
+      const result = await runLane([
+        'fake', '--project', repo, '--queue', file,
+        '--test', 'node first-check.cjs',
+        '--test', 'node second-check.cjs',
+      ], {
+        TEMP: parent,
+        MACHINEROOM_RUNS: runs,
+        MACHINEROOM_LANES_FILE: fakeLaneFile(parent),
+      })
+      expect(result.code).toBe(0)
+      expect(result.stdout).toContain('check 1 of 2 passed: node first-check.cjs')
+      expect(result.stdout).toContain('check 2 of 2 passed: node second-check.cjs')
+      expect(result.stdout).toContain('tests: node first-check.cjs passed, node second-check.cjs passed')
+      expect(result.stdout).toContain('1. committed')
+      expect(git(repo, ['show', 'HEAD:first-ran.txt']).trim()).toBe('yes')
+      expect(git(repo, ['show', 'HEAD:second-ran.txt']).trim()).toBe('yes')
+      expect(git(repo, ['status', '--porcelain']).trim()).toBe('')
     } finally {
       remove(parent)
     }

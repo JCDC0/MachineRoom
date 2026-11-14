@@ -304,6 +304,8 @@ export function worktreeProblems({ worktree, project } = {}) {
 
 export const CHECK_SHELL_PROBLEM = 'The check command cannot use shell syntax; put it in an npm script.'
 export const CHECK_QUOTE_PROBLEM = 'The check command has an unclosed quote.'
+export const CHECK_COMMAND_COUNT = 4
+export const CHECK_COMMAND_COUNT_PROBLEM = 'A check holds at most 4 commands, one per line.'
 
 function quoteIsOpen(text) {
   let quoted = false
@@ -318,10 +320,20 @@ function quoteIsOpen(text) {
   return quoted
 }
 
+export function checkCommandLines(command) {
+  return String(command ?? '')
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line !== '')
+}
+
 export function checkCommandProblem(command) {
-  const text = String(command ?? '')
-  if (/[|&;<>`]|\$\(|%[^%\r\n]+%/.test(text)) return CHECK_SHELL_PROBLEM
-  if (quoteIsOpen(text)) return CHECK_QUOTE_PROBLEM
+  const lines = checkCommandLines(command)
+  if (lines.length > CHECK_COMMAND_COUNT) return CHECK_COMMAND_COUNT_PROBLEM
+  for (const line of lines) {
+    if (/[|&;<>`]|\$\(|%[^%\r\n]+%/.test(line)) return CHECK_SHELL_PROBLEM
+    if (quoteIsOpen(line)) return CHECK_QUOTE_PROBLEM
+  }
   return ''
 }
 
@@ -379,7 +391,7 @@ export function parseRunArgs(argv) {
   let worktree = false
   let startedBy = ''
   let startedAt = ''
-  let test = ''
+  const testLines = []
   const overrides = {}
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index]
@@ -474,13 +486,18 @@ export function parseRunArgs(argv) {
       if (typeof value !== 'string' || value.trim() === '') throw new Error('--test needs a command.')
       const problem = checkCommandProblem(value)
       if (problem !== '') throw new Error(problem)
-      test = value
+      testLines.push(...checkCommandLines(value))
       continue
     }
     if (arg.startsWith('-')) throw new Error(`Unknown option ${arg}.`)
     if (arg === '') continue
     if (!lane) lane = arg
     else briefs.push(arg)
+  }
+  const test = testLines.join('\n')
+  if (test !== '') {
+    const problem = checkCommandProblem(test)
+    if (problem !== '') throw new Error(problem)
   }
   if (list) return { lane, briefs, dryRun, minutes, list, ...(since ? { since } : {}) }
   if (stats) return { lane, briefs, dryRun, minutes, list, stats, ...(since ? { since } : {}) }

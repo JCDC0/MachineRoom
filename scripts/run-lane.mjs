@@ -8,7 +8,7 @@ import { finished } from 'node:stream'
 import { fileURLToPath } from 'node:url'
 import { branchFor, briefFileList, buildPrompt, nextVersion, parseBriefs, parseRules } from '../src/briefs/briefs.js'
 import { commitAuthorFor, formatQueueSummary, parseQueue, parseQueueArgs, runQueue } from '../src/briefs/queue.js'
-import { briefProblems, briefWorktreeProblems, checkCommandProblem, childEnvironment, commandFor, createLaneLog, DEFAULT_MINUTES, fallbackProblem, failoverKind, filterRunsSince, formatOutcomes, formatStats, formatSummary, laneCommandProblem, laneLockStartedAt, laneLockText, laneStats, laneStopProblem, laneWithOverrides, limitedFor, maskedQueueTasks, ORCHESTRATOR_LANE_PROBLEM, parseRunArgs, projectProblems, projectRunGit, readinessLine, retryStartProblem, runListLine, runRecord, sessionToolLines, splitCheckCommand, startFailureText, summarizeRun, unattendedPrompt, worktreeFor, WORKTREES_FOLDER } from '../src/briefs/run.js'
+import { briefProblems, briefWorktreeProblems, checkCommandLines, checkCommandProblem, childEnvironment, commandFor, createLaneLog, DEFAULT_MINUTES, fallbackProblem, failoverKind, filterRunsSince, formatOutcomes, formatStats, formatSummary, laneCommandProblem, laneLockStartedAt, laneLockText, laneStats, laneStopProblem, laneWithOverrides, limitedFor, maskedQueueTasks, ORCHESTRATOR_LANE_PROBLEM, parseRunArgs, projectProblems, projectRunGit, readinessLine, retryStartProblem, runListLine, runRecord, sessionToolLines, splitCheckCommand, startFailureText, summarizeRun, unattendedPrompt, worktreeFor, WORKTREES_FOLDER } from '../src/briefs/run.js'
 import { outcomeTable } from '../server/outcomes.js'
 import { readMainSubjectsSync } from '../server/runs.js'
 import { isLockHolderStale, killTree, descendantProcesses, leftoverProcesses, listProcesses } from '../server/processTree.js'
@@ -124,7 +124,7 @@ export function helpLines() {
     '  --model <id>         use this model for this run only',
     '  --reasoning <level>  use this reasoning level for this run only',
     '  --minutes <n>        stop the run after n minutes (100 by default)',
-    '  --test <command>     run this check after each task, or npm test when the package has one',
+    '  --test <command>     run this check after each task; repeat for more, or npm test when the package has one',
     '  --started-by <id>    name the orchestrator that started the run',
     '  --force              run a retired lane or a brief marked done',
     '',
@@ -727,6 +727,16 @@ function runTestCommand(command, cwd, minutes) {
   })
 }
 
+function checkDisplay(command) {
+  return checkCommandLines(command).join(', ')
+}
+
+function checkSummary(check) {
+  const commands = Array.isArray(check?.commands) ? check.commands : []
+  if (commands.length === 0) return String(check?.command ?? '')
+  return commands.map((item) => `${item.command} ${item.ok ? 'passed' : 'failed'}`).join(', ')
+}
+
 async function projectCheck({ project, given, minutes }) {
   let command
   try {
@@ -734,11 +744,20 @@ async function projectCheck({ project, given, minutes }) {
   } catch (error) {
     const message = String(error?.message ?? error)
     console.error(message)
-    return { command: message, ok: false, ran: false }
+    return { command: message, commands: [], ok: false, ran: false }
   }
-  if (command === '') return { command: '', ok: true, ran: false }
-  const outcome = await runTestCommand(command, project, minutes)
-  return { command, ok: outcome?.ok === true, ran: true, outcome }
+  if (command === '') return { command: '', commands: [], ok: true, ran: false }
+  const lines = checkCommandLines(command)
+  const commands = []
+  for (const line of lines) {
+    const outcome = await runTestCommand(line, project, minutes)
+    const ok = outcome?.ok === true
+    commands.push({ command: line, ok, outcome })
+    console.log(`check ${commands.length} of ${lines.length} ${ok ? 'passed' : 'failed'}: ${line}`)
+    if (!ok) break
+  }
+  const ok = commands.length === lines.length && commands.every((item) => item.ok)
+  return { command, commands, ok, ran: true, outcome: commands.at(-1)?.outcome }
 }
 
 function queueGit(project, branch, lane, { onSettled } = {}) {
@@ -1266,7 +1285,7 @@ async function runQueueProject({ options, lane, lanes }) {
   const branch = `machineroom/queue-${options.lane}-${queueId}`
   if (options.dryRun) {
     const plan = options.worktree ? worktreePlan(project, options.lane) : { path: project, made: false }
-    const test = testCommandFor(project, options.test)
+    const test = checkDisplay(testCommandFor(project, options.test))
     console.log(`lane: ${options.lane}`)
     console.log(`project: ${printedRunsFolder(project)}`)
     if (options.worktree) printWorktree(plan)
@@ -1340,7 +1359,7 @@ async function runQueueProject({ options, lane, lanes }) {
         },
         runTests: async () => {
           const check = await projectCheck({ project: target.path, given: options.test, minutes: options.minutes })
-          test = check.command
+          test = checkSummary(check)
           testsFailed = !check.ok
           if (pending) pending.tests = check.command === '' ? 'none' : (check.ok ? 'passed' : 'failed')
           return { ok: check.ok }
@@ -1494,7 +1513,7 @@ async function main() {
       const needsMcp = enabledServers.length > 0 && (harness === 'claude' || harness === 'opencode')
       const mcpConfigPath = needsMcp ? join(folder, `${name}.mcp.json`) : ''
       const command = commandFor({ lane, prompt, env: process.env, usageFile, title: name, cwd: project, mcpConfig: mcpConfigPath })
-      const test = testCommandFor(project, options.test)
+      const test = checkDisplay(testCommandFor(project, options.test))
       printCommand(command, prompt, { mcpConfig: mcpConfigPath, mcpServers: enabledServers })
       console.log(`tests: ${test || 'none, the project has no tests'}`)
       console.log('Dry run, nothing started.')
@@ -1519,7 +1538,7 @@ async function main() {
       if (run.code === 0 && run.killed !== true) {
         const check = await projectCheck({ project, given: options.test, minutes: options.minutes })
         tests = check.command === '' ? 'none' : (check.ok ? 'passed' : 'failed')
-        console.log(`tests: ${check.command || 'none, the project has no tests'}`)
+        console.log(`tests: ${check.command ? checkSummary(check) : 'none, the project has no tests'}`)
         if (!check.ok) {
           run.record.exitCode = 1
           code = 1

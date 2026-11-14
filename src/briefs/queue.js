@@ -1,4 +1,4 @@
-import { DEFAULT_MINUTES } from './run.js'
+import { checkCommandLines, checkCommandProblem, DEFAULT_MINUTES } from './run.js'
 
 export const QUEUE_TASK_LIMIT = 20
 export const QUEUE_TASK_TEXT_LIMIT = 4000
@@ -58,6 +58,7 @@ export function parseQueueArgs(argv) {
   const args = (Array.isArray(argv) ? argv : []).map((value) => String(value))
   if (!args.some((arg) => arg === '--queue' || arg.startsWith('--queue='))) return null
   const options = { lane: '', briefs: [], project: '', queue: '', test: '', dryRun: false, minutes: DEFAULT_MINUTES }
+  const testLines = []
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index]
     const named = (name) => arg === `--${name}` || arg.startsWith(`--${name}=`)
@@ -76,7 +77,10 @@ export function parseQueueArgs(argv) {
       continue
     }
     if (named('test')) {
-      options.test = valueOf('test', '--test needs a command.')
+      const value = valueOf('test', '--test needs a command.')
+      const problem = checkCommandProblem(value)
+      if (problem !== '') throw new Error(problem)
+      testLines.push(...checkCommandLines(value))
       continue
     }
     if (named('minutes')) {
@@ -111,6 +115,11 @@ export function parseQueueArgs(argv) {
   if (!options.project) throw new Error('--queue needs --project <folder>.')
   if (!options.queue) throw new Error('--queue needs a file.')
   if (options.briefs.length > 0) throw new Error('A queue takes no brief id. Name the lane and the queue file only.')
+  options.test = testLines.join('\n')
+  if (options.test !== '') {
+    const problem = checkCommandProblem(options.test)
+    if (problem !== '') throw new Error(problem)
+  }
   return options
 }
 

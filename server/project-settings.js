@@ -4,7 +4,7 @@ import { checkCommandProblem as runnerCheckCommandProblem } from '../src/briefs/
 import { projectHash } from './active-lanes.js'
 
 export const CHECK_COMMAND_LIMIT = 500
-export const CHECK_COMMAND_PROBLEM = 'Write the check command as one line of 1 to 500 characters.'
+export const CHECK_COMMAND_PROBLEM = 'Write the check command as up to 4 commands, one per line, in 500 characters or fewer.'
 export const CHECK_ORIGIN_PROBLEM = 'A request to save the check command needs a page Origin.'
 export const CHECK_CONFIRM_PROBLEM = 'Confirm the check command first.'
 export const METHOD_NOT_ALLOWED_PROBLEM = 'Method not allowed.'
@@ -20,7 +20,6 @@ export function checkCommandProblem(value) {
   const text = value.trim()
   if (text === '') return null
   if (text.length > CHECK_COMMAND_LIMIT) return CHECK_COMMAND_PROBLEM
-  if (/[\r\n]/.test(text)) return CHECK_COMMAND_PROBLEM
   const runnerProblem = runnerCheckCommandProblem(text)
   if (runnerProblem) return runnerProblem
   return null

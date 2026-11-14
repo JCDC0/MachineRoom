@@ -5,7 +5,7 @@ import { basename, dirname, join, resolve } from 'node:path'
 import { StringDecoder } from 'node:string_decoder'
 import { fileURLToPath } from 'node:url'
 import { parseBriefs } from '../src/briefs/briefs.js'
-import { SINCE_PROBLEM, dayStart, laneStats, pathInside, projectProblems, runRecord, worktreeFor } from '../src/briefs/run.js'
+import { SINCE_PROBLEM, checkCommandLines, dayStart, laneStats, pathInside, projectProblems, runRecord, worktreeFor } from '../src/briefs/run.js'
 import { profileFromBrief, profileFromTask } from '../src/policy/profile.js'
 import { readPolicy, routeLane, tierFor, TIERS } from '../src/policy/route.js'
 import { conversationFromLog } from '../src/model/conversation.js'
@@ -792,7 +792,9 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
     }
     const startedArgs = startedBy ? ['--started-by', startedBy] : []
     const reasoningArgs = reasoning ? ['--reasoning', reasoning] : []
-    const testArgs = projectRun?.checkCommand ? ['--test', projectRun.checkCommand] : []
+    const testArgs = projectRun?.checkCommand
+      ? checkCommandLines(projectRun.checkCommand).flatMap((command) => ['--test', command])
+      : []
     const chosenModel = typeof model === 'string' && model.trim() ? model.trim() : projectRun?.model && String(projectRun.model).trim()
     const modelArgs = chosenModel ? ['--model', chosenModel] : []
     const item = {

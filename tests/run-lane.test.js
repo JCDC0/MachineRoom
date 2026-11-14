@@ -145,6 +145,19 @@ describe('parseRunArgs', () => {
     expect(parseRunArgs(['--dry-run', 'hermes', 'T2', '--minutes=5'])).toMatchObject({ lane: 'hermes', dryRun: true, minutes: 5 })
   })
 
+  it('keeps every --test in order and refuses a fifth command', () => {
+    expect(parseRunArgs(['opencode', '--project', 'C:\\work', '--task', 'Fix it.', '--test', 'npm test', '--test', 'npm run check'])).toMatchObject({
+      test: 'npm test\nnpm run check',
+    })
+    expect(parseRunArgs(['opencode', '--project', 'C:\\work', '--task', 'Fix it.', '--test', 'npm test\r\nnpm run check'])).toMatchObject({
+      test: 'npm test\nnpm run check',
+    })
+    expect(() => parseRunArgs([
+      'opencode', '--project', 'C:\\work', '--task', 'Fix it.',
+      '--test', 'one', '--test', 'two', '--test', 'three', '--test', 'four', '--test', 'five',
+    ])).toThrow('A check holds at most 4 commands, one per line.')
+  })
+
   it('accepts --list without a lane or a brief', () => {
     expect(parseRunArgs(['--list'])).toEqual({ lane: '', briefs: [], dryRun: false, minutes: 100, list: true })
     expect(parseRunArgs(['--list', '--minutes', '5'])).toMatchObject({ list: true, minutes: 5 })
