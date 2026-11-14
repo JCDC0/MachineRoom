@@ -2509,3 +2509,29 @@ Since P286, when a project run with a deferred record fails over and the backup 
 1. Change the test `keeps the one-second rule for a folder ask while the bridge polls` so the bridge has a working watcher and a poll timer at once, and a folder ask reads again only because of the poll. If the bridge cannot reach that state through its options, add the smallest option to `createBridge` that lets a test arm the poll beside a watcher, and use it only in the test.
 2. Prove it: with `pollTimer` taken out of `folderTreeReuseAllowed` the test fails, and with it in the test passes. Say how you proved it.
 3. Mark row 2 fixed in the audit file, add one changelog line, and run `node node_modules/vitest/vitest.mjs run tests/tree-read.test.js` and `npm run build`. Report what passed.
+
+**P302. The lanes source takes a run's start time only from the lock of that run (OpenCode).** Read finding R33-1 in `docs/agents/AUDIT-2026-11-REVIEW-33.md` and this brief only. Use no subagents. Run every command in the foreground. Commit each step as you finish it, and stop starting new work at minute 28. Files: src/briefs/run.js, scripts/run-lane.mjs, server/lanes-source.js, tests/lanes-source.test.js, tests/run-lane-stop.test.js, docs/agents/CHANGELOG.md, docs/agents/architecture/LIVE.md.
+
+1. `laneLockText` also writes `log`, the base name of the run's log file, and the runner passes it when it takes the lane lock for a run (the same place it passes `startedAt`). Add `laneLockLog(text)` beside `laneLockStartedAt`.
+2. In `server/lanes-source.js`, `beginRun` takes the lock's `startedAt` only when the lock's `log` is the base name of the log it is opening. Otherwise it keeps `now()`, so a Stop from the room names a start time no lock holds and the runner refuses it.
+3. Tests, by what they prove: two logs on one lane, the old one discovered after a newer run took the lock, give the old log no lock start time and the new log the lock's; a lock with no `log` gives `now()`. The first must fail before your change.
+4. Run `node node_modules/vitest/vitest.mjs run tests/lanes-source.test.js tests/run-lane-stop.test.js` and `npm run build`. Report what passed.
+
+**P303. A stop leaves a newer run's processes alone (OpenCode).** Read finding R33-2 in `docs/agents/AUDIT-2026-11-REVIEW-33.md` and this brief only. Use no subagents. Run every command in the foreground. Commit each step as you finish it, and stop starting new work at minute 25. Files: scripts/run-lane.mjs, tests/run-lane-stop.test.js, docs/agents/CHANGELOG.md, docs/agents/architecture/COMMANDS.md.
+
+1. In `stopLane`, read the lock again after the run's own processes and descendants are stopped and before `stopLeftovers`. When its text differs from the text read at the start, skip the worktree leftover search, print `kept the LANE lock: a newer run took it while the stop ran`, and exit 0 as today.
+2. Test, by what it proves: a stop whose `kill` stub writes a new lock (a newer holder) before the leftover search does not call `kill` for a process in the worktree that is not the stopped run's. It must fail before your change. Use the `list`, `kill` and `alive` options of `stopLane` rather than real processes.
+3. Run `node node_modules/vitest/vitest.mjs run tests/run-lane-stop.test.js` and `npm run build`. Report what passed.
+
+**P305. A Codex rollout read checks the file it opened (AGY).** Read finding R33-4 in `docs/agents/AUDIT-2026-11-REVIEW-33.md` and this brief only. Commit each step as you finish it, and stop starting new work at minute 25. Files: scripts/run-lane.mjs, tests/quota-read.test.js, docs/agents/CHANGELOG.md.
+
+1. In `readCodexQuota`, after `openSync`, compare `fstatSync(fd)` with the `lstatSync` of the path taken before the open (`dev` and `ino`, with `{ bigint: true }` on both). When they differ, or the lstat was a symbolic link, close the descriptor and answer null. `findCodexRollout` passes the checked path as today.
+2. Test, by what it proves: a rollout replaced between the check and the open (stub the open step, or replace the file through an injected hook) answers null. It must fail before your change. Keep the test working on Windows and Linux.
+3. Run `node node_modules/vitest/vitest.mjs run tests/quota-read.test.js` and `npm run build`. Report what passed.
+
+**P304. A failover writes the failed record once, even when the backup throws, and says a move only when the backup starts (OpenCode).** Start after P300 is merged. Read findings R33-3 and R33-5 in `docs/agents/AUDIT-2026-11-REVIEW-33.md` and this brief only. Use no subagents. Run every command in the foreground. Commit each finding's fix as you finish it, and stop starting new work at minute 28. Files: scripts/run-lane.mjs, server/runs.js, tests/run-failover.test.js, tests/project-dispatch.test.js, docs/agents/CHANGELOG.md.
+
+1. R33-3: when `startFailover` throws for a deferred project run, the failed run's record is still written exactly once, and the queue does not also write a generic record for it. A refused backup keeps today's path.
+2. R33-5: a failed record keeps `failover.to` only when the backup started. A refused backup records `failover: { kind, to, refused: true }`, and the bridge's room note for it says `LANE hit KIND and its backup TO could not start.` instead of `moved to`.
+3. Tests, by what they prove, each failing before its fix: a backup whose start throws leaves one failed record of the first lane; a busy backup gives a record with `refused: true` and the note `could not start`.
+4. Run `node node_modules/vitest/vitest.mjs run tests/run-failover.test.js tests/run-queue.test.js tests/project-dispatch.test.js` and `npm run build`. Report what passed.
