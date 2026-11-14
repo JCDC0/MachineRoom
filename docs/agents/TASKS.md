@@ -2430,3 +2430,22 @@ For each merge in `git log --first-parent --oneline 12c25524..HEAD`, read the te
 2. Add one line for each, in the section and order CODE.md uses, saying what the file owns, in its style: plain words, short sentences, no em dashes. Read each file's exports and first lines before writing its line.
 3. Remove any line that names a file that no longer exists.
 4. Report how many lines you added and removed.
+
+**P290. Three tests that fail only under load (OpenCode).** Read this brief and `docs/agents/architecture/LIMITS.md` (T26 and T28) only. Use no subagents. Run every command in the foreground. Never change product code, and never weaken an assertion. Commit each step as you finish it, and stop starting new work at minute 30. Files: tests/candidate.test.js, tests/claude-sessions.test.js, tests/run-lane-stop.test.js, tests/helpers/*.js, docs/agents/architecture/LIMITS.md, docs/agents/CHANGELOG.md.
+
+With ten lanes running, three tests failed and then passed alone:
+- `tests/candidate.test.js` `runCandidate > prints the last 20 build lines and exits 1`: `Error: Port 56212 is in use. Pass --port.` The test picks a port that another process takes before the candidate checks it.
+- `tests/claude-sessions.test.js` `reads a session started in a subfolder of the project`: `expected [] to have a length of 1 but got +0` at line 491, a wait that ends before the reader sees the file.
+- `tests/run-lane-stop.test.js` `--stop kills the run, the harness and the grandchild before it writes`: the stop marked the descendants stale instead of printing `leftover: stopped`.
+
+1. For each, find why load breaks it and fix the test: ask the OS for a free port at the moment of use (listen on port 0) or retry on that exact error, wait for the condition with a bound of at least 10 seconds, or wait until the descendants are listed before the stop.
+2. Run each file alone three times, and report each fix and what it now waits for. Add a line to LIMITS.md under T26 and T28 if the stop test's cause is the same.
+
+**P291. Check the ulolTris trial plan against the code (Codex).** Read `docs/agents/TRIAL-ULOLTRIS.md` and this brief only. Change no code. Do not commit: the runner commits your file. Stop at minute 30. Files: docs/agents/AUDIT-2026-11-TRIAL-PLAN.md.
+
+The plan makes claims about what MachineRoom does on another project. Check each against the code at `HEAD`, with `file:line`: that `up` turns on lanes and sessions; that an empty check command falls back to `npm test` when the project has that script; that `Own worktree` sends a single task through the queue runner into `PROJECT\.worktrees\LANE` and adds `/.worktrees/` to `.git\info\exclude`; that `node_modules` is joined into the worktree; that a dirty project refuses to start even with `Own worktree`; that a worktree with uncommitted changes or unmerged commits refuses to start; that Reviews merges with `--ff-only`; and the branch name `machineroom/queue-LANE-STAMP`. Write the file as a table: claim, true or false, `file:line`, and the corrected sentence for any false claim. Then list any step of the plan the room cannot do today.
+
+**P292. The README names this week's features (AGY).** Read `README.md`, `docs/agents/OWNER.md` and this brief only. Change only `README.md` and `docs/agents/CHANGELOG.md`. Commit each step as you finish it.
+
+1. The README tells a new owner what the room shows and what they can do. Add, in its style and in the section that fits, short plain sentences for: opening any lane's conversation from its row in Agents or its Inspector, with Stop while it runs; a lane's backup lane (`fallback` in the lane file), which takes a run that hit its quota or failed to start; and `npm run run-lane -- --list` marking a run that moved.
+2. Check each sentence against `docs/agents/architecture/ROOM.md` and `COMMANDS.md` before writing it. Keep the README's PowerShell syntax for commands.
