@@ -1625,6 +1625,7 @@ describe('a lane ticket for a run the bridge starts', () => {
       lane: 'opencode',
       startedBy: '',
       startedAt: answers.at(-1).body.startedAt,
+      inbox: [],
     })
 
     await api.handle(

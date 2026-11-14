@@ -808,6 +808,7 @@ export function createBridge(options = {}) {
         return fromSource || fromRuns
       },
       laneTicket: (value) => (runs && typeof runs.laneTicket === 'function' ? runs.laneTicket(value) : null),
+      laneTickets: (lane) => (runs && typeof runs.laneTicketsFor === 'function' ? runs.laneTicketsFor(lane) : []),
       startLaneTask: async (lane, taskText) => {
         if (!runs || typeof runs.startProjectTask !== 'function') throw new Error('The runner is not available.')
         return runs.startProjectTask({

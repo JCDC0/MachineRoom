@@ -49,6 +49,14 @@ export const NO_TOKEN_PROBLEM = 'A request with no Origin needs a valid orchestr
 export const LANE_ENDED_PROBLEM = 'That lane run has ended or is not known.'
 export const LANE_LIMIT_PROBLEM = 'This lane run has sent its 4 messages.'
 export const LANE_MESSAGE_LIMIT = 4
+export const LANE_SELF_PROBLEM = 'A lane cannot message itself.'
+export const PAGE_INBOX_PROBLEM = 'A page cannot read a lane inbox.'
+export const TOKEN_INBOX_PROBLEM = 'A lane inbox is read with a lane ticket, not an orchestrator token.'
+export const LANE_INBOX_LIMIT = 20
+
+export function laneNoRunProblem(key) {
+  return `The lane ${key} has no run that can read a message now.`
+}
 export const MAIN_LADDER_PROBLEM = 'A ladder change needs the main orchestrator\'s token.'
 export const MAIN_MESSAGE_PROBLEM = 'A message to a sub needs the main orchestrator\'s token.'
 export const OWNER_COMPACT_PROBLEM = 'A request with no Origin cannot compact an orchestrator.'
@@ -220,6 +228,7 @@ export function createOrchestrators({
   startLaneTask,
   harnessAvailable = isHarnessAvailable,
   laneTicket,
+  laneTickets,
 } = {}) {
   const root = projectRoot ? resolve(projectRoot) : ''
   const folder = resolve(runsFolder)
@@ -591,6 +600,46 @@ export function createOrchestrators({
   const laneSent = new Map()
   const clock = typeof now === 'function' ? now : Date.now
 
+  function laneKeyOf(value) {
+    const target = typeof value === 'string' ? value.trim() : ''
+    return target.startsWith('lane:') ? target.slice(5).trim() : ''
+  }
+
+  function receiveLaneMessage(lane, from, text, at) {
+    const tickets = typeof laneTickets === 'function' ? laneTickets(lane) : null
+    const held = Array.isArray(tickets) && tickets.length > 0 ? tickets[tickets.length - 1] : null
+    if (!held || !Array.isArray(held.inbox)) return false
+    held.inbox.push({ from, text, at: new Date(at).toISOString() })
+    while (held.inbox.length > LANE_INBOX_LIMIT) held.inbox.shift()
+    return true
+  }
+
+  function takeOrchestratorSlot(actor, at) {
+    const cutoff = at - 10 * 60 * 1000
+    const recent = (sentMessages.get(actor) ?? []).filter((time) => time > cutoff)
+    if (recent.length >= 6) {
+      sentMessages.set(actor, recent)
+      return false
+    }
+    recent.push(at)
+    sentMessages.set(actor, recent)
+    return true
+  }
+
+  function laneInbox(page, tokenValue = '', laneTicketValue = '') {
+    if (page) return { status: 403, body: { error: PAGE_INBOX_PROBLEM } }
+    if (typeof tokenValue === 'string' && tokenValue.trim()) {
+      return { status: 403, body: { error: TOKEN_INBOX_PROBLEM } }
+    }
+    const ticket = typeof laneTicketValue === 'string' ? laneTicketValue.trim() : ''
+    const held = ticket && typeof laneTicket === 'function' ? laneTicket(ticket) : null
+    if (!held) return { status: 403, body: { error: LANE_ENDED_PROBLEM } }
+    const messages = Array.isArray(held.inbox)
+      ? held.inbox.map((entry) => ({ from: entry.from, text: entry.text, at: entry.at }))
+      : []
+    return { status: 200, body: { messages } }
+  }
+
   async function message(body, page, tokenValue = '', laneTicketValue = '') {
     const ticketValue = typeof laneTicketValue === 'string' ? laneTicketValue.trim() : ''
     if (!page && !tokenValue && ticketValue) {
@@ -601,6 +650,22 @@ export function createOrchestrators({
         return { status: 400, body: { error: MESSAGE_PROBLEM } }
       }
       const hasTarget = typeof body.to === 'string' && body.to.trim() !== ''
+      const laneTarget = hasTarget ? laneKeyOf(body.to) : ''
+      if (hasTarget && !laneTarget && String(body.to).trim().startsWith('lane:')) {
+        return { status: 400, body: { error: MESSAGE_PROBLEM } }
+      }
+      if (laneTarget) {
+        if (laneTarget === held.lane) return { status: 400, body: { error: LANE_SELF_PROBLEM } }
+        const sentCount = laneSent.get(ticketValue) ?? 0
+        if (sentCount >= LANE_MESSAGE_LIMIT) return { status: 429, body: { error: LANE_LIMIT_PROBLEM } }
+        const sender = `lane:${held.lane}`
+        if (!receiveLaneMessage(laneTarget, sender, text, clock())) {
+          return { status: 409, body: { error: laneNoRunProblem(laneTarget) } }
+        }
+        laneSent.set(ticketValue, sentCount + 1)
+        announce(sender, laneTarget, 'message', text)
+        return { status: 202, body: { id: null } }
+      }
       const starter = typeof held.startedBy === 'string' ? held.startedBy.trim() : ''
       const target = hasTarget
         ? body.to.trim()
@@ -625,6 +690,30 @@ export function createOrchestrators({
       : typeof body.id === 'string' && body.id.trim()
         ? body.id.trim()
         : ORCHESTRATOR_KEY
+    const laneTarget = laneKeyOf(target)
+    if (laneTarget && !page) {
+      const from =
+        body.from === undefined || body.from === null || body.from === ''
+          ? 'orchestrator'
+          : body.from
+      if (from !== 'orchestrator' && from !== actor && from !== `sub:${actor}`) {
+        return { status: 400, body: { error: MESSAGE_FROM_PROBLEM } }
+      }
+      const text = typeof body.text === 'string' ? body.text.trim() : ''
+      if (text.length < 1 || text.length > ORCHESTRATOR_MESSAGE_LIMIT) {
+        return { status: 400, body: { error: MESSAGE_PROBLEM } }
+      }
+      const at = clock()
+      if (!takeOrchestratorSlot(actor, at)) {
+        return { status: 429, body: { error: 'Too many messages from this orchestrator. Wait, or ask the owner.' } }
+      }
+      const sender = actor === ORCHESTRATOR_KEY ? ORCHESTRATOR_KEY : `sub:${actor}`
+      if (!receiveLaneMessage(laneTarget, sender, text, at)) {
+        return { status: 409, body: { error: laneNoRunProblem(laneTarget) } }
+      }
+      announce(agentKey(actor), laneTarget, 'message', text)
+      return { status: 202, body: { id: null } }
+    }
     if (!instances.has(target)) {
       const currentLanes = typeof lanes === 'function' ? lanes() : (lanes ?? {})
       const isLaneTarget = Object.hasOwn(currentLanes, target) || eligibleLaneKeys().includes(target)
@@ -681,17 +770,12 @@ export function createOrchestrators({
         return { status: 400, body: { error: MESSAGE_PROBLEM } }
       }
       const at = clock()
-      const cutoff = at - 10 * 60 * 1000
-      const recent = (sentMessages.get(actor) ?? []).filter((time) => time > cutoff)
-      if (recent.length >= 6) {
-        sentMessages.set(actor, recent)
+      if (!takeOrchestratorSlot(actor, at)) {
         return {
           status: 429,
           body: { error: 'Too many messages from this orchestrator. Wait, or ask the owner.' },
         }
       }
-      recent.push(at)
-      sentMessages.set(actor, recent)
       const sender = actor === ORCHESTRATOR_KEY ? ORCHESTRATOR_KEY : `sub:${actor}`
       const sent = instance.deliver(sender, text)
       if (sent) announce(agentKey(actor), agentKey(id), 'message', text)
@@ -834,11 +918,16 @@ export function createOrchestrators({
       return true
     }
     if (path === '/api/orchestrator/messages') {
+      const laneHeader = req.headers['x-machineroom-lane']
+      const laneValue = typeof laneHeader === 'string' ? laneHeader.trim() : Array.isArray(laneHeader) ? laneHeader[0].trim() : ''
+      if (method === 'GET') {
+        const out = laneInbox(page, token, laneValue)
+        sendJson(req, res, out.status, out.body)
+        return true
+      }
       if (method !== 'POST') return methodNotAllowed(req, res)
       const body = await readJsonBody(req, res)
       if (body === null) return true
-      const laneHeader = req.headers['x-machineroom-lane']
-      const laneValue = typeof laneHeader === 'string' ? laneHeader.trim() : Array.isArray(laneHeader) ? laneHeader[0].trim() : ''
       const out = await message(body, page, token, laneValue)
       sendJson(req, res, out.status, out.body)
       return true
