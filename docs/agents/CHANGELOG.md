@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- A lane run takes messages from an orchestrator, a sub or another lane, and reads them mid-run with its ticket, oldest first, the newest 20 kept (P341).
 - A lane run the bridge started may message the orchestrator that started it, or any orchestrator, with its run's ticket: at most 4 per run, shown in the Team view (P335).
 - A lane run the bridge started gets its ticket and the bridge address, and its prompt says how to message its coordinator (P336).
 - A lane's message shows the lane's name in the chat and in a conversation preview, or its key when the lane is unknown (P337).
