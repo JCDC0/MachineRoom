@@ -1,6 +1,8 @@
 # Changelog
 
 ## Unreleased
+- A brief run masks a key or a profile path in each lane commit subject before it is saved (P328).
+- A refused backup keeps the failed run's captured head, so a backup commit cannot replace it (P328).
 - Review 35 confirms every review 34 fix has a test that fails with it undone, and finds four more: R35-1 to R35-4 (P324).
 - The queue dispatch test waits on the bridge's run end notice instead of a ten second poll (P323).
 - After a failover a queue expects the task's start branch with -on-BACKUP and fails a task that ends on another branch (P321).

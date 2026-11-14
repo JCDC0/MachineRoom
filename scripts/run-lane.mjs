@@ -8,7 +8,8 @@ import { finished } from 'node:stream'
 import { fileURLToPath } from 'node:url'
 import { branchFor, briefFileList, buildPrompt, nextVersion, parseBriefs, parseRules } from '../src/briefs/briefs.js'
 import { commitAuthorFor, formatQueueSummary, parseQueue, parseQueueArgs, runQueue } from '../src/briefs/queue.js'
-import { briefProblems, briefWorktreeProblems, checkCommandLines, checkCommandProblem, childEnvironment, commandFor, createLaneLog, DEFAULT_MINUTES, fallbackProblem, failoverKind, filterRunsSince, formatOutcomes, formatStats, formatSummary, laneCommandProblem, laneLockStartedAt, laneLockText, laneStats, laneStopProblem, laneWithOverrides, limitedFor, maskedQueueTasks, ORCHESTRATOR_LANE_PROBLEM, parseRunArgs, projectProblems, projectRunGit, readinessLine, retryStartProblem, runListLine, runRecord, sessionToolLines, splitCheckCommand, startFailureText, summarizeRun, unattendedPrompt, worktreeFor, WORKTREES_FOLDER } from '../src/briefs/run.js'
+import { maskKeys } from '../src/briefs/audit.js'
+import { briefProblems, briefWorktreeProblems, checkCommandLines, checkCommandProblem, childEnvironment, commandFor, createLaneLog, DEFAULT_MINUTES, fallbackProblem, failoverKind, filterRunsSince, formatOutcomes, formatStats, formatSummary, laneCommandProblem, laneLockStartedAt, laneLockText, laneStats, laneStopProblem, laneWithOverrides, limitedFor, maskProfilePaths, maskedQueueTasks, ORCHESTRATOR_LANE_PROBLEM, parseRunArgs, projectProblems, projectRunGit, readinessLine, retryStartProblem, runListLine, runRecord, sessionToolLines, splitCheckCommand, startFailureText, summarizeRun, unattendedPrompt, worktreeFor, WORKTREES_FOLDER } from '../src/briefs/run.js'
 import { outcomeTable } from '../server/outcomes.js'
 import { readMainSubjectsSync } from '../server/runs.js'
 import { isLockHolderStale, killTree, descendantProcesses, leftoverProcesses, listProcesses } from '../server/processTree.js'
@@ -831,11 +832,11 @@ function writeProjectRecord({ record, folder, startHead, startBranch, tests = ''
     })
     if (git.branch !== '') record.branch = git.branch
     record.commits = git.commits
+    const head = gitRead(folder, ['rev-parse', 'HEAD']) ?? ''
+    const testedDiffers = (tests === 'failed' || tests === 'passed') && gitRead(folder, ['status', '--porcelain']) !== ''
+    if (head !== '' && !testedDiffers) record.head = head
+    else if (testedDiffers) delete record.head
   }
-  const head = gitRead(folder, ['rev-parse', 'HEAD']) ?? ''
-  const testedDiffers = (tests === 'failed' || tests === 'passed') && gitRead(folder, ['status', '--porcelain']) !== ''
-  if (head !== '' && !testedDiffers) record.head = head
-  else if (testedDiffers) delete record.head
   if (tests === 'passed' || tests === 'failed' || tests === 'none') record.tests = tests
   if (appendRunRecord(record)) console.log(`record: ${printedRunsFolder(runsFile())}`)
 }
@@ -2028,7 +2029,10 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
         })
       : {
           branch: gitRead(lane.worktree, ['branch', '--show-current']) ?? '',
-          commits: (gitRead(lane.worktree, ['log', '--oneline', 'refs/heads/main..HEAD']) ?? '').split(/\r?\n/).filter(Boolean),
+          commits: (gitRead(lane.worktree, ['log', '--oneline', 'refs/heads/main..HEAD']) ?? '')
+            .split(/\r?\n/)
+            .filter(Boolean)
+            .map((line) => maskProfilePaths(maskKeys(line).text)),
         }
 
     const startFailed = (Boolean(result.error) || result.code !== 0) && summary.toolCalls === 0 && minutes < 1
@@ -2125,6 +2129,7 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
       if (failedGit) {
         if (failedGit.branch !== '') record.branch = failedGit.branch
         record.commits = failedGit.commits
+        if (failedHead !== '') record.head = failedHead
       }
       record.failover = { kind, to: target, refused: true }
       let recordWritten = false

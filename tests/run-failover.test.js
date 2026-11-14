@@ -581,6 +581,19 @@ describe('a lane that hits its quota hands its run to a backup lane', { timeout:
       const okCount = join(base, 'ok-count.txt')
       mkdirSync(runs, { recursive: true })
       makeRepo(project, commitThenFailScript(failCount))
+      const hook = join(project, '.git', 'hooks', 'post-checkout')
+      writeFileSync(hook, [
+        '#!/bin/sh',
+        'branch=$(git rev-parse --abbrev-ref HEAD)',
+        'case "$branch" in',
+        '  *-on-agy)',
+        "    echo backup > backup-note.txt",
+        '    git add -A',
+        '    git -c commit.gpgsign=false commit -q -m "Backup work"',
+        '    ;;',
+        'esac',
+        '',
+      ].join('\n'))
       const lanes = {
         opencode: { name: 'Fail lane', worktree: join(base, 'first'), fallback: 'agy', cli: { harness: 'opencode', bin: process.execPath, model: 'fake/fail' } },
         agy: { name: 'Backup lane', worktree: join(base, 'backup'), cli: { harness: 'not-a-harness', bin: process.execPath, model: 'fake/ok' } },
@@ -600,6 +613,9 @@ describe('a lane that hits its quota hands its run to a backup lane', { timeout:
       expect(records[0].branch).toBe('work-x')
       expect(records[0].commits).toHaveLength(1)
       expect(records[0].commits[0]).toContain('Write the note')
+      expect(records[0].head).toBe(gitIn(project, ['rev-parse', 'work-x']))
+      expect(gitIn(project, ['rev-parse', 'work-x-on-agy'])).not.toBe(records[0].head)
+      expect(gitIn(project, ['log', '--oneline', 'work-x-on-agy'])).toContain('Backup work')
       expect(gitIn(project, ['branch', '--show-current'])).toBe('work-x-on-agy')
       expect(result.stdout).toContain('The backup lane agy could not start')
       expect(result.stderr).not.toContain('TypeError')
