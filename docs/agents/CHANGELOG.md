@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- P319: LIVE.md and CONTROL-CLIENT.md say a check holds up to 4 non-empty commands and 500 characters in all, a refused backup's note says it could not start, and the first read of the records posts no note for old failovers.
 - P319: COMMANDS.md, ROOM.md and the Dispatch check hint say a lane may commit during its task and only the queue's own commit waits for every check to pass.
 - Review 34 lists nine findings in the batch since review 33 and seventeen doc sentences the code contradicts (P312).
 - The doctor and every orchestrator find the Codex app's codex.exe when codex is not on PATH, as lanes already did (P311).
