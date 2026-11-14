@@ -61,10 +61,10 @@ Rules, all checked by `src/model/hierarchy.js`:
 | Owner | a chat message, a ladder change, a run start | the main orchestrator or any sub, from the chat tabs; any lane |
 | Main | a chat reply, a message, a ladder change, a run start | the owner; any sub; any lane |
 | Sub | a message, a run start in its sector, and its turn's answer as `sub:<id>` | any other orchestrator (`orchestrator` or another sub); its own lanes; its parent for the turn answer |
-| Lane | one report when its run ends | the orchestrator named by `startedBy`, else the main |
+| Lane | one report when its run ends, and up to 4 short messages mid-run with its run's ticket | the orchestrator named by `startedBy`, any other orchestrator named by `to`, else the main |
 | Harness subagent | its result as a tool result | the harness turn that started it |
 
-Any orchestrator can message any other orchestrator (never itself, at most 6 messages per sender in 10 minutes), and a sub's turn answer still goes to its parent as `sub:<id>`. Lanes still send one report when their run ends.
+Any orchestrator can message any other orchestrator (never itself, at most 6 messages per sender in 10 minutes), and a sub's turn answer still goes to its parent as `sub:<id>`. A lane run the bridge started may also send at most 4 messages of 1 to 8000 characters while it works, with the ticket in `MACHINEROOM_LANE_TICKET` and the bridge address in `MACHINEROOM_BRIDGE`: `POST /api/orchestrator/messages` with `X-MachineRoom-Lane: TICKET` and `{ text, to? }`. With no `to` it goes to the run's `startedBy`, else the main orchestrator, from `lane:KEY`, and the Team view records it. A lane still receives nothing mid-run: its run is one non-interactive call, and a coordinator answers by starting a follow-up run.
 
 ## How it looks
 
