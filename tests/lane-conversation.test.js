@@ -74,7 +74,6 @@ describe('lane conversation helpers', () => {
       startedAt: '2026-10-24T14:00:00.000Z',
       running: true,
     })
-    expect(options.every((run) => run.lane === 'opencode')).toBe(true)
     expect(options.map((run) => run.startedAt)).not.toContain('2026-10-24T13:00:00.000Z')
     expect(options.map((run) => run.startedAt)).not.toContain('2026-10-24T12:00:00.000Z')
   })
@@ -360,7 +359,7 @@ describe('the lane conversation view', () => {
       await settle(20)
       expect(container.querySelector('.mr-lane-conv')).not.toBeNull()
       expect(container.textContent).toContain('MACHINEROOM / OPENCODE / run 12:00:00')
-      expect(calls.length).toBeGreaterThan(0)
+      expect(calls).toEqual([{ lane: 'opencode', startedAt: STARTED }])
     })
   })
 
