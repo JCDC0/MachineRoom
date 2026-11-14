@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- P288: every parsed JSON line in a lane conversation is masked before it is serialized, so a string, number or array line shows no profile name.
 - P289: CODE.md gains a line for each file under src, server, scripts, bin and tests that it did not name.
 - P280: TRIAL-ULOLTRIS.md gives the command, the check command, worktree mode, three candidate tasks from ulolTris's own next steps and what would count as a room failure.
 - P279: a secret-named field is masked only when it holds a string, so token counts show and keys stay hidden.
