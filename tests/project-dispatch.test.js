@@ -1568,3 +1568,77 @@ describe('POST /api/control/runs/stop', () => {
     expect(finished.body).toEqual({ error: 'No run is running on opencode.' })
   })
 })
+
+describe('a lane ticket for a run the bridge starts', () => {
+  it('passes the ticket and the bridge address to the runner and keeps the ticket out of every answer', async () => {
+    const base = tempDir('mr-lane-ticket-')
+    const project = join(base, 'project')
+    const runs = join(base, 'runs')
+    mkdirSync(project, { recursive: true })
+    mkdirSync(runs, { recursive: true })
+    const runnerDir = tempDir('mr-lane-ticket-runner-')
+    const envFile = join(runnerDir, 'env.json')
+    const release = join(runnerDir, 'release')
+    const runner = join(runnerDir, 'hold-runner.mjs')
+    writeFileSync(
+      runner,
+      [
+        "import { existsSync, writeFileSync } from 'node:fs'",
+        `writeFileSync(${JSON.stringify(envFile)}, JSON.stringify({ ticket: process.env.MACHINEROOM_LANE_TICKET ?? '', bridge: process.env.MACHINEROOM_BRIDGE ?? '' }))`,
+        `while (!existsSync(${JSON.stringify(release)})) await new Promise((done) => setTimeout(done, 20))`,
+      ].join('\n')
+    )
+    const answers = []
+    const api = createRunsApi({
+      projectRoot: project,
+      runnerCommand: { file: process.execPath, args: [runner] },
+      bridgeUrl: 'http://127.0.0.1:5999',
+      sendJson: (req, res, status, body) => {
+        answers.push({ status, body })
+      },
+      readJsonBody: async () => ({ lane: 'opencode', task: 'Report the ticket.', confirmed: true }),
+      runsFolder: runs,
+      lanesFile: join(REPO_ROOT, 'docs', 'agents', 'lanes.json'),
+      activeLanes: { isChosen: () => true, isLaneActive: () => true },
+    })
+    cleanups.push(() => api.stopAll())
+
+    await api.handle(
+      { method: 'POST', headers: { origin: 'http://localhost:5173' } },
+      {},
+      new URL('http://127.0.0.1/api/control/runs')
+    )
+    expect(answers.at(-1).status).toBe(202)
+    const env = await waitFor(
+      () => {
+        try {
+          return JSON.parse(readFileSync(envFile, 'utf8'))
+        } catch {
+          return null
+        }
+      },
+      { what: 'the runner environment' }
+    )
+    expect(env.ticket).toMatch(/^[0-9a-f]{32}$/)
+    expect(env.bridge).toBe('http://127.0.0.1:5999')
+    expect(api.laneTicket(env.ticket)).toEqual({
+      lane: 'opencode',
+      startedBy: '',
+      startedAt: answers.at(-1).body.startedAt,
+    })
+
+    await api.handle(
+      { method: 'GET', headers: { origin: 'http://localhost:5173' } },
+      {},
+      new URL('http://127.0.0.1/api/control/runs')
+    )
+    expect(answers.at(-1).status).toBe(200)
+    expect(answers.at(-1).body.running).toHaveLength(1)
+    expect(JSON.stringify(answers)).not.toContain(env.ticket)
+
+    writeFileSync(release, 'go\n')
+    await waitFor(() => !api.isRunning('opencode'), { what: 'the run to end' })
+    expect(api.laneTicket(env.ticket)).toBeNull()
+    expect(existsSync(join(runs, 'runs.jsonl')) ? readFileSync(join(runs, 'runs.jsonl'), 'utf8') : '').not.toContain(env.ticket)
+  })
+})
