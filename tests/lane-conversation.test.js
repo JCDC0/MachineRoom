@@ -201,6 +201,99 @@ describe('the lane conversation view', () => {
     })
   })
 
+  it('keeps the selected run when an older answer arrives last', async () => {
+    const later = '2026-10-24T13:00:00.000Z'
+    let finishA
+    let finishB
+    const client = {
+      runConversation: ({ startedAt }) => new Promise((resolve) => {
+        if (startedAt === STARTED) finishA = resolve
+        else finishB = resolve
+      }),
+    }
+    const runs = [
+      { lane: 'opencode', startedAt: STARTED, exitCode: 0 },
+      { lane: 'opencode', startedAt: later, exitCode: 0 },
+    ]
+
+    await withDom(async ({ container, root }) => {
+      await mount(root, { client, lane: 'opencode', lanes: LANES, runs, initialStartedAt: STARTED })
+      await act(async () => {
+        const picker = container.querySelector('select')
+        picker.value = later
+        picker.dispatchEvent({ type: 'change', bubbles: true })
+      })
+      await act(async () => {
+        finishB({ running: false, entries: [{ role: 'agent', text: 'Run B' }] })
+      })
+      expect(container.textContent).toContain('Run B')
+      expect(buttonWithText(container, 'Stop')).toBeNull()
+      await act(async () => {
+        finishA({ running: true, entries: [{ role: 'agent', text: 'Run A' }] })
+      })
+      expect(container.textContent).toContain('Run B')
+      expect(container.textContent).not.toContain('Run A')
+      expect(buttonWithText(container, 'Stop')).toBeNull()
+      await act(async () => {
+        const picker = container.querySelector('select')
+        picker.value = STARTED
+        picker.dispatchEvent({ type: 'change', bubbles: true })
+      })
+      expect(container.textContent).not.toContain('Run B')
+      expect(container.textContent).toContain('Reading the conversation.')
+    })
+  })
+
+  it('ignores an error from a lane that is no longer selected', async () => {
+    let failA
+    const client = {
+      runConversation: ({ lane }) => lane === 'opencode'
+        ? new Promise((resolve, reject) => { failA = reject })
+        : Promise.resolve({ running: false, entries: [{ role: 'agent', text: 'Other lane' }] }),
+    }
+    const runs = [
+      { lane: 'opencode', startedAt: STARTED },
+      { lane: 'hermes', startedAt: STARTED },
+    ]
+    const props = { client, lane: 'opencode', runs, initialStartedAt: STARTED }
+
+    await withDom(async ({ container, root }) => {
+      await mount(root, props)
+      await act(async () => {
+        root.render(createElement(LaneConversation, { ...props, lane: 'hermes' }))
+      })
+      await act(async () => { failA(new Error('Old lane failed')) })
+      expect(container.textContent).toContain('Other lane')
+      expect(container.textContent).not.toContain('Old lane failed')
+    })
+  })
+
+  it('clears a running conversation while the next run loads', async () => {
+    const later = '2026-10-24T13:00:00.000Z'
+    const client = {
+      runConversation: ({ startedAt }) => startedAt === STARTED
+        ? Promise.resolve({ running: true, entries: [{ role: 'agent', text: 'Running A' }] })
+        : new Promise(() => {}),
+    }
+    const runs = [
+      { lane: 'opencode', startedAt: STARTED },
+      { lane: 'opencode', startedAt: later, running: true },
+    ]
+
+    await withDom(async ({ container, root }) => {
+      await mount(root, { client, lane: 'opencode', runs, initialStartedAt: STARTED })
+      expect(buttonWithText(container, 'Stop')).not.toBeNull()
+      await act(async () => {
+        const picker = container.querySelector('select')
+        picker.value = later
+        picker.dispatchEvent({ type: 'change', bubbles: true })
+      })
+      expect(container.textContent).not.toContain('Running A')
+      expect(buttonWithText(container, 'Stop')).toBeNull()
+      expect(container.textContent).toContain('Reading the conversation.')
+    })
+  })
+
   it('shows no Stop on a finished run', async () => {
     const client = makeClient({
       entries: [

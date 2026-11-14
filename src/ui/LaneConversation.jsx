@@ -38,7 +38,7 @@ export default function LaneConversation({
 }) {
   const [runs, setRuns] = useState(givenRuns)
   const [selected, setSelected] = useState(initialStartedAt)
-  const [conversation, setConversation] = useState({ loading: true, data: null, error: '' })
+  const [conversationState, setConversation] = useState({ loading: true, data: null, error: '' })
   const [confirmStop, setConfirmStop] = useState(false)
   const [stopping, setStopping] = useState(false)
   const [stopError, setStopError] = useState('')
@@ -47,9 +47,14 @@ export default function LaneConversation({
   const mountedRef = useRef(true)
   const lastReadRef = useRef(null)
   const readRef = useRef(null)
+  const selectionRef = useRef(null)
+  selectionRef.current = { lane, startedAt: selected }
+  const conversation = conversationState.lane === lane && conversationState.startedAt === selected
+    ? conversationState
+    : { loading: true, data: null, error: '' }
   const options = useMemo(() => runOptions(runs, lane, { liveRuns, lanes }), [runs, lane, liveRuns, lanes])
   const currentRun = options.find((run) => run.startedAt === selected) ?? null
-  const running = conversation.data?.running === true || currentRun?.running === true
+  const running = conversation.data !== null && (conversation.data?.running === true || currentRun?.running === true)
   const outcome = runOutcome(currentRun, conversation.data)
   const colour = agentColor(lane, lanes)
   const entries = Array.isArray(conversation.data?.entries) ? conversation.data.entries : []
@@ -112,17 +117,23 @@ export default function LaneConversation({
 
   async function readConversation(startedAt, { force = false } = {}) {
     if (!startedAt || !client || typeof client.runConversation !== 'function') return
+    const isSelected = () => mountedRef.current && selectionRef.current.lane === lane && selectionRef.current.startedAt === startedAt
+    if (!isSelected()) return
     const at = Date.now()
     if (!force && !readDue(lastReadRef.current, at)) return
     lastReadRef.current = at
-    setConversation((current) => ({ ...current, loading: current.data === null }))
+    setConversation((current) => current.lane === lane && current.startedAt === startedAt
+      ? { ...current, loading: current.data === null }
+      : { lane, startedAt, loading: true, data: null, error: '' })
     try {
       const data = await client.runConversation({ lane, startedAt })
-      if (!mountedRef.current) return
-      setConversation({ loading: false, data: data && typeof data === 'object' ? data : null, error: '' })
+      if (!isSelected()) return
+      setConversation({ lane, startedAt, loading: false, data: data && typeof data === 'object' ? data : null, error: '' })
     } catch (failure) {
-      if (!mountedRef.current) return
+      if (!isSelected()) return
       setConversation({
+        lane,
+        startedAt,
         loading: false,
         data: null,
         error: failure?.message || 'Could not read the conversation.',
@@ -133,6 +144,7 @@ export default function LaneConversation({
 
   useEffect(() => {
     lastReadRef.current = null
+    setConversation({ lane, startedAt: selected, loading: true, data: null, error: '' })
     readRef.current?.(selected, { force: true })
   }, [client, lane, selected])
 
