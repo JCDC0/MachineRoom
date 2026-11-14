@@ -517,6 +517,41 @@ describe('stopLane creation time rules', () => {
     }
   })
 
+  it('keeps the lock when a non-empty snapshot misses the live run', async () => {
+    const { worktree, runs, env } = setup('mr-stop-unseen-')
+    const run = startIdleProcess()
+    const harness = startIdleProcess()
+    expect(await waitUntil(() => processAlive(run.pid) && processAlive(harness.pid), 5000), 'the run did not start').toBe(true)
+    const lockPath = join(runs, 'fake.lock')
+    writeFileSync(lockPath, laneLockText({ pid: run.pid, child: harness.pid, folder: worktree }))
+    const killed = []
+    const lines = []
+    const log = console.log
+    console.log = (msg) => lines.push(msg)
+    try {
+      withEnv(env, () => {
+        const code = stopLane('fake', {
+          platform: 'win32',
+          stat: () => ({ mtimeMs: 10000 }),
+          list: () => [{ pid: 999, ppid: 1, created: 5000 }],
+          kill: ({ pid }) => {
+            killed.push(pid)
+            return true
+          },
+        })
+        expect(code).toBe(1)
+      })
+      expect(killed).toEqual([])
+      expect(processAlive(run.pid)).toBe(true)
+      expect(processAlive(harness.pid)).toBe(true)
+      expect(lines).toContain('could not see the fake run in the process list, so the lock stays')
+      expect(existsSync(lockPath)).toBe(true)
+      expect(readFileSync(lockPath, 'utf8')).toContain(`"pid":${run.pid}`)
+    } finally {
+      console.log = log
+    }
+  }, 30000)
+
   it('keeps what the code does when a row has no created', () => {
     const { runs, env } = setup('mr-stop-nocreated-')
     const lockPath = join(runs, 'fake.lock')

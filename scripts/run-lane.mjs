@@ -336,6 +336,7 @@ export function stopLane(laneKey, { platform = process.platform, list = listProc
   let stopped = 0
   let failed = 0
   let listStale = false
+  let unseen = false
   for (const [pid, name] of [[holder.child, 'the harness'], [holder.pid, 'the run']]) {
     if (!Number.isInteger(pid) || pid <= 0 || pid === process.pid) continue
     if (isStranger(pid)) {
@@ -349,7 +350,13 @@ export function stopLane(laneKey, { platform = process.platform, list = listProc
         console.log(`could not stop: ${pid} (${name})`)
         failed += 1
       }
+    } else if (alive(pid)) {
+      unseen = true
     }
+  }
+  if (unseen) {
+    console.log(`could not see the ${laneKey} run in the process list, so the lock stays`)
+    failed += 1
   }
   const descendantsResult = stopDescendants(descendants, {
     list,
