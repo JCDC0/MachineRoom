@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- A lane run takes a permission mode with --mode or the lane's cli.mode: Claude lanes get plan, edits, auto or bypass, Codex and AGY lanes pass theirs, and a mode the harness lacks is refused before anything starts (P338).
 - A lane run the bridge started may message the orchestrator that started it, or any orchestrator, with its run's ticket: at most 4 per run, shown in the Team view (P335).
 - A lane run the bridge started gets its ticket and the bridge address, and its prompt says how to message its coordinator (P336).
 - A lane's message shows the lane's name in the chat and in a conversation preview, or its key when the lane is unknown (P337).

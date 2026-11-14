@@ -1,6 +1,7 @@
 import { basename } from '../model/paths.js'
 import { finiteNumber, summaryOf } from '../harnesses/common.js'
 import { harnessByKey } from '../harnesses/index.js'
+import { modesFor } from '../control/modes.js'
 import { createSplitMasker, maskKeys } from './audit.js'
 import { branchFor, briefFileList } from './briefs.js'
 import { pathAllowed } from './plan.js'
@@ -8,6 +9,7 @@ import { pathAllowed } from './plan.js'
 export const UNATTENDED_NOTE = 'You are running unattended in a one-shot command started for the owner, who may be away. Nobody can answer a question. If something blocks you, stop, leave the branch as it is, and say why in your report.'
 
 const OVERRIDES = [
+  { key: 'mode', pattern: /^(?!-).+$/, problem: '--mode needs a permission mode.' },
   { key: 'model', pattern: /^[A-Za-z0-9][\w./:@-]*$/, problem: '--model needs a model id, for example minimax/minimax-m3.1-flash:free.' },
   { key: 'reasoning', pattern: /^[a-z]+$/, problem: '--reasoning needs a level such as low, medium, high or xhigh.' },
 ]
@@ -42,6 +44,17 @@ export function laneCommandProblem(lane) {
   return ''
 }
 
+export function laneModeProblem(lane, laneKey) {
+  const mode = lane?.cli?.mode
+  if (mode === undefined) return ''
+  const harness = lane?.cli?.harness
+  const modes = modesFor(harness).map((item) => item.id)
+  if (!modes.includes(mode)) return `The ${mode} mode is not one ${laneKey}'s harness has. It has: ${modes.join(', ')}.`
+  if (mode === 'ask') return 'A lane run has nobody to ask, so the ask mode is for orchestrators only.'
+  if (harness === 'opencode' && (mode === 'plan' || mode === 'edits')) return `OpenCode lanes cannot use ${mode} mode because it needs a permission config.`
+  return ''
+}
+
 export function commandFor({ lane, prompt, env = {}, usageFile, title, cwd, sessionId, mcpConfig } = {}) {
   if (!lane || typeof lane !== 'object') throw new Error('There is no lane to run.')
   const startProblem = laneCommandProblem(lane)
@@ -51,7 +64,7 @@ export function commandFor({ lane, prompt, env = {}, usageFile, title, cwd, sess
   if (!Object.hasOwn(harnessByKey, harness)) throw new Error(`The runner does not know the ${harness} command line.`)
   const folder = typeof cwd === 'string' && cwd.trim() !== '' ? cwd : lane.worktree
   if (typeof folder !== 'string' || folder.trim() === '') throw new Error(`The lane ${lane.name ?? 'this one'} has no worktree, so the runner cannot start it.`)
-  const command = harnessByKey[harness].command({ cli, prompt, env, usageFile, title, folder, reasoning: lane.reasoning, sessionId, mcpConfig })
+  const command = harnessByKey[harness].command({ cli, prompt, env, usageFile, title, folder, reasoning: lane.reasoning, mode: cli.mode, sessionId, mcpConfig })
   const endpoint = typeof cli.endpoint === 'string' ? cli.endpoint.trim() : ''
   if (harness !== 'machineroom' || endpoint === '') return command
   const args = [...command.args]
@@ -636,7 +649,7 @@ export function limitedFor(harness, log) {
   return typeof descriptor.limited === 'function' ? descriptor.limited(String(log ?? '')) : ''
 }
 
-export function laneWithOverrides(lane, { model, reasoning } = {}) {
+export function laneWithOverrides(lane, { model, reasoning, mode } = {}) {
   if (!lane?.cli) return lane
   const next = { ...lane, cli: { ...lane.cli } }
   if (model) {
@@ -645,6 +658,7 @@ export function laneWithOverrides(lane, { model, reasoning } = {}) {
     delete next.models
   }
   if (reasoning) next.reasoning = reasoning
+  if (mode !== undefined) next.cli.mode = mode
   return next
 }
 
@@ -1172,7 +1186,7 @@ export function maskedQueueTasks(tasks) {
   return (Array.isArray(tasks) ? tasks : []).map((task) => maskProfilePaths(maskKeys(String(task ?? '')).text).slice(0, RECORD_TEXT_LIMIT))
 }
 
-export function runRecord({ lane, briefs, model, reasoning, startedAt, minutes, exitCode, killed, costUsd, inputTokens, outputTokens, peakTokens, log, branch, commits, base, head, tests, project, task, startedBy, stoppedLeftovers, queue, startFailed, note, retried, failover, failoverFrom, quota } = {}) {
+export function runRecord({ lane, briefs, model, reasoning, mode, startedAt, minutes, exitCode, killed, costUsd, inputTokens, outputTokens, peakTokens, log, branch, commits, base, head, tests, project, task, startedBy, stoppedLeftovers, queue, startFailed, note, retried, failover, failoverFrom, quota } = {}) {
   const record = {
     lane: String(lane ?? ''),
     briefs: Array.isArray(briefs) ? briefs.map(String) : [],
@@ -1190,6 +1204,7 @@ export function runRecord({ lane, briefs, model, reasoning, startedAt, minutes, 
     branch: branch ? String(branch) : '',
     commits: Array.isArray(commits) ? commits.map(String) : [],
   }
+  if (mode !== undefined) record.mode = mode
   if (typeof base === 'string' && base.trim() !== '') record.base = base.trim()
   if (typeof head === 'string' && head.trim() !== '') record.head = head.trim()
   if (tests === 'passed' || tests === 'failed' || tests === 'none') record.tests = tests
@@ -1255,7 +1270,7 @@ export function runListLine(record) {
   const taken = typeof from?.lane === 'string' && from.lane.trim() !== ''
     ? ` | taken over from ${from.lane.trim()}`
     : ''
-  return `${when} | ${record.lane} | ${model} | ${briefs} | ${minutes} | ${exit}${killed} | ${cost} | ${branch}${peak}${moved}${taken}`
+  return `${when} | ${record.lane} | ${model}${record.mode !== undefined ? ` | ${record.mode}` : ''} | ${briefs} | ${minutes} | ${exit}${killed} | ${cost} | ${branch}${peak}${moved}${taken}`
 }
 
 const CRASH_STATUSES = [3221226505, -1073740791]
