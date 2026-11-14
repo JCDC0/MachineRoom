@@ -822,7 +822,7 @@ describe('Dispatch project check command', () => {
       expect(field).not.toBeNull()
       expect(field.value).toBe('node scripts/check.mjs')
       expect(container.textContent).toContain(
-        'One command per line, run in order after each task; the task is committed only when all pass. Empty uses npm test when package.json has one.'
+        'One command per line, run in order after each task; the queue commits what is left only when all pass. Empty uses npm test when package.json has one.'
       )
 
       const lane = container.querySelector('#project-run-lane')

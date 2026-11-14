@@ -921,7 +921,7 @@ export default function DispatchPanel({
                 }}
               />
               <div className="brief-state is-dim mono">
-                One command per line, run in order after each task; the task is committed only when all pass. Empty uses npm test when package.json has one.
+                One command per line, run in order after each task; the queue commits what is left only when all pass. Empty uses npm test when package.json has one.
               </div>
             </div>
           )}
