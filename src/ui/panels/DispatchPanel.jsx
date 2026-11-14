@@ -907,9 +907,9 @@ export default function DispatchPanel({
           {hasProjectSettings && (
             <div className="panel-field">
               <label htmlFor="project-run-check">Check command</label>
-              <input
+              <textarea
                 id="project-run-check"
-                type="text"
+                rows={Math.min(4, Math.max(2, String(projectCheckCommand ?? '').split(/\r?\n/).length))}
                 value={projectCheckCommand}
                 maxLength={500}
                 placeholder="Empty uses npm test when package.json has one"
@@ -921,7 +921,7 @@ export default function DispatchPanel({
                 }}
               />
               <div className="brief-state is-dim mono">
-                Runs after each task; the task is committed only when it passes. Empty uses npm test when package.json has one.
+                One command per line, run in order after each task; the task is committed only when all pass. Empty uses npm test when package.json has one.
               </div>
             </div>
           )}
