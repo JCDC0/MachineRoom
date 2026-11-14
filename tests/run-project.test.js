@@ -82,7 +82,7 @@ function runLane(args, extra = {}) {
       clearTimeout(timer)
       fail(error)
     })
-    child.once('exit', (code) => {
+    child.once('close', (code) => {
       clearTimeout(timer)
       done({ code, stdout, stderr })
     })
