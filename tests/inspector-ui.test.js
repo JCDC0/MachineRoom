@@ -186,6 +186,61 @@ describe('the inspector panel', () => {
     })
   })
 
+  it('shows a refused backup as one that could not start beside a started move', async () => {
+    const opencode = {
+      key: 'opencode',
+      name: 'OpenCode',
+      harness: 'opencode',
+      model: 'opencode-go/deepseek-v4.1-flash',
+      status: 'idle',
+      openCalls: 0,
+    }
+    const agy = {
+      key: 'agy',
+      name: 'agy',
+      harness: 'agy',
+      model: 'gemini-3.8-flash-high',
+      status: 'idle',
+      openCalls: 0,
+    }
+    const client = makeClient({
+      runs: async () => ({
+        running: [],
+        last: [
+          { lane: 'opencode', startedAt: '2026-11-14T10:00:00.000Z', failover: { kind: 'quota', to: 'agy' } },
+          { lane: 'agy', startedAt: '2026-11-14T10:01:00.000Z', failover: { kind: 'quota', to: 'opencode', refused: true } },
+        ],
+      }),
+    })
+
+    await withDom(async ({ container, root }) => {
+      await mount(root, {
+        target: { kind: 'agent', id: 'opencode' },
+        live: true,
+        bridge: true,
+        client,
+        lanes: [opencode, agy],
+        liveRuns: [],
+        tasks: [],
+        log: [],
+      })
+      expect(container.textContent).toContain('Moved to agy: quota')
+
+      await mount(root, {
+        target: { kind: 'agent', id: 'agy' },
+        live: true,
+        bridge: true,
+        client,
+        lanes: [opencode, agy],
+        liveRuns: [],
+        tasks: [],
+        log: [],
+      })
+      expect(container.textContent).toContain('Backup opencode could not start: quota')
+      expect(container.textContent).not.toContain('Moved to opencode: quota')
+    })
+  })
+
   it('opens a lane conversation from the button under its log lines', async () => {
     const client = makeClient()
     const onClose = vi.fn()

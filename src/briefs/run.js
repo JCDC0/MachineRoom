@@ -1236,8 +1236,12 @@ export function runListLine(record) {
   const peakTokens = record.peakTokens ?? record.peak
   const peak = typeof peakTokens === 'number' && Number.isFinite(peakTokens) ? ` | peak ${peakTokens}` : ''
   const move = record.failover
-  const moved = typeof move?.to === 'string' && move.to.trim() !== '' && typeof move?.kind === 'string' && move.kind.trim() !== ''
-    ? ` | moved to ${move.to.trim()} (${move.kind.trim()})`
+  const moveTo = typeof move?.to === 'string' ? move.to.trim() : ''
+  const moveKind = typeof move?.kind === 'string' ? move.kind.trim() : ''
+  const moved = moveTo !== '' && moveKind !== ''
+    ? move.refused === true
+      ? ` | backup ${moveTo} could not start (${moveKind})`
+      : ` | moved to ${moveTo} (${moveKind})`
     : ''
   const from = record.failoverFrom
   const taken = typeof from?.lane === 'string' && from.lane.trim() !== ''
