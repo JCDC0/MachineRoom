@@ -2461,3 +2461,10 @@ The plan makes claims about what MachineRoom does on another project. Check each
 1. Before a project run reuses `PROJECT\.worktrees\LANE`, the runner refuses, with one sentence naming the branch and the count, when the worktree is on a named branch that has commits not in the project's current HEAD: `The LANE worktree is on BRANCH with N commits not in the project yet. Merge or remove it first.` A detached worktree keeps today's check.
 2. Test, by what it proves: a worktree left on a named branch with one extra commit refuses with that sentence; one on a branch already merged starts. The first must fail before your change.
 3. Run `node node_modules/vitest/vitest.mjs run tests/run-worktree.test.js` and `npm run build`. Report what passed.
+
+**P295. The tests that could not fail can fail now, round two (AGY).** Read `docs/agents/AUDIT-2026-11-TESTS-2.md` and this brief only. Never change product code. Commit each step as you finish it. Files: tests/tree-read.test.js, tests/lane-conversation.test.js, tests/history-audit.test.js, tests/runs-folder.test.js, tests/scale.test.js, tests/scale-live.test.js, tests/screenshots.test.js, tests/hand-run.test.js, tests/bridge-routes.test.js, tests/conversation.test.js, docs/agents/AUDIT-2026-11-TESTS-2.md, docs/agents/CHANGELOG.md.
+
+1. For each row of the audit's table, add the smallest real assertion the row proposes, or one that proves the same thing: literal usage lines and refusal sentences instead of the imported constants, a literal 4000 for the text cut, the exact call in the open-chat test, and for the two tree-read rows a test that separates the guard it names (a failed git watcher with `gitMetaDirty` already cleared; a polling bridge that still has a watcher object).
+2. Prove each new assertion fails with its change undone, in a scratch copy under `%TEMP%`, never in the worktree. Delete the copy after.
+3. Add a `Fixed` column to the audit table naming the test that now fails.
+4. Run each changed test file alone and report what passed.
