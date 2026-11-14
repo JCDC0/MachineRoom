@@ -840,7 +840,7 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
             entry.startedAt,
           ]
       : [...command.args, lane, ...briefs, ...startedArgs, '--started-at', entry.startedAt]
-    laneTickets.set(ticket, { lane, startedBy, startedAt: entry.startedAt })
+    laneTickets.set(ticket, { lane, startedBy, startedAt: entry.startedAt, inbox: [] })
     const child = spawn(command.file, args, {
       cwd: projectRun ? REPO_ROOT : resolvedRoot || undefined,
       shell: false,
@@ -1557,7 +1557,16 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
       const ticket = typeof value === 'string' ? value.trim() : ''
       if (!ticket) return null
       const held = laneTickets.get(ticket)
-      return held ? { lane: held.lane, startedBy: held.startedBy, startedAt: held.startedAt } : null
+      return held ? { lane: held.lane, startedBy: held.startedBy, startedAt: held.startedAt, inbox: held.inbox } : null
+    },
+    laneTicketsFor: (lane) => {
+      const key = typeof lane === 'string' ? lane.trim() : ''
+      if (!key) return []
+      const found = []
+      for (const held of laneTickets.values()) {
+        if (held.lane === key) found.push(held)
+      }
+      return found
     },
   }
 }
