@@ -1,6 +1,10 @@
 # Changelog
 
 ## Unreleased
+- P311: `codexProgramFor` answers the Codex app's newest program for a bare `codex` bin when codex is not on PATH, and run-lane uses it.
+- P311: the doctor prints an ok line for a Codex lane that starts from the app's program.
+- P311: a Codex orchestrator or sub orchestrator starts the app's program when codex is not on PATH.
+- P311: COMMANDS.md and LIVE.md say the doctor and the orchestrators find the Codex app's program.
 - Test helpers that read a child's output resolve on close, not exit, so stdout is complete on Linux (P310).
 - P310: the test helpers that collect a child's stdout and stderr resolve on `close`, so they read the whole output on Ubuntu CI.
 - P309: after a Reviews merge, a clean detached .worktrees/play moves to the merged commit with hooks still off, and Reviews says whether it moved.
