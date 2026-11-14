@@ -2449,3 +2449,15 @@ The plan makes claims about what MachineRoom does on another project. Check each
 
 1. The README tells a new owner what the room shows and what they can do. Add, in its style and in the section that fits, short plain sentences for: opening any lane's conversation from its row in Agents or its Inspector, with Stop while it runs; a lane's backup lane (`fallback` in the lane file), which takes a run that hit its quota or failed to start; and `npm run run-lane -- --list` marking a run that moved.
 2. Check each sentence against `docs/agents/architecture/ROOM.md` and `COMMANDS.md` before writing it. Keep the README's PowerShell syntax for commands.
+
+**P293. The Dispatch confirm card says where the worktree is and what it starts from (AGY).** Read the last section of `docs/agents/AUDIT-2026-11-TRIAL-PLAN.md` and this brief only. Commit each step as you finish it. Files: src/ui/panels/DispatchPanel.jsx, src/ui/panels/runs.js, tests/project-dispatch.test.js, docs/agents/CHANGELOG.md, docs/agents/architecture/ROOM.md.
+
+1. With Own worktree, the confirm card says `The lane works in its own worktree, .worktrees/LANE inside the project, on a new branch from the project's current branch.` with the real lane and the branch the project has checked out when the card opens (read how the card already gets the project's details). Drop `beside the project` and `never on main`, which are not true.
+2. Test, by what it proves: the confirm card for a project on branch `work` names `.worktrees/opencode` and `work`. It must fail before your change.
+3. Run `node node_modules/vitest/vitest.mjs run tests/project-dispatch.test.js` and `npm run build`. Report what passed.
+
+**P294. A reused worktree on a named branch with unmerged commits refuses to start (OpenCode).** Start after P285 and P286 are merged. Read the row on reused worktrees in `docs/agents/AUDIT-2026-11-TRIAL-PLAN.md` and this brief only. Use no subagents. Run every command in the foreground. Commit each step as you finish it, and stop starting new work at minute 25. Files: scripts/run-lane.mjs, tests/run-worktree.test.js, docs/agents/CHANGELOG.md, docs/agents/architecture/COMMANDS.md.
+
+1. Before a project run reuses `PROJECT\.worktrees\LANE`, the runner refuses, with one sentence naming the branch and the count, when the worktree is on a named branch that has commits not in the project's current HEAD: `The LANE worktree is on BRANCH with N commits not in the project yet. Merge or remove it first.` A detached worktree keeps today's check.
+2. Test, by what it proves: a worktree left on a named branch with one extra commit refuses with that sentence; one on a branch already merged starts. The first must fail before your change.
+3. Run `node node_modules/vitest/vitest.mjs run tests/run-worktree.test.js` and `npm run build`. Report what passed.
