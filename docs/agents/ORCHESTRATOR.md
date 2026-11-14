@@ -10,14 +10,14 @@ How to read this file: `Where things stand`, `Rules`, `Session start` and `The l
 
 Rewrite this section at every merge and before you end a session. Keep it under ten lines: what is pushed, what is unpushed, what runs, what waits on the owner, what is next.
 
-- 2026-11-13, night: everything merged is pushed at `12c25524`, CI green on Windows and Ubuntu (run 43439953614; read CI first with `gh run list --limit 3 --repo JCDC0/MachineRoom`). The full suite at `a01af28f` passed (`RUN-2026-11-13-SUITE-7.md`, 5,189 passed).
-- Since `1bb54a0f`: P213 to P248. The owner said yes to the check command (P224, P241, P247), Ask to prepare (P215), failed-queue handoff (P216, P223, P243), storage cleanup (P217, P236, P240, P246), conversation export (P218), Stop a lane with a note to its head (P219), the branch filter (P225) and the Dispatch draft (P226). Readiness 4 (P213) is fixed by P220 to P222, P228 to P230, P237 and P238. Reviews 29 and 30 (Codex) are fixed by P240 to P247.
-- The hands-on check by eye is `RUN-2026-11-13-HANDS-ON-2.md`; its findings are fixed by P232 to P236, with the transport overlap fixed by hand after a look at 1280 by 800.
+- 2026-11-14, afternoon: everything merged is pushed at `72f7ed60` (read CI first with `gh run list --limit 3 --repo JCDC0/MachineRoom`). The full suite at `8652616e` passed on the first try (`RUN-2026-11-14-SUITE-2.md`, 5,294 passed).
+- Since `12c25524`: P249 to P305, except P256 (scale rerun, waits for a quiet machine) and P276 (rejected: U158 scrolls on purpose). Reviews 31, 32 and 33 are closed: P272 to P275, P285 to P288 and P300 to P305 fixed their findings.
+- Lowbeam runs through MachineRoom at the owner's word (2026-11-14): `TRIAL-LOWBEAM.md` (P296) is the plan. The six October Lowbeam worktrees hold work that is on Lowbeam `main` (patch text differs only in comments and doc wording); removing them waits for the owner's yes. Never push Lowbeam.
 - Nothing runs at this rewrite.
-- The fleet at the owner's word: `opencode` to `opencode5` on DeepSeek V4.1 Flash at max reasoning, `codex` on GPT-6.1 Sol high (briefs and reviews; its sandbox cannot run a browser or stop processes), `agy`, `agy2` and `agy3` on Gemini 4 Hydrogen (no `src/engine`, `src/styles.css`, `Stage.jsx` or `App.jsx`).
-- Open for the owner: two wording choices from the hands-on check (the waiting card counts session readers as agents; the transport says `waiting for you` where the inspector says `IDLE`), a per-lane conversation view with Stop (follows P219), the session source status feature (readiness 4 feature 1), and the release (P4).
-- Known and accepted: the archive's last race needs a local process swapping folders mid-move and no longer loses a source (P246); a folder-shaped `/api/tree` older than one second reads the tree again (review 30 finding 4); a UNC path in a check command needs doubled backslashes.
-- Push: the owner said "push commits" for the session of 2026-11-13. A new session asks again.
+- The fleet at the owner's word: `opencode` to `opencode5` on DeepSeek V4.1 Flash, `agy` and `agy2` on Hydrogen, `codex` on GPT-6.1 Terra high (reviews and single-file briefs; its sandbox cannot stop processes), `native` and `native2` for reports.
+- Open for the owner: two check commands in one check field and the queue's commit format for projects like Lowbeam (features); the Lowbeam row of the workspace guide.
+- Known and accepted: a backup that spawns and fails at once still shows as moved (its own record shows the failed start); the history audit flags `OPENAI_API_KEY: value` in `tests/conversation.test.js`, a test fixture.
+- Push: the owner gave a standing yes for this work on 2026-11-14. A new session asks again.
 
 ## Rules
 
