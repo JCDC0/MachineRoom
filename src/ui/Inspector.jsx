@@ -377,7 +377,11 @@ export default function Inspector({
   if (!orchestratorAgent && laneRecord?.failover) {
     const kind = typeof laneRecord.failover.kind === 'string' ? laneRecord.failover.kind.trim() : ''
     const to = typeof laneRecord.failover.to === 'string' ? laneRecord.failover.to.trim() : ''
-    if (kind && to) failoverLine = `Moved to ${to}: ${kind}`
+    if (kind && to) {
+      failoverLine = laneRecord.failover.refused === true
+        ? `Backup ${to} could not start: ${kind}`
+        : `Moved to ${to}: ${kind}`
+    }
   } else if (!orchestratorAgent && laneRecord?.failoverFrom) {
     const from = typeof laneRecord.failoverFrom.lane === 'string' ? laneRecord.failoverFrom.lane.trim() : ''
     const failed = laneRecords.find(

@@ -1002,6 +1002,14 @@ describe('runListLine', () => {
     expect(runListLine(moved)).toBe('2026-10-19T12:00:00.000Z | hermes | model unknown | P284 | 2 min | exit 1 | not reported | no branch | moved to agy (quota)')
   })
 
+  it('marks a refused backup as one that could not start beside a started move', () => {
+    const base = { lane: 'hermes', briefs: ['P284'], startedAt: '2026-10-19T12:00:00.000Z', minutes: 2, exitCode: 1 }
+    const started = runRecord({ ...base, failover: { kind: 'quota', to: 'agy' } })
+    expect(runListLine(started)).toBe('2026-10-19T12:00:00.000Z | hermes | model unknown | P284 | 2 min | exit 1 | not reported | no branch | moved to agy (quota)')
+    const refused = { ...started, failover: { kind: 'quota', to: 'agy', refused: true } }
+    expect(runListLine(refused)).toBe('2026-10-19T12:00:00.000Z | hermes | model unknown | P284 | 2 min | exit 1 | not reported | no branch | backup agy could not start (quota)')
+  })
+
   it('marks a run that took over another lane', () => {
     const taken = runRecord({ lane: 'agy', briefs: ['P284'], startedAt: '2026-10-19T12:00:00.000Z', minutes: 2, exitCode: 0, failoverFrom: { lane: 'opencode' } })
     expect(runListLine(taken)).toBe('2026-10-19T12:00:00.000Z | agy | model unknown | P284 | 2 min | exit 0 | not reported | no branch | taken over from opencode')
