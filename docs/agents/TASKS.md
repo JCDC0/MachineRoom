@@ -2468,3 +2468,16 @@ The plan makes claims about what MachineRoom does on another project. Check each
 2. Prove each new assertion fails with its change undone, in a scratch copy under `%TEMP%`, never in the worktree. Delete the copy after.
 3. Add a `Fixed` column to the audit table naming the test that now fails.
 4. Run each changed test file alone and report what passed.
+
+**P296. Plan the Lowbeam trial, and check it against the code (Codex).** The owner chose Lowbeam, not ulolTris, for the real-project trial. Read `docs/agents/OWNER.md`, `docs/agents/AUDIT-2026-11-TRIAL-PLAN.md` (what the room cannot do on another project), `C:\GitHub\Lowbeam\docs\agents\ARCHITECTURE.md` (its Conventions, Verification and Open work sections) and `C:\GitHub\Lowbeam\docs\agents\tasks\README.md` ("Working in your worktree"), and this brief only. Read Lowbeam; never change, commit, push, test or start anything in it. Change no MachineRoom file except your report. Do not commit: the runner commits your file. Stop at minute 35. Files: docs/agents/TRIAL-LOWBEAM.md.
+
+Lowbeam is worked by several agents. Its `main` folder is its overseer's (Claude in the desktop app): only the overseer tests a branch and fast-forwards `main`, and no agent edits, tests or runs a server there. Port 8040 is `main`'s and 8041 is the owner's. Lowbeam already holds six worktrees from an October MachineRoom run (`.worktrees/agy`, `ccc`, `hermes`, `oc5`, `oc6`, `opencode`), each on a `machineroom/queue-...` branch.
+
+Write the plan the owner will follow to give MachineRoom one real Lowbeam task, with `file:line` in MachineRoom for every claim about what the room does:
+1. The command that opens the room on Lowbeam, and the lane the owner adds.
+2. The check command (Lowbeam's `npm test` and `npm run check`; say how the room runs both, since a check command refuses shell operators).
+3. The worktree: where MachineRoom puts it, what happens with the six existing worktrees and their branches (name clashes with lane keys, reuse of a named branch with unmerged commits), and the lane name to choose so it meets none of them.
+4. The merge: MachineRoom's Reviews merge would fast-forward Lowbeam's `main`, which is the overseer's. Say how the trial hands the branch to the overseer instead, or what the owner must do, and whether Reviews can be told not to merge.
+5. The dev server port for the lane's own check by eye (not 8040 or 8041), and how the owner sees the change.
+6. Three small candidate tasks from Lowbeam's own open work, each with the files it touches.
+7. What the room should show at each step, and what would count as a failure of MachineRoom rather than of the task. Name every step the room cannot do today.
