@@ -28,6 +28,7 @@ Every file in this folder, and what it is for:
 - `AUDIT-2026-11-CORE.md`: history. The November 2026 audit of the pure logic and the tests, with the orchestrator's corrections.
 - `AUDIT-2026-11-CONTRACT.md`: history. The November 2026 hunt of the page and the bridge against each other, with a table of every write route and its guard.
 - `AUDIT-2026-11-DESIGN.md`: history. The November 2026 design review of how the room shows its work, with features and a full design.
+- `AUDIT-2026-11-DOCS-2.md`: history. The P252 audit of `ROOM.md`, `LIVE.md` and `COMMANDS.md` against the code since `1bb54a0f`, with 17 contradicted claims fixed by P264 and P265.
 - `AUDIT-2026-11-DOCS-P70-P76.md`: history. The documentation audit for the P70 to P76 merges, read sentence by sentence against the code.
 - `AUDIT-2026-11-ENGINE.md`: history. The November 2026 audit of the engine.
 - `AUDIT-2026-11-LOGS.md`: history. The November 2026 hunt that ran 464 real run logs through the parsers.
@@ -44,6 +45,10 @@ Every file in this folder, and what it is for:
 - `AUDIT-2026-11-FRAME.md`: history. The November 2026 audit of the frame cost of music, bloom and light trails.
 - `AUDIT-2026-11-PANELS.md`: history. The November 2026 hunt of the page's panels.
 - `AUDIT-2026-11-PANELS-2.md`: history. The second November 2026 hunt of the page's panels, with features.
+- `AUDIT-2026-11-READINESS.md`: history. The P164 daily-use readiness audit from install to a reviewed merge on another project, with blockers, bug patches and suggested features.
+- `AUDIT-2026-11-READINESS-2.md`: history. The P178 audit of what breaks over days of daily use, with capacity, recovery and resource findings and suggested features.
+- `AUDIT-2026-11-READINESS-3.md`: history. The P197 audit of the room's panels on another project, with target, identity and spend findings and suggested features.
+- `AUDIT-2026-11-READINESS-4.md`: history. The P213 audit of startup, session discovery, tree reads, file touches, replay and git reads in a live room on another project.
 - `AUDIT-2026-11-REVIEW.md`: history. The November 2026 review of the merges that answered the five audits, with the orchestrator's corrections.
 - `AUDIT-2026-11-REVIEW-2.md`: history. The review of the merges of 2026-11-03, with the orchestrator's corrections.
 - `AUDIT-2026-11-REVIEW-3.md`: history. The review of the merges since the second review, with findings ranked by owner impact.
@@ -62,8 +67,22 @@ Every file in this folder, and what it is for:
 - `AUDIT-2026-11-REVIEW-16.md`: history. The review of the late merges, with three push blockers fixed by P108 to P111 and its smaller merge-check finding left to P124.
 - `AUDIT-2026-11-REVIEW-17.md`: history. The review of the ten merges before the push, with five push blockers fixed by P116 to P118.
 - `AUDIT-2026-11-REVIEW-18.md`: history. The last review before the push, of P113 and P115 to P118, with six push blockers fixed by P120 to P122.
+- `AUDIT-2026-11-REVIEW-19.md`: history. The P126 review of seven merges since review 18, with five push blockers and one smaller finding.
+- `AUDIT-2026-11-REVIEW-20.md`: history. The P135 review of P123, P125, P128 and P131, with two push blockers and four smaller findings.
+- `AUDIT-2026-11-REVIEW-21.md`: history. The P141 review of P133, P134, P139 and P140, with four push blockers.
+- `AUDIT-2026-11-REVIEW-22.md`: history. The P149 review of seven merges before the shutdown, with three push blockers and one smaller finding.
+- `AUDIT-2026-11-REVIEW-23.md`: history. The P160 review of seven merges at `35f9bc28`, with four push blockers and one smaller finding.
+- `AUDIT-2026-11-REVIEW-24.md`: history. The P174 review of seven merges since the push, with three push blockers and one smaller finding.
+- `AUDIT-2026-11-REVIEW-25.md`: history. The P187 review of eight readiness merges, with five push blockers and one non-blocking finding.
+- `AUDIT-2026-11-REVIEW-26.md`: history. The P193 review of six review 25 fixes, confirming R1 fixed and finding one push blocker and one non-blocking issue in P185.
+- `AUDIT-2026-11-REVIEW-27.md`: history. The P198 review of P194's stream cap fix, confirming review 26's R1 and R2 fixed with no new findings.
+- `AUDIT-2026-11-REVIEW-28.md`: history. The P210 review of the panel fixes and run caches, with one push blocker and one non-blocking finding.
+- `AUDIT-2026-11-REVIEW-29.md`: history. The P239 review of 21 merges since `1bb54a0f`, with six push blockers and two smaller findings fixed by P240 to P244.
+- `AUDIT-2026-11-REVIEW-30.md`: history. The P245 check of review 29's fixes, confirming five fixed and two partly fixed, with two push blockers and two smaller findings fixed by P246, P247 and P254.
+- `AUDIT-2026-11-REVIEW-31.md`: history. The P269 review of `12c25524..1122d2cf`, with five push blockers and two follow-up findings fixed by P272 to P275.
 - `AUDIT-2026-11-RUNNER.md`: history. The November 2026 hunt of the runner, worktrees, reviews and merges.
 - `AUDIT-2026-11-SUMMARY.md`: plan. The five November 2026 audits ranked and checked, with the features, the design changes that need the owner and the proposed briefs.
+- `AUDIT-2026-11-TESTS.md`: history. The P255 audit of tests changed since `1bb54a0f`, listing four tests that could pass with their change undone, fixed by P266.
 - `AUDIT-2026-11-TREE-COST.md`: history. The measurement of what the deleted-file list costs on every tree read, since P51.
 - `AUDIT-2026-11-UI.md`: history. The November 2026 audit of the page.
 - `AUDIT-2026-11-WORKTREE-SWITCH.md`: history. The P87 audit of the worktree branch switch on 2026-11-12.
@@ -84,6 +103,18 @@ Every file in this folder, and what it is for:
 - `policy.json`: config the code reads. The routing policy that `src/policy/route.js` parses.
 - `SLASH-COMMANDS.md`: current. What Claude Code and OpenCode do with a slash command in a headless turn, and the room's design for them.
 - `RECORDING.md`: current. How a run becomes a recording and how to replay it.
+- `RUN-2026-11-13-COMMANDS.md`: history. The P258 check of every command's help form against `COMMANDS.md`, finding seven missing `--help` forms and four doc gaps.
+- `RUN-2026-11-13-FIRST-USE.md`: history. The P166 check of the non-server commands from a new owner's view.
+- `RUN-2026-11-13-FRESH-CLONE.md`: history. The P257 fresh-clone install, build, doctor and server check at `ddeb194a`, finding ten `README.md` gaps.
+- `RUN-2026-11-13-HANDS-ON.md`: history. The P227 hands-on browser check, stopped before the first view by denied access to the Playwright folder.
+- `RUN-2026-11-13-HANDS-ON-2.md`: history. The orchestrator's hands-on browser pass at `835a07cc`, listing 12 UI, layout, path-masking and doc findings.
+- `RUN-2026-11-13-SUITE.md`: history. The P136 full test suite run at `ee5d328c`: 274 files and 4,879 tests passed, 4 skipped.
+- `RUN-2026-11-13-SUITE-2.md`: history. The P150 full test suite run at `69b6da77`: 269 of 274 files passed, with 8 masked-path failures across 5 files.
+- `RUN-2026-11-13-SUITE-3.md`: history. The P159 full test suite run at `35f9bc28`: 274 files and 4,917 tests passed, 4 skipped.
+- `RUN-2026-11-13-SUITE-4.md`: history. The P186 full test suite run at `e8a6ce06`: 275 files and 4,976 tests passed, 4 skipped.
+- `RUN-2026-11-13-SUITE-5.md`: history. The P192 full test suite run at `433b0fe2`: 275 files and 4,989 tests passed, 4 skipped.
+- `RUN-2026-11-13-SUITE-6.md`: history. The P209 full test suite run at `31f73519`: 275 files and 5,026 tests passed, 4 skipped.
+- `RUN-2026-11-13-SUITE-7.md`: history. The P248 full test suite run at `a01af28f` and build check: 281 files and 5,189 tests passed, 4 skipped.
 - `TASKS.md`: prompt the code reads. The briefs since 2026-11-09; the code reads them and the planner adds to them.
 - `history/TASKS-ARCHIVE.md`: history. Every older brief, moved out of `TASKS.md` unchanged on 2026-11-10 (P35); the Tasks tab reads a run's title from it when the brief is not in `TASKS.md`, and an id stays unique across both files.
 - `history/ORCHESTRATOR-ARCHIVE.md`: history. The orchestrator guide as it stood on 2026-11-12: who held the role when, and the story behind each review lesson.
