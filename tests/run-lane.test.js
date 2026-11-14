@@ -7,7 +7,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { gitPath, programPath } from '../server/programPath.js'
 import { saveAgentsConfig } from '../server/agents-config.js'
 import { projectLanesFileFor, writeHiddenLanes } from '../server/active-lanes.js'
-import { briefProblems, briefWorktreeProblems, CHECK_QUOTE_PROBLEM, CHECK_SHELL_PROBLEM, checkCommandProblem, commandFor, DEFAULT_MINUTES, filterRunsSince, laneCommandProblem, readinessLine, retryStartProblem, SINCE_PROBLEM, splitCheckCommand, startFailureText, worktreeFor, formatOutcomes, formatStats, formatSummary, laneLockPids, laneLockText, laneStats, laneStopProblem, laneWithOverrides, nextTestStep, parseRunArgs, projectRunGit, runListLine, runRecord, sessionToolLines, summarizeRun, UNATTENDED_NOTE, unattendedPrompt } from '../src/briefs/run.js'
+import { briefProblems, briefWorktreeProblems, CHECK_COMMAND_COUNT_PROBLEM, CHECK_QUOTE_PROBLEM, CHECK_SHELL_PROBLEM, checkCommandLines, checkCommandProblem, commandFor, DEFAULT_MINUTES, filterRunsSince, laneCommandProblem, readinessLine, retryStartProblem, SINCE_PROBLEM, splitCheckCommand, startFailureText, worktreeFor, formatOutcomes, formatStats, formatSummary, laneLockPids, laneLockText, laneStats, laneStopProblem, laneWithOverrides, nextTestStep, parseRunArgs, projectRunGit, runListLine, runRecord, sessionToolLines, summarizeRun, UNATTENDED_NOTE, unattendedPrompt } from '../src/briefs/run.js'
 import { branchFor, briefFileList, parseBriefs } from '../src/briefs/briefs.js'
 import { harnessByKey } from '../src/harnesses/index.js'
 import { appendRunRecord, printCommand, printedRunsFolder, projectLockName, runnerCommitVersion, sessionStartedBy, startLane, takeProjectLock } from '../scripts/run-lane.mjs'
@@ -238,6 +238,29 @@ describe('the check command', () => {
       expect(checkCommandProblem(command)).toBe(CHECK_SHELL_PROBLEM)
     }
     expect(checkCommandProblem('npm test -- --runInBand')).toBe('')
+  })
+
+  it('ends a check line at a bare carriage return', () => {
+    expect(checkCommandLines('npm test\rnpm run check')).toEqual(['npm test', 'npm run check'])
+    expect(parseRunArgs([
+      'opencode', '--project', 'C:\\work', '--task', 'Fix it.', '--test', 'npm test\rnpm run check',
+    ])).toMatchObject({ test: 'npm test\nnpm run check' })
+    const quoted = 'powershell -NoProfile -Command "Write-Output first\rWrite-Output second"'
+    expect(checkCommandLines(quoted)).toEqual([
+      'powershell -NoProfile -Command "Write-Output first',
+      'Write-Output second"',
+    ])
+    expect(checkCommandProblem(quoted)).toBe(CHECK_QUOTE_PROBLEM)
+    expect(() => parseRunArgs([
+      'opencode', '--project', 'C:\\work', '--task', 'Fix it.', '--test', quoted,
+    ])).toThrow(CHECK_QUOTE_PROBLEM)
+  })
+
+  it('refuses five commands split by carriage returns', () => {
+    expect(checkCommandProblem('one\rtwo\rthree\rfour\rfive')).toBe(CHECK_COMMAND_COUNT_PROBLEM)
+    expect(() => parseRunArgs([
+      'opencode', '--project', 'C:\\work', '--task', 'Fix it.', '--test', 'one\rtwo\rthree\rfour\rfive',
+    ])).toThrow(CHECK_COMMAND_COUNT_PROBLEM)
   })
 })
 

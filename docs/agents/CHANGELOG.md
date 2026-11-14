@@ -1,8 +1,10 @@
 # Changelog
 
 ## Unreleased
+- A bare carriage return ends a check line, so it counts toward the four commands (P317).
 - A refused backup reads as one that could not start in --list and the Inspector (P315).
 - P315: `--list` prints ` | backup BACKUP could not start (KIND)` and the Inspector prints `Backup BACKUP could not start: KIND` for a refused backup, and a started move reads as before.
+- P317: a bare carriage return ends a check line in the saved setting, `--test` and the mock, so a quoted argument cannot hide a second command.
 - Review 34 lists nine findings in the batch since review 33 and seventeen doc sentences the code contradicts (P312).
 - The doctor and every orchestrator find the Codex app's codex.exe when codex is not on PATH, as lanes already did (P311).
 - P311: `codexProgramFor` answers the Codex app's newest program for a bare `codex` bin when codex is not on PATH, and run-lane uses it.

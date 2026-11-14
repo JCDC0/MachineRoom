@@ -162,7 +162,7 @@ function checkCommandValueProblem(value) {
   const text = value.trim()
   if (text === '') return null
   if (text.length > 500) return CHECK_COMMAND_PROBLEM
-  const lines = text.split(/\r?\n/).filter((line) => line.trim() !== '')
+  const lines = text.split(/\r\n|\r|\n/).filter((line) => line.trim() !== '')
   if (lines.length > 4) return CHECK_COMMAND_COUNT_PROBLEM
   return null
 }

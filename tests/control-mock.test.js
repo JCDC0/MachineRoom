@@ -290,3 +290,15 @@ describe('mock orchestrators and the ladder', () => {
     expect(state.changeCount).toBe(0)
   })
 })
+
+describe('mock check command', () => {
+  it('counts commands split by carriage returns and refuses five', async () => {
+    const client = fast()
+    expect(await client.saveProjectSettings({ checkCommand: 'npm test\rnpm run check' })).toEqual({
+      checkCommand: 'npm test\rnpm run check',
+      hasTestScript: true,
+    })
+    await expect(client.saveProjectSettings({ checkCommand: 'one\rtwo\rthree\rfour\rfive' }))
+      .rejects.toThrow('A check holds at most 4 commands, one per line.')
+  })
+})
