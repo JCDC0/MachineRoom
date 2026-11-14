@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- P282: AUDIT-2026-11-DOCS-3.md lists 14 doc sentences this week's code contradicts, with corrections; every new route, flag and record field is named.
 - P283: AUDIT-2026-11-TESTS-2.md lists 12 tests since 12c25524 that pass with their change undone, nine proved in a scratch copy.
 - P291: AUDIT-2026-11-TRIAL-PLAN.md finds six of eight plan claims true and lists nine steps the room cannot do today on another project.
 - P292: README.md names the lane conversation view with Stop, a lane's backup lane and the moved marks in run-lane --list.
