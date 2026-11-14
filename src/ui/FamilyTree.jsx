@@ -566,6 +566,7 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
   const [lanes, setLanes] = useState(null)
   const [harnesses, setHarnesses] = useState(null)
   const [models, setModels] = useState(null)
+  const [backups, setBackups] = useState(null)
   const [readError, setReadError] = useState('')
   const [actionError, setActionError] = useState('')
   const [open, setOpen] = useState(true)
@@ -599,6 +600,7 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
     const jobs = [
       ['family', () => client.family()],
       ['lanes', () => client.lanes?.()],
+      ['backups', () => client.laneBackups?.()],
       ['harnesses', () => client.harnesses?.()],
       ['models', () => client.models?.()],
       ['orchestrators', () => client.orchestrators?.()],
@@ -618,6 +620,7 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
       })
       if (values.family) setFamily(values.family)
       if (values.lanes) setLanes(values.lanes)
+      if (values.backups) setBackups(values.backups)
       if (values.harnesses) setHarnesses(values.harnesses)
       if (values.models) setModels(values.models)
       if (values.orchestrators) setOrchestrators(values.orchestrators)
@@ -642,6 +645,13 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
       jobs.push(
         Promise.resolve(client.lanes()).then((answer) => {
           if (answer) setLanes(answer)
+        })
+      )
+    }
+    if (typeof client?.laneBackups === 'function') {
+      jobs.push(
+        Promise.resolve(client.laneBackups()).then((answer) => {
+          if (answer && typeof answer === 'object') setBackups(answer)
         })
       )
     }
@@ -834,6 +844,12 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
     fallback: editorFallback,
     value: nodeDraft?.model ?? '',
   })
+  const backupChoices = useMemo(() => {
+    if (!editingNode || editingNode.kind !== 'lane') return []
+    return tree.nodes
+      .filter((row) => row.kind === 'lane' && row.id !== editingNode.id && row.active === true)
+      .map((row) => ({ id: row.id, label: row.label || row.id }))
+  }, [editingNode, tree])
 
   const childHarness = useMemo(() => {
     if (!childFor) return null
@@ -1003,6 +1019,7 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
       harness: node.harness,
       model: node.model,
       effort: node.effort,
+      fallback: typeof backups?.[node.id] === 'string' ? backups[node.id] : '',
       lanes:
         node.kind === 'sub'
           ? tree.nodes.filter((row) => row.kind === 'lane' && row.parent === node.id).map((row) => row.id)
@@ -1154,8 +1171,10 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
       setActionError('Choose an effort for this agent.')
       return
     }
+    const fallback = cleanText(nodeDraft.fallback, 60)
     ask({
       text: `Save ${node.label} on ${model || 'its model'}?`,
+      detail: fallback ? `Backup lane ${fallback}` : 'No backup lane',
       label: 'Save',
       busyText: 'Saving the agent...',
       run: async () => {
@@ -1163,6 +1182,7 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
           key: node.id,
           model: model || undefined,
           effort: effort || null,
+          fallback: fallback || null,
           confirmed: true,
         })
         await refresh()
@@ -1698,6 +1718,25 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
                 </select>
               </label>
             ) : null}
+            <label className="mr-side-field">
+              <span className="mr-side-field-label mono">Backup lane</span>
+              <select
+                className="mr-side-select mono"
+                aria-label={`Backup lane for ${node.label}`}
+                value={nodeDraft.fallback ?? ''}
+                onChange={(event) => setNodeDraft({ ...nodeDraft, fallback: event.target.value })}
+              >
+                <option value="">None</option>
+                {backupChoices.map((row) => (
+                  <option value={row.id} key={row.id}>
+                    {row.label}
+                  </option>
+                ))}
+                {nodeDraft.fallback && !backupChoices.some((row) => row.id === nodeDraft.fallback) ? (
+                  <option value={nodeDraft.fallback}>{nodeDraft.fallback}</option>
+                ) : null}
+              </select>
+            </label>
             <div className="mr-side-form-actions">
               <button
                 type="button"

@@ -2,7 +2,7 @@ import { harnessUnavailableProblem, modelUnavailableProblem, resolveContextWindo
 import { outcomeTable } from '../../server/outcomes.js'
 import { branchFor, buildPrompt, modelFor, parseBriefs } from '../briefs/briefs.js'
 import { briefMarkdown, planPrompt } from '../briefs/plan.js'
-import { SINCE_PROBLEM, dayStart, laneStats } from '../briefs/run.js'
+import { SINCE_PROBLEM, dayStart, fallbackProblem, laneStats } from '../briefs/run.js'
 import { defaultMode, legacyMode, modesFor } from './modes.js'
 import { readLadder } from '../model/hierarchy.js'
 import { chooseRoute, routeLane } from '../policy/route.js'
@@ -61,6 +61,7 @@ export const CLIENT_METHODS = [
   'projectSettings',
   'saveProjectSettings',
   'lanes',
+  'laneBackups',
   'harnesses',
   'harnessModels',
   'providers',
@@ -1151,7 +1152,18 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
         }
       }),
 
-    runs: () => call('runs', () => runsState),
+    runs: () =>
+      call('runs', () => {
+        const last = []
+        const seen = new Set()
+        for (const record of runsState.recent) {
+          const lane = typeof record?.lane === 'string' ? record.lane.trim() : ''
+          if (!lane || seen.has(lane)) continue
+          seen.add(lane)
+          last.push(record)
+        }
+        return { ...runsState, last }
+      }),
 
     runConversation: ({ lane, startedAt } = {}) =>
       call('runConversation', () => {
@@ -1783,6 +1795,7 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
         const projectRun = body.briefs === undefined
         const queue = body.tasks !== undefined
         const worktree = projectRun && body.worktree === true
+        const chosenModel = projectRun && typeof body.model === 'string' ? body.model.trim() : ''
         if (queue && (body.task !== undefined || body.briefs !== undefined)) throw new Error(RUN_KIND_PROBLEM)
         const briefs = projectRun ? [] : body.briefs
         let task = ''
@@ -1806,6 +1819,7 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
         }
         if (runsState.running.some((item) => item.lane === lane)) throw new Error('That lane is already running.')
         const entry = { lane, briefs: [...briefs], startedAt: new Date(now()).toISOString(), lastLines: [] }
+        if (chosenModel) entry.model = chosenModel
         if (worktree) entry.worktree = true
         if (queue) {
           entry.queue = true
@@ -1826,7 +1840,7 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
           const record = {
             lane,
             briefs: [...entry.briefs],
-            model: typeof info.cli.model === 'string' && info.cli.model ? info.cli.model : null,
+            model: entry.model || (typeof info.cli.model === 'string' && info.cli.model ? info.cli.model : null),
             reasoning: info.reasoning ? String(info.reasoning) : null,
             startedAt: entry.startedAt,
             minutes: 0,
@@ -1881,7 +1895,7 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
         const record = {
           lane,
           briefs: [...entry.briefs],
-          model: typeof info?.cli?.model === 'string' && info.cli.model ? info.cli.model : null,
+          model: entry.model || (typeof info?.cli?.model === 'string' && info.cli.model ? info.cli.model : null),
           reasoning: info?.reasoning ? String(info.reasoning) : null,
           startedAt: entry.startedAt,
           minutes: 0,
@@ -1952,6 +1966,15 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
         max: state.lanes.length,
         chosen: Boolean(state.chosenLanes),
       })),
+
+    laneBackups: () =>
+      call('laneBackups', () => {
+        const backups = {}
+        for (const lane of state.lanes) {
+          if (typeof lane.fallback === 'string' && lane.fallback.trim()) backups[lane.key] = lane.fallback.trim()
+        }
+        return backups
+      }),
 
     harnesses: () =>
       call('harnesses', () => [
@@ -2185,7 +2208,7 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
         return { ...entry }
       }),
 
-    updateLane: ({ key, name, model, effort, confirmed = true } = {}) =>
+    updateLane: ({ key, name, model, effort, fallback, confirmed = true } = {}) =>
       call('updateLane', () => {
         if (confirmed !== true) throw new Error('Confirm updating the lane first.')
         const lane = state.lanes.find((l) => l.key === key)
@@ -2210,6 +2233,14 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
         if (effort !== undefined) {
           if (effort && (!found || !found.efforts.includes(effort))) throw new Error(`The effort ${effort} is not available for ${lane.harness}.`)
           lane.effort = effort || null
+        }
+        if (fallback !== undefined) {
+          const wanted = fallback === null ? '' : String(fallback).trim()
+          const lanes = Object.fromEntries(state.lanes.map((item) => [item.key, item]))
+          const problem = fallbackProblem({ laneKey: key, fallback: wanted, lanes })
+          if (problem) throw new Error(problem)
+          if (wanted) lane.fallback = wanted
+          else delete lane.fallback
         }
         emit({ topic: 'agents' })
         return { ...lane }

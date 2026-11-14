@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- P262: the family tree editor sets a lane's backup lane, Dispatch can choose a model for one project run and names the backup lane, and a failover adds one room note and shows on both lanes.
 - P295: eleven tests assert literal text or the real call instead of the imported constant, and the git watcher test proves a failed rewatch reads again; row 2 needs a product change.
 - P293: with Own worktree the confirm card names .worktrees/LANE inside the project and the branch the project has checked out, and drops beside the project and never on main.
 - P290: the candidate build test retries on a fresh port when another process takes it, the subfolder session test waits up to 15 seconds, and the stop test keeps its grandchild alive until the stop lists it.
@@ -38,6 +39,9 @@
 - P281: DOCUMENTS.md now lists all 31 newer audits, reviews and run reports in docs/agents.
 - P284: the run list marks a run that moved with `| moved to LANE (KIND)` and a run that took over another lane with `| taken over from LANE`.
 - P279: a conversation masks only a text value in a key, token, secret, password or authorization field, so a count such as `input_tokens` keeps its number.
+- P262: a lane's editor offers a Backup lane select of the other active lanes, saved as fallback, and refuses the lane itself, the orchestrator or an unknown lane.
+- P262: Dispatch offers a model for one project run, sends it as --model, and names the model and the backup lane on the confirm card.
+- P262: a failover record adds one room note to the lane's head, and the Inspector shows Moved to or Taken over from with the kind.
 - P273: a backup lane passes the brief worktree check, a retry keeps the backup prompt, a project failover returns the backup's record and branch, and a spawn error counts as a failed start.
 - P272: a raw JSON line in a lane conversation is parsed and masked field by field, so escaped home paths and named secrets never reach the route.
 - P250: a lane's tree row and its Inspector open its conversation in the lower half, with a run picker, folded tool calls, live reads and Stop; the route reads live runs too.

@@ -160,6 +160,7 @@ export default function Inspector({
   const [connection, setConnection] = useState(null)
   const [chat, setChat] = useState(null)
   const [runs, setRuns] = useState(null)
+  const [lastRuns, setLastRuns] = useState(null)
   const [confirmStop, setConfirmStop] = useState(false)
   const [stoppingRun, setStoppingRun] = useState(false)
   const [stopError, setStopError] = useState('')
@@ -303,6 +304,7 @@ export default function Inspector({
   useEffect(() => {
     if (item?.kind !== 'agent' || orchestratorAgent || !bridge || !client || typeof client.runs !== 'function') {
       setRuns(null)
+      setLastRuns(null)
       return undefined
     }
     let active = true
@@ -314,9 +316,13 @@ export default function Inspector({
         const answer = await client.runs()
         if (active && mine === ticket) {
           setRuns(Array.isArray(answer?.running) ? answer.running : [])
+          setLastRuns(Array.isArray(answer?.last) ? answer.last : [])
         }
       } catch {
-        if (active && mine === ticket) setRuns(null)
+        if (active && mine === ticket) {
+          setRuns(null)
+          setLastRuns(null)
+        }
       }
     }
     readRuns()
@@ -364,6 +370,25 @@ export default function Inspector({
       : git.branch
     : ''
 
+  const laneKey = String(lane?.key || context.key || item?.id || '').toLowerCase()
+  const laneRecords = Array.isArray(lastRuns) ? lastRuns : []
+  const laneRecord = laneRecords.find((record) => String(record?.lane ?? '').trim().toLowerCase() === laneKey)
+  let failoverLine = ''
+  if (!orchestratorAgent && laneRecord?.failover) {
+    const kind = typeof laneRecord.failover.kind === 'string' ? laneRecord.failover.kind.trim() : ''
+    const to = typeof laneRecord.failover.to === 'string' ? laneRecord.failover.to.trim() : ''
+    if (kind && to) failoverLine = `Moved to ${to}: ${kind}`
+  } else if (!orchestratorAgent && laneRecord?.failoverFrom) {
+    const from = typeof laneRecord.failoverFrom.lane === 'string' ? laneRecord.failoverFrom.lane.trim() : ''
+    const failed = laneRecords.find(
+      (record) =>
+        String(record?.lane ?? '').trim().toLowerCase() === from.toLowerCase() &&
+        String(record?.failover?.to ?? '').trim().toLowerCase() === laneKey
+    )
+    const kind = typeof failed?.failover?.kind === 'string' ? failed.failover.kind.trim() : ''
+    if (from) failoverLine = `Taken over from ${from}${kind ? `: ${kind}` : ''}`
+  }
+
   if (!item) return null
 
   const canStopRunning =
@@ -408,7 +433,10 @@ export default function Inspector({
       if (typeof client.runs === 'function') {
         try {
           const answer = await client.runs()
-          if (mountedRef.current) setRuns(Array.isArray(answer?.running) ? answer.running : [])
+          if (mountedRef.current) {
+            setRuns(Array.isArray(answer?.running) ? answer.running : [])
+            setLastRuns(Array.isArray(answer?.last) ? answer.last : [])
+          }
         } catch {}
       }
     } catch (failure) {
@@ -442,6 +470,7 @@ export default function Inspector({
                   <span className="mr-inspector-command">{` · ${shownState.command}`}</span>
                 )}
               </Row>
+              {failoverLine ? <Row label="Run">{failoverLine}</Row> : null}
               <Row label="Harness">{context.harness}</Row>
               <Row label="Model">{context.model}</Row>
               <Row label="Effort">{effort}</Row>

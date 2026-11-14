@@ -498,12 +498,18 @@ export function createClient({
     createLane: ({ name, harness, model, effort, confirmed = true } = {}) =>
       request('POST', '/api/lanes/create', { name, harness, model, effort, confirmed }),
 
-    updateLane: ({ key, name, model, effort, confirmed = true } = {}) => {
+    updateLane: ({ key, name, model, effort, fallback, confirmed = true } = {}) => {
       const body = { confirmed }
       if (name !== undefined) body.name = name
       if (model !== undefined) body.model = model
       if (effort !== undefined) body.effort = effort
+      if (fallback !== undefined) body.fallback = fallback
       return request('POST', `/api/lanes/${encodeURIComponent(key ?? '')}/update`, body)
+    },
+
+    laneBackups: async () => {
+      const data = await request('GET', '/api/lanes/backups')
+      return data && typeof data === 'object' && data.backups && typeof data.backups === 'object' ? data.backups : {}
     },
 
     deleteLane: ({ key, confirmed = true } = {}) =>

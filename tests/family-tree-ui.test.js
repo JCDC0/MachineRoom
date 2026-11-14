@@ -413,6 +413,33 @@ describe('FamilyTree rows', () => {
     })
   })
 
+  it('lists the other active lanes as backup lanes and saves the chosen one', async () => {
+    const { client } = makeClient()
+    const calls = []
+    client.updateLane = async (payload) => {
+      calls.push(payload)
+      return { ok: true }
+    }
+    client.laneBackups = async () => ({})
+    const nodes = FAMILY.nodes.map((node) => (node.id === 'opencode' ? { ...node, custom: true } : node))
+    client.family = async () => ({ ...FAMILY, nodes })
+    await withDom(async ({ container, root }) => {
+      await mount(root, client)
+      await click(root, rowByLabel(container, 'OpenCode').querySelector('.mr-family-open'))
+      const editor = container.querySelector('.mr-family-editor')
+      const picker = editor.querySelector('select[aria-label="Backup lane for OpenCode"]')
+      expect([...picker.querySelectorAll('option')].map((option) => option.textContent)).toEqual(['None', 'Claude'])
+
+      await type(root, picker, 'claude')
+      await click(root, buttonWithText(editor, 'Save'))
+      const dialog = container.querySelector('[role="dialog"]')
+      expect(dialog.textContent).toContain('Backup lane claude')
+      await click(root, buttonWithText(dialog, 'Save'))
+      expect(calls).toHaveLength(1)
+      expect(calls[0]).toMatchObject({ key: 'opencode', fallback: 'claude', confirmed: true })
+    })
+  })
+
   it('counts the checked lanes from their selection checkboxes and clears them', async () => {
     const { client } = makeClient()
     await withDom(async ({ container, root }) => {

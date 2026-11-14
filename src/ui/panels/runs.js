@@ -517,17 +517,19 @@ export function projectSplitWorktreeLine(gitState) {
   return `Each task runs in its own worktree inside the project, on a new branch from ${projectWorktreeBase(gitState)}.`
 }
 
-export function projectRunBody({ task, tasks, allowDirty, worktree, checkCommand } = {}) {
+export function projectRunBody({ task, tasks, allowDirty, worktree, checkCommand, model } = {}) {
   const list = Array.isArray(tasks) ? tasks : []
   const command = typeof checkCommand === 'string' ? checkCommand.trim() : ''
   const check = command === '' ? {} : { checkCommand: command }
+  const chosen = typeof model === 'string' ? model.trim() : ''
+  const chosenModel = chosen === '' ? {} : { model: chosen }
   if (list.length > 1) {
-    return { tasks: list, ...(worktree === true ? { worktree: true } : {}), ...check }
+    return { tasks: list, ...(worktree === true ? { worktree: true } : {}), ...check, ...chosenModel }
   }
   const text = typeof task === 'string' ? task : ''
   // A single task in its own worktree runs as a queue of one, so it ends committed on a branch.
-  if (worktree === true) return { tasks: [text], worktree: true, ...check }
-  return { task: text, allowDirty: allowDirty === true, ...check }
+  if (worktree === true) return { tasks: [text], worktree: true, ...check, ...chosenModel }
+  return { task: text, allowDirty: allowDirty === true, ...check, ...chosenModel }
 }
 
 export function projectCheckLine({ checkCommand, hasTestScript } = {}) {
@@ -537,7 +539,7 @@ export function projectCheckLine({ checkCommand, hasTestScript } = {}) {
   return 'No check: this project has no npm test script.'
 }
 
-export function projectRunConfirm({ lane, project, task, tasks } = {}) {
+export function projectRunConfirm({ lane, project, task, tasks, model, backup } = {}) {
   const list = Array.isArray(tasks) ? tasks : []
   const first = list.length > 0 && typeof list[0] === 'string' ? list[0] : ''
   const taskText = typeof task === 'string' ? task.trim() : first.trim()
@@ -546,6 +548,10 @@ export function projectRunConfirm({ lane, project, task, tasks } = {}) {
     project: typeof project === 'string' && project.trim() ? project.trim() : 'this project',
     task: taskText.slice(0, PROJECT_CONFIRM_LIMIT),
   }
+  const chosenModel = typeof model === 'string' ? model.trim() : ''
+  const backupLane = typeof backup === 'string' ? backup.trim() : ''
+  if (chosenModel) confirm.model = chosenModel
+  if (backupLane) confirm.backup = backupLane
   if (list.length > 1) {
     confirm.queue = true
     confirm.count = list.length
