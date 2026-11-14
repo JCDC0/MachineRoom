@@ -43,7 +43,7 @@ function toolLine(path, { at = Date.now(), id = 'call-1', tool = 'read' } = {}) 
   })
 }
 
-function startSource({ runs, projectRoot = '', lanes, quietMs = 60000, pollMs = 20, repoRoot = projectRoot }) {
+function startSource({ runs, projectRoot = '', lanes, quietMs = 60000, pollMs = 20, repoRoot = projectRoot, now }) {
   const frames = []
   const source = createLanesSource({
     folder: runs,
@@ -52,6 +52,7 @@ function startSource({ runs, projectRoot = '', lanes, quietMs = 60000, pollMs = 
     lanes,
     quietMs,
     pollMs,
+    ...(now ? { now } : {}),
     onFrame: (frame) => frames.push(frame),
   })
   cleanups.push(() => source.stop())
@@ -1284,11 +1285,58 @@ describe('the lane source carries the session that started a run', () => {
     const lanes = lanesFor({ opencode: join(base, 'MachineRoom-opencode') })
     const { source } = startSource({ runs, projectRoot: main, repoRoot: main, lanes })
     const lockedAt = new Date(Date.now() - 60000).toISOString()
-    writeFileSync(join(runs, 'opencode.lock'), JSON.stringify({ pid: process.pid, startedAt: lockedAt }))
+    writeFileSync(join(runs, 'opencode.lock'), JSON.stringify({ pid: process.pid, startedAt: lockedAt, log: 'opencode-P85-20261112-220000.log' }))
     writeFileSync(join(runs, 'opencode-P85-20261112-220000.log'), `${toolLine('src/a.js')}
 `)
     await waitFor(() => source.openRuns().length === 1, { what: 'the open run' })
     expect(source.openRuns()[0].startedAt).toBe(lockedAt)
+  })
+
+  it('gives an old log now when a newer run took the lane lock', async () => {
+    const base = tempDir()
+    const runs = join(base, 'runs')
+    const main = join(base, 'MachineRoom')
+    mkdirSync(runs, { recursive: true })
+    mkdirSync(main, { recursive: true })
+    git(main, ['init'])
+    git(main, ['commit', '--allow-empty', '-m', 'base'])
+    const lanes = lanesFor({ opencode: join(base, 'MachineRoom-opencode') })
+    const current = Date.now()
+    const { source } = startSource({ runs, projectRoot: main, repoRoot: main, lanes, now: () => current })
+    const lockedAt = new Date(current - 60000).toISOString()
+    const newer = 'opencode-P302-20261114-120000.log'
+    const older = 'opencode-P301-20261114-110000.log'
+    writeFileSync(join(runs, 'opencode.lock'), JSON.stringify({ pid: process.pid, startedAt: lockedAt, log: newer }))
+    writeFileSync(join(runs, newer), `${toolLine('src/a.js')}
+`)
+    await waitFor(() => source.openRuns().length === 1, { what: 'the newer run' })
+    expect(source.openRuns()[0]).toMatchObject({ name: newer.slice(0, -4), startedAt: lockedAt })
+
+    writeFileSync(join(runs, older), `${toolLine('src/b.js')}
+`)
+    await waitFor(() => source.openRuns().length === 2, { what: 'the older run' })
+    const byName = new Map(source.openRuns().map((run) => [run.name, run]))
+    expect(byName.get(newer.slice(0, -4)).startedAt).toBe(lockedAt)
+    expect(byName.get(older.slice(0, -4)).startedAt).toBe(new Date(current).toISOString())
+  })
+
+  it('gives a log now when the lane lock names no log', async () => {
+    const base = tempDir()
+    const runs = join(base, 'runs')
+    const main = join(base, 'MachineRoom')
+    mkdirSync(runs, { recursive: true })
+    mkdirSync(main, { recursive: true })
+    git(main, ['init'])
+    git(main, ['commit', '--allow-empty', '-m', 'base'])
+    const lanes = lanesFor({ opencode: join(base, 'MachineRoom-opencode') })
+    const current = Date.now()
+    const { source } = startSource({ runs, projectRoot: main, repoRoot: main, lanes, now: () => current })
+    const lockedAt = new Date(current - 60000).toISOString()
+    writeFileSync(join(runs, 'opencode.lock'), JSON.stringify({ pid: process.pid, startedAt: lockedAt }))
+    writeFileSync(join(runs, 'opencode-P85-20261112-220000.log'), `${toolLine('src/a.js')}
+`)
+    await waitFor(() => source.openRuns().length === 1, { what: 'the open run' })
+    expect(source.openRuns()[0].startedAt).toBe(new Date(current).toISOString())
   })
 })
 

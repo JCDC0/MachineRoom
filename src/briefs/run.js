@@ -512,7 +512,14 @@ export function parseRunArgs(argv) {
   return { lane, briefs, dryRun, minutes, list, ...(force ? { force: true } : {}), ...overrides, ...(startedBy ? { startedBy } : {}), ...(startedAt ? { startedAt } : {}) }
 }
 
-export function laneLockText({ pid, child, folder, projectRun, startedAt } = {}) {
+function lockLogName(value) {
+  if (typeof value !== 'string') return ''
+  const name = value.trim()
+  if (name === '' || name === '.' || name === '..') return ''
+  return name.includes('/') || name.includes('\\') ? '' : name
+}
+
+export function laneLockText({ pid, child, folder, projectRun, startedAt, log } = {}) {
   const own = Number.isInteger(pid) && pid > 0 ? pid : 0
   if (own === 0) return ''
   const entry = { pid: own }
@@ -522,6 +529,8 @@ export function laneLockText({ pid, child, folder, projectRun, startedAt } = {})
   if (projectRun === true) entry.projectRun = true
   const start = isoTime(startedAt)
   if (start !== null) entry.startedAt = start
+  const logName = lockLogName(log)
+  if (logName !== '') entry.log = logName
   return `${JSON.stringify(entry)}\n`
 }
 
@@ -536,6 +545,18 @@ export function laneLockStartedAt(text) {
   }
   const startedAt = typeof parsed?.startedAt === 'string' ? parsed.startedAt.trim() : ''
   return isoTime(startedAt) === null ? '' : startedAt
+}
+
+export function laneLockLog(text) {
+  const raw = String(text ?? '').trim()
+  if (!raw.startsWith('{')) return ''
+  let parsed
+  try {
+    parsed = JSON.parse(raw)
+  } catch {
+    return ''
+  }
+  return lockLogName(parsed?.log)
 }
 
 export function laneLockPids(text) {

@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { descendantProcesses, killTree, leftoverProcesses, listProcesses } from '../server/processTree.js'
 import { readLaneLock, releaseLaneLock, takeLaneLock, processAlive } from '../scripts/lane-lock.mjs'
 import { isResultLine, startLane, stopLane } from '../scripts/run-lane.mjs'
-import { laneLockStartedAt, laneLockText } from '../src/briefs/run.js'
+import { laneLockLog, laneLockStartedAt, laneLockText } from '../src/briefs/run.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 
 const RUN_LANE_SCRIPT = fileURLToPath(new URL('../scripts/run-lane.mjs', import.meta.url))
@@ -186,8 +186,10 @@ describe('a stopped lane stays stopped', () => {
     expect(lock.child).toBeGreaterThan(0)
     expect(lock.folder).toBe(project)
     expect(lock.projectRun).toBe(true)
-    const lockStart = laneLockStartedAt(readFileSync(join(runs, 'fake.lock'), 'utf8'))
+    const lockFile = readFileSync(join(runs, 'fake.lock'), 'utf8')
+    const lockStart = laneLockStartedAt(lockFile)
     expect(lockStart).not.toBe('')
+    expect(laneLockLog(lockFile)).toMatch(/^fake-project-\d{8}-\d{6}\.log$/)
     expect(processAlive(grandchildPid)).toBe(true)
 
     const stopped = await runLane(['--stop', 'fake'], env)
