@@ -21,8 +21,16 @@ const HERMES_LINES = {
   search_files: { emoji: '🔎', verb: 'grep' },
 }
 
-export function unattendedPrompt(prompt) {
-  return `${prompt}\n\n${UNATTENDED_NOTE}`
+function laneMessageNote(env) {
+  const source = env && typeof env === 'object' ? env : {}
+  const value = (name) => (typeof source[name] === 'string' ? source[name].trim() : '')
+  if (value('MACHINEROOM_LANE_TICKET') === '' || value('MACHINEROOM_BRIDGE') === '') return ''
+  return 'You may send your coordinator a short message while you work, for a question or a blocker: POST $MACHINEROOM_BRIDGE/api/orchestrator/messages with the header X-MachineRoom-Lane: $MACHINEROOM_LANE_TICKET and the JSON body {"text": "..."}. Read both values from your environment; never print the ticket. You get no reply during this run, so keep working on what you can, and send at most 4.'
+}
+
+export function unattendedPrompt(prompt, env = {}) {
+  const note = laneMessageNote(env)
+  return note === '' ? `${prompt}\n\n${UNATTENDED_NOTE}` : `${prompt}\n\n${note}\n\n${UNATTENDED_NOTE}`
 }
 
 export function laneCommandProblem(lane) {

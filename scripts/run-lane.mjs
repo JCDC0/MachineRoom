@@ -1379,7 +1379,7 @@ async function runQueueProject({ options, lane, lanes }) {
         author: commitAuthorFor(harnessByKey[lane?.cli?.harness], lane?.cli?.model),
         runTask: async (task, number) => {
           console.log(`task ${number} of ${tasks.length}`)
-          const prompt = unattendedPrompt(task)
+          const prompt = unattendedPrompt(task, process.env)
           const name = `${options.lane}-queue-${queueId}-${number}`
           const logPath = join(folder, `${name}.log`)
           const usageFile = join(folder, `${name}.usage.json`)
@@ -1539,7 +1539,7 @@ async function main() {
       return 1
     }
     const task = readTask(options)
-    const prompt = unattendedPrompt(task)
+    const prompt = unattendedPrompt(task, process.env)
     const name = `${options.lane}-project-${stamp()}`
     const folder = runsFolder()
     const logPath = join(folder, `${name}.log`)
@@ -1624,7 +1624,7 @@ async function main() {
   const rules = parseRules(read('HOUSE-RULES.md'))
   const version = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).version
   const agentDepth = readAgentDepth(runsFolder()).limit
-  const promptFor = (laneKey, branchSuffix = '') => unattendedPrompt(buildPrompt({ briefs: wanted, laneKey, lanes, rules, version, agentDepth, branchSuffix }))
+  const promptFor = (laneKey, branchSuffix = '') => unattendedPrompt(buildPrompt({ briefs: wanted, laneKey, lanes, rules, version, agentDepth, branchSuffix }), process.env)
   const prompt = promptFor(options.lane)
   const name = `${options.lane}-${wanted.map((brief) => brief.id).join('-')}-${stamp()}`
   const folder = runsFolder()
@@ -1814,7 +1814,7 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
       : null
     // OpenCode takes its folder from PWD, which a shell started elsewhere leaves pointing at that shell's folder.
     const spawnSpec = laneSpawn({ command, minutes: options.minutes, model: lane.cli.model, effort: lane.reasoning })
-    const runnerNames = ['MACHINEROOM_RUNS', 'MACHINEROOM_LANES_FILE']
+    const runnerNames = ['MACHINEROOM_RUNS', 'MACHINEROOM_LANES_FILE', 'MACHINEROOM_LANE_TICKET', 'MACHINEROOM_BRIDGE']
       .filter((name) => typeof process.env[name] === 'string' && process.env[name] !== '')
     const runsDir = options?.runs || (logPath ? dirname(logPath) : runsFolder())
     const endpoints = readEndpoints(runsDir)
