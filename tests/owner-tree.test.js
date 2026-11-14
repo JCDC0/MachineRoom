@@ -678,7 +678,7 @@ describe("the owner's test tree", () => {
     )
   })
 
-  it.fails('passes high reasoning effort to the Codex sub turn command', async () => {
+  it('passes high reasoning effort to the Codex sub turn command', async () => {
     const { url, orchLog, spawns } = await setupOwnerTreeRig()
     await saveOwnerTestTree(url)
 
