@@ -648,7 +648,14 @@ function runLane(args, env = {}) {
   return new Promise((done, fail) => {
     const child = spawn(process.execPath, [RUN_LANE_SCRIPT, ...args], {
       stdio: ['ignore', 'pipe', 'pipe'],
-      env: { ...process.env, ...env },
+      env: {
+        ...process.env,
+        GIT_AUTHOR_NAME: 'MachineRoom Test',
+        GIT_AUTHOR_EMAIL: 'test@example.invalid',
+        GIT_COMMITTER_NAME: 'MachineRoom Test',
+        GIT_COMMITTER_EMAIL: 'test@example.invalid',
+        ...env,
+      },
     })
     let stdout = ''
     let stderr = ''
