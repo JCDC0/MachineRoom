@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- P307: projectCheckLine names multiple check lines in order as Check: A, then B. and keeps today's wording for one line or none.
 - P306: a saved check holds up to 4 commands, one per line; the bridge sends one --test per line, and the runner runs them in order, stops at the first failure and names each command passed or failed.
 - P308: a queue task where the lane committed keeps those commits and records the newest sha, and the queue's own commit ends with a Co-Authored-By trailer for the lane's harness and model.
 - The history audit allows any `noreply@` or `no-reply@` address, which co-author trailers use, beside the Anthropic and GitHub ones.

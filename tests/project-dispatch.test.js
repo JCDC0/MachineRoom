@@ -17,6 +17,7 @@ import {
   NO_CODE_LANE_FORM_LINE,
   NO_LANES_FORM_LINE,
   PROJECT_CONFIRM_LIMIT,
+  projectCheckLine,
   projectFormNotice,
   projectRunBody,
   projectRunConfirm,
@@ -823,6 +824,23 @@ describe('the project run helpers', () => {
     })
     expect(projectRunConfirm({ lane: 'opencode', project: 'Room', task: 'Fix it.' })).not.toHaveProperty('model')
   })
+
+  it('names every check line in order and keeps today wording for one or none', () => {
+    expect(projectCheckLine({ checkCommand: 'npm test\nnpm run check', hasTestScript: false })).toBe(
+      'Check: npm test, then npm run check.'
+    )
+    expect(projectCheckLine({ checkCommand: 'npm test\r\n\r\n  npm run check  \r\n', hasTestScript: true })).toBe(
+      'Check: npm test, then npm run check.'
+    )
+    expect(projectCheckLine({ checkCommand: 'npm test\nnpm run check\nnpm run build', hasTestScript: false })).toBe(
+      'Check: npm test, then npm run check, then npm run build.'
+    )
+    expect(projectCheckLine({ checkCommand: 'node check.mjs', hasTestScript: false })).toBe('Check: node check.mjs')
+    expect(projectCheckLine({ checkCommand: '  \n  ', hasTestScript: true })).toBe('Check: npm test')
+    expect(projectCheckLine({ checkCommand: '', hasTestScript: false })).toBe(
+      'No check: this project has no npm test script.'
+    )
+  })
 })
 
 describe('Dispatch when it cannot show the project form', () => {
@@ -1131,6 +1149,34 @@ describe('Dispatch with a chosen model and backup lane', () => {
       expect(card.textContent).toContain('Model: opencode-go/qwen3.8-flash')
       expect(card.textContent).toContain('Backup lane: agy')
       expect(calls).toEqual([])
+    })
+  })
+})
+
+describe('Dispatch confirm card with multiple check commands', () => {
+  it('names every saved check line in order on the confirm card', async () => {
+    const agents = [
+      { id: 'agent-opencode', key: 'opencode', name: 'OpenCode', adapterType: 'opencode_local', role: null },
+    ]
+    const client = {
+      health: async () => ({ lanes: true }),
+      agents: async () => agents,
+      runs: async () => ({ project: 'MachineRoom', running: [], recent: [] }),
+      projectSettings: async () => ({ checkCommand: 'npm test\nnpm run check', hasTestScript: false }),
+      saveProjectSettings: async ({ checkCommand }) => ({ checkCommand, hasTestScript: false }),
+      startRun: async (lane) => ({ lane, queue: true, tasks: 1 }),
+    }
+    await withDom(async ({ container, root }) => {
+      await act(async () => {
+        root.render(createElement(DispatchPanel, { client, initialAgents: agents }))
+      })
+      await settle()
+      await type(root, container.querySelector('#project-run-lane'), 'opencode')
+      await type(root, container.querySelector('#project-run-task'), 'Fix the typo.')
+      await click(root, buttonWithText(container, 'Run'))
+      const card = container.querySelector('[aria-label="Confirm project run"]')
+      expect(card).not.toBeNull()
+      expect(card.textContent).toContain('Check: npm test, then npm run check.')
     })
   })
 })
