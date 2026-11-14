@@ -1006,7 +1006,12 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
       const mark = `${lane}\u0000${record.startedAt ?? ''}\u0000${kind}\u0000${to}`
       if (notedFailovers.has(mark)) continue
       notedFailovers.add(mark)
-      if (!quiet) notifyLaneHead(lane, `${lane} hit ${kind} and its run moved to ${to}.`)
+      if (!quiet) {
+        const note = failover.refused === true
+          ? `${lane} hit ${kind} and its backup ${to} could not start.`
+          : `${lane} hit ${kind} and its run moved to ${to}.`
+        notifyLaneHead(lane, note)
+      }
     }
   }
 

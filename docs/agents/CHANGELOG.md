@@ -1,6 +1,8 @@
 # Changelog
 
 ## Unreleased
+- P304: a deferred project run writes its failed record once when the backup throws, and its queue writes no generic record.
+- P304: a refused backup records `refused: true` and its room note says the backup could not start, so only a started backup reads as a move.
 - P300: a project run that fails over reads its branch and commits before the backup starts and keeps them on its failed record.
 - P302: a lane lock names its run's log, and the lanes source takes the lock's start time only for that log, so a Stop on an old log names no live run.
 - P305: readCodexQuota opens the rollout without following a link where the platform allows, and answers null when the opened file is not the one it checked.

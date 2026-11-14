@@ -1610,7 +1610,7 @@ function recordRoom(record, toolLines, lanes) {
   }
 }
 
-async function startFailover({ laneKey, target, lanes, options, wanted, prompt, promptFor = null, folder, project, task, queue = null, base = '', deferRecord, openLog, failedRecord, failedStartBranch }) {
+async function startFailover({ laneKey, target, lanes, options, wanted, prompt, promptFor = null, folder, project, task, queue = null, base = '', deferRecord, openLog, failedRecord, failedStartBranch, onStart = null }) {
   const fallbackLane = lanes?.[target]
   if (!fallbackLane) return null
   if (!project) {
@@ -1667,13 +1667,14 @@ async function startFailover({ laneKey, target, lanes, options, wanted, prompt, 
       failoverFrom: { lane: laneKey, startedAt: failedRecord?.startedAt },
       openLog,
       startedAt,
+      onStart,
     })
   } finally {
     releaseLaneLock(lock)
   }
 }
 
-export async function startLane({ options, lane, lanes, wanted, prompt, logPath, usageFile, name, project = '', task = '', queue = null, lockPath = '', projectBranch = null, deferRecord = false, base = '', openLog = createWriteStream, branchSuffix = '', failoverFrom = null, promptFor = null, startedAt: givenStartedAt = null }) {
+export async function startLane({ options, lane, lanes, wanted, prompt, logPath, usageFile, name, project = '', task = '', queue = null, lockPath = '', projectBranch = null, deferRecord = false, base = '', openLog = createWriteStream, branchSuffix = '', failoverFrom = null, promptFor = null, startedAt: givenStartedAt = null, onStart = null }) {
   if (options?.failedOver !== true) {
     const problem = fallbackProblem({ laneKey: options?.lane, fallback: lane?.fallback, lanes })
     if (problem !== '') throw new Error(problem)
@@ -1769,6 +1770,7 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
       endpoints,
     })
     const child = spawn(spawnSpec.file, spawnSpec.args, { cwd: command.cwd, env: childEnv, stdio: spawnSpec.input ? ['pipe', 'pipe', 'pipe'] : ['ignore', 'pipe', 'pipe'], windowsHide: true })
+    if (typeof onStart === 'function') onStart()
     const lockStart = queue && lockPath ? laneLockStartedAt(lockText(lockPath)) || startedAt : startedAt
     if (lockPath) writeLaneChild(lockPath, child.pid)
     if (lockPath) writeLockStart(lockPath, lockStart, basename(logPath))
@@ -2025,7 +2027,7 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
         lane, lanes, wanted, prompt,
         logPath: join(dirname(logPath), `${retryName}.log`),
         usageFile: join(dirname(usageFile), `${retryName}.usage.json`),
-        name: retryName, project, task, queue, lockPath, projectBranch, deferRecord, base: runBase, openLog, branchSuffix, failoverFrom, promptFor,
+        name: retryName, project, task, queue, lockPath, projectBranch, deferRecord, base: runBase, openLog, branchSuffix, failoverFrom, promptFor, onStart,
       })
     }
     const record = laneRunRecord({
@@ -2059,9 +2061,9 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
     const kind = failoverKind({ exitCode: result.code, limited, startFailed: startFailure !== '', killed })
     const target = kind !== '' && typeof lane.fallback === 'string' ? lane.fallback.trim() : ''
     if (target !== '' && options?.failedOver !== true) {
-      record.failover = { kind, to: target }
-      const failedHead = project && deferRecord ? gitRead(project, ['rev-parse', 'HEAD']) || '' : ''
-      const failedGit = project && deferRecord
+      const deferredProject = Boolean(project && deferRecord)
+      const failedHead = deferredProject ? gitRead(project, ['rev-parse', 'HEAD']) || '' : ''
+      const failedGit = deferredProject
         ? projectRunGit({
             branch: gitRead(project, ['branch', '--show-current']) ?? '',
             startBranch: projectStart.branch,
@@ -2072,37 +2074,56 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
         if (failedGit.branch !== '') record.branch = failedGit.branch
         record.commits = failedGit.commits
       }
-      if (!(project && deferRecord)) {
+      record.failover = { kind, to: target, refused: true }
+      let recordWritten = false
+      const writeFailedRecord = () => {
+        if (recordWritten) return
+        recordWritten = true
         if (appendRunRecord(record)) console.log(`record: ${printedRunsFolder(runsFile())}`)
         if (!project) recordRoom(record, toolLines, lanes)
       }
       console.log(`moving the run to ${target} because ${kind}`)
-      const fallbackRun = await startFailover({
-        laneKey: options.lane,
-        target,
-        lanes,
-        options,
-        wanted,
-        prompt,
-        promptFor,
-        folder,
-        project,
-        task,
-        queue,
-        base: runBase,
-        deferRecord,
-        openLog,
-        failedRecord: record,
-        failedStartBranch: projectStart?.branch ?? '',
-      })
+      let fallbackRun = null
+      try {
+        fallbackRun = await startFailover({
+          laneKey: options.lane,
+          target,
+          lanes,
+          options,
+          wanted,
+          prompt,
+          promptFor,
+          folder,
+          project,
+          task,
+          queue,
+          base: runBase,
+          deferRecord,
+          openLog,
+          failedRecord: record,
+          failedStartBranch: projectStart?.branch ?? '',
+          onStart: () => {
+            record.failover = { kind, to: target }
+            if (!deferredProject) writeFailedRecord()
+          },
+        })
+      } catch (error) {
+        if (!deferredProject) {
+          writeFailedRecord()
+          throw error
+        }
+        console.log(`The backup lane ${target} could not start (${errorCode(error)}), so the run stays failed.`)
+        return { code: result.code ?? 1, killed, record, startHead: projectStart.head, startBranch: projectStart.branch }
+      }
       if (fallbackRun) {
-        if (project && deferRecord) {
+        if (deferredProject) {
           if (failedHead !== '') record.head = failedHead
-          if (appendRunRecord(record)) console.log(`record: ${printedRunsFolder(runsFile())}`)
+          writeFailedRecord()
         }
         return fallbackRun
       }
-      if (project && deferRecord) return { code: result.code ?? 1, killed, record, startHead: projectStart.head, startBranch: projectStart.branch }
+      if (deferredProject) return { code: result.code ?? 1, killed, record, startHead: projectStart.head, startBranch: projectStart.branch }
+      writeFailedRecord()
       return { code: result.code ?? 1, killed }
     }
     if (project && deferRecord) {

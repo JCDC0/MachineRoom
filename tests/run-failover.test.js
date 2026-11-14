@@ -528,11 +528,56 @@ describe('a lane that hits its quota hands its run to a backup lane', { timeout:
         queueIndex: 1,
         queueSize: 1,
         queueRemaining: [],
-        failover: { kind: 'rate-limit', to: 'agy' },
+        failover: { kind: 'rate-limit', to: 'agy', refused: true },
       })
       expect(result.stdout).toContain('The backup lane agy is busy, so the run stays failed.')
       expect(result.stdout).toContain('1. failed: lane exit 1')
       expect(result.stderr).not.toContain('TypeError')
+      expect(count(okCount)).toBe(0)
+    } finally {
+      rmSync(base, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+    }
+  })
+
+  it('writes the failed task once when the backup cannot start', async () => {
+    const base = makeTempDir('machine-room-failover-queue-throw-')
+    try {
+      const project = join(base, 'project')
+      const runs = join(base, 'runs')
+      const failCount = join(base, 'fail-count.txt')
+      const okCount = join(base, 'ok-count.txt')
+      mkdirSync(runs, { recursive: true })
+      makeRepo(project, failScript(failCount))
+      const lanes = {
+        opencode: { name: 'Fail lane', worktree: join(base, 'first'), fallback: 'agy', cli: { harness: 'opencode', bin: process.execPath, model: 'fake/fail' } },
+        agy: { name: 'Backup lane', worktree: join(base, 'backup'), cli: { harness: 'not-a-harness', bin: process.execPath, model: 'fake/ok' } },
+      }
+      const lanesFile = join(base, 'lanes.json')
+      writeFileSync(lanesFile, `${JSON.stringify(lanes, null, 2)}\n`)
+      const queueFile = join(base, 'queue.txt')
+      writeFileSync(queueFile, 'Do the task.\n')
+      const result = await runLane(['opencode', '--project', project, '--queue', queueFile], {
+        MACHINEROOM_RUNS: runs,
+        MACHINEROOM_LANES_FILE: lanesFile,
+      })
+      expect(result.code).toBe(1)
+      const records = readRecords(runs)
+      expect(records).toHaveLength(1)
+      expect(records[0]).toMatchObject({
+        lane: 'opencode',
+        project,
+        task: 'Do the task.',
+        exitCode: 1,
+        queueStatus: 'failed',
+        queueIndex: 1,
+        queueSize: 1,
+        queueRemaining: [],
+        failover: { kind: 'rate-limit', to: 'agy', refused: true },
+      })
+      expect(records[0].log).toMatch(/opencode-queue-.*\.log$/)
+      expect(result.stdout).toContain('The backup lane agy could not start')
+      expect(result.stderr).not.toContain('TypeError')
+      expect(count(failCount)).toBe(1)
       expect(count(okCount)).toBe(0)
     } finally {
       rmSync(base, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
@@ -559,7 +604,7 @@ describe('a lane that hits its quota hands its run to a backup lane', { timeout:
       expect(result.code).toBe(1)
       const records = readRecords(runs)
       expect(records).toHaveLength(1)
-      expect(records[0].failover).toEqual({ kind: 'rate-limit', to: 'agy' })
+      expect(records[0].failover).toEqual({ kind: 'rate-limit', to: 'agy', refused: true })
       expect(count(okCount)).toBe(0)
       expect(logs).toContain('The backup lane agy is busy, so the run stays failed.')
     } finally {
@@ -588,7 +633,7 @@ describe('a lane that hits its quota hands its run to a backup lane', { timeout:
       expect(result.code).toBe(1)
       const records = readRecords(runs)
       expect(records).toHaveLength(1)
-      expect(records[0].failover).toEqual({ kind: 'rate-limit', to: 'agy' })
+      expect(records[0].failover).toEqual({ kind: 'rate-limit', to: 'agy', refused: true })
       expect(count(okCount)).toBe(0)
       expect(logs).toContain(`The lane worktree ${base} is the main checkout, so the runner will not start there.`)
       expect(gitIn(base, ['branch', '--show-current'])).toBe('main')
