@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- P279: a secret-named field is masked only when it holds a string, so token counts show and keys stay hidden.
 - P278: RUN-2026-11-14-SUITE.md at d54e3a38: 5263 tests passed, one load flake in run-lane-stop that passes alone.
 - P284: run-lane --list adds 'moved to LANE (KIND)' to a run that failed over and 'taken over from LANE' to the backup's run.
 - P287: a late conversation answer for another run is ignored, and choosing a run clears the view, so Stop never shows for a run that is not selected.
@@ -10,6 +11,7 @@
 - P281: ARCHITECTURE.md's Open work now names reviews 29 to 31 and their fixes, the docs and test audits, lane failover, Codex quota readings and the per-lane conversation view.
 - P281: DOCUMENTS.md now lists all 31 newer audits, reviews and run reports in docs/agents.
 - P284: the run list marks a run that moved with `| moved to LANE (KIND)` and a run that took over another lane with `| taken over from LANE`.
+- P279: a conversation masks only a text value in a key, token, secret, password or authorization field, so a count such as `input_tokens` keeps its number.
 - P273: a backup lane passes the brief worktree check, a retry keeps the backup prompt, a project failover returns the backup's record and branch, and a spawn error counts as a failed start.
 - P272: a raw JSON line in a lane conversation is parsed and masked field by field, so escaped home paths and named secrets never reach the route.
 - P250: a lane's tree row and its Inspector open its conversation in the lower half, with a run picker, folded tool calls, live reads and Stop; the route reads live runs too.

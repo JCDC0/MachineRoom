@@ -26,7 +26,7 @@ function maskData(value) {
   if (value === null || typeof value !== 'object') return value
   const safe = {}
   for (const [name, item] of Object.entries(value)) {
-    safe[name] = SECRET_FIELD.test(name) ? KEY_MASK : maskData(item)
+    safe[name] = SECRET_FIELD.test(name) && typeof item === 'string' ? KEY_MASK : maskData(item)
   }
   return safe
 }
