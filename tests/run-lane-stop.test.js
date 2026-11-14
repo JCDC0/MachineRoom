@@ -578,6 +578,35 @@ describe('stopLane creation time rules', () => {
     }
   })
 
+  it('stops nothing by worktree and says so when the process list is missing', () => {
+    const { runs, env } = setup('mr-stop-no-snapshot-')
+    const lockPath = join(runs, 'fake.lock')
+    writeFileSync(lockPath, laneLockText({ pid: 100, child: 200, folder: 'C:\\fake\\worktree' }))
+    const killed = []
+    const lines = []
+    const log = console.log
+    console.log = (msg) => lines.push(msg)
+    try {
+      withEnv(env, () => {
+        const code = stopLane('fake', {
+          platform: 'win32',
+          stat: () => ({ mtimeMs: 10000 }),
+          list: () => [],
+          kill: ({ pid }) => {
+            killed.push(pid)
+            return true
+          },
+        })
+        expect(code).toBe(0)
+      })
+      expect(killed).toEqual([200, 100])
+      expect(lines).toContain('leftover: no process snapshot, so nothing was stopped by worktree')
+      expect(existsSync(lockPath)).toBe(false)
+    } finally {
+      console.log = log
+    }
+  })
+
   it('keeps what the code does away from Windows', () => {
     const { runs, env } = setup('mr-stop-linux-')
     const lockPath = join(runs, 'fake.lock')
@@ -781,6 +810,55 @@ describe('stopLane creation time rules', () => {
     }
   })
 
+  it('leaves a newer run alive and keeps its lock when it appears inside the leftover list', () => {
+    const { runs, env } = setup('mr-stop-snapshot-race-')
+    const lockPath = join(runs, 'fake.lock')
+    const worktreePath = 'C:\\fake\\worktree'
+    writeFileSync(lockPath, laneLockText({ pid: 100, child: 200, folder: worktreePath }))
+    const killed = []
+    const lines = []
+    let listCalls = 0
+    const log = console.log
+    console.log = (msg) => lines.push(msg)
+    try {
+      withEnv(env, () => {
+        const code = stopLane('fake', {
+          platform: 'win32',
+          stat: () => ({ mtimeMs: 10000 }),
+          list: () => {
+            listCalls += 1
+            if (listCalls === 1) {
+              return [
+                { pid: 100, ppid: 1, created: 9000 },
+                { pid: 200, ppid: 100, created: 9500 },
+                { pid: 500, ppid: 1, created: 9700, command: 'node C:\\fake\\worktree\\worker.js' },
+              ]
+            }
+            writeFileSync(lockPath, laneLockText({ pid: 300, child: 400, folder: worktreePath }))
+            return [
+              { pid: 300, ppid: 1, created: 9900, command: 'node C:\\fake\\worktree\\runner.mjs' },
+              { pid: 400, ppid: 300, created: 9950, command: 'node C:\\fake\\worktree\\harness.mjs' },
+              { pid: 500, ppid: 1, created: 9700, command: 'node C:\\fake\\worktree\\worker.js' },
+            ]
+          },
+          kill: ({ pid }) => {
+            killed.push(pid)
+            return true
+          },
+        })
+        expect(code).toBe(0)
+      })
+      expect(killed).toEqual([200, 100, 500])
+      expect(killed).not.toContain(400)
+      expect(listCalls).toBe(2)
+      expect(lines).toContain('leftover: stopped 500')
+      expect(lines).toContain('kept the fake lock: a newer run took it while the stop ran')
+      expect(readFileSync(lockPath, 'utf8')).toContain('"pid":300')
+    } finally {
+      console.log = log
+    }
+  })
+
   it('stops a project run by its descendants and leaves a process that only names the project', () => {
     const { runs, env } = setup('mr-stop-project-')
     const lockPath = join(runs, 'fake.lock')
@@ -918,22 +996,26 @@ describe('stopLane creation time rules', () => {
     expect(lines).toContain('stale: 301 was not this run')
     expect(lines).toContain('leftover: stopped 302')
     expect(existsSync(lockPath)).toBe(false)
-    expect(listCalls).toBe(3)
+    expect(listCalls).toBe(2)
   })
 
-  it('reuses the post-harness process list for leftovers when no descendant is killed', () => {
+  it('takes leftover targets from the snapshot and skips a reused pid', () => {
     const { code, killed, lines, listCalls, lockPath } = runStopWithLists({
-      prefix: 'mr-stop-reuse-list-',
+      prefix: 'mr-stop-snapshot-leftover-',
       lockFields: { pid: 100, child: 200, folder: 'C:\\fake\\worktree' },
       lists: [
         [
           { pid: 100, ppid: 1, created: 9000 },
           { pid: 200, ppid: 100, created: 9500 },
           { pid: 300, ppid: 200, created: 9600 },
+          { pid: 400, ppid: 1, created: 9700, command: 'node C:\\fake\\worktree\\worker.js' },
+          { pid: 500, ppid: 1, created: 9800, command: 'node C:\\fake\\worktree\\helper.js' },
         ],
         [
           { pid: 300, ppid: 1, created: 9900 },
           { pid: 400, ppid: 1, created: 9700, command: 'node C:\\fake\\worktree\\worker.js' },
+          { pid: 500, ppid: 1, created: 9950, command: 'node C:\\fake\\worktree\\helper.js' },
+          { pid: 600, ppid: 1, created: 9960, command: 'node C:\\fake\\worktree\\new.js' },
         ],
       ],
     })
@@ -941,6 +1023,8 @@ describe('stopLane creation time rules', () => {
     expect(killed).toEqual([200, 100, 400])
     expect(lines).toContain('stale: 300 was not this run')
     expect(lines).toContain('leftover: stopped 400')
+    expect(lines).toContain('stale: 500 was not this run')
+    expect(lines).not.toContain('leftover: stopped 600')
     expect(existsSync(lockPath)).toBe(false)
     expect(listCalls).toBe(2)
   })

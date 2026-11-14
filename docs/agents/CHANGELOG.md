@@ -1,6 +1,8 @@
 # Changelog
 
 ## Unreleased
+- P313: a stop takes its leftover targets only from the process list read before its lock check, so a newer run's harness stays alive, and says so in one line when that list is missing.
+- P313: a stop matches each leftover by pid and creation time, so a reused pid is not killed, and the stop test covers a newer run that takes the lock inside the leftover list.
 - Review 34 lists nine findings in the batch since review 33 and seventeen doc sentences the code contradicts (P312).
 - The doctor and every orchestrator find the Codex app's codex.exe when codex is not on PATH, as lanes already did (P311).
 - P311: `codexProgramFor` answers the Codex app's newest program for a bare `codex` bin when codex is not on PATH, and run-lane uses it.
