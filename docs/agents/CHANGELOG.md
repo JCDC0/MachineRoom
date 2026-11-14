@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- P301: the folder tree poll test runs a working watcher and a poll timer at once, so dropping `pollTimer` from `folderTreeReuseAllowed` makes it fail.
 - P294: a project run refuses to reuse .worktrees/LANE when it is on a named branch with commits not in the project, naming the branch and the count; a detached worktree keeps its check.
 - P297: ROOM.md, LIVE.md and COMMANDS.md say what the lane conversation, the cost board, failover, quota and the tree reuse do now, and the audit table records each row's status.
 - P262: the family tree editor sets a lane's backup lane, Dispatch can choose a model for one project run and names the backup lane, and a failover adds one room note and shows on both lanes.
