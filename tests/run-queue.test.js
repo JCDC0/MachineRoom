@@ -523,7 +523,8 @@ describe('scripts/run-lane.mjs with --queue', { timeout: 30000 }, () => {
       })
       expect(result.code).toBe(0)
       expect(result.stdout).toContain('1. committed')
-      expect(result.stdout).toContain('tests: node explicit-test.cjs')
+      expect(result.stdout).toContain('check 1 of 1 passed: node explicit-test.cjs')
+      expect(result.stdout).toContain('tests: node explicit-test.cjs passed')
       expect(git(repo, ['show', 'HEAD:explicit-ran.txt']).trim()).toBe('yes')
       expect(existsSync(join(repo, 'auto-ran.txt'))).toBe(false)
     } finally {

@@ -732,7 +732,7 @@ function checkDisplay(command) {
 
 function checkSummary(check) {
   const commands = Array.isArray(check?.commands) ? check.commands : []
-  if (commands.length <= 1) return String(check?.command ?? '')
+  if (commands.length === 0) return String(check?.command ?? '')
   return commands.map((item) => `${item.command} ${item.ok ? 'passed' : 'failed'}`).join(', ')
 }
 
@@ -752,7 +752,7 @@ async function projectCheck({ project, given, minutes }) {
     const outcome = await runTestCommand(line, project, minutes)
     const ok = outcome?.ok === true
     commands.push({ command: line, ok, outcome })
-    if (lines.length > 1) console.log(`check ${commands.length} of ${lines.length} ${ok ? 'passed' : 'failed'}: ${line}`)
+    console.log(`check ${commands.length} of ${lines.length} ${ok ? 'passed' : 'failed'}: ${line}`)
     if (!ok) break
   }
   const ok = commands.length === lines.length && commands.every((item) => item.ok)
