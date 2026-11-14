@@ -11,7 +11,7 @@ import {
   writeProjectSettings,
 } from '../server/project-settings.js'
 import { createMockClient } from '../src/control/mock.js'
-import { CHECK_SHELL_PROBLEM } from '../src/briefs/run.js'
+import { CHECK_COMMAND_COUNT_PROBLEM, CHECK_QUOTE_PROBLEM, CHECK_SHELL_PROBLEM } from '../src/briefs/run.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 
 const cleanups = []
@@ -58,16 +58,29 @@ describe('project settings file', () => {
     expect(readProjectSettings(file)).toEqual({ checkCommand: 'node scripts/check.mjs' })
     expect(readFileSync(file, 'utf8')).toContain('node scripts/check.mjs')
 
+    writeProjectSettings(file, 'npm test\nnpm run check')
+    expect(readProjectSettings(file)).toEqual({ checkCommand: 'npm test\nnpm run check' })
+
     writeProjectSettings(file, '')
     expect(readProjectSettings(file)).toEqual({ checkCommand: '' })
   })
 
-  it('refuses a too-long or two-line command with one sentence', () => {
+  it('accepts up to four commands, one per line, and refuses a fifth', () => {
+    expect(checkCommandProblem('npm test\nnpm run check')).toBeNull()
+    expect(checkCommandProblem('npm test\r\nnpm run check')).toBeNull()
+    expect(checkCommandProblem('npm test\n\nnpm run check\n')).toBeNull()
+    expect(checkCommandProblem('one\ntwo\nthree\nfour')).toBeNull()
+    expect(checkCommandProblem('one\ntwo\nthree\nfour\nfive')).toBe(CHECK_COMMAND_COUNT_PROBLEM)
+    expect(checkCommandProblem('one\n\n\n\n\n')).toBeNull()
+  })
+
+  it('refuses a too-long command, shell syntax on any line and an open quote', () => {
     expect(checkCommandProblem('x'.repeat(501))).toBe(CHECK_COMMAND_PROBLEM)
-    expect(checkCommandProblem('one\ntwo')).toBe(CHECK_COMMAND_PROBLEM)
     expect(checkCommandProblem('')).toBeNull()
     expect(checkCommandProblem('npm run check')).toBeNull()
     expect(checkCommandProblem('npm test && npm run build')).toBe(CHECK_SHELL_PROBLEM)
+    expect(checkCommandProblem('npm test\nnpm run check && npm run build')).toBe(CHECK_SHELL_PROBLEM)
+    expect(checkCommandProblem('npm test\nnode "x.test.cjs')).toBe(CHECK_QUOTE_PROBLEM)
     const sentence = CHECK_COMMAND_PROBLEM
     expect(sentence.endsWith('.')).toBe(true)
     expect(sentence.slice(0, -1)).not.toContain('.')
@@ -101,6 +114,16 @@ describe('the project settings route', () => {
     expect(await cleared.json()).toEqual({ checkCommand: '', hasTestScript: true })
   })
 
+  it('saves two commands on two lines and reads both back', async () => {
+    const { url } = await startBridge()
+    const saved = await postSettings(url, { checkCommand: 'npm test\nnpm run check', confirmed: true })
+    expect(saved.status).toBe(200)
+    expect(await saved.json()).toEqual({ checkCommand: 'npm test\nnpm run check', hasTestScript: true })
+
+    const read = await (await fetch(`${url}/api/control/project-settings`)).json()
+    expect(read).toEqual({ checkCommand: 'npm test\nnpm run check', hasTestScript: true })
+  })
+
   it('refuses shell syntax and never saves it', async () => {
     const { url } = await startBridge()
     const res = await postSettings(url, { checkCommand: 'npm test && npm run build', confirmed: true })
@@ -111,7 +134,7 @@ describe('the project settings route', () => {
     expect(read).toEqual({ checkCommand: '', hasTestScript: true })
   })
 
-  it('refuses a page write with no Origin and a command of more than one line', async () => {
+  it('refuses a page write with no Origin and a check of more than four lines', async () => {
     const { url } = await startBridge()
     const noOrigin = await fetch(`${url}/api/control/project-settings`, {
       method: 'POST',
@@ -120,11 +143,13 @@ describe('the project settings route', () => {
     })
     expect(noOrigin.status).toBe(403)
 
-    for (const checkCommand of ['x'.repeat(501), 'one\ntwo']) {
-      const res = await postSettings(url, { checkCommand, confirmed: true })
-      expect(res.status).toBe(400)
-      expect(await res.json()).toEqual({ error: CHECK_COMMAND_PROBLEM })
-    }
+    const tooLong = await postSettings(url, { checkCommand: 'x'.repeat(501), confirmed: true })
+    expect(tooLong.status).toBe(400)
+    expect(await tooLong.json()).toEqual({ error: CHECK_COMMAND_PROBLEM })
+
+    const fiveLines = await postSettings(url, { checkCommand: 'one\ntwo\nthree\nfour\nfive', confirmed: true })
+    expect(fiveLines.status).toBe(400)
+    expect(await fiveLines.json()).toEqual({ error: CHECK_COMMAND_COUNT_PROBLEM })
   })
 })
 
@@ -141,9 +166,13 @@ describe('the mock project settings', () => {
     expect(await client.projectSettings()).toEqual({ checkCommand: '', hasTestScript: true })
   })
 
-  it('refuses a too-long or two-line command with one sentence', async () => {
+  it('takes two commands on one field and refuses a fifth line', async () => {
     const client = createMockClient({ latencyMs: 0 })
+    expect(await client.saveProjectSettings({ checkCommand: 'npm test\nnpm run check' })).toEqual({
+      checkCommand: 'npm test\nnpm run check',
+      hasTestScript: true,
+    })
     await expect(client.saveProjectSettings({ checkCommand: 'x'.repeat(501) })).rejects.toThrow(CHECK_COMMAND_PROBLEM)
-    await expect(client.saveProjectSettings({ checkCommand: 'one\ntwo' })).rejects.toThrow(CHECK_COMMAND_PROBLEM)
+    await expect(client.saveProjectSettings({ checkCommand: 'one\ntwo\nthree\nfour\nfive' })).rejects.toThrow(CHECK_COMMAND_COUNT_PROBLEM)
   })
 })

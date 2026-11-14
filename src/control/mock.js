@@ -140,7 +140,8 @@ const TASKS_PROBLEM = 'Write one to twenty tasks, each 1 to 4000 characters.'
 const TASK_SEPARATOR_PROBLEM = 'A task cannot hold a line of only ---.'
 const RUN_KIND_PROBLEM = 'Send a task, a queue or briefs, not more than one.'
 const QUEUE_DIRTY_PROBLEM = 'A queue needs a clean project.'
-const CHECK_COMMAND_PROBLEM = 'Write the check command as one line of 1 to 500 characters.'
+const CHECK_COMMAND_PROBLEM = 'Write the check command as up to 4 commands, one per line, in 500 characters or fewer.'
+const CHECK_COMMAND_COUNT_PROBLEM = 'A check holds at most 4 commands, one per line.'
 const clone = (value) => JSON.parse(JSON.stringify(value))
 const slug = (name) => String(name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
 
@@ -161,7 +162,8 @@ function checkCommandValueProblem(value) {
   const text = value.trim()
   if (text === '') return null
   if (text.length > 500) return CHECK_COMMAND_PROBLEM
-  if (/[\r\n]/.test(text)) return CHECK_COMMAND_PROBLEM
+  const lines = text.split(/\r?\n/).filter((line) => line.trim() !== '')
+  if (lines.length > 4) return CHECK_COMMAND_COUNT_PROBLEM
   return null
 }
 
