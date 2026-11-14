@@ -621,6 +621,7 @@ describe('one orchestrator turn', () => {
 
   it('starts a Codex orchestrator from the app program when codex is not on PATH', async () => {
     const localAppData = makeTempDir('mr-orchestrator-codex-')
+    cleanups.push(() => rmSync(localAppData, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }))
     const program = join(localAppData, 'OpenAI', 'Codex', 'bin', '0123456789abcdef', 'codex.exe')
     mkdirSync(dirname(program), { recursive: true })
     writeFileSync(program, '')
@@ -636,6 +637,7 @@ describe('one orchestrator turn', () => {
 
   it('starts a Codex sub orchestrator from the app program when its bin is codex', async () => {
     const localAppData = makeTempDir('mr-sub-orchestrator-codex-')
+    cleanups.push(() => rmSync(localAppData, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }))
     const program = join(localAppData, 'OpenAI', 'Codex', 'bin', '0123456789abcdef', 'codex.exe')
     mkdirSync(dirname(program), { recursive: true })
     writeFileSync(program, '')
