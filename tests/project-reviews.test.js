@@ -423,6 +423,97 @@ describe('review routes on another project', () => {
     expect(git(project, ['rev-parse', 'HEAD']).trim()).toBe(head)
   }, 40000)
 
+  it('moves a clean detached play worktree to the merged head', async () => {
+    const { project, worktree, briefsDir } = makeProject()
+    const play = join(project, '.worktrees', 'play')
+    const oldHead = git(project, ['rev-parse', 'refs/heads/trunk']).trim()
+    git(project, ['worktree', 'add', '--detach', play, 'trunk'])
+    expect(git(play, ['rev-parse', 'HEAD']).trim()).toBe(oldHead)
+    expect(git(play, ['branch', '--show-current'])).toBe('')
+    const head = git(worktree, ['rev-parse', 'HEAD']).trim()
+    const { url } = await startBridge({ projectRoot: project, briefsDir })
+
+    const res = await mergeRequest(url, 'opencode', { confirmed: true, head, base: 'trunk', baseHead: oldHead })
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body).toEqual({ ok: true, lane: 'opencode', branch: 'feat/x', head, commit: head, play: 'moved' })
+    expect(git(play, ['rev-parse', 'HEAD']).trim()).toBe(head)
+    expect(git(play, ['branch', '--show-current'])).toBe('')
+    expect(git(play, ['status', '--porcelain'])).toBe('')
+  }, 40000)
+
+  it('leaves a dirty play worktree where it is and answers dirty', async () => {
+    const { project, worktree, briefsDir } = makeProject()
+    const play = join(project, '.worktrees', 'play')
+    const oldHead = git(project, ['rev-parse', 'refs/heads/trunk']).trim()
+    git(project, ['worktree', 'add', '--detach', play, 'trunk'])
+    writeFileSync(join(play, 'local.txt'), 'local change\n')
+    const head = git(worktree, ['rev-parse', 'HEAD']).trim()
+    const { url } = await startBridge({ projectRoot: project, briefsDir })
+
+    const res = await mergeRequest(url, 'opencode', { confirmed: true, head, base: 'trunk', baseHead: oldHead })
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body).toEqual({ ok: true, lane: 'opencode', branch: 'feat/x', head, commit: head, play: 'dirty' })
+    expect(git(play, ['rev-parse', 'HEAD']).trim()).toBe(oldHead)
+    expect(git(play, ['status', '--porcelain'])).toContain('local.txt')
+  }, 40000)
+
+  it('leaves a play worktree on a branch and answers not detached', async () => {
+    const { project, worktree, briefsDir } = makeProject()
+    const play = join(project, '.worktrees', 'play')
+    const oldHead = git(project, ['rev-parse', 'refs/heads/trunk']).trim()
+    git(project, ['worktree', 'add', '-b', 'play-branch', play, 'trunk'])
+    expect(git(play, ['branch', '--show-current']).trim()).toBe('play-branch')
+    const head = git(worktree, ['rev-parse', 'HEAD']).trim()
+    const { url } = await startBridge({ projectRoot: project, briefsDir })
+
+    const res = await mergeRequest(url, 'opencode', { confirmed: true, head, base: 'trunk', baseHead: oldHead })
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body).toEqual({ ok: true, lane: 'opencode', branch: 'feat/x', head, commit: head, play: 'not detached' })
+    expect(git(play, ['branch', '--show-current']).trim()).toBe('play-branch')
+    expect(git(play, ['rev-parse', 'HEAD']).trim()).toBe(oldHead)
+  }, 40000)
+
+  it('answers no play field without a play worktree and moves one that appears later', async () => {
+    const { project, worktree, briefsDir } = makeProject()
+    const play = join(project, '.worktrees', 'play')
+    const firstHead = git(worktree, ['rev-parse', 'HEAD']).trim()
+    const oldHead = git(project, ['rev-parse', 'refs/heads/trunk']).trim()
+    const { url } = await startBridge({ projectRoot: project, briefsDir })
+
+    const first = await mergeRequest(url, 'opencode', { confirmed: true, head: firstHead, base: 'trunk', baseHead: oldHead })
+    expect(first.status).toBe(200)
+    const firstBody = await first.json()
+    expect(firstBody).toEqual({ ok: true, lane: 'opencode', branch: 'feat/x', head: firstHead, commit: firstHead })
+    expect(Object.hasOwn(firstBody, 'play')).toBe(false)
+
+    writeFileSync(join(worktree, 'second.js'), 'export const second = 2\n')
+    git(worktree, ['add', 'second.js'])
+    git(worktree, ['commit', '-m', 'second lane work'])
+    const secondHead = git(worktree, ['rev-parse', 'HEAD']).trim()
+    git(project, ['worktree', 'add', '--detach', play, 'trunk'])
+
+    const second = await mergeRequest(url, 'opencode', {
+      confirmed: true,
+      head: secondHead,
+      base: 'trunk',
+      baseHead: firstHead,
+    })
+    expect(second.status).toBe(200)
+    const secondBody = await second.json()
+    expect(secondBody).toEqual({
+      ok: true,
+      lane: 'opencode',
+      branch: 'feat/x',
+      head: secondHead,
+      commit: secondHead,
+      play: 'moved',
+    })
+    expect(git(play, ['rev-parse', 'HEAD']).trim()).toBe(secondHead)
+  }, 40000)
+
   it('refuses a merge when the project branch moved on and says to rebase', async () => {
     const { project, worktree, briefsDir } = makeProject()
     writeFileSync(join(project, 'notes.txt'), 'changed on the project\n')

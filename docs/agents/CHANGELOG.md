@@ -1,6 +1,10 @@
 # Changelog
 
 ## Unreleased
+- P309: after a Reviews merge, a clean detached .worktrees/play moves to the merged commit with hooks still off, and Reviews says whether it moved.
+- P309: a successful Reviews merge moves a clean detached `.worktrees/play` worktree to the merged commit with hooks off and answers play moved, dirty, not detached or failed.
+- P309: Reviews shows what happened to the play worktree under the merged line.
+- P309: LIVE.md and ROOM.md say what a Reviews merge does to the play worktree.
 - P307: the Dispatch check box is a text area of two to four rows, one command per line, and the confirm card names each command in order.
 - P307: the Dispatch check box is a text area of two to four rows, one command per line, with a hint that says so.
 - P307: projectCheckLine names multiple check lines in order as Check: A, then B. and keeps today's wording for one line or none.

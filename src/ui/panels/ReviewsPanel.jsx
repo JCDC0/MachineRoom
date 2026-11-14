@@ -20,12 +20,27 @@ function checksColor(checks) {
   return 'var(--yellow)'
 }
 
+export function playNotice(play, commit, oldHead) {
+  const short = typeof commit === 'string' ? commit.slice(0, 7) : ''
+  const oldShort = typeof oldHead === 'string' ? oldHead.slice(0, 7) : ''
+  if (play === 'moved') return `The play worktree moved to ${short}.`
+  if (play === 'dirty') {
+    return oldShort
+      ? `The play worktree has changes, so it stayed on ${oldShort}.`
+      : 'The play worktree has changes, so it stayed.'
+  }
+  if (play === 'not detached') return 'The play worktree is on a branch, so it stayed.'
+  if (play === 'failed') return `The play worktree could not move to ${short}.`
+  return ''
+}
+
 export function MergeConfirmCard({
   target,
   message,
   messageValid,
   merging,
   mergedBanner,
+  playLine,
   mergeError,
   conflictFiles,
   onMessageChange,
@@ -85,7 +100,8 @@ export function MergeConfirmCard({
       </div>
       {mergedBanner && !mergeError && (
         <div className="review-merged-banner mono" role="status">
-          {mergedBanner}
+          <div>{mergedBanner}</div>
+          {playLine && <div className="review-play-line">{playLine}</div>}
         </div>
       )}
       {mergeError && (
@@ -399,7 +415,8 @@ export default function ReviewsPanel({
       if (!mountedRef.current) return
       const commitShort = typeof result?.commit === 'string' ? result.commit.slice(0, 7) : ''
       const text = `Merged as ${commitShort}.`
-      setMergeSuccessByLane((prev) => ({ ...prev, [target.lane]: text }))
+      const playLine = playNotice(result?.play, result?.commit, target.baseHead)
+      setMergeSuccessByLane((prev) => ({ ...prev, [target.lane]: { text, playLine } }))
       setRefusedByLane((prev) => {
         if (!Object.hasOwn(prev, target.lane)) return prev
         const next = { ...prev }
@@ -463,7 +480,9 @@ export default function ReviewsPanel({
             const isSelected = selectedLane === row.lane
             const isConfirmOpen = confirmTarget?.lane === row.lane
             const isPrepareOpen = prepareTarget?.lane === row.lane
-            const mergedBanner = mergeSuccessByLane[row.lane]
+            const merged = mergeSuccessByLane[row.lane]
+            const mergedBanner = merged?.text ?? ''
+            const playLine = merged?.playLine ?? ''
             const refusedHead = refusedByLane[row.lane]
             const showPrepare =
               !row.error &&
@@ -562,7 +581,8 @@ export default function ReviewsPanel({
 
                 {mergedBanner && !isConfirmOpen && (
                   <div className="review-merged-banner mono" role="status">
-                    {mergedBanner}
+                    <div>{mergedBanner}</div>
+                    {playLine && <div className="review-play-line">{playLine}</div>}
                   </div>
                 )}
 
@@ -582,6 +602,7 @@ export default function ReviewsPanel({
                     messageValid={isMessageValid}
                     merging={merging}
                     mergedBanner={mergedBanner}
+                    playLine={playLine}
                     mergeError={mergeError}
                     conflictFiles={mergeConflictFiles}
                     onMessageChange={setMergeMessage}

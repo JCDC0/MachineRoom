@@ -293,6 +293,62 @@ describe('ReviewsPanel and ControlDrawer', () => {
     expect(html).toContain('Confirm merge for hermes')
   })
 
+  it('shows what happened to the play worktree under the merged line', async () => {
+    const laneHead = '1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d'
+    const baseHead = '9f8e7d6c5b4a39281706f5e4d3c2b1a09f8e7d6c'
+    const review = {
+      lane: 'opencode',
+      branch: 'feat/x',
+      head: laneHead,
+      base: 'trunk',
+      baseHead,
+      strategy: 'fast-forward',
+      ahead: 1,
+      dirty: false,
+      files: 1,
+      added: 1,
+      deleted: 0,
+      checks: 'passed',
+    }
+    let playResult = 'moved'
+    const client = {
+      reviews: async () => [review],
+      mergeReview: async (lane) => ({ ok: true, lane, head: laneHead, commit: laneHead, play: playResult }),
+      subscribe: () => () => {},
+    }
+
+    await withDom(async ({ container, root }) => {
+      await act(async () => {
+        root.render(createElement(ReviewsPanel, { client, initialReviews: [review] }))
+      })
+      const merge = async () => {
+        await click(root, container.querySelector('.review-merge-btn'))
+        await click(root, buttonWithText(container.querySelector('.review-confirm-card'), 'Merge'))
+        await settle()
+      }
+
+      await merge()
+      expect(container.querySelector('.review-merged-banner')?.textContent).toContain(
+        `Merged as ${laneHead.slice(0, 7)}.`
+      )
+      expect(container.querySelector('.review-play-line')?.textContent).toBe(
+        `The play worktree moved to ${laneHead.slice(0, 7)}.`
+      )
+
+      playResult = 'dirty'
+      await merge()
+      expect(container.querySelector('.review-play-line')?.textContent).toBe(
+        `The play worktree has changes, so it stayed on ${baseHead.slice(0, 7)}.`
+      )
+
+      playResult = 'not detached'
+      await merge()
+      expect(container.querySelector('.review-play-line')?.textContent).toBe(
+        'The play worktree is on a branch, so it stayed.'
+      )
+    })
+  })
+
   it('marks a direction control in a patch line', async () => {
     const client = createMockClient({ latencyMs: 0 })
     const initialReviews = await client.reviews()
