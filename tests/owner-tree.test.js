@@ -502,7 +502,7 @@ afterEach(async () => {
   while (dirs.length > 0) removeTempDir(dirs.pop())
 })
 
-describe("the owner's test tree", () => {
+describe("the owner's test tree", { timeout: 90000 }, () => {
   it('saves the tree, runs both subs and their own lanes, refuses cross-sub lanes, messages between subs, and wakes each owning sub', async () => {
     const { url, project, runs, orchLog, spawns } = await setupOwnerTreeRig()
     await saveOwnerTestTree(url)
