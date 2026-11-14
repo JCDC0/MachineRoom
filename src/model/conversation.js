@@ -35,6 +35,15 @@ function jsonLine(json) {
   return clean(JSON.stringify(maskData(json))).trim()
 }
 
+function parsedLine(line) {
+  try {
+    return { value: JSON.parse(line) }
+  } catch {
+    const value = parseJson(line)
+    return value === null ? null : { value }
+  }
+}
+
 function timeOf(json) {
   const stamp = json?.timestamp
   return typeof stamp === 'number' && Number.isFinite(stamp) ? new Date(stamp).toISOString() : null
@@ -129,8 +138,8 @@ export function conversationFromLog(harness, text, prompt = '') {
     for (const line of String(text ?? '').split(/\r?\n/)) {
       const trimmed = line.trim()
       if (trimmed === '') continue
-      const json = parseJson(trimmed)
-      const shown = json && typeof json === 'object' ? jsonLine(json) : clean(trimmed).trim()
+      const parsed = parsedLine(trimmed)
+      const shown = parsed === null ? clean(trimmed).trim() : jsonLine(parsed.value)
       if (shown !== '') entries.push(entry('line', shown, null, null))
     }
     return entries.slice(-CONVERSATION_ENTRY_LIMIT)
@@ -149,16 +158,17 @@ export function conversationFromLog(harness, text, prompt = '') {
 
   for (const line of String(text ?? '').split(/\r?\n/)) {
     if (!line.trim()) continue
-    const json = parseJson(line)
-    if (!json || typeof json !== 'object') {
+    const parsed = parsedLine(line)
+    if (parsed === null) {
       flushAgy()
       const shown = clean(line.trim()).trim()
       if (shown !== '') entries.push(entry('line', shown, null, null))
       continue
     }
+    const json = parsed.value
 
     const at = timeOf(json)
-    const step = json.event === 'step_update' ? json.step_update : null
+    const step = json?.event === 'step_update' ? json.step_update : null
     const delta = typeof step?.text_delta === 'string' ? step.text_delta : ''
     if (delta !== '') {
       const key = `${step.conversation_id ?? ''}:${step.step_index ?? ''}`

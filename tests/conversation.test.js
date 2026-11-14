@@ -122,6 +122,17 @@ describe('a conversation read from a lane log', () => {
     expect(entries[0].text).not.toContain('NAME')
   })
 
+  it('masks a JSON string line for a harness it reads and one it does not', () => {
+    const text = lines(JSON.stringify('C:\\Users\\NAME\\project'))
+    for (const harness of ['opencode', 'native']) {
+      const entries = conversationFromLog(harness, text)
+      expect(entries).toHaveLength(1)
+      expect(entries[0]).toMatchObject({ role: 'line' })
+      expect(entries[0].text).toContain('%USERPROFILE%')
+      expect(entries[0].text).not.toContain('NAME')
+    }
+  })
+
   it('masks a named secret field in an unknown OpenCode event', () => {
     const value = 'opaque-value-12345'
     const entries = conversationFromLog('opencode', lines({ type: 'session.updated', env: { OPENAI_API_KEY: value } }))
