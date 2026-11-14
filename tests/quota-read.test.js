@@ -1,11 +1,24 @@
 import { spawnSync } from 'node:child_process'
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { harnessByKey } from '../src/harnesses/index.js'
 import { gitPath } from '../server/programPath.js'
 import { quotaForRun, readCodexQuota, startLane } from '../scripts/run-lane.mjs'
 import { makeTempDir } from './helpers/tempRoot.js'
+
+const readFault = vi.hoisted(() => ({ fail: false }))
+
+vi.mock('node:fs', async (importOriginal) => {
+  const actual = await importOriginal()
+  return {
+    ...actual,
+    readSync: (...args) => {
+      if (readFault.fail) throw new Error('The rollout read failed.')
+      return actual.readSync(...args)
+    },
+  }
+})
 
 const RESET = Date.UTC(2026, 10, 14) / 1000
 
@@ -167,5 +180,18 @@ describe('the codex rollout read', () => {
     const folder = tempDir('machine-room-rollout-missing-')
     const log = `${JSON.stringify({ type: 'thread.started', thread_id: 'thread-1' })}\n`
     expect(quotaForRun({ harness: 'codex', log, env: { CODEX_HOME: folder }, startedAt: Date.now(), now: Date.now() })).toBeNull()
+  })
+
+  it('gives no quota when the rollout file links outside the sessions folder', () => {
+    const folder = tempDir('machine-room-rollout-link-')
+    const now = new Date(2026, 10, 14, 12, 0, 0)
+    const day = join(folder, 'sessions', '2026', '11', '14')
+    mkdirSync(day, { recursive: true })
+    const outside = join(folder, 'outside-rollout.jsonl')
+    writeFileSync(outside, `${tokenLine(22, RESET)}\n`)
+    symlinkSync(outside, join(day, 'rollout-2026-11-14T12-00-00-thread-7.jsonl'), 'file')
+    const log = `${JSON.stringify({ type: 'thread.started', thread_id: 'thread-7' })}\n`
+    expect(readCodexQuota(outside)).not.toBeNull()
+    expect(quotaForRun({ harness: 'codex', log, env: { CODEX_HOME: folder }, startedAt: now.getTime(), now: now.getTime() })).toBeNull()
   })
 })

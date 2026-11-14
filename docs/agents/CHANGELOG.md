@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- P286: a Codex rollout outside the sessions folder or a symbolic link gives no quota.
 - P286: a queue keeps the failed record when its backup is refused, and reports the failed task without an exception.
 - P289: CODE.md gains a line for each file under src, server, scripts, bin and tests that it did not name.
 - P280: TRIAL-ULOLTRIS.md gives the command, the check command, worktree mode, three candidate tasks from ulolTris's own next steps and what would count as a room failure.
