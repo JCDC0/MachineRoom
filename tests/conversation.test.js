@@ -140,6 +140,42 @@ describe('a conversation read from a lane log', () => {
     expect(entries[0].text).not.toContain(value)
   })
 
+  it('keeps a number, a false and a null in a field named like a secret', () => {
+    const entries = conversationFromLog(
+      'opencode',
+      lines({
+        type: 'session.updated',
+        usage: { input_tokens: 120 },
+        secret_enabled: false,
+        token_expiry: null,
+      })
+    )
+    expect(entries).toHaveLength(1)
+    expect(entries[0]).toMatchObject({ role: 'line' })
+    expect(entries[0].text).toContain('"input_tokens":120')
+    expect(entries[0].text).toContain('"secret_enabled":false')
+    expect(entries[0].text).toContain('"token_expiry":null')
+    expect(entries[0].text).not.toContain('[key]')
+  })
+
+  it('masks a secret field whose value is text', () => {
+    const value = 'sk-abcdef123456'
+    const entries = conversationFromLog('opencode', lines({ type: 'session.updated', api_key: value }))
+    expect(entries).toHaveLength(1)
+    expect(entries[0].text).toContain('"api_key":"[key]"')
+    expect(entries[0].text).not.toContain(value)
+  })
+
+  it('masks a nested token or password field whose value is text', () => {
+    const entries = conversationFromLog(
+      'opencode',
+      lines({ type: 'session.updated', auth: { token: 'x' }, list: [{ password: 'y' }] })
+    )
+    expect(entries).toHaveLength(1)
+    expect(entries[0].text).toContain('"auth":{"token":"[key]"}')
+    expect(entries[0].text).toContain('"list":[{"password":"[key]"}]')
+  })
+
   it('keeps the last 2000 entries and cuts each text to 4000 characters', () => {
     const many = Array.from({ length: CONVERSATION_ENTRY_LIMIT + 100 }, (_, index) => `line ${index + 1}`).join('\n')
     const kept = conversationFromLog('hermes', many)

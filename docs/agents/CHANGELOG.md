@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- P279: a conversation masks only a text value in a key, token, secret, password or authorization field, so a count such as `input_tokens` keeps its number.
 - P273: a backup lane passes the brief worktree check, a retry keeps the backup prompt, a project failover returns the backup's record and branch, and a spawn error counts as a failed start.
 - P272: a raw JSON line in a lane conversation is parsed and masked field by field, so escaped home paths and named secrets never reach the route.
 - P250: a lane's tree row and its Inspector open its conversation in the lower half, with a run picker, folded tool calls, live reads and Stop; the route reads live runs too.
