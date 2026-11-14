@@ -28,6 +28,7 @@ import {
 } from '../server/agents-config.js'
 import { createBridge } from '../server/index.js'
 import { activeLanesFileFor, projectLanesFileFor, readActiveLanesChoice, readHiddenLanes, writeActiveLanes } from '../server/active-lanes.js'
+import { modelAllowed } from '../server/harness-models.js'
 import { gitPath } from '../server/programPath.js'
 import { createClient } from '../src/control/client.js'
 import { createMockClient } from '../src/control/mock.js'
@@ -340,7 +341,8 @@ describe('GET /api/harnesses', () => {
     const codex = body.find((item) => item.key === 'codex')
     expect(codex.name).toBe('Codex')
     expect(codex.efforts).toEqual(['low', 'medium', 'high', 'xhigh'])
-    expect(codex.models.map((item) => item.id)).toEqual(['gpt-6-luna', 'gpt-6.1-sol', 'gpt-6-astra'])
+    expect(codex.models.map((item) => item.id)).toEqual(['gpt-6-luna', 'gpt-6.1-sol', 'gpt-6.1-terra', 'gpt-6-astra'])
+    expect(modelAllowed('codex', 'gpt-6.1-terra')).toBe(true)
 
     const copilot = body.find((item) => item.key === 'copilot')
     expect(copilot.name).toBe('GitHub Copilot')

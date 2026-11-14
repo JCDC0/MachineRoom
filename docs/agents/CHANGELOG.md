@@ -1,8 +1,10 @@
 # Changelog
 
 ## Unreleased
+- The room lists GPT-6.1 Terra for the codex harness, so a lane or orchestrator can pick it (P329).
 - A stop keeps the lane lock when a non-empty process list misses a run pid that is still alive (P330).
 - A stop keeps the lock when a non-empty process list misses a live run holder, and says so (P330).
+- The harness model list names GPT-6.1 Terra for Codex with Sol's tier, so the room accepts the lane's model (P329).
 - Review 35 confirms every review 34 fix has a test that fails with it undone, and finds four more: R35-1 to R35-4 (P324).
 - The queue dispatch test waits on the bridge's run end notice instead of a ten second poll (P323).
 - After a failover a queue expects the task's start branch with -on-BACKUP and fails a task that ends on another branch (P321).

@@ -31,6 +31,7 @@ export const MODELS = [
   { id: 'gpt-oss-120b-medium', label: 'GPT-OSS 120B (Medium)', harness: 'agy', tier: 'medium', free: false },
   { id: 'gpt-6-luna', label: 'GPT-6 Luna', harness: 'codex', tier: 'small', free: false },
   { id: 'gpt-6.1-sol', label: 'GPT-6.1 Sol', harness: 'codex', tier: 'medium', free: false },
+  { id: 'gpt-6.1-terra', label: 'GPT-6.1 Terra', harness: 'codex', tier: 'medium', free: false },
   { id: 'gpt-6-astra', label: 'GPT-6 Astra', harness: 'codex', tier: 'large', free: false },
   { id: 'claude-haiku-4.5', label: 'Claude Haiku 4.5', harness: 'copilot', tier: 'small', free: false },
   { id: 'claude-sonnet-4.5', label: 'Claude Sonnet 4.5', harness: 'copilot', tier: 'medium', free: false },
