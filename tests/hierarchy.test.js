@@ -406,7 +406,9 @@ describe('subPrompt', () => {
   it('says there are no siblings when the ladder holds no other sub', () => {
     expect(text).toContain('Your siblings: none.')
     expect(subPrompt(ladder.subs[0], 'orchestrator', ladder)).toContain('Your siblings: none.')
-    expect(text).toContain('To message another sub, ask your parent to pass it on.')
+    expect(text).toContain(
+      'To message any orchestrator, POST {{BRIDGE}}/api/orchestrator/messages with { "to": "ID", "text": "..." } and the X-MachineRoom-Orchestrator header.',
+    )
     expect(text).toContain('Your lanes do not talk. They report when their run ends.')
   })
 

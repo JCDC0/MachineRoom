@@ -58,12 +58,12 @@ Rules, all checked by `src/model/hierarchy.js`:
 | Who | Can send | To |
 | --- | --- | --- |
 | Owner | a chat message, a ladder change, a run start | the main orchestrator or any sub, from the chat tabs; any lane |
-| Main | a chat reply, a goal message, a ladder change, a run start | the owner; any sub; any lane |
-| Sub | its turn's answer, as `sub:<id>` | its parent only |
+| Main | a chat reply, a message, a ladder change, a run start | the owner; any sub; any lane |
+| Sub | a message, a run start in its sector, and its turn's answer as `sub:<id>` | any other orchestrator (`orchestrator` or another sub); its own lanes; its parent for the turn answer |
 | Lane | one report when its run ends | the orchestrator named by `startedBy`, else the main |
 | Harness subagent | its result as a tool result | the harness turn that started it |
 
-A sub cannot message another sub. It asks its parent to pass the message on, and the main relays it in its own name. A sub's answer is its only message to its parent.
+Any orchestrator can message any other orchestrator (never itself, at most 6 messages per sender in 10 minutes), and a sub's turn answer still goes to its parent as `sub:<id>`. Lanes still send one report when their run ends.
 
 ## How it looks
 

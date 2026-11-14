@@ -86,9 +86,9 @@ curl -s -X POST -H "Content-Type: application/json" -H "X-MachineRoom-Orchestrat
 ## Talking to your subs
 
 - The owner can message you and any sub from the chat, one tab per orchestrator.
-- You can message a sub with a confirmed message, and its answer arrives in your chat as `sub:<id>`.
-- A sub's answer goes to its parent only. Subs cannot message each other and cannot message you mid-turn.
-- The main orchestrator relays between subs. When one sub's answer asks you to tell another sub something, send it to that sub as your own message.
+- To message any orchestrator, `POST {{BRIDGE}}/api/orchestrator/messages` with `{ "to": "ID", "text": "..." }` and the `X-MachineRoom-Orchestrator` header.
+- Any orchestrator may message any other orchestrator (`orchestrator` or a sub id), never itself, at most 6 times in 10 minutes.
+- A sub's turn answer still goes to its parent as `sub:<id>`.
 - A lane does not talk. It reports when its run ends, as a room message in the chat of the orchestrator named by `startedBy`.
 - A harness subagent inside a turn answers only that turn, as a tool result.
 

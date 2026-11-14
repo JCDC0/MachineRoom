@@ -1619,7 +1619,7 @@ describe('the orchestrator registry', () => {
     expect(pageCall.body).toEqual({ ok: true })
   })
 
-  it('sends one order frame for a main message to a sub and one report frame for its reply', async () => {
+  it('records a main message to a sub in the chat and sends one report frame for its reply', async () => {
     const files = makeBase({ ladder: { subs: [FRONTEND] } })
     writeFileSync(
       chatFileFor(files.projectRoot, files.runs, 'frontend'),
@@ -1640,22 +1640,173 @@ describe('the orchestrator registry', () => {
       'the sub report'
     )
 
+    const chatMessages = (await getJson(`${rig.url}/api/orchestrator`)).body.messages
+    expect(
+      chatMessages.some(
+        (message) =>
+          message.from === 'agent' &&
+          message.agent?.from === 'orchestrator' &&
+          message.agent?.to === 'sub-frontend' &&
+          message.agent?.kind === 'message' &&
+          message.agent?.text === 'Do the goal'
+      )
+    ).toBe(true)
+
     const frames = (
       await readFrames(
         rig.url,
-        (list) => list.some((frame) => frame.payload?.kind === 'order') && list.some((frame) => frame.payload?.kind === 'report')
+        (list) => list.some((frame) => frame.payload?.kind === 'report')
       )
     ).filter((frame) => frame.type === 'orchestrator.message')
-    const orders = frames.filter((frame) => frame.payload.kind === 'order')
     const reports = frames.filter((frame) => frame.payload.kind === 'report')
-    expect(orders).toHaveLength(1)
     expect(reports).toHaveLength(1)
-    expect(orders[0].payload).toEqual({ from: 'orchestrator', to: 'sub-frontend', kind: 'order', ts: expect.any(String) })
     expect(reports[0].payload).toEqual({ from: 'sub-frontend', to: 'orchestrator', kind: 'report', ts: expect.any(String) })
     for (const frame of frames) {
       expect(frame.companyId).toBe('company-orchestrator')
       expect(Number.isFinite(Date.parse(frame.createdAt))).toBe(true)
     }
+  })
+
+  it('lets a sub token send a message to another sub and to the main orchestrator', async () => {
+    const BACKEND = {
+      id: 'backend',
+      name: 'Backend',
+      harness: 'claude',
+      model: 'sonnet',
+      lanes: ['opencode2'],
+      scope: ['server/**'],
+      restricted: true,
+      setBy: 'owner',
+    }
+    const files = makeBase({ ladder: { subs: [FRONTEND, BACKEND] } })
+    writeFileSync(
+      chatFileFor(files.projectRoot, files.runs, 'orchestrator'),
+      `${JSON.stringify({ project: files.projectRoot, sessionId: 'main-session', state: 'idle', messages: [], pending: [], ladder: { subs: [FRONTEND, BACKEND] } })}\n`
+    )
+    writeFileSync(
+      chatFileFor(files.projectRoot, files.runs, 'backend'),
+      `${JSON.stringify({ project: files.projectRoot, sessionId: 'backend-session', state: 'idle', messages: [], pending: [] })}\n`
+    )
+    const rig = await makeBridge(files)
+    const frontendToken = rig.bridge.orchestrators().token('frontend')
+
+    const toSibling = await tokenPost(
+      `${rig.url}/api/orchestrator/messages`,
+      { to: 'backend', text: 'Need the new endpoint shape.' },
+      frontendToken
+    )
+    expect(toSibling.status).toBe(202)
+    await waitFor(
+      () => rig.chat('backend')?.messages.some((m) => m.from === 'sub:frontend' && m.text === 'Need the new endpoint shape.'),
+      15000,
+      'backend to receive sub:frontend message'
+    )
+    await waitFor(
+      () => rig.chat('backend')?.messages.some((m) => m.from === 'orchestrator'),
+      15000,
+      'backend turn to complete'
+    )
+
+    const toMain = await tokenPost(
+      `${rig.url}/api/orchestrator/messages`,
+      { to: 'orchestrator', text: 'Waiting on backend.' },
+      frontendToken
+    )
+    expect(toMain.status).toBe(202)
+    await waitFor(
+      () => rig.chat('orchestrator')?.messages.some((m) => m.from === 'sub:frontend' && m.text === 'Waiting on backend.'),
+      15000,
+      'main to receive sub:frontend message'
+    )
+
+    const teamRecorded = rig.chat('orchestrator').messages.filter((m) => m.from === 'agent' && m.agent?.kind === 'message')
+    expect(teamRecorded).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          agent: expect.objectContaining({
+            from: 'sub-frontend',
+            to: 'sub-backend',
+            kind: 'message',
+            text: 'Need the new endpoint shape.',
+          }),
+        }),
+        expect.objectContaining({
+          agent: expect.objectContaining({
+            from: 'sub-frontend',
+            to: 'orchestrator',
+            kind: 'message',
+            text: 'Waiting on backend.',
+          }),
+        }),
+      ])
+    )
+  })
+
+  it('refuses a sub messaging itself with 400 and refuses a message with no token and no origin', async () => {
+    const rig = await makeBridge(makeBase({ ladder: { subs: [FRONTEND] } }))
+    const frontendToken = rig.bridge.orchestrators().token('frontend')
+
+    const selfByTo = await tokenPost(
+      `${rig.url}/api/orchestrator/messages`,
+      { to: 'frontend', text: 'Talk to myself' },
+      frontendToken
+    )
+    expect(selfByTo.status).toBe(400)
+
+    const selfById = await tokenPost(
+      `${rig.url}/api/orchestrator/messages`,
+      { id: 'frontend', text: 'Talk to myself', from: 'orchestrator', confirmed: true },
+      frontendToken
+    )
+    expect(selfById.status).toBe(400)
+
+    const noTokenNoOrigin = await postJson(`${rig.url}/api/orchestrator/messages`, {
+      to: 'frontend',
+      text: 'No token here',
+    })
+    expect(noTokenNoOrigin.status).toBe(403)
+    expect(noTokenNoOrigin.body).toEqual({ error: NO_TOKEN_PROBLEM })
+  })
+
+  it('allows at most 6 messages from one orchestrator in 10 minutes and answers 429 on the seventh', async () => {
+    const BACKEND = {
+      id: 'backend',
+      name: 'Backend',
+      harness: 'claude',
+      model: 'sonnet',
+      lanes: ['opencode2'],
+      scope: ['server/**'],
+      restricted: true,
+      setBy: 'owner',
+    }
+    let clock = 1_000_000
+    const files = makeBase({ ladder: { subs: [FRONTEND, BACKEND] } })
+    const rig = makeRig(files, { now: () => clock })
+    const frontendToken = rig.registry.token('frontend')
+    const backendToken = rig.registry.token('backend')
+
+    for (let i = 1; i <= 6; i += 1) {
+      clock += 1000
+      const res = await rig.registry.message({ to: 'backend', text: `Ping ${i}` }, false, frontendToken)
+      expect(res.status).toBe(202)
+    }
+
+    clock += 1000
+    const seventh = await rig.registry.message({ to: 'backend', text: 'Ping 7' }, false, frontendToken)
+    expect(seventh.status).toBe(429)
+    expect(seventh.body).toEqual({
+      error: 'Too many messages from this orchestrator. Wait, or ask the owner.',
+    })
+
+    const otherSender = await rig.registry.message({ to: 'frontend', text: 'Reply from backend' }, false, backendToken)
+    expect(otherSender.status).toBe(202)
+
+    const ownerMessage = await rig.registry.message({ to: 'backend', text: 'Owner note', confirmed: true }, true)
+    expect(ownerMessage.status).toBe(202)
+
+    clock += 10 * 60 * 1000 + 1
+    const afterWindow = await rig.registry.message({ to: 'backend', text: 'After ten minutes' }, false, frontendToken)
+    expect(afterWindow.status).toBe(202)
   })
 })
 
@@ -1828,8 +1979,7 @@ describe('starting lanes from a sub orchestrator', () => {
       from: 'orchestrator',
       confirmed: true,
     }, subToken)
-    expect(subMessage.status).toBe(403)
-    expect(subMessage.body).toEqual({ error: MAIN_MESSAGE_PROBLEM })
+    expect(subMessage.status).toBe(400)
 
     const noTokenMessage = await postJson(`${rig.url}/api/orchestrator/messages`, {
       id: 'frontend',

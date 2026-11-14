@@ -297,7 +297,7 @@ export function subPrompt(sub, parent, ladder, agentDepth = 2) {
     `Your lanes: ${laneLine}.`,
     'Your lanes do not talk. They report when their run ends.',
     `Your siblings: ${siblingLine}.`,
-    'To message another sub, ask your parent to pass it on.',
+    'To message any orchestrator, POST {{BRIDGE}}/api/orchestrator/messages with { "to": "ID", "text": "..." } and the X-MachineRoom-Orchestrator header.',
     `Your scope: ${scopeLine}.`,
     ruleLine,
     `Your sector branch is \`machineroom/sector-${id}\`.`,
