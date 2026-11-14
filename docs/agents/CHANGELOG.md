@@ -1,6 +1,9 @@
 # Changelog
 
 ## Unreleased
+- P314: a failed-over project run whose backup is refused or throws after making its branch keeps the branch and commits captured before the backup started, and its deferred writer keeps them.
+- P314: a queue picks the commit author for each task from the run that succeeded for it, so a task that failed over is signed with the backup lane's harness and model.
+- P314: after each task a queue checks the worktree is still on the queue branch and fails the task and stops when the lane left it.
 - Review 34 lists nine findings in the batch since review 33 and seventeen doc sentences the code contradicts (P312).
 - The doctor and every orchestrator find the Codex app's codex.exe when codex is not on PATH, as lanes already did (P311).
 - P311: `codexProgramFor` answers the Codex app's newest program for a bare `codex` bin when codex is not on PATH, and run-lane uses it.
