@@ -7,6 +7,7 @@ import {
   runLaneFor,
 } from './briefs.js'
 import { subscribeToNotices } from './notices.js'
+import { useHarnessModels } from '../ModelRefresh.jsx'
 import { laneNeedsNetwork } from '../../model/online.js'
 import { TIERS } from '../../policy/route.js'
 import { PROJECT_CONFIRM_LIMIT, PROJECT_QUEUE_TEXT_LIMIT, cancelSplitRun, clearProjectDraft, clearSplitRun, planLaneTasks, projectCheckLine, projectDraftKey, projectFormNotice, projectRunBody, projectRunConfirm, projectRunLabel, projectRunLanes, projectSplitLabel, projectTaskProblem, projectWorktreeName, queueRecoveryAvailable, queueRecoveryMessage, queueRecoveryPlan, readProjectDraft, recordLine, resultWord, splitRunProgress, splitRunSnapshot, splitTasks, startSplitRun, subscribeSplitRun, timeSinceStart, writeProjectDraft } from './runs.js'
@@ -73,6 +74,8 @@ export default function DispatchPanel({
   const [lanesMode, setLanesMode] = useState(false)
   const [lanesKnown, setLanesKnown] = useState(false)
   const [projectLane, setProjectLane] = useState(() => (typeof client?.routeLane === 'function' ? 'auto' : ''))
+  const [projectModel, setProjectModel] = useState('')
+  const [laneBackups, setLaneBackups] = useState({})
   const [autoRoute, setAutoRoute] = useState({ text: '', answer: null, error: null })
   const [projectTask, setProjectTask] = useState('')
   const [projectCheckCommand, setProjectCheckCommand] = useState('')
@@ -123,6 +126,27 @@ export default function DispatchPanel({
   const routeError = hasRouteLane && projectLane === 'auto' && autoRoute.text === routeText ? autoRoute.error : null
   const effectiveLane = projectLane === 'auto' ? routeAnswer?.lane ?? '' : projectLane
   const projectLaneRunning = projectLanes.some((lane) => lane.key === effectiveLane && lane.running)
+  const laneAgentFor = (key) => agents.find((agent) => agent && agent.key === key) ?? null
+  const projectLaneHarness = laneAgentFor(effectiveLane)?.harness ?? ''
+  const projectModels = useHarnessModels({
+    client,
+    harness: projectLaneHarness,
+    open: Boolean(effectiveLane),
+    value: laneAgentFor(effectiveLane)?.model ?? '',
+  })
+
+  useEffect(() => {
+    if (typeof client?.laneBackups !== 'function') return undefined
+    let active = true
+    Promise.resolve(client.laneBackups())
+      .then((answer) => {
+        if (active && answer && typeof answer === 'object') setLaneBackups(answer)
+      })
+      .catch(() => {})
+    return () => {
+      active = false
+    }
+  }, [client])
 
   async function loadData() {
     if (!client || Array.isArray(initialAgents)) return
@@ -642,6 +666,7 @@ export default function DispatchPanel({
         allowDirty: projectAllowDirty,
         worktree: projectOwnWorktree,
         checkCommand: projectCheckCommand,
+        model: projectModel,
       })
       await client.startRun(lane, run)
       clearProjectDraft(projectName)
@@ -651,6 +676,7 @@ export default function DispatchPanel({
       setProjectNeedsPreview(false)
       setProjectTask('')
       setProjectAllowDirty(false)
+      setProjectModel('')
       loadRuns()
     } catch (err) {
       const message = err.message || 'Could not start run.'
@@ -707,6 +733,8 @@ export default function DispatchPanel({
     project: projectName,
     task: projectTask,
     tasks: projectTasks,
+    model: projectModel,
+    backup: laneBackups[projectConfirmLane],
   })
   const ownWorktreeName = projectOwnWorktree ? projectWorktreeName(projectName, projectConfirmLane) : ''
   const projectProblem = projectTaskProblem(projectTasks)
@@ -745,6 +773,7 @@ export default function DispatchPanel({
               disabled={projectSplitRun}
               onChange={(event) => {
                 setProjectLane(event.target.value)
+                setProjectModel('')
                 rememberProjectDraft({ lane: event.target.value })
                 setProjectDiscardConfirm(false)
                 dismissProjectConfirm()
@@ -777,6 +806,27 @@ export default function DispatchPanel({
               </div>
             )}
           </div>
+
+          {!projectSplitRun && effectiveLane ? (
+            <div className="panel-field">
+              <label htmlFor="project-run-model">Model for this run</label>
+              <select
+                id="project-run-model"
+                value={projectModel}
+                onChange={(event) => {
+                  setProjectModel(event.target.value)
+                  dismissProjectConfirm()
+                }}
+              >
+                <option value="">The lane's model</option>
+                {projectModels.choices.map((row) => (
+                  <option key={row.id} value={row.id}>
+                    {row.label && row.label !== row.id ? `${row.label} (${row.id})` : row.id}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : null}
 
           <div className="panel-field">
             <div className="panel-field-head">
@@ -1045,6 +1095,7 @@ export default function DispatchPanel({
             <div className="brief-confirm-card" role="region" aria-label="Confirm project run">
               <div className="brief-confirm-meta mono">
                 <span className="brief-confirm-lane">Lane: {projectConfirm.lane}</span>
+                <span className="brief-confirm-model">Model: {projectConfirm.model || "The lane's model"}</span>
                 <span className="brief-confirm-project">Project: {projectConfirm.project}</span>
                 {projectQueue ? (
                   <span className="brief-confirm-tasks">Tasks: {projectConfirm.count} in order</span>
@@ -1055,6 +1106,11 @@ export default function DispatchPanel({
               {projectLane === 'auto' && routeAnswer && (
                 <div className="brief-confirm-warning">
                   {`Picked by the routing policy: ${routeAnswer.reason}`}
+                </div>
+              )}
+              {projectConfirm.backup && (
+                <div className="brief-confirm-warning">
+                  {`Backup lane: ${projectConfirm.backup}`}
                 </div>
               )}
               <div className="brief-confirm-warning">

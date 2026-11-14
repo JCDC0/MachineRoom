@@ -18,13 +18,14 @@ import {
   NO_LANES_FORM_LINE,
   PROJECT_CONFIRM_LIMIT,
   projectFormNotice,
+  projectRunBody,
   projectRunConfirm,
   projectRunLanes,
   projectTaskProblem,
 } from '../src/ui/panels/runs.js'
 import { getJson, waitFor } from './helpers/bridge.js'
 import { makeTempDir } from './helpers/tempRoot.js'
-import { settle, withDom } from './helpers/uiDom.js'
+import { buttonWithText, click, settle, type, withDom } from './helpers/uiDom.js'
 
 function postJson(url, body) {
   return getJson(url, { method: 'POST', headers: { 'content-type': 'application/json', origin: new URL(url).origin }, body: JSON.stringify(body) })
@@ -201,6 +202,25 @@ describe('the runs route with a task', () => {
 
     const args = await waitFor(() => readArgs(out), { what: 'the runner arguments' })
     expect(args).toEqual(['opencode', '--project', project, '--task', 'Fix the typo.'])
+    await waitFor(async () => (await getJson(`${url}/api/control/runs`)).body.running.length === 0, { what: 'the run to end' })
+  })
+
+  it('passes a chosen model to the runner as --model and refuses one the lane does not list', async () => {
+    const project = tempDir('mr-project-dispatch-')
+    const runnerDir = tempDir('mr-project-runner-')
+    const out = join(runnerDir, 'args.json')
+    const { url } = await startBridge({ projectRoot: project, runnerPath: writeRunner(runnerDir, out) })
+
+    const refused = await postJson(`${url}/api/control/runs`, { lane: 'opencode', task: 'Fix it.', model: 'nope', confirmed: true })
+    expect(refused.status).toBe(400)
+    expect(refused.body).toEqual({ error: 'The model nope is not available for opencode.' })
+    expect(readArgs(out)).toBeNull()
+
+    const model = 'opencode-go/qwen3.8-flash'
+    const res = await postJson(`${url}/api/control/runs`, { lane: 'opencode', task: 'Fix the typo.', model, confirmed: true })
+    expect(res.status).toBe(202)
+    const args = await waitFor(() => readArgs(out), { what: 'the runner arguments' })
+    expect(args).toEqual(['opencode', '--project', project, '--task', 'Fix the typo.', '--model', model])
     await waitFor(async () => (await getJson(`${url}/api/control/runs`)).body.running.length === 0, { what: 'the run to end' })
   })
 
@@ -751,6 +771,19 @@ describe('the project run helpers', () => {
     expect(projectTaskProblem('x')).toBeNull()
     expect(projectTaskProblem('x'.repeat(4000))).toBeNull()
   })
+
+  it('puts a chosen model in the run body and names it with the backup lane on the confirm card', () => {
+    const model = 'opencode-go/qwen3.8-flash'
+    expect(projectRunBody({ task: 'Fix it.', model })).toMatchObject({ model })
+    expect(projectRunBody({ tasks: ['One.', 'Two.'], model })).toMatchObject({ model })
+    expect(projectRunBody({ task: 'Fix it.', worktree: true, model })).toMatchObject({ model })
+    expect(projectRunBody({ task: 'Fix it.' })).not.toHaveProperty('model')
+    expect(projectRunConfirm({ lane: 'opencode', project: 'Room', task: 'Fix it.', model, backup: 'agy' })).toMatchObject({
+      model,
+      backup: 'agy',
+    })
+    expect(projectRunConfirm({ lane: 'opencode', project: 'Room', task: 'Fix it.' })).not.toHaveProperty('model')
+  })
 })
 
 describe('Dispatch when it cannot show the project form', () => {
@@ -803,6 +836,55 @@ describe('Dispatch when it cannot show the project form', () => {
     expect(lanePicker).not.toBeNull()
     expect(text).not.toContain(NO_LANES_FORM_LINE)
     expect(text).not.toContain(NO_CODE_LANE_FORM_LINE)
+  })
+})
+
+describe('Dispatch with a chosen model and backup lane', () => {
+  it('lists the lane models, puts the choice in the body and names the model and backup on the confirm card', async () => {
+    const agents = [
+      {
+        id: 'agent-opencode',
+        key: 'opencode',
+        name: 'OpenCode',
+        adapterType: 'opencode_local',
+        role: null,
+        harness: 'opencode',
+        model: 'opencode-go/deepseek-v4.1-flash',
+      },
+    ]
+    const calls = []
+    const client = {
+      health: async () => ({ lanes: true }),
+      agents: async () => agents,
+      runs: async () => ({ project: 'MachineRoom', running: [], recent: [] }),
+      laneBackups: async () => ({ opencode: 'agy' }),
+      harnessModels: async () => ({ models: [{ id: 'opencode-go/qwen3.8-flash', label: 'Qwen 3.8 Flash' }] }),
+      startRun: async (...args) => {
+        calls.push(args)
+        return { ok: true }
+      },
+    }
+    await withDom(async ({ container, root }) => {
+      await act(async () => {
+        root.render(createElement(DispatchPanel, { client, initialAgents: agents }))
+      })
+      await settle(20)
+      await type(root, container.querySelector('#project-run-lane'), 'opencode')
+      await settle(20)
+      const picker = container.querySelector('#project-run-model')
+      expect([...picker.querySelectorAll('option')].map((option) => option.textContent)).toEqual([
+        "The lane's model",
+        'opencode-go/deepseek-v4.1-flash',
+        'Qwen 3.8 Flash (opencode-go/qwen3.8-flash)',
+      ])
+      await type(root, picker, 'opencode-go/qwen3.8-flash')
+      await type(root, container.querySelector('#project-run-task'), 'Fix the typo.')
+      await click(root, buttonWithText(container, 'Run'))
+      const card = container.querySelector('[aria-label="Confirm project run"]')
+      expect(card.textContent).toContain('Model: opencode-go/qwen3.8-flash')
+      expect(card.textContent).toContain('Backup lane: agy')
+      expect(calls).toEqual([])
+    })
   })
 })
 

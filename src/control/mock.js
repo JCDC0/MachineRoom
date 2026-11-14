@@ -1784,6 +1784,7 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
         const projectRun = body.briefs === undefined
         const queue = body.tasks !== undefined
         const worktree = projectRun && body.worktree === true
+        const chosenModel = projectRun && typeof body.model === 'string' ? body.model.trim() : ''
         if (queue && (body.task !== undefined || body.briefs !== undefined)) throw new Error(RUN_KIND_PROBLEM)
         const briefs = projectRun ? [] : body.briefs
         let task = ''
@@ -1807,6 +1808,7 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
         }
         if (runsState.running.some((item) => item.lane === lane)) throw new Error('That lane is already running.')
         const entry = { lane, briefs: [...briefs], startedAt: new Date(now()).toISOString(), lastLines: [] }
+        if (chosenModel) entry.model = chosenModel
         if (worktree) entry.worktree = true
         if (queue) {
           entry.queue = true
@@ -1827,7 +1829,7 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
           const record = {
             lane,
             briefs: [...entry.briefs],
-            model: typeof info.cli.model === 'string' && info.cli.model ? info.cli.model : null,
+            model: entry.model || (typeof info.cli.model === 'string' && info.cli.model ? info.cli.model : null),
             reasoning: info.reasoning ? String(info.reasoning) : null,
             startedAt: entry.startedAt,
             minutes: 0,
@@ -1882,7 +1884,7 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
         const record = {
           lane,
           briefs: [...entry.briefs],
-          model: typeof info?.cli?.model === 'string' && info.cli.model ? info.cli.model : null,
+          model: entry.model || (typeof info?.cli?.model === 'string' && info.cli.model ? info.cli.model : null),
           reasoning: info?.reasoning ? String(info.reasoning) : null,
           startedAt: entry.startedAt,
           minutes: 0,
