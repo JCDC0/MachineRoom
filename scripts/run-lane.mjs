@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { spawn, spawnSync } from 'node:child_process'
 import { createHash, randomUUID } from 'node:crypto'
-import { appendFileSync, closeSync, createWriteStream, existsSync, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
+import { appendFileSync, closeSync, constants, createWriteStream, existsSync, fstatSync, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import { finished } from 'node:stream'
@@ -1062,26 +1062,32 @@ function findCodexRollout({ threadId, env, startedAt, now }) {
 }
 
 export function readCodexQuota(file, limit = CODEX_ROLLOUT_TAIL_BYTES) {
-  let stat
+  let before
   try {
-    stat = statSync(file)
+    before = lstatSync(file, { bigint: true })
   } catch {
     return null
   }
-  if (!stat.isFile() || stat.size <= 0) return null
-  const length = Math.min(stat.size, limit)
+  if (before.isSymbolicLink() || !before.isFile() || before.size <= 0n) return null
+  const flags = constants?.O_NOFOLLOW ? (constants.O_RDONLY ?? 0) | constants.O_NOFOLLOW : 'r'
   let fd
   try {
-    fd = openSync(file, 'r')
+    fd = openSync(file, flags)
   } catch {
     return null
   }
   try {
+    const after = fstatSync(fd, { bigint: true })
+    if (!after.isFile() || after.dev !== before.dev || after.ino !== before.ino || after.size <= 0n) return null
+    const cap = Number.isFinite(limit) ? Math.trunc(limit) : limit === Infinity ? Infinity : 0
+    if (cap <= 0) return null
+    const length = cap !== Infinity && after.size >= BigInt(cap) ? cap : Number(after.size)
+    if (!Number.isSafeInteger(length) || length <= 0) return null
     const buffer = Buffer.alloc(length)
-    const got = readSync(fd, buffer, 0, length, stat.size - length)
+    const got = readSync(fd, buffer, 0, length, after.size - BigInt(length))
     if (got <= 0) return null
     let text = buffer.subarray(0, got).toString('utf8')
-    if (stat.size > length) {
+    if (after.size > BigInt(length)) {
       const newline = text.indexOf('\n')
       text = newline === -1 ? '' : text.slice(newline + 1)
     }
