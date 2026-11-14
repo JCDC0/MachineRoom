@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- P322: a stop counts only the leftovers it killed, so a gone pid prints `leftover: PID had already ended` and a reused pid prints `stale: PID was not this run` with `stopped` at 0.
 - The docs match review 34: lane commits during a task, the check limits, refused backups, two new limits, the Lowbeam trial ran, and the codex lane on GPT-6.1 Terra high (P319).
 - A refused backup keeps the failed run's branch and commits, a queue signs each task with the lane and model that did it, and a lane that leaves the queue branch fails its task (P314).
 - Commit subjects on a run record are masked for keys and profile paths when saved and again in the runs response (P316).

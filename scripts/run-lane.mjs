@@ -149,7 +149,7 @@ function stopProcess(pid, { kill = killTree, alive = processAlive } = {}) {
   return !alive(pid)
 }
 
-function stopLeftovers({ worktree, childPid = 0, label = 'leftover', excludePids = [], list = listProcesses, kill = killTree, alive = processAlive, processes = null, current = null, snapshotOnly = false } = {}) {
+export function stopLeftovers({ worktree, childPid = 0, label = 'leftover', excludePids = [], list = listProcesses, kill = killTree, alive = processAlive, processes = null, current = null, snapshotOnly = false } = {}) {
   const folder = String(worktree ?? '').trim()
   if (!folder && !(childPid > 0)) return { found: 0, stopped: 0, failed: 0 }
   const snapshot = Array.isArray(processes) ? processes : null
@@ -166,13 +166,11 @@ function stopLeftovers({ worktree, childPid = 0, label = 'leftover', excludePids
     if (currentByPid && currentByPid.size > 0) {
       const now = currentByPid.get(item.pid)
       if (!now) {
-        console.log(`${label}: stopped ${item.pid}`)
-        stopped += 1
+        console.log(`${label}: ${item.pid} had already ended`)
         continue
       }
       if (typeof item.created === 'number' && Number.isFinite(item.created) && now.created !== item.created) {
         console.log(`stale: ${item.pid} was not this run`)
-        stopped += 1
         continue
       }
     }
