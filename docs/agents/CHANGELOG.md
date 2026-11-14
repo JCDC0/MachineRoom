@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- P297: ROOM.md, LIVE.md and COMMANDS.md say what the lane conversation, the cost board, failover, quota and the tree reuse do now, and the audit table records each row's status.
 - P262: the family tree editor sets a lane's backup lane, Dispatch can choose a model for one project run and names the backup lane, and a failover adds one room note and shows on both lanes.
 - P295: eleven tests assert literal text or the real call instead of the imported constant, and the git watcher test proves a failed rewatch reads again; row 2 needs a product change.
 - P293: with Own worktree the confirm card names .worktrees/LANE inside the project and the branch the project has checked out, and drops beside the project and never on main.
@@ -9,6 +10,7 @@
 - P286: a queue task whose backup is refused keeps its failed record and the queue ends without throwing; a Codex rollout outside the sessions folder or a link gives no quota; a quota read error answers null.
 - P296: TRIAL-LOWBEAM.md plans Lowbeam's move to MachineRoom lanes and Reviews, with the six old worktrees, the guide rules to replace, three first tasks and the room's limits, each checked against the code.
 - P285: a lane lock names its run start, and a stop with --started-at refuses a different run; the bridge passes the confirmed start time, and the lanes source takes it from the lock.
+- P297: ROOM.md, LIVE.md and COMMANDS.md carry the corrected sentences from AUDIT-2026-11-DOCS-3.md rows 1 to 14 and 18, and the audit table has a Status column.
 - P282: AUDIT-2026-11-DOCS-3.md lists 14 doc sentences this week's code contradicts, with corrections; every new route, flag and record field is named.
 - P293: DispatchPanel confirm cards name .worktrees/LANE inside the project and the checked-out branch from gitState(), dropping beside the project and never on main.
 - P295: 11 of 12 weak tests in AUDIT-2026-11-TESTS-2.md now assert real checks and fail when undone; the polling-with-watcher row is blocked without a server change.
