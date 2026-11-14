@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createBridge } from '../server/index.js'
 import { extractReplyText } from '../server/assistant.js'
 import { activeLanesFileFor, writeActiveLanes } from '../server/active-lanes.js'
-import { CONVERSATION_LOG_OUTSIDE_PROBLEM, CONVERSATION_UNKNOWN_PROBLEM, NO_TOKEN_PROBLEM } from '../server/runs.js'
+import { NO_TOKEN_PROBLEM } from '../server/runs.js'
 import { SINCE_PROBLEM } from '../src/briefs/run.js'
 import { createClient } from '../src/control/client.js'
 import { choice } from '../src/decider/wire.js'
@@ -1075,11 +1075,11 @@ describe('run routes', () => {
 
     const unknownTime = await getJson(conversationUrl(url, 'opencode', '2026-10-25T12:00:00.000Z'))
     expect(unknownTime.status).toBe(404)
-    expect(unknownTime.body).toEqual({ error: CONVERSATION_UNKNOWN_PROBLEM })
+    expect(unknownTime.body).toEqual({ error: 'No run of that lane started at that time.' })
 
     const unknownLane = await getJson(conversationUrl(url, 'nobody', startedAt))
     expect(unknownLane.status).toBe(404)
-    expect(unknownLane.body).toEqual({ error: CONVERSATION_UNKNOWN_PROBLEM })
+    expect(unknownLane.body).toEqual({ error: 'No run of that lane started at that time.' })
   })
 
   it('refuses a log outside the runs folder', async () => {
@@ -1094,7 +1094,7 @@ describe('run routes', () => {
 
     const res = await getJson(conversationUrl(url, 'opencode', startedAt))
     expect(res.status).toBe(400)
-    expect(res.body).toEqual({ error: CONVERSATION_LOG_OUTSIDE_PROBLEM })
+    expect(res.body).toEqual({ error: "The run's log is outside the runs folder." })
   })
 
   it('reads the last 8 MB of a large log and says it was cut', async () => {
