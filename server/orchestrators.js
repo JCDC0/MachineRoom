@@ -4,7 +4,7 @@ import { maskKeys } from '../src/briefs/audit.js'
 import { legacyMode, modesFor } from '../src/control/modes.js'
 import { HARNESSES } from '../src/harnesses/index.js'
 import { canChange, outsideScope, readLadder, subPrompt } from '../src/model/hierarchy.js'
-import { isHarnessAvailable } from './agents-config.js'
+import { harnessUnavailableProblem, isHarnessAvailable } from './agents-config.js'
 import { readEndpoints } from './endpoints.js'
 import { MODELS } from './models.js'
 import {
@@ -704,6 +704,26 @@ export function createOrchestrators({
     const next = readLadder(ladderInput, { lanes: eligibleLaneKeys() })
     if (next.problems.length > 0) {
       return { status: 400, body: { error: next.problems.join(' '), problems: next.problems } }
+    }
+    if (next.ladder.subs.length > 0) {
+      const known = new Set([...HARNESSES.map((h) => h.key), ...MODELS.map((m) => m.harness)])
+      const allLanes = readAllLanes({
+        folder: root,
+        runsFolder: folder,
+        lanesJson: typeof lanes === 'function' ? lanes() : (lanes ?? {}),
+      })
+      const endpoints = readEndpoints(folder)
+      const unavailable = []
+      for (const sub of next.ladder.subs) {
+        const harness = harnessFor(sub)
+        if (!known.has(harness) || !isHarnessAvailable(harness, { lanes: allLanes, endpoints })) {
+          const problem = harnessUnavailableProblem(harness)
+          if (!unavailable.includes(problem)) unavailable.push(problem)
+        }
+      }
+      if (unavailable.length > 0) {
+        return { status: 400, body: { error: unavailable.join(' '), problems: unavailable } }
+      }
     }
     if (by === 'orchestrator') {
       const current = readSaved().ladder
