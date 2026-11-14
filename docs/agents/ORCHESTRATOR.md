@@ -10,13 +10,12 @@ How to read this file: `Where things stand`, `Rules`, `Session start` and `The l
 
 Rewrite this section at every merge and before you end a session. Keep it under ten lines: what is pushed, what is unpushed, what runs, what waits on the owner, what is next.
 
-- 2026-11-14, afternoon: everything merged is pushed at `72f7ed60` (read CI first with `gh run list --limit 3 --repo JCDC0/MachineRoom`). The full suite at `8652616e` passed on the first try (`RUN-2026-11-14-SUITE-2.md`, 5,294 passed).
-- Since `12c25524`: P249 to P305, except P256 (scale rerun, waits for a quiet machine) and P276 (rejected: U158 scrolls on purpose). Reviews 31, 32 and 33 are closed: P272 to P275, P285 to P288 and P300 to P305 fixed their findings.
-- Lowbeam runs through MachineRoom at the owner's word (2026-11-14): `TRIAL-LOWBEAM.md` (P296) is the plan. The six October Lowbeam worktrees hold work that is on Lowbeam `main` (patch text differs only in comments and doc wording); removing them waits for the owner's yes. Never push Lowbeam.
+- 2026-11-14, night: everything merged is pushed at `6bb9d961`, CI green on Windows and Ubuntu (read CI first with `gh run list --limit 3 --repo JCDC0/MachineRoom`). The full suite at `8652616e` passed on the first try (`RUN-2026-11-14-SUITE-2.md`).
+- Since `12c25524`: P249 to P309, except P256 (scale rerun, waits for a quiet machine) and P276 (rejected). Reviews 31 to 33 are closed. At the owner's word: two to four check commands, one per line (P306, P307), a queue that keeps the lane's own commits and signs its own (P308), and a Reviews merge that moves the project's `.worktrees/play` (P309).
+- Lowbeam runs through MachineRoom (`TRIAL-LOWBEAM.md`). The six October worktrees are removed (branches kept). The first task, its guides rewritten as 0.12.56, ran on `opencode` with `npm test` and `npm run check`, and the owner had it merged through Reviews as `f3255a3`. Never push Lowbeam.
 - Nothing runs at this rewrite.
-- The fleet at the owner's word: `opencode` to `opencode5` on DeepSeek V4.1 Flash, `agy` and `agy2` on Hydrogen, `codex` on GPT-6.1 Terra high (reviews and single-file briefs; its sandbox cannot stop processes), `native` and `native2` for reports.
-- Open for the owner: two check commands in one check field and the queue's commit format for projects like Lowbeam (features); the Lowbeam row of the workspace guide.
-- Known and accepted: a backup that spawns and fails at once still shows as moved (its own record shows the failed start); the history audit flags a key setting in `tests/conversation.test.js` (6b34de1a), a test fixture with no real key.
+- The fleet at the owner's word: `opencode` to `opencode5` on DeepSeek V4.1 Flash, `agy` and `agy2` on Hydrogen, `codex` on GPT-6.1 Terra high, `native` and `native2` for reports.
+- Known and accepted: a backup that spawns and fails at once still shows as moved; the play line for a dirty play worktree names the old `main`, not play's own head.
 - Push: the owner gave a standing yes for this work on 2026-11-14. A new session asks again.
 
 ## Rules
