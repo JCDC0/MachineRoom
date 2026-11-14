@@ -2479,3 +2479,9 @@ Write the plan the owner will follow, with `file:line` in MachineRoom for every 
 5. The merge: how a lane's branch reaches Lowbeam's `main` through Reviews, and what Reviews requires (a clean `main`, a fast-forward).
 6. The dev server: Lowbeam's `npm start` serves `main` on 8040. Say how the owner sees a lane's change before merging, on a port that is not 8040 or 8041.
 7. Three small first tasks from Lowbeam's own open work, each with the files it touches, and what the room should show at each step. Say what would count as a failure of MachineRoom rather than of the task, and name every step the room cannot do today.
+
+**P297. The detail docs say what this week's code does (native).** Read `docs/agents/AUDIT-2026-11-DOCS-3.md` and this brief only. Change only docs. Commit each step as you finish it, and stop at minute 25. Files: docs/agents/architecture/ROOM.md, docs/agents/architecture/LIVE.md, docs/agents/architecture/COMMANDS.md, docs/agents/AUDIT-2026-11-DOCS-3.md, docs/agents/CHANGELOG.md.
+
+1. For rows 1 to 14 and the unnamed parts in row 18, check the row against the code at `HEAD` once more, then replace the doc sentence with the corrected one. These lines are long: change only the sentence the row names, and keep the docs' style (plain words, short sentences, no em dashes).
+2. Add a `Status` column to the audit table: `fixed in P297` or `no change`.
+3. Run `node node_modules/vitest/vitest.mjs run tests/briefs.test.js` and report what passed.
