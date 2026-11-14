@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- The sub form offers every harness the room can start, the room draws each sub with its own harness, and a ladder naming an unavailable harness is refused (P331).
 - A brief run masks keys and profile paths in its commit text before the record is written, and a refused backup keeps the failed run's head (P328).
 - A ladder end to end test runs main, a Codex sub, its lanes and the sub's report to main, and refuses a lane outside the sector (P334).
 - A Codex orchestrator offers Plan (read-only sandbox) and Auto (workspace-write), with no Bypass, so it keeps its sandbox (P332).
@@ -12,6 +13,7 @@
 - Add the non-Claude ladder test covering a main orchestrator, a codex sub turn, lane wake, sub:ID reply and 403 sector refusal (P334).
 - A brief run masks a key or a profile path in each lane commit subject before it is saved (P328).
 - A refused backup keeps the failed run's captured head, so a backup commit cannot replace it (P328).
+- Any harness the room can start can lead a sub orchestrator in the sub forms, ladder save checks and agent roster, refusing unavailable harnesses with 400 (P331).
 - Review 35 confirms every review 34 fix has a test that fails with it undone, and finds four more: R35-1 to R35-4 (P324).
 - The queue dispatch test waits on the bridge's run end notice instead of a ten second poll (P323).
 - After a failover a queue expects the task's start branch with -on-BACKUP and fails a task that ends on another branch (P321).

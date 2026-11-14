@@ -2408,3 +2408,37 @@ describe('talking to a lane and agent announcements', () => {
     expect(laneMsg.text).toContain('Run opencode-direct-1 on lane opencode ended: succeeded.')
   })
 })
+
+
+describe('ladder save harness availability', () => {
+  it('refuses a sub whose harness has no program on this machine with 400 and allows an available codex sub', async () => {
+    const files = makeBase()
+    const lanes = {
+      orchestrator: { name: 'Orchestrator', harness: 'Claude Code', cli: { harness: 'claude', bin: process.execPath, model: 'opus' } },
+      claude: { name: 'Claude Code', harness: 'Claude Code', cli: { harness: 'claude', bin: process.execPath, model: 'sonnet' } },
+      codex: { name: 'Codex', harness: 'Codex', cli: { harness: 'codex', bin: process.execPath, model: 'gpt-5-codex' } },
+      acp: { name: 'ACP', harness: 'ACP', cli: { harness: 'acp', bin: join(files.base, 'does-not-exist.exe'), model: 'm' } },
+    }
+    const rig = await makeBridge(files, { lanesSource: { folder: files.runs, lanes, pollMs: 20, quietMs: 60000 } })
+
+    const unavailable = await pagePost(`${rig.url}/api/orchestrator/ladder`, {
+      ladder: {
+        subs: [{ id: 'broken', name: 'Broken', harness: 'acp', lanes: ['claude'], scope: ['src/**'], restricted: true, setBy: 'owner' }],
+      },
+      by: 'owner',
+      confirmed: true,
+    })
+    expect(unavailable.status).toBe(400)
+    expect(unavailable.body.error).toBe('The harness acp is not available on this computer.')
+
+    const saved = await pagePost(`${rig.url}/api/orchestrator/ladder`, {
+      ladder: {
+        subs: [{ id: 'backend', name: 'Backend', harness: 'codex', model: 'gpt-5-codex', lanes: ['codex'], scope: ['server/**'], restricted: true, setBy: 'owner' }],
+      },
+      by: 'owner',
+      confirmed: true,
+    })
+    expect(saved.status).toBe(200)
+    expect(saved.body.ladder.subs[0]).toMatchObject({ id: 'backend', harness: 'codex', model: 'gpt-5-codex' })
+  })
+})

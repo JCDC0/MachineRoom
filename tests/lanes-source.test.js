@@ -1441,3 +1441,56 @@ describe('lane lock stale checks in the lane source', () => {
     expect(rig.source.openRuns()).toEqual([])
   })
 })
+
+
+describe('sub orchestrator agent for any harness', () => {
+  it('names a codex, agy and machineroom sub with its own harness, adapterType, parser and model', () => {
+    expect(subOrchestratorAgent({ id: 'backend', name: 'Backend', harness: 'codex', model: 'gpt-5-codex' })).toMatchObject({
+      key: 'sub-backend',
+      name: 'Backend',
+      harness: 'codex',
+      adapterType: 'codex_local',
+      parser: 'codex',
+      model: 'gpt-5-codex',
+      subOrchestrator: true,
+    })
+    expect(subOrchestratorAgent({ id: 'design', name: 'Design', harness: 'agy', model: 'gemini-4-hydrogen' })).toMatchObject({
+      key: 'sub-design',
+      name: 'Design',
+      harness: 'agy',
+      adapterType: 'process',
+      parser: 'agy',
+      model: 'gemini-4-hydrogen',
+      subOrchestrator: true,
+    })
+    expect(subOrchestratorAgent({ id: 'direct', name: 'Direct', harness: 'machineroom', model: 'Work/alpha' })).toMatchObject({
+      key: 'sub-direct',
+      name: 'Direct',
+      harness: 'machineroom',
+      adapterType: 'machineroom_local',
+      parser: 'machineroom',
+      model: 'Work/alpha',
+      subOrchestrator: true,
+    })
+  })
+
+  it('lists a codex sub orchestrator in the live source roster as codex', () => {
+    const dir = makeTempDir('mr-lanes-codex-sub-')
+    const source = createLanesSource({
+      projectRoot: dir,
+      lanes: { codex: { name: 'Codex', cli: { harness: 'codex', bin: 'codex', model: 'gpt-5-codex' } } },
+      subOrchestrators: () => [{ id: 'backend', name: 'Backend', harness: 'codex' }],
+      recordsCache: createRecordsCache(join(dir, 'runs.jsonl'), join(dir, 'runs')),
+      now: () => 1000,
+    })
+    expect(source.agents.find((agent) => agent.key === 'sub-backend')).toMatchObject({
+      key: 'sub-backend',
+      name: 'Backend',
+      harness: 'codex',
+      adapterType: 'codex_local',
+      parser: 'codex',
+      model: 'gpt-5-codex',
+      subOrchestrator: true,
+    })
+  })
+})

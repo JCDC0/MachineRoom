@@ -140,7 +140,7 @@ export function subOrchestratorAgent(sub, lanes = {}) {
   if (!id) return null
   const key = `sub-${id}`
   const name = typeof sub?.name === 'string' && sub.name.trim() ? sub.name.trim() : id
-  const harness = String(sub?.harness ?? '') === 'opencode' ? 'opencode' : 'claude'
+  const harness = typeof sub?.harness === 'string' && sub.harness.trim() ? sub.harness.trim() : 'claude'
   const model = subModel(sub, harness, lanes)
   try {
     const agent = agentsFile(key, { [key]: { name, cli: { harness } } }).agents[0]
