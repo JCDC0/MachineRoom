@@ -1,6 +1,8 @@
 # Changelog
 
 ## Unreleased
+- P316: `projectRunGit` masks a key or a profile path in each commit subject before a run record stores it.
+- P316: GET /api/control/runs masks the commits of every record it returns, including records written before the change.
 - Review 34 lists nine findings in the batch since review 33 and seventeen doc sentences the code contradicts (P312).
 - The doctor and every orchestrator find the Codex app's codex.exe when codex is not on PATH, as lanes already did (P311).
 - P311: `codexProgramFor` answers the Codex app's newest program for a bare `codex` bin when codex is not on PATH, and run-lane uses it.

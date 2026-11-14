@@ -1344,6 +1344,23 @@ describe('GET /api/control/runs project scoping', () => {
     expect(fromLink.recent.map((record) => record.task)).toEqual(['Direct A task', 'Linked A task'])
   })
 
+  it('masks a key and a home path in commits written before the change', async () => {
+    const runsDir = tempDir('mr-runs-commits-')
+    const projectA = tempDir('mr-project-a-')
+    const key = 'sk-' + 'or-v1-' + 'a'.repeat(40)
+    const subject = `abc1234 Use ${key} from C:\\Users\\NAME\\notes.txt`
+    writeRunRecords(runsDir, [
+      { lane: 'opencode', briefs: [], project: projectA, task: 'Old run', startedAt: '2026-11-10T01:00:00.000Z', exitCode: 1, commits: [subject] },
+    ])
+    const body = await getRuns(projectA, runsDir)
+    for (const record of [...body.recent, ...body.last]) {
+      expect(record.commits[0]).not.toContain(key)
+      expect(record.commits[0]).toContain('[key]')
+      expect(record.commits[0]).toContain('%USERPROFILE%')
+      expect(record.commits[0]).not.toContain('NAME')
+    }
+  })
+
   it('returns only brief runs for this repository and no project A or project B run', async () => {
     const runsDir = tempDir('mr-runs-briefs-')
     const projectA = tempDir('mr-project-a-')

@@ -5,7 +5,8 @@ import { basename, dirname, join, resolve } from 'node:path'
 import { StringDecoder } from 'node:string_decoder'
 import { fileURLToPath } from 'node:url'
 import { parseBriefs } from '../src/briefs/briefs.js'
-import { SINCE_PROBLEM, checkCommandLines, dayStart, laneStats, pathInside, projectProblems, runRecord, worktreeFor } from '../src/briefs/run.js'
+import { maskKeys } from '../src/briefs/audit.js'
+import { SINCE_PROBLEM, checkCommandLines, dayStart, laneStats, maskProfilePaths, pathInside, projectProblems, runRecord, worktreeFor } from '../src/briefs/run.js'
 import { profileFromBrief, profileFromTask } from '../src/policy/profile.js'
 import { readPolicy, routeLane, tierFor, TIERS } from '../src/policy/route.js'
 import { conversationFromLog } from '../src/model/conversation.js'
@@ -1125,6 +1126,14 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
     })
   }
 
+  function maskRecordCommits(record) {
+    if (!Array.isArray(record?.commits) || record.commits.length === 0) return record
+    return {
+      ...record,
+      commits: record.commits.map((line) => maskProfilePaths(maskKeys(String(line ?? '')).text)),
+    }
+  }
+
   async function handle(req, res, url) {
     const path = url.pathname
     const method = req.method ?? 'GET'
@@ -1268,7 +1277,7 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
       const records = readAllRunRecords(recordsPath())
       noteFailovers(records)
       const thisRepo = await inThisRepository()
-      const visible = roomRecords(records, thisRepo)
+      const visible = roomRecords(records, thisRepo).map(maskRecordCommits)
       sendJson(req, res, 200, {
         project: resolvedRoot ? basename(resolvedRoot) : '',
         running: [...running.values()].map(snapshot),
