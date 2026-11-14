@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- P290: the candidate build test retries on a fresh port when another process takes it, the subfolder session test waits up to 15 seconds, and the stop test keeps its grandchild alive until the stop lists it.
 - P288: a conversation line that parses as JSON is masked whatever its type, so a string, number or array line shows no profile name.
 - P286: a queue task whose backup is refused keeps its failed record and the queue ends without throwing; a Codex rollout outside the sessions folder or a link gives no quota; a quota read error answers null.
 - P296: TRIAL-LOWBEAM.md plans Lowbeam's move to MachineRoom lanes and Reviews, with the six old worktrees, the guide rules to replace, three first tasks and the room's limits, each checked against the code.
@@ -14,6 +15,9 @@
 - P286: a Codex rollout outside the sessions folder or a symbolic link gives no quota.
 - P286: a queue keeps the failed record when its backup is refused, and reports the failed task without an exception.
 - P288: every parsed JSON line in a lane conversation is masked before it is serialized, so a string, number or array line shows no profile name.
+- P290: the stop test keeps its fake grandchild alive for 30 seconds and waits until it is alive and listed under the harness before the stop.
+- P290: the subfolder session test ticks the reader until the session appears, with a 15 second bound.
+- P290: the candidate build test asks for a new free port and retries when another process takes the port before the check.
 - P289: CODE.md gains a line for each file under src, server, scripts, bin and tests that it did not name.
 - P280: TRIAL-ULOLTRIS.md gives the command, the check command, worktree mode, three candidate tasks from ulolTris's own next steps and what would count as a room failure.
 - P279: a secret-named field is masked only when it holds a string, so token counts show and keys stay hidden.

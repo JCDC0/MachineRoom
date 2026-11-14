@@ -11,6 +11,7 @@ import { makeTempDir } from './helpers/tempRoot.js'
 
 const RUN_LANE_SCRIPT = fileURLToPath(new URL('../scripts/run-lane.mjs', import.meta.url))
 const DEAD_PID = 2147483647
+const HARNESS_LATE_WRITE_MS = 30000
 const cleanups = []
 
 afterEach(() => {
@@ -90,7 +91,7 @@ function writeFakeHarness(project, mark, started, { stay = true } = {}) {
   writeFileSync(late, [
     "const { writeFileSync } = require('node:fs')",
     `writeFileSync(${JSON.stringify(started)}, String(process.pid))`,
-    `setTimeout(() => { try { writeFileSync(${JSON.stringify(mark)}, 'late') } catch {} }, 6000)`,
+    `setTimeout(() => { try { writeFileSync(${JSON.stringify(mark)}, 'late') } catch {} }, ${HARNESS_LATE_WRITE_MS})`,
     '',
   ].join('\n'))
   const script = join(project, 'run')
@@ -177,7 +178,7 @@ describe('a stopped lane stays stopped', () => {
       lock = readLaneLock(join(runs, 'fake.lock'))
       if (!Number.isInteger(lock.child) || lock.child <= 0) return false
       grandchildPid = readStartedPid(started)
-      if (grandchildPid <= 0) return false
+      if (grandchildPid <= 0 || !processAlive(grandchildPid)) return false
       return descendantProcesses(listProcesses(), { rootPid: lock.child, ownPid: process.pid }).some((item) => item.pid === grandchildPid)
     })
     expect(ready, 'the harness and its grandchild were not in the process list').toBe(true)
