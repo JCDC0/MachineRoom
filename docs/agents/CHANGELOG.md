@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- `fileTouch` and each harness parser mark absolute outside-project file touches through `toolStart` with `maskProfilePaths` in `src/model/paths.js` and no second reader in `src/model/pipeline.js`, state keeps per-agent counts and the last 20 distinct paths newest first, and the agent Inspector lists them under Outside the project (P339, P346).
 - The owner's test tree (a Codex sub over two AGY lanes, a native sub over three OpenCode lanes) is proven in tests/owner-tree.test.js, and FREE-HIERARCHY.md says what the free hierarchy does today and how to build the tree in the room (P340).
 - A lane run takes a permission mode with --mode or the lane's cli.mode: Claude lanes get plan, edits, auto or bypass, Codex and AGY lanes pass theirs, and a mode the harness lacks is refused before anything starts (P338).
 - A lane run the bridge started may message the orchestrator that started it, or any orchestrator, with its run's ticket: at most 4 per run, shown in the Team view (P335).
@@ -10,7 +11,6 @@
 - The runner hands a lane its ticket and the bridge address, and its prompt says how to message the coordinator without printing the ticket (P336).
 - A lane run the bridge started may message its coordinator mid-run with its run's ticket, at most 4 times, and receives nothing back (P335).
 - Added the owner's test tree end-to-end test in `tests/owner-tree.test.js` and the `docs/agents/FREE-HIERARCHY.md` runbook (P340).
-- The pipeline marks absolute outside-project file touches with masked home paths, state keeps per-agent counts and the last 20 distinct paths newest first, and the agent Inspector lists them under Outside the project (P339).
 - Any orchestrator may message any other with its token, capped at 6 messages per 10 minutes per sender, shown in the Team view; a sub's added instructions get the real bridge address (P333).
 - The sub form offers every harness the room can start, the room draws each sub with its own harness, and a ladder naming an unavailable harness is refused (P331).
 - A brief run masks keys and profile paths in its commit text before the record is written, and a refused backup keeps the failed run's head (P328).
