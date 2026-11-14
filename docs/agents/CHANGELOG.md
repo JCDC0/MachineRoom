@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- P280: TRIAL-ULOLTRIS.md gives the command, the check command, worktree mode, three candidate tasks from ulolTris's own next steps and what would count as a room failure.
 - P279: a secret-named field is masked only when it holds a string, so token counts show and keys stay hidden.
 - P278: RUN-2026-11-14-SUITE.md at d54e3a38: 5263 tests passed, one load flake in run-lane-stop that passes alone.
 - P284: run-lane --list adds 'moved to LANE (KIND)' to a run that failed over and 'taken over from LANE' to the backup's run.
