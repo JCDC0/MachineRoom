@@ -6,7 +6,7 @@ import {
   teamHarnesses,
   teamPlan,
 } from './family.js'
-import { ladderFromOrchestrators } from './ladderForm.js'
+import { ladderFromOrchestrators, orchestratorHarnesses } from './ladderForm.js'
 import { ModelSelect, useHarnessModels } from './ModelRefresh.jsx'
 import { withHarnessModels, withModelRows } from './modelRefresh.js'
 import { cleanText } from './sidebar.js'
@@ -39,6 +39,7 @@ export function FamilyTeam({ client = null }) {
   const [open, setOpen] = useState(false)
   const [lanes, setLanes] = useState(null)
   const [ladder, setLadder] = useState(null)
+  const [orchestrators, setOrchestrators] = useState(null)
   const [harnesses, setHarnesses] = useState(null)
   const [models, setModels] = useState(null)
   const [draft, setDraft] = useState({ orchestrators: 1, coders: 1, harness: '', model: '' })
@@ -74,7 +75,10 @@ export function FamilyTeam({ client = null }) {
         if (result.status === 'fulfilled' && result.value) values[jobs[index][0]] = result.value
       })
       if (values.lanes) setLanes(values.lanes)
-      if (values.ladder) setLadder(ladderFromOrchestrators(values.ladder))
+      if (values.ladder) {
+        setOrchestrators(values.ladder)
+        setLadder(ladderFromOrchestrators(values.ladder))
+      }
       if (values.harnesses) setHarnesses(values.harnesses)
       if (values.models) setModels(values.models)
       const failed = results.find((result) => result.status === 'rejected')
@@ -97,7 +101,10 @@ export function FamilyTeam({ client = null }) {
     if (typeof client?.orchestrators === 'function') {
       jobs.push(
         Promise.resolve(client.orchestrators()).then((answer) => {
-          if (answer) setLadder(ladderFromOrchestrators(answer))
+          if (answer) {
+            setOrchestrators(answer)
+            setLadder(ladderFromOrchestrators(answer))
+          }
         })
       )
     }
@@ -126,13 +133,30 @@ export function FamilyTeam({ client = null }) {
     return () => window.removeEventListener('keydown', onKey, true)
   }, [confirm, busy])
 
+  const activeHarnesses = useMemo(() => orchestratorHarnesses(orchestrators, harnesses), [orchestrators, harnesses])
+  const offered = useMemo(() => {
+    if (activeHarnesses) {
+      return [
+        ...activeHarnesses.filter((row) => row.key === 'opencode'),
+        ...activeHarnesses.filter((row) => row.key !== 'opencode'),
+      ]
+    }
+    return teamHarnesses(harnesses, models)
+  }, [activeHarnesses, harnesses, models])
+
   useEffect(() => {
     if (!open || picked || draft.harness) return
+    if (activeHarnesses) {
+      const first = offered[0] ?? null
+      if (!first) return
+      const model = harnessModels(first, models)[0]?.id ?? ''
+      setDraft((current) => ({ ...current, harness: first.key, model }))
+      return
+    }
     const next = teamDraft(harnesses, models)
     setDraft((current) => ({ ...current, harness: next.harness, model: next.model }))
-  }, [open, picked, draft.harness, harnesses, models])
+  }, [open, picked, draft.harness, activeHarnesses, offered, harnesses, models])
 
-  const offered = useMemo(() => teamHarnesses(harnesses, models), [harnesses, models])
   const selected = offered.find((row) => row.key === draft.harness) ?? null
   const fallback = useMemo(
     () => (selected ? harnessModels(selected, models) : []),

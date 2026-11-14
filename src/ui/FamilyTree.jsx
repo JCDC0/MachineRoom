@@ -34,7 +34,7 @@ import {
   subsLosingLanes,
   teamRows,
 } from './family.js'
-import { changeSub, idFromName, ladderFromOrchestrators, ladderSubs } from './ladderForm.js'
+import { changeSub, idFromName, ladderFromOrchestrators, ladderSubs, orchestratorHarnesses, subFromForm } from './ladderForm.js'
 import { useHarnessModels } from './ModelRefresh.jsx'
 import ModelPicker from './ModelPicker.jsx'
 import { withHarnessModels, withModelRows } from './modelRefresh.js'
@@ -107,7 +107,7 @@ function subIdFor(taken, label) {
   return id
 }
 
-function groupSubLadder(ladder, draft, laneIds, laneKeys = []) {
+function groupSubLadder(ladder, draft, laneIds, laneKeys = [], allowedHarnesses = null) {
   const subs = ladderSubs(ladder)
   const picked = cleanLaneIds(laneIds)
   const problem = labelProblem(draft?.label)
@@ -129,16 +129,18 @@ function groupSubLadder(ladder, draft, laneIds, laneKeys = []) {
     const id = cleanText(key, 80)
     if (id) taken.add(id)
   }
-  const sub = {
-    id: subIdFor(taken, draft.label),
-    name: cleanText(draft.label, AGENT_NAME_MAX),
-    harness: cleanText(draft.harness, 40) || 'opencode',
-    model: cleanText(draft.model, 120),
-    lanes: picked,
-    scope: ['**'],
-    restricted: false,
-    setBy: 'owner',
-  }
+  const sub = subFromForm(
+    {
+      id: subIdFor(taken, draft.label),
+      name: cleanText(draft.label, AGENT_NAME_MAX),
+      harness: cleanText(draft.harness, 40) || 'opencode',
+      model: cleanText(draft.model, 120),
+      lanes: picked,
+      scope: ['**'],
+      restricted: false,
+    },
+    allowedHarnesses
+  )
   return { problem: '', subs: [...next, sub], sub, affected }
 }
 
@@ -795,6 +797,14 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
     }
     return map
   }, [orchestrators])
+  const activeSubHarnesses = useMemo(
+    () => orchestratorHarnesses(orchestrators, harnesses),
+    [orchestrators, harnesses]
+  )
+  const subHarnesses = useMemo(
+    () => activeSubHarnesses ?? childHarnesses(harnesses, models),
+    [activeSubHarnesses, harnesses, models]
+  )
   const taskMap = tasks instanceof Map ? tasks : liveTaskMap
   const laneRows = useMemo(() => splitMoreLanes(tree.rows), [tree])
   const mainRows = useMemo(() => {
@@ -832,7 +842,7 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
     }
     const key = nodeDraft?.harness ?? editingNode.harness
     return nodeHarnessOptions(editingNode).find((row) => row.key === key) ?? null
-  }, [editingNode, harnesses, nodeDraft?.harness])
+  }, [editingNode, harnesses, nodeDraft?.harness, subHarnesses])
   const editorFallback = useMemo(
     () => (editorHarness && editorHarness.key !== DIRECT_HARNESS ? harnessModels(editorHarness, models) : []),
     [editorHarness, models]
@@ -869,8 +879,8 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
 
   const subHarness = useMemo(() => {
     if (!groupOpen) return null
-    return childHarnesses(harnesses, models).find((row) => row.key === subDraft?.harness) ?? null
-  }, [groupOpen, subDraft?.harness, harnesses, models])
+    return subHarnesses.find((row) => row.key === subDraft?.harness) ?? null
+  }, [groupOpen, subDraft?.harness, subHarnesses])
   const subFallback = useMemo(
     () => (subHarness && subHarness.key !== DIRECT_HARNESS ? harnessModels(subHarness, models) : []),
     [subHarness, models]
@@ -1038,7 +1048,7 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
   }
 
   function nodeHarnessOptions(node) {
-    const list = childHarnesses(harnesses, models)
+    const list = [...subHarnesses]
     if (node && node.harness && !list.some((row) => row.key === node.harness)) {
       const known = findHarness(harnesses, node.harness)
       list.push({
@@ -1211,12 +1221,12 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
   }
 
   function subDraftFor() {
-    const offered = childHarnesses(harnesses, models)
+    const offered = subHarnesses
     const harness = offered.find((row) => row.key === 'opencode') ?? offered[0] ?? null
     return {
       label: 'Sub orchestrator',
       harness: harness?.key ?? 'opencode',
-      model: harness?.models?.[0]?.id ?? '',
+      model: harness ? harnessModels(harness, models)[0]?.id ?? '' : '',
       effort: harness?.efforts?.[0] ?? '',
     }
   }
@@ -1259,7 +1269,7 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
   }
 
   function chooseSubHarness(key) {
-    const harness = childHarnesses(harnesses, models).find((row) => row.key === key)
+    const harness = subHarnesses.find((row) => row.key === key)
     if (!harness) return
     setSubProblem('')
     setSubDraft((current) => ({
@@ -1274,7 +1284,8 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
     if (!subDraft || busy) return
     const draftForPlan = subDraft
     const pickedForPlan = selectedLanes
-    const problem = childFormProblem(draftForPlan, { harnesses, models, directModels: subModels.choices })
+    const subFormHarnesses = activeSubHarnesses ? { harnesses: activeSubHarnesses } : harnesses
+    const problem = childFormProblem(draftForPlan, { harnesses: subFormHarnesses, models, directModels: subModels.choices })
     if (problem) {
       setSubProblem(problem)
       return
@@ -1294,7 +1305,7 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
       if (node.kind === 'lane' && !laneKeys.includes(node.id)) laneKeys.push(node.id)
     }
     function planGroup(ladder) {
-      return groupSubLadder(ladder, draftForPlan, pickedForPlan, laneKeys)
+      return groupSubLadder(ladder, draftForPlan, pickedForPlan, laneKeys, activeSubHarnesses)
     }
     let ladder
     try {
@@ -1310,7 +1321,7 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
     }
     ask({
       text: `Add "${plan.sub.name}" to lead ${agentCount(plan.sub.lanes.length)}?`,
-      detail: childDetail(draftForPlan, harnesses, models),
+      detail: childDetail(draftForPlan, subFormHarnesses, models),
       notes: affectedSubText(plan.affected),
       label: 'Create',
       busyText: 'Creating the sub orchestrator...',
@@ -2009,7 +2020,7 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
 
   function renderSubForm() {
     if (!subDraft) return null
-    const offered = childHarnesses(harnesses, models)
+    const offered = subHarnesses
     const selected = offered.find((row) => row.key === subDraft.harness) ?? null
     const efforts = selected ? harnessEfforts(selected) : []
     const direct = selected?.key === DIRECT_HARNESS

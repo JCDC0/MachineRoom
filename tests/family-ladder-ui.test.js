@@ -221,3 +221,110 @@ describe('FamilyTeam ladder changes', () => {
     })
   })
 })
+
+describe('Sub form harnesses from orchestrators', () => {
+  it('offers every active harness from orchestrators in FamilyTree and keeps codex on save', async () => {
+    const activeHarnesses = [
+      { key: 'claude', name: 'Claude Code', harness: 'claude', models: [{ id: 'claude-sonnet-5-5', name: 'Claude Sonnet 5.5' }] },
+      { key: 'opencode', name: 'OpenCode', harness: 'opencode', models: [{ id: 'opencode/deepseek-v4.1-flash-free', name: 'DeepSeek' }] },
+      { key: 'codex', name: 'Codex', harness: 'codex', models: [{ id: 'gpt-5-codex', name: 'GPT-5 Codex' }] },
+      { key: 'agy', name: 'AGY', harness: 'agy', models: [{ id: 'gemini-4-hydrogen', name: 'Gemini 4 Hydrogen' }] },
+    ]
+    const { client, calls } = makeClient({
+      orchestrators: [
+        { id: 'orchestrator', name: 'Orchestrator', main: true, harness: 'claude', model: 'claude-sonnet-5-5', harnesses: activeHarnesses, ladder: { subs: [] } },
+      ],
+    })
+    await withDom(async ({ container, root }) => {
+      await act(async () => {
+        root.render(createElement(FamilyTree, { client }))
+      })
+      await settle()
+      const check = rowByLabel(container, 'OpenCode').querySelector('.mr-family-check')
+      await act(async () => {
+        check.checked = true
+        check.click()
+      })
+      await act(async () => {
+        buttonWithText(container, 'Add sub orchestrator').click()
+      })
+      const form = container.querySelector('.mr-family-sub-form')
+      const harnessSelect = form.querySelector('select[aria-label="Sub orchestrator harness"]')
+      const keys = harnessSelect.querySelectorAll('option').map((option) => option.value ?? option.getAttribute('value'))
+      expect(keys).toEqual(['claude', 'opencode', 'codex', 'agy'])
+
+      await act(async () => {
+        harnessSelect.value = 'codex'
+        harnessSelect.dispatchEvent({ type: 'change', bubbles: true, cancelable: true })
+      })
+      const label = form.querySelector('input[aria-label="Sub orchestrator label"]')
+      await act(async () => {
+        label.focus()
+        label.dispatchEvent({ type: 'focusin', bubbles: true, cancelable: true })
+        label.value = 'Codex Lead'
+        label.dispatchEvent({ type: 'keyup', bubbles: true, cancelable: true })
+      })
+      await act(async () => {
+        form.dispatchEvent({ type: 'submit', bubbles: true, cancelable: true })
+      })
+      await settle()
+      const card = container.querySelector('.mr-side-confirm-card')
+      await act(async () => {
+        buttonWithText(card, 'Create').click()
+      })
+      await settle()
+      expect(calls.setLadder).toHaveLength(1)
+      expect(calls.setLadder[0].subs[0]).toMatchObject({
+        name: 'Codex Lead',
+        harness: 'codex',
+        model: 'gpt-5-codex',
+      })
+    })
+  })
+
+  it('offers every active harness from orchestrators in FamilyTeam and keeps codex on build', async () => {
+    const activeHarnesses = [
+      { key: 'claude', name: 'Claude Code', harness: 'claude', models: [{ id: 'claude-sonnet-5-5', name: 'Claude Sonnet 5.5' }] },
+      { key: 'opencode', name: 'OpenCode', harness: 'opencode', models: [{ id: 'opencode/deepseek-v4.1-flash-free', name: 'DeepSeek' }] },
+      { key: 'codex', name: 'Codex', harness: 'codex', models: [{ id: 'gpt-5-codex', name: 'GPT-5 Codex' }] },
+      { key: 'agy', name: 'AGY', harness: 'agy', models: [{ id: 'gemini-4-hydrogen', name: 'Gemini 4 Hydrogen' }] },
+    ]
+    const { client, calls } = makeClient({
+      orchestrators: [
+        { id: 'orchestrator', name: 'Orchestrator', main: true, harness: 'claude', model: 'claude-sonnet-5-5', harnesses: activeHarnesses, ladder: { subs: [] } },
+      ],
+    })
+    await withDom(async ({ container, root }) => {
+      await act(async () => {
+        root.render(createElement(FamilyTeam, { client }))
+      })
+      await settle()
+      await act(async () => {
+        container.querySelector('.mr-side-head').click()
+      })
+      const harnessSelect = container.querySelector('select[aria-label="Harness for the new sub orchestrators"]')
+      const keys = harnessSelect.querySelectorAll('option').map((option) => option.value ?? option.getAttribute('value'))
+      expect(keys).toEqual(['opencode', 'claude', 'codex', 'agy'])
+
+      await act(async () => {
+        harnessSelect.value = 'codex'
+        harnessSelect.dispatchEvent({ type: 'change', bubbles: true, cancelable: true })
+      })
+      const form = container.querySelector('form')
+      await act(async () => {
+        form.dispatchEvent({ type: 'submit', bubbles: true, cancelable: true })
+      })
+      await settle()
+      const card = container.querySelector('.mr-side-confirm-card')
+      await act(async () => {
+        buttonWithText(card, 'Build the team').click()
+      })
+      await settle()
+      expect(calls.setLadder).toHaveLength(1)
+      expect(calls.setLadder[0].subs[0]).toMatchObject({
+        harness: 'codex',
+        model: 'gpt-5-codex',
+      })
+    })
+  })
+})

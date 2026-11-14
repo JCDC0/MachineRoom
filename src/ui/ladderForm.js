@@ -1,6 +1,77 @@
 const ID_MAX = 24
 const RESERVED_ID = 'orchestrator'
 
+import { harnessByKey } from '../harnesses/index.js'
+
+function harnessKeyOf(entry) {
+  if (typeof entry === 'string') return entry.trim()
+  return String(entry?.key ?? entry?.harness ?? '').trim()
+}
+
+function keepHarness(value, allowed = null) {
+  const key = String(value ?? '').trim()
+  if (!key) return 'claude'
+  if (Array.isArray(allowed)) {
+    const keys = new Set(allowed.map((entry) => harnessKeyOf(entry)).filter(Boolean))
+    return keys.has(key) ? key : 'claude'
+  }
+  return Object.hasOwn(harnessByKey, key) ? key : 'claude'
+}
+
+export function orchestratorHarnesses(orchestrators, harnesses = null) {
+  const list = Array.isArray(orchestrators)
+    ? orchestrators
+    : Array.isArray(orchestrators?.orchestrators)
+      ? orchestrators.orchestrators
+      : []
+  const raw = Array.isArray(orchestrators?.harnesses)
+    ? orchestrators.harnesses
+    : list.find((entry) => entry && Array.isArray(entry.harnesses))?.harnesses ?? null
+  if (!raw) return null
+  const known = Array.isArray(harnesses)
+    ? harnesses
+    : Array.isArray(harnesses?.harnesses)
+      ? harnesses.harnesses
+      : []
+  const byKey = new Map()
+  for (const item of known) {
+    const key = harnessKeyOf(item)
+    if (key && !byKey.has(key)) byKey.set(key, item)
+  }
+  const offered = []
+  const seen = new Set()
+  for (const entry of raw) {
+    const key = harnessKeyOf(entry)
+    if (!key || seen.has(key)) continue
+    seen.add(key)
+    const base = byKey.get(key)
+    const models =
+      Array.isArray(entry?.models) && entry.models.length > 0
+        ? entry.models
+        : Array.isArray(base?.models)
+          ? base.models
+          : []
+    const efforts = Array.isArray(entry?.efforts)
+      ? entry.efforts
+      : Array.isArray(base?.efforts)
+        ? base.efforts
+        : []
+    const fallbackLabel = key === 'machineroom' ? 'Direct API' : (harnessByKey[key]?.name ?? key)
+    const name =
+      key === 'machineroom'
+        ? 'Direct API'
+        : String(entry?.name ?? '').trim() || String(base?.name ?? '').trim() || fallbackLabel
+    offered.push({
+      key,
+      name,
+      available: true,
+      models,
+      efforts,
+    })
+  }
+  return offered
+}
+
 export function ladderSubs(ladder) {
   if (!ladder || !Array.isArray(ladder.subs)) return []
   return ladder.subs.filter((sub) => sub && typeof sub === 'object' && !Array.isArray(sub))
@@ -44,12 +115,12 @@ export function freeLanes(lanes, ladder, { except } = {}) {
   return free
 }
 
-export function subFromForm(form) {
+export function subFromForm(form, allowed = null) {
   const value = form && typeof form === 'object' ? form : {}
   const name = String(value.name ?? '').trim()
   const typedId = String(value.id ?? '').trim()
   const id = typedId || idFromName(name)
-  const harness = value.harness === 'claude' || value.harness === 'opencode' ? value.harness : 'claude'
+  const harness = keepHarness(value.harness, allowed)
   const lanes = []
   for (const lane of Array.isArray(value.lanes) ? value.lanes : []) {
     const key = String(lane ?? '').trim()

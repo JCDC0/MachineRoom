@@ -221,3 +221,13 @@ describe('a form saved through the ladder', () => {
     expect(ladderSubs(null)).toEqual([])
   })
 })
+
+describe('subFromForm any harness', () => {
+  it('keeps codex and agy and falls back unknown harnesses to claude', () => {
+    expect(subFromForm({ name: 'Codex Lead', harness: 'codex', scope: 'server/**', lanes: ['codex'] }).harness).toBe('codex')
+    expect(subFromForm({ name: 'AGY Lead', harness: 'agy', scope: 'src/**', lanes: ['agy'] }).harness).toBe('agy')
+    expect(subFromForm({ name: 'Hermes Lead', harness: 'hermes' }).harness).toBe('hermes')
+    expect(subFromForm({ name: 'Direct Lead', harness: 'machineroom' }).harness).toBe('machineroom')
+    expect(subFromForm({ name: 'Unknown Lead', harness: 'no-such-harness' }).harness).toBe('claude')
+  })
+})
