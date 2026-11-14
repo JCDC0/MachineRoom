@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- P296: TRIAL-LOWBEAM.md plans Lowbeam's move to MachineRoom lanes and Reviews, with the six old worktrees, the guide rules to replace, three first tasks and the room's limits, each checked against the code.
 - P285: a lane lock names its run start, and a stop with --started-at refuses a different run; the bridge passes the confirmed start time, and the lanes source takes it from the lock.
 - P282: AUDIT-2026-11-DOCS-3.md lists 14 doc sentences this week's code contradicts, with corrections; every new route, flag and record field is named.
 - P283: AUDIT-2026-11-TESTS-2.md lists 12 tests since 12c25524 that pass with their change undone, nine proved in a scratch copy.
