@@ -567,13 +567,15 @@ export function prepareWorktree(project, lane) {
     if (head.status !== 0 || !sha) throw new Error(`Could not read the project's HEAD in ${project}.`)
     const current = spawnSync(gitPath(), ['branch', '--show-current'], { cwd: plan.path, encoding: 'utf8', windowsHide: true })
     if (current.status !== 0) throw new Error(`Could not read the worktree branch in ${plan.path}.`)
-    if (String(current.stdout ?? '').trim() === '') {
-      const counted = spawnSync(gitPath(), ['rev-list', '--count', `${sha}..HEAD`], { cwd: plan.path, encoding: 'utf8', windowsHide: true })
-      const count = counted.status === 0 ? Number.parseInt(String(counted.stdout ?? '').trim(), 10) : null
-      if (!Number.isInteger(count) || count < 0) throw new Error(`Could not read the commits in the worktree ${plan.path}.`)
-      if (count > 0) {
-        throw new Error(`The worktree ${plan.path} is detached with ${count} ${count === 1 ? 'commit' : 'commits'} that the project's HEAD does not have, so make a branch for them or remove the worktree first.`)
-      }
+    const branch = String(current.stdout ?? '').trim()
+    const counted = spawnSync(gitPath(), ['rev-list', '--count', `${sha}..HEAD`], { cwd: plan.path, encoding: 'utf8', windowsHide: true })
+    const count = counted.status === 0 ? Number.parseInt(String(counted.stdout ?? '').trim(), 10) : null
+    if (!Number.isInteger(count) || count < 0) throw new Error(`Could not read the commits in the worktree ${plan.path}.`)
+    if (branch === '' && count > 0) {
+      throw new Error(`The worktree ${plan.path} is detached with ${count} ${count === 1 ? 'commit' : 'commits'} that the project's HEAD does not have, so make a branch for them or remove the worktree first.`)
+    }
+    if (branch !== '' && count > 0) {
+      throw new Error(`The ${lane} worktree is on ${branch} with ${count} ${count === 1 ? 'commit' : 'commits'} not in the project yet. Merge or remove it first.`)
     }
     const moved = spawnSync(gitPath(), ['switch', '--detach', sha], { cwd: plan.path, encoding: 'utf8', windowsHide: true })
     if (moved.status !== 0) throw new Error(`Could not move the worktree ${plan.path} to the project's HEAD: ${String(moved.stderr ?? '').trim()}`)

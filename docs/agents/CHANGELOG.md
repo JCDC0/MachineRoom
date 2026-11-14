@@ -1,9 +1,11 @@
 # Changelog
 
 ## Unreleased
+- P294: a project run refuses to reuse .worktrees/LANE when it is on a named branch with commits not in the project, naming the branch and the count; a detached worktree keeps its check.
 - P297: ROOM.md, LIVE.md and COMMANDS.md say what the lane conversation, the cost board, failover, quota and the tree reuse do now, and the audit table records each row's status.
 - P262: the family tree editor sets a lane's backup lane, Dispatch can choose a model for one project run and names the backup lane, and a failover adds one room note and shows on both lanes.
 - P295: eleven tests assert literal text or the real call instead of the imported constant, and the git watcher test proves a failed rewatch reads again; row 2 needs a product change.
+- P294: a reused worktree on a named branch with commits not in the project's HEAD refuses with `The LANE worktree is on BRANCH with N commits not in the project yet. Merge or remove it first.`, and a detached worktree keeps its check.
 - P293: with Own worktree the confirm card names .worktrees/LANE inside the project and the branch the project has checked out, and drops beside the project and never on main.
 - P290: the candidate build test retries on a fresh port when another process takes it, the subfolder session test waits up to 15 seconds, and the stop test keeps its grandchild alive until the stop lists it.
 - P288: a conversation line that parses as JSON is masked whatever its type, so a string, number or array line shows no profile name.
