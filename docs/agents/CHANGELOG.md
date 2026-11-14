@@ -1,6 +1,9 @@
 # Changelog
 
 ## Unreleased
+- P262: a lane's editor offers a Backup lane select of the other active lanes, saved as fallback, and refuses the lane itself, the orchestrator or an unknown lane.
+- P262: Dispatch offers a model for one project run, sends it as --model, and names the model and the backup lane on the confirm card.
+- P262: a failover record adds one room note to the lane's head, and the Inspector shows Moved to or Taken over from with the kind.
 - P273: a backup lane passes the brief worktree check, a retry keeps the backup prompt, a project failover returns the backup's record and branch, and a spawn error counts as a failed start.
 - P272: a raw JSON line in a lane conversation is parsed and masked field by field, so escaped home paths and named secrets never reach the route.
 - P250: a lane's tree row and its Inspector open its conversation in the lower half, with a run picker, folded tool calls, live reads and Stop; the route reads live runs too.

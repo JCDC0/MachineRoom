@@ -1152,7 +1152,18 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
         }
       }),
 
-    runs: () => call('runs', () => runsState),
+    runs: () =>
+      call('runs', () => {
+        const last = []
+        const seen = new Set()
+        for (const record of runsState.recent) {
+          const lane = typeof record?.lane === 'string' ? record.lane.trim() : ''
+          if (!lane || seen.has(lane)) continue
+          seen.add(lane)
+          last.push(record)
+        }
+        return { ...runsState, last }
+      }),
 
     runConversation: ({ lane, startedAt } = {}) =>
       call('runConversation', () => {

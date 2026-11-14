@@ -959,21 +959,49 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
     })
   }
 
-  function notifyHeadStop(item, lane, stoppedAt) {
+  function headForLane(lane) {
     const registry = typeof orchestrators === 'function' ? orchestrators() : null
-    if (!registry) return
+    if (!registry) return null
     const sector = typeof registry.sectorForLane === 'function' ? registry.sectorForLane(lane) : null
-    const head =
+    return (
       (sector?.id && typeof registry.find === 'function' ? registry.find(sector.id) : null) ??
       (typeof registry.find === 'function' ? registry.find('orchestrator') : null) ??
       registry.main ??
       null
-    if (!head || typeof head.addNote !== 'function') return
-    const taskLabel = stopTaskLabel(item)
-    const note = `The owner stopped ${lane}'s run on ${taskLabel} at ${stoppedAt}.`
+    )
+  }
+
+  function notifyLaneHead(lane, note) {
+    const head = headForLane(lane)
+    if (!head || typeof head.addNote !== 'function') return false
     try {
       head.addNote(note)
-    } catch {}
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  function notifyHeadStop(item, lane, stoppedAt) {
+    const taskLabel = stopTaskLabel(item)
+    notifyLaneHead(lane, `The owner stopped ${lane}'s run on ${taskLabel} at ${stoppedAt}.`)
+  }
+
+  const notedFailovers = new Set()
+
+  function noteFailovers(records) {
+    for (const record of Array.isArray(records) ? records : []) {
+      const failover = record?.failover
+      if (!failover || typeof failover !== 'object' || Array.isArray(failover)) continue
+      const lane = typeof record.lane === 'string' ? record.lane.trim() : ''
+      const kind = typeof failover.kind === 'string' ? failover.kind.trim() : ''
+      const to = typeof failover.to === 'string' ? failover.to.trim() : ''
+      if (!lane || !kind || !to) continue
+      const mark = `${lane}\u0000${record.startedAt ?? ''}\u0000${kind}\u0000${to}`
+      if (notedFailovers.has(mark)) continue
+      notedFailovers.add(mark)
+      notifyLaneHead(lane, `${lane} hit ${kind} and its run moved to ${to}.`)
+    }
   }
 
   async function stopRun({ lane = '', startedAt = '', confirmed = false } = {}) {
@@ -1224,13 +1252,15 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
     if (path !== '/api/control/runs') return false
 
     if (method === 'GET') {
+      const records = readAllRunRecords(recordsPath())
+      noteFailovers(records)
       const thisRepo = await inThisRepository()
-      const records = roomRecords(readAllRunRecords(recordsPath()), thisRepo)
+      const visible = roomRecords(records, thisRepo)
       sendJson(req, res, 200, {
         project: resolvedRoot ? basename(resolvedRoot) : '',
         running: [...running.values()].map(snapshot),
-        recent: records.slice(-RECENT_LIMIT).reverse(),
-        last: newestRecordPerLane(records),
+        recent: visible.slice(-RECENT_LIMIT).reverse(),
+        last: newestRecordPerLane(visible),
       })
       return true
     }

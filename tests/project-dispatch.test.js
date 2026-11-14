@@ -839,6 +839,41 @@ describe('Dispatch when it cannot show the project form', () => {
   })
 })
 
+describe('a failover record read by the bridge', () => {
+  it('adds one room note for the lane head even when the runs list is read twice', async () => {
+    const runs = tempDir('mr-failover-note-')
+    writeFileSync(
+      join(runs, 'runs.jsonl'),
+      `${JSON.stringify({
+        lane: 'opencode',
+        startedAt: '2026-11-14T10:00:00.000Z',
+        failover: { kind: 'quota', to: 'agy' },
+      })}\n`
+    )
+    const notes = []
+    const head = { addNote: (text) => notes.push(text) }
+    let answer = null
+    const api = createRunsApi({
+      runsFolder: runs,
+      orchestrators: () => ({
+        sectorForLane: () => ({ id: 'frontend' }),
+        find: (id) => (id === 'frontend' ? head : null),
+        main: head,
+      }),
+      sendJson: (req, res, status, body) => {
+        answer = { status, body }
+      },
+      readJsonBody: async () => ({}),
+      activeLanes: { isChosen: () => true, isLaneActive: () => true },
+    })
+    for (let index = 0; index < 2; index += 1) {
+      await api.handle({ method: 'GET', headers: {} }, {}, new URL('http://127.0.0.1/api/control/runs'))
+      expect(answer.status).toBe(200)
+    }
+    expect(notes).toEqual(['opencode hit quota and its run moved to agy.'])
+  })
+})
+
 describe('Dispatch with a chosen model and backup lane', () => {
   it('lists the lane models, puts the choice in the body and names the model and backup on the confirm card', async () => {
     const agents = [
