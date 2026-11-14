@@ -296,6 +296,7 @@ describe('ReviewsPanel and ControlDrawer', () => {
   it('shows what happened to the play worktree under the merged line', async () => {
     const laneHead = '1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d'
     const baseHead = '9f8e7d6c5b4a39281706f5e4d3c2b1a09f8e7d6c'
+    const playHead = '0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d'
     const review = {
       lane: 'opencode',
       branch: 'feat/x',
@@ -310,10 +311,10 @@ describe('ReviewsPanel and ControlDrawer', () => {
       deleted: 0,
       checks: 'passed',
     }
-    let playResult = 'moved'
+    let playResult = { play: 'moved' }
     const client = {
       reviews: async () => [review],
-      mergeReview: async (lane) => ({ ok: true, lane, head: laneHead, commit: laneHead, play: playResult }),
+      mergeReview: async (lane) => ({ ok: true, lane, head: laneHead, commit: laneHead, ...playResult }),
       subscribe: () => () => {},
     }
 
@@ -335,16 +336,22 @@ describe('ReviewsPanel and ControlDrawer', () => {
         `The play worktree moved to ${laneHead.slice(0, 7)}.`
       )
 
-      playResult = 'dirty'
+      playResult = { play: 'dirty', playHead }
       await merge()
       expect(container.querySelector('.review-play-line')?.textContent).toBe(
-        `The play worktree has changes, so it stayed on ${baseHead.slice(0, 7)}.`
+        `The play worktree has changes, so it stayed on ${playHead.slice(0, 7)}.`
       )
 
-      playResult = 'not detached'
+      playResult = { play: 'dirty' }
       await merge()
       expect(container.querySelector('.review-play-line')?.textContent).toBe(
-        'The play worktree is on a branch, so it stayed.'
+        'The play worktree has changes, so it stayed.'
+      )
+
+      playResult = { play: 'not detached', playHead }
+      await merge()
+      expect(container.querySelector('.review-play-line')?.textContent).toBe(
+        `The play worktree is on a branch, so it stayed on ${playHead.slice(0, 7)}.`
       )
     })
   })

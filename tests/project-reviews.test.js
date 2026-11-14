@@ -454,8 +454,48 @@ describe('review routes on another project', () => {
     const res = await mergeRequest(url, 'opencode', { confirmed: true, head, base: 'trunk', baseHead: oldHead })
     expect(res.status).toBe(200)
     const body = await res.json()
-    expect(body).toEqual({ ok: true, lane: 'opencode', branch: 'feat/x', head, commit: head, play: 'dirty' })
+    expect(body).toEqual({
+      ok: true,
+      lane: 'opencode',
+      branch: 'feat/x',
+      head,
+      commit: head,
+      play: 'dirty',
+      playHead: oldHead,
+    })
     expect(git(play, ['rev-parse', 'HEAD']).trim()).toBe(oldHead)
+    expect(git(play, ['status', '--porcelain'])).toContain('local.txt')
+  }, 40000)
+
+  it('names a dirty play worktree by its own head, not the old main', async () => {
+    const { project, worktree, briefsDir } = makeProject()
+    const play = join(project, '.worktrees', 'play')
+    const oldHead = git(project, ['rev-parse', 'refs/heads/trunk']).trim()
+    git(project, ['worktree', 'add', '--detach', play, 'trunk'])
+    writeFileSync(join(play, 'play.txt'), 'play work\n')
+    git(play, ['add', 'play.txt'])
+    git(play, ['commit', '-m', 'play work'])
+    const playHead = git(play, ['rev-parse', 'HEAD']).trim()
+    expect(playHead).not.toBe(oldHead)
+    writeFileSync(join(play, 'local.txt'), 'local change\n')
+    const head = git(worktree, ['rev-parse', 'HEAD']).trim()
+    const { url } = await startBridge({ projectRoot: project, briefsDir })
+
+    const res = await mergeRequest(url, 'opencode', { confirmed: true, head, base: 'trunk', baseHead: oldHead })
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body).toEqual({
+      ok: true,
+      lane: 'opencode',
+      branch: 'feat/x',
+      head,
+      commit: head,
+      play: 'dirty',
+      playHead,
+    })
+    expect(body.playHead).not.toBe(oldHead)
+    expect(git(project, ['rev-parse', 'HEAD']).trim()).toBe(head)
+    expect(git(play, ['rev-parse', 'HEAD']).trim()).toBe(playHead)
     expect(git(play, ['status', '--porcelain'])).toContain('local.txt')
   }, 40000)
 
@@ -471,7 +511,15 @@ describe('review routes on another project', () => {
     const res = await mergeRequest(url, 'opencode', { confirmed: true, head, base: 'trunk', baseHead: oldHead })
     expect(res.status).toBe(200)
     const body = await res.json()
-    expect(body).toEqual({ ok: true, lane: 'opencode', branch: 'feat/x', head, commit: head, play: 'not detached' })
+    expect(body).toEqual({
+      ok: true,
+      lane: 'opencode',
+      branch: 'feat/x',
+      head,
+      commit: head,
+      play: 'not detached',
+      playHead: oldHead,
+    })
     expect(git(play, ['branch', '--show-current']).trim()).toBe('play-branch')
     expect(git(play, ['rev-parse', 'HEAD']).trim()).toBe(oldHead)
   }, 40000)

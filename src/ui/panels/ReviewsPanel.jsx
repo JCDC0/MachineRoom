@@ -20,16 +20,20 @@ function checksColor(checks) {
   return 'var(--yellow)'
 }
 
-export function playNotice(play, commit, oldHead) {
+export function playNotice(play, commit, playHead) {
   const short = typeof commit === 'string' ? commit.slice(0, 7) : ''
-  const oldShort = typeof oldHead === 'string' ? oldHead.slice(0, 7) : ''
+  const stayedShort = typeof playHead === 'string' ? playHead.slice(0, 7) : ''
   if (play === 'moved') return `The play worktree moved to ${short}.`
   if (play === 'dirty') {
-    return oldShort
-      ? `The play worktree has changes, so it stayed on ${oldShort}.`
+    return stayedShort
+      ? `The play worktree has changes, so it stayed on ${stayedShort}.`
       : 'The play worktree has changes, so it stayed.'
   }
-  if (play === 'not detached') return 'The play worktree is on a branch, so it stayed.'
+  if (play === 'not detached') {
+    return stayedShort
+      ? `The play worktree is on a branch, so it stayed on ${stayedShort}.`
+      : 'The play worktree is on a branch, so it stayed.'
+  }
   if (play === 'failed') return `The play worktree could not move to ${short}.`
   return ''
 }
@@ -415,7 +419,7 @@ export default function ReviewsPanel({
       if (!mountedRef.current) return
       const commitShort = typeof result?.commit === 'string' ? result.commit.slice(0, 7) : ''
       const text = `Merged as ${commitShort}.`
-      const playLine = playNotice(result?.play, result?.commit, target.baseHead)
+      const playLine = playNotice(result?.play, result?.commit, result?.playHead)
       setMergeSuccessByLane((prev) => ({ ...prev, [target.lane]: { text, playLine } }))
       setRefusedByLane((prev) => {
         if (!Object.hasOwn(prev, target.lane)) return prev

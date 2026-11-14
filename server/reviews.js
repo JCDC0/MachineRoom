@@ -438,10 +438,11 @@ export function createReviewsApi({
     const play = await playWorktree()
     if (!play) return null
     try {
+      const playHead = (await runGit(play, ['rev-parse', 'HEAD'])).trim()
       const branch = (await runGit(play, ['branch', '--show-current'])).trim()
-      if (branch) return { play: 'not detached' }
+      if (branch) return { play: 'not detached', playHead }
       const status = await runGit(play, ['status', '--porcelain'])
-      if (status.trim() !== '') return { play: 'dirty' }
+      if (status.trim() !== '') return { play: 'dirty', playHead }
       await runGit(play, ['checkout', '--no-overwrite-ignore', '--detach', commit], { timeout: GIT_WRITE_TIMEOUT_MS })
       return { play: 'moved' }
     } catch {
