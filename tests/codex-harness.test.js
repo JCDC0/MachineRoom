@@ -12,6 +12,11 @@ const ctx = {
 const lines = (...items) => items.map((item) => (typeof item === 'string' ? item : JSON.stringify(item))).join('\n') + '\n'
 
 describe('codex harness command builder', () => {
+  it('uses the workspace sandbox when no mode is passed', () => {
+    const args = codexHarness.command({ cli: {}, prompt: 'Do it.' }).args
+    expect(args.slice(args.indexOf('--sandbox'), args.indexOf('--sandbox') + 2)).toEqual(['--sandbox', 'workspace-write'])
+  })
+
   it('builds the standard codex exec command with model, effort and prompt', () => {
     const cmd = codexHarness.command({
       cli: { bin: 'codex', model: 'gpt-6.1-sol', effort: 'high' },
