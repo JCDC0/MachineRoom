@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- P284: the run list marks a run that moved with `| moved to LANE (KIND)` and a run that took over another lane with `| taken over from LANE`.
 - P273: a backup lane passes the brief worktree check, a retry keeps the backup prompt, a project failover returns the backup's record and branch, and a spawn error counts as a failed start.
 - P272: a raw JSON line in a lane conversation is parsed and masked field by field, so escaped home paths and named secrets never reach the route.
 - P250: a lane's tree row and its Inspector open its conversation in the lower half, with a run picker, folded tool calls, live reads and Stop; the route reads live runs too.

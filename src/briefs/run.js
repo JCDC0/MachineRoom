@@ -1173,7 +1173,15 @@ export function runListLine(record) {
   const branch = record.branch || 'no branch'
   const peakTokens = record.peakTokens ?? record.peak
   const peak = typeof peakTokens === 'number' && Number.isFinite(peakTokens) ? ` | peak ${peakTokens}` : ''
-  return `${when} | ${record.lane} | ${model} | ${briefs} | ${minutes} | ${exit}${killed} | ${cost} | ${branch}${peak}`
+  const move = record.failover
+  const moved = typeof move?.to === 'string' && move.to.trim() !== '' && typeof move?.kind === 'string' && move.kind.trim() !== ''
+    ? ` | moved to ${move.to.trim()} (${move.kind.trim()})`
+    : ''
+  const from = record.failoverFrom
+  const taken = typeof from?.lane === 'string' && from.lane.trim() !== ''
+    ? ` | taken over from ${from.lane.trim()}`
+    : ''
+  return `${when} | ${record.lane} | ${model} | ${briefs} | ${minutes} | ${exit}${killed} | ${cost} | ${branch}${peak}${moved}${taken}`
 }
 
 const CRASH_STATUSES = [3221226505, -1073740791]

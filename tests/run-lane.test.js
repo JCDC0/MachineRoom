@@ -983,6 +983,21 @@ describe('runListLine', () => {
     const withPeak = runRecord({ lane: 'hermes', briefs: ['T3'], startedAt: '2026-10-19T12:00:00.000Z', minutes: 12.4, exitCode: 0, costUsd: 0.0421, peakTokens: 125000, branch: 'feat/t3' })
     expect(runListLine(withPeak)).toBe('2026-10-19T12:00:00.000Z | hermes | model unknown | T3 | 12.4 min | exit 0 | 0.0421 USD | feat/t3 | peak 125000')
   })
+
+  it('marks a run that moved to another lane', () => {
+    const moved = runRecord({ lane: 'hermes', briefs: ['P284'], startedAt: '2026-10-19T12:00:00.000Z', minutes: 2, exitCode: 1, failover: { kind: 'quota', to: 'agy' } })
+    expect(runListLine(moved)).toBe('2026-10-19T12:00:00.000Z | hermes | model unknown | P284 | 2 min | exit 1 | not reported | no branch | moved to agy (quota)')
+  })
+
+  it('marks a run that took over another lane', () => {
+    const taken = runRecord({ lane: 'agy', briefs: ['P284'], startedAt: '2026-10-19T12:00:00.000Z', minutes: 2, exitCode: 0, failoverFrom: { lane: 'opencode' } })
+    expect(runListLine(taken)).toBe('2026-10-19T12:00:00.000Z | agy | model unknown | P284 | 2 min | exit 0 | not reported | no branch | taken over from opencode')
+  })
+
+  it('leaves a run that neither moved nor took over as it was', () => {
+    const plain = runRecord({ lane: 'hermes', briefs: ['P284'], startedAt: '2026-10-19T12:00:00.000Z', minutes: 2, exitCode: 0 })
+    expect(runListLine(plain)).toBe('2026-10-19T12:00:00.000Z | hermes | model unknown | P284 | 2 min | exit 0 | not reported | no branch')
+  })
 })
 
 const record = (over = {}) => ({
