@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- OPENCODE-RETIREMENT.md maps every fleet, doc and product dependency on OpenCode and gives a nine-step order that retires it from the fleet and keeps product support (P325).
 - LADDER-READINESS.md finds the ladder a no-go on Lowbeam until sub turns leave the main checkout and sector branches reach Reviews, and lists the bugs that need no feature yes (P327).
 - A stop counts a leftover only when it killed it; a gone or reused pid prints its own line (P322).
 - P322: a stop counts only the leftovers it killed, so a gone pid prints `leftover: PID had already ended` and a reused pid prints `stale: PID was not this run` with `stopped` at 0.
