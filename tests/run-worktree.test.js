@@ -193,6 +193,28 @@ describe('the worktree on a real repository', () => {
     expect(git(path, ['log', '--oneline', '-1']).trim()).toContain('detached work')
   })
 
+  it('refuses a worktree on a named branch with a commit the project does not have', () => {
+    const base = tempDir()
+    const project = initRepo(base)
+    const path = prepareWorktree(project, 'opencode').path
+    git(path, ['switch', '-q', '-c', 'machineroom/queue-old'])
+    git(path, ['commit', '-q', '--allow-empty', '-m', 'old task'])
+    expect(() => prepareWorktree(project, 'opencode')).toThrow('The opencode worktree is on machineroom/queue-old with 1 commit not in the project yet. Merge or remove it first.')
+    expect(git(path, ['rev-parse', '--abbrev-ref', 'HEAD']).trim()).toBe('machineroom/queue-old')
+  })
+
+  it('starts a worktree on a named branch the project already merged', () => {
+    const base = tempDir()
+    const project = initRepo(base)
+    const path = prepareWorktree(project, 'opencode').path
+    git(path, ['switch', '-q', '-c', 'machineroom/queue-merged'])
+    git(path, ['commit', '-q', '--allow-empty', '-m', 'merged task'])
+    git(project, ['merge', '-q', '--ff-only', 'machineroom/queue-merged'])
+    expect(prepareWorktree(project, 'opencode')).toEqual({ path, made: false })
+    expect(git(path, ['rev-parse', '--abbrev-ref', 'HEAD']).trim()).toBe('HEAD')
+    expect(git(path, ['rev-parse', 'HEAD']).trim()).toBe(git(project, ['rev-parse', 'HEAD']).trim())
+  })
+
   it('refuses a worktree that belongs to another project', () => {
     const base = tempDir()
     const project = initRepo(base)
@@ -208,6 +230,7 @@ describe('the worktree on a real repository', () => {
     const path = prepareWorktree(project, 'opencode').path
     git(path, ['switch', '-q', '-c', 'machineroom/queue-old'])
     git(path, ['commit', '-q', '--allow-empty', '-m', 'old task'])
+    git(project, ['merge', '-q', '--ff-only', 'machineroom/queue-old'])
     git(project, ['commit', '-q', '--allow-empty', '-m', 'newer main'])
     prepareWorktree(project, 'opencode')
     expect(git(path, ['rev-parse', 'HEAD']).trim()).toBe(git(project, ['rev-parse', 'HEAD']).trim())

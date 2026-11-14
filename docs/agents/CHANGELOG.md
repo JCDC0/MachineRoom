@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- P294: a reused worktree on a named branch with commits not in the project's HEAD refuses with `The LANE worktree is on BRANCH with N commits not in the project yet. Merge or remove it first.`, and a detached worktree keeps its check.
 - P293: with Own worktree the confirm card names .worktrees/LANE inside the project and the branch the project has checked out, and drops beside the project and never on main.
 - P290: the candidate build test retries on a fresh port when another process takes it, the subfolder session test waits up to 15 seconds, and the stop test keeps its grandchild alive until the stop lists it.
 - P288: a conversation line that parses as JSON is masked whatever its type, so a string, number or array line shows no profile name.
