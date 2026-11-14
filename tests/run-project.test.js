@@ -20,6 +20,7 @@ import {
   parseRunArgs,
   pathInside,
   projectProblems,
+  projectRunGit,
   runListLine,
   runRecord,
   UNATTENDED_NOTE,
@@ -498,6 +499,31 @@ describe('the record of a project run', () => {
     expect(record.task).toContain('OPENROUTER_API_KEY=[key]')
     const written = JSON.parse(JSON.stringify(record))
     expect(written.task).toBe(record.task)
+  })
+
+  it('masks a key and a home path in a commit subject before it is stored', () => {
+    const key = 'sk-' + 'or-v1-' + 'a'.repeat(40)
+    const subject = `abc1234 Use ${key} from C:\\Users\\NAME\\notes.txt`
+    const git = projectRunGit({
+      branch: 'machineroom/queue-opencode-20261110-120000',
+      startBranch: 'main',
+      commits: [subject],
+    })
+    expect(git.branch).toBe('machineroom/queue-opencode-20261110-120000')
+    expect(git.commits).toHaveLength(1)
+    expect(git.commits[0]).not.toContain(key)
+    expect(git.commits[0]).toContain('[key]')
+    expect(git.commits[0]).toContain('%USERPROFILE%')
+    expect(git.commits[0]).not.toContain('NAME')
+
+    const runs = folderIn(tempDir(), 'machineroom-runs')
+    const record = runRecord({ lane: 'opencode', briefs: [], branch: git.branch, commits: git.commits })
+    appendFileSync(join(runs, 'runs.jsonl'), `${JSON.stringify(record)}\n`)
+    const written = JSON.parse(readFileSync(join(runs, 'runs.jsonl'), 'utf8').trim())
+    expect(written.branch).toBe('machineroom/queue-opencode-20261110-120000')
+    expect(written.commits).toEqual(git.commits)
+    expect(written.commits[0]).not.toContain(key)
+    expect(written.commits[0]).not.toContain('NAME')
   })
 
   it('still lists a project run with --list and --stats', async () => {
