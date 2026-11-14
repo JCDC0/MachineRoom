@@ -472,7 +472,7 @@ describe('claude sessions reader', () => {
     expect(chunks(frames)[0].message.content[0].id).toBe('in-1')
   })
 
-  it('reads a session started in a subfolder of the project', () => {
+  it('reads a session started in a subfolder of the project', async () => {
     const { projectRoot, home, runs } = setup()
     const frames = []
     const reader = makeReader({ projectRoot, home, runs, frames })
@@ -486,7 +486,13 @@ describe('claude sessions reader', () => {
       sessionLine('user', { role: 'user', content: 'Build the page.' }, { cwd: packageFolder, sessionId: 'sess-sub' }, projectRoot),
       sessionLine('assistant', { role: 'assistant', content: [readUse('sub-1', join(packageFolder, 'src', 'page.js'))] }, { cwd: packageFolder, sessionId: 'sess-sub' }, projectRoot),
     ]))
-    reader.tick()
+    await waitFor(
+      () => {
+        reader.tick()
+        return logFrames(frames).length === 1
+      },
+      { timeoutMs: 15000, what: 'the reader to see the subfolder session' }
+    )
 
     expect(logFrames(frames)).toHaveLength(1)
     expect(chunks(frames)[0].message.content[0].id).toBe('sub-1')
