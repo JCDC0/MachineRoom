@@ -86,7 +86,7 @@ function makeRoot() {
   return root
 }
 
-function startBridge({ readTree, root, debounceMs = 15, pollMs, quietMs, watchProject }) {
+function startBridge({ readTree, root, debounceMs = 15, pollMs, quietMs, watchProject, pollBesideWatcher }) {
   const bridge = createBridge({
     projectRoot: root,
     port: 0,
@@ -94,6 +94,7 @@ function startBridge({ readTree, root, debounceMs = 15, pollMs, quietMs, watchPr
     debounceMs,
     pollMs,
     quietMs,
+    pollBesideWatcher,
     readTree,
     ...(watchProject ? { watchProject } : {}),
   })
@@ -402,14 +403,23 @@ describe('the folder tree answer', () => {
 
   it('keeps the one-second rule for a folder ask while the bridge polls', async () => {
     const root = makeRoot()
+    writeFileSync(join(root, 'a.js'), '1\n')
     let reads = 0
+    let watcherArmed = false
+    let watcherClosed = false
     const { started } = startBridge({
       root,
       debounceMs: 60000,
       pollMs: 60000,
       quietMs: 60000,
-      watchProject: () => {
-        throw new Error('watch is off')
+      pollBesideWatcher: true,
+      watchProject: (folder, watchOptions, listener) => {
+        const current = watch(folder, watchOptions, listener)
+        watcherArmed = true
+        current.on('close', () => {
+          watcherClosed = true
+        })
+        return current
       },
       readTree: async () => {
         reads += 1
@@ -418,11 +428,13 @@ describe('the folder tree answer', () => {
     })
     const { url } = await started
     await waitFor(() => reads === 1)
+    expect(watcherArmed).toBe(true)
     await wait(1100)
 
     const first = await folderTree(url)
     expect(first.body.version).toBe(1)
     expect(reads).toBe(2)
+    expect(watcherClosed).toBe(false)
   })
 })
 

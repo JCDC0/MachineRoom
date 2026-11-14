@@ -607,6 +607,7 @@ export function createBridge(options = {}) {
   const heartbeatMs = Number(options.heartbeatMs ?? 15000)
   const debounceMs = Number(options.debounceMs ?? 300)
   const pollMs = Number(options.pollMs ?? Math.min(debounceMs, 200))
+  const pollBesideWatcher = Boolean(options.pollBesideWatcher)
   const quietMs = Number(options.quietMs ?? WATCH_QUIET_MS)
   const quietFullMs = Number(options.quietFullMs ?? QUIET_FULL_READ_MS)
   const treeBudgetMs = Number(options.treeBudgetMs ?? TREE_LAST_FILE_BUDGET_MS)
@@ -1385,7 +1386,7 @@ export function createBridge(options = {}) {
       lastReadEndAt = Date.now()
       lastReadChanged = changed
       if (treeReading === read) treeReading = null
-      if (!treeDirty && watcher && pollTimer) {
+      if (!pollBesideWatcher && !treeDirty && watcher && pollTimer) {
         clearInterval(pollTimer)
         pollTimer = null
       }
@@ -1445,6 +1446,7 @@ export function createBridge(options = {}) {
     ensureGitMeta().catch(() => {})
     if (!adoptInitialTree(options.initialTree)) startTreeRead().catch(() => {})
     if (!armWatcher()) beginPolling(false)
+    else if (pollBesideWatcher) pollTimer = setInterval(pollTreeChange, pollMs)
   }
 
   function invalidateGitTree() {

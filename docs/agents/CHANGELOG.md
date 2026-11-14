@@ -1,10 +1,12 @@
 # Changelog
 
 ## Unreleased
+- P301: the poll test runs a bridge with a watcher and a poll timer at once, through a test-only pollBesideWatcher option, so it fails when the poll guard is taken out.
 - P303: a stop reads the lane lock again before its worktree leftover search and skips it when a newer run holds the lock.
 - P299: the full suite on main at 8652616e passed on the first try: 287 files, 5294 passed, 4 skipped, in 226 seconds.
 - P303: a stop reads the lane lock again before it searches the worktree for leftovers, so a newer run that took the lock keeps its processes and its lock.
 - P298: review 33 reads P285 to P297 and lists five findings; R33-1 to R33-3 block the push.
+- P301: the folder tree poll test runs a working watcher and a poll timer at once, so dropping `pollTimer` from `folderTreeReuseAllowed` makes it fail.
 - P294: a project run refuses to reuse .worktrees/LANE when it is on a named branch with commits not in the project, naming the branch and the count; a detached worktree keeps its check.
 - P297: ROOM.md, LIVE.md and COMMANDS.md say what the lane conversation, the cost board, failover, quota and the tree reuse do now, and the audit table records each row's status.
 - P262: the family tree editor sets a lane's backup lane, Dispatch can choose a model for one project run and names the backup lane, and a failover adds one room note and shows on both lanes.
