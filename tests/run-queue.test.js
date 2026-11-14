@@ -371,6 +371,30 @@ describe('runQueue', { timeout: 30000 }, () => {
     }
   })
 
+  it('commits a failed-over task on the backup branch', async () => {
+    const parent = makeTempDir('machine-room-queue-')
+    try {
+      const repo = initRepo(parent)
+      const result = await runQueue({
+        tasks: ['Fail over from work-x'],
+        git: adapter(repo, 'work-x'),
+        runTask: async () => {
+          git(repo, ['switch', '-c', 'work-x-on-agy'])
+          writeFileSync(join(repo, 'backup.txt'), 'The backup lane wrote this.\n')
+          return { code: 0, backupLane: 'agy' }
+        },
+        runTests: async () => ({ ok: true }),
+      })
+
+      expect(result.results.map((item) => item.status)).toEqual(['committed'])
+      expect(git(repo, ['branch', '--show-current']).trim()).toBe('work-x-on-agy')
+      expect(git(repo, ['log', '-1', '--format=%s']).trim()).toBe('Fail over from work-x')
+      expect(git(repo, ['show', 'HEAD:backup.txt']).trim()).toBe('The backup lane wrote this.')
+    } finally {
+      remove(parent)
+    }
+  })
+
   it('notes a task with no change and goes on', async () => {
     const parent = makeTempDir('machine-room-queue-')
     try {

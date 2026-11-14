@@ -136,6 +136,7 @@ export async function runQueue({ tasks, runTask, runTests, git, author = null } 
   if (String(await git.status()).trim() !== '') throw new Error('The project has uncommitted changes. A queue needs a clean start.')
   await git.create(branch)
   const head = async () => (typeof git.head === 'function' ? String(await git.head()).trim() : '')
+  const currentBranch = async () => (typeof git.currentBranch === 'function' ? String(await git.currentBranch()).trim() : '')
   let stopped = false
   for (let offset = 0; offset < list.length; offset += 1) {
     const number = offset + 1
@@ -145,6 +146,7 @@ export async function runQueue({ tasks, runTask, runTests, git, author = null } 
       continue
     }
     const startHead = await head()
+    const startBranch = (await currentBranch()) || branch
     const run = await runTask(task, number)
     if (run?.killed === true) {
       results.push({ number, task, status: 'failed: lane killed' })
@@ -156,9 +158,11 @@ export async function runQueue({ tasks, runTask, runTests, git, author = null } 
       stopped = true
       continue
     }
-    const expectedBranch = typeof run?.branch === 'string' && run.branch !== '' ? run.branch : branch
+    const backupLane = typeof run?.backupLane === 'string' ? run.backupLane.trim() : ''
+    const expectedBranch = backupLane === '' ? startBranch : `${startBranch}-on-${backupLane}`
     const onBranch = typeof git.currentBranch === 'function' ? String(await git.currentBranch()).trim() : expectedBranch
-    if (onBranch !== expectedBranch) {
+    const onBackupBranch = backupLane !== '' && onBranch.endsWith(`-on-${backupLane}`)
+    if (onBranch !== expectedBranch && !onBackupBranch) {
       results.push({ number, task, status: `failed: the lane left the queue branch for ${onBranch === '' ? 'no branch' : onBranch}` })
       stopped = true
       continue

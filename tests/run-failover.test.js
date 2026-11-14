@@ -521,6 +521,57 @@ describe('a lane that hits its quota hands its run to a backup lane', { timeout:
     }
   })
 
+  it('fails the task when the backup ends on a third branch', async () => {
+    const base = makeTempDir('machine-room-failover-queue-third-')
+    try {
+      const project = join(base, 'project')
+      const runs = join(base, 'runs')
+      const okCount = join(base, 'ok-count.txt')
+      const git = gitPath() || 'git'
+      const script = [
+        "const { appendFileSync, writeFileSync } = require('node:fs')",
+        "const { spawnSync } = require('node:child_process')",
+        "const title = process.argv.includes('--title') ? process.argv[process.argv.indexOf('--title') + 1] : ''",
+        "if (title.startsWith('agy-project-')) {",
+        `  const env = { ...process.env, ...${JSON.stringify(GIT_IDENTITY)} }`,
+        `  spawnSync(${JSON.stringify(git)}, ['switch', '-c', 'third'], { stdio: 'ignore', env })`,
+        `  appendFileSync(${JSON.stringify(okCount)}, 'x')`,
+        "  writeFileSync('note.txt', 'done\\n')",
+        "  console.log('{\"type\":\"step_finish\",\"part\":{\"cost\":0,\"tokens\":{\"input\":1,\"output\":1}}}')",
+        '} else {',
+        "  console.log(JSON.stringify({ type: 'error', error: { type: 'provider.rate_limit', message: '429 Too Many Requests' } }))",
+        '  process.exit(1)',
+        '}',
+        '',
+      ].join('\n')
+      mkdirSync(runs, { recursive: true })
+      makeRepo(project, script)
+      const lanes = {
+        opencode: { name: 'Fail lane', worktree: join(base, 'first'), fallback: 'agy', cli: { harness: 'opencode', bin: process.execPath, model: 'fake/fail' } },
+        agy: { name: 'Backup lane', worktree: join(base, 'backup'), cli: { harness: 'opencode', bin: process.execPath, model: 'fake/ok' } },
+      }
+      const lanesFile = join(base, 'lanes.json')
+      writeFileSync(lanesFile, `${JSON.stringify(lanes, null, 2)}\n`)
+      const queueFile = join(base, 'queue.txt')
+      writeFileSync(queueFile, 'Do the task.\n')
+      const result = await runLane(['opencode', '--project', project, '--queue', queueFile], {
+        MACHINEROOM_RUNS: runs,
+        MACHINEROOM_LANES_FILE: lanesFile,
+      })
+      expect(result.code, `${result.stdout}\n${result.stderr}`).toBe(1)
+      expect(result.stdout).toContain('1. failed: the lane left the queue branch for third')
+      const records = readRecords(runs)
+      expect(records).toHaveLength(2)
+      expect(records[1]).toMatchObject({ lane: 'agy', branch: 'third', queueStatus: 'failed: the lane left the queue branch for third' })
+      expect(gitIn(project, ['branch', '--show-current'])).toBe('third')
+      expect(gitIn(project, ['status', '--porcelain'])).toContain('note.txt')
+      expect(gitIn(project, ['rev-list', '--count', 'refs/heads/main..third'])).toBe('0')
+      expect(count(okCount)).toBe(1)
+    } finally {
+      rmSync(base, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+    }
+  })
+
   it('keeps the failed branch and commits when the backup throws after making its branch', async () => {
     const base = makeTempDir('machine-room-failover-queue-refused-')
     try {

@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- After a failover a queue expects the task's start branch with -on-BACKUP and fails a task that ends on another branch (P321).
 - When the play worktree stays, Reviews names the commit play is on, not the old main (P320).
 - OPENCODE-RETIREMENT.md maps every fleet, doc and product dependency on OpenCode and gives a nine-step order that retires it from the fleet and keeps product support (P325).
 - LADDER-READINESS.md finds the ladder a no-go on Lowbeam until sub turns leave the main checkout and sector branches reach Reviews, and lists the bugs that need no feature yes (P327).
@@ -8,6 +9,7 @@
 - P322: a stop counts only the leftovers it killed, so a gone pid prints `leftover: PID had already ended` and a reused pid prints `stale: PID was not this run` with `stopped` at 0.
 - P320: the play worktree's `dirty` and `not detached` answers carry `playHead`, play's own head, and the Reviews play line names it instead of the destination's old head.
 - P320: ROOM.md and LIVE.md say the play line names the play worktree's own head and falls back to the sentence with no SHA.
+- P321: after a failover a queue expects the backup's branch `BEFORE-on-BACKUP` and fails the task when the backup ends elsewhere.
 - The docs match review 34: lane commits during a task, the check limits, refused backups, two new limits, the Lowbeam trial ran, and the codex lane on GPT-6.1 Terra high (P319).
 - A refused backup keeps the failed run's branch and commits, a queue signs each task with the lane and model that did it, and a lane that leaves the queue branch fails its task (P314).
 - Commit subjects on a run record are masked for keys and profile paths when saved and again in the runs response (P316).
