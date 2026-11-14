@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- Any harness the room can start can lead a sub orchestrator in the sub forms, ladder save checks and agent roster, refusing unavailable harnesses with 400 (P331).
 - Review 35 confirms every review 34 fix has a test that fails with it undone, and finds four more: R35-1 to R35-4 (P324).
 - The queue dispatch test waits on the bridge's run end notice instead of a ten second poll (P323).
 - After a failover a queue expects the task's start branch with -on-BACKUP and fails a task that ends on another branch (P321).

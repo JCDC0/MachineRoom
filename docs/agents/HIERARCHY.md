@@ -42,6 +42,7 @@ Rules, all checked by `src/model/hierarchy.js`:
 - At most 5 sub orchestrators.
 - A scope is a list of 1 to 20 folder or file globs relative to the project root, with no `..` and no absolute path.
 - `restricted` and `scope` set by the owner (`setBy: "owner"`) cannot be changed by the main orchestrator.
+- A sub orchestrator may use any harness the bridge can start on this computer (`activeHarnesses` from `GET /api/orchestrators`). Saving a ladder refuses a sub whose harness has no program on this computer with `harnessUnavailableProblem` (400), and `subOrchestratorAgent` reports each sub with its own harness, adapter type, parser and model (P331).
 
 ## How it runs
 
