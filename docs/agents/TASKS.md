@@ -2728,3 +2728,40 @@ Review 35 (`docs/agents/AUDIT-2026-11-REVIEW-35.md`) fixes, P328 to P330. OpenCo
 1. When the snapshot is not empty but holds neither the lock holder's run pid nor its child pid while that pid is alive, the stop counts it as failed, prints `could not see the LANE run in the process list, so the lock stays`, and keeps the lock.
 2. Test, failing before your change: a non-empty snapshot without the holder's pids, with the pid alive, leaves the lock in place and exits non-zero.
 3. Run `node node_modules/vitest/vitest.mjs run tests/run-lane-stop.test.js` and report the counts.
+
+The free hierarchy, P331 to P334. The owner said yes on 2026-11-15. The goal: the owner's harnesses (Claude, Codex, AGY, OpenCode, native) work together with free choice of who coordinates whom, they can message each other, and the owner watches their file access in the room. Worktrees stay a workflow choice, and the permission modes guard against an agent going outside the project. A probe on 2026-11-15 showed a `codex exec --sandbox workspace-write` turn reaches a server on 127.0.0.1, so a Codex orchestrator can call the bridge; its sandbox keeps git read-only.
+
+**P331. Any harness can be a sub orchestrator (AGY).** Read this brief only. Commit each step as you finish it, and stop starting new work at minute 32. Run every command in the foreground. Change no engine file and no styles. Files: src/ui/ladderForm.js, src/ui/FamilyTree.jsx, src/ui/FamilyTeam.jsx (only the sub form's harness choice), server/lanes-source.js (only `subOrchestratorAgent`), server/orchestrators.js (only the ladder save path), tests/ladder-form.test.js, tests/family-ladder-ui.test.js, tests/orchestrators.test.js, tests/lanes-source.test.js, docs/agents/HIERARCHY.md, docs/agents/architecture/ROOM.md, docs/agents/CHANGELOG.md.
+
+Today `subFromForm` keeps only `claude` or `opencode` (`src/ui/ladderForm.js`), and `subOrchestratorAgent` shows every other sub as `claude` (`server/lanes-source.js`).
+
+1. The sub form offers every harness the room can start (the harnesses the orchestrators route already lists as available, `activeHarnesses` in `server/orchestrators.js`), and `subFromForm` keeps any of them. An unknown harness falls back to `claude` as before.
+2. `subOrchestratorAgent` uses the sub's own harness and model, so a `codex`, `agy` or `machineroom` sub shows with its own shape and parser.
+3. Saving a ladder refuses a sub whose harness has no program on this machine, with `harnessUnavailableProblem` from `server/agents-config.js`.
+4. Tests, each failing before your change: the form keeps `codex` and `agy`; the roster names a `codex` sub as codex; a ladder save with an unavailable harness answers 400.
+5. Run `node node_modules/vitest/vitest.mjs run tests/ladder-form.test.js tests/family-ladder-ui.test.js tests/orchestrators.test.js tests/lanes-source.test.js` and `npm run build`. Report the counts.
+
+**P332. Codex orchestrators get Plan and Auto modes (Codex).** Read this brief only. Do not commit: your sandbox keeps git read-only, so leave your work uncommitted in your worktree and the runner commits it. Write every file the brief names in your worktree; your reply is not the report. Stop starting new work at minute 30. Files: src/control/modes.js, src/harnesses/codex.js, tests/modes.test.js, tests/harness-modes.test.js, tests/codex-harness.test.js, docs/agents/architecture/LIVE.md, docs/agents/CHANGELOG.md.
+
+1. `modesFor('codex')` lists `plan` and `auto`, and its default is `auto`. There is no `bypass` for Codex: it keeps its sandbox.
+2. `codexHarness.command` reads `mode`: `plan` runs `--sandbox read-only`; every other mode runs `--sandbox workspace-write` as today. Lane runs, which pass no mode, are unchanged.
+3. LIVE.md: one sentence that a Codex orchestrator reaches the bridge from its `workspace-write` sandbox (probe of 2026-11-15) and cannot write git, so it coordinates and its lanes or the owner merge.
+4. Tests, each failing before your change: the codex mode list; `plan` gives `read-only`; no mode gives `workspace-write`.
+5. Run `node node_modules/vitest/vitest.mjs run tests/modes.test.js tests/harness-modes.test.js tests/codex-harness.test.js` and report the counts.
+
+**P333. Orchestrators message each other freely (AGY, Gemini 4 Argon).** Read this brief only. Commit each step as you finish it, and stop starting new work at minute 35. Run every command in the foreground. Files: server/orchestrators.js (only `message` and the sub's reply path), src/model/hierarchy.js (only the sub's instruction lines), docs/agents/ORCHESTRATOR-AGENT.md, docs/agents/HIERARCHY.md (only "Who talks to whom"), tests/orchestrators.test.js, tests/hierarchy.test.js, docs/agents/architecture/LIVE.md, docs/agents/CHANGELOG.md.
+
+Today only the main orchestrator's token may send a message (`MAIN_MESSAGE_PROBLEM`), and a sub's answer goes only to the main orchestrator.
+
+1. `POST /api/orchestrator/messages` with any orchestrator's token may send to any other orchestrator by id (`orchestrator` or a sub id), never to itself. The recipient receives it with `deliver`, from `orchestrator` or `sub:ID`, it wakes as a room message does, and the Team view records it with `announce(from, to, 'message', text)`. The owner, with an Origin, may still send to anyone.
+2. Loop guard: each sender may send at most 6 such messages in any 10 minutes; the seventh answers 429 with `Too many messages from this orchestrator. Wait, or ask the owner.` Each recipient's existing wake budget still applies.
+3. The sub's instruction lines and ORCHESTRATOR-AGENT.md say how to message any orchestrator: `POST {{BRIDGE}}/api/orchestrator/messages` with `{ "to": "ID", "text": "..." }` and the `X-MachineRoom-Orchestrator` header. A sub's turn answer still goes to its parent.
+4. HIERARCHY.md's table: subs can message any orchestrator; lanes still send one report when their run ends.
+5. Tests, each failing before your change: a sub's token sends to another sub and to the main orchestrator; a sub cannot message itself (400); the seventh message in ten minutes answers 429; a message with no token and no Origin is refused.
+6. Run `node node_modules/vitest/vitest.mjs run tests/orchestrators.test.js tests/hierarchy.test.js` and report the counts.
+
+**P334. A ladder test from start to report, on harnesses other than Claude (AGY).** Read this brief only. Change no product code: only tests. Commit each step as you finish it, and stop starting new work at minute 32. Run every command in the foreground. Files: tests/ladder-e2e.test.js, docs/agents/CHANGELOG.md.
+
+1. Read `tests/orchestrator-e2e.test.js` and `tests/orchestrators.test.js` for how they build orchestrators with fake programs. Write `tests/ladder-e2e.test.js`: a main orchestrator and one sub on the `codex` harness with two lanes in its sector, using fake programs that print the harness's JSON lines. The sub's turn starts a lane run through the runs route with its token; the run's end wakes the sub; the sub's answer reaches the main orchestrator as `sub:ID`; and a lane outside the sector is refused with 403.
+2. If a step fails because of product code, keep that test as `it.fails` with a one-line comment naming the file and line, and report it. Do not change product code.
+3. Run `node node_modules/vitest/vitest.mjs run tests/ladder-e2e.test.js` and report the counts.
