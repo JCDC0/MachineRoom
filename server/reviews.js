@@ -417,6 +417,38 @@ export function createReviewsApi({
     return onProject ? projectBase() : mainBase()
   }
 
+  async function playWorktree() {
+    const play = join(resolvedRoot, '.worktrees', 'play')
+    if (!resolvedRoot || !existsSync(play)) return ''
+    let list
+    try {
+      list = await runGit(resolvedRoot, ['worktree', 'list', '--porcelain'])
+    } catch {
+      return ''
+    }
+    const key = pathKey(play)
+    for (const line of list.split(/\r?\n/)) {
+      if (!line.startsWith('worktree ')) continue
+      if (pathKey(line.slice('worktree '.length)) === key) return play
+    }
+    return ''
+  }
+
+  async function movePlayWorktree(commit) {
+    const play = await playWorktree()
+    if (!play) return null
+    try {
+      const branch = (await runGit(play, ['branch', '--show-current'])).trim()
+      if (branch) return { play: 'not detached' }
+      const status = await runGit(play, ['status', '--porcelain'])
+      if (status.trim() !== '') return { play: 'dirty' }
+      await runGit(play, ['checkout', '--detach', commit], { timeout: GIT_WRITE_TIMEOUT_MS })
+      return { play: 'moved' }
+    } catch {
+      return { play: 'failed' }
+    }
+  }
+
   async function laneReview(lane, worktree, base, runs = null) {
     const branch = (await runGit(worktree, ['branch', '--show-current'])).trim()
     const head = (await runGit(worktree, ['rev-parse', 'HEAD'])).trim()
@@ -743,7 +775,11 @@ export function createReviewsApi({
           answer = onProject
             ? await fastForwardLane(lane, worktree, head, baseName, baseHead)
             : await mergeLane(lane, worktree, head, message, baseName, baseHead)
-          if (answer.status === 200) {
+          if (answer.status === 200 && answer.body && typeof answer.body.commit === 'string') {
+            try {
+              const play = await movePlayWorktree(answer.body.commit)
+              if (play) answer = { ...answer, body: { ...answer.body, ...play } }
+            } catch {}
             invalidateGitCache(resolvedRoot)
             notify({ topic: 'git' })
           }
