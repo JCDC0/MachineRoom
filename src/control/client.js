@@ -425,6 +425,7 @@ export function createClient({
 
     startRun: (lane, run) => {
       const body = Array.isArray(run) ? { briefs: run } : { ...(run ?? {}) }
+      if (typeof body.mode === 'string' && body.mode.trim() !== '') body.mode = body.mode.trim()
       return request('POST', '/api/control/runs', { lane, ...body, confirmed: true })
     },
 

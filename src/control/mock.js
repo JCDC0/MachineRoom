@@ -1798,6 +1798,12 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
         const queue = body.tasks !== undefined
         const worktree = projectRun && body.worktree === true
         const chosenModel = projectRun && typeof body.model === 'string' ? body.model.trim() : ''
+        const chosenMode = typeof body.mode === 'string' ? body.mode.trim() : ''
+        if (chosenMode !== '') {
+          const modes = modesFor(info.cli.harness).map((mode) => mode.id)
+          if (!modes.includes(chosenMode)) throw new Error(`The ${chosenMode} mode is not one ${lane}'s harness has. It has: ${modes.join(', ')}.`)
+          if (chosenMode === 'ask') throw new Error('A lane run has nobody to ask, so the ask mode is for orchestrators only.')
+        }
         if (queue && (body.task !== undefined || body.briefs !== undefined)) throw new Error(RUN_KIND_PROBLEM)
         const briefs = projectRun ? [] : body.briefs
         let task = ''
@@ -1822,6 +1828,7 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
         if (runsState.running.some((item) => item.lane === lane)) throw new Error('That lane is already running.')
         const entry = { lane, briefs: [...briefs], startedAt: new Date(now()).toISOString(), lastLines: [] }
         if (chosenModel) entry.model = chosenModel
+        if (chosenMode) entry.mode = chosenMode
         if (worktree) entry.worktree = true
         if (queue) {
           entry.queue = true
