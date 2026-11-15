@@ -525,4 +525,69 @@ describe('review 39 fixes: R39-3 inbox context bound', () => {
     expect(kept).toMatch(/^(filler|keep|this|tail\.)(?=\s|$)/)
     expect(kept.endsWith('keep this tail.')).toBe(true)
   })
+
+  it('keeps a sender name with spaces on a cut inbox reply', () => {
+    const messages = [
+      { role: 'system', content: 's'.repeat(6500) },
+      { role: 'user', content: 'Initial task to keep.' },
+      {
+        role: 'user',
+        content: 'Messages for you while you work:\nEye check agent: ' + 'filler '.repeat(400) + 'keep this tail.',
+      },
+    ]
+    boundMessages(messages, 8000)
+    expect(JSON.stringify(messages).length).toBeLessThanOrEqual(8000)
+    expect(messages[1].content).toBe('Initial task to keep.')
+    const prefix = 'Messages for you while you work:\nEye check agent: [start cut] '
+    expect(messages[2].content.startsWith(prefix)).toBe(true)
+    const kept = messages[2].content.slice(prefix.length)
+    expect(kept).toMatch(/^(filler|keep|this|tail\.)(?=\s|$)/)
+    expect(kept.endsWith('keep this tail.')).toBe(true)
+  })
+
+  it('keeps the bound and the task when a spaced-sender reply is cut', async () => {
+    const folder = tempDir()
+    const bridge = await startFakeBridge((_req, res) => {
+      res.writeHead(200, { 'content-type': 'application/json' })
+      res.end(
+        JSON.stringify({
+          messages: [
+            { from: 'Eye check agent', text: `${'filler '.repeat(1200)}keep this tail.`, at: '2026-11-16T10:00:00.000Z' },
+          ],
+        }),
+      )
+    })
+    const api = await startFakeApi((_body, index) =>
+      index === 0
+        ? chatAnswer({ calls: [{ name: 'list_dir', arguments: { path: '.' } }] })
+        : chatAnswer({ text: 'Done.' }),
+    )
+
+    const result = await runAgent({
+      folder,
+      api,
+      env: {
+        MACHINEROOM_BRIDGE: bridge.url,
+        MACHINEROOM_LANE_TICKET: 'ticket-spaced-sender',
+        MR_AGENT_CONTEXT_CHARS: '8000',
+      },
+    })
+
+    expect(result.code).toBe(0)
+    expect(result.stderr).toBe('')
+    expect(api.calls).toHaveLength(2)
+    const messages = api.calls[1].body.messages
+    expect(JSON.stringify(messages).length).toBeLessThanOrEqual(8000)
+    expect(messages[1]).toEqual({ role: 'user', content: 'Do the task.' })
+    const inbox = messages.filter(
+      (message) =>
+        message.role === 'user' &&
+        typeof message.content === 'string' &&
+        message.content.startsWith('Messages for you while you work:'),
+    )
+    expect(inbox).toHaveLength(1)
+    expect(inbox[0].content.length).toBeLessThanOrEqual(2000)
+    expect(inbox[0].content.startsWith('Messages for you while you work:\nEye check agent: [start cut] ')).toBe(true)
+    expect(inbox[0].content.endsWith('keep this tail.')).toBe(true)
+  })
 })
