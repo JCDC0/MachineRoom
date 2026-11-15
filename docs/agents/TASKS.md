@@ -3229,3 +3229,12 @@ Review 39 fixes, P384 and P385. `docs/agents/AUDIT-2026-11-REVIEW-39.md` (P383, 
 2. R39-3: `boundMessages` drops the oldest injected inbox messages (the ones that start `Messages for you while you work:`) until the conversation fits `MR_AGENT_CONTEXT_CHARS`, keeping the first task message and the newest inbox message.
 3. Tests, each failing before your change: with a delayed save, the picker is disabled until the save ends; six inbox batches with an 8000 character limit end under the limit with the task and the newest batch kept.
 4. Run `node node_modules/vitest/vitest.mjs run tests/review-39-fixes.test.js tests/chat-pickers.test.js tests/chat-picker-layout.test.js tests/mr-agent-inbox.test.js tests/mr-agent.test.js` and report the counts.
+
+**P386. Choosing a harness keeps Harness default (OpenCode).** Read this brief only. Commit each step as you finish it. Run every command in the foreground. Files: src/ui/FamilyTree.jsx (only `chooseChildHarness`, `chooseSubHarness`, `chooseNodeHarness` and the model checks in `askSetup`), src/ui/family.js (only the no-models check in `childFormProblem`), tests/harness-default-pick.test.js (new; add no test to another file except to keep an existing one passing), docs/agents/CHANGELOG.md.
+
+On 2026-11-15 the orchestrator opened Add child, clicked the OpenCode pill and saw its first model (`beam-free`) picked instead of Harness default. P378 made the forms start at Harness default, but the three harness pickers still set `model` to the harness's first model.
+
+1. `chooseChildHarness`, `chooseSubHarness` and `chooseNodeHarness` set `model` to `''` for every harness except `DIRECT_HARNESS`, which keeps today's first model (the effects that fill a Direct API model stay).
+2. `childFormProblem` and `askSetup` accept an empty model for a CLI harness even when its model list is empty or failed: `This harness has no models.` and `Choose a model for this harness.` apply only to Direct API or to a non-empty model. `askSetup` saves an empty model as Harness default.
+3. Tests, each failing before your change: after choosing OpenCode in Add child the draft model is empty; the same for Direct API picks its first model; `childFormProblem` for a CLI harness with no models and an empty model returns no problem; Direct API with no models still returns its problem.
+4. Run `node node_modules/vitest/vitest.mjs run tests/harness-default-pick.test.js tests/family.test.js tests/family-tree.test.js` (skip a file that does not exist) and report the counts.
