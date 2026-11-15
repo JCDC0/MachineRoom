@@ -9,7 +9,8 @@ import {
   teamPlan,
 } from './family.js'
 import { ladderFromOrchestrators, orchestratorHarnesses } from './ladderForm.js'
-import { ModelSelect, useHarnessModels } from './ModelRefresh.jsx'
+import ModelPicker from './ModelPicker.jsx'
+import { useHarnessModels } from './ModelRefresh.jsx'
 import { withHarnessModels, withModelRows } from './modelRefresh.js'
 import { cleanText } from './sidebar.js'
 
@@ -402,11 +403,12 @@ export function FamilyTeam({ client = null }) {
             <p className="mr-side-note is-dim">{NO_READY_HARNESS}</p>
           )}
           {selected ? (
-            <ModelSelect
+            <ModelPicker
               label="Model"
               ariaLabel="Model for the new sub orchestrators"
               value={draft.model}
               choices={live.choices}
+              client={client}
               onChange={(model) => setDraft({ ...draft, model })}
               onRefresh={live.refresh}
               loading={live.loading}

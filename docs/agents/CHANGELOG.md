@@ -1,8 +1,10 @@
 # Changelog
 
 ## Unreleased
+- P373: The Build a team Model field is the shared ModelPicker, with search, Current, pins and refresh; what the team saves does not change.
 - P372: The chat's model control is the shared ModelPicker, and picking a different model or effort applies it at once; picking the current one closes the list.
 - P372: The chat uses the shared model picker and applies model and effort changes when picked.
+- P373: Build a team uses the shared ModelPicker with search, sort, pins and refresh while saving the same team plan.
 - P368: The main orchestrator and subs start the saved harness program unless a lane names its own, the sub harness list sees saved programs, and an effort-only ladder save changes the idle sub's effort.
 - P367: The harness version line is masked for keys and the home folder before it reaches Settings or the doctor, and the Program field starts empty with Save off until a path is typed.
 - P369: A harness settings write or check sends a notice the family tree and team form reload on, and a lane run or failover onto a turned-off harness starts nothing.
