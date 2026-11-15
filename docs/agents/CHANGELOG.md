@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- P413: A new sub keeps the harness and model it was added with and drops a saved session, mode and model from another harness.
 - Review 42 (Sol) of P395 to P408: four P1 and two P2 findings in the scope gate, Codex Bypass, failover modes, sub restore and choice.
 - Lane mode pickers and lane saves leave out Ask, which a headless lane run cannot use.
 - The control client sends a lane chat's Separate worktree choice to the bridge, so the box takes effect.
