@@ -192,21 +192,49 @@ function gitFolderAway(dir) {
   return `${dir}-git-away`
 }
 
+const RENAME_TRIES = 10
+const RENAME_GAP_MS = 100
+const LOCKED_RENAME_CODES = new Set(['EPERM', 'EBUSY', 'EACCES'])
+
+export function renameWithRetry(
+  from,
+  to,
+  {
+    rename = renameSync,
+    wait = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms),
+  } = {},
+) {
+  let last = null
+  for (let attempt = 1; attempt <= RENAME_TRIES; attempt += 1) {
+    try {
+      rename(from, to)
+      return
+    } catch (error) {
+      last = error
+      if (!LOCKED_RENAME_CODES.has(error?.code)) throw error
+      if (attempt < RENAME_TRIES) wait(RENAME_GAP_MS)
+    }
+  }
+  throw last
+}
+
 function restoreGitFolder(dir) {
   const away = gitFolderAway(dir)
-  if (existsSync(away) && existsSync(dir) && !existsSync(join(dir, '.git'))) renameSync(away, join(dir, '.git'))
+  const target = join(dir, '.git')
+  if (existsSync(away) && existsSync(dir) && !existsSync(target)) renameWithRetry(away, target)
 }
 
 async function readPlainFolder(dir) {
   const away = gitFolderAway(dir)
+  const target = join(dir, '.git')
   rmSync(away, { recursive: true, force: true })
-  renameSync(join(dir, '.git'), away)
+  renameWithRetry(target, away)
   try {
     const started = performance.now()
     const tree = await readTree(dir)
     return { ms: performance.now() - started, files: tree.files }
   } finally {
-    renameSync(away, join(dir, '.git'))
+    renameWithRetry(away, target)
   }
 }
 

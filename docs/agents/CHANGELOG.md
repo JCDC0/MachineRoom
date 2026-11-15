@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- The scale probe retries a .git rename up to 10 times when Windows still holds the folder, so the scale-live test no longer fails on a lock.
 - The replay scrubber's max and value stay finite before a recording loads, so the NaN attribute warnings are gone.
 - A cut inbox reply keeps its sender's name even when the name has spaces.
 - A model picker shows the saved model's name while its list loads, fails or lacks that model, instead of Harness default.
@@ -9,6 +10,7 @@
 - P396: The model picker shows a saved model's name when its list holds no row for it, including while the list loads.
 - P397: A cut inbox reply keeps a sender name with spaces.
 - P400: The replay scrubber's max and value are always finite, and a non-finite duration or position counts as 0.
+- P398: The scale probe retries the .git folder rename on EPERM, EBUSY or EACCES up to 10 times, 100 milliseconds apart.
 - When the newest inbox reply must be cut, it keeps its sender, starts on a whole word and says [start cut].
 - An orchestrator saved at Harness default keeps it after a restart, and a new sub at Harness default no longer takes a lane's model.
 - The orchestrator and lane editors' model pickers show and offer Harness default for every harness but Direct API.
