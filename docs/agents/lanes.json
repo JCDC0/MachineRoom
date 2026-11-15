@@ -175,13 +175,13 @@
   "opencode7": {
     "name": "OpenCode 7",
     "harness": "OpenCode",
-    "model": "Crouton Alpha Free",
-    "modelHint": "in OpenCode's list it appears as opencode/crouton-alpha-free",
-    "reasoning": "high",
+    "model": "DeepSeek V4.1 Flash 1017",
+    "modelHint": "in OpenCode's list it appears as opencode-go/deepseek-v4.1-flash",
+    "reasoning": "max",
     "cli": {
       "harness": "opencode",
       "bin": "%APPDATA%\\npm\\node_modules\\@opencode\\cli\\bin\\opencode.exe",
-      "model": "opencode/crouton-alpha-free"
+      "model": "opencode-go/deepseek-v4.1-flash"
     },
     "worktree": "C:\\GitHub\\MachineRoom\\.worktrees\\opencode7",
     "role": "You own the bridge (server/**), scripts/**, src/control/**, src/assistant/** and src/decider/**, and from 0.1.126 the UI briefs the owner moved from AGY (src/ui/**, src/styles.css, src/engine/**).",
