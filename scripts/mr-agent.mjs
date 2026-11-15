@@ -1341,6 +1341,40 @@ function boundMessages(messages, limit) {
   }
 }
 
+const INBOX_TIMEOUT_MS = 3000
+
+async function readLaneInbox(seen, env = process.env) {
+  const bridge = String(env?.MACHINEROOM_BRIDGE ?? '').trim().replace(/\/+$/, '')
+  const ticket = String(env?.MACHINEROOM_LANE_TICKET ?? '').trim()
+  if (!bridge || !ticket) return ''
+  let data = null
+  try {
+    const response = await fetch(`${bridge}/api/orchestrator/messages`, {
+      headers: { 'X-MachineRoom-Lane': ticket },
+      signal: AbortSignal.timeout(INBOX_TIMEOUT_MS),
+    })
+    if (!response.ok) return ''
+    data = await response.json()
+  } catch {
+    return ''
+  }
+  const items = Array.isArray(data?.messages) ? data.messages : []
+  const lines = []
+  for (const item of items) {
+    if (!item || typeof item !== 'object') continue
+    const text = typeof item.text === 'string' ? item.text : ''
+    if (text.trim() === '') continue
+    const at = typeof item.at === 'string' ? item.at : typeof item.at === 'number' ? String(item.at) : ''
+    const key = JSON.stringify([at, text])
+    if (seen.has(key)) continue
+    seen.add(key)
+    const from = typeof item.from === 'string' && item.from.trim() !== '' ? item.from.trim() : 'unknown'
+    lines.push(`${from}: ${text}`)
+  }
+  if (lines.length === 0) return ''
+  return `Messages for you while you work:\n${lines.join('\n')}`
+}
+
 async function main() {
   const options = parseArgs(process.argv.slice(2))
   if (!options) return
@@ -1397,6 +1431,7 @@ async function main() {
   let step = 0
   let damagedAnswers = 0
   let nudged = false
+  const seenInbox = new Set()
 
   const finish = (isError, result, exitCode = isError ? 1 : 0) => {
     writeJson({
@@ -1424,6 +1459,10 @@ async function main() {
         finish(true, sentence, 3)
         process.stdout.write(`${sentence}\n`)
         return
+      }
+      if (step > 0) {
+        const inbox = await readLaneInbox(seenInbox)
+        if (inbox !== '') messages.push({ role: 'user', content: inbox })
       }
       boundMessages(messages, limit)
       const payload = {
