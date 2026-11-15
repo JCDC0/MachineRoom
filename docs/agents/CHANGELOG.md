@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- P408: The real control client sends a lane message's Separate worktree choice to the bridge.
 - A chat message sent to a lane and a split run carry a Separate worktree choice, and no run uses a worktree outside a git checkout.
 - Codex lanes and orchestrators offer Edits and Bypass: Edits writes in Codex's workspace sandbox like Auto, and Bypass runs with no sandbox or approvals.
 - Add child, the lane editor and Dispatch pick a lane's mode, and a lane set to Orchestrator's choice lets the agent above choose the mode for each run.

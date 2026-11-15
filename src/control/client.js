@@ -224,8 +224,9 @@ export function createClient({
       return Array.isArray(data?.commands) ? data.commands : []
     },
 
-    sendOrchestrator: (text, { id } = {}) => {
+    sendOrchestrator: (text, { id, worktree } = {}) => {
       const body = id === undefined || id === null || id === '' ? { text, confirmed: true } : { text, id, confirmed: true }
+      if (typeof worktree === 'boolean') body.worktree = worktree
       return request('POST', '/api/orchestrator/messages', body)
     },
 
