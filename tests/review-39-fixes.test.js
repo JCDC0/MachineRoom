@@ -454,4 +454,75 @@ describe('review 39 fixes: R39-3 inbox context bound', () => {
     expect(inboxMessages[0].content).toMatch(/6+$/)
     expect(inboxMessages[0].content).not.toContain('batch-1:')
   })
+
+  it('keeps the sender and [start cut] on a cut inbox reply and starts at a word boundary', () => {
+    const heading = 'Messages for you while you work:'
+    const prefix = `${heading}\nnewer: [start cut] `
+    const capacity = 2000 - prefix.length
+    const lead = 'delete the backup. '
+    const padWords = 'word '.repeat(Math.ceil(capacity / 5) + 10)
+    const makeReply = (extra) => {
+      const tail = lead + padWords.slice(0, capacity - lead.length + extra)
+      return `${heading}\nnewer: ${'x'.repeat(5500)} Never ${tail}`
+    }
+
+    const exactMessages = [
+      { role: 'system', content: 's'.repeat(1000) },
+      { role: 'user', content: 'Initial task to keep.' },
+      { role: 'user', content: makeReply(0) },
+    ]
+    boundMessages(exactMessages, 8000)
+    expect(JSON.stringify(exactMessages).length).toBeLessThanOrEqual(8000)
+    expect(exactMessages[2].content.length).toBeLessThanOrEqual(2000)
+    expect(exactMessages[1].content).toBe('Initial task to keep.')
+    expect(exactMessages[2].content.startsWith(`${prefix}delete the backup. `)).toBe(true)
+    expect(exactMessages[2].content).not.toContain('Never')
+
+    const shiftedMessages = [
+      { role: 'system', content: 's'.repeat(1000) },
+      { role: 'user', content: 'Initial task to keep.' },
+      { role: 'user', content: makeReply(1) },
+    ]
+    boundMessages(shiftedMessages, 8000)
+    expect(JSON.stringify(shiftedMessages).length).toBeLessThanOrEqual(8000)
+    expect(shiftedMessages[2].content.length).toBeLessThanOrEqual(2000)
+    expect(shiftedMessages[1].content).toBe('Initial task to keep.')
+    expect(shiftedMessages[2].content.startsWith(`${prefix}the backup. `)).toBe(true)
+    expect(shiftedMessages[2].content).not.toContain('Never')
+    expect(shiftedMessages[2].content).not.toContain('elete')
+
+    for (let extra = 0; extra <= 25; extra += 1) {
+      const messages = [
+        { role: 'system', content: 's'.repeat(1000) },
+        { role: 'user', content: 'Initial task to keep.' },
+        { role: 'user', content: makeReply(extra) },
+      ]
+      boundMessages(messages, 8000)
+      expect(JSON.stringify(messages).length).toBeLessThanOrEqual(8000)
+      expect(messages[2].content.length).toBeLessThanOrEqual(2000)
+      expect(messages[1].content).toBe('Initial task to keep.')
+      expect(messages[2].content.startsWith(prefix)).toBe(true)
+      const kept = messages[2].content.slice(prefix.length)
+      expect(kept).toMatch(/^(delete|the|backup\.|word)(?=\s|$)/)
+    }
+  })
+
+  it('keeps a colon-named sender and fits a tighter message bound when cutting an inbox tail', () => {
+    const messages = [
+      { role: 'system', content: 's'.repeat(6500) },
+      { role: 'user', content: 'Initial task to keep.' },
+      {
+        role: 'user',
+        content: 'Messages for you while you work:\nlane:opencode: ' + 'filler '.repeat(400) + 'keep this tail.',
+      },
+    ]
+    boundMessages(messages, 8000)
+    expect(JSON.stringify(messages).length).toBeLessThanOrEqual(8000)
+    expect(messages[1].content).toBe('Initial task to keep.')
+    const prefix = 'Messages for you while you work:\nlane:opencode: [start cut] '
+    expect(messages[2].content.startsWith(prefix)).toBe(true)
+    const kept = messages[2].content.slice(prefix.length)
+    expect(kept).toMatch(/^(filler|keep|this|tail\.)(?=\s|$)/)
+    expect(kept.endsWith('keep this tail.')).toBe(true)
+  })
 })
