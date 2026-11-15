@@ -12,16 +12,20 @@ The owner wants a free hierarchy of coding agents in one project:
 1. Any harness coordinates any other:
    - Ladder data, live updates, 3D sector arcs, sub shapes, chat tabs, autocompact, and per-orchestrator tokens (`X-MachineRoom-Orchestrator` with 403 refusal outside sector lanes): `O1` (0.1.282, `src/model/hierarchy.js`), `O2` (0.1.305), `O3` (0.1.295), `O4` (0.1.291), `O5` (0.1.311), `O6` (0.1.298), `O7` (0.1.316), `O8` (0.1.356), `server/runs.js`.
    - Native Direct API harness (`machineroom` / `scripts/mr-agent.mjs`), `Direct API` panel in `Settings`, GPT-6.1 Terra (`gpt-6.1-terra`) for Codex, any available harness in sub forms (`Direct API` label in `src/ui/ladderForm.js`) with 400 refusal if unavailable, plus ladder tests: `H5`, `H10`, `H17`, `U85`, `P329`, `P331`, `P334`, `P340` (`tests/owner-tree.test.js`).
+   - `Settings` under `Harnesses` (`HarnessesSettings.jsx`, `server/harness-settings.js`) checks each harness with `--version` cached for 10 minutes, saves program paths in `harnesses.json`, and keeps harnesses turned off in `off` out of new lanes, subs, and harness changes: `P352`, `P355`, `P355b`, `P356`.
    - Still limited on `main`: `FamilyTree.jsx` has no per-sub `scope` or `restricted` fields (`subFromForm` in `ladderForm.js` reads them, UI hardcodes `['**']` and `false`). A Codex or native sub's turn uses its effort since `P345`. `server/model-list.js` does not list `z-ai/glm-5.3-flash` statically, so add a `Direct API` key first. Built-in non-custom `agy` lanes are skipped by `server/active-lanes.js`.
 2. They message each other:
    - Any orchestrator can message any other (`POST /api/orchestrator/messages`, capped at 6 per 10 minutes per sender), shown in the `Team` tab: `P333`.
+   - A bridge-started lane run receives a one-run ticket (`MACHINEROOM_LANE_TICKET`) to message its coordinator, any orchestrator or another running lane up to 4 times and poll its replies with `GET /api/orchestrator/messages` (`P341`, `P342`).
    - Lane end reports wake only the `startedBy` orchestrator: `O2` (0.1.305), `O8` (0.1.356).
 3. The owner watches file access:
    - Commit diffs and `git status` are checked against a sub's `scope` (`outsideFiles` in `server/orchestrators.js`) at turn end: `O2`, `O7`, `X3`.
+   - An agent's `Inspector` lists the distinct paths it read, wrote or edited outside the project and its lane worktrees newest-first under `Outside the project`, with home prefixes masked (`P339`, `P346`).
 4. Worktrees are a choice:
    - `Control` -> `Dispatch` offers `Own worktree` per task, while queued lane runs in `scripts/run-lane.mjs` create worktrees (`U78`, `P293`), and process tree stops release locks (`U75`, `P313`, `P322`, `P330`).
 5. Modes guard the edges:
    - Main and sub orchestrators enforce modes in `src/control/modes.js`; Codex orchestrators support `Plan` and `Auto` (`P332`).
+   - Lane runs take a permission mode via `--mode`, `cli.mode` or `POST /api/control/runs`, validated per harness while refusing `ask` and refusing OpenCode `plan` and `edits` (`P338`, `P343`, `P344`).
 
 ## What Does Not Work Yet
 - Nothing interrupts a lane run: a run is one call, so a lane gets a reply only when it reads its inbox (`P341`), and the main orchestrator's instructions name the reply form since review 36.
@@ -33,14 +37,14 @@ The owner wants a free hierarchy of coding agents in one project:
 - A lane run the room started messages its coordinator, any orchestrator or another running lane while it works, at most 4 times, and reads its replies with its ticket: `P335`, `P336`, `P337`, `P341`, `P342`.
 - A lane run takes a permission mode: `P338`, `P343`, `P344`.
 - An agent's Inspector lists the paths it touched outside the project, under `Outside the project`: `P339`, `P346`.
+- `Settings` under `Harnesses` checks harness versions (`Ready`, `Not ready`, or `Off`), saves program paths, and keeps turned-off harnesses out of new lanes, subs, and harness changes; model lookup finds OpenCode and Codex programs, the add-agent form accepts `default` effort, and sub efforts save and show in the chat `Effort:` menu: `P352` to `P356`.
 
 ## Runbook: Build and Run the Owner's Test Tree
 Target tree: Main on `claude` (`claude-opus-5-5`, `high`); Sub 1 on `codex` (`gpt-6.1-terra`, `high`) with 2 AGY lanes (`gemini-4-hydrogen-xhigh`); Sub 2 on `machineroom` (GLM 5.3 Flash) with 3 OpenCode lanes. Simple form: no subs, all lanes under Main.
 
-### Step 1: Open Your Project and Save a Direct API Key
-1. Start the bridge in your project folder: run `machineroom YOUR-PROJECT` or `npm run serve -- up --root YOUR-PROJECT`, then open the printed URL.
-2. On `Connect.jsx`, verify `Bridge URL` under `Connect through the bridge` and click `Connect`. If already open, use the `Projects` sidebar tab -> `Open folder` -> confirm `Open project`.
-3. Click `Settings` in the top bar. Under `Direct API`, pick `Provider` (such as OpenRouter), paste `Key`, click `Save key`, confirm to load `z-ai/glm-5.3-flash` models, then click `Close`.
+### Step 1: Check Harnesses in Settings, Open Your Project and Save a Direct API Key
+1. Start in `Settings`, under `Harnesses` (after starting the bridge in your project with `machineroom YOUR-PROJECT` or `npm run serve -- up --root YOUR-PROJECT` and clicking `Connect` on `Connect.jsx`, or switching folders via the `Projects` sidebar tab -> `Open folder` -> confirm `Open project`): check that each harness you want shows `Ready` (`Check again` refreshes every harness), turn off `Offer in forms` and confirm for any harness you do not use, and enter a `Program` path and click `Save` (then confirm) when a wanted harness is not found.
+2. Under `Direct API`, pick `Provider` (such as OpenRouter), paste `Key`, click `Save key`, confirm to load `z-ai/glm-5.3-flash` models, then click `Close`.
 
 ### Step 2: Build the Tree in Agents (`FamilyTree.jsx`, `ladderForm.js`)
 Open the `Agents` sidebar tab and open `Agents` (`FamilyTree`):
@@ -65,9 +69,9 @@ Open the `Agents` sidebar tab and open `Agents` (`FamilyTree`):
 
 The orchestrator walked steps 1 to 3 on Lowbeam in the owner's room at 1280 by 800, up to the first message, which is the owner's to send. The room now holds: the main orchestrator on Claude Code, `claude-opus-5-5`, effort high; the sub `Terra` on Codex, `gpt-6.1-terra`, effort high, over `Hydrogen A` and `Hydrogen B` (AGY, `gemini-4-hydrogen-xhigh`); and `OpenCode A`, `OpenCode B` and `OpenCode C` (`opencode-go/deepseek-v4.1-flash`, effort max) under the main. Both orchestrators are in Plan. No turn and no run was started. The native sub over the three OpenCode lanes is not made: `Direct API` is not offered as a sub harness until a key is saved in `Settings`, and only the owner saves a key.
 
-What the walk found, each briefed (P352 to P354):
+What the walk found, fixed on `main` (P352 to P356):
 
-- The add-agent and sub forms show `The program for opencode was not found.` and `The program for codex was not found.` in red. The lanes and the sub still work: only the model list falls back to its built-in list.
-- The add-agent form offers the effort `default` and then refuses it with `Choose an effort for this harness.` Pick a level.
-- The sub form's effort is not saved: `Terra` came out with no effort. Set it after: `Edit <sub>`, the effort select, `Save`, confirm.
-- The chat tab's `Effort:` menu says `No effort levels for this harness.` for a Codex orchestrator. Use `Edit <sub>` as above.
+- Model and harness lookups (`server/harness-models.js`, `server/agents-config.js`) now check saved `harnesses.json` programs, lane `cli.bin`, descriptor `defaultProgram`, `PATH` and the Codex app, and `Settings` under `Harnesses` checks `--version` readiness and lets the owner save a program path (`P352`, `P355`, `P356`).
+- The add-agent form and `POST /api/lanes/create` now accept `default` (empty) effort and save `effort: null` (`P354`).
+- Saving the ladder (`POST /api/orchestrator/ladder`) now keeps and validates per-sub `effort`, passing it from the sub's first turn (`P353`).
+- The chat tab's `Effort:` menu (`effortMenuLevels`) now reads the bridge's `harnesses` levels so a Codex orchestrator offers `low`, `medium`, `high` and `xhigh` (`P353`).
