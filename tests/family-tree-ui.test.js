@@ -606,7 +606,7 @@ describe('FamilyTree rows', () => {
         {
           name: 'Writer',
           harness: 'opencode',
-          model: 'opencode-go/deepseek-v4.1-flash',
+          model: '',
           effort: 'max',
           confirmed: true,
         },
@@ -863,7 +863,7 @@ describe('FamilyTeam', () => {
           id: 'team-1',
           name: 'Team 1',
           harness: 'opencode',
-          model: 'opencode-go/deepseek-v4.1-flash',
+          model: '',
           lanes: ['opencode'],
           scope: ['**'],
           restricted: false,

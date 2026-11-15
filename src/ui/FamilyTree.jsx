@@ -1245,7 +1245,7 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
     return {
       label: 'Sub orchestrator',
       harness: harness?.key ?? '',
-      model: harness ? harnessModels(harness, models)[0]?.id ?? '' : '',
+      model: '',
       effort: harness?.efforts?.[0] ?? '',
     }
   }
@@ -1619,7 +1619,7 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
           <div className="mr-family-request" key={proposal.id}>
             <p className="mr-family-request-title">
               <span>{proposal.label}</span>
-              <span className="mono">{familyMeta(proposal)}</span>
+              <span className="mono">{familyMeta(proposal, { harnesses, models })}</span>
             </p>
             <p className="mr-family-request-meta mono">{`from ${proposal.from || 'an orchestrator'}`}</p>
             {proposal.reason ? <p className="mr-family-request-reason">{proposal.reason}</p> : null}
@@ -2042,6 +2042,8 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
             loading={childModels.loading}
             error={childModels.error}
             canRefresh={childModels.canRefresh}
+            allowDefault={!direct}
+            placeholder={direct ? 'Choose a model' : 'Harness default'}
           />
         ) : null}
         {selected && !directMissing && efforts.length > 0 ? (
@@ -2135,6 +2137,8 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
             loading={subModels.loading}
             error={subModels.error}
             canRefresh={subModels.canRefresh}
+            allowDefault={!direct}
+            placeholder={direct ? 'Choose a model' : 'Harness default'}
           />
         ) : null}
         {selected && !directMissing && efforts.length > 0 ? (
@@ -2296,7 +2300,7 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
             <div className="mr-family-under">
               {text ? <span className={`mr-family-state is-${dotState} mono`}>{text}</span> : null}
               <span className="mr-family-kind mono">{node.kind === 'lane' ? 'lane' : node.kind}</span>
-              <span className="mr-family-meta mono">{familyMeta(node)}</span>
+              <span className="mr-family-meta mono">{familyMeta(node, { harnesses, models })}</span>
               <span className="mr-family-actions">
                 {node.kind === 'lane' ? (
                   <button

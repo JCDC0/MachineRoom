@@ -135,7 +135,7 @@ describe('Build a team ModelPicker', () => {
       expect(picker).not.toBeNull()
       const trigger = picker.querySelector('button.mr-picker-trigger[aria-label="Model for the new sub orchestrators"]')
       expect(trigger).not.toBeNull()
-      expect(trigger.textContent).toContain('DeepSeek V4.1 Flash')
+      expect(trigger.textContent).toContain('Harness default')
 
       await click(root, trigger)
       await settle()

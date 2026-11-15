@@ -12,7 +12,6 @@ export const MAX_SUBS = 5
 
 const KINDS = new Set(['orchestrator', 'sub', 'lane'])
 const DEFAULT_LABEL = { orchestrator: 'Orchestrator', sub: 'Sub orchestrator', lane: 'Code agent' }
-const OPENCODE_DEFAULT_MODEL = 'opencode-go/deepseek-v4.1-flash'
 
 export function labelProblem(value) {
   const text = cleanText(value)
@@ -118,9 +117,19 @@ export function harnessLabel(harness) {
   return key
 }
 
-export function familyMeta(node) {
+export function familyMeta(node, choices = null) {
   const harness = harnessLabel(node?.harness) || 'harness unknown'
-  const model = modelName(node?.model)
+  const key = harnessKey(node?.harness)
+  let list = Array.isArray(choices) ? choices : []
+  if (!Array.isArray(choices) && choices && typeof choices === 'object') {
+    const known = 'harnesses' in choices ? choices.harnesses : choices
+    const extra = 'models' in choices ? choices.models : null
+    const entry = key ? findHarness(known, key) : null
+    const fromHarness = entry ? harnessModels(entry, extra) : []
+    const fromModels = key ? modelChoices(extra, key) : []
+    list = [...fromHarness, ...fromModels]
+  }
+  const model = modelName(node?.model, list)
   const effort = cleanText(node?.effort, 20) || 'default'
   return `${harness} · ${model} · ${effort}`
 }
@@ -366,11 +375,10 @@ export function childDraft(harnesses = null, models = null) {
   const offered = childHarnesses(harnesses, models)
   const first = offered.find((row) => row.key === 'opencode') ?? offered[0] ?? null
   const own = first?.key === 'opencode'
-  const preferredModel = own && first.models.some((row) => row.id === OPENCODE_DEFAULT_MODEL)
   return {
     label: '',
     harness: first?.key ?? '',
-    model: preferredModel ? OPENCODE_DEFAULT_MODEL : first?.models?.[0]?.id ?? '',
+    model: '',
     effort: own && first.efforts.includes('max') ? 'max' : first?.efforts?.[0] ?? '',
   }
 }
@@ -390,7 +398,9 @@ export function childFormProblem(draft, { harnesses = null, models = null, direc
     return harness.key === DIRECT_HARNESS ? DIRECT_KEY_PROBLEM : 'This harness has no models.'
   }
   const model = cleanText(draft?.model, 120)
-  if (!choices.some((row) => row.id === model)) return 'Choose a model for this harness.'
+  if ((harness.key === DIRECT_HARNESS || model) && !choices.some((row) => row.id === model)) {
+    return 'Choose a model for this harness.'
+  }
   const efforts = harnessEfforts(harness)
   const effort = cleanText(draft?.effort, 20).toLowerCase()
   if (efforts.length > 0 && effort && !efforts.includes(effort)) return 'Choose an effort for this harness.'

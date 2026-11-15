@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- P378: The add-agent, sub and team forms start with no model and offer Harness default first; Direct API still needs a model; family rows name models from the harness list.
 - P375: Gemini 4 Argon ranks the next eight briefs toward the free hierarchy in PLAN-NEXT-ARGON.md; two need no design call, six wait for the owner.
 - P379: A finished label write updates only the same open draft, and a not-ready reason shows outside the program details, Direct API included (R38-1, R38-4).
 - P377: The chat's ModelPicker reads Model: NAME inline and opens upward, closing returns focus to its trigger, and a model or effort reply after a tab switch changes nothing (R38-2, R38-3).
@@ -10,6 +11,7 @@
 - P379: A Not ready Direct API row shows its reason outside the program details (R38-4).
 - P374: Review 38 by GPT-6.1 Sol of P370 to P373 lists four P2 findings, for P377 and P379.
 - P376: OpenCode lane runs in plan or edits mode get the permission config (merged with enabled MCP servers) as OPENCODE_CONFIG with mode 0o600 and removed on finish.
+- P378: The add-agent, sub and team forms start at Harness default with Harness default first in non-Direct model lists, and family tree rows name models from the harness model list.
 - P370: Settings lists Harnesses, Direct API, Keys and Lanes first, and a Ready harness folds its version, path and Program field under Program details.
 - P371: A sub's Agents checklist shows each agent's current parent in place of its id, and Save label saves a valid changed label at once.
 - P373: The Build a team Model field is the shared ModelPicker, with search, Current, pins and refresh; what the team saves does not change.

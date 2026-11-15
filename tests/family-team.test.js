@@ -232,7 +232,7 @@ describe('the team form defaults', () => {
       orchestrators: 1,
       coders: 1,
       harness: 'opencode',
-      model: 'opencode-go/deepseek-v4.1-flash',
+      model: '',
     })
   })
 
