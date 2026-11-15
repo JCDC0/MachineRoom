@@ -11382,6 +11382,35 @@ body:has(#hud-orchestrator-chat) .lens-waiting {
   min-width: 0;
 }
 
+.mr-picker.is-inline {
+  position: relative;
+  flex-direction: row;
+  align-items: center;
+}
+
+.mr-picker.is-inline .mr-side-field-label {
+  color: rgb(255 255 255 / 0.8);
+  font-size: 10px;
+  letter-spacing: 0;
+  text-transform: none;
+  white-space: nowrap;
+}
+
+.mr-picker.is-inline .mr-picker-trigger {
+  flex: 0 1 auto;
+  width: max-content;
+  max-width: 220px;
+}
+
+.mr-picker.is-inline .mr-picker-pop.is-upward {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  width: 320px;
+  max-width: 90vw;
+  z-index: 2;
+}
+
 .mr-picker .mr-model-row {
   align-items: center;
 }

@@ -1,7 +1,9 @@
 # Changelog
 
 ## Unreleased
+- P377: The chat's ModelPicker reads Model: NAME inline and opens upward, closing returns focus to its trigger, and a model or effort reply after a tab switch changes nothing (R38-2, R38-3).
 - P376: An OpenCode lane run in plan or edits gets the permission config the orchestrator writes for OpenCode turns, merged with any MCP servers, so the refusal is gone.
+- P377: The chat model picker sits inline and opens upward, late model and effort saves stay with their agent, and closing a model picker restores focus.
 - P374: Review 38 by GPT-6.1 Sol of P370 to P373 lists four P2 findings, for P377 and P379.
 - P376: OpenCode lane runs in plan or edits mode get the permission config (merged with enabled MCP servers) as OPENCODE_CONFIG with mode 0o600 and removed on finish.
 - P370: Settings lists Harnesses, Direct API, Keys and Lanes first, and a Ready harness folds its version, path and Program field under Program details.
