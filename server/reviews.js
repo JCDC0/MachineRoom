@@ -349,6 +349,9 @@ export function createReviewsApi({
   async function scopeRefusal(lane, worktree, head, baseRef, request) {
     const sub = ladderSubFor(lane)
     if (!sub || sub.restricted !== true) return null
+    const parent = parentIdFor(sub)
+    const headers = request?.headers ?? {}
+    const allowed = request?.allowOutside === true && (Boolean(headers.origin) || callerId({ headers }) === parent)
     let changed
     try {
       const text = await runGit(worktree, [
@@ -360,13 +363,16 @@ export function createReviewsApi({
       ])
       changed = text.split(/\r?\n/).filter(Boolean)
     } catch {
-      return null
+      if (allowed) return null
+      return {
+        status: 409,
+        body: {
+          error: "The bridge could not read the lane's changed files, so it was not merged.",
+        },
+      }
     }
     const outside = outsideScope(changed, sub, { windows: process.platform === 'win32' })
     if (outside.length === 0) return null
-    const parent = parentIdFor(sub)
-    const headers = request?.headers ?? {}
-    const allowed = request?.allowOutside === true && (Boolean(headers.origin) || callerId({ headers }) === parent)
     if (allowed) return null
     warnOutsideScope(lane, head, sub, parent, outside)
     const name = typeof sub.name === 'string' && sub.name.trim() ? sub.name.trim() : sub.id

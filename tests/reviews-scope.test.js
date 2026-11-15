@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { act, createElement } from 'react'
 import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { gitPath } from '../server/programPath.js'
-import { createReviewsApi } from '../server/reviews.js'
+import { createReviewsApi, defaultGitRunner } from '../server/reviews.js'
 import ReviewsPanel from '../src/ui/panels/ReviewsPanel.jsx'
 import { buttonWithText, click, settle, withDom } from './helpers/uiDom.js'
 import { makeTempDir, processTempRoot, removeTempDir } from './helpers/tempRoot.js'
@@ -104,7 +104,7 @@ function makeRepo() {
   return { base, repo, worktree, head, baseHead }
 }
 
-function scopeApi(repo, worktree, { restricted = true, scope = ['src/**'], head, baseHead } = {}) {
+function scopeApi(repo, worktree, { restricted = true, scope = ['src/**'], head, baseHead, gitRunner } = {}) {
   const dir = freshDir()
   const agentsDir = join(dir, 'docs', 'agents')
   mkdirSync(agentsDir, { recursive: true })
@@ -118,6 +118,7 @@ function scopeApi(repo, worktree, { restricted = true, scope = ['src/**'], head,
     baseHead,
     restricted,
     scope,
+    gitRunner,
   })
 }
 
@@ -160,6 +161,7 @@ function makeScopeApi({
   baseHead,
   restricted = true,
   scope = ['src/**'],
+  gitRunner = defaultGitRunner,
 }) {
   const dir = freshDir()
   const delivered = []
@@ -200,6 +202,7 @@ function makeScopeApi({
     readJsonBody: async () => body,
     orchestrators: () => registry,
     readRuns: () => [],
+    gitRunner,
   })
   const url = new URL('http://127.0.0.1/api/control/reviews/opencode/merge')
 
@@ -296,6 +299,29 @@ describe('a restricted sub and an out-of-scope lane merge', { timeout: 30000 }, 
     expect(delivered[0].text).toContain('- docs/notes.md')
     expect(delivered[0].text).toContain('Lane opencode')
     expect(delivered[0].text).toContain('Scout')
+  })
+
+  it('answers 409 when the changed-file read fails', async () => {
+    const { repo, worktree, baseHead } = makeRepo()
+    const failingScopeRead = async (cwd, args, options) => {
+      if (args[0] === 'diff' && args[1] === '--name-only' && args.includes('--no-ext-diff')) {
+        throw new Error('git failed')
+      }
+      return defaultGitRunner(cwd, args, options)
+    }
+    const { merge } = scopeApi(repo, worktree, { gitRunner: failingScopeRead })
+
+    const answer = await merge()
+    expect(answer.status).toBe(409)
+    expect(answer.body).toEqual({
+      error: "The bridge could not read the lane's changed files, so it was not merged.",
+    })
+    expect(mainHead(repo)).toBe(baseHead)
+
+    const allowed = await merge({ allowOutside: true })
+    expect(allowed.status).toBe(200)
+    expect(allowed.body.ok).toBe(true)
+    expect(git(repo, ['show', 'HEAD:docs/notes.md'])).toContain('outside the scope')
   })
 
   it('merges an unrestricted sub lane with files outside its scope', async () => {
