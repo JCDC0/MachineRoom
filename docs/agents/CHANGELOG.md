@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- Settings now has a Harnesses section before Direct API to check readiness, save or clear programs, and toggle Offer in forms (P356).
 - The model list finds a harness at its default program, through the Codex app, or through a lane made in the family tree, so the forms no longer say the program was not found (P352).
 - The add-agent form accepts its default effort and saves the lane with no effort, so the harness uses its own default (P354).
 - The add-agent form accepts the effort it offers as `default` and saves the lane with no effort (P354).
