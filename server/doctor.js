@@ -3,7 +3,8 @@ import { accessSync, constants, mkdirSync, readFileSync, statSync } from 'node:f
 import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { readTree } from './index.js'
-import { codexProgramFor } from './agents-config.js'
+import { codexProgramFor, listHarnesses } from './agents-config.js'
+import { harnessStatus } from './harness-settings.js'
 import { lanesFolder, readAllLanes, runsFolder } from './lanes-source.js'
 import { printedRunsFolder } from './printed-path.js'
 import { programPath } from './programPath.js'
@@ -223,6 +224,26 @@ export function runDoctor(options = {}) {
   return { exitCode: ok ? 0 : 1, lines, folderOk: true, warnings }
 }
 
+export function harnessLine(row) {
+  const name = typeof row?.name === 'string' && row.name ? row.name : row?.key
+  if (row?.enabled === false) return `info ${name} is turned off in Settings.`
+  if (row?.ready) {
+    const version = typeof row.version === 'string' ? row.version.trim() : ''
+    return version ? `ok ${name} is ready (${version}).` : `ok ${name} is ready.`
+  }
+  const reason = typeof row?.reason === 'string' && row.reason ? row.reason : 'No program was found.'
+  return `warn ${name} is not ready: ${reason}`
+}
+
+export async function harnessLines({ runsFolder: folder, lanes = {}, env = process.env, platform = process.platform } = {}) {
+  const rows = listHarnesses({ lanes, env, platform, runsFolder: folder })
+  const checked = await Promise.all(rows.map(async (row) => ({
+    ...row,
+    ...await harnessStatus(row.key, { runsFolder: folder, lanes, env, platform, available: row.available }),
+  })))
+  return checked.map(harnessLine)
+}
+
 export function projectCounts(files) {
   const folders = new Set()
   let count = 0
@@ -269,13 +290,17 @@ export async function readProjectLine(projectRoot, { read = readTree, limit = PR
 
 export async function runDoctorWithProject(options = {}) {
   const env = options.env ?? process.env
+  const platform = options.platform ?? process.platform
   const result = runDoctor(options)
   if (!result.folderOk) return { ...result, project: null, tree: null }
-  const project = await readProjectLine(doctorSettings(options, env).projectRoot, {
+  const settings = doctorSettings(options, env)
+  const project = await readProjectLine(settings.projectRoot, {
     read: options.readProject ?? readTree,
     limit: options.projectReadLimitMs ?? PROJECT_READ_LIMIT_MS,
   })
+  const laneFile = readLaneFile(settings.lanesFile, env)
   const lines = [...result.lines]
+  lines.push(...await harnessLines({ runsFolder: settings.runsFolder, lanes: laneFile.lanes ?? {}, env, platform }))
   lines.splice(1, 0, `${project.ok ? 'ok' : 'FAIL'} ${project.text}`)
   return {
     ...result,
