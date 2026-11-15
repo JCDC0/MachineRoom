@@ -1,6 +1,9 @@
 # Changelog
 
 ## Unreleased
+- P365: The custom endpoint form offers model refresh only for a saved endpoint, and a failed lanes read no longer says the list is empty.
+- The custom endpoint form offers model refresh only for a saved endpoint and explains how to refresh a new one (P365).
+- A failed lanes read no longer says the list is empty (P365).
 - P358: The runner starts a harness's saved program, refuses a harness turned off in Settings, and the doctor prints one line per harness.
 - The runner starts the program saved for a lane's harness when the lane's bin is missing or the harness default, and refuses a lane on a harness turned off in Settings before it makes a folder, lock or worktree (P358).
 - The doctor prints one line per harness: ready with its version, not ready with its reason, or turned off in Settings (P358).

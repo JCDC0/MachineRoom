@@ -461,11 +461,7 @@ export default function EndpointsPanel({ client, initialEndpoints = null, initia
     }
   }
 
-  async function fetchModels(nameForFetch, saved = true) {
-    if (!saved) {
-      setError('Save the endpoint first.')
-      return
-    }
+  async function fetchModels(nameForFetch) {
     if (!client || typeof client.endpointModels !== 'function') {
       setError('The bridge is not reachable.')
       return
@@ -684,12 +680,15 @@ export default function EndpointsPanel({ client, initialEndpoints = null, initia
               disabled={busy || confirm !== null}
               onChange={(event) => setModelText(event.target.value)}
             />
+            {!endpoints.some((entry) => entry.name === name.trim()) ? <p>Save first, then use Refresh models on its row.</p> : null}
             <div className="endpoints-actions">
-              <ModelRefresh
-                onRefresh={() => fetchModels(name.trim(), endpoints.some((entry) => entry.name === name.trim()))}
-                loading={modelsBusy}
-                disabled={busy || confirm !== null || name.trim() === ''}
-              />
+              {endpoints.some((entry) => entry.name === name.trim()) ? (
+                <ModelRefresh
+                  onRefresh={() => fetchModels(name.trim())}
+                  loading={modelsBusy}
+                  disabled={busy || confirm !== null}
+                />
+              ) : null}
               <button type="button" className="hud-settings-switch" disabled={busy || confirm !== null} onClick={askSave}>
                 Save
               </button>
