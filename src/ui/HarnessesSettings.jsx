@@ -286,7 +286,7 @@ export default function HarnessesSettings({ client }) {
                       <button
                         type="button"
                         className="hud-settings-switch"
-                        disabled={busy}
+                        disabled={busy || draft.trim() === ''}
                         onClick={() =>
                           setConfirm(
                             harnessConfirmSpec({
