@@ -1,6 +1,8 @@
 # Changelog
 
 ## Unreleased
+- P379: A finished label write reaches only the agent and the submitted label still open (R38-1).
+- P379: A Not ready Direct API row shows its reason outside the program details (R38-4).
 - P374: Review 38 by GPT-6.1 Sol of P370 to P373 lists four P2 findings, for P377 and P379.
 - P370: Settings lists Harnesses, Direct API, Keys and Lanes first, and a Ready harness folds its version, path and Program field under Program details.
 - P371: A sub's Agents checklist shows each agent's current parent in place of its id, and Save label saves a valid changed label at once.

@@ -236,11 +236,6 @@ export default function HarnessesSettings({ client }) {
               <>
                 {row.version ? <div className="endpoints-meta mono">{row.version}</div> : null}
                 {row.program ? <div className="endpoints-meta mono">{row.program}</div> : null}
-                {status.state === 'not-ready' && status.reason ? (
-                  <div className="endpoints-meta mono" data-harness-reason="true" style={{ color: '#ff2a2a' }}>
-                    {status.reason}
-                  </div>
-                ) : null}
                 <div className="endpoints-field">
                   <label className="endpoints-label mono" htmlFor={programInputId}>
                     Program
@@ -321,6 +316,11 @@ export default function HarnessesSettings({ client }) {
                 ) : (
                   programDetails
                 )}
+                {status.state === 'not-ready' && status.reason ? (
+                  <div className="endpoints-meta mono" data-harness-reason="true" style={{ color: '#ff2a2a' }}>
+                    {status.reason}
+                  </div>
+                ) : null}
                 {rowError ? (
                   <p className="endpoints-error mono" role="alert">
                     {rowError}

@@ -1098,11 +1098,16 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
       setActionError('This bridge cannot rename an agent.')
       return
     }
+    const openDraft = nodeDraft
     setBusy(true)
     setActionError('')
     try {
       await client.setAgentLabel({ id: node.id, label, confirmed: true })
-      setNodeDraft((current) => (current ? { ...current, label } : current))
+      setNodeDraft((current) =>
+        current === openDraft && cleanText(current.label, AGENT_NAME_MAX) === label
+          ? { ...current, label }
+          : current
+      )
       await refresh()
     } catch (error) {
       setActionError(messageOf(error))
