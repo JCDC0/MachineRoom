@@ -3034,3 +3034,30 @@ Models by name, no hidden defaults, P359 to P362. The owner asked on 2026-11-15:
 4. HARNESSES.md says how a harness is found (a saved program, then the lane's `bin`, then the descriptor's default, then the Codex app) and what `ready` means.
 5. ROOM.md, LIVE.md and COMMANDS.md: fix each sentence the code contradicts. Do not restate what a section already says.
 6. List in your report every sentence you changed and the code line that made you change it.
+
+Friendlier forms, first part, P363 to P365. `docs/agents/UI-FRIENDLY.md` (P361, GPT-6.1 Sol) ranks 15 findings. These three briefs fix the ones where a form says or does the wrong thing: findings 1 to 7, 14 and 15. Findings 8 to 13 change a layout or remove a step and wait for the owner. Read only your findings in that file, and its `Do not change` section.
+
+**P363. The chat sends where it shows and says the mode it runs in (OpenCode).** Start it after P360 is merged. Read this brief, findings 1, 3 and 14 (the chat part) of `docs/agents/UI-FRIENDLY.md` and its `Do not change` section. Use no subagents. Run every command in the foreground. Commit each step as you finish it. Add no style. Files: src/ui/OrchestratorChat.jsx, src/ui/orchestratorChat.js, tests/chat-friendly.test.js (new; add no test to another file except to keep an existing one passing), docs/agents/architecture/ROOM.md, docs/agents/CHANGELOG.md.
+
+1. Finding 1: opening an orchestrator's tab sets `To` to that orchestrator. Choosing a lane in `To` by hand still works until another tab opens.
+2. Finding 3: the start text says the current mode's label and its line from `src/control/modes.js` in place of `with full permissions`, for the main and for a sub. With no known mode, it says nothing about permissions.
+3. Finding 14, chat part: with no effort levels for the harness, the chat shows no Effort control at all. A saved effort is not changed.
+4. Tests, each failing before your change: a sub's tab sets To; a start text in Plan mode names Plan and not full permissions; a harness with no effort levels draws no Effort control.
+5. Run `node node_modules/vitest/vitest.mjs run tests/chat-friendly.test.js tests/orchestrator-chat.test.js` (skip a file that does not exist) and report the counts.
+
+**P364. The family forms keep what they show (OpenCode).** Start it after P357 is merged. Read this brief, findings 2, 4, 5, 6 and 14 (the editor part) of `docs/agents/UI-FRIENDLY.md` and its `Do not change` section. Use no subagents. Run every command in the foreground. Commit each step as you finish it. Add no style. Files: src/ui/FamilyTree.jsx, src/ui/ladderForm.js (only `subFromForm`), src/ui/family.js (only the team shortage sentence), tests/family-friendly.test.js (new; add no test to another file except to keep an existing one passing), docs/agents/architecture/ROOM.md, docs/agents/CHANGELOG.md.
+
+1. Finding 2: `subFromForm` keeps the effort the owner chose, and the bridge saves it (P353 taught the bridge to take it; check `server/orchestrators.js`). An empty effort stays empty.
+2. Finding 4: a lane from lanes.json shows its harness, model, effort and backup lane as plain text with `Edit this agent in lanes.json.`, not as controls. Its Label and its Hide or Remove actions stay.
+3. Finding 5: when the Direct API model read failed, the form shows that error and Retry, not `Add a Direct API key in Settings first.` The key sentence stays for a Direct API with nothing saved.
+4. Finding 6: the team shortage sentence becomes `Need N more agents outside existing teams. Add agents or make the team smaller.`
+5. Finding 14, editor part: an orchestrator whose harness has no effort levels shows no Effort select.
+6. Tests, each failing before your change: a sub made with effort `high` is saved with `high`; a lanes.json lane has no Model select; a failed Direct API read shows its error and not the key sentence; the new shortage sentence; no Effort select for a harness without levels.
+7. Run `node node_modules/vitest/vitest.mjs run tests/family-friendly.test.js tests/family.test.js tests/ladder-form.test.js tests/family-ladder-ui.test.js` and report the counts.
+
+**P365. Settings stops offering a step that cannot work (Codex, GPT-6.1 Terra).** Read this brief, findings 7 and 15 of `docs/agents/UI-FRIENDLY.md` and its `Do not change` section. Your sandbox keeps git read-only: write the files in your worktree and the runner commits them. Never run `npm install`; run tests as `node ../../node_modules/vitest/vitest.mjs run FILES` from your worktree. Add no style. Files: src/ui/EndpointsPanel.jsx, src/ui/LanesSettings.jsx, tests/settings-friendly.test.js (new; add no test to another file except to keep an existing one passing), docs/agents/CHANGELOG.md.
+
+1. Finding 7: the custom endpoint form shows no model refresh button until its name is a saved endpoint, and says `Save first, then use Refresh models on its row.` beside Models.
+2. Finding 15: when the lanes read failed, `No lanes are listed.` is not shown; the error stands alone.
+3. Tests, each failing before your change: a new custom endpoint form has no refresh button and has the sentence; a failed lanes read shows the error and not the empty sentence.
+4. Run `node ../../node_modules/vitest/vitest.mjs run tests/settings-friendly.test.js tests/endpoints-panel.test.js tests/lanes-settings.test.js` (skip a file that does not exist) and report the counts. If a test cannot run in your sandbox, say which and why.
