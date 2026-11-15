@@ -111,3 +111,7 @@ Effort set and load on an unchanged harness: Codex and native command propagatio
 Tests and UI: the four original lane-send tests, one ticket secrecy test, six prompt/environment tests, three lane-label tests and three owner-tree tests passed. These are focused checks, not a full-suite or visual pass.
 
 Docs checked against code: the HIERARCHY communication table, the mode mapping and refusal text added by P344 to COMMANDS, and LIVE's P345 effort sentence agree with the reviewed paths, subject to the open findings above.
+
+## Closed
+
+R36-1 is fixed by P348, R36-2 and R36-3 by P349, R36-4 at the P343 merge (the bridge uses the runner's own mode check), R36-5 and R36-6 by P350, R36-7 by P351, and R36-8 and R36-9 by the orchestrator's doc fixes at `cf03ef70`.

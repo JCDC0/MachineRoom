@@ -80,6 +80,7 @@ Every file in this folder, and what it is for:
 - `AUDIT-2026-11-REVIEW-29.md`: history. The P239 review of 21 merges since `1bb54a0f`, with six push blockers and two smaller findings fixed by P240 to P244.
 - `AUDIT-2026-11-REVIEW-30.md`: history. The P245 check of review 29's fixes, confirming five fixed and two partly fixed, with two push blockers and two smaller findings fixed by P246, P247 and P254.
 - `AUDIT-2026-11-REVIEW-31.md`: history. The P269 review of `12c25524..1122d2cf`, with five push blockers and two follow-up findings fixed by P272 to P275.
+- `AUDIT-2026-11-REVIEW-36.md`: history. The P347 review by GPT-6.1 Sol of lane messages, lane modes and the effort fix (P335 to P345), with nine findings closed by P348 to P351, the P343 merge and two doc fixes.
 - `AUDIT-2026-11-RUNNER.md`: history. The November 2026 hunt of the runner, worktrees, reviews and merges.
 - `AUDIT-2026-11-SUMMARY.md`: plan. The five November 2026 audits ranked and checked, with the features, the design changes that need the owner and the proposed briefs.
 - `AUDIT-2026-11-TESTS.md`: history. The P255 audit of tests changed since `1bb54a0f`, listing four tests that could pass with their change undone, fixed by P266.
