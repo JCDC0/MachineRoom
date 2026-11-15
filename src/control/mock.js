@@ -63,6 +63,8 @@ export const CLIENT_METHODS = [
   'lanes',
   'laneBackups',
   'harnesses',
+  'checkHarnesses',
+  'harnessSettings',
   'harnessModels',
   'providers',
   'endpoints',
@@ -683,6 +685,110 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
   let projectSettingsState = { checkCommand: '', hasTestScript: true }
   const reviewState = clone(SAMPLE_REVIEWS)
   let endpointState = clone(SAMPLE_ENDPOINTS)
+  let harnessState = [
+    {
+      key: 'claude',
+      name: 'Claude Code',
+      available: true,
+      ready: true,
+      enabled: true,
+      program: 'C:\\Tools\\claude\\claude.exe',
+      version: '2.1.0',
+      reason: '',
+      models: [
+        { id: 'claude-haiku-5-5', label: 'Claude Haiku 5.5' },
+        { id: 'claude-sonnet-5-5', label: 'Claude Sonnet 5.5' },
+      ],
+      efforts: ['low', 'medium', 'high', 'xhigh', 'max'],
+    },
+    {
+      key: 'opencode',
+      name: 'OpenCode',
+      available: true,
+      ready: true,
+      enabled: true,
+      program: 'C:\\Tools\\opencode\\opencode.exe',
+      version: '0.4.2',
+      reason: '',
+      models: [
+        { id: 'opencode/deepseek-v4.1-flash-free', label: 'DeepSeek v4.1 Flash (free)' },
+        { id: 'opencode-go/qwen3.8-flash', label: 'Qwen 3.8 Flash' },
+      ],
+      efforts: ['low', 'medium', 'high', 'max'],
+    },
+    {
+      key: 'agy',
+      name: 'AGY',
+      available: false,
+      ready: true,
+      enabled: true,
+      program: 'C:\\Tools\\agy\\agy.exe',
+      version: '0.1.0',
+      reason: '',
+      models: [],
+      efforts: [],
+    },
+    {
+      key: 'codex',
+      name: 'Codex',
+      available: false,
+      ready: false,
+      enabled: true,
+      program: '',
+      version: '',
+      reason: 'Program not found on PATH.',
+      models: [],
+      efforts: [],
+    },
+    {
+      key: 'copilot',
+      name: 'GitHub Copilot',
+      available: false,
+      ready: false,
+      enabled: false,
+      program: '',
+      version: '',
+      reason: '',
+      models: [],
+      efforts: [],
+    },
+    {
+      key: 'hermes',
+      name: 'Hermes',
+      available: false,
+      ready: false,
+      enabled: true,
+      program: '',
+      version: '',
+      reason: 'Program not found on PATH.',
+      models: [],
+      efforts: [],
+    },
+    {
+      key: 'acp',
+      name: 'ACP',
+      available: false,
+      ready: false,
+      enabled: true,
+      program: '',
+      version: '',
+      reason: 'Program not found on PATH.',
+      models: [],
+      efforts: [],
+    },
+    {
+      key: 'machineroom',
+      name: 'MachineRoom',
+      available: false,
+      ready: false,
+      enabled: true,
+      program: '',
+      version: '',
+      reason: 'No key is saved.',
+      models: [],
+      efforts: [],
+    },
+  ]
   let modelPinState = []
   let mcpServerState = clone(SAMPLE_MCP_SERVERS)
   let gitState = {
@@ -1985,43 +2091,62 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
         return backups
       }),
 
-    harnesses: () =>
-      call('harnesses', () => [
-        {
-          key: 'claude',
-          name: 'Claude Code',
-          available: true,
-          models: [
-            { id: 'claude-haiku-5-5', label: 'Claude Haiku 5.5' },
-            { id: 'claude-sonnet-5-5', label: 'Claude Sonnet 5.5' },
-          ],
-          efforts: ['low', 'medium', 'high', 'xhigh', 'max'],
-        },
-        {
-          key: 'opencode',
-          name: 'OpenCode',
-          available: true,
-          models: [
-            { id: 'opencode/deepseek-v4.1-flash-free', label: 'DeepSeek v4.1 Flash (free)' },
-            { id: 'opencode-go/qwen3.8-flash', label: 'Qwen 3.8 Flash' },
-          ],
-          efforts: ['low', 'medium', 'high', 'max'],
-        },
-        {
-          key: 'agy',
-          name: 'AGY',
-          available: false,
-          models: [],
-          efforts: [],
-        },
-        {
-          key: 'acp',
-          name: 'ACP',
-          available: false,
-          models: [],
-          efforts: [],
-        },
-      ]),
+    harnesses: () => call('harnesses', () => clone(harnessState)),
+
+    checkHarnesses: (options = {}) =>
+      call('checkHarnesses', () => {
+        const confirmed =
+          options && typeof options === 'object' && Object.hasOwn(options, 'confirmed') ? options.confirmed : true
+        if (confirmed !== true) throw new Error('Confirm checking harnesses first.')
+        emit({ topic: 'harnesses' })
+        return clone(harnessState)
+      }),
+
+    harnessSettings: (options = {}) =>
+      call('harnessSettings', () => {
+        const opts = options && typeof options === 'object' ? options : {}
+        const confirmed = Object.hasOwn(opts, 'confirmed') ? opts.confirmed : true
+        if (confirmed !== true) throw new Error('Confirm changing harness settings first.')
+        const target = harnessState.find((entry) => entry.key === opts.key)
+        if (!target) throw new Error(`The harness ${String(opts.key ?? '')} is not known.`)
+        if (Object.hasOwn(opts, 'program') && opts.program !== undefined) {
+          if (target.key === 'machineroom') {
+            throw new Error('Direct API uses keys and endpoints saved below, not a program.')
+          }
+          if (typeof opts.program !== 'string') throw new Error('Program must be text.')
+          const trimmed = opts.program.trim()
+          if (trimmed) {
+            if (trimmed.endsWith('/') || trimmed.endsWith('\\')) {
+              throw new Error('Give a program file, not a folder.')
+            }
+            if (/[\\/]/.test(trimmed) && !/^([A-Za-z]:[\\/]|\\\\|\/)/.test(trimmed)) {
+              throw new Error('Give a full program path or bare command name, not a relative path.')
+            }
+          }
+          target.program = trimmed
+        }
+        if (Object.hasOwn(opts, 'enabled') && opts.enabled !== undefined) {
+          if (typeof opts.enabled !== 'boolean') throw new Error('Offer in forms must be true or false.')
+          target.enabled = opts.enabled
+        }
+        if (!target.enabled) {
+          target.ready = false
+        } else if (target.key === 'claude' || target.key === 'opencode' || target.key === 'agy') {
+          target.ready = true
+          target.reason = ''
+        } else if (target.key === 'machineroom') {
+          target.ready = keySlots.size > 0
+          target.reason = target.ready ? '' : 'No key is saved.'
+        } else if (target.program) {
+          target.ready = true
+          target.reason = ''
+        } else {
+          target.ready = false
+          target.reason = 'Program not found on PATH.'
+        }
+        emit({ topic: 'harnesses' })
+        return { harness: clone(target), harnesses: clone(harnessState) }
+      }),
 
     harnessModels: (harnessOrOptions = {}) =>
       call('harnessModels', () => {

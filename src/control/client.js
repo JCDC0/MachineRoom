@@ -446,6 +446,18 @@ export function createClient({
 
     harnesses: () => request('GET', '/api/harnesses'),
 
+    checkHarnesses: (options = {}) => {
+      const confirmed =
+        options && typeof options === 'object' && Object.hasOwn(options, 'confirmed') ? options.confirmed : true
+      return request('POST', '/api/harnesses/check', { confirmed })
+    },
+
+    harnessSettings: (options = {}) => {
+      const body = options && typeof options === 'object' ? { ...options } : {}
+      const confirmed = Object.hasOwn(body, 'confirmed') ? body.confirmed : true
+      return request('POST', '/api/harnesses/settings', { ...body, confirmed })
+    },
+
     harnessModels: (harnessOrOptions = {}, refreshOption = false) => {
       let harness = ''
       let refresh = false

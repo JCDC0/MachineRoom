@@ -1,7 +1,9 @@
 # Changelog
 
 ## Unreleased
+- Settings has a Harnesses section above Direct API: each harness shows Ready, Not ready with its reason, or Off, with its version and program, an Offer in forms switch and a Program field, and Check again checks them all (P356).
 - A ladder save keeps the effort it names on a sub and its first turn takes it, an effort the harness lacks is refused, and the chat's Effort menu offers the levels the bridge lists for that harness (P353).
+- Settings now has a Harnesses section before Direct API to check readiness, save or clear programs, and toggle Offer in forms (P356).
 - The model list finds a harness at its default program, through the Codex app, or through a lane made in the family tree, so the forms no longer say the program was not found (P352).
 - The add-agent form accepts its default effort and saves the lane with no effort, so the harness uses its own default (P354).
 - The add-agent form accepts the effort it offers as `default` and saves the lane with no effort (P354).
