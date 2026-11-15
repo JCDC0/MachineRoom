@@ -1291,26 +1291,45 @@ function cutToolResult(message) {
   return { ...message, content: `${content.slice(0, NEWEST_READABLE_CHARS)}${TOOL_RESULT_CUT}` }
 }
 
-function boundMessages(messages, limit) {
+export function boundMessages(messages, limit) {
   if (messageChars(messages) <= limit) return
-  const newestTurn = newestToolTurn(messages)
+  const firstUser = messages.findIndex((message) => message?.role === 'user')
+  const start = firstUser >= 0 ? firstUser + 1 : 2
+  const isInbox = (message) =>
+    message?.role === 'user' &&
+    typeof message.content === 'string' &&
+    message.content.startsWith('Messages for you while you work:')
+  let newestTurn = newestToolTurn(messages)
   const oldTools = []
-  const newestTools = []
   messages.forEach((message, index) => {
-    if (message?.role !== 'tool') return
-    if (index < newestTurn) oldTools.push(index)
-    else newestTools.push(index)
+    if (message?.role === 'tool' && index < newestTurn) oldTools.push(index)
   })
   for (const index of oldTools) {
     if (messageChars(messages) <= limit) break
     messages[index] = { ...messages[index], content: TOOL_RESULT_REMOVED }
   }
   if (messageChars(messages) <= limit) return
-  for (let index = 2; index < newestTurn; index += 1) {
+  for (let index = start; index < newestTurn; index += 1) {
     if (messageChars(messages) <= limit) return
     if (messages[index]?.role === 'assistant') messages[index] = trimAssistant(messages[index])
   }
   if (messageChars(messages) <= limit) return
+  const inbox = []
+  for (let index = start; index < messages.length; index += 1) {
+    if (isInbox(messages[index])) inbox.push(index)
+  }
+  let removed = 0
+  for (let i = 0; i < inbox.length - 1; i += 1) {
+    if (messageChars(messages) <= limit) break
+    messages.splice(inbox[i] - removed, 1)
+    removed += 1
+  }
+  if (messageChars(messages) <= limit) return
+  newestTurn = newestToolTurn(messages)
+  const newestTools = []
+  for (let index = newestTurn; index < messages.length; index += 1) {
+    if (messages[index]?.role === 'tool') newestTools.push(index)
+  }
   const newestChars = newestTools.reduce((total, index) => total + JSON.stringify(messages[index]).length, 0)
   if (newestChars > limit) {
     for (const index of newestTools) messages[index] = cutToolResult(messages[index])
@@ -1322,7 +1341,7 @@ function boundMessages(messages, limit) {
   }
   if (messageChars(messages) <= limit) return
   const rest = []
-  for (let index = 2; index < messages.length; index += 1) rest.push(index)
+  for (let index = start; index < messages.length; index += 1) rest.push(index)
   rest.sort((left, right) => JSON.stringify(messages[right]).length - JSON.stringify(messages[left]).length)
   for (const index of rest) {
     if (messageChars(messages) <= limit) return

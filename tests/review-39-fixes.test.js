@@ -1,7 +1,151 @@
+import { spawn } from 'node:child_process'
+import { createServer } from 'node:http'
+import { fileURLToPath } from 'node:url'
 import { act, createElement } from 'react'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
+import { killTree } from '../server/processTree.js'
 import OrchestratorChat from '../src/ui/OrchestratorChat.jsx'
+import { makeTempDir, removeTempDir } from './helpers/tempRoot.js'
 import { click, withDom } from './helpers/uiDom.js'
+
+const AGENT_SCRIPT = fileURLToPath(new URL('../scripts/mr-agent.mjs', import.meta.url))
+const cleanups = []
+
+afterEach(async () => {
+  while (cleanups.length > 0) {
+    await cleanups.pop()()
+  }
+})
+
+function tempDir(prefix = 'review-39-') {
+  const dir = makeTempDir(prefix)
+  cleanups.push(async () => removeTempDir(dir))
+  return dir
+}
+
+function baseEnvironment() {
+  const env = {}
+  for (const name of ['PATH', 'Path', 'PATHEXT', 'SystemRoot', 'SYSTEMROOT', 'WINDIR', 'TEMP', 'TMP', 'ComSpec', 'COMSPEC', 'HOME', 'USERPROFILE', 'APPDATA', 'LOCALAPPDATA']) {
+    if (typeof process.env[name] === 'string') env[name] = process.env[name]
+  }
+  return env
+}
+
+function chatAnswer({ text = '', calls = [] } = {}) {
+  const message = { role: 'assistant', content: text === '' ? null : text }
+  if (calls.length > 0) {
+    message.tool_calls = calls.map((call, index) => ({
+      id: call.id ?? `call_${index}`,
+      type: 'function',
+      function: {
+        name: call.name,
+        arguments: typeof call.arguments === 'string' ? call.arguments : JSON.stringify(call.arguments ?? {}),
+      },
+    }))
+  }
+  return {
+    id: 'chatcmpl-test',
+    object: 'chat.completion',
+    choices: [{ index: 0, message, finish_reason: calls.length > 0 ? 'tool_calls' : 'stop' }],
+    usage: { prompt_tokens: 0, completion_tokens: 0 },
+  }
+}
+
+function startFakeApi(handler) {
+  const calls = []
+  const server = createServer((req, res) => {
+    let body = ''
+    req.on('data', (chunk) => {
+      body += chunk
+    })
+    req.on('end', async () => {
+      try {
+        const parsed = body === '' ? null : JSON.parse(body)
+        calls.push({ method: req.method, url: req.url, headers: req.headers, body: parsed })
+        const answer = await handler(parsed, calls.length - 1, calls)
+        const status = Number.isInteger(answer?.status) ? answer.status : 200
+        res.writeHead(status, { 'content-type': 'application/json' })
+        res.end(JSON.stringify(answer?.body ?? answer))
+      } catch (error) {
+        res.writeHead(500, { 'content-type': 'application/json' })
+        res.end(JSON.stringify({ error: String(error?.message ?? error) }))
+      }
+    })
+  })
+  cleanups.push(
+    () =>
+      new Promise((done) => {
+        server.close(() => done())
+        server.closeAllConnections?.()
+      }),
+  )
+  return new Promise((done) => {
+    server.listen(0, '127.0.0.1', () => {
+      const address = server.address()
+      done({ url: `http://127.0.0.1:${address.port}/v1`, calls })
+    })
+  })
+}
+
+function startFakeBridge(handler) {
+  const server = createServer((req, res) => {
+    Promise.resolve(handler(req, res)).catch((error) => {
+      if (!res.headersSent) res.writeHead(500, { 'content-type': 'application/json' })
+      res.end(JSON.stringify({ error: String(error?.message ?? error) }))
+    })
+  })
+  cleanups.push(
+    () =>
+      new Promise((done) => {
+        server.close(() => done())
+        server.closeAllConnections?.()
+      }),
+  )
+  return new Promise((done) => {
+    server.listen(0, '127.0.0.1', () => {
+      const address = server.address()
+      done({ url: `http://127.0.0.1:${address.port}` })
+    })
+  })
+}
+
+function runAgent({ folder, api, prompt = 'Do the task.', env = {}, seconds = 20 }) {
+  return new Promise((done, fail) => {
+    const childEnv = {
+      ...baseEnvironment(),
+      MACHINEROOM_API_URL: api.url,
+      MACHINEROOM_API_KEY: 'test-key',
+      ...env,
+    }
+    const args = [AGENT_SCRIPT, '--model', 'test/model', '--cwd', folder, prompt]
+    const child = spawn(process.execPath, args, {
+      cwd: folder,
+      env: childEnv,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      windowsHide: true,
+    })
+    let stdout = ''
+    let stderr = ''
+    const timer = setTimeout(() => {
+      killTree(child)
+      fail(new Error(`mr-agent did not exit. stderr: ${stderr}`))
+    }, seconds * 1000)
+    child.stdout.on('data', (chunk) => {
+      stdout += chunk
+    })
+    child.stderr.on('data', (chunk) => {
+      stderr += chunk
+    })
+    child.once('error', (error) => {
+      clearTimeout(timer)
+      fail(error)
+    })
+    child.once('close', (code) => {
+      clearTimeout(timer)
+      done({ code, stdout, stderr })
+    })
+  })
+}
 
 function isDisabled(node) {
   return node?.disabled === true || node?.hasAttribute('disabled') === true
@@ -193,5 +337,85 @@ describe('review 39 fixes: R39-2 chat model picker', () => {
       expect(isDisabled(modelTrigger(container))).toBe(false)
       expect(modelTrigger(container).textContent).toContain('sonnet')
     })
+  })
+})
+
+describe('review 39 fixes: R39-3 inbox context bound', () => {
+  async function runWithSixBatches(batchSize) {
+    const folder = tempDir()
+    const batchText = (number) => `batch-${number}: ${String(number).repeat(batchSize)}`
+    let inbox = []
+    const bridge = await startFakeBridge((_req, res) => {
+      res.writeHead(200, { 'content-type': 'application/json' })
+      res.end(JSON.stringify({ messages: inbox }))
+    })
+    const api = await startFakeApi((_body, index) => {
+      if (index < 6) {
+        const number = index + 1
+        inbox = [
+          {
+            from: 'orchestrator',
+            text: batchText(number),
+            at: `2026-11-15T11:0${number}:00.000Z`,
+          },
+        ]
+        return chatAnswer({ calls: [{ id: `call_${index}`, name: 'list_dir', arguments: { path: '.' } }] })
+      }
+      return chatAnswer({ text: 'Done.' })
+    })
+
+    const result = await runAgent({
+      folder,
+      api,
+      prompt: 'Initial task to keep.',
+      env: {
+        MACHINEROOM_BRIDGE: bridge.url,
+        MACHINEROOM_LANE_TICKET: `ticket-bound-${batchSize}`,
+        MR_AGENT_CONTEXT_CHARS: '8000',
+      },
+    })
+    return { result, api, batchText }
+  }
+
+  it('drops oldest inbox batches under an 8000 character limit while keeping the task and newest batch', async () => {
+    const { result, api, batchText } = await runWithSixBatches(2500)
+    expect(result.code).toBe(0)
+    expect(result.stderr).toBe('')
+    expect(api.calls).toHaveLength(7)
+
+    const messages = api.calls[6].body.messages
+    expect(JSON.stringify(messages).length).toBeLessThanOrEqual(8000)
+    expect(messages[1]).toEqual({ role: 'user', content: 'Initial task to keep.' })
+
+    const inboxMessages = messages.filter(
+      (message) =>
+        message.role === 'user' &&
+        typeof message.content === 'string' &&
+        message.content.startsWith('Messages for you while you work:'),
+    )
+    expect(inboxMessages.length).toBeGreaterThanOrEqual(1)
+    expect(inboxMessages.some((message) => message.content.includes('batch-1:'))).toBe(false)
+    expect(inboxMessages.at(-1).content).toContain(batchText(6))
+  })
+
+  it('stays under 8000 characters when all six inbox batches are close to 8000 characters', async () => {
+    const { result, api } = await runWithSixBatches(7500)
+    expect(result.code).toBe(0)
+    expect(result.stderr).toBe('')
+    expect(api.calls).toHaveLength(7)
+
+    const messages = api.calls[6].body.messages
+    expect(JSON.stringify(messages).length).toBeLessThanOrEqual(8000)
+    expect(messages[1]).toEqual({ role: 'user', content: 'Initial task to keep.' })
+
+    const inboxMessages = messages.filter(
+      (message) =>
+        message.role === 'user' &&
+        typeof message.content === 'string' &&
+        message.content.startsWith('Messages for you while you work:'),
+    )
+    expect(inboxMessages).toHaveLength(1)
+    expect(inboxMessages[0].content).toContain('batch-6:')
+    expect(inboxMessages[0].content).not.toContain('batch-1:')
   })
 })
