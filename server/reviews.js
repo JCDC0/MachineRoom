@@ -357,6 +357,7 @@ export function createReviewsApi({
       const text = await runGit(worktree, [
         'diff',
         '--name-only',
+        '--no-renames',
         '--no-ext-diff',
         '--no-textconv',
         `${baseRef}...${head}`,

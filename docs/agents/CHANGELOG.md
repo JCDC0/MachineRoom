@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- P410: The scope gate reads changed files with --no-renames, so a moved file names both its old and new path.
 - P410: A restricted sub's lane merge answers 409 when the bridge cannot read its changed files, unless allowOutside is allowed.
 - Review 42 (Sol) of P395 to P408: four P1 and two P2 findings in the scope gate, Codex Bypass, failover modes, sub restore and choice.
 - Lane mode pickers and lane saves leave out Ask, which a headless lane run cannot use.

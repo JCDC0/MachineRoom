@@ -104,6 +104,30 @@ function makeRepo() {
   return { base, repo, worktree, head, baseHead }
 }
 
+function makeMovedFileRepo() {
+  const base = freshDir()
+  const repo = join(base, 'repo')
+  mkdirSync(join(repo, 'src'), { recursive: true })
+  mkdirSync(join(repo, 'docs'), { recursive: true })
+  git(repo, ['init', '-b', 'main'])
+  git(repo, ['config', 'user.name', 'MachineRoom Test'])
+  git(repo, ['config', 'user.email', 'test@example.invalid'])
+  git(repo, ['config', 'commit.gpgsign', 'false'])
+  git(repo, ['config', 'core.autocrlf', 'false'])
+  writeFileSync(join(repo, 'src', 'app.js'), 'export const app = 1\n')
+  writeFileSync(join(repo, 'docs', 'a.md'), '# a\n')
+  git(repo, ['add', 'src/app.js', 'docs/a.md'])
+  git(repo, ['commit', '-m', 'first'])
+  const baseHead = git(repo, ['rev-parse', 'HEAD']).trim()
+
+  const worktree = join(base, 'lane-worktree')
+  git(repo, ['worktree', 'add', '-b', 'feat/x', worktree])
+  git(worktree, ['mv', 'docs/a.md', 'src/a.md'])
+  git(worktree, ['commit', '-m', 'move a into src'])
+  const head = git(worktree, ['rev-parse', 'HEAD']).trim()
+  return { base, repo, worktree, head, baseHead }
+}
+
 function scopeApi(repo, worktree, { restricted = true, scope = ['src/**'], head, baseHead, gitRunner } = {}) {
   const dir = freshDir()
   const agentsDir = join(dir, 'docs', 'agents')
@@ -322,6 +346,20 @@ describe('a restricted sub and an out-of-scope lane merge', { timeout: 30000 }, 
     expect(allowed.status).toBe(200)
     expect(allowed.body.ok).toBe(true)
     expect(git(repo, ['show', 'HEAD:docs/notes.md'])).toContain('outside the scope')
+  })
+
+  it('refuses a moved outside file that lands in scope', async () => {
+    const { repo, worktree, baseHead } = makeMovedFileRepo()
+    const { merge } = scopeApi(repo, worktree)
+
+    const answer = await merge()
+    expect(answer.status).toBe(409)
+    expect(answer.body).toEqual({
+      error: 'The lane changed files outside the scope of Scout, so it was not merged.',
+      files: ['docs/a.md'],
+      outside: true,
+    })
+    expect(mainHead(repo)).toBe(baseHead)
   })
 
   it('merges an unrestricted sub lane with files outside its scope', async () => {
