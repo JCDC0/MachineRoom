@@ -1,6 +1,8 @@
 # Changelog
 
 ## Unreleased
+- LIMITS.md names the browser's six connections to a host and the two event streams a live room page holds.
+- P399: LIMITS.md names the browser's six connections to a host, the two event streams a live room page holds and how to avoid the stall.
 - When the newest inbox reply must be cut, it keeps its sender, starts on a whole word and says [start cut].
 - An orchestrator saved at Harness default keeps it after a restart, and a new sub at Harness default no longer takes a lane's model.
 - The orchestrator and lane editors' model pickers show and offer Harness default for every harness but Direct API.

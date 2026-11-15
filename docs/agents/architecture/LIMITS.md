@@ -31,3 +31,7 @@ What the room does not do, and the measurements behind each limit.
 - The Codex rollout read accepts the race review 34 found as a limit (R34-4): a same-user process that rewrites the `.codex\sessions` folders while a run reads the rollout can point the read at an outside file. Such a process can already do worse.
 - A check line on Windows starts only a real program or `npm` or `npx`; a `pnpm` or `yarn` shim fails to start, because the runner passes the first word to `spawn` with no shell and sends only `npm` and `npx` through Node and their own JavaScript entry point.
 
+## Six connections a host
+
+Each live room page holds two event streams: the frames from `src/live/bridge.js` and the control notices from `src/control/client.js`. A browser opens at most six connections to one host over HTTP/1.1. Three tabs of the same room use all six, so every later request waits for one to free: on 2026-11-16 three tabs stalled every request for 30 seconds while curl answered the bridge in 28 milliseconds, and the page said `The bridge did not answer within 30 seconds.` The browser's Network tab shows the requests still pending. Close the other tabs, or open the room once on `127.0.0.1` and once on `localhost`, which count as two hosts.
+
