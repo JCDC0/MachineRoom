@@ -1577,8 +1577,10 @@ async function main() {
   }
   if (!Object.hasOwn(lanes, options.lane)) throw new Error(missingLaneText(options.lane, lanesJson, lanesPath))
   const saved = lanes[options.lane]
-  const mode = options.mode ?? (saved?.cli?.mode === 'choice' ? defaultMode(saved.cli.harness) ?? undefined : undefined)
+  const choiceDefault = saved?.cli?.mode === 'choice' ? defaultMode(saved.cli.harness) : undefined
+  const mode = options.mode ?? (choiceDefault ?? undefined)
   const lane = laneWithOverrides(saved, { ...options, ...(mode !== undefined ? { mode } : {}) })
+  if (options.mode === undefined && choiceDefault === null && lane?.cli) delete lane.cli.mode
   lanes[options.lane] = lane
   if (typeof lane?.cli?.harness === 'string' && readHarnessSettings(runsFolder()).off.includes(lane.cli.harness)) {
     console.log(HARNESS_OFF_PROBLEM)

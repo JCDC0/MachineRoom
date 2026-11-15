@@ -7,7 +7,7 @@ import { MODELS, modelsFor } from './models.js'
 import { programPath } from './programPath.js'
 import { readLanes, runsFolder } from './lanes-source.js'
 import { cachedRunRecords } from './runs.js'
-import { laneModesFor } from '../src/control/modes.js'
+import { defaultMode, laneModesFor } from '../src/control/modes.js'
 import { harnessByKey } from '../src/harnesses/index.js'
 import { harnessUnavailableProblem, modelUnavailableProblem } from './model-list.js'
 import { machineroomModels, modelAllowed, readHarnessModelsCache } from './harness-models.js'
@@ -512,7 +512,7 @@ export function createAgentLane(body, {
   }
 
   const mode = body?.mode ?? ''
-  if (mode !== '' && (typeof mode !== 'string' || (mode !== 'choice' && !laneModesFor(harness).some((item) => item.id === mode)))) {
+  if (mode !== '' && (typeof mode !== 'string' || !(mode === 'choice' ? defaultMode(harness) !== null : laneModesFor(harness).some((item) => item.id === mode)))) {
     return { ok: false, status: 400, error: `The mode ${mode} is not available for ${harness}.` }
   }
 
@@ -749,7 +749,7 @@ export function createAgentsConfigApi(options = {}) {
 
       if (body.mode !== undefined) {
         const mode = body.mode ?? ''
-        if (mode !== '' && (typeof mode !== 'string' || (mode !== 'choice' && !laneModesFor(agent.harness).some((item) => item.id === mode)))) {
+        if (mode !== '' && (typeof mode !== 'string' || !(mode === 'choice' ? defaultMode(agent.harness) !== null : laneModesFor(agent.harness).some((item) => item.id === mode)))) {
           sendJson(req, res, 400, { error: `The mode ${mode} is not available for ${agent.harness}.` })
           return true
         }

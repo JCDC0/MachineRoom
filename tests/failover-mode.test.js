@@ -5,11 +5,13 @@ import { fileURLToPath } from 'node:url'
 import { describe, expect, it, vi } from 'vitest'
 import { laneWithOverrides } from '../src/briefs/run.js'
 import { harnessByKey } from '../src/harnesses/index.js'
+import { createAgentsConfigApi, readAllLanes } from '../server/agents-config.js'
 import { gitPath } from '../server/programPath.js'
 import { startLane } from '../scripts/run-lane.mjs'
 import { makeTempDir } from './helpers/tempRoot.js'
 
 const REPO_ROOT = fileURLToPath(new URL('..', import.meta.url))
+const RUN_LANE_SCRIPT = fileURLToPath(new URL('../scripts/run-lane.mjs', import.meta.url))
 const RECORDINGS = join(REPO_ROOT, 'public', 'recordings')
 const BRIEF = { id: 'P412X', title: 'A failover mode check', text: 'Do it.\n\nFiles: note.txt\n' }
 const GIT_IDENTITY = {
@@ -247,5 +249,81 @@ describe('failover respects the backup lane saved mode', { timeout: 60000 }, () 
     expect(records).toHaveLength(2)
     expect(records[1]).toMatchObject({ lane: 'codex', mode: 'auto', failoverFrom: { lane: 'opencode' } })
     expect(okRuns).toBe(1)
+  })
+})
+
+function agentsPost(lanes, runsFolder, body) {
+  let answer = null
+  const api = createAgentsConfigApi({
+    runsFolder,
+    lanes,
+    env: {},
+    readJsonBody: async () => body,
+    sendJson: (req, res, status, result) => {
+      answer = { status, body: result }
+    },
+  })
+  return async (path) => {
+    await api.handle({ method: 'POST', headers: { origin: 'http://localhost:5173' } }, {}, new URL(path, 'http://localhost'))
+    return answer
+  }
+}
+
+describe('choice needs a harness with modes', () => {
+  it('refuses choice when creating or updating a Hermes lane and accepts it for Codex', async () => {
+    const runs = makeTempDir('machine-room-choice-hermes-')
+    try {
+      const lanes = {
+        hermesBase: { cli: { harness: 'hermes', bin: process.execPath } },
+        codexBase: { cli: { harness: 'codex', bin: process.execPath } },
+      }
+      const createdHermesChoice = await agentsPost(lanes, runs, { name: 'Hermes Choice', harness: 'hermes', mode: 'choice', confirmed: true })('/api/lanes/create')
+      expect(createdHermesChoice.status).toBe(400)
+      expect(createdHermesChoice.body.error).toBe('The mode choice is not available for hermes.')
+
+      const createdHermes = await agentsPost(lanes, runs, { name: 'Hermes Plain', harness: 'hermes', confirmed: true })('/api/lanes/create')
+      expect(createdHermes.status).toBe(200)
+      const updatedHermes = await agentsPost(lanes, runs, { mode: 'choice', confirmed: true })(`/api/lanes/${createdHermes.body.key}/update`)
+      expect(updatedHermes.status).toBe(400)
+      expect(updatedHermes.body.error).toBe('The mode choice is not available for hermes.')
+      expect(readAllLanes({ lanesJson: lanes, runsFolder: runs })[createdHermes.body.key].cli.mode).toBeUndefined()
+
+      const createdCodex = await agentsPost(lanes, runs, { name: 'Codex Choice', harness: 'codex', mode: 'choice', confirmed: true })('/api/lanes/create')
+      expect(createdCodex.status).toBe(200)
+      expect(readAllLanes({ lanesJson: lanes, runsFolder: runs })[createdCodex.body.key].cli.mode).toBe('choice')
+    } finally {
+      rmSync(runs, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+    }
+  })
+
+  it('treats a saved choice on a Hermes lane as no mode in run-lane', () => {
+    const base = makeTempDir('machine-room-run-hermes-choice-')
+    try {
+      const project = join(base, 'project')
+      const runs = join(base, 'runs')
+      const lanesPath = join(base, 'lanes.json')
+      mkdirSync(project, { recursive: true })
+      writeFileSync(lanesPath, JSON.stringify({
+        hermes: { name: 'Hermes', cli: { harness: 'hermes', bin: process.execPath, provider: 'fake', mode: 'choice' } },
+      }))
+      const env = { ...process.env, MACHINEROOM_LANES_FILE: lanesPath, MACHINEROOM_RUNS: runs }
+      const dryRun = spawnSync(process.execPath, [RUN_LANE_SCRIPT, 'hermes', '--project', project, '--task', 'Say hi.', '--dry-run'], {
+        env,
+        encoding: 'utf8',
+        timeout: 60000,
+      })
+      expect(dryRun.status, dryRun.stderr).toBe(0)
+      expect(dryRun.stdout).toContain('Dry run, nothing started.')
+
+      const explicitPlan = spawnSync(process.execPath, [RUN_LANE_SCRIPT, 'hermes', '--project', project, '--task', 'Say hi.', '--mode', 'plan', '--dry-run'], {
+        env,
+        encoding: 'utf8',
+        timeout: 60000,
+      })
+      expect(explicitPlan.status).toBe(1)
+      expect(explicitPlan.stderr).toContain('The hermes lane has no permission modes, so it cannot run in plan mode.')
+    } finally {
+      rmSync(base, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+    }
   })
 })
