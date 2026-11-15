@@ -1634,7 +1634,23 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
     )
   }
 
-  function renderDirectNotice(onRefresh = null) {
+  function renderDirectNotice(onRefresh = null, error = '') {
+    if (error) {
+      return (
+        <div className="mr-family-direct">
+          <p className="mr-side-note is-error" role="alert">
+            {error}
+          </p>
+          <div className="mr-family-direct-actions">
+            {onRefresh ? (
+              <button type="button" className="mr-side-action" onClick={onRefresh}>
+                Retry
+              </button>
+            ) : null}
+          </div>
+        </div>
+      )
+    }
     return (
       <div className="mr-family-direct">
         <p className="mr-side-note">{DIRECT_KEY_PROBLEM}</p>
@@ -1825,7 +1841,7 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
               <p className="mr-side-note is-dim">{NO_READY_HARNESS}</p>
             )}
             {directMissing ? (
-              renderDirectNotice(editorModels.refresh)
+              renderDirectNotice(editorModels.refresh, editorModels.error)
             ) : harness ? (
               <ModelPicker
                 label="Model"
@@ -2000,7 +2016,7 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
         ) : (
           <p className="mr-side-note is-dim">{NO_READY_HARNESS}</p>
         )}
-        {directMissing ? renderDirectNotice(childModels.refresh) : null}
+        {directMissing ? renderDirectNotice(childModels.refresh, childModels.error) : null}
         {selected && !directMissing ? (
           <ModelPicker
             label="Model"
@@ -2093,7 +2109,7 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
         ) : (
           <p className="mr-side-note is-dim">{NO_READY_HARNESS}</p>
         )}
-        {directMissing ? renderDirectNotice(subModels.refresh) : null}
+        {directMissing ? renderDirectNotice(subModels.refresh, subModels.error) : null}
         {selected && !directMissing ? (
           <ModelPicker
             label="Model"
