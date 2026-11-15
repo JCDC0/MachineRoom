@@ -60,3 +60,14 @@ Open the `Agents` sidebar tab and open `Agents` (`FamilyTree`):
 - Watch: in 3D, sub shapes float over sector arcs with activity, active, finished, and failure lights; `Transport` shows orchestrator chips and lane pills; `Team` tab and `Show agent messages` show cross-orchestrator chat and `startedBy` wake reports; `Control` (`Dispatch`, `Tasks`, `Meters`, `Team`, `Reviews`) and `Log` show queues, cost meters, and errors.
 - Stop orchestrators: open every running tab (`Orchestrator` and each sub tab) in `OrchestratorChat`, click `Stop`, and confirm `Stop`.
 - Stop running lanes: click the active lane to open `Inspector`, click `Stop`, and click `Confirm` (or click `Open conversation with <label>` -> `Stop`), or run `npm run run-lane -- --stop LANE`.
+
+## Checked in the room on 2026-11-15
+
+The orchestrator walked steps 1 to 3 on Lowbeam in the owner's room at 1280 by 800, up to the first message, which is the owner's to send. The room now holds: the main orchestrator on Claude Code, `claude-opus-5-5`, effort high; the sub `Terra` on Codex, `gpt-6.1-terra`, effort high, over `Hydrogen A` and `Hydrogen B` (AGY, `gemini-4-hydrogen-xhigh`); and `OpenCode A`, `OpenCode B` and `OpenCode C` (`opencode-go/deepseek-v4.1-flash`, effort max) under the main. Both orchestrators are in Plan. No turn and no run was started. The native sub over the three OpenCode lanes is not made: `Direct API` is not offered as a sub harness until a key is saved in `Settings`, and only the owner saves a key.
+
+What the walk found, each briefed (P352 to P354):
+
+- The add-agent and sub forms show `The program for opencode was not found.` and `The program for codex was not found.` in red. The lanes and the sub still work: only the model list falls back to its built-in list.
+- The add-agent form offers the effort `default` and then refuses it with `Choose an effort for this harness.` Pick a level.
+- The sub form's effort is not saved: `Terra` came out with no effort. Set it after: `Edit <sub>`, the effort select, `Save`, confirm.
+- The chat tab's `Effort:` menu says `No effort levels for this harness.` for a Codex orchestrator. Use `Edit <sub>` as above.

@@ -2922,3 +2922,26 @@ Review 36 fixes, P348 to P351. GPT-6.1 Sol read P335 to P345 (`docs/agents/AUDIT
 1. The Sidebar passes the lanes it already has to `previewLines`, so a preview of a message from `lane:opencode` shows the lane's label. An unknown lane still shows its key.
 2. A test through the real component, failing before your change: a preview with a `lane:KEY` message and the Sidebar's real lanes shows the label.
 3. Run `node node_modules/vitest/vitest.mjs run tests/sidebar-preview-ui.test.js tests/sidebar.test.js` and report the counts.
+
+The owner's tree, walked in the room, P352 to P354. On 2026-11-15 the orchestrator built the owner's test tree in the owner's room on Lowbeam through the page, as `FREE-HIERARCHY.md` says to. Four things went wrong on the way. None stops the tree; each makes the owner doubt the room. Not started: they wait for the owner's word.
+
+**P352. The model list finds OpenCode and Codex the way the runner does (OpenCode).** Read this brief only. Use no subagents. Run every command in the foreground. Commit each step as you finish it. Files: server/harness-models.js (only `resolveHarnessProgram` and its callers' arguments), tests/harness-models-program.test.js (new), docs/agents/CHANGELOG.md.
+
+1. In a room with no OpenCode lane in `lanes.json`, `GET /api/harnesses/opencode/models` answers with the error `The program for opencode was not found.`, because `resolveHarnessProgram` looks for the bare name on the PATH and npm installs only a `.cmd` shim there. `isHarnessAvailable` of `server/agents-config.js` already falls back to the descriptor's `defaultProgram`: do the same, with the same expansion of `%APPDATA%`.
+2. For Codex use `codexProgramFor` of `server/agents-config.js`, as the runner and the doctor do, so the desktop app's program counts.
+3. A lane made in the family tree (`agents.json`) counts as a lane with a program too, if the callers do not pass those today.
+4. Tests, each failing before your change: with no lane and a fake `%APPDATA%` that holds the default OpenCode program, the program is found; with a Codex app program and no `codex` on the PATH, it is found; with neither, the error stays.
+5. Run `node node_modules/vitest/vitest.mjs run tests/harness-models-program.test.js tests/harness-models.test.js` and report the counts.
+
+**P353. A sub keeps the effort its form named, and the chat offers its harness's levels (OpenCode).** Read this brief only. Use no subagents. Run every command in the foreground. Change no style. Commit each step as you finish it. Files: server/orchestrators.js (only where a ladder save makes or updates a sub), server/orchestrator.js (only what a sub needs to take an effort at creation), src/ui/OrchestratorChat.jsx and src/ui/orchestratorChat.js (only the effort menu's levels), tests/sub-effort.test.js (new), docs/agents/CHANGELOG.md.
+
+1. `Add sub orchestrator` with effort `high` confirms `Codex · gpt-6.1-terra · high` and then `GET /api/orchestrators` shows the sub with `effort: null`. Find where the effort is lost between the form, the ladder save and the sub's instance, and keep it. An effort the sub's harness does not take is refused at the save with the sentence `setEffort` uses.
+2. The chat tab's `Effort:` menu says `No effort levels for this harness.` for a Codex orchestrator. It offers the levels the bridge lists for that harness (`efforts` in the harness list, the source `Edit <sub>` already uses), for every harness.
+3. Tests, each failing before your change: a ladder save with a Codex sub on `high` gives a sub whose effort is `high` and whose first turn command holds `model_reasoning_effort=high`; an effort the harness lacks is refused; the chat's effort levels for Codex are low, medium, high and xhigh.
+4. Run `node node_modules/vitest/vitest.mjs run tests/sub-effort.test.js tests/orchestrators.test.js tests/orchestrator-chat.test.js tests/owner-tree.test.js` and report the counts.
+
+**P354. The add-agent form takes the effort it offers (OpenCode).** Read this brief only. Use no subagents. Run every command in the foreground. Change no style. Commit each step as you finish it. Files: src/ui/family.js (only `childFormProblem` and what it needs), src/ui/FamilyTree.jsx (only if the saved value needs it), tests/family.test.js, docs/agents/CHANGELOG.md.
+
+1. The form offers `default` for the effort and `childFormProblem` refuses it with `Choose an effort for this harness.` when the harness has effort levels. `default` means the harness's own default: accept it and save the lane with no effort, as the confirmation line `Effort default` already says. A value that is neither empty nor one of the harness's levels is still refused.
+2. Tests, each failing before your change: `default` passes for Claude Code, OpenCode and Codex and the saved lane has no effort; a level the harness lacks is refused; a harness with no levels still refuses a level.
+3. Run `node node_modules/vitest/vitest.mjs run tests/family.test.js tests/family-ladder-ui.test.js` and report the counts.
