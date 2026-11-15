@@ -7,7 +7,7 @@ import {
   runLaneFor,
 } from './briefs.js'
 import { subscribeToNotices } from './notices.js'
-import { modesFor, defaultMode } from '../../control/modes.js'
+import { laneModesFor, defaultMode } from '../../control/modes.js'
 import { useHarnessModels } from '../ModelRefresh.jsx'
 import { laneNeedsNetwork } from '../../model/online.js'
 import { TIERS } from '../../policy/route.js'
@@ -866,11 +866,11 @@ export default function DispatchPanel({
             </div>
           ) : null}
 
-          {!projectSplitRun && effectiveLane && modesFor(projectLaneHarness).length > 0 ? (
+          {!projectSplitRun && effectiveLane && laneModesFor(projectLaneHarness).length > 0 ? (
             <div className="panel-field">
               <label htmlFor="project-run-mode">Mode for this run</label>
               <select id="project-run-mode" value={projectMode} onChange={(event) => { setProjectMode(event.target.value); dismissProjectConfirm() }}>
-                {modesFor(projectLaneHarness).map((mode) => <option key={mode.id} value={mode.id}>{mode.label}</option>)}
+                {laneModesFor(projectLaneHarness).map((mode) => <option key={mode.id} value={mode.id}>{mode.label}</option>)}
               </select>
             </div>
           ) : null}

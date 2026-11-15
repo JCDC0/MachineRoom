@@ -29,6 +29,10 @@ export function modesFor(harness) {
   return MODES.filter((mode) => ids.includes(mode.id) && (ASK_READY || mode.id !== 'ask'))
 }
 
+export function laneModesFor(harness) {
+  return modesFor(harness).filter((mode) => mode.id !== 'ask')
+}
+
 export function legacyMode(harness) {
   return Object.hasOwn(LEGACY, harness) ? LEGACY[harness] : null
 }
