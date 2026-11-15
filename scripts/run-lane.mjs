@@ -1584,10 +1584,7 @@ async function main() {
     const usageFile = join(folder, `${name}.usage.json`)
 
     if (options.dryRun) {
-      const enabledServers = enabledMcpServers(folder)
-      const harness = lane.cli?.harness
-      const needsMcp = enabledServers.length > 0 && (harness === 'claude' || harness === 'opencode')
-      const mcpConfigPath = needsMcp ? join(folder, `${name}.mcp.json`) : ''
+      const { enabledServers, mcpConfigPath } = laneConfigPlan(lane, folder, name)
       const command = commandFor({ lane: laneRunProgram(lane, { folder }).lane, prompt, env: process.env, usageFile, title: name, cwd: project, mcpConfig: mcpConfigPath })
       const test = checkDisplay(testCommandFor(project, options.test))
       printCommand(command, prompt, { mcpConfig: mcpConfigPath, mcpServers: enabledServers })
@@ -1671,10 +1668,7 @@ async function main() {
 
   if (options.dryRun) {
     const start = gitCheckout(lane.worktree) ? laneWorktreeStart({ worktree: lane.worktree }) : null
-    const enabledServers = enabledMcpServers(folder)
-    const harness = lane.cli?.harness
-    const needsMcp = enabledServers.length > 0 && (harness === 'claude' || harness === 'opencode')
-    const mcpConfigPath = needsMcp ? join(folder, `${name}.mcp.json`) : ''
+    const { enabledServers, mcpConfigPath } = laneConfigPlan(lane, folder, name)
     const codex = laneRunProgram(lane, { folder })
     const command = commandFor({ lane: codex.lane, prompt, env: process.env, usageFile, title: name, mcpConfig: mcpConfigPath })
     printCommand(command, prompt, { mcpConfig: mcpConfigPath, mcpServers: enabledServers })
@@ -1791,6 +1785,24 @@ async function startFailover({ laneKey, target, lanes, options, wanted, prompt, 
   }
 }
 
+function laneConfigPlan(lane, folder, name) {
+  const enabledServers = enabledMcpServers(folder)
+  const harness = lane?.cli?.harness
+  const mode = lane?.cli?.mode
+  const needsMcp = enabledServers.length > 0 && (harness === 'claude' || harness === 'opencode')
+  const needsOpencodeConfig = harness === 'opencode' && (needsMcp || mode === 'edits' || mode === 'plan')
+  const mcpConfigPath = needsMcp || needsOpencodeConfig ? join(folder, `${name}.mcp.json`) : ''
+  return { enabledServers, harness, mode, needsMcp, mcpConfigPath }
+}
+
+function laneConfigBody({ harness, mode, enabledServers, needsMcp }) {
+  if (harness === 'claude') return mcpConfigForClaude(enabledServers)
+  const config = needsMcp ? mcpConfigForOpencode(enabledServers) : {}
+  if (mode === 'edits') config.permission = { bash: 'deny' }
+  else if (mode === 'plan') config.permission = { edit: 'deny', bash: 'deny' }
+  return config
+}
+
 export async function startLane({ options, lane, lanes, wanted, prompt, logPath, usageFile, name, project = '', task = '', queue = null, lockPath = '', projectBranch = null, deferRecord = false, base = '', openLog = createWriteStream, branchSuffix = '', failoverFrom = null, promptFor = null, startedAt: givenStartedAt = null, onStart = null }) {
   if (readHarnessSettings(runsFolder()).off.includes(lane?.cli?.harness)) throw new Error(HARNESS_OFF_PROBLEM)
   if (options?.failedOver !== true) {
@@ -1809,13 +1821,11 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
     : (baseFolder ? gitRead(baseFolder, ['rev-parse', 'HEAD']) || '' : '')
 
   const folder = runsFolder()
-  const enabledServers = enabledMcpServers(folder)
-  const harness = lane.cli?.harness
-  const needsMcp = enabledServers.length > 0 && (harness === 'claude' || harness === 'opencode')
-  const mcpConfigPath = needsMcp ? join(folder, `${name}.mcp.json`) : ''
-  if (needsMcp) {
-    const config = harness === 'claude' ? mcpConfigForClaude(enabledServers) : mcpConfigForOpencode(enabledServers)
-    writeFileSync(mcpConfigPath, `${JSON.stringify(config, null, 2)}\n`, { mode: 0o600 })
+  const configPlan = laneConfigPlan(lane, folder, name)
+  const { harness, mcpConfigPath } = configPlan
+  if (mcpConfigPath) {
+    mkdirSync(folder, { recursive: true })
+    writeFileSync(mcpConfigPath, `${JSON.stringify(laneConfigBody(configPlan), null, 2)}\n`, { mode: 0o600 })
   }
 
   try {

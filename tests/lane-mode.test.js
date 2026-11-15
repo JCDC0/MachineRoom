@@ -109,9 +109,9 @@ describe('laneModeProblem', () => {
     expect(laneModeProblem({ cli: { harness: 'codex', mode: 'edits' } }, 'codex')).toBe("The edits mode is not one codex's harness has. It has: plan, auto.")
   })
 
-  it('refuses plan and edits for an OpenCode lane', () => {
-    expect(laneModeProblem({ cli: { harness: 'opencode', mode: 'plan' } }, 'opencode')).toBe('OpenCode lanes cannot use plan mode because it needs a permission config.')
-    expect(laneModeProblem({ cli: { harness: 'opencode', mode: 'edits' } }, 'opencode')).toBe('OpenCode lanes cannot use edits mode because it needs a permission config.')
+  it('accepts plan and edits for an OpenCode lane', () => {
+    expect(laneModeProblem({ cli: { harness: 'opencode', mode: 'plan' } }, 'opencode')).toBe('')
+    expect(laneModeProblem({ cli: { harness: 'opencode', mode: 'edits' } }, 'opencode')).toBe('')
   })
 
   it('refuses every mode for a harness with no list', () => {

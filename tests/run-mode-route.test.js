@@ -101,13 +101,13 @@ describe('the runs route with a permission mode', () => {
     await waitFor(() => !api.isRunning('claude'), { what: 'the run to end' })
   })
 
-  it('refuses plan for an OpenCode lane as the runner does', async () => {
-    const { api, out, post } = makeApi()
+  it('starts plan for an OpenCode lane with --mode plan', async () => {
+    const { project, api, out, post } = makeApi()
     const answer = await post({ lane: 'opencode', task: 'Fix the typo.', mode: 'plan', confirmed: true })
-    expect(answer.status).toBe(400)
-    expect(answer.body).toEqual({ error: 'OpenCode lanes cannot use plan mode because it needs a permission config.' })
-    expect(readArgs(out)).toBeNull()
-    expect(api.isRunning('opencode')).toBe(false)
+    expect(answer.status).toBe(202)
+    const args = await waitFor(() => readArgs(out), { what: 'the runner arguments' })
+    expect(args).toEqual(['opencode', '--project', project, '--task', 'Fix the typo.', '--mode', 'plan', '--started-at', answer.body.startedAt])
+    await waitFor(() => !api.isRunning('opencode'), { what: 'the run to end' })
   })
 
   it('refuses a mode outside the harness list and starts nothing', async () => {
