@@ -3352,3 +3352,59 @@ The test run prints `Received NaN for the max attribute` and `Received NaN for t
 1. The scrubber's `max` and `value` are finite numbers at all times: a duration or position that is not a finite number counts as 0, and the value never goes above the max.
 2. Tests, each failing before your change: rendering the transport with `duration` and `position` as NaN gives the range input `max="0"` and `value="0"` and logs no NaN warning; a normal duration and position keep today's numbers.
 3. Run `node node_modules/vitest/vitest.mjs run tests/transport-scrubber.test.js tests/transport-lanes.test.js tests/transport-orchestrators.test.js tests/transport-spend.test.js` and report the counts.
+
+## 2026-11-16: The owner's answers to Argon's plan (P401 to P406)
+
+On 2026-11-16 the owner answered `PLAN-NEXT-ARGON.md`: items 1, 2, 5, 6 and 8 are approved, 1 and 6 with additions, and item 7 is replaced by a same-harness rule. Each brief below names its plan item; read that item in `docs/agents/PLAN-NEXT-ARGON.md` too.
+
+**P401. Codex offers Edits and Bypass (OpenCode). Plan item 8.** Read this brief and plan item 8 only. Commit each step as you finish it. Run every command in the foreground. Files: src/control/modes.js (only the `codex` list), src/harnesses/codex.js (only where a mode becomes command line flags), tests/codex-modes.test.js (new; add no test to another file except to keep an existing one passing), docs/agents/architecture/ROOM.md (only the sentence that lists each harness's modes, if there is one), docs/agents/CHANGELOG.md.
+
+1. Run `codex exec --help` once on this machine and read which sandbox and approval flags it takes. Do not start a Codex run.
+2. `modesFor('codex')` returns plan, edits, auto and bypass, in that order. Edits maps to the flags that let Codex write in its workspace with the narrowest command rights `codex exec --help` offers (for example `--sandbox workspace-write` with an approval policy that refuses commands, or `--full-auto` if nothing narrower exists; say in your report which and why). Bypass maps to `--dangerously-bypass-approvals-and-sandbox`. Plan and auto keep today's flags exactly.
+3. Tests, each failing before your change: `modesFor('codex')` lists the four ids; the codex command for `edits` and for `bypass` holds the chosen flags; plan and auto command lines are unchanged.
+4. Run `node node_modules/vitest/vitest.mjs run tests/codex-modes.test.js tests/harnesses.test.js tests/orchestrator-modes.test.js tests/lane-mode.test.js` (skip a file that does not exist) and report the counts.
+
+**P402. A restricted sub's out-of-scope merge waits for the agent above (OpenCode). Plan item 6.** Read this brief and plan item 6 only. Commit each step as you finish it. Run every command in the foreground. Files: server/reviews.js (only the two merge routes and a helper they share), src/ui/panels/ReviewsPanel.jsx (only how a refused merge shows), tests/reviews-scope.test.js (new; add no test to another file except to keep an existing one passing), docs/agents/FREE-HIERARCHY.md (one short paragraph), docs/agents/CHANGELOG.md.
+
+The owner's addition: the agent above the one whose lane went out of scope manages that review and is told about it.
+
+1. A merge of a lane whose starter sub has `restricted: true` and whose branch changes files outside that sub's `scope` (use `outsideScope` from `src/model/hierarchy.js`) answers 409 with the list of files, unless the request says `allowOutside: true` and comes from the owner's page or from the orchestrator above that sub (its parent, by its token). The sub itself, and any other orchestrator, cannot allow it.
+2. On the first refusal for a lane branch, the bridge posts one message to the orchestrator above the sub naming the lane and the files (use the existing orchestrator message path the room already uses for lane warnings). Do not post again for the same branch head.
+3. Reviews shows the 409's files under the lane and a button `Merge anyway` that sends `allowOutside: true` after a confirm.
+4. Tests through the real merge route, each failing before your change: a restricted sub's out-of-scope lane answers 409 with its files; the same with `allowOutside` from the owner page merges; from the sub's own token it still answers 409; from the parent's token it merges; the parent gets one message; an unrestricted sub merges as today.
+5. Run `node node_modules/vitest/vitest.mjs run tests/reviews-scope.test.js tests/reviews.test.js` and report the counts.
+
+**P403. A lane's mode in Agents and Dispatch, with an orchestrator's choice (Codex, GPT-6.1 Terra). Plan item 1.** Read this brief and plan item 1 only. Your sandbox keeps git read-only: write the files in your worktree and the runner commits them. Never run `npm install`; run tests as `node ../../node_modules/vitest/vitest.mjs run FILES` from your worktree. Known sandbox baseline failures, not yours: process tests in `tests/run-lane-stop.test.js` and `tests/run-lane.test.js` that need real processes, `taskkill` or a worktree (EPERM). Files: server/agents-config.js (only lane create and update), server/runs.js (only the run start's mode choice), src/ui/FamilyTree.jsx (only the Add child form and the lane editor), src/ui/panels/DispatchPanel.jsx (only a mode picker for the run), src/ui/panels/runs.js (only passing the mode), tests/lane-mode-picker.test.js (new; add no test to another file except to keep an existing one passing), docs/agents/FREE-HIERARCHY.md (one short paragraph), docs/agents/CHANGELOG.md.
+
+The owner's addition: a lane's mode can be set to `Orchestrator's choice`, and then the agent above it picks the mode for each run.
+
+1. Creating or editing a lane saves `cli.mode`: one of `modesFor(harness)` (from `src/control/modes.js`), or `choice`, or nothing (today's default). Any other value is refused with 400.
+2. Add child and the lane editor show a Mode select with the harness's modes and `Orchestrator's choice`, starting at the harness default.
+3. Dispatch shows a Mode select for a run, starting at the lane's saved mode, and sends `mode` to `POST /api/control/runs`.
+4. At run start: the owner's page may pick any of the lane's modes. An orchestrator's run takes the requested mode only when the lane's mode is `choice`; for a lane with a fixed mode, an orchestrator's different mode is refused with 400 naming the lane's mode. A `choice` lane with no mode requested runs at the harness default.
+5. Tests, each failing before your change: a lane saved with `edits` keeps `cli.mode`; `choice` saves; an unknown mode is refused; Dispatch sends the chosen mode; an orchestrator's mode on a `choice` lane is used; on a fixed lane it is refused; the owner's mode on a fixed lane is used.
+6. Run `node ../../node_modules/vitest/vitest.mjs run tests/lane-mode-picker.test.js tests/agents-config.test.js tests/control-panels.test.js tests/lane-mode.test.js` and report the counts.
+
+**P404. An orchestrator makes new agents only on its own harness (OpenCode). Replaces plan item 7.** Read this brief only. Commit each step as you finish it. Run every command in the foreground. Files: server/family.js (only the proposal route), server/orchestrators.js (only the ladder route's check for subs an orchestrator adds), tests/same-harness-agents.test.js (new; add no test to another file except to keep an existing one passing), docs/agents/FREE-HIERARCHY.md (one short paragraph), docs/agents/CHANGELOG.md.
+
+The owner's rule: subscriptions and usage change too often for an orchestrator to start agents on another harness. An orchestrator may make a new agent only on its own harness, with any model that harness lists; an AGY orchestrator on Argon may make a Hydrogen agent. The owner may make any agent.
+
+1. A lane proposal from an orchestrator's token (`POST /api/family/proposals`) whose harness is not that orchestrator's harness answers 400 with `An orchestrator can add agents only on its own harness (HARNESS).`. The owner's proposals and approvals are not limited.
+2. A ladder change from an orchestrator's token that adds a new sub on another harness than that orchestrator's answers 400 with the same message. A sub already saved is not checked again.
+3. Tests through the real routes, each failing before your change: a Claude orchestrator proposing an OpenCode lane is refused; proposing a Claude lane with another Claude model is accepted; an AGY orchestrator adding an AGY sub on another model is accepted; adding a Codex sub is refused; the owner's page proposing any harness is accepted.
+4. Run `node node_modules/vitest/vitest.mjs run tests/same-harness-agents.test.js tests/family.test.js tests/orchestrators.test.js tests/ladder-sub-model.test.js` (skip a file that does not exist) and report the counts.
+
+**P405. A sub orchestrator's scope and restriction in Agents (AGY, Hydrogen). Plan item 2.** Read this brief and plan item 2 only. Commit each step as you finish it. Run every command in the foreground. Files: src/ui/FamilyTree.jsx (only the sub form, the sub editor and `subDraftFor`), src/ui/ladderForm.js, tests/sub-scope-form.test.js (new; add no test to another file except to keep an existing one passing), docs/agents/CHANGELOG.md.
+
+1. The sub form and the sub editor show a Scope field (one glob a line, `**` by default) and a `Restricted` checkbox (off by default) with one plain line under it: `A restricted sub's lanes cannot merge files outside its scope without the orchestrator above.`
+2. Saving sends `scope` as a list of trimmed, non-empty lines and `restricted` as a boolean through `saveLadder`; an empty scope saves `['**']`. Reopening the editor shows what was saved.
+3. Tests, each failing before your change: creating a sub with scope `src/ui/**` and Restricted on saves both; editing a sub to `server/**` saves and reopens with it; an empty scope saves `['**']`.
+4. Run `node node_modules/vitest/vitest.mjs run tests/sub-scope-form.test.js tests/family-tree-ui.test.js tests/ladder-form.test.js tests/family-ladder-ui.test.js` (skip a file that does not exist) and report the counts.
+
+**P406. Chat dispatch and split runs offer a worktree choice (OpenCode). Plan item 5.** Read this brief and plan item 5 only. Commit each step as you finish it. Run every command in the foreground. Files: server/index.js (only `startLaneTask` near line 812), the route in server/orchestrators.js that calls `startLaneTask` (only passing `worktree` through), src/ui/OrchestratorChat.jsx (only a worktree toggle beside the lane send and passing it), src/ui/panels/runs.js (only `startSplitRun`), src/ui/panels/DispatchPanel.jsx (only a worktree toggle for split runs), tests/worktree-choice.test.js (new; add no test to another file except to keep an existing one passing), docs/agents/CHANGELOG.md. P403 also edits DispatchPanel.jsx and runs.js for a mode picker: touch only the worktree lines.
+
+1. `startLaneTask(lane, taskText, { worktree })` uses the given boolean; when none is given it keeps today's `await isGitCheckout(projectRoot)`. A worktree is never used outside a git checkout, whatever is asked.
+2. A chat message sent straight to a lane carries the owner's choice from a `Separate worktree` checkbox beside the send (on by default in a git checkout, as today). An orchestrator's own dispatch keeps today's default.
+3. `startSplitRun` sends the Dispatch panel's `Separate worktree` choice (on by default) instead of always `true`.
+4. Tests, each failing before your change: a direct lane message with the box off starts the task with `worktree: false`; a split run with the box off sends `worktree: false`; with no choice given both keep today's value; outside a git checkout `worktree: true` is never used.
+5. Run `node node_modules/vitest/vitest.mjs run tests/worktree-choice.test.js tests/project-task.test.js tests/control-panels.test.js` and report the counts.
