@@ -1363,8 +1363,43 @@ export function boundMessages(messages, limit) {
         messages[index] = { ...message, content: `${heading}\n${replies.join('\n')}` }
       }
       if (messageChars(messages) <= limit) return
-      const reply = replies.join('\n').slice(-(NEWEST_READABLE_CHARS - heading.length - 1))
-      messages[index] = { ...message, content: `${heading}\n${reply}` }
+      const rawReply = replies.join('\n')
+      if (rawReply === '') continue
+      const match = rawReply.match(/^([^\s:]+(?::[^\s:]+)*): ([\s\S]*)$/)
+      let body = match ? match[2] : rawReply
+      let prefix = match ? `${match[1]}: [start cut] ` : '[start cut] '
+      if (heading.length + 1 + prefix.length >= NEWEST_READABLE_CHARS) {
+        body = rawReply
+        prefix = '[start cut] '
+      }
+      const base = `${heading}\n${prefix}`
+      messages[index] = { ...message, content: base }
+      const remaining = limit - messageChars(messages)
+      let budget = Math.min(NEWEST_READABLE_CHARS - base.length, remaining, body.length - 1)
+      const tailAtWord = (text, maxChars) => {
+        if (maxChars <= 0) return ''
+        if (text.length <= maxChars) return text.replace(/^\s+/, '')
+        const cutAt = text.length - maxChars
+        const rawTail = text.slice(cutAt)
+        if (!/\s/.test(text[cutAt - 1]) && !/\s/.test(text[cutAt])) {
+          const next = rawTail.search(/\s+\S/)
+          if (next >= 0) return rawTail.slice(next).replace(/^\s+/, '')
+          return rawTail.search(/\s/) >= 0 ? '' : rawTail
+        }
+        return rawTail.replace(/^\s+/, '')
+      }
+      while (budget > 0) {
+        const tail = tailAtWord(body, budget)
+        const nextContent = tail === '' ? `${heading}\n${prefix.trimEnd()}` : `${base}${tail}`
+        messages[index] = { ...message, content: nextContent }
+        if (messageChars(messages) <= limit) return
+        if (tail === '') break
+        const excess = messageChars(messages) - limit
+        const scaled = Math.floor((tail.length * remaining) / (remaining + excess))
+        budget = Math.min(budget - 1, scaled)
+      }
+      const fallback = `${heading}\n${prefix.trimEnd()}`
+      messages[index] = { ...message, content: fallback.length < content.length ? fallback : content }
     } else {
       messages[index] = { ...message, content: content.slice(0, NEWEST_READABLE_CHARS) }
     }
