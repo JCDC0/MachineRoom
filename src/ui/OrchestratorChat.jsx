@@ -1284,6 +1284,7 @@ export default function OrchestratorChat({
     setTeamOpen(false)
     setTeamFailed([])
     if (id === selected) return
+    setToRecipient(id)
     changeSelected(id)
     setConfirm(null)
     setError(null)
