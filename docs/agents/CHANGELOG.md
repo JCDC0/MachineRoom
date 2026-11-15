@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- P381b: A failover backup keeps the primary lane's ticket and message prompt, sharing its inbox and send limit.
 - P378: The add-agent, sub and team forms start with no model and offer Harness default first; Direct API still needs a model; family rows name models from the harness list.
 - P375: Gemini 4 Argon ranks the next eight briefs toward the free hierarchy in PLAN-NEXT-ARGON.md; two need no design call, six wait for the owner.
 - P379: A finished label write updates only the same open draft, and a not-ready reason shows outside the program details, Direct API included (R38-1, R38-4).

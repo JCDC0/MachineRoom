@@ -233,8 +233,8 @@ describe('a failover run keeps the failed run mode', { timeout: 60000 }, () => {
   })
 })
 
-describe('a failover run gets no ticket of the failed lane', { timeout: 60000 }, () => {
-  it('starts the backup harness without the ticket or the bridge and leaves the message paragraph out', async () => {
+describe('a failover run keeps the failed lane ticket', { timeout: 60000 }, () => {
+  it('starts the backup with the same ticket, bridge and message paragraph', async () => {
     const base = makeTempDir('machine-room-failover-message-')
     const savedTicket = process.env.MACHINEROOM_LANE_TICKET
     const savedBridge = process.env.MACHINEROOM_BRIDGE
@@ -269,11 +269,11 @@ describe('a failover run gets no ticket of the failed lane', { timeout: 60000 },
       })
       expect(result.code, logs.join('\n')).toBe(0)
       expect(JSON.parse(readFileSync(primaryEnv, 'utf8'))).toEqual({ ticket: TICKET_VALUE, bridge: BRIDGE_VALUE })
-      expect(JSON.parse(readFileSync(backupEnv, 'utf8'))).toEqual({ ticket: null, bridge: null })
+      expect(JSON.parse(readFileSync(backupEnv, 'utf8'))).toEqual({ ticket: TICKET_VALUE, bridge: BRIDGE_VALUE })
       const prompt = readFileSync(promptFile, 'utf8')
       expect(prompt).toContain(`Your worktree is ${backup}.`)
       expect(prompt).toContain(`${branchFor(BRIEF)}-on-agy`)
-      expect(prompt).not.toContain(MESSAGE_START)
+      expect(prompt).toContain(unattendedPrompt('', process.env).split('\n\n').find((part) => part.startsWith(MESSAGE_START)))
       expect(count(okCount)).toBe(1)
     } finally {
       if (savedTicket === undefined) delete process.env.MACHINEROOM_LANE_TICKET
