@@ -1,8 +1,10 @@
 # Changelog
 
 ## Unreleased
+- Switching the orchestrator to another harness at Harness default saves with no model instead of answering 400; Direct API still needs a model.
 - The runner's leftover recheck refuses for any process in the second list that names the lane's worktree, so a leftover that hands off to a worker still blocks the lane.
 - When one inbox batch is over the native agent's context bound, its oldest replies go first and the newest reply stays, or its ending if it alone is too long.
+- P390: The orchestrator takes a harness at Harness default and saves an empty model for every harness but Direct API, which still needs a known model.
 - Choosing a harness in Add child, a sub or the orchestrator editor keeps Harness default, and a CLI harness with no model list still saves at Harness default.
 - P389: An oversized inbox batch keeps its newest reply and trims the oldest replies first (R40-2).
 - P388: The leftover recheck refuses any process in the second list that names the lane's worktree or folder and names its pid and program (R40-1).
