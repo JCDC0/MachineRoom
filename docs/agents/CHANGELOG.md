@@ -1,8 +1,15 @@
 # Changelog
 
 ## Unreleased
+- P364: A new sub keeps its chosen effort, a lanes.json lane shows its setup as text, a failed Direct API read shows its error and Retry, the team shortage says what to do, and no Effort select shows without levels.
 - P362: CODE, ROOM, LIVE, COMMANDS, FREE-HIERARCHY, HARNESSES and DOCUMENTS match the code for lane messages, modes, outside paths and the harness settings.
 - P360: Pickers, family rows, the Model button and the Inspector show a model's name only; a repeated name adds its first id segment; an empty model reads Harness default.
+- A Direct API with nothing saved still shows the key sentence and Open Settings, while a failed model read shows its error and Retry (P364).
+- An orchestrator on a harness with no effort levels shows no Effort select, and its saved effort is left alone (P364).
+- Build a team now says how many agents it needs outside existing teams and offers the two useful steps (P364).
+- When a Direct API model read fails, the form shows that error and Retry instead of the missing-key sentence (P364).
+- A lane from lanes.json shows its harness, model, effort and backup lane as plain text and points at the file, and keeps its Label and Remove action (P364).
+- A sub orchestrator made with an effort keeps that effort in the ladder, and an empty effort stays unset (P364).
 - P357: The add-agent, sub, team and orchestrator pickers offer only ready, enabled harnesses; a node keeps its own harness marked (not ready); an empty picker points to Settings.
 - P365: The custom endpoint form offers model refresh only for a saved endpoint, and a failed lanes read no longer says the list is empty.
 - The custom endpoint form offers model refresh only for a saved endpoint and explains how to refresh a new one (P365).

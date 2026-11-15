@@ -616,6 +616,8 @@ export function teamPlan({
     number += 1
   }
   const problem =
-    missing > 0 ? `Turn on ${missing} more ${missing === 1 ? 'lane' : 'lanes'} first.` : ''
+    missing > 0
+      ? `Need ${missing} more ${missing === 1 ? 'agent' : 'agents'} outside existing teams. Add agents or make the team smaller.`
+      : ''
   return { problem, subs, teams, needed, available, missing }
 }
