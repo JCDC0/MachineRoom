@@ -100,6 +100,11 @@ export default function Settings({ open = true, effects, onChange, onSettingsCha
       </header>
 
       <div className="hud-settings-body">
+        <HarnessesSettings client={client} />
+        <EndpointsPanel client={client} />
+        <KeysSettings client={client} />
+        <LanesSettings client={client} project={project} />
+
         <div className="hud-settings-section">
           <div className="hud-settings-row">
             <span className="hud-settings-label">Folder depth</span>
@@ -298,10 +303,6 @@ export default function Settings({ open = true, effects, onChange, onSettingsCha
         </div>
 
         <AgentDepthSettings client={client} />
-        <LanesSettings client={client} project={project} />
-        <HarnessesSettings client={client} />
-        <EndpointsPanel client={client} />
-        <KeysSettings client={client} />
         <McpSettings client={client} />
         <SearchSettings client={client} />
         <StorageSettings client={client} />
