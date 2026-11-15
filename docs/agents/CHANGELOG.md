@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- P378: The add-agent, sub and team forms start at Harness default with Harness default first in non-Direct model lists, and family tree rows name models from the harness model list.
 - P370: Settings lists Harnesses, Direct API, Keys and Lanes first, and a Ready harness folds its version, path and Program field under Program details.
 - P371: A sub's Agents checklist shows each agent's current parent in place of its id, and Save label saves a valid changed label at once.
 - P373: The Build a team Model field is the shared ModelPicker, with search, Current, pins and refresh; what the team saves does not change.
