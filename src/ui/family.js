@@ -394,10 +394,11 @@ export function childFormProblem(draft, { harnesses = null, models = null, direc
     harness.key === DIRECT_HARNESS && Array.isArray(directModels)
       ? modelRows(directModels)
       : harnessModels(harness, models)
-  if (choices.length === 0) {
-    return harness.key === DIRECT_HARNESS ? DIRECT_KEY_PROBLEM : 'This harness has no models.'
-  }
   const model = cleanText(draft?.model, 120)
+  if (choices.length === 0) {
+    if (harness.key === DIRECT_HARNESS) return DIRECT_KEY_PROBLEM
+    if (model) return 'This harness has no models.'
+  }
   if ((harness.key === DIRECT_HARNESS || model) && !choices.some((row) => row.id === model)) {
     return 'Choose a model for this harness.'
   }
