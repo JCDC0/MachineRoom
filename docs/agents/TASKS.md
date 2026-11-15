@@ -3122,3 +3122,27 @@ Friendlier forms, second part, P370 to P373. The owner said yes on 2026-11-15 to
 1. The Model field of `Build a team` is `ModelPicker`, as the add-agent form uses it in `src/ui/FamilyTree.jsx`, with the team form's current model list and refresh. What the form saves does not change.
 2. Tests, each failing before your change: the team form renders a ModelPicker; picking a model puts its id in the team plan; the preview and Save behave as before.
 3. Run `node node_modules/vitest/vitest.mjs run tests/team-picker.test.js tests/family-team.test.js tests/model-picker.test.js` and report the counts.
+
+Review, plan and one gap, P374 to P376. The owner asked on 2026-11-15 (night) for GPT-6.1 Sol and Gemini 4 Argon to review and help orchestrate, while OpenCode, AGY Hydrogen and Codex Terra code. OpenCode has about 5 percent of its plan left: give it only small briefs.
+
+**P374. Review 38: the friendlier forms batch (Codex, GPT-6.1 Sol, report).** Read this brief only. Change no file except the one you write. Your sandbox keeps git read-only: write the file in your worktree and the runner commits it. Files: docs/agents/AUDIT-2026-11-REVIEW-38.md.
+
+1. Review `git diff cedd5100..HEAD` (P370 to P373 and the commits beside them): Settings order and the folded program details, the ladder checklist and one-click label, the chat's ModelPicker with apply on pick, Build a team's ModelPicker.
+2. Look for: a choice applied that the owner did not make (a picker that saves on open, on arrow keys or on a refresh); a save that sends a stale id; a confirm removed that `UI-FRIENDLY.md`'s `Do not change` kept; an error that no longer shows; a test that would pass with its change undone; focus lost or Escape broken; a folded control that hides a `Not ready` reason.
+3. Each finding: `R38-N`, a severity (P1 blocks a push, P2 should be fixed soon, P3 small), the file and line, what goes wrong, how to see it, one fix in plain words. At most 10. No finding without a file and line you read.
+4. End with `Checked and fine`. Under 100 lines. Plain words, no em dashes.
+
+**P375. What the free hierarchy needs next (AGY, Gemini 4 Argon High, report).** Read this brief only. Change no file except the one you write. Commit it when done. Files: docs/agents/PLAN-NEXT-ARGON.md.
+
+1. Read `docs/agents/FREE-HIERARCHY.md` (the goal, what works, what does not work yet), `docs/agents/HIERARCHY.md`, `docs/agents/UI-FRIENDLY.md` and the code each names. The code is the authority.
+2. Propose the next 8 briefs toward the owner's goal (any harness coordinates any other, they message each other, the owner watches file access, worktrees are a choice, modes guard the edges), ranked by how much each closes the gap between the goal and today. Each: a title, the gap it closes in one sentence with the file and line that shows the gap, the files it would touch, the tests that would prove it, its size (one lane run of 30 minutes or less), and the harness that fits (AGY Hydrogen or Codex Terra for most; OpenCode only for a brief under 15 minutes).
+3. Mark any brief that changes what the owner sees or removes a step as `needs the owner's yes`.
+4. Do not propose P376 (OpenCode lane modes, already briefed).
+5. Under 120 lines. Plain words, no em dashes.
+
+**P376. OpenCode lanes take plan and edits (Codex, GPT-6.1 Terra).** Read this brief only. Your sandbox keeps git read-only: write the files in your worktree and the runner commits them. Never run `npm install`; run tests as `node ../../node_modules/vitest/vitest.mjs run FILES` from your worktree. Files: src/briefs/run.js (only `runnerModeProblem` or the line that refuses OpenCode plan and edits), scripts/run-lane.mjs (only where a lane's OpenCode config file is written and passed), server/runs.js (only if the bridge's mode check names the same refusal), tests/opencode-lane-mode.test.js (new; add no test to another file except to keep an existing one passing), docs/agents/architecture/COMMANDS.md, docs/agents/FREE-HIERARCHY.md (only the line that says OpenCode lanes take no plan or edits), docs/agents/CHANGELOG.md.
+
+1. An OpenCode lane run in `plan` or `edits` mode gets the same permission config the orchestrator writes for an OpenCode turn (read `server/orchestrator.js` near `needsOpencodeConfig`: `edits` denies `bash`, `plan` denies `edit` and `bash`), merged with the MCP config the runner already writes when MCP servers are on. The file is written with mode 0o600, passed as `OPENCODE_CONFIG`, and removed when the run ends, as the MCP file is today.
+2. The refusal `OpenCode lanes cannot use MODE mode because it needs a permission config.` goes, for the runner and the bridge. `ask` stays refused for every lane.
+3. Tests, each failing before your change: `--mode plan` on an OpenCode lane passes `OPENCODE_CONFIG` pointing at a file whose permission denies edit and bash; `edits` denies bash only; with MCP servers on, the file holds both the servers and the permission; no mode writes no file; the file is gone after the run.
+4. Run `node ../../node_modules/vitest/vitest.mjs run tests/opencode-lane-mode.test.js tests/lane-mode.test.js tests/run-mode-route.test.js tests/run-lane.test.js` and report the counts. If a test cannot run in your sandbox, say which and why.
