@@ -1318,7 +1318,9 @@ export function createOrchestrator({
     }
     if (typeof saved.sessionId === 'string' && saved.sessionId.trim() !== '') sessionId = saved.sessionId
     if (typeof saved.harness === 'string' && saved.harness.trim() !== '') harness = saved.harness.trim()
-    if (typeof saved.model === 'string' && saved.model.trim() !== '') model = saved.model.trim()
+    if (typeof saved.model === 'string' && saved.model.trim() !== '') {
+      model = MODEL_ALIASES[saved.model.trim()] ?? saved.model.trim()
+    }
     if (saved.state === 'working') state = 'idle'
     if (saved.state === 'paused') state = 'paused'
     if (saved.ladder && typeof saved.ladder === 'object' && !Array.isArray(saved.ladder)) ladder = saved.ladder

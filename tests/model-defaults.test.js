@@ -61,12 +61,13 @@ function readLines(file) {
     .map((line) => JSON.parse(line))
 }
 
-function makeOrchestrator(lanes) {
+function makeOrchestrator(lanes, saved = null) {
   const base = makeTempDir('mr-model-defaults-')
   const runs = join(base, 'runs')
   const projectRoot = join(base, 'project')
   mkdirSync(runs, { recursive: true })
   mkdirSync(projectRoot, { recursive: true })
+  if (saved) writeFileSync(chatFileFor(projectRoot, runs), `${JSON.stringify({ project: projectRoot, ...saved })}\n`)
   const script = join(base, 'fake-claude.mjs')
   writeFileSync(script, FAKE_CLAUDE)
   const promptFile = join(base, 'orchestrator-agent.md')
@@ -192,6 +193,11 @@ describe('no model is filled in that the owner did not choose', () => {
     )
     expect(state.answer.status).toBe(200)
     expect(registry.getLadder().subs[0].model).toBe('claude-opus-5-5')
+  })
+
+  it('reads a saved conversation model alias as the full id', () => {
+    const rig = makeOrchestrator({}, { harness: 'claude', model: 'opus', sessionId: null, state: 'idle', messages: [], pending: [] })
+    expect(rig.orchestrator.answer().model).toBe('claude-opus-5-5')
   })
 
   it('writes no bare opus model value under server, src or config', () => {
