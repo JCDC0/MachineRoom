@@ -29,6 +29,7 @@ Every file in this folder, and what it is for:
 - `AUDIT-2026-11-CONTRACT.md`: history. The November 2026 hunt of the page and the bridge against each other, with a table of every write route and its guard.
 - `AUDIT-2026-11-DESIGN.md`: history. The November 2026 design review of how the room shows its work, with features and a full design.
 - `AUDIT-2026-11-DOCS-2.md`: history. The P252 audit of `ROOM.md`, `LIVE.md` and `COMMANDS.md` against the code since `1bb54a0f`, with 17 contradicted claims fixed by P264 and P265.
+- `AUDIT-2026-11-DOCS-3.md`: history. Audit of architecture doc claims against `HEAD`, recording sentences fixed in P297.
 - `AUDIT-2026-11-DOCS-P70-P76.md`: history. The documentation audit for the P70 to P76 merges, read sentence by sentence against the code.
 - `AUDIT-2026-11-ENGINE.md`: history. The November 2026 audit of the engine.
 - `AUDIT-2026-11-LOGS.md`: history. The November 2026 hunt that ran 464 real run logs through the parsers.
@@ -80,15 +81,22 @@ Every file in this folder, and what it is for:
 - `AUDIT-2026-11-REVIEW-29.md`: history. The P239 review of 21 merges since `1bb54a0f`, with six push blockers and two smaller findings fixed by P240 to P244.
 - `AUDIT-2026-11-REVIEW-30.md`: history. The P245 check of review 29's fixes, confirming five fixed and two partly fixed, with two push blockers and two smaller findings fixed by P246, P247 and P254.
 - `AUDIT-2026-11-REVIEW-31.md`: history. The P269 review of `12c25524..1122d2cf`, with five push blockers and two follow-up findings fixed by P272 to P275.
+- `AUDIT-2026-11-REVIEW-32.md`: history. Review of `1122d2cf..d54e3a38` on 2026-11-14, listing six findings (`R32-1` to `R32-6`) across stop locks, queue failover, rollout links, conversation ordering and path masking.
+- `AUDIT-2026-11-REVIEW-33.md`: history. Review of `ce85a7a4..HEAD` on 2026-11-14, listing push-blocking stop-identity and leftover-cleanup findings (`R33-1` and `R33-2`).
+- `AUDIT-2026-11-REVIEW-34.md`: history. Review of `ad5ebe43..dc4c1ff6` on 2026-11-14, listing push-blocking stop-race (`R34-1`) and ignored-file play checkout overwrite (`R34-2`) findings.
+- `AUDIT-2026-11-REVIEW-35.md`: history. Review of fixes `P313` to `P319` (`bf2bb79d..ead926b4` on 2026-11-15), listing P1 lane commit masking (`R35-1`) and four P2/P3 findings.
 - `AUDIT-2026-11-REVIEW-36.md`: history. The P347 review by GPT-6.1 Sol of lane messages, lane modes and the effort fix (P335 to P345), with nine findings closed by P348 to P351, the P343 merge and two doc fixes.
 - `AUDIT-2026-11-RUNNER.md`: history. The November 2026 hunt of the runner, worktrees, reviews and merges.
 - `AUDIT-2026-11-SUMMARY.md`: plan. The five November 2026 audits ranked and checked, with the features, the design changes that need the owner and the proposed briefs.
 - `AUDIT-2026-11-TESTS.md`: history. The P255 audit of tests changed since `1bb54a0f`, listing four tests that could pass with their change undone, fixed by P266.
+- `AUDIT-2026-11-TESTS-2.md`: history. Second test audit of 37 commits from `12c25524..HEAD`, checking undo proofs and recording fixes in `tests/tree-read.test.js`.
 - `AUDIT-2026-11-TREE-COST.md`: history. The measurement of what the deleted-file list costs on every tree read, since P51.
+- `AUDIT-2026-11-TRIAL-PLAN.md`: history. Code review of the ulolTris trial plan against `1a0d6f81`, checking each claim and listing current guarantees.
 - `AUDIT-2026-11-UI.md`: history. The November 2026 audit of the page.
 - `AUDIT-2026-11-WORKTREE-SWITCH.md`: history. The P87 audit of the worktree branch switch on 2026-11-12.
 - `CANDIDATE.md`: current. How to build and serve one lane's worktree beside the stable room.
 - `CHANGELOG.md`: history. One line per change under the version it shipped in.
+- `CODEX-ORCHESTRATOR.md`: history. Codex P326 probe report on bridge reachability, replies from `codex exec` and read-only git metadata.
 - `CONTROL-PLANE.md`: plan. The control plane design from the Paperclip era; parts are replaced by the lane records.
 - `DECIDER-EVAL.md`: current. How to compare decision models with `npm run decide-eval`.
 - `FLAKY-2026-11.md`: history. The November 2026 hunt of the flaky tests on main, with each cause and its fix.
@@ -96,7 +104,9 @@ Every file in this folder, and what it is for:
 - `HARNESSES.md`: plan. The harness registry and the steps H1 to H15, with what is built.
 - `HIERARCHY.md`: plan. The sub-orchestrator ladder and its sectors, with what is built.
 - `HOUSE-RULES.md`: prompt the code reads. The rules in every lane prompt.
+- `LADDER-READINESS.md`: current. P327 No-Go readiness audit for running the sub-orchestrator ladder on Lowbeam without code fixes.
 - `lanes.json`: config the code reads. Each lane's harness, model, worktree, forbidden paths and retirement.
+- `OPENCODE-RETIREMENT.md`: plan. P325 map of OpenCode references across fleet config, docs, tests and code ahead of retiring OpenCode lanes.
 - `ORCHESTRATOR-AGENT.md`: prompt the code reads. The instructions added to every orchestrator turn.
 - `ORCHESTRATOR.md`: current. The orchestrator's guide: standing rules, the review and merge loop, ownership and lessons.
 - `OWNER.md`: current. What the owner wants the room to be, the settled design, and the steps for one of the owner's concerns.
@@ -117,7 +127,11 @@ Every file in this folder, and what it is for:
 - `RUN-2026-11-13-SUITE-5.md`: history. The P192 full test suite run at `433b0fe2`: 275 files and 4,989 tests passed, 4 skipped.
 - `RUN-2026-11-13-SUITE-6.md`: history. The P209 full test suite run at `31f73519`: 275 files and 5,026 tests passed, 4 skipped.
 - `RUN-2026-11-13-SUITE-7.md`: history. The P248 full test suite run at `a01af28f` and build check: 281 files and 5,189 tests passed, 4 skipped.
+- `RUN-2026-11-14-SUITE.md`: history. Full test suite run at `d54e3a38`: 287 files (286 passed, 1 failed) and 5,268 tests (5,263 passed, 1 failed, 4 skipped).
+- `RUN-2026-11-14-SUITE-2.md`: history. Second full test suite run at `8652616e`: 287 files and 5,294 of 5,298 tests passed, 4 skipped.
 - `TASKS.md`: prompt the code reads. The briefs since 2026-11-09; the code reads them and the planner adds to them.
+- `TRIAL-LOWBEAM.md`: history. Lowbeam trial summary and notes on the six old worktrees and Reviews fast-forward moves.
+- `TRIAL-ULOLTRIS.md`: plan. Trial plan for running one MachineRoom coding task on ulolTris in an isolated worktree on port `8123`.
 - `history/TASKS-ARCHIVE.md`: history. Every older brief, moved out of `TASKS.md` unchanged on 2026-11-10 (P35); the Tasks tab reads a run's title from it when the brief is not in `TASKS.md`, and an id stays unique across both files.
 - `history/ORCHESTRATOR-ARCHIVE.md`: history. The orchestrator guide as it stood on 2026-11-12: who held the role when, and the story behind each review lesson.
 - `history/BACKUPS.md`: history. Paperclip's backup routes, from before 2026-10-24.
