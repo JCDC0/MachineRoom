@@ -2037,6 +2037,7 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
             loading={childModels.loading}
             error={childModels.error}
             canRefresh={childModels.canRefresh}
+            allowDefault={!direct}
             placeholder={direct ? 'Choose a model' : 'Harness default'}
           />
         ) : null}
@@ -2131,6 +2132,7 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
             loading={subModels.loading}
             error={subModels.error}
             canRefresh={subModels.canRefresh}
+            allowDefault={!direct}
             placeholder={direct ? 'Choose a model' : 'Harness default'}
           />
         ) : null}

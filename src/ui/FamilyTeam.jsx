@@ -416,6 +416,7 @@ export function FamilyTeam({ client = null }) {
               loading={live.loading}
               error={live.error}
               canRefresh={live.canRefresh}
+              allowDefault={selected.key !== DIRECT_HARNESS}
               placeholder={selected.key === DIRECT_HARNESS ? 'Choose a model' : 'Harness default'}
             />
           ) : null}

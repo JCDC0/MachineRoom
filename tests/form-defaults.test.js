@@ -8,7 +8,7 @@ import {
   childFormProblem,
   teamDraft,
 } from '../src/ui/family.js'
-import { buttonWithText, click, settle, withDom } from './helpers/uiDom.js'
+import { buttonWithText, click, settle, type, withDom } from './helpers/uiDom.js'
 
 const HARNESSES = {
   harnesses: [
@@ -277,6 +277,107 @@ describe('form defaults and row model names', () => {
       const trigger = form.querySelector('.mr-picker-trigger[aria-label="Model for the new sub orchestrators"]')
       expect(trigger.textContent).toContain('Choose a model')
       expect(buttonWithText(form, 'Save')).toBeNull()
+
+      await click(root, trigger)
+      const firstRow = form.querySelectorAll('.mr-picker-row')[0]
+      expect(firstRow.textContent).not.toContain('Harness default')
+    })
+  })
+
+  it('lists Harness default first and empties a picked model when chosen again', async () => {
+    const { client: childClient } = makeClient()
+    await withDom(async ({ container, root }) => {
+      await mountTree(root, childClient)
+      await click(root, rowByLabel(container, 'Orchestrator').querySelector('.mr-family-add'))
+      const form = container.querySelector('.mr-family-child')
+      const trigger = form.querySelector('.mr-picker-trigger[aria-label="New agent model"]')
+
+      await click(root, trigger)
+      await settle()
+      expect(form.querySelectorAll('.mr-picker-row')[0].textContent).toContain('Harness default')
+
+      const flash = form
+        .querySelectorAll('.mr-picker-pick')
+        .find((button) => button.getAttribute('title') === 'opencode-go/deepseek-v4.1-flash')
+      await click(root, flash)
+      expect(trigger.textContent).toContain('DeepSeek V4.1 Flash')
+
+      await click(root, trigger)
+      await settle()
+      const firstRow = form.querySelectorAll('.mr-picker-row')[0]
+      expect(firstRow.textContent).toContain('Harness default')
+      await click(root, firstRow.querySelector('.mr-picker-pick'))
+      expect(trigger.textContent).toContain('Harness default')
+
+      await click(root, trigger)
+      await settle()
+      await type(root, form.querySelector('.mr-picker-search'), 'other')
+      expect(form.querySelectorAll('.mr-picker-row')[0]?.textContent ?? '').not.toContain('Harness default')
+    })
+
+    const { client: subClient, calls: subCalls } = makeClient()
+    await withDom(async ({ container, root }) => {
+      await mountTree(root, subClient)
+      const check = rowByLabel(container, 'Coder').querySelector('.mr-family-check')
+      await act(async () => {
+        check.checked = true
+        check.click()
+      })
+      await click(root, buttonWithText(container, 'Add sub orchestrator'))
+      const form = container.querySelector('.mr-family-sub-form')
+      const trigger = form.querySelector('.mr-picker-trigger[aria-label="Sub orchestrator model"]')
+
+      await click(root, trigger)
+      await settle()
+      const other = form.querySelectorAll('.mr-picker-pick').find((button) => button.getAttribute('title') === 'other')
+      await click(root, other)
+      expect(trigger.textContent).toContain('Other')
+
+      await click(root, trigger)
+      await settle()
+      const firstRow = form.querySelectorAll('.mr-picker-row')[0]
+      expect(firstRow.textContent).toContain('Harness default')
+      await click(root, firstRow.querySelector('.mr-picker-pick'))
+      expect(trigger.textContent).toContain('Harness default')
+
+      await act(async () => {
+        form.dispatchEvent({ type: 'submit', bubbles: true, cancelable: true })
+      })
+      await click(root, buttonWithText(container.querySelector('.mr-side-confirm-card'), 'Create'))
+      expect(subCalls.setLadder[0].subs[0].model).toBe('')
+    })
+
+    const { client: teamClient, calls: teamCalls } = makeClient()
+    await withDom(async ({ container, root }) => {
+      await act(async () => {
+        root.render(createElement(FamilyTeam, { client: teamClient }))
+      })
+      await settle()
+      await click(root, container.querySelector('.mr-side-head'))
+      await settle()
+
+      const form = container.querySelector('.mr-team-form')
+      const trigger = form.querySelector('.mr-picker-trigger[aria-label="Model for the new sub orchestrators"]')
+      await click(root, trigger)
+      await settle()
+      const flash = form
+        .querySelectorAll('.mr-picker-pick')
+        .find((button) => button.getAttribute('title') === 'opencode-go/deepseek-v4.1-flash')
+      await click(root, flash)
+      expect(trigger.textContent).toContain('DeepSeek V4.1 Flash')
+
+      await click(root, trigger)
+      await settle()
+      const firstRow = form.querySelectorAll('.mr-picker-row')[0]
+      expect(firstRow.textContent).toContain('Harness default')
+      await click(root, firstRow.querySelector('.mr-picker-pick'))
+      expect(trigger.textContent).toContain('Harness default')
+
+      await act(async () => {
+        form.dispatchEvent({ type: 'submit', bubbles: true, cancelable: true })
+      })
+      await click(root, buttonWithText(container.querySelector('.mr-side-confirm-card'), 'Build the team'))
+      expect(teamCalls.setLadder[0].subs[0].model).toBe('')
     })
   })
 })

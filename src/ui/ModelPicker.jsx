@@ -223,6 +223,8 @@ export default function ModelPicker({
   error = '',
   disabled = false,
   canRefresh = true,
+  allowDefault = false,
+  defaultLabel = 'Harness default',
   placeholder = 'Choose a model',
   emptyText = 'No models listed for this harness.',
 }) {
@@ -245,6 +247,13 @@ export default function ModelPicker({
     return merged
   }, [details, loadedDetails])
 
+  const defaultText = cleanText(defaultLabel) || 'Harness default'
+  const defaultQuery = cleanText(query).toLowerCase()
+  const showDefault = allowDefault && (!defaultQuery || defaultText.toLowerCase().includes(defaultQuery))
+  const defaultRow = useMemo(
+    () => (showDefault ? { id: '', name: defaultText } : null),
+    [showDefault, defaultText]
+  )
   const rows = useMemo(() => pickerRows(choices, detailMap), [choices, detailMap])
   const shown = useMemo(() => rows.find((row) => row.id === value) ?? null, [rows, value])
   const filtered = useMemo(() => filterPickerRows(rows, query), [rows, query])
@@ -252,7 +261,10 @@ export default function ModelPicker({
     () => pickerSections(filtered, { sort, current: value, pins }),
     [filtered, sort, value, pins]
   )
-  const flat = useMemo(() => sections.flatMap((section) => section.rows), [sections])
+  const flat = useMemo(
+    () => (defaultRow ? [defaultRow, ...sections.flatMap((section) => section.rows)] : sections.flatMap((section) => section.rows)),
+    [defaultRow, sections]
+  )
   const flatIndex = useMemo(() => new Map(flat.map((row, index) => [row.id, index])), [flat])
 
   useEffect(() => {
@@ -361,7 +373,7 @@ export default function ModelPicker({
     close()
   }
 
-  const triggerText = shown ? shown.name : placeholder
+  const triggerText = shown ? shown.name : allowDefault && placeholder === 'Choose a model' ? defaultText : placeholder
 
   return (
     <div className="mr-picker mr-model-field" onKeyDown={onRootKey}>
@@ -415,6 +427,24 @@ export default function ModelPicker({
             </select>
           </div>
           <div className="mr-picker-list" role="listbox" aria-label={ariaLabel}>
+            {defaultRow ? (
+              <div
+                className={`mr-picker-row${active === 0 ? ' is-active' : ''}${value === '' ? ' is-current' : ''}`}
+                role="option"
+                aria-selected={value === ''}
+              >
+                <button
+                  type="button"
+                  className="mr-picker-pick"
+                  title={defaultRow.name}
+                  onClick={() => pick(defaultRow)}
+                >
+                  <span className="mr-picker-row-main">
+                    <span className="mr-picker-name">{defaultRow.name}</span>
+                  </span>
+                </button>
+              </div>
+            ) : null}
             {rows.length === 0 ? <p className="mr-picker-note mono">{emptyText}</p> : null}
             {rows.length > 0 && flat.length === 0 ? <p className="mr-picker-note mono">No models found.</p> : null}
             {sections.map((section) => (
