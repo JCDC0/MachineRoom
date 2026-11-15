@@ -138,7 +138,7 @@ export default function LanesSettings({ client = null, project = '' }) {
         Lanes
       </h3>
       {lanes === null ? <p className="mr-lanes-state mono">Loading lanes</p> : null}
-      {lanes !== null && rows.length === 0 ? (
+      {lanes !== null && rows.length === 0 && !error ? (
         <p className="mr-lanes-state mono">No lanes are listed.</p>
       ) : null}
       {rows.length > 0 ? (
