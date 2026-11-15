@@ -521,8 +521,8 @@ describe('Proposals: POST /api/family/proposals', () => {
       body: {
         parent: 'orchestrator',
         label: 'Tester',
-        harness: 'opencode',
-        model: 'opencode-go/deepseek-v4.1-flash',
+        harness: 'claude',
+        model: 'claude-haiku-5-5',
         reason: 'For testing.',
       },
     })
@@ -640,8 +640,8 @@ describe('Approve and decline proposals', () => {
       body: {
         parent: 'orchestrator',
         label: 'Reviewer',
-        harness: 'opencode',
-        model: 'opencode-go/deepseek-v4.1-flash',
+        harness: 'claude',
+        model: 'claude-sonnet-5-5',
         reason: 'Review tasks.',
       },
     })
@@ -794,8 +794,8 @@ describe('Approve and decline proposals', () => {
       body: {
         parent: 'frontend',
         label: 'Frontend Assistant',
-        harness: 'opencode',
-        model: 'opencode-go/deepseek-v4.1-flash',
+        harness: 'claude',
+        model: 'claude-sonnet-5-5',
         reason: 'Work on CSS.',
       },
     })

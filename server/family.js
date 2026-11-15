@@ -18,7 +18,7 @@ import { activeLanesFileFor, eligibleLanes, projectHash, projectLanesFileFor, re
 import { readEndpoints } from './endpoints.js'
 import { MODELS } from './models.js'
 import { ORCHESTRATOR_KEY } from './orchestrator.js'
-import { NO_TOKEN_PROBLEM } from './orchestrators.js'
+import { NO_TOKEN_PROBLEM, sameHarnessProblem } from './orchestrators.js'
 
 export const ORIGIN_LABEL_PROBLEM = 'A request to set an agent label needs a page Origin.'
 export const ORIGIN_KEY_PROBLEM = 'A request to set a key needs a page Origin.'
@@ -512,6 +512,16 @@ export function createFamilyApi(options = {}) {
 
       const harness = typeof body.harness === 'string' ? body.harness.trim() : ''
       const baseLanes = getBaseLanes()
+
+      if (from !== 'owner') {
+        const actor = orchs && typeof orchs.find === 'function' ? orchs.find(from) : null
+        const ownHarness = actor && typeof actor.answer === 'function' ? actor.answer().harness : ''
+        if (ownHarness && harness !== ownHarness) {
+          sendJson(req, res, 400, { error: sameHarnessProblem(ownHarness) })
+          return true
+        }
+      }
+
       const available = HARNESS_KEYS.includes(harness) && isHarnessAvailable(harness, { lanes: baseLanes, env, endpoints: readEndpoints(runsDir) })
       if (!available) {
         sendJson(req, res, 400, { error: harnessUnavailableProblem(harness) })

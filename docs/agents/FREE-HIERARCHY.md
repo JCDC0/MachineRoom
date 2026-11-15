@@ -41,6 +41,7 @@ The owner wants a free hierarchy of coding agents in one project:
 
 ## Added on 2026-11-16
 - A merge of a restricted sub's lane that changes files outside the sub's scope answers 409 with those files and posts one message to the orchestrator above the sub for that branch head. The owner's page or that orchestrator can allow it, and `Reviews` offers `Merge anyway` behind a confirm: `P402`.
+- An orchestrator may propose or add a new agent only on its own harness, with any model that harness lists; the owner may make any agent on any harness (`P404`).
 
 ## Runbook: Build and Run the Owner's Test Tree
 Target tree: Main on `claude` (`claude-opus-5-5`, `high`); Sub 1 on `codex` (`gpt-6.1-terra`, `high`) with 2 AGY lanes (`gemini-4-hydrogen-xhigh`); Sub 2 on `machineroom` (GLM 5.3 Flash) with 3 OpenCode lanes. Simple form: no subs, all lanes under Main.

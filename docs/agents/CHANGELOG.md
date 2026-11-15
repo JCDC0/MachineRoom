@@ -1,11 +1,13 @@
 # Changelog
 
 ## Unreleased
+- An orchestrator may propose a lane or add a sub only on its own harness, with any model that harness lists; the owner may make any agent.
 - A restricted sub's lane that changed files outside its scope is not merged until the owner or the orchestrator above the sub allows it, and that orchestrator is told once.
 - A chat message sent to a lane and a split run carry a Separate worktree choice, and no run uses a worktree outside a git checkout.
 - Codex lanes and orchestrators offer Edits and Bypass: Edits writes in Codex's workspace sandbox like Auto, and Bypass runs with no sandbox or approvals.
 - Add child, the lane editor and Dispatch pick a lane's mode, and a lane set to Orchestrator's choice lets the agent above choose the mode for each run.
 - The sub orchestrator form and editor set a Scope (one glob a line) and Restricted, saved through the ladder.
+- P404: An orchestrator may propose or add a new agent only on its own harness; the owner may still make any agent.
 - The ladder route refuses a new or changed sub whose model its harness does not list, or a Direct API sub with no model; saved, unchanged subs are not checked.
 - The sub orchestrator form and editor in Agents let you set Scope and Restricted, saving trimmed globs or `**` when empty and showing the saved values on reopen.
 - Agents and Dispatch offer lane modes, including an orchestrator choice for each run.

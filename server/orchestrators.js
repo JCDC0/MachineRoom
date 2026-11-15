@@ -79,6 +79,10 @@ export const NO_APPROVAL_PROBLEM = 'There is no approval with that id.'
 export const APPROVAL_LIMIT_PROBLEM = '20 approvals are already waiting for the owner.'
 export const APPROVAL_INPUT_LIMIT = 2000
 
+export function sameHarnessProblem(harness) {
+  return `An orchestrator can add agents only on its own harness (${harness}).`
+}
+
 export function runsFolderDefault(env = process.env) {
   return sharedRunsFolder(env)
 }
@@ -848,8 +852,9 @@ export function createOrchestrators({
   }
 
   function ladderChange(body, page, tokenValue = '') {
+    let actor = null
     if (!page) {
-      const actor = idForToken(tokenValue)
+      actor = idForToken(tokenValue)
       if (!actor) return { status: 403, body: { error: NO_TOKEN_PROBLEM } }
       if (actor !== ORCHESTRATOR_KEY) return { status: 403, body: { error: MAIN_LADDER_PROBLEM } }
     }
@@ -911,9 +916,14 @@ export function createOrchestrators({
       const unavailable = []
       const modelProblems = []
       const savedSubs = readSaved().ladder.subs
+      const actorInstance = actor ? instances.get(actor) : null
+      const ownHarness = actorInstance ? actorInstance.answer().harness : ''
       for (const sub of next.ladder.subs) {
         const harness = harnessFor(sub)
         const previous = savedSubs.find (item => item.id === sub.id)
+        if (!previous && ownHarness && harness !== ownHarness) {
+          return { status: 400, body: { error: sameHarnessProblem(ownHarness) } }
+        }
         if (readHarnessSettings(folder).off.includes(harness) && (!previous || harnessFor(previous) !== harness)) return { status: 400, body: { error: HARNESS_OFF_PROBLEM } }
         if (!known.has(harness) || !harnessAvailable(harness, { lanes: allLanes, endpoints, runsFolder: folder })) {
           const problem = harnessUnavailableProblem(harness)
