@@ -54,7 +54,7 @@ describe('commandFor', () => {
   it('builds the Claude Code command for a headless stream-json run', () => {
     expect(commandFor({ lane: lanes.claude, prompt, env, usageFile, title })).toEqual({
       file: 'claude',
-      args: ['-p', prompt, '--output-format', 'stream-json', '--verbose', '--model', 'sonnet', '--dangerously-skip-permissions'],
+      args: ['-p', prompt, '--output-format', 'stream-json', '--verbose', '--model', 'claude-sonnet-5-5', '--dangerously-skip-permissions'],
       cwd: lanes.claude.worktree,
     })
   })

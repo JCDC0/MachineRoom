@@ -92,7 +92,7 @@ describe('lane agents', () => {
     expect(agents.find((agent) => agent.key === 'native')).toMatchObject({ name: 'MachineRoom native', adapterType: 'machineroom_local' })
     expect(agents.find((agent) => agent.key === 'opencode2').name).toBe('OpenCode 2')
     expect(agents.find((agent) => agent.key === 'claude')).toMatchObject({ name: 'Claude Code', parser: 'claude', adapterType: 'claude_local' })
-    expect(agents.find((agent) => agent.key === 'orchestrator')).toMatchObject({ harness: 'claude', model: 'opus' })
+    expect(agents.find((agent) => agent.key === 'orchestrator')).toMatchObject({ harness: 'claude', model: 'claude-opus-5-5' })
     expect(agents.find((agent) => agent.key === 'opencode')).toMatchObject({
       harness: 'opencode',
       model: 'opencode-go/deepseek-v4.1-flash',

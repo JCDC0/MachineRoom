@@ -37,7 +37,7 @@ describe('a lane mode leaves the command line alone', () => {
   it('builds the Claude Code command with no mode', () => {
     expect(commandFor({ lane: lanes.claude, prompt, env, title })).toEqual({
       file: 'claude',
-      args: ['-p', prompt, '--output-format', 'stream-json', '--verbose', '--model', 'sonnet', '--dangerously-skip-permissions'],
+      args: ['-p', prompt, '--output-format', 'stream-json', '--verbose', '--model', 'claude-sonnet-5-5', '--dangerously-skip-permissions'],
       cwd: lanes.claude.worktree,
     })
   })
@@ -70,19 +70,19 @@ describe('a lane mode leaves the command line alone', () => {
 describe('a lane mode reaches the harness', () => {
   it('gives a Claude lane the permission mode in place of the skip flag', () => {
     expect(commandArgs(lanes.claude, { ...lanes.claude.cli, mode: 'plan' })).toEqual([
-      '-p', prompt, '--output-format', 'stream-json', '--verbose', '--model', 'sonnet', '--permission-mode', 'plan',
+      '-p', prompt, '--output-format', 'stream-json', '--verbose', '--model', 'claude-sonnet-5-5', '--permission-mode', 'plan',
     ])
     expect(commandArgs(lanes.claude, { ...lanes.claude.cli, mode: 'edits' })).toEqual([
-      '-p', prompt, '--output-format', 'stream-json', '--verbose', '--model', 'sonnet', '--permission-mode', 'acceptEdits',
+      '-p', prompt, '--output-format', 'stream-json', '--verbose', '--model', 'claude-sonnet-5-5', '--permission-mode', 'acceptEdits',
     ])
     expect(commandArgs(lanes.claude, { ...lanes.claude.cli, mode: 'auto' })).toEqual([
-      '-p', prompt, '--output-format', 'stream-json', '--verbose', '--model', 'sonnet', '--permission-mode', 'auto',
+      '-p', prompt, '--output-format', 'stream-json', '--verbose', '--model', 'claude-sonnet-5-5', '--permission-mode', 'auto',
     ])
   })
 
   it('keeps the skip flag for a Claude lane in bypass mode', () => {
     expect(commandArgs(lanes.claude, { ...lanes.claude.cli, mode: 'bypass' })).toEqual([
-      '-p', prompt, '--output-format', 'stream-json', '--verbose', '--model', 'sonnet', '--dangerously-skip-permissions',
+      '-p', prompt, '--output-format', 'stream-json', '--verbose', '--model', 'claude-sonnet-5-5', '--dangerously-skip-permissions',
     ])
   })
 

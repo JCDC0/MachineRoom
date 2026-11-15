@@ -279,7 +279,7 @@ describe('lanes', () => {
     expect(lanes.orchestrator).toMatchObject({
       name: 'Orchestrator',
       harness: 'Claude Code',
-      cli: { harness: 'claude', bin: 'claude', model: 'opus' },
+      cli: { harness: 'claude', bin: 'claude', model: 'claude-opus-5-5' },
     })
     expect(lanes.orchestrator.worktree).toBeUndefined()
     expect(lanes.orchestrator.role).toBeUndefined()
