@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- A restricted sub's lane that changed files outside its scope is not merged until the owner or the orchestrator above the sub allows it, and that orchestrator is told once.
 - A chat message sent to a lane and a split run carry a Separate worktree choice, and no run uses a worktree outside a git checkout.
 - Codex lanes and orchestrators offer Edits and Bypass: Edits writes in Codex's workspace sandbox like Auto, and Bypass runs with no sandbox or approvals.
 - Add child, the lane editor and Dispatch pick a lane's mode, and a lane set to Orchestrator's choice lets the agent above choose the mode for each run.
@@ -10,6 +11,7 @@
 - Agents and Dispatch offer lane modes, including an orchestrator choice for each run.
 - P401: Codex offers Edits in its workspace sandbox and Bypass with --dangerously-bypass-approvals-and-sandbox, and Plan and Auto keep their flags.
 - P406: A lane task sent from the chat and a split run carry a Separate worktree choice, and a worktree is never used outside a git checkout.
+- P402: A restricted sub's lane merge answers 409 with the files outside its scope and waits for the owner or the orchestrator above the sub, which is told once per branch head, and Reviews offers Merge anyway.
 - The scale probe retries a .git rename up to 10 times when Windows still holds the folder, so the scale-live test no longer fails on a lock.
 - The replay scrubber's max and value stay finite before a recording loads, so the NaN attribute warnings are gone.
 - A cut inbox reply keeps its sender's name even when the name has spaces.

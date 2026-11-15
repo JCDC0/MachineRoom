@@ -8,11 +8,20 @@ import {
   formatChecksNotice,
   isFastForwardRefusal,
   mergeHead,
+  MOVED_BRANCH_ERROR,
   normalizeChecks,
   patchLines,
   prepareMergeMessage,
   reviewRow,
 } from './reviews.js'
+
+const OUTSIDE_SCOPE_START = 'The lane changed files outside the scope of '
+
+export function isOutsideScopeRefusal(error) {
+  if (error?.outside === true) return true
+  const message = typeof error?.message === 'string' ? error.message : ''
+  return message.startsWith(OUTSIDE_SCOPE_START)
+}
 
 function checksColor(checks) {
   if (checks === 'failed') return 'var(--red)'
@@ -162,6 +171,50 @@ export function PrepareConfirmCard({ target, sending, onConfirm, onCancel }) {
   )
 }
 
+export function OutsideConfirmCard({ target, files, mergeError, merging, onConfirm, onCancel }) {
+  if (!target) return null
+  const branch = target.branch ? `${target.lane}'s ${target.branch}` : `${target.lane}'s work`
+  return (
+    <div
+      className="brief-confirm-card review-confirm-card review-outside-card"
+      role="region"
+      aria-label={`Confirm merge anyway for ${target.lane}`}
+    >
+      <div className="brief-confirm-warning">
+        {`Merge ${branch} (${target.headShort}) even though it changes files outside the sub's scope?`}
+      </div>
+      <ul className="review-conflict-files mono">
+        {files.map((file) => (
+          <li key={file}>{visibleText(file)}</li>
+        ))}
+      </ul>
+      <div className="brief-confirm-actions">
+        <button
+          type="button"
+          className="brief-confirm-btn"
+          disabled={merging}
+          onClick={onConfirm}
+        >
+          {merging ? 'Merging' : 'Merge anyway'}
+        </button>
+        <button
+          type="button"
+          className="brief-cancel-btn"
+          disabled={merging}
+          onClick={onCancel}
+        >
+          Cancel
+        </button>
+      </div>
+      {mergeError && (
+        <div className="brief-confirm-error review-merge-error mono" role="alert">
+          {mergeError}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function ReviewsPanel({
   client,
   initialReviews = null,
@@ -186,6 +239,8 @@ export default function ReviewsPanel({
   const [mergeConflictFiles, setMergeConflictFiles] = useState([])
   const [mergeSuccessByLane, setMergeSuccessByLane] = useState({})
   const [movedByLane, setMovedByLane] = useState({})
+  const [outsideByLane, setOutsideByLane] = useState({})
+  const [outsideTarget, setOutsideTarget] = useState(null)
 
   const [prepareTarget, setPrepareTarget] = useState(null)
   const [preparing, setPreparing] = useState(false)
@@ -211,6 +266,15 @@ export default function ReviewsPanel({
   function clearMoved(lane) {
     setMovedByLane((prev) => {
       if (!prev[lane]) return prev
+      const next = { ...prev }
+      delete next[lane]
+      return next
+    })
+  }
+
+  function clearOutside(lane) {
+    setOutsideByLane((prev) => {
+      if (!Object.hasOwn(prev, lane)) return prev
       const next = { ...prev }
       delete next[lane]
       return next
@@ -309,6 +373,7 @@ export default function ReviewsPanel({
     }
     clearMoved(row.lane)
     const isFastForward = row.strategy === 'fast-forward'
+    setOutsideTarget((current) => (current?.lane === row.lane ? null : current))
     setConfirmTarget({
       lane: row.lane,
       branch: row.branch,
@@ -318,6 +383,7 @@ export default function ReviewsPanel({
       checks: row.checks,
       head: result.head,
       headShort: result.head.slice(0, 7),
+      message: isFastForward ? '' : defaultMergeMessage(review),
     })
     setMergeMessage(isFastForward ? '' : defaultMergeMessage(review))
     setMergeError(null)
@@ -398,11 +464,17 @@ export default function ReviewsPanel({
       mergeMessage.length <= 200 &&
       !/[\r\n]/.test(mergeMessage))
 
-  async function handleConfirmMerge() {
-    if (merging || !confirmTarget || !isMessageValid || typeof client?.mergeReview !== 'function') {
-      return
-    }
-    const target = confirmTarget
+  async function sendMerge(target, { allowOutside = false } = {}) {
+    if (merging || !target || typeof client?.mergeReview !== 'function') return
+    const isFastForward = target.strategy === 'fast-forward'
+    const message = allowOutside && typeof target.message === 'string' ? target.message : mergeMessage
+    const valid =
+      isFastForward ||
+      (typeof message === 'string' &&
+        message.length >= 1 &&
+        message.length <= 200 &&
+        !/[\r\n]/.test(message))
+    if (!valid) return
     setMerging(true)
     setMergeError(null)
     setMergeConflictFiles([])
@@ -412,8 +484,11 @@ export default function ReviewsPanel({
         base: target.base,
         baseHead: target.baseHead,
       }
-      if (!isFastForwardConfirm) {
-        options.message = mergeMessage
+      if (!isFastForward) {
+        options.message = message
+      }
+      if (allowOutside) {
+        options.allowOutside = true
       }
       const result = await client.mergeReview(target.lane, options)
       if (!mountedRef.current) return
@@ -427,22 +502,74 @@ export default function ReviewsPanel({
         delete next[target.lane]
         return next
       })
+      clearOutside(target.lane)
       setConfirmTarget(null)
+      setOutsideTarget(null)
       setMergeMessage('')
       await loadReviews({ isInitial: false })
     } catch (err) {
       if (!mountedRef.current) return
-      const message = err.message || 'Could not merge lane.'
-      setMergeError(message)
-      setMergeConflictFiles(Array.isArray(err?.files) ? err.files : [])
-      if (target.strategy === 'fast-forward' && isFastForwardRefusal(message)) {
-        setRefusedByLane((prev) => ({ ...prev, [target.lane]: target.head }))
+      const text = err.message || 'Could not merge lane.'
+      if (isOutsideScopeRefusal(err)) {
+        setOutsideByLane((prev) => ({
+          ...prev,
+          [target.lane]: {
+            target: { ...target, message: isFastForward ? '' : message },
+            files: Array.isArray(err?.files) ? err.files : [],
+            error: text,
+          },
+        }))
+        setConfirmTarget((current) => (current?.lane === target.lane ? null : current))
+        setOutsideTarget(null)
+        setMergeError(null)
+        setMergeConflictFiles([])
+      } else {
+        setMergeError(text)
+        setMergeConflictFiles(Array.isArray(err?.files) ? err.files : [])
+        if (target.strategy === 'fast-forward' && isFastForwardRefusal(text)) {
+          setRefusedByLane((prev) => ({ ...prev, [target.lane]: target.head }))
+        }
       }
     } finally {
       if (mountedRef.current) {
         setMerging(false)
       }
     }
+  }
+
+  async function handleConfirmMerge() {
+    if (!confirmTarget || !isMessageValid) return
+    await sendMerge(confirmTarget)
+  }
+
+  function handleOpenOutside(event, row) {
+    event.stopPropagation()
+    if (merging) return
+    const refusal = outsideByLane[row.lane]
+    if (!refusal?.target) return
+    if (row.head !== refusal.target.head) {
+      setMovedByLane((prev) => ({ ...prev, [row.lane]: MOVED_BRANCH_ERROR }))
+      clearOutside(row.lane)
+      setOutsideTarget((current) => (current?.lane === row.lane ? null : current))
+      return
+    }
+    clearMoved(row.lane)
+    setConfirmTarget((current) => (current?.lane === row.lane ? null : current))
+    setMergeError(null)
+    setMergeConflictFiles([])
+    setOutsideTarget(refusal.target)
+  }
+
+  async function handleConfirmOutside() {
+    if (merging || !outsideTarget) return
+    await sendMerge(outsideTarget, { allowOutside: true })
+  }
+
+  function handleCancelOutside() {
+    if (merging) return
+    setOutsideTarget(null)
+    setMergeError(null)
+    setMergeConflictFiles([])
   }
 
   const lines = diff?.patch ? patchLines(diff.patch) : []
@@ -494,6 +621,8 @@ export default function ReviewsPanel({
               (row.behindDestination || (Boolean(row.head) && refusedHead === row.head))
             const prepareSent = prepareSentByLane[row.lane]
             const prepareError = prepareErrorByLane[row.lane]
+            const outsideRefusal = outsideByLane[row.lane]
+            const showOutside = Boolean(outsideRefusal && outsideRefusal.target?.head === row.head)
 
             return (
               <div
@@ -579,6 +708,26 @@ export default function ReviewsPanel({
                           {prepareError}
                         </div>
                       )}
+                      {showOutside && (
+                        <div className="review-scope-refusal" role="alert">
+                          <div className="mono">{outsideRefusal.error}</div>
+                          {outsideRefusal.files.length > 0 && (
+                            <ul className="review-conflict-files mono">
+                              {outsideRefusal.files.map((file) => (
+                                <li key={file}>{visibleText(file)}</li>
+                              ))}
+                            </ul>
+                          )}
+                          <button
+                            type="button"
+                            className="review-merge-anyway-btn"
+                            disabled={merging}
+                            onClick={(e) => handleOpenOutside(e, row)}
+                          >
+                            Merge anyway
+                          </button>
+                        </div>
+                      )}
                     </>
                   )}
                 </div>
@@ -612,6 +761,17 @@ export default function ReviewsPanel({
                     onMessageChange={setMergeMessage}
                     onConfirm={handleConfirmMerge}
                     onCancel={handleCancelConfirm}
+                  />
+                )}
+
+                {outsideTarget?.lane === row.lane && (
+                  <OutsideConfirmCard
+                    target={outsideTarget}
+                    files={outsideByLane[row.lane]?.files ?? []}
+                    mergeError={mergeError}
+                    merging={merging}
+                    onConfirm={handleConfirmOutside}
+                    onCancel={handleCancelOutside}
                   />
                 )}
 
