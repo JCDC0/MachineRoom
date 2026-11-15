@@ -5,6 +5,7 @@ import { act, createElement } from 'react'
 import { afterEach, describe, expect, it } from 'vitest'
 import { killTree } from '../server/processTree.js'
 import OrchestratorChat from '../src/ui/OrchestratorChat.jsx'
+import { boundMessages } from '../scripts/mr-agent.mjs'
 import { makeTempDir, removeTempDir } from './helpers/tempRoot.js'
 import { click, withDom } from './helpers/uiDom.js'
 
@@ -341,6 +342,41 @@ describe('review 39 fixes: R39-2 chat model picker', () => {
 })
 
 describe('review 39 fixes: R39-3 inbox context bound', () => {
+  it('keeps the newest reply when an inbox batch is oversized', () => {
+    const messages = [
+      { role: 'system', content: 's'.repeat(1000) },
+      { role: 'user', content: 'Initial task to keep.' },
+      { role: 'user', content: 'Messages for you while you work:\nolder: ' + 'x'.repeat(7500) + '\nnewer: Newest order to keep.' },
+    ]
+    boundMessages(messages, 8000)
+    expect(JSON.stringify(messages).length).toBeLessThanOrEqual(8000)
+    expect(messages[1].content).toBe('Initial task to keep.')
+    expect(messages[2].content).toBe('Messages for you while you work:\nnewer: Newest order to keep.')
+  })
+
+  it('leaves a short inbox batch unchanged', () => {
+    const messages = [
+      { role: 'system', content: 's'.repeat(1000) },
+      { role: 'user', content: 'Initial task to keep.' },
+      { role: 'user', content: 'Messages for you while you work:\nfirst: Hello.\nsecond: Continue.' },
+    ]
+    const original = structuredClone(messages)
+    boundMessages(messages, 8000)
+    expect(messages).toEqual(original)
+  })
+
+  it('keeps the end of a reply that is too large on its own', () => {
+    const messages = [
+      { role: 'system', content: 's'.repeat(1000) },
+      { role: 'user', content: 'Initial task to keep.' },
+      { role: 'user', content: 'Messages for you while you work:\nnewer: ' + 'x'.repeat(7500) + ' end of reply' },
+    ]
+    boundMessages(messages, 8000)
+    expect(JSON.stringify(messages).length).toBeLessThanOrEqual(8000)
+    expect(messages[2].content.startsWith('Messages for you while you work:\n')).toBe(true)
+    expect(messages[2].content.endsWith('end of reply')).toBe(true)
+  })
+
   async function runWithSixBatches(batchSize) {
     const folder = tempDir()
     const batchText = (number) => `batch-${number}: ${String(number).repeat(batchSize)}`
@@ -415,7 +451,7 @@ describe('review 39 fixes: R39-3 inbox context bound', () => {
         message.content.startsWith('Messages for you while you work:'),
     )
     expect(inboxMessages).toHaveLength(1)
-    expect(inboxMessages[0].content).toContain('batch-6:')
+    expect(inboxMessages[0].content).toMatch(/6+$/)
     expect(inboxMessages[0].content).not.toContain('batch-1:')
   })
 })

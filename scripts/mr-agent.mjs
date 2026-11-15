@@ -1356,7 +1356,18 @@ export function boundMessages(messages, limit) {
     }
     if (message?.role !== 'user') continue
     const content = String(message.content ?? '')
-    messages[index] = { ...message, content: content.slice(0, NEWEST_READABLE_CHARS) }
+    if (isInbox(message)) {
+      const [heading, ...replies] = content.split('\n')
+      while (replies.length > 1 && messageChars(messages) > limit) {
+        replies.shift()
+        messages[index] = { ...message, content: `${heading}\n${replies.join('\n')}` }
+      }
+      if (messageChars(messages) <= limit) return
+      const reply = replies.join('\n').slice(-(NEWEST_READABLE_CHARS - heading.length - 1))
+      messages[index] = { ...message, content: `${heading}\n${reply}` }
+    } else {
+      messages[index] = { ...message, content: content.slice(0, NEWEST_READABLE_CHARS) }
+    }
   }
 }
 
