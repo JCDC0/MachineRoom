@@ -1240,7 +1240,7 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
     return {
       label: 'Sub orchestrator',
       harness: harness?.key ?? '',
-      model: harness ? harnessModels(harness, models)[0]?.id ?? '' : '',
+      model: '',
       effort: harness?.efforts?.[0] ?? '',
     }
   }
@@ -2037,6 +2037,7 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
             loading={childModels.loading}
             error={childModels.error}
             canRefresh={childModels.canRefresh}
+            placeholder={direct ? 'Choose a model' : 'Harness default'}
           />
         ) : null}
         {selected && !directMissing && efforts.length > 0 ? (
@@ -2130,6 +2131,7 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
             loading={subModels.loading}
             error={subModels.error}
             canRefresh={subModels.canRefresh}
+            placeholder={direct ? 'Choose a model' : 'Harness default'}
           />
         ) : null}
         {selected && !directMissing && efforts.length > 0 ? (

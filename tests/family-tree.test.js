@@ -251,12 +251,12 @@ describe('the harness choices', () => {
     expect(childDraft(HARNESSES, MODELS)).toMatchObject({
       label: '',
       harness: 'opencode',
-      model: 'qwen',
+      model: '',
       effort: '',
     })
   })
 
-  it('prefers the OpenCode default model and max effort', () => {
+  it('prefers Harness default and max effort on OpenCode', () => {
     const preferred = {
       harnesses: [
         { key: 'claude', available: true, models: [{ id: 'sonnet' }], efforts: ['low'] },
@@ -270,7 +270,7 @@ describe('the harness choices', () => {
     }
     expect(childDraft(preferred, null)).toMatchObject({
       harness: 'opencode',
-      model: 'opencode-go/deepseek-v4.1-flash',
+      model: '',
       effort: 'max',
     })
   })
@@ -279,7 +279,7 @@ describe('the harness choices', () => {
     const fallback = { harnesses: [HARNESSES.harnesses[0]] }
     expect(childDraft(fallback, null)).toMatchObject({
       harness: 'claude',
-      model: 'sonnet',
+      model: '',
       effort: 'low',
     })
   })

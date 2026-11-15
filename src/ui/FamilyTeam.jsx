@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useDialogFocus } from './dialogFocus.js'
 import {
+  DIRECT_HARNESS,
   NO_READY_HARNESS,
   harnessModels,
   harnessReady,
@@ -153,8 +154,7 @@ export function FamilyTeam({ client = null }) {
     if (activeHarnesses) {
       const first = offered[0] ?? null
       if (!first) return
-      const model = harnessModels(first, models)[0]?.id ?? ''
-      setDraft((current) => ({ ...current, harness: first.key, model }))
+      setDraft((current) => ({ ...current, harness: first.key, model: '' }))
       return
     }
     const next = teamDraft(harnesses, models)
@@ -195,8 +195,10 @@ export function FamilyTeam({ client = null }) {
 
   function harnessProblem() {
     if (!selected) return offered.length === 0 ? NO_READY_HARNESS : 'Choose a harness.'
+    const model = cleanText(draft.model, 120)
+    if (selected.key !== DIRECT_HARNESS && !model) return ''
     if (live.choices.length === 0) return 'This harness has no models.'
-    if (!live.choices.some((row) => row.id === cleanText(draft.model, 120))) {
+    if (!live.choices.some((row) => row.id === model)) {
       return 'Choose a model for this harness.'
     }
     return ''
@@ -414,6 +416,7 @@ export function FamilyTeam({ client = null }) {
               loading={live.loading}
               error={live.error}
               canRefresh={live.canRefresh}
+              placeholder={selected.key === DIRECT_HARNESS ? 'Choose a model' : 'Harness default'}
             />
           ) : null}
           {renderPreview()}
