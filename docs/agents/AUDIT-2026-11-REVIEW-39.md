@@ -35,3 +35,7 @@ Fix: remove or summarize the oldest injected inbox messages until they fit the c
 - Six targeted test files passed all 42 tests through npm. The related-test check for this Markdown file found no affected tests. The build passed. Three dependency-free checks passed nine assertions. No screen check was possible.
 
 Checked and fine
+
+## Closed
+
+All three are fixed on main: P384 fixed R39-1 (a code agent made at Harness default saves and starts with no model flag), and P385 fixed R39-2 and R39-3.
