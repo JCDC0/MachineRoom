@@ -1,7 +1,9 @@
 # Changelog
 
 ## Unreleased
+- P381b: A failover backup keeps the primary's lane ticket, bridge address and message paragraph, so it messages under the primary's name and reads its inbox.
 - P380: The native agent reads its lane inbox before each model call after the first and adds unseen replies as one user message; the ticket is never printed.
+- P381b: A failover backup keeps the primary lane's ticket and message prompt, sharing its inbox and send limit.
 - P378: The add-agent, sub and team forms start with no model and offer Harness default first; Direct API still needs a model; family rows name models from the harness list.
 - P380: The native agent reads unseen lane inbox replies from the bridge once before each model call after the first without printing or logging the ticket.
 - P375: Gemini 4 Argon ranks the next eight briefs toward the free hierarchy in PLAN-NEXT-ARGON.md; two need no design call, six wait for the owner.

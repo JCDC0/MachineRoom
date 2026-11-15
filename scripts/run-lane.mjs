@@ -1702,15 +1702,6 @@ function recordRoom(record, toolLines, lanes) {
   }
 }
 
-const LANE_MESSAGE_START = 'You may send your coordinator a short message'
-
-function withoutLaneMessage(prompt) {
-  return String(prompt ?? '')
-    .split(/\n{2,}/)
-    .filter((part) => !part.trimStart().startsWith(LANE_MESSAGE_START))
-    .join('\n\n')
-}
-
 async function startFailover({ laneKey, target, lanes, options, wanted, prompt, promptFor = null, folder, project, task, queue = null, base = '', deferRecord, openLog, failedRecord, failedStartBranch, onStart = null }) {
   const primaryMode = options?.mode !== undefined ? options.mode : lanes?.[laneKey]?.cli?.mode
   const fallbackLane = laneWithOverrides(lanes?.[target], primaryMode !== undefined ? { mode: primaryMode } : {})
@@ -1763,7 +1754,7 @@ async function startFailover({ laneKey, target, lanes, options, wanted, prompt, 
       lane: fallbackLane,
       lanes,
       wanted,
-      prompt: withoutLaneMessage(!project && typeof promptFor === 'function' ? promptFor(target, `-on-${target}`) : prompt),
+      prompt: !project && typeof promptFor === 'function' ? promptFor(target, `-on-${target}`) : prompt,
       logPath: join(folder, `${fallbackName}.log`),
       usageFile: join(folder, `${fallbackName}.usage.json`),
       name: fallbackName,
@@ -1885,7 +1876,8 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
     const runnerNames = [
       'MACHINEROOM_RUNS',
       'MACHINEROOM_LANES_FILE',
-      ...(options?.failedOver === true ? [] : ['MACHINEROOM_LANE_TICKET', 'MACHINEROOM_BRIDGE']),
+      'MACHINEROOM_LANE_TICKET',
+      'MACHINEROOM_BRIDGE',
     ]
       .filter((name) => typeof process.env[name] === 'string' && process.env[name] !== '')
     const runsDir = options?.runs || (logPath ? dirname(logPath) : runsFolder())
