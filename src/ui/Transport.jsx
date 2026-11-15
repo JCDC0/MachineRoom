@@ -28,6 +28,12 @@ function clock(ms) {
   return `${minutes}:${seconds}`
 }
 
+function scrubberBounds(position, duration) {
+  const max = Number.isFinite(duration) ? Math.round(duration) : 0
+  const value = Number.isFinite(position) ? Math.min(Math.round(position), max) : 0
+  return { max, value }
+}
+
 function reducedMotion() {
   return (
     typeof window !== 'undefined' &&
@@ -235,6 +241,8 @@ export default function Transport({ snapshot, speeds, markers = [], orchestrator
     )
   }
 
+  const scrubber = scrubberBounds(position, duration)
+
   return (
     <div className="transport">
       <button type="button" onClick={onToggle} aria-label={playing ? 'Pause replay' : 'Play replay'}>
@@ -244,8 +252,8 @@ export default function Transport({ snapshot, speeds, markers = [], orchestrator
         <input
           type="range"
           min="0"
-          max={Math.round(duration)}
-          value={Math.round(position)}
+          max={scrubber.max}
+          value={scrubber.value}
           onChange={(event) => onSeek(Number(event.target.value))}
           aria-label="Replay position"
         />
