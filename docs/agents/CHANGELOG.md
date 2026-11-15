@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- The ladder route refuses a new or changed sub whose model its harness does not list, and a Direct API sub with no model.
 - When the newest inbox reply must be cut, it keeps its sender, starts on a whole word and says [start cut].
 - An orchestrator saved at Harness default keeps it after a restart, and a new sub at Harness default no longer takes a lane's model.
 - The orchestrator and lane editors' model pickers show and offer Harness default for every harness but Direct API.

@@ -2633,13 +2633,13 @@ describe('ladder save harness availability', () => {
 
     const saved = await pagePost(`${rig.url}/api/orchestrator/ladder`, {
       ladder: {
-        subs: [{ id: 'backend', name: 'Backend', harness: 'codex', model: 'gpt-5-codex', lanes: ['codex'], scope: ['server/**'], restricted: true, setBy: 'owner' }],
+        subs: [{ id: 'backend', name: 'Backend', harness: 'codex', model: 'gpt-6-luna', lanes: ['codex'], scope: ['server/**'], restricted: true, setBy: 'owner' }],
       },
       by: 'owner',
       confirmed: true,
     })
     expect(saved.status).toBe(200)
-    expect(saved.body.ladder.subs[0]).toMatchObject({ id: 'backend', harness: 'codex', model: 'gpt-5-codex' })
+    expect(saved.body.ladder.subs[0]).toMatchObject({ id: 'backend', harness: 'codex', model: 'gpt-6-luna' })
   })
 })
 
