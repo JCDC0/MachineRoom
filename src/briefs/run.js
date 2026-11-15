@@ -617,12 +617,15 @@ export function laneLockPids(text) {
   return { pid, child, folder, projectRun: parsed?.projectRun === true }
 }
 
-export function laneStopProblem({ lane, pid, leftover = false } = {}) {
+export function laneStopProblem({ lane, pid, leftover = false, program = '' } = {}) {
   const name = String(lane ?? '').trim()
   const holder = Number.isInteger(pid) && pid > 0 ? pid : 0
   if (!name || holder === 0) return ''
   const noun = leftover === true ? 'leftover process' : 'harness process'
-  return `The ${name} lane still has ${noun} ${holder}; stop it with npm run run-lane -- --stop ${name}.`
+  const token = leftover === true && typeof program === 'string' ? program.trim() : ''
+  const masked = token !== '' ? maskProfilePaths(token) : ''
+  const detail = masked !== '' ? ` (${masked})` : ''
+  return `The ${name} lane still has ${noun} ${holder}${detail}; stop it with npm run run-lane -- --stop ${name}.`
 }
 
 export function fallbackProblem({ laneKey, fallback, lanes } = {}) {
