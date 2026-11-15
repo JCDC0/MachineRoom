@@ -41,6 +41,7 @@ import {
   runnableLanes,
   sendChatMessage,
   startConfirmText,
+  startModeText,
   statusDetail,
   statusTone,
   teamLines,
@@ -358,8 +359,8 @@ export default function OrchestratorChat({
   ]
   const startText =
     selected === 'orchestrator'
-      ? startConfirmText(project, harness)
-      : `${current?.name || selected} runs on this project with full permissions. It plans for its lanes, works in its scope and reports to the main orchestrator.`
+      ? startConfirmText(project, harness, mode, modeList)
+      : `${current?.name || selected} runs on this project${startModeText(mode, modeList) || '.'} It plans for its lanes, works in its scope and reports to the main orchestrator.`
 
   useEffect(() => {
     if (!open) return undefined

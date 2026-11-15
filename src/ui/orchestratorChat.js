@@ -1,4 +1,5 @@
 import { createContext } from 'react'
+import { MODES } from '../control/modes.js'
 import { harnessByKey } from '../harnesses/index.js'
 import { effortLevels, harnessKey } from './agentStrip.js'
 import { DIRECT_HARNESS, DIRECT_LABEL } from './family.js'
@@ -26,14 +27,33 @@ function startHarnessKey(harness) {
   return ''
 }
 
-export function startConfirmText(project = '', harness = '') {
+function startMode(mode, modes) {
+  const id = typeof mode === 'string' ? mode.trim() : ''
+  if (!MODE_IDS.has(id)) return null
+  const list = Array.isArray(modes) ? modes : []
+  const found = list.find((entry) => entry && entry.id === id)
+  const known = MODES.find((entry) => entry.id === id)
+  const label = typeof found?.label === 'string' && found.label.trim() ? found.label.trim() : known?.label ?? ''
+  const line = typeof found?.line === 'string' && found.line.trim() ? found.line.trim() : known?.line ?? ''
+  return label ? { label, line } : null
+}
+
+export function startModeText(mode, modes) {
+  const found = startMode(mode, modes)
+  if (!found) return ''
+  const line = found.line ? (/[.!?]$/.test(found.line) ? found.line : `${found.line}.`) : ''
+  return ` in ${found.label} mode.${line ? ` ${line}` : ''}`
+}
+
+export function startConfirmText(project = '', harness = '', mode = '', modes = []) {
   const key = startHarnessKey(harness)
   const name = key === DIRECT_HARNESS ? DIRECT_LABEL : Object.hasOwn(harnessByKey, key) ? harnessByKey[key].name : ''
+  const modeText = startModeText(mode, modes)
   const where = project
-    ? `The orchestrator works in ${project}${name ? ` on ${name}` : ''} with full permissions.`
+    ? `The orchestrator works in ${project}${name ? ` on ${name}` : ''}${modeText || '.'}`
     : name
-      ? `The orchestrator runs ${name} on this project with full permissions.`
-      : 'The orchestrator runs on this project with full permissions.'
+      ? `The orchestrator runs ${name} on this project${modeText || '.'}`
+      : `The orchestrator runs on this project${modeText || '.'}`
   const plan = ' It plans, starts lanes, merges what passes on a branch and never pushes.'
   let account = ''
   if (key === DIRECT_HARNESS) account = ' It uses no subscription.'
