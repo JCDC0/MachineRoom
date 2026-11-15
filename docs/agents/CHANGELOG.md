@@ -1,7 +1,9 @@
 # Changelog
 
 ## Unreleased
+- The sub orchestrator form and editor set a Scope (one glob a line) and Restricted, saved through the ladder.
 - The ladder route refuses a new or changed sub whose model its harness does not list, or a Direct API sub with no model; saved, unchanged subs are not checked.
+- The sub orchestrator form and editor in Agents let you set Scope and Restricted, saving trimmed globs or `**` when empty and showing the saved values on reopen.
 - The scale probe retries a .git rename up to 10 times when Windows still holds the folder, so the scale-live test no longer fails on a lock.
 - The replay scrubber's max and value stay finite before a recording loads, so the NaN attribute warnings are gone.
 - A cut inbox reply keeps its sender's name even when the name has spaces.
