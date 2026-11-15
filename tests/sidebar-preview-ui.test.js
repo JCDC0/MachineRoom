@@ -62,6 +62,28 @@ describe('a conversation list that cannot be read', () => {
 })
 
 describe('the conversation preview', () => {
+  it('shows a lane message by the lane name and an unknown lane by its key', async () => {
+    const client = makeClient({
+      lanes: async () => ({ max: 2, lanes: [{ key: 'opencode', name: 'OpenCode' }] }),
+      orchestratorSession: async () => ({
+        title: 'Alpha',
+        messages: [
+          { id: 'a1', from: 'lane:opencode', text: 'Tests fixed.' },
+          { id: 'a2', from: 'lane:ghost', text: 'Blocked.' },
+        ],
+      }),
+    })
+
+    await withDom(async ({ container, root }) => {
+      await mount(root, { client, live: true })
+      await click(root, rowByTitle(container, 'Alpha'))
+      await settle()
+
+      const from = container.querySelectorAll('.mr-side-message-from').map((node) => node.textContent)
+      expect(from).toEqual(['OpenCode', 'ghost'])
+    })
+  })
+
   it('keeps the newest conversation when an older preview answers later', async () => {
     let answerAlpha = null
     const client = makeClient({
