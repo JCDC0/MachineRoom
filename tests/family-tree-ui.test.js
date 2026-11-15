@@ -608,6 +608,7 @@ describe('FamilyTree rows', () => {
           harness: 'opencode',
           model: '',
           effort: 'max',
+          mode: 'auto',
           confirmed: true,
         },
       ])
