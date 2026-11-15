@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { activeLanesFileFor, writeActiveLanes } from '../server/active-lanes.js'
 import { createBridge } from '../server/index.js'
 import { gitPath } from '../server/programPath.js'
+import { createClient } from '../src/control/client.js'
 import OrchestratorChat from '../src/ui/OrchestratorChat.jsx'
 import DispatchPanel from '../src/ui/panels/DispatchPanel.jsx'
 import { clearSplitRun, startSplitRun } from '../src/ui/panels/runs.js'
@@ -289,6 +290,37 @@ describe('the chat worktree box', () => {
       })
       expect(client.calls).toEqual([{ text: 'Fix tests', options: { id: 'opencode', worktree: true } }])
     })
+  })
+})
+
+describe('the control client sends the worktree choice', () => {
+  function recorder() {
+    const calls = []
+    const fetchImpl = async (url, options = {}) => {
+      calls.push({ url, method: options.method, body: options.body })
+      return { ok: true, json: async () => ({ ok: true }) }
+    }
+    return { calls, client: createClient({ baseUrl: 'http://127.0.0.1:9', fetchImpl }) }
+  }
+
+  it('posts worktree false when the box is off', async () => {
+    const { calls, client } = recorder()
+    await client.sendOrchestrator('Fix tests', { id: 'opencode', worktree: false })
+    expect(calls).toEqual([
+      {
+        url: 'http://127.0.0.1:9/api/orchestrator/messages',
+        method: 'POST',
+        body: JSON.stringify({ text: 'Fix tests', id: 'opencode', confirmed: true, worktree: false }),
+      },
+    ])
+  })
+
+  it('leaves worktree out of the body when no choice is given', async () => {
+    const { calls, client } = recorder()
+    await client.sendOrchestrator('Fix tests', { id: 'opencode' })
+    const body = JSON.parse(calls[0].body)
+    expect(body).toEqual({ text: 'Fix tests', id: 'opencode', confirmed: true })
+    expect('worktree' in body).toBe(false)
   })
 })
 
