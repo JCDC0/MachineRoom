@@ -207,7 +207,7 @@ export function buildFamilyNodes({
   const orchLanes = typeof lanesConfig === 'function' ? lanesConfig() : (lanesConfig ?? {})
 
   const mainHarness = orchAnswer?.harness ?? orchLanes?.[ORCHESTRATOR_KEY]?.cli?.harness ?? 'claude'
-  const mainModel = orchAnswer?.model ?? orchLanes?.[ORCHESTRATOR_KEY]?.cli?.model ?? 'opus'
+  const mainModel = orchAnswer?.model ?? orchLanes?.[ORCHESTRATOR_KEY]?.cli?.model ?? ''
   const mainEffort = orchAnswer?.effort ?? null
   const mainWorking = orchAnswer?.state === 'working' || (typeof isWorking === 'function' && isWorking(ORCHESTRATOR_KEY))
 

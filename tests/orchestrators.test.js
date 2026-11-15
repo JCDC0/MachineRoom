@@ -42,7 +42,7 @@ const assumeInstalled = (key, options) => key === 'claude' || key === 'opencode'
 const REPO_ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)))
 const PROMPT = 'project={{PROJECT}}\nmachineroom={{MACHINEROOM}}\nruns={{RUNS}}\nbridge={{BRIDGE}}'
 const LANES = {
-  orchestrator: { name: 'Orchestrator', harness: 'Claude Code', cli: { harness: 'claude', bin: 'claude', model: 'opus' } },
+  orchestrator: { name: 'Orchestrator', harness: 'Claude Code', cli: { harness: 'claude', bin: 'claude', model: 'opus', contextWindow: 200000 } },
   opencode: { name: 'OpenCode', harness: 'OpenCode', cli: { harness: 'opencode', bin: 'opencode', model: 'opencode-go/deepseek-v4.1-flash' } },
   opencode2: { name: 'OpenCode 2', harness: 'OpenCode', cli: { harness: 'opencode', bin: 'opencode', model: 'opencode-go/deepseek-v4.1-flash' } },
   claude: { name: 'Claude Code', harness: 'Claude Code', cli: { harness: 'claude', bin: 'claude', model: 'sonnet' } },
@@ -547,7 +547,7 @@ describe('the orchestrator registry', () => {
       id: 'orchestrator',
       name: 'Orchestrator',
       harness: 'claude',
-      model: 'opus',
+      model: 'claude-opus-5-5',
       state: 'idle',
       scope: [],
       restricted: false,
@@ -874,7 +874,7 @@ describe('the orchestrator registry', () => {
     const files = makeBase({ ladder: { subs: [FRONTEND] } })
     const lanes = {
       ...LANES,
-      orchestrator: { ...LANES.orchestrator, cli: { ...LANES.orchestrator.cli, bin: process.execPath } },
+      orchestrator: { ...LANES.orchestrator, cli: { harness: 'claude', bin: process.execPath, model: 'opus' } },
       claude: { name: 'Claude Code', harness: 'Claude Code', cli: { harness: 'claude', bin: process.execPath, model: 'sonnet' } },
       opencode: { name: 'OpenCode', harness: 'OpenCode', cli: { harness: 'opencode', bin: process.execPath, model: 'opencode-go/deepseek-v4.1-flash' } },
       acp: { name: 'ACP', harness: 'ACP', cli: { harness: 'acp', bin: join(files.base, 'does-not-exist.exe'), model: 'm' } },
@@ -1249,7 +1249,7 @@ describe('the orchestrator registry', () => {
       id: 'frontend',
       name: 'Frontend',
       harness: 'claude',
-      model: 'sonnet',
+      model: 'claude-sonnet-5-5',
       state: 'idle',
       lanes: ['opencode'],
       scope: ['src/ui/**'],
@@ -1259,7 +1259,7 @@ describe('the orchestrator registry', () => {
 
     const chat = await getJson(`${rig.url}/api/orchestrator?id=frontend`)
     expect(chat.status).toBe(200)
-    expect(chat.body).toMatchObject({ id: 'frontend', name: 'Frontend', parent: 'orchestrator', model: 'sonnet' })
+    expect(chat.body).toMatchObject({ id: 'frontend', name: 'Frontend', parent: 'orchestrator', model: 'claude-sonnet-5-5' })
     expect(chat.body.messages).toEqual([])
     expect((await getJson(`${rig.url}/api/orchestrator?id=missing`)).status).toBe(404)
 

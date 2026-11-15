@@ -584,7 +584,7 @@ function seed(at) {
     ],
     orchestratorChat: {
       state: 'idle',
-      model: 'opus',
+      model: '',
       project: 'MachineRoom',
       contextTokens: 96000,
       contextWindow: 200000,

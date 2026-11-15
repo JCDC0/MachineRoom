@@ -74,7 +74,7 @@ const REPO_ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)))
 const ORCHESTRATOR_LANE = {
   name: 'Orchestrator',
   harness: 'Claude Code',
-  cli: { harness: 'claude', bin: 'claude', model: 'opus' },
+  cli: { harness: 'claude', bin: 'claude', model: 'opus', contextWindow: 200000 },
 }
 const OPENCODE_LANE = {
   name: 'Orchestrator',
@@ -515,7 +515,7 @@ describe('the orchestrator lane', () => {
 describe('one orchestrator turn', () => {
   it('starts Claude in the project with the filled prompt, then resumes the same session', async () => {
     const rig = makeRig()
-    expect(rig.answer()).toMatchObject({ state: 'idle', model: 'opus', project: rig.projectRoot })
+    expect(rig.answer()).toMatchObject({ state: 'idle', model: 'claude-opus-5-5', project: rig.projectRoot })
     const first = rig.send('Build the room.')
     expect(first.status).toBe(202)
     expect(typeof first.body.id).toBe('string')
@@ -530,7 +530,7 @@ describe('one orchestrator turn', () => {
     expect(calls[0].args[1]).toBe('Build the room.')
     expect(valueAfter(calls[0].args, '--output-format')).toBe('stream-json')
     expect(calls[0].args).toContain('--verbose')
-    expect(valueAfter(calls[0].args, '--model')).toBe('opus')
+    expect(valueAfter(calls[0].args, '--model')).toBe('claude-opus-5-5')
     expect(valueAfter(calls[0].args, '--permission-mode')).toBe('auto')
     expect(calls[0].args).not.toContain('--dangerously-skip-permissions')
     expect(calls[0].args).not.toContain('--resume')
@@ -3396,8 +3396,8 @@ describe('orchestrator reasoning effort and sessions', () => {
 
     writeFileSync(rig.releaseFile, 'go')
     await waitIdle(rig, 1)
-    expect(rig.answer().model).toBe('opus')
-    expect(recordsOf(rig).at(-1)).toMatchObject({ model: 'opus' })
+    expect(rig.answer().model).toBe('claude-opus-5-5')
+    expect(recordsOf(rig).at(-1)).toMatchObject({ model: 'claude-opus-5-5' })
   })
 
   it('archives sessions, lists pinned first, resumes an open session, and updates fields', async () => {
@@ -4138,7 +4138,7 @@ describe('the orchestrator routes', () => {
     expect(health.body.orchestrator).toBe(true)
     const chat = await getJson(`${url}/api/orchestrator`)
     expect(chat.status).toBe(200)
-    expect(chat.body).toMatchObject({ state: 'idle', model: 'opus', project: rig.projectRoot })
+    expect(chat.body).toMatchObject({ state: 'idle', model: 'claude-opus-5-5', project: rig.projectRoot })
     expect(Array.isArray(chat.body.messages)).toBe(true)
 
     expect((await pagePostJson(`${url}/api/orchestrator/messages`, { text: 'Build it' })).body).toEqual({
@@ -4287,7 +4287,16 @@ describe('the lane source and the orchestrator turn', () => {
 
   describe('the context window', () => {
     it('uses the model contextWindow when listed in models.js', () => {
-      const rig = makeRig({ model: 'claude-haiku-5-5' })
+      const rig = makeRig({
+        model: 'claude-haiku-5-5',
+        lanes: {
+          orchestrator: {
+            name: 'Orchestrator',
+            harness: 'Claude Code',
+            cli: { harness: 'claude', bin: 'claude', model: 'opus' },
+          },
+        },
+      })
       expect(rig.answer().contextWindow).toBe(1000000)
     })
 
@@ -4305,12 +4314,12 @@ describe('the lane source and the orchestrator turn', () => {
       expect(rigWithLaneWindow.answer().contextWindow).toBe(350000)
 
       const rigDefault = makeRig({
-        model: 'opus',
+        model: 'claude-opus-legacy',
         lanes: {
           orchestrator: {
             name: 'Orchestrator',
             harness: 'Claude Code',
-            cli: { harness: 'claude', bin: 'claude', model: 'opus' },
+            cli: { harness: 'claude', bin: 'claude', model: 'claude-opus-legacy' },
           },
         },
       })
@@ -4352,12 +4361,12 @@ describe('the lane source and the orchestrator turn', () => {
 
     it('changes the window when the model changes', () => {
       const rig = makeRig({
-        model: 'opus',
+        model: 'claude-opus-legacy',
         lanes: {
           orchestrator: {
             name: 'Orchestrator',
             harness: 'Claude Code',
-            cli: { harness: 'claude', bin: process.execPath, model: 'opus' },
+            cli: { harness: 'claude', bin: process.execPath, model: 'claude-opus-legacy' },
           },
           opencode: {
             name: 'OpenCode',

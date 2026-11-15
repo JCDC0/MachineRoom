@@ -8,6 +8,7 @@ import { canChange, outsideScope, readLadder, subPrompt } from '../src/model/hie
 import { HARNESS_EFFORTS, harnessUnavailableProblem, isHarnessAvailable } from './agents-config.js'
 import { readEndpoints } from './endpoints.js'
 import { MODELS } from './models.js'
+import { MODEL_ALIASES } from './model-list.js'
 import {
   CONFIRM_MESSAGE_PROBLEM,
   createOrchestrator,
@@ -319,14 +320,24 @@ export function createOrchestrators({
       if (!sub || typeof sub !== 'object' || typeof sub.id !== 'string') continue
       if (typeof sub.effort === 'string' && sub.effort.trim()) efforts.set(sub.id, sub.effort.trim())
     }
-    if (efforts.size === 0) return read
+    if (efforts.size === 0) {
+      return { ...read, ladder: { ...read.ladder, subs: read.ladder.subs.map(withAliasModel) } }
+    }
     return {
       ...read,
       ladder: {
         ...read.ladder,
-        subs: read.ladder.subs.map((sub) => (efforts.has(sub.id) ? { ...sub, effort: efforts.get(sub.id) } : sub)),
+        subs: read.ladder.subs.map((sub) => {
+          const withModel = withAliasModel(sub)
+          return efforts.has(sub.id) ? { ...withModel, effort: efforts.get(sub.id) } : withModel
+        }),
       },
     }
+  }
+
+  function withAliasModel(sub) {
+    const model = MODEL_ALIASES[sub.model] ?? sub.model
+    return model === sub.model ? sub : { ...sub, model }
   }
 
   function laneDefaults(harness) {
@@ -342,12 +353,12 @@ export function createOrchestrators({
   function subConfig(sub) {
     const harness = harnessFor(sub)
     const defaults = laneDefaults(harness)
-    const fallbackModel = MODELS.find((m) => m.harness === harness)?.id ?? (harness === 'opencode' ? 'opencode/deepseek-v4.1-flash-free' : 'opus')
     const siblings = readSaved().ladder.subs
       .map((entry) => entry.id)
       .filter((id) => id !== sub.id)
       .sort()
-    const model = sub.model || String(defaults?.model ?? fallbackModel)
+    const fallbackModel = String(defaults?.model ?? '')
+    const model = sub.model || (MODEL_ALIASES[fallbackModel] ?? fallbackModel)
     const laneWindow = Number.isFinite(defaults?.contextWindow) && defaults.contextWindow > 0 ? Math.round(defaults.contextWindow) : 0
     return {
       id: sub.id,
