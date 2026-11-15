@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- P390: The orchestrator takes a harness at Harness default and saves an empty model for every harness but Direct API, which still needs a known model.
 - Choosing a harness in Add child, a sub or the orchestrator editor keeps Harness default, and a CLI harness with no model list still saves at Harness default.
 - Review 40 (Sol) of P382, P384 and P385: two P2 findings, a replacement leftover and an oversized inbox batch.
 - P386: The child, sub and orchestrator harness pickers keep Harness default, Direct API keeps its first model, and the orchestrator setup saves an empty model as Harness default.
