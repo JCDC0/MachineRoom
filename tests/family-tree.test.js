@@ -302,7 +302,7 @@ describe('the add child form', () => {
     expect(childFormProblem({ ...draft, harness: 'nope' }, { harnesses: HARNESSES, models: MODELS })).toBe(
       'Choose a harness.'
     )
-    expect(childFormProblem({ ...draft, harness: 'acp', model: '' }, { harnesses: HARNESSES, models: MODELS })).toBe(
+    expect(childFormProblem({ ...draft, harness: 'acp', model: 'opus' }, { harnesses: HARNESSES, models: MODELS })).toBe(
       'This harness has no models.'
     )
     expect(childFormProblem({ ...draft, model: 'other' }, { harnesses: HARNESSES, models: MODELS })).toBe(
