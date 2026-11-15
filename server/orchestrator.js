@@ -915,7 +915,7 @@ export function createOrchestrator({
   id = ORCHESTRATOR_KEY,
   name = '',
   harness: harnessOption = '',
-  model: modelOption = '',
+  model: modelOption,
   bin: binOption = '',
   parent = '',
   projectRoot = '',
@@ -959,7 +959,7 @@ export function createOrchestrator({
   const laneEntry = lanes && Object.hasOwn(lanes, ORCHESTRATOR_KEY) ? lanes[ORCHESTRATOR_KEY] : null
   const lane = laneEntry?.cli ? laneEntry : DEFAULT_LANE
   let harness = harnessOption || String(lane.cli.harness ?? 'claude')
-  let model = modelOption ? String(modelOption) : String(lane.cli.model ?? '')
+  let model = String(modelOption ?? lane.cli.model ?? '')
   model = MODEL_ALIASES[model] ?? model
   function binFor(name) {
     if (binOption) {
@@ -1325,7 +1325,7 @@ export function createOrchestrator({
     }
     if (typeof saved.sessionId === 'string' && saved.sessionId.trim() !== '') sessionId = saved.sessionId
     if (typeof saved.harness === 'string' && saved.harness.trim() !== '') harness = saved.harness.trim()
-    if (typeof saved.model === 'string' && saved.model.trim() !== '') {
+    if (typeof saved.model === 'string') {
       model = MODEL_ALIASES[saved.model.trim()] ?? saved.model.trim()
     }
     if (saved.state === 'working') state = 'idle'
