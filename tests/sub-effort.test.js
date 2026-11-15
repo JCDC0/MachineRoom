@@ -1,9 +1,13 @@
 import { spawn } from 'node:child_process'
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
+import { act, createElement } from 'react'
 import { afterEach, describe, expect, it } from 'vitest'
 import { EFFORT_PROBLEM } from '../server/orchestrator.js'
 import { createOrchestrators } from '../server/orchestrators.js'
+import OrchestratorChat from '../src/ui/OrchestratorChat.jsx'
+import { effortMenuLevels } from '../src/ui/orchestratorChat.js'
+import { click, settle, withDom } from './helpers/uiDom.js'
 import { makeTempDir, removeTempDir } from './helpers/tempRoot.js'
 
 const rigs = []
@@ -93,5 +97,53 @@ describe('a sub orchestrator takes the effort of its ladder entry', () => {
     expect(refused.body.error).toBe(EFFORT_PROBLEM)
     expect(rig.orchestrators.find('codex-sub')).toBeNull()
     expect(rig.orchestrators.list().map((row) => row.id)).toEqual(['orchestrator'])
+  })
+})
+
+describe('the chat effort menu', () => {
+  const codexRows = [{ key: 'codex', name: 'Codex', available: true, models: [], efforts: ['low', 'medium', 'high', 'xhigh'] }]
+
+  it('offers the levels the bridge lists for Codex', () => {
+    expect(effortMenuLevels('codex', codexRows)).toEqual(['low', 'medium', 'high', 'xhigh'])
+  })
+
+  it('shows those levels in the menu for a Codex orchestrator', async () => {
+    const list = [
+      { id: 'orchestrator', name: 'Orchestrator', harness: 'codex', model: 'gpt-6.1-terra', state: 'idle' },
+    ]
+    const chat = {
+      state: 'idle',
+      model: 'gpt-6.1-terra',
+      messages: [{ id: 'm1', from: 'owner', text: 'Start.' }],
+    }
+    const client = {
+      orchestrator: async () => chat,
+      orchestrators: async () => list,
+      harnesses: async () => codexRows,
+      setOrchestratorEffort: async () => ({ ok: true }),
+      subscribe: () => () => {},
+    }
+    await withDom(async ({ container, root }) => {
+      await act(async () => {
+        root.render(
+          createElement(OrchestratorChat, {
+            client,
+            inline: true,
+            open: true,
+            orchestrators: list,
+            initialOrchestrators: list,
+            initialSelected: 'orchestrator',
+            initialChat: chat,
+          })
+        )
+      })
+      await settle()
+      await click(root, container.querySelector('.hud-strip-effort'))
+      const pop = container.querySelector('.strip-pop.is-effort')
+      expect(pop).not.toBeNull()
+      const levels = pop.querySelectorAll('.strip-model-choice').map((node) => node.textContent.trim())
+      expect(levels).toEqual(['low', 'medium', 'high', 'xhigh'])
+      expect(pop.textContent).not.toContain('No effort levels for this harness.')
+    })
   })
 })
