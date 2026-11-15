@@ -68,13 +68,13 @@ export function harnessStatus(entry) {
 }
 
 /**
- * Builds editable program drafts keyed by harness key.
+ * Builds empty program drafts keyed by harness key.
  */
 export function programDraftsFrom(rows) {
   const next = {}
   for (const row of rows) {
     if (!row || !row.key || isNativeHarness(row)) continue
-    next[row.key] = typeof row.program === 'string' ? row.program : ''
+    next[row.key] = ''
   }
   return next
 }

@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- P367: The Program field starts empty with the masked saved path as text beside it, and Save stays off until a path is typed.
 - P367: The harness version line has its home folder and keys masked before it is cut to 80 characters, so Settings and the doctor show the masked value.
 - P363: Opening an orchestrator's tab sets To to it, the start card names the mode in place of full permissions, and no Effort control shows for a harness without levels.
 - P359: No written-in opus or OpenCode default: an unset model starts the harness with no --model and reads Harness default, and a saved opus, sonnet or haiku reads as its full Claude id.
