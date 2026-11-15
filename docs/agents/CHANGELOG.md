@@ -1,8 +1,10 @@
 # Changelog
 
 ## Unreleased
+- The model list finds a harness at its default program, through the Codex app, or through a lane made in the family tree, so the forms no longer say the program was not found (P352).
 - The add-agent form accepts its default effort and saves the lane with no effort, so the harness uses its own default (P354).
 - The add-agent form accepts the effort it offers as `default` and saves the lane with no effort (P354).
+- The model list finds OpenCode and Codex the way the runner does, at the descriptor's default program, the Codex app program or a lane made in the family tree, so a room with no lane for that harness still lists its models (P352).
 - A conversation preview in the sidebar reads the lanes, so a lane's message shows the lane's name there too (P351, R36-7).
 - A saved message from a lane survives a bridge restart, in the conversation, a saved session and the waiting list, and a harness change clears an effort the new harness does not take (P350, R36-5 and R36-6).
 - A failover backup gets neither the failed lane's ticket nor the message paragraph, and runs in the failed run's mode or not at all (P349, R36-2 and R36-3).

@@ -1,12 +1,14 @@
 import { spawn } from 'node:child_process'
 import { mkdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
+import { codexProgramFor, readAllLanes } from './agents-config.js'
 import { readEndpoints } from './endpoints.js'
 import { readLanes, runsFolder as defaultRunsFolder } from './lanes-source.js'
 import { MODELS } from './model-list.js'
 import { endpointModels } from './models.js'
 import { killTree } from './processTree.js'
 import { programPath } from './programPath.js'
+import { harnessByKey } from '../src/harnesses/index.js'
 
 export const CACHE_TTL_MS = 6 * 60 * 60 * 1000
 export const COMMAND_TIMEOUT_MS = 30000
@@ -138,43 +140,54 @@ function isProgramFile(path) {
   }
 }
 
-export function resolveHarnessProgram(harness, { lanes = {}, env = process.env, platform = process.platform } = {}) {
+function laneBinFor(harness, lanes, runsFolder) {
   const baseLanes = typeof lanes === 'function' ? lanes() : (lanes ?? {})
-  let laneBin = null
-  for (const lane of Object.values(baseLanes ?? {})) {
+  const allLanes = runsFolder ? readAllLanes({ lanesJson: baseLanes, runsFolder }) : baseLanes
+  for (const lane of Object.values(allLanes ?? {})) {
     if (lane?.cli?.harness === harness && typeof lane?.cli?.bin === 'string') {
-      laneBin = lane.cli.bin
-      break
+      return lane.cli.bin
     }
   }
+  return null
+}
 
-  if (laneBin) {
-    const { text, missing } = expand(laneBin, env)
-    if (missing) return null
-    if (isAbsolute(text) || text.includes('/') || text.includes('\\')) {
-      if (isProgramFile(text)) return text
-      if (platform === 'win32') {
-        for (const ending of ['.exe', '.com']) {
-          const withEnding = `${text}${ending}`
-          if (isProgramFile(withEnding)) return withEnding
-        }
+function defaultProgramFor(harness) {
+  const descriptor = Object.hasOwn(harnessByKey, harness) ? harnessByKey[harness] : null
+  const program = descriptor?.defaultProgram
+  return typeof program === 'string' && program !== '' ? program : harness
+}
+
+function programAt(bin, { harness, env, platform }) {
+  const { text, missing } = expand(bin, env)
+  if (missing) return null
+  if (isAbsolute(text) || text.includes('/') || text.includes('\\')) {
+    if (isProgramFile(text)) return text
+    if (platform === 'win32') {
+      for (const ending of ['.exe', '.com']) {
+        const withEnding = `${text}${ending}`
+        if (isProgramFile(withEnding)) return withEnding
       }
-      return null
-    }
-    const endings = platform === 'win32' && !/\.(exe|com)$/i.test(text) ? [text, `${text}.exe`, `${text}.com`] : [text]
-    for (const name of endings) {
-      const found = programPath(name, { env, platform })
-      if (found) return found
     }
     return null
   }
-
-  const endings = platform === 'win32' && !/\.(exe|com)$/i.test(harness) ? [harness, `${harness}.exe`, `${harness}.com`] : [harness]
+  const endings = platform === 'win32' && !/\.(exe|com)$/i.test(text) ? [text, `${text}.exe`, `${text}.com`] : [text]
   for (const name of endings) {
     const found = programPath(name, { env, platform })
     if (found) return found
   }
+  if (harness === 'codex') return codexProgramFor(harness, text, { env, platform })
   return null
+}
+
+export function resolveHarnessProgram(harness, { lanes = {}, runsFolder = null, env = process.env, platform = process.platform } = {}) {
+  const laneBin = laneBinFor(harness, lanes, runsFolder)
+  if (laneBin) return programAt(laneBin, { harness, env, platform })
+
+  const defaultProgram = defaultProgramFor(harness)
+  const found = programAt(defaultProgram, { harness, env, platform })
+  if (found) return found
+  if (defaultProgram === harness) return null
+  return programAt(harness, { harness, env, platform })
 }
 
 export function runCommand(command, args, {
@@ -364,7 +377,7 @@ export async function getHarnessModels(harness, {
     }
   }
 
-  const program = resolveHarnessProgram(harness, { lanes, env, platform })
+  const program = resolveHarnessProgram(harness, { lanes, runsFolder, env, platform })
   if (!program) {
     return {
       harness,
