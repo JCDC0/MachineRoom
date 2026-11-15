@@ -10,6 +10,7 @@ import { readEndpoints } from './endpoints.js'
 import { MODELS } from './models.js'
 import { MODEL_ALIASES } from './model-list.js'
 import {
+  COMPACT_RUNNING_PROBLEM,
   CONFIRM_MESSAGE_PROBLEM,
   createOrchestrator,
   APPROVAL_TIMEOUT_MS,
@@ -171,11 +172,11 @@ export function branchChanges(record, lanes = {}, options = {}) {
   }
 }
 
-export function availableHarnesses(lanes = {}, env = process.env, platform = process.platform, endpoints = []) {
+export function availableHarnesses(lanes = {}, env = process.env, platform = process.platform, endpoints = [], runsFolder = null) {
   const keys = [...new Set([...HARNESSES.map((h) => h.key), ...MODELS.map((m) => m.harness)])]
   const list = []
   for (const key of keys) {
-    if (isHarnessAvailable(key, { lanes, env, platform, endpoints })) {
+    if (isHarnessAvailable(key, { lanes, env, platform, endpoints, runsFolder })) {
       const descriptor = HARNESSES.find((h) => h.key === key)
       const name = descriptor?.name ?? key
       const models = key === 'machineroom' && endpoints.length > 0
@@ -353,6 +354,11 @@ export function createOrchestrators({
   function subConfig(sub) {
     const harness = harnessFor(sub)
     const defaults = laneDefaults(harness)
+    const descriptor = HARNESSES.find((entry) => entry.key === harness)
+    const defaultProgram = typeof descriptor?.defaultProgram === 'string' && descriptor.defaultProgram !== ''
+      ? descriptor.defaultProgram
+      : harness
+    const laneBin = String(defaults?.bin ?? '').trim()
     const siblings = readSaved().ladder.subs
       .map((entry) => entry.id)
       .filter((id) => id !== sub.id)
@@ -366,7 +372,7 @@ export function createOrchestrators({
       harness,
       model,
       effort: typeof sub.effort === 'string' && sub.effort.trim() ? sub.effort.trim() : null,
-      bin: String(defaults?.bin ?? harness),
+      bin: laneBin && laneBin !== defaultProgram ? laneBin : '',
       ...(laneWindow > 0 ? { contextWindow: laneWindow } : {}),
       lanes: [...sub.lanes],
       scope: [...sub.scope],
@@ -382,6 +388,7 @@ export function createOrchestrators({
       config.name,
       config.harness,
       config.model,
+      config.effort,
       config.bin,
       config.contextWindow,
       [...config.lanes].sort(),
@@ -390,6 +397,10 @@ export function createOrchestrators({
       config.setBy,
     ]
     return JSON.stringify(shape(left)) === JSON.stringify(shape(right))
+  }
+
+  function sameConfigApartFromEffort(left, right) {
+    return Boolean(left) && sameConfig({ ...left, effort: right.effort }, right)
   }
 
   function createSub(sub) {
@@ -480,12 +491,23 @@ export function createOrchestrators({
         instances.delete(id)
         configs.delete(id)
         instance.close({ removed: true })
-      } else if (!config || !sameConfig(config, subConfig(next))) {
+        continue
+      }
+      const nextConfig = subConfig(next)
+      if (!config || !sameConfig(config, nextConfig)) {
+        const moved = sameConfigApartFromEffort(config, nextConfig)
+          ? instance.setEffort({ confirmed: true, effort: nextConfig.effort })
+          : null
+        if (moved?.status === 200) {
+          config.effort = nextConfig.effort
+          config.siblings = nextConfig.siblings
+          instance.setSiblings?.(nextConfig.siblings)
+          continue
+        }
         instances.delete(id)
         configs.delete(id)
         instance.close({ removed: false })
       } else {
-        const nextConfig = subConfig(next)
         config.siblings = nextConfig.siblings
         instance.setSiblings?.(nextConfig.siblings)
       }
@@ -495,11 +517,22 @@ export function createOrchestrators({
     }
   }
 
+  function effortOnlyOnWorkingSub(ladder) {
+    for (const sub of ladder.subs) {
+      const config = configs.get(sub.id)
+      if (!config) continue
+      const next = subConfig(sub)
+      if (sameConfig(config, next) || !sameConfigApartFromEffort(config, next)) continue
+      if (instances.get(sub.id)?.answer().state === 'working') return true
+    }
+    return false
+  }
+
   function list() {
     const { ladder } = readSaved()
     const claimed = new Set(ladder.subs.flatMap((sub) => sub.lanes))
     const answer = main.answer()
-    const activeHarnesses = availableHarnesses(lanes, process.env, process.platform, readEndpoints(folder))
+    const activeHarnesses = availableHarnesses(lanes, process.env, process.platform, readEndpoints(folder), folder)
     const entries = [
       {
         id: ORCHESTRATOR_KEY,
@@ -936,6 +969,7 @@ export function createOrchestrators({
       }
       if (problems.length > 0) return { status: 403, body: { error: problems.join(' '), problems } }
     }
+    if (effortOnlyOnWorkingSub(ladder)) return { status: 409, body: { error: COMPACT_RUNNING_PROBLEM } }
     main.setLadder(ladder)
     sync()
     onNotice?.({ topic: 'agents' })

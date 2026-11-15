@@ -1,11 +1,15 @@
 # Changelog
 
 ## Unreleased
+- P368: The main orchestrator and subs start the saved harness program unless a lane names its own, the sub harness list sees saved programs, and an effort-only ladder save changes the idle sub's effort.
 - P367: The harness version line is masked for keys and the home folder before it reaches Settings or the doctor, and the Program field starts empty with Save off until a path is typed.
 - P369: A harness settings write or check sends a notice the family tree and team form reload on, and a lane run or failover onto a turned-off harness starts nothing.
 - P369: Harness settings changes refresh the family forms, and failover refuses a backup on a turned-off harness before taking its lock.
 - P367: The Program field starts empty with the masked saved path as text beside it, and Save stays off until a path is typed.
 - P367: The harness version line has its home folder and keys masked before it is cut to 80 characters, so Settings and the doctor show the masked value.
+- P368: Chat and each sub start the program saved for their harness, and a lane's own custom program still wins.
+- P368: The orchestrator's harness list checks availability with the runs folder, so a harness ready only through a saved program is listed.
+- P368: A ladder save that changes only a sub's effort applies it to the idle sub through its effort setter, and is refused while that sub works.
 - P363: Opening an orchestrator's tab sets To to it, the start card names the mode in place of full permissions, and no Effort control shows for a harness without levels.
 - P359: No written-in opus or OpenCode default: an unset model starts the harness with no --model and reads Harness default, and a saved opus, sonnet or haiku reads as its full Claude id.
 - P364: A new sub keeps its chosen effort, a lanes.json lane shows its setup as text, a failed Direct API read shows its error and Retry, the team shortage says what to do, and no Effort select shows without levels.
