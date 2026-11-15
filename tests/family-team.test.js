@@ -152,12 +152,12 @@ describe('the team plan', () => {
     expect(plan.missing).toBe(0)
 
     const short = teamPlan({ lanes: LANES, ladder: LADDER, orchestrators: 2, coders: 2 })
-    expect(short.problem).toBe('Turn on 1 more lane first.')
+    expect(short.problem).toBe('Need 1 more agent outside existing teams. Add agents or make the team smaller.')
     expect(short.missing).toBe(1)
     expect(short.teams.map((team) => team.lanes)).toEqual([['alpha', 'idle-a'], ['idle-b']])
 
     const empty = teamPlan({ lanes: [], ladder: { subs: [] }, orchestrators: 1, coders: 3 })
-    expect(empty.problem).toBe('Turn on 3 more lanes first.')
+    expect(empty.problem).toBe('Need 3 more agents outside existing teams. Add agents or make the team smaller.')
     expect(empty.teams.map((team) => team.lanes)).toEqual([[]])
   })
 

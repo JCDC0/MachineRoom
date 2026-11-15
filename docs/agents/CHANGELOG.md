@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- Build a team now says how many agents it needs outside existing teams and offers the two useful steps (P364).
 - When a Direct API model read fails, the form shows that error and Retry instead of the missing-key sentence (P364).
 - A lane from lanes.json shows its harness, model, effort and backup lane as plain text and points at the file, and keeps its Label and Remove action (P364).
 - A sub orchestrator made with an effort keeps that effort in the ladder, and an empty effort stays unset (P364).
