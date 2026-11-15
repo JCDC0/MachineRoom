@@ -1081,7 +1081,7 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
     setNodeDraft((current) => ({
       ...(current ?? {}),
       harness: harness.key,
-      model: harnessModels(harness, models)[0]?.id ?? '',
+      model: harness.key === DIRECT_HARNESS ? harnessModels(harness, models)[0]?.id ?? '' : '',
     }))
   }
 
@@ -1127,10 +1127,16 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
     const choices = harness.key === DIRECT_HARNESS ? editorModels.choices : harnessModels(harness, models)
     const model = cleanText(nodeDraft.model, 120)
     if (choices.length === 0) {
-      setActionError(harness.key === DIRECT_HARNESS ? DIRECT_KEY_PROBLEM : 'This harness has no models.')
-      return
+      if (harness.key === DIRECT_HARNESS) {
+        setActionError(DIRECT_KEY_PROBLEM)
+        return
+      }
+      if (model) {
+        setActionError('This harness has no models.')
+        return
+      }
     }
-    if (!choices.some((row) => row.id === model)) {
+    if ((harness.key === DIRECT_HARNESS || model) && !choices.some((row) => row.id === model)) {
       setActionError('Choose a model for this harness.')
       return
     }
@@ -1147,7 +1153,7 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
       return
     }
     ask({
-      text: `Run ${node.label} on ${harness.name} with ${model}?`,
+      text: `Run ${node.label} on ${harness.name} with ${model || 'Harness default'}?`,
       detail: effort ? `Effort ${effort}` : 'Effort default',
       label: 'Save',
       busyText: 'Saving the orchestrator...',
@@ -1294,7 +1300,7 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
     setSubDraft((current) => ({
       ...(current ?? subDraftFor()),
       harness: harness.key,
-      model: harnessModels(harness, models)[0]?.id ?? '',
+      model: harness.key === DIRECT_HARNESS ? harnessModels(harness, models)[0]?.id ?? '' : '',
       effort: harnessEfforts(harness)[0] ?? '',
     }))
   }
@@ -1512,7 +1518,7 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
     setDraft((current) => ({
       ...(current ?? {}),
       harness: harness.key,
-      model: harnessModels(harness, models)[0]?.id ?? '',
+      model: harness.key === DIRECT_HARNESS ? harnessModels(harness, models)[0]?.id ?? '' : '',
       effort: harnessEfforts(harness)[0] ?? '',
     }))
   }

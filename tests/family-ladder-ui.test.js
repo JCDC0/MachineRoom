@@ -277,7 +277,7 @@ describe('Sub form harnesses from orchestrators', () => {
       expect(calls.setLadder[0].subs[0]).toMatchObject({
         name: 'Codex Lead',
         harness: 'codex',
-        model: 'gpt-5-codex',
+        model: '',
       })
     })
   })
