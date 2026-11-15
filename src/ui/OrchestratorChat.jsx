@@ -169,6 +169,8 @@ export default function OrchestratorChat({
   const [teamOpen, setTeamOpen] = useState(false)
   const controlled = typeof selectedTab === 'string' && selectedTab !== ''
   const selected = controlled ? selectedTab : ownSelected
+  const selectionRef = useRef({ id: selected, version: 0 })
+  if (selectionRef.current.id !== selected) selectionRef.current = { id: selected, version: selectionRef.current.version + 1 }
   const [loadedIds, setLoadedIds] = useState(() => (initialChat ? { orchestrator: true } : {}))
   const [draft, setDraft] = useState(() => clampDraft(initialDraft))
   const [confirm, setConfirm] = useState(() =>
@@ -603,6 +605,8 @@ export default function OrchestratorChat({
     setCompactOpen(false)
     setModelError('')
     setEffortError('')
+    setModelSaving(false)
+    setEffortSaving(false)
     setModelSaved('')
     setEffortSaved('')
     setModeOpen(false)
@@ -1020,16 +1024,18 @@ export default function OrchestratorChat({
       setModelError('The bridge cannot set a model.')
       return
     }
+    const version = selectionRef.current.version
     setModelSaving(true)
     setModelError('')
     try {
       await client.setOrchestratorModel({ id: selected, model: value, confirmed: true })
+      if (selectionRef.current.version !== version) return
       setModelSaved(value)
       onOrchestratorChange()
     } catch (failure) {
-      setModelError(messageOf(failure, 'The bridge refused the model.'))
+      if (selectionRef.current.version === version) setModelError(messageOf(failure, 'The bridge refused the model.'))
     } finally {
-      setModelSaving(false)
+      if (selectionRef.current.version === version) setModelSaving(false)
     }
   }
 
@@ -1049,6 +1055,7 @@ export default function OrchestratorChat({
       setEffortError('The bridge cannot set an effort.')
       return
     }
+    const version = selectionRef.current.version
     setEffortSaving(true)
     setEffortError('')
     try {
@@ -1057,12 +1064,13 @@ export default function OrchestratorChat({
         effort: value,
         confirmed: true,
       })
+      if (selectionRef.current.version !== version) return
       setEffortSaved(value)
       onOrchestratorChange()
     } catch (failure) {
-      setEffortError(messageOf(failure, 'The bridge refused the effort.'))
+      if (selectionRef.current.version === version) setEffortError(messageOf(failure, 'The bridge refused the effort.'))
     } finally {
-      setEffortSaving(false)
+      if (selectionRef.current.version === version) setEffortSaving(false)
     }
   }
 
@@ -1611,6 +1619,7 @@ export default function OrchestratorChat({
                 <ModelPicker
                   key={selected}
                   label="Model:"
+                  inline
                   ariaLabel={`Models for ${current?.name || 'the orchestrator'}`}
                   value={modelSaved || model}
                   choices={modelList}
@@ -1619,7 +1628,6 @@ export default function OrchestratorChat({
                   onRefresh={modelRefresh.refresh}
                   loading={modelsLoading || modelRefresh.loading}
                   canRefresh={modelRefresh.canRefresh}
-                  disabled={modelSaving}
                   placeholder="Harness default"
                   error={modelError || modelRefresh.error || modelsError}
                 />

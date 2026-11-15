@@ -225,6 +225,7 @@ export default function ModelPicker({
   canRefresh = true,
   placeholder = 'Choose a model',
   emptyText = 'No models listed for this harness.',
+  inline = false,
 }) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
@@ -235,6 +236,7 @@ export default function ModelPicker({
   const [loadedDetails, setLoadedDetails] = useState(() => new Map())
   const [active, setActive] = useState(0)
   const searchRef = useRef(null)
+  const triggerRef = useRef(null)
   const hasDetails = Array.isArray(details) && details.length > 0
 
   const detailMap = useMemo(() => {
@@ -300,6 +302,7 @@ export default function ModelPicker({
     setOpen(false)
     setQuery('')
     setPinError('')
+    triggerRef.current?.focus()
   }
 
   function pick(row) {
@@ -364,12 +367,13 @@ export default function ModelPicker({
   const triggerText = shown ? shown.name : placeholder
 
   return (
-    <div className="mr-picker mr-model-field" onKeyDown={onRootKey}>
+    <div className={`mr-picker mr-model-field${inline ? ' is-inline' : ''}`} onKeyDown={onRootKey}>
       {label ? <span className="mr-side-field-label mono">{label}</span> : null}
       <div className="mr-model-row">
         <button
           type="button"
           id={id}
+          ref={triggerRef}
           className="mr-picker-trigger mono"
           aria-label={ariaLabel}
           aria-haspopup="listbox"
@@ -388,7 +392,7 @@ export default function ModelPicker({
         <ModelRefresh onRefresh={onRefresh} loading={loading} disabled={disabled || !canRefresh} />
       </div>
       {open ? (
-        <div className="mr-picker-pop" role="dialog" aria-label={ariaLabel}>
+        <div className={`mr-picker-pop${inline ? ' is-upward' : ''}`} role="dialog" aria-label={ariaLabel}>
           <div className="mr-picker-head">
             <input
               ref={searchRef}
