@@ -234,7 +234,7 @@ const FAKE_AGENT_SCRIPT = [
   'if (exitCode !== 0) process.exitCode = exitCode',
 ].join('\n')
 
-function makeRig({ prompt = PROMPT, mode = 'reply', lanes = LANES, harness = 'claude', model = '', bin = '', contextWindow = 0, harnesses = undefined, project = true, id = undefined, mergeWaitMs = undefined, gitSpawn = undefined, gitTimeoutMs = undefined, env = undefined, platform = undefined, extraInstructions = undefined } = {}) {
+function makeRig({ prompt = PROMPT, mode = 'reply', lanes = LANES, harness = 'claude', model = undefined, bin = '', contextWindow = 0, harnesses = undefined, project = true, id = undefined, mergeWaitMs = undefined, gitSpawn = undefined, gitTimeoutMs = undefined, env = undefined, platform = undefined, extraInstructions = undefined } = {}) {
   const base = makeTempDir('mr-orchestrator-')
   const runs = join(base, 'runs')
   const projectRoot = project ? join(base, 'project') : ''

@@ -364,7 +364,7 @@ export function createOrchestrators({
       .filter((id) => id !== sub.id)
       .sort()
     const fallbackModel = String(defaults?.model ?? '')
-    const model = sub.model || (MODEL_ALIASES[fallbackModel] ?? fallbackModel)
+    const model = sub.model ?? (MODEL_ALIASES[fallbackModel] ?? fallbackModel)
     const laneWindow = Number.isFinite(defaults?.contextWindow) && defaults.contextWindow > 0 ? Math.round(defaults.contextWindow) : 0
     return {
       id: sub.id,
