@@ -1,5 +1,6 @@
 import { effortLevels, modelChoices } from './agentStrip.js'
 import { idFromName, ladderSubs } from './ladderForm.js'
+import { modelName } from './modelRefresh.js'
 import { AGENT_NAME_MAX, cleanText } from './sidebar.js'
 
 export const DIRECT_HARNESS = 'machineroom'
@@ -118,7 +119,7 @@ export function harnessLabel(harness) {
 
 export function familyMeta(node) {
   const harness = harnessLabel(node?.harness) || 'harness unknown'
-  const model = cleanText(node?.model, 120) || 'no model'
+  const model = modelName(node?.model)
   const effort = cleanText(node?.effort, 20) || 'default'
   return `${harness} · ${model} · ${effort}`
 }
@@ -390,7 +391,7 @@ export function childConfirmText(draft, parent) {
 export function childDetail(draft, harnesses = null, models = null) {
   const harness = childHarnesses(harnesses, models).find((row) => row.key === cleanText(draft?.harness, 40))
   const name = harness?.name || cleanText(draft?.harness, 40) || 'the harness'
-  const model = cleanText(draft?.model, 120) || 'no model'
+  const model = modelName(draft?.model, harness ? harnessModels(harness, models) : null)
   const effort = cleanText(draft?.effort, 20) || 'default'
   return [name, model, effort].join(' · ')
 }

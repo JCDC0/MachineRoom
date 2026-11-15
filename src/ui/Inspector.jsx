@@ -4,6 +4,7 @@ import { agentContext, waitingForOwner } from './agentContext.js'
 import { orchestratorEntry, orchestratorId } from './agentStrip.js'
 import { isOrchestratorAgent } from './agentList.js'
 import { chatLines, normalizeChat } from './orchestratorChat.js'
+import { modelName } from './modelRefresh.js'
 import { subscribeToNotices } from './panels/notices.js'
 import { OPEN_CHAT_EVENT } from './transportOrchestrators.js'
 import {
@@ -478,7 +479,7 @@ export default function Inspector({
               </Row>
               {failoverLine ? <Row label="Run">{failoverLine}</Row> : null}
               <Row label="Harness">{context.harness}</Row>
-              <Row label="Model">{context.model}</Row>
+              <Row label="Model">{modelName(context.model)}</Row>
               <Row label="Effort">{effort}</Row>
               <Row label="Task">{context.task}</Row>
               <Row label="Context">

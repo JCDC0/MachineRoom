@@ -3,7 +3,7 @@ import MenuIcon from './MenuIcon.jsx'
 import CompactCard from './AgentStrip.jsx'
 import { useDialogFocus } from './dialogFocus.js'
 import ModelRefresh, { useHarnessModels } from './ModelRefresh.jsx'
-import { filterModelChoices, groupModelChoices, modelChoiceText } from './modelRefresh.js'
+import { filterModelChoices, groupModelChoices, modelName } from './modelRefresh.js'
 import {
   contextLine,
   effortLabel,
@@ -264,7 +264,6 @@ export default function OrchestratorChat({
   const working = state === 'working'
   const model = teamSelected ? '' : chat.model || (typeof current?.model === 'string' ? current.model : '')
   const harness = typeof current?.harness === 'string' ? current.harness : ''
-  const shownModel = modelSaved || model || 'not reported'
   const shownEffort = effortSaved || effortLabel(orchestratorEffort(list, selected), harness)
   const mode = teamSelected ? '' : chat.mode || (typeof current?.mode === 'string' ? current.mode : '')
   const modeList = teamSelected
@@ -296,6 +295,12 @@ export default function OrchestratorChat({
     visibleModels,
     visibleModels.some((choice) => choice.id === model) ? model : ''
   )
+  const modelNameCounts = new Map()
+  for (const choice of visibleModels) {
+    const name = modelName(choice.id, visibleModels)
+    modelNameCounts.set(name, (modelNameCounts.get(name) ?? 0) + 1)
+  }
+  const shownModel = modelSaved || modelName(model, modelList)
   const effortChoices = effortMenuLevels(harness, harnessRows.length > 0 ? harnessRows : current?.harnesses)
   const context = contextLine({
     context: { tokens: current?.contextTokens, window: current?.contextWindow },
@@ -1075,18 +1080,22 @@ export default function OrchestratorChat({
   }
 
   function renderModelChoice(choice) {
+    const name = modelName(choice.id, visibleModels)
+    const repeated = (modelNameCounts.get(name) ?? 0) > 1
     return (
       <button
         type="button"
         className={`strip-model-choice mr-model-choice${choice.id === model ? ' is-current' : ''}`}
         key={choice.id}
-        title={modelChoiceText(choice)}
+        title={choice.id}
         onClick={() => chooseModel(choice)}
       >
-        <span className="mr-model-choice-name">{choice.label}</span>
-        {choice.label !== choice.id ? (
-          <span className="mr-model-choice-id mono">{choice.id}</span>
-        ) : null}
+        <span className="mr-model-choice-name">
+          {name}
+          {repeated ? (
+            <span className="mr-model-choice-id mono">{` ${choice.id.split('/')[0]}`}</span>
+          ) : null}
+        </span>
       </button>
     )
   }
@@ -1105,7 +1114,7 @@ export default function OrchestratorChat({
         model: modelConfirm.id,
         confirmed: true,
       })
-      setModelSaved(modelConfirm.label)
+      setModelSaved(modelName(modelConfirm.id, modelList))
       setModelConfirm(null)
       onOrchestratorChange()
     } catch (failure) {
