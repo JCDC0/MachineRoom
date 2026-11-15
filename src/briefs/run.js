@@ -3,7 +3,7 @@ export { maskProfilePaths }
 import { finiteNumber, summaryOf } from '../harnesses/common.js'
 import { harnessByKey } from '../harnesses/index.js'
 import { modesFor } from '../control/modes.js'
-import { createSplitMasker, maskKeys } from './audit.js'
+import { createSplitMasker, KEY_MASK, maskKeys } from './audit.js'
 import { branchFor, briefFileList } from './briefs.js'
 import { pathAllowed } from './plan.js'
 
@@ -813,17 +813,47 @@ export function mcpConfigForOpencode(servers) {
   return { mcp }
 }
 
-export function createLaneLog({ write, runId = 'lane', holdMs } = {}) {
+export function createLaneLog({ write, runId = 'lane', holdMs, ticket } = {}) {
   if (typeof write !== 'function') throw new Error('The lane log needs a writer.')
+  const fromEnv =
+    typeof process !== 'undefined' && process.env && typeof process.env.MACHINEROOM_LANE_TICKET === 'string'
+      ? process.env.MACHINEROOM_LANE_TICKET.trim()
+      : ''
+  const secret = typeof ticket === 'string' ? ticket.trim() : fromEnv
   const masker = createSplitMasker(holdMs === undefined ? {} : { holdMs })
   const seqs = new Map()
   const timers = new Set()
+  const carries = new Map()
+
+  function scrub(stream, text) {
+    if (secret === '') return text
+    const joined = (carries.get(stream) ?? '') + text
+    carries.delete(stream)
+    let keep = 0
+    const most = Math.min(secret.length - 1, joined.length)
+    for (let length = most; length > 0; length -= 1) {
+      if (joined.endsWith(secret.slice(0, length))) {
+        keep = length
+        break
+      }
+    }
+    if (keep > 0) carries.set(stream, joined.slice(-keep))
+    return (keep > 0 ? joined.slice(0, -keep) : joined).split(secret).join(KEY_MASK)
+  }
 
   function emit(result) {
     for (const frame of result.frames) {
       const chunk = frame?.payload?.chunk
       if (typeof chunk === 'string' && chunk !== '') write(chunk)
     }
+  }
+
+  function send(stream, text) {
+    const key = `${runId}:${stream}`
+    const seq = (seqs.get(key) ?? 0) + 1
+    seqs.set(key, seq)
+    const frame = { type: 'heartbeat.run.log', payload: { runId: key, stream, seq, chunk: text } }
+    emit(masker.push(frame, Date.now()))
   }
 
   function due() {
@@ -845,16 +875,16 @@ export function createLaneLog({ write, runId = 'lane', holdMs } = {}) {
   return {
     push(stream, chunk) {
       if (typeof chunk !== 'string' || chunk === '') return
-      const key = `${runId}:${stream}`
-      const seq = (seqs.get(key) ?? 0) + 1
-      seqs.set(key, seq)
-      const frame = { type: 'heartbeat.run.log', payload: { runId: key, stream, seq, chunk } }
-      emit(masker.push(frame, Date.now()))
+      const safe = scrub(stream, chunk)
+      if (safe === '') return
+      send(stream, safe)
       schedule()
     },
     flush() {
       for (const timer of timers) clearTimeout(timer)
       timers.clear()
+      for (const [stream, text] of carries) send(stream, text)
+      carries.clear()
       emit(masker.flush())
     },
   }

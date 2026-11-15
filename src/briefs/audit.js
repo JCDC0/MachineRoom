@@ -8,6 +8,8 @@ const GITHUB_TOKEN = /(?<![A-Za-z0-9_])(?:ghp_|gho_|github_pat_)\w{20,}/g
 const AWS_TOKEN = /(?<![A-Za-z0-9])AKIA[0-9A-Z]{16}/g
 const KEY_SETTING = /(?<![A-Za-z0-9_])(OPENROUTER_API_KEY|ANTHROPIC_API_KEY|OPENAI_API_KEY)(?![A-Za-z0-9_])\s*(?::|=)(?![=>])\s*(['"]?)([^\s'"]*)\2/g
 const HEADER_SETTING = /(?<![A-Za-z0-9_-])([Xx]-[Mm]achine[Rr]oom-[Oo]rchestrator)(?![A-Za-z0-9_-])\s*(?::|=)(?![=>])\s*(['"]?)([^\s'"]*)\2/gi
+const LANE_HEADER = /(?<![A-Za-z0-9_-])([Xx]-[Mm]achine[Rr]oom-[Ll]ane)(?![A-Za-z0-9_-])\s*(?::|=)(?![=>])\s*(['"]?)([^\s'"]*)\2/gi
+const LANE_TICKET = /(?<![A-Za-z0-9_])(MACHINEROOM_LANE_TICKET)(?![A-Za-z0-9_])\s*[:=](?![=>])\s*(['"]?)([^\s'"]*)\2/g
 const EMAIL = /(?<![A-Za-z0-9._%+-])[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+/g
 const USER_PATH = /[A-Za-z]:[\\/]Users[\\/](<[^<>\s]{1,64}>|\$env:[A-Za-z_][A-Za-z0-9_]*|%[A-Za-z_][A-Za-z0-9_]*%|[^\s\\/"'`,;:<>|?*)\]}]+)/gi
 
@@ -168,7 +170,7 @@ export const KEY_MASK = '[key]'
 function keyRanges(line) {
   const ranges = []
   const settings = []
-  for (const re of [KEY_SETTING, HEADER_SETTING]) {
+  for (const re of [KEY_SETTING, HEADER_SETTING, LANE_HEADER, LANE_TICKET]) {
     eachMatch(re, line, (match) => {
       const raw = match[3] ?? ''
       const start = match.index + match[0].lastIndexOf(raw)
@@ -241,9 +243,13 @@ const SETTING_NAMES = [
   'OPENAI_API_KEY',
   'X-MachineRoom-Orchestrator',
   'x-machineroom-orchestrator',
+  'X-MachineRoom-Lane',
+  'x-machineroom-lane',
+  'MACHINEROOM_LANE_TICKET',
+  'machineroom_lane_ticket',
 ]
 const GITHUB_HEADS = ['ghp_', 'gho_', 'github_pat_']
-const OPEN_SETTING = /(?<![A-Za-z0-9_-])(?:OPENROUTER_API_KEY|ANTHROPIC_API_KEY|OPENAI_API_KEY|[Xx]-[Mm]achine[Rr]oom-[Oo]rchestrator)\s*(?:[:=]\s*['"]?[^\s'"]*)?$/i
+const OPEN_SETTING = /(?<![A-Za-z0-9_-])(?:OPENROUTER_API_KEY|ANTHROPIC_API_KEY|OPENAI_API_KEY|MACHINEROOM_LANE_TICKET|[Xx]-[Mm]achine[Rr]oom-[Oo]rchestrator|[Xx]-[Mm]achine[Rr]oom-[Ll]ane)\s*(?:[:=]\s*['"]?[^\s'"]*)?$/i
 const OPEN_SK = /^(?:s|sk|sk-[A-Za-z0-9_-]*)$/
 const OPEN_GOOGLE = /^(?:A|AI|AIz|AIza[0-9A-Za-z_-]{0,34})$/
 const OPEN_GITHUB = /^(?:ghp_|gho_|github_pat_)\w*$/
