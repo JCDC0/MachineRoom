@@ -175,6 +175,44 @@ describe('a harness pick keeps Harness default', () => {
     })
   })
 
+  it('shows Harness default in the orchestrator editor for OpenCode', async () => {
+    const { client } = makeClient()
+    await withDom(async ({ container, root }) => {
+      await mount(root, client)
+      await click(root, rowByLabel(container, 'Orchestrator').querySelector('.mr-family-open'))
+      const editor = container.querySelector('.mr-family-editor')
+      const picker = editor.querySelector('select[aria-label="Harness for Orchestrator"]')
+
+      await type(root, picker, 'opencode')
+
+      const trigger = editor.querySelector('button[aria-label="Model for Orchestrator"]')
+      expect(trigger.textContent.trim()).toBe('Harness default')
+      await click(root, trigger)
+      const rows = editor.querySelectorAll('.mr-picker-row')
+      expect(rows[0].textContent.trim()).toBe('Harness default')
+    })
+  })
+
+  it('lists no default row in the orchestrator editor for Direct API', async () => {
+    const { client } = makeClient([{ id: 'OpenRouter/flash', label: 'flash (OpenRouter)' }])
+    await withDom(async ({ container, root }) => {
+      await mount(root, client)
+      await click(root, rowByLabel(container, 'Orchestrator').querySelector('.mr-family-open'))
+      const editor = container.querySelector('.mr-family-editor')
+      const picker = editor.querySelector('select[aria-label="Harness for Orchestrator"]')
+
+      await type(root, picker, DIRECT_HARNESS)
+      await settle()
+
+      const trigger = editor.querySelector('button[aria-label="Model for Orchestrator"]')
+      expect(trigger.textContent.trim()).toContain('flash')
+      await click(root, trigger)
+      const rows = editor.querySelectorAll('.mr-picker-row')
+      expect(rows.length).toBeGreaterThan(0)
+      expect(rows.some((row) => row.textContent.trim() === 'Harness default')).toBe(false)
+    })
+  })
+
   it('saves an empty model for OpenCode in the orchestrator editor', async () => {
     const { client } = makeClient()
     const calls = []
