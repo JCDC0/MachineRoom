@@ -41,6 +41,7 @@ import {
   runnableLanes,
   sendChatMessage,
   startConfirmText,
+  startModeText,
   statusDetail,
   statusTone,
   teamLines,
@@ -358,8 +359,8 @@ export default function OrchestratorChat({
   ]
   const startText =
     selected === 'orchestrator'
-      ? startConfirmText(project, harness)
-      : `${current?.name || selected} runs on this project with full permissions. It plans for its lanes, works in its scope and reports to the main orchestrator.`
+      ? startConfirmText(project, harness, mode, modeList)
+      : `${current?.name || selected} runs on this project${startModeText(mode, modeList) || '.'} It plans for its lanes, works in its scope and reports to the main orchestrator.`
 
   useEffect(() => {
     if (!open) return undefined
@@ -1284,6 +1285,7 @@ export default function OrchestratorChat({
     setTeamOpen(false)
     setTeamFailed([])
     if (id === selected) return
+    setToRecipient(id)
     changeSelected(id)
     setConfirm(null)
     setError(null)
@@ -1716,19 +1718,21 @@ export default function OrchestratorChat({
                   loading={modelRefresh.loading}
                   disabled={!modelRefresh.canRefresh}
                 />
-                <button
-                  type="button"
-                  className="hud-strip-effort"
-                  aria-expanded={effortOpen}
-                  aria-label={`Effort for ${current?.name || 'the orchestrator'}`}
-                  onClick={openEffort}
-                >
-                  <span>Effort:</span>
-                  <span className="hud-lower-picker-value mono">{shownEffort}</span>
-                  <span className="hud-lower-picker-v" aria-hidden="true">
-                    <MenuIcon />
-                  </span>
-                </button>
+                {effortChoices.length > 0 ? (
+                  <button
+                    type="button"
+                    className="hud-strip-effort"
+                    aria-expanded={effortOpen}
+                    aria-label={`Effort for ${current?.name || 'the orchestrator'}`}
+                    onClick={openEffort}
+                  >
+                    <span>Effort:</span>
+                    <span className="hud-lower-picker-value mono">{shownEffort}</span>
+                    <span className="hud-lower-picker-v" aria-hidden="true">
+                      <MenuIcon />
+                    </span>
+                  </button>
+                ) : null}
                 {canSetMode ? (
                   <button
                     type="button"

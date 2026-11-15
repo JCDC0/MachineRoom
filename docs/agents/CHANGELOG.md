@@ -1,9 +1,11 @@
 # Changelog
 
 ## Unreleased
+- P363: Opening an orchestrator's tab sets To to it, the start card names the mode in place of full permissions, and no Effort control shows for a harness without levels.
 - P359: No written-in opus or OpenCode default: an unset model starts the harness with no --model and reads Harness default, and a saved opus, sonnet or haiku reads as its full Claude id.
 - P364: A new sub keeps its chosen effort, a lanes.json lane shows its setup as text, a failed Direct API read shows its error and Retry, the team shortage says what to do, and no Effort select shows without levels.
 - P362: CODE, ROOM, LIVE, COMMANDS, FREE-HIERARCHY, HARNESSES and DOCUMENTS match the code for lane messages, modes, outside paths and the harness settings.
+- P363: The chat sends to the orchestrator whose tab it opens, names the current mode and its rule in the start card for the main and a sub, and leaves out the Effort control when the harness lists no effort levels.
 - P360: Pickers, family rows, the Model button and the Inspector show a model's name only; a repeated name adds its first id segment; an empty model reads Harness default.
 - A Direct API with nothing saved still shows the key sentence and Open Settings, while a failed model read shows its error and Retry (P364).
 - An orchestrator on a harness with no effort levels shows no Effort select, and its saved effort is left alone (P364).

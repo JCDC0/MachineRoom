@@ -1775,7 +1775,7 @@ describe('OrchestratorChat panel', () => {
       })
     )
     expect(html).toContain(
-      'The orchestrator runs Claude Code on this project with full permissions. It plans, starts lanes, merges what passes on a branch and never pushes. It uses your Claude subscription.'
+      'The orchestrator runs Claude Code on this project. It plans, starts lanes, merges what passes on a branch and never pushes. It uses your Claude subscription.'
     )
     expect(html).toContain('>Start</button>')
     expect(html).toContain('>Cancel</button>')
@@ -1797,7 +1797,7 @@ describe('OrchestratorChat panel', () => {
     expect(direct).not.toContain('It uses your')
 
     expect(startConfirmText('', '')).toBe(
-      'The orchestrator runs on this project with full permissions. It plans, starts lanes, merges what passes on a branch and never pushes.'
+      'The orchestrator runs on this project. It plans, starts lanes, merges what passes on a branch and never pushes.'
     )
   })
 
@@ -1823,7 +1823,7 @@ describe('OrchestratorChat panel', () => {
     expect(html).toContain('>app</span>')
     expect(html).toContain('>opus</span>')
     expect(html).toContain(
-      'The orchestrator works in C:\\work\\projects\\app on OpenCode with full permissions.'
+      'The orchestrator works in C:\\work\\projects\\app on OpenCode.'
     )
     expect(html).toContain('It uses your OpenCode subscription.')
     expect(html).not.toContain('It uses your Claude subscription.')
@@ -1847,7 +1847,7 @@ describe('OrchestratorChat panel', () => {
     )
     expect(html).toContain('>app</span>')
     expect(html).toContain(
-      'The orchestrator works in C:\\work\\projects\\app\\ with full permissions.'
+      'The orchestrator works in C:\\work\\projects\\app\\.'
     )
   })
 
@@ -2172,7 +2172,6 @@ describe('Hud and Waiting with an orchestrator', () => {
       expect(html).toContain('class="mr-orch is-inline"')
       expect(html).toContain('Ask the orchestrator anything')
       expect(html).toContain('class="hud-strip-model"')
-      expect(html).toContain('class="hud-strip-effort"')
       expect(html).toContain('class="hud-strip-compact"')
       expect(html).not.toContain('id="hud-orchestrator-chat"')
       expect(html).not.toContain('class="hud-dock"')
