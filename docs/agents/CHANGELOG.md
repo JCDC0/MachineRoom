@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- The sub orchestrator form and editor in Agents let you set Scope and Restricted, saving trimmed globs or `**` when empty and showing the saved values on reopen.
 - The scale probe retries a .git rename up to 10 times when Windows still holds the folder, so the scale-live test no longer fails on a lock.
 - The replay scrubber's max and value stay finite before a recording loads, so the NaN attribute warnings are gone.
 - A cut inbox reply keeps its sender's name even when the name has spaces.

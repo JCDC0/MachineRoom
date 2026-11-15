@@ -37,11 +37,65 @@ import {
   subsLosingLanes,
   teamRows,
 } from './family.js'
-import { changeSub, idFromName, ladderFromOrchestrators, ladderSubs, orchestratorHarnesses, subFromForm } from './ladderForm.js'
+import {
+  changeSub,
+  idFromName,
+  ladderFromOrchestrators,
+  ladderSubs,
+  orchestratorHarnesses,
+  scopeText,
+  setSubScope,
+  subEntry,
+  subFromForm,
+  subScope,
+} from './ladderForm.js'
 import { useHarnessModels } from './ModelRefresh.jsx'
 import ModelPicker from './ModelPicker.jsx'
 import { modelName, withHarnessModels, withModelRows } from './modelRefresh.js'
 import { AGENT_NAME_MAX, cleanText, laneChoice, laneSummary, projectName } from './sidebar.js'
+
+const SCOPE_NOTE =
+  "A restricted sub's lanes cannot merge files outside its scope without the orchestrator above."
+
+function ScopeFields({
+  scope,
+  restricted,
+  scopeAriaLabel,
+  restrictedAriaLabel,
+  disabled = false,
+  onScopeChange,
+  onRestrictedChange,
+}) {
+  const rows = Math.min(4, Math.max(2, String(scope ?? '**').split(/\r?\n/).length))
+  return (
+    <>
+      <label className="mr-side-field">
+        <span className="mr-side-field-label mono">Scope</span>
+        <textarea
+          className="mr-side-input mono"
+          rows={rows}
+          placeholder="**"
+          aria-label={scopeAriaLabel}
+          style={{ height: 'auto', minHeight: '42px', padding: '4px', resize: 'vertical' }}
+          value={scope ?? '**'}
+          disabled={disabled}
+          onChange={(event) => onScopeChange(event.target.value)}
+        />
+      </label>
+      <label className="mr-side-field is-inline">
+        <input
+          type="checkbox"
+          aria-label={restrictedAriaLabel}
+          checked={restricted === true}
+          disabled={disabled}
+          onChange={(event) => onRestrictedChange(event.target.checked)}
+        />
+        <span>Restricted</span>
+      </label>
+      <p className="mr-side-note is-dim">{SCOPE_NOTE}</p>
+    </>
+  )
+}
 
 function messageOf(error) {
   return error instanceof Error && error.message ? error.message : 'The bridge refused the change.'
@@ -140,8 +194,8 @@ function groupSubLadder(ladder, draft, laneIds, laneKeys = [], allowedHarnesses 
       model: cleanText(draft.model, 120),
       effort: cleanText(draft.effort, 20),
       lanes: picked,
-      scope: ['**'],
-      restricted: false,
+      scope: subScope(draft?.scope),
+      restricted: draft?.restricted === true,
     },
     allowedHarnesses
   )
@@ -1031,6 +1085,7 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
       setNodeDraft(null)
       return
     }
+    const currentSub = node.kind === 'sub' ? subEntry(orchestrators, node.id) : null
     setActionError('')
     setEditing(node.id)
     setNodeDraft({
@@ -1043,6 +1098,8 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
         node.kind === 'sub'
           ? tree.nodes.filter((row) => row.kind === 'lane' && row.parent === node.id).map((row) => row.id)
           : [],
+      scope: node.kind === 'sub' ? scopeText(currentSub?.scope) : '**',
+      restricted: node.kind === 'sub' ? currentSub?.restricted === true : false,
     })
     setChildFor(null)
     setDraft(null)
@@ -1253,6 +1310,8 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
       harness: harness?.key ?? '',
       model: '',
       effort: harness?.efforts?.[0] ?? '',
+      scope: '**',
+      restricted: false,
     }
   }
 
@@ -1401,6 +1460,49 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
         const fresh = assignSubLadder(await readLadder(), node.id, picked)
         if (fresh.problem) throw new Error(fresh.problem)
         await client.setLadder({ subs: fresh.subs })
+        await refresh()
+      },
+    })
+  }
+
+  async function askSubScope(node) {
+    if (!nodeDraft || node.kind !== 'sub' || busy) return
+    if (typeof client?.setLadder !== 'function' || typeof client?.orchestrators !== 'function') {
+      setActionError('This bridge cannot change the ladder.')
+      return
+    }
+    setActionError('')
+    const draftScope = nodeDraft.scope
+    const draftRestricted = nodeDraft.restricted === true
+    let ladder
+    try {
+      ladder = await readLadder()
+    } catch (error) {
+      setActionError(messageOf(error))
+      return
+    }
+    const plan = setSubScope(ladder, node.id, { scope: draftScope, restricted: draftRestricted })
+    if (plan.problem) {
+      setActionError(plan.problem)
+      return
+    }
+    ask({
+      text: `Save scope for "${node.label}"?`,
+      detail: `${plan.scope.join(', ')} · ${plan.restricted ? 'Restricted' : 'Unrestricted'}`,
+      label: 'Save',
+      busyText: 'Saving the sub orchestrator...',
+      run: async () => {
+        const fresh = setSubScope(await readLadder(), node.id, {
+          scope: draftScope,
+          restricted: draftRestricted,
+        })
+        if (fresh.problem) throw new Error(fresh.problem)
+        await client.setLadder({ subs: fresh.subs })
+        setNodeDraft((current) =>
+          current
+            ? { ...current, scope: fresh.scope.join('\n'), restricted: fresh.restricted }
+            : current
+        )
         await refresh()
       },
     })
@@ -1976,6 +2078,33 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
                 </div>
               </div>
             ) : null}
+            {sub ? (
+              <div className="mr-family-agents" role="group" aria-label={`Scope for ${node.label}`}>
+                <ScopeFields
+                  scope={nodeDraft.scope}
+                  restricted={nodeDraft.restricted}
+                  scopeAriaLabel={`Scope for ${node.label}`}
+                  restrictedAriaLabel={`Restricted for ${node.label}`}
+                  disabled={busy}
+                  onScopeChange={(scope) => setNodeDraft({ ...nodeDraft, scope })}
+                  onRestrictedChange={(restricted) => setNodeDraft({ ...nodeDraft, restricted })}
+                />
+                <div className="mr-side-form-actions">
+                  <button
+                    type="button"
+                    className="mr-side-primary"
+                    disabled={
+                      busy ||
+                      typeof client?.setLadder !== 'function' ||
+                      typeof client?.orchestrators !== 'function'
+                    }
+                    onClick={() => askSubScope(node)}
+                  >
+                    Save scope
+                  </button>
+                </div>
+              </div>
+            ) : null}
             {orchLoaded && orchestrator ? (
               <AutocompactInput orchestrator={orchestrator} client={client} onSaved={refresh} />
             ) : null}
@@ -2172,6 +2301,15 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
             </select>
           </label>
         ) : null}
+        <ScopeFields
+          scope={subDraft.scope}
+          restricted={subDraft.restricted}
+          scopeAriaLabel="Sub orchestrator scope"
+          restrictedAriaLabel="Sub orchestrator restricted"
+          disabled={busy}
+          onScopeChange={(scope) => setSubDraft({ ...subDraft, scope })}
+          onRestrictedChange={(restricted) => setSubDraft({ ...subDraft, restricted })}
+        />
         {subProblem ? <p className="mr-family-note is-error">{subProblem}</p> : null}
         <div className="mr-side-form-actions">
           <button type="submit" className="mr-side-primary" disabled={busy || !canGroup || directMissing || !selected}>

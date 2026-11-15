@@ -100,6 +100,25 @@ export function scopeLines(value) {
   return clean
 }
 
+export function subScope(value) {
+  const clean = scopeLines(value)
+  return clean.length > 0 ? clean : ['**']
+}
+
+export function scopeText(value) {
+  return subScope(value).join('\n')
+}
+
+export function subEntry(orchestrators, id) {
+  if (!id) return null
+  const list = Array.isArray(orchestrators)
+    ? orchestrators
+    : Array.isArray(orchestrators?.orchestrators)
+      ? orchestrators.orchestrators
+      : []
+  return list.find((entry) => entry && entry.id === id) ?? null
+}
+
 export function freeLanes(lanes, ladder, { except } = {}) {
   const claimed = new Set()
   for (const sub of ladderSubs(ladder)) {
@@ -152,6 +171,21 @@ export function changeSub(ladder, sub) {
   if (index === -1) subs.push(sub)
   else subs[index] = sub
   return { subs }
+}
+
+export function setSubScope(ladder, id, { scope, restricted } = {}) {
+  const subs = ladderSubs(ladder)
+  if (!subs.some((sub) => sub.id === id)) {
+    return { problem: 'This sub orchestrator is not in the ladder.', subs, scope: [], restricted: false }
+  }
+  const nextScope = subScope(scope)
+  const nextRestricted = restricted === true
+  const nextSubs = subs.map((sub) =>
+    sub.id === id
+      ? { ...sub, scope: nextScope, restricted: nextRestricted, setBy: 'owner' }
+      : sub
+  )
+  return { problem: '', subs: nextSubs, scope: nextScope, restricted: nextRestricted }
 }
 
 export function removeSub(ladder, id) {
