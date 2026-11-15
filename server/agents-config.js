@@ -595,6 +595,7 @@ export function createAgentsConfigApi(options = {}) {
         if (error) { sendJson(req, res, 400, { error }); return true }
       } else clearHarnessChecks(runsDir)
       const rows = await rowsFor(getBaseLanes())
+      if (typeof notify === 'function') notify({ topic: 'harnesses' })
       sendJson(req, res, 200, path.endsWith('/settings') ? rows.find((row) => row.key === body.key) : rows)
       return true
     }
