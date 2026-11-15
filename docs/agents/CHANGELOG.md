@@ -1,10 +1,12 @@
 # Changelog
 
 ## Unreleased
+- A cut inbox reply keeps its sender's name even when the name has spaces.
 - A model picker shows the saved model's name while its list loads, fails or lacks that model, instead of Harness default.
 - LIMITS.md names the browser's six connections to a host and the two event streams a live room page holds.
 - P399: LIMITS.md names the browser's six connections to a host, the two event streams a live room page holds and how to avoid the stall.
 - P396: The model picker shows a saved model's name when its list holds no row for it, including while the list loads.
+- P397: A cut inbox reply keeps a sender name with spaces.
 - When the newest inbox reply must be cut, it keeps its sender, starts on a whole word and says [start cut].
 - An orchestrator saved at Harness default keeps it after a restart, and a new sub at Harness default no longer takes a lane's model.
 - The orchestrator and lane editors' model pickers show and offer Harness default for every harness but Direct API.

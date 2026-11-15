@@ -1365,7 +1365,7 @@ export function boundMessages(messages, limit) {
       if (messageChars(messages) <= limit) return
       const rawReply = replies.join('\n')
       if (rawReply === '') continue
-      const match = rawReply.match(/^([^\s:]+(?::[^\s:]+)*): ([\s\S]*)$/)
+      const match = rawReply.match(/^([^\n]{1,80}?): ([\s\S]*)$/)
       let body = match ? match[2] : rawReply
       let prefix = match ? `${match[1]}: [start cut] ` : '[start cut] '
       if (heading.length + 1 + prefix.length >= NEWEST_READABLE_CHARS) {
