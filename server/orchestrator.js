@@ -967,16 +967,23 @@ export function createOrchestrator({
       return codexProgramFor(name, chosen, { env, platform }) ?? chosen
     }
     let bin = ''
-    if (lane.cli.harness === name && lane.cli.bin) bin = String(lane.cli.bin)
-    else {
-      for (const entry of Object.values(lanes ?? {})) {
-        if (entry?.cli?.harness === name && entry.cli.bin) {
-          bin = String(entry.cli.bin)
-          break
-        }
+    let laneDefault = ''
+    const descriptor = (harnesses && harnesses[name]) || harnessByKey[name]
+    const defaultProgram = typeof descriptor?.defaultProgram === 'string' && descriptor.defaultProgram !== ''
+      ? descriptor.defaultProgram
+      : name
+    for (const entry of [laneEntry, ...Object.values(lanes ?? {})]) {
+      if (entry?.cli?.harness !== name) continue
+      const chosen = typeof entry.cli.bin === 'string' ? entry.cli.bin.trim() : ''
+      if (!chosen) continue
+      if (chosen !== defaultProgram) {
+        bin = chosen
+        break
       }
-      if (!bin) bin = name
+      if (!laneDefault) laneDefault = chosen
     }
+    if (!bin) bin = String(readHarnessSettings(folder).programs[name] ?? '')
+    if (!bin) bin = laneDefault || name
     return codexProgramFor(name, bin, { env, platform }) ?? bin
   }
   function laneDetails() {
