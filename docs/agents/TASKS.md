@@ -2990,3 +2990,10 @@ Harnesses in Settings, and forms that offer only what is ready, P355 to P358. Th
 3. `npm run serve -- doctor` prints one line per harness: `ok NAME is ready (VERSION).`, `warn NAME is not ready: REASON` or `info NAME is turned off in Settings.`
 4. Tests, each failing before your change: the saved program is the one spawned; a lane's own `bin` wins; an `off` harness is refused with nothing made; the doctor's three line forms.
 5. Run `node node_modules/vitest/vitest.mjs run tests/run-lane-saved-program.test.js tests/run-lane.test.js tests/machine-doctor.test.js` and report the counts.
+
+**P355b. Finish the bridge side of harness settings (OpenCode).** Read this brief, the contract above P355 and P355 itself only. Codex ran P355 twice and stopped both times: its sandbox cannot run `taskkill`, so `tests/harness-models.test.js` "handles command timeout" fails there, and it stops on a red test. Its work is on `feat/p355-the-bridge-checks` (commit `7e8bb6b7`). Start by merging it into your branch: `git merge --no-edit refs/heads/feat/p355-the-bridge-checks`. Use no subagents. Run every command in the foreground. Commit each step as you finish it, and stop starting new work at minute 30. Files: those P355 names.
+
+1. Read what the merged commit does against P355 steps 1 to 4, and write the gaps at the top of your report. Fix each gap. Undo the change to `runCommand`'s timeout in `server/harness-models.js` unless `killTree` really returns false when it fails; say which.
+2. Add the tests P355 step 5 names that the commit lacks: the masked home folder in `program`, the 10 minute cache and `POST /api/harnesses/check`, Direct API ready by an endpoint alone, a new sub on a turned-off harness refused while an existing one keeps it, and the two POST routes refusing a request with no Origin while `GET /api/harnesses` still answers.
+3. LIVE.md and the changelog, as P355 says.
+4. Run `node node_modules/vitest/vitest.mjs run tests/harness-settings.test.js tests/agents-config.test.js tests/harness-models.test.js tests/harness-models-program.test.js tests/orchestrators.test.js` and report the counts.
