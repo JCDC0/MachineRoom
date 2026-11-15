@@ -1856,7 +1856,7 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
                 canRefresh={editorModels.canRefresh}
               />
             ) : null}
-            {harness ? (
+            {harness && efforts.length > 0 ? (
               <label className="mr-side-field">
                 <span className="mr-side-field-label mono">Effort</span>
                 <select
