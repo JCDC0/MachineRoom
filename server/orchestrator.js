@@ -1323,9 +1323,11 @@ export function createOrchestrator({
       quarantine()
       return false
     }
-    if (typeof saved.sessionId === 'string' && saved.sessionId.trim() !== '') sessionId = saved.sessionId
-    if (typeof saved.harness === 'string' && saved.harness.trim() !== '') harness = saved.harness.trim()
-    if (typeof saved.model === 'string') {
+    const savedHarness = typeof saved.harness === 'string' ? saved.harness.trim() : ''
+    const keepsGivenHarness = Boolean(harnessOption) && savedHarness !== '' && savedHarness !== harness
+    if (!keepsGivenHarness && typeof saved.sessionId === 'string' && saved.sessionId.trim() !== '') sessionId = saved.sessionId
+    if (!keepsGivenHarness && typeof saved.harness === 'string' && saved.harness.trim() !== '') harness = saved.harness.trim()
+    if (!keepsGivenHarness && typeof saved.model === 'string') {
       model = MODEL_ALIASES[saved.model.trim()] ?? saved.model.trim()
     }
     if (saved.state === 'working') state = 'idle'
@@ -1373,13 +1375,15 @@ export function createOrchestrator({
       }
     }
     if (effort !== null && !effortLevelsFor(harness).includes(effort)) effort = null
-    if (typeof saved.mode === 'string' && modesFor(harness).some((entry) => entry.id === saved.mode.trim())) {
+    if (keepsGivenHarness) {
+      mode = defaultMode(harness)
+    } else if (typeof saved.mode === 'string' && modesFor(harness).some((entry) => entry.id === saved.mode.trim())) {
       mode = saved.mode.trim()
     }
-    if (typeof saved.currentConversationId === 'string' && saved.currentConversationId.trim() !== '') {
+    if (!keepsGivenHarness && typeof saved.currentConversationId === 'string' && saved.currentConversationId.trim() !== '') {
       currentConversationId = saved.currentConversationId.trim()
     }
-    if (typeof saved.currentSessionId === 'string' && saved.currentSessionId.trim() !== '') {
+    if (!keepsGivenHarness && typeof saved.currentSessionId === 'string' && saved.currentSessionId.trim() !== '') {
       currentSessionId = saved.currentSessionId.trim()
     }
     if (typeof saved.currentTitle === 'string' && saved.currentTitle.trim() !== '') {
@@ -1408,8 +1412,8 @@ export function createOrchestrator({
           starred: Boolean(item.starred),
           unread: Boolean(item.unread),
           archived: Boolean(item.archived),
-          sessionId: typeof item.sessionId === 'string' ? item.sessionId : null,
-          opencodeSessionId: typeof item.opencodeSessionId === 'string' ? item.opencodeSessionId : null,
+          sessionId: !keepsGivenHarness && typeof item.sessionId === 'string' ? item.sessionId : null,
+          opencodeSessionId: !keepsGivenHarness && typeof item.opencodeSessionId === 'string' ? item.opencodeSessionId : null,
           summary: typeof item.summary === 'string' ? maskText(item.summary) : '',
           branchTranscript: typeof item.branchTranscript === 'string'
             ? maskText(item.branchTranscript).slice(0, BRANCH_TRANSCRIPT_LIMIT)
