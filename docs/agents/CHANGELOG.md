@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- The bridge checks each harness with `--version`, keeps the answer for 10 minutes, masks the home folder in the program path, and keeps saved programs and turned-off harnesses in `harnesses.json`, so Settings can add a program and the forms offer only a ready harness (P355, P355b).
 - The model list finds a harness at its default program, through the Codex app, or through a lane made in the family tree, so the forms no longer say the program was not found (P352).
 - The add-agent form accepts its default effort and saves the lane with no effort, so the harness uses its own default (P354).
 - The add-agent form accepts the effort it offers as `default` and saves the lane with no effort (P354).
