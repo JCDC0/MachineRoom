@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- P396: The model picker shows a saved model's name when its list holds no row for it, including while the list loads.
 - When the newest inbox reply must be cut, it keeps its sender, starts on a whole word and says [start cut].
 - An orchestrator saved at Harness default keeps it after a restart, and a new sub at Harness default no longer takes a lane's model.
 - The orchestrator and lane editors' model pickers show and offer Harness default for every harness but Direct API.

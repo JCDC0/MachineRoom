@@ -257,7 +257,11 @@ export default function ModelPicker({
     [showDefault, defaultText]
   )
   const rows = useMemo(() => pickerRows(choices, detailMap), [choices, detailMap])
-  const shown = useMemo(() => rows.find((row) => row.id === value) ?? null, [rows, value])
+  const shown = useMemo(() => {
+    const found = rows.find((row) => row.id === value) ?? null
+    if (found || !cleanText(value)) return found
+    return { id: value, name: modelName(value) }
+  }, [rows, value])
   const filtered = useMemo(() => filterPickerRows(rows, query), [rows, query])
   const sections = useMemo(
     () => pickerSections(filtered, { sort, current: value, pins }),
