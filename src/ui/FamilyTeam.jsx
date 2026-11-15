@@ -93,6 +93,11 @@ export function FamilyTeam({ client = null }) {
 
   async function refresh() {
     const jobs = []
+    if (typeof client?.harnesses === 'function') {
+      jobs.push(Promise.resolve(client.harnesses()).then((answer) => {
+        if (answer) setHarnesses(answer)
+      }))
+    }
     if (typeof client?.lanes === 'function') {
       jobs.push(
         Promise.resolve(client.lanes()).then((answer) => {
@@ -118,7 +123,7 @@ export function FamilyTeam({ client = null }) {
   useEffect(() => {
     if (typeof client?.subscribe !== 'function') return undefined
     return client.subscribe((notice) => {
-      if (!notice || (notice.topic !== 'family' && notice.topic !== 'agents')) return
+      if (!notice || (notice.topic !== 'family' && notice.topic !== 'agents' && notice.topic !== 'harnesses')) return
       refresh()
     })
   }, [client])

@@ -639,6 +639,11 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
 
   async function refresh() {
     const jobs = []
+    if (typeof client?.harnesses === 'function') {
+      jobs.push(Promise.resolve(client.harnesses()).then((answer) => {
+        if (answer) setHarnesses(answer)
+      }))
+    }
     if (typeof client?.family === 'function') {
       jobs.push(
         Promise.resolve(client.family()).then((answer) => {
@@ -687,7 +692,7 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
     return client.subscribe((notice) => {
       if (!notice) return
       if (notice.topic === 'orchestrator') readOrchestrators()
-      else if (notice.topic === 'family' || notice.topic === 'agents') refresh()
+      else if (notice.topic === 'family' || notice.topic === 'agents' || notice.topic === 'harnesses') refresh()
     })
   }, [client])
 

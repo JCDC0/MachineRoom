@@ -1721,6 +1721,10 @@ async function startFailover({ laneKey, target, lanes, options, wanted, prompt, 
   const primaryMode = options?.mode !== undefined ? options.mode : lanes?.[laneKey]?.cli?.mode
   const fallbackLane = laneWithOverrides(lanes?.[target], primaryMode !== undefined ? { mode: primaryMode } : {})
   if (!fallbackLane) return null
+  if (readHarnessSettings(folder).off.includes(fallbackLane.cli?.harness)) {
+    console.log(HARNESS_OFF_PROBLEM)
+    return null
+  }
   const modeProblem = laneModeProblem(fallbackLane, target)
   if (modeProblem) {
     console.log(modeProblem)
@@ -1788,6 +1792,7 @@ async function startFailover({ laneKey, target, lanes, options, wanted, prompt, 
 }
 
 export async function startLane({ options, lane, lanes, wanted, prompt, logPath, usageFile, name, project = '', task = '', queue = null, lockPath = '', projectBranch = null, deferRecord = false, base = '', openLog = createWriteStream, branchSuffix = '', failoverFrom = null, promptFor = null, startedAt: givenStartedAt = null, onStart = null }) {
+  if (readHarnessSettings(runsFolder()).off.includes(lane?.cli?.harness)) throw new Error(HARNESS_OFF_PROBLEM)
   if (options?.failedOver !== true) {
     const problem = fallbackProblem({ laneKey: options?.lane, fallback: lane?.fallback, lanes })
     if (problem !== '') throw new Error(problem)
