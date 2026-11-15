@@ -1,6 +1,8 @@
 # Changelog
 
 ## Unreleased
+- P386: The child, sub and orchestrator harness pickers keep Harness default, Direct API keeps its first model, and the orchestrator setup saves an empty model as Harness default.
+- P386: The add child and sub forms accept an empty model for a CLI harness with no models or a failed model list; Direct API and a chosen model still need a known one.
 - P385: The chat's model picker is disabled while a save waits, and the native agent drops its oldest inbox batches first when it trims to its context limit (R39-2, R39-3).
 - P384: Lane creation and update accept an empty model for a CLI harness, Direct API and endpoints still need one, and Claude, OpenCode and Hermes leave the model flag out when it is empty (R39-1).
 - P382: The runner lists processes again after 500 ms and refuses a lane only for a leftover with the same pid and command line, and names its program.
