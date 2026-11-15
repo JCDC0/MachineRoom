@@ -77,3 +77,7 @@ Fix: leave the replacement draft empty and show the masked current path separate
 - Fresh Claude chat omits an unchosen model flag. Alias expansion is tested separately from display naming, and friendly labels keep the provider-qualified option ids.
 - Existing model choices are kept by the model-loading hook. The current unavailable harness stays in the orchestrator editor with a not-ready label.
 - Tests cover ready-only initial choices, empty forms, readonly built-in lanes, saved-endpoint refresh, honest lane-load errors and chat recipient changes.
+
+## Closed
+
+All seven are fixed on main: P367 fixed R37-1 and R37-7, P368 fixed R37-2, R37-3 and R37-5, and P369 fixed R37-4 and R37-6 and wrote the one meaning of `off` into `HARNESSES.md`.
