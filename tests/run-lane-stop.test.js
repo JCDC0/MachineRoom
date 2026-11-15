@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { descendantProcesses, killTree, leftoverProcesses, listProcesses } from '../server/processTree.js'
 import { readLaneLock, releaseLaneLock, takeLaneLock, processAlive } from '../scripts/lane-lock.mjs'
 import { isResultLine, startLane, stopLane, stopLeftovers } from '../scripts/run-lane.mjs'
-import { laneLockLog, laneLockStartedAt, laneLockText } from '../src/briefs/run.js'
+import { laneLockLog, laneLockStartedAt, laneLockText, maskProfilePaths } from '../src/briefs/run.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 
 const RUN_LANE_SCRIPT = fileURLToPath(new URL('../scripts/run-lane.mjs', import.meta.url))
@@ -272,7 +272,7 @@ describe('a stopped lane stays stopped', () => {
     expect(leftoverReady, 'the leftover process was not in the process list').toBe(true)
     const result = await runLane(['fake', '--project', project, '--task', 'Do it.'], env)
     expect(result.code).toBe(1)
-    expect(result.stderr).toContain(`The fake lane still has leftover process ${leftover.pid}; stop it with npm run run-lane -- --stop fake.`)
+    expect(result.stderr).toContain(`The fake lane still has leftover process ${leftover.pid} (${maskProfilePaths(process.execPath)}); stop it with npm run run-lane -- --stop fake.`)
     expect(result.stdout).not.toContain('exit code:')
   }, 30000)
 

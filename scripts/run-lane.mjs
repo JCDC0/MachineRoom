@@ -243,19 +243,59 @@ function stopDescendants(descendants, options = 'leftover') {
   return { stopped, failed, processes: killed ? null : currentList }
 }
 
-function refuseRunningLane(laneKey, worktree, folder = runsFolder()) {
+export async function refuseRunningLane(
+  laneKey,
+  worktree,
+  folder = runsFolder(),
+  {
+    list = listProcesses,
+    wait = (ms) => new Promise((done) => setTimeout(done, ms)),
+  } = {},
+) {
   const lock = join(folder, `${laneKey}.lock`)
   const holder = readLaneLock(lock)
-  if (isHolderAlive(holder.child, lock)) throw new Error(laneStopProblem({ lane: laneKey, pid: holder.child }))
+  if (isHolderAlive(holder.child, lock, { list })) throw new Error(laneStopProblem({ lane: laneKey, pid: holder.child }))
   const folders = []
   for (const value of [worktree, holder.folder]) {
     const name = String(value ?? '').trim()
     if (name !== '' && !folders.includes(name)) folders.push(name)
   }
+  if (folders.length === 0) return
+  const first = list()
+  const candidates = []
+  const seenPids = new Set()
   for (const name of folders) {
-    const found = leftoverProcesses(listProcesses(), { worktree: name, ownPid: process.pid })
-    if (found.length > 0) throw new Error(laneStopProblem({ lane: laneKey, pid: found[0].pid, leftover: true }))
+    for (const item of leftoverProcesses(first, { worktree: name, ownPid: process.pid })) {
+      if (seenPids.has(item.pid)) continue
+      seenPids.add(item.pid)
+      candidates.push(item)
+    }
   }
+  if (candidates.length === 0) return
+  await wait(500)
+  const second = list()
+  const secondByPid = new Map()
+  for (const row of Array.isArray(second) ? second : []) {
+    if (Number.isInteger(row?.pid) && row.pid > 0 && !secondByPid.has(row.pid)) {
+      secondByPid.set(row.pid, row)
+    }
+  }
+  const persisted = candidates.find((item) => {
+    const after = secondByPid.get(item.pid)
+    return after && after.command === item.command
+  })
+  if (!persisted) return
+  const program = (() => {
+    const text = String(persisted.command ?? '').trim()
+    if (text === '') return ''
+    if (text[0] === '"' || text[0] === "'") {
+      const end = text.indexOf(text[0], 1)
+      if (end !== -1) return text.slice(1, end).trim()
+    }
+    const match = /^\S+/.exec(text)
+    return match ? match[0] : ''
+  })()
+  throw new Error(laneStopProblem({ lane: laneKey, pid: persisted.pid, leftover: true, program }))
 }
 
 function stopArgument(argv) {
@@ -1361,7 +1401,7 @@ async function runQueueProject({ options, lane, lanes }) {
   const laneProblem = laneCommandProblem(lane)
   if (laneProblem !== '') throw new Error(laneProblem)
   const lockTarget = options.worktree ? worktreeFor(project, options.lane) || project : project
-  refuseRunningLane(options.lane, options.worktree ? lockTarget : '', folder)
+  await refuseRunningLane(options.lane, options.worktree ? lockTarget : '', folder)
   const projectLock = takeProjectLock(folder, lockTarget)
   const startedAt = laneStartTime(options)
   let lock
@@ -1594,7 +1634,7 @@ async function main() {
     }
 
     mkdirSync(folder, { recursive: true })
-    refuseRunningLane(options.lane, '', folder)
+    await refuseRunningLane(options.lane, '', folder)
     const projectLock = takeProjectLock(folder, project)
     const startedAt = laneStartTime(options)
     let lock
@@ -1681,7 +1721,7 @@ async function main() {
   }
 
   mkdirSync(folder, { recursive: true })
-  refuseRunningLane(options.lane, lane.worktree, folder)
+  await refuseRunningLane(options.lane, lane.worktree, folder)
   const startedAt = laneStartTime(options)
   const lock = takeRunLock(folder, options.lane, { worktree: lane.worktree }, startedAt, basename(logPath))
   try {
@@ -1738,7 +1778,7 @@ async function startFailover({ laneKey, target, lanes, options, wanted, prompt, 
     : `${target}-${wanted.map((brief) => brief.id).join('-')}-${stamp()}`
   let lock
   try {
-    refuseRunningLane(target, project ? '' : fallbackLane.worktree, folder)
+    await refuseRunningLane(target, project ? '' : fallbackLane.worktree, folder)
     lock = takeRunLock(folder, target, project ? { worktree: project, projectRun: true } : { worktree: fallbackLane.worktree }, startedAt, `${fallbackName}.log`)
   } catch {
     console.log(`The backup lane ${target} is busy, so the run stays failed.`)
