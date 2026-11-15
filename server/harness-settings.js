@@ -1,6 +1,7 @@
 import { mkdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
 import { isAbsolute, join } from 'node:path'
 import { randomUUID } from 'node:crypto'
+import { maskKeys } from '../src/briefs/audit.js'
 import { maskProfilePaths } from '../src/model/paths.js'
 import { harnessByKey } from '../src/harnesses/index.js'
 import { resolveHarnessProgram, runCommand } from './harness-models.js'
@@ -70,6 +71,11 @@ function isFile(path) {
   }
 }
 
+function versionLine(stdout) {
+  const line = String(stdout ?? '').split(/\r?\n/)[0]
+  return maskKeys(maskProfilePaths(line)).text.slice(0, 80)
+}
+
 export function clearHarnessChecks(folder) {
   cache.delete(folder)
 }
@@ -98,7 +104,7 @@ export async function harnessStatus(key, { runsFolder, lanes, env, platform, ava
     enabled,
     ready,
     program: maskProfilePaths(program),
-    version: ready ? result.stdout.split(/\r?\n/)[0].slice(0, 80) : '',
+    version: ready ? versionLine(result.stdout) : '',
     reason: ready ? '' : 'The program did not answer a version check.',
   }
 }
