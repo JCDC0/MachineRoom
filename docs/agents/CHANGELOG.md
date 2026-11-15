@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- P380: The native agent reads unseen lane inbox replies from the bridge once before each model call after the first without printing or logging the ticket.
 - P375: Gemini 4 Argon ranks the next eight briefs toward the free hierarchy in PLAN-NEXT-ARGON.md; two need no design call, six wait for the owner.
 - P379: A finished label write updates only the same open draft, and a not-ready reason shows outside the program details, Direct API included (R38-1, R38-4).
 - P377: The chat's ModelPicker reads Model: NAME inline and opens upward, closing returns focus to its trigger, and a model or effort reply after a tab switch changes nothing (R38-2, R38-3).
