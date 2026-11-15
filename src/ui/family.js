@@ -117,9 +117,19 @@ export function harnessLabel(harness) {
   return key
 }
 
-export function familyMeta(node) {
+export function familyMeta(node, choices = null) {
   const harness = harnessLabel(node?.harness) || 'harness unknown'
-  const model = modelName(node?.model)
+  const key = harnessKey(node?.harness)
+  let list = Array.isArray(choices) ? choices : []
+  if (!Array.isArray(choices) && choices && typeof choices === 'object') {
+    const known = 'harnesses' in choices ? choices.harnesses : choices
+    const extra = 'models' in choices ? choices.models : null
+    const entry = key ? findHarness(known, key) : null
+    const fromHarness = entry ? harnessModels(entry, extra) : []
+    const fromModels = key ? modelChoices(extra, key) : []
+    list = [...fromHarness, ...fromModels]
+  }
+  const model = modelName(node?.model, list)
   const effort = cleanText(node?.effort, 20) || 'default'
   return `${harness} · ${model} · ${effort}`
 }

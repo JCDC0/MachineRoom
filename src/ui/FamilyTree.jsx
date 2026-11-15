@@ -1614,7 +1614,7 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
           <div className="mr-family-request" key={proposal.id}>
             <p className="mr-family-request-title">
               <span>{proposal.label}</span>
-              <span className="mono">{familyMeta(proposal)}</span>
+              <span className="mono">{familyMeta(proposal, { harnesses, models })}</span>
             </p>
             <p className="mr-family-request-meta mono">{`from ${proposal.from || 'an orchestrator'}`}</p>
             {proposal.reason ? <p className="mr-family-request-reason">{proposal.reason}</p> : null}
@@ -2295,7 +2295,7 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
             <div className="mr-family-under">
               {text ? <span className={`mr-family-state is-${dotState} mono`}>{text}</span> : null}
               <span className="mr-family-kind mono">{node.kind === 'lane' ? 'lane' : node.kind}</span>
-              <span className="mr-family-meta mono">{familyMeta(node)}</span>
+              <span className="mr-family-meta mono">{familyMeta(node, { harnesses, models })}</span>
               <span className="mr-family-actions">
                 {node.kind === 'lane' ? (
                   <button

@@ -6,6 +6,7 @@ import {
   DIRECT_HARNESS,
   childDraft,
   childFormProblem,
+  familyMeta,
   teamDraft,
 } from '../src/ui/family.js'
 import { buttonWithText, click, settle, type, withDom } from './helpers/uiDom.js'
@@ -93,14 +94,14 @@ function makeClient({
       model: 'openrouter/claude-opus-5-5',
       effort: '',
       parent: 'orchestrator',
-      active: false,
+      active: true,
       working: false,
     },
   ]
   const lanes = {
     lanes: [
       { key: 'coder', name: 'Coder', harness: 'opencode', active: true },
-      { key: 'helper', name: 'Helper', harness: 'claude', active: false },
+      { key: 'helper', name: 'Helper', harness: 'claude', active: true },
     ],
     max: 4,
     chosen: true,
@@ -378,6 +379,53 @@ describe('form defaults and row model names', () => {
       })
       await click(root, buttonWithText(container.querySelector('.mr-side-confirm-card'), 'Build the team'))
       expect(teamCalls.setLadder[0].subs[0].model).toBe('')
+    })
+  })
+
+  it('names a family row model with modelName and the harness list, or last segment when absent', async () => {
+    expect(
+      familyMeta(
+        { harness: 'claude', model: 'claude-opus-5-5', effort: 'high' },
+        [{ id: 'claude-opus-5-5', label: 'Claude Opus 5.5' }]
+      )
+    ).toBe('claude · Claude Opus 5.5 · high')
+    expect(familyMeta({ harness: 'claude', model: 'openrouter/claude-opus-5-5', effort: 'high' }, [])).toBe(
+      'claude · claude-opus-5-5 · high'
+    )
+    expect(familyMeta({ harness: 'claude', model: 'openrouter/claude-opus-5-5', effort: 'high' })).toBe(
+      'claude · claude-opus-5-5 · high'
+    )
+
+    const { client: modelsClient } = makeClient({
+      harnesses: {
+        harnesses: [
+          { key: 'claude', name: 'Claude Code', available: true, ready: true, models: [], efforts: ['high'] },
+          { key: 'opencode', name: 'OpenCode', available: true, ready: true, models: [], efforts: ['max'] },
+        ],
+      },
+    })
+    await withDom(async ({ container, root }) => {
+      await mountTree(root, modelsClient)
+      expect(rowByLabel(container, 'Orchestrator').querySelector('.mr-family-meta').textContent).toBe(
+        'claude · Claude Opus 5.5 · high'
+      )
+      expect(rowByLabel(container, 'Helper').querySelector('.mr-family-meta').textContent).toBe(
+        'claude · claude-opus-5-5 · default'
+      )
+    })
+
+    const { client: harnessesClient } = makeClient({ models: { models: [] } })
+    await withDom(async ({ container, root }) => {
+      await mountTree(root, harnessesClient)
+      expect(rowByLabel(container, 'Orchestrator').querySelector('.mr-family-meta').textContent).toBe(
+        'claude · Claude Opus 5.5 · high'
+      )
+      expect(rowByLabel(container, 'Coder').querySelector('.mr-family-meta').textContent).toBe(
+        'opencode · DeepSeek V4.1 Flash · max'
+      )
+      expect(rowByLabel(container, 'Helper').querySelector('.mr-family-meta').textContent).toBe(
+        'claude · claude-opus-5-5 · default'
+      )
     })
   })
 })
