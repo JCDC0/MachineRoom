@@ -3167,14 +3167,10 @@ Found in the room on 2026-11-15 (night), checked at 1280 by 800 against a fresh 
 4. Tests, each failing before your change: a new child, sub and team draft has an empty model and no form problem; Direct API with no model still has the problem; choosing `Harness default` after a model empties it; a row with `claude-opus-5-5` and a model list reads `Claude Opus 5.5`.
 5. Run `node node_modules/vitest/vitest.mjs run tests/form-defaults.test.js tests/family.test.js tests/family-tree-ui.test.js tests/family-team.test.js tests/team-picker.test.js tests/ready-harnesses.test.js` and report the counts.
 
-**P379. A rename keeps to its own agent, and Direct API shows why it is not ready (OpenCode).** Read this brief, R38-1 and R38-4 of  only. This is a small brief: stop at minute 15. Use no subagents. Run every command in the foreground. Commit each step as you finish it. Files: src/ui/FamilyTree.jsx (only ), src/ui/HarnessesSettings.jsx (only where the not-ready reason renders), tests/review-38-fixes.test.js (new), docs/agents/CHANGELOG.md.
+
+**P379. A rename keeps to its own agent, and Direct API shows why it is not ready (OpenCode).** Read this brief, R38-1 and R38-4 of `docs/agents/AUDIT-2026-11-REVIEW-38.md` only. This is a small brief: stop at minute 15. Use no subagents. Run every command in the foreground. Commit each step as you finish it. Files: src/ui/FamilyTree.jsx (only `askLabel`), src/ui/HarnessesSettings.jsx (only where the not-ready reason renders), tests/review-38-fixes.test.js (new), docs/agents/CHANGELOG.md.
 
 1. R38-1: when a label write finishes, the draft takes the new label only if the same agent and the same submitted label are still open.
-2. R38-4: the not-ready reason renders outside the program details, so the Direct API row shows 3. Tests, each failing before your change: a delayed rename of one agent does not change another agent's open draft; a not-ready Direct API row shows its reason.
-4. Run  RUN  v5.0.5 C:/GitHub/MachineRoom
-
-
- Test Files  1 passed (1)
-      Tests  5 passed (5)
-   Start at  22:27:33
-   Duration  1.03s (tests 48%, transform 28%, import 20%, setup 3%, worker 1%) and report the counts.
+2. R38-4: the not-ready reason renders outside the program details, so the Direct API row shows `No key or endpoint is saved.`
+3. Tests, each failing before your change: a delayed rename of one agent does not change another agent's open draft; a not-ready Direct API row shows its reason.
+4. Run `node node_modules/vitest/vitest.mjs run tests/review-38-fixes.test.js tests/family-checklist.test.js tests/settings-order.test.js` and report the counts.
