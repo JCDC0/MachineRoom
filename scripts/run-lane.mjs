@@ -261,32 +261,24 @@ export async function refuseRunningLane(
     if (name !== '' && !folders.includes(name)) folders.push(name)
   }
   if (folders.length === 0) return
-  const first = list()
-  const candidates = []
-  const seenPids = new Set()
-  for (const name of folders) {
-    for (const item of leftoverProcesses(first, { worktree: name, ownPid: process.pid })) {
-      if (seenPids.has(item.pid)) continue
-      seenPids.add(item.pid)
-      candidates.push(item)
+  const findLeftovers = (snapshot) => {
+    const found = []
+    const seenPids = new Set()
+    for (const name of folders) {
+      for (const item of leftoverProcesses(snapshot, { worktree: name, ownPid: process.pid })) {
+        if (seenPids.has(item.pid)) continue
+        seenPids.add(item.pid)
+        found.push(item)
+      }
     }
+    return found
   }
-  if (candidates.length === 0) return
+  if (findLeftovers(list()).length === 0) return
   await wait(500)
-  const second = list()
-  const secondByPid = new Map()
-  for (const row of Array.isArray(second) ? second : []) {
-    if (Number.isInteger(row?.pid) && row.pid > 0 && !secondByPid.has(row.pid)) {
-      secondByPid.set(row.pid, row)
-    }
-  }
-  const persisted = candidates.find((item) => {
-    const after = secondByPid.get(item.pid)
-    return after && after.command === item.command
-  })
-  if (!persisted) return
+  const leftover = findLeftovers(list())[0]
+  if (!leftover) return
   const program = (() => {
-    const text = String(persisted.command ?? '').trim()
+    const text = String(leftover.command ?? '').trim()
     if (text === '') return ''
     if (text[0] === '"' || text[0] === "'") {
       const end = text.indexOf(text[0], 1)
@@ -295,7 +287,7 @@ export async function refuseRunningLane(
     const match = /^\S+/.exec(text)
     return match ? match[0] : ''
   })()
-  throw new Error(laneStopProblem({ lane: laneKey, pid: persisted.pid, leftover: true, program }))
+  throw new Error(laneStopProblem({ lane: laneKey, pid: leftover.pid, leftover: true, program }))
 }
 
 function stopArgument(argv) {
