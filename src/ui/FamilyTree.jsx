@@ -1666,6 +1666,9 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
     const directMissing = direct && !editorModels.loading && choices.length === 0
     const efforts = harness ? harnessEfforts(harness) : []
     const canLabel = typeof client?.setAgentLabel === 'function'
+    const fallbackLabel = nodeDraft.fallback
+      ? backupChoices.find((row) => row.id === nodeDraft.fallback)?.label ?? nodeDraft.fallback
+      : 'None'
     return (
       <div
         className="mr-family-editor"
@@ -1696,85 +1699,103 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
         {lane ? (
           <>
             <p className="mr-family-note mono">{`Harness ${harnessLabel(node.harness) || 'unknown'}`}</p>
-            {directMissing ? (
-              renderDirectNotice(editorModels.refresh)
-            ) : harness ? (
-              <ModelPicker
-                label="Model"
-                ariaLabel={`Model for ${node.label}`}
-                value={nodeDraft.model}
-                choices={choices}
-                client={client}
-                onChange={(model) => setNodeDraft({ ...nodeDraft, model })}
-                onRefresh={editorModels.refresh}
-                loading={editorModels.loading}
-                error={editorModels.error}
-                canRefresh={editorModels.canRefresh}
-              />
-            ) : (
-              <p className="mr-side-note is-dim">No models listed for this harness.</p>
-            )}
-            {efforts.length > 0 ? (
-              <label className="mr-side-field">
-                <span className="mr-side-field-label mono">Effort</span>
-                <select
-                  className="mr-side-select mono"
-                  aria-label={`Effort for ${node.label}`}
-                  value={nodeDraft.effort}
-                  onChange={(event) => setNodeDraft({ ...nodeDraft, effort: event.target.value })}
-                >
-                  <option value="">default</option>
-                  {efforts.map((level) => (
-                    <option value={level} key={level}>
-                      {level}
-                    </option>
-                  ))}
-                  {nodeDraft.effort && !efforts.includes(nodeDraft.effort) ? (
-                    <option value={nodeDraft.effort}>{nodeDraft.effort}</option>
-                  ) : null}
-                </select>
-              </label>
-            ) : null}
-            <label className="mr-side-field">
-              <span className="mr-side-field-label mono">Backup lane</span>
-              <select
-                className="mr-side-select mono"
-                aria-label={`Backup lane for ${node.label}`}
-                value={nodeDraft.fallback ?? ''}
-                onChange={(event) => setNodeDraft({ ...nodeDraft, fallback: event.target.value })}
-              >
-                <option value="">None</option>
-                {backupChoices.map((row) => (
-                  <option value={row.id} key={row.id}>
-                    {row.label}
-                  </option>
-                ))}
-                {nodeDraft.fallback && !backupChoices.some((row) => row.id === nodeDraft.fallback) ? (
-                  <option value={nodeDraft.fallback}>{nodeDraft.fallback}</option>
-                ) : null}
-              </select>
-            </label>
-            <div className="mr-side-form-actions">
-              <button
-                type="button"
-                className="mr-side-primary"
-                disabled={busy || typeof client?.updateLane !== 'function' || directMissing || node.custom !== true}
-                onClick={() => askLaneSave(node)}
-              >
-                Save
-              </button>
-              <button
-                type="button"
-                className="mr-side-action"
-                disabled={busy || typeof client?.hideLane !== 'function'}
-                onClick={() => askHide(node)}
-              >
-                {node.custom === true ? 'Hide' : 'Remove'}
-              </button>
-            </div>
             {node.custom !== true ? (
-              <p className="mr-side-note is-dim">{LANES_JSON_SAVE_PROBLEM}</p>
-            ) : null}
+              <>
+                <p className="mr-family-note mono">{`Model ${nodeDraft.model || 'no model'}`}</p>
+                <p className="mr-family-note mono">{`Effort ${nodeDraft.effort || 'default'}`}</p>
+                <p className="mr-family-note mono">{`Backup lane ${fallbackLabel}`}</p>
+                <p className="mr-side-note is-dim">Edit this agent in lanes.json.</p>
+                <div className="mr-side-form-actions">
+                  <button
+                    type="button"
+                    className="mr-side-action"
+                    disabled={busy || typeof client?.hideLane !== 'function'}
+                    onClick={() => askHide(node)}
+                  >
+                    Remove
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                {directMissing ? (
+                  renderDirectNotice(editorModels.refresh, editorModels.error)
+                ) : harness ? (
+                  <ModelPicker
+                    label="Model"
+                    ariaLabel={`Model for ${node.label}`}
+                    value={nodeDraft.model}
+                    choices={choices}
+                    client={client}
+                    onChange={(model) => setNodeDraft({ ...nodeDraft, model })}
+                    onRefresh={editorModels.refresh}
+                    loading={editorModels.loading}
+                    error={editorModels.error}
+                    canRefresh={editorModels.canRefresh}
+                  />
+                ) : (
+                  <p className="mr-side-note is-dim">No models listed for this harness.</p>
+                )}
+                {efforts.length > 0 ? (
+                  <label className="mr-side-field">
+                    <span className="mr-side-field-label mono">Effort</span>
+                    <select
+                      className="mr-side-select mono"
+                      aria-label={`Effort for ${node.label}`}
+                      value={nodeDraft.effort}
+                      onChange={(event) => setNodeDraft({ ...nodeDraft, effort: event.target.value })}
+                    >
+                      <option value="">default</option>
+                      {efforts.map((level) => (
+                        <option value={level} key={level}>
+                          {level}
+                        </option>
+                      ))}
+                      {nodeDraft.effort && !efforts.includes(nodeDraft.effort) ? (
+                        <option value={nodeDraft.effort}>{nodeDraft.effort}</option>
+                      ) : null}
+                    </select>
+                  </label>
+                ) : null}
+                <label className="mr-side-field">
+                  <span className="mr-side-field-label mono">Backup lane</span>
+                  <select
+                    className="mr-side-select mono"
+                    aria-label={`Backup lane for ${node.label}`}
+                    value={nodeDraft.fallback ?? ''}
+                    onChange={(event) => setNodeDraft({ ...nodeDraft, fallback: event.target.value })}
+                  >
+                    <option value="">None</option>
+                    {backupChoices.map((row) => (
+                      <option value={row.id} key={row.id}>
+                        {row.label}
+                      </option>
+                    ))}
+                    {nodeDraft.fallback && !backupChoices.some((row) => row.id === nodeDraft.fallback) ? (
+                      <option value={nodeDraft.fallback}>{nodeDraft.fallback}</option>
+                    ) : null}
+                  </select>
+                </label>
+                <div className="mr-side-form-actions">
+                  <button
+                    type="button"
+                    className="mr-side-primary"
+                    disabled={busy || typeof client?.updateLane !== 'function' || directMissing}
+                    onClick={() => askLaneSave(node)}
+                  >
+                    Save
+                  </button>
+                  <button
+                    type="button"
+                    className="mr-side-action"
+                    disabled={busy || typeof client?.hideLane !== 'function'}
+                    onClick={() => askHide(node)}
+                  >
+                    Hide
+                  </button>
+                </div>
+              </>
+            )}
           </>
         ) : (
           <>

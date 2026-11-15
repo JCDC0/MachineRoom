@@ -3,7 +3,7 @@ import { act, createElement } from 'react'
 import { describe, expect, it } from 'vitest'
 import FamilyTeam from '../src/ui/FamilyTeam.jsx'
 import { FamilyTeams, FamilyTree } from '../src/ui/FamilyTree.jsx'
-import { DIRECT_KEY_PROBLEM, LANES_JSON_SAVE_PROBLEM } from '../src/ui/family.js'
+import { DIRECT_KEY_PROBLEM } from '../src/ui/family.js'
 import { buttonWithText, classesOf, click, settle, type, withDom } from './helpers/uiDom.js'
 
 const NODES = [
@@ -385,16 +385,15 @@ describe('FamilyTree rows', () => {
     })
   })
 
-  it('offers Save on the lane editor only for a lane the owner made', async () => {
+  it('keeps Save off a lane from lanes.json and points at the file', async () => {
     const { client } = makeClient()
     client.updateLane = async () => ({ ok: true })
     await withDom(async ({ container, root }) => {
       await mount(root, client)
       await click(root, rowByLabel(container, 'OpenCode').querySelector('.mr-family-open'))
       const editor = container.querySelector('.mr-family-editor')
-      const save = buttonWithText(editor, 'Save')
-      expect(save.getAttribute('disabled')).not.toBeNull()
-      expect(editor.textContent).toContain(LANES_JSON_SAVE_PROBLEM)
+      expect(buttonWithText(editor, 'Save')).toBeNull()
+      expect(editor.textContent).toContain('Edit this agent in lanes.json.')
     })
   })
 
@@ -409,7 +408,6 @@ describe('FamilyTree rows', () => {
       const editor = container.querySelector('.mr-family-editor')
       const save = buttonWithText(editor, 'Save')
       expect(save.getAttribute('disabled')).toBeNull()
-      expect(editor.textContent).not.toContain(LANES_JSON_SAVE_PROBLEM)
     })
   })
 

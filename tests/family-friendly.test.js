@@ -181,7 +181,7 @@ describe('a lane from lanes.json', () => {
       expect(editor.querySelector('select[aria-label="Backup lane for OpenCode"]')).toBeNull()
       expect(editor.textContent).toContain('Edit this agent in lanes.json.')
       expect(editor.textContent).toContain('opencode-go/deepseek-v4.1-flash')
-      expect(editor.textContent).toContain('Backup lane Claude')
+      expect(editor.textContent).toContain('Backup lane claude')
       expect(editor.querySelector('input[aria-label="Label for OpenCode"]')).not.toBeNull()
       expect(buttonWithText(editor, 'Remove')).not.toBeNull()
       expect(buttonWithText(editor, 'Save')).toBeNull()
