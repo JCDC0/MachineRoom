@@ -3245,3 +3245,19 @@ On 2026-11-15 the orchestrator opened Add child, clicked the OpenCode pill and s
 2. Look for: a lane still refused for a process that is gone, or let through while a real leftover runs; a home path or key in the refusal; an empty model that reaches a harness that needs one (Direct API, an endpoint, Codex or AGY with a profile); a command line with an empty argument or a dangling flag; a model check skipped for a non-empty model; a picker left disabled after a failed save or on another tab; `boundMessages` dropping the task message or the newest inbox message, or looping when one message alone is over the limit; a test that would pass with its change undone.
 3. Each finding: `R40-N`, a severity (P1 blocks a push, P2 should be fixed soon, P3 small), the file and line, what goes wrong, how to see it, one fix in plain words. At most 10. No finding without a file and line you read.
 4. End with `Checked and fine`. Under 100 lines. Plain words, no em dashes.
+
+Review 40 fixes, P388 and P389. `docs/agents/AUDIT-2026-11-REVIEW-40.md` (P387, GPT-6.1 Sol): two P2 findings.
+
+**P388. A leftover that hands off to a worker still blocks the lane (AGY, Hydrogen).** Read this brief and R40-1 only. Commit each step as you finish it. Run every command in the foreground. Files: scripts/run-lane.mjs (only `refuseRunningLane`), tests/leftover-recheck.test.js (add tests here), docs/agents/CHANGELOG.md.
+
+1. After the 500 millisecond wait, `refuseRunningLane` refuses for any process in the second list that names the lane's worktree or folder the same way the first list's check does, not only for a first-list pid whose command is unchanged. A process that was in the first list and is gone from the second, with nothing new naming the worktree, still lets the lane start.
+2. The refusal names the process found in the second list (its pid and program).
+3. Tests, each failing before your change: pid 4141 running `node.exe C:/review-work/parent.js` in the first list and pid 4142 running `node.exe C:/review-work/worker.js` in the second, with `C:/review-work` as the worktree, refuses and names 4142; the same pid whose command changed but still names the worktree refuses; today's three P382 tests still pass.
+4. Run `node node_modules/vitest/vitest.mjs run tests/leftover-recheck.test.js tests/run-lane.test.js` and report the counts.
+
+**P389. An oversized inbox batch keeps its newest reply (Codex, GPT-6.1 Terra).** Read this brief and R40-2 only. Your sandbox keeps git read-only: write the files in your worktree and the runner commits them. Never run `npm install`; run tests as `node ../../node_modules/vitest/vitest.mjs run FILES` from your worktree. Files: scripts/mr-agent.mjs (only `boundMessages` and the helpers it calls), tests/review-39-fixes.test.js (add tests here), docs/agents/CHANGELOG.md.
+
+1. When an injected inbox message (one that starts `Messages for you while you work:`) must be cut, `boundMessages` drops its oldest replies first and keeps its heading and newest reply whole, instead of keeping the first 2000 characters. If the newest reply alone is over the limit, keep its last characters, not its first.
+2. Other user messages are cut as today.
+3. Tests, each failing before your change: an 8000 character bound, a 1000 character system message, the task, then one inbox batch with a 7500 character older reply followed by `Newest order to keep.` ends under the bound with `Newest order to keep.` present and the task kept; a batch of two short replies under the bound is unchanged.
+4. Run `node ../../node_modules/vitest/vitest.mjs run tests/review-39-fixes.test.js tests/mr-agent-inbox.test.js tests/mr-agent.test.js` and report the counts.
