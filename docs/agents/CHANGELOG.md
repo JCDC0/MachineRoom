@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- P382: The runner rechecks worktree leftovers after 500 milliseconds and refuses only a process with the same pid and command line, naming its masked program.
 - P380: The native agent reads its lane inbox before each model call after the first and adds unseen replies as one user message; the ticket is never printed.
 - P378: The add-agent, sub and team forms start with no model and offer Harness default first; Direct API still needs a model; family rows name models from the harness list.
 - P380: The native agent reads unseen lane inbox replies from the bridge once before each model call after the first without printing or logging the ticket.
