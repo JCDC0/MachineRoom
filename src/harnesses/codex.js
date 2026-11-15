@@ -103,7 +103,9 @@ export const codexHarness = {
     const effort = reasoning ?? cli?.effort
     const args = ['exec', '--json']
     if (cli?.model) args.push('--model', String(cli.model))
-    args.push('--sandbox', mode === 'plan' ? 'read-only' : 'workspace-write', '--skip-git-repo-check')
+    if (mode === 'bypass') args.push('--dangerously-bypass-approvals-and-sandbox')
+    else args.push('--sandbox', mode === 'plan' ? 'read-only' : 'workspace-write')
+    args.push('--skip-git-repo-check')
     if (effort) args.push('-c', `model_reasoning_effort=${effort}`)
     for (const dir of Array.isArray(cli?.addDirs) ? cli.addDirs : []) {
       if (typeof dir === 'string') args.push('--add-dir', expandBin(dir, env))

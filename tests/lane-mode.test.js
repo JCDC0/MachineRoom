@@ -106,7 +106,7 @@ describe('laneModeProblem', () => {
 
   it('refuses a mode the harness does not have and names the lane and the list', () => {
     expect(laneModeProblem({ cli: { harness: 'claude', mode: 'nonsense' } }, 'claude')).toBe("The nonsense mode is not one claude's harness has. It has: plan, ask, edits, auto, bypass.")
-    expect(laneModeProblem({ cli: { harness: 'codex', mode: 'edits' } }, 'codex')).toBe("The edits mode is not one codex's harness has. It has: plan, auto.")
+    expect(laneModeProblem({ cli: { harness: 'codex', mode: 'nonsense' } }, 'codex')).toBe("The nonsense mode is not one codex's harness has. It has: plan, edits, auto, bypass.")
   })
 
   it('accepts plan and edits for an OpenCode lane', () => {
