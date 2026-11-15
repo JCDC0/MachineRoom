@@ -281,7 +281,7 @@ export function splitRunProgress(run) {
   return `Started ${pairs.length} tasks.`
 }
 
-export async function startSplitRun({ client, pairs, delay = PROJECT_SPLIT_DELAY, checkCommand } = {}) {
+export async function startSplitRun({ client, pairs, delay = PROJECT_SPLIT_DELAY, checkCommand, worktree } = {}) {
   if (splitRun.active) return false
   const list = (Array.isArray(pairs) ? pairs : []).filter(
     (pair) => pair && typeof pair === 'object' && typeof pair.lane === 'string' && typeof pair.task === 'string'
@@ -289,6 +289,7 @@ export async function startSplitRun({ client, pairs, delay = PROJECT_SPLIT_DELAY
   if (list.length === 0) return false
   if (typeof client?.startRun !== 'function') return false
   const command = typeof checkCommand === 'string' ? checkCommand.trim() : ''
+  const useWorktree = typeof worktree === 'boolean' ? worktree : true
   splitCancelRequested = false
   splitWaitCancel = null
   publishSplitRun({ active: true, pairs: list, answers: [], failed: false, done: false, cancelled: false })
@@ -304,7 +305,7 @@ export async function startSplitRun({ client, pairs, delay = PROJECT_SPLIT_DELAY
     try {
       const answer = await client.startRun(pair.lane, {
         tasks: [pair.task],
-        worktree: true,
+        worktree: useWorktree,
         ...(command === '' ? {} : { checkCommand: command }),
       })
       answers.push({ ok: true, message: runStartLine(answer) })

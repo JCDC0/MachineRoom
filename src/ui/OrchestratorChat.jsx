@@ -155,6 +155,7 @@ export default function OrchestratorChat({
   const [list, setList] = useState(() => initialList(initialOrchestrators))
   const [lanesData, setLanesData] = useState(() => initialLanes ?? [])
   const [toRecipient, setToRecipient] = useState(() => initialRecipient)
+  const [separateWorktree, setSeparateWorktree] = useState(true)
   const [openAgentAll, setOpenAgentAll] = useState({})
   const [showAgentMessages, setShowAgentMessages] = useState(() => {
     try {
@@ -293,6 +294,7 @@ export default function OrchestratorChat({
   const project = teamSelected ? chats.orchestrator?.project ?? '' : chat.project
   const projectLabel = projectBaseName(project)
   const availableLanes = runnableLanes(lanesData)
+  const laneRecipient = availableLanes.some((lane) => lane.key === toRecipient)
   const lines = teamSelected
     ? []
     : chatLines(chat, ORCH_MAX_LINES, {
@@ -300,6 +302,20 @@ export default function OrchestratorChat({
         showAgentMessages,
         lanes: lanesData,
       })
+
+  function worktreeChoice() {
+    if (!laneRecipient) return null
+    return (
+      <label className="mr-orch-worktree mono" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+        <input
+          type="checkbox"
+          checked={separateWorktree}
+          onChange={(event) => setSeparateWorktree(event.target.checked)}
+        />
+        <span>Separate worktree</span>
+      </label>
+    )
+  }
 
   function toggleAgentMessages(val) {
     const next = typeof val === 'boolean' ? val : !showAgentMessages
@@ -759,6 +775,18 @@ export default function OrchestratorChat({
     return entry?.name || id
   }
 
+  async function sendToLane(text, id) {
+    if (!client || typeof client.sendOrchestrator !== 'function') {
+      return { ok: false, error: 'The orchestrator is not connected.' }
+    }
+    try {
+      await client.sendOrchestrator(text, { id, worktree: separateWorktree })
+      return { ok: true }
+    } catch (failure) {
+      return { ok: false, error: errorText(failure, 'Could not send the message.') }
+    }
+  }
+
   async function deliver(text, id = toRecipient) {
     if (!client) {
       setError('The orchestrator is not connected.')
@@ -767,7 +795,8 @@ export default function OrchestratorChat({
     setSending(true)
     setError(null)
     setConfirm(null)
-    const result = await sendChatMessage(client, text, id)
+    const laneSend = availableLanes.some((lane) => lane.key === id)
+    const result = laneSend ? await sendToLane(text, id) : await sendChatMessage(client, text, id)
     setSending(false)
     if (!result.ok) {
       setError(result.error)
@@ -1616,6 +1645,7 @@ export default function OrchestratorChat({
                     ))}
                   </select>
                 </div>
+                {worktreeChoice()}
                 <ModelPicker
                   key={selected}
                   label="Model:"
@@ -1845,6 +1875,7 @@ export default function OrchestratorChat({
                 {count ? <span className="mr-orch-count mono">{count}</span> : null}
               </div>
               <div className="mr-orch-actions">
+                {worktreeChoice()}
                 <button type="submit" className="mr-orch-send" disabled={!canSend(draft) || sending || unavailable}>
                   {sending ? 'Sending' : 'Send'}
                 </button>

@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- A chat message sent to a lane and a split run carry a Separate worktree choice, and no run uses a worktree outside a git checkout.
 - Codex lanes and orchestrators offer Edits and Bypass: Edits writes in Codex's workspace sandbox like Auto, and Bypass runs with no sandbox or approvals.
 - Add child, the lane editor and Dispatch pick a lane's mode, and a lane set to Orchestrator's choice lets the agent above choose the mode for each run.
 - The sub orchestrator form and editor set a Scope (one glob a line) and Restricted, saved through the ladder.
@@ -8,6 +9,7 @@
 - The sub orchestrator form and editor in Agents let you set Scope and Restricted, saving trimmed globs or `**` when empty and showing the saved values on reopen.
 - Agents and Dispatch offer lane modes, including an orchestrator choice for each run.
 - P401: Codex offers Edits in its workspace sandbox and Bypass with --dangerously-bypass-approvals-and-sandbox, and Plan and Auto keep their flags.
+- P406: A lane task sent from the chat and a split run carry a Separate worktree choice, and a worktree is never used outside a git checkout.
 - The scale probe retries a .git rename up to 10 times when Windows still holds the folder, so the scale-live test no longer fails on a lock.
 - The replay scrubber's max and value stay finite before a recording loads, so the NaN attribute warnings are gone.
 - A cut inbox reply keeps its sender's name even when the name has spaces.

@@ -809,12 +809,14 @@ export function createBridge(options = {}) {
       },
       laneTicket: (value) => (runs && typeof runs.laneTicket === 'function' ? runs.laneTicket(value) : null),
       laneTickets: (lane) => (runs && typeof runs.laneTicketsFor === 'function' ? runs.laneTicketsFor(lane) : []),
-      startLaneTask: async (lane, taskText) => {
+      startLaneTask: async (lane, taskText, options = {}) => {
         if (!runs || typeof runs.startProjectTask !== 'function') throw new Error('The runner is not available.')
+        const git = await isGitCheckout(projectRoot)
+        const asked = options && typeof options.worktree === 'boolean' ? options.worktree : git
         return runs.startProjectTask({
           lane,
           task: taskText,
-          worktree: await isGitCheckout(projectRoot),
+          worktree: git ? asked : false,
           allowDirty: false,
           startedBy: 'orchestrator',
           checkCommand: runs.readSavedCheckCommand(),

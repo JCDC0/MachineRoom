@@ -788,7 +788,7 @@ export function createOrchestrators({
         }
         if (typeof startLaneTask === 'function') {
           try {
-            const started = await startLaneTask(target, text)
+            const started = await startLaneTask(target, text, { worktree: page ? body.worktree : undefined })
             if (!started || started.status !== 202) {
               const status = Number.isInteger(started?.status) ? started.status : 500
               const error = typeof started?.body?.error === 'string' && started.body.error.trim()
