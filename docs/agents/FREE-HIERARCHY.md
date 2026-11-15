@@ -39,6 +39,10 @@ The owner wants a free hierarchy of coding agents in one project:
 - An agent's Inspector lists the paths it touched outside the project, under `Outside the project`: `P339`, `P346`.
 - `Settings` under `Harnesses` checks harness versions (`Ready`, `Not ready`, or `Off`), saves program paths, and keeps turned-off harnesses out of new lanes, subs, and harness changes; model lookup finds OpenCode and Codex programs, the add-agent form accepts `default` effort, and sub efforts save and show in the chat `Effort:` menu: `P352` to `P356`.
 
+## Added on 2026-11-16
+
+An orchestrator may propose or add a new agent only on its own harness, with any model that harness lists; the owner may make any agent on any harness (`P404`).
+
 ## Runbook: Build and Run the Owner's Test Tree
 Target tree: Main on `claude` (`claude-opus-5-5`, `high`); Sub 1 on `codex` (`gpt-6.1-terra`, `high`) with 2 AGY lanes (`gemini-4-hydrogen-xhigh`); Sub 2 on `machineroom` (GLM 5.3 Flash) with 3 OpenCode lanes. Simple form: no subs, all lanes under Main.
 

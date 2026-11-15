@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- P404: An orchestrator may propose or add a new agent only on its own harness; the owner may still make any agent.
 - The ladder route refuses a new or changed sub whose model its harness does not list, or a Direct API sub with no model; saved, unchanged subs are not checked.
 - The scale probe retries a .git rename up to 10 times when Windows still holds the folder, so the scale-live test no longer fails on a lock.
 - The replay scrubber's max and value stay finite before a recording loads, so the NaN attribute warnings are gone.
