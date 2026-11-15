@@ -1,3 +1,4 @@
+import { readHarnessSettings } from './harness-settings.js'
 import { spawn } from 'node:child_process'
 import { mkdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
@@ -180,6 +181,8 @@ function programAt(bin, { harness, env, platform }) {
 }
 
 export function resolveHarnessProgram(harness, { lanes = {}, runsFolder = null, env = process.env, platform = process.platform } = {}) {
+  const saved = runsFolder ? readHarnessSettings(runsFolder).programs[harness] : null
+  if (saved) return programAt(saved, { harness, env, platform })
   const laneBin = laneBinFor(harness, lanes, runsFolder)
   if (laneBin) return programAt(laneBin, { harness, env, platform })
 
@@ -222,7 +225,7 @@ export function runCommand(command, args, {
 
     timer = setTimeout(() => {
       timedOut = true
-      killTree(child, { platform })
+      if (!killTree(child, { platform })) child.kill()
     }, timeoutMs)
 
     child.stdout?.on('data', (chunk) => {

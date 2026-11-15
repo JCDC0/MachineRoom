@@ -1,3 +1,4 @@
+import { HARNESS_OFF_PROBLEM, readHarnessSettings } from './harness-settings.js'
 import { spawn } from 'node:child_process'
 import { createHash, randomBytes, randomUUID } from 'node:crypto'
 import {
@@ -2352,7 +2353,8 @@ export function createOrchestrator({
   function setHarness(body) {
     if (body?.confirmed !== true) return { status: 400, body: { error: CONFIRM_HARNESS_PROBLEM } }
     const nextHarness = typeof body?.harness === 'string' ? body.harness.trim() : ''
-    if (!nextHarness || !isHarnessAvailable(nextHarness, { lanes, endpoints: readEndpoints(folder) })) {
+    if (nextHarness !== harness && readHarnessSettings(folder).off.includes(nextHarness)) return { status: 400, body: { error: HARNESS_OFF_PROBLEM } }
+    if (!nextHarness || !isHarnessAvailable(nextHarness, { lanes, endpoints: readEndpoints(folder), runsFolder: folder })) {
       return { status: 400, body: { error: harnessUnavailableProblem(nextHarness || 'unknown') } }
     }
     const nextModel = typeof body?.model === 'string' ? body.model.trim() : ''
