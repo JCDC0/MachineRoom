@@ -4,7 +4,7 @@ import { maskKeys } from '../src/briefs/audit.js'
 import { legacyMode, modesFor } from '../src/control/modes.js'
 import { HARNESSES } from '../src/harnesses/index.js'
 import { canChange, outsideScope, readLadder, subPrompt } from '../src/model/hierarchy.js'
-import { harnessUnavailableProblem, isHarnessAvailable } from './agents-config.js'
+import { HARNESS_EFFORTS, harnessUnavailableProblem, isHarnessAvailable } from './agents-config.js'
 import { readEndpoints } from './endpoints.js'
 import { MODELS } from './models.js'
 import {
@@ -16,6 +16,7 @@ import {
   DEFAULT_AUTOCOMPACT_PERCENT,
   DEFAULT_AUTOCOMPACT_VALUE,
   DEFAULT_CONTEXT_WINDOW,
+  EFFORT_PROBLEM,
   MESSAGE_PROBLEM,
   NO_NEW_REPORT,
   NO_REPORT,
@@ -311,7 +312,20 @@ export function createOrchestrators({
   function readSaved() {
     const raw = main.getLadder()
     if (!raw) return { ladder: { subs: [] }, problems: [] }
-    return readLadder(raw, { lanes: eligibleLaneKeys() })
+    const read = readLadder(raw, { lanes: eligibleLaneKeys() })
+    const efforts = new Map()
+    for (const sub of Array.isArray(raw.subs) ? raw.subs : []) {
+      if (!sub || typeof sub !== 'object' || typeof sub.id !== 'string') continue
+      if (typeof sub.effort === 'string' && sub.effort.trim()) efforts.set(sub.id, sub.effort.trim())
+    }
+    if (efforts.size === 0) return read
+    return {
+      ...read,
+      ladder: {
+        ...read.ladder,
+        subs: read.ladder.subs.map((sub) => (efforts.has(sub.id) ? { ...sub, effort: efforts.get(sub.id) } : sub)),
+      },
+    }
   }
 
   function laneDefaults(harness) {
@@ -339,6 +353,7 @@ export function createOrchestrators({
       name: sub.name,
       harness,
       model,
+      effort: typeof sub.effort === 'string' && sub.effort.trim() ? sub.effort.trim() : null,
       bin: String(defaults?.bin ?? harness),
       ...(laneWindow > 0 ? { contextWindow: laneWindow } : {}),
       lanes: [...sub.lanes],
@@ -383,6 +398,7 @@ export function createOrchestrators({
       promptFile,
       bridgeUrl,
       contextWindow: config.contextWindow,
+      effort: config.effort,
       onNotice,
       onMasked,
       recordsCache: sharedCache,
@@ -859,6 +875,37 @@ export function createOrchestrators({
         return { status: 400, body: { error: unavailable.join(' '), problems: unavailable } }
       }
     }
+    const namedEfforts = new Map()
+    for (const sub of Array.isArray(ladderInput?.subs) ? ladderInput.subs : []) {
+      if (!sub || typeof sub !== 'object' || typeof sub.id !== 'string') continue
+      if (Object.hasOwn(sub, 'effort')) namedEfforts.set(sub.id, sub.effort)
+    }
+    const savedEfforts = new Map()
+    const savedRaw = main.getLadder()
+    for (const sub of Array.isArray(savedRaw?.subs) ? savedRaw.subs : []) {
+      if (!sub || typeof sub !== 'object' || typeof sub.id !== 'string') continue
+      if (typeof sub.effort === 'string' && sub.effort.trim()) savedEfforts.set(sub.id, sub.effort.trim())
+    }
+    const effortProblems = []
+    const savedSubs = next.ladder.subs.map((sub) => {
+      const levels = HARNESS_EFFORTS[harnessFor(sub)]?.length ? HARNESS_EFFORTS[harnessFor(sub)] : HARNESS_EFFORTS.opencode
+      if (namedEfforts.has(sub.id)) {
+        const named = namedEfforts.get(sub.id)
+        if (named === null) return { ...sub, effort: null }
+        const value = typeof named === 'string' ? named.trim() : ''
+        if (!value || !levels.includes(value)) {
+          if (!effortProblems.includes(EFFORT_PROBLEM)) effortProblems.push(EFFORT_PROBLEM)
+          return sub
+        }
+        return { ...sub, effort: value }
+      }
+      const kept = savedEfforts.get(sub.id)
+      return kept && levels.includes(kept) ? { ...sub, effort: kept } : sub
+    })
+    if (effortProblems.length > 0) {
+      return { status: 400, body: { error: effortProblems.join(' '), problems: effortProblems } }
+    }
+    const ladder = { ...next.ladder, subs: savedSubs }
     if (by === 'orchestrator') {
       const current = readSaved().ladder
       const problems = []
@@ -874,11 +921,11 @@ export function createOrchestrators({
       }
       if (problems.length > 0) return { status: 403, body: { error: problems.join(' '), problems } }
     }
-    main.setLadder(next.ladder)
+    main.setLadder(ladder)
     sync()
     onNotice?.({ topic: 'agents' })
     onNotice?.({ topic: 'family' })
-    return { status: 200, body: { ladder: next.ladder } }
+    return { status: 200, body: { ladder } }
   }
 
   function methodNotAllowed(req, res) {
