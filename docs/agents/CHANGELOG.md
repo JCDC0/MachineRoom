@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- P374: Review 38 by GPT-6.1 Sol of P370 to P373 lists four P2 findings, for P377 and P379.
 - P370: Settings lists Harnesses, Direct API, Keys and Lanes first, and a Ready harness folds its version, path and Program field under Program details.
 - P371: A sub's Agents checklist shows each agent's current parent in place of its id, and Save label saves a valid changed label at once.
 - P373: The Build a team Model field is the shared ModelPicker, with search, Current, pins and refresh; what the team saves does not change.
