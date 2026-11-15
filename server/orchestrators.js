@@ -1,3 +1,4 @@
+import { HARNESS_OFF_PROBLEM, readHarnessSettings } from './harness-settings.js'
 import { execFileSync } from 'node:child_process'
 import { isAbsolute, join, relative, resolve } from 'node:path'
 import { maskKeys } from '../src/briefs/audit.js'
@@ -848,9 +849,12 @@ export function createOrchestrators({
       })
       const endpoints = readEndpoints(folder)
       const unavailable = []
+      const savedSubs = readSaved().ladder.subs
       for (const sub of next.ladder.subs) {
         const harness = harnessFor(sub)
-        if (!known.has(harness) || !harnessAvailable(harness, { lanes: allLanes, endpoints })) {
+        const previous = savedSubs.find (item => item.id === sub.id)
+        if (readHarnessSettings(folder).off.includes(harness) && (!previous || harnessFor(previous) !== harness)) return { status: 400, body: { error: HARNESS_OFF_PROBLEM } }
+        if (!known.has(harness) || !harnessAvailable(harness, { lanes: allLanes, endpoints, runsFolder: folder })) {
           const problem = harnessUnavailableProblem(harness)
           if (!unavailable.includes(problem)) unavailable.push(problem)
         }
