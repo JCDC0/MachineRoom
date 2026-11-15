@@ -239,7 +239,7 @@ async function attachCodexSub(url) {
           id: 'coder',
           name: 'Backend',
           harness: 'codex',
-          model: 'gpt-5.3-codex',
+          model: 'gpt-6.1-terra',
           lanes: ['codex', 'codex2'],
           scope: ['ladder-work.txt'],
           setBy: 'owner',
@@ -269,12 +269,12 @@ async function setupLadderRig() {
     codex: {
       name: 'Codex',
       harness: 'Codex',
-      cli: { harness: 'codex', bin: process.execPath, model: 'gpt-5.3-codex' },
+      cli: { harness: 'codex', bin: process.execPath, model: 'gpt-6.1-terra' },
     },
     codex2: {
       name: 'Codex Two',
       harness: 'Codex',
-      cli: { harness: 'codex', bin: process.execPath, model: 'gpt-5.3-codex' },
+      cli: { harness: 'codex', bin: process.execPath, model: 'gpt-6.1-terra' },
     },
     opencode: {
       name: 'OpenCode Lane',
