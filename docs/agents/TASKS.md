@@ -3197,3 +3197,12 @@ From Argon's plan, P380 and P381. `docs/agents/PLAN-NEXT-ARGON.md` (P375, Gemini
 2. FREE-HIERARCHY.md says: a failover backup keeps messaging under the primary lane's name and reads the primary's inbox.
 3. Tests, each failing before your change: the backup's env holds both variables with the primary's values; its prompt holds the paragraph; a run with no ticket gives the backup none.
 4. Run `node ../../node_modules/vitest/vitest.mjs run tests/failover-messages.test.js tests/failover-ticket-mode.test.js` and report the counts.
+
+**P382. The runner refuses a lane only for a leftover that is still there (AGY, Hydrogen).** Read this brief only. Commit each step as you finish it. Run every command in the foreground. Files: scripts/run-lane.mjs (only `refuseRunningLane`), src/briefs/run.js (only `laneStopProblem`), tests/leftover-recheck.test.js (new; add no test to another file except to keep an existing one passing), docs/agents/architecture/COMMANDS.md (only the leftover sentence), docs/agents/CHANGELOG.md.
+
+On 2026-11-15 the runner twice refused the opencode lane with `The opencode lane still has leftover process N`, and each time process N had already exited when the orchestrator looked. Something short-lived named the worktree on its command line at the moment of the check.
+
+1. `refuseRunningLane` lists processes, and when it finds a leftover, waits 500 milliseconds, lists again and refuses only for a process that is in both lists with the same pid and the same command line.
+2. The refusal names the leftover's program name too (the first word of its command line, with the home folder masked by `maskProfilePaths` of `src/model/paths.js`): `The opencode lane still has leftover process N (node.exe); stop it with npm run run-lane -- --stop opencode.`
+3. Tests, each failing before your change: a process in the first list and gone from the second is not a refusal; one in both is, and its message names its program; a pid in both lists with a different command line (a reused pid) is not a refusal. Pass the process lister and the wait in as arguments so the tests need no real processes.
+4. Run `node node_modules/vitest/vitest.mjs run tests/leftover-recheck.test.js tests/run-lane.test.js tests/process-tree.test.js` (skip a file that does not exist) and report the counts.
