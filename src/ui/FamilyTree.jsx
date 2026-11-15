@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { toAgents } from '../live/source.js'
-import { modesFor, defaultMode } from '../control/modes.js'
+import { laneModesFor, defaultMode } from '../control/modes.js'
 import { sessionKeyFor } from '../model/laneStarter.js'
 import { agentTasks } from '../model/liveTasks.js'
 import AutocompactInput from './AutocompactInput.jsx'
@@ -1860,10 +1860,10 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
               </>
             ) : (
               <>
-                {modesFor(node.harness).length > 0 ? (
+                {laneModesFor(node.harness).length > 0 ? (
                   <label className="mr-side-field"><span className="mr-side-field-label mono">Mode</span>
                     <select className="mr-side-select mono" aria-label={`Mode for ${node.label}`} value={nodeDraft.mode} onChange={(event) => setNodeDraft({ ...nodeDraft, mode: event.target.value })}>
-                      {modesFor(node.harness).map((mode) => <option key={mode.id} value={mode.id}>{mode.label}</option>)}
+                      {laneModesFor(node.harness).map((mode) => <option key={mode.id} value={mode.id}>{mode.label}</option>)}
                       <option value="choice">Orchestrator's choice</option>
                     </select>
                   </label>
@@ -2198,10 +2198,10 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
             placeholder={direct ? 'Choose a model' : 'Harness default'}
           />
         ) : null}
-        {selected && modesFor(draft.harness).length > 0 ? (
+        {selected && laneModesFor(draft.harness).length > 0 ? (
           <label className="mr-side-field"><span className="mr-side-field-label mono">Mode</span>
             <select className="mr-side-select mono" aria-label="New agent mode" value={draft.mode ?? defaultMode(draft.harness) ?? ''} onChange={(event) => setDraft({ ...draft, mode: event.target.value })}>
-              {modesFor(draft.harness).map((mode) => <option key={mode.id} value={mode.id}>{mode.label}</option>)}
+              {laneModesFor(draft.harness).map((mode) => <option key={mode.id} value={mode.id}>{mode.label}</option>)}
               <option value="choice">Orchestrator's choice</option>
             </select>
           </label>
