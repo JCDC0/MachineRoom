@@ -1154,7 +1154,7 @@ describe('talking to a lane and seeing agent messages', () => {
         })
       })
 
-      expect(calls).toEqual([{ text: 'Fix tests', options: { id: 'opencode' } }])
+      expect(calls).toEqual([{ text: 'Fix tests', options: { id: 'opencode', worktree: true } }])
     })
   })
 

@@ -658,7 +658,7 @@ export default function DispatchPanel({
       setProjectError(null)
       if (!(await saveProjectCheckCommand())) return
       splitProjectRef.current = projectName
-      const started = await startSplitRun({ client, pairs: projectSplitPlan.pairs, checkCommand: projectCheckCommand })
+      const started = await startSplitRun({ client, pairs: projectSplitPlan.pairs, checkCommand: projectCheckCommand, worktree: projectOwnWorktree })
       if (!started) {
         splitProjectRef.current = ''
         setProjectError('The split run is already starting.')
@@ -931,7 +931,6 @@ export default function DispatchPanel({
               <input
                 type="checkbox"
                 checked={projectOwnWorktree}
-                disabled={projectOneLanePerTask}
                 onChange={(event) => {
                   const on = event.target.checked
                   setProjectOwnWorktree(on)
@@ -939,7 +938,7 @@ export default function DispatchPanel({
                   dismissProjectConfirm()
                 }}
               />
-              <span>Own worktree</span>
+              <span>Separate worktree</span>
             </label>
           </div>
 
@@ -951,10 +950,7 @@ export default function DispatchPanel({
                 onChange={(event) => {
                   const on = event.target.checked
                   setProjectOneLanePerTask(on)
-                  if (on) {
-                    setProjectOwnWorktree(true)
-                    setProjectAllowDirty(false)
-                  }
+                  if (on) setProjectAllowDirty(false)
                   dismissProjectConfirm()
                 }}
               />
@@ -1064,7 +1060,9 @@ export default function DispatchPanel({
                     {projectCheckLine({ checkCommand: projectCheckCommand, hasTestScript: projectHasTestScript })}
                   </div>
                   <div className="brief-confirm-warning">
-                    {projectSplitWorktreeLine(projectGitState)}
+                    {projectOwnWorktree
+                      ? projectSplitWorktreeLine(projectGitState)
+                      : 'Each task runs in the project folder.'}
                   </div>
                   <div className="brief-confirm-warning">
                     This starts {projectSplitTaskCount} agents on this computer three seconds apart and spends money.

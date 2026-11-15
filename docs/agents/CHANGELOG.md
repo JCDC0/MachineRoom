@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- P406: A lane task sent from the chat and a split run carry a Separate worktree choice, and a worktree is never used outside a git checkout.
 - The scale probe retries a .git rename up to 10 times when Windows still holds the folder, so the scale-live test no longer fails on a lock.
 - The replay scrubber's max and value stay finite before a recording loads, so the NaN attribute warnings are gone.
 - A cut inbox reply keeps its sender's name even when the name has spaces.
