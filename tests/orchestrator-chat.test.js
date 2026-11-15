@@ -2172,7 +2172,6 @@ describe('Hud and Waiting with an orchestrator', () => {
       expect(html).toContain('class="mr-orch is-inline"')
       expect(html).toContain('Ask the orchestrator anything')
       expect(html).toContain('class="hud-strip-model"')
-      expect(html).toContain('class="hud-strip-effort"')
       expect(html).toContain('class="hud-strip-compact"')
       expect(html).not.toContain('id="hud-orchestrator-chat"')
       expect(html).not.toContain('class="hud-dock"')

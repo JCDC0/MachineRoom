@@ -1718,19 +1718,21 @@ export default function OrchestratorChat({
                   loading={modelRefresh.loading}
                   disabled={!modelRefresh.canRefresh}
                 />
-                <button
-                  type="button"
-                  className="hud-strip-effort"
-                  aria-expanded={effortOpen}
-                  aria-label={`Effort for ${current?.name || 'the orchestrator'}`}
-                  onClick={openEffort}
-                >
-                  <span>Effort:</span>
-                  <span className="hud-lower-picker-value mono">{shownEffort}</span>
-                  <span className="hud-lower-picker-v" aria-hidden="true">
-                    <MenuIcon />
-                  </span>
-                </button>
+                {effortChoices.length > 0 ? (
+                  <button
+                    type="button"
+                    className="hud-strip-effort"
+                    aria-expanded={effortOpen}
+                    aria-label={`Effort for ${current?.name || 'the orchestrator'}`}
+                    onClick={openEffort}
+                  >
+                    <span>Effort:</span>
+                    <span className="hud-lower-picker-value mono">{shownEffort}</span>
+                    <span className="hud-lower-picker-v" aria-hidden="true">
+                      <MenuIcon />
+                    </span>
+                  </button>
+                ) : null}
                 {canSetMode ? (
                   <button
                     type="button"

@@ -93,4 +93,20 @@ describe('friendly chat forms', () => {
     expect(html).toContain('Reads and plans. Makes no edits and runs no commands.')
     expect(html).not.toContain('full permissions')
   })
+
+  it('draws no Effort control when the harness has no effort levels', () => {
+    const html = renderToString(
+      createElement(OrchestratorChat, {
+        open: true,
+        inline: true,
+        client: fakeClient(),
+        initialChat: { state: 'idle', messages: [] },
+        initialOrchestrators: [
+          { id: 'orchestrator', name: 'Orchestrator', harness: 'agy', effort: 'high' },
+        ],
+      })
+    )
+    expect(html).not.toContain('class="hud-strip-effort"')
+    expect(html).not.toContain('Effort:')
+  })
 })
