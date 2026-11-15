@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- P388: The leftover recheck refuses any process in the second list that names the lane's worktree or folder and names its pid and program (R40-1).
 - Review 40 (Sol) of P382, P384 and P385: two P2 findings, a replacement leftover and an oversized inbox batch.
 - P385: The chat's model picker is disabled while a save waits, and the native agent drops its oldest inbox batches first when it trims to its context limit (R39-2, R39-3).
 - P384: Lane creation and update accept an empty model for a CLI harness, Direct API and endpoints still need one, and Claude, OpenCode and Hermes leave the model flag out when it is empty (R39-1).
