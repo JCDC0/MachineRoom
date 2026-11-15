@@ -1686,8 +1686,18 @@ function recordRoom(record, toolLines, lanes) {
   }
 }
 
+const LANE_MESSAGE_START = 'You may send your coordinator a short message'
+
+function withoutLaneMessage(prompt) {
+  return String(prompt ?? '')
+    .split(/\n{2,}/)
+    .filter((part) => !part.trimStart().startsWith(LANE_MESSAGE_START))
+    .join('\n\n')
+}
+
 async function startFailover({ laneKey, target, lanes, options, wanted, prompt, promptFor = null, folder, project, task, queue = null, base = '', deferRecord, openLog, failedRecord, failedStartBranch, onStart = null }) {
-  const fallbackLane = laneWithOverrides(lanes?.[target], { mode: options.mode })
+  const primaryMode = options?.mode !== undefined ? options.mode : lanes?.[laneKey]?.cli?.mode
+  const fallbackLane = laneWithOverrides(lanes?.[target], primaryMode !== undefined ? { mode: primaryMode } : {})
   if (!fallbackLane) return null
   const modeProblem = laneModeProblem(fallbackLane, target)
   if (modeProblem) {
@@ -1733,7 +1743,7 @@ async function startFailover({ laneKey, target, lanes, options, wanted, prompt, 
       lane: fallbackLane,
       lanes,
       wanted,
-      prompt: !project && typeof promptFor === 'function' ? promptFor(target, `-on-${target}`) : prompt,
+      prompt: withoutLaneMessage(!project && typeof promptFor === 'function' ? promptFor(target, `-on-${target}`) : prompt),
       logPath: join(folder, `${fallbackName}.log`),
       usageFile: join(folder, `${fallbackName}.usage.json`),
       name: fallbackName,
@@ -1835,7 +1845,11 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
       : null
     // OpenCode takes its folder from PWD, which a shell started elsewhere leaves pointing at that shell's folder.
     const spawnSpec = laneSpawn({ command, minutes: options.minutes, model: lane.cli.model, effort: lane.reasoning })
-    const runnerNames = ['MACHINEROOM_RUNS', 'MACHINEROOM_LANES_FILE', 'MACHINEROOM_LANE_TICKET', 'MACHINEROOM_BRIDGE']
+    const runnerNames = [
+      'MACHINEROOM_RUNS',
+      'MACHINEROOM_LANES_FILE',
+      ...(options?.failedOver === true ? [] : ['MACHINEROOM_LANE_TICKET', 'MACHINEROOM_BRIDGE']),
+    ]
       .filter((name) => typeof process.env[name] === 'string' && process.env[name] !== '')
     const runsDir = options?.runs || (logPath ? dirname(logPath) : runsFolder())
     const endpoints = readEndpoints(runsDir)

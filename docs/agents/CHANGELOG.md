@@ -1,10 +1,12 @@
 # Changelog
 
 ## Unreleased
+- A failover backup gets neither the failed lane's ticket nor the message paragraph, and runs in the failed run's mode or not at all (P349, R36-2 and R36-3).
 - The bridge and the lane log mask a run's ticket, and the key masker knows the X-MachineRoom-Lane header and MACHINEROOM_LANE_TICKET (P348, R36-1).
 - The Inspector's `Outside the project` list now reaches the screen: both players' snapshots carry an agent's outside paths, and a new one redraws the Inspector (found by eye after P346).
 - The bridge masks a run's own ticket in its runner output, the tail and a failed start's note, split chunks included (P348).
 - `maskKeys` masks the value after `X-MachineRoom-Lane:` and `MACHINEROOM_LANE_TICKET=`, and the lane log drops the bare ticket too (P348).
+- A failover run keeps the failed run's mode and gives the backup neither the failed lane's ticket nor its message paragraph (P349).
 - A read, write or edit of an absolute path outside the project and its lane worktrees is marked on the activity, kept per agent and listed in the agent's Inspector under Outside the project, with the home folder masked (P339, P346).
 - Lane modes are tested per harness and written in COMMANDS.md, and a harness with no modes refuses one with a plain sentence (P344).
 - A run start request may name a mode: the bridge checks it with the runner's own check and passes --mode to the runner (P343).
