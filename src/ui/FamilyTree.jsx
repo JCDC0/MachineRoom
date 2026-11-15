@@ -28,6 +28,7 @@ import {
   hideLaneText,
   labelProblem,
   laneCountLine,
+  laneParentLabel,
   moreLanesLabel,
   removeLaneText,
   rowText,
@@ -1084,8 +1085,8 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
     }))
   }
 
-  function askLabel(node) {
-    if (!nodeDraft) return
+  async function askLabel(node) {
+    if (!nodeDraft || busy) return
     const problem = labelProblem(nodeDraft.label)
     if (problem) {
       setActionError(problem)
@@ -1097,16 +1098,18 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
       setActionError('This bridge cannot rename an agent.')
       return
     }
-    ask({
-      text: `Set the label of ${node.label} to "${label}"?`,
-      label: 'Save label',
-      busyText: 'Saving the label...',
-      run: async () => {
-        await client.setAgentLabel({ id: node.id, label, confirmed: true })
-        setNodeDraft((current) => (current ? { ...current, label } : current))
-        await refresh()
-      },
-    })
+    setBusy(true)
+    setActionError('')
+    try {
+      await client.setAgentLabel({ id: node.id, label, confirmed: true })
+      setNodeDraft((current) => (current ? { ...current, label } : current))
+      await refresh()
+    } catch (error) {
+      setActionError(messageOf(error))
+      await refresh().catch(() => {})
+    } finally {
+      setBusy(false)
+    }
   }
 
   function askSetup(node) {
@@ -1711,7 +1714,7 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
           <button
             type="button"
             className="mr-side-action"
-            disabled={busy || !canLabel}
+            disabled={busy || !canLabel || cleanText(nodeDraft.label, AGENT_NAME_MAX) === node.label}
             onClick={() => askLabel(node)}
           >
             Save label
@@ -1937,7 +1940,7 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
                           }}
                         />
                         <span className="mr-family-agent-label">{row.label}</span>
-                        <span className="mr-family-agent-id mono">{row.id}</span>
+                        <span className="mr-family-agent-id mono">{laneParentLabel(tree.nodes, row)}</span>
                       </label>
                     )
                   })

@@ -131,6 +131,12 @@ export function stateWord(node) {
   return 'idle'
 }
 
+export function laneParentLabel(nodes, lane) {
+  const parentId = cleanText(lane?.parent, 80)
+  const parent = (Array.isArray(nodes) ? nodes : []).find((node) => node && node.id === parentId)
+  return cleanText(parent?.label, AGENT_NAME_MAX) || 'Orchestrator'
+}
+
 export function laneCountLine(nodes) {
   const lanes = (Array.isArray(nodes) ? nodes : []).filter((node) => node && node.kind === 'lane')
   const active = lanes.filter((node) => node.active !== false).length
