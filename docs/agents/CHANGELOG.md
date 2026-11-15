@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- P363: The chat sends to the orchestrator whose tab it opens, names the current mode and its rule in the start card for the main and a sub, and leaves out the Effort control when the harness lists no effort levels.
 - P360: Pickers, family rows, the Model button and the Inspector show a model's name only; a repeated name adds its first id segment; an empty model reads Harness default.
 - P357: The add-agent, sub, team and orchestrator pickers offer only ready, enabled harnesses; a node keeps its own harness marked (not ready); an empty picker points to Settings.
 - P365: The custom endpoint form offers model refresh only for a saved endpoint, and a failed lanes read no longer says the list is empty.
