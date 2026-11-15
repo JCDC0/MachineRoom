@@ -68,6 +68,14 @@ export function harnessStatus(entry) {
 }
 
 /**
+ * Reports whether a harness row folds its program details under a summary.
+ */
+export function harnessProgramFolded(entry) {
+  if (!entry || isNativeHarness(entry)) return false
+  return harnessStatus(entry).state === 'ready'
+}
+
+/**
  * Builds empty program drafts keyed by harness key.
  */
 export function programDraftsFrom(rows) {
