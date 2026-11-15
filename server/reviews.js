@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { worktreeFor } from '../src/briefs/run.js'
+import { outsideScope } from '../src/model/hierarchy.js'
 import { lanesFolder, mainCheckoutOf, readAllLanes, runsFolder as defaultRunsFolder } from './lanes-source.js'
 import { gitPath } from './programPath.js'
 import {
@@ -290,15 +291,93 @@ export function createReviewsApi({
   const onProject = Boolean(resolvedRoot && !sameCheckout)
   const runGit = (cwd, args, options = {}) => gitRunner(cwd, args, { timeout: GIT_TIMEOUT_MS, ...options })
   let merging = false
+  const scopeWarned = new Set()
+
+  function orchestratorRegistry() {
+    return typeof orchestrators === 'function' ? orchestrators() : null
+  }
+
+  function callerId(req) {
+    const registry = orchestratorRegistry()
+    if (!registry || typeof registry.idForToken !== 'function') return null
+    const header = req.headers?.['x-machineroom-orchestrator']
+    const token = typeof header === 'string' ? header.trim() : Array.isArray(header) ? header[0].trim() : ''
+    return registry.idForToken(token)
+  }
 
   function ownerRequest(req) {
     const headers = req.headers ?? {}
     if (headers.origin) return true
-    const registry = typeof orchestrators === 'function' ? orchestrators() : null
-    if (!registry || typeof registry.idForToken !== 'function') return false
-    const header = headers['x-machineroom-orchestrator']
-    const token = typeof header === 'string' ? header.trim() : Array.isArray(header) ? header[0].trim() : ''
-    return Boolean(registry.idForToken(token))
+    return Boolean(callerId(req))
+  }
+
+  function ladderSubFor(lane) {
+    const registry = orchestratorRegistry()
+    if (!registry || typeof registry.getLadder !== 'function') return null
+    const ladder = registry.getLadder()
+    if (!ladder || !Array.isArray(ladder.subs)) return null
+    const sub = ladder.subs.find((entry) => entry && Array.isArray(entry.lanes) && entry.lanes.includes(lane))
+    return sub && typeof sub === 'object' ? sub : null
+  }
+
+  function parentIdFor(sub) {
+    const parent = typeof sub.parent === 'string' ? sub.parent.trim() : ''
+    return parent || 'orchestrator'
+  }
+
+  function warnOutsideScope(lane, head, sub, parent, files) {
+    const key = `${lane}:${head}`
+    if (scopeWarned.has(key)) return
+    scopeWarned.add(key)
+    const registry = orchestratorRegistry()
+    if (!registry || typeof registry.find !== 'function') return
+    const target = registry.find(parent)
+    if (!target || typeof target.deliver !== 'function') return
+    const name = typeof sub.name === 'string' && sub.name.trim() ? sub.name.trim() : sub.id
+    const text = [
+      'Outside the scope, do not merge:',
+      ...files.map((file) => `- ${file}`),
+      '',
+      `Lane ${lane} changed files outside the scope of ${name}, so its merge was refused.`,
+      'Allow it with allowOutside if the files are right.',
+    ].join('\n')
+    try {
+      target.deliver('room', text)
+    } catch {}
+  }
+
+  async function scopeRefusal(lane, worktree, head, baseRef, request) {
+    const sub = ladderSubFor(lane)
+    if (!sub || sub.restricted !== true) return null
+    let changed
+    try {
+      const text = await runGit(worktree, [
+        'diff',
+        '--name-only',
+        '--no-ext-diff',
+        '--no-textconv',
+        `${baseRef}...${head}`,
+      ])
+      changed = text.split(/\r?\n/).filter(Boolean)
+    } catch {
+      return null
+    }
+    const outside = outsideScope(changed, sub, { windows: process.platform === 'win32' })
+    if (outside.length === 0) return null
+    const parent = parentIdFor(sub)
+    const headers = request?.headers ?? {}
+    const allowed = request?.allowOutside === true && (Boolean(headers.origin) || callerId({ headers }) === parent)
+    if (allowed) return null
+    warnOutsideScope(lane, head, sub, parent, outside)
+    const name = typeof sub.name === 'string' && sub.name.trim() ? sub.name.trim() : sub.id
+    return {
+      status: 409,
+      body: {
+        error: `The lane changed files outside the scope of ${name}, so it was not merged.`,
+        files: outside,
+        outside: true,
+      },
+    }
   }
 
   function readLanes() {
@@ -495,7 +574,7 @@ export function createReviewsApi({
     }
   }
 
-  async function mergeLane(lane, worktree, head, message, expectedBase, expectedBaseHead) {
+  async function mergeLane(lane, worktree, head, message, expectedBase, expectedBaseHead, request) {
     if (!resolvedRoot) {
       return { status: 500, body: { error: 'The bridge could not read the main checkout.' } }
     }
@@ -533,6 +612,8 @@ export function createReviewsApi({
     if (await isAncestor(runGit, resolvedRoot, laneHead, MAIN_REF)) {
       return { status: 409, body: { error: 'Nothing to merge.' } }
     }
+    const outside = await scopeRefusal(lane, worktree, laneHead, MAIN_REF, request)
+    if (outside) return outside
 
     const branch = (await runGit(worktree, ['branch', '--show-current'])).trim()
     const oldHead = (await runGit(resolvedRoot, ['rev-parse', 'HEAD'])).trim()
@@ -604,7 +685,7 @@ export function createReviewsApi({
     return { status: 200, body: { ok: true, lane, branch, head: laneHead, commit } }
   }
 
-  async function fastForwardLane(lane, worktree, head, expectedBase, expectedBaseHead) {
+  async function fastForwardLane(lane, worktree, head, expectedBase, expectedBaseHead, request) {
     if (!resolvedRoot) {
       return { status: 500, body: { error: 'The bridge could not read the project folder.' } }
     }
@@ -650,6 +731,8 @@ export function createReviewsApi({
         body: { error: `The lane is not a fast forward of ${base.name}. Rebase it onto ${base.name} and read it again.` },
       }
     }
+    const outside = await scopeRefusal(lane, worktree, laneHead, base.ref, request)
+    if (outside) return outside
 
     const branch = (await runGit(worktree, ['branch', '--show-current'])).trim()
     const oldHead = (await runGit(resolvedRoot, ['rev-parse', 'HEAD'])).trim()
@@ -773,9 +856,10 @@ export function createReviewsApi({
         merging = true
         let answer
         try {
+          const scopeRequest = { allowOutside: body.allowOutside === true, headers: req.headers ?? {} }
           answer = onProject
-            ? await fastForwardLane(lane, worktree, head, baseName, baseHead)
-            : await mergeLane(lane, worktree, head, message, baseName, baseHead)
+            ? await fastForwardLane(lane, worktree, head, baseName, baseHead, scopeRequest)
+            : await mergeLane(lane, worktree, head, message, baseName, baseHead, scopeRequest)
           if (answer.status === 200 && answer.body && typeof answer.body.commit === 'string') {
             try {
               const play = await movePlayWorktree(answer.body.commit)

@@ -68,6 +68,7 @@ export function createClient({
         const error = new Error(message)
         if (Array.isArray(json?.files)) error.files = json.files.filter((file) => typeof file === 'string')
         if (Array.isArray(json?.problems)) error.problems = json.problems.filter((item) => typeof item === 'string')
+        if (json?.outside === true) error.outside = true
         throw error
       }
       return json
@@ -650,11 +651,12 @@ export function createClient({
     reviewDiff: (lane) =>
       request('GET', `/api/control/reviews/${encodeURIComponent(lane ?? '')}/diff`, undefined, REQUEST_LIMITS.reviewDiff),
 
-    mergeReview: (lane, { head, base, baseHead, message } = {}) => {
+    mergeReview: (lane, { head, base, baseHead, message, allowOutside } = {}) => {
       const body = { confirmed: true, head }
       if (base !== undefined) body.base = base
       if (baseHead !== undefined) body.baseHead = baseHead
       if (message !== undefined) body.message = message
+      if (allowOutside !== undefined) body.allowOutside = allowOutside
       return request(
         'POST',
         `/api/control/reviews/${encodeURIComponent(lane ?? '')}/merge`,

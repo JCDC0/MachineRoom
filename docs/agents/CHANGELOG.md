@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- P402: A restricted sub's lane merge answers 409 with the files outside its scope and waits for the owner or the orchestrator above the sub, which is told once per branch head, and Reviews offers Merge anyway.
 - The scale probe retries a .git rename up to 10 times when Windows still holds the folder, so the scale-live test no longer fails on a lock.
 - The replay scrubber's max and value stay finite before a recording loads, so the NaN attribute warnings are gone.
 - A cut inbox reply keeps its sender's name even when the name has spaces.
