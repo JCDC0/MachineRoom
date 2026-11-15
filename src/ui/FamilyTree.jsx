@@ -1767,6 +1767,8 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
                     loading={editorModels.loading}
                     error={editorModels.error}
                     canRefresh={editorModels.canRefresh}
+                    allowDefault={!direct}
+                    placeholder={direct ? 'Choose a model' : 'Harness default'}
                   />
                 ) : (
                   <p className="mr-side-note is-dim">No models listed for this harness.</p>
@@ -1873,6 +1875,8 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
                 loading={editorModels.loading}
                 error={editorModels.error}
                 canRefresh={editorModels.canRefresh}
+                allowDefault={!direct}
+                placeholder={direct ? 'Choose a model' : 'Harness default'}
               />
             ) : null}
             {harness && efforts.length > 0 ? (
