@@ -2376,7 +2376,8 @@ export function createOrchestrator({
       return { status: 400, body: { error: modelUnavailableProblem(nextModel, nextHarness) } }
     }
     if (running && !running.done) return { status: 409, body: { error: COMPACT_RUNNING_PROBLEM } }
-    const keptMode = mode ?? legacyMode(harness)
+    const changedHarness = nextHarness !== harness
+    const keptMode = changedHarness ? mode : (mode ?? legacyMode(harness))
     harness = nextHarness
     model = nextModel
     if (effort !== null && !effortLevelsFor(harness).includes(effort)) effort = null
@@ -2386,7 +2387,8 @@ export function createOrchestrator({
       s.opencodeSessionId = null
     }
     contextWindow = resolveContextWindow(model, harness, windowOption, laneDetails())
-    mode = modesFor(harness).some((entry) => entry.id === keptMode) ? keptMode : defaultMode(harness)
+    const keepsMode = keptMode !== 'bypass' || !changedHarness
+    mode = keepsMode && modesFor(harness).some((entry) => entry.id === keptMode) ? keptMode : defaultMode(harness)
     persist()
     notify()
     return { status: 200, body: answer() }

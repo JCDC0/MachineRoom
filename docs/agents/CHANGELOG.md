@@ -1,11 +1,13 @@
 # Changelog
 
 ## Unreleased
+- Switching an orchestrator to another harness keeps its saved mode unless that is Bypass or only implied, so a switch never turns on Codex Bypass.
 - A restricted sub's merge is refused when the bridge cannot read its changed files, and a moved file names both paths.
 - A failover backup with a fixed saved mode runs in that mode, and Orchestrator's choice is refused for a harness with no modes.
 - P412: Failover keeps a backup lane's fixed mode, and choice requires a harness with modes on lane saves and run-lane.
 - P410: The scope gate reads changed files with --no-renames, so a moved file names both its old and new path.
 - P410: A restricted sub's lane merge answers 409 when the bridge cannot read its changed files, unless allowOutside is allowed.
+- A harness switch keeps the owner's saved mode when the new harness offers it and it is not Bypass, so a switch to Codex never turns on Bypass on its own.
 - Review 42 (Sol) of P395 to P408: four P1 and two P2 findings in the scope gate, Codex Bypass, failover modes, sub restore and choice.
 - Lane mode pickers and lane saves leave out Ask, which a headless lane run cannot use.
 - The control client sends a lane chat's Separate worktree choice to the bridge, so the box takes effect.
