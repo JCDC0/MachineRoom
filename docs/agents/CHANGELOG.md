@@ -1,10 +1,12 @@
 # Changelog
 
 ## Unreleased
+- When the newest inbox reply must be cut, it keeps its sender, starts on a whole word and says [start cut].
 - An orchestrator saved at Harness default keeps it after a restart, and a new sub at Harness default no longer takes a lane's model.
 - The orchestrator and lane editors' model pickers show and offer Harness default for every harness but Direct API.
 - P394: The orchestrator and custom lane editor pickers offer Harness default for every harness but Direct API.
 - Harness default survives an orchestrator restart and stays empty for a new sub.
+- P393: A cut inbox reply keeps its sender, marks [start cut] and begins at a word boundary within the bound (R41-3).
 - Review 41 (Sol) of P386 and P388 to P390: three P2 findings, a restart that loses Harness default, a sub given a lane model, and an inbox tail cut mid-word.
 - Switching the orchestrator to another harness at Harness default saves with no model instead of answering 400; Direct API still needs a model.
 - The runner's leftover recheck refuses for any process in the second list that names the lane's worktree, so a leftover that hands off to a worker still blocks the lane.
