@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- The add-agent pills, the sub form, Build a team and an orchestrator's harness select offer only a harness the bridge names ready and not turned off, keep a node's own harness marked `(not ready)`, and say `No harness is ready. Add one in Settings, under Harnesses.` when there is nothing to offer (P357).
 - The bridge runs each harness with --version once in 10 minutes and lists it as ready or not with a reason, keeps a saved program and an on or off choice per harness, and refuses a new lane or sub on a harness turned off (P355, P355b).
 - Settings has a Harnesses section above Direct API: each harness shows Ready, Not ready with its reason, or Off, with its version and program, an Offer in forms switch and a Program field, and Check again checks them all (P356).
 - A ladder save keeps the effort it names on a sub and its first turn takes it, an effort the harness lacks is refused, and the chat's Effort menu offers the levels the bridge lists for that harness (P353).

@@ -9,6 +9,7 @@ import {
   DIRECT_KEY_PROBLEM,
   LANES_JSON_SAVE_PROBLEM,
   MAX_SUBS,
+  NO_READY_HARNESS,
   affectedSubText,
   childConfirmText,
   childDetail,
@@ -23,6 +24,7 @@ import {
   harnessEfforts,
   harnessLabel,
   harnessModels,
+  harnessReady,
   hideLaneText,
   labelProblem,
   laneCountLine,
@@ -879,7 +881,7 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
 
   const subHarness = useMemo(() => {
     if (!groupOpen) return null
-    return subHarnesses.find((row) => row.key === subDraft?.harness) ?? null
+    return subHarnesses.filter((row) => harnessReady(row)).find((row) => row.key === subDraft?.harness) ?? null
   }, [groupOpen, subDraft?.harness, subHarnesses])
   const subFallback = useMemo(
     () => (subHarness && subHarness.key !== DIRECT_HARNESS ? harnessModels(subHarness, models) : []),
@@ -1048,13 +1050,16 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
   }
 
   function nodeHarnessOptions(node) {
-    const list = [...subHarnesses]
-    if (node && node.harness && !list.some((row) => row.key === node.harness)) {
-      const known = findHarness(harnesses, node.harness)
+    const key = cleanText(node?.harness, 40)
+    const list = subHarnesses.filter((row) => harnessReady(row))
+    if (key && !list.some((row) => row.key === key)) {
+      const known = subHarnesses.find((row) => row.key === key) ?? findHarness(harnesses, key)
       list.push({
-        key: node.harness,
-        name: harnessLabel(node.harness) || known?.name || node.harness,
-        available: false,
+        key,
+        name: known?.name || harnessLabel(key) || key,
+        available: known?.available === true,
+        ready: known && typeof known.ready === 'boolean' ? known.ready : null,
+        enabled: known ? known.enabled !== false : true,
         models: known?.models ?? [],
         efforts: known?.efforts ?? [],
         fallback: true,
@@ -1221,11 +1226,11 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
   }
 
   function subDraftFor() {
-    const offered = subHarnesses
+    const offered = subHarnesses.filter((row) => harnessReady(row))
     const harness = offered.find((row) => row.key === 'opencode') ?? offered[0] ?? null
     return {
       label: 'Sub orchestrator',
-      harness: harness?.key ?? 'opencode',
+      harness: harness?.key ?? '',
       model: harness ? harnessModels(harness, models)[0]?.id ?? '' : '',
       effort: harness?.efforts?.[0] ?? '',
     }
@@ -1789,12 +1794,13 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
                   {options.map((row) => (
                     <option value={row.key} key={row.key}>
                       {harnessLabel(row) || row.key}
+                      {harnessReady(row) ? '' : ' (not ready)'}
                     </option>
                   ))}
                 </select>
               </label>
             ) : (
-              <p className="mr-side-note is-dim">No harnesses are listed.</p>
+              <p className="mr-side-note is-dim">{NO_READY_HARNESS}</p>
             )}
             {directMissing ? (
               renderDirectNotice(editorModels.refresh)
@@ -1840,6 +1846,7 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
                 disabled={
                   busy ||
                   directMissing ||
+                  !harness ||
                   (typeof client?.setOrchestratorHarness !== 'function' &&
                     typeof client?.setOrchestratorEffort !== 'function')
                 }
@@ -1969,7 +1976,7 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
             ))}
           </div>
         ) : (
-          <p className="mr-side-note is-dim">Loading harnesses...</p>
+          <p className="mr-side-note is-dim">{NO_READY_HARNESS}</p>
         )}
         {directMissing ? renderDirectNotice(childModels.refresh) : null}
         {selected && !directMissing ? (
@@ -2006,7 +2013,7 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
         ) : null}
         {childProblem ? <p className="mr-family-note is-error">{childProblem}</p> : null}
         <div className="mr-side-form-actions">
-          <button type="submit" className="mr-side-primary" disabled={busy || !canCreate || directMissing}>
+          <button type="submit" className="mr-side-primary" disabled={busy || !canCreate || directMissing || !selected}>
             Create
           </button>
           <button type="button" className="mr-side-action" disabled={busy} onClick={closeChild}>
@@ -2020,7 +2027,7 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
 
   function renderSubForm() {
     if (!subDraft) return null
-    const offered = subHarnesses
+    const offered = subHarnesses.filter((row) => harnessReady(row))
     const selected = offered.find((row) => row.key === subDraft.harness) ?? null
     const efforts = selected ? harnessEfforts(selected) : []
     const direct = selected?.key === DIRECT_HARNESS
@@ -2045,21 +2052,25 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
             onChange={(event) => setSubDraft({ ...subDraft, label: event.target.value })}
           />
         </label>
-        <label className="mr-side-field">
-          <span className="mr-side-field-label mono">Harness</span>
-          <select
-            className="mr-side-select mono"
-            aria-label="Sub orchestrator harness"
-            value={subDraft.harness}
-            onChange={(event) => chooseSubHarness(event.target.value)}
-          >
-            {offered.map((row) => (
-              <option value={row.key} key={row.key}>
-                {row.key === DIRECT_HARNESS ? 'Direct API' : row.name || row.key}
-              </option>
-            ))}
-          </select>
-        </label>
+        {offered.length > 0 ? (
+          <label className="mr-side-field">
+            <span className="mr-side-field-label mono">Harness</span>
+            <select
+              className="mr-side-select mono"
+              aria-label="Sub orchestrator harness"
+              value={subDraft.harness}
+              onChange={(event) => chooseSubHarness(event.target.value)}
+            >
+              {offered.map((row) => (
+                <option value={row.key} key={row.key}>
+                  {row.key === DIRECT_HARNESS ? 'Direct API' : row.name || row.key}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : (
+          <p className="mr-side-note is-dim">{NO_READY_HARNESS}</p>
+        )}
         {directMissing ? renderDirectNotice(subModels.refresh) : null}
         {selected && !directMissing ? (
           <ModelPicker
@@ -2098,7 +2109,7 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
         ) : null}
         {subProblem ? <p className="mr-family-note is-error">{subProblem}</p> : null}
         <div className="mr-side-form-actions">
-          <button type="submit" className="mr-side-primary" disabled={busy || !canGroup || directMissing}>
+          <button type="submit" className="mr-side-primary" disabled={busy || !canGroup || directMissing || !selected}>
             Create
           </button>
           <button type="button" className="mr-side-action" disabled={busy} onClick={closeGroupForm}>

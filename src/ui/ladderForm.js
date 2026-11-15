@@ -64,7 +64,9 @@ export function orchestratorHarnesses(orchestrators, harnesses = null) {
     offered.push({
       key,
       name,
-      available: true,
+      available: base ? base.available === true : true,
+      ready: typeof base?.ready === 'boolean' ? base.ready : null,
+      enabled: base ? base.enabled !== false : true,
       models,
       efforts,
     })
