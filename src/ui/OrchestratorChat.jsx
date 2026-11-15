@@ -1628,6 +1628,7 @@ export default function OrchestratorChat({
                   onRefresh={modelRefresh.refresh}
                   loading={modelsLoading || modelRefresh.loading}
                   canRefresh={modelRefresh.canRefresh}
+                  disabled={modelSaving}
                   placeholder="Harness default"
                   error={modelError || modelRefresh.error || modelsError}
                 />
