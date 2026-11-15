@@ -3408,3 +3408,21 @@ The owner's rule: subscriptions and usage change too often for an orchestrator t
 3. `startSplitRun` sends the Dispatch panel's `Separate worktree` choice (on by default) instead of always `true`.
 4. Tests, each failing before your change: a direct lane message with the box off starts the task with `worktree: false`; a split run with the box off sends `worktree: false`; with no choice given both keep today's value; outside a git checkout `worktree: true` is never used.
 5. Run `node node_modules/vitest/vitest.mjs run tests/worktree-choice.test.js tests/project-task.test.js tests/control-panels.test.js` and report the counts.
+
+**P407. Lane mode pickers leave out Ask (OpenCode).** Read this brief only. Commit each step as you finish it. Run every command in the foreground. Files: src/control/modes.js (add one exported helper only), src/ui/FamilyTree.jsx (only the two lane Mode selects P403 added), src/ui/panels/DispatchPanel.jsx (only the run's Mode select), server/agents-config.js (only the two mode checks P403 added), tests/lane-mode-picker.test.js (add tests here), docs/agents/CHANGELOG.md.
+
+P403 offers every mode of `modesFor(harness)` for a lane, but a lane run is headless: `server/runs.js` refuses Ask with `A lane run has nobody to ask, so the ask mode is for orchestrators only.` So the owner can pick a mode that always fails.
+
+1. Add `laneModesFor(harness)` to `src/control/modes.js`: `modesFor(harness)` without `ask`.
+2. The Add child and lane editor Mode selects and the Dispatch run's Mode select use `laneModesFor`. Orchestrator mode pickers keep `modesFor`.
+3. Lane create and update in `server/agents-config.js` accept `choice` or an id of `laneModesFor(harness)`; `ask` is refused with the same 400 as an unknown mode.
+4. Tests, each failing before your change: `laneModesFor('claude')` has no `ask`; the Add child Mode select for Claude Code lists no Ask; saving a lane with `ask` answers 400.
+5. Run `node node_modules/vitest/vitest.mjs run tests/lane-mode-picker.test.js tests/modes.test.js tests/agents-config.test.js` and report the counts.
+
+**P408. The chat's Separate worktree choice reaches the bridge (OpenCode).** Read this brief only. Commit each step as you finish it. Run every command in the foreground. Files: src/control/client.js (only `sendOrchestrator`), src/control/mock.js or the mock client file next to it (only its `sendOrchestrator`, if it has one), tests/worktree-choice.test.js (add tests here), docs/agents/CHANGELOG.md.
+
+P406 added a `Separate worktree` box beside a chat message sent to a lane and calls `client.sendOrchestrator(text, { id, worktree })`, but the real `sendOrchestrator` in `src/control/client.js` sends only `text`, `id` and `confirmed`, so the bridge never sees the choice. P406's test used a mock client.
+
+1. `sendOrchestrator(text, { id, worktree })` adds `worktree` to the body when it is a boolean; otherwise the body is as today.
+2. Tests through the real `createClient` with a stubbed `fetch`, each failing before your change: `worktree: false` is in the posted body; leaving it out sends no `worktree` key.
+3. Run `node node_modules/vitest/vitest.mjs run tests/worktree-choice.test.js tests/control-client.test.js` (skip a file that does not exist) and report the counts.
