@@ -342,6 +342,20 @@ function makeProject() {
   writeFileSync(join(project, 'package.json'), JSON.stringify({ name: 'owner-tree-test', private: true }, null, 2))
   writeFileSync(join(project, 'README.md'), 'owner tree test project\n')
   writeFileSync(join(project, 'run'), fakeOpencodeLaneScript(git))
+  writeFileSync(
+    join(runs, 'endpoints.json'),
+    JSON.stringify({
+      endpoints: [
+        {
+          name: 'z-ai',
+          provider: 'OpenRouter',
+          baseUrl: 'https://openrouter.ai/api/v1',
+          keyName: 'openrouter',
+          models: ['glm-5.3-flash'],
+        },
+      ],
+    })
+  )
   execFileSync(git, ['add', '.'], { cwd: project })
   execFileSync(git, ['commit', '-m', 'Initial commit'], { cwd: project })
   return { root, project, runs, git }
