@@ -14,6 +14,7 @@ import { outcomeTable } from '../server/outcomes.js'
 import { readMainSubjectsSync } from '../server/runs.js'
 import { isLockHolderStale, killTree, descendantProcesses, leftoverProcesses, listProcesses } from '../server/processTree.js'
 import { codexProgramFor } from '../server/agents-config.js'
+import { HARNESS_OFF_PROBLEM, readHarnessSettings } from '../server/harness-settings.js'
 import { codexHarness } from '../src/harnesses/codex.js'
 import { harnessByKey } from '../src/harnesses/index.js'
 import { gitPath, programPath } from '../server/programPath.js'
@@ -936,11 +937,28 @@ export function printCommand(command, prompt, { mcpConfig = '', mcpServers = [] 
   }
 }
 
-function codexLaneProgram(lane, env = process.env) {
+function defaultProgramFor(harness) {
+  const descriptor = Object.hasOwn(harnessByKey, harness) ? harnessByKey[harness] : null
+  const program = descriptor?.defaultProgram
+  return typeof program === 'string' && program !== '' ? program : harness
+}
+
+function usesDefaultProgram(lane) {
   const bin = lane?.cli?.bin
-  if (lane?.cli?.harness !== 'codex') return { lane, program: null }
-  const program = codexProgramFor('codex', bin, { env })
-  return program ? { lane: { ...lane, cli: { ...lane.cli, bin: program } }, program } : { lane, program: null }
+  if (typeof bin !== 'string' || bin.trim() === '') return true
+  return bin === defaultProgramFor(lane?.cli?.harness)
+}
+
+function laneRunProgram(lane, { folder = runsFolder(), env = process.env } = {}) {
+  const harness = lane?.cli?.harness
+  let next = lane
+  if (usesDefaultProgram(lane) && typeof harness === 'string') {
+    const saved = readHarnessSettings(folder).programs[harness]
+    if (typeof saved === 'string' && saved.trim() !== '') next = { ...lane, cli: { ...lane.cli, bin: saved } }
+  }
+  if (next?.cli?.harness !== 'codex') return { lane: next, program: null }
+  const program = codexProgramFor('codex', next.cli.bin, { env })
+  return program ? { lane: { ...next, cli: { ...next.cli, bin: program } }, program } : { lane: next, program: null }
 }
 
 function gitRead(cwd, args) {
@@ -1527,6 +1545,10 @@ async function main() {
   if (!Object.hasOwn(lanes, options.lane)) throw new Error(missingLaneText(options.lane, lanesJson, lanesPath))
   const lane = laneWithOverrides(lanes[options.lane], options)
   lanes[options.lane] = lane
+  if (typeof lane?.cli?.harness === 'string' && readHarnessSettings(runsFolder()).off.includes(lane.cli.harness)) {
+    console.log(HARNESS_OFF_PROBLEM)
+    return 1
+  }
   const modeProblem = laneModeProblem(lane, options.lane)
   if (modeProblem) throw new Error(modeProblem)
   if (options.lane === 'orchestrator') {
@@ -1566,7 +1588,7 @@ async function main() {
       const harness = lane.cli?.harness
       const needsMcp = enabledServers.length > 0 && (harness === 'claude' || harness === 'opencode')
       const mcpConfigPath = needsMcp ? join(folder, `${name}.mcp.json`) : ''
-      const command = commandFor({ lane, prompt, env: process.env, usageFile, title: name, cwd: project, mcpConfig: mcpConfigPath })
+      const command = commandFor({ lane: laneRunProgram(lane, { folder }).lane, prompt, env: process.env, usageFile, title: name, cwd: project, mcpConfig: mcpConfigPath })
       const test = checkDisplay(testCommandFor(project, options.test))
       printCommand(command, prompt, { mcpConfig: mcpConfigPath, mcpServers: enabledServers })
       console.log(`tests: ${test || 'none, the project has no tests'}`)
@@ -1653,7 +1675,7 @@ async function main() {
     const harness = lane.cli?.harness
     const needsMcp = enabledServers.length > 0 && (harness === 'claude' || harness === 'opencode')
     const mcpConfigPath = needsMcp ? join(folder, `${name}.mcp.json`) : ''
-    const codex = codexLaneProgram(lane)
+    const codex = laneRunProgram(lane, { folder })
     const command = commandFor({ lane: codex.lane, prompt, env: process.env, usageFile, title: name, mcpConfig: mcpConfigPath })
     printCommand(command, prompt, { mcpConfig: mcpConfigPath, mcpServers: enabledServers })
     if (start) {
@@ -1793,7 +1815,7 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
 
   try {
     const sessionId = randomUUID()
-    const codex = codexLaneProgram(lane)
+    const codex = laneRunProgram(lane, { folder })
     const command = commandFor({
       lane: codex.lane,
       prompt,

@@ -1,6 +1,8 @@
 # Changelog
 
 ## Unreleased
+- The runner starts the program saved for a lane's harness when the lane's bin is missing or the harness default, and refuses a lane on a harness turned off in Settings before it makes a folder, lock or worktree (P358).
+- The doctor prints one line per harness: ready with its version, not ready with its reason, or turned off in Settings (P358).
 - The bridge runs each harness with --version once in 10 minutes and lists it as ready or not with a reason, keeps a saved program and an on or off choice per harness, and refuses a new lane or sub on a harness turned off (P355, P355b).
 - Settings has a Harnesses section above Direct API: each harness shows Ready, Not ready with its reason, or Off, with its version and program, an Offer in forms switch and a Program field, and Check again checks them all (P356).
 - A ladder save keeps the effort it names on a sub and its first turn takes it, an effort the harness lacks is refused, and the chat's Effort menu offers the levels the bridge lists for that harness (P353).
