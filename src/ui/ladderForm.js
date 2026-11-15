@@ -123,6 +123,7 @@ export function subFromForm(form, allowed = null) {
   const typedId = String(value.id ?? '').trim()
   const id = typedId || idFromName(name)
   const harness = keepHarness(value.harness, allowed)
+  const effort = String(value.effort ?? '').trim()
   const lanes = []
   for (const lane of Array.isArray(value.lanes) ? value.lanes : []) {
     const key = String(lane ?? '').trim()
@@ -133,6 +134,7 @@ export function subFromForm(form, allowed = null) {
     name: name || id,
     harness,
     model: String(value.model ?? '').trim(),
+    ...(effort ? { effort } : {}),
     lanes,
     scope: scopeLines(value.scope),
     restricted: value.restricted !== false,

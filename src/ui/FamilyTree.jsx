@@ -137,6 +137,7 @@ function groupSubLadder(ladder, draft, laneIds, laneKeys = [], allowedHarnesses 
       name: cleanText(draft.label, AGENT_NAME_MAX),
       harness: cleanText(draft.harness, 40) || 'opencode',
       model: cleanText(draft.model, 120),
+      effort: cleanText(draft.effort, 20),
       lanes: picked,
       scope: ['**'],
       restricted: false,

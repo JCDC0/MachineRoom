@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- A sub orchestrator made with an effort keeps that effort in the ladder, and an empty effort stays unset (P364).
 - P357: The add-agent, sub, team and orchestrator pickers offer only ready, enabled harnesses; a node keeps its own harness marked (not ready); an empty picker points to Settings.
 - P365: The custom endpoint form offers model refresh only for a saved endpoint, and a failed lanes read no longer says the list is empty.
 - The custom endpoint form offers model refresh only for a saved endpoint and explains how to refresh a new one (P365).
