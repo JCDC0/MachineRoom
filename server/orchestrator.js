@@ -2372,8 +2372,7 @@ export function createOrchestrator({
       return { status: 400, body: { error: harnessUnavailableProblem(nextHarness || 'unknown') } }
     }
     const nextModel = typeof body?.model === 'string' ? body.model.trim() : ''
-    const allowed = modelAllowed(nextHarness, nextModel, folder)
-    if (!nextModel || !allowed) {
+    if ((nextModel || nextHarness === 'machineroom') && !modelAllowed(nextHarness, nextModel, folder)) {
       return { status: 400, body: { error: modelUnavailableProblem(nextModel, nextHarness) } }
     }
     if (running && !running.done) return { status: 409, body: { error: COMPACT_RUNNING_PROBLEM } }
