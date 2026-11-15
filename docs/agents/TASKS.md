@@ -3277,3 +3277,26 @@ Since P386 the orchestrator editor sends an empty model when the owner picks a n
 2. Look for: an empty model sent to a route that still refuses it (follow each form's save to its real bridge route, not a mock); Direct API or an endpoint saved with no model; an orchestrator at an empty model whose command line, context window or label breaks; a lane refused forever by a process that is the runner itself or its parent; `boundMessages` dropping the task, looping, or keeping a cut reply that starts mid-word in a way that confuses the agent; a test that would pass with its change undone.
 3. Each finding: `R41-N`, a severity (P1 blocks a push, P2 should be fixed soon, P3 small), the file and line, what goes wrong, how to see it, one fix in plain words. At most 10. No finding without a file and line you read.
 4. End with `Checked and fine`. Under 100 lines. Plain words, no em dashes.
+
+Review 41 fixes, P392 to P394. `docs/agents/AUDIT-2026-11-REVIEW-41.md` (P391, GPT-6.1 Sol): three P2 findings, and one gap the orchestrator saw in the room.
+
+**P392. Harness default survives a restart and reaches a new sub (Codex, GPT-6.1 Terra).** Read this brief, R41-1 and R41-2 only. Your sandbox keeps git read-only: write the files in your worktree and the runner commits them. Never run `npm install`; run tests as `node ../../node_modules/vitest/vitest.mjs run FILES` from your worktree. Known sandbox baseline failures, not yours: process tests in `tests/run-lane-stop.test.js` and `tests/run-lane.test.js` that need real processes, `taskkill` or a worktree (EPERM). Files: server/orchestrator.js (only the saved-model restore near line 1328 and the constructor's model choice near line 962), server/orchestrators.js (only `subConfig`'s model near line 367), tests/harness-default-restart.test.js (new; add no test to another file except to keep an existing one passing), docs/agents/CHANGELOG.md.
+
+1. R41-1: when the saved state holds `model` as a string, restore it even when it is empty, so an orchestrator saved at Harness default stays at Harness default after a restart. A saved state with no `model` key keeps today's lane fallback.
+2. R41-2: an explicit empty model passed to the constructor, or saved on a sub, stays empty; the lane's model fills in only when no model was given at all (`undefined` or `null`). `machineroom` (Direct API) keeps needing a model as today.
+3. Tests, through the real routes and a real restart on the same runs folder, each failing before your change: a main lane configured as Claude with `opus`, switched to OpenCode at `''`, then a new registry on the same folder, still has an empty model; a new OpenCode sub at `''` with an OpenCode lane that has a model answers with an empty model; a sub given a named model keeps it.
+4. Run `node ../../node_modules/vitest/vitest.mjs run tests/harness-default-restart.test.js tests/orchestrator-harness-default.test.js tests/orchestrator.test.js tests/orchestrators.test.js` (skip a file that does not exist) and report the counts.
+
+**P393. A cut inbox reply says it was cut (AGY, Hydrogen).** Read this brief and R41-3 only. Commit each step as you finish it. Run every command in the foreground. Files: scripts/mr-agent.mjs (only the inbox tail cut in `boundMessages`), tests/review-39-fixes.test.js (add tests here), docs/agents/CHANGELOG.md.
+
+1. When the newest inbox reply must be cut to its tail, the kept text starts at a word boundary, keeps the reply's sender (`name:`) in front, and marks the cut: `name: [start cut] ...rest`. The whole message still fits the bound.
+2. Tests, each failing before your change: R41-3's case keeps the sender and `[start cut]`, and the kept text never starts mid-word; the bound still holds and the task is kept.
+3. Run `node node_modules/vitest/vitest.mjs run tests/review-39-fixes.test.js tests/mr-agent-inbox.test.js tests/mr-agent.test.js` and report the counts.
+
+**P394. The orchestrator and lane editors offer Harness default (OpenCode).** Read this brief only. Commit each step as you finish it. Run every command in the foreground. Files: src/ui/FamilyTree.jsx (only the two node editor `ModelPicker`s near lines 1759 and 1865), tests/harness-default-pick.test.js (add tests here), docs/agents/CHANGELOG.md.
+
+On 2026-11-15 the orchestrator switched the room's orchestrator to OpenCode in its editor. It saved at Harness default, but the editor's picker read `Choose a model` and had no Harness default row.
+
+1. Both node editor pickers get `allowDefault` and the placeholder `Harness default` for every harness except `DIRECT_HARNESS`, the same way the Add child picker near line 2040 does.
+2. Tests, each failing before your change: the orchestrator editor with OpenCode shows `Harness default` on its trigger and lists a Harness default row first; with Direct API it shows no default row.
+3. Run `node node_modules/vitest/vitest.mjs run tests/harness-default-pick.test.js tests/family-tree.test.js` and report the counts.
