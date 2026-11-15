@@ -372,7 +372,7 @@ export function childFormProblem(draft, { harnesses = null, models = null, direc
   if (!choices.some((row) => row.id === model)) return 'Choose a model for this harness.'
   const efforts = harnessEfforts(harness)
   const effort = cleanText(draft?.effort, 20).toLowerCase()
-  if (efforts.length > 0 && !efforts.includes(effort)) return 'Choose an effort for this harness.'
+  if (efforts.length > 0 && effort && !efforts.includes(effort)) return 'Choose an effort for this harness.'
   if (efforts.length === 0 && effort) return 'This harness has no effort levels.'
   return ''
 }

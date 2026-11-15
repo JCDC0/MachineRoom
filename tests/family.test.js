@@ -29,6 +29,7 @@ import { saveEndpoints } from '../server/endpoints.js'
 import { NO_TOKEN_PROBLEM } from '../server/orchestrators.js'
 import { createClient } from '../src/control/client.js'
 import { createMockClient } from '../src/control/mock.js'
+import { childFormProblem } from '../src/ui/family.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 
 const REPO_ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)))
@@ -932,5 +933,100 @@ describe('Control client and mock family methods', () => {
     await client.deleteKey({ name: 'API_KEY' })
     const keysAfterDelete = await client.keys()
     expect(keysAfterDelete).toEqual([])
+  })
+})
+
+describe('the add child form takes the default effort', () => {
+  const HARNESSES = {
+    harnesses: [
+      {
+        key: 'claude',
+        name: 'Claude Code',
+        available: true,
+        models: [{ id: 'claude-opus-5-5', label: 'Claude Opus 5.5' }],
+        efforts: ['low', 'medium', 'high', 'xhigh', 'max'],
+      },
+      {
+        key: 'opencode',
+        name: 'OpenCode',
+        available: true,
+        models: [{ id: 'opencode-go/deepseek-v4.1-flash', label: 'DeepSeek v4.1 Flash' }],
+        efforts: ['low', 'medium', 'high', 'max'],
+      },
+      {
+        key: 'codex',
+        name: 'Codex',
+        available: true,
+        models: [{ id: 'gpt-6.1-sol', label: 'GPT-6.1 Sol' }],
+        efforts: ['low', 'medium', 'high', 'xhigh'],
+      },
+    ],
+  }
+
+  const DRAFTS = [
+    { label: 'Claude writer', harness: 'claude', model: 'claude-opus-5-5', effort: '' },
+    { label: 'OpenCode writer', harness: 'opencode', model: 'opencode-go/deepseek-v4.1-flash', effort: '' },
+    { label: 'Codex writer', harness: 'codex', model: 'gpt-6.1-sol', effort: '' },
+  ]
+
+  it('accepts default for Claude Code, OpenCode and Codex and saves no effort', async () => {
+    const lanes = {
+      ...SAMPLE_LANES,
+      codex: {
+        name: 'Codex',
+        harness: 'Codex',
+        cli: { harness: 'codex', bin: process.execPath, model: 'gpt-6.1-sol' },
+      },
+    }
+    const { url, runsFolder } = await startBridge({ lanes })
+
+    for (const draft of DRAFTS) {
+      expect(childFormProblem(draft, { harnesses: HARNESSES })).toBe('')
+      const res = await request(`${url}/api/lanes/create`, {
+        method: 'POST',
+        body: {
+          name: draft.label,
+          harness: draft.harness,
+          model: draft.model,
+          effort: null,
+          confirmed: true,
+        },
+      })
+      expect(res.status).toBe(200)
+      expect(res.body.effort).toBeNull()
+    }
+
+    const { agents } = readAgentsConfig(runsFolder)
+    for (const draft of DRAFTS) {
+      const saved = agents.find((agent) => agent.name === draft.label)
+      expect(saved).toBeTruthy()
+      expect(saved.effort).toBeNull()
+    }
+  })
+
+  it('refuses a level the harness does not take', () => {
+    expect(
+      childFormProblem({ ...DRAFTS[2], effort: 'max' }, { harnesses: HARNESSES })
+    ).toBe('Choose an effort for this harness.')
+  })
+
+  it('refuses a level for a harness with no levels', () => {
+    const none = {
+      harnesses: [
+        {
+          key: 'acp',
+          name: 'ACP',
+          available: true,
+          models: [{ id: 'acp-agent', label: 'ACP agent' }],
+          efforts: [],
+        },
+      ],
+    }
+    expect(
+      childFormProblem(
+        { label: 'Writer', harness: 'acp', model: 'acp-agent', effort: 'high' },
+        { harnesses: none }
+      )
+    ).toBe('This harness has no effort levels.')
   })
 })
