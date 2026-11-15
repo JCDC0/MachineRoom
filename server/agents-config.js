@@ -7,6 +7,7 @@ import { MODELS, modelsFor } from './models.js'
 import { programPath } from './programPath.js'
 import { readLanes, runsFolder } from './lanes-source.js'
 import { cachedRunRecords } from './runs.js'
+import { modesFor } from '../src/control/modes.js'
 import { harnessByKey } from '../src/harnesses/index.js'
 import { harnessUnavailableProblem, modelUnavailableProblem } from './model-list.js'
 import { machineroomModels, modelAllowed, readHarnessModelsCache } from './harness-models.js'
@@ -396,6 +397,8 @@ export function buildMadeLane(agent, lanesJson = {}) {
         bin: descriptor?.defaultProgram ?? agent.harness,
         model: agent.model,
       }
+  if (agent.mode) cli.mode = agent.mode
+  else delete cli.mode
   if (agent.bin) cli.bin = agent.bin
   if (agent.endpoint) cli.endpoint = agent.endpoint
   else delete cli.endpoint
@@ -508,6 +511,11 @@ export function createAgentLane(body, {
     return { ok: false, status: 400, error: modelUnavailableProblem(body?.model, harness) }
   }
 
+  const mode = body?.mode ?? ''
+  if (mode !== '' && (typeof mode !== 'string' || (mode !== 'choice' && !modesFor(harness).some((item) => item.id === mode)))) {
+    return { ok: false, status: 400, error: `The mode ${mode} is not available for ${harness}.` }
+  }
+
   const allowedEfforts = HARNESS_EFFORTS[harness] ?? []
   let effort = null
   if (body?.effort !== undefined && body?.effort !== null && body?.effort !== '') {
@@ -533,6 +541,7 @@ export function createAgentLane(body, {
     harness,
     model,
     effort,
+    ...(mode ? { mode } : {}),
     ...(settings.programs[harness] ? { bin: settings.programs[harness] } : {}),
     ...(endpoint ? { endpoint: endpoint.name } : {}),
     createdAt: new Date().toISOString(),
@@ -736,6 +745,16 @@ export function createAgentsConfigApi(options = {}) {
         } else {
           agent.effort = null
         }
+      }
+
+      if (body.mode !== undefined) {
+        const mode = body.mode ?? ''
+        if (mode !== '' && (typeof mode !== 'string' || (mode !== 'choice' && !modesFor(agent.harness).some((item) => item.id === mode)))) {
+          sendJson(req, res, 400, { error: `The mode ${mode} is not available for ${agent.harness}.` })
+          return true
+        }
+        if (mode) agent.mode = mode
+        else delete agent.mode
       }
 
       if (body.fallback !== undefined) {

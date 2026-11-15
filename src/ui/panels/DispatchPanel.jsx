@@ -7,6 +7,7 @@ import {
   runLaneFor,
 } from './briefs.js'
 import { subscribeToNotices } from './notices.js'
+import { modesFor, defaultMode } from '../../control/modes.js'
 import { useHarnessModels } from '../ModelRefresh.jsx'
 import { laneNeedsNetwork } from '../../model/online.js'
 import { TIERS } from '../../policy/route.js'
@@ -75,6 +76,7 @@ export default function DispatchPanel({
   const [lanesKnown, setLanesKnown] = useState(false)
   const [projectLane, setProjectLane] = useState(() => (typeof client?.routeLane === 'function' ? 'auto' : ''))
   const [projectModel, setProjectModel] = useState('')
+  const [projectMode, setProjectMode] = useState('')
   const [laneBackups, setLaneBackups] = useState({})
   const [autoRoute, setAutoRoute] = useState({ text: '', answer: null, error: null })
   const [projectTask, setProjectTask] = useState('')
@@ -139,7 +141,9 @@ export default function DispatchPanel({
 
   useEffect(() => {
     setProjectModel('')
-  }, [effectiveLane])
+    const agent = laneAgentFor(effectiveLane)
+    setProjectMode(agent?.mode && agent.mode !== 'choice' ? agent.mode : defaultMode(agent?.harness) ?? '')
+  }, [effectiveLane, projectLaneHarness])
 
   useEffect(() => {
     if (typeof client?.laneBackups !== 'function') return undefined
@@ -701,6 +705,7 @@ export default function DispatchPanel({
         worktree: projectOwnWorktree,
         checkCommand: projectCheckCommand,
         model: projectModel,
+        mode: projectMode,
       })
       await client.startRun(lane, run)
       clearProjectDraft(projectName)
@@ -857,6 +862,15 @@ export default function DispatchPanel({
                     {row.label && row.label !== row.id ? `${row.label} (${row.id})` : row.id}
                   </option>
                 ))}
+              </select>
+            </div>
+          ) : null}
+
+          {!projectSplitRun && effectiveLane && modesFor(projectLaneHarness).length > 0 ? (
+            <div className="panel-field">
+              <label htmlFor="project-run-mode">Mode for this run</label>
+              <select id="project-run-mode" value={projectMode} onChange={(event) => { setProjectMode(event.target.value); dismissProjectConfirm() }}>
+                {modesFor(projectLaneHarness).map((mode) => <option key={mode.id} value={mode.id}>{mode.label}</option>)}
               </select>
             </div>
           ) : null}

@@ -30,7 +30,7 @@ The owner wants a free hierarchy of coding agents in one project:
 ## What Does Not Work Yet
 - Nothing interrupts a lane run: a run is one call, so a lane gets a reply only when it reads its inbox (`P341`), and the main orchestrator's instructions name the reply form since review 36.
 - A failover backup keeps messaging under the primary lane's name and reads the primary's inbox (`P381b`).
-- The room has no control for a lane's mode yet: name it in the lane's `cli.mode`, with `--mode`, or in the run start request (`P338`, `P343`).
+- Agents saves a lane's mode, including Orchestrator's choice. Dispatch can choose a mode for each run. An orchestrator can choose a different mode only when the lane allows its choice (`P403`).
 - A touch outside the project is shown, not stopped (`P346`). The modes are the guard, and only the native harness refuses a path outside its folder by itself.
 
 ## Added on 2026-11-15
