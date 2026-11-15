@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- P384: CLI lanes can save and run with the harness default model; Direct API and endpoints still require a known model.
 - P383: Review 39 by GPT-6.1 Sol of P376 to P381b: one P1 (Harness default cannot create a code agent) and two P2, for P384 and P385.
 - P381b: A failover backup keeps the primary's lane ticket, bridge address and message paragraph, so it messages under the primary's name and reads its inbox.
 - P380: The native agent reads its lane inbox before each model call after the first and adds unseen replies as one user message; the ticket is never printed.

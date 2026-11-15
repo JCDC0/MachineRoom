@@ -16,7 +16,9 @@ export const hermesHarness = {
   commitAuthor: { label: 'Hermes', address: 'noreply@nousresearch.com' },
   createParser: createHermesParser,
   command({ cli, prompt, env = {}, folder, usageFile, reasoning } = {}) {
-    const args = ['-z', prompt, '-m', cli.model, '--provider', cli.provider]
+    const args = ['-z', prompt]
+    if (cli.model) args.push('-m', cli.model)
+    args.push('--provider', cli.provider)
     if (cli.toolsets) args.push('-t', String(cli.toolsets))
     if (reasoning) args.push('--reasoning', String(reasoning))
     if (usageFile) args.push('--usage-file', usageFile)

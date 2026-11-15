@@ -112,7 +112,8 @@ export const claudeHarness = {
   commitAuthor: { label: 'Claude', address: 'noreply@anthropic.com' },
   createParser: createClaudeParser,
   command({ cli, prompt, env = {}, folder, sessionId, mcpConfig, mode } = {}) {
-    const args = ['-p', prompt, '--output-format', 'stream-json', '--verbose', '--model', cli.model]
+    const args = ['-p', prompt, '--output-format', 'stream-json', '--verbose']
+    if (cli.model) args.push('--model', cli.model)
     if (mode === 'plan' || mode === 'edits' || mode === 'auto') args.push('--permission-mode', mode === 'edits' ? 'acceptEdits' : mode)
     else args.push('--dangerously-skip-permissions')
     if (typeof mcpConfig === 'string' && mcpConfig.trim() !== '') args.push('--mcp-config', mcpConfig.trim())
