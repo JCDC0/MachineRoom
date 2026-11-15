@@ -109,6 +109,59 @@ function scopeApi(repo, worktree, { restricted = true, scope = ['src/**'], head,
   const agentsDir = join(dir, 'docs', 'agents')
   mkdirSync(agentsDir, { recursive: true })
   writeFileSync(join(agentsDir, 'lanes.json'), JSON.stringify({ opencode: { name: 'OpenCode', worktree } }))
+  return makeScopeApi({
+    projectRoot: repo,
+    briefsDir: agentsDir,
+    worktree,
+    base: 'main',
+    head,
+    baseHead,
+    restricted,
+    scope,
+  })
+}
+
+function makeProjectRepo() {
+  const base = freshDir()
+  const room = join(base, 'room')
+  mkdirSync(join(room, 'docs', 'agents'), { recursive: true })
+  git(room, ['init', '-b', 'main'])
+  writeFileSync(join(room, 'docs', 'agents', 'lanes.json'), JSON.stringify({ opencode: { name: 'OpenCode' } }))
+
+  const project = join(base, 'project')
+  mkdirSync(join(project, 'src'), { recursive: true })
+  git(project, ['init', '-b', 'trunk'])
+  git(project, ['config', 'user.name', 'MachineRoom Test'])
+  git(project, ['config', 'user.email', 'test@example.invalid'])
+  git(project, ['config', 'commit.gpgsign', 'false'])
+  git(project, ['config', 'core.autocrlf', 'false'])
+  writeFileSync(join(project, 'src', 'app.js'), 'export const app = 1\n')
+  git(project, ['add', 'src/app.js'])
+  git(project, ['commit', '-m', 'first'])
+  const baseHead = git(project, ['rev-parse', 'refs/heads/trunk']).trim()
+
+  const worktree = join(project, '.worktrees', 'opencode')
+  git(project, ['worktree', 'add', '-b', 'feat/x', worktree])
+  writeFileSync(join(worktree, 'src', 'app.js'), 'export const app = 2\n')
+  mkdirSync(join(worktree, 'docs'), { recursive: true })
+  writeFileSync(join(worktree, 'docs', 'notes.md'), 'outside the scope\n')
+  git(worktree, ['add', 'src/app.js', 'docs/notes.md'])
+  git(worktree, ['commit', '-m', 'lane work'])
+  const head = git(worktree, ['rev-parse', 'HEAD']).trim()
+  return { base, room, project, worktree, head, baseHead }
+}
+
+function makeScopeApi({
+  projectRoot,
+  briefsDir,
+  worktree,
+  base = 'main',
+  head,
+  baseHead,
+  restricted = true,
+  scope = ['src/**'],
+}) {
+  const dir = freshDir()
   const delivered = []
   const tokens = { 'main-token': 'orchestrator', 'sub-token': 'scout', 'other-token': 'other' }
   const registry = {
@@ -140,8 +193,8 @@ function scopeApi(repo, worktree, { restricted = true, scope = ['src/**'], head,
   const answers = []
   let body = null
   const api = createReviewsApi({
-    projectRoot: repo,
-    briefsDir: agentsDir,
+    projectRoot,
+    briefsDir,
     runsFolder: join(dir, 'runs'),
     sendJson: (req, res, status, payload) => answers.push({ status, body: payload }),
     readJsonBody: async () => body,
@@ -154,8 +207,8 @@ function scopeApi(repo, worktree, { restricted = true, scope = ['src/**'], head,
     body = {
       confirmed: true,
       head: head ?? git(worktree, ['rev-parse', 'HEAD']).trim(),
-      base: 'main',
-      baseHead: baseHead ?? git(repo, ['rev-parse', 'refs/heads/main']).trim(),
+      base,
+      baseHead: baseHead ?? git(projectRoot, ['rev-parse', `refs/heads/${base}`]).trim(),
       message: 'Merge the lane',
       ...(allowOutside ? { allowOutside: true } : {}),
     }
@@ -254,6 +307,26 @@ describe('a restricted sub and an out-of-scope lane merge', { timeout: 30000 }, 
     expect(answer.body.ok).toBe(true)
     expect(git(repo, ['show', 'HEAD:docs/notes.md'])).toContain('outside the scope')
     expect(delivered).toHaveLength(0)
+  })
+
+  it('applies the same gate on a project room fast forward', async () => {
+    const { room, project, worktree, head } = makeProjectRepo()
+    const { merge } = makeScopeApi({
+      projectRoot: project,
+      briefsDir: join(room, 'docs', 'agents'),
+      worktree,
+      base: 'trunk',
+    })
+
+    const refused = await merge()
+    expect(refused.status).toBe(409)
+    expect(refused.body.files).toEqual(['docs/notes.md'])
+    expect(mainHead(project)).not.toBe(head)
+
+    const answer = await merge({ allowOutside: true })
+    expect(answer.status).toBe(200)
+    expect(answer.body.ok).toBe(true)
+    expect(mainHead(project)).toBe(head)
   })
 })
 
