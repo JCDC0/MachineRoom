@@ -82,7 +82,7 @@ function fakeHarnessClient(overrides = {}) {
 
 describe('mock harnesses client calls', () => {
   test('mock lists the sample harness states required by P356', async () => {
-    const client = createMockClient({ delayMs: 0 })
+    const client = createMockClient({ latencyMs: 0 })
     const list = await client.harnesses()
     const byKey = Object.fromEntries(list.map((entry) => [entry.key, entry]))
 
@@ -101,7 +101,7 @@ describe('mock harnesses client calls', () => {
   })
 
   test('mock checkHarnesses redraws and harnessSettings updates program and enabled state', async () => {
-    const client = createMockClient({ delayMs: 0 })
+    const client = createMockClient({ latencyMs: 0 })
     const checked = await client.checkHarnesses({ confirmed: true })
     expect(Array.isArray(checked)).toBe(true)
 
@@ -134,12 +134,12 @@ describe('HarnessesSettings UI', () => {
   })
 
   test('renders rows and state words with colours from the mock client', async () => {
-    const client = createMockClient({ delayMs: 0 })
+    const client = createMockClient({ latencyMs: 0 })
     await withDom(async ({ container, root }) => {
       await act(async () => {
         root.render(createElement(HarnessesSettings, { client }))
       })
-      await settle(10)
+      await settle(20)
 
       const claudeRow = rowFor(container, 'claude')
       const opencodeRow = rowFor(container, 'opencode')
@@ -159,6 +159,8 @@ describe('HarnessesSettings UI', () => {
       expect(claudeState.textContent.trim()).toBe('Ready')
       expect(claudeState.style.color).toBe('#2aff80')
       expect(claudeRow.textContent).toContain('Claude Code')
+      expect(claudeRow.textContent).toContain('2.1.0')
+      expect(claudeRow.textContent).toContain('C:\\Tools\\claude\\claude.exe')
 
       const codexState = codexRow.querySelector('[data-harness-state]')
       expect(codexState.textContent.trim()).toBe('Not ready')
@@ -238,8 +240,9 @@ describe('HarnessesSettings UI', () => {
       await settle()
 
       const codexRow = rowFor(container, 'codex')
-      const input = codexRow.querySelector('input[type="text"]')
+      const input = codexRow.querySelector('input')
       expect(input).not.toBeNull()
+      expect(input.type).toBe('text')
 
       const targetProgram = 'C:\\Tools\\codex\\codex.exe'
       await type(root, input, targetProgram)
@@ -279,7 +282,7 @@ describe('HarnessesSettings UI', () => {
       await settle()
 
       const claudeRow = rowFor(container, 'claude')
-      const input = claudeRow.querySelector('input[type="text"]')
+      const input = claudeRow.querySelector('input')
       await type(root, input, './relative/claude')
       await click(root, buttonWithText(claudeRow, 'Save'))
 
@@ -375,12 +378,12 @@ describe('HarnessesSettings UI', () => {
       })
       await settle()
 
-      const html = container.innerHTML
-      const harnessesPos = html.indexOf('aria-label="Harnesses"')
-      const endpointsPos = html.indexOf('Direct API')
-      expect(harnessesPos).toBeGreaterThan(-1)
-      expect(endpointsPos).toBeGreaterThan(-1)
-      expect(harnessesPos).toBeLessThan(endpointsPos)
+      const sections = container.querySelectorAll('.hud-settings-section')
+      const harnessesIdx = sections.findIndex((section) => section.getAttribute('aria-label') === 'Harnesses')
+      const endpointsIdx = sections.findIndex((section) => section.id === 'settings-direct-api')
+      expect(harnessesIdx).toBeGreaterThan(-1)
+      expect(endpointsIdx).toBeGreaterThan(-1)
+      expect(harnessesIdx).toBe(endpointsIdx - 1)
     })
   })
 })
