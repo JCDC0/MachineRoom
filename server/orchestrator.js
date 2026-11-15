@@ -1078,7 +1078,18 @@ export function createOrchestrator({
     if (from === 'owner' || from === 'room' || from === ORCHESTRATOR_KEY || from === 'agent') return from
     const subId = subIdOf(from)
     if (subId) return subExists(subId) ? from : ''
+    if (from.startsWith('lane:')) {
+      const laneKey = from.slice(5)
+      return laneKey && Object.hasOwn(laneRecords(), laneKey) ? from : ''
+    }
     return Object.hasOwn(laneRecords(), from) ? from : ''
+  }
+
+  function waitingSender(from) {
+    if (from === 'owner' || from === 'room' || from === ORCHESTRATOR_KEY) return true
+    if (typeof from !== 'string') return false
+    if (from.startsWith('sub:')) return true
+    return from.startsWith('lane:') && Object.hasOwn(laneRecords(), from.slice(5))
   }
 
   function restoredAgent(value) {
@@ -1124,7 +1135,7 @@ export function createOrchestrator({
     try {
       mkdirSync(folder, { recursive: true })
       const waiting = pending
-        .filter((message) => message.from === 'owner' || message.from === 'room' || message.from === ORCHESTRATOR_KEY || (typeof message.from === 'string' && message.from.startsWith('sub:')))
+        .filter((message) => waitingSender(message.from))
         .map((message) => message.id)
       const turnLog = state === 'working' && running && !running.done ? running.logFile : null
       const saved = {
@@ -1419,9 +1430,7 @@ export function createOrchestrator({
     }
     const waitingIds = Array.isArray(saved.pending) ? saved.pending : []
     for (const id of waitingIds) {
-      const message = messages.find(
-        (item) => item.id === id && (item.from === 'owner' || item.from === 'room' || item.from === ORCHESTRATOR_KEY || (typeof item.from === 'string' && item.from.startsWith('sub:')))
-      )
+      const message = messages.find((item) => item.id === id && waitingSender(item.from))
       if (message && !pending.includes(message)) pending.push(message)
     }
     const finished = Array.isArray(saved.completedRuns) ? saved.completedRuns : []
@@ -2355,6 +2364,7 @@ export function createOrchestrator({
     const keptMode = mode ?? legacyMode(harness)
     harness = nextHarness
     model = nextModel
+    if (effort !== null && !effortLevelsFor(harness).includes(effort)) effort = null
     sessionId = null
     for (const s of sessions) {
       s.sessionId = null
