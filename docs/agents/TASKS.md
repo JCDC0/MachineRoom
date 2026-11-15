@@ -3155,8 +3155,9 @@ Found in the room on 2026-11-15 (night), checked at 1280 by 800 against a fresh 
 2. Its list opens upward, above the strip, so it covers neither the Mode nor the Compact row. Search, Current, pins, keys and refresh stay.
 3. The family forms' pickers do not change: test that the prop is off by default.
 4. Tests, each failing before your change: the chat passes the prop; with it the label is inline and the list has the upward class; without it neither.
-5. The orchestrator checks it by eye; you need not.
-6. Run `node ../../node_modules/vitest/vitest.mjs run tests/chat-picker-layout.test.js tests/chat-pickers.test.js tests/model-picker.test.js tests/orchestrator-chat.test.js` and report the counts.
+5. Also fix R38-2 and R38-3 of `docs/agents/AUDIT-2026-11-REVIEW-38.md` (read those two only): a chat model or effort save, and its error, belong to the agent it was sent for, so a reply that lands after the owner opened another tab changes nothing there; and closing the ModelPicker by Escape or a pick returns focus to its trigger, in every form. Add a test for each that fails before the fix.
+6. The orchestrator checks it by eye; you need not.
+7. Run `node ../../node_modules/vitest/vitest.mjs run tests/chat-picker-layout.test.js tests/chat-pickers.test.js tests/model-picker.test.js tests/orchestrator-chat.test.js` and report the counts.
 
 **P378. The forms start at Harness default, and a family row names its model (AGY, Hydrogen).** Read this brief only. Commit each step as you finish it. Run every command in the foreground. Files: src/ui/family.js (only `childDraft`, `teamDraft`, `childFormProblem`, `familyMeta` and what they need), src/ui/FamilyTree.jsx (only `subDraftFor`, the sub form's model check and where `familyMeta` gets its model list), src/ui/FamilyTeam.jsx (only `harnessProblem`'s model check), src/ui/ModelPicker.jsx (only if `Harness default` needs to be a choice in the list), tests/form-defaults.test.js (new; add no test to another file except to keep an existing one passing), docs/agents/architecture/ROOM.md, docs/agents/CHANGELOG.md.
 
@@ -3165,3 +3166,15 @@ Found in the room on 2026-11-15 (night), checked at 1280 by 800 against a fresh 
 3. A family tree row names its model with `modelName` and the harness's model list when the room has one (`Claude Opus 5.5`), and the id's last segment when it has none.
 4. Tests, each failing before your change: a new child, sub and team draft has an empty model and no form problem; Direct API with no model still has the problem; choosing `Harness default` after a model empties it; a row with `claude-opus-5-5` and a model list reads `Claude Opus 5.5`.
 5. Run `node node_modules/vitest/vitest.mjs run tests/form-defaults.test.js tests/family.test.js tests/family-tree-ui.test.js tests/family-team.test.js tests/team-picker.test.js tests/ready-harnesses.test.js` and report the counts.
+
+**P379. A rename keeps to its own agent, and Direct API shows why it is not ready (OpenCode).** Read this brief, R38-1 and R38-4 of  only. This is a small brief: stop at minute 15. Use no subagents. Run every command in the foreground. Commit each step as you finish it. Files: src/ui/FamilyTree.jsx (only ), src/ui/HarnessesSettings.jsx (only where the not-ready reason renders), tests/review-38-fixes.test.js (new), docs/agents/CHANGELOG.md.
+
+1. R38-1: when a label write finishes, the draft takes the new label only if the same agent and the same submitted label are still open.
+2. R38-4: the not-ready reason renders outside the program details, so the Direct API row shows 3. Tests, each failing before your change: a delayed rename of one agent does not change another agent's open draft; a not-ready Direct API row shows its reason.
+4. Run  RUN  v5.0.5 C:/GitHub/MachineRoom
+
+
+ Test Files  1 passed (1)
+      Tests  5 passed (5)
+   Start at  22:27:33
+   Duration  1.03s (tests 48%, transform 28%, import 20%, setup 3%, worker 1%) and report the counts.
