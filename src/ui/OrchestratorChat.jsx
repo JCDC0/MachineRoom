@@ -7,7 +7,6 @@ import { filterModelChoices, groupModelChoices, modelChoiceText } from './modelR
 import {
   contextLine,
   effortLabel,
-  effortLevels,
   modelChoices,
   orchestratorEffort,
 } from './agentStrip.js'
@@ -27,6 +26,7 @@ import {
   chatLines,
   clampDraft,
   copyChatText,
+  effortMenuLevels,
   errorText,
   isSendKey,
   modeClass,
@@ -197,6 +197,7 @@ export default function OrchestratorChat({
   const [modelError, setModelError] = useState('')
   const [modelSaved, setModelSaved] = useState('')
   const [effortOpen, setEffortOpen] = useState(false)
+  const [harnessRows, setHarnessRows] = useState([])
   const [effortConfirm, setEffortConfirm] = useState('')
   const [effortSaving, setEffortSaving] = useState(false)
   const [effortError, setEffortError] = useState('')
@@ -295,7 +296,7 @@ export default function OrchestratorChat({
     visibleModels,
     visibleModels.some((choice) => choice.id === model) ? model : ''
   )
-  const effortChoices = effortLevels(harness)
+  const effortChoices = effortMenuLevels(harness, harnessRows.length > 0 ? harnessRows : current?.harnesses)
   const context = contextLine({
     context: { tokens: current?.contextTokens, window: current?.contextWindow },
   })
@@ -418,6 +419,22 @@ export default function OrchestratorChat({
       stopped = true
     }
   }, [open, client])
+
+  useEffect(() => {
+    if (!open || typeof client?.harnesses !== 'function') return undefined
+    let stopped = false
+    client
+      .harnesses()
+      .then((answer) => {
+        if (stopped) return
+        const items = Array.isArray(answer) ? answer : Array.isArray(answer?.harnesses) ? answer.harnesses : []
+        if (items.length > 0) setHarnessRows(items)
+      })
+      .catch(() => {})
+    return () => {
+      stopped = true
+    }
+  }, [open, client, effortOpen])
 
   useEffect(() => {
     const ids = list.map((entry) => entry.id)

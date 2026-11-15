@@ -1,5 +1,6 @@
 import { createContext } from 'react'
 import { harnessByKey } from '../harnesses/index.js'
+import { effortLevels, harnessKey } from './agentStrip.js'
 import { DIRECT_HARNESS, DIRECT_LABEL } from './family.js'
 
 const CHAT_HIDDEN = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u200E\u200F\u202A-\u202E\u2066-\u2069]/g
@@ -724,4 +725,16 @@ export function orchestratorOn(health) {
 export function errorText(error, fallback) {
   const text = error && typeof error.message === 'string' ? error.message.trim() : ''
   return visibleChatText(text) || fallback
+}
+
+export function effortMenuLevels(harness, harnesses = null) {
+  const key = harnessKey(harness)
+  if (!key) return []
+  const rows = Array.isArray(harnesses) ? harnesses : Array.isArray(harnesses?.harnesses) ? harnesses.harnesses : []
+  const row = rows.find((entry) => entry && typeof entry === 'object' && harnessKey(entry.key ?? entry.harness) === key)
+  const own = row && Array.isArray(row.efforts)
+    ? row.efforts.map((level) => (typeof level === 'string' ? level.trim().toLowerCase() : '')).filter(Boolean)
+    : []
+  if (own.length > 0) return [...new Set(own)]
+  return effortLevels(key)
 }

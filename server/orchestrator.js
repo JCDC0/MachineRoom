@@ -935,6 +935,7 @@ export function createOrchestrator({
   outsideFiles = null,
   onOutsideScope = null,
   contextWindow: contextWindowOption = 0,
+  effort: effortOption = null,
   token: tokenOption = '',
   home = '',
   harnesses = harnessByKey,
@@ -1006,7 +1007,9 @@ export function createOrchestrator({
   let autocompactMode = DEFAULT_AUTOCOMPACT_MODE
   let autocompactValue = DEFAULT_AUTOCOMPACT_VALUE
   let compactRules = ''
-  let effort = null
+  let effort = typeof effortOption === 'string' && effortLevelsFor(harness).includes(effortOption.trim())
+    ? effortOption.trim()
+    : null
   let mode = null
   let currentConversationId = randomUUID()
   let currentSessionId = null
@@ -1358,6 +1361,7 @@ export function createOrchestrator({
         effort = saved.effort ? saved.effort.trim() : null
       }
     }
+    if (effort !== null && !effortLevelsFor(harness).includes(effort)) effort = null
     if (typeof saved.mode === 'string' && modesFor(harness).some((entry) => entry.id === saved.mode.trim())) {
       mode = saved.mode.trim()
     }
