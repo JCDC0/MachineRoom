@@ -135,6 +135,7 @@ export function eligibleLanes(lanesConfig = {}) {
       name: entry.name ?? key,
       harness: entry.cli.harness,
       model: entry.cli.model,
+      mode: entry.cli.mode,
       custom: entry.custom === true,
       effort: entry.effort ?? null,
     })
@@ -199,6 +200,7 @@ export function listActiveLanes({
     name: lane.name,
     harness: lane.harness,
     model: lane.model,
+    mode: lane.mode,
     custom: lane.custom === true,
     effort: lane.effort ?? null,
     active: chosen ? activeSet.has(lane.key) : false,

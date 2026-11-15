@@ -12,6 +12,7 @@ import { profileFromBrief, profileFromTask } from '../src/policy/profile.js'
 import { readPolicy, routeLane, tierFor, TIERS } from '../src/policy/route.js'
 import { conversationFromLog } from '../src/model/conversation.js'
 import { readLaneCosts } from './lane-costs.js'
+import { defaultMode, legacyMode } from '../src/control/modes.js'
 import { modelUnavailableProblem } from './model-list.js'
 import { modelAllowed } from './harness-models.js'
 import { outcomeTable, subjectsFromLog } from './outcomes.js'
@@ -1480,14 +1481,21 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
       return true
     }
 
-    const modeProblem = laneModeProblem(lanes[lane], lane, requestedMode)
+    const savedMode = lanes[lane].cli?.mode
+    const fixedMode = savedMode && savedMode !== 'choice' ? savedMode : legacyMode(lanes[lane].cli?.harness)
+    if (!startInfo.page && requestedMode && savedMode !== 'choice' && requestedMode !== fixedMode) {
+      sendJson(req, res, 400, { error: `The ${lane} lane uses ${fixedMode} mode.` })
+      return true
+    }
+    const chosenMode = requestedMode || (savedMode === 'choice' ? defaultMode(lanes[lane].cli?.harness) || '' : '')
+    const modeProblem = laneModeProblem(lanes[lane], lane, chosenMode)
     if (modeProblem) {
       sendJson(req, res, 400, { error: modeProblem })
       return true
     }
 
     if (projectRun && !hasTasks) {
-      const started = await startProjectTask({ lane, task, worktree, allowDirty, startedBy, checkCommand, model, mode: requestedMode })
+      const started = await startProjectTask({ lane, task, worktree, allowDirty, startedBy, checkCommand, model, mode: chosenMode })
       sendJson(
         req,
         res,
@@ -1555,7 +1563,7 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
         startedBy,
         reasoning,
         model,
-        requestedMode
+        chosenMode
       )
     } catch {
       sendJson(req, res, 500, { error: 'The bridge could not start that run.' })

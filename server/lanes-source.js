@@ -116,6 +116,7 @@ export function laneAgents(lanes) {
           role: null,
           harness: typeof harness === 'string' && harness ? harness : agent.parser,
           model: typeof model === 'string' && model ? model : null,
+          mode: entry.cli.mode,
         })
       }
     } catch {}

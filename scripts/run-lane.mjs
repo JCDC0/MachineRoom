@@ -16,6 +16,7 @@ import { isLockHolderStale, killTree, descendantProcesses, leftoverProcesses, li
 import { codexProgramFor } from '../server/agents-config.js'
 import { HARNESS_OFF_PROBLEM, readHarnessSettings } from '../server/harness-settings.js'
 import { codexHarness } from '../src/harnesses/codex.js'
+import { defaultMode } from '../src/control/modes.js'
 import { harnessByKey } from '../src/harnesses/index.js'
 import { gitPath, programPath } from '../server/programPath.js'
 import { isWindowsPath, printedRunsFolder, realPath } from '../server/printed-path.js'
@@ -1575,7 +1576,9 @@ async function main() {
     }
   }
   if (!Object.hasOwn(lanes, options.lane)) throw new Error(missingLaneText(options.lane, lanesJson, lanesPath))
-  const lane = laneWithOverrides(lanes[options.lane], options)
+  const saved = lanes[options.lane]
+  const mode = options.mode ?? (saved?.cli?.mode === 'choice' ? defaultMode(saved.cli.harness) ?? undefined : undefined)
+  const lane = laneWithOverrides(saved, { ...options, ...(mode !== undefined ? { mode } : {}) })
   lanes[options.lane] = lane
   if (typeof lane?.cli?.harness === 'string' && readHarnessSettings(runsFolder()).off.includes(lane.cli.harness)) {
     console.log(HARNESS_OFF_PROBLEM)

@@ -517,12 +517,12 @@ export function projectSplitWorktreeLine(gitState) {
   return `Each task runs in its own worktree inside the project, on a new branch from ${projectWorktreeBase(gitState)}.`
 }
 
-export function projectRunBody({ task, tasks, allowDirty, worktree, checkCommand, model } = {}) {
+export function projectRunBody({ task, tasks, allowDirty, worktree, checkCommand, model, mode } = {}) {
   const list = Array.isArray(tasks) ? tasks : []
   const command = typeof checkCommand === 'string' ? checkCommand.trim() : ''
   const check = command === '' ? {} : { checkCommand: command }
   const chosen = typeof model === 'string' ? model.trim() : ''
-  const chosenModel = chosen === '' ? {} : { model: chosen }
+  const chosenModel = { ...(chosen === '' ? {} : { model: chosen }), ...(mode ? { mode } : {}) }
   if (list.length > 1) {
     return { tasks: list, ...(worktree === true ? { worktree: true } : {}), ...check, ...chosenModel }
   }

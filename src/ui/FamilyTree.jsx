@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { toAgents } from '../live/source.js'
+import { modesFor, defaultMode } from '../control/modes.js'
 import { sessionKeyFor } from '../model/laneStarter.js'
 import { agentTasks } from '../model/liveTasks.js'
 import AutocompactInput from './AutocompactInput.jsx'
@@ -1093,6 +1094,7 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
       harness: node.harness,
       model: node.model,
       effort: node.effort,
+      mode: laneSummary(lanes).lanes.find((lane) => lane.key === node.id)?.mode ?? defaultMode(node.harness) ?? '',
       fallback: typeof backups?.[node.id] === 'string' ? backups[node.id] : '',
       lanes:
         node.kind === 'sub'
@@ -1274,6 +1276,7 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
           key: node.id,
           model: model || undefined,
           effort: effort || null,
+          mode: nodeDraft.mode || undefined,
           fallback: fallback || null,
           confirmed: true,
         })
@@ -1622,6 +1625,7 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
       harness: harness.key,
       model: harness.key === DIRECT_HARNESS ? harnessModels(harness, models)[0]?.id ?? '' : '',
       effort: harnessEfforts(harness)[0] ?? '',
+      mode: defaultMode(harness.key) ?? '',
     }))
   }
 
@@ -1680,6 +1684,7 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
       harness: draft.harness,
       model: cleanText(draft.model, 120),
       effort: cleanText(draft.effort, 20) || null,
+      mode: draft.mode || defaultMode(draft.harness) || undefined,
     }
     ask({
       text: childConfirmText(draft, parent),
@@ -1855,6 +1860,14 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
               </>
             ) : (
               <>
+                {modesFor(node.harness).length > 0 ? (
+                  <label className="mr-side-field"><span className="mr-side-field-label mono">Mode</span>
+                    <select className="mr-side-select mono" aria-label={`Mode for ${node.label}`} value={nodeDraft.mode} onChange={(event) => setNodeDraft({ ...nodeDraft, mode: event.target.value })}>
+                      {modesFor(node.harness).map((mode) => <option key={mode.id} value={mode.id}>{mode.label}</option>)}
+                      <option value="choice">Orchestrator's choice</option>
+                    </select>
+                  </label>
+                ) : null}
                 {directMissing ? (
                   renderDirectNotice(editorModels.refresh, editorModels.error)
                 ) : harness ? (
@@ -2184,6 +2197,14 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
             allowDefault={!direct}
             placeholder={direct ? 'Choose a model' : 'Harness default'}
           />
+        ) : null}
+        {selected && modesFor(draft.harness).length > 0 ? (
+          <label className="mr-side-field"><span className="mr-side-field-label mono">Mode</span>
+            <select className="mr-side-select mono" aria-label="New agent mode" value={draft.mode ?? defaultMode(draft.harness) ?? ''} onChange={(event) => setDraft({ ...draft, mode: event.target.value })}>
+              {modesFor(draft.harness).map((mode) => <option key={mode.id} value={mode.id}>{mode.label}</option>)}
+              <option value="choice">Orchestrator's choice</option>
+            </select>
+          </label>
         ) : null}
         {selected && !directMissing && efforts.length > 0 ? (
           <label className="mr-side-field">
