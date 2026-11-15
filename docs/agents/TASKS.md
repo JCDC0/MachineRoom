@@ -3300,3 +3300,55 @@ On 2026-11-15 the orchestrator switched the room's orchestrator to OpenCode in i
 1. Both node editor pickers get `allowDefault` and the placeholder `Harness default` for every harness except `DIRECT_HARNESS`, the same way the Add child picker near line 2040 does.
 2. Tests, each failing before your change: the orchestrator editor with OpenCode shows `Harness default` on its trigger and lists a Harness default row first; with Direct API it shows no default row.
 3. Run `node node_modules/vitest/vitest.mjs run tests/harness-default-pick.test.js tests/family-tree.test.js` and report the counts.
+
+## 2026-11-16: OpenCode batch (P395 to P400)
+
+The owner asked for all OpenCode lanes on coding for an hour and a half. These six fix bugs and gaps found on 2026-11-15 and 2026-11-16; none adds a feature.
+
+**P395. The ladder route checks a sub's model (OpenCode).** Read this brief only. Commit each step as you finish it. Run every command in the foreground. Files: server/orchestrators.js (only the ladder check loop after `readLadder` near line 899), tests/ladder-sub-model.test.js (new; add no test to another file except to keep an existing one passing), docs/agents/CHANGELOG.md.
+
+`POST /api/orchestrator/ladder` checks each sub's harness but never its model, so a sub can be saved with a model its harness does not list, or a Direct API (`machineroom`) sub with no model.
+
+1. In the loop that checks each sub's harness, for a sub that is new or whose harness or model changed from the saved ladder: a non-empty model must pass `modelAllowed(harness, model, folder)`, and a `machineroom` sub must have a model. Otherwise answer 400 with `modelUnavailableProblem(model, harness)`, collected like the harness problems. A sub that is saved and unchanged is not checked, so an old ladder still saves.
+2. An empty model on any other harness is Harness default and passes.
+3. Tests through the real ladder route, each failing before your change: a new OpenCode sub with an unknown model answers 400; a new `machineroom` sub with an empty model answers 400; a new OpenCode sub with an empty model answers 200; an unchanged saved sub with an unknown model does not block saving another sub.
+4. Run `node node_modules/vitest/vitest.mjs run tests/ladder-sub-model.test.js tests/orchestrators.test.js tests/harness-default-restart.test.js` (skip a file that does not exist) and report the counts.
+
+**P396. A model picker shows a saved model that is not in its list (OpenCode).** Read this brief only. Commit each step as you finish it. Run every command in the foreground. Files: src/ui/ModelPicker.jsx (only `shown` and `triggerText`), tests/model-picker-unlisted.test.js (new; add no test to another file except to keep an existing one passing), docs/agents/CHANGELOG.md.
+
+On 2026-11-15 the chat's model picker read `Harness default` while the orchestrator ran `claude-opus-5-5`: its model list was still loading, so `shown` was null and the trigger fell back to the default text.
+
+1. When `value` is not empty and no row matches it, the trigger shows `modelName(value)` (from `src/ui/modelRefresh.js`), never the default text or the placeholder. An empty `value` keeps today's text.
+2. Tests, each failing before your change: a picker with `value="claude-opus-5-5"`, `allowDefault`, `placeholder="Harness default"` and no choices shows a name for that model, not `Harness default`; the same picker while loading does the same; an empty value with `allowDefault` still shows `Harness default`.
+3. Run `node node_modules/vitest/vitest.mjs run tests/model-picker-unlisted.test.js tests/model-picker.test.js tests/chat-pickers.test.js tests/harness-default-pick.test.js` and report the counts.
+
+**P397. A cut inbox reply keeps a sender name that has spaces (OpenCode).** Read this brief only. Commit each step as you finish it. Run every command in the foreground. Files: scripts/mr-agent.mjs (only the sender match in the inbox cut of `boundMessages`, near line 1368), tests/review-39-fixes.test.js (add tests here), docs/agents/CHANGELOG.md.
+
+`readLaneInbox` writes each reply as `from: text`, and `from` can be a label with spaces such as `Eye check agent`. The cut's sender pattern `[^\s:]+` matches no such name, so the cut reply loses its sender.
+
+1. The sender is the text before the first `: ` on the reply's first line, when that text is at most 80 characters. Keep today's behaviour otherwise.
+2. Tests, each failing before your change: a cut reply from `Eye check agent` starts `Eye check agent: [start cut] `; the bound still holds and the task is kept.
+3. Run `node node_modules/vitest/vitest.mjs run tests/review-39-fixes.test.js tests/mr-agent-inbox.test.js` and report the counts.
+
+**P398. The scale probe retries a locked .git rename on Windows (OpenCode).** Read this brief only. Commit each step as you finish it. Run every command in the foreground. Files: scripts/scale-live.mjs (only `readPlainFolder` and `restoreGitFolder`), tests/scale-live-rename.test.js (new; add no test to another file except to keep an existing one passing), docs/agents/CHANGELOG.md.
+
+CI on 2026-11-16 failed once on windows-latest: `tests/scale-live.test.js` threw `EPERM: operation not permitted, rename '...\2000-11\.git' -> '...\2000-11-git-away'`. A git process that had just exited still held the folder; a rerun passed.
+
+1. Add a small rename helper in `scripts/scale-live.mjs` that retries `renameSync` on `EPERM`, `EBUSY` or `EACCES` up to 10 times, 100 milliseconds apart, and throws the last error after that. Any other error is thrown at once. Use it for the three renames in `readPlainFolder` and `restoreGitFolder`. Pass the rename and the wait in as arguments so the test needs no locked folder.
+2. Tests, each failing before your change: a rename that fails twice with `EPERM` and then works succeeds; one that always fails with `EPERM` throws after 10 tries; one that fails with `ENOENT` throws at once.
+3. Run `node node_modules/vitest/vitest.mjs run tests/scale-live-rename.test.js tests/scale-live.test.js` and report the counts.
+
+**P399. LIMITS.md names the browser's six connections (OpenCode).** Read this brief only. Commit when done. Files: docs/agents/architecture/LIMITS.md (one new short section), docs/agents/CHANGELOG.md.
+
+On 2026-11-16 three tabs of one room on the same address stalled every request for 30 seconds, and the page said `The bridge did not answer within 30 seconds.` while the bridge answered curl in 28 milliseconds. Each live room page holds two event streams (`src/live/bridge.js` and `src/control/client.js`), and a browser opens at most six connections to one host over HTTP/1.1.
+
+1. Read both files to confirm the two streams. Then add a section to LIMITS.md: what happens, the numbers (two streams a page, six connections a host, so a third tab of the same room stalls the rest), how to see it, and what to do (close the other tabs, or open the room once on `127.0.0.1` and once on `localhost`, which count as two hosts). Plain words, short sentences, no em dashes, at most 12 lines.
+2. Run `node node_modules/vitest/vitest.mjs run tests/docs.test.js` if it exists and report the counts.
+
+**P400. The replay scrubber never gets NaN (OpenCode).** Read this brief only. Commit each step as you finish it. Run every command in the foreground. Files: src/ui/Transport.jsx (only the scrubber's `max` and `value`), tests/transport-scrubber.test.js (new; add no test to another file except to keep an existing one passing), docs/agents/CHANGELOG.md.
+
+The test run prints `Received NaN for the max attribute` and `Received NaN for the value attribute`. The scrubber's range input in `src/ui/Transport.jsx` near line 247 rounds `duration` and `position`, which can be NaN before a recording loads.
+
+1. The scrubber's `max` and `value` are finite numbers at all times: a duration or position that is not a finite number counts as 0, and the value never goes above the max.
+2. Tests, each failing before your change: rendering the transport with `duration` and `position` as NaN gives the range input `max="0"` and `value="0"` and logs no NaN warning; a normal duration and position keep today's numbers.
+3. Run `node node_modules/vitest/vitest.mjs run tests/transport-scrubber.test.js tests/transport-lanes.test.js tests/transport-orchestrators.test.js tests/transport-spend.test.js` and report the counts.
