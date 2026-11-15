@@ -75,6 +75,7 @@ describe('the model picker helpers', () => {
     expect(priced).toEqual({
       name: 'GPT-5',
       id: 'openai/gpt-5',
+      source: '',
       hasDetail: true,
       context: '128K',
       price: '$0.27 / $1.10',
@@ -85,8 +86,9 @@ describe('the model picker helpers', () => {
     expect(free.context).toBe('32K')
     const bare = modelRowParts(rows.find((row) => row.id === 'bare/model'))
     expect(bare).toEqual({
-      name: 'bare/model',
+      name: 'model',
       id: 'bare/model',
+      source: '',
       hasDetail: false,
       context: '',
       price: '',
@@ -103,18 +105,31 @@ describe('the model picker helpers', () => {
     expect(filterPickerRows(rows, '')).toHaveLength(CHOICES.length)
   })
 
+  it('names a model without its provider and tells apart two that share a name', () => {
+    const rows = pickerRows(
+      ['opencode/deepseek/deepseek-v4.1-flash-1017', 'opencode-go/deepseek-v4.1-flash', 'zen/deepseek-v4.1-flash', 'or/x'],
+      modelDetailMap([{ id: 'or/x', name: 'DeepSeek: DeepSeek V9' }])
+    )
+    expect(rows.map((row) => [row.name, row.source])).toEqual([
+      ['deepseek-v4.1-flash-1017', ''],
+      ['deepseek-v4.1-flash', 'opencode-go'],
+      ['deepseek-v4.1-flash', 'zen'],
+      ['DeepSeek V9', ''],
+    ])
+  })
+
   it('sorts by each order', () => {
     const rows = makeRows()
     expect(sortPickerRows(rows, 'name-asc').map((row) => row.name)).toEqual([
       'Alpha',
-      'bare/model',
       'Free Model',
       'GPT-5',
+      'model',
     ])
     expect(sortPickerRows(rows, 'name-desc').map((row) => row.name)).toEqual([
+      'model',
       'GPT-5',
       'Free Model',
-      'bare/model',
       'Alpha',
     ])
     expect(sortPickerRows(rows, 'price-asc').map((row) => row.id)).toEqual([
@@ -187,10 +202,10 @@ describe('ModelPicker', () => {
       const rows = container.querySelectorAll('.mr-picker-row')
       expect(rows).toHaveLength(4)
       expect(rows.map((row) => row.textContent)).toEqual([
-        'GPT-5openai/gpt-5128K$0.27 / $1.102026-01',
-        'Alphaold/model1K$2.00 / $8.002020-09',
-        'bare/model',
-        'Free Modelfree/model32Kfree2024-01',
+        'GPT-5128K$0.27 / $1.102026-01',
+        'Alpha1K$2.00 / $8.002020-09',
+        'Free Model32Kfree2024-01',
+        'model',
       ])
       expect(container.querySelector('.mr-picker-group').textContent).toBe('Current')
 
@@ -222,15 +237,15 @@ describe('ModelPicker', () => {
       await act(async () => {
         search.dispatchEvent({ type: 'keydown', key: 'ArrowDown', bubbles: true, cancelable: true })
       })
-      expect(container.querySelector('.mr-picker-row.is-active').textContent).toBe('bare/model')
+      expect(container.querySelector('.mr-picker-row.is-active').textContent).toContain('Free Model')
       await act(async () => {
         search.dispatchEvent({ type: 'keydown', key: 'ArrowDown', bubbles: true, cancelable: true })
       })
-      expect(container.querySelector('.mr-picker-row.is-active').textContent).toContain('Free Model')
+      expect(container.querySelector('.mr-picker-row.is-active').textContent).toBe('model')
       await act(async () => {
         search.dispatchEvent({ type: 'keydown', key: 'Enter', bubbles: true, cancelable: true })
       })
-      expect(picked).toEqual(['free/model'])
+      expect(picked).toEqual(['bare/model'])
       expect(container.querySelector('.mr-picker-pop')).toBeNull()
     })
   })

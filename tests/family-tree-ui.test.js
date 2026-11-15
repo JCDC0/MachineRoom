@@ -623,7 +623,7 @@ describe('FamilyTree rows', () => {
 
   it('lists the Direct API endpoint models and drops the key slot in Add child', async () => {
     const { client, directModels } = makeClient()
-    directModels.push({ id: 'OpenRouter/flash', label: 'flash (OpenRouter)' })
+    directModels.push({ id: 'OpenRouter/flash' })
     await withDom(async ({ container, root }) => {
       await mount(root, client)
       await click(root, rowByLabel(container, 'Orchestrator').querySelector('.mr-family-add'))
@@ -638,9 +638,10 @@ describe('FamilyTree rows', () => {
       expect(buttonWithText(form, 'Add key')).toBeNull()
       const trigger = form.querySelector('button[aria-label="New agent model"]')
       expect(trigger).not.toBeNull()
-      expect(trigger.textContent).toContain('OpenRouter/flash')
+      expect(trigger.textContent).toContain('flash')
+      expect(trigger.textContent).not.toContain('OpenRouter')
       await click(root, trigger)
-      const option = container.querySelectorAll('.mr-picker-row').find((row) => row.textContent.includes('OpenRouter/flash'))
+      const option = container.querySelectorAll('.mr-picker-row').find((row) => row.querySelector('.mr-picker-pick')?.getAttribute('title') === 'OpenRouter/flash')
       expect(option).not.toBeNull()
       expect(buttonWithText(form, 'Create').getAttribute('disabled')).toBeNull()
     })

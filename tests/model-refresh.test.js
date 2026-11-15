@@ -58,9 +58,7 @@ describe('the model refresh helper', () => {
   })
 
   it('writes one label for a native option', () => {
-    expect(modelChoiceText({ id: 'claude-opus', label: 'Claude Opus' })).toBe(
-      'Claude Opus (claude-opus)'
-    )
+    expect(modelChoiceText({ id: 'claude-opus', label: 'Claude Opus' })).toBe('Claude Opus')
     expect(modelChoiceText({ id: 'same', label: 'same' })).toBe('same')
     expect(modelChoiceText({ id: 'bare' })).toBe('bare')
   })
@@ -167,7 +165,7 @@ describe('ModelSelect', () => {
     expect(html).toContain('optgroup label="Current"')
     expect(html).toContain('>saved</option>')
     expect(html).toContain('optgroup label="Models"')
-    expect(html).toContain('>Claude Opus (claude-opus)</option>')
+    expect(html).toContain('>Claude Opus</option>')
     expect(html).toContain('role="alert"')
     expect(html).toContain('The program is missing.')
     expect(html).toContain('title="Refresh models"')

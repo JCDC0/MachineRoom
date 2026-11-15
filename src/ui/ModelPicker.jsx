@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import ModelRefresh from './ModelRefresh.jsx'
-import { normalizeModelChoices } from './modelRefresh.js'
+import { modelName, normalizeModelChoices } from './modelRefresh.js'
 import { readStorage, writeStorage } from '../storage.js'
 
 export const MODEL_SORT_STORAGE = 'machineroom.modelSort'
@@ -69,14 +69,21 @@ export function endpointDetailMap(endpoints) {
 
 export function pickerRows(value, details) {
   const map = details instanceof Map ? details : modelDetailMap(details)
-  return normalizeModelChoices(value).map((row) => {
+  const rows = normalizeModelChoices(value).map((row) => {
     const detail = map.get(row.id) ?? null
     return {
       id: row.id,
-      name: detail ? detail.name : row.id,
+      name: detail ? detailName(detail.name, row.id) : modelName(row.id, [row]),
       detail,
     }
   })
+  const counts = new Map()
+  for (const row of rows) counts.set(row.name, (counts.get(row.name) ?? 0) + 1)
+  return rows.map((row) => ({ ...row, source: counts.get(row.name) > 1 && row.id.includes('/') ? row.id.split('/')[0] : '' }))
+}
+
+function detailName(name, id) {
+  return cleanText(name).replace(/^[^:]{1,40}:\s+(?=\S)/, '') || modelName(id)
 }
 
 export function filterPickerRows(rows, query) {
@@ -172,8 +179,9 @@ export function formatCreated(value) {
 export function modelRowParts(row) {
   const detail = row?.detail ?? null
   return {
-    name: detail ? detail.name : row?.id ?? '',
+    name: row?.name || modelName(row?.id),
     id: row?.id ?? '',
+    source: row?.source ?? '',
     hasDetail: Boolean(detail),
     context: detail ? formatContext(detail.contextLength) : '',
     price: detail ? formatPrice(detail) : '',
@@ -426,12 +434,12 @@ export default function ModelPicker({
                       <button
                         type="button"
                         className="mr-picker-pick"
-                        title={parts.hasDetail ? `${parts.name} (${parts.id})` : parts.id}
+                        title={parts.id}
                         onClick={() => pick(row)}
                       >
                         <span className="mr-picker-row-main">
                           <span className="mr-picker-name">{parts.name}</span>
-                          {parts.hasDetail ? <span className="mr-picker-id mono">{parts.id}</span> : null}
+                          {parts.source ? <span className="mr-picker-id mono">{parts.source}</span> : null}
                         </span>
                         {parts.hasDetail ? (
                           <span className="mr-picker-meta mono">

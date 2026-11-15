@@ -48,10 +48,18 @@ export function filterModelChoices(value, query) {
   )
 }
 
+export function modelName(id, choices = []) {
+  const wanted = cleanText(id)
+  if (!wanted) return 'Harness default'
+  const found = normalizeModelChoices(choices).find((row) => row.id === wanted)
+  const label = cleanText(found?.label)
+  if (label && label !== wanted) return label
+  const mark = wanted.lastIndexOf('/')
+  return mark === -1 ? wanted : wanted.slice(mark + 1) || wanted
+}
+
 export function modelChoiceText(choice) {
-  const id = cleanText(choice?.id)
-  const label = cleanText(choice?.label) || id
-  return label && label !== id ? `${label} (${id})` : id
+  return modelName(choice?.id, [choice])
 }
 
 export function modelErrorText(value) {

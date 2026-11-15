@@ -159,9 +159,9 @@ describe('a node line', () => {
   it('joins the harness, model and effort', () => {
     expect(familyMeta({ harness: 'claude', model: 'opus', effort: 'high' })).toBe('claude · opus · high')
     expect(familyMeta({ harness: 'machineroom', model: 'openrouter/flash', effort: '' })).toBe(
-      'Direct API · openrouter/flash · default'
+      'Direct API · flash · default'
     )
-    expect(familyMeta({})).toBe('harness unknown · no model · default')
+    expect(familyMeta({})).toBe('harness unknown · Harness default · default')
   })
 
   it('names the machineroom harness Direct API', () => {
@@ -352,7 +352,7 @@ describe('the add child form', () => {
     expect(childConfirmText(draft, { kind: 'lane', label: 'Editor', id: 'editor' })).toBe(
       'Editor becomes a sub orchestrator and leads the new agent.'
     )
-    expect(childDetail(draft, HARNESSES, MODELS)).toBe('Claude Code · sonnet · high')
+    expect(childDetail(draft, HARNESSES, MODELS)).toBe('Claude Code · Sonnet · high')
   })
 })
 
