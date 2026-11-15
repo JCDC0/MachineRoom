@@ -3261,3 +3261,12 @@ Review 40 fixes, P388 and P389. `docs/agents/AUDIT-2026-11-REVIEW-40.md` (P387, 
 2. Other user messages are cut as today.
 3. Tests: an 8000 character bound, a 1000 character system message, the task, then one inbox batch with a 7500 character older reply followed by `Newest order to keep.` ends under the bound with `Newest order to keep.` present and the task kept (this one fails before your change); a batch of two short replies under the bound is unchanged (a guard that passes before and after).
 4. Run `node ../../node_modules/vitest/vitest.mjs run tests/review-39-fixes.test.js tests/mr-agent-inbox.test.js tests/mr-agent.test.js` and report the counts.
+
+**P390. The orchestrator takes a harness at Harness default (OpenCode).** Read this brief only. Commit each step as you finish it. Run every command in the foreground. Files: server/orchestrator.js (only `setHarness`), tests/orchestrator-harness-default.test.js (new; add no test to another file except to keep an existing one passing), docs/agents/CHANGELOG.md.
+
+Since P386 the orchestrator editor sends an empty model when the owner picks a new harness and leaves Harness default. `setHarness` in `server/orchestrator.js` refuses any empty model with `modelUnavailableProblem`, so the save fails with 400.
+
+1. `setHarness` accepts an empty model for every harness except `machineroom` (Direct API), and saves the orchestrator with no model, as a fresh orchestrator already runs. A non-empty model is checked with `modelAllowed` as today. `machineroom` with an empty model is refused as today.
+2. `setModel` does not change.
+3. Tests, through the real `setHarness` (no mocked bridge), each failing before your change: a switch to `opencode` with model `''` and `confirmed: true` answers 200 and the orchestrator's model is empty; the same for `machineroom` answers 400; a switch with an unknown non-empty model still answers 400.
+4. Run `node node_modules/vitest/vitest.mjs run tests/orchestrator-harness-default.test.js tests/orchestrator.test.js tests/control-contract.test.js` and report the counts.
