@@ -1,12 +1,14 @@
 # Changelog
 
 ## Unreleased
+- P357: The add-agent, sub, team and orchestrator pickers offer only ready, enabled harnesses; a node keeps its own harness marked (not ready); an empty picker points to Settings.
 - P365: The custom endpoint form offers model refresh only for a saved endpoint, and a failed lanes read no longer says the list is empty.
 - The custom endpoint form offers model refresh only for a saved endpoint and explains how to refresh a new one (P365).
 - A failed lanes read no longer says the list is empty (P365).
 - P358: The runner starts a harness's saved program, refuses a harness turned off in Settings, and the doctor prints one line per harness.
 - The runner starts the program saved for a lane's harness when the lane's bin is missing or the harness default, and refuses a lane on a harness turned off in Settings before it makes a folder, lock or worktree (P358).
 - The doctor prints one line per harness: ready with its version, not ready with its reason, or turned off in Settings (P358).
+- The add-agent pills, the sub form, Build a team and an orchestrator's harness select offer only a harness the bridge names ready and not turned off, keep a node's own harness marked `(not ready)`, and say `No harness is ready. Add one in Settings, under Harnesses.` when there is nothing to offer (P357).
 - The bridge runs each harness with --version once in 10 minutes and lists it as ready or not with a reason, keeps a saved program and an on or off choice per harness, and refuses a new lane or sub on a harness turned off (P355, P355b).
 - Settings has a Harnesses section above Direct API: each harness shows Ready, Not ready with its reason, or Off, with its version and program, an Offer in forms switch and a Program field, and Check again checks them all (P356).
 - A ladder save keeps the effort it names on a sub and its first turn takes it, an effort the harness lacks is refused, and the chat's Effort menu offers the levels the bridge lists for that harness (P353).

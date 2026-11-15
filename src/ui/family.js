@@ -5,6 +5,7 @@ import { AGENT_NAME_MAX, cleanText } from './sidebar.js'
 export const DIRECT_HARNESS = 'machineroom'
 export const DIRECT_LABEL = 'Direct API'
 export const DIRECT_KEY_PROBLEM = 'Add a Direct API key in Settings first.'
+export const NO_READY_HARNESS = 'No harness is ready. Add one in Settings, under Harnesses.'
 export const LANES_JSON_SAVE_PROBLEM = 'A lane from lanes.json cannot be updated.'
 export const MAX_SUBS = 5
 
@@ -278,11 +279,20 @@ export function harnessList(value) {
       key,
       name: cleanText(entry.name, 60) || key,
       available: entry.available === true,
+      ready: typeof entry.ready === 'boolean' ? entry.ready : null,
+      enabled: entry.enabled !== false,
       models: modelRows(entry.models),
       efforts: effortRows(entry.efforts),
     })
   }
   return rows
+}
+
+export function harnessReady(harness) {
+  if (!harness || typeof harness !== 'object') return false
+  if (harness.enabled === false) return false
+  if (typeof harness.ready === 'boolean') return harness.ready
+  return harness.available === true
 }
 
 export function harnessGroups(value) {
@@ -291,6 +301,8 @@ export function harnessGroups(value) {
     all,
     available: all.filter((row) => row.available),
     unavailable: all.filter((row) => !row.available),
+    ready: all.filter((row) => harnessReady(row)),
+    notReady: all.filter((row) => !harnessReady(row)),
   }
 }
 
@@ -327,7 +339,9 @@ export function directHarness(harnesses = null, models = null) {
   return {
     key: DIRECT_HARNESS,
     name: DIRECT_LABEL,
-    available: true,
+    available: listed ? listed.available : true,
+    ready: listed ? listed.ready : null,
+    enabled: listed ? listed.enabled : true,
     models: directModels,
     efforts: [...directEfforts],
   }
@@ -335,10 +349,10 @@ export function directHarness(harnesses = null, models = null) {
 
 export function childHarnesses(harnesses = null, models = null) {
   const groups = harnessGroups(harnesses)
-  return [
-    ...groups.available.filter((row) => row.key !== DIRECT_HARNESS),
-    directHarness(harnesses, models),
-  ]
+  const offered = groups.all.filter((row) => row.key !== DIRECT_HARNESS && harnessReady(row))
+  const direct = directHarness(harnesses, models)
+  if (harnessReady(direct)) offered.push(direct)
+  return offered
 }
 
 export function childDraft(harnesses = null, models = null) {
@@ -360,7 +374,7 @@ export function childFormProblem(draft, { harnesses = null, models = null, direc
   const offered = childHarnesses(harnesses, models)
   const harness = offered.find((row) => row.key === cleanText(draft?.harness, 40))
   if (!harness) return 'Choose a harness.'
-  if (!harness.available) return 'That harness is not on this computer.'
+  if (!harnessReady(harness)) return 'That harness is not on this computer.'
   const choices =
     harness.key === DIRECT_HARNESS && Array.isArray(directModels)
       ? modelRows(directModels)

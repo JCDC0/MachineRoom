@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useDialogFocus } from './dialogFocus.js'
 import {
+  NO_READY_HARNESS,
   harnessModels,
+  harnessReady,
   teamDraft,
   teamHarnesses,
   teamPlan,
@@ -135,13 +137,9 @@ export function FamilyTeam({ client = null }) {
 
   const activeHarnesses = useMemo(() => orchestratorHarnesses(orchestrators, harnesses), [orchestrators, harnesses])
   const offered = useMemo(() => {
-    if (activeHarnesses) {
-      return [
-        ...activeHarnesses.filter((row) => row.key === 'opencode'),
-        ...activeHarnesses.filter((row) => row.key !== 'opencode'),
-      ]
-    }
-    return teamHarnesses(harnesses, models)
+    const rows = activeHarnesses ?? teamHarnesses(harnesses, models)
+    const ready = rows.filter((row) => harnessReady(row))
+    return [...ready.filter((row) => row.key === 'opencode'), ...ready.filter((row) => row.key !== 'opencode')]
   }, [activeHarnesses, harnesses, models])
 
   useEffect(() => {
@@ -190,8 +188,7 @@ export function FamilyTeam({ client = null }) {
   }, [ready, lanes, ladder, draft])
 
   function harnessProblem() {
-    if (!selected) return offered.length === 0 ? 'Loading harnesses...' : 'Choose a harness.'
-    if (!selected.available) return 'That harness is not on this computer.'
+    if (!selected) return offered.length === 0 ? NO_READY_HARNESS : 'Choose a harness.'
     if (live.choices.length === 0) return 'This harness has no models.'
     if (!live.choices.some((row) => row.id === cleanText(draft.model, 120))) {
       return 'Choose a model for this harness.'
@@ -397,7 +394,7 @@ export function FamilyTeam({ client = null }) {
               </select>
             </label>
           ) : (
-            <p className="mr-side-note is-dim">Loading harnesses...</p>
+            <p className="mr-side-note is-dim">{NO_READY_HARNESS}</p>
           )}
           {selected ? (
             <ModelSelect
@@ -413,7 +410,9 @@ export function FamilyTeam({ client = null }) {
             />
           ) : null}
           {renderPreview()}
-          {formProblem ? <p className="mr-family-note is-error">{formProblem}</p> : null}
+          {formProblem && !(offered.length === 0 && formProblem === NO_READY_HARNESS) ? (
+            <p className="mr-family-note is-error">{formProblem}</p>
+          ) : null}
           {canTeam && ready && !formProblem ? (
             <div className="mr-side-form-actions">
               <button type="submit" className="mr-side-primary" disabled={busy}>
