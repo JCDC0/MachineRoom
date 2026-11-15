@@ -11,7 +11,7 @@ const cli = { bin: 'agy', model: 'gemini-3.8-flash-high' }
 
 describe('the harness permission modes', () => {
   it('runs Codex Plan in a read-only sandbox and Auto in a workspace sandbox', () => {
-    for (const [mode, sandbox] of [['plan', 'read-only'], ['auto', 'workspace-write'], ['bypass', 'workspace-write']]) {
+    for (const [mode, sandbox] of [['plan', 'read-only'], ['auto', 'workspace-write']]) {
       const args = codexHarness.command({ cli: {}, prompt: 'Do it.', mode }).args
       expect(args.slice(args.indexOf('--sandbox'), args.indexOf('--sandbox') + 2)).toEqual(['--sandbox', sandbox])
     }

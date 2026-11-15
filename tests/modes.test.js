@@ -15,7 +15,7 @@ describe('permission modes', () => {
     expect(modesFor('opencode').map((mode) => mode.id)).toEqual(['plan', 'edits', 'auto'])
     expect(modesFor('agy').map((mode) => mode.id)).toEqual(['plan', 'edits', 'auto', 'bypass'])
     expect(modesFor('hermes')).toEqual([])
-    expect(modesFor('codex').map((mode) => mode.id)).toEqual(['plan', 'auto'])
+    expect(modesFor('codex').map((mode) => mode.id)).toEqual(['plan', 'edits', 'auto', 'bypass'])
     expect(modesFor(undefined)).toEqual([])
   })
 

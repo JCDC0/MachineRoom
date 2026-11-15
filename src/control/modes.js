@@ -12,7 +12,7 @@ const LISTS = {
   claude: ['plan', 'ask', 'edits', 'auto', 'bypass'],
   machineroom: ['plan', 'ask', 'edits', 'auto', 'bypass'],
   opencode: ['plan', 'edits', 'auto'],
-  codex: ['plan', 'auto'],
+  codex: ['plan', 'edits', 'auto', 'bypass'],
   agy: ['plan', 'edits', 'auto', 'bypass'],
 }
 
