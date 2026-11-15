@@ -1577,8 +1577,10 @@ async function main() {
   }
   if (!Object.hasOwn(lanes, options.lane)) throw new Error(missingLaneText(options.lane, lanesJson, lanesPath))
   const saved = lanes[options.lane]
-  const mode = options.mode ?? (saved?.cli?.mode === 'choice' ? defaultMode(saved.cli.harness) ?? undefined : undefined)
+  const choiceDefault = saved?.cli?.mode === 'choice' ? defaultMode(saved.cli.harness) : undefined
+  const mode = options.mode ?? (choiceDefault ?? undefined)
   const lane = laneWithOverrides(saved, { ...options, ...(mode !== undefined ? { mode } : {}) })
+  if (options.mode === undefined && choiceDefault === null && lane?.cli) delete lane.cli.mode
   lanes[options.lane] = lane
   if (typeof lane?.cli?.harness === 'string' && readHarnessSettings(runsFolder()).off.includes(lane.cli.harness)) {
     console.log(HARNESS_OFF_PROBLEM)
@@ -1738,9 +1740,21 @@ function recordRoom(record, toolLines, lanes) {
 }
 
 async function startFailover({ laneKey, target, lanes, options, wanted, prompt, promptFor = null, folder, project, task, queue = null, base = '', deferRecord, openLog, failedRecord, failedStartBranch, onStart = null }) {
-  const primaryMode = options?.mode !== undefined ? options.mode : lanes?.[laneKey]?.cli?.mode
-  const fallbackLane = laneWithOverrides(lanes?.[target], primaryMode !== undefined ? { mode: primaryMode } : {})
+  const savedTarget = lanes?.[target]
+  const targetMode = typeof savedTarget?.cli?.mode === 'string' ? savedTarget.cli.mode.trim() : ''
+  const fixedTarget = targetMode !== '' && targetMode !== 'choice'
+  const primaryRaw = options?.mode !== undefined ? options.mode : lanes?.[laneKey]?.cli?.mode
+  const primaryMode = primaryRaw === 'choice'
+    ? (defaultMode(lanes?.[laneKey]?.cli?.harness) ?? undefined)
+    : (primaryRaw !== undefined && primaryRaw !== '' ? primaryRaw : undefined)
+  const carriedMode = fixedTarget
+    ? undefined
+    : (primaryMode ?? (targetMode === 'choice' ? (defaultMode(savedTarget?.cli?.harness) ?? undefined) : undefined))
+  const fallbackLane = laneWithOverrides(savedTarget, carriedMode !== undefined ? { mode: carriedMode } : {})
   if (!fallbackLane) return null
+  if (!fixedTarget && carriedMode === undefined && fallbackLane.cli && (fallbackLane.cli.mode === '' || fallbackLane.cli.mode === 'choice')) {
+    delete fallbackLane.cli.mode
+  }
   if (readHarnessSettings(folder).off.includes(fallbackLane.cli?.harness)) {
     console.log(HARNESS_OFF_PROBLEM)
     return null
