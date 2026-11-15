@@ -210,6 +210,27 @@ describe('a failed Direct API model read', () => {
       expect(buttonWithText(form, 'Retry')).not.toBeNull()
     })
   })
+
+  it('keeps the key sentence when nothing is saved', async () => {
+    const { client } = makeClient({
+      harnessModels: (harness) =>
+        harness === 'machineroom' ? { harness, models: [], error: DIRECT_KEY_PROBLEM } : null,
+    })
+    await withDom(async ({ container, root }) => {
+      await mount(root, client)
+      await click(root, rowByLabel(container, 'Orchestrator').querySelector('.mr-family-add'))
+      const form = container.querySelector('.mr-family-child')
+      const direct = form
+        .querySelectorAll('.mr-side-harness')
+        .find((button) => button.textContent.trim() === 'Direct API')
+      await click(root, direct)
+      await settle()
+
+      expect(form.textContent).toContain(DIRECT_KEY_PROBLEM)
+      expect(buttonWithText(form, 'Open Settings')).not.toBeNull()
+      expect(buttonWithText(form, 'Retry')).toBeNull()
+    })
+  })
 })
 
 describe('a team that needs more agents', () => {

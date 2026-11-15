@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- A Direct API with nothing saved still shows the key sentence and Open Settings, while a failed model read shows its error and Retry (P364).
 - An orchestrator on a harness with no effort levels shows no Effort select, and its saved effort is left alone (P364).
 - Build a team now says how many agents it needs outside existing teams and offers the two useful steps (P364).
 - When a Direct API model read fails, the form shows that error and Retry instead of the missing-key sentence (P364).

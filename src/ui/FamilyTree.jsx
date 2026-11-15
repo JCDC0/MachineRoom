@@ -1635,7 +1635,7 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
   }
 
   function renderDirectNotice(onRefresh = null, error = '') {
-    if (error) {
+    if (error && error !== DIRECT_KEY_PROBLEM) {
       return (
         <div className="mr-family-direct">
           <p className="mr-side-note is-error" role="alert">
