@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- A harness switch keeps the owner's saved mode when the new harness offers it and it is not Bypass, so a switch to Codex never turns on Bypass on its own.
 - Review 42 (Sol) of P395 to P408: four P1 and two P2 findings in the scope gate, Codex Bypass, failover modes, sub restore and choice.
 - Lane mode pickers and lane saves leave out Ask, which a headless lane run cannot use.
 - The control client sends a lane chat's Separate worktree choice to the bridge, so the box takes effect.
