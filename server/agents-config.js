@@ -1,3 +1,4 @@
+import { clearHarnessChecks, harnessStatus, HARNESS_OFF_PROBLEM, readHarnessSettings, updateHarnessSettings } from './harness-settings.js'
 import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import { projectLanesFileFor, readHiddenLanes, writeHiddenLanes } from './active-lanes.js'
@@ -12,7 +13,7 @@ import { machineroomModels, modelAllowed, readHarnessModelsCache } from './harne
 import { fallbackProblem } from '../src/briefs/run.js'
 
 export const MAX_AGENTS = 30
-export const HARNESS_KEYS = ['claude', 'opencode', 'agy', 'acp', 'machineroom', 'codex', 'copilot']
+export const HARNESS_KEYS = ['claude', 'opencode', 'agy', 'acp', 'machineroom', 'codex', 'copilot', 'hermes']
 
 export const HARNESS_NAMES = {
   claude: 'Claude Code',
@@ -22,6 +23,7 @@ export const HARNESS_NAMES = {
   machineroom: 'MachineRoom',
   codex: 'Codex',
   copilot: 'GitHub Copilot',
+  hermes: 'Hermes',
 }
 
 export const HARNESS_EFFORTS = {
@@ -134,7 +136,7 @@ export function codexProgramFor(harness, bin, { env = process.env, platform = pr
   return codexAppProgram({ env, platform })
 }
 
-export function isHarnessAvailable(harnessKey, { lanes = {}, env = process.env, platform = process.platform, endpoints = [] } = {}) {
+export function isHarnessAvailable(harnessKey, { lanes = {}, env = process.env, platform = process.platform, endpoints = [], runsFolder = null } = {}) {
   if (harnessKey === 'machineroom') {
     if (Array.isArray(endpoints) && endpoints.length > 0) return true
     const key = env?.MACHINEROOM_API_KEY
@@ -142,9 +144,9 @@ export function isHarnessAvailable(harnessKey, { lanes = {}, env = process.env, 
     return (typeof key === 'string' && key.trim() !== '') || (typeof fallback === 'string' && fallback.trim() !== '')
   }
 
-  let laneBin = null
+  let laneBin = runsFolder ? readHarnessSettings(runsFolder).programs[harnessKey] : null
   for (const lane of Object.values(lanes ?? {})) {
-    if (lane?.cli?.harness === harnessKey && typeof lane?.cli?.bin === 'string') {
+    if (!laneBin && lane?.cli?.harness === harnessKey && typeof lane?.cli?.bin === 'string') {
       laneBin = lane.cli.bin
       break
     }
@@ -184,7 +186,7 @@ export function listHarnesses({ lanes = {}, env = process.env, platform = proces
       return {
         key,
         name: HARNESS_NAMES[key] ?? key,
-        available: isHarnessAvailable(key, { lanes, env, platform, endpoints }),
+        available: isHarnessAvailable(key, { lanes, env, platform, endpoints, runsFolder }),
         models: runsFolder ? machineroomModels(runsFolder, env).models : [],
         efforts: [...(HARNESS_EFFORTS[key] ?? [])],
       }
@@ -209,7 +211,7 @@ export function listHarnesses({ lanes = {}, env = process.env, platform = proces
     return {
       key,
       name: HARNESS_NAMES[key] ?? key,
-      available: isHarnessAvailable(key, { lanes, env, platform, endpoints }),
+      available: isHarnessAvailable(key, { lanes, env, platform, endpoints, runsFolder }),
       models,
       efforts: [...(HARNESS_EFFORTS[key] ?? [])],
     }
@@ -394,6 +396,7 @@ export function buildMadeLane(agent, lanesJson = {}) {
         bin: descriptor?.defaultProgram ?? agent.harness,
         model: agent.model,
       }
+  if (agent.bin) cli.bin = agent.bin
   if (agent.endpoint) cli.endpoint = agent.endpoint
   else delete cli.endpoint
 
@@ -480,6 +483,8 @@ export function createAgentLane(body, {
   const baseLanes = typeof lanes === 'function' ? lanes() : (lanes ?? {})
   const runs = runsDir ?? runsFolder()
   const endpoints = readEndpoints(runs)
+  const settings = readHarnessSettings(runs)
+  if (settings.off.includes(harness)) return { ok: false, status: 400, error: HARNESS_OFF_PROBLEM }
   let endpoint = null
   if (body?.endpoint !== undefined && body?.endpoint !== null && String(body.endpoint).trim() !== '') {
     const endpointName = String(body.endpoint).trim()
@@ -488,7 +493,7 @@ export function createAgentLane(body, {
       return { ok: false, status: 400, error: laneEndpointProblem(harness, endpointName) }
     }
   }
-  const available = HARNESS_KEYS.includes(harness) && isHarnessAvailable(harness, { lanes: baseLanes, env, endpoints })
+  const available = HARNESS_KEYS.includes(harness) && isHarnessAvailable(harness, { lanes: baseLanes, env, endpoints, runsFolder: runs })
   if (!available) {
     return { ok: false, status: 400, error: harnessUnavailableProblem(harness) }
   }
@@ -528,6 +533,7 @@ export function createAgentLane(body, {
     harness,
     model,
     effort,
+    ...(settings.programs[harness] ? { bin: settings.programs[harness] } : {}),
     ...(endpoint ? { endpoint: endpoint.name } : {}),
     createdAt: new Date().toISOString(),
   }
@@ -558,6 +564,10 @@ export function createAgentsConfigApi(options = {}) {
   const getBaseLanes = typeof options.lanes === 'function' ? options.lanes : () => options.lanes ?? readLanes()
   const env = options.env ?? process.env
 
+  async function rowsFor(lanes) {
+    return Promise.all(listHarnesses({ lanes, env, runsFolder: runsDir }).map(async (row) => ({ ...row, ...await harnessStatus(row.key, { runsFolder: runsDir, lanes, env, available: row.available }) })))
+  }
+
   async function handle(req, res, url) {
     const path = url.pathname
     const method = req.method ?? 'GET'
@@ -569,8 +579,23 @@ export function createAgentsConfigApi(options = {}) {
         return true
       }
       const lanes = getBaseLanes()
-      const data = listHarnesses({ lanes, env, runsFolder: runsDir })
+      const data = await rowsFor(lanes)
       sendJson(req, res, 200, data)
+      return true
+    }
+
+    if (path === '/api/harnesses/check' || path === '/api/harnesses/settings') {
+      if (method !== 'POST') { sendJson(req, res, 405, { error: 'Method not allowed.' }); return true }
+      if (!page) { sendJson(req, res, 403, { error: ORIGIN_CREATE_PROBLEM }); return true }
+      const body = await readJsonBody(req, res)
+      if (body === null) return true
+      if (body.confirmed !== true) { sendJson(req, res, 400, { error: 'Confirm the harness change first.' }); return true }
+      if (path.endsWith('/settings')) {
+        const error = updateHarnessSettings(runsDir, body)
+        if (error) { sendJson(req, res, 400, { error }); return true }
+      } else clearHarnessChecks(runsDir)
+      const rows = await rowsFor(getBaseLanes())
+      sendJson(req, res, 200, path.endsWith('/settings') ? rows.find((row) => row.key === body.key) : rows)
       return true
     }
 

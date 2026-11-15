@@ -1393,6 +1393,25 @@ describe('the orchestrator registry', () => {
     expect((await getJson(`${second.url}/api/orchestrator`)).status).toBe(200)
   })
 
+  it('refuses a new sub on a harness turned off in Settings and keeps an existing one', () => {
+    const files = makeBase({ ladder: { subs: [FRONTEND] } })
+    writeFileSync(join(files.runs, 'harnesses.json'), `${JSON.stringify({ programs: {}, off: ['claude'] })}\n`)
+    const rig = makeRig(files)
+
+    const kept = rig.registry.ladderChange({ ladder: { subs: [{ ...FRONTEND, name: 'Frontend kept' }] }, by: 'owner', confirmed: true }, true)
+    expect(kept.status).toBe(200)
+    expect(rig.chat('orchestrator').ladder.subs[0].name).toBe('Frontend kept')
+
+    const added = rig.registry.ladderChange({
+      ladder: { subs: [{ ...FRONTEND, name: 'Frontend kept' }, { ...FRONTEND, id: 'newsub', name: 'New Sub', lanes: ['opencode2'] }] },
+      by: 'owner',
+      confirmed: true,
+    }, true)
+    expect(added.status).toBe(400)
+    expect(added.body.error).toBe('That harness is turned off in Settings.')
+    expect(rig.chat('orchestrator').ladder.subs).toHaveLength(1)
+  })
+
   it('refuses a ladder that does not read and a write without a confirmation', async () => {
     const rig = await makeBridge(makeBase())
     const mainToken = rig.bridge.orchestrators().token('orchestrator')
