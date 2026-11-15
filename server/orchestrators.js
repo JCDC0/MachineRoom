@@ -5,7 +5,7 @@ import { maskKeys } from '../src/briefs/audit.js'
 import { legacyMode, modesFor } from '../src/control/modes.js'
 import { HARNESSES } from '../src/harnesses/index.js'
 import { canChange, outsideScope, readLadder, subPrompt } from '../src/model/hierarchy.js'
-import { HARNESS_EFFORTS, harnessUnavailableProblem, isHarnessAvailable } from './agents-config.js'
+import { HARNESS_EFFORTS, harnessUnavailableProblem, isHarnessAvailable, modelAllowed, modelUnavailableProblem } from './agents-config.js'
 import { readEndpoints } from './endpoints.js'
 import { MODELS } from './models.js'
 import { MODEL_ALIASES } from './model-list.js'
@@ -909,6 +909,7 @@ export function createOrchestrators({
       })
       const endpoints = readEndpoints(folder)
       const unavailable = []
+      const modelProblems = []
       const savedSubs = readSaved().ladder.subs
       for (const sub of next.ladder.subs) {
         const harness = harnessFor(sub)
@@ -918,9 +919,16 @@ export function createOrchestrators({
           const problem = harnessUnavailableProblem(harness)
           if (!unavailable.includes(problem)) unavailable.push(problem)
         }
+        const model = withAliasModel(sub).model
+        const changed = !previous || harnessFor(previous) !== harness || previous.model !== model
+        if (changed && (model || harness === 'machineroom') && !modelAllowed(harness, model, folder)) {
+          const problem = modelUnavailableProblem(model, harness)
+          if (!modelProblems.includes(problem)) modelProblems.push(problem)
+        }
       }
-      if (unavailable.length > 0) {
-        return { status: 400, body: { error: unavailable.join(' '), problems: unavailable } }
+      const problems = [...unavailable, ...modelProblems]
+      if (problems.length > 0) {
+        return { status: 400, body: { error: problems.join(' '), problems } }
       }
     }
     const namedEfforts = new Map()

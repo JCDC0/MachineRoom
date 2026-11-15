@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- The ladder route refuses a new or changed sub whose model its harness does not list, or a Direct API sub with no model; saved, unchanged subs are not checked.
 - The scale probe retries a .git rename up to 10 times when Windows still holds the folder, so the scale-live test no longer fails on a lock.
 - The replay scrubber's max and value stay finite before a recording loads, so the NaN attribute warnings are gone.
 - A cut inbox reply keeps its sender's name even when the name has spaces.
@@ -11,6 +12,7 @@
 - P397: A cut inbox reply keeps a sender name with spaces.
 - P400: The replay scrubber's max and value are always finite, and a non-finite duration or position counts as 0.
 - P398: The scale probe retries the .git folder rename on EPERM, EBUSY or EACCES up to 10 times, 100 milliseconds apart.
+- The ladder route refuses a new or changed sub whose model its harness does not list, and a Direct API sub with no model.
 - When the newest inbox reply must be cut, it keeps its sender, starts on a whole word and says [start cut].
 - An orchestrator saved at Harness default keeps it after a restart, and a new sub at Harness default no longer takes a lane's model.
 - The orchestrator and lane editors' model pickers show and offer Harness default for every harness but Direct API.
