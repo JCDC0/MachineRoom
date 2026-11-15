@@ -6,6 +6,7 @@ import {
   harnessConfirmSpec,
   harnessDisplayName,
   harnessListFrom,
+  harnessProgramFolded,
   harnessStatus,
   isNativeHarness,
   programDraftsFrom,
@@ -230,6 +231,61 @@ export default function HarnessesSettings({ client }) {
             const rowError = rowErrors[row.key] || ''
             const draft = drafts[row.key] ?? ''
             const programInputId = `harness-program-${row.key}`
+            const folded = harnessProgramFolded(row)
+            const programDetails = (
+              <>
+                {row.version ? <div className="endpoints-meta mono">{row.version}</div> : null}
+                {row.program ? <div className="endpoints-meta mono">{row.program}</div> : null}
+                {status.state === 'not-ready' && status.reason ? (
+                  <div className="endpoints-meta mono" data-harness-reason="true" style={{ color: '#ff2a2a' }}>
+                    {status.reason}
+                  </div>
+                ) : null}
+                <div className="endpoints-field">
+                  <label className="endpoints-label mono" htmlFor={programInputId}>
+                    Program
+                  </label>
+                  <input
+                    id={programInputId}
+                    type="text"
+                    value={draft}
+                    disabled={busy}
+                    placeholder="Program name or path"
+                    onChange={(event) => {
+                      const nextValue = event.target.value
+                      setDrafts((current) => ({ ...current, [row.key]: nextValue }))
+                    }}
+                  />
+                </div>
+                <div className="endpoints-actions">
+                  <button
+                    type="button"
+                    className="hud-settings-switch"
+                    disabled={busy || draft.trim() === ''}
+                    onClick={() =>
+                      setConfirm(
+                        harnessConfirmSpec({
+                          kind: 'program',
+                          key: row.key,
+                          name,
+                          program: draft,
+                        })
+                      )
+                    }
+                  >
+                    Save
+                  </button>
+                  <button
+                    type="button"
+                    className="hud-settings-switch"
+                    disabled={busy}
+                    onClick={() => applySetting(row.key, { program: '' })}
+                  >
+                    Clear
+                  </button>
+                </div>
+              </>
+            )
             return (
               <div key={row.key} className="endpoints-row" data-harness={row.key}>
                 <div className="endpoints-row-head">
@@ -242,13 +298,6 @@ export default function HarnessesSettings({ client }) {
                     {status.label}
                   </span>
                 </div>
-                {row.version ? <div className="endpoints-meta mono">{row.version}</div> : null}
-                {!native && row.program ? <div className="endpoints-meta mono">{row.program}</div> : null}
-                {status.state === 'not-ready' && status.reason ? (
-                  <div className="endpoints-meta mono" data-harness-reason="true" style={{ color: '#ff2a2a' }}>
-                    {status.reason}
-                  </div>
-                ) : null}
                 <div className="endpoints-actions">
                   <button
                     type="button"
@@ -264,52 +313,13 @@ export default function HarnessesSettings({ client }) {
                 </div>
                 {native ? (
                   <p className="endpoints-note mono">{directApiSummary(counts)}</p>
+                ) : folded ? (
+                  <details>
+                    <summary className="endpoints-label mono">Program details</summary>
+                    {programDetails}
+                  </details>
                 ) : (
-                  <>
-                    <div className="endpoints-field">
-                      <label className="endpoints-label mono" htmlFor={programInputId}>
-                        Program
-                      </label>
-                      <input
-                        id={programInputId}
-                        type="text"
-                        value={draft}
-                        disabled={busy}
-                        placeholder="Program name or path"
-                        onChange={(event) => {
-                          const nextValue = event.target.value
-                          setDrafts((current) => ({ ...current, [row.key]: nextValue }))
-                        }}
-                      />
-                    </div>
-                    <div className="endpoints-actions">
-                      <button
-                        type="button"
-                        className="hud-settings-switch"
-                        disabled={busy || draft.trim() === ''}
-                        onClick={() =>
-                          setConfirm(
-                            harnessConfirmSpec({
-                              kind: 'program',
-                              key: row.key,
-                              name,
-                              program: draft,
-                            })
-                          )
-                        }
-                      >
-                        Save
-                      </button>
-                      <button
-                        type="button"
-                        className="hud-settings-switch"
-                        disabled={busy}
-                        onClick={() => applySetting(row.key, { program: '' })}
-                      >
-                        Clear
-                      </button>
-                    </div>
-                  </>
+                  programDetails
                 )}
                 {rowError ? (
                   <p className="endpoints-error mono" role="alert">

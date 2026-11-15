@@ -2,6 +2,7 @@
 
 ## Unreleased
 - P370: Settings lists Harnesses, Direct API, Keys and Lanes first, then the other sections as before.
+- P370: A Ready harness row folds its version, program path and Program field under Program details, while a Not ready row keeps them open.
 - P368: The main orchestrator and subs start the saved harness program unless a lane names its own, the sub harness list sees saved programs, and an effort-only ladder save changes the idle sub's effort.
 - P367: The harness version line is masked for keys and the home folder before it reaches Settings or the doctor, and the Program field starts empty with Save off until a path is typed.
 - P369: A harness settings write or check sends a notice the family tree and team form reload on, and a lane run or failover onto a turned-off harness starts nothing.
