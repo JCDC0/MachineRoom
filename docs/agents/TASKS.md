@@ -3433,3 +3433,31 @@ P406 added a `Separate worktree` box beside a chat message sent to a lane and ca
 2. Look for: an orchestrator that can set a fixed lane's mode, or pick Bypass for a lane the owner did not set to choice; a Codex Bypass reached without the owner choosing it; an out-of-scope merge that a sub can allow for itself, or that slips through the project fast forward; a parent never told, or told on every poll; an orchestrator that can still add an agent on another harness by any route (proposal, ladder, lane create, team build); a worktree used outside a git checkout, or several lanes started in one folder with no warning; a saved scope that does not reach the merge check; a picker or route that refuses a mode the runner accepts, or the reverse; a test that would pass with its change undone.
 3. Each finding: `R42-N`, a severity (P1 blocks a push, P2 should be fixed soon, P3 small), the file and line, what goes wrong, how to see it, one fix in plain words. At most 10. No finding without a file and line you read.
 4. End with `Checked and fine`. Under 100 lines. Plain words, no em dashes.
+
+Review 42 fixes, P410 to P413. `docs/agents/AUDIT-2026-11-REVIEW-42.md` (P409, GPT-6.1 Sol): four P1 and two P2 findings. Read only the findings your brief names.
+
+**P410. The scope gate refuses when it cannot read the files, and sees renames (OpenCode).** Read this brief, R42-1 and R42-2 only. Commit each step as you finish it. Run every command in the foreground. Files: server/reviews.js (only `scopeRefusal`), tests/reviews-scope.test.js (add tests here), docs/agents/CHANGELOG.md.
+
+1. R42-1: when the changed-file read fails for a restricted sub's lane, the merge answers 409 with `The bridge could not read the lane's changed files, so it was not merged.` (unless `allowOutside` is allowed as today).
+2. R42-2: the changed-file read passes `--no-renames`, so a moved file names both its old and new path.
+3. Tests through the real merge route, each failing before your change: a git stub that fails only the changed-file read gives 409; a lane restricted to `src/**` that moves `docs/a.md` to `src/a.md` gives 409 naming `docs/a.md`.
+4. Run `node node_modules/vitest/vitest.mjs run tests/reviews-scope.test.js tests/reviews.test.js` and report the counts.
+
+**P411. Switching an orchestrator's harness never carries an implied Bypass (OpenCode).** Read this brief and R42-3 only. Commit each step as you finish it. Run every command in the foreground. Files: server/orchestrator.js (only how `setHarness` picks the new mode, near line 2389), tests/harness-switch-mode.test.js (new; add no test to another file except to keep an existing one passing), docs/agents/CHANGELOG.md.
+
+1. On a harness change, the new mode is the owner's saved mode (the `mode` variable as saved, never `legacyMode`) when the new harness offers it and it is not `bypass`; otherwise it is `defaultMode(newHarness)`. Bypass is set only by `setMode`, which the owner confirms.
+2. Tests through the real `createOrchestrator`, each failing before your change: a restored Claude orchestrator with no saved mode switched to Codex runs in `auto` and its command has no `--dangerously-bypass-approvals-and-sandbox`; one saved in `bypass` switched to Codex is `auto`; one saved in `plan` switched to Codex stays `plan`.
+3. Run `node node_modules/vitest/vitest.mjs run tests/harness-switch-mode.test.js tests/orchestrator.test.js tests/orchestrator-modes.test.js tests/orchestrator-harness-default.test.js` and report the counts.
+
+**P412. A failover keeps the backup's fixed mode, and Choice needs a harness with modes (AGY, Hydrogen).** Read this brief, R42-4 and R42-6 only. Commit each step as you finish it. Run every command in the foreground. Files: scripts/run-lane.mjs (only `startFailover`'s mode, near line 1742, and the saved `choice` read near line 1580), server/agents-config.js (only the two mode checks), tests/failover-mode.test.js (new; add no test to another file except to keep an existing one passing), docs/agents/CHANGELOG.md.
+
+1. R42-4: in `startFailover`, a backup lane whose saved `cli.mode` is a fixed mode (not empty and not `choice`) runs in its own saved mode; the primary's mode is carried only to a backup saved as `choice` or with no mode.
+2. R42-6: lane create and update accept `choice` only when `defaultMode(harness)` is not null; otherwise 400 with today's unknown-mode message. In `run-lane`, a saved `choice` on such a harness is treated as no mode.
+3. Tests, each failing before your change: a choice primary run in `bypass` failing over to a Codex backup saved as `plan` starts the backup in `plan`; a backup saved as `choice` gets the primary's mode; creating a Hermes lane with `choice` answers 400.
+4. Run `node node_modules/vitest/vitest.mjs run tests/failover-mode.test.js tests/failover-ticket-mode.test.js tests/lane-mode-picker.test.js tests/agents-config.test.js` and report the counts.
+
+**P413. A new sub keeps the harness it was checked for (OpenCode).** Read this brief and R42-5 only. Commit each step as you finish it. Run every command in the foreground. Files: server/orchestrator.js (only the saved-state restore near line 1327), server/orchestrators.js (only where a sub's instance is made), tests/sub-restore-harness.test.js (new; add no test to another file except to keep an existing one passing), docs/agents/CHANGELOG.md. P411 also edits server/orchestrator.js, in `setHarness` only: touch only the restore.
+
+1. When a sub's instance is made with a harness and its saved state names another harness, the restore keeps the given harness and model and drops the saved session ids, mode and model that belonged to the other harness. A restore with the same harness is as today.
+2. Tests through the real routes, each failing before your change: the owner creates and removes a Codex sub, then a Claude orchestrator adds a Claude sub with that id; the new instance answers `claude`; a sub restored on its own harness keeps its session.
+3. Run `node node_modules/vitest/vitest.mjs run tests/sub-restore-harness.test.js tests/orchestrators.test.js tests/same-harness-agents.test.js tests/harness-default-restart.test.js` and report the counts.
