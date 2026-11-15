@@ -87,6 +87,7 @@ Every file in this folder, and what it is for:
 - `AUDIT-2026-11-REVIEW-35.md`: history. Review of fixes `P313` to `P319` (`bf2bb79d..ead926b4` on 2026-11-15), listing P1 lane commit masking (`R35-1`) and four P2/P3 findings.
 - `AUDIT-2026-11-REVIEW-36.md`: history. The P347 review by GPT-6.1 Sol of lane messages, lane modes and the effort fix (P335 to P345), with nine findings closed by P348 to P351, the P343 merge and two doc fixes.
 - `UI-FRIENDLY.md`: the P361 review by GPT-6.1 Sol of how friendly the forms are, with 15 ranked findings and what not to change. Later briefs build from it.
+- `AUDIT-2026-11-REVIEW-37.md`: history. The P366 review by GPT-6.1 Sol of the harness settings and model batch (P352 to P365), with seven findings for P367 to P369.
 - `AUDIT-2026-11-RUNNER.md`: history. The November 2026 hunt of the runner, worktrees, reviews and merges.
 - `AUDIT-2026-11-SUMMARY.md`: plan. The five November 2026 audits ranked and checked, with the features, the design changes that need the owner and the proposed briefs.
 - `AUDIT-2026-11-TESTS.md`: history. The P255 audit of tests changed since `1bb54a0f`, listing four tests that could pass with their change undone, fixed by P266.
