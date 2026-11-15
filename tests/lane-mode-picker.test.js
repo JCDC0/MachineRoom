@@ -1,11 +1,15 @@
 ﻿import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { act, createElement } from 'react'
 import { afterEach, expect, it } from 'vitest'
-import { createAgentLane, readAllLanes } from '../server/agents-config.js'
+import { createAgentLane, createAgentsConfigApi, readAllLanes } from '../server/agents-config.js'
 import { createRunsApi } from '../server/runs.js'
+import { laneModesFor } from '../src/control/modes.js'
+import FamilyTree from '../src/ui/FamilyTree.jsx'
 import { projectRunBody } from '../src/ui/panels/runs.js'
 import { waitFor } from './helpers/bridge.js'
 import { makeTempDir } from './helpers/tempRoot.js'
+import { click, withDom } from './helpers/uiDom.js'
 
 const dirs = []
 const apis = []
@@ -57,4 +61,93 @@ it.each([['choice', false, 202], ['edits', false, 400], ['edits', true, 202]])('
     expect(args.slice(args.indexOf('--mode'), args.indexOf('--mode') + 2)).toEqual(['--mode', 'plan'])
     await waitFor(() => !api.isRunning('coder'), { what: 'run end' })
   }
+})
+
+it('leaves ask out of the lane modes', () => {
+  expect(laneModesFor('claude').map((mode) => mode.id)).toEqual(['plan', 'edits', 'auto', 'bypass'])
+  expect(laneModesFor('opencode').map((mode) => mode.id)).toEqual(['plan', 'edits', 'auto'])
+})
+
+const PICKER_FAMILY = {
+  nodes: [
+    {
+      id: 'orchestrator',
+      kind: 'orchestrator',
+      label: 'Orchestrator',
+      harness: 'claude',
+      model: 'opus',
+      effort: 'high',
+      parent: null,
+      children: [],
+      active: true,
+      working: false,
+    },
+  ],
+  keys: [],
+  proposals: [],
+}
+const PICKER_HARNESSES = {
+  harnesses: [
+    { key: 'claude', name: 'Claude Code', available: true, models: [{ id: 'sonnet', label: 'Sonnet' }], efforts: ['low', 'high'] },
+    { key: 'opencode', name: 'OpenCode', available: true, models: [{ id: 'opencode-go/deepseek-v4.1-flash', label: 'DeepSeek V4.1 Flash' }], efforts: ['low', 'max'] },
+  ],
+}
+function pickerClient() {
+  return {
+    family: async () => PICKER_FAMILY,
+    lanes: async () => ({ lanes: [], max: 4, chosen: true }),
+    harnesses: async () => PICKER_HARNESSES,
+    harnessModels: async (options = {}) => ({ harness: typeof options === 'string' ? options : options.harness ?? '', models: [] }),
+    models: async () => ({ models: [] }),
+    orchestrators: async () => [{ id: 'orchestrator', name: 'Orchestrator' }],
+  }
+}
+
+it('lists no Ask in the Add child mode select for Claude Code', async () => {
+  await withDom(async ({ container, root }) => {
+    await act(async () => {
+      root.render(createElement(FamilyTree, { client: pickerClient() }))
+    })
+    await act(async () => {})
+    await click(root, container.querySelector('.mr-family-add'))
+    const form = container.querySelector('.mr-family-child')
+    expect(form).not.toBeNull()
+    const claude = form.querySelectorAll('.mr-side-harness').find((button) => button.textContent.trim() === 'Claude Code')
+    await click(root, claude)
+    const select = form.querySelector('select[aria-label="New agent mode"]')
+    expect(select).not.toBeNull()
+    expect(select.options.map((option) => option.textContent)).toEqual(['Plan', 'Edits', 'Auto', 'Bypass', "Orchestrator's choice"])
+  })
+})
+
+function agentsPost(lanes, runsFolder, body) {
+  let answer = null
+  const api = createAgentsConfigApi({
+    runsFolder,
+    lanes,
+    env: {},
+    readJsonBody: async () => body,
+    sendJson: (req, res, status, result) => {
+      answer = { status, body: result }
+    },
+  })
+  return async (path) => {
+    await api.handle({ method: 'POST', headers: { origin: 'http://localhost:5173' } }, {}, new URL(path, 'http://localhost'))
+    return answer
+  }
+}
+
+it('refuses ask when a lane is created or saved', async () => {
+  const runsFolder = folder()
+  const lanes = { base: { cli: { harness: 'claude', bin: process.execPath } } }
+  const created = await agentsPost(lanes, runsFolder, { name: 'Coder', harness: 'claude', model: 'claude-haiku-5-5', mode: 'ask', confirmed: true })('/api/lanes/create')
+  expect(created.status).toBe(400)
+  expect(created.body.error).toBe('The mode ask is not available for claude.')
+
+  const made = createAgentLane({ name: 'Writer', harness: 'claude', model: 'claude-haiku-5-5', mode: 'plan', confirmed: true }, { runsFolder, lanes })
+  expect(made.status).toBe(200)
+  const updated = await agentsPost(lanes, runsFolder, { mode: 'ask', confirmed: true })(`/api/lanes/${made.agent.key}/update`)
+  expect(updated.status).toBe(400)
+  expect(updated.body.error).toBe('The mode ask is not available for claude.')
+  expect(readAllLanes({ lanesJson: lanes, runsFolder })[made.agent.key].cli.mode).toBe('plan')
 })
