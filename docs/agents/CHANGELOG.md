@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- P359: No written-in opus or OpenCode default: an unset model starts the harness with no --model and reads Harness default, and a saved opus, sonnet or haiku reads as its full Claude id.
 - P364: A new sub keeps its chosen effort, a lanes.json lane shows its setup as text, a failed Direct API read shows its error and Retry, the team shortage says what to do, and no Effort select shows without levels.
 - P362: CODE, ROOM, LIVE, COMMANDS, FREE-HIERARCHY, HARNESSES and DOCUMENTS match the code for lane messages, modes, outside paths and the harness settings.
 - P360: Pickers, family rows, the Model button and the Inspector show a model's name only; a repeated name adds its first id segment; an empty model reads Harness default.
@@ -20,6 +21,7 @@
 - The add-agent pills, the sub form, Build a team and an orchestrator's harness select offer only a harness the bridge names ready and not turned off, keep a node's own harness marked `(not ready)`, and say `No harness is ready. Add one in Settings, under Harnesses.` when there is nothing to offer (P357).
 - The room names a model without its provider path in the chat menu, the Model button, the family rows, the child form and the Inspector, a repeated name adds the first segment of its id, and an empty model reads `Harness default`; the model picker of the family forms and Direct API does the same, drops the `Provider: ` prefix of an endpoint model name and keeps the full id in each row's title (P360).
 - Brought CODE.md, DOCUMENTS.md, FREE-HIERARCHY.md, HARNESSES.md, ROOM.md, LIVE.md and COMMANDS.md in line with the bridge, runner and UI code up to P356 (P362).
+- No model is filled in that the owner did not choose: a fresh orchestrator or sub starts with an empty model, the harness runs with no `--model` flag, and a lane or ladder saved with an alias reads and saves the full model id (P359).
 - The bridge runs each harness with --version once in 10 minutes and lists it as ready or not with a reason, keeps a saved program and an on or off choice per harness, and refuses a new lane or sub on a harness turned off (P355, P355b).
 - Settings has a Harnesses section above Direct API: each harness shows Ready, Not ready with its reason, or Off, with its version and program, an Offer in forms switch and a Program field, and Check again checks them all (P356).
 - A ladder save keeps the effort it names on a sub and its first turn takes it, an effort the harness lacks is refused, and the chat's Effort menu offers the levels the bridge lists for that harness (P353).

@@ -30,6 +30,7 @@ import { HARNESS_EFFORTS, codexProgramFor, harnessUnavailableProblem, isHarnessA
 import { readEndpoints } from './endpoints.js'
 import { modelAllowed } from './harness-models.js'
 import { DEFAULT_CONTEXT_WINDOW, MODELS, resolveContextWindow } from './models.js'
+import { MODEL_ALIASES } from './model-list.js'
 import { isLockHolderStale, killTree, listProcesses } from './processTree.js'
 import { gitPath, programPath } from './programPath.js'
 import { createRecordsCache, runsFolder as sharedRunsFolder } from './lanes-source.js'
@@ -116,8 +117,7 @@ const GIT_OPERATION_TIMEOUT_MS = 10000
 const RECORD_COMMITS = 10
 const TURN_STDERR_LIMIT = 4 * 1024
 const TURN_LOG = /-chat-\d{8}-\d{6}-\d{3}\.log$/i
-const DEFAULT_LANE = { name: 'Orchestrator', harness: 'Claude Code', cli: { harness: 'claude', bin: 'claude', model: 'opus' } }
-const DEFAULT_OPENCODE_MODEL = 'opencode/deepseek-v4.1-flash-free'
+const DEFAULT_LANE = { name: 'Orchestrator', harness: 'Claude Code', cli: { harness: 'claude', bin: 'claude' } }
 const VARIABLE = /%([^%]+)%/g
 
 export const SLASH_COMMAND_LIMIT = 200
@@ -959,7 +959,8 @@ export function createOrchestrator({
   const laneEntry = lanes && Object.hasOwn(lanes, ORCHESTRATOR_KEY) ? lanes[ORCHESTRATOR_KEY] : null
   const lane = laneEntry?.cli ? laneEntry : DEFAULT_LANE
   let harness = harnessOption || String(lane.cli.harness ?? 'claude')
-  let model = modelOption ? String(modelOption) : String(lane.cli.model ?? (harness === 'opencode' ? DEFAULT_OPENCODE_MODEL : 'opus'))
+  let model = modelOption ? String(modelOption) : String(lane.cli.model ?? '')
+  model = MODEL_ALIASES[model] ?? model
   function binFor(name) {
     if (binOption) {
       const chosen = String(binOption)
@@ -1317,7 +1318,9 @@ export function createOrchestrator({
     }
     if (typeof saved.sessionId === 'string' && saved.sessionId.trim() !== '') sessionId = saved.sessionId
     if (typeof saved.harness === 'string' && saved.harness.trim() !== '') harness = saved.harness.trim()
-    if (typeof saved.model === 'string' && saved.model.trim() !== '') model = saved.model.trim()
+    if (typeof saved.model === 'string' && saved.model.trim() !== '') {
+      model = MODEL_ALIASES[saved.model.trim()] ?? saved.model.trim()
+    }
     if (saved.state === 'working') state = 'idle'
     if (saved.state === 'paused') state = 'paused'
     if (saved.ladder && typeof saved.ladder === 'object' && !Array.isArray(saved.ladder)) ladder = saved.ladder
@@ -1900,8 +1903,9 @@ export function createOrchestrator({
     let program = binFor(harness)
     let args
     if (harness === 'opencode') {
-      const modelArg = effort ? `${model}#${effort}` : model
-      args = ['run', '--standalone', '--format', 'json', '--model', modelArg, '--auto']
+      args = ['run', '--standalone', '--format', 'json']
+      if (model) args.push('--model', effort ? `${model}#${effort}` : model)
+      args.push('--auto')
       if (turnMode === 'plan') args.push('--agent', 'plan')
       args.push('--title', logName)
       if (!first) args.push('--session', sessionId)
@@ -1916,9 +1920,8 @@ export function createOrchestrator({
         '--output-format',
         'stream-json',
         '--verbose',
-        '--model',
-        model,
       ]
+      if (model) args.push('--model', model)
       if (turnMode === 'plan') args.push('--permission-mode', 'plan')
       else if (turnMode === 'edits') args.push('--permission-mode', 'acceptEdits')
       else if (turnMode === 'auto') args.push('--permission-mode', 'auto')

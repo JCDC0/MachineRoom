@@ -39,6 +39,12 @@ export const MODELS = [
   { id: 'gpt-5', label: 'GPT-5', harness: 'copilot', tier: 'large', free: false },
 ]
 
+export const MODEL_ALIASES = {
+  opus: 'claude-opus-5-5',
+  sonnet: 'claude-sonnet-5-5',
+  haiku: 'claude-haiku-5-5',
+}
+
 function detailId(detail) {
   return detail && typeof detail === 'object' && typeof detail.id === 'string' ? detail.id.trim() : ''
 }

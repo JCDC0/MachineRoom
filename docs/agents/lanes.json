@@ -5,7 +5,7 @@
     "cli": {
       "harness": "claude",
       "bin": "claude",
-      "model": "opus",
+      "model": "claude-opus-5-5",
       "contextWindow": 200000
     }
   },
@@ -344,7 +344,7 @@
     "cli": {
       "harness": "claude",
       "bin": "claude",
-      "model": "sonnet"
+      "model": "claude-sonnet-5-5"
     },
     "worktree": "C:\\GitHub\\MachineRoom\\.worktrees\\claude",
     "role": "You work on the brief in your own worktree and report back.",

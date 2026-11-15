@@ -544,14 +544,14 @@ function seed(at) {
   const iso = (minutesAgo) => new Date(at - minutesAgo * 60000).toISOString()
   return {
     agents: [
-      { id: 'agent-claude', key: 'claude', name: 'Claude Code', adapterType: 'claude_local', role: null, status: 'idle', model: 'sonnet', budgetMonthlyCents: 0, spentMonthlyCents: 0 },
+      { id: 'agent-claude', key: 'claude', name: 'Claude Code', adapterType: 'claude_local', role: null, status: 'idle', model: 'claude-sonnet-5-5', budgetMonthlyCents: 0, spentMonthlyCents: 0 },
       { id: 'agent-opencode', key: 'opencode', name: 'OpenCode', adapterType: 'opencode_local', role: null, status: 'running', model: 'opencode-go/deepseek-v4.1-flash', budgetMonthlyCents: 0, spentMonthlyCents: 0 },
       { id: 'agent-opencode2', key: 'opencode2', name: 'OpenCode 2', adapterType: 'opencode_local', role: null, status: 'idle', model: 'opencode-go/deepseek-v4.1-flash', budgetMonthlyCents: 0, spentMonthlyCents: 0 },
       { id: 'agent-opencode3', key: 'opencode3', name: 'OpenCode 3', adapterType: 'opencode_local', role: null, status: 'idle', model: 'opencode-go/deepseek-v4.1-flash', budgetMonthlyCents: 0, spentMonthlyCents: 0 },
       { id: 'agent-opencode4', key: 'opencode4', name: 'OpenCode 4', adapterType: 'opencode_local', role: null, status: 'idle', model: 'opencode-go/deepseek-v4.1-flash', budgetMonthlyCents: 0, spentMonthlyCents: 0 },
     ],
     lanes: [
-      { key: 'claude', name: 'Claude Code', harness: 'claude', model: 'sonnet', custom: false, effort: null, active: true, working: false },
+      { key: 'claude', name: 'Claude Code', harness: 'claude', model: 'claude-sonnet-5-5', custom: false, effort: null, active: true, working: false },
       { key: 'opencode', name: 'OpenCode', harness: 'opencode', model: 'opencode-go/deepseek-v4.1-flash', custom: false, effort: null, active: true, working: true },
       { key: 'opencode2', name: 'OpenCode 2', harness: 'opencode', model: 'opencode-go/deepseek-v4.1-flash', custom: false, effort: null, active: true, working: false },
       { key: 'opencode3', name: 'OpenCode 3', harness: 'opencode', model: 'opencode-go/deepseek-v4.1-flash', custom: false, effort: null, active: true, working: false },
@@ -584,7 +584,7 @@ function seed(at) {
     ],
     orchestratorChat: {
       state: 'idle',
-      model: 'opus',
+      model: '',
       project: 'MachineRoom',
       contextTokens: 96000,
       contextWindow: 200000,
@@ -649,8 +649,8 @@ function seed(at) {
       { id: 'claude-sonnet-5-5', label: 'Claude Sonnet 5.5', harness: 'claude', tier: 'medium', free: false, contextWindow: 1000000 },
       { id: 'claude-opus-5-5', label: 'Claude Opus 5.5', harness: 'claude', tier: 'large', free: false, contextWindow: 1000000 },
       { id: 'xiaomi/mimo-v2.6-pro', label: 'MiMo v2.6 Pro', harness: 'hermes', tier: 'medium', free: false },
-      { id: 'deepseek/deepseek-v4.1-flash-1017', label: 'DeepSeek v4.1 Flash (OpenRouter)', harness: 'hermes', tier: 'medium', free: false },
-      { id: 'opencode-go/deepseek-v4.1-flash', label: 'DeepSeek v4.1 Flash (Go)', harness: 'opencode', tier: 'medium', free: false },
+      { id: 'deepseek/deepseek-v4.1-flash-1017', label: 'DeepSeek v4.1 Flash', harness: 'hermes', tier: 'medium', free: false },
+      { id: 'opencode-go/deepseek-v4.1-flash', label: 'DeepSeek v4.1 Flash', harness: 'opencode', tier: 'medium', free: false },
     ],
   }
 }
