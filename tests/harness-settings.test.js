@@ -1,8 +1,9 @@
-﻿import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { homedir, tmpdir, userInfo } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, expect, it } from 'vitest'
+import { afterEach, expect, it, vi } from 'vitest'
 import { createAgentLane, createAgentsConfigApi, isHarnessAvailable } from '../server/agents-config.js'
+import { saveEndpoints } from '../server/endpoints.js'
 import { resolveHarnessProgram } from '../server/harness-models.js'
 import { readHarnessSettings, saveHarnessSettings } from '../server/harness-settings.js'
 
@@ -71,4 +72,55 @@ it('reports Direct API readiness from a key or endpoint', async () => {
   const dir = setup()
   expect((await api(dir)('/api/harnesses')).body.find((r) => r.key === 'machineroom')).toMatchObject({ ready: false, reason: 'No key or endpoint is saved.' })
   expect((await api(dir, { PATH: '', MACHINEROOM_API_KEY: 'test' })('/api/harnesses')).body.find((r) => r.key === 'machineroom').ready).toBe(true)
+})
+
+it('reports Direct API ready from a saved endpoint alone', async () => {
+  const dir = setup()
+  saveEndpoints(dir, [{ name: 'Local', provider: 'Custom', baseUrl: 'http://127.0.0.1:11434/v1', keyName: '', models: [] }])
+  const row = (await api(dir, { PATH: '' })('/api/harnesses')).body.find((r) => r.key === 'machineroom')
+  expect(row).toMatchObject({ ready: true, enabled: true, program: '', version: '', reason: '' })
+})
+
+it('checks again only after ten minutes or a page request', async () => {
+  const dir = setup()
+  const count = join(dir, 'count')
+  const program = fake(dir, `import { appendFileSync } from 'node:fs'; appendFileSync(${JSON.stringify(count)}, 'x'); console.log('fake 1.0')`)
+  saveHarnessSettings(dir, { programs: { claude: program }, off: [] })
+  const request = api(dir, { PATH: '' })
+  vi.useFakeTimers({ toFake: ['Date'] })
+  try {
+    vi.setSystemTime(new Date('2026-11-15T10:00:00Z'))
+    expect((await request('/api/harnesses')).body.find((r) => r.key === 'claude').ready).toBe(true)
+    expect(readFileSync(count, 'utf8')).toBe('x')
+    vi.setSystemTime(new Date('2026-11-15T10:09:59Z'))
+    await request('/api/harnesses')
+    expect(readFileSync(count, 'utf8')).toBe('x')
+    vi.setSystemTime(new Date('2026-11-15T10:10:00Z'))
+    await request('/api/harnesses')
+    expect(readFileSync(count, 'utf8')).toBe('xx')
+    vi.setSystemTime(new Date('2026-11-15T10:10:30Z'))
+    await request('/api/harnesses/check', { confirmed: true })
+    expect(readFileSync(count, 'utf8')).toBe('xxx')
+  } finally {
+    vi.useRealTimers()
+  }
+}, 15000)
+
+it('masks the home folder in the program path', async () => {
+  const dir = mkdtempSync(join(homedir(), 'mr-harness-home-'))
+  dirs.push(dir)
+  const program = fake(dir, 'console.log("fake 1.0")')
+  saveHarnessSettings(dir, { programs: { claude: program }, off: [] })
+  const row = (await api(dir, { PATH: '' })('/api/harnesses')).body.find((r) => r.key === 'claude')
+  const label = process.platform === 'win32' ? '%USERPROFILE%' : '~'
+  expect(row.program.startsWith(label)).toBe(true)
+  expect(row.program).not.toContain(userInfo().username)
+})
+
+it('refuses the two writes without an Origin and still answers the list', async () => {
+  const dir = setup()
+  const request = api(dir, { PATH: '' })
+  expect((await request('/api/harnesses', null, '')).status).toBe(200)
+  expect((await request('/api/harnesses/check', { confirmed: true }, '')).status).toBe(403)
+  expect((await request('/api/harnesses/settings', { confirmed: true, key: 'claude', enabled: false }, '')).status).toBe(403)
 })
