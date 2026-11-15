@@ -25,12 +25,12 @@ The owner wants a free hierarchy of coding agents in one project:
    - `Control` -> `Dispatch` offers `Own worktree` per task, while queued lane runs in `scripts/run-lane.mjs` create worktrees (`U78`, `P293`), and process tree stops release locks (`U75`, `P313`, `P322`, `P330`).
 5. Modes guard the edges:
    - Main and sub orchestrators enforce modes in `src/control/modes.js`; Codex orchestrators support `Plan` and `Auto` (`P332`).
-   - Lane runs take a permission mode via `--mode`, `cli.mode` or `POST /api/control/runs`, validated per harness while refusing `ask` and refusing OpenCode `plan` and `edits` (`P338`, `P343`, `P344`).
+   - Lane runs take a permission mode via `--mode`, `cli.mode` or `POST /api/control/runs`, validated per harness (including OpenCode `plan` and `edits` via `OPENCODE_CONFIG`) while refusing `ask` (`P338`, `P343`, `P344`, `P376`).
 
 ## What Does Not Work Yet
 - Nothing interrupts a lane run: a run is one call, so a lane gets a reply only when it reads its inbox (`P341`), and the main orchestrator's instructions name the reply form since review 36.
 - A failover backup does not message: the ticket names the failed lane (`P349`).
-- OpenCode lanes take no `plan` or `edits` mode, because those need a permission config the runner does not write yet. The room has no control for a lane's mode yet: name it in the lane's `cli.mode`, with `--mode`, or in the run start request (`P338`, `P343`).
+- The room has no control for a lane's mode yet: name it in the lane's `cli.mode`, with `--mode`, or in the run start request (`P338`, `P343`).
 - A touch outside the project is shown, not stopped (`P346`). The modes are the guard, and only the native harness refuses a path outside its folder by itself.
 
 ## Added on 2026-11-15

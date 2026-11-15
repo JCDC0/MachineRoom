@@ -1,7 +1,9 @@
 # Changelog
 
 ## Unreleased
+- P376: An OpenCode lane run in plan or edits gets the permission config the orchestrator writes for OpenCode turns, merged with any MCP servers, so the refusal is gone.
 - P374: Review 38 by GPT-6.1 Sol of P370 to P373 lists four P2 findings, for P377 and P379.
+- P376: OpenCode lane runs in plan or edits mode get the permission config (merged with enabled MCP servers) as OPENCODE_CONFIG with mode 0o600 and removed on finish.
 - P370: Settings lists Harnesses, Direct API, Keys and Lanes first, and a Ready harness folds its version, path and Program field under Program details.
 - P371: A sub's Agents checklist shows each agent's current parent in place of its id, and Save label saves a valid changed label at once.
 - P373: The Build a team Model field is the shared ModelPicker, with search, Current, pins and refresh; what the team saves does not change.

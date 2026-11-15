@@ -212,21 +212,21 @@ describe('a failover run keeps the failed run mode', { timeout: 60000 }, () => {
       const failCount = join(base, 'fail-count.txt')
       const primaryEnv = join(base, 'primary-env.json')
       const okCount = join(base, 'ok-count.txt')
-      makeRepo(first, 'exec', codexFailScript(failCount, primaryEnv))
-      makeRepo(backup, 'run', okScript(okCount))
+      makeRepo(first, 'run', opencodeFailScript(failCount, primaryEnv))
+      makeRepo(backup, 'exec', okScript(okCount))
       mkdirSync(runs, { recursive: true })
       const lanes = {
-        codex: { name: 'Primary lane', worktree: first, fallback: 'opencode', cli: { harness: 'codex', bin: process.execPath, model: 'fake/fail', mode: 'plan' } },
-        opencode: { name: 'Backup lane', worktree: backup, cli: { harness: 'opencode', bin: process.execPath, model: 'fake/ok' } },
+        opencode: { name: 'Primary lane', worktree: first, fallback: 'codex', cli: { harness: 'opencode', bin: process.execPath, model: 'fake/fail', mode: 'edits' } },
+        codex: { name: 'Backup lane', worktree: backup, cli: { harness: 'codex', bin: process.execPath, model: 'fake/ok' } },
       }
-      const { result, logs } = await runFailover({ laneKey: 'codex', lane: lanes.codex, lanes, runs, name: 'refused' })
+      const { result, logs } = await runFailover({ laneKey: 'opencode', lane: lanes.opencode, lanes, runs, name: 'refused' })
       expect(result.code, logs.join('\n')).toBe(1)
-      expect(logs.join('\n')).toContain('OpenCode lanes cannot use plan mode because it needs a permission config.')
+      expect(logs.join('\n')).toContain("The edits mode is not one codex's harness has. It has: plan, auto.")
       expect(count(okCount)).toBe(0)
       const records = readRecords(runs)
       expect(records).toHaveLength(1)
-      expect(records[0].failover).toEqual({ kind: 'rate-limit', to: 'opencode', refused: true })
-      expect(records[0].lane).toBe('codex')
+      expect(records[0].failover).toEqual({ kind: 'rate-limit', to: 'codex', refused: true })
+      expect(records[0].lane).toBe('opencode')
     } finally {
       rmSync(base, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
     }
