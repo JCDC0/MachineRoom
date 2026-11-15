@@ -504,7 +504,7 @@ export function createAgentLane(body, {
     if (model === '') {
       return { ok: false, status: 400, error: modelUnavailableProblem(body?.model, harness) }
     }
-  } else if (!modelAllowed(harness, model, runs)) {
+  } else if ((model || harness === 'machineroom') && !modelAllowed(harness, model, runs)) {
     return { ok: false, status: 400, error: modelUnavailableProblem(body?.model, harness) }
   }
 
@@ -712,7 +712,7 @@ export function createAgentsConfigApi(options = {}) {
             sendJson(req, res, 400, { error: modelUnavailableProblem(body.model ?? agent.model, agent.harness) })
             return true
           }
-        } else if (!modelAllowed(agent.harness, model, runsDir)) {
+        } else if ((model || agent.harness === 'machineroom') && !modelAllowed(agent.harness, model, runsDir)) {
           sendJson(req, res, 400, { error: modelUnavailableProblem(body.model ?? agent.model, agent.harness) })
           return true
         }

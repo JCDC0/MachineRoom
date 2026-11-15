@@ -104,8 +104,10 @@ export const opencodeHarness = {
   commitAuthor: { label: 'OpenCode', address: 'noreply@opencode.ai' },
   createParser: createOpencodeParser,
   command({ cli, prompt, env = {}, folder, title, reasoning, mcpConfig } = {}) {
-    const model = reasoning ? `${cli.model}#${reasoning}` : cli.model
-    const result = { file: expandBin(cli.bin, env), args: ['run', '--standalone', '--format', 'json', '--model', model, '--auto', '--title', title, prompt], cwd: folder }
+    const args = ['run', '--standalone', '--format', 'json']
+    if (cli.model) args.push('--model', reasoning ? `${cli.model}#${reasoning}` : cli.model)
+    args.push('--auto', '--title', title, prompt)
+    const result = { file: expandBin(cli.bin, env), args, cwd: folder }
     if (typeof mcpConfig === 'string' && mcpConfig.trim() !== '') {
       result.env = { OPENCODE_CONFIG: mcpConfig.trim() }
     }

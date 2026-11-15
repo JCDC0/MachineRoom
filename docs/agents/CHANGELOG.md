@@ -1,7 +1,9 @@
 # Changelog
 
 ## Unreleased
+- P384: Lane creation and update accept an empty model for a CLI harness, Direct API and endpoints still need one, and Claude, OpenCode and Hermes leave the model flag out when it is empty (R39-1).
 - P382: The runner lists processes again after 500 ms and refuses a lane only for a leftover with the same pid and command line, and names its program.
+- P384: CLI lanes can save and run with the harness default model; Direct API and endpoints still require a known model.
 - P383: Review 39 by GPT-6.1 Sol of P376 to P381b: one P1 (Harness default cannot create a code agent) and two P2, for P384 and P385.
 - P381b: A failover backup keeps the primary's lane ticket, bridge address and message paragraph, so it messages under the primary's name and reads its inbox.
 - P382: The runner rechecks worktree leftovers after 500 milliseconds and refuses only a process with the same pid and command line, naming its masked program.
