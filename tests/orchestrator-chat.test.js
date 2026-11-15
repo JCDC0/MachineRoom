@@ -1615,7 +1615,7 @@ describe('OrchestratorChat panel', () => {
     expect(html).not.toContain('id="hud-orchestrator-chat"')
     expect(html).toContain('Ask the orchestrator anything')
     expect(html).toContain('class="mr-orch-form hud-lower-input"')
-    expect(html).toContain('class="hud-strip-model"')
+    expect(html).toContain('class="mr-picker-trigger mono"')
     expect(html).toContain('title="Refresh models"')
     expect(html).toContain('class="mr-model-refresh"')
     expect(html).toContain('class="hud-strip-effort"')
@@ -1894,34 +1894,12 @@ describe('OrchestratorChat panel', () => {
       })
       await act(async () => {})
 
-      await click(root, container.querySelector('.hud-strip-model'))
-      await act(async () => {
-        await new Promise((resolve) => setTimeout(resolve, 0))
-      })
-      const modelsPop = container.querySelector('.strip-pop.is-models')
-      const modelChoice = modelsPop ? modelsPop.querySelector('.mr-model-choice') : null
-      expect(modelChoice).not.toBeNull()
-      await click(root, modelChoice)
-      expect(container.querySelector('.mr-orch-confirm[aria-label="Set the model"]')).not.toBeNull()
-      const modelEscape = { type: 'keydown', key: 'Escape', bubbles: true, cancelable: true }
-      await act(async () => {
-        dom.window.dispatchEvent(modelEscape)
-      })
-      expect(container.querySelector('.mr-orch-confirm[aria-label="Set the model"]')).toBeNull()
-      expect(modelEscape.cancelBubble).toBe(true)
-
       await click(root, container.querySelector('.hud-strip-effort'))
-      const effortPop = container.querySelector('.strip-pop.is-effort')
-      const effortChoice = effortPop ? effortPop.querySelector('.strip-model-choice') : null
-      expect(effortChoice).not.toBeNull()
-      await click(root, effortChoice)
-      expect(container.querySelector('.mr-orch-confirm[aria-label="Set the effort"]')).not.toBeNull()
-      const effortEscape = { type: 'keydown', key: 'Escape', bubbles: true, cancelable: true }
+      expect(container.querySelector('.strip-pop.is-effort')).not.toBeNull()
       await act(async () => {
-        dom.window.dispatchEvent(effortEscape)
+        dom.window.dispatchEvent({ type: 'keydown', key: 'Escape', bubbles: true, cancelable: true })
       })
-      expect(container.querySelector('.mr-orch-confirm[aria-label="Set the effort"]')).toBeNull()
-      expect(effortEscape.cancelBubble).toBe(true)
+      expect(container.querySelector('.strip-pop.is-effort')).toBeNull()
 
       await click(root, container.querySelector('.hud-strip-compact'))
       expect(container.querySelector('.strip-pop.is-compact')).not.toBeNull()
@@ -2171,7 +2149,7 @@ describe('Hud and Waiting with an orchestrator', () => {
       expect(html).toContain('class="hud-lower-crumb mono"')
       expect(html).toContain('class="mr-orch is-inline"')
       expect(html).toContain('Ask the orchestrator anything')
-      expect(html).toContain('class="hud-strip-model"')
+      expect(html).toContain('class="mr-picker-trigger mono"')
       expect(html).toContain('class="hud-strip-compact"')
       expect(html).not.toContain('id="hud-orchestrator-chat"')
       expect(html).not.toContain('class="hud-dock"')

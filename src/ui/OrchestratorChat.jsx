@@ -2,8 +2,8 @@ import { useContext, useEffect, useId, useRef, useState } from 'react'
 import MenuIcon from './MenuIcon.jsx'
 import CompactCard from './AgentStrip.jsx'
 import { useDialogFocus } from './dialogFocus.js'
-import ModelRefresh, { useHarnessModels } from './ModelRefresh.jsx'
-import { filterModelChoices, groupModelChoices, modelName } from './modelRefresh.js'
+import { useHarnessModels } from './ModelRefresh.jsx'
+import ModelPicker from './ModelPicker.jsx'
 import {
   contextLine,
   effortLabel,
@@ -188,18 +188,14 @@ export default function OrchestratorChat({
   const [readError, setReadError] = useState(null)
   const [listError, setListError] = useState(null)
   const [teamFailed, setTeamFailed] = useState([])
-  const [modelsOpen, setModelsOpen] = useState(false)
   const [models, setModels] = useState(null)
   const [modelsLoading, setModelsLoading] = useState(false)
   const [modelsError, setModelsError] = useState('')
-  const [modelQuery, setModelQuery] = useState('')
-  const [modelConfirm, setModelConfirm] = useState(null)
   const [modelSaving, setModelSaving] = useState(false)
   const [modelError, setModelError] = useState('')
   const [modelSaved, setModelSaved] = useState('')
   const [effortOpen, setEffortOpen] = useState(false)
   const [harnessRows, setHarnessRows] = useState([])
-  const [effortConfirm, setEffortConfirm] = useState('')
   const [effortSaving, setEffortSaving] = useState(false)
   const [effortError, setEffortError] = useState('')
   const [effortSaved, setEffortSaved] = useState('')
@@ -228,8 +224,6 @@ export default function OrchestratorChat({
   const teamTicketRef = useRef(0)
   const focusAtRef = useRef(Number(focusRequest) || 0)
   const confirmRef = useRef(null)
-  const modelConfirmRef = useRef(null)
-  const effortConfirmRef = useRef(null)
   const modeConfirmRef = useRef(null)
   const modeSavedTimer = useRef(null)
   const copyTimer = useRef(null)
@@ -237,8 +231,6 @@ export default function OrchestratorChat({
   const roomActivity = useContext(OrchestratorActivity)
 
   useDialogFocus(Boolean(confirm), { containerRef: confirmRef })
-  useDialogFocus(Boolean(modelConfirm), { containerRef: modelConfirmRef })
-  useDialogFocus(Boolean(effortConfirm), { containerRef: effortConfirmRef })
   useDialogFocus(Boolean(modeConfirm), { containerRef: modeConfirmRef })
   useDialogFocus(compactOpen, { containerRef: compactRef })
 
@@ -286,30 +278,16 @@ export default function OrchestratorChat({
   const modelRefresh = useHarnessModels({
     client,
     harness,
-    open: modelsOpen,
+    open: open && inline && !teamSelected,
     fallback: staticModels,
-    value: model,
+    value: modelSaved || model,
   })
   const modelList = modelRefresh.choices
-  const visibleModels = filterModelChoices(modelRefresh.choices, modelQuery)
-  const modelGroups = groupModelChoices(
-    visibleModels,
-    visibleModels.some((choice) => choice.id === model) ? model : ''
-  )
-  const modelNameCounts = new Map()
-  for (const choice of visibleModels) {
-    const name = modelName(choice.id, visibleModels)
-    modelNameCounts.set(name, (modelNameCounts.get(name) ?? 0) + 1)
-  }
-  const shownModel = modelSaved || modelName(model, modelList)
   const effortChoices = effortMenuLevels(harness, harnessRows.length > 0 ? harnessRows : current?.harnesses)
   const context = contextLine({
     context: { tokens: current?.contextTokens, window: current?.contextWindow },
   })
-  const canSetModel = inline && typeof client?.setOrchestratorModel === 'function'
   const canSetEffort = inline && typeof client?.setOrchestratorEffort === 'function'
-  const canReadModels =
-    typeof client?.models === 'function' || typeof client?.harnessModels === 'function'
   const project = teamSelected ? chats.orchestrator?.project ?? '' : chat.project
   const projectLabel = projectBaseName(project)
   const availableLanes = runnableLanes(lanesData)
@@ -621,16 +599,12 @@ export default function OrchestratorChat({
   }, [selected])
 
   useEffect(() => {
-    setModelsOpen(false)
     setEffortOpen(false)
     setCompactOpen(false)
-    setModelConfirm(null)
-    setEffortConfirm('')
     setModelError('')
     setEffortError('')
     setModelSaved('')
     setEffortSaved('')
-    setModelQuery('')
     setModeOpen(false)
     setModeConfirm(null)
     setModeError('')
@@ -669,22 +643,12 @@ export default function OrchestratorChat({
   }, [open, selected, lines.length, workKey, teamRows.length, atBottom])
 
   useEffect(() => {
-    if (!modelConfirm && !effortConfirm && !modeConfirm && !compactOpen) return undefined
+    if (!modeConfirm && !compactOpen) return undefined
     function onKey(event) {
       if (event.key !== 'Escape') return
       event.preventDefault()
       event.stopPropagation()
-      if (modelSaving || effortSaving || modeSaving) return
-      if (modelConfirm) {
-        setModelConfirm(null)
-        setModelError('')
-        return
-      }
-      if (effortConfirm) {
-        setEffortConfirm('')
-        setEffortError('')
-        return
-      }
+      if (modeSaving) return
       if (modeConfirm) {
         setModeConfirm(null)
         setModeError('')
@@ -694,32 +658,18 @@ export default function OrchestratorChat({
     }
     window.addEventListener('keydown', onKey, true)
     return () => window.removeEventListener('keydown', onKey, true)
-  }, [modelConfirm, effortConfirm, modeConfirm, compactOpen, modelSaving, effortSaving, modeSaving])
+  }, [modeConfirm, compactOpen, modeSaving])
 
   useEffect(() => {
     if (!open) return undefined
     function onKey(event) {
       if (event.key !== 'Escape') return
-      if (modelsOpen) {
-        setModelsOpen(false)
-        return
-      }
       if (effortOpen) {
         setEffortOpen(false)
         return
       }
       if (modeOpen) {
         setModeOpen(false)
-        return
-      }
-      if (modelConfirm) {
-        setModelConfirm(null)
-        setModelError('')
-        return
-      }
-      if (effortConfirm) {
-        setEffortConfirm('')
-        setEffortError('')
         return
       }
       if (modeConfirm) {
@@ -747,11 +697,8 @@ export default function OrchestratorChat({
     open,
     confirm,
     onClose,
-    modelsOpen,
     effortOpen,
     modeOpen,
-    modelConfirm,
-    effortConfirm,
     modeConfirm,
     compactOpen,
     slashOpen,
@@ -1036,73 +983,39 @@ export default function OrchestratorChat({
   }
 
   function closePickers() {
-    setModelsOpen(false)
     setEffortOpen(false)
     setModeOpen(false)
     setCompactOpen(false)
-    setModelConfirm(null)
-    setEffortConfirm('')
     setModeConfirm(null)
     setModelError('')
     setEffortError('')
     setModeError('')
-    setModelQuery('')
   }
 
   function messageOf(failure, fallback) {
     return errorText(failure, fallback)
   }
 
-  async function openModels() {
-    if (modelsOpen) {
-      setModelsOpen(false)
-      return
-    }
-    closePickers()
-    setModelsOpen(true)
-    setModelQuery('')
-    if (models !== null || typeof client?.models !== 'function') return
+  useEffect(() => {
+    if (!open || !inline || models !== null || typeof client?.models !== 'function') return undefined
+    let active = true
     setModelsLoading(true)
     setModelsError('')
-    try {
-      setModels(await client.models())
-    } catch (failure) {
-      setModelsError(messageOf(failure, 'Models are not available.'))
-    } finally {
-      setModelsLoading(false)
-    }
-  }
+    client.models().then((answer) => {
+      if (active) {
+        setModelsLoading(false)
+        setModels(answer)
+      }
+    }).catch((failure) => {
+      if (active) setModelsError(messageOf(failure, 'Models are not available.'))
+    }).finally(() => {
+      if (active) setModelsLoading(false)
+    })
+    return () => { active = false }
+  }, [open, inline, client, models])
 
-  function chooseModel(choice) {
-    setModelsOpen(false)
-    setModelQuery('')
-    setModelError('')
-    setModelConfirm(choice)
-  }
-
-  function renderModelChoice(choice) {
-    const name = modelName(choice.id, visibleModels)
-    const repeated = (modelNameCounts.get(name) ?? 0) > 1
-    return (
-      <button
-        type="button"
-        className={`strip-model-choice mr-model-choice${choice.id === model ? ' is-current' : ''}`}
-        key={choice.id}
-        title={choice.id}
-        onClick={() => chooseModel(choice)}
-      >
-        <span className="mr-model-choice-name">
-          {name}
-          {repeated ? (
-            <span className="mr-model-choice-id mono">{` ${choice.id.split('/')[0]}`}</span>
-          ) : null}
-        </span>
-      </button>
-    )
-  }
-
-  async function saveModel() {
-    if (!modelConfirm || modelSaving) return
+  async function saveModel(value) {
+    if (value === (modelSaved || model) || modelSaving) return
     if (typeof client?.setOrchestratorModel !== 'function') {
       setModelError('The bridge cannot set a model.')
       return
@@ -1110,13 +1023,8 @@ export default function OrchestratorChat({
     setModelSaving(true)
     setModelError('')
     try {
-      await client.setOrchestratorModel({
-        id: selected,
-        model: modelConfirm.id,
-        confirmed: true,
-      })
-      setModelSaved(modelName(modelConfirm.id, modelList))
-      setModelConfirm(null)
+      await client.setOrchestratorModel({ id: selected, model: value, confirmed: true })
+      setModelSaved(value)
       onOrchestratorChange()
     } catch (failure) {
       setModelError(messageOf(failure, 'The bridge refused the model.'))
@@ -1134,8 +1042,9 @@ export default function OrchestratorChat({
     setEffortOpen(true)
   }
 
-  async function saveEffort() {
-    if (!effortConfirm || effortSaving) return
+  async function saveEffort(value) {
+    setEffortOpen(false)
+    if (value === shownEffort || effortSaving) return
     if (typeof client?.setOrchestratorEffort !== 'function') {
       setEffortError('The bridge cannot set an effort.')
       return
@@ -1145,11 +1054,10 @@ export default function OrchestratorChat({
     try {
       await client.setOrchestratorEffort({
         id: selected,
-        effort: effortConfirm,
+        effort: value,
         confirmed: true,
       })
-      setEffortSaved(effortConfirm)
-      setEffortConfirm('')
+      setEffortSaved(value)
       onOrchestratorChange()
     } catch (failure) {
       setEffortError(messageOf(failure, 'The bridge refused the effort.'))
@@ -1700,23 +1608,20 @@ export default function OrchestratorChat({
                     ))}
                   </select>
                 </div>
-                <button
-                  type="button"
-                  className="hud-strip-model"
-                  aria-expanded={modelsOpen}
-                  aria-label={`Models for ${current?.name || 'the orchestrator'}`}
-                  onClick={openModels}
-                >
-                  <span>Model:</span>
-                  <span className="hud-lower-picker-value mono">{shownModel}</span>
-                  <span className="hud-lower-picker-v" aria-hidden="true">
-                    <MenuIcon />
-                  </span>
-                </button>
-                <ModelRefresh
+                <ModelPicker
+                  key={selected}
+                  label="Model:"
+                  ariaLabel={`Models for ${current?.name || 'the orchestrator'}`}
+                  value={modelSaved || model}
+                  choices={modelList}
+                  client={client}
+                  onChange={saveModel}
                   onRefresh={modelRefresh.refresh}
-                  loading={modelRefresh.loading}
-                  disabled={!modelRefresh.canRefresh}
+                  loading={modelsLoading || modelRefresh.loading}
+                  canRefresh={modelRefresh.canRefresh}
+                  disabled={modelSaving}
+                  placeholder="Harness default"
+                  error={modelError || modelRefresh.error || modelsError}
                 />
                 {effortChoices.length > 0 ? (
                   <button
@@ -1795,56 +1700,10 @@ export default function OrchestratorChat({
                   {modeSaved}
                 </p>
               ) : null}
-              {modelRefresh.error ? (
-                <p className="mr-model-error mono" role="alert">
-                  {modelRefresh.error}
-                </p>
-              ) : null}
+              {effortError ? <p className="strip-note is-error" role="alert">{effortError}</p> : null}
               <div className="mr-orch-meta">
                 {count ? <span className="mr-orch-count mono">{count}</span> : null}
               </div>
-
-              {modelsOpen ? (
-                <div className="strip-pop is-models" aria-label="Models">
-                  <div className="mr-model-pop-head">
-                    <input
-                      type="search"
-                      className="mr-model-search mono"
-                      value={modelQuery}
-                      placeholder="Search models..."
-                      aria-label="Search models"
-                      onChange={(event) => setModelQuery(event.target.value)}
-                    />
-                  </div>
-                  {!canReadModels && <p className="strip-note">Models are not available.</p>}
-                  {(modelsLoading || modelRefresh.loading) && (
-                    <p className="strip-note">Loading models.</p>
-                  )}
-                  {!modelsLoading && modelsError ? (
-                    <p className="strip-note is-error">{modelsError}</p>
-                  ) : null}
-                  {!modelsLoading && !modelRefresh.loading && canReadModels && modelList.length === 0 && (
-                    <p className="strip-note">No models for this harness.</p>
-                  )}
-                  {!modelsLoading &&
-                    !modelRefresh.loading &&
-                    modelList.length > 0 &&
-                    visibleModels.length === 0 && <p className="strip-note">No models found</p>}
-                  {modelGroups.current ? (
-                    <>
-                      <p className="mr-model-group mono">Current</p>
-                      {renderModelChoice(modelGroups.current)}
-                    </>
-                  ) : null}
-                  {modelGroups.rest.length > 0 ? (
-                    <>
-                      <p className="mr-model-group mono">Models</p>
-                      {modelGroups.rest.map((choice) => renderModelChoice(choice))}
-                    </>
-                  ) : null}
-                  {!canSetModel && <p className="strip-note">Read only here.</p>}
-                </div>
-              ) : null}
 
               {modeOpen ? (
                 <div className="strip-pop is-modes" aria-label="Modes">
@@ -1895,38 +1754,6 @@ export default function OrchestratorChat({
                 </div>
               ) : null}
 
-              {modelConfirm ? (
-                <div className="strip-pop is-confirm">
-                  <section ref={modelConfirmRef} className="mr-orch-confirm" aria-label="Set the model">
-                    <p className="mr-orch-confirm-text">
-                      {`Set ${modelConfirm.label} for ${current?.name || 'the orchestrator'}?`}
-                    </p>
-                    {modelError ? <p className="strip-note is-error">{modelError}</p> : null}
-                    <div className="mr-orch-confirm-actions">
-                      <button
-                        type="button"
-                        className="mr-orch-confirm-btn is-start"
-                        onClick={saveModel}
-                        disabled={modelSaving}
-                      >
-                        Set
-                      </button>
-                      <button
-                        type="button"
-                        className="mr-orch-confirm-btn is-cancel"
-                        onClick={() => {
-                          setModelConfirm(null)
-                          setModelError('')
-                        }}
-                        disabled={modelSaving}
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  </section>
-                </div>
-              ) : null}
-
               {effortOpen ? (
                 <div className="strip-pop is-effort" aria-label="Effort">
                   {effortChoices.length === 0 ? (
@@ -1937,49 +1764,14 @@ export default function OrchestratorChat({
                         type="button"
                         className={`strip-model-choice${level === shownEffort ? ' is-current' : ''}`}
                         key={level}
-                        onClick={() => {
-                          setEffortOpen(false)
-                          setEffortError('')
-                          setEffortConfirm(level)
-                        }}
+                        onClick={() => saveEffort(level)}
+                        disabled={effortSaving}
                       >
                         {level}
                       </button>
                     ))
                   )}
                   {!canSetEffort && <p className="strip-note">Read only here.</p>}
-                </div>
-              ) : null}
-
-              {effortConfirm ? (
-                <div className="strip-pop is-confirm">
-                  <section ref={effortConfirmRef} className="mr-orch-confirm" aria-label="Set the effort">
-                    <p className="mr-orch-confirm-text">
-                      {`Set effort ${effortConfirm} for ${current?.name || 'the orchestrator'}?`}
-                    </p>
-                    {effortError ? <p className="strip-note is-error">{effortError}</p> : null}
-                    <div className="mr-orch-confirm-actions">
-                      <button
-                        type="button"
-                        className="mr-orch-confirm-btn is-start"
-                        onClick={saveEffort}
-                        disabled={effortSaving}
-                      >
-                        Set
-                      </button>
-                      <button
-                        type="button"
-                        className="mr-orch-confirm-btn is-cancel"
-                        onClick={() => {
-                          setEffortConfirm('')
-                          setEffortError('')
-                        }}
-                        disabled={effortSaving}
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  </section>
                 </div>
               ) : null}
 
