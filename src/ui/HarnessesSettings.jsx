@@ -39,6 +39,11 @@ function worktreeSetupFrom(answer) {
   return typeof rows[0]?.worktreeSetup === 'string' ? rows[0].worktreeSetup : ''
 }
 
+function worktreeCopiesFrom(answer) {
+  const rows = Array.isArray(answer) ? answer : Array.isArray(answer?.harnesses) ? answer.harnesses : []
+  return Array.isArray(rows[0]?.worktreeCopies) ? rows[0].worktreeCopies.join('\n') : ''
+}
+
 /**
  * Renders the Harnesses section in Settings to inspect and configure runners.
  */
@@ -54,6 +59,7 @@ export default function HarnessesSettings({ client }) {
   const [laneCountWarning, setLaneCountWarning] = useState('0')
   const [savingWorktreeSetup, setSavingWorktreeSetup] = useState(false)
   const [worktreeSetup, setWorktreeSetup] = useState('')
+  const [worktreeCopies, setWorktreeCopies] = useState('')
   const [checking, setChecking] = useState(false)
   const [confirm, setConfirm] = useState(null)
   const [sectionError, setSectionError] = useState('')
@@ -113,6 +119,7 @@ export default function HarnessesSettings({ client }) {
       setLaneReplies('next-turn')
       setLaneCountWarning('0')
       setWorktreeSetup('')
+      setWorktreeCopies('')
       setSectionError('')
       setRowErrors({})
       return
@@ -126,6 +133,7 @@ export default function HarnessesSettings({ client }) {
       setLaneReplies(laneRepliesFrom(answer))
       setLaneCountWarning(String(laneCountWarningFrom(answer)))
       setWorktreeSetup(worktreeSetupFrom(answer))
+      setWorktreeCopies(worktreeCopiesFrom(answer))
       setSectionError('')
       await loadCounts()
     } catch (error) {
@@ -240,7 +248,8 @@ export default function HarnessesSettings({ client }) {
     setSavingWorktreeSetup(true)
     setSectionError('')
     try {
-      const result = await client.harnessSettings({ worktreeSetup: command, confirmed: true })
+      const copies = worktreeCopies.split(/\r?\n/).map((path) => path.trim()).filter(Boolean)
+      const result = await client.harnessSettings({ worktreeSetup: command, worktreeCopies: copies, confirmed: true })
       if (!mountedRef.current) return
       setWorktreeSetup(command)
       const nextRows = updateRowsWithResult(rows, result)
@@ -400,6 +409,14 @@ export default function HarnessesSettings({ client }) {
               disabled={checking || savingWorktreeSetup || Boolean(busyKey)}
               onChange={(event) => setWorktreeSetup(event.target.value)}
             />
+            <label className="endpoints-label mono" htmlFor="harness-worktree-copies">Copy into new worktrees</label>
+            <textarea
+              id="harness-worktree-copies"
+              value={worktreeCopies}
+              disabled={checking || savingWorktreeSetup || Boolean(busyKey)}
+              onChange={(event) => setWorktreeCopies(event.target.value)}
+            />
+            <p className="endpoints-note mono">One project-relative file path per line.</p>
             <div className="endpoints-actions">
               <button
                 type="button"

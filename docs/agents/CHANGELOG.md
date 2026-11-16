@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- Settings can copy exact opt-in files into new worktrees, exclude them from commits and give each lane a port offset.
 - A test setup defaults every child_process call to windowsHide and passes it to node children through NODE_OPTIONS, four scripts hide their windows, and an audit test fails on any call in server, scripts or bin without it.
 - Checks hide child process windows on Windows, including processes started by tests.
 - LaneConversation shows Edit from this plan on a finished exit-0 Plan run, and a confirm card with the editable plan text and a non-Plan mode starts one run only when the owner presses Start.
