@@ -258,6 +258,16 @@ function outcomeCost(value) {
   return `$${value.toFixed(2)} a merge`
 }
 
+function outcomeRepairs(value) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return '?'
+  return String(Math.round(value))
+}
+
+function outcomeWait(value) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return '?'
+  return `${Math.round(value * 10) / 10} min`
+}
+
 export function formatOutcomes(rows) {
   const list = Array.isArray(rows) ? rows : []
   if (list.length === 0) return ['No runs yet.']
@@ -265,7 +275,7 @@ export function formatOutcomes(rows) {
   return list.map((row) => {
     const lane = String(row?.lane ?? '')
     const model = String(row?.model ?? MODEL_UNKNOWN)
-    return `${lane}  ${model}  runs ${count(row?.runs)}, merged ${count(row?.merged)} (${count(row?.ungraded)} not graded), rejected ${count(row?.rejected)}, pending ${count(row?.pending)}, merge rate ${outcomePercent(row?.mergeRate)}, fixes ${outcomeFixes(row?.averageFixes)}, ${outcomeCost(row?.costPerMerge)}`
+    return `${lane}  ${model}  runs ${count(row?.runs)}, merged ${count(row?.merged)} (${count(row?.ungraded)} not graded), rejected ${count(row?.rejected)}, pending ${count(row?.pending)}, merge rate ${outcomePercent(row?.mergeRate)}, fixes ${outcomeFixes(row?.averageFixes)}, ${outcomeCost(row?.costPerMerge)}, repair runs ${outcomeRepairs(row?.repairRuns)}, review wait ${outcomeWait(row?.reviewWaitMinutes)}`
   })
 }
 
@@ -1236,13 +1246,14 @@ export function maskedQueueTasks(tasks) {
   return (Array.isArray(tasks) ? tasks : []).map((task) => maskProfilePaths(maskKeys(String(task ?? '')).text).slice(0, RECORD_TEXT_LIMIT))
 }
 
-export function runRecord({ lane, briefs, model, reasoning, mode, startedAt, minutes, exitCode, killed, costUsd, inputTokens, outputTokens, peakTokens, log, branch, commits, base, head, checkpoint, tests, project, task, startedBy, stoppedLeftovers, queue, startFailed, note, retried, failover, failoverFrom, quota, continues, interruptedBy } = {}) {
+export function runRecord({ lane, briefs, model, reasoning, mode, startedAt, finishedAt, minutes, exitCode, killed, costUsd, inputTokens, outputTokens, peakTokens, log, branch, commits, base, head, checkpoint, tests, project, task, startedBy, stoppedLeftovers, queue, startFailed, note, retried, failover, failoverFrom, quota, continues, interruptedBy } = {}) {
   const record = {
     lane: String(lane ?? ''),
     briefs: Array.isArray(briefs) ? briefs.map(String) : [],
     model: model ? String(model) : null,
     reasoning: reasoning ? String(reasoning) : null,
     startedAt: isoTime(startedAt),
+    finishedAt: isoTime(finishedAt ?? new Date()),
     minutes: Number.isFinite(minutes) ? minutes : null,
     exitCode: Number.isInteger(exitCode) ? exitCode : null,
     killed: killed === true,

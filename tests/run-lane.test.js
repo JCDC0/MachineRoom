@@ -912,6 +912,7 @@ describe('runRecord', () => {
       model: 'deepseek/deepseek-v4.1-flash-1017',
       reasoning: 'xhigh',
       startedAt: '2026-10-19T12:00:00.000Z',
+      finishedAt: '2026-10-19T12:12:24.000Z',
       minutes: 12.4,
       exitCode: 0,
       killed: false,
@@ -929,6 +930,7 @@ describe('runRecord', () => {
       model: 'deepseek/deepseek-v4.1-flash-1017',
       reasoning: 'xhigh',
       startedAt: '2026-10-19T12:00:00.000Z',
+      finishedAt: '2026-10-19T12:12:24.000Z',
       minutes: 12.4,
       exitCode: 0,
       killed: false,
@@ -941,7 +943,7 @@ describe('runRecord', () => {
       commits: ['abc1234 0.1.44: Record each lane run'],
     })
     expect(Object.keys(record)).toEqual([
-      'lane', 'briefs', 'model', 'reasoning', 'startedAt', 'minutes', 'exitCode', 'killed', 'costUsd', 'inputTokens', 'outputTokens', 'peakTokens', 'log', 'branch', 'commits',
+      'lane', 'briefs', 'model', 'reasoning', 'startedAt', 'finishedAt', 'minutes', 'exitCode', 'killed', 'costUsd', 'inputTokens', 'outputTokens', 'peakTokens', 'log', 'branch', 'commits',
     ])
   })
 
@@ -1243,28 +1245,28 @@ describe('formatStats', () => {
 describe('formatOutcomes', () => {
   it('prints one line per row with the merge rate, the fixes and the cost per merge', () => {
     const rows = [
-      { lane: 'hermes', model: 'deepseek/x', runs: 5, merged: 4, rejected: 1, pending: 0, mergeRate: 0.8, averageFixes: 0.5, costUsd: 0.4, decidedCostUsd: 0.24, costPerMerge: 0.06 },
-      { lane: 'opencode', model: 'model unknown', runs: 1, merged: 0, rejected: 1, pending: 0, mergeRate: 0, averageFixes: null, costUsd: 0.2, decidedCostUsd: 0.2, costPerMerge: null },
+      { lane: 'hermes', model: 'deepseek/x', runs: 5, merged: 4, rejected: 1, pending: 0, mergeRate: 0.8, averageFixes: 0.5, repairRuns: 2, reviewWaitMinutes: 30, costUsd: 0.4, decidedCostUsd: 0.24, costPerMerge: 0.06 },
+      { lane: 'opencode', model: 'model unknown', runs: 1, merged: 0, rejected: 1, pending: 0, mergeRate: 0, averageFixes: null, repairRuns: 0, reviewWaitMinutes: null, costUsd: 0.2, decidedCostUsd: 0.2, costPerMerge: null },
     ]
 
     expect(formatOutcomes(rows)).toEqual([
-      'hermes  deepseek/x  runs 5, merged 4 (0 not graded), rejected 1, pending 0, merge rate 80%, fixes 0.5, $0.06 a merge',
-      'opencode  model unknown  runs 1, merged 0 (0 not graded), rejected 1, pending 0, merge rate 0%, fixes -, not reported',
+      'hermes  deepseek/x  runs 5, merged 4 (0 not graded), rejected 1, pending 0, merge rate 80%, fixes 0.5, $0.06 a merge, repair runs 2, review wait 30 min',
+      'opencode  model unknown  runs 1, merged 0 (0 not graded), rejected 1, pending 0, merge rate 0%, fixes -, not reported, repair runs 0, review wait ?',
     ])
   })
 
   it('prints a dash for a null rate and says so with no rows', () => {
     expect(formatOutcomes([
-      { lane: 'hermes', model: 'm', runs: 1, merged: 1, rejected: 0, pending: 0, mergeRate: null, averageFixes: 1, costPerMerge: 1 },
-    ])).toEqual(['hermes  m  runs 1, merged 1 (0 not graded), rejected 0, pending 0, merge rate -, fixes 1, $1.00 a merge'])
+      { lane: 'hermes', model: 'm', runs: 1, merged: 1, rejected: 0, pending: 0, mergeRate: null, averageFixes: 1, repairRuns: 0, reviewWaitMinutes: null, costPerMerge: 1 },
+    ])).toEqual(['hermes  m  runs 1, merged 1 (0 not graded), rejected 0, pending 0, merge rate -, fixes 1, $1.00 a merge, repair runs 0, review wait ?'])
     expect(formatOutcomes([])).toEqual(['No runs yet.'])
     expect(formatOutcomes(null)).toEqual(['No runs yet.'])
   })
 
   it('says how many merges were read from main and not graded', () => {
     expect(formatOutcomes([
-      { lane: 'opencode', model: 'm', runs: 2, merged: 2, rejected: 0, pending: 0, ungraded: 1, mergeRate: 1, averageFixes: null, costPerMerge: 0.1 },
-    ])).toEqual(['opencode  m  runs 2, merged 2 (1 not graded), rejected 0, pending 0, merge rate 100%, fixes -, $0.10 a merge'])
+      { lane: 'opencode', model: 'm', runs: 2, merged: 2, rejected: 0, pending: 0, ungraded: 1, mergeRate: 1, averageFixes: null, repairRuns: 1, reviewWaitMinutes: 12.5, costPerMerge: 0.1 },
+    ])).toEqual(['opencode  m  runs 2, merged 2 (1 not graded), rejected 0, pending 0, merge rate 100%, fixes -, $0.10 a merge, repair runs 1, review wait 12.5 min'])
   })
 })
 
@@ -1798,11 +1800,11 @@ describe('scripts/run-lane.mjs', () => {
 
       const all = await runLane(['--outcomes'], { TEMP: folder, MACHINEROOM_RUNS: runsFolder })
       expect(all.code).toBe(0)
-      expect(all.stdout.trim()).toBe('hermes  deepseek/x  runs 3, merged 1 (0 not graded), rejected 0, pending 2, merge rate 100%, fixes 1, $0.50 a merge')
+      expect(all.stdout.trim()).toBe('hermes  deepseek/x  runs 3, merged 1 (0 not graded), rejected 0, pending 2, merge rate 100%, fixes 1, $0.50 a merge, repair runs 0, review wait ?')
 
       const since = await runLane(['--outcomes', '--since', '2026-10-19'], { TEMP: folder, MACHINEROOM_RUNS: runsFolder })
       expect(since.code).toBe(0)
-      expect(since.stdout.trim()).toBe('hermes  deepseek/x  runs 2, merged 1 (0 not graded), rejected 0, pending 1, merge rate 100%, fixes 1, $0.50 a merge')
+      expect(since.stdout.trim()).toBe('hermes  deepseek/x  runs 2, merged 1 (0 not graded), rejected 0, pending 1, merge rate 100%, fixes 1, $0.50 a merge, repair runs 0, review wait ?')
 
       const emptyTemp = join(folder, 'empty')
       mkdirSync(emptyTemp, { recursive: true })
