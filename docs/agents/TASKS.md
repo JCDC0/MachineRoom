@@ -3530,3 +3530,14 @@ Review 43 fixes, P421 and P422. `docs/agents/AUDIT-2026-11-REVIEW-43.md` (P414, 
 1. Make the test keep the saved conversation of the old harness on disk until the new sub restores it (do not overwrite the fixture before the restore), so it checks that P413 drops that conversation's sessions and mode.
 2. Prove it: undo P413's guards in `server/orchestrator.js` locally, run the test and see it fail, then restore the file exactly (`git checkout -- server/orchestrator.js`) and see it pass. Commit only the test.
 3. Run `node node_modules/vitest/vitest.mjs run tests/sub-restore-harness.test.js tests/orchestrators.test.js` and report the counts, and the failing count with the guards undone.
+
+**P423. Three tests that fail under load or inside a merge (OpenCode).** Read this brief only. Commit each step as you finish it. Run every command in the foreground. Files: tests/git.test.js, tests/bridge.test.js, tests/lanes-source.test.js, tests/helpers/ (only if a shared helper fixes more than one), server/lanes-source.js (only `mainCheckoutOf`, and only if step 3 shows the cause is there), docs/agents/CHANGELOG.md. Change no other source file.
+
+On 2026-11-16 these failed once each during `npm run merge-lane` while other lanes were running tests, and passed alone:
+- `tests/git.test.js` > `creates a new branch without switching to it and sends notice`: `listenForChange` aborted after its fixed 10 second timer (line 130).
+- `tests/bridge.test.js` > `returns the file tree for both git repositories and plain folders`: `TimeoutError` after about 11 seconds.
+- `tests/lanes-source.test.js` > X15 `shows a worktree run when the room root is the repository main checkout`: `mainCheckoutOf(worktree)` answered the real `C:\GitHub\MachineRoom` instead of the test's temporary repository (line 672).
+
+1. For the two timeouts: find what waits, and make the wait follow the test's own timeout or a shared constant, not a short fixed timer, so a busy machine does not fail them. Do not just raise a number without saying why in one line.
+2. For X15: find why git resolved the real repository. Check whether a `GIT_DIR`, `GIT_WORK_TREE`, `GIT_INDEX_FILE` or `GIT_COMMON_DIR` from the parent process (a merge or hook) reaches the test's git calls or `mainCheckoutOf`. If so, the test helpers run git with those variables removed, and `mainCheckoutOf` does the same if it spawns git. Prove it: run the X15 test with `GIT_DIR` set to this repository's `.git` and see it fail before your change and pass after.
+3. Run `node node_modules/vitest/vitest.mjs run tests/git.test.js tests/bridge.test.js tests/lanes-source.test.js` and report the counts, and the X15 result with `GIT_DIR` set before and after.
