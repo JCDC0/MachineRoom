@@ -1,7 +1,14 @@
+import { EventEmitter } from 'node:events'
+import { mkdirSync } from 'node:fs'
+import { join } from 'node:path'
 import { act, createElement } from 'react'
 import { describe, expect, it } from 'vitest'
+import { activeLanesFileFor, writeActiveLanes } from '../server/active-lanes.js'
+import { createBridge } from '../server/index.js'
 import FamilyTree from '../src/ui/FamilyTree.jsx'
 import * as ladderForm from '../src/ui/ladderForm.js'
+import { getJson } from './helpers/bridge.js'
+import { makeTempDir, removeTempDir } from './helpers/tempRoot.js'
 import { buttonWithText, click, settle, type, withDom } from './helpers/uiDom.js'
 
 const BASE_LANES = [
@@ -343,5 +350,91 @@ describe('sub orchestrator mode picker', () => {
       { id: 'lead', name: 'Lead', harness: 'claude', model: 'sonnet', mode: 'ask', lanes: ['claude'], scope: ['**'], restricted: false, setBy: 'owner' },
     ])
     expect(out.subs[0].mode).toBe('ask')
+  })
+})
+
+describe('server ladder save keeps sub mode', () => {
+  async function startSubBridge() {
+    const base = makeTempDir('mr-sub-mode-')
+    const runs = join(base, 'runs')
+    mkdirSync(runs)
+    writeActiveLanes(activeLanesFileFor(base, runs), ['codex', 'claude'])
+    const child = new EventEmitter()
+    const lanes = {
+      orchestrator: { name: 'Main', cli: { harness: 'claude', bin: process.execPath, model: 'sonnet' } },
+      codex: { name: 'Codex', cli: { harness: 'codex', bin: process.execPath, model: 'gpt-6.1-terra' } },
+      claude: { name: 'Claude', cli: { harness: 'claude', bin: process.execPath, model: 'sonnet' } },
+    }
+    const bridge = createBridge({
+      projectRoot: base,
+      port: 0,
+      env: {},
+      lanesSource: { folder: runs, lanes, pollMs: 20, quietMs: 60000 },
+      orchestratorHarnessAvailable: () => true,
+      orchestratorSpawn: () => child,
+    })
+    const { url } = await bridge.start()
+    const post = (path, body) =>
+      getJson(`${url}/api/orchestrator/${path}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', origin: 'http://localhost:5173' },
+        body: JSON.stringify({ id: 'sub', confirmed: true, ...body }),
+      })
+    const sub = {
+      id: 'sub',
+      name: 'Sub',
+      harness: 'claude',
+      model: 'claude-sonnet-5-5',
+      effort: 'high',
+      lanes: ['claude'],
+      scope: ['src/**'],
+      restricted: false,
+      setBy: 'owner',
+    }
+    expect((await post('ladder', { ladder: { subs: [sub] }, by: 'owner' })).status).toBe(200)
+    return {
+      bridge,
+      post,
+      stop: async () => {
+        child.emit('close', 0)
+        await bridge.stop()
+        removeTempDir(base)
+      },
+    }
+  }
+
+  it('keeps the mode saved by /api/orchestrator/mode across a later ladder save', async () => {
+    const rig = await startSubBridge()
+    try {
+      expect((await rig.post('mode', { mode: 'ask' })).status).toBe(200)
+      const entry = rig.bridge.orchestrators().getLadder().subs[0]
+      expect(entry.mode).toBe('ask')
+      const { mode, ...withoutMode } = entry
+      const saved = await rig.post('ladder', { ladder: { subs: [{ ...withoutMode, scope: ['server/**'] }] }, by: 'owner' })
+      expect(saved.status).toBe(200)
+      expect(saved.body.ladder.subs[0].mode).toBe('ask')
+      expect(rig.bridge.orchestrators().getLadder().subs[0].mode).toBe('ask')
+      expect(rig.bridge.orchestrators().find('sub').answer().mode).toBe('ask')
+    } finally {
+      await rig.stop()
+    }
+  })
+
+  it('keeps the sub mode when effort changes before a later ladder save', async () => {
+    const rig = await startSubBridge()
+    try {
+      expect((await rig.post('mode', { mode: 'plan' })).status).toBe(200)
+      expect((await rig.post('effort', { effort: 'low' })).status).toBe(200)
+      const entry = rig.bridge.orchestrators().getLadder().subs[0]
+      expect(entry.mode).toBe('plan')
+      const { mode, ...withoutMode } = entry
+      const saved = await rig.post('ladder', { ladder: { subs: [{ ...withoutMode, scope: ['server/**'] }] }, by: 'owner' })
+      expect(saved.status).toBe(200)
+      expect(saved.body.ladder.subs[0].mode).toBe('plan')
+      expect(rig.bridge.orchestrators().getLadder().subs[0].mode).toBe('plan')
+      expect(rig.bridge.orchestrators().find('sub').answer().mode).toBe('plan')
+    } finally {
+      await rig.stop()
+    }
   })
 })
