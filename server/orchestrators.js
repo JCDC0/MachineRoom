@@ -59,6 +59,7 @@ export const TOKEN_INBOX_PROBLEM = 'A lane inbox is read with a lane ticket, not
 export const PAGE_FAILOVER_PROBLEM = 'A page cannot take over a lane ticket.'
 export const TOKEN_FAILOVER_PROBLEM = 'A lane ticket is taken over with the lane ticket, not an orchestrator token.'
 export const LANE_BACKUP_PROBLEM = 'Name the backup lane the run moves to.'
+export const LANE_TAKEOVER_PROBLEM = 'A lane can take over only its own backup lane.'
 export const LANE_INBOX_LIMIT = 20
 
 export function laneNoRunProblem(key) {
@@ -707,7 +708,7 @@ export function createOrchestrators({
   }
 
   function receiveLaneMessage(lane, from, text, at) {
-    const held = backupHeld(lane) ?? lastLaneTicket(lane)
+    const held = lastLaneTicket(lane) ?? backupHeld(lane)
     if (!held || !Array.isArray(held.inbox)) return false
     held.inbox.push({ from, text, at: new Date(at).toISOString() })
     while (held.inbox.length > LANE_INBOX_LIMIT) held.inbox.shift()
@@ -750,11 +751,18 @@ export function createOrchestrators({
     if (!held) return { status: 403, body: { error: LANE_ENDED_PROBLEM } }
     const lane = typeof body.lane === 'string' ? body.lane.trim() : ''
     const allLanes = typeof lanes === 'function' ? lanes() : (lanes ?? {})
+    if (laneBackups.has(ticket)) {
+      return { status: 403, body: { error: LANE_TAKEOVER_PROBLEM } }
+    }
     if (lane === '' || !Object.hasOwn(allLanes, lane)) {
       return { status: 400, body: { error: LANE_BACKUP_PROBLEM } }
     }
-    if (lane === held.lane) laneBackups.delete(ticket)
-    else laneBackups.set(ticket, lane)
+    const own = Object.hasOwn(allLanes, held.lane) ? allLanes[held.lane] : null
+    const ownBackup = typeof own?.fallback === 'string' ? own.fallback.trim() : ''
+    if (ownBackup === '' || lane !== ownBackup) {
+      return { status: 403, body: { error: LANE_TAKEOVER_PROBLEM } }
+    }
+    laneBackups.set(ticket, lane)
     return { status: 200, body: { lane: laneName(ticket, held), from: held.lane } }
   }
 

@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- P439b: A lane ticket can take over only its own lane's fallback, only once, and a lane's own run gets its messages first.
 - Argon drafts PLAN-RESEARCH.md, one ranked plan of 15 items from the three harness surveys.
 - A failover backup sends as its own lane and keeps the primary's inbox and send count.
 - A sub's task or queue start passes its allowed lanes to the runner, and a failover to a backup outside them is refused before it touches the backup.

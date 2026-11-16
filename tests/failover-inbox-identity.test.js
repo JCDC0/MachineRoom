@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createBridge } from '../server/index.js'
 import { activeLanesFileFor, writeActiveLanes } from '../server/active-lanes.js'
 import { chatFileFor } from '../server/orchestrator.js'
-import { LANE_BACKUP_PROBLEM, LANE_LIMIT_PROBLEM } from '../server/orchestrators.js'
+import { LANE_BACKUP_PROBLEM, LANE_LIMIT_PROBLEM, LANE_TAKEOVER_PROBLEM } from '../server/orchestrators.js'
 import { buildPrompt } from '../src/briefs/briefs.js'
 import { unattendedPrompt } from '../src/briefs/run.js'
 import { gitPath } from '../server/programPath.js'
@@ -32,6 +32,7 @@ const LANES = {
   orchestrator: { name: 'Orchestrator', harness: 'Claude Code', cli: { harness: 'claude', bin: 'claude', model: 'opus' } },
   opencode: { name: 'Primary lane', harness: 'OpenCode', fallback: BACKUP, cli: { harness: 'opencode', bin: 'opencode', model: 'opencode-go/deepseek-v4.1-flash' } },
   agy: { name: 'Backup lane', harness: 'AGY', cli: { harness: 'opencode', bin: 'opencode', model: 'opencode-go/deepseek-v4.1-flash' } },
+  claude: { name: 'Other lane', harness: 'Claude Code', cli: { harness: 'claude', bin: 'claude', model: 'opus' } },
 }
 
 const LANE_RUNNER = [
@@ -290,6 +291,60 @@ describe('a failover backup in the bridge', () => {
     const unknown = await claimBackup(rig.url, ticket, 'not-a-lane')
     expect(unknown.status).toBe(400)
     expect(unknown.body).toEqual({ error: LANE_BACKUP_PROBLEM })
+    await releaseRun(rig)
+  })
+
+  it("refuses a lane that is not its fallback and still reaches that lane's own run", async () => {
+    const rig = await makeBridge(makeBase())
+    const ticket = await startRun(rig, PRIMARY)
+    const otherTicket = await startRun(rig, 'claude')
+
+    const claimed = await claimBackup(rig.url, ticket, 'claude')
+    expect(claimed.status).toBe(403)
+    expect(claimed.body).toEqual({ error: LANE_TAKEOVER_PROBLEM })
+
+    const sent = await tokenPost(
+      rig.url,
+      '/api/orchestrator/messages',
+      { to: 'lane:claude', text: 'For the other lane.' },
+      rig.token('orchestrator')
+    )
+    expect(sent.status).toBe(202)
+    const other = await laneGet(rig.url, otherTicket)
+    expect(other.body.messages.map((message) => message.text)).toContain('For the other lane.')
+    const primary = await laneGet(rig.url, ticket)
+    expect(primary.body.messages).toEqual([])
+    await releaseRun(rig)
+  })
+
+  it('refuses a second claim on the same ticket', async () => {
+    const rig = await makeBridge(makeBase())
+    const ticket = await startRun(rig, PRIMARY)
+
+    expect((await claimBackup(rig.url, ticket, BACKUP)).status).toBe(200)
+    const second = await claimBackup(rig.url, ticket, BACKUP)
+    expect(second.status).toBe(403)
+    expect(second.body).toEqual({ error: LANE_TAKEOVER_PROBLEM })
+    await releaseRun(rig)
+  })
+
+  it("gives a message to the backup's own run when the backup is running", async () => {
+    const rig = await makeBridge(makeBase())
+    const ticket = await startRun(rig, PRIMARY)
+    expect((await claimBackup(rig.url, ticket, BACKUP)).status).toBe(200)
+    const backupTicket = await startRun(rig, BACKUP)
+
+    const sent = await tokenPost(
+      rig.url,
+      '/api/orchestrator/messages',
+      { to: `lane:${BACKUP}`, text: 'For the backup itself.' },
+      rig.token('orchestrator')
+    )
+    expect(sent.status).toBe(202)
+    const backup = await laneGet(rig.url, backupTicket)
+    expect(backup.body.messages.map((message) => message.text)).toContain('For the backup itself.')
+    const primary = await laneGet(rig.url, ticket)
+    expect(primary.body.messages).toEqual([])
     await releaseRun(rig)
   })
 })
