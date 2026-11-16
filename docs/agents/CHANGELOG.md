@@ -2,6 +2,7 @@
 
 ## Unreleased
 - Interrupted backups continue with their saved settings and recorded worktree, and the interrupt limit carries across failover.
+- Backup continuation dry runs show the recorded backup branch; three regressions cover settings, partial work and the interrupt limit.
 - Review 47 (GPT-6.1 Sol) lists ten findings in the interrupts, failover, stop-tree, review totals, removed-lane costs and the MCP cache.
 - GET /api/orchestrator/messages/status answers a lane message's status to its sender or the page, and 404 to anyone else.
 - Dispatch shows Needs you for lanes whose newest run failed, could not start or stopped on five repeated failures, and native loop stops exit 4 with a stop reason.

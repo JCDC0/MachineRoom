@@ -1488,6 +1488,7 @@ async function runQueueProject({ options, lane, lanes }) {
   const project = projectFolder(options.project)
   if (!gitCheckout(project)) throw new Error(`The project folder ${printedRunsFolder(project)} is not a git folder. A queue needs one.`)
   const previousProject = continueFrom && typeof prevRun.record.project === 'string' ? realPath(prevRun.record.project) : ''
+  const continuedBranch = prevRun?.record.failoverFrom ? prevRun.record.checkpoint?.branch || prevRun.record.branch : prevRun?.record.branch
   const continuedWorktree = options.worktree && previousProject && realPath(dirname(previousProject)) === realPath(join(project, '.worktrees')) ? previousProject : ''
   if (continueFrom && (options.worktree ? !continuedWorktree : previousProject !== project)) throw new Error('The interrupted run has a different project worktree.')
   if (continuedWorktree && !existsSync(continuedWorktree)) throw new Error('The interrupted run worktree no longer exists.')
@@ -1516,7 +1517,7 @@ async function runQueueProject({ options, lane, lanes }) {
     const plan = options.worktree
       ? (continueFrom ? { path: continuedWorktree, made: false } : worktreePlan(project, options.lane))
       : { path: project, made: false }
-    const dryBranch = continueFrom ? (prevRun.record.queue || prevRun.record.branch || branch) : branch
+    const dryBranch = continueFrom ? (continuedBranch || prevRun.record.queue || branch) : branch
     const test = checkDisplay(testCommandFor(project, options.test))
     console.log(`lane: ${options.lane}`)
     console.log(`project: ${printedRunsFolder(project)}`)
@@ -1558,7 +1559,6 @@ async function runQueueProject({ options, lane, lanes }) {
     }
     const target = options.worktree && (!continueFrom || plan.made) ? prepareWorktree(project, options.lane, { setup: worktreeSetup }) : plan
     const currentWtBranch = gitRead(target.path, ['branch', '--show-current']) || ''
-    const continuedBranch = prevRun?.record.failoverFrom ? prevRun.record.checkpoint?.branch || prevRun.record.branch : prevRun?.record.branch
     if (continueFrom && continuedBranch && currentWtBranch !== continuedBranch) throw new Error('The interrupted run worktree is on a different branch.')
     const activeBranch = continueFrom
       ? (currentWtBranch || prevRun.record.queue || prevRun.record.branch || branch)
