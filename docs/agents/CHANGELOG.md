@@ -1,6 +1,8 @@
 # Changelog
 
 ## Unreleased
+- P452: A lane cost row counts the runs with no cost and the spend of runs that failed or were stopped.
+- P452: The costs answer keeps those counts and the quota for the page, so the cost board now shows the quota rows it used to leave out.
 - The native agent keeps a reply its inbox watch read as the model call ended, and gives it to the next call.
 - A sub's harness change also changes its program, and a ladder save that gives a sub's model and effort keeps them over the saved chat file.
 - A sub's harness route change updates its live program override, and a ladder recreation keeps given model and effort values over the saved chat file.
