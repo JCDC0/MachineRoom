@@ -192,6 +192,7 @@ function makeScopeApi({
   const tokens = { 'main-token': 'orchestrator', 'sub-token': 'scout', 'other-token': 'other' }
   const registry = {
     idForToken: (value) => tokens[value] ?? null,
+    sector: (id) => id === 'scout' ? { name: 'Scout', lanes: ['opencode'] } : null,
     getLadder: () => ({
       subs: [
         {
@@ -292,8 +293,7 @@ describe('a restricted sub and an out-of-scope lane merge', { timeout: 30000 }, 
     expect(own.body.files).toEqual(['docs/notes.md'])
 
     const other = await merge({ allowOutside: true, headers: { 'x-machineroom-orchestrator': 'other-token' } })
-    expect(other.status).toBe(409)
-    expect(other.body.files).toEqual(['docs/notes.md'])
+    expect(other.status).toBe(403)
     expect(mainHead(repo)).toBe(baseHead)
   })
 

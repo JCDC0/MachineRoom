@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- Sub tokens can start, stop and merge only lanes in their sector, and can stop only their own orchestrator.
 - A lane proposal is refused for a harness turned off in Settings, and a program path saved there counts as available.
 - Argon lists eight free hierarchy gaps to fix next (PLAN-NEXT-ARGON-2.md).
 - Every server git call drops GIT_DIR, GIT_WORK_TREE, GIT_INDEX_FILE and GIT_COMMON_DIR through one helper, gitEnv.
