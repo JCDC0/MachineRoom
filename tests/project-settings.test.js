@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { createBridge } from '../server/index.js'
 import {
   CHECK_COMMAND_PROBLEM,
+  PLAN_BY_DEFAULT_PROBLEM,
   checkCommandProblem,
   hasNpmTestScript,
   projectSettingsFileFor,
@@ -48,21 +49,21 @@ function postSettings(url, body) {
 }
 
 describe('project settings file', () => {
-  it('saves, reads back and clears the check command', () => {
+  it('saves, reads back and clears the check command and planByDefault', () => {
     const runs = tempDir('mr-project-settings-runs-')
     const file = projectSettingsFileFor('C:\\work\\demo', runs)
     expect(file).toMatch(/project-settings-[0-9a-f]{8}\.json$/)
-    expect(readProjectSettings(file)).toEqual({ checkCommand: '' })
+    expect(readProjectSettings(file)).toEqual({ checkCommand: '', planByDefault: false })
 
     writeProjectSettings(file, 'node scripts/check.mjs')
-    expect(readProjectSettings(file)).toEqual({ checkCommand: 'node scripts/check.mjs' })
+    expect(readProjectSettings(file)).toEqual({ checkCommand: 'node scripts/check.mjs', planByDefault: false })
     expect(readFileSync(file, 'utf8')).toContain('node scripts/check.mjs')
 
-    writeProjectSettings(file, 'npm test\nnpm run check')
-    expect(readProjectSettings(file)).toEqual({ checkCommand: 'npm test\nnpm run check' })
+    writeProjectSettings(file, { checkCommand: 'npm test\nnpm run check', planByDefault: true })
+    expect(readProjectSettings(file)).toEqual({ checkCommand: 'npm test\nnpm run check', planByDefault: true })
 
     writeProjectSettings(file, '')
-    expect(readProjectSettings(file)).toEqual({ checkCommand: '' })
+    expect(readProjectSettings(file)).toEqual({ checkCommand: '', planByDefault: false })
   })
 
   it('accepts up to four commands, one per line, and refuses a fifth', () => {
@@ -101,28 +102,36 @@ describe('the project settings route', () => {
   it('saves, reads back and clears the setting for the room project', async () => {
     const { url } = await startBridge()
     const empty = await (await fetch(`${url}/api/control/project-settings`)).json()
-    expect(empty).toEqual({ checkCommand: '', hasTestScript: true })
+    expect(empty).toEqual({ checkCommand: '', planByDefault: false, hasTestScript: true })
 
     const saved = await postSettings(url, { checkCommand: ' node scripts/check.mjs ', confirmed: true })
     expect(saved.status).toBe(200)
-    expect(await saved.json()).toEqual({ checkCommand: 'node scripts/check.mjs', hasTestScript: true })
+    expect(await saved.json()).toEqual({ checkCommand: 'node scripts/check.mjs', planByDefault: false, hasTestScript: true })
 
     const read = await (await fetch(`${url}/api/control/project-settings`)).json()
-    expect(read).toEqual({ checkCommand: 'node scripts/check.mjs', hasTestScript: true })
+    expect(read).toEqual({ checkCommand: 'node scripts/check.mjs', planByDefault: false, hasTestScript: true })
+
+    const planOn = await postSettings(url, { planByDefault: true, confirmed: true })
+    expect(planOn.status).toBe(200)
+    expect(await planOn.json()).toEqual({ checkCommand: 'node scripts/check.mjs', planByDefault: true, hasTestScript: true })
 
     const cleared = await postSettings(url, { checkCommand: '', confirmed: true })
     expect(cleared.status).toBe(200)
-    expect(await cleared.json()).toEqual({ checkCommand: '', hasTestScript: true })
+    expect(await cleared.json()).toEqual({ checkCommand: '', planByDefault: true, hasTestScript: true })
+
+    const planOff = await postSettings(url, { planByDefault: false, confirmed: true })
+    expect(planOff.status).toBe(200)
+    expect(await planOff.json()).toEqual({ checkCommand: '', planByDefault: false, hasTestScript: true })
   })
 
   it('saves two commands on two lines and reads both back', async () => {
     const { url } = await startBridge()
     const saved = await postSettings(url, { checkCommand: 'npm test\nnpm run check', confirmed: true })
     expect(saved.status).toBe(200)
-    expect(await saved.json()).toEqual({ checkCommand: 'npm test\nnpm run check', hasTestScript: true })
+    expect(await saved.json()).toEqual({ checkCommand: 'npm test\nnpm run check', planByDefault: false, hasTestScript: true })
 
     const read = await (await fetch(`${url}/api/control/project-settings`)).json()
-    expect(read).toEqual({ checkCommand: 'npm test\nnpm run check', hasTestScript: true })
+    expect(read).toEqual({ checkCommand: 'npm test\nnpm run check', planByDefault: false, hasTestScript: true })
   })
 
   it('refuses shell syntax and never saves it', async () => {
@@ -132,7 +141,7 @@ describe('the project settings route', () => {
     expect(await res.json()).toEqual({ error: CHECK_SHELL_PROBLEM })
 
     const read = await (await fetch(`${url}/api/control/project-settings`)).json()
-    expect(read).toEqual({ checkCommand: '', hasTestScript: true })
+    expect(read).toEqual({ checkCommand: '', planByDefault: false, hasTestScript: true })
   })
 
   it('refuses a carriage return inside a quoted argument and never saves it', async () => {
@@ -143,10 +152,10 @@ describe('the project settings route', () => {
     expect(await res.json()).toEqual({ error: CHECK_QUOTE_PROBLEM })
 
     const read = await (await fetch(`${url}/api/control/project-settings`)).json()
-    expect(read).toEqual({ checkCommand: '', hasTestScript: true })
+    expect(read).toEqual({ checkCommand: '', planByDefault: false, hasTestScript: true })
   })
 
-  it('refuses a page write with no Origin and a check of more than four lines', async () => {
+  it('refuses a page write with no Origin, a non-boolean planByDefault and a check of more than four lines', async () => {
     const { url } = await startBridge()
     const noOrigin = await fetch(`${url}/api/control/project-settings`, {
       method: 'POST',
@@ -154,6 +163,10 @@ describe('the project settings route', () => {
       body: JSON.stringify({ checkCommand: 'npm test', confirmed: true }),
     })
     expect(noOrigin.status).toBe(403)
+
+    const badPlan = await postSettings(url, { planByDefault: 'yes', confirmed: true })
+    expect(badPlan.status).toBe(400)
+    expect(await badPlan.json()).toEqual({ error: PLAN_BY_DEFAULT_PROBLEM })
 
     const tooLong = await postSettings(url, { checkCommand: 'x'.repeat(501), confirmed: true })
     expect(tooLong.status).toBe(400)
@@ -168,20 +181,22 @@ describe('the project settings route', () => {
 describe('the mock project settings', () => {
   it('saves, reads back and clears the check command', async () => {
     const client = createMockClient({ latencyMs: 0 })
-    expect(await client.projectSettings()).toEqual({ checkCommand: '', hasTestScript: true })
+    expect(await client.projectSettings()).toEqual({ checkCommand: '', planByDefault: false, hasTestScript: true })
     expect(await client.saveProjectSettings({ checkCommand: 'node scripts/check.mjs' })).toEqual({
       checkCommand: 'node scripts/check.mjs',
+      planByDefault: false,
       hasTestScript: true,
     })
-    expect(await client.projectSettings()).toEqual({ checkCommand: 'node scripts/check.mjs', hasTestScript: true })
-    expect(await client.saveProjectSettings({ checkCommand: '' })).toEqual({ checkCommand: '', hasTestScript: true })
-    expect(await client.projectSettings()).toEqual({ checkCommand: '', hasTestScript: true })
+    expect(await client.projectSettings()).toEqual({ checkCommand: 'node scripts/check.mjs', planByDefault: false, hasTestScript: true })
+    expect(await client.saveProjectSettings({ checkCommand: '' })).toEqual({ checkCommand: '', planByDefault: false, hasTestScript: true })
+    expect(await client.projectSettings()).toEqual({ checkCommand: '', planByDefault: false, hasTestScript: true })
   })
 
   it('takes two commands on one field and refuses a fifth line', async () => {
     const client = createMockClient({ latencyMs: 0 })
     expect(await client.saveProjectSettings({ checkCommand: 'npm test\nnpm run check' })).toEqual({
       checkCommand: 'npm test\nnpm run check',
+      planByDefault: false,
       hasTestScript: true,
     })
     await expect(client.saveProjectSettings({ checkCommand: 'x'.repeat(501) })).rejects.toThrow(CHECK_COMMAND_PROBLEM)

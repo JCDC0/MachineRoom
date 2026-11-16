@@ -473,8 +473,18 @@ export function createClient({
     },
     projectSettings: () => request('GET', '/api/control/project-settings'),
 
-    saveProjectSettings: ({ checkCommand, confirmed = true } = {}) =>
-      request('POST', '/api/control/project-settings', { checkCommand, confirmed }),
+    saveProjectSettings: (options = {}) => {
+      const source = options && typeof options === 'object' ? options : {}
+      const { checkCommand, planByDefault, confirmed = true } = source
+      const body = { confirmed }
+      if (Object.hasOwn(source, 'checkCommand') && checkCommand !== undefined) {
+        body.checkCommand = checkCommand
+      }
+      if (Object.hasOwn(source, 'planByDefault') && planByDefault !== undefined) {
+        body.planByDefault = planByDefault
+      }
+      return request('POST', '/api/control/project-settings', body)
+    },
 
     lanes: () => request('GET', '/api/lanes'),
 

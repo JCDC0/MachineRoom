@@ -67,17 +67,24 @@ describe('sandboxSummary', () => {
     expect(sandboxSummary('opencode', 'choice')).toBe('Permission rules, file edits stay in the project; no OS sandbox')
   })
 
-  it('describes native, AGY, ACP and unknown harnesses', () => {
+  it('describes native, AGY and unknown harnesses', () => {
     for (const mode of [undefined, 'plan', 'ask', 'edits', 'auto', 'bypass']) {
       expect(sandboxSummary('machineroom', mode)).toBe('File tools stay in the project; shell commands are not sandboxed')
       expect(sandboxSummary('agy', mode)).toBe('No permission checks')
-      expect(sandboxSummary('acp', mode)).toBe('Approves every request the agent asks for')
     }
     expect(sandboxSummary('hermes')).toBe('Unknown')
     expect(sandboxSummary('copilot', 'auto')).toBe('Unknown')
     expect(sandboxSummary('other')).toBe('Unknown')
     expect(sandboxSummary('')).toBe('Unknown')
     expect(sandboxSummary(null)).toBe('Unknown')
+  })
+
+  it('describes ACP modes and keeps legacy lanes in Bypass', () => {
+    expect(sandboxSummary('acp', 'plan')).toBe('Allows reads only')
+    expect(sandboxSummary('acp', 'auto')).toBe('Allows reads and edits inside the project; refuses commands')
+    expect(sandboxSummary('acp', 'choice')).toBe('Allows reads and edits inside the project; refuses commands')
+    expect(sandboxSummary('acp', 'bypass')).toBe('Approves every request the agent asks for')
+    expect(sandboxSummary('acp')).toBe('Approves every request the agent asks for')
   })
 })
 

@@ -353,14 +353,41 @@ describe('mock orchestrators and the ladder', () => {
   })
 })
 
-describe('mock check command', () => {
+describe('mock check command and planByDefault', () => {
   it('counts commands split by carriage returns and refuses five', async () => {
     const client = fast()
     expect(await client.saveProjectSettings({ checkCommand: 'npm test\rnpm run check' })).toEqual({
       checkCommand: 'npm test\rnpm run check',
+      planByDefault: false,
       hasTestScript: true,
     })
     await expect(client.saveProjectSettings({ checkCommand: 'one\rtwo\rthree\rfour\rfive' }))
       .rejects.toThrow('A check holds at most 4 commands, one per line.')
+  })
+
+  it('saves and reads back planByDefault while keeping checkCommand', async () => {
+    const client = fast()
+    expect(await client.projectSettings()).toEqual({
+      checkCommand: '',
+      planByDefault: false,
+      hasTestScript: true,
+    })
+    expect(await client.saveProjectSettings({ planByDefault: true })).toEqual({
+      checkCommand: '',
+      planByDefault: true,
+      hasTestScript: true,
+    })
+    expect(await client.saveProjectSettings({ checkCommand: 'npm test' })).toEqual({
+      checkCommand: 'npm test',
+      planByDefault: true,
+      hasTestScript: true,
+    })
+    await expect(client.saveProjectSettings({ planByDefault: 'yes' }))
+      .rejects.toThrow('Choose whether new runs start in Plan.')
+    expect(await client.projectSettings()).toEqual({
+      checkCommand: 'npm test',
+      planByDefault: true,
+      hasTestScript: true,
+    })
   })
 })

@@ -242,16 +242,43 @@ describe('the control client contract', () => {
     for (const name of CLIENT_METHODS) expect(typeof client[name], `bridge ${name}`).toBe('function')
   })
 
-  it('saves, reads back and clears the project check command', async () => {
+  it('saves, reads back and clears the project check command and planByDefault', async () => {
     const { client } = await makeHarness()
-    expect(await client.projectSettings()).toEqual({ checkCommand: '', hasTestScript: true })
-    expect(await client.saveProjectSettings({ checkCommand: 'node scripts/check.mjs' })).toEqual({
-      checkCommand: 'node scripts/check.mjs',
+    expect(await client.projectSettings()).toEqual({
+      checkCommand: '',
+      planByDefault: false,
       hasTestScript: true,
     })
-    expect(await client.projectSettings()).toEqual({ checkCommand: 'node scripts/check.mjs', hasTestScript: true })
-    expect(await client.saveProjectSettings({ checkCommand: '' })).toEqual({ checkCommand: '', hasTestScript: true })
-    expect(await client.projectSettings()).toEqual({ checkCommand: '', hasTestScript: true })
+    expect(await client.saveProjectSettings({ checkCommand: 'node scripts/check.mjs' })).toEqual({
+      checkCommand: 'node scripts/check.mjs',
+      planByDefault: false,
+      hasTestScript: true,
+    })
+    expect(await client.projectSettings()).toEqual({
+      checkCommand: 'node scripts/check.mjs',
+      planByDefault: false,
+      hasTestScript: true,
+    })
+    expect(await client.saveProjectSettings({ planByDefault: true })).toEqual({
+      checkCommand: 'node scripts/check.mjs',
+      planByDefault: true,
+      hasTestScript: true,
+    })
+    expect(await client.saveProjectSettings({ checkCommand: '' })).toEqual({
+      checkCommand: '',
+      planByDefault: true,
+      hasTestScript: true,
+    })
+    expect(await client.saveProjectSettings({ planByDefault: false })).toEqual({
+      checkCommand: '',
+      planByDefault: false,
+      hasTestScript: true,
+    })
+    expect(await client.projectSettings()).toEqual({
+      checkCommand: '',
+      planByDefault: false,
+      hasTestScript: true,
+    })
   })
 
   it('lists the lanes with the spend from the run records', async () => {

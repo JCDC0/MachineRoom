@@ -79,12 +79,14 @@ describe('First task card in DispatchPanel', () => {
     const agents = [
       { id: 'agent-hermes', key: 'hermes', name: 'Hermes', adapterType: 'hermes_local', harness: 'hermes', role: null },
       { id: 'agent-codex', key: 'codex', name: 'Codex', adapterType: 'codex_local', harness: 'codex', role: null },
+      { id: 'agent-acp', key: 'acp', name: 'ACP', adapterType: 'acp_local', harness: 'acp', role: null },
       { id: 'agent-opencode', key: 'opencode', name: 'OpenCode', adapterType: 'opencode_local', harness: 'opencode', mode: 'auto', role: null },
       { id: 'agent-claude', key: 'claude', name: 'Claude Code', adapterType: 'claude_local', harness: 'claude', mode: 'bypass', role: null },
     ]
     const harnesses = [
       { key: 'hermes', name: 'Hermes', ready: true, enabled: true },
       { key: 'codex', name: 'Codex', ready: false, enabled: true },
+      { key: 'acp', name: 'ACP', ready: true, enabled: true },
       { key: 'opencode', name: 'OpenCode', ready: true, enabled: true },
       { key: 'claude', name: 'Claude Code', ready: true, enabled: true },
     ]
@@ -100,7 +102,7 @@ describe('First task card in DispatchPanel', () => {
       const card = container.querySelector('[aria-label="First task"]')
       expect(card).not.toBeNull()
       expect(card.textContent).toContain('First task')
-      expect(selectedValue(container.querySelector('#project-run-lane'))).toBe('opencode')
+      expect(selectedValue(container.querySelector('#project-run-lane'))).toBe('acp')
       expect(selectedValue(container.querySelector('#project-run-mode'))).toBe('plan')
       expect(container.querySelector('#project-run-task').value).toBe(FIRST_TASK)
       expect(startCalls).toEqual([])
@@ -145,11 +147,9 @@ describe('First task card in DispatchPanel', () => {
 
     const noPlanAgents = [
       { id: 'agent-hermes', key: 'hermes', name: 'Hermes', adapterType: 'hermes_local', harness: 'hermes', role: null },
-      { id: 'agent-acp', key: 'acp', name: 'ACP', adapterType: 'acp_local', harness: 'acp', role: null },
     ]
     const noPlanHarnesses = [
       { key: 'hermes', name: 'Hermes', ready: true, enabled: true },
-      { key: 'acp', name: 'ACP', ready: true, enabled: true },
     ]
     const withoutPlan = makeClient({ project: 'no-plan-harness', agents: noPlanAgents, harnesses: noPlanHarnesses })
     await withDom(async ({ container, root }) => {

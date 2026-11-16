@@ -5,6 +5,7 @@ import { projectHash } from './active-lanes.js'
 
 export const CHECK_COMMAND_LIMIT = 500
 export const CHECK_COMMAND_PROBLEM = 'Write the check command as up to 4 commands, one per line, in 500 characters or fewer.'
+export const PLAN_BY_DEFAULT_PROBLEM = 'Choose whether new runs start in Plan.'
 export const CHECK_ORIGIN_PROBLEM = 'A request to save the check command needs a page Origin.'
 export const CHECK_CONFIRM_PROBLEM = 'Confirm the check command first.'
 export const METHOD_NOT_ALLOWED_PROBLEM = 'Method not allowed.'
@@ -27,21 +28,28 @@ export function checkCommandProblem(value) {
 
 export function readProjectSettings(file) {
   try {
-    if (!existsSync(file)) return { checkCommand: '' }
+    if (!existsSync(file)) return { checkCommand: '', planByDefault: false }
     const parsed = JSON.parse(readFileSync(file, 'utf8'))
+    const planByDefault = Boolean(parsed && typeof parsed === 'object' && parsed.planByDefault === true)
     const value = parsed && typeof parsed === 'object' && typeof parsed.checkCommand === 'string'
       ? parsed.checkCommand.trim()
       : ''
-    if (checkCommandProblem(value)) return { checkCommand: '' }
-    return { checkCommand: value }
+    if (checkCommandProblem(value)) return { checkCommand: '', planByDefault }
+    return { checkCommand: value, planByDefault }
   } catch {
-    return { checkCommand: '' }
+    return { checkCommand: '', planByDefault: false }
   }
 }
 
-export function writeProjectSettings(file, checkCommand) {
-  const text = typeof checkCommand === 'string' ? checkCommand.trim() : ''
-  const content = `${JSON.stringify(text === '' ? {} : { checkCommand: text }, null, 2)}\n`
+export function writeProjectSettings(file, settings) {
+  const isObject = settings !== null && typeof settings === 'object' && !Array.isArray(settings)
+  const rawCommand = isObject ? settings.checkCommand : settings
+  const text = typeof rawCommand === 'string' ? rawCommand.trim() : ''
+  const planByDefault = isObject && settings.planByDefault === true
+  const payload = {}
+  if (text !== '') payload.checkCommand = text
+  if (planByDefault) payload.planByDefault = true
+  const content = `${JSON.stringify(payload, null, 2)}\n`
   mkdirSync(dirname(file), { recursive: true })
   const temporary = `${file}.tmp`
   writeFileSync(temporary, content, 'utf8')
@@ -80,8 +88,9 @@ export function createProjectSettingsApi({
 } = {}) {
   const folder = () => (typeof runsFolder === 'function' ? runsFolder() : runsFolder)
   const file = () => projectSettingsFileFor(projectRoot, folder())
-  const answer = () => ({
-    checkCommand: readProjectSettings(file()).checkCommand,
+  const answer = (saved = readProjectSettings(file())) => ({
+    checkCommand: saved.checkCommand,
+    planByDefault: saved.planByDefault,
     hasTestScript: hasNpmTestScript(projectRoot),
   })
 
@@ -102,24 +111,38 @@ export function createProjectSettingsApi({
     }
     const body = await readJsonBody(req, res)
     if (body === null) return true
-    if (body.confirmed !== true) {
+    if (!body || typeof body !== 'object' || Array.isArray(body) || body.confirmed !== true) {
       sendJson(req, res, 400, { error: CHECK_CONFIRM_PROBLEM })
       return true
     }
-    const problem = checkCommandProblem(body.checkCommand)
-    if (problem) {
-      sendJson(req, res, 400, { error: problem })
+    const hasCheckCommand = Object.hasOwn(body, 'checkCommand') && body.checkCommand !== undefined
+    const hasPlanByDefault = Object.hasOwn(body, 'planByDefault') && body.planByDefault !== undefined
+    if (hasCheckCommand) {
+      const problem = checkCommandProblem(body.checkCommand)
+      if (problem) {
+        sendJson(req, res, 400, { error: problem })
+        return true
+      }
+    }
+    if (hasPlanByDefault && typeof body.planByDefault !== 'boolean') {
+      sendJson(req, res, 400, { error: PLAN_BY_DEFAULT_PROBLEM })
       return true
     }
-    const checkCommand = typeof body.checkCommand === 'string' ? body.checkCommand.trim() : ''
+    const current = readProjectSettings(file())
+    const next = {
+      checkCommand: hasCheckCommand
+        ? (typeof body.checkCommand === 'string' ? body.checkCommand.trim() : '')
+        : current.checkCommand,
+      planByDefault: hasPlanByDefault ? body.planByDefault : current.planByDefault,
+    }
     try {
-      writeProjectSettings(file(), checkCommand)
+      writeProjectSettings(file(), next)
     } catch {
-      sendJson(req, res, 500, { error: 'The bridge could not save the check command.' })
+      sendJson(req, res, 500, { error: 'The bridge could not save the project settings.' })
       return true
     }
     notify({ topic: 'project-settings' })
-    sendJson(req, res, 200, { checkCommand, hasTestScript: hasNpmTestScript(projectRoot) })
+    sendJson(req, res, 200, answer(next))
     return true
   }
 
