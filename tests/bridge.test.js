@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { FOLDER_SHAPE, createBridge, isAllowedHost, packTree, trimHistory } from '../server/index.js'
 import { DEFAULT_ASSISTANT_MODEL } from '../server/assistant.js'
 import { getJson, postJson, readFrames, startLaneBridge, waitFor, waitForBridge } from './helpers/bridge.js'
+import { withoutRepoEnv } from './helpers/gitEnv.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 import { SLOW_TEST_TIMEOUT_MS } from './helpers/timeout.js'
 
@@ -358,7 +359,7 @@ describe('health and agents', () => {
 describe('the file tree', () => {
   it('returns the file tree for both git repositories and plain folders', async ({ signal }) => {
     const gitDir = tempDir()
-    execFileSync('git', ['init'], { cwd: gitDir, stdio: 'ignore' })
+    execFileSync('git', ['init'], { cwd: gitDir, stdio: 'ignore', env: withoutRepoEnv() })
     mkdirSync(join(gitDir, 'src'), { recursive: true })
     mkdirSync(join(gitDir, 'node_modules', 'pkg'), { recursive: true })
     writeFileSync(join(gitDir, '.gitignore'), 'node_modules/\n')

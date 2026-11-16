@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- P423: Test helpers and mainCheckoutOf run git without a parent's GIT_DIR, GIT_WORK_TREE, GIT_INDEX_FILE or GIT_COMMON_DIR, so X15 reads the test's own repository inside a merge.
 - P423: The git notice and file tree waits follow the test's own timeout, and the slow tests allow 60 seconds, so a busy machine no longer cuts them at 10 seconds.
 - A restricted sub's merge refused because its changed files could not be read now offers Merge anyway in Reviews, with no file list.
 - The sub restore test keeps the old harness's saved conversation on disk until the restore, so it fails if P413's guards are undone.

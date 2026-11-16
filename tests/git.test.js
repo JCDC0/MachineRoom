@@ -36,6 +36,7 @@ import {
 } from '../server/git.js'
 import { REQUEST_LIMITS, REQUEST_TIMEOUT_MS, createClient } from '../src/control/client.js'
 import { createMockClient } from '../src/control/mock.js'
+import { withoutRepoEnv } from './helpers/gitEnv.js'
 import { makeTempDir, removeTempDir } from './helpers/tempRoot.js'
 import { SLOW_TEST_TIMEOUT_MS } from './helpers/timeout.js'
 
@@ -61,7 +62,7 @@ function testGit(cwd, args) {
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'pipe'],
     env: {
-      ...process.env,
+      ...withoutRepoEnv(),
       GIT_CONFIG_SYSTEM: NO_GIT_CONFIG,
       GIT_CONFIG_GLOBAL: NO_GIT_CONFIG,
       GIT_CONFIG_NOSYSTEM: '1',
@@ -806,7 +807,7 @@ describe('caching and throttling', () => {
     let gitCalls = 0
     const countingRunner = async (cwd, args, opts) => {
       gitCalls += 1
-      return execFileSync('git', args, { cwd, encoding: 'utf8', windowsHide: true })
+      return execFileSync('git', args, { cwd, encoding: 'utf8', windowsHide: true, env: withoutRepoEnv() })
     }
 
     const { client } = await startBridge({

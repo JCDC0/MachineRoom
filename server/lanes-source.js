@@ -160,6 +160,13 @@ function pathKey(path) {
 }
 
 export function mainCheckoutOf(folder) {
+  const env = { ...process.env }
+  for (const key of Object.keys(env)) {
+    const upper = key.toUpperCase()
+    if (upper === 'GIT_DIR' || upper === 'GIT_WORK_TREE' || upper === 'GIT_INDEX_FILE' || upper === 'GIT_COMMON_DIR') {
+      delete env[key]
+    }
+  }
   try {
     const common = execFileSync(gitPath(), ['rev-parse', '--git-common-dir'], {
       cwd: folder,
@@ -167,6 +174,7 @@ export function mainCheckoutOf(folder) {
       timeout: 5000,
       windowsHide: true,
       stdio: ['ignore', 'pipe', 'ignore'],
+      env,
     }).trim()
     if (!common) return ''
     return dirname(resolve(folder, common))
