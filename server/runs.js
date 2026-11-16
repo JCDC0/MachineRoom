@@ -6,6 +6,7 @@ import { basename, dirname, join, resolve } from 'node:path'
 import { StringDecoder } from 'node:string_decoder'
 import { fileURLToPath } from 'node:url'
 import { parseBriefs } from '../src/briefs/briefs.js'
+import { attentionItems } from '../src/briefs/attention.js'
 import { KEY_MASK, maskKeys } from '../src/briefs/audit.js'
 import { SINCE_PROBLEM, checkCommandLines, dayStart, formatInterruptMessage, interruptSenderFrom, laneLockLog, laneLockStartedAt, laneModeProblem as runnerModeProblem, laneStats, laneWithOverrides, maskProfilePaths, pathInside, projectProblems, runRecord, worktreeFor } from '../src/briefs/run.js'
 import { profileFromBrief, profileFromTask } from '../src/policy/profile.js'
@@ -1818,6 +1819,7 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
         running: [...running.values()].map(snapshot),
         recent: visible.slice(-RECENT_LIMIT).reverse(),
         last: newestRecordPerLane(visible),
+        attention: attentionItems(visible),
       })
       return true
     }

@@ -2,12 +2,15 @@ import { execFileSync } from 'node:child_process'
 import { createServer } from 'node:http'
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { act, createElement } from 'react'
 import { afterEach, describe, expect, it } from 'vitest'
 import { startLane } from '../scripts/run-lane.mjs'
 import { gitPath } from '../server/programPath.js'
 import { attentionItems } from '../src/briefs/attention.js'
 import { runRecord } from '../src/briefs/run.js'
+import DispatchPanel from '../src/ui/panels/DispatchPanel.jsx'
 import { makeTempDir } from './helpers/tempRoot.js'
+import { buttonWithText, settle, withDom } from './helpers/uiDom.js'
 
 const cleanups = []
 
@@ -285,5 +288,86 @@ describe('attentionItems', () => {
     ])).toEqual([
       { lane: 'opencode', startedAt: '2026-11-16T10:05:00.000Z', text: 'opencode failed on P2.' },
     ])
+  })
+})
+
+describe('DispatchPanel Needs you', () => {
+  it('shows the Needs you heading only when attention has items and clears when a newer run clears them', async () => {
+    let payload = {
+      project: 'demo',
+      running: [],
+      recent: [{ lane: 'opencode', briefs: ['P1'], startedAt: '2026-11-16T10:00:00.000Z', exitCode: 0, killed: false }],
+      attention: [],
+    }
+    const client = {
+      health: async () => ({ lanes: true }),
+      runs: async () => payload,
+    }
+    await withDom(async ({ container, root }) => {
+      await act(async () => {
+        root.render(createElement(DispatchPanel, { client, initialAgents: [] }))
+      })
+      await settle()
+      expect(container.textContent).not.toContain('Needs you')
+
+      payload = {
+        project: 'demo',
+        running: [],
+        recent: [{ lane: 'opencode', briefs: ['P1'], startedAt: '2026-11-16T10:00:00.000Z', exitCode: 1, killed: false }],
+        attention: [
+          { lane: 'lane1', startedAt: '2026-11-16T10:06:00.000Z', text: 'lane1 failed on P1.' },
+          { lane: 'lane2', startedAt: '2026-11-16T10:05:00.000Z', text: 'lane2 could not start.' },
+          { lane: 'lane3', startedAt: '2026-11-16T10:04:00.000Z', text: 'lane3 stopped: the same call failed five times.' },
+          { lane: 'lane4', startedAt: '2026-11-16T10:03:00.000Z', text: 'lane4 failed on P4.' },
+          { lane: 'lane5', startedAt: '2026-11-16T10:02:00.000Z', text: 'lane5 failed on P5.' },
+          { lane: 'lane6', startedAt: '2026-11-16T10:01:00.000Z', text: 'lane6 failed on P6.' },
+        ],
+      }
+      await act(async () => {
+        buttonWithText(container, 'Refresh').click()
+      })
+      await settle()
+
+      expect(container.textContent).toContain('Needs you')
+      const text = container.textContent
+      expect(text).toContain('lane1 failed on P1.')
+      expect(text).toContain('lane5 failed on P5.')
+      expect(text).not.toContain('lane6 failed on P6.')
+      expect(text.indexOf('Needs you')).toBeLessThan(text.indexOf('opencode | P1'))
+      const rows = container.querySelectorAll('.runs-entry.is-failed')
+      expect(rows.some((row) => row.textContent.includes('lane1 failed on P1.'))).toBe(true)
+
+      payload = {
+        project: 'demo',
+        running: [],
+        recent: [{ lane: 'opencode', briefs: ['P1'], startedAt: '2026-11-16T10:07:00.000Z', exitCode: 0, killed: false }],
+        attention: [],
+      }
+      await act(async () => {
+        buttonWithText(container, 'Refresh').click()
+      })
+      await settle()
+      expect(container.textContent).not.toContain('Needs you')
+    })
+  })
+
+  it('shows Needs you even when running and recent are empty', async () => {
+    const client = {
+      health: async () => ({ lanes: true }),
+      runs: async () => ({
+        project: 'demo',
+        running: [],
+        recent: [],
+        attention: [{ lane: 'opencode', startedAt: '2026-11-16T10:00:00.000Z', text: 'opencode failed on P1.' }],
+      }),
+    }
+    await withDom(async ({ container, root }) => {
+      await act(async () => {
+        root.render(createElement(DispatchPanel, { client, initialAgents: [] }))
+      })
+      await settle()
+      expect(container.textContent).toContain('Needs you')
+      expect(container.textContent).toContain('opencode failed on P1.')
+    })
   })
 })
