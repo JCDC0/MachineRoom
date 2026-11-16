@@ -3754,3 +3754,10 @@ P439's `POST /api/orchestrator/failover` lets any running lane's ticket claim an
 2. `receiveLaneMessage` prefers the lane's own running ticket (`lastLaneTicket(lane)`) and uses a claimed backup only when the lane has no run of its own.
 3. Tests, each failing before your change: a ticket claiming a lane that is not its fallback gets 403 and messages to that lane still reach that lane's own run; a second claim gets 403; when the backup lane has its own running run, a message to `lane:BACKUP` reaches that run, not the claimed ticket.
 4. Run `node node_modules/vitest/vitest.mjs run tests/failover-inbox-identity.test.js tests/failover-messages.test.js` and report the counts.
+
+**P443b. Sol's review of the research plan (Codex, GPT-6.1 Sol, report).** Read this brief, `docs/agents/PLAN-RESEARCH.md` and the three surveys in `docs/agents/research/` only, then the code each item names. Change no file except `docs/agents/PLAN-RESEARCH.md`, and in it only the section `Sol's review`. Your sandbox keeps git read-only: write the file in your worktree and the runner commits it. Do not install or copy `node_modules`. Files: docs/agents/PLAN-RESEARCH.md.
+
+1. For each of the 15 items: does it answer a user want the surveys show (cite the survey line), is its `Today` true of the code (file and line you read), is the step the smallest one that does it, and is the size and harness right. One line each when it holds; a short paragraph when it does not, with your change.
+2. Name anything the three surveys agree on that the plan leaves out, and anything in the plan no survey supports.
+3. Give your own order of the 15, with one line on why it differs from Argon's where it does.
+4. Under 90 lines in the section. Plain words, no em dashes.
