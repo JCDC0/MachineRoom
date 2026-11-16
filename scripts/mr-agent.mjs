@@ -1445,8 +1445,10 @@ function startInboxWatch(seen, env, onMessage) {
       await wait(INBOX_POLL_MS)
       if (stopped) return
       const inbox = await readLaneInbox(seen, env)
-      if (stopped) return
-      if (inbox === '') continue
+      if (inbox === '') {
+        if (stopped) return
+        continue
+      }
       onMessage(inbox)
       return
     }
@@ -1587,6 +1589,8 @@ async function main() {
           throw error
         }
         watch.stop()
+        await watch.done
+        if (inbox !== '') heldInbox = inbox
       } else {
         data = await post(url, key, payload, postOptions)
       }
