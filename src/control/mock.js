@@ -683,7 +683,7 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
   const listeners = new Set()
   const runsState = { project: 'MachineRoom', running: [], recent: [] }
   const runningMeta = new Map()
-  let projectSettingsState = { checkCommand: '', hasTestScript: true }
+  let projectSettingsState = { checkCommand: '', planByDefault: false, hasTestScript: true }
   const reviewState = clone(SAMPLE_REVIEWS)
   let endpointState = clone(SAMPLE_ENDPOINTS)
   let harnessState = [
@@ -2108,13 +2108,22 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
 
     saveProjectSettings: (options = {}) =>
       call('saveProjectSettings', () => {
-        const { checkCommand, confirmed = true } = options
+        const source = options && typeof options === 'object' ? options : {}
+        const { checkCommand, planByDefault, confirmed = true } = source
         if (confirmed !== true) throw new Error('Confirm the check command first.')
-        const problem = checkCommandValueProblem(checkCommand)
-        if (problem) throw new Error(problem)
+        const hasCheckCommand = Object.hasOwn(source, 'checkCommand') && checkCommand !== undefined
+        const hasPlanByDefault = Object.hasOwn(source, 'planByDefault') && planByDefault !== undefined
+        if (hasCheckCommand) {
+          const problem = checkCommandValueProblem(checkCommand)
+          if (problem) throw new Error(problem)
+        }
+        if (hasPlanByDefault && typeof planByDefault !== 'boolean') {
+          throw new Error('Choose whether new runs start in Plan.')
+        }
         projectSettingsState = {
           ...projectSettingsState,
-          checkCommand: typeof checkCommand === 'string' ? checkCommand.trim() : '',
+          ...(hasCheckCommand ? { checkCommand: typeof checkCommand === 'string' ? checkCommand.trim() : '' } : {}),
+          ...(hasPlanByDefault ? { planByDefault } : {}),
         }
         return { ...projectSettingsState }
       }),
