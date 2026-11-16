@@ -1,11 +1,13 @@
 # Changelog
 
 ## Unreleased
+- A progress notice resets the timer only as a notification with a numeric progress for this call, and the HTTP stream is read as whole events with LF or CRLF.
 - Auto refuses any location with a .. component before resolving, and the docs say a saved ACP choice lane starts in Auto.
 - Each split pair on a Plan-capable lane starts in Plan when the project setting is on, and a lane without Plan shows the warning.
 - P480: Split project runs honour `Start new runs in Plan` by sending `mode: 'plan'` for Plan-capable lanes, keeping the usual mode with no `mode` override for lanes without Plan, and showing `This lane has no Plan mode.` once per such lane on the confirm card.
 - ACP Auto refuses location paths with a `..` component before resolving paths.
 - A saved ACP lane with mode `choice` now starts in Auto, and `cli.mode: "bypass"` keeps the old behaviour.
+- P478: MCP progress counts only a notification with no id and a numeric progress, and an HTTP stream is read as whole events with LF or CRLF separators.
 - Five findings: malformed and CRLF MCP progress, a link plus .. escape in ACP Auto, split tasks that skip Plan by default, and the ACP choice default.
 - The page sends to lane:KEY as owner with a per-message interrupt choice, and LaneConversation shows Send, Send and interrupt and each message's status.
 - P475: The owner page can send to a running lane with per-message interrupt override, and LaneConversation shows Send, Send and interrupt and live message status.
