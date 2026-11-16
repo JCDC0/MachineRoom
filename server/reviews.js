@@ -1057,8 +1057,8 @@ export function createReviewsApi({
     if (req.method === 'GET') {
       const state = await rewindState(lane, worktree, null)
       if (state.reason) return sendJson(req, res, 200, { allowed: false, reason: state.reason })
-      const { checkpointHead, head, commits, files } = state
-      return sendJson(req, res, 200, { checkpointHead, head, commits, files })
+      const { checkpointHead, head, commits, files, record } = state
+      return sendJson(req, res, 200, { checkpointHead, head, commits, files, recoveryRef: recoveryRefFor(lane, record) })
     }
     const body = typeof readJsonBody === 'function' ? await readJsonBody(req, res) : null
     if (body === null) return undefined

@@ -216,6 +216,79 @@ export function OutsideConfirmCard({ target, files, mergeError, merging, onConfi
   )
 }
 
+function RewindControl({ client, lane, head, onDone }) {
+  const [preview, setPreview] = useState(null)
+  const [open, setOpen] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [message, setMessage] = useState(null)
+
+  useEffect(() => {
+    let live = true
+    setOpen(false)
+    if (typeof client?.reviewRewind !== 'function') return undefined
+    client
+      .reviewRewind(lane)
+      .then((data) => live && setPreview(data))
+      .catch(() => live && setPreview(null))
+    return () => {
+      live = false
+    }
+  }, [client, lane, head])
+
+  async function rewind() {
+    setBusy(true)
+    try {
+      const result = await client.rewindReview(lane, { expectedHead: preview.head })
+      setMessage({ text: `Rewound. Get the work back with ${result.restore} in the worktree.` })
+      setOpen(false)
+      onDone()
+    } catch (err) {
+      setMessage({ error: err.message || 'Could not rewind the lane.' })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const allowed = preview && preview.allowed !== false
+  return (
+    <div className="review-last-run mono" onClick={(e) => e.stopPropagation()}>
+      {allowed && !open && (
+        <button type="button" className="review-expand-btn" onClick={() => setOpen(true)}>
+          Rewind last run
+        </button>
+      )}
+      {allowed && open && (
+        <div className="brief-confirm-card review-confirm-card" role="region" aria-label={`Confirm rewind for ${lane}`}>
+          <div className="brief-confirm-text">
+            {`Rewind ${lane} to ${preview.checkpointHead.slice(0, 7)}? It drops these commits from the branch and keeps them at the recovery ref ${preview.recoveryRef}.`}
+          </div>
+          <ul className="review-conflict-files">
+            {preview.commits.map((commit) => (
+              <li key={commit}>{commit}</li>
+            ))}
+          </ul>
+          <ul className="review-conflict-files">
+            {preview.files.map((file) => (
+              <li key={file}>{file}</li>
+            ))}
+          </ul>
+          <div className="brief-confirm-actions">
+            <button type="button" className="brief-confirm-btn" disabled={busy} onClick={rewind}>
+              Rewind
+            </button>
+            <button type="button" className="brief-cancel-btn" disabled={busy} onClick={() => setOpen(false)}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+      {preview?.allowed === false && <div>{`Rewind unavailable: ${preview.reason}`}</div>}
+      {message?.text && <div role="status">{message.text}</div>}
+      {message?.error && <div role="alert">{message.error}</div>}
+    </div>
+  )
+}
+
 export default function ReviewsPanel({
   client,
   initialReviews = null,
@@ -751,6 +824,12 @@ export default function ReviewsPanel({
                       {row.runTotalsText && (
                         <div className="review-last-run mono">{row.runTotalsText}</div>
                       )}
+                      <RewindControl
+                        client={client}
+                        lane={row.lane}
+                        head={row.head}
+                        onDone={() => loadReviews({ isInitial: false })}
+                      />
                       {movedByLane[row.lane] && (
                         <div className="review-error mono" role="alert">
                           {movedByLane[row.lane]}

@@ -10,6 +10,7 @@ export const REQUEST_LIMITS = {
   reviewDiff: 50000,
   reviews: 210000,
   mergeReview: 140000,
+  rewindReview: 140000,
   switchBranch: 140000,
   createBranch: 140000,
   storage: 60000,
@@ -709,6 +710,17 @@ export function createClient({
         REQUEST_LIMITS.mergeReview
       )
     },
+
+    reviewRewind: (lane) =>
+      request('GET', `/api/control/reviews/${encodeURIComponent(lane ?? '')}/rewind`, undefined, REQUEST_LIMITS.reviewDiff),
+
+    rewindReview: (lane, { expectedHead } = {}) =>
+      request(
+        'POST',
+        `/api/control/reviews/${encodeURIComponent(lane ?? '')}/rewind`,
+        { confirmed: true, expectedHead },
+        REQUEST_LIMITS.rewindReview
+      ),
 
     askPlanner: (goal) => request('POST', '/api/control/plans', { goal, confirmed: true }, REQUEST_LIMITS.askPlanner),
 
