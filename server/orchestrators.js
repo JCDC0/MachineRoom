@@ -921,7 +921,7 @@ export function createOrchestrators({
       for (const sub of next.ladder.subs) {
         const harness = harnessFor(sub)
         const previous = savedSubs.find (item => item.id === sub.id)
-        if (!previous && ownHarness && harness !== ownHarness) {
+        if ((!previous || harnessFor(previous) !== harness) && ownHarness && harness !== ownHarness) {
           return { status: 400, body: { error: sameHarnessProblem(ownHarness) } }
         }
         if (readHarnessSettings(folder).off.includes(harness) && (!previous || harnessFor(previous) !== harness)) return { status: 400, body: { error: HARNESS_OFF_PROBLEM } }
