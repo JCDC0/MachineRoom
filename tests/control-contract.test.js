@@ -1333,6 +1333,21 @@ describe('the control client review routes', () => {
     return { calls, client: createClient({ baseUrl: 'http://127.0.0.1:9', fetchImpl }) }
   }
 
+  it('reads a rewind preview and sends a confirmed rewind with the head read', async () => {
+    const { calls, client } = recorder()
+    const expectedHead = 'a'.repeat(40)
+    await client.reviewRewind('opencode')
+    await client.rewindReview('opencode', { expectedHead })
+    expect(calls).toEqual([
+      { url: 'http://127.0.0.1:9/api/control/reviews/opencode/rewind', method: 'GET', body: undefined },
+      {
+        url: 'http://127.0.0.1:9/api/control/reviews/opencode/rewind',
+        method: 'POST',
+        body: JSON.stringify({ confirmed: true, expectedHead }),
+      },
+    ])
+  })
+
   it('sends destination branch and head with or without a message by strategy', async () => {
     const { calls, client } = recorder()
     const head = 'a'.repeat(40)

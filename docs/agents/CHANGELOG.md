@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- Reviews offers Rewind last run: `GET` and `POST /api/control/reviews/LANE/rewind` move a lane back to its last run's checkpoint only when the lane is idle, clean and on the run's branch and every dropped commit is the run's, after writing a recovery ref.
 - Owner-listed files are copied into a new worktree only, checked against links and never overwritten or committed, and each run gets MACHINEROOM_PORT_OFFSET.
 - Each running entry carries the paths its live log has written, cached per log, and the confirm card says Now editing in LANE beside the declared-file warning.
 - A compaction puts a block of running lanes, unmerged review branches and sub scopes, read from the room with a 5 second limit, above the model's summary, and the next session gets it fresh.
