@@ -58,10 +58,12 @@ function backupRanLater(record, lane, records) {
 }
 
 function attentionText(record, lane) {
-  if (record.killed === true || record.exitCode === 0) return ''
+  if (record.killed === true) return ''
   if (text(record.stopReason) === REPEATED_FAILURE) {
     return `${lane} stopped: the same call failed five times.`
   }
+  if (typeof record.repeatedFailure?.tool === 'string' && Number.isInteger(record.repeatedFailure.count) && record.repeatedFailure.count >= 5) return `${lane} repeated one failing ${record.repeatedFailure.tool} call ${record.repeatedFailure.count} times.`
+  if (record.exitCode === 0) return ''
   if (record.startFailed === true) return `${lane} could not start.`
   const exitCode = typeof record.exitCode === 'number' && Number.isFinite(record.exitCode) ? record.exitCode : null
   if (exitCode === null || exitCode === 0) return ''

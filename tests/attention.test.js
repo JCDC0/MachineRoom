@@ -371,3 +371,9 @@ describe('DispatchPanel Needs you', () => {
     })
   })
 })
+
+it('shows a repeated failure on a successful newest run and clears it on a later run', () => {
+  const run = { lane: 'codex', startedAt: '2026-11-16T10:00:00.000Z', exitCode: 0, repeatedFailure: { tool: 'Read', count: 5 } }
+  expect(attentionItems([run])).toEqual([{ lane: 'codex', startedAt: run.startedAt, text: 'codex repeated one failing Read call 5 times.' }])
+  expect(attentionItems([run, { lane: 'codex', startedAt: '2026-11-16T10:01:00.000Z', exitCode: 0 }])).toEqual([])
+})
