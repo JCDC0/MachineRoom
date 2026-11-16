@@ -1,11 +1,17 @@
 import { act } from 'react'
+import { spawn } from 'node:child_process'
 import { rmSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
 import { sandboxSummary } from '../src/control/modes.js'
 import Inspector from '../src/ui/Inspector.jsx'
 import { buildFamilyNodes } from '../server/family.js'
+import { acpRunCommand } from '../scripts/acp-run.mjs'
+import { killTree } from '../server/processTree.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 import { settle, withDom } from './helpers/uiDom.js'
+
+const FAKE_ACP = fileURLToPath(new URL('./fixtures/fake-acp-agent.mjs', import.meta.url))
 
 const cleanups = []
 
@@ -235,5 +241,50 @@ describe('Inspector Sandbox row', () => {
       await settle(80)
       expect(rowValue(container, 'Sandbox')).toBe('No sandbox')
     })
+  })
+})
+
+function runFakeAcp(folder) {
+  return new Promise((done, fail) => {
+    const command = { file: process.execPath, args: [FAKE_ACP], cwd: folder }
+    const spec = acpRunCommand({ command, seconds: 20 })
+    const child = spawn(spec.file, spec.args, {
+      cwd: folder,
+      env: process.env,
+      stdio: ['pipe', 'pipe', 'pipe'],
+      windowsHide: true,
+    })
+    let stdout = ''
+    let stderr = ''
+    const timer = setTimeout(() => {
+      killTree(child)
+      fail(new Error(`acp-run did not exit. stderr: ${stderr}`))
+    }, 20000)
+    child.stdout.on('data', (chunk) => { stdout += chunk })
+    child.stderr.on('data', (chunk) => { stderr += chunk })
+    child.once('error', (error) => {
+      clearTimeout(timer)
+      fail(error)
+    })
+    child.once('close', (code) => {
+      clearTimeout(timer)
+      done({ code, stdout, stderr })
+    })
+    child.stdin.on('error', () => {})
+    child.stdin.end('Do the task.')
+  })
+}
+
+describe('ACP start log line', () => {
+  it('writes the automatic approval notice once at start without breaking JSONL stdout', async () => {
+    const folder = tempDir('mr-acp-start-')
+    const result = await runFakeAcp(folder)
+    expect(result.code).toBe(0)
+    const stderrLines = result.stderr.split(/\r?\n/).filter(Boolean)
+    expect(stderrLines[0]).toBe("This ACP agent's permission requests are approved automatically.")
+    expect(stderrLines.filter((line) => line.includes('approved automatically'))).toHaveLength(1)
+    const stdoutLines = result.stdout.split(/\r?\n/).filter(Boolean).map((line) => JSON.parse(line))
+    expect(stdoutLines[0]).toEqual({ type: 'acp_session', sessionId: 'ses_fake_parent' })
+    expect(stdoutLines.at(-1)).toMatchObject({ type: 'acp_result', stopReason: 'end_turn', error: null })
   })
 })
