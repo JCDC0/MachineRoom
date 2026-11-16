@@ -16,7 +16,7 @@ import { isLockHolderStale, killTree, descendantProcesses, leftoverProcesses, li
 import { codexProgramFor } from '../server/agents-config.js'
 import { HARNESS_OFF_PROBLEM, readHarnessSettings } from '../server/harness-settings.js'
 import { codexHarness } from '../src/harnesses/codex.js'
-import { defaultMode } from '../src/control/modes.js'
+import { defaultMode, legacyMode } from '../src/control/modes.js'
 import { harnessByKey } from '../src/harnesses/index.js'
 import { gitPath, programPath } from '../server/programPath.js'
 import { isWindowsPath, printedRunsFolder, realPath } from '../server/printed-path.js'
@@ -1750,7 +1750,12 @@ async function startFailover({ laneKey, target, lanes, options, wanted, prompt, 
   const modeToCarry = fixedTarget
     ? undefined
     : (primaryMode ?? (targetMode === 'choice' ? (defaultMode(savedTarget?.cli?.harness) ?? undefined) : undefined))
-  const carriedMode = modeToCarry === 'bypass' && targetMode !== 'bypass' ? undefined : modeToCarry
+  const refusedBypass = modeToCarry === 'bypass' && targetMode !== 'bypass'
+  const targetDefault = defaultMode(savedTarget?.cli?.harness) ?? undefined
+  const targetLegacyMode = legacyMode(savedTarget?.cli?.harness) ?? undefined
+  const carriedMode = refusedBypass
+    ? (targetDefault !== targetLegacyMode ? targetDefault : undefined)
+    : modeToCarry
   const fallbackLane = laneWithOverrides(savedTarget, carriedMode !== undefined ? { mode: carriedMode } : {})
   if (!fallbackLane) return null
   if (!fixedTarget && carriedMode === undefined && fallbackLane.cli && (fallbackLane.cli.mode === '' || fallbackLane.cli.mode === 'choice')) {
