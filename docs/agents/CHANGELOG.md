@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- A sub's harness route change updates its live program override, and a ladder recreation keeps given model and effort values over the saved chat file.
 - Review 46 (GPT-6.1 Sol) finds five gaps in the sector gates, the failover mode and the sub settings saves.
 - A sub's harness, model or effort change is saved to the ladder and its config, so a later ladder save keeps it and does not close the sub's running turn.
 - A Bypass run that fails over never passes Bypass to a backup lane not saved as Bypass; the backup runs at its own mode or its harness default.
