@@ -375,7 +375,7 @@
       "src/App.jsx"
     ],
     "notes": [
-      "Your sandbox keeps git read-only, so never run a git command that writes: no switch, add, commit, stash or reset. Edit the files in your worktree and leave them uncommitted; the orchestrator puts them on a branch and commits them after your run. Reading git (status, diff, log, show) is fine.",
+      "Your sandbox keeps git read-only, so never run a git command that writes: no switch, add, commit, stash or reset. Edit the files in your worktree and leave them uncommitted; the orchestrator puts them on a branch and commits them after your run. Reading git (status, diff, log, show) is fine. The rule covers this worktree only: tests that make their own temporary repositories (git init, add and commit in a scratch folder) are allowed, so run them.",
       "Codex runs from the owner's Codex app. Its codex.exe sits in a folder named by a hash that changes when the app updates, and the runner finds the newest one (P73).",
       "You cannot see the screen. When a brief asks for a check by eye, say in your report that it is left to the orchestrator.",
       "Touch only the files your brief names. Other lanes work at the same time in their own worktrees."
