@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- A restricted sub's merge refused because its changed files could not be read now offers Merge anyway in Reviews, with no file list.
 - The sub restore test keeps the old harness's saved conversation on disk until the restore, so it fails if P413's guards are undone.
 - A harness's model list command comes only from an indented subcommand line of its help, so Codex's --model option no longer runs codex model, and no list command is no error.
 - The inbox cut in boundMessages is 32 lines instead of 44, with the same rule and every test unchanged.
@@ -8,6 +9,7 @@
 - Codex's Edits mode line says it can run commands inside its workspace sandbox, since Codex has no edits-only mode.
 - The sub scope box and the chat's Separate worktree box take their look from CSS classes instead of inline styles.
 - Review 43 (Sol): all six review 42 findings are fixed; two P2 findings remain, a failed scope read with no Merge anyway and a sub restore test that cannot fail.
+- P421: A failed changed-file read carries outside true and no files, so Reviews offers Merge anyway and lists no files.
 - The inspector shows the orchestrator's live harness and model, and Harness default for an empty model, instead of the lane config's.
 - P419: The inspector shows the orchestrator's live harness and model, and Harness default when the live model is empty.
 - P416: The sub Scope box and the chat's Separate worktree box use classes instead of inline styles.
