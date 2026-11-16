@@ -421,6 +421,14 @@ describe('stopLane creation time rules', () => {
     }
   }
 
+  function fakeAlive(processes, killed = []) {
+    return (pid) => {
+      if (killed.includes(pid)) return false
+      const rows = typeof processes === 'function' ? processes() : processes
+      return rows.some((item) => item.pid === pid)
+    }
+  }
+
   it('stops a process created no later than the lock file last change plus 2 seconds', () => {
     const { runs, env } = setup('mr-stop-rules-')
     const lockPath = join(runs, 'fake.lock')
@@ -428,6 +436,10 @@ describe('stopLane creation time rules', () => {
     const lockMtime = 10000
     const killed = []
     const lines = []
+    const processes = [
+      { pid: 100, ppid: 1, created: 9000 },
+      { pid: 200, ppid: 100, created: 11500 },
+    ]
     const log = console.log
     console.log = (msg) => lines.push(msg)
     try {
@@ -435,14 +447,12 @@ describe('stopLane creation time rules', () => {
         const code = stopLane('fake', {
           platform: 'win32',
           stat: () => ({ mtimeMs: lockMtime }),
-          list: () => [
-            { pid: 100, ppid: 1, created: 9000 },
-            { pid: 200, ppid: 100, created: 11500 },
-          ],
+          list: () => processes,
           kill: ({ pid }) => {
             killed.push(pid)
             return true
           },
+          alive: fakeAlive(processes, killed),
         })
         expect(code).toBe(0)
       })
@@ -461,6 +471,10 @@ describe('stopLane creation time rules', () => {
     const lockMtime = 10000
     const killed = []
     const lines = []
+    const processes = [
+      { pid: 100, ppid: 1, created: 12500 },
+      { pid: 200, ppid: 100, created: 13000 },
+    ]
     const log = console.log
     console.log = (msg) => lines.push(msg)
     try {
@@ -468,14 +482,12 @@ describe('stopLane creation time rules', () => {
         const code = stopLane('fake', {
           platform: 'win32',
           stat: () => ({ mtimeMs: lockMtime }),
-          list: () => [
-            { pid: 100, ppid: 1, created: 12500 },
-            { pid: 200, ppid: 100, created: 13000 },
-          ],
+          list: () => processes,
           kill: ({ pid }) => {
             killed.push(pid)
             return true
           },
+          alive: fakeAlive(processes, killed),
         })
         expect(code).toBe(0)
       })
@@ -494,6 +506,7 @@ describe('stopLane creation time rules', () => {
     const lockMtime = 10000
     const killed = []
     const lines = []
+    const processes = [{ pid: 999, ppid: 1, created: 5000 }]
     const log = console.log
     console.log = (msg) => lines.push(msg)
     try {
@@ -501,11 +514,12 @@ describe('stopLane creation time rules', () => {
         const code = stopLane('fake', {
           platform: 'win32',
           stat: () => ({ mtimeMs: lockMtime }),
-          list: () => [{ pid: 999, ppid: 1, created: 5000 }],
+          list: () => processes,
           kill: ({ pid }) => {
             killed.push(pid)
             return true
           },
+          alive: fakeAlive(processes, killed),
         })
         expect(code).toBe(0)
       })
@@ -558,6 +572,10 @@ describe('stopLane creation time rules', () => {
     writeFileSync(lockPath, laneLockText({ pid: 100, child: 200 }))
     const killed = []
     const lines = []
+    const processes = [
+      { pid: 100, ppid: 1 },
+      { pid: 200, ppid: 100 },
+    ]
     const log = console.log
     console.log = (msg) => lines.push(msg)
     try {
@@ -565,14 +583,12 @@ describe('stopLane creation time rules', () => {
         const code = stopLane('fake', {
           platform: 'win32',
           stat: () => ({ mtimeMs: 10000 }),
-          list: () => [
-            { pid: 100, ppid: 1 },
-            { pid: 200, ppid: 100 },
-          ],
+          list: () => processes,
           kill: ({ pid }) => {
             killed.push(pid)
             return true
           },
+          alive: fakeAlive(processes, killed),
         })
         expect(code).toBe(0)
       })
@@ -602,6 +618,7 @@ describe('stopLane creation time rules', () => {
             killed.push(pid)
             return true
           },
+          alive: fakeAlive([{ pid: 100 }, { pid: 200 }], killed),
         })
         expect(code).toBe(0)
       })
@@ -631,6 +648,7 @@ describe('stopLane creation time rules', () => {
             killed.push(pid)
             return true
           },
+          alive: fakeAlive([{ pid: 100 }, { pid: 200 }], killed),
         })
         expect(code).toBe(0)
       })
@@ -648,6 +666,10 @@ describe('stopLane creation time rules', () => {
     writeFileSync(lockPath, laneLockText({ pid: 100, child: 200 }))
     const killed = []
     const lines = []
+    const processes = [
+      { pid: 100, ppid: 1 },
+      { pid: 200, ppid: 100 },
+    ]
     const log = console.log
     console.log = (msg) => lines.push(msg)
     try {
@@ -655,14 +677,12 @@ describe('stopLane creation time rules', () => {
         const code = stopLane('fake', {
           platform: 'linux',
           stat: () => ({ mtimeMs: 10000 }),
-          list: () => [
-            { pid: 100, ppid: 1 },
-            { pid: 200, ppid: 100 },
-          ],
+          list: () => processes,
           kill: ({ pid }) => {
             killed.push(pid)
             return true
           },
+          alive: fakeAlive(processes, killed),
         })
         expect(code).toBe(0)
       })
@@ -681,6 +701,12 @@ describe('stopLane creation time rules', () => {
     writeFileSync(lockPath, laneLockText({ pid: 100, child: 200, folder: worktreePath }))
     const killed = []
     const lines = []
+    const processes = [
+      { pid: 100, ppid: 1, created: 9000 },
+      { pid: 200, ppid: 100, created: 9500 },
+      { pid: 300, ppid: 200, created: 9600 },
+      { pid: 400, ppid: 1, created: 9700, command: 'node C:\\fake\\worktree\\worker.js' },
+    ]
     const log = console.log
     console.log = (msg) => lines.push(msg)
     try {
@@ -688,16 +714,12 @@ describe('stopLane creation time rules', () => {
         const code = stopLane('fake', {
           platform: 'win32',
           stat: () => ({ mtimeMs: 10000 }),
-          list: () => [
-            { pid: 100, ppid: 1, created: 9000 },
-            { pid: 200, ppid: 100, created: 9500 },
-            { pid: 300, ppid: 200, created: 9600 },
-            { pid: 400, ppid: 1, created: 9700, command: 'node C:\\fake\\worktree\\worker.js' },
-          ],
+          list: () => processes,
           kill: ({ pid }) => {
             killed.push(pid)
             return true
           },
+          alive: fakeAlive(processes, killed),
         })
         expect(code).toBe(0)
       })
@@ -784,6 +806,10 @@ describe('stopLane creation time rules', () => {
     const lockPath = join(runs, 'fake.lock')
     writeFileSync(lockPath, laneLockText({ pid: 100, child: 200 }))
     const lines = []
+    const processes = [
+      { pid: 100, ppid: 1, created: 9000 },
+      { pid: 200, ppid: 100, created: 9500 },
+    ]
     const log = console.log
     console.log = (msg) => lines.push(msg)
     try {
@@ -791,14 +817,12 @@ describe('stopLane creation time rules', () => {
         const code = stopLane('fake', {
           platform: 'win32',
           stat: () => ({ mtimeMs: 10000 }),
-          list: () => [
-            { pid: 100, ppid: 1, created: 9000 },
-            { pid: 200, ppid: 100, created: 9500 },
-          ],
+          list: () => processes,
           kill: () => {
             writeFileSync(lockPath, laneLockText({ pid: 300, child: 400 }))
             return true
           },
+          alive: fakeAlive(processes),
         })
         expect(code).toBe(0)
       })
@@ -816,6 +840,11 @@ describe('stopLane creation time rules', () => {
     writeFileSync(lockPath, laneLockText({ pid: 100, child: 200, folder: worktreePath }))
     const killed = []
     const lines = []
+    const processes = [
+      { pid: 100, ppid: 1, created: 9000 },
+      { pid: 200, ppid: 100, created: 9500 },
+      { pid: 400, ppid: 1, created: 9900, command: 'node C:\\fake\\worktree\\worker.js' },
+    ]
     const log = console.log
     console.log = (msg) => lines.push(msg)
     try {
@@ -823,16 +852,13 @@ describe('stopLane creation time rules', () => {
         const code = stopLane('fake', {
           platform: 'win32',
           stat: () => ({ mtimeMs: 10000 }),
-          list: () => [
-            { pid: 100, ppid: 1, created: 9000 },
-            { pid: 200, ppid: 100, created: 9500 },
-            { pid: 400, ppid: 1, created: 9900, command: 'node C:\\fake\\worktree\\worker.js' },
-          ],
+          list: () => processes,
           kill: ({ pid }) => {
             killed.push(pid)
             if (pid === 200) writeFileSync(lockPath, laneLockText({ pid: 300, child: 400, folder: worktreePath }))
             return true
           },
+          alive: fakeAlive(processes, killed),
         })
         expect(code).toBe(0)
       })
@@ -852,6 +878,16 @@ describe('stopLane creation time rules', () => {
     writeFileSync(lockPath, laneLockText({ pid: 100, child: 200, folder: worktreePath }))
     const killed = []
     const lines = []
+    const firstList = [
+      { pid: 100, ppid: 1, created: 9000 },
+      { pid: 200, ppid: 100, created: 9500 },
+      { pid: 500, ppid: 1, created: 9700, command: 'node C:\\fake\\worktree\\worker.js' },
+    ]
+    const secondList = [
+      { pid: 300, ppid: 1, created: 9900, command: 'node C:\\fake\\worktree\\runner.mjs' },
+      { pid: 400, ppid: 300, created: 9950, command: 'node C:\\fake\\worktree\\harness.mjs' },
+      { pid: 500, ppid: 1, created: 9700, command: 'node C:\\fake\\worktree\\worker.js' },
+    ]
     let listCalls = 0
     const log = console.log
     console.log = (msg) => lines.push(msg)
@@ -862,24 +898,15 @@ describe('stopLane creation time rules', () => {
           stat: () => ({ mtimeMs: 10000 }),
           list: () => {
             listCalls += 1
-            if (listCalls === 1) {
-              return [
-                { pid: 100, ppid: 1, created: 9000 },
-                { pid: 200, ppid: 100, created: 9500 },
-                { pid: 500, ppid: 1, created: 9700, command: 'node C:\\fake\\worktree\\worker.js' },
-              ]
-            }
+            if (listCalls === 1) return firstList
             writeFileSync(lockPath, laneLockText({ pid: 300, child: 400, folder: worktreePath }))
-            return [
-              { pid: 300, ppid: 1, created: 9900, command: 'node C:\\fake\\worktree\\runner.mjs' },
-              { pid: 400, ppid: 300, created: 9950, command: 'node C:\\fake\\worktree\\harness.mjs' },
-              { pid: 500, ppid: 1, created: 9700, command: 'node C:\\fake\\worktree\\worker.js' },
-            ]
+            return secondList
           },
           kill: ({ pid }) => {
             killed.push(pid)
             return true
           },
+          alive: fakeAlive(() => (listCalls <= 1 ? firstList : secondList), killed),
         })
         expect(code).toBe(0)
       })
@@ -901,6 +928,12 @@ describe('stopLane creation time rules', () => {
     writeFileSync(lockPath, laneLockText({ pid: 100, child: 200, folder: projectPath, projectRun: true }))
     const killed = []
     const lines = []
+    const processes = [
+      { pid: 100, ppid: 1, created: 9000 },
+      { pid: 200, ppid: 100, created: 9500 },
+      { pid: 300, ppid: 200, created: 9600 },
+      { pid: 400, ppid: 1, created: 9700, command: 'code C:\\fake\\project' },
+    ]
     const log = console.log
     console.log = (msg) => lines.push(msg)
     try {
@@ -908,16 +941,12 @@ describe('stopLane creation time rules', () => {
         const code = stopLane('fake', {
           platform: 'win32',
           stat: () => ({ mtimeMs: 10000 }),
-          list: () => [
-            { pid: 100, ppid: 1, created: 9000 },
-            { pid: 200, ppid: 100, created: 9500 },
-            { pid: 300, ppid: 200, created: 9600 },
-            { pid: 400, ppid: 1, created: 9700, command: 'code C:\\fake\\project' },
-          ],
+          list: () => processes,
           kill: ({ pid }) => {
             killed.push(pid)
             return true
           },
+          alive: fakeAlive(processes, killed),
         })
         expect(code).toBe(0)
       })
@@ -951,6 +980,7 @@ describe('stopLane creation time rules', () => {
             killed.push(pid)
             return true
           },
+          alive: fakeAlive(() => lists[Math.min(Math.max(listCalls - 1, 0), lists.length - 1)], killed),
         }),
       )
       return { code, killed, lines, listCalls, lockPath }
