@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- P421: A failed changed-file read carries outside true and no files, so Reviews offers Merge anyway and lists no files.
 - The inspector shows the orchestrator's live harness and model, and Harness default for an empty model, instead of the lane config's.
 - P419: The inspector shows the orchestrator's live harness and model, and Harness default when the live model is empty.
 - A sub made with a harness keeps it when an old saved conversation of that id names another harness, and drops that conversation's sessions and mode.

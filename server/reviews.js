@@ -369,6 +369,8 @@ export function createReviewsApi({
         status: 409,
         body: {
           error: "The bridge could not read the lane's changed files, so it was not merged.",
+          files: [],
+          outside: true,
         },
       }
     }
