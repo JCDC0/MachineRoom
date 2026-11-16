@@ -4,6 +4,7 @@ import { subscribeToNotices } from './notices.js'
 import {
   canAskMain,
   canMerge,
+  CLAIMS_PREVIEW_LINES,
   defaultMergeMessage,
   formatChecksNotice,
   isFastForwardRefusal,
@@ -247,6 +248,11 @@ export default function ReviewsPanel({
   const [prepareErrorByLane, setPrepareErrorByLane] = useState({})
   const [prepareSentByLane, setPrepareSentByLane] = useState({})
   const [refusedByLane, setRefusedByLane] = useState({})
+  const [claimsOpenByLane, setClaimsOpenByLane] = useState({})
+
+  function toggleClaims(lane) {
+    setClaimsOpenByLane((prev) => ({ ...prev, [lane]: prev[lane] !== true }))
+  }
 
   function clearPrepareNotice(lane) {
     setPrepareErrorByLane((prev) => {
@@ -623,6 +629,10 @@ export default function ReviewsPanel({
             const prepareError = prepareErrorByLane[row.lane]
             const outsideRefusal = outsideByLane[row.lane]
             const showOutside = Boolean(outsideRefusal && outsideRefusal.target?.head === row.head)
+            const claimsOpen = claimsOpenByLane[row.lane] === true
+            const shownClaims = claimsOpen
+              ? row.claimsLines
+              : row.claimsLines.slice(0, CLAIMS_PREVIEW_LINES)
 
             return (
               <div
@@ -693,6 +703,38 @@ export default function ReviewsPanel({
                       <div className="review-last-run mono">
                         {row.lastRunText}
                       </div>
+                      {row.evidenceText && (
+                        <div className="review-last-run mono">{row.evidenceText}</div>
+                      )}
+                      {row.claimsLines.length > 0 && (
+                        <div className="review-last-run mono">
+                          <div>The agent said:</div>
+                          {shownClaims.map((line, index) => (
+                            <div key={`${index}-${line}`}>
+                              {line === '' ? '\u00a0' : visibleText(line)}
+                            </div>
+                          ))}
+                          {row.claimsMore && (
+                            <button
+                              type="button"
+                              className="review-expand-btn"
+                              aria-expanded={claimsOpen}
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                toggleClaims(row.lane)
+                              }}
+                            >
+                              {claimsOpen ? 'Less' : 'More'}
+                            </button>
+                          )}
+                        </div>
+                      )}
+                      {row.runsText && (
+                        <div className="review-last-run mono">{row.runsText}</div>
+                      )}
+                      {row.runTotalsText && (
+                        <div className="review-last-run mono">{row.runTotalsText}</div>
+                      )}
                       {movedByLane[row.lane] && (
                         <div className="review-error mono" role="alert">
                           {movedByLane[row.lane]}
