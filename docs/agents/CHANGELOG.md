@@ -1,12 +1,14 @@
 # Changelog
 
 ## Unreleased
+- LaneConversation shows Edit from this plan on a finished exit-0 Plan run, and a confirm card with the editable plan text and a non-Plan mode starts one run only when the owner presses Start.
 - POST /api/harnesses/KEY/probe runs one hidden, time-limited prompt in an empty folder and answers reached, failed or unknown, and Settings asks before it runs.
 - The run summary finds five or more consecutive failed identical calls from an exact call key the parsers keep for the summary only, the record keeps tool and count, and Needs you shows it.
 - Harnesses in Settings gain Test connection, which sends one short prompt through the harness and shows reached, failed or unknown (P487).
 - Each lane review carries fileGroups, largeDiff above 400 lines and outsideBrief from the brief's Files list, null when unknown, and Reviews shows one line for them.
 - A lane review groups its files by risk, lists files outside the newest run's brief Files list (or says Scope unknown) and flags a diff over 400 lines (P486).
 - Run summaries record repeated identical failing calls and show them in Needs you.
+- P485: LaneConversation shows Edit from this plan for a finished exit-0 Plan run, opening a confirm card with the report text, a non-Plan mode select, Start and Cancel.
 - The test checks that recent holds its project, not that it is first, since test files in one process share the runs folder.
 - Every stopLane test with fake pids gets an alive stub from its own process list, so a Linux runner's real pids cannot change the result.
 - A progress notice resets the timer only as a notification with a numeric progress for this call, and the HTTP stream is read as whole events with LF or CRLF.

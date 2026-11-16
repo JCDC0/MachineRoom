@@ -1,6 +1,9 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
+import { defaultMode, laneModesFor } from '../control/modes.js'
+import { HARNESSES, harnessByAdapter, harnessByKey } from '../harnesses/index.js'
 import { agentColor } from './orchestratorChat.js'
 import { useLogFollow } from './logScroll.js'
+import { runStartLine } from './panels/runs.js'
 import {
   foldPrompt,
   foldToolCalls,
@@ -13,10 +16,84 @@ import {
 
 const STATUS_REFRESH_MS = 5000
 const MAX_MESSAGE_CHARS = 8000
+const GENERIC_RESULT_TEXTS = new Set(['The run ended.', 'The run failed.'])
 const STATUS_LABELS = {
   queued: 'Queued',
   fetched: 'Read by the runner',
   interrupted: 'Interrupted the run',
+}
+
+function normalizeHarnessKey(value) {
+  const raw = typeof value === 'string' ? value.trim().toLowerCase() : ''
+  if (!raw) return ''
+  if (Object.hasOwn(harnessByKey, raw)) return raw
+  if (raw === 'direct api') return 'machineroom'
+  const byName = HARNESSES.find(
+    (entry) => entry.name.toLowerCase() === raw || entry.laneName?.toLowerCase() === raw
+  )
+  return byName ? byName.key : raw
+}
+
+function agentHarnessKey(agent) {
+  if (!agent || typeof agent !== 'object') return ''
+  const direct = normalizeHarnessKey(agent.harness)
+  if (direct && Object.hasOwn(harnessByKey, direct)) return direct
+  const adapter = typeof agent.adapterType === 'string' ? agent.adapterType.trim() : ''
+  if (adapter && Object.hasOwn(harnessByAdapter, adapter)) return harnessByAdapter[adapter].key
+  const parser = normalizeHarnessKey(agent.parser)
+  if (parser && Object.hasOwn(harnessByKey, parser)) return parser
+  return direct || parser
+}
+
+function isFinishedPlanRun(run, conversationData) {
+  if (!run || !conversationData) return false
+  if (run.running === true || conversationData.running === true) return false
+  if (run.killed === true) return false
+  if (run.exitCode !== 0) return false
+  const mode = typeof run.mode === 'string' ? run.mode.trim().toLowerCase() : ''
+  return mode === 'plan'
+}
+
+function finalReportText(entries) {
+  const list = Array.isArray(entries) ? entries : []
+  for (let index = list.length - 1; index >= 0; index -= 1) {
+    const item = list[index]
+    if (item?.role !== 'result') continue
+    const text = typeof item.text === 'string' ? item.text.trim() : ''
+    if (text && !GENERIC_RESULT_TEXTS.has(text)) return text
+  }
+  for (let index = list.length - 1; index >= 0; index -= 1) {
+    const item = list[index]
+    if (item?.role !== 'agent') continue
+    const text = typeof item.text === 'string' ? item.text.trim() : ''
+    if (text) return text
+  }
+  for (let index = list.length - 1; index >= 0; index -= 1) {
+    const item = list[index]
+    if (item?.role !== 'line') continue
+    const text = typeof item.text === 'string' ? item.text.trim() : ''
+    if (text && !text.startsWith('{')) return text
+  }
+  return ''
+}
+
+function initialPlanDraft(entries) {
+  const report = finalReportText(entries)
+  return report ? `Carry out this plan:\n\n${report}` : 'Carry out this plan:'
+}
+
+function editModesFor(harness) {
+  return laneModesFor(harness).filter((entry) => entry.id !== 'plan')
+}
+
+function initialEditMode(harness, savedMode) {
+  const modes = editModesFor(harness)
+  if (modes.length === 0) return ''
+  const saved = typeof savedMode === 'string' ? savedMode.trim().toLowerCase() : ''
+  if (saved && saved !== 'choice' && modes.some((entry) => entry.id === saved)) return saved
+  const fallback = defaultMode(harness)
+  if (fallback && modes.some((entry) => entry.id === fallback)) return fallback
+  return modes[0].id
 }
 
 function statusLabel(status) {
@@ -60,6 +137,13 @@ export default function LaneConversation({
   const [sending, setSending] = useState(false)
   const [sendError, setSendError] = useState('')
   const [sentMessages, setSentMessages] = useState([])
+  const [laneConfig, setLaneConfig] = useState({ lane: '', harness: '', mode: '' })
+  const [planConfirmOpen, setPlanConfirmOpen] = useState(false)
+  const [planDraft, setPlanDraft] = useState('')
+  const [planMode, setPlanMode] = useState('')
+  const [planStarting, setPlanStarting] = useState(false)
+  const [planStartError, setPlanStartError] = useState('')
+  const [planStartStatus, setPlanStartStatus] = useState('')
   const mountedRef = useRef(true)
   const lastReadRef = useRef(null)
   const readRef = useRef(null)
@@ -68,7 +152,10 @@ export default function LaneConversation({
   sentRef.current = sentMessages
   const wasRunningRef = useRef(null)
   const refreshStatusesRef = useRef(null)
+  const planModeChosenRef = useRef(false)
+  const planStartingRef = useRef(false)
   const inputId = useId()
+  const planTaskId = useId()
   selectionRef.current = { lane, startedAt: selected }
   const conversation = conversationState.lane === lane && conversationState.startedAt === selected
     ? conversationState
@@ -88,6 +175,17 @@ export default function LaneConversation({
   const label = laneName || lane || 'Lane'
   const projectLabel = String(project || 'PROJECT').toUpperCase()
   const loaded = conversation.data !== null
+  const isFinishedPlan = isFinishedPlanRun(currentRun, conversation.data)
+  const activeLaneConfig = laneConfig.lane === lane ? laneConfig : null
+  const laneAgent = (Array.isArray(lanes) ? lanes : []).find((entry) => entry?.key === lane) ?? null
+  const planHarness =
+    normalizeHarnessKey(conversation.data?.harness) ||
+    normalizeHarnessKey(activeLaneConfig?.harness) ||
+    agentHarnessKey(laneAgent) ||
+    normalizeHarnessKey(currentRun?.harness)
+  const savedLaneMode =
+    activeLaneConfig?.mode || (typeof laneAgent?.mode === 'string' ? laneAgent.mode.trim() : '')
+  const editModes = useMemo(() => editModesFor(planHarness), [planHarness])
   const trimmedDraft = draft.trim()
   const canSend = trimmedDraft.length > 0 && trimmedDraft.length <= MAX_MESSAGE_CHARS
   const visibleSent = sentMessages.filter((item) => item.lane === lane && item.startedAt === selected)
@@ -151,6 +249,40 @@ export default function LaneConversation({
   }, [lane])
 
   useEffect(() => {
+    if (!lane || !client || typeof client.lanes !== 'function') {
+      setLaneConfig({ lane: '', harness: '', mode: '' })
+      return undefined
+    }
+    let active = true
+    async function readLanes() {
+      try {
+        const answer = await client.lanes()
+        if (!active) return
+        const list = Array.isArray(answer?.lanes) ? answer.lanes : []
+        const found = list.find((entry) => entry?.key === lane) ?? null
+        setLaneConfig({
+          lane,
+          harness: typeof found?.harness === 'string' ? found.harness.trim() : '',
+          mode: typeof found?.mode === 'string' ? found.mode.trim() : '',
+        })
+      } catch {
+        if (active) setLaneConfig({ lane: '', harness: '', mode: '' })
+      }
+    }
+    readLanes()
+    const unsubscribe =
+      typeof client.subscribe === 'function'
+        ? client.subscribe((notice) => {
+            if (notice?.topic === 'agents' || notice?.topic === 'family') readLanes()
+          })
+        : null
+    return () => {
+      active = false
+      if (typeof unsubscribe === 'function') unsubscribe()
+    }
+  }, [client, lane])
+
+  useEffect(() => {
     setConfirmStop(false)
     setStopError('')
     setStopping(false)
@@ -158,7 +290,20 @@ export default function LaneConversation({
     setOpenTools({})
     setSendError('')
     setSending(false)
+    planModeChosenRef.current = false
+    planStartingRef.current = false
+    setPlanConfirmOpen(false)
+    setPlanDraft('')
+    setPlanMode('')
+    setPlanStarting(false)
+    setPlanStartError('')
+    setPlanStartStatus('')
   }, [lane, selected])
+
+  useEffect(() => {
+    if (!planConfirmOpen || planModeChosenRef.current) return
+    setPlanMode(initialEditMode(planHarness, savedLaneMode))
+  }, [planConfirmOpen, planHarness, savedLaneMode])
 
   async function readConversation(startedAt, { force = false } = {}) {
     if (!startedAt || !client || typeof client.runConversation !== 'function') return
@@ -292,6 +437,48 @@ export default function LaneConversation({
     }
   }
 
+  function openPlanHandoff() {
+    if (!isFinishedPlan) return
+    planModeChosenRef.current = false
+    setPlanDraft(initialPlanDraft(entries))
+    setPlanMode(initialEditMode(planHarness, savedLaneMode))
+    setPlanStartError('')
+    setPlanStartStatus('')
+    setPlanConfirmOpen(true)
+  }
+
+  function cancelPlanHandoff() {
+    if (planStartingRef.current) return
+    planModeChosenRef.current = false
+    setPlanConfirmOpen(false)
+    setPlanStartError('')
+  }
+
+  async function startPlanHandoff() {
+    if (planStartingRef.current || !isFinishedPlan) return
+    if (planDraft.trim() === '') return
+    if (!client || typeof client.startRun !== 'function') {
+      setPlanStartError('Could not start run.')
+      return
+    }
+    planStartingRef.current = true
+    setPlanStarting(true)
+    setPlanStartError('')
+    try {
+      const run = planMode ? { tasks: [planDraft], mode: planMode } : { tasks: [planDraft] }
+      const answer = await client.startRun(lane, run)
+      if (!mountedRef.current) return
+      setPlanConfirmOpen(false)
+      setPlanStartStatus(runStartLine(answer))
+    } catch (failure) {
+      if (!mountedRef.current) return
+      setPlanStartError(failure?.message || 'Could not start run.')
+    } finally {
+      planStartingRef.current = false
+      if (mountedRef.current) setPlanStarting(false)
+    }
+  }
+
   return (
     <aside className={`mr-orch mr-lane-conv${inline ? ' is-inline' : ''}`} aria-label={`${label} conversation`}>
       <header className="mr-orch-head mr-lane-conv-head">
@@ -324,6 +511,16 @@ export default function LaneConversation({
           </select>
         </label>
         {!running && outcome ? <span className="mr-lane-conv-outcome mono">{outcome}</span> : null}
+        {isFinishedPlan ? (
+          <button
+            type="button"
+            className="brief-run-btn"
+            disabled={planConfirmOpen}
+            onClick={openPlanHandoff}
+          >
+            Edit from this plan
+          </button>
+        ) : null}
       </div>
 
       {confirmStop ? (
@@ -355,6 +552,75 @@ export default function LaneConversation({
               {stopError}
             </div>
           ) : null}
+        </div>
+      ) : null}
+
+      {isFinishedPlan && planConfirmOpen ? (
+        <div className="brief-confirm-card" role="region" aria-label="Confirm edit from this plan">
+          <div className="brief-confirm-meta mono">
+            <span className="brief-confirm-lane">Lane: {lane}</span>
+          </div>
+          <label className="mr-orch-label mono" htmlFor={planTaskId}>
+            Task
+          </label>
+          <textarea
+            id={planTaskId}
+            className="brief-prompt-box mono"
+            rows={6}
+            spellCheck="false"
+            aria-label="Task"
+            value={planDraft}
+            onChange={(event) => setPlanDraft(event.target.value)}
+          />
+          {editModes.length > 0 ? (
+            <label className="mr-lane-conv-picker">
+              <span className="mono">Mode</span>
+              <select
+                className="mr-lane-conv-select mono"
+                aria-label="Mode"
+                value={planMode}
+                onChange={(event) => {
+                  planModeChosenRef.current = true
+                  setPlanMode(event.target.value)
+                }}
+              >
+                {editModes.map((entry) => (
+                  <option key={entry.id} value={entry.id}>
+                    {entry.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
+          <div className="brief-confirm-actions">
+            <button
+              type="button"
+              className="brief-confirm-btn"
+              disabled={planStarting || planDraft.trim() === ''}
+              onClick={startPlanHandoff}
+            >
+              {planStarting ? 'Starting' : 'Start'}
+            </button>
+            <button
+              type="button"
+              className="brief-cancel-btn"
+              disabled={planStarting}
+              onClick={cancelPlanHandoff}
+            >
+              Cancel
+            </button>
+          </div>
+          {planStartError ? (
+            <div className="brief-confirm-error mono" role="alert">
+              {planStartError}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
+      {isFinishedPlan && planStartStatus ? (
+        <div className="brief-copy-status mono is-ok" role="status">
+          {planStartStatus}
         </div>
       ) : null}
 
