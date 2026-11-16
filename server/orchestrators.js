@@ -1,6 +1,6 @@
 import { HARNESS_OFF_PROBLEM, readHarnessSettings } from './harness-settings.js'
 import { execFileSync } from 'node:child_process'
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { isAbsolute, join, relative, resolve } from 'node:path'
 import { maskKeys } from '../src/briefs/audit.js'
 import { defaultMode, legacyMode, modesFor } from '../src/control/modes.js'
@@ -702,6 +702,7 @@ export function createOrchestrators({
   const laneSent = new Map()
   const laneBackups = new Map()
   const seenLaneEntries = new WeakSet()
+  const laneMessageEntries = new Map()
   const clock = typeof now === 'function' ? now : Date.now
 
   function attachRuns(nextRuns) {
@@ -851,12 +852,13 @@ export function createOrchestrators({
     return Array.isArray(tickets) && tickets.length > 0 ? tickets[tickets.length - 1] : null
   }
 
-  function receiveLaneMessage(lane, from, text, at) {
+  function receiveLaneMessage(lane, from, text, at, sender) {
     const held = lastLaneTicket(lane) ?? backupHeld(lane)
     if (!held || !Array.isArray(held.inbox)) return false
-    const entry = { id: randomUUID(), from, text, at: new Date(at).toISOString(), status: 'queued' }
+    const entry = { id: randomUUID(), from, text, at: new Date(at).toISOString(), status: 'queued', sender }
     held.inbox.push(entry)
-    while (held.inbox.length > LANE_INBOX_LIMIT) held.inbox.shift()
+    laneMessageEntries.set(entry.id, entry)
+    while (held.inbox.length > LANE_INBOX_LIMIT) laneMessageEntries.delete(held.inbox.shift().id)
     if (
       !stopped &&
       typeof interruptLane === 'function' &&
@@ -917,6 +919,17 @@ export function createOrchestrators({
     return { status: 200, body: { messages } }
   }
 
+  function messageStatus(id, page, tokenValue, laneTicketValue) {
+    const entry = laneMessageEntries.get(id)
+    const credential = tokenValue ? `orchestrator:${tokenValue}` : laneTicketValue ? `lane:${laneTicketValue}` : ''
+    const sender = credential ? createHash('sha256').update(credential).digest('hex') : ''
+    if (!entry || (!page && sender !== entry.sender)) {
+      return { status: 404, body: { error: 'not found' } }
+    }
+    const { status, at, fetchedAt } = entry
+    return { status: 200, body: { id: entry.id, status, at, ...(fetchedAt ? { fetchedAt } : {}) } }
+  }
+
   function takeOver(body, page, tokenValue = '', laneTicketValue = '') {
     if (page) return { status: 403, body: { error: PAGE_FAILOVER_PROBLEM } }
     if (typeof tokenValue === 'string' && tokenValue.trim()) {
@@ -965,7 +978,8 @@ export function createOrchestrators({
         const sentCount = laneSent.get(ticketValue) ?? 0
         if (sentCount >= LANE_MESSAGE_LIMIT) return { status: 429, body: { error: LANE_LIMIT_PROBLEM } }
         const sender = `lane:${senderLane}`
-        const delivered = receiveLaneMessage(laneTarget, sender, text, clock())
+        const identity = createHash('sha256').update(`lane:${ticketValue}`).digest('hex')
+        const delivered = receiveLaneMessage(laneTarget, sender, text, clock(), identity)
         if (!delivered) {
           return { status: 409, body: { error: laneNoRunProblem(laneTarget) } }
         }
@@ -1022,7 +1036,8 @@ export function createOrchestrators({
         return { status: 429, body: { error: 'Too many messages from this orchestrator. Wait, or ask the owner.' } }
       }
       const sender = actor === ORCHESTRATOR_KEY ? ORCHESTRATOR_KEY : `sub:${actor}`
-      const delivered = receiveLaneMessage(laneTarget, sender, text, at)
+      const identity = createHash('sha256').update(`orchestrator:${tokenValue}`).digest('hex')
+      const delivered = receiveLaneMessage(laneTarget, sender, text, at, identity)
       if (!delivered) {
         return { status: 409, body: { error: laneNoRunProblem(laneTarget) } }
       }
@@ -1307,6 +1322,14 @@ export function createOrchestrators({
         return true
       }
       sendJson(req, res, 200, { commands: instance.commands() })
+      return true
+    }
+    if (path === '/api/orchestrator/messages/status') {
+      if (method !== 'GET') return methodNotAllowed(req, res)
+      const laneHeader = req.headers['x-machineroom-lane']
+      const laneValue = typeof laneHeader === 'string' ? laneHeader.trim() : Array.isArray(laneHeader) ? laneHeader[0].trim() : ''
+      const out = messageStatus(url.searchParams.get('id'), page, token, laneValue)
+      sendJson(req, res, out.status, out.body)
       return true
     }
     if (path === '/api/orchestrator/messages') {

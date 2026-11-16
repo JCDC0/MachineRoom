@@ -185,3 +185,60 @@ describe('a lane message id', () => {
     await releaseRuns(rig)
   })
 })
+
+describe('a lane message status', () => {
+  it('lets only the sending ticket and the page read queued and fetched status', async () => {
+    const rig = await makeBridge(makeBase({ ladder: { subs: [FRONTEND, BACKEND] } }))
+    const sender = await startRun(rig, 'opencode')
+    const target = await startRun(rig, 'opencode2')
+    const sent = await lanePost(rig.url, '/api/orchestrator/messages', sender, { to: 'lane:opencode2', text: 'Ready.' })
+    const path = `/api/orchestrator/messages/status?id=${sent.body.id}`
+    const read = (headers) => getJson(rig.url + path, { headers })
+    const laneHeaders = { 'X-MachineRoom-Lane': sender }
+    const queued = await read(laneHeaders)
+    expect(queued.status).toBe(200)
+    expect(queued.body).toEqual({ id: sent.body.id, status: 'queued', at: expect.any(String) })
+    const denied = await read({ 'X-MachineRoom-Lane': target })
+    expect(denied.status).toBe(404)
+    expect(await getJson(`${rig.url}/api/orchestrator/messages/status?id=unknown`, { headers: laneHeaders })).toEqual(denied)
+    expect((await read({ origin: 'http://localhost:5173' })).body).toEqual(queued.body)
+    await laneGet(rig.url, target)
+    expect((await read(laneHeaders)).body).toEqual({ ...queued.body, status: 'fetched', fetchedAt: expect.any(String) })
+    await releaseRuns(rig)
+    expect((await read({ origin: 'http://localhost:5173' })).body.status).toBe('fetched')
+  })
+
+  it('lets the sending orchestrator token read its own message only', async () => {
+    const rig = await makeBridge(makeBase({ ladder: { subs: [FRONTEND, BACKEND] } }))
+    await startRun(rig, 'opencode')
+    const sent = await tokenPost(rig.url, '/api/orchestrator/messages', { to: 'lane:opencode', text: 'Ready.' }, rig.token('frontend'))
+    const path = `/api/orchestrator/messages/status?id=${sent.body.id}`
+    const read = (id) => getJson(rig.url + path, { headers: { 'X-MachineRoom-Orchestrator': rig.token(id) } })
+    expect((await read('frontend')).body).toEqual({ id: sent.body.id, status: 'queued', at: expect.any(String) })
+    expect((await read('backend')).status).toBe(404)
+    expect((await read('orchestrator')).status).toBe(404)
+    await releaseRuns(rig)
+  })
+
+  it('returns the same 404 after an entry is evicted', async () => {
+    let at = Date.parse('2026-11-15T09:00:00.000Z')
+    const rig = await makeBridge(makeBase(), { now: () => at })
+    await startRun(rig, 'opencode')
+    let first
+    for (let index = 0; index < 21; index += 1) {
+      if (index % 6 === 0) at += 11 * 60 * 1000
+      const sent = await tokenPost(rig.url, '/api/orchestrator/messages', { to: 'lane:opencode', text: `Note ${index}` }, rig.token())
+      expect(sent.status).toBe(202)
+      first ??= sent.body.id
+      if (index === 0) {
+        const initial = await getJson(`${rig.url}/api/orchestrator/messages/status?id=${first}`, { headers: { 'X-MachineRoom-Orchestrator': rig.token() } })
+        expect(initial.status).toBe(200)
+      }
+    }
+    const headers = { 'X-MachineRoom-Orchestrator': rig.token() }
+    const evicted = await getJson(`${rig.url}/api/orchestrator/messages/status?id=${first}`, { headers })
+    expect(evicted.status).toBe(404)
+    expect(evicted).toEqual(await getJson(`${rig.url}/api/orchestrator/messages/status?id=unknown`, { headers }))
+    await releaseRuns(rig)
+  })
+})

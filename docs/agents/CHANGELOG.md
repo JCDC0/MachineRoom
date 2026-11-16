@@ -1,7 +1,9 @@
 # Changelog
 
 ## Unreleased
+- GET /api/orchestrator/messages/status answers a lane message's status to its sender or the page, and 404 to anyone else.
 - Dispatch shows Needs you for lanes whose newest run failed, could not start or stopped on five repeated failures, and native loop stops exit 4 with a stop reason.
+- A lane message sender and the page can read its retained status without exposing it to other senders.
 - A checkpoint counts untracked files apart, writes a recovery ref only when a tracked file changed, and the Inspector row says what was not kept.
 - Each lane inbox entry gets an id and a queued, fetched or interrupted status, and a lane message answers its id.
 - P461: Each lane inbox message carries a stable id and a status of queued, fetched or interrupted, and both lane message replies answer that id.
