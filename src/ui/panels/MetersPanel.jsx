@@ -25,6 +25,21 @@ function tokenText(row) {
   return `${formatTokens(input)} in / ${formatTokens(output)} out`
 }
 
+function countOf(value) {
+  return Number.isInteger(value) && value >= 0 ? value : 0
+}
+
+function runCountText(count) {
+  return count === 1 ? '1 run not reported' : `${count} runs not reported`
+}
+
+function clockText(value) {
+  const time = typeof value === 'string' ? Date.parse(value) : NaN
+  if (!Number.isFinite(time)) return null
+  const date = new Date(time)
+  return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
+}
+
 export default function MetersPanel({ client, initialCosts = null }) {
   const costMode = useContext(CostsModeContext)
   const sample = costLabels(costMode)
@@ -68,6 +83,7 @@ export default function MetersPanel({ client, initialCosts = null }) {
 
   const summary = costs?.summary ?? null
   const byAgent = listOf(costs?.byAgent)
+  const quotaRows = listOf(costs?.quota)
   const companySpend = Number.isFinite(summary?.spendCents) ? summary.spendCents : 0
   const companyBudget = Number.isFinite(summary?.budgetCents) ? summary.budgetCents : 0
   const companyPercent = companyBudget > 0
@@ -137,13 +153,21 @@ export default function MetersPanel({ client, initialCosts = null }) {
               {byAgent.map((row, index) => {
                 const agentId = textOf(row.agentId)
                 const name = visibleText(textOf(row.agentName) || agentId) || 'Lane'
+                const missingCostRuns = countOf(row.missingCostRuns)
+                const failedCost = countOf(row.failedCost)
                 return (
                   <div key={`${agentId}-${index}`} className="meter-agent-row">
                     <div className="meter-agent-head">
                       <span className="meter-agent-name">{name}</span>
-                      <span className="mono">{formatCents(row.costCents)}</span>
+                      <span className="mono">
+                        {formatCents(row.costCents)}
+                        {missingCostRuns > 0 ? ` (${runCountText(missingCostRuns)})` : ''}
+                      </span>
                     </div>
                     <div className="meter-label-dim mono">{tokenText(row)}</div>
+                    {failedCost > 0 && (
+                      <div className="meter-label-dim mono">{`Failed or stopped: ${formatCents(failedCost)}`}</div>
+                    )}
                   </div>
                 )
               })}
@@ -152,6 +176,40 @@ export default function MetersPanel({ client, initialCosts = null }) {
               Spend comes from the lane run records. Budgets are not set here.
             </div>
           </section>
+
+          {quotaRows.length > 0 && (
+            <section className="meters-section" aria-label="Quota">
+              <h4 className="meters-section-title">Quota</h4>
+              {quotaRows.map((provider, index) => {
+                const seen = clockText(provider.at)
+                const windows = listOf(provider.windows)
+                const providerName = textOf(provider.provider).toUpperCase() || 'Quota'
+                return (
+                  <div key={`${providerName}-${index}`} className="meter-agent-row">
+                    <div className="meter-agent-head">
+                      <span className="meter-agent-name">{providerName}</span>
+                      {seen && <span className="meter-label-dim mono">{`seen ${seen}`}</span>}
+                    </div>
+                    {windows.map((window, windowIndex) => {
+                      const resets = clockText(window.resetsAt)
+                      const percent = clampPercent(window.usedPercent)
+                      const windowText = [textOf(window.label), percent === null ? '' : `${percent}%`]
+                        .filter(Boolean)
+                        .join(' ')
+                      return (
+                        <div
+                          key={`${textOf(window.label)}-${windowIndex}`}
+                          className="meter-label-dim mono"
+                        >
+                          {resets ? `${windowText}, resets ${resets}` : windowText}
+                        </div>
+                      )
+                    })}
+                  </div>
+                )
+              })}
+            </section>
+          )}
         </>
       )}
     </div>
