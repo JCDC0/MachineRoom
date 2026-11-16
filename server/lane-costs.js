@@ -25,6 +25,11 @@ function recordCost(record) {
   return typeof record?.costUsd === 'number' && Number.isFinite(record.costUsd) ? record.costUsd : null
 }
 
+function recordFailedOrStopped(record) {
+  if (record?.killed === true || record?.startFailed === true) return true
+  return Number.isInteger(record?.exitCode) && record.exitCode !== 0
+}
+
 function recordTokens(record, name) {
   const value = record?.[name]
   return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null
@@ -81,7 +86,7 @@ export function laneCosts({ records = [], agents = [], now = Date.now() } = {}) 
     if (!Number.isFinite(started) || started < from || started >= to) continue
     let total = totals.get(lane)
     if (!total) {
-      total = { cost: 0, today: 0, hasCost: false, input: 0, output: 0, hasInput: false, hasOutput: false }
+      total = { cost: 0, today: 0, hasCost: false, failed: 0, missingCostRuns: 0, input: 0, output: 0, hasInput: false, hasOutput: false }
       totals.set(lane, total)
     }
     const cost = recordCost(record)
@@ -89,6 +94,9 @@ export function laneCosts({ records = [], agents = [], now = Date.now() } = {}) 
       total.cost += cost
       total.hasCost = true
       if (started >= today) total.today += cost
+      if (recordFailedOrStopped(record)) total.failed += cost
+    } else {
+      total.missingCostRuns += 1
     }
     const input = recordTokens(record, 'inputTokens')
     if (input !== null) {
@@ -122,6 +130,8 @@ export function laneCosts({ records = [], agents = [], now = Date.now() } = {}) 
       todayCents: total ? (total.hasCost ? Math.round(total.today * 100) : null) : 0,
       inputTokens: total ? (total.hasInput ? total.input : null) : 0,
       outputTokens: total ? (total.hasOutput ? total.output : null) : 0,
+      missingCostRuns: total ? total.missingCostRuns : 0,
+      failedCost: total ? Math.round(total.failed * 100) : 0,
     }
   })
 
@@ -129,10 +139,12 @@ export function laneCosts({ records = [], agents = [], now = Date.now() } = {}) 
   for (const [lane, total] of totals) {
     if (rosterKeys.has(lane)) continue
     if (!removed) {
-      removed = { costCents: 0, todayCents: 0, input: 0, output: 0, hasInput: false, hasOutput: false }
+      removed = { costCents: 0, todayCents: 0, failedCost: 0, missingCostRuns: 0, input: 0, output: 0, hasInput: false, hasOutput: false }
     }
     removed.costCents += Math.round(total.cost * 100)
     removed.todayCents += Math.round(total.today * 100)
+    removed.failedCost += Math.round(total.failed * 100)
+    removed.missingCostRuns += total.missingCostRuns
     if (total.hasInput) {
       removed.input += total.input
       removed.hasInput = true
@@ -150,6 +162,8 @@ export function laneCosts({ records = [], agents = [], now = Date.now() } = {}) 
       todayCents: removed.todayCents,
       inputTokens: removed.hasInput ? removed.input : null,
       outputTokens: removed.hasOutput ? removed.output : null,
+      missingCostRuns: removed.missingCostRuns,
+      failedCost: removed.failedCost,
     })
   }
 

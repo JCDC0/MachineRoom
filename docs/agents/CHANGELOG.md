@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- Meters labels a lane total with its unreported runs, shows failed or stopped spend, and shows when a quota window was seen and resets.
 - A lane review keeps the checks run on its head apart from the agent's report and lists every run of the task by its failover and continuation links.
 - With Replies set to interrupt, a reply stops a working CLI lane run and continues it on the same branch, worktree, ticket and inbox, at most three times.
 - Ready says it means the program was found, and doctor warns when the project has no AGENTS.md, CLAUDE.md or GEMINI.md.
@@ -13,6 +14,9 @@
 - P453: doctor warns when the project has no AGENTS.md, CLAUDE.md or GEMINI.md, and names the one it found.
 - A reply to a working CLI lane stops and continues it on the same branch and worktree when Settings choose interrupt, up to three times per run.
 - P451: A lane review shows its evidence for the checked head apart from the agent's claims, and lists every run of the task with an honest total.
+- P452: A lane cost row counts the runs with no cost and the spend of runs that failed or were stopped.
+- P452: The costs answer keeps those counts and the quota for the page, so the cost board now shows the quota rows it used to leave out.
+- P452: Meters labels a lane total with its unreported runs, shows failed or stopped spend and the quota's seen and reset times.
 - The native agent keeps a reply its inbox watch read as the model call ended, and gives it to the next call.
 - A sub's harness change also changes its program, and a ladder save that gives a sub's model and effort keeps them over the saved chat file.
 - A sub's harness route change updates its live program override, and a ladder recreation keeps given model and effort values over the saved chat file.
