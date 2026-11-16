@@ -936,7 +936,7 @@ export function createOrchestrator({
   outsideFiles = null,
   onOutsideScope = null,
   contextWindow: contextWindowOption = 0,
-  effort: effortOption = null,
+  effort: effortOption,
   token: tokenOption = '',
   home = '',
   harnesses = harnessByKey,
@@ -959,6 +959,7 @@ export function createOrchestrator({
   const laneEntry = lanes && Object.hasOwn(lanes, ORCHESTRATOR_KEY) ? lanes[ORCHESTRATOR_KEY] : null
   const lane = laneEntry?.cli ? laneEntry : DEFAULT_LANE
   let harness = harnessOption || String(lane.cli.harness ?? 'claude')
+  const hasExplicitModel = modelOption !== undefined && modelOption !== null
   let model = String(modelOption ?? lane.cli.model ?? '')
   model = MODEL_ALIASES[model] ?? model
   let binOverride = binOption
@@ -1017,6 +1018,7 @@ export function createOrchestrator({
   let autocompactMode = DEFAULT_AUTOCOMPACT_MODE
   let autocompactValue = DEFAULT_AUTOCOMPACT_VALUE
   let compactRules = ''
+  const hasExplicitEffort = effortOption === null || (typeof effortOption === 'string' && effortLevelsFor(harness).includes(effortOption.trim()))
   let effort = typeof effortOption === 'string' && effortLevelsFor(harness).includes(effortOption.trim())
     ? effortOption.trim()
     : null
@@ -1328,7 +1330,7 @@ export function createOrchestrator({
     const keepsGivenHarness = Boolean(harnessOption) && savedHarness !== '' && savedHarness !== harness
     if (!keepsGivenHarness && typeof saved.sessionId === 'string' && saved.sessionId.trim() !== '') sessionId = saved.sessionId
     if (!keepsGivenHarness && typeof saved.harness === 'string' && saved.harness.trim() !== '') harness = saved.harness.trim()
-    if (!keepsGivenHarness && typeof saved.model === 'string') {
+    if (!keepsGivenHarness && !hasExplicitModel && typeof saved.model === 'string') {
       model = MODEL_ALIASES[saved.model.trim()] ?? saved.model.trim()
     }
     if (saved.state === 'working') state = 'idle'
@@ -1369,7 +1371,7 @@ export function createOrchestrator({
     if (typeof saved.branchTranscript === 'string' && saved.branchTranscript.trim() !== '') {
       branchTranscript = maskText(saved.branchTranscript).slice(0, BRANCH_TRANSCRIPT_LIMIT)
     }
-    if (saved.effort === null || typeof saved.effort === 'string') {
+    if (!hasExplicitEffort && (saved.effort === null || typeof saved.effort === 'string')) {
       const allowed = effortLevelsFor(harness)
       if (saved.effort === null || allowed.includes(saved.effort.trim())) {
         effort = saved.effort ? saved.effort.trim() : null

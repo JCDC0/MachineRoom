@@ -324,7 +324,8 @@ export function createOrchestrators({
     const efforts = new Map()
     for (const sub of Array.isArray(raw.subs) ? raw.subs : []) {
       if (!sub || typeof sub !== 'object' || typeof sub.id !== 'string') continue
-      if (typeof sub.effort === 'string' && sub.effort.trim()) efforts.set(sub.id, sub.effort.trim())
+      if (sub.effort === null) efforts.set(sub.id, null)
+      else if (typeof sub.effort === 'string' && sub.effort.trim()) efforts.set(sub.id, sub.effort.trim())
     }
     if (efforts.size === 0) {
       return { ...read, ladder: { ...read.ladder, subs: read.ladder.subs.map(withAliasModel) } }
@@ -439,7 +440,7 @@ export function createOrchestrators({
       promptFile,
       bridgeUrl,
       contextWindow: config.contextWindow,
-      effort: config.effort,
+      effort: Object.hasOwn(sub, 'effort') ? config.effort : undefined,
       onNotice,
       onMasked,
       recordsCache: sharedCache,

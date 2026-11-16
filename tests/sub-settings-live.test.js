@@ -1,9 +1,10 @@
 import { spawn } from 'node:child_process'
-import { mkdirSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterEach, expect, it } from 'vitest'
 import { createBridge } from '../server/index.js'
 import { activeLanesFileFor, writeActiveLanes } from '../server/active-lanes.js'
+import { chatFileFor, createOrchestrator } from '../server/orchestrator.js'
 import { getJson, waitFor } from './helpers/bridge.js'
 import { makeTempDir, removeTempDir } from './helpers/tempRoot.js'
 
@@ -96,4 +97,128 @@ it('spawns the new harness program after a route harness change and an unchanged
   })
   expect(rig.spawned[0].file).toBe(rig.claudeBin)
   expect(rig.spawned[0].args).toContain('-p')
+})
+
+it('uses the saved model and effort on the live sub when a ladder save changes scope and settings together', async () => {
+  const rig = await start()
+  expect((await post(rig, 'model', { model: 'gpt-6.1-sol' })).status).toBe(200)
+  expect((await post(rig, 'effort', { effort: 'high' })).status).toBe(200)
+
+  const registry = rig.bridge.orchestrators()
+  const entry = registry.getLadder().subs[0]
+  const saved = await save(rig, {
+    ...entry,
+    model: 'gpt-6.1-terra',
+    effort: 'medium',
+    scope: ['server/**'],
+  })
+  expect(saved.status).toBe(200)
+  expect(saved.body.ladder.subs[0]).toMatchObject({
+    model: 'gpt-6.1-terra',
+    effort: 'medium',
+    scope: ['server/**'],
+  })
+
+  const live = await getJson(`${rig.url}/api/orchestrator?id=sub`)
+  expect(live.status).toBe(200)
+  expect(live.body).toMatchObject({ model: 'gpt-6.1-terra', effort: 'medium' })
+  const listed = (await getJson(`${rig.url}/api/orchestrators`)).body.find((row) => row.id === 'sub')
+  expect(listed).toMatchObject({ model: 'gpt-6.1-terra', effort: 'medium' })
+  const chat = JSON.parse(readFileSync(chatFileFor(rig.base, rig.runs, 'sub'), 'utf8'))
+  expect(chat).toMatchObject({ model: 'gpt-6.1-terra', effort: 'medium' })
+})
+
+it('keeps the ladder-saved model on a later effort route change after scope recreation', async () => {
+  const rig = await start()
+  expect((await post(rig, 'model', { model: 'gpt-6.1-sol' })).status).toBe(200)
+  expect((await post(rig, 'effort', { effort: 'high' })).status).toBe(200)
+
+  const registry = rig.bridge.orchestrators()
+  const entry = registry.getLadder().subs[0]
+  const saved = await save(rig, {
+    ...entry,
+    model: 'gpt-6.1-terra',
+    effort: 'medium',
+    scope: ['server/**'],
+  })
+  expect(saved.status).toBe(200)
+
+  const changedEffort = await post(rig, 'effort', { effort: 'low' })
+  expect(changedEffort.status).toBe(200)
+  expect((await getJson(`${rig.url}/api/orchestrator?id=sub`)).body).toMatchObject({
+    model: 'gpt-6.1-terra',
+    effort: 'low',
+  })
+  expect(registry.getLadder().subs[0]).toMatchObject({
+    model: 'gpt-6.1-terra',
+    effort: 'low',
+  })
+})
+
+it('keeps values not given from the saved chat file while applying given values', async () => {
+  const rig = await start()
+  expect((await post(rig, 'model', { model: 'gpt-6.1-sol' })).status).toBe(200)
+  expect((await post(rig, 'effort', { effort: 'high' })).status).toBe(200)
+  expect((await post(rig, 'ladder', { ladder: { subs: [] }, by: 'owner' })).status).toBe(200)
+
+  const readded = await save(rig, {
+    id: 'sub',
+    name: 'Sub',
+    harness: 'codex',
+    model: 'gpt-6.1-terra',
+    lanes: ['codex'],
+    scope: ['server/**'],
+    restricted: false,
+    setBy: 'owner',
+  })
+  expect(readded.status).toBe(200)
+  expect((await getJson(`${rig.url}/api/orchestrator?id=sub`)).body).toMatchObject({
+    model: 'gpt-6.1-terra',
+    effort: 'high',
+  })
+
+  const directFile = chatFileFor(rig.base, rig.runs, 'direct-sub')
+  writeFileSync(
+    directFile,
+    `${JSON.stringify({
+      project: rig.base,
+      harness: 'codex',
+      model: 'gpt-6.1-sol',
+      effort: 'high',
+      state: 'idle',
+      messages: [],
+    })}\n`
+  )
+  const direct = createOrchestrator({
+    id: 'direct-sub',
+    harness: 'codex',
+    effort: 'medium',
+    projectRoot: rig.base,
+    runsFolder: rig.runs,
+  })
+  try {
+    expect(direct.answer()).toMatchObject({ model: 'gpt-6.1-sol', effort: 'medium' })
+  } finally {
+    direct.close()
+  }
+})
+
+it('applies explicit empty model and null effort over the saved chat file on scope recreation', async () => {
+  const rig = await start()
+  expect((await post(rig, 'model', { model: 'gpt-6.1-sol' })).status).toBe(200)
+  expect((await post(rig, 'effort', { effort: 'high' })).status).toBe(200)
+
+  const registry = rig.bridge.orchestrators()
+  const entry = registry.getLadder().subs[0]
+  const saved = await save(rig, {
+    ...entry,
+    model: '',
+    effort: null,
+    scope: ['server/**'],
+  })
+  expect(saved.status).toBe(200)
+  expect((await getJson(`${rig.url}/api/orchestrator?id=sub`)).body).toMatchObject({
+    model: '',
+    effort: null,
+  })
 })
