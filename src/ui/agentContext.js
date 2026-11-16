@@ -227,6 +227,11 @@ export function waitingForOwner(orchestrator, id = 'orchestrator') {
   return rows.some(hasWaitingApproval) || orchestratorStateWord(main?.state) === 'waiting for you'
 }
 
+function isMainAgent(agent) {
+  const ids = [clean(agent?.key).toLowerCase(), clean(agent?.id).toLowerCase()]
+  return ids.some((id) => id === 'orchestrator' || id === 'agent-orchestrator')
+}
+
 function withOrchestratorData(selected, orchestrator) {
   const main = orchestratorRows(orchestrator).find((row) => clean(row.id).toLowerCase() === 'orchestrator')
   if (!main) return selected
@@ -236,9 +241,11 @@ function withOrchestratorData(selected, orchestrator) {
     if (value !== null) next[key] = value
   }
   if (typeof main.autocompact === 'boolean') next.autocompact = main.autocompact
-  const harness = clean(main.harness)
-  if (harness) next.harness = harness
-  if (typeof main.model === 'string') next.model = clean(main.model) || modelName(main.model)
+  if (isMainAgent(selected)) {
+    const harness = clean(main.harness)
+    if (harness) next.harness = harness
+    if (typeof main.model === 'string') next.model = clean(main.model) || modelName(main.model)
+  }
   return next
 }
 
