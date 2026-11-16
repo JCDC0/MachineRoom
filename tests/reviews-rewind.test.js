@@ -28,7 +28,7 @@ function git(cwd, args) {
   }).trim()
 }
 
-function setup({ dirty = false, branch = 'feat/rewind' } = {}) {
+function setup({ dirty = false, branch = 'feat/rewind', throwing = false } = {}) {
   const dir = makeTempDir('mr-rewind-')
   cleanups.push(() => removeTempDir(dir))
   const repo = join(dir, 'repo')
@@ -65,7 +65,7 @@ function setup({ dirty = false, branch = 'feat/rewind' } = {}) {
     readJsonBody: async (req) => req.body,
     orchestrators: () => ({
       idForToken: () => null,
-      find: () => ({ deliver: (from, text) => messages.push({ from, text }) }),
+      find: () => ({ deliver: (from, text) => { if (throwing) throw new Error('down'); messages.push({ from, text }) } }),
     }),
     readRuns: () => [record],
   })
@@ -78,7 +78,7 @@ function setup({ dirty = false, branch = 'feat/rewind' } = {}) {
     await api.handle({ method: 'GET', headers: {} }, {}, url)
     return answers.at(-1)
   }
-  return { worktree, repo, runsFolder, checkpointHead, head, messages, post, get }
+  return { record, worktree, repo, runsFolder, checkpointHead, head, messages, post, get }
 }
 
 describe('lane rewind', () => {
@@ -88,7 +88,7 @@ describe('lane rewind', () => {
     expect(answer.status).toBe(200)
     expect(answer.body).toMatchObject({ checkpointHead: s.checkpointHead, head: s.head, files: ['b.txt'] })
     expect(answer.body.commits).toHaveLength(1)
-    expect(answer.body.recoveryRef).toBe('refs/machineroom/recovery/lane1-2026-11-17T10-00-00.000Z')
+        expect(answer.body.recoveryRef).toMatch(/^refs\/machineroom\/recovery\/lane1-[0-9a-f]{6}-2026-11-17T10-00-00\.000Z$/)
   })
 
   it('moves a clean lane back, keeps the old head in a recovery ref and tells the orchestrator', async () => {
@@ -114,7 +114,7 @@ describe('lane rewind', () => {
     expect(git(s.worktree, ['rev-parse', 'HEAD'])).toBe(s.head)
   })
 
-  it('refuses a commit made by hand after the run', async () => {
+  it('refuses a commit made before the last run', async () => {
     const s = setup()
     writeFileSync(join(s.worktree, 'hand.txt'), 'hand\n')
     git(s.worktree, ['add', '.'])
@@ -123,7 +123,7 @@ describe('lane rewind', () => {
     const answer = await s.post({ confirmed: true, expectedHead: head })
     expect(answer).toEqual({
       status: 409,
-      body: { error: 'The lane has commits that the last run did not make, so it was not rewound.' },
+      body: { error: 'The lane has commits from before the last run, so it was not rewound.' },
     })
     expect(git(s.worktree, ['rev-parse', 'HEAD'])).toBe(head)
   })
@@ -140,6 +140,32 @@ describe('lane rewind', () => {
     writeFileSync(join(s.runsFolder, 'lane1.lock'), String(process.pid))
     const answer = await s.post({ confirmed: true, expectedHead: s.head })
     expect(answer).toEqual({ status: 409, body: { error: 'The lane has a run going, so stop it first.' } })
+    expect(git(s.worktree, ['rev-parse', 'HEAD'])).toBe(s.head)
+  })
+
+  it('refuses a commit from an earlier run', async () => {
+    const s = setup()
+    s.record.commits = ''
+    const answer = await s.post({ confirmed: true, expectedHead: s.head })
+    expect(answer.status).toBe(409)
+    expect(answer.body.error).toBe('The lane has commits from before the last run, so it was not rewound.')
+  })
+
+  it('answers 200 when the room message throws, and refuses a second rewind of the same run', async () => {
+    const s = setup({ throwing: true })
+    const answer = await s.post({ confirmed: true, expectedHead: s.head })
+    expect(answer.status).toBe(200)
+    expect(git(s.worktree, ['rev-parse', 'HEAD'])).toBe(s.checkpointHead)
+    expect(git(s.worktree, ['rev-parse', answer.body.recoveryRef])).toBe(s.head)
+    git(s.worktree, ['reset', '--hard', s.head])
+    expect((await s.post({ confirmed: true, expectedHead: s.head })).status).toBe(500)
+    expect(git(s.worktree, ['rev-parse', 'HEAD'])).toBe(s.head)
+  })
+
+  it('refuses while the lane lock is held and moves nothing', async () => {
+    const s = setup()
+    writeFileSync(join(s.runsFolder, 'lane1.lock'), String(process.pid))
+    expect((await s.post({ confirmed: true, expectedHead: s.head })).status).toBe(409)
     expect(git(s.worktree, ['rev-parse', 'HEAD'])).toBe(s.head)
   })
 

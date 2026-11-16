@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process'
-import { randomBytes } from 'node:crypto'
+import { createHash, randomBytes } from 'node:crypto'
 import { existsSync, readFileSync, realpathSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
@@ -20,7 +20,7 @@ import {
   WRITE_IN_FLIGHT_PROBLEM,
 } from './git.js'
 import { readAllRunRecords, runsFile } from './runs.js'
-import { processAlive, readLaneLock } from '../scripts/lane-lock.mjs'
+import { processAlive, readLaneLock, releaseLaneLock, takeLaneLock } from '../scripts/lane-lock.mjs'
 
 const GIT_MAX_BUFFER = 64 * 1024 * 1024
 const COMMIT_LIMIT = 50
@@ -1015,10 +1015,11 @@ export function createReviewsApi({
 
   function recoveryRefFor(lane, record) {
     const part = (value) => String(value ?? '').replace(/[^A-Za-z0-9.-]+/g, '-').replace(/^[.-]+|[.-]+$/g, '') || 'run'
-    return `refs/machineroom/recovery/${part(lane)}-${part(record.startedAt)}`
+    const tag = createHash('sha256').update(String(lane)).digest('hex').slice(0, 6)
+    return `refs/machineroom/recovery/${part(lane)}-${tag}-${part(record.startedAt)}`
   }
 
-  async function rewindState(lane, worktree, expectedHead) {
+  async function rewindState(lane, worktree, expectedHead, held = false) {
     const record = projectRunsFor(lane, worktree)
       .filter((entry) => entry.checkpoint && typeof entry.checkpoint === 'object')
       .reduce((newest, entry) => (newest ? newestRecord([newest, entry]) : entry), null)
@@ -1027,7 +1028,7 @@ export function createReviewsApi({
       return { reason: 'No run of this lane recorded a checkpoint.' }
     }
     const holder = readLaneLock(join(dirname(recordsFile()), `${lane}.lock`))
-    if (processAlive(holder.pid) || processAlive(holder.child)) return { reason: 'The lane has a run going, so stop it first.' }
+    if (!held && (processAlive(holder.pid) || processAlive(holder.child))) return { reason: 'The lane has a run going, so stop it first.' }
     const head = (await runGit(worktree, ['rev-parse', 'HEAD'])).trim()
     if (expectedHead !== null && head !== expectedHead) return { reason: 'The lane moved since you read it. Read it again.' }
     if ((await runGit(worktree, ['status', '--porcelain'])).trim() !== '') {
@@ -1046,7 +1047,7 @@ export function createReviewsApi({
       .map((line) => /^([0-9a-f]{7,40})\b/i.exec(String(line).trim())?.[1]?.toLowerCase())
       .filter(Boolean)
     if (!full.every((hash) => recorded.some((short) => hash.startsWith(short)))) {
-      return { reason: 'The lane has commits that the last run did not make, so it was not rewound.' }
+      return { reason: 'The lane has commits from before the last run, so it was not rewound.' }
     }
     const commits = (await runGit(worktree, ['log', '--oneline', range])).split(/\r?\n/).filter(Boolean)
     const files = (await runGit(worktree, ['diff', '--name-only', checkpoint.head, head])).split(/\r?\n/).filter(Boolean)
@@ -1067,19 +1068,27 @@ export function createReviewsApi({
     }
     const lockKey = beginRepoWrite(resolvedRoot)
     if (!lockKey) return sendJson(req, res, 409, { error: WRITE_IN_FLIGHT_PROBLEM })
+    let laneLock = ''
     try {
-      const state = await rewindState(lane, worktree, body.expectedHead.toLowerCase())
+      try {
+        laneLock = takeLaneLock(dirname(recordsFile()), lane)
+      } catch {
+        return sendJson(req, res, 409, { error: 'The lane has a run going, so stop it first.' })
+      }
+      const state = await rewindState(lane, worktree, body.expectedHead.toLowerCase(), true)
       if (state.reason) return sendJson(req, res, 409, { error: state.reason })
       const ref = recoveryRefFor(lane, state.record)
-      await runGit(worktree, ['update-ref', ref, state.head])
+      await runGit(worktree, ['update-ref', ref, state.head, '0000000000000000000000000000000000000000'])
       await runGit(worktree, ['reset', '--keep', state.checkpointHead])
-      invalidateGitCache(resolvedRoot)
-      notify({ topic: 'git' })
-      const short = state.checkpointHead.slice(0, 7)
-      orchestratorRegistry()?.find?.('orchestrator')?.deliver?.(
-        'room',
-        `${lane} was rewound to ${short}; its last run's commits are kept at ${ref}.`
-      )
+      try {
+        invalidateGitCache(resolvedRoot)
+        notify({ topic: 'git' })
+        const short = state.checkpointHead.slice(0, 7)
+        orchestratorRegistry()?.find?.('orchestrator')?.deliver?.(
+          'room',
+          `${lane} was rewound to ${short}; its last run's commits are kept at ${ref}.`
+        )
+      } catch {}
       return sendJson(req, res, 200, {
         ok: true,
         lane,
@@ -1090,6 +1099,7 @@ export function createReviewsApi({
     } catch {
       return sendJson(req, res, 500, { error: 'The rewind failed.' })
     } finally {
+      if (laneLock) releaseLaneLock(laneLock)
       endRepoWrite(lockKey)
     }
   }

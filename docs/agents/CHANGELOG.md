@@ -1,6 +1,8 @@
 # Changelog
 
 ## Unreleased
+
+- The rewind takes the lane's run lock, refuses commits from before the last run (a lane run now records `checkpoint.head..HEAD`), answers 200 once the reset is done, never replaces a recovery ref, and MACHINEROOM_PORT_OFFSET comes from a hash of the lane key (P494).
 - Ten findings: the rewind lock, recorded commits and late errors, worktree copy excludes, the Codex cache share, the Direct API and OpenCode probes, unknown touched lists, the brief source and the port offset.
 - Reviews previews and, on the owner's confirm with the head read, moves a lane back to its last run's checkpoint only when it is clean, idle, on the same branch and every dropped commit is that run's, after writing a recovery ref.
 - Reviews offers Rewind last run: `GET` and `POST /api/control/reviews/LANE/rewind` move a lane back to its last run's checkpoint only when the lane is idle, clean and on the run's branch and every dropped commit is the run's, after writing a recovery ref.
