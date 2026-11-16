@@ -7,6 +7,7 @@ import { createBridge } from '../server/index.js'
 import { clearRunsCache } from '../server/runs.js'
 import { gitPath } from '../server/programPath.js'
 import { startLane } from '../scripts/run-lane.mjs'
+import { runRecord } from '../src/briefs/run.js'
 import Inspector from '../src/ui/Inspector.jsx'
 import { makeTempDir, removeTempDir } from './helpers/tempRoot.js'
 import { settle, withDom } from './helpers/uiDom.js'
@@ -151,6 +152,7 @@ describe('a lane run checkpoint', { timeout: 60000 }, () => {
     expect(record.checkpoint.dirty).toBe(true)
     expect(record.checkpoint.dirtyFiles).toEqual(['readme.txt', 'wip.txt'])
     expect(record.checkpoint.dirtyCount).toBe(2)
+    expect(record.checkpoint.untrackedCount).toBe(1)
     expect(record.checkpoint.recovery).toMatch(/^[0-9a-f]{40}$/)
     expect(gitIn(worktree, ['cat-file', '-t', record.checkpoint.recovery])).toBe('commit')
     expect(gitIn(worktree, ['status', '--porcelain'])).toBe(before)
@@ -212,6 +214,7 @@ describe('a lane run checkpoint', { timeout: 60000 }, () => {
     expect(continuation.checkpoint.dirty).toBe(true)
     expect(continuation.checkpoint.dirtyFiles).toEqual(['readme.txt', 'wip.txt'])
     expect(continuation.checkpoint.dirtyCount).toBe(2)
+    expect(continuation.checkpoint.untrackedCount).toBe(1)
     expect(continuation.checkpoint.recovery).toMatch(/^[0-9a-f]{40}$/)
   })
 
@@ -276,6 +279,7 @@ describe('a lane run checkpoint', { timeout: 60000 }, () => {
       })
       await settle(20)
       expect(rowValue(container, 'Checkpoint')).toBe('abcdef1 on feat/x, 3 changed files kept as 1234567')
+      expect(rowValue(container, 'Checkpoint')).not.toMatch(/^Checkpoint:/)
 
       answer = { running: [], last: [older] }
       await act(async () => {
@@ -295,5 +299,109 @@ describe('a lane run checkpoint', { timeout: 60000 }, () => {
       await settle(20)
       expect(rowValue(container, 'Checkpoint')).toBeNull()
     })
+  })
+
+  it('omits recovery for an untracked-only worktree and Inspector says not kept', async () => {
+    const base = tempDir('mr-run-checkpoint-untracked-')
+    const worktree = join(base, 'worktree')
+    const runs = join(base, 'runs')
+    makeRepo(worktree)
+    mkdirSync(runs, { recursive: true })
+    writeFileSync(join(worktree, 'new-one.txt'), 'one\n')
+    writeFileSync(join(worktree, 'new-two.txt'), 'two\n')
+    const head = gitIn(worktree, ['rev-parse', 'HEAD'])
+
+    const result = await runLane({ worktree, runs, name: 'opencode-checkpoint-untracked' })
+    expect(result.code).toBe(0)
+
+    const record = readRecords(runs)[0]
+    expect(record.checkpoint.dirty).toBe(true)
+    expect(record.checkpoint.dirtyFiles).toEqual(['new-one.txt', 'new-two.txt'])
+    expect(record.checkpoint.dirtyCount).toBe(2)
+    expect(record.checkpoint.untrackedCount).toBe(2)
+    expect('recovery' in record.checkpoint).toBe(false)
+    expect(gitIn(worktree, ['stash', 'list'])).toBe('')
+
+    const lane = { key: 'opencode', name: 'OpenCode', harness: 'opencode', model: 'fake/model', status: 'idle', openCalls: 0 }
+    await withDom(async ({ container, root }) => {
+      await act(async () => {
+        root.render(
+          createElement(Inspector, {
+            target: { kind: 'agent', id: 'opencode' },
+            live: true,
+            bridge: true,
+            client: { runs: async () => ({ running: [], last: [record] }) },
+            lanes: [lane],
+            liveRuns: [],
+            tasks: [],
+            log: [],
+          })
+        )
+      })
+      await settle(20)
+      expect(rowValue(container, 'Checkpoint')).toBe(`${head.slice(0, 7)} on main, 2 untracked files not kept`)
+    })
+  })
+
+  it('counts both tracked and untracked files in a mixed worktree and shows both in Inspector', async () => {
+    const base = tempDir('mr-run-checkpoint-mixed-')
+    const worktree = join(base, 'worktree')
+    const runs = join(base, 'runs')
+    makeRepo(worktree)
+    mkdirSync(runs, { recursive: true })
+    writeFileSync(join(worktree, 'tracked.txt'), 'one\n')
+    gitIn(worktree, ['add', 'tracked.txt'])
+    gitIn(worktree, ['commit', '-q', '-m', 'Add tracked file'])
+    const head = gitIn(worktree, ['rev-parse', 'HEAD'])
+
+    writeFileSync(join(worktree, 'readme.txt'), 'edited\n')
+    writeFileSync(join(worktree, 'tracked.txt'), 'edited too\n')
+    writeFileSync(join(worktree, 'wip.txt'), 'untracked\n')
+
+    const result = await runLane({ worktree, runs, name: 'opencode-checkpoint-mixed' })
+    expect(result.code).toBe(0)
+
+    const record = readRecords(runs)[0]
+    expect(record.checkpoint.dirty).toBe(true)
+    expect(record.checkpoint.dirtyCount).toBe(3)
+    expect(record.checkpoint.untrackedCount).toBe(1)
+    expect(record.checkpoint.recovery).toMatch(/^[0-9a-f]{40}$/)
+
+    const lane = { key: 'opencode', name: 'OpenCode', harness: 'opencode', model: 'fake/model', status: 'idle', openCalls: 0 }
+    await withDom(async ({ container, root }) => {
+      await act(async () => {
+        root.render(
+          createElement(Inspector, {
+            target: { kind: 'agent', id: 'opencode' },
+            live: true,
+            bridge: true,
+            client: { runs: async () => ({ running: [], last: [record] }) },
+            lanes: [lane],
+            liveRuns: [],
+            tasks: [],
+            log: [],
+          })
+        )
+      })
+      await settle(20)
+      expect(rowValue(container, 'Checkpoint')).toBe(
+        `${head.slice(0, 7)} on main, 2 changed files kept as ${record.checkpoint.recovery.slice(0, 7)}, 1 untracked files not kept`
+      )
+    })
+
+    const untrackedRecord = runRecord({
+      lane: 'opencode',
+      checkpoint: {
+        head,
+        branch: 'main',
+        dirty: true,
+        dirtyFiles: ['wip.txt'],
+        dirtyCount: 1,
+        untrackedCount: 1,
+        recovery: record.checkpoint.recovery,
+      },
+    })
+    expect('recovery' in untrackedRecord.checkpoint).toBe(false)
+    expect(untrackedRecord.checkpoint.untrackedCount).toBe(1)
   })
 })
