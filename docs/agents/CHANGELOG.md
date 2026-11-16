@@ -1,12 +1,14 @@
 # Changelog
 
 ## Unreleased
+- A checkpoint counts untracked files apart, writes a recovery ref only when a tracked file changed, and the Inspector row says what was not kept.
 - Each lane inbox entry gets an id and a queued, fetched or interrupted status, and a lane message answers its id.
 - P461: Each lane inbox message carries a stable id and a status of queued, fetched or interrupted, and both lane message replies answer that id.
 - A compaction lists only the turn logs written since the previous one, the ten newest, then how many earlier.
 - The stop confirm adds Stop with its lanes, or Stop everything for Main, and reports the lanes the server stopped and any still running.
 - A Reviews row shows the head its checks ran on, the agent's own words under their own heading, and the linked runs with totals that say what they do not know.
 - Settings keep a worktree setup command that runs once in each new lane worktree, with its time and exit code in the run log.
+- P462b: A checkpoint records untrackedCount, skips stash create when only untracked files exist, and Inspector shows tracked and untracked counts without a doubled label.
 - A run record keeps the worktree's head, branch and changed files at start, with a stash-create recovery commit for dirty work, and Inspector shows it.
 - P462: Each lane run records its worktree checkpoint, and a dirty start also keeps a recovery commit made with git stash create.
 - P463: A Reviews row shows the checked head and its result apart from what the agent said, plus its linked runs and an honest total.

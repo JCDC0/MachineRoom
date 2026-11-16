@@ -1080,13 +1080,16 @@ function checkpointFor(folder) {
   if (status === null) return null
   const lines = status.split(/\r?\n/).filter((line) => line.trim() !== '')
   const paths = lines.map((line) => line.slice(3).trim()).filter((path) => path !== '')
-  const recovery = lines.length > 0 ? (gitText(folder, ['stash', 'create']) ?? '').trim() : ''
+  const untrackedCount = lines.filter((line) => line.slice(0, 2) === '??').length
+  const trackedCount = lines.length - untrackedCount
+  const recovery = trackedCount > 0 ? (gitText(folder, ['stash', 'create']) ?? '').trim() : ''
   return {
     head,
     branch,
     dirty: lines.length > 0,
     dirtyFiles: paths.slice(0, CHECKPOINT_FILE_LIMIT),
     dirtyCount: lines.length,
+    untrackedCount,
     ...(recovery !== '' ? { recovery } : {}),
   }
 }
