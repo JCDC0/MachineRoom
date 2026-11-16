@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- P473: An MCP tool call sends a progress token, and a progress notice with it resets the 15 second inactivity limit, up to a 10 minute ceiling.
 - When the process list cannot be read, Stop sector reports its lanes as still running, and a review's runs and totals include retries and earlier repair runs on the task branch.
 - The interrupt test's repository sets its own user.name and user.email, so CI runners with no global identity pass it.
 - Replies are marked interrupted only after the continuation starts, and a Stop sector or Stop everything cancels interrupts in progress inside its target.
