@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- P462: Each lane run records its worktree checkpoint, and a dirty start also keeps a recovery commit made with git stash create.
 - The compaction message and the kept summary name the turn logs and the retention limits.
 - Dispatch's confirm card names lanes that declared the same files, says when overlap is unknown, and can warn above a set lane count.
 - A continuation's own record carries continues and interruptedBy; no earlier line of runs.jsonl is changed.

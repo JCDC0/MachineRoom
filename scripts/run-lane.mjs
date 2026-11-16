@@ -1032,6 +1032,40 @@ function gitRead(cwd, args) {
   return String(result.stdout ?? '').trim()
 }
 
+const CHECKPOINT_FILE_LIMIT = 20
+
+function gitText(cwd, args) {
+  let git
+  try {
+    git = gitPath()
+  } catch {
+    return null
+  }
+  const result = spawnSync(git, args, { cwd, encoding: 'utf8', windowsHide: true })
+  if (result.error || result.status !== 0) return null
+  return String(result.stdout ?? '')
+}
+
+function checkpointFor(folder) {
+  if (!folder) return null
+  const head = (gitText(folder, ['rev-parse', 'HEAD']) ?? '').trim()
+  if (head === '') return null
+  const branch = (gitText(folder, ['branch', '--show-current']) ?? '').trim()
+  const status = gitText(folder, ['status', '--porcelain'])
+  if (status === null) return null
+  const lines = status.split(/\r?\n/).filter((line) => line.trim() !== '')
+  const paths = lines.map((line) => line.slice(3).trim()).filter((path) => path !== '')
+  const recovery = lines.length > 0 ? (gitText(folder, ['stash', 'create']) ?? '').trim() : ''
+  return {
+    head,
+    branch,
+    dirty: lines.length > 0,
+    dirtyFiles: paths.slice(0, CHECKPOINT_FILE_LIMIT),
+    dirtyCount: lines.length,
+    ...(recovery !== '' ? { recovery } : {}),
+  }
+}
+
 function gitFolder(cwd) {
   const text = gitRead(cwd, ['rev-parse', '--is-inside-work-tree', '--git-common-dir'])
   if (!text) return { checkout: false, commonDir: '' }
@@ -2013,6 +2047,7 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
   const runBase = typeof base === 'string' && base.trim() !== ''
     ? base.trim()
     : continuedBase || (baseFolder ? gitRead(baseFolder, ['rev-parse', 'HEAD']) || '' : '')
+  const checkpoint = checkpointFor(baseFolder)
 
   const folder = runsFolder()
   const configPlan = laneConfigPlan(lane, folder, name)
@@ -2345,6 +2380,7 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
         branch: git.branch,
         commits: git.commits,
         base: runBase,
+        checkpoint,
         quota,
         retried: true,
         startFailed: startFailure !== '' ? true : undefined,
@@ -2385,6 +2421,7 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
       branch: git.branch,
       commits: git.commits,
       base: runBase,
+      checkpoint,
       quota,
       stoppedLeftovers: totalStoppedLeftovers > 0 ? totalStoppedLeftovers : undefined,
       note: note || undefined,
