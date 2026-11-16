@@ -210,6 +210,7 @@ export function buildFamilyNodes({
   const mainHarness = orchAnswer?.harness ?? orchLanes?.[ORCHESTRATOR_KEY]?.cli?.harness ?? 'claude'
   const mainModel = orchAnswer?.model ?? orchLanes?.[ORCHESTRATOR_KEY]?.cli?.model ?? ''
   const mainEffort = orchAnswer?.effort ?? null
+  const mainMode = typeof orchAnswer?.mode === 'string' && orchAnswer.mode.trim() ? orchAnswer.mode.trim() : null
   const mainWorking = orchAnswer?.state === 'working' || (typeof isWorking === 'function' && isWorking(ORCHESTRATOR_KEY))
 
   const mainNode = {
@@ -219,6 +220,7 @@ export function buildFamilyNodes({
     harness: mainHarness,
     model: mainModel,
     effort: mainEffort,
+    mode: mainMode,
     parent: null,
     children: [],
     active: true,
@@ -251,6 +253,12 @@ export function buildFamilyNodes({
     const subAnswer = subInst?.answer?.() ?? null
     const subWorking = subAnswer?.state === 'working' || (typeof isWorking === 'function' && isWorking(sub.id))
     const subName = typeof sub.name === 'string' && sub.name.trim() ? sub.name : 'Sub orchestrator'
+    const subMode =
+      typeof subAnswer?.mode === 'string' && subAnswer.mode.trim()
+        ? subAnswer.mode.trim()
+        : typeof sub.mode === 'string' && sub.mode.trim()
+          ? sub.mode.trim()
+          : null
     const subNode = {
       id: sub.id,
       kind: 'sub',
@@ -258,6 +266,7 @@ export function buildFamilyNodes({
       harness: subAnswer?.harness ?? sub.harness ?? 'opencode',
       model: subAnswer?.model ?? sub.model ?? 'opencode-go/deepseek-v4.1-flash',
       effort: subAnswer?.effort ?? null,
+      mode: subMode,
       parent: ORCHESTRATOR_KEY,
       children: [],
       active: true,
@@ -310,6 +319,7 @@ export function buildFamilyNodes({
       harness: lane.harness,
       model: lane.model,
       effort: lane.effort ?? null,
+      mode: typeof lane.mode === 'string' && lane.mode.trim() ? lane.mode.trim() : null,
       parent: parentId,
       children: [],
       active,
