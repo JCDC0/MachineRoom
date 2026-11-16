@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- P423: The git notice and file tree waits follow the test's own timeout, and the slow tests allow 60 seconds, so a busy machine no longer cuts them at 10 seconds.
 - A restricted sub's merge refused because its changed files could not be read now offers Merge anyway in Reviews, with no file list.
 - The sub restore test keeps the old harness's saved conversation on disk until the restore, so it fails if P413's guards are undone.
 - A harness's model list command comes only from an indented subcommand line of its help, so Codex's --model option no longer runs codex model, and no list command is no error.

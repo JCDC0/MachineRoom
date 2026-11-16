@@ -8,6 +8,7 @@ import { FOLDER_SHAPE, createBridge, isAllowedHost, packTree, trimHistory } from
 import { DEFAULT_ASSISTANT_MODEL } from '../server/assistant.js'
 import { getJson, postJson, readFrames, startLaneBridge, waitFor, waitForBridge } from './helpers/bridge.js'
 import { makeTempDir } from './helpers/tempRoot.js'
+import { SLOW_TEST_TIMEOUT_MS } from './helpers/timeout.js'
 
 const KEY = 'sk-or-v1-' + '0123456789abcdef'.repeat(4)
 const cleanups = []
@@ -355,7 +356,7 @@ describe('health and agents', () => {
 })
 
 describe('the file tree', () => {
-  it('returns the file tree for both git repositories and plain folders', async () => {
+  it('returns the file tree for both git repositories and plain folders', async ({ signal }) => {
     const gitDir = tempDir()
     execFileSync('git', ['init'], { cwd: gitDir, stdio: 'ignore' })
     mkdirSync(join(gitDir, 'src'), { recursive: true })
@@ -366,7 +367,7 @@ describe('the file tree', () => {
     writeFileSync(join(gitDir, 'node_modules', 'pkg', 'index.js'), 'ignored\n')
 
     const gitBridge = await laneBridge({ projectRoot: gitDir })
-    const gitTree = await getJson(`${gitBridge.url}/api/tree`)
+    const gitTree = await getJson(`${gitBridge.url}/api/tree`, { signal })
     expect(gitTree.body.files).toEqual(['.gitignore', 'README.md', 'src/index.js'])
     expect(gitTree.body.created).toEqual([])
 
@@ -379,10 +380,10 @@ describe('the file tree', () => {
     writeFileSync(join(plainDir, 'dist', 'bundle.js'), '3\n')
 
     const plainBridge = await laneBridge({ projectRoot: plainDir })
-    const plainTree = await getJson(`${plainBridge.url}/api/tree`)
+    const plainTree = await getJson(`${plainBridge.url}/api/tree`, { signal })
     expect(plainTree.body.files).toEqual(['src/app.js'])
     expect(plainTree.body.created).toEqual([])
-  })
+  }, SLOW_TEST_TIMEOUT_MS)
 
   it('answers GET /api/tree gzipped when the request names gzip', async () => {
     const dir = tempDir()
