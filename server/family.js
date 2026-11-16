@@ -16,6 +16,7 @@ import {
 } from './agents-config.js'
 import { activeLanesFileFor, eligibleLanes, projectHash, projectLanesFileFor, readActiveLanesChoice, readHiddenLanes } from './active-lanes.js'
 import { readEndpoints } from './endpoints.js'
+import { HARNESS_OFF_PROBLEM, readHarnessSettings } from './harness-settings.js'
 import { MODELS } from './models.js'
 import { ORCHESTRATOR_KEY } from './orchestrator.js'
 import { NO_TOKEN_PROBLEM, sameHarnessProblem } from './orchestrators.js'
@@ -522,7 +523,12 @@ export function createFamilyApi(options = {}) {
         }
       }
 
-      const available = HARNESS_KEYS.includes(harness) && isHarnessAvailable(harness, { lanes: baseLanes, env, endpoints: readEndpoints(runsDir) })
+      if (readHarnessSettings(runsDir).off.includes(harness)) {
+        sendJson(req, res, 400, { error: HARNESS_OFF_PROBLEM })
+        return true
+      }
+
+      const available = HARNESS_KEYS.includes(harness) && isHarnessAvailable(harness, { lanes: baseLanes, env, endpoints: readEndpoints(runsDir), runsFolder: runsDir })
       if (!available) {
         sendJson(req, res, 400, { error: harnessUnavailableProblem(harness) })
         return true

@@ -1,9 +1,11 @@
 # Changelog
 
 ## Unreleased
+- A lane proposal is refused for a harness turned off in Settings, and a program path saved there counts as available.
 - Argon lists eight free hierarchy gaps to fix next (PLAN-NEXT-ARGON-2.md).
 - Every server git call drops GIT_DIR, GIT_WORK_TREE, GIT_INDEX_FILE and GIT_COMMON_DIR through one helper, gitEnv.
 - Server git calls ignore inherited repository variables so they use the selected project.
+- P434: Lane proposals read the saved harness settings, so a harness turned off in Settings is refused and a program path saved there counts.
 - Review 45 (GPT-6.1 Sol) finds git calls that keep a parent's repository variables.
 - Two slow tests wait for their own timeout instead of a fixed ten seconds, and git calls in mainCheckoutOf and the lane source tests ignore a parent GIT_DIR.
 - Only Main itself takes Main's live harness and model in the inspector and dock, so a lane or sub named like an orchestrator keeps its own.
