@@ -246,6 +246,8 @@ describe('hand-run record', () => {
         ungraded: 0,
         mergeRate: 1,
         averageFixes: null,
+        repairRuns: 0,
+        reviewWaitMinutes: null,
         costUsd: 0,
         decidedCostUsd: 0,
         costPerMerge: null,
