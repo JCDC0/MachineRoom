@@ -353,7 +353,8 @@
       "src/App.jsx"
     ],
     "notes": [
-      "Do not start Claude Code headless outside a lane run; it spends the owner's Claude subscription."
+      "Do not start Claude Code headless outside a lane run; it spends the owner's Claude subscription.",
+        "Never use git stash: the stash list is shared by every worktree. To show a test fails without your change, save the diff to a file and apply it in reverse, or make a temporary commit on your branch."
     ]
   },
   "codex": {
