@@ -4053,3 +4053,9 @@ Review 48 fixes, P478 to P480. `docs/agents/AUDIT-2026-11-REVIEW-48.md` (P477, G
 1. With `planByDefault` on, each split pair whose lane offers Plan starts with `mode: 'plan'`. A pair whose lane has no Plan keeps its usual mode, and the confirm shows `This lane has no Plan mode.` once per such lane. With it off nothing changes.
 2. Tests, each failing before your change: with the setting on, two split tasks on Plan-capable lanes each send `mode: 'plan'`; a lane without Plan sends no mode and shows the line; with it off no mode is sent.
 3. Run `node node_modules/vitest/vitest.mjs run tests/plan-default.test.jsx tests/first-task-card.test.jsx` and `npm run build`, and report the counts.
+
+**P481. CI: stopLane tests never ask the real process table (AGY, Hydrogen).** Read this brief only. Commit each step as you finish it. Run every command in the foreground. Never use git stash. Files: tests/run-lane-stop.test.js only.
+
+1. CI on ubuntu-latest at `95a8fa8e` failed `stopLane creation time rules > treats a process missing from the list as gone` with `expected 1 to be +0`: `stopLane` (scripts/run-lane.mjs near line 391) calls the real `processAlive` for the fake pids 100 and 200, and on a Linux runner those pids can be real processes.
+2. Give every `stopLane(...)` call in the file that uses fake pids an `alive` stub that answers from the test's own fake process list (or `() => false` where the test means the run is gone), so no test depends on which pids exist on the machine. Change no expectation.
+3. Run `node node_modules/vitest/vitest.mjs run tests/run-lane-stop.test.js` and report the counts.
