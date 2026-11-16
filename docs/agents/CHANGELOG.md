@@ -1,7 +1,9 @@
 # Changelog
 
 ## Unreleased
+- When a native model call ends with a final answer while a reply is held, the agent delivers the reply and makes one more call.
 - An interrupted backup restarts with its own saved model and mode in the interrupted run's worktree and branch, and the three-interrupt limit holds across a failover.
+- P469: A native final answer no longer drops a reply read at the same time; the agent delivers it and makes one more model call.
 - A removed lane with unknown cost keeps its row and Meters shows ? and (partial), and the MCP tool list cache key hashes the whole server config.
 - P471: A removed lane with unknown costs keeps its row and marks spend partial, and the MCP list cache key hashes the whole server configuration, environment values included, and the Meters panel shows ? and (partial) for unknown costs.
 - Continuations use saved worktree metadata when the bridge records an interrupted run against the project root.
