@@ -3918,7 +3918,7 @@ Research plan, third batch, P461 and P462 (first steps as Sol narrowed them; bot
 4. Tests, each failing before your change: the client posts the right body for a sub and for Main; the mock shape matches; the button calls `stopTree` and shows both lines; a failure shows the server's error.
 5. Run `node node_modules/vitest/vitest.mjs run tests/orchestrator-stop-tree.test.jsx tests/control-contract.test.js tests/control-mock.test.js tests/orchestrator-chat.test.js` and `npm run build`, and report the counts.
 
-**P462b. A checkpoint says which changed files its recovery ref does not keep (OpenCode).** Read this brief and P462 above only. Commit each step as you finish it. Run every command in the foreground. Files: scripts/run-lane.mjs (`checkpointFor`), src/briefs/run.js (`checkpointField`), src/ui/Inspector.jsx (the checkpoint row), tests/run-checkpoint.test.js, docs/agents/CHANGELOG.md, docs/agents/architecture/LIVE.md.
+**P462b. A checkpoint says which changed files its recovery ref does not keep (AGY, Hydrogen; OpenCode stopped at its monthly quota).** Read this brief and P462 above only. Commit each step as you finish it. Run every command in the foreground. Files: scripts/run-lane.mjs (`checkpointFor`), src/briefs/run.js (`checkpointField`), src/ui/Inspector.jsx (the checkpoint row), tests/run-checkpoint.test.js, docs/agents/CHANGELOG.md, docs/agents/architecture/LIVE.md.
 
 `git stash create` keeps changes to tracked files only, but the Inspector says every changed file was kept.
 
@@ -3934,3 +3934,12 @@ Research plan, third batch, P461 and P462 (first steps as Sol narrowed them; bot
 3. `GET /api/control/runs` adds `attention` from the visible records. Dispatch shows `Needs you` with at most 5 lines above the recent runs when the list is not empty, and nothing otherwise. An item leaves when the lane has a newer run.
 4. Tests, each failing before your change: a loop stop records the reason; a plain failure is an item; a stopped run, a 0-exit run with no commits and a failure taken over by its backup are not; a newer run clears the item; Dispatch shows the heading only with items.
 5. Run `node node_modules/vitest/vitest.mjs run tests/attention.test.js tests/mr-agent.test.js` (skip a file that does not exist) and `npm run build`, and report the counts.
+
+**P461b. Item 5: the sender reads a lane message's status (AGY, Hydrogen; OpenCode stopped at its monthly quota after P461's first two steps).** Read this brief and P461 above only. Commit each step as you finish it. Run every command in the foreground. Files: server/orchestrators.js (the `/api/orchestrator/messages` route near line 1180, and a `messageStatus` function beside `laneInbox`), tests/lane-message-status.test.js, docs/agents/CHANGELOG.md, docs/agents/architecture/LIVE.md. No UI.
+
+P461 gives each inbox entry an `id` and a `status` (`queued`, `fetched` with `fetchedAt`, `interrupted`) and answers a lane message with `{ id }`. Nothing reads the status yet.
+
+1. `GET /api/orchestrator/messages/status?id=ID` answers `{ id, status, at, fetchedAt? }`. Only the sender may read it: the same lane ticket (`lane:LANE` sender), the same orchestrator token (`orchestrator` or `sub:ID` sender), or the page. Anyone else, an unknown id, or an entry pushed out past `LANE_INBOX_LIMIT` gets 404 with the same body, so a caller cannot tell which.
+2. Keep each entry's sender identity on the entry when it is made, so the check never depends on the display `from` text alone.
+3. Tests, each failing before your change: the sending lane reads `queued`, then `fetched` after the target reads its inbox; the orchestrator that sent reads its own; another lane's ticket and another sub's token get 404; the page reads any; an unknown id gets the same 404.
+4. Run `node node_modules/vitest/vitest.mjs run tests/lane-message-status.test.js tests/lane-inbox.test.js` and report the counts.

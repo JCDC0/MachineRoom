@@ -1,6 +1,6 @@
 # OpenCode retirement map
 
-Version 0.1.401, 2026-11-15. Written for P325. The owner removes OpenCode from the fleet when an OpenCode lane reports that its monthly quota is used up (owner, 2026-11-16); until then its lanes keep working. Retiring the lanes keeps OpenCode support in the product working. The lanes that stay are `codex` (GPT-6.1 Terra high), `agy` and `agy2` (Gemini 4 Hydrogen XHigh), the Claude Code lanes, and `native` and `native2` (MachineRoom's own harness on OpenRouter, DeepSeek V4.1 Flash only).
+Version 0.1.401, 2026-11-15. Written for P325. The owner removes OpenCode from the fleet when an OpenCode lane reports that its monthly quota is used up (owner, 2026-11-16); until then its lanes keep working. That happened on 2026-11-16 at 21:13, on P461 and P462b (`OpenCode Go usage limit reached (monthly)`): the fleet gives OpenCode lanes no new briefs from then on. Retiring the lanes keeps OpenCode support in the product working. The lanes that stay are `codex` (GPT-6.1 Terra high), `agy` and `agy2` (Gemini 4 Hydrogen XHigh), the Claude Code lanes, and `native` and `native2` (MachineRoom's own harness on OpenRouter, DeepSeek V4.1 Flash only).
 
 This file changes no code. It maps what depends on OpenCode now, and ends with the smallest ordered list that retires it from the fleet while keeping OpenCode support in the product.
 
