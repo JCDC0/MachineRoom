@@ -3867,3 +3867,37 @@ Research plan, second batch, P456 to P460 (first steps as Sol narrowed them). It
 3. `--outcomes` prints both columns, `?` for unknown.
 4. Tests, each failing before your change: a record gains `finishedAt`; two plain runs before a merge make `repairRuns: 1`; a failover does not count; a missing time gives `null` and `?`.
 5. Run `node node_modules/vitest/vitest.mjs run tests/outcomes-repair.test.js tests/outcomes.test.js` and report the counts.
+
+**P438d. An interrupt never rewrites `runs.jsonl` (AGY, Hydrogen).** Read this brief and P438b above only. Commit each step as you finish it. Run every command in the foreground. Files: scripts/run-lane.mjs (the function that sets `interruptedBy` on an earlier record), server/runs.js (only if it reads `interruptedBy` from the first record), src/briefs/run.js, tests/lane-interrupt.test.js, docs/agents/CHANGELOG.md.
+
+P438b sets `interruptedBy` by reading all of `runs.jsonl`, changing the earlier run's line and writing the whole file back. Many runs append to that file at once, so a record appended between the read and the rename is lost.
+
+1. Remove the rewrite. The continuation's own record carries `continues: NAME` and `interruptedBy: SENDER`; nothing else writes to an earlier line. Anything that showed `interruptedBy` on the first run reads it from the record that `continues` it. If P438b changed `cachedRunRecords` only to notice in-place edits, put that change back.
+2. Tests, each failing before your change: an interrupt leaves every earlier line of `runs.jsonl` byte for byte as it was; the continuation record holds `continues` and `interruptedBy`; a record appended by another writer during the interrupt is still there afterwards.
+3. Run `node node_modules/vitest/vitest.mjs run tests/lane-interrupt.test.js tests/run-failover.test.js` and report the counts.
+
+**P457b. A compaction names only the logs it summarized, at most ten (OpenCode).** Read this brief and P457 above only. Commit each step as you finish it. Run every command in the foreground. Files: server/orchestrator.js (`turnLogNames`, `compactedMessage`, `compactedSummary`), tests/compaction-links.test.js, docs/agents/CHANGELOG.md.
+
+P457 lists every chat turn log the orchestrator ever wrote, so after weeks of use the room message and the summary fed back to the model carry hundreds of names.
+
+1. Name only the turn logs written since the previous compaction (or since the session began when there was none). Show at most the 10 newest, then `and N earlier` when there are more.
+2. Tests, each failing before your change: with 30 logs and a compaction after the 20th, the next compaction names only the 10 written since; with 15 since, it names 10 and says `and 5 earlier`.
+3. Run `node node_modules/vitest/vitest.mjs run tests/compaction-links.test.js tests/orchestrator.test.js` and report the counts.
+
+Research plan, third batch, P461 and P462 (first steps as Sol narrowed them; both need P438b and P438d on main).
+
+**P461. Item 5: a lane message gets an id and a status the sender can read (OpenCode).** Read this brief, item 5 and its paragraph in `Sol's review` only. Commit each step as you finish it. Run every command in the foreground. Files: server/orchestrators.js (`receiveLaneMessage`, `laneInbox`, the two `{ id: null }` replies in `message`, the `/api/orchestrator/messages` route), tests/lane-message-status.test.js (new), docs/agents/CHANGELOG.md, docs/agents/architecture/LIVE.md. No UI in this brief.
+
+1. `receiveLaneMessage` gives each inbox entry a stable id (`randomUUID`) and a status `queued`. When `laneInbox` hands the entry to the lane it becomes `fetched` with `fetchedAt`; when an interrupt takes it (`takeUnseen`) it becomes `interrupted`. `fetched` means the lane's runner read it, not that the model acted on it: say so in LIVE.md.
+2. Both lane-message replies answer `{ id }` instead of `{ id: null }`.
+3. `GET /api/orchestrator/messages/status?id=ID` answers `{ id, status, at, fetchedAt? }`. Only the sender may read it: the same lane ticket, or the same orchestrator token, or the page. Anyone else gets 404 with no hint that the id exists. Ended runs keep the status while the entry is still in the inbox; past `LANE_INBOX_LIMIT` it is 404. The inbox the lane reads keeps its present fields and adds only `id`.
+4. Tests, each failing before your change: a sent message answers an id and reads `queued`; after the target lane reads its inbox it reads `fetched`; an interrupt makes it `interrupted`; another lane's ticket gets 404; the page can read it.
+5. Run `node node_modules/vitest/vitest.mjs run tests/lane-message-status.test.js tests/orchestrators.test.js` and report the counts.
+
+**P462. Item 8: each lane run records its checkpoint, with no rewind (OpenCode).** Read this brief, item 8 and its paragraph in `Sol's review` only. Commit each step as you finish it. Run every command in the foreground. Files: scripts/run-lane.mjs (where `startHead` and `runBase` are read, near lines 1556 and 2071), src/briefs/run.js (`runRecord`), server/runs.js (only the run entry it serves), src/ui/Inspector.jsx (one read-only row), tests/run-checkpoint.test.js (new), docs/agents/CHANGELOG.md, docs/agents/architecture/LIVE.md. No CSS. Nothing in this brief moves a branch, resets a file or deletes anything.
+
+1. Before the agent starts, the runner records `checkpoint: { head, branch, dirty, dirtyFiles }` on the run record: the worktree's HEAD, its branch, whether `git status --porcelain` showed changes, and at most 20 of those paths (then a count). A continuation (`--continue-from`) records its own checkpoint, so dirty work carried in from the interrupted run is visible.
+2. When the worktree is dirty at start, the runner also writes a recovery ref with `git stash create` (which does not touch the worktree or the stash list) and records it as `checkpoint.recovery`. When `stash create` prints nothing, there is no `recovery` field. Never run bare `git stash`.
+3. The run entry served by `server/runs.js` carries `checkpoint`, and Inspector shows one row `Checkpoint: SHORT_HEAD on BRANCH` plus `, N changed files kept as RECOVERY_SHORT` when dirty. Older records have none and show nothing.
+4. Tests, each failing before your change: a clean start records head and branch with `dirty: false`; a dirty start records the files and a recovery ref that `git cat-file -t` reads as a commit, and the worktree is unchanged afterwards; a continuation records its own checkpoint; Inspector shows the row.
+5. Run `node node_modules/vitest/vitest.mjs run tests/run-checkpoint.test.js tests/lane-interrupt.test.js` and `npm run build`, and report the counts.

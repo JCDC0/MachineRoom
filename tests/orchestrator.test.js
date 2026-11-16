@@ -1140,7 +1140,7 @@ describe('autocompact', () => {
     expect(calls[1].args).toContain('--resume')
     expect(valueAfter(calls[1].args, '--resume')).toBe(sessionId)
     expect(calls[1].args[1]).toBe(compactPrompt())
-    expect(rig.answer().messages.some((message) => message.from === 'room' && message.text === COMPACTED_MESSAGE)).toBe(true)
+    expect(rig.answer().messages.some((message) => message.from === 'room' && message.text.startsWith(COMPACTED_MESSAGE))).toBe(true)
     expect(rig.answer()).toMatchObject({
       contextTokens: null,
       contextWindow: 200000,
@@ -1162,7 +1162,7 @@ describe('autocompact', () => {
     expect(next).not.toContain('--resume')
     const nextSession = valueAfter(next, '--session-id')
     expect(nextSession).not.toBe(sessionId)
-    expect(next[1].startsWith('Reply: Write a summary')).toBe(true)
+    expect(next[1].startsWith('Summarized from these turn logs')).toBe(true)
     expect(next[1]).toContain('And then run the tests.')
   })
 
@@ -1239,7 +1239,7 @@ describe('autocompact', () => {
     expect(calls[2].args).toContain('--resume')
     expect(valueAfter(calls[2].args, '--resume')).toBe(firstSessionId)
     expect(calls[2].args[1]).toBe(compactPrompt())
-    expect(rig.answer().messages.some((message) => message.from === 'room' && message.text === COMPACTED_MESSAGE)).toBe(true)
+    expect(rig.answer().messages.some((message) => message.from === 'room' && message.text.startsWith(COMPACTED_MESSAGE))).toBe(true)
     const saved = stateFile(rig)
     expect(saved.sessionId).toBeNull()
     expect(saved.summary).toContain('Reply: Write a summary')
@@ -1255,7 +1255,7 @@ describe('autocompact', () => {
     expect(nextArgs).toContain('--session-id')
     const nextSessionId = valueAfter(nextArgs, '--session-id')
     expect(nextSessionId).not.toBe(firstSessionId)
-    expect(nextArgs[1].startsWith('Reply: Write a summary')).toBe(true)
+    expect(nextArgs[1].startsWith('Summarized from these turn logs')).toBe(true)
     expect(nextArgs[1]).toContain('Turn after Claude compaction.')
   })
 
@@ -1297,7 +1297,7 @@ describe('autocompact', () => {
 
     expect(rig.calls()).toHaveLength(3)
     expect(rig.calls()[1].args).toContain('--resume')
-    expect(rig.answer().messages.some((message) => message.text === COMPACTED_MESSAGE)).toBe(true)
+    expect(rig.answer().messages.some((message) => message.text.startsWith(COMPACTED_MESSAGE))).toBe(true)
   })
 
   it('compacts the main orchestrator on opencode at 500,000 tokens and not at 499,999, where the session id is OpenCodes sessionID', async () => {
@@ -1331,7 +1331,7 @@ describe('autocompact', () => {
     expect(calls[2].args).toContain('--session')
     expect(valueAfter(calls[2].args, '--session')).toBe('ses_fake_first')
     expect(calls[2].args.at(-1)).toBe(compactPrompt())
-    expect(rig.answer().messages.some((message) => message.from === 'room' && message.text === COMPACTED_MESSAGE)).toBe(true)
+    expect(rig.answer().messages.some((message) => message.from === 'room' && message.text.startsWith(COMPACTED_MESSAGE))).toBe(true)
     const saved = stateFile(rig)
     expect(saved.sessionId).toBeNull()
     expect(saved.summary).toContain('Reply: Write a summary')
@@ -1511,7 +1511,7 @@ describe('autocompact', () => {
     expect(calls).toHaveLength(2)
     expect(calls[1].args[1]).toContain(COMPACT_PROMPT)
     expect(calls[1].args[1]).toContain('Keep these in the summary:\nKeep the tests and bridge passing.')
-    expect(rig.answer().messages.some((message) => message.from === 'room' && message.text === COMPACTED_MESSAGE)).toBe(true)
+    expect(rig.answer().messages.some((message) => message.from === 'room' && message.text.startsWith(COMPACTED_MESSAGE))).toBe(true)
   })
 
   it('keeps the open session and says so when a compact fails', async () => {

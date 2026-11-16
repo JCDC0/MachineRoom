@@ -790,8 +790,9 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
     },
   ]
   let laneReplies = 'next-turn'
+  let laneCountWarning = 0
   function harnessRows() {
-    return harnessState.map((row) => ({ ...row, laneReplies }))
+    return harnessState.map((row) => ({ ...row, laneReplies, laneCountWarning }))
   }
   let modelPinState = []
   let mcpServerState = clone(SAMPLE_MCP_SERVERS)
@@ -2111,6 +2112,14 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
         const opts = options && typeof options === 'object' ? options : {}
         const confirmed = Object.hasOwn(opts, 'confirmed') ? opts.confirmed : true
         if (confirmed !== true) throw new Error('Confirm changing harness settings first.')
+        if (Object.hasOwn(opts, 'laneCountWarning')) {
+          if (!Number.isInteger(opts.laneCountWarning) || opts.laneCountWarning < 0) {
+            throw new Error('Write the lane count warning as a whole number, 0 or more.')
+          }
+          laneCountWarning = opts.laneCountWarning
+          emit({ topic: 'harnesses' })
+          return { harnesses: clone(harnessRows()) }
+        }
         if (Object.hasOwn(opts, 'laneReplies')) {
           if (opts.laneReplies !== 'next-turn' && opts.laneReplies !== 'interrupt') {
             throw new Error("Choose whether a reply waits for the lane's next turn or interrupts it at once.")

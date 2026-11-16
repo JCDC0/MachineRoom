@@ -140,8 +140,22 @@ export function mapCosts(costs) {
       todayCents: Number.isInteger(row?.todayCents) && row.todayCents >= 0 ? row.todayCents : null,
       inputTokens: Number.isInteger(row?.inputTokens) && row.inputTokens >= 0 ? row.inputTokens : null,
       outputTokens: Number.isInteger(row?.outputTokens) && row.outputTokens >= 0 ? row.outputTokens : null,
+      missingCostRuns: Number.isInteger(row?.missingCostRuns) && row.missingCostRuns >= 0 ? row.missingCostRuns : 0,
+      failedCost: money(row?.failedCost),
     })),
-    quota: [],
+    quota: (Array.isArray(costs?.quota) ? costs.quota : [])
+      .filter((item) => item && typeof item === 'object' && !Array.isArray(item))
+      .map((item) => ({
+        provider: typeof item.provider === 'string' ? item.provider : '',
+        at: typeof item.at === 'string' ? item.at : null,
+        windows: (Array.isArray(item.windows) ? item.windows : [])
+          .filter((window) => window && typeof window === 'object' && !Array.isArray(window))
+          .map((window) => ({
+            label: typeof window.label === 'string' ? window.label : '',
+            usedPercent: Number.isFinite(window.usedPercent) ? window.usedPercent : null,
+            resetsAt: typeof window.resetsAt === 'string' ? window.resetsAt : null,
+          })),
+      })),
   }
 }
 

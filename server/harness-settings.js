@@ -11,6 +11,11 @@ const CHECK_TTL_MS = 10 * 60 * 1000
 const cache = new Map()
 
 export const LANE_REPLIES = ['next-turn', 'interrupt']
+export const LANE_COUNT_WARNING_PROBLEM = 'Write the lane count warning as a whole number, 0 or more.'
+
+function laneCountWarningOf(value) {
+  return Number.isInteger(value) && value >= 0 ? value : 0
+}
 
 export function readHarnessSettings(folder) {
   try {
@@ -19,9 +24,10 @@ export function readHarnessSettings(folder) {
       programs: data?.programs && typeof data.programs === 'object' && !Array.isArray(data.programs) ? data.programs : {},
       off: Array.isArray(data?.off) ? data.off.filter((key) => typeof key === 'string') : [],
       laneReplies: data?.laneReplies === 'interrupt' ? 'interrupt' : 'next-turn',
+      laneCountWarning: laneCountWarningOf(data?.laneCountWarning),
     }
   } catch {
-    return { programs: {}, off: [], laneReplies: 'next-turn' }
+    return { programs: {}, off: [], laneReplies: 'next-turn', laneCountWarning: 0 }
   }
 }
 
@@ -44,6 +50,15 @@ export function saveHarnessSettings(folder, settings, { rename = renameSync } = 
 
 export function updateHarnessSettings(folder, body) {
   const settings = readHarnessSettings(folder)
+  if (Object.hasOwn(body ?? {}, 'laneCountWarning')) {
+    if (Object.hasOwn(body, 'program') || Object.hasOwn(body, 'enabled') || Object.hasOwn(body, 'laneReplies')) {
+      return 'Change one setting at a time.'
+    }
+    if (!Number.isInteger(body.laneCountWarning) || body.laneCountWarning < 0) return LANE_COUNT_WARNING_PROBLEM
+    settings.laneCountWarning = body.laneCountWarning
+    saveHarnessSettings(folder, settings)
+    return ''
+  }
   if (Object.hasOwn(body ?? {}, 'laneReplies')) {
     if (Object.hasOwn(body, 'program') || Object.hasOwn(body, 'enabled')) return 'Change one setting at a time.'
     if (!LANE_REPLIES.includes(body.laneReplies)) return "Choose whether a reply waits for the lane's next turn or interrupts it at once."
@@ -93,11 +108,19 @@ export function clearHarnessChecks(folder) {
 export async function harnessStatus(key, { runsFolder, lanes, env, platform, available }) {
   const settings = readHarnessSettings(runsFolder)
   const enabled = !settings.off.includes(key)
+  const laneCountWarning = settings.laneCountWarning
   if (key === 'machineroom') {
-    return { enabled, ready: available, program: '', version: '', reason: available ? '' : 'No key or endpoint is saved.' }
+    return {
+      enabled,
+      ready: available,
+      program: '',
+      version: '',
+      reason: available ? '' : 'No key or endpoint is saved.',
+      laneCountWarning,
+    }
   }
   const program = resolveHarnessProgram(key, { runsFolder, lanes, env, platform })
-  if (!program) return { enabled, ready: false, program: '', version: '', reason: 'No program was found.' }
+  if (!program) return { enabled, ready: false, program: '', version: '', reason: 'No program was found.', laneCountWarning }
   let checks = cache.get(runsFolder)
   if (!checks) {
     checks = new Map()
@@ -116,5 +139,6 @@ export async function harnessStatus(key, { runsFolder, lanes, env, platform, ava
     program: maskProfilePaths(program),
     version: ready ? versionLine(result.stdout) : '',
     reason: ready ? '' : 'The program did not answer a version check.',
+    laneCountWarning,
   }
 }

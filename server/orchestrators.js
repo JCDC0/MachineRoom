@@ -12,6 +12,7 @@ import { MODEL_ALIASES } from './model-list.js'
 import {
   COMPACT_RUNNING_PROBLEM,
   CONFIRM_MESSAGE_PROBLEM,
+  CONFIRM_STOP_PROBLEM,
   createOrchestrator,
   APPROVAL_TIMEOUT_MS,
   DEFAULT_AUTOCOMPACT_MODE,
@@ -50,6 +51,8 @@ export const PAGE_MESSAGE_PROBLEM = 'A page cannot send a message as the orchest
 export const ORCHESTRATOR_TARGET_PROBLEM = 'The orchestrator sends a message to a sub orchestrator.'
 export const MESSAGE_FROM_PROBLEM = 'A message comes from the owner or the orchestrator.'
 export const NO_TOKEN_PROBLEM = 'A request with no Origin needs a valid orchestrator token.'
+export const SECTOR_STOPPING_PROBLEM = 'That sector is stopping.'
+export const SUB_STOP_TREE_PROBLEM = 'A sub can only stop its own sector.'
 export const LANE_ENDED_PROBLEM = 'That lane run has ended or is not known.'
 export const LANE_LIMIT_PROBLEM = 'This lane run has sent its 4 messages.'
 export const LANE_MESSAGE_LIMIT = 4
@@ -242,6 +245,8 @@ export function createOrchestrators({
   harnessAvailable = isHarnessAvailable,
   laneTicket,
   laneTickets,
+  runs = null,
+  interruptLane,
 } = {}) {
   const root = projectRoot ? resolve(projectRoot) : ''
   const folder = resolve(runsFolder)
@@ -250,6 +255,8 @@ export function createOrchestrators({
   const instances = new Map()
   const configs = new Map()
   let stopped = false
+  let attachedRuns = runs ?? null
+  const stoppingSectors = new Map()
 
   function agentKey(id) {
     const key = typeof id === 'string' ? id.trim() : ''
@@ -693,7 +700,130 @@ export function createOrchestrators({
   const sentMessages = new Map()
   const laneSent = new Map()
   const laneBackups = new Map()
+  const seenLaneEntries = new WeakSet()
   const clock = typeof now === 'function' ? now : Date.now
+
+  function attachRuns(nextRuns) {
+    if (nextRuns && typeof nextRuns === 'object') attachedRuns = nextRuns
+  }
+
+  function enterStopping(id, sectorLanes) {
+    const entry = { lanes: sectorLanes ? new Set(sectorLanes) : null }
+    const list = stoppingSectors.get(id) ?? []
+    list.push(entry)
+    stoppingSectors.set(id, list)
+    return () => {
+      const current = stoppingSectors.get(id)
+      if (!current) return
+      const index = current.indexOf(entry)
+      if (index !== -1) current.splice(index, 1)
+      if (current.length === 0) stoppingSectors.delete(id)
+    }
+  }
+
+  function isSectorStopping(id) {
+    if (stoppingSectors.has(ORCHESTRATOR_KEY)) return true
+    const key = typeof id === 'string' ? id.trim() : ''
+    return key !== '' && stoppingSectors.has(key)
+  }
+
+  function isLaneStopping(lane) {
+    if (stoppingSectors.has(ORCHESTRATOR_KEY)) return true
+    const key = typeof lane === 'string' ? lane.trim() : ''
+    if (!key) return false
+    const holder = sectorForLane(key)
+    if (holder && stoppingSectors.has(holder.id)) return true
+    for (const entries of stoppingSectors.values()) {
+      for (const entry of entries) {
+        if (entry.lanes === null || entry.lanes.has(key)) return true
+      }
+    }
+    return false
+  }
+
+  async function stopTree(body, page, tokenValue = '') {
+    const actor = page ? null : idForToken(tokenValue)
+    if (!page && !actor) {
+      return { status: 403, body: { error: NO_TOKEN_PROBLEM } }
+    }
+    const hasId = Object.hasOwn(body, 'id') && body.id !== undefined
+    if (actor && actor !== ORCHESTRATOR_KEY) {
+      if (hasId && (typeof body.id !== 'string' || body.id.trim() !== actor)) {
+        return { status: 403, body: { error: SUB_STOP_TREE_PROBLEM } }
+      }
+    }
+    if (body.confirmed !== true) {
+      return { status: 400, body: { error: CONFIRM_STOP_PROBLEM } }
+    }
+    if (hasId && body.id !== null && typeof body.id !== 'string') {
+      return { status: 404, body: { error: NO_ORCHESTRATOR_PROBLEM } }
+    }
+    const targetId = actor && actor !== ORCHESTRATOR_KEY
+      ? actor
+      : typeof body.id === 'string' && body.id.trim()
+        ? body.id.trim()
+        : ORCHESTRATOR_KEY
+    const targetInstance = find(targetId)
+    if (!targetInstance) {
+      return { status: 404, body: { error: NO_ORCHESTRATOR_PROBLEM } }
+    }
+    const isWholeTree = targetId === ORCHESTRATOR_KEY
+    const targetOrchestrators = isWholeTree ? [...instances.keys()] : [targetId]
+    const targetLanes = isWholeTree ? null : new Set(sector(targetId)?.lanes ?? [])
+    const releaseGate = enterStopping(targetId, targetLanes)
+    try {
+      const stoppedOrchestrators = []
+      for (const id of targetOrchestrators) {
+        const instance = instances.get(id)
+        if (!instance) continue
+        const out = instance.stop({ confirmed: true })
+        if (out?.status === 200) stoppedOrchestrators.push(id)
+      }
+      const backupLanes = new Set()
+      for (const [ticket, backup] of laneBackups) {
+        const held = typeof laneTicket === 'function' ? laneTicket(ticket) : null
+        if (!held) {
+          laneBackups.delete(ticket)
+          continue
+        }
+        if (
+          isWholeTree ||
+          targetLanes.has(held.lane) ||
+          (held.startedBy && targetOrchestrators.includes(held.startedBy))
+        ) {
+          backupLanes.add(backup)
+        }
+      }
+      let stoppedLanes = []
+      let stillRunning = []
+      if (attachedRuns && typeof attachedRuns.stopSectorLanes === 'function') {
+        const laneResult = await attachedRuns.stopSectorLanes({
+          targetId,
+          isWholeTree,
+          targetOrchestrators,
+          targetLanes,
+          backupLanes,
+        })
+        stoppedLanes = laneResult?.stoppedLanes ?? []
+        stillRunning = laneResult?.stillRunning ?? []
+      }
+      return {
+        status: 200,
+        body: { stoppedOrchestrators, stoppedLanes, stillRunning },
+      }
+    } finally {
+      releaseGate()
+    }
+  }
+
+  function laneHarnessFor(laneKey) {
+    const given = typeof lanes === 'function' ? lanes() : (lanes ?? {})
+    const all = readAllLanes({ folder: root, runsFolder: folder, lanesJson: given })
+    const entry =
+      (all && typeof all === 'object' && Object.hasOwn(all, laneKey) ? all[laneKey] : null) ??
+      (given && typeof given === 'object' && Object.hasOwn(given, laneKey) ? given[laneKey] : null)
+    return typeof entry?.cli?.harness === 'string' ? entry.cli.harness.trim() : ''
+  }
 
   function laneKeyOf(value) {
     const target = typeof value === 'string' ? value.trim() : ''
@@ -725,6 +855,27 @@ export function createOrchestrators({
     if (!held || !Array.isArray(held.inbox)) return false
     held.inbox.push({ from, text, at: new Date(at).toISOString() })
     while (held.inbox.length > LANE_INBOX_LIMIT) held.inbox.shift()
+    if (
+      !stopped &&
+      typeof interruptLane === 'function' &&
+      readHarnessSettings(folder).laneReplies === 'interrupt' &&
+      laneHarnessFor(lane) !== 'machineroom'
+    ) {
+      setImmediate(() => {
+        if (stopped) return
+        void Promise.resolve(
+          interruptLane({
+            lane,
+            held,
+            takeUnseen: () => {
+              const unseen = held.inbox.filter((entry) => !seenLaneEntries.has(entry))
+              for (const entry of unseen) seenLaneEntries.add(entry)
+              return unseen
+            },
+          })
+        ).catch(() => {})
+      })
+    }
     return true
   }
 
@@ -749,7 +900,10 @@ export function createOrchestrators({
     const held = ticket && typeof laneTicket === 'function' ? laneTicket(ticket) : null
     if (!held) return { status: 403, body: { error: LANE_ENDED_PROBLEM } }
     const messages = Array.isArray(held.inbox)
-      ? held.inbox.map((entry) => ({ from: entry.from, text: entry.text, at: entry.at }))
+      ? held.inbox.map((entry) => {
+          seenLaneEntries.add(entry)
+          return { from: entry.from, text: entry.text, at: entry.at }
+        })
       : []
     return { status: 200, body: { messages } }
   }
@@ -774,6 +928,9 @@ export function createOrchestrators({
     const ownBackup = typeof own?.fallback === 'string' ? own.fallback.trim() : ''
     if (ownBackup === '' || lane !== ownBackup) {
       return { status: 403, body: { error: LANE_TAKEOVER_PROBLEM } }
+    }
+    if (isLaneStopping(lane) || isLaneStopping(held.lane) || (held.startedBy && isSectorStopping(held.startedBy))) {
+      return { status: 409, body: { error: SECTOR_STOPPING_PROBLEM } }
     }
     laneBackups.set(ticket, lane)
     return { status: 200, body: { lane: laneName(ticket, held), from: held.lane } }
@@ -871,6 +1028,9 @@ export function createOrchestrators({
             const name = own?.name?.trim() || actor
             return { status: 403, body: { error: `The ${name} sector does not hold the lane ${target}.` } }
           }
+        }
+        if (isLaneStopping(target) || (actor && isSectorStopping(actor))) {
+          return { status: 409, body: { error: SECTOR_STOPPING_PROBLEM } }
         }
         if (typeof isWorking === 'function' && isWorking(target)) {
           return { status: 409, body: { error: 'That lane is working. Wait for it, or stop it.' } }
@@ -1182,6 +1342,14 @@ export function createOrchestrators({
         return true
       }
       const out = instance.stop(body)
+      sendJson(req, res, out.status, out.body)
+      return true
+    }
+    if (path === '/api/orchestrator/stop-tree') {
+      if (method !== 'POST') return methodNotAllowed(req, res)
+      const body = await readJsonBody(req, res)
+      if (body === null) return true
+      const out = await stopTree(body, page, token)
       sendJson(req, res, out.status, out.body)
       return true
     }
@@ -1520,6 +1688,10 @@ export function createOrchestrators({
     main,
     handle,
     message,
+    stopTree,
+    attachRuns,
+    isSectorStopping,
+    isLaneStopping,
     list,
     subs,
     sector,

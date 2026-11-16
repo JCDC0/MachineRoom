@@ -1,4 +1,4 @@
-import { checkCommandLines, checkCommandProblem, DEFAULT_MINUTES } from './run.js'
+import { checkCommandLines, checkCommandProblem, continueFromProblem, DEFAULT_MINUTES } from './run.js'
 
 export const QUEUE_TASK_LIMIT = 20
 export const QUEUE_TASK_TEXT_LIMIT = 4000
@@ -106,6 +106,14 @@ export function parseQueueArgs(argv) {
       options.force = true
       continue
     }
+    if (named('continue-from')) {
+      const value = arg === '--continue-from' ? args[index + 1] : arg.slice('--continue-from='.length)
+      if (arg === '--continue-from') index += 1
+      const problem = continueFromProblem(value)
+      if (problem !== '') throw new Error(problem)
+      options.continueFrom = value.trim()
+      continue
+    }
     if (arg.startsWith('-')) throw new Error(`Unknown option ${arg}.`)
     if (arg === '') continue
     if (!options.lane) options.lane = arg
@@ -123,7 +131,7 @@ export function parseQueueArgs(argv) {
   return options
 }
 
-export async function runQueue({ tasks, runTask, runTests, git, author = null } = {}) {
+export async function runQueue({ tasks, runTask, runTests, git, author = null, continueBranch = false, startIndex = 1 } = {}) {
   const list = Array.isArray(tasks) ? tasks : []
   const branch = String(git?.branch ?? '')
   const lane = String(git?.lane ?? '')
@@ -132,13 +140,16 @@ export async function runQueue({ tasks, runTask, runTests, git, author = null } 
   if (typeof runTask !== 'function') throw new Error('A queue needs a task runner.')
   if (branch === '') throw new Error('A queue needs a branch name.')
   if (lane === '') throw new Error('A queue needs a lane name.')
-  if (await git.exists(branch)) throw new Error(`The branch ${branch} already exists. Pick another name or delete it first.`)
-  if (String(await git.status()).trim() !== '') throw new Error('The project has uncommitted changes. A queue needs a clean start.')
-  await git.create(branch)
+  if (continueBranch !== true) {
+    if (await git.exists(branch)) throw new Error(`The branch ${branch} already exists. Pick another name or delete it first.`)
+    if (String(await git.status()).trim() !== '') throw new Error('The project has uncommitted changes. A queue needs a clean start.')
+    await git.create(branch)
+  }
   const head = async () => (typeof git.head === 'function' ? String(await git.head()).trim() : '')
   const currentBranch = async () => (typeof git.currentBranch === 'function' ? String(await git.currentBranch()).trim() : '')
   let stopped = false
-  for (let offset = 0; offset < list.length; offset += 1) {
+  const firstOffset = Math.max(0, Number.isInteger(startIndex) ? startIndex - 1 : 0)
+  for (let offset = firstOffset; offset < list.length; offset += 1) {
     const number = offset + 1
     const task = list[offset]
     if (stopped) {
