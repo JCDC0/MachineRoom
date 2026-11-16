@@ -3,6 +3,7 @@ import { visibleText } from '../model/paths.js'
 import { addressIn, addressUrl, consoleRows } from '../engine/terminals.js'
 import { isOrchestratorAgent } from './agentList.js'
 import { orchestratorStateWord } from './contextRing.js'
+import { modelName } from './modelRefresh.js'
 import { hasWaitingApproval, orchestratorAnswerList } from './transportOrchestrators.js'
 
 export const DOCK_LOG_LIMIT = 12
@@ -235,6 +236,9 @@ function withOrchestratorData(selected, orchestrator) {
     if (value !== null) next[key] = value
   }
   if (typeof main.autocompact === 'boolean') next.autocompact = main.autocompact
+  const harness = clean(main.harness)
+  if (harness) next.harness = harness
+  if (typeof main.model === 'string') next.model = clean(main.model) || modelName(main.model)
   return next
 }
 
