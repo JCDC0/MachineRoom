@@ -3561,3 +3561,10 @@ Review 44 fixes, P425 and P426. `docs/agents/AUDIT-2026-11-REVIEW-44.md` (P424, 
 
 1. Say that the parent is told once per branch head only when the lane changed files outside the scope. A refused merge because the changed files could not be read sends no message; the owner or the orchestrator above can still allow it with `Merge anyway`. Read `server/reviews.js` `scopeRefusal` to confirm before writing. Plain words, no em dashes.
 2. Run `node node_modules/vitest/vitest.mjs run tests/docs.test.js` if it exists and report the counts.
+
+**P427. Plan the next round of fixes (AGY, Argon, plan).** Read this brief, `docs/agents/FREE-HIERARCHY.md`, `docs/agents/architecture/LIMITS.md` and the last three review files (`AUDIT-2026-11-REVIEW-42.md` to `-44.md`) only. Change no file except the one you write. Commit when done. Files: docs/agents/PLAN-NEXT-ARGON-2.md.
+
+1. Find up to 8 gaps in the code on `main` that are bugs, missing checks, untested paths or docs the code contradicts, in the free hierarchy (orchestrators, subs, lanes, modes, scopes, worktrees, messages, failover, reviews). Read the code for each; no gap without a file and line you read.
+2. Leave out anything that changes what the owner sees or adds a feature; list such ideas separately at the end under `Needs the owner's yes`, one line each.
+3. For each gap: the gap in one or two sentences with file and line, the files a fix touches, the test that would fail before the fix, a size (minutes) and a harness (OpenCode for small, Codex Terra for server work across files, AGY Hydrogen for UI that touches no CSS).
+4. Rank by risk to the owner's work. Under 90 lines. Plain words, no em dashes.
