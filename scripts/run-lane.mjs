@@ -1760,6 +1760,23 @@ function recordRoom(record, toolLines, lanes) {
   }
 }
 
+async function claimBackupTicket(ticket, lane) {
+  const bridge = typeof process.env.MACHINEROOM_BRIDGE === 'string' ? process.env.MACHINEROOM_BRIDGE.trim().replace(/\/+$/, '') : ''
+  const held = typeof ticket === 'string' ? ticket.trim() : ''
+  if (bridge === '' || held === '' || typeof fetch !== 'function') return false
+  try {
+    const answer = await fetch(`${bridge}/api/orchestrator/failover`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'X-MachineRoom-Lane': held },
+      body: JSON.stringify({ lane }),
+      signal: AbortSignal.timeout(2000),
+    })
+    return answer.ok
+  } catch {
+    return false
+  }
+}
+
 async function startFailover({ laneKey, target, lanes, options, wanted, prompt, promptFor = null, folder, project, task, queue = null, base = '', deferRecord, openLog, failedRecord, failedStartBranch, onStart = null }) {
   const allowedLanes = Array.isArray(options?.allowedLanes) && options.allowedLanes.length > 0 ? options.allowedLanes : null
   if (allowedLanes && !allowedLanes.includes(target)) {
@@ -1830,6 +1847,7 @@ async function startFailover({ laneKey, target, lanes, options, wanted, prompt, 
         return null
       }
     }
+    await claimBackupTicket(process.env.MACHINEROOM_LANE_TICKET, target)
     return await startLane({
       options: { ...options, lane: target, failedOver: true },
       lane: fallbackLane,
@@ -1848,6 +1866,7 @@ async function startFailover({ laneKey, target, lanes, options, wanted, prompt, 
       base,
       branchSuffix: `-on-${target}`,
       failoverFrom: { lane: laneKey, startedAt: failedRecord?.startedAt },
+      laneTicket: process.env.MACHINEROOM_LANE_TICKET,
       openLog,
       startedAt,
       onStart,
@@ -1875,7 +1894,7 @@ function laneConfigBody({ harness, mode, enabledServers, needsMcp }) {
   return config
 }
 
-export async function startLane({ options, lane, lanes, wanted, prompt, logPath, usageFile, name, project = '', task = '', queue = null, lockPath = '', projectBranch = null, deferRecord = false, base = '', openLog = createWriteStream, branchSuffix = '', failoverFrom = null, promptFor = null, startedAt: givenStartedAt = null, onStart = null }) {
+export async function startLane({ options, lane, lanes, wanted, prompt, logPath, usageFile, name, project = '', task = '', queue = null, lockPath = '', projectBranch = null, deferRecord = false, base = '', openLog = createWriteStream, branchSuffix = '', failoverFrom = null, promptFor = null, startedAt: givenStartedAt = null, onStart = null, laneTicket = '' }) {
   if (readHarnessSettings(runsFolder()).off.includes(lane?.cli?.harness)) throw new Error(HARNESS_OFF_PROBLEM)
   if (options?.failedOver !== true) {
     const problem = fallbackProblem({ laneKey: options?.lane, fallback: lane?.fallback, lanes })
@@ -1964,6 +1983,7 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
     const runsDir = options?.runs || (logPath ? dirname(logPath) : runsFolder())
     const endpoints = readEndpoints(runsDir)
     const extra = { ...command.env }
+    if (typeof laneTicket === 'string' && laneTicket.trim() !== '') extra.MACHINEROOM_LANE_TICKET = laneTicket.trim()
     if (lane.cli.harness === 'machineroom' && Number.isFinite(Number(options?.minutes))) {
       extra.MR_AGENT_MINUTES = String(options.minutes)
     }
@@ -2236,7 +2256,7 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
         lane, lanes, wanted, prompt,
         logPath: join(dirname(logPath), `${retryName}.log`),
         usageFile: join(dirname(usageFile), `${retryName}.usage.json`),
-        name: retryName, project, task, queue, lockPath, projectBranch, deferRecord, base: runBase, openLog, branchSuffix, failoverFrom, promptFor, onStart,
+        name: retryName, project, task, queue, lockPath, projectBranch, deferRecord, base: runBase, openLog, branchSuffix, failoverFrom, promptFor, onStart, laneTicket,
       })
     }
     const record = laneRunRecord({
