@@ -1,11 +1,16 @@
+import { readFileSync } from 'node:fs'
 import { act, createElement } from 'react'
+import { renderToString } from 'react-dom/server'
 import { afterEach, describe, expect, it } from 'vitest'
+import Connect from '../src/ui/Connect.jsx'
 import DispatchPanel from '../src/ui/panels/DispatchPanel.jsx'
 import { clearProjectDraft } from '../src/ui/panels/runs.js'
 import { buttonWithText, click, settle, type, withDom } from './helpers/uiDom.js'
 
 const FIRST_TASK =
   'Read this repository and say what it does, how to run it and how to test it. Change nothing.'
+const RECORDS_SENTENCE =
+  'MachineRoom keeps its records, logs and costs on this computer; the agents still send your code to their model providers.'
 
 const trackedProjects = []
 
@@ -219,5 +224,15 @@ describe('First task card in DispatchPanel', () => {
         body: { tasks: ['Second task.'], worktree: true, mode: 'bypass' },
       })
     })
+  })
+})
+
+describe('local records notice on Connect and in README', () => {
+  it('shows the exact local records and model provider sentence in Connect and README.md', () => {
+    const html = renderToString(createElement(Connect, { firstBoot: false }))
+    expect(html).toContain(RECORDS_SENTENCE)
+
+    const readme = readFileSync(new URL('../README.md', import.meta.url), 'utf8')
+    expect(readme).toContain(RECORDS_SENTENCE)
   })
 })

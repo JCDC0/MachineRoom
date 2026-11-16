@@ -89,6 +89,8 @@ No project at hand? Run `npm run serve -- up --open` (or `machineroom`) in the M
 
 The room writes run logs, locks and orchestrator state (`orchestrator-<hash>.json` and `orchestrator-<hash>.lock`) inside the runs folder. By default that is `%LOCALAPPDATA%\MachineRoom\runs` on Windows, or `$XDG_STATE_HOME/machineroom/runs` or `~/.local/state/machineroom/runs` elsewhere. Set `MACHINEROOM_RUNS` to change it: in PowerShell `$env:MACHINEROOM_RUNS = "$env:TEMP\machineroom-runs"`, or `MACHINEROOM_RUNS=/path/to/runs` in bash.
 
+MachineRoom keeps its records, logs and costs on this computer; the agents still send your code to their model providers.
+
 ![One touched card, close up](docs/images/closeup.png)
 
 Follow mode close up on the card an agent is touching.
