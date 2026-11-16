@@ -769,6 +769,13 @@ export function createOrchestrators({
         : ORCHESTRATOR_KEY
     const laneTarget = laneKeyOf(target)
     if (laneTarget && !page) {
+      if (actor !== ORCHESTRATOR_KEY) {
+        const own = sector(actor)
+        if (!own || !Array.isArray(own.lanes) || !own.lanes.includes(laneTarget)) {
+          const name = own?.name?.trim() || actor
+          return { status: 403, body: { error: `The ${name} sector does not hold the lane ${laneTarget}.` } }
+        }
+      }
       const from =
         body.from === undefined || body.from === null || body.from === ''
           ? 'orchestrator'

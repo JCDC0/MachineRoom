@@ -1,7 +1,9 @@
 # Changelog
 
 ## Unreleased
+- A sub orchestrator's lane:KEY message to a lane outside its sector is refused with 403.
 - Argon's survey of coding agent harnesses and what their users want (P442c).
+- P445: A sub token's prefixed lane message is refused outside its sector before it reaches the lane.
 - Review 46 (GPT-6.1 Sol) finds five gaps in the sector gates, the failover mode and the sub settings saves.
 - A sub's harness, model or effort change is saved to the ladder and its config, so a later ladder save keeps it and does not close the sub's running turn.
 - A Bypass run that fails over never passes Bypass to a backup lane not saved as Bypass; the backup runs at its own mode or its harness default.
