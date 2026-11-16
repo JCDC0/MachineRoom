@@ -1,13 +1,13 @@
 import { rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { act, createElement } from 'react'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createBridge } from '../server/index.js'
 import { projectSettingsFileFor, readProjectSettings } from '../server/project-settings.js'
 import { createClient } from '../src/control/client.js'
 import { createMockClient } from '../src/control/mock.js'
 import DispatchPanel from '../src/ui/panels/DispatchPanel.jsx'
-import { clearProjectDraft } from '../src/ui/panels/runs.js'
+import { clearProjectDraft, clearSplitRun } from '../src/ui/panels/runs.js'
 import { buttonWithText, click, settle, type, withDom } from './helpers/uiDom.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 
@@ -15,6 +15,8 @@ const cleanups = []
 const trackedProjects = []
 
 afterEach(async () => {
+  vi.useRealTimers()
+  clearSplitRun()
   while (trackedProjects.length > 0) {
     clearProjectDraft(trackedProjects.pop())
   }
@@ -104,19 +106,37 @@ function selectedValue(select) {
   return select?.value ?? ''
 }
 
-function planCheckbox(container) {
+function checkboxWithLabel(container, text) {
   const label = container
     .querySelectorAll('label')
-    .find((item) => item.textContent.includes('Start new runs in Plan'))
+    .find((item) => item.textContent.includes(text))
   return label ? label.querySelector('input[type="checkbox"]') ?? label.querySelector('input') : null
 }
 
-async function toggleCheckbox(root, box, checked) {
+function planCheckbox(container) {
+  return checkboxWithLabel(container, 'Start new runs in Plan')
+}
+
+async function toggleCheckbox(root, box, checked, useFake = false) {
   await act(async () => {
     box.checked = checked
     box.click()
   })
-  await settle(20)
+  if (useFake) await settleTimers()
+  else await settle(20)
+}
+
+async function settleTimers() {
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(0)
+  })
+}
+
+async function mountDispatchTimers(root, client, agents) {
+  await act(async () => {
+    root.render(createElement(DispatchPanel, { client, initialAgents: agents }))
+  })
+  await settleTimers()
 }
 
 describe('planByDefault setting and Dispatch behavior', () => {
@@ -399,6 +419,159 @@ describe('planByDefault setting and Dispatch behavior', () => {
 
       await toggleCheckbox(root, box, false)
       expect(selectedValue(container.querySelector('#project-run-mode'))).toBe('bypass')
+    })
+  })
+
+  it('with planByDefault on, two split tasks on Plan-capable lanes each send mode: plan', async () => {
+    vi.useFakeTimers()
+    const agents = [
+      { id: 'agent-claude', key: 'claude', name: 'Claude Code', adapterType: 'claude_local', harness: 'claude', mode: 'bypass', role: null },
+      { id: 'agent-opencode', key: 'opencode', name: 'OpenCode', adapterType: 'opencode_local', harness: 'opencode', mode: 'auto', role: null },
+    ]
+    const { client, startCalls } = makeDispatchClient({ project: 'split-plan-on', agents, planByDefault: true })
+
+    await withDom(async ({ container, root }) => {
+      await mountDispatchTimers(root, client, agents)
+      await type(root, container.querySelector('#project-run-task'), 'Inspect routes.\n---\nCheck tests.')
+      await toggleCheckbox(root, checkboxWithLabel(container, 'One lane per task'), true, true)
+      await click(root, buttonWithText(container, 'Run 2 tasks on 2 lanes'))
+      await settleTimers()
+
+      const card = container.querySelector('[aria-label="Confirm project runs"]')
+      expect(card).not.toBeNull()
+      expect(card.textContent).not.toContain('This lane has no Plan mode.')
+
+      await click(root, buttonWithText(card, 'Confirm'))
+      await settleTimers()
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(3000)
+      })
+      await settleTimers()
+
+      expect(startCalls).toEqual([
+        { lane: 'claude', body: { tasks: ['Inspect routes.'], worktree: true, mode: 'plan' } },
+        { lane: 'opencode', body: { tasks: ['Check tests.'], worktree: true, mode: 'plan' } },
+      ])
+    })
+  })
+
+  it('with planByDefault on, split tasks on lanes without Plan send no mode and show the line once per such lane', async () => {
+    vi.useFakeTimers()
+    const agents = [
+      { id: 'agent-claude', key: 'claude', name: 'Claude Code', adapterType: 'claude_local', harness: 'claude', mode: 'bypass', role: null },
+      { id: 'agent-hermes', key: 'hermes', name: 'Hermes', adapterType: 'hermes_local', harness: 'hermes', role: null },
+      { id: 'agent-copilot', key: 'copilot', name: 'Copilot', adapterType: 'copilot_local', harness: 'copilot', role: null },
+    ]
+    const { client, startCalls } = makeDispatchClient({ project: 'split-no-plan', agents, planByDefault: true })
+
+    await withDom(async ({ container, root }) => {
+      await mountDispatchTimers(root, client, agents)
+      await type(root, container.querySelector('#project-run-task'), 'Task A.\n---\nTask B.\n---\nTask C.')
+      await toggleCheckbox(root, checkboxWithLabel(container, 'One lane per task'), true, true)
+      await click(root, buttonWithText(container, 'Run 3 tasks on 3 lanes'))
+      await settleTimers()
+
+      const card = container.querySelector('[aria-label="Confirm project runs"]')
+      expect(card).not.toBeNull()
+      expect(card.textContent.match(/This lane has no Plan mode\./g)).toHaveLength(2)
+
+      const entries = card.querySelectorAll('.runs-entry')
+      expect(entries).toHaveLength(3)
+      expect(entries[0].textContent).not.toContain('This lane has no Plan mode.')
+      expect(entries[1].textContent).toContain('This lane has no Plan mode.')
+      expect(entries[2].textContent).toContain('This lane has no Plan mode.')
+
+      await click(root, buttonWithText(card, 'Confirm'))
+      await settleTimers()
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(3000)
+      })
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(3000)
+      })
+      await settleTimers()
+
+      expect(startCalls).toEqual([
+        { lane: 'claude', body: { tasks: ['Task A.'], worktree: true, mode: 'plan' } },
+        { lane: 'hermes', body: { tasks: ['Task B.'], worktree: true } },
+        { lane: 'copilot', body: { tasks: ['Task C.'], worktree: true } },
+      ])
+      expect(Object.hasOwn(startCalls[1].body, 'mode')).toBe(false)
+      expect(Object.hasOwn(startCalls[2].body, 'mode')).toBe(false)
+    })
+  })
+
+  it('with planByDefault off, split tasks send no mode and toggling updates split starts', async () => {
+    vi.useFakeTimers()
+    const agents = [
+      { id: 'agent-claude', key: 'claude', name: 'Claude Code', adapterType: 'claude_local', harness: 'claude', mode: 'bypass', role: null },
+      { id: 'agent-opencode', key: 'opencode', name: 'OpenCode', adapterType: 'opencode_local', harness: 'opencode', mode: 'auto', role: null },
+      { id: 'agent-hermes', key: 'hermes', name: 'Hermes', adapterType: 'hermes_local', harness: 'hermes', role: null },
+    ]
+    const { client, startCalls } = makeDispatchClient({ project: 'split-plan-off', agents, planByDefault: false })
+
+    await withDom(async ({ container, root }) => {
+      await mountDispatchTimers(root, client, agents)
+      await type(root, container.querySelector('#project-run-task'), 'One.\n---\nTwo.\n---\nThree.')
+      await toggleCheckbox(root, checkboxWithLabel(container, 'One lane per task'), true, true)
+      await click(root, buttonWithText(container, 'Run 3 tasks on 3 lanes'))
+      await settleTimers()
+
+      const firstCard = container.querySelector('[aria-label="Confirm project runs"]')
+      expect(firstCard).not.toBeNull()
+      expect(firstCard.textContent).not.toContain('This lane has no Plan mode.')
+
+      await click(root, buttonWithText(firstCard, 'Confirm'))
+      await settleTimers()
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(3000)
+      })
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(3000)
+      })
+      await settleTimers()
+
+      expect(startCalls).toEqual([
+        { lane: 'claude', body: { tasks: ['One.'], worktree: true } },
+        { lane: 'opencode', body: { tasks: ['Two.'], worktree: true } },
+        { lane: 'hermes', body: { tasks: ['Three.'], worktree: true } },
+      ])
+      for (const call of startCalls) {
+        expect(Object.hasOwn(call.body, 'mode')).toBe(false)
+      }
+
+      const box = planCheckbox(container)
+      await toggleCheckbox(root, box, true, true)
+      await type(root, container.querySelector('#project-run-task'), 'Four.\n---\nFive.')
+      await click(root, buttonWithText(container, 'Run 2 tasks on 2 lanes'))
+      await settleTimers()
+      await click(root, buttonWithText(container.querySelector('[aria-label="Confirm project runs"]'), 'Confirm'))
+      await settleTimers()
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(3000)
+      })
+      await settleTimers()
+
+      expect(startCalls.slice(3)).toEqual([
+        { lane: 'claude', body: { tasks: ['Four.'], worktree: true, mode: 'plan' } },
+        { lane: 'opencode', body: { tasks: ['Five.'], worktree: true, mode: 'plan' } },
+      ])
+
+      await toggleCheckbox(root, box, false, true)
+      await type(root, container.querySelector('#project-run-task'), 'Six.\n---\nSeven.')
+      await click(root, buttonWithText(container, 'Run 2 tasks on 2 lanes'))
+      await settleTimers()
+      await click(root, buttonWithText(container.querySelector('[aria-label="Confirm project runs"]'), 'Confirm'))
+      await settleTimers()
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(3000)
+      })
+      await settleTimers()
+
+      expect(startCalls.slice(5)).toEqual([
+        { lane: 'claude', body: { tasks: ['Six.'], worktree: true } },
+        { lane: 'opencode', body: { tasks: ['Seven.'], worktree: true } },
+      ])
     })
   })
 })

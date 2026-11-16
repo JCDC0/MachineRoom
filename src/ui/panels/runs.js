@@ -365,11 +365,13 @@ export async function startSplitRun({ client, pairs, delay = PROJECT_SPLIT_DELAY
       break
     }
     const pair = list[index]
+    const mode = typeof pair.mode === 'string' ? pair.mode.trim() : ''
     try {
       const answer = await client.startRun(pair.lane, {
         tasks: [pair.task],
         worktree: useWorktree,
         ...(command === '' ? {} : { checkCommand: command }),
+        ...(mode === '' ? {} : { mode }),
       })
       answers.push({ ok: true, message: runStartLine(answer) })
     } catch (err) {
