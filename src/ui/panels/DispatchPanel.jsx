@@ -843,6 +843,7 @@ export default function DispatchPanel({
     setProjectShowConfirm(true)
     setProjectError(null)
     loadProjectGitState()
+    loadRuns()
   }
 
   async function saveProjectCheckCommand() {
@@ -1659,6 +1660,7 @@ export default function DispatchPanel({
                     onClick={() => {
                       setShowConfirm(true)
                       setRunError(null)
+                      loadRuns()
                     }}
                   >
                     Run now

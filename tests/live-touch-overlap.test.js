@@ -1,16 +1,22 @@
 import { appendFileSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { userInfo } from 'node:os'
 import { join } from 'node:path'
+import { act, createElement } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { activeLanesFileFor, writeActiveLanes } from '../server/active-lanes.js'
 import { createRunsApi } from '../server/runs.js'
 import { laneLockText, summarizeRun } from '../src/briefs/run.js'
+import DispatchPanel from '../src/ui/panels/DispatchPanel.jsx'
+import { clearSplitRun, overlapCardLines, runningLaneFiles } from '../src/ui/panels/runs.js'
 import { getJson, startLaneBridge, waitFor } from './helpers/bridge.js'
 import { makeTempDir } from './helpers/tempRoot.js'
+import { buttonWithText, settle, withDom } from './helpers/uiDom.js'
 
 const cleanups = []
 
 afterEach(async () => {
+  vi.useRealTimers()
+  clearSplitRun()
   while (cleanups.length > 0) {
     const fn = cleanups.pop()
     try {
@@ -353,5 +359,175 @@ describe('live touched files in GET /api/control/runs', () => {
     expect(masked.join('\n')).not.toContain(secretKey)
     expect(masked.join('\n')).not.toContain(userInfo().username)
     expect(masked[0]).toContain('[key]')
+  })
+})
+
+async function typeInto(node, text) {
+  await act(async () => {
+    node.focus()
+    node.dispatchEvent({ type: 'focusin', bubbles: true, cancelable: true })
+    node.value = text
+    node.dispatchEvent({ type: 'keyup', bubbles: true, cancelable: true })
+  })
+}
+
+async function selectLane(node, value) {
+  await act(async () => {
+    node.value = value
+    node.dispatchEvent({ type: 'change', bubbles: true, cancelable: true })
+  })
+}
+
+const UI_AGENTS = [
+  { id: 'agent-opencode', key: 'opencode', name: 'OpenCode', adapterType: 'opencode_local', role: null },
+  { id: 'agent-opencode2', key: 'opencode2', name: 'OpenCode 2', adapterType: 'opencode_local', role: null },
+]
+
+describe('Dispatch live touched overlap warning', () => {
+  it('shows Now editing in from a running lane log and still starts when confirmed', async () => {
+    const rig = await setupRunRig({ logContent: opencodeWriteLine('src/a.js') })
+    await startOtherTask(rig.url, 'opencode')
+
+    await waitFor(async () => {
+      const { body } = await getJson(`${rig.url}/api/control/runs`)
+      return Array.isArray(body?.running?.[0]?.touched) && body.running[0].touched.length > 0
+    }, { what: 'live touched path in bridge' })
+
+    const pending = new Set()
+    const track = (promise) => {
+      pending.add(promise)
+      return promise.finally(() => pending.delete(promise))
+    }
+    const startSpy = vi.fn((lane, body) =>
+      track(
+        getJson(`${rig.url}/api/control/runs`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', origin: rig.url },
+          body: JSON.stringify({ lane, ...body, confirmed: true }),
+        }).then((started) => {
+          expect(started.status).toBe(202)
+          return started.body
+        })
+      )
+    )
+    writeFileSync(
+      join(rig.runs, 'opencode2.spec.json'),
+      JSON.stringify({ logName: 'opencode2-project-test', logContent: '', release: rig.release })
+    )
+    const client = {
+      health: async () => ({ lanes: true }),
+      agents: async () => UI_AGENTS,
+      runs: () => track(getJson(`${rig.url}/api/control/runs`).then((res) => res.body)),
+      startRun: startSpy,
+    }
+
+    await withDom(async ({ container, root }) => {
+      await act(async () => {
+        root.render(createElement(DispatchPanel, { client, initialAgents: UI_AGENTS }))
+      })
+      await waitFor(async () => {
+        await settle(15)
+        return pending.size === 0 && container.textContent.includes('opencode')
+      }, { what: 'initial Dispatch runs load' })
+
+      await selectLane(container.querySelector('#project-run-lane'), 'opencode2')
+      await typeInto(container.querySelector('#project-run-task'), 'Edit a.\n\nFiles: `src/a.js`.')
+      await act(async () => {
+        buttonWithText(container, 'Run').click()
+      })
+      await waitFor(async () => {
+        await settle(15)
+        return pending.size === 0
+      }, { what: 'runs refresh on confirm' })
+
+      expect(container.textContent).toContain('Now editing in opencode: src/a.js')
+      expect(container.textContent).not.toContain('Also declared by opencode:')
+
+      const confirmButton = buttonWithText(container, 'Confirm')
+      expect(confirmButton.disabled).toBeFalsy()
+      expect(confirmButton.hasAttribute('disabled')).toBe(false)
+      await act(async () => {
+        confirmButton.click()
+      })
+      await waitFor(async () => {
+        await settle(15)
+        return startSpy.mock.calls.length === 1 && pending.size === 0 && !buttonWithText(container, 'Starting')
+      }, { what: 'confirm startRun to settle' })
+
+      expect(startSpy).toHaveBeenCalledTimes(1)
+      expect(startSpy.mock.calls[0][0]).toBe('opencode2')
+    })
+  })
+
+  it('omits Now editing in when the running lane only read the file or its log is unreadable', () => {
+    const readOnlyLines = overlapCardLines({
+      files: ['src/a.js'],
+      active: runningLaneFiles([{ lane: 'opencode', briefs: [], task: 'Read.', touched: [] }], []),
+      runningCount: 1,
+      startingCount: 1,
+      laneCountWarning: 0,
+    })
+    expect(readOnlyLines.join('\n')).not.toContain('Now editing in')
+
+    const unreadableLines = overlapCardLines({
+      files: ['src/a.js'],
+      active: runningLaneFiles([{ lane: 'opencode', briefs: [], task: 'Work.', touched: null }], []),
+      runningCount: 1,
+      startingCount: 1,
+      laneCountWarning: 0,
+    })
+    expect(unreadableLines.join('\n')).not.toContain('Now editing in')
+
+    const noFilesLines = overlapCardLines({
+      files: [],
+      active: runningLaneFiles([{ lane: 'opencode', briefs: [], task: 'Work.', touched: ['src/a.js'] }], []),
+      runningCount: 1,
+      startingCount: 1,
+      laneCountWarning: 0,
+    })
+    expect(noFilesLines).toContain('Overlap unknown: this task names no files.')
+    expect(noFilesLines.join('\n')).not.toContain('Now editing in')
+  })
+
+  it('refreshes runs when opening confirm so newly touched files show up', async () => {
+    let calls = 0
+    const client = {
+      health: async () => ({ lanes: true }),
+      agents: async () => UI_AGENTS,
+      runs: async () => {
+        calls += 1
+        return {
+          running: [
+            {
+              lane: 'opencode2',
+              briefs: [],
+              startedAt: '2026-11-17T03:00:00.000Z',
+              lastLines: [],
+              touched: calls === 1 ? [] : ['src/a.js'],
+              task: 'Other task.',
+            },
+          ],
+          recent: [],
+          project: 'demo-refresh-confirm',
+        }
+      },
+      startRun: async () => ({ lane: 'opencode' }),
+    }
+
+    await withDom(async ({ container, root }) => {
+      await act(async () => {
+        root.render(createElement(DispatchPanel, { client, initialAgents: UI_AGENTS }))
+      })
+      await settle(20)
+
+      await selectLane(container.querySelector('#project-run-lane'), 'opencode')
+      await typeInto(container.querySelector('#project-run-task'), 'Edit a.\n\nFiles: `src/a.js`.')
+      await act(async () => {
+        buttonWithText(container, 'Run').click()
+      })
+      await settle(20)
+
+      expect(container.textContent).toContain('Now editing in opencode2: src/a.js')
+    })
   })
 })

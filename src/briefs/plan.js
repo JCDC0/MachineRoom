@@ -47,26 +47,36 @@ function declaredList(value) {
   return []
 }
 
+function collectOverlapMatches(lanes, lane, source, rawList, wanted) {
+  const bucket = lanes.get(lane) ?? { lane, source, files: [], seen: new Set() }
+  for (const file of declaredList(rawList)) {
+    const key = compareFile(file)
+    const shared = wanted.get(key)
+    if (shared === undefined || bucket.seen.has(key)) continue
+    bucket.seen.add(key)
+    bucket.files.push(shared)
+  }
+  if (bucket.files.length > 0) lanes.set(lane, bucket)
+}
+
 export function overlappingLanes({ files, active } = {}) {
   const target = declaredList(files)
   if (target.length === 0) return 'unknown'
   const wanted = new Map(target.map((file) => [compareFile(file), file]))
-  const lanes = new Map()
+  const touchedLanes = new Map()
+  const declaredLanes = new Map()
   for (const entry of Array.isArray(active) ? active : []) {
     if (!entry || typeof entry !== 'object') continue
     const lane = typeof entry.lane === 'string' ? entry.lane.trim() : ''
     if (!lane) continue
-    const bucket = lanes.get(lane) ?? { files: [], seen: new Set() }
-    for (const file of declaredList(entry.files)) {
-      const key = compareFile(file)
-      const shared = wanted.get(key)
-      if (shared === undefined || bucket.seen.has(key)) continue
-      bucket.seen.add(key)
-      bucket.files.push(shared)
-    }
-    if (bucket.files.length > 0) lanes.set(lane, bucket)
+    if (Array.isArray(entry.touched)) collectOverlapMatches(touchedLanes, lane, 'touched', entry.touched, wanted)
+    collectOverlapMatches(declaredLanes, lane, 'declared', entry.files, wanted)
   }
-  return [...lanes].map(([lane, bucket]) => ({ lane, files: bucket.files }))
+  return [...touchedLanes.values(), ...declaredLanes.values()].map(({ lane, files: matched, source }) => ({
+    lane,
+    files: matched,
+    source,
+  }))
 }
 
 function idIndex(ids) {
