@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- P440: An OpenCode lane that is not Bypass denies writes outside the project, and more mode lines say where writes go.
 - A sub's harness, model or effort change is saved to the ladder and its config, so a later ladder save keeps it and does not close the sub's running turn.
 - A Bypass run that fails over never passes Bypass to a backup lane not saved as Bypass; the backup runs at its own mode or its harness default.
 - Sub harness, model and effort changes update the saved ladder and keep unchanged working turns alive.

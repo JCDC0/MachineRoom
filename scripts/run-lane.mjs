@@ -1826,21 +1826,32 @@ async function startFailover({ laneKey, target, lanes, options, wanted, prompt, 
   }
 }
 
-function laneConfigPlan(lane, folder, name) {
+export function laneConfigPlan(lane, folder, name) {
   const enabledServers = enabledMcpServers(folder)
   const harness = lane?.cli?.harness
   const mode = lane?.cli?.mode
   const needsMcp = enabledServers.length > 0 && (harness === 'claude' || harness === 'opencode')
-  const needsOpencodeConfig = harness === 'opencode' && (needsMcp || mode === 'edits' || mode === 'plan')
+  const needsOpencodeConfig = harness === 'opencode' && mode !== 'bypass'
   const mcpConfigPath = needsMcp || needsOpencodeConfig ? join(folder, `${name}.mcp.json`) : ''
   return { enabledServers, harness, mode, needsMcp, mcpConfigPath }
 }
 
-function laneConfigBody({ harness, mode, enabledServers, needsMcp }) {
+function opencodePermission(mode) {
+  if (mode === 'bypass') return null
+  const permission = { external_directory: 'deny' }
+  if (mode === 'edits') permission.bash = 'deny'
+  else if (mode === 'plan') {
+    permission.edit = 'deny'
+    permission.bash = 'deny'
+  }
+  return permission
+}
+
+export function laneConfigBody({ harness, mode, enabledServers, needsMcp }) {
   if (harness === 'claude') return mcpConfigForClaude(enabledServers)
   const config = needsMcp ? mcpConfigForOpencode(enabledServers) : {}
-  if (mode === 'edits') config.permission = { bash: 'deny' }
-  else if (mode === 'plan') config.permission = { edit: 'deny', bash: 'deny' }
+  const permission = opencodePermission(mode)
+  if (permission) config.permission = permission
   return config
 }
 

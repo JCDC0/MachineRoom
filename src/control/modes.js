@@ -2,10 +2,10 @@ export const ASK_READY = true
 
 export const MODES = [
   { id: 'plan', label: 'Plan', line: 'Reads and plans. Makes no edits and runs no commands.' },
-  { id: 'ask', label: 'Ask', line: 'Asks before every write or command.' },
-  { id: 'edits', label: 'Edits', line: 'Edits files. Runs no commands.' },
-  { id: 'auto', label: 'Auto', line: 'Edits files and runs commands. The harness guards risky ones.' },
-  { id: 'bypass', label: 'Bypass', line: 'Allows every edit and command.' },
+  { id: 'ask', label: 'Ask', line: 'Asks before every write or command. An outside write needs your Allow.' },
+  { id: 'edits', label: 'Edits', line: 'Edits files. Writes stay in the project. Runs no commands.' },
+  { id: 'auto', label: 'Auto', line: 'Edits files and runs commands. Writes stay in the project. The harness guards risky ones.' },
+  { id: 'bypass', label: 'Bypass', line: 'Allows every edit and command. It can write anywhere.' },
 ]
 
 const LISTS = {

@@ -104,7 +104,7 @@ describe('OpenCode lane permission config', () => {
     expect(seen.cfg.startsWith(rig.runs)).toBe(true)
     expect(seen.existed).toBe(true)
     if (process.platform !== 'win32') expect(seen.modeBits).toBe(0o600)
-    expect(seen.content).toEqual({ permission: { edit: 'deny', bash: 'deny' } })
+    expect(seen.content).toEqual({ permission: { external_directory: 'deny', edit: 'deny', bash: 'deny' } })
     expect(existsSync(seen.cfg)).toBe(false)
     expect(rig.mcpFilesInRuns()).toEqual([])
   })
@@ -118,7 +118,7 @@ describe('OpenCode lane permission config', () => {
     expect(seen.cfg.startsWith(rig.runs)).toBe(true)
     expect(seen.existed).toBe(true)
     if (process.platform !== 'win32') expect(seen.modeBits).toBe(0o600)
-    expect(seen.content).toEqual({ permission: { bash: 'deny' } })
+    expect(seen.content).toEqual({ permission: { external_directory: 'deny', bash: 'deny' } })
     expect(existsSync(seen.cfg)).toBe(false)
     expect(rig.mcpFilesInRuns()).toEqual([])
   })
@@ -146,7 +146,7 @@ describe('OpenCode lane permission config', () => {
     expect(planSeen.existed).toBe(true)
     expect(planSeen.content).toEqual({
       mcp: expectedMcp,
-      permission: { edit: 'deny', bash: 'deny' },
+      permission: { external_directory: 'deny', edit: 'deny', bash: 'deny' },
     })
     expect(existsSync(planSeen.cfg)).toBe(false)
 
@@ -156,13 +156,13 @@ describe('OpenCode lane permission config', () => {
     expect(editsSeen.existed).toBe(true)
     expect(editsSeen.content).toEqual({
       mcp: expectedMcp,
-      permission: { bash: 'deny' },
+      permission: { external_directory: 'deny', bash: 'deny' },
     })
     expect(existsSync(editsSeen.cfg)).toBe(false)
     expect(rig.mcpFilesInRuns()).toEqual([])
   })
 
-  it('writes no config file when no mode or auto mode is used while plan writes and removes one', async () => {
+  it('writes an external directory denial when no mode or auto mode is used', async () => {
     const rig = setupRig()
 
     const planResult = await runLane(['opencode', '--project', rig.project, '--task', 'Plan first.', '--mode', 'plan'], rig.env)
@@ -175,17 +175,19 @@ describe('OpenCode lane permission config', () => {
     const plainResult = await runLane(['opencode', '--project', rig.project, '--task', 'Run without mode.'], rig.env)
     expect(plainResult.code, plainResult.stdout + plainResult.stderr).toBe(0)
     const plainSeen = rig.readCapture()
-    expect(plainSeen.cfg).toBe('')
-    expect(plainSeen.existed).toBe(false)
-    expect(plainSeen.filesInRuns).toEqual([])
+    expect(plainSeen.cfg).toMatch(/\.mcp\.json$/)
+    expect(plainSeen.existed).toBe(true)
+    expect(plainSeen.content).toEqual({ permission: { external_directory: 'deny' } })
+    expect(existsSync(plainSeen.cfg)).toBe(false)
     expect(rig.mcpFilesInRuns()).toEqual([])
 
     const autoResult = await runLane(['opencode', '--project', rig.project, '--task', 'Run in auto.', '--mode', 'auto'], rig.env)
     expect(autoResult.code, autoResult.stdout + autoResult.stderr).toBe(0)
     const autoSeen = rig.readCapture()
-    expect(autoSeen.cfg).toBe('')
-    expect(autoSeen.existed).toBe(false)
-    expect(autoSeen.filesInRuns).toEqual([])
+    expect(autoSeen.cfg).toMatch(/\.mcp\.json$/)
+    expect(autoSeen.existed).toBe(true)
+    expect(autoSeen.content).toEqual({ permission: { external_directory: 'deny' } })
+    expect(existsSync(autoSeen.cfg)).toBe(false)
     expect(rig.mcpFilesInRuns()).toEqual([])
   })
 
@@ -195,7 +197,7 @@ describe('OpenCode lane permission config', () => {
     expect(failed.code).toBe(1)
     const seen = rig.readCapture()
     expect(seen.existed).toBe(true)
-    expect(seen.content).toEqual({ permission: { edit: 'deny', bash: 'deny' } })
+    expect(seen.content).toEqual({ permission: { external_directory: 'deny', edit: 'deny', bash: 'deny' } })
     expect(existsSync(seen.cfg)).toBe(false)
     expect(rig.mcpFilesInRuns()).toEqual([])
 
