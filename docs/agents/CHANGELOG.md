@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- P435: Both ladder end-to-end tests allow 120 seconds, more than their waits add up to.
 - An orchestrator's ladder save refuses to move an existing sub to another harness, as it refuses a new one.
 - The turn-end scope check lists both paths of a renamed file, so a move out of a restricted sub's scope is warned about.
 - A lane proposal is refused for a harness turned off in Settings, and a program path saved there counts as available.
