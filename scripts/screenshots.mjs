@@ -275,7 +275,7 @@ async function main() {
     '--disable-backgrounding-occluded-windows',
     '--disable-renderer-backgrounding',
     'about:blank',
-  ], { stdio: 'ignore' })
+  ], { stdio: 'ignore', windowsHide: true })
 
   let browser = null
   let page = null

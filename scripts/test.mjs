@@ -22,7 +22,7 @@ function testCommand(env) {
 function runOnce(command) {
   return new Promise((resolveRun) => {
     const [file, ...args] = command
-    const child = spawn(file, args, { stdio: 'inherit' })
+    const child = spawn(file, args, { stdio: 'inherit', windowsHide: true })
     child.once('error', (error) => resolveRun({ status: null, error }))
     child.once('exit', (code) => resolveRun({ status: code, error: null }))
   })

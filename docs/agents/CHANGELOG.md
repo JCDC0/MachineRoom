@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- Checks hide child process windows on Windows, including processes started by tests.
 - LaneConversation shows Edit from this plan on a finished exit-0 Plan run, and a confirm card with the editable plan text and a non-Plan mode starts one run only when the owner presses Start.
 - POST /api/harnesses/KEY/probe runs one hidden, time-limited prompt in an empty folder and answers reached, failed or unknown, and Settings asks before it runs.
 - The run summary finds five or more consecutive failed identical calls from an exact call key the parsers keep for the summary only, the record keeps tool and count, and Needs you shows it.
