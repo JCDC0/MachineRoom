@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- Argon lists eight free hierarchy gaps to fix next (PLAN-NEXT-ARGON-2.md).
 - Every server git call drops GIT_DIR, GIT_WORK_TREE, GIT_INDEX_FILE and GIT_COMMON_DIR through one helper, gitEnv.
 - Server git calls ignore inherited repository variables so they use the selected project.
 - Review 45 (GPT-6.1 Sol) finds git calls that keep a parent's repository variables.
