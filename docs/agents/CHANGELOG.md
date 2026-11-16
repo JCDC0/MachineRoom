@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- A reply to a working lane waits for its next turn or interrupts the native agent's model call, as Settings say.
 - Argon's survey of coding agent harnesses and what their users want (P442c).
 - Review 46 (GPT-6.1 Sol) finds five gaps in the sector gates, the failover mode and the sub settings saves.
 - A sub's harness, model or effort change is saved to the ladder and its config, so a later ladder save keeps it and does not close the sub's running turn.
