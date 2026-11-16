@@ -16,6 +16,12 @@ const LISTS = {
   agy: ['plan', 'edits', 'auto', 'bypass'],
 }
 
+const LINES = {
+  codex: {
+    edits: 'Edits files and can run commands inside its workspace sandbox. Codex has no edits-only mode.',
+  },
+}
+
 const LEGACY = {
   claude: 'bypass',
   agy: 'bypass',
@@ -26,7 +32,10 @@ const LEGACY = {
 
 export function modesFor(harness) {
   const ids = Object.hasOwn(LISTS, harness) ? LISTS[harness] : []
-  return MODES.filter((mode) => ids.includes(mode.id) && (ASK_READY || mode.id !== 'ask'))
+  const lines = Object.hasOwn(LINES, harness) ? LINES[harness] : {}
+  return MODES
+    .filter((mode) => ids.includes(mode.id) && (ASK_READY || mode.id !== 'ask'))
+    .map((mode) => (Object.hasOwn(lines, mode.id) ? { ...mode, line: lines[mode.id] } : mode))
 }
 
 export function laneModesFor(harness) {
