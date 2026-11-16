@@ -10,10 +10,10 @@ export function createCodexParser(ctx) {
   let counter = 0
   const parentKey = ctx?.agentKey ?? 'agent'
 
-  function startCall(id, tool, label, touches, time, outsidePath) {
+  function startCall(id, tool, label, touches, time, outsidePath, callKey, callName) {
     const call = { id, tool, label, touches, started: true }
     calls.set(id, call)
-    out.push({ ...toolStart({ time, id, tool, label, touches, outsidePath }), agent: parentKey })
+    out.push({ ...toolStart({ time, id, tool, label, touches, outsidePath, ...(ctx.trackCalls ? { callKey, callName } : {}) }), agent: parentKey })
   }
 
   function endCall(id, ok, time) {
@@ -27,7 +27,7 @@ export function createCodexParser(ctx) {
     if (!calls.has(id)) {
       const touches = commandTouch(ctx, command)
       const label = `$ ${shorten(command || 'command')}`
-      startCall(id, 'shell', label, touches, time)
+      startCall(id, 'shell', label, touches, time, undefined, command ? JSON.stringify([item.type, command]) : undefined, item.type)
     }
     if (isComplete) {
       const exitCode = item.exit_code
@@ -65,7 +65,7 @@ export function createCodexParser(ctx) {
         }
       }
       const label = firstRaw ? labelFor(tool, firstRel, firstRaw) : 'edit file'
-      startCall(id, tool, label, touches, time, outsidePath)
+      startCall(id, tool, label, touches, time, outsidePath, changes.length ? JSON.stringify([item.type, changes]) : undefined, item.type)
     }
     if (isComplete) {
       const ok = item.status !== 'failed' && item.status !== 'error' && !item.error
@@ -78,7 +78,7 @@ export function createCodexParser(ctx) {
     const query = typeof item.query === 'string' ? item.query : ''
     if (!calls.has(id)) {
       const label = shorten(query || 'web search')
-      startCall(id, 'web', label, [], time)
+      startCall(id, 'web', label, [], time, undefined, query ? JSON.stringify([item.type, query]) : undefined, item.type)
     }
     if (isComplete) {
       const ok = item.status !== 'failed' && item.status !== 'error' && !item.error

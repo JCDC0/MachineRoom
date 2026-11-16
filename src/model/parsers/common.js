@@ -94,8 +94,9 @@ export function commandTouch(ctx, command) {
   return touchesForCommand(command, ctx.files, ctx.dirs)
 }
 
-export function toolStart({ time, id, tool, label, touches, outsidePath }) {
+export function toolStart({ time, id, tool, label, touches, outsidePath, callKey, callName }) {
   const activity = { time, type: 'tool.start', id, tool, label, touches }
+  if (callKey !== undefined) { activity.callKey = callKey; activity.callName = callName }
   if (typeof outsidePath === 'string' && outsidePath !== '' && (!Array.isArray(touches) || touches.length === 0)) {
     activity.outside = true
     activity.outsidePath = outsidePath

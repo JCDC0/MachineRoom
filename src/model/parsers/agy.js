@@ -98,7 +98,7 @@ export function createAgyParser(ctx) {
     const err = typeof step.tool_info?.error === 'string' ? step.tool_info.error.trim() : ''
     if (err) label = `${label}: ${shorten(err)}`
     calls.set(id, label)
-    out.push(credit(entry, toolStart({ time, id, tool, label, touches, outsidePath })))
+    out.push(credit(entry, toolStart({ time, id, tool, label, touches, outsidePath, ...(ctx.trackCalls && step.tool_name && step.tool_info?.parameters ? { callKey: JSON.stringify([step.tool_name, step.tool_info.parameters]), callName: step.tool_name } : {}) })))
   }
 
   function newChild() {

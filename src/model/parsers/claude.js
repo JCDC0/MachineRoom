@@ -60,7 +60,7 @@ export function createClaudeParser(ctx) {
     } else if (call.kind === 'mcp') {
       label = mcpLabelOf(String(call.name ?? '').toLowerCase(), call.input ?? {})
     }
-    out.push({ ...toolStart({ time, id: call.id, tool: call.kind, label, touches, outsidePath }), agent: call.owner ?? parentKey })
+    out.push({ ...toolStart({ time, id: call.id, tool: call.kind, label, touches, outsidePath, ...(ctx.trackCalls && (call.path || call.command) ? { callKey: JSON.stringify([call.name, call.path ?? call.command]), callName: call.name.split(/\s/)[0] } : {}) }), agent: call.owner ?? parentKey })
   }
 
   function ownerOf(parentId) {
@@ -143,7 +143,7 @@ export function createClaudeParser(ctx) {
       if (input.run_in_background === true) call.background = true
       label = description ? `task: ${shorten(description)}` : 'task'
     }
-    out.push({ ...toolStart({ time, id, tool: call.kind, label, touches, outsidePath }), agent: owner })
+    out.push({ ...toolStart({ time, id, tool: call.kind, label, touches, outsidePath, ...(ctx.trackCalls ? { callKey: JSON.stringify([name, input]), callName: name } : {}) }), agent: owner })
     if (STREAM_TASKS.has(lower)) {
       call.task = true
       const description = typeof input.description === 'string' ? input.description.trim() : ''
