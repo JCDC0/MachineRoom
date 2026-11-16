@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- The sub restore test keeps the old harness's saved conversation on disk until the restore, so it fails if P413's guards are undone.
 - A harness's model list command comes only from an indented subcommand line of its help, so Codex's --model option no longer runs codex model, and no list command is no error.
 - The inbox cut in boundMessages is 32 lines instead of 44, with the same rule and every test unchanged.
 - ROOM.md, LIVE.md and FREE-HIERARCHY.md describe the lane Mode select, sub Scope and Restricted, Merge anyway, Separate worktree, Codex Edits and Bypass, and same-harness agents.
