@@ -467,23 +467,52 @@ export function createReviewsApi({
     return file.replace(/\.log$/i, '')
   }
 
+  function taskBranchOf(record, baseName = '') {
+    const raw = typeof record?.branch === 'string' ? record.branch.trim() : ''
+    const branch = raw || (typeof record?.queue === 'string' ? record.queue.trim() : '')
+    if (!branch || branch === 'main' || branch === 'master') return ''
+    if (baseName && branch === baseName) return ''
+    return branch
+  }
+
+  function recordTime(record) {
+    const parsed = Date.parse(record?.startedAt ?? '')
+    return Number.isFinite(parsed) ? parsed : null
+  }
+
+  function isEarlierOrSame(candidate, current, indexMap) {
+    const candidateTime = recordTime(candidate)
+    const currentTime = recordTime(current)
+    if (candidateTime !== null && currentTime !== null) return candidateTime <= currentTime
+    return (indexMap.get(candidate) ?? 0) <= (indexMap.get(current) ?? 0)
+  }
+
+  function isRetryPair(left, right) {
+    const leftName = recordName(left)
+    const rightName = recordName(right)
+    if (!leftName || !rightName) return false
+    if (left.retried === true && rightName === `${leftName}-retry`) return true
+    if (right.retried === true && leftName === `${rightName}-retry`) return true
+    return false
+  }
+
   function sameRun(record, lane, startedAt) {
     const wanted = typeof lane === 'string' ? lane.trim() : ''
     return Boolean(record) && record.lane === wanted && (record.startedAt ?? null) === (startedAt ?? null)
   }
 
-  function linkedRuns(lane, worktree, runs = null) {
-    const list = (runs ?? readRuns(recordsFile())).filter((record) => record && runMatchesProject(record, worktree))
-    const found = new Map()
+  function linkedRuns(lane, worktree, runs = null, baseName = '') {
+    const allRuns = runs ?? readRuns(recordsFile())
+    const list = allRuns.filter((record) => record && runMatchesProject(record, worktree))
+    const indexMap = new Map(list.map((record, index) => [record, index]))
+    const found = new Set()
     const pending = []
     const add = (record) => {
-      if (!record) return
-      const key = `${record.lane}\u0000${record.startedAt ?? ''}`
-      if (found.has(key)) return
-      found.set(key, record)
+      if (!record || found.has(record)) return
+      found.add(record)
       pending.push(record)
     }
-    add(lastRunFor(lane, worktree, runs))
+    add(lastRunFor(lane, worktree, allRuns))
     while (pending.length > 0) {
       const current = pending.pop()
       const from = current.failoverFrom
@@ -491,19 +520,31 @@ export function createReviewsApi({
         add(list.find((record) => sameRun(record, from.lane, from.startedAt)))
       }
       const currentName = recordName(current)
+      const currentBranch = taskBranchOf(current, baseName)
       for (const record of list) {
         const back = record.failoverFrom
         if (back && typeof back === 'object' && sameRun(current, back.lane, back.startedAt)) add(record)
         const continued = typeof record.continues === 'string' ? record.continues.trim() : ''
         if (continued !== '' && currentName !== '' && continued === currentName) add(record)
+        if (record.lane === current.lane) {
+          if (isRetryPair(record, current)) {
+            add(record)
+          } else if (
+            currentBranch !== '' &&
+            taskBranchOf(record, baseName) === currentBranch &&
+            isEarlierOrSame(record, current, indexMap)
+          ) {
+            add(record)
+          }
+        }
       }
       const earlier = typeof current.continues === 'string' ? current.continues.trim() : ''
       if (earlier !== '') add(list.find((record) => recordName(record) === earlier))
     }
-    return [...found.values()].sort((left, right) => {
-      const leftTime = Number.isFinite(Date.parse(left.startedAt ?? '')) ? Date.parse(left.startedAt) : 0
-      const rightTime = Number.isFinite(Date.parse(right.startedAt ?? '')) ? Date.parse(right.startedAt) : 0
-      return leftTime - rightTime
+    return [...found].sort((left, right) => {
+      const leftTime = recordTime(left) ?? 0
+      const rightTime = recordTime(right) ?? 0
+      return leftTime - rightTime || (indexMap.get(left) ?? 0) - (indexMap.get(right) ?? 0)
     })
   }
 
@@ -696,7 +737,7 @@ export function createReviewsApi({
     const status = await runGit(worktree, ['status', '--porcelain'])
     const stat = parseNumstat(await runGit(worktree, ['diff', '--no-ext-diff', '--no-textconv', '--numstat', `${base.ref}...HEAD`]))
     const lastRun = lastRunFor(lane, worktree, runs)
-    const laneRuns = linkedRuns(lane, worktree, runs).map((record) => runEntry(record, laneList))
+    const laneRuns = linkedRuns(lane, worktree, runs, base.name).map((record) => runEntry(record, laneList))
     return {
       lane,
       worktree,

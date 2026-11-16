@@ -663,9 +663,9 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
   function safeListProcesses() {
     try {
       const items = list({ platform })
-      return Array.isArray(items) ? items : []
+      return Array.isArray(items) && items.length > 0 ? items : null
     } catch {
-      return []
+      return null
     }
   }
 
@@ -1470,10 +1470,10 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
 
     const candidateLockLanes = lockLanes.filter((lane) => !isOrchestratorAgent(lane) && (isWholeTree || laneSet.has(lane) || extraSet.has(lane)) && !targets.has(lane))
     const processesBefore = targets.size > 0 || candidateLockLanes.length > 0 ? safeListProcesses() : []
-    const byPidBefore = new Map(processesBefore.map((proc) => [proc.pid, proc]))
+    const byPidBefore = new Map((processesBefore ?? []).map((proc) => [proc.pid, proc]))
 
     for (const lane of candidateLockLanes) {
-      if (!laneLockAlive(folder, lane, { platform, list: () => processesBefore, stat })) continue
+      if (!laneLockAlive(folder, lane, { platform, list: () => processesBefore ?? [], stat })) continue
       const lockStart = laneLockStartedAt(readTextAt(join(folder, `${lane}.lock`)) ?? '')
       if (!lockStart) continue
       targets.set(lane, { lane, startedAt: lockStart, item: null, lockOnly: true })
@@ -1483,7 +1483,7 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
       return { stoppedLanes: [], stillRunning: [] }
     }
 
-    const tracked = [...targets.values()].map((entry) => captureTrackedLane(entry.lane, entry.item ?? running.get(entry.lane) ?? null, processesBefore, byPidBefore, lanesConfig))
+    const tracked = [...targets.values()].map((entry) => captureTrackedLane(entry.lane, entry.item ?? running.get(entry.lane) ?? null, processesBefore ?? [], byPidBefore, lanesConfig))
 
     await Promise.all([...targets.values()].map(async (entry) => {
       if (!entry.lockOnly) {
@@ -1497,17 +1497,17 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
     }))
 
     let processesAfter = safeListProcesses()
-    let byPidAfter = new Map(processesAfter.map((proc) => [proc.pid, proc]))
-    if (tracked.some((entry) => isTrackedLaneAlive(entry, processesAfter, byPidAfter))) {
+    let byPidAfter = new Map((processesAfter ?? []).map((proc) => [proc.pid, proc]))
+    if (processesAfter === null || tracked.some((entry) => isTrackedLaneAlive(entry, processesAfter, byPidAfter))) {
       await new Promise((done) => setTimeout(done, STOP_SETTLE_MS))
       processesAfter = safeListProcesses()
-      byPidAfter = new Map(processesAfter.map((proc) => [proc.pid, proc]))
+      byPidAfter = new Map((processesAfter ?? []).map((proc) => [proc.pid, proc]))
     }
 
     const stoppedLanes = []
     const stillRunning = []
     for (const entry of tracked) {
-      if (isTrackedLaneAlive(entry, processesAfter, byPidAfter)) {
+      if (processesAfter === null || isTrackedLaneAlive(entry, processesAfter, byPidAfter)) {
         stillRunning.push(entry.lane)
       } else {
         stoppedLanes.push(entry.lane)

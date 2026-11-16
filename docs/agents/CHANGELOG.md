@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- When the process list cannot be read, Stop sector reports its lanes as still running, and a review's runs and totals include retries and earlier repair runs on the task branch.
 - The interrupt test's repository sets its own user.name and user.email, so CI runners with no global identity pass it.
 - Replies are marked interrupted only after the continuation starts, and a Stop sector or Stop everything cancels interrupts in progress inside its target.
 - P468: A failed interrupt keeps its replies queued for the next one, and Stop sector cancels an interrupt that is still waiting to restart its lane.
@@ -8,6 +9,7 @@
 - The interrupt test gives its temporary repository a local Git identity so lane commits work without a global identity.
 - An interrupted backup restarts with its own saved model and mode in the interrupted run's worktree and branch, and the three-interrupt limit holds across a failover.
 - P469: A native final answer no longer drops a reply read at the same time; the agent delivers it and makes one more model call.
+- P470: `stopSectorLanes` reports unchecked lanes in `stillRunning` when the process list cannot be read, and review `linkedRuns` includes retries and earlier plain repair runs on the same lane and task branch.
 - A removed lane with unknown cost keeps its row and Meters shows ? and (partial), and the MCP tool list cache key hashes the whole server config.
 - P471: A removed lane with unknown costs keeps its row and marks spend partial, and the MCP list cache key hashes the whole server configuration, environment values included, and the Meters panel shows ? and (partial) for unknown costs.
 - Continuations use saved worktree metadata when the bridge records an interrupted run against the project root.
