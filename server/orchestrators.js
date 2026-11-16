@@ -329,7 +329,8 @@ export function createOrchestrators({
     const modes = new Map()
     for (const sub of Array.isArray(raw.subs) ? raw.subs : []) {
       if (!sub || typeof sub !== 'object' || typeof sub.id !== 'string') continue
-      if (typeof sub.effort === 'string' && sub.effort.trim()) efforts.set(sub.id, sub.effort.trim())
+      if (sub.effort === null) efforts.set(sub.id, null)
+      else if (typeof sub.effort === 'string' && sub.effort.trim()) efforts.set(sub.id, sub.effort.trim())
       if (typeof sub.mode === 'string' && sub.mode.trim()) modes.set(sub.id, sub.mode.trim())
     }
     if (efforts.size === 0 && modes.size === 0) {
@@ -345,7 +346,7 @@ export function createOrchestrators({
           const mode = modes.get(sub.id)
           return {
             ...withModel,
-            ...(effort ? { effort } : {}),
+            ...(efforts.has(sub.id) ? { effort } : {}),
             ...(mode ? { mode } : {}),
           }
         }),
@@ -430,7 +431,9 @@ export function createOrchestrators({
     if (mode) sub.mode = mode
     else delete sub.mode
     main.setLadder(ladder)
-    configs.set(id, subConfig(sub))
+    const nextConfig = subConfig(sub)
+    instance.setBin?.(nextConfig.bin)
+    configs.set(id, nextConfig)
   }
 
   function createSub(sub) {
@@ -451,7 +454,7 @@ export function createOrchestrators({
       promptFile,
       bridgeUrl,
       contextWindow: config.contextWindow,
-      effort: config.effort,
+      effort: Object.hasOwn(sub, 'effort') ? config.effort : undefined,
       onNotice,
       onMasked,
       recordsCache: sharedCache,
