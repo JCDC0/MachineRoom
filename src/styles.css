@@ -6273,6 +6273,12 @@ body:has(#hud-orchestrator-chat) .lens-waiting {
   color: rgb(255 255 255 / 0.6);
 }
 
+.mr-orch-worktree {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
 .mr-orch-input {
   width: 100%;
   min-height: 64px;
@@ -8701,6 +8707,13 @@ body:has(#hud-orchestrator-chat) .lens-waiting {
 .mr-side-select:focus {
   border-color: var(--yellow);
   outline: none;
+}
+
+.mr-side-scope {
+  height: auto;
+  min-height: 40px;
+  padding: 4px;
+  resize: vertical;
 }
 
 .mr-side-auto .mr-side-field {

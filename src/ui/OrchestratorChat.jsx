@@ -306,7 +306,7 @@ export default function OrchestratorChat({
   function worktreeChoice() {
     if (!laneRecipient) return null
     return (
-      <label className="mr-orch-worktree mono" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+      <label className="mr-orch-worktree mono">
         <input
           type="checkbox"
           checked={separateWorktree}

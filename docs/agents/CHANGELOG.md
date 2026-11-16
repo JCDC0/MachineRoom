@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- P416: The sub Scope box and the chat's Separate worktree box use classes instead of inline styles.
 - A sub made with a harness keeps it when an old saved conversation of that id names another harness, and drops that conversation's sessions and mode.
 - Switching an orchestrator to another harness keeps its saved mode unless that is Bypass or only implied, so a switch never turns on Codex Bypass.
 - A restricted sub's merge is refused when the bridge cannot read its changed files, and a moved file names both paths.
