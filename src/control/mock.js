@@ -40,6 +40,8 @@ export const CLIENT_METHODS = [
   'orchestrator',
   'sendOrchestrator',
   'sendToOrchestrator',
+  'sendLaneMessage',
+  'laneMessageStatus',
   'stopOrchestrator',
   'stopTree',
   'compactOrchestrator',
@@ -683,6 +685,8 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
   const listeners = new Set()
   const runsState = { project: 'MachineRoom', running: [], recent: [] }
   const runningMeta = new Map()
+  const laneMessages = new Map()
+  let laneMessageCounter = 0
   let projectSettingsState = { checkCommand: '', planByDefault: false, hasTestScript: true }
   const reviewState = clone(SAMPLE_REVIEWS)
   let endpointState = clone(SAMPLE_ENDPOINTS)
@@ -1386,6 +1390,52 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
     sendOrchestrator: (text, { id } = {}) => call('sendOrchestrator', () => sendMessage(id, text, true)),
 
     sendToOrchestrator: (text, { confirmed } = {}) => call('sendToOrchestrator', () => sendMessage(undefined, text, confirmed)),
+
+    sendLaneMessage: ({ lane = '', text = '', interrupt } = {}) =>
+      call('sendLaneMessage', () => {
+        const target = typeof lane === 'string' ? lane.trim() : ''
+        const value = typeof text === 'string' ? text.trim() : ''
+        if (!target || value.length < 1 || value.length > 8000) {
+          throw new Error('Write a message from 1 to 8000 characters.')
+        }
+        const entry = runsState.running.find((item) => item.lane === target)
+        if (!entry) throw new Error(`The lane ${target} has no run that can read a message now.`)
+        const meta = runningMeta.get(entry)
+        if (meta && !Array.isArray(meta.inbox)) meta.inbox = []
+        const harness = SAMPLE_LANES[target]?.cli?.harness ?? ''
+        const shouldInterrupt = typeof interrupt === 'boolean' ? interrupt : laneReplies === 'interrupt'
+        laneMessageCounter += 1
+        const id =
+          typeof globalThis.crypto?.randomUUID === 'function'
+            ? globalThis.crypto.randomUUID()
+            : `lane-message-${laneMessageCounter}`
+        const message = {
+          id,
+          from: 'owner',
+          text: value,
+          at: new Date(now()).toISOString(),
+          status: shouldInterrupt && harness !== 'machineroom' ? 'interrupted' : 'queued',
+        }
+        laneMessages.set(id, message)
+        if (meta?.inbox) {
+          meta.inbox.push(message)
+          while (meta.inbox.length > 20) laneMessages.delete(meta.inbox.shift().id)
+        }
+        return { id }
+      }),
+
+    laneMessageStatus: (id) =>
+      call('laneMessageStatus', () => {
+        const wanted = typeof id === 'string' ? id : ''
+        const message = laneMessages.get(wanted)
+        if (!message) throw new Error('not found')
+        return {
+          id: message.id,
+          status: message.status,
+          at: message.at,
+          ...(message.fetchedAt ? { fetchedAt: message.fetchedAt } : {}),
+        }
+      }),
 
     stopOrchestrator: ({ confirmed, id } = {}) =>
       call('stopOrchestrator', () => {

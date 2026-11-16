@@ -1,6 +1,8 @@
 # Changelog
 
 ## Unreleased
+- The page sends to lane:KEY as owner with a per-message interrupt choice, and LaneConversation shows Send, Send and interrupt and each message's status.
+- P475: The owner page can send to a running lane with per-message interrupt override, and LaneConversation shows Send, Send and interrupt and live message status.
 - acp-run takes --mode; Plan allows reads, Auto also allows edits inside the project, Bypass approves all, and refusals are logged.
 - Project settings keep planByDefault, and Dispatch starts a Plan-capable lane's run in Plan when it is on, with a Start new runs in Plan checkbox.
 - An MCP tool call sends a progress token; matching progress resets the 15 second idle limit, and a ten minute ceiling ends it.

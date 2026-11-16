@@ -516,6 +516,37 @@ describe('the control client contract', () => {
     expect(mockAnswer.stillRunning).toEqual([])
   })
 
+  it('sends a lane message and reads its status with the same shape on bridge and mock', async () => {
+    const { client } = await makeHarness({ runnerCode: SLOW_RUNNER })
+    const mock = createMockClient({ latencyMs: 0, runMs: 2000 })
+
+    for (const [label, target] of [
+      ['bridge', client],
+      ['mock', mock],
+    ]) {
+      await expect(target.sendLaneMessage({ lane: 'opencode', text: 'Nobody home.' }), `${label} idle`).rejects.toThrow(
+        'The lane opencode has no run that can read a message now.'
+      )
+      await expect(target.laneMessageStatus('missing-id'), `${label} missing`).rejects.toThrow('not found')
+
+      const run = await target.startRun('opencode', ['B6'])
+      const sent = await target.sendLaneMessage({ lane: 'opencode', text: 'Check the header.', interrupt: false })
+      expect(Object.keys(sent), `${label} send keys`).toEqual(['id'])
+      expect(typeof sent.id, `${label} id`).toBe('string')
+      expect(sent.id.length, `${label} id length`).toBeGreaterThan(0)
+
+      const status = await target.laneMessageStatus(sent.id)
+      expect(Object.keys(status).sort(), `${label} status keys`).toEqual(['at', 'id', 'status'])
+      expect(status).toEqual({
+        id: sent.id,
+        status: 'queued',
+        at: expect.any(String),
+      })
+
+      await target.stopRun({ lane: 'opencode', startedAt: run.startedAt, confirmed: true })
+    }
+  })
+
   it('asks the planner and reads the plan through the lane records only', async () => {
     const { client } = await makeHarness()
     await expect(client.askPlanner('Split the work into briefs.')).rejects.toThrow(PLAN_REFUSAL)
@@ -903,6 +934,36 @@ describe('the control client orchestrator routes', () => {
         url: 'http://127.0.0.1:9/api/orchestrator/ladder',
         method: 'POST',
         body: JSON.stringify({ ladder: { subs: [] }, by: 'owner', confirmed: true }),
+      },
+    ])
+  })
+
+  it('calls lane message send and status routes with expected URLs and bodies', async () => {
+    const { calls, client } = recorder({ id: 'msg-1', status: 'queued' })
+    await client.sendLaneMessage({ lane: 'opencode', text: 'Wait.' })
+    await client.sendLaneMessage({ lane: 'opencode', text: 'Interrupt.', interrupt: true })
+    await client.sendLaneMessage({ lane: 'opencode', text: 'Queue.', interrupt: false })
+    await client.laneMessageStatus('msg-1')
+    expect(calls).toEqual([
+      {
+        url: 'http://127.0.0.1:9/api/orchestrator/messages',
+        method: 'POST',
+        body: JSON.stringify({ to: 'lane:opencode', text: 'Wait.' }),
+      },
+      {
+        url: 'http://127.0.0.1:9/api/orchestrator/messages',
+        method: 'POST',
+        body: JSON.stringify({ to: 'lane:opencode', text: 'Interrupt.', interrupt: true }),
+      },
+      {
+        url: 'http://127.0.0.1:9/api/orchestrator/messages',
+        method: 'POST',
+        body: JSON.stringify({ to: 'lane:opencode', text: 'Queue.', interrupt: false }),
+      },
+      {
+        url: 'http://127.0.0.1:9/api/orchestrator/messages/status?id=msg-1',
+        method: 'GET',
+        body: undefined,
       },
     ])
   })
