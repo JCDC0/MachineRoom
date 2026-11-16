@@ -32,7 +32,7 @@ import { modelAllowed } from './harness-models.js'
 import { DEFAULT_CONTEXT_WINDOW, MODELS, resolveContextWindow } from './models.js'
 import { MODEL_ALIASES } from './model-list.js'
 import { isLockHolderStale, killTree, listProcesses } from './processTree.js'
-import { gitPath, programPath } from './programPath.js'
+import { gitEnv, gitPath, programPath } from './programPath.js'
 import { createRecordsCache, runsFolder as sharedRunsFolder } from './lanes-source.js'
 
 export const ORCHESTRATOR_KEY = 'orchestrator'
@@ -1593,7 +1593,7 @@ export function createOrchestrator({
             shell: false,
             windowsHide: true,
             stdio: ['ignore', 'pipe', 'ignore'],
-            env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
+            env: { ...gitEnv(), GIT_TERMINAL_PROMPT: '0' },
           }
         )
       } catch {

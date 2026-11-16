@@ -16,7 +16,7 @@ import { defaultMode, legacyMode } from '../src/control/modes.js'
 import { modelUnavailableProblem } from './model-list.js'
 import { modelAllowed } from './harness-models.js'
 import { outcomeTable, subjectsFromLog } from './outcomes.js'
-import { gitPath } from './programPath.js'
+import { gitEnv, gitPath } from './programPath.js'
 import { killTree, listProcesses, treeSpawnOptions } from './processTree.js'
 import { createLaneLockCheck, laneAgents, lanesFolder, readAllLanes, runsFolder as defaultRunsFolder } from './lanes-source.js'
 import { NO_ACTIVE_CHOICE_PROBLEM, activeLanesFileFor, hiddenLaneProblem, projectLanesFileFor, readActiveLanesChoice, readHiddenLanes } from './active-lanes.js'
@@ -105,7 +105,7 @@ function git(folder, args) {
     execFile(
       file,
       args,
-      { cwd: folder, encoding: 'utf8', windowsHide: true, timeout: GIT_TIMEOUT_MS, maxBuffer: GIT_MAX_BUFFER },
+      { cwd: folder, env: gitEnv(), encoding: 'utf8', windowsHide: true, timeout: GIT_TIMEOUT_MS, maxBuffer: GIT_MAX_BUFFER },
       (error, stdout) => {
         done(error ? null : String(stdout ?? ''))
       }
@@ -131,6 +131,7 @@ export function readMainSubjectsSync() {
   }
   const result = spawnSync(file, ['log', '--format=%s', 'refs/heads/main'], {
     cwd: REPO_ROOT,
+    env: gitEnv(),
     encoding: 'utf8',
     windowsHide: true,
     timeout: GIT_TIMEOUT_MS,

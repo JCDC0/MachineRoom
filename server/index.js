@@ -34,7 +34,7 @@ import { createTeamsApi } from './teams.js'
 import { createSearchApi } from './search.js'
 import { createSessionsSource } from './sessions-source.js'
 import { createStorageApi } from './storage.js'
-import { gitPath } from './programPath.js'
+import { gitEnv, gitPath } from './programPath.js'
 import { createStaticHandler } from './static.js'
 
 const LOCAL_ORIGIN = /^http:\/\/(localhost|127\.0\.0\.1):(\d+)$/
@@ -149,7 +149,7 @@ function runGitPaths(resolved, args) {
       ['-C', resolved, ...args],
       {
         encoding: 'utf8',
-        env: { ...process.env, GIT_CEILING_DIRECTORIES: dirname(resolved) },
+        env: { ...gitEnv(), GIT_CEILING_DIRECTORIES: dirname(resolved) },
         maxBuffer: TREE_MAX_BUFFER,
         timeout: TREE_TIMEOUT_MS,
         windowsHide: true,
@@ -190,7 +190,7 @@ function runGitCommand(resolved, args) {
       ['-C', resolved, ...args],
       {
         encoding: 'utf8',
-        env: { ...process.env, GIT_CEILING_DIRECTORIES: dirname(resolved) },
+        env: { ...gitEnv(), GIT_CEILING_DIRECTORIES: dirname(resolved) },
         timeout: TREE_TIMEOUT_MS,
         windowsHide: true,
       },

@@ -44,3 +44,11 @@ export function gitPath() {
   if (!path) throw Object.assign(new Error('Git is not on the PATH.'), { code: 'ENOGIT' })
   return path
 }
+
+export function gitEnv(base = process.env) {
+  const env = { ...base }
+  for (const key of Object.keys(env)) {
+    if (['GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE', 'GIT_COMMON_DIR'].includes(key.toUpperCase())) delete env[key]
+  }
+  return env
+}

@@ -26,7 +26,7 @@ import {
   ORCHESTRATOR_KEY,
   ORCHESTRATOR_MESSAGE_LIMIT,
 } from './orchestrator.js'
-import { gitPath } from './programPath.js'
+import { gitEnv, gitPath } from './programPath.js'
 import { readAllLanes } from './agents-config.js'
 import { activeEligibleLaneKeys, eligibleLanes, projectLanesFileFor, readHiddenLanes } from './active-lanes.js'
 import { createRecordsCache, runsFolder as sharedRunsFolder } from './lanes-source.js'
@@ -92,6 +92,7 @@ export const SCOPE_UNREAD_PROBLEM = 'The scope could not be read.'
 function gitText(folder, args) {
   return String(
     execFileSync(gitPath(), ['-C', folder, ...args], {
+      env: gitEnv(),
       encoding: 'utf8',
       timeout: 10000,
       windowsHide: true,
