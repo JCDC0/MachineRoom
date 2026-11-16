@@ -4,7 +4,9 @@ import { existsSync, readFileSync, realpathSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { worktreeFor } from '../src/briefs/run.js'
+import { maskKeys } from '../src/briefs/audit.js'
+import { maskProfilePaths, worktreeFor } from '../src/briefs/run.js'
+import { harnessByKey } from '../src/harnesses/index.js'
 import { outsideScope } from '../src/model/hierarchy.js'
 import { lanesFolder, mainCheckoutOf, readAllLanes, runsFolder as defaultRunsFolder } from './lanes-source.js'
 import { gitEnv, gitPath } from './programPath.js'
@@ -449,6 +451,158 @@ export function createReviewsApi({
     return 'unchecked'
   }
 
+  function harnessFor(lanes, lane) {
+    const info = laneEntry(lanes, lane)
+    const fromCli = info?.cli?.harness
+    if (typeof fromCli === 'string' && fromCli.trim() !== '') return fromCli.trim()
+    const plain = info?.harness
+    if (typeof plain === 'string' && plain.trim() !== '') return plain.trim()
+    return null
+  }
+
+  function recordName(record) {
+    const log = typeof record?.log === 'string' ? record.log.trim() : ''
+    if (log === '') return ''
+    const file = log.split(/[\\/]/).pop() ?? ''
+    return file.replace(/\.log$/i, '')
+  }
+
+  function sameRun(record, lane, startedAt) {
+    const wanted = typeof lane === 'string' ? lane.trim() : ''
+    return Boolean(record) && record.lane === wanted && (record.startedAt ?? null) === (startedAt ?? null)
+  }
+
+  function linkedRuns(lane, worktree, runs = null) {
+    const list = (runs ?? readRuns(recordsFile())).filter((record) => record && runMatchesProject(record, worktree))
+    const found = new Map()
+    const pending = []
+    const add = (record) => {
+      if (!record) return
+      const key = `${record.lane}\u0000${record.startedAt ?? ''}`
+      if (found.has(key)) return
+      found.set(key, record)
+      pending.push(record)
+    }
+    add(lastRunFor(lane, worktree, runs))
+    while (pending.length > 0) {
+      const current = pending.pop()
+      const from = current.failoverFrom
+      if (from && typeof from === 'object') {
+        add(list.find((record) => sameRun(record, from.lane, from.startedAt)))
+      }
+      const currentName = recordName(current)
+      for (const record of list) {
+        const back = record.failoverFrom
+        if (back && typeof back === 'object' && sameRun(current, back.lane, back.startedAt)) add(record)
+        const continued = typeof record.continues === 'string' ? record.continues.trim() : ''
+        if (continued !== '' && currentName !== '' && continued === currentName) add(record)
+      }
+      const earlier = typeof current.continues === 'string' ? current.continues.trim() : ''
+      if (earlier !== '') add(list.find((record) => recordName(record) === earlier))
+    }
+    return [...found.values()].sort((left, right) => {
+      const leftTime = Number.isFinite(Date.parse(left.startedAt ?? '')) ? Date.parse(left.startedAt) : 0
+      const rightTime = Number.isFinite(Date.parse(right.startedAt ?? '')) ? Date.parse(right.startedAt) : 0
+      return leftTime - rightTime
+    })
+  }
+
+  function runEntry(record, lanes) {
+    return {
+      lane: record.lane,
+      harness: harnessFor(lanes, record.lane),
+      model: typeof record.model === 'string' && record.model.trim() !== '' ? record.model : null,
+      branch: typeof record.branch === 'string' ? record.branch : '',
+      startedAt: typeof record.startedAt === 'string' ? record.startedAt : null,
+      minutes: Number.isFinite(record.minutes) ? record.minutes : null,
+      costUsd: Number.isFinite(record.costUsd) ? record.costUsd : null,
+      inputTokens: Number.isFinite(record.inputTokens) ? record.inputTokens : null,
+      outputTokens: Number.isFinite(record.outputTokens) ? record.outputTokens : null,
+      exitCode: Number.isInteger(record.exitCode) ? record.exitCode : null,
+      killed: record.killed === true,
+    }
+  }
+
+  function sumKnown(runs, field) {
+    let total = 0
+    let known = 0
+    for (const run of runs) {
+      const value = run[field]
+      if (typeof value !== 'number' || !Number.isFinite(value)) continue
+      total += value
+      known += 1
+    }
+    return { total: known === 0 ? null : Math.round(total * 1e6) / 1e6, known }
+  }
+
+  function runTotalsFor(runs) {
+    const minutes = sumKnown(runs, 'minutes')
+    const cost = sumKnown(runs, 'costUsd')
+    const input = sumKnown(runs, 'inputTokens')
+    const output = sumKnown(runs, 'outputTokens')
+    return {
+      runs: runs.length,
+      runMinutes: minutes.total,
+      costUsd: cost.total,
+      inputTokens: input.total,
+      outputTokens: output.total,
+      partial:
+        runs.length === 0 ||
+        minutes.known < runs.length ||
+        cost.known < runs.length ||
+        input.known < runs.length ||
+        output.known < runs.length,
+    }
+  }
+
+  function evidenceFor(lane, worktree, head, runs = null) {
+    const key = typeof head === 'string' ? head.trim().toLowerCase() : ''
+    const tested = projectRunsFor(lane, worktree, runs).filter(
+      (record) =>
+        typeof record.head === 'string' &&
+        HEAD_PATTERN.test(record.head.trim()) &&
+        (record.tests === 'passed' || record.tests === 'failed')
+    )
+    const matches = HEAD_PATTERN.test(key)
+      ? tested.filter((record) => record.head.trim().toLowerCase() === key)
+      : []
+    const latest = newestRecord(matches)
+    if (latest) {
+      return {
+        checkedHead: head,
+        checks: [
+          {
+            command: null,
+            result: latest.tests,
+            at: typeof latest.startedAt === 'string' ? latest.startedAt : null,
+          },
+        ],
+        stale: false,
+      }
+    }
+    return { checkedHead: null, checks: [], stale: tested.length > 0 }
+  }
+
+  function claimsFor(record, lanes) {
+    if (!record) return null
+    const log = typeof record.log === 'string' ? record.log.trim() : ''
+    if (log === '' || !inside(log, dirname(recordsFile()))) return null
+    const text = readText(log)
+    if (text === null) return null
+    const harness = harnessFor(lanes, record.lane)
+    if (!harness || !Object.hasOwn(harnessByKey, harness)) return null
+    const descriptor = harnessByKey[harness]
+    if (typeof descriptor.reply !== 'function') return null
+    let reply
+    try {
+      reply = descriptor.reply(text)
+    } catch {
+      return null
+    }
+    if (typeof reply !== 'string' || reply.trim() === '') return null
+    return maskProfilePaths(maskKeys(reply.trim()).text)
+  }
+
   function laneFolder(lanes, lane) {
     const info = laneEntry(lanes, lane)
     if (!info) return null
@@ -532,7 +686,8 @@ export function createReviewsApi({
     }
   }
 
-  async function laneReview(lane, worktree, base, runs = null) {
+  async function laneReview(lane, worktree, base, runs = null, lanes = null) {
+    const laneList = lanes ?? readLanes().lanes ?? {}
     const branch = (await runGit(worktree, ['branch', '--show-current'])).trim()
     const head = (await runGit(worktree, ['rev-parse', 'HEAD'])).trim()
     const log = await runGit(worktree, ['log', '--oneline', `${base.ref}..HEAD`])
@@ -540,6 +695,8 @@ export function createReviewsApi({
     const behind = Number.parseInt((await runGit(worktree, ['rev-list', '--count', `HEAD..${base.ref}`])).trim(), 10)
     const status = await runGit(worktree, ['status', '--porcelain'])
     const stat = parseNumstat(await runGit(worktree, ['diff', '--no-ext-diff', '--no-textconv', '--numstat', `${base.ref}...HEAD`]))
+    const lastRun = lastRunFor(lane, worktree, runs)
+    const laneRuns = linkedRuns(lane, worktree, runs).map((record) => runEntry(record, laneList))
     return {
       lane,
       worktree,
@@ -556,7 +713,11 @@ export function createReviewsApi({
       added: stat.added,
       deleted: stat.deleted,
       checks: checkStateFor(lane, worktree, head, runs),
-      lastRun: lastRunFor(lane, worktree, runs),
+      evidence: evidenceFor(lane, worktree, head, runs),
+      claims: claimsFor(lastRun, laneList),
+      lastRun,
+      runs: laneRuns,
+      runTotals: runTotalsFor(laneRuns),
     }
   }
 
@@ -918,7 +1079,7 @@ export function createReviewsApi({
     }
     const entries = await mapConcurrent(targets, concurrency, async ({ lane, worktree }) => {
       try {
-        return await laneReview(lane, worktree, base, runs)
+        return await laneReview(lane, worktree, base, runs, read.lanes)
       } catch (error) {
         return { lane, worktree, error: worktreeError(error) }
       }

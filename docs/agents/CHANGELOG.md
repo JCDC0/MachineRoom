@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- A lane review keeps the checks run on its head apart from the agent's report and lists every run of the task by its failover and continuation links.
 - With Replies set to interrupt, a reply stops a working CLI lane run and continues it on the same branch, worktree, ticket and inbox, at most three times.
 - Ready says it means the program was found, and doctor warns when the project has no AGENTS.md, CLAUDE.md or GEMINI.md.
 - Each MCP server's tool list is kept 60 seconds per runs folder and config, failures are not kept, and parallel lists share one request.
@@ -11,6 +12,7 @@
 - P453: Ready says it means only that the program was found, in Settings and in doctor.
 - P453: doctor warns when the project has no AGENTS.md, CLAUDE.md or GEMINI.md, and names the one it found.
 - A reply to a working CLI lane stops and continues it on the same branch and worktree when Settings choose interrupt, up to three times per run.
+- P451: A lane review shows its evidence for the checked head apart from the agent's claims, and lists every run of the task with an honest total.
 - The native agent keeps a reply its inbox watch read as the model call ended, and gives it to the next call.
 - A sub's harness change also changes its program, and a ladder save that gives a sub's model and effort keeps them over the saved chat file.
 - A sub's harness route change updates its live program override, and a ladder recreation keeps given model and effort values over the saved chat file.
