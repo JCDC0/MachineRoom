@@ -72,6 +72,46 @@ function quotaRows(records, now) {
   return [{ provider: 'codex', windows, at: new Date(newest.at).toISOString() }]
 }
 
+const TOKEN_TOTAL_KEYS = [
+  ['input', 'hasInput'],
+  ['output', 'hasOutput'],
+  ['cacheRead', 'hasCacheRead'],
+  ['cacheWrite', 'hasCacheWrite'],
+  ['cacheInput', 'hasCacheInput'],
+]
+
+function emptyTotals() {
+  return {
+    cost: 0,
+    today: 0,
+    hasCost: false,
+    failed: 0,
+    missingCostRuns: 0,
+    runs: 0,
+    input: 0,
+    output: 0,
+    hasInput: false,
+    hasOutput: false,
+    cacheRead: 0,
+    cacheWrite: 0,
+    cacheInput: 0,
+    hasCacheRead: false,
+    hasCacheWrite: false,
+    hasCacheInput: false,
+    cacheKnownRuns: 0,
+  }
+}
+
+function cacheFields(total) {
+  return {
+    cacheReadTokens: total && total.hasCacheRead ? Math.round(total.cacheRead) : null,
+    cacheWriteTokens: total && total.hasCacheWrite ? Math.round(total.cacheWrite) : null,
+    cacheInputTokens: total && total.hasCacheInput ? Math.round(total.cacheInput) : null,
+    cacheKnownRuns: total ? total.cacheKnownRuns : 0,
+    runs: total ? total.runs : 0,
+  }
+}
+
 export function laneCosts({ records = [], agents = [], now = Date.now() } = {}) {
   const from = monthStart(now)
   const to = nextMonth(from)
@@ -86,9 +126,10 @@ export function laneCosts({ records = [], agents = [], now = Date.now() } = {}) 
     if (!Number.isFinite(started) || started < from || started >= to) continue
     let total = totals.get(lane)
     if (!total) {
-      total = { cost: 0, today: 0, hasCost: false, failed: 0, missingCostRuns: 0, input: 0, output: 0, hasInput: false, hasOutput: false }
+      total = emptyTotals()
       totals.set(lane, total)
     }
+    total.runs += 1
     const cost = recordCost(record)
     if (cost !== null) {
       total.cost += cost
@@ -107,6 +148,23 @@ export function laneCosts({ records = [], agents = [], now = Date.now() } = {}) 
     if (output !== null) {
       total.output += output
       total.hasOutput = true
+    }
+    const cacheRead = recordTokens(record, 'cacheReadTokens')
+    const cacheWrite = recordTokens(record, 'cacheWriteTokens')
+    if (cacheRead !== null) {
+      total.cacheRead += cacheRead
+      total.hasCacheRead = true
+      if (input !== null) {
+        total.cacheInput += input
+        total.hasCacheInput = true
+      }
+    }
+    if (cacheWrite !== null) {
+      total.cacheWrite += cacheWrite
+      total.hasCacheWrite = true
+    }
+    if (cacheRead !== null || cacheWrite !== null) {
+      total.cacheKnownRuns += 1
     }
   }
 
@@ -130,6 +188,7 @@ export function laneCosts({ records = [], agents = [], now = Date.now() } = {}) 
       todayCents: total ? (total.hasCost ? Math.round(total.today * 100) : null) : 0,
       inputTokens: total ? (total.hasInput ? total.input : null) : 0,
       outputTokens: total ? (total.hasOutput ? total.output : null) : 0,
+      ...cacheFields(total),
       missingCostRuns: total ? total.missingCostRuns : 0,
       failedCost: total ? Math.round(total.failed * 100) : 0,
     }
@@ -139,23 +198,23 @@ export function laneCosts({ records = [], agents = [], now = Date.now() } = {}) 
   for (const [lane, total] of totals) {
     if (rosterKeys.has(lane)) continue
     if (!removed) {
-      removed = { hasCost: false, costCents: 0, todayCents: 0, failedCost: 0, missingCostRuns: 0, input: 0, output: 0, hasInput: false, hasOutput: false }
+      removed = { ...emptyTotals(), costCents: 0, todayCents: 0, failedCost: 0 }
     }
     if (total.hasCost) removed.hasCost = true
     removed.costCents += Math.round(total.cost * 100)
     removed.todayCents += Math.round(total.today * 100)
     removed.failedCost += Math.round(total.failed * 100)
     removed.missingCostRuns += total.missingCostRuns
-    if (total.hasInput) {
-      removed.input += total.input
-      removed.hasInput = true
-    }
-    if (total.hasOutput) {
-      removed.output += total.output
-      removed.hasOutput = true
+    removed.runs += total.runs
+    removed.cacheKnownRuns += total.cacheKnownRuns
+    for (const [sumKey, hasKey] of TOKEN_TOTAL_KEYS) {
+      if (total[hasKey]) {
+        removed[sumKey] += total[sumKey]
+        removed[hasKey] = true
+      }
     }
   }
-  if (removed && (removed.costCents > 0 || removed.missingCostRuns > 0 || removed.hasInput || removed.hasOutput)) {
+  if (removed && (removed.costCents > 0 || removed.missingCostRuns > 0 || removed.hasInput || removed.hasOutput || removed.cacheKnownRuns > 0)) {
     byAgent.push({
       agentId: 'removed-lanes',
       agentName: 'Removed lanes',
@@ -163,6 +222,7 @@ export function laneCosts({ records = [], agents = [], now = Date.now() } = {}) 
       todayCents: removed.hasCost ? removed.todayCents : null,
       inputTokens: removed.hasInput ? removed.input : null,
       outputTokens: removed.hasOutput ? removed.output : null,
+      ...cacheFields(removed),
       missingCostRuns: removed.missingCostRuns,
       failedCost: removed.failedCost,
     })

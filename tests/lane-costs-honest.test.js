@@ -150,4 +150,40 @@ describe('laneCosts honesty', () => {
     expect(html).toContain('resets 18:00')
     expect(html).toContain('primary 95%')
   })
+
+  it('shows cache share from reporting runs only and hides the line with no cache data', () => {
+    const costs = mapCosts(
+      laneCosts({
+        records: [
+          record('opencode', localIso(9, 0), 0.2, {
+            inputTokens: 1000,
+            outputTokens: 50,
+            cacheReadTokens: 400,
+            cacheWriteTokens: 100,
+          }),
+          record('opencode', localIso(10, 0), 0.3, {
+            inputTokens: 1000,
+            outputTokens: 60,
+            cacheReadTokens: 600,
+            cacheWriteTokens: 50,
+          }),
+          record('opencode', localIso(11, 0), 0.1, {
+            inputTokens: 8000,
+            outputTokens: 20,
+          }),
+          record('agy', localIso(11, 30), 0.1, {
+            inputTokens: 500,
+            outputTokens: 20,
+          }),
+        ],
+        agents: AGENTS,
+        now: NOW,
+      })
+    )
+    const html = panelHtml(costs)
+
+    expect(html).toContain('Cache: 50% of input read from cache (2 of 3 runs reported)')
+    expect(html.slice(html.indexOf('>agy<'))).not.toContain('Cache:')
+    expect(panelHtml(PANEL_COSTS)).not.toContain('Cache:')
+  })
 })

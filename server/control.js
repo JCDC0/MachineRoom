@@ -126,6 +126,14 @@ export function mapAgent(raw, spendCents) {
   }
 }
 
+function tokenOrNull(value) {
+  return Number.isInteger(value) && value >= 0 ? value : null
+}
+
+function countOrZero(value) {
+  return Number.isInteger(value) && value >= 0 ? value : 0
+}
+
 export function mapCosts(costs) {
   return {
     summary: {
@@ -137,10 +145,15 @@ export function mapCosts(costs) {
       agentId: String(row?.agentId ?? ''),
       agentName: String(row?.agentName ?? ''),
       costCents: money(row?.costCents),
-      todayCents: Number.isInteger(row?.todayCents) && row.todayCents >= 0 ? row.todayCents : null,
-      inputTokens: Number.isInteger(row?.inputTokens) && row.inputTokens >= 0 ? row.inputTokens : null,
-      outputTokens: Number.isInteger(row?.outputTokens) && row.outputTokens >= 0 ? row.outputTokens : null,
-      missingCostRuns: Number.isInteger(row?.missingCostRuns) && row.missingCostRuns >= 0 ? row.missingCostRuns : 0,
+      todayCents: tokenOrNull(row?.todayCents),
+      inputTokens: tokenOrNull(row?.inputTokens),
+      outputTokens: tokenOrNull(row?.outputTokens),
+      cacheReadTokens: tokenOrNull(row?.cacheReadTokens),
+      cacheWriteTokens: tokenOrNull(row?.cacheWriteTokens),
+      cacheInputTokens: tokenOrNull(row?.cacheInputTokens),
+      cacheKnownRuns: countOrZero(row?.cacheKnownRuns),
+      runs: countOrZero(row?.runs),
+      missingCostRuns: countOrZero(row?.missingCostRuns),
       failedCost: money(row?.failedCost),
     })),
     quota: (Array.isArray(costs?.quota) ? costs.quota : [])

@@ -175,7 +175,7 @@ describe('harness reports and usage', () => {
     const log = lines({ type: 'result', result: 'First.\nSecond.', total_cost_usd: 0.25, usage: { input_tokens: 10, output_tokens: 5 } })
     expect(harnessByKey.claude.report(log)).toEqual(['First.', 'Second.'])
     expect(harnessByKey.claude.reply(log)).toBe('First.\nSecond.')
-    expect(harnessByKey.claude.usage(log)).toEqual({ costUsd: 0.25, inputTokens: 10, outputTokens: 5, peakTokens: null })
+    expect(harnessByKey.claude.usage(log)).toEqual({ costUsd: 0.25, inputTokens: 10, outputTokens: 5, cacheReadTokens: null, cacheWriteTokens: null, peakTokens: null })
   })
 
   it('reads the OpenCode text and step_finish lines', () => {
@@ -185,7 +185,7 @@ describe('harness reports and usage', () => {
     )
     expect(harnessByKey.opencode.reply(log)).toBe('All done.\nAgain.')
     expect(harnessByKey.opencode.report(log)).toEqual(['All done.', 'Again.'])
-    expect(harnessByKey.opencode.usage(log)).toEqual({ costUsd: 0.5, inputTokens: 112, outputTokens: 25, peakTokens: 112 })
+    expect(harnessByKey.opencode.usage(log)).toEqual({ costUsd: 0.5, inputTokens: 112, outputTokens: 25, cacheReadTokens: 10, cacheWriteTokens: 2, peakTokens: 112 })
   })
 
   it('reads peakTokens from an OpenCode log with two steps of different sizes', () => {
@@ -271,7 +271,7 @@ describe('harness reports and usage', () => {
     )
     expect(harnessByKey.codex.report(log)).toEqual(['Fixed.', 'Done.'])
     expect(harnessByKey.codex.reply(log)).toBe('Fixed.\nDone.')
-    expect(harnessByKey.codex.usage(log)).toEqual({ costUsd: null, inputTokens: 120, outputTokens: 45 })
+    expect(harnessByKey.codex.usage(log)).toEqual({ costUsd: null, inputTokens: 120, outputTokens: 45, cacheReadTokens: 20, cacheWriteTokens: null })
   })
 
   it('reads the Copilot message and usage lines', () => {

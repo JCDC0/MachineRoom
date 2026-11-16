@@ -84,13 +84,15 @@ function claudeUsage(log) {
   }
 
   const line = lastJsonLine(log, (item) => item?.type === 'result')
-  if (!line) return { costUsd: null, inputTokens: null, outputTokens: null, peakTokens }
+  if (!line) return { costUsd: null, inputTokens: null, outputTokens: null, cacheReadTokens: null, cacheWriteTokens: null, peakTokens }
   const models = line.modelUsage && typeof line.modelUsage === 'object' ? Object.values(line.modelUsage).filter((item) => item && typeof item === 'object') : []
   if (models.length > 0) {
     return {
       costUsd: finiteNumber(line.total_cost_usd),
       inputTokens: sumTokens(models.flatMap((item) => [item.inputTokens, item.cacheCreationInputTokens, item.cacheReadInputTokens])),
       outputTokens: sumTokens(models.map((item) => item.outputTokens)),
+      cacheReadTokens: sumTokens(models.map((item) => item.cacheReadInputTokens ?? item.cache_read_input_tokens)),
+      cacheWriteTokens: sumTokens(models.map((item) => item.cacheCreationInputTokens ?? item.cache_creation_input_tokens)),
       peakTokens,
     }
   }
@@ -99,6 +101,8 @@ function claudeUsage(log) {
     costUsd: finiteNumber(line.total_cost_usd),
     inputTokens: sumTokens([usage.input_tokens, usage.cache_creation_input_tokens, usage.cache_read_input_tokens]),
     outputTokens: tokenCount(usage.output_tokens),
+    cacheReadTokens: tokenCount(usage.cache_read_input_tokens ?? usage.cacheReadInputTokens),
+    cacheWriteTokens: tokenCount(usage.cache_creation_input_tokens ?? usage.cacheCreationInputTokens),
     peakTokens,
   }
 }

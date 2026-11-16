@@ -40,6 +40,26 @@ function clockText(value) {
   return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
 }
 
+function cacheText(row) {
+  const known = countOf(row.cacheKnownRuns)
+  const read = tokenCount(row.cacheReadTokens)
+  const write = tokenCount(row.cacheWriteTokens)
+  if (known <= 0 || (read === null && write === null)) return null
+  const totalRuns = Math.max(countOf(row.runs), known)
+  const reportingInput = row.cacheInputTokens === undefined ? tokenCount(row.inputTokens) : tokenCount(row.cacheInputTokens)
+  if (read !== null && reportingInput !== null && reportingInput > 0) {
+    const share = percentOf(read, reportingInput)
+    return `Cache: ${share}% of input read from cache (${known} of ${totalRuns} runs reported)`
+  }
+  if (read !== null && write !== null) {
+    return `Cache: ${formatTokens(read)} read / ${formatTokens(write)} write (${known} of ${totalRuns} runs reported)`
+  }
+  if (read !== null) {
+    return `Cache: ${formatTokens(read)} read (${known} of ${totalRuns} runs reported)`
+  }
+  return `Cache: ${formatTokens(write)} write (${known} of ${totalRuns} runs reported)`
+}
+
 export default function MetersPanel({ client, initialCosts = null }) {
   const costMode = useContext(CostsModeContext)
   const sample = costLabels(costMode)
@@ -156,6 +176,7 @@ export default function MetersPanel({ client, initialCosts = null }) {
                 const name = visibleText(textOf(row.agentName) || agentId) || 'Lane'
                 const missingCostRuns = countOf(row.missingCostRuns)
                 const failedCost = countOf(row.failedCost)
+                const cache = cacheText(row)
                 return (
                   <div key={`${agentId}-${index}`} className="meter-agent-row">
                     <div className="meter-agent-head">
@@ -166,6 +187,7 @@ export default function MetersPanel({ client, initialCosts = null }) {
                       </span>
                     </div>
                     <div className="meter-label-dim mono">{tokenText(row)}</div>
+                    {cache && <div className="meter-label-dim mono">{cache}</div>}
                     {failedCost > 0 && (
                       <div className="meter-label-dim mono">{`Failed or stopped: ${formatCents(failedCost)}`}</div>
                     )}

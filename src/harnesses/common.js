@@ -109,7 +109,9 @@ function unique(values) {
 }
 
 export function summaryOf(harness, activities, head, usage = {}) {
-  const { costUsd = null, inputTokens = null, outputTokens = null, peakTokens = null } = usage ?? {}
+  const { costUsd = null, inputTokens = null, outputTokens = null, cacheReadTokens = null, cacheWriteTokens = null, peakTokens = null } = usage ?? {}
+  const cacheRead = tokenCount(cacheReadTokens)
+  const cacheWrite = tokenCount(cacheWriteTokens)
   const calls = activities.filter((activity) => activity.type === 'tool.start')
   const pending = new Map()
   const results = new Map()
@@ -155,6 +157,8 @@ export function summaryOf(harness, activities, head, usage = {}) {
     costUsd,
     inputTokens,
     outputTokens,
+    ...(cacheRead !== null ? { cacheReadTokens: cacheRead } : {}),
+    ...(cacheWrite !== null ? { cacheWriteTokens: cacheWrite } : {}),
     peakTokens,
   }
 }
