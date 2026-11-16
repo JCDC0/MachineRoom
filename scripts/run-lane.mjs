@@ -2382,6 +2382,7 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
       ? (result.error ? `The harness did not start (${errorCode(result.error)}).` : startFailureText({ harness, log: logText }))
       : ''
     if (startFailure !== '' && !result.error) console.log(`start failed: ${startFailure}`)
+    const stopReason = !killed && harness === 'machineroom' && result.code === 4 ? 'repeated failure' : undefined
     const retryProblem = retryStartProblem({
       exitCode: result.code,
       minutes,
@@ -2401,6 +2402,7 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
         minutes,
         exitCode: result.code,
         killed,
+        ...(stopReason ? { stopReason } : {}),
         costUsd: summary.costUsd ?? totalCost(report),
         inputTokens: summary.inputTokens,
         outputTokens: summary.outputTokens,
@@ -2442,6 +2444,7 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
       minutes,
       exitCode: result.code,
       killed,
+      ...(stopReason ? { stopReason } : {}),
       costUsd: summary.costUsd ?? totalCost(report),
       inputTokens: summary.inputTokens,
       outputTokens: summary.outputTokens,

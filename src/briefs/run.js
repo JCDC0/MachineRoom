@@ -1246,7 +1246,7 @@ export function maskedQueueTasks(tasks) {
   return (Array.isArray(tasks) ? tasks : []).map((task) => maskProfilePaths(maskKeys(String(task ?? '')).text).slice(0, RECORD_TEXT_LIMIT))
 }
 
-export function runRecord({ lane, briefs, model, reasoning, mode, startedAt, finishedAt, minutes, exitCode, killed, costUsd, inputTokens, outputTokens, peakTokens, log, branch, commits, base, head, checkpoint, tests, project, task, startedBy, stoppedLeftovers, queue, startFailed, note, retried, failover, failoverFrom, quota, continues, interruptedBy } = {}) {
+export function runRecord({ lane, briefs, model, reasoning, mode, startedAt, finishedAt, minutes, exitCode, killed, costUsd, inputTokens, outputTokens, peakTokens, log, branch, commits, base, head, checkpoint, tests, project, task, startedBy, stoppedLeftovers, queue, startFailed, stopReason, note, retried, failover, failoverFrom, quota, continues, interruptedBy } = {}) {
   const record = {
     lane: String(lane ?? ''),
     briefs: Array.isArray(briefs) ? briefs.map(String) : [],
@@ -1281,6 +1281,7 @@ export function runRecord({ lane, briefs, model, reasoning, mode, startedAt, fin
   }
   if (Number.isInteger(stoppedLeftovers) && stoppedLeftovers > 0) record.stoppedLeftovers = stoppedLeftovers
   if (startFailed === true) record.startFailed = true
+  if (typeof stopReason === 'string' && stopReason.trim() !== '') record.stopReason = stopReason.trim().slice(0, RECORD_TEXT_LIMIT)
   if (retried === true) record.retried = true
   if (typeof note === 'string' && note.trim() !== '') record.note = note.trim().slice(0, 200)
   if (typeof startedBy === 'string' && startedBy.trim() !== '') record.startedBy = startedBy.trim()
