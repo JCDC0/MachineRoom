@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { toAgents } from '../live/source.js'
-import { laneModesFor, defaultMode } from '../control/modes.js'
+import { defaultMode, laneModesFor, modesFor } from '../control/modes.js'
 import { sessionKeyFor } from '../model/laneStarter.js'
 import { agentTasks } from '../model/liveTasks.js'
 import AutocompactInput from './AutocompactInput.jsx'
@@ -99,6 +99,19 @@ function ScopeFields({
 
 function messageOf(error) {
   return error instanceof Error && error.message ? error.message : 'The bridge refused the change.'
+}
+
+function modeSetter(client) {
+  if (typeof client?.setOrchestratorMode === 'function') return client.setOrchestratorMode.bind(client)
+  if (typeof client?.setMode === 'function') return client.setMode.bind(client)
+  return null
+}
+
+function chosenSubMode(harness, raw) {
+  const list = modesFor(harness)
+  if (list.length === 0) return ''
+  const picked = cleanText(raw, 40)
+  return list.some((entry) => entry.id === picked) ? picked : defaultMode(harness) ?? ''
 }
 
 function lanesOf(answer) {
@@ -1093,7 +1106,12 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
       harness: node.harness,
       model: node.model,
       effort: node.effort,
-      mode: laneSummary(lanes).lanes.find((lane) => lane.key === node.id)?.mode ?? defaultMode(node.harness) ?? '',
+      mode:
+        node.kind === 'lane'
+          ? laneSummary(lanes).lanes.find((lane) => lane.key === node.id)?.mode ?? defaultMode(node.harness) ?? ''
+          : node.kind === 'sub'
+            ? chosenSubMode(node.harness, currentSub?.mode)
+            : '',
       fallback: typeof backups?.[node.id] === 'string' ? backups[node.id] : '',
       lanes:
         node.kind === 'sub'
@@ -1140,6 +1158,7 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
       ...(current ?? {}),
       harness: harness.key,
       model: harness.key === DIRECT_HARNESS ? harnessModels(harness, models)[0]?.id ?? '' : '',
+      ...(editingNode?.kind === 'sub' ? { mode: defaultMode(harness.key) ?? '' } : {}),
     }))
   }
 
@@ -1177,6 +1196,7 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
 
   function askSetup(node) {
     if (!nodeDraft) return
+    const sub = node.kind === 'sub'
     const harness = nodeHarnessOptions(node).find((row) => row.key === nodeDraft.harness)
     if (!harness) {
       setActionError('Choose a harness.')
@@ -1199,9 +1219,14 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
       return
     }
     const effort = cleanText(nodeDraft.effort, 20)
+    const availableModes = sub ? modesFor(harness.key) : []
+    const currentSub = sub ? subEntry(orchestrators, node.id) : null
+    const previousMode = sub ? chosenSubMode(node.harness, currentSub?.mode) : ''
+    const mode = sub ? chosenSubMode(harness.key, nodeDraft.mode) : ''
     const harnessChanged = harness.key !== node.harness || model !== node.model
     const effortChanged = effort !== (node.effort || '')
-    if (!harnessChanged && !effortChanged) return
+    const modeChanged = sub && availableModes.length > 0 && mode !== previousMode
+    if (!harnessChanged && !effortChanged && !modeChanged) return
     if (harnessChanged && typeof client?.setOrchestratorHarness !== 'function') {
       setActionError('This bridge cannot set a harness.')
       return
@@ -1210,9 +1235,17 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
       setActionError('This bridge cannot set an effort.')
       return
     }
+    const saveMode = modeSetter(client)
+    if (modeChanged && (!harnessChanged || mode !== defaultMode(harness.key)) && typeof saveMode !== 'function') {
+      setActionError('This bridge cannot set a mode.')
+      return
+    }
+    const modeLabel = availableModes.find((entry) => entry.id === mode)?.label ?? mode
+    const detailParts = [effort ? `Effort ${effort}` : 'Effort default']
+    if (sub && modeLabel) detailParts.push(`Mode ${modeLabel}`)
     ask({
       text: `Run ${node.label} on ${harness.name} with ${model || 'Harness default'}?`,
-      detail: effort ? `Effort ${effort}` : 'Effort default',
+      detail: detailParts.join(' · '),
       label: 'Save',
       busyText: 'Saving the orchestrator...',
       run: async () => {
@@ -1231,7 +1264,16 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
             confirmed: true,
           })
         }
-        setNodeDraft((current) => (current ? { ...current, harness: harness.key, model, effort } : current))
+        if (modeChanged && typeof saveMode === 'function') {
+          await saveMode({
+            id: node.id,
+            mode,
+            confirmed: true,
+          })
+        }
+        setNodeDraft((current) =>
+          current ? { ...current, harness: harness.key, model, effort, ...(sub ? { mode } : {}) } : current
+        )
         await refresh()
       },
     })
@@ -1312,6 +1354,7 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
       harness: harness?.key ?? '',
       model: '',
       effort: harness?.efforts?.[0] ?? '',
+      mode: defaultMode(harness?.key ?? '') ?? '',
       scope: '**',
       restricted: false,
     }
@@ -1363,6 +1406,7 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
       harness: harness.key,
       model: harness.key === DIRECT_HARNESS ? harnessModels(harness, models)[0]?.id ?? '' : '',
       effort: harnessEfforts(harness)[0] ?? '',
+      mode: defaultMode(harness.key) ?? '',
     }))
   }
 
@@ -1423,6 +1467,11 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
         if (!same) throw new Error('The team changed while the card was open. Open it again.')
         await client.setLadder({ subs: fresh.subs })
         clearSelection()
+        const mode = chosenSubMode(fresh.sub.harness, draftForPlan.mode)
+        const saveMode = modeSetter(client)
+        if (mode && typeof saveMode === 'function') {
+          await saveMode({ id: fresh.sub.id, mode, confirmed: true })
+        }
         await refresh()
       },
     })
@@ -1806,6 +1855,7 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
     const choices = harness ? editorModels.choices : []
     const directMissing = direct && !editorModels.loading && choices.length === 0
     const efforts = harness ? harnessEfforts(harness) : []
+    const subModes = sub && harness ? modesFor(harness.key) : []
     const canLabel = typeof client?.setAgentLabel === 'function'
     const fallbackLabel = nodeDraft.fallback
       ? backupChoices.find((row) => row.id === nodeDraft.fallback)?.label ?? nodeDraft.fallback
@@ -1993,6 +2043,23 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
                 placeholder={direct ? 'Choose a model' : 'Harness default'}
               />
             ) : null}
+            {sub && harness && subModes.length > 0 ? (
+              <label className="mr-side-field">
+                <span className="mr-side-field-label mono">Mode</span>
+                <select
+                  className="mr-side-select mono"
+                  aria-label={`Mode for ${node.label}`}
+                  value={chosenSubMode(harness.key, nodeDraft.mode)}
+                  onChange={(event) => setNodeDraft({ ...nodeDraft, mode: event.target.value })}
+                >
+                  {subModes.map((entry) => (
+                    <option key={entry.id} value={entry.id}>
+                      {entry.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
             {harness && efforts.length > 0 ? (
               <label className="mr-side-field">
                 <span className="mr-side-field-label mono">Effort</span>
@@ -2023,7 +2090,8 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
                   directMissing ||
                   !harness ||
                   (typeof client?.setOrchestratorHarness !== 'function' &&
-                    typeof client?.setOrchestratorEffort !== 'function')
+                    typeof client?.setOrchestratorEffort !== 'function' &&
+                    (!sub || typeof modeSetter(client) !== 'function'))
                 }
                 onClick={() => askSetup(node)}
               >
@@ -2242,6 +2310,7 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
     const offered = subHarnesses.filter((row) => harnessReady(row))
     const selected = offered.find((row) => row.key === subDraft.harness) ?? null
     const efforts = selected ? harnessEfforts(selected) : []
+    const subModes = selected ? modesFor(selected.key) : []
     const direct = selected?.key === DIRECT_HARNESS
     const directMissing = direct && !subModels.loading && subModels.choices.length === 0
     const canGroup = typeof client?.setLadder === 'function' && typeof client?.orchestrators === 'function'
@@ -2299,6 +2368,23 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
             allowDefault={!direct}
             placeholder={direct ? 'Choose a model' : 'Harness default'}
           />
+        ) : null}
+        {selected && subModes.length > 0 ? (
+          <label className="mr-side-field">
+            <span className="mr-side-field-label mono">Mode</span>
+            <select
+              className="mr-side-select mono"
+              aria-label="Sub orchestrator mode"
+              value={chosenSubMode(selected.key, subDraft.mode)}
+              onChange={(event) => setSubDraft({ ...subDraft, mode: event.target.value })}
+            >
+              {subModes.map((mode) => (
+                <option key={mode.id} value={mode.id}>
+                  {mode.label}
+                </option>
+              ))}
+            </select>
+          </label>
         ) : null}
         {selected && !directMissing && efforts.length > 0 ? (
           <label className="mr-side-field">

@@ -2,7 +2,7 @@ import { HARNESS_OFF_PROBLEM, readHarnessSettings } from './harness-settings.js'
 import { execFileSync } from 'node:child_process'
 import { isAbsolute, join, relative, resolve } from 'node:path'
 import { maskKeys } from '../src/briefs/audit.js'
-import { legacyMode, modesFor } from '../src/control/modes.js'
+import { defaultMode, legacyMode, modesFor } from '../src/control/modes.js'
 import { HARNESSES } from '../src/harnesses/index.js'
 import { canChange, outsideScope, readLadder, subPrompt } from '../src/model/hierarchy.js'
 import { HARNESS_EFFORTS, harnessUnavailableProblem, isHarnessAvailable, modelAllowed, modelUnavailableProblem } from './agents-config.js'
@@ -326,11 +326,13 @@ export function createOrchestrators({
     if (!raw) return { ladder: { subs: [] }, problems: [] }
     const read = readLadder(raw, { lanes: eligibleLaneKeys() })
     const efforts = new Map()
+    const modes = new Map()
     for (const sub of Array.isArray(raw.subs) ? raw.subs : []) {
       if (!sub || typeof sub !== 'object' || typeof sub.id !== 'string') continue
       if (typeof sub.effort === 'string' && sub.effort.trim()) efforts.set(sub.id, sub.effort.trim())
+      if (typeof sub.mode === 'string' && sub.mode.trim()) modes.set(sub.id, sub.mode.trim())
     }
-    if (efforts.size === 0) {
+    if (efforts.size === 0 && modes.size === 0) {
       return { ...read, ladder: { ...read.ladder, subs: read.ladder.subs.map(withAliasModel) } }
     }
     return {
@@ -339,7 +341,13 @@ export function createOrchestrators({
         ...read.ladder,
         subs: read.ladder.subs.map((sub) => {
           const withModel = withAliasModel(sub)
-          return efforts.has(sub.id) ? { ...withModel, effort: efforts.get(sub.id) } : withModel
+          const effort = efforts.get(sub.id)
+          const mode = modes.get(sub.id)
+          return {
+            ...withModel,
+            ...(effort ? { effort } : {}),
+            ...(mode ? { mode } : {}),
+          }
         }),
       },
     }
@@ -417,8 +425,10 @@ export function createOrchestrators({
     const { ladder } = readSaved()
     const sub = ladder.subs.find((entry) => entry.id === id)
     if (!sub) return
-    const { harness, model, effort } = instance.answer()
+    const { harness, model, effort, mode } = instance.answer()
     Object.assign(sub, { harness, model, effort })
+    if (mode) sub.mode = mode
+    else delete sub.mode
     main.setLadder(ladder)
     configs.set(id, subConfig(sub))
   }
@@ -1023,26 +1033,44 @@ export function createOrchestrators({
       if (Object.hasOwn(sub, 'effort')) namedEfforts.set(sub.id, sub.effort)
     }
     const savedEfforts = new Map()
+    const savedModes = new Map()
+    const savedHarnesses = new Map()
     const savedRaw = main.getLadder()
     for (const sub of Array.isArray(savedRaw?.subs) ? savedRaw.subs : []) {
       if (!sub || typeof sub !== 'object' || typeof sub.id !== 'string') continue
       if (typeof sub.effort === 'string' && sub.effort.trim()) savedEfforts.set(sub.id, sub.effort.trim())
+      if (typeof sub.mode === 'string' && sub.mode.trim()) savedModes.set(sub.id, sub.mode.trim())
+      const oldHarness = harnessFor(sub)
+      if (oldHarness) savedHarnesses.set(sub.id, oldHarness)
     }
     const effortProblems = []
     const savedSubs = next.ladder.subs.map((sub) => {
-      const levels = HARNESS_EFFORTS[harnessFor(sub)]?.length ? HARNESS_EFFORTS[harnessFor(sub)] : HARNESS_EFFORTS.opencode
+      const harness = harnessFor(sub)
+      const levels = HARNESS_EFFORTS[harness]?.length ? HARNESS_EFFORTS[harness] : HARNESS_EFFORTS.opencode
+      let nextSub = sub
       if (namedEfforts.has(sub.id)) {
         const named = namedEfforts.get(sub.id)
-        if (named === null) return { ...sub, effort: null }
-        const value = typeof named === 'string' ? named.trim() : ''
-        if (!value || !levels.includes(value)) {
-          if (!effortProblems.includes(EFFORT_PROBLEM)) effortProblems.push(EFFORT_PROBLEM)
-          return sub
+        if (named === null) {
+          nextSub = { ...sub, effort: null }
+        } else {
+          const value = typeof named === 'string' ? named.trim() : ''
+          if (!value || !levels.includes(value)) {
+            if (!effortProblems.includes(EFFORT_PROBLEM)) effortProblems.push(EFFORT_PROBLEM)
+          } else {
+            nextSub = { ...sub, effort: value }
+          }
         }
-        return { ...sub, effort: value }
+      } else {
+        const kept = savedEfforts.get(sub.id)
+        if (kept && levels.includes(kept)) nextSub = { ...sub, effort: kept }
       }
-      const kept = savedEfforts.get(sub.id)
-      return kept && levels.includes(kept) ? { ...sub, effort: kept } : sub
+      const previousHarness = savedHarnesses.get(sub.id)
+      const keptMode =
+        previousHarness && previousHarness !== harness
+          ? defaultMode(harness)
+          : savedModes.get(sub.id) ?? null
+      const validMode = keptMode && modesFor(harness).some((entry) => entry.id === keptMode) ? keptMode : null
+      return validMode ? { ...nextSub, mode: validMode } : nextSub
     })
     if (effortProblems.length > 0) {
       return { status: 400, body: { error: effortProblems.join(' '), problems: effortProblems } }
@@ -1238,6 +1266,7 @@ export function createOrchestrators({
         return true
       }
       const out = instance.setMode(body)
+      if (out.status === 200) saveSubSettings(body.id, instance)
       sendJson(req, res, out.status, out.body)
       return true
     }

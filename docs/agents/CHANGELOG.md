@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- Add sub and the sub editor in Agents offer a Mode select, saved with the sub and kept across ladder saves.
 - Sol reviews the research plan against the surveys and the code, narrows each item's first step and reorders the plan.
 - A lane ticket can take over only its own lane's backup, once, and a lane's own run gets its messages first.
 - Settings choose whether a reply to a working lane waits for its next turn or interrupts it; the native agent aborts its model call for a new reply.
@@ -20,6 +21,7 @@
 - P446: A sub's failover stays in its sector: the runner receives the sub's allowed lanes and refuses a backup outside them before it takes the backup's lock or branch.
 - Review 46 (GPT-6.1 Sol) finds five gaps in the sector gates, the failover mode and the sub settings saves.
 - P439: A failover backup messages as lane:BACKUP, keeps the primary's replies in its inbox, takes a reply sent to either lane name, and shares the primary's four sends.
+- Add sub and the sub editor in Agents offer a Mode select from modesFor and save and keep the sub's mode across later ladder saves.
 - A sub's harness, model or effort change is saved to the ladder and its config, so a later ladder save keeps it and does not close the sub's running turn.
 - A Bypass run that fails over never passes Bypass to a backup lane not saved as Bypass; the backup runs at its own mode or its harness default.
 - Sub harness, model and effort changes update the saved ladder and keep unchanged working turns alive.
