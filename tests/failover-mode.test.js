@@ -223,16 +223,17 @@ describe('failover respects the backup lane saved mode', { timeout: 60000 }, () 
     const { result, logs, seen, records, okRuns } = await runCodexBackupFailover({
       primaryHarness: 'claude',
       primarySavedMode: 'choice',
-      runMode: 'bypass',
+      runMode: 'plan',
       backupMode: 'choice',
-      name: 'choice-bypass',
+      name: 'choice-plan',
     })
     expect(result.code, logs.join('\n')).toBe(0)
     expect(seen).toHaveLength(1)
-    expect(seen[0].mode).toBe('bypass')
-    expect(seen[0].args).toContain('--dangerously-bypass-approvals-and-sandbox')
+    expect(seen[0].mode).toBe('plan')
+    expect(seen[0].args.slice(seen[0].args.indexOf('--sandbox'), seen[0].args.indexOf('--sandbox') + 2)).toEqual(['--sandbox', 'read-only'])
+    expect(seen[0].args).not.toContain('--dangerously-bypass-approvals-and-sandbox')
     expect(records).toHaveLength(2)
-    expect(records[1]).toMatchObject({ lane: 'codex', mode: 'bypass', failoverFrom: { lane: 'claude' } })
+    expect(records[1]).toMatchObject({ lane: 'codex', mode: 'plan', failoverFrom: { lane: 'claude' } })
     expect(okRuns).toBe(1)
   })
 

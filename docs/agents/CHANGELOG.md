@@ -1,12 +1,14 @@
 # Changelog
 
 ## Unreleased
+- A Bypass run that fails over never passes Bypass to a backup lane not saved as Bypass; the backup runs at its own mode or its harness default.
 - The ladder end-to-end tests allow 120 seconds, more than their own waits add up to.
 - A sub orchestrator's token can start, stop or merge only the lanes in its own sector and stop only itself; its lane messages show it as the sender.
 - P435: Both ladder end-to-end tests allow 120 seconds, more than their waits add up to.
 - An orchestrator's ladder save refuses to move an existing sub to another harness, as it refuses a new one.
 - The turn-end scope check lists both paths of a renamed file, so a move out of a restricted sub's scope is warned about.
 - Sub tokens can start, stop and merge only lanes in their sector, and can stop only their own orchestrator.
+- P430b: A failover never passes Bypass to a backup lane that is not saved as Bypass, so the backup runs at its own saved mode or its harness default.
 - A lane proposal is refused for a harness turned off in Settings, and a program path saved there counts as available.
 - Argon lists eight free hierarchy gaps to fix next (PLAN-NEXT-ARGON-2.md).
 - Every server git call drops GIT_DIR, GIT_WORK_TREE, GIT_INDEX_FILE and GIT_COMMON_DIR through one helper, gitEnv.
