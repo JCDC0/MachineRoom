@@ -34,6 +34,11 @@ function laneRepliesFrom(answer) {
   return rows[0]?.laneReplies === 'interrupt' ? 'interrupt' : 'next-turn'
 }
 
+function worktreeSetupFrom(answer) {
+  const rows = Array.isArray(answer) ? answer : Array.isArray(answer?.harnesses) ? answer.harnesses : []
+  return typeof rows[0]?.worktreeSetup === 'string' ? rows[0].worktreeSetup : ''
+}
+
 /**
  * Renders the Harnesses section in Settings to inspect and configure runners.
  */
@@ -47,6 +52,8 @@ export default function HarnessesSettings({ client }) {
   const [laneReplies, setLaneReplies] = useState('next-turn')
   const [savingLaneCount, setSavingLaneCount] = useState(false)
   const [laneCountWarning, setLaneCountWarning] = useState('0')
+  const [savingWorktreeSetup, setSavingWorktreeSetup] = useState(false)
+  const [worktreeSetup, setWorktreeSetup] = useState('')
   const [checking, setChecking] = useState(false)
   const [confirm, setConfirm] = useState(null)
   const [sectionError, setSectionError] = useState('')
@@ -104,6 +111,7 @@ export default function HarnessesSettings({ client }) {
       setCounts(null)
       setLaneReplies('next-turn')
       setLaneCountWarning('0')
+      setWorktreeSetup('')
       setSectionError('')
       setRowErrors({})
       return
@@ -116,6 +124,7 @@ export default function HarnessesSettings({ client }) {
       setDrafts(programDraftsFrom(nextRows))
       setLaneReplies(laneRepliesFrom(answer))
       setLaneCountWarning(String(laneCountWarningFrom(answer)))
+      setWorktreeSetup(worktreeSetupFrom(answer))
       setSectionError('')
       await loadCounts()
     } catch (error) {
@@ -221,6 +230,31 @@ export default function HarnessesSettings({ client }) {
       setSectionError(error?.message || 'Could not save the lane count warning.')
     } finally {
       if (mountedRef.current) setSavingLaneCount(false)
+    }
+  }
+
+  async function applyWorktreeSetup(value) {
+    if (!client || typeof client.harnessSettings !== 'function') return
+    const command = String(value ?? '').trim()
+    setSavingWorktreeSetup(true)
+    setSectionError('')
+    try {
+      const result = await client.harnessSettings({ worktreeSetup: command, confirmed: true })
+      if (!mountedRef.current) return
+      setWorktreeSetup(command)
+      const nextRows = updateRowsWithResult(rows, result)
+      if (nextRows) {
+        setRows(nextRows)
+        setDrafts(programDraftsFrom(nextRows))
+        await loadCounts()
+      } else {
+        await loadAll()
+      }
+    } catch (error) {
+      if (!mountedRef.current) return
+      setSectionError(error?.message || 'Could not save the worktree setup command.')
+    } finally {
+      if (mountedRef.current) setSavingWorktreeSetup(false)
     }
   }
 
@@ -336,6 +370,29 @@ export default function HarnessesSettings({ client }) {
               </button>
             </div>
             <p className="endpoints-note mono">0 turns the warning off.</p>
+          </div>
+          <div className="endpoints-field">
+            <label className="endpoints-label mono" htmlFor="harness-worktree-setup">
+              Worktree setup command
+            </label>
+            <input
+              id="harness-worktree-setup"
+              type="text"
+              value={worktreeSetup}
+              disabled={checking || savingWorktreeSetup || Boolean(busyKey)}
+              onChange={(event) => setWorktreeSetup(event.target.value)}
+            />
+            <div className="endpoints-actions">
+              <button
+                type="button"
+                className="hud-settings-switch"
+                disabled={checking || savingWorktreeSetup || Boolean(busyKey)}
+                onClick={() => applyWorktreeSetup(worktreeSetup)}
+              >
+                Save
+              </button>
+            </div>
+            <p className="endpoints-note mono">Runs once in each new lane worktree, for example npm ci.</p>
           </div>
           {rows.map((row) => {
             const status = harnessStatus(row)

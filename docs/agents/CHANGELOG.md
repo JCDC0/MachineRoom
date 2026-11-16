@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- Settings keep a worktree setup command that runs once in each new lane worktree, with its time and exit code in the run log.
 - A run record keeps the worktree's head, branch and changed files at start, with a stash-create recovery commit for dirty work, and Inspector shows it.
 - P462: Each lane run records its worktree checkpoint, and a dirty start also keeps a recovery commit made with git stash create.
 - Dispatch offers a First task card in Plan for a project with no runs, and Connect and the README say records stay on this computer.
@@ -10,6 +11,7 @@
 - P460: The outcome table counts extra plain runs before a merge as `repairRuns` and the median wait from the last run to the merge commit as `reviewWaitMinutes`.
 - P460: `run-lane --outcomes` prints repair runs and review wait, with `?` when a time is unknown.
 - The compaction message and the kept summary name the turn logs and the retention limits.
+- P459: Settings keep one worktree setup command, run once in a new lane worktree and written to the run log.
 - Dispatch's confirm card names lanes that declared the same files, says when overlap is unknown, and can warn above a set lane count.
 - A continuation's own record carries continues and interruptedBy; no earlier line of runs.jsonl is changed.
 - POST /api/orchestrator/stop-tree stops an orchestrator's sector, or the whole tree, refusing new work there until it answers.

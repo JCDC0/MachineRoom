@@ -12,19 +12,26 @@ const cache = new Map()
 
 export const LANE_REPLIES = ['next-turn', 'interrupt']
 export const LANE_COUNT_WARNING_PROBLEM = 'Write the lane count warning as a whole number, 0 or more.'
+export const WORKTREE_SETUP_PROBLEM = 'Write the worktree setup as one command line.'
 
 function laneCountWarningOf(value) {
   return Number.isInteger(value) && value >= 0 ? value : 0
 }
 
+export function worktreeSetupOf(settings) {
+  return typeof settings?.worktreeSetup === 'string' ? settings.worktreeSetup.trim() : ''
+}
+
 export function readHarnessSettings(folder) {
   try {
     const data = JSON.parse(readFileSync(join(folder, 'harnesses.json'), 'utf8'))
+    const worktreeSetup = worktreeSetupOf(data)
     return {
       programs: data?.programs && typeof data.programs === 'object' && !Array.isArray(data.programs) ? data.programs : {},
       off: Array.isArray(data?.off) ? data.off.filter((key) => typeof key === 'string') : [],
       laneReplies: data?.laneReplies === 'interrupt' ? 'interrupt' : 'next-turn',
       laneCountWarning: laneCountWarningOf(data?.laneCountWarning),
+      ...(worktreeSetup ? { worktreeSetup } : {}),
     }
   } catch {
     return { programs: {}, off: [], laneReplies: 'next-turn', laneCountWarning: 0 }
@@ -50,6 +57,17 @@ export function saveHarnessSettings(folder, settings, { rename = renameSync } = 
 
 export function updateHarnessSettings(folder, body) {
   const settings = readHarnessSettings(folder)
+  if (Object.hasOwn(body ?? {}, 'worktreeSetup')) {
+    if (Object.hasOwn(body, 'program') || Object.hasOwn(body, 'enabled') || Object.hasOwn(body, 'laneReplies') || Object.hasOwn(body, 'laneCountWarning')) {
+      return 'Change one setting at a time.'
+    }
+    if (typeof body.worktreeSetup !== 'string' || /[\r\n]/.test(body.worktreeSetup)) return WORKTREE_SETUP_PROBLEM
+    const command = body.worktreeSetup.trim()
+    if (command) settings.worktreeSetup = command
+    else delete settings.worktreeSetup
+    saveHarnessSettings(folder, settings)
+    return ''
+  }
   if (Object.hasOwn(body ?? {}, 'laneCountWarning')) {
     if (Object.hasOwn(body, 'program') || Object.hasOwn(body, 'enabled') || Object.hasOwn(body, 'laneReplies')) {
       return 'Change one setting at a time.'
@@ -109,6 +127,7 @@ export async function harnessStatus(key, { runsFolder, lanes, env, platform, ava
   const settings = readHarnessSettings(runsFolder)
   const enabled = !settings.off.includes(key)
   const laneCountWarning = settings.laneCountWarning
+  const worktreeSetup = worktreeSetupOf(settings)
   if (key === 'machineroom') {
     return {
       enabled,
@@ -117,10 +136,11 @@ export async function harnessStatus(key, { runsFolder, lanes, env, platform, ava
       version: '',
       reason: available ? '' : 'No key or endpoint is saved.',
       laneCountWarning,
+      worktreeSetup,
     }
   }
   const program = resolveHarnessProgram(key, { runsFolder, lanes, env, platform })
-  if (!program) return { enabled, ready: false, program: '', version: '', reason: 'No program was found.', laneCountWarning }
+  if (!program) return { enabled, ready: false, program: '', version: '', reason: 'No program was found.', laneCountWarning, worktreeSetup }
   let checks = cache.get(runsFolder)
   if (!checks) {
     checks = new Map()
@@ -140,5 +160,6 @@ export async function harnessStatus(key, { runsFolder, lanes, env, platform, ava
     version: ready ? versionLine(result.stdout) : '',
     reason: ready ? '' : 'The program did not answer a version check.',
     laneCountWarning,
+    worktreeSetup,
   }
 }
