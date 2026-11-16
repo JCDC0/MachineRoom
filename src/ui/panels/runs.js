@@ -99,7 +99,11 @@ export function runningLaneFiles(running, briefs) {
       const brief = byId.get(id)
       if (brief) texts.push(brief.text)
     }
-    active.push({ lane, files: declaredFilesOf(...texts) })
+    active.push({
+      lane,
+      files: declaredFilesOf(...texts),
+      touched: Array.isArray(entry.touched) ? [...entry.touched] : null,
+    })
   }
   return active
 }
@@ -122,7 +126,12 @@ export function overlapCardLines({ files, active, runningCount = 0, startingCoun
   const overlaps = overlappingLanes({ files, active })
   const lines = []
   if (overlaps === 'unknown') lines.push('Overlap unknown: this task names no files.')
-  else for (const item of overlaps) lines.push(`Also declared by ${item.lane}: ${item.files.join(', ')}`)
+  else {
+    for (const item of overlaps) {
+      const prefix = item.source === 'touched' ? 'Now editing in' : 'Also declared by'
+      lines.push(`${prefix} ${item.lane}: ${item.files.join(', ')}`)
+    }
+  }
   lines.push(laneRunningLine(runningCount))
   const countLine = laneCountWarningLine({ runningCount, startingCount, laneCountWarning })
   if (countLine !== '') lines.push(countLine)

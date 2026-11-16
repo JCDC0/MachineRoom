@@ -31,7 +31,7 @@ describe('overlappingLanes', () => {
     const active = runningLaneFiles([{ lane: 'opencode2', task: second }], [])
 
     expect(overlappingLanes({ files: briefFileList(first), active })).toEqual([
-      { lane: 'opencode2', files: ['src/briefs/plan.js'] },
+      { lane: 'opencode2', files: ['src/briefs/plan.js'], source: 'declared' },
     ])
   })
 
@@ -40,7 +40,43 @@ describe('overlappingLanes', () => {
     const active = [{ lane: 'opencode3', files: ['SRC\\Briefs\\Plan.js'] }]
 
     expect(overlappingLanes({ files: ['src/briefs/plan.js'], active })).toEqual([
-      { lane: 'opencode3', files: ['src/briefs/plan.js'] },
+      { lane: 'opencode3', files: ['src/briefs/plan.js'], source: 'declared' },
+    ])
+  })
+
+  it('matches live touched files separately beside declared files', () => {
+    const active = runningLaneFiles(
+      [
+        {
+          lane: 'opencode2',
+          task: 'Declare b.\n\nFiles: `src/b.js`.',
+          touched: ['src/a.js'],
+        },
+        {
+          lane: 'opencode3',
+          task: 'Missing log.',
+          touched: null,
+        },
+      ],
+      []
+    )
+
+    expect(overlappingLanes({ files: ['src/a.js', 'src/b.js'], active })).toEqual([
+      { lane: 'opencode2', files: ['src/a.js'], source: 'touched' },
+      { lane: 'opencode2', files: ['src/b.js'], source: 'declared' },
+    ])
+    expect(
+      overlapCardLines({
+        files: ['src/a.js', 'src/b.js'],
+        active,
+        runningCount: 2,
+        startingCount: 1,
+        laneCountWarning: 0,
+      })
+    ).toEqual([
+      'Now editing in opencode2: src/a.js',
+      'Also declared by opencode2: src/b.js',
+      '2 lanes are running now.',
     ])
   })
 
