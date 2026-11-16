@@ -27,6 +27,7 @@ export function createClient({
   baseUrl = '',
   fetchImpl = fetch,
   EventSourceImpl = globalThis.EventSource,
+  notices = null,
   setTimer = setTimeout,
   clearTimer = clearTimeout,
 } = {}) {
@@ -35,6 +36,7 @@ export function createClient({
   let source = null
   let timer = null
   let delay = STREAM_START
+  let noticeStop = null
 
   async function request(method, path, body, timeoutMs = REQUEST_TIMEOUT_MS) {
     const controller = new AbortController()
@@ -77,6 +79,14 @@ export function createClient({
     }
   }
 
+  function deliverNotice(parsed) {
+    if (!parsed || typeof parsed !== 'object' || typeof parsed.topic !== 'string') return
+    const payload = parsed.id !== undefined ? { topic: parsed.topic, id: parsed.id } : { topic: parsed.topic }
+    for (const listener of [...listeners]) {
+      listener({ ...payload })
+    }
+  }
+
   function handleChange(event) {
     let parsed
     try {
@@ -84,11 +94,7 @@ export function createClient({
     } catch {
       return
     }
-    if (!parsed || typeof parsed !== 'object' || typeof parsed.topic !== 'string') return
-    const payload = parsed.id !== undefined ? { topic: parsed.topic, id: parsed.id } : { topic: parsed.topic }
-    for (const listener of [...listeners]) {
-      listener({ ...payload })
-    }
+    deliverNotice(parsed)
   }
 
   function reopenStream() {
@@ -98,6 +104,10 @@ export function createClient({
   }
 
   function ensureStream() {
+    if (notices && typeof notices.subscribe === 'function') {
+      if (noticeStop === null) noticeStop = notices.subscribe(deliverNotice)
+      return
+    }
     if (source || timer !== null || typeof EventSourceImpl !== 'function') return
     const current = new EventSourceImpl(`${base}/events`)
     source = current
@@ -117,6 +127,12 @@ export function createClient({
 
   function closeStreamIfIdle() {
     if (listeners.size > 0) return
+    if (noticeStop !== null) {
+      const stop = noticeStop
+      noticeStop = null
+      stop()
+      return
+    }
     if (timer !== null) {
       clearTimer(timer)
       timer = null
