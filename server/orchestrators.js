@@ -871,13 +871,12 @@ export function createOrchestrators({
           interruptLane({
             lane,
             held,
-            takeUnseen: () => {
-              const unseen = held.inbox.filter((item) => !seenLaneEntries.has(item))
-              for (const item of unseen) {
+            takeUnseen: () => held.inbox.filter((item) => !seenLaneEntries.has(item)),
+            markSeen: (items) => {
+              for (const item of items) {
                 seenLaneEntries.add(item)
                 item.status = 'interrupted'
               }
-              return unseen
             },
           })
         ).catch(() => {})

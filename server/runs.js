@@ -497,7 +497,7 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
   })
   const running = new Map()
   const laneTickets = new Map()
-  const activeInterrupts = new Set()
+  const activeInterrupts = new Map()
   let lastStartMs = 0
   let stopped = false
   let rootCommonDirPromise = null
@@ -1408,6 +1408,12 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
     const orchSet = new Set(targetOrchestrators)
     const laneSet = targetLanes instanceof Set ? targetLanes : new Set(targetLanes ?? [])
     const extraSet = backupLanes instanceof Set ? backupLanes : new Set(backupLanes ?? [])
+    for (const state of activeInterrupts.values()) {
+      const lane = state.item.entry.lane
+      if (isWholeTree || laneSet.has(lane) || extraSet.has(lane) || (state.item.startedBy && orchSet.has(state.item.startedBy))) {
+        state.cancelled = true
+      }
+    }
     const folder = recordsDir()
     const lanesConfig = readStartLanes({ lanesFile: laneFile, runsFolder: folder }) ?? {}
     let open = []
@@ -1560,7 +1566,7 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
     writeFileSync(join(folder, `${runName}.interrupt.txt`), formatInterruptMessage(messages), 'utf8')
   }
 
-  async function interruptLane({ lane = '', held = null, takeUnseen } = {}) {
+  async function interruptLane({ lane = '', held = null, takeUnseen, markSeen } = {}) {
     if (stopped) return false
     const runKey = typeof held?.lane === 'string' && held.lane.trim() ? held.lane.trim() : lane
     const item = running.get(runKey) ?? running.get(lane)
@@ -1570,7 +1576,8 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
     if (activeInterrupts.has(item.ticket)) return false
     const interruptCount = laneTickets.get(item.ticket)?.interruptCount ?? continuesChainCount(item.continueFrom)
     if (interruptCount >= 3) return false
-    activeInterrupts.add(item.ticket)
+    const interruptState = { item, cancelled: false }
+    activeInterrupts.set(item.ticket, interruptState)
     try {
       const runName = await waitForRunName(item, lane, runKey)
       if (!runName || stopped || item.closed || item.stopping || item.interrupting) return false
@@ -1598,11 +1605,17 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
         await runStopCommand(item.entry.lane, Boolean(item.project), item.entry.startedAt)
       }
       const more = typeof takeUnseen === 'function' ? takeUnseen() : []
-      if (Array.isArray(more) && more.length > 0) {
-        unseen.push(...more)
+      const fresh = Array.isArray(more) ? more.filter((entry) => !unseen.includes(entry)) : []
+      if (fresh.length > 0) {
+        unseen.push(...fresh)
         writeInterruptFile(recordsDir(), runName, unseen)
       }
       const nextLane = lane !== item.entry.lane ? lane : item.entry.lane
+      if (interruptState.cancelled || sectorStoppingError(nextLane, item.startedBy)) {
+        item.stopping = false
+        item.interrupting = false
+        return false
+      }
       startRun(
         nextLane,
         item.briefs,
@@ -1614,6 +1627,7 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
         item.allowedLanes,
         { continueFrom: runName, ticket: item.ticket, interruptedBy: sender }
       )
+      if (typeof markSeen === 'function') markSeen(unseen)
       laneTickets.get(item.ticket).interruptCount = interruptCount + 1
       notify({ topic: 'runs' })
       return true

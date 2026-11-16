@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- P468: A failed interrupt keeps its replies queued for the next one, and Stop sector cancels an interrupt that is still waiting to restart its lane.
 - When a native model call ends with a final answer while a reply is held, the agent delivers the reply and makes one more call.
 - An interrupted backup restarts with its own saved model and mode in the interrupted run's worktree and branch, and the three-interrupt limit holds across a failover.
 - P469: A native final answer no longer drops a reply read at the same time; the agent delivers it and makes one more model call.
