@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process'
 import { realpathSync, statSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { gitPath } from './programPath.js'
+import { gitEnv, gitPath } from './programPath.js'
 
 export const GIT_TIMEOUT_MS = 10000
 export const GIT_WRITE_TIMEOUT_MS = 120 * 1000
@@ -98,7 +98,7 @@ export function defaultGitRunner(cwd, args, { timeout = GIT_TIMEOUT_MS, env = pr
         maxBuffer: GIT_MAX_BUFFER,
         encoding: 'utf8',
         env: {
-          ...env,
+          ...gitEnv(env),
           GIT_TERMINAL_PROMPT: '0',
         },
       },

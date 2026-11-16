@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url'
 import { worktreeFor } from '../src/briefs/run.js'
 import { outsideScope } from '../src/model/hierarchy.js'
 import { lanesFolder, mainCheckoutOf, readAllLanes, runsFolder as defaultRunsFolder } from './lanes-source.js'
-import { gitPath } from './programPath.js'
+import { gitEnv, gitPath } from './programPath.js'
 import {
   beginRepoWrite,
   endRepoWrite,
@@ -99,13 +99,7 @@ export function emptyHooksDir() {
 }
 
 export function defaultGitRunner(worktree, args, { timeout = GIT_TIMEOUT_MS, extraEnv = null } = {}) {
-  const env = { ...process.env, ...(extraEnv ?? {}) }
-  for (const key of Object.keys(env)) {
-    const upper = key.toUpperCase()
-    if (upper === 'GIT_DIR' || upper === 'GIT_WORK_TREE' || upper === 'GIT_INDEX_FILE') {
-      delete env[key]
-    }
-  }
+  const env = { ...gitEnv(), ...(extraEnv ?? {}) }
   const hooksDir = emptyHooksDir()
   const gitArgs = args[0] === '-c' && typeof args[1] === 'string' && args[1].startsWith('core.hooksPath=')
     ? args

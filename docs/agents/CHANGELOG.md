@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- Server git calls ignore inherited repository variables so they use the selected project.
 - Review 45 (GPT-6.1 Sol) finds git calls that keep a parent's repository variables.
 - Two slow tests wait for their own timeout instead of a fixed ten seconds, and git calls in mainCheckoutOf and the lane source tests ignore a parent GIT_DIR.
 - Only Main itself takes Main's live harness and model in the inspector and dock, so a lane or sub named like an orchestrator keeps its own.
