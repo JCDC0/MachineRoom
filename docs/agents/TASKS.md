@@ -3761,3 +3761,11 @@ P439's `POST /api/orchestrator/failover` lets any running lane's ticket claim an
 2. Name anything the three surveys agree on that the plan leaves out, and anything in the plan no survey supports.
 3. Give your own order of the 15, with one line on why it differs from Argon's where it does.
 4. Under 90 lines in the section. Plain words, no em dashes.
+
+**P438a2. The native agent never drops a reply that arrives as its model call ends (OpenCode).** Read this brief and `startInboxWatch` and its use in `main` in `scripts/mr-agent.mjs` only. Commit each step as you finish it. Run every command in the foreground. Files: scripts/mr-agent.mjs, tests/lane-replies-setting.test.js, docs/agents/CHANGELOG.md.
+
+`readLaneInbox` marks messages as seen when it reads them. With `interrupt`, if the model call resolves while the watcher is inside `readLaneInbox`, `watch.stop()` runs, the loop returns at `if (stopped) return` without calling `onMessage`, and the messages it just marked seen are never added to the conversation.
+
+1. The watcher always hands over what it read: after `readLaneInbox` returns non-empty text, it calls `onMessage` even when stopped. In `main`, after a successful call, stop the watch, `await watch.done`, and if it handed over text, keep it in `heldInbox` for the next call, as the abort path does.
+2. Test, failing before your change: a fake model call that resolves while a slow fake inbox read is in flight; the read's message reaches the next model call.
+3. Run `node node_modules/vitest/vitest.mjs run tests/lane-replies-setting.test.js tests/mr-agent.test.js` and report the counts. `mr-agent > stops the whole shell tree on the time limit` may fail under load; rerun it alone.
