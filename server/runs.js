@@ -8,7 +8,8 @@ import { fileURLToPath } from 'node:url'
 import { parseBriefs } from '../src/briefs/briefs.js'
 import { attentionItems } from '../src/briefs/attention.js'
 import { KEY_MASK, maskKeys } from '../src/briefs/audit.js'
-import { SINCE_PROBLEM, checkCommandLines, dayStart, formatInterruptMessage, interruptSenderFrom, laneLockLog, laneLockStartedAt, laneModeProblem as runnerModeProblem, laneStats, laneWithOverrides, maskProfilePaths, pathInside, projectProblems, runRecord, worktreeFor } from '../src/briefs/run.js'
+import { SINCE_PROBLEM, checkCommandLines, dayStart, formatInterruptMessage, interruptSenderFrom, laneLockLog, laneLockPids, laneLockStartedAt, laneModeProblem as runnerModeProblem, laneStats, laneWithOverrides, maskProfilePaths, pathInside, projectProblems, runRecord, summarizeRun, worktreeFor } from '../src/briefs/run.js'
+import { harnessByKey } from '../src/harnesses/index.js'
 import { profileFromBrief, profileFromTask } from '../src/policy/profile.js'
 import { readPolicy, routeLane, tierFor, TIERS } from '../src/policy/route.js'
 import { conversationFromLog } from '../src/model/conversation.js'
@@ -49,6 +50,7 @@ export const CONVERSATION_UNKNOWN_PROBLEM = 'No run of that lane started at that
 export const CONVERSATION_LOG_OUTSIDE_PROBLEM = "The run's log is outside the runs folder."
 export const CONVERSATION_LOG_MISSING_PROBLEM = "The run's log is missing."
 export const CONVERSATION_LOG_BYTES = 8 * 1024 * 1024
+export const LIVE_TOUCH_LIMIT = 50
 const STOP_TIMEOUT_MS = 15 * 1000
 const STOP_SETTLE_MS = 50
 export function notGitProblem(project, { queue = false } = {}) {
@@ -478,7 +480,7 @@ export function readOutcomeRecords(file) {
   return readJsonLines(file)
 }
 
-export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand, sendJson, readJsonBody, notify = () => {}, orchestrators = () => null, lanesSource = () => null, lanesFile = '', runsFolder = '', activeLanes = null, isLaneActive = null, onMessage = () => {}, platform = process.platform, list = listProcesses, stat = statSync, bridgeUrl = '' }) {
+export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand, sendJson, readJsonBody, notify = () => {}, orchestrators = () => null, lanesSource = () => null, lanesFile = '', runsFolder = '', activeLanes = null, isLaneActive = null, onMessage = () => {}, platform = process.platform, list = listProcesses, stat = statSync, readFile = readFileSync, summarize = summarizeRun, bridgeUrl = '' }) {
   const resolvedRoot = projectRoot ? realPath(projectRoot) : ''
   const resolvedBriefs = briefsDir ? resolve(briefsDir) : resolvedRoot ? join(resolvedRoot, 'docs', 'agents') : ''
   const laneFile = lanesFile ? resolve(lanesFile) : join(lanesFolder(), 'lanes.json')
@@ -498,6 +500,7 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
   const running = new Map()
   const laneTickets = new Map()
   const activeInterrupts = new Map()
+  const touchedCache = new Map()
   let lastStartMs = 0
   let stopped = false
   let rootCommonDirPromise = null
@@ -858,12 +861,151 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
     return { status: 202, body: entry }
   }
 
-  function snapshot(item) {
+  function readLockState(laneKey) {
+    const text = readTextAt(join(recordsDir(), `${laneKey}.lock`))
+    if (!text) return { log: '', startedAt: '', folder: '' }
+    return {
+      log: laneLockLog(text),
+      startedAt: laneLockStartedAt(text),
+      folder: laneLockPids(text).folder,
+    }
+  }
+
+  function currentOpenRuns() {
+    try {
+      const source = typeof lanesSource === 'function' ? lanesSource() : lanesSource
+      const open = source && typeof source.openRuns === 'function' ? source.openRuns() : []
+      return Array.isArray(open) ? open : []
+    } catch {
+      return []
+    }
+  }
+
+  function touchedForLog(logPath, { harness = '', worktree = '' } = {}) {
+    if (!logPath) return null
+    const folder = realPath(recordsDir())
+    const resolvedLog = realPath(logPath)
+    if (!resolvedLog || !pathInside(resolvedLog, folder)) return null
+    let info
+    try {
+      info = stat(resolvedLog)
+    } catch {
+      touchedCache.delete(resolvedLog)
+      return null
+    }
+    if (!info || (typeof info.isFile === 'function' && !info.isFile())) {
+      touchedCache.delete(resolvedLog)
+      return null
+    }
+    if (!Number.isFinite(info.size) || !Number.isFinite(info.mtimeMs) || info.size < 0 || info.size > CONVERSATION_LOG_BYTES) {
+      touchedCache.delete(resolvedLog)
+      return null
+    }
+    if (!harness || !Object.hasOwn(harnessByKey, harness)) {
+      touchedCache.delete(resolvedLog)
+      return null
+    }
+    const cached = touchedCache.get(resolvedLog)
+    if (
+      cached &&
+      cached.size === info.size &&
+      cached.mtimeMs === info.mtimeMs &&
+      cached.harness === harness &&
+      cached.worktree === worktree
+    ) {
+      return [...cached.touched]
+    }
+    let text
+    try {
+      text = readFile(resolvedLog, 'utf8')
+    } catch {
+      touchedCache.delete(resolvedLog)
+      return null
+    }
+    if (typeof text !== 'string' || Buffer.byteLength(text, 'utf8') > CONVERSATION_LOG_BYTES) {
+      touchedCache.delete(resolvedLog)
+      return null
+    }
+    let summary
+    try {
+      summary = summarize({ harness, log: text, worktree })
+    } catch {
+      touchedCache.delete(resolvedLog)
+      return null
+    }
+    if (!Array.isArray(summary?.written)) {
+      touchedCache.delete(resolvedLog)
+      return null
+    }
+    const touched = []
+    const seen = new Set()
+    for (const raw of summary.written) {
+      const safe = maskProfilePaths(maskKeys(String(raw ?? '')).text).trim()
+      if (!safe || seen.has(safe)) continue
+      seen.add(safe)
+      touched.push(safe)
+      if (touched.length >= LIVE_TOUCH_LIMIT) break
+    }
+    touchedCache.set(resolvedLog, {
+      size: info.size,
+      mtimeMs: info.mtimeMs,
+      harness,
+      worktree,
+      touched,
+    })
+    return [...touched]
+  }
+
+  function touchedForItem(item, lanes, openRuns) {
+    const folder = realPath(recordsDir())
+    const lane = item.entry.lane
+    const lock = readLockState(lane)
+    const lockMatches = lock.startedAt !== '' && matchesLockStart(lock.startedAt, item.entry.startedAt)
+    const openMatch = openRuns.find((run) => {
+      if (!run || !run.name || run.lane !== lane) return false
+      return matchesLockStart(run.startedAt, item.entry.startedAt)
+    })
+    const candidate =
+      (lockMatches && lock.log !== '' ? join(folder, lock.log) : '') ||
+      item.logPath ||
+      (openMatch ? join(folder, `${openMatch.name}.log`) : '')
+    if (!candidate) {
+      if (item.liveLogPath) {
+        touchedCache.delete(item.liveLogPath)
+        item.liveLogPath = ''
+      }
+      return null
+    }
+    const resolvedLog = realPath(candidate)
+    if (item.liveLogPath && item.liveLogPath !== resolvedLog) {
+      touchedCache.delete(item.liveLogPath)
+    }
+    item.liveLogPath = resolvedLog
+    const meta = readMeta(resolvedLog)
+    const logLane = typeof meta?.lane === 'string' && meta.lane.trim() !== '' ? meta.lane.trim() : lane
+    const harness =
+      (typeof lanes?.[logLane]?.cli?.harness === 'string' && lanes[logLane].cli.harness) ||
+      (typeof lanes?.[lane]?.cli?.harness === 'string' && lanes[lane].cli.harness) ||
+      ''
+    const worktree =
+      (typeof meta?.project === 'string' && meta.project.trim()) ||
+      (lockMatches && lock.folder) ||
+      (item.projectRun?.worktree && item.project ? worktreeFor(item.project, lane) : '') ||
+      item.project ||
+      lanes?.[logLane]?.worktree ||
+      lanes?.[lane]?.worktree ||
+      resolvedRoot ||
+      ''
+    return touchedForLog(resolvedLog, { harness, worktree })
+  }
+
+  function snapshot(item, { lanes = null, openRuns = [] } = {}) {
     const out = {
       lane: item.entry.lane,
       briefs: [...item.entry.briefs],
       startedAt: item.entry.startedAt,
       lastLines: [...item.entry.lastLines],
+      touched: touchedForItem(item, lanes, openRuns),
       ...(item.entry.queue ? { queue: true, tasks: item.entry.tasks } : {}),
     }
     const taskLabel = item.task || (item.entry.queue && item.entry.tasks === 1 ? item.firstTask : '')
@@ -882,6 +1024,7 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
 
   function finish(item) {
     if (running.get(item.entry.lane) !== item) return
+    if (item.liveLogPath) touchedCache.delete(item.liveLogPath)
     if (item.ticket && !item.interrupting) laneTickets.delete(item.ticket)
     flushTail(item)
     running.delete(item.entry.lane)
@@ -1642,6 +1785,7 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
   function stopAll() {
     stopped = true
     laneTickets.clear()
+    touchedCache.clear()
     for (const item of running.values()) {
       if (item.child?.pid) killTree(item.child)
     }
@@ -1832,9 +1976,12 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
       noteFailovers(records)
       const thisRepo = await inThisRepository()
       const visible = roomRecords(records, thisRepo).map(maskRecordCommits)
+      const runningItems = [...running.values()]
+      const lanes = runningItems.length > 0 ? readStartLanes({ lanesFile: laneFile, runsFolder: recordsDir() }) : null
+      const openRuns = runningItems.length > 0 ? currentOpenRuns() : []
       sendJson(req, res, 200, {
         project: resolvedRoot ? basename(resolvedRoot) : '',
-        running: [...running.values()].map(snapshot),
+        running: runningItems.map((item) => snapshot(item, { lanes, openRuns })),
         recent: visible.slice(-RECENT_LIMIT).reverse(),
         last: newestRecordPerLane(visible),
         attention: attentionItems(visible),
