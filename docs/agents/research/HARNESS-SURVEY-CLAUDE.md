@@ -1,0 +1,54 @@
+# Harness survey, Claude (P442a)
+
+Claude, Opus 5.5 High, 2026-11-16. Written without reading the Sol or Argon surveys. Sources are web pages read through search on this date; most are blogs, vendor pages and forum threads, not formal studies, and that is said where it matters.
+
+## 1. What users want
+
+### Trust and review (strongest theme)
+- Users trust agent output less each year. The 2025 Stack Overflow survey (secondary coverage): 46% distrust AI accuracy, up from 31%; 87% worry about the accuracy of agent output; 81% have security or privacy concerns; 66% say answers are "almost right". Only 14% used agents daily. [InfoWorld](https://www.infoworld.com/article/4031673/), [The Decoder](https://the-decoder.com/developers-rely-on-ai-tools-more-than-ever-but-trust-is-slipping/), [TechRepublic](https://www.techrepublic.com/article/news-developer-trust-in-ai-declines/).
+- Review, not writing, is the bottleneck. Writers in 2026 say parallel agents make diffs faster than people can read them, and ask for smaller diffs, evidence attached to a change, and risk scores that route attention. Mostly vendor and consultancy blogs. [Addy Osmani, Agentic Code Review](https://addyosmani.com/blog/agentic-code-review/), [Wyeworks, Aug 2026](https://wyeworks.com/blog/2026/08/07/we-have-a-code-review-problem/), [smaller review surfaces](https://blakecrosley.com/blog/ai-coding-agents-smaller-review-surfaces), [Developers Digest on HN](https://www.developersdigest.tech/blog/what-hacker-news-gets-right-about-ai-coding-agents-2026).
+
+### Cost and quota (most common complaint about one tool)
+- Claude Code's usage limits are the single most common complaint on Reddit per one roundup; GitHub issues from March to April 2026 report a 5 hour window spent in 70 to 90 minutes and rate-limit errors at 16% shown usage. [MacRumors, 2026-03-26](https://www.macrumors.com/2026/03/26/claude-code-users-rapid-rate-limit-drain-bug/), [issue 41788](https://github.com/anthropics/claude-code/issues/41788), [issue 29579](https://github.com/anthropics/claude-code/issues/29579), [Reddit roundup](https://www.morphllm.com/claude-code-reddit).
+- Observability products sell cost per session, per PR and per model, cache behaviour and replay; the gap they name is attribution: which agent, which model, at what cost made this change. Vendor sources. [LangWatch](https://langwatch.ai/docs/coding-agents/overview.md), [Augment](https://www.augmentcode.com/guides/agent-observability-for-ai-coding), [Codex OpenTelemetry gap, 2026-06-07](https://codex.danielvaughan.com/2026/06/07/agent-observability-gap-codex-cli-opentelemetry-session-tracing-cost-attribution/).
+- Keeping transcripts local is a selling point against hosted tools. [Agents Observe](https://openapps.pro/apps/agents-observe).
+
+### Few bounded agents beat swarms
+- Practitioners report the sweet spot is two or three agents with a human over them, each scoped to one concern; failures come from agents overwriting each other's state. Forum anecdotes. [Ask HN, orchestrators](https://news.ycombinator.com/item?id=46993479), [HN, distributed systems problem](https://news.ycombinator.com/item?id=47761625), [Mike Mason, Jan 2026](https://mikemason.ca/writing/ai-coding-agents-jan-2026/).
+- At scale, failed or non-returning agents waste tokens silently: one 271 agent run lost about 12% of tokens to them. [OpenAI community](https://community.openai.com/t/scaling-multi-agent-coding-keep-the-intelligence-reduce-the-orchestration/1403652).
+
+### Steering a running agent
+- Tools converge on three controls: steer (adjust at the next safe point), queue (wait for the turn to end) and interrupt (stop and resend), plus rewind for finished work. Users ask for pause distinct from stop and a priority channel to redirect mid-run. [Kiro queue and steering](https://kiro.dev/docs/cli/chat/queue-steering/), [VS Code, get an agent back on track](https://code.visualstudio.com/docs/agents/guides/get-agent-back-on-track), [agentpatterns.ai](https://agentpatterns.ai/patterns/agent-design/steering-running-agents/), [Claude Code pause request](https://github.com/anthropics/claude-code/issues/65827), [priority channel request](https://claudeissues.com/issue/30492-feature-request-real-time-steering-priority-message-channel-for-redirecting-clau), [Claude Code checkpointing](https://code.claude.com/docs/en/checkpointing.md).
+
+### Setup for a beginner
+- Guides agree the hard part is setup and permissions, not daily use; they advise plan mode first, guided first tasks, prerequisite checks, and letting an agent run the setup. Blogs. [Context Studios on-ramp](https://www.contextstudios.ai/blog/claude-code-for-non-engineers-the-honest-on-ramp), [zero-friction onboarding](https://understandingdata.com/posts/zero-friction-onboarding/), [agent handoff onboarding](https://pickaxe.co/learn/changelog/cli-agent-handoff).
+
+### Context and instructions
+- AGENTS.md is becoming the cross-tool file, now under the Agentic AI Foundation; adoption is still low (about 5% of 466 repos had any context file). A study of 2,923 repos found context files are often the only configuration, and one controlled study found AGENTS.md cut runtime and tokens at equal completion. Preprints. [arXiv 2510.21413](https://arxiv.org/html/2510.21413v4), [arXiv 2602.14690](https://arxiv.org/html/2602.14690v3).
+
+## 2. How harnesses are built
+
+- **Claude Code**: one agent loop with named permission modes plus allow and deny rules and hooks; an opt-in OS sandbox; nested subagents; `--worktree`; checkpoints and `/rewind`; typed messages queue to the turn boundary, Ctrl+C interrupts. [Haseeb Qureshi architecture gist](https://gist.github.com/Haseeb-Qureshi/2213cc0487ea71d62572a645d7582518), [Convika on subagents](https://convika.com/blog/claude-code-codex-subagents/), [checkpointing docs](https://code.claude.com/docs/en/checkpointing.md).
+- **Codex CLI**: OS sandbox by default (Seatbelt, bubblewrap) with network off, sandbox modes plus approval policies; subagents inherit the sandbox; worktrees isolate whole chats in the desktop app; a turn steer API since February 2026 (per one request). [computingforgeeks comparison](https://computingforgeeks.com/opencode-vs-claude-code-vs-cursor/), [michaellivs comparison](https://michaellivs.com/blog/cli-coding-agents-compared/), [Codex 0.159 steering](https://www.remio.ai/post/openai-codex-0-159-0-makes-mid-run-steering-the-main-event).
+- **OpenCode**: open source, 75+ providers, allow, ask and deny permission rules, no OS sandbox. [ofox comparison](https://ofox.ai/blog/opencode-vs-codex-cli-terminal-coding-agent-2026/).
+- **Parallel orchestrators** (Conductor, Vibe Kanban, Claude Squad and others): each task in its own git worktree; Conductor and Vibe Kanban centre on a diff-first review screen and sending feedback to a running agent; Claude Squad is a tmux TUI that leaves merging to git; Vibe Kanban's maintenance is in doubt after April 2026. [rustman on Conductor](https://rustman.org/wiki/conductor-parallel-agents/), [awesome-agent-orchestrators](https://github.com/andyrewlee/awesome-agent-orchestrators), [appxlab](https://blog.appxlab.io/2026/04/05/parallel-ai-coding-agents/), [Addy Osmani, Code Agent Orchestra](https://addyosmani.com/blog/code-agent-orchestra/).
+- **Agent Client Protocol**: an LSP-like standard from Zed; JetBrains joined in December 2025, a registry opened 2026-01-28, 25 to 30+ agents by March 2026 including Codex CLI, Gemini CLI and Copilot; Claude Code works through Zed's adapter. [Zed ACP](https://zed.dev/acp), [ACP registry](https://zed.dev/blog/acp-registry), [Microsoft Terminal and ACP, 2026-06-10](https://codex.danielvaughan.com/2026/06/10/agent-client-protocol-microsoft-intelligent-terminal-codex-cli-multi-agent-ide-ecosystem/).
+
+## 3. What MachineRoom should take
+
+Ranked by how many users ask and how little MachineRoom has today.
+
+1. **Review screen built for agent diffs** (trust and review). Others: Conductor's diff-first review, risk routing. Today: Reviews tab and `npm run review-lane` (`server/reviews.js`). Change: per lane a short summary, test evidence from the run (`vitest related` result), files grouped by risk (outside scope, server, tests), and a size warning past N lines. Medium. Changes what the owner sees.
+2. **Cost per change** (cost). Others: LangWatch, Agents Observe. Today: `server/lane-costs.js`, `--stats`. Change: show cost, tokens and minutes on each review and each merge commit note, and a per-brief total across failover and continuation runs. Small. Visible.
+3. **Steer, queue, interrupt in one place** (steering). Others: Kiro, VS Code, Codex steer. Today: P438 adds wait or interrupt. Change: name the three in the room's lane chat, add Pause (hold before the next model call) for the native agent. Small after P438. Visible.
+4. **First-run guide that does the setup** (beginners). Others: agent-run setup, prerequisite checks. Today: `machineroom doctor`, the connect screen. Change: a guided first project that runs `doctor`, lists found harnesses with one click to enable, and starts one lane in Plan mode on a sample task. Medium. Visible.
+5. **Plan mode as the beginner default** (beginners, trust). Today: `defaultMode` per harness. Change: a Settings choice `Start new lanes in Plan`. Small. Visible.
+6. **Failed and silent agents surfaced** (bounded agents). Today: failure tray, run records. Change: a run that ends with no commit and no report, or spends past a budget with no file change, is flagged and its spend counted as waste on the cost board. Small. Visible.
+7. **Few agents by default** (bounded agents). Change: a soft cap on concurrent lanes per project (default 3) with a warning, not a block. Small. Visible.
+8. **AGENTS.md first** (context). Today: lanes read the project's guide by name in the brief. Change: the lane prompt names `AGENTS.md` when present, and `doctor` warns when a project has no context file. Small. Not visible beyond doctor.
+9. **ACP as the default way to add a harness** (expert extension). Today: the `acp` harness and `scripts/acp-run.mjs`. Change: list registry agents in Settings and add one as a lane in one step. Medium. Visible.
+10. **Checkpoint before each lane turn** (rewind). Today: worktrees and branches. Change: commit a hidden ref before each continuation or interrupt so a bad turn can be dropped from the review screen. Small. Visible.
+11. **Sandbox stated per lane** (trust). Today: P440 states writes outside the project. Change: the Inspector shows each lane's sandbox in one line (OS sandbox, rules only, or none) from the harness descriptor. Small. Visible.
+12. **Local-only telemetry stays a promise** (privacy). Today: masking of keys and home paths. Change: say it on the connect screen and in the README. Small. Visible.
+
+Not taken: autonomous CI-fix and merge with no human (Composio style); the owner's rule keeps merges in the owner's hands.
