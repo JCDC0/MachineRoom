@@ -3468,3 +3468,34 @@ Review 42 fixes, P410 to P413. `docs/agents/AUDIT-2026-11-REVIEW-42.md` (P409, G
 2. For each of R42-1 to R42-6, say whether it is fixed, with the line that fixes it, and try the finding's own reproduction again. Then look for what the fixes broke: a restricted merge refused forever when the owner allows it; an orchestrator that loses a mode the owner set; a failover that now refuses where it worked; a sub that loses its own conversation after a restart; a test that would pass with its change undone.
 3. Each new finding: `R43-N`, a severity, the file and line, what goes wrong, how to see it, one fix. At most 8. No finding without a file and line you read.
 4. End with `Checked and fine`. Under 80 lines. Plain words, no em dashes.
+
+## 2026-11-16: After the shutdown (P415 to P418)
+
+Small follow-ups found while merging P395 to P413. None adds a feature.
+
+**P415. ROOM.md and FREE-HIERARCHY.md describe the new controls (AGY, Argon, docs).** Read this brief only. Commit each step as you finish it. Run every command in the foreground. Change only docs. Files: docs/agents/architecture/ROOM.md, docs/agents/FREE-HIERARCHY.md, docs/agents/architecture/LIVE.md (only the routes these change), docs/agents/CHANGELOG.md.
+
+1. Read the code, not the briefs, for each of these and write what the owner sees and what the bridge does, in plain words, short sentences, no em dashes: the lane Mode select in Add child, the lane editor and Dispatch, with `Orchestrator's choice` and no Ask (`src/ui/FamilyTree.jsx`, `src/ui/panels/DispatchPanel.jsx`, `server/runs.js`); the sub Scope field and Restricted box (`src/ui/FamilyTree.jsx`); a restricted sub's out-of-scope merge and `Merge anyway` (`server/reviews.js`, `src/ui/panels/ReviewsPanel.jsx`); the `Separate worktree` box in the chat and for split runs (`src/ui/OrchestratorChat.jsx`, `src/ui/panels/runs.js`); Codex Edits and Bypass (`src/control/modes.js`, `src/harnesses/codex.js`); an orchestrator adds agents only on its own harness (`server/family.js`, `server/orchestrators.js`); a ladder sub's model check (`server/orchestrators.js`).
+2. Put each in the one place it belongs (ROOM.md for what the owner sees, FREE-HIERARCHY.md for who may do what, LIVE.md for a route's body and answers). Fix any sentence these changes made wrong. Add nothing the code does not do.
+3. Run `node node_modules/vitest/vitest.mjs run tests/docs.test.js tests/briefs.test.js` (skip a file that does not exist) and report the counts.
+
+**P416. The sub scope box and the chat's worktree box use classes, not inline styles (OpenCode).** Read this brief only. Commit each step as you finish it. Run every command in the foreground. Files: src/ui/FamilyTree.jsx (only the scope `textarea` near line 80), src/ui/OrchestratorChat.jsx (only the `mr-orch-worktree` label near line 309), src/styles.css (two new rules), tests/inline-style.test.js (new; add no test to another file except to keep an existing one passing), docs/agents/CHANGELOG.md.
+
+1. Move the scope textarea's inline `style` to a class `mr-side-scope` in `src/styles.css`, and the worktree label's inline `style` to its existing class `mr-orch-worktree`. Same look: keep the values. Use the 8px spacing base where a value is close (4px stays 4px).
+2. Tests, each failing before your change: neither element has a `style` attribute when rendered; `src/styles.css` holds both rules.
+3. Run `node node_modules/vitest/vitest.mjs run tests/inline-style.test.js tests/sub-scope-form.test.js tests/worktree-choice.test.js` and report the counts.
+
+**P417. Codex's Edits mode says what it really allows (OpenCode).** Read this brief only. Commit each step as you finish it. Run every command in the foreground. Files: src/control/modes.js (only how a mode's line is chosen), tests/codex-modes.test.js (add tests here), docs/agents/CHANGELOG.md.
+
+Codex has no edits-only sandbox, so P401 maps Codex Edits to `--sandbox workspace-write`, the same as Auto. The shared Edits line `Edits files. Runs no commands.` is then false for Codex.
+
+1. `modesFor('codex')` returns Edits with the line `Edits files and can run commands inside its workspace sandbox. Codex has no edits-only mode.` Every other harness's lines stay as they are.
+2. Tests, each failing before your change: Codex's Edits line is the new one; Claude Code's Edits line is unchanged.
+3. Run `node node_modules/vitest/vitest.mjs run tests/codex-modes.test.js tests/modes.test.js tests/orchestrator-modes.test.js` and report the counts.
+
+**P418. The inbox cut in `boundMessages` is shorter (OpenCode).** Read this brief only. Commit each step as you finish it. Run every command in the foreground. Files: scripts/mr-agent.mjs (only the inbox branch of `boundMessages`), docs/agents/CHANGELOG.md. Add no test and change no test.
+
+P393 and P397 left about 40 lines for one rule: keep the inbox heading, keep the newest reply's sender, mark `[start cut]`, start on a whole word, fit the bound.
+
+1. Rewrite that branch to do the same in as few plain lines as you can. Keep behaviour identical: every test in `tests/review-39-fixes.test.js`, `tests/mr-agent-inbox.test.js` and `tests/mr-agent.test.js` must pass unchanged.
+2. Run `node node_modules/vitest/vitest.mjs run tests/review-39-fixes.test.js tests/mr-agent-inbox.test.js tests/mr-agent.test.js` before and after and report both counts, and the line count of the branch before and after.
