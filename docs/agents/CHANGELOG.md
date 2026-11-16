@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- P448: A page opens one `/events` stream, and the control client takes its notices from the live bridge's stream, so six tabs fit before the browser's connection limit stalls the room.
 - Add sub and the sub editor in Agents offer a Mode select, saved with the sub and kept across ladder saves.
 - Sol reviews the research plan against the surveys and the code, narrows each item's first step and reorders the plan.
 - A lane ticket can take over only its own lane's backup, once, and a lane's own run gets its messages first.
