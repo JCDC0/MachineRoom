@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { spawn, spawnSync } from 'node:child_process'
 import { createHash, randomUUID } from 'node:crypto'
-import { appendFileSync, closeSync, constants, createWriteStream, existsSync, fstatSync, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
+import { appendFileSync, closeSync, constants, copyFileSync, createWriteStream, existsSync, fstatSync, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import { finished } from 'node:stream'
@@ -14,7 +14,7 @@ import { outcomeTable } from '../server/outcomes.js'
 import { readMainSubjectsSync } from '../server/runs.js'
 import { isLockHolderStale, killTree, descendantProcesses, leftoverProcesses, listProcesses } from '../server/processTree.js'
 import { codexProgramFor } from '../server/agents-config.js'
-import { HARNESS_OFF_PROBLEM, readHarnessSettings, worktreeSetupOf } from '../server/harness-settings.js'
+import { HARNESS_OFF_PROBLEM, readHarnessSettings, worktreeCopiesProblem, worktreeSetupOf } from '../server/harness-settings.js'
 import { codexHarness } from '../src/harnesses/codex.js'
 import { defaultMode, legacyMode } from '../src/control/modes.js'
 import { harnessByKey } from '../src/harnesses/index.js'
@@ -647,7 +647,53 @@ function runWorktreeSetup(worktree, command) {
   return line
 }
 
-export function prepareWorktree(project, lane, { setup = '' } = {}) {
+function copyWorktreeFiles(project, worktree, copies) {
+  const problem = worktreeCopiesProblem(copies, project)
+  if (problem) throw new Error(problem)
+  const sourceRoot = realpathSync(project)
+  const targetRoot = realpathSync(worktree)
+  const inside = (root, path) => {
+    const rel = relative(root, path)
+    return rel !== '..' && !rel.startsWith(`..${process.platform === 'win32' ? '\\' : '/'}`) && !isAbsolute(rel)
+  }
+  for (const path of copies) {
+    const source = join(project, path)
+    let resolvedSource
+    try { resolvedSource = realpathSync(source) } catch (error) {
+      if (error.code !== 'ENOENT') throw error
+      console.log(`worktree copy: skipped ${path} (missing)`)
+      continue
+    }
+    const gitDir = join(sourceRoot, '.git')
+    if (!inside(sourceRoot, resolvedSource) || inside(gitDir, resolvedSource) || !statSync(resolvedSource).isFile()) throw new Error(`Worktree copy ${path} must resolve to a file inside the project.`)
+    const target = join(worktree, path)
+    let parent = dirname(target)
+    while (!existsSync(parent)) parent = dirname(parent)
+    if (!inside(targetRoot, realpathSync(parent))) throw new Error(`Worktree copy ${path} must resolve inside the worktree.`)
+    try {
+      lstatSync(target)
+      try {
+        if (!inside(targetRoot, realpathSync(target))) throw new Error(`Worktree copy ${path} must resolve inside the worktree.`)
+      } catch (error) { if (error.code !== 'ENOENT') throw error }
+      console.log(`worktree copy: skipped ${path} (exists)`)
+      continue
+    } catch (error) { if (error.code !== 'ENOENT') throw error }
+    mkdirSync(dirname(target), { recursive: true })
+    if (!inside(targetRoot, realpathSync(dirname(target)))) throw new Error(`Worktree copy ${path} must resolve inside the worktree.`)
+    const found = spawnSync(gitPath(), ['rev-parse', '--git-common-dir'], { cwd: worktree, encoding: 'utf8', windowsHide: true })
+    const common = String(found.stdout ?? '').trim()
+    if (found.status !== 0 || !common) throw new Error('Could not find the worktree exclude file.')
+    const exclude = join(isAbsolute(common) ? common : join(worktree, common), 'info', 'exclude')
+    mkdirSync(dirname(exclude), { recursive: true })
+    let text = ''
+    try { text = readFileSync(exclude, 'utf8') } catch (error) { if (error.code !== 'ENOENT') throw error }
+    const pattern = '/' + relative(worktree, target).replace(/\\/g, '/').replace(/[\\*?\[\]#!]/g, '\\$&').replace(/ /g, '\\ ')
+    appendFileSync(exclude, `${text && !text.endsWith('\n') ? '\n' : ''}${pattern}\n`)
+    copyFileSync(resolvedSource, target, constants.COPYFILE_EXCL)
+  }
+}
+
+export function prepareWorktree(project, lane, { setup = '', copies = [] } = {}) {
   const plan = worktreePlan(project, lane)
   excludeWorktrees(project)
   if (plan.made) {
@@ -679,6 +725,7 @@ export function prepareWorktree(project, lane, { setup = '' } = {}) {
     const moved = spawnSync(gitPath(), ['switch', '--detach', sha], { cwd: plan.path, encoding: 'utf8', windowsHide: true })
     if (moved.status !== 0) throw new Error(`Could not move the worktree ${plan.path} to the project's HEAD: ${String(moved.stderr ?? '').trim()}`)
   }
+  if (plan.made) copyWorktreeFiles(project, plan.path, copies)
   const command = plan.made ? String(setup ?? '').trim() : ''
   if (command !== '') plan.worktreeSetup = runWorktreeSetup(plan.path, command)
   linkNodeModules(project, plan.path)
@@ -1538,7 +1585,8 @@ async function runQueueProject({ options, lane, lanes }) {
   mkdirSync(folder, { recursive: true })
   const laneProblem = laneCommandProblem(lane)
   if (laneProblem !== '') throw new Error(laneProblem)
-  const worktreeSetup = options.worktree ? worktreeSetupOf(readHarnessSettings(folder)) : ''
+  const worktreeSettings = options.worktree ? readHarnessSettings(folder) : {}
+  const worktreeSetup = worktreeSetupOf(worktreeSettings)
   const lockTarget = options.worktree ? continuedWorktree || worktreeFor(project, options.lane) || project : project
   await refuseRunningLane(options.lane, options.worktree ? lockTarget : '', folder)
   const projectLock = takeProjectLock(folder, lockTarget)
@@ -1563,7 +1611,7 @@ async function runQueueProject({ options, lane, lanes }) {
     } else {
       plan = { path: project, made: false }
     }
-    const target = options.worktree && (!continueFrom || plan.made) ? prepareWorktree(project, options.lane, { setup: worktreeSetup }) : plan
+    const target = options.worktree && (!continueFrom || plan.made) ? prepareWorktree(project, options.lane, { setup: worktreeSetup, copies: worktreeSettings.worktreeCopies ?? [] }) : plan
     const currentWtBranch = gitRead(target.path, ['branch', '--show-current']) || ''
     if (continueFrom && continuedBranch && currentWtBranch !== continuedBranch) throw new Error('The interrupted run worktree is on a different branch.')
     const activeBranch = continueFrom
@@ -2164,7 +2212,7 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
     ]
       .filter((name) => typeof process.env[name] === 'string' && process.env[name] !== '')
     const endpoints = readEndpoints(runsDir)
-    const extra = { ...command.env }
+    const extra = { ...command.env, MACHINEROOM_PORT_OFFSET: String(Math.max(0, Object.keys(lanes ?? {}).indexOf(options.lane)) * 10) }
     if (typeof laneTicket === 'string' && laneTicket.trim() !== '') extra.MACHINEROOM_LANE_TICKET = laneTicket.trim()
     if (lane.cli.harness === 'machineroom' && Number.isFinite(Number(options?.minutes))) {
       extra.MR_AGENT_MINUTES = String(options.minutes)

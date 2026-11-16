@@ -1,9 +1,11 @@
 # Changelog
 
 ## Unreleased
+- Owner-listed files are copied into a new worktree only, checked against links and never overwritten or committed, and each run gets MACHINEROOM_PORT_OFFSET.
 - Each running entry carries the paths its live log has written, cached per log, and the confirm card says Now editing in LANE beside the declared-file warning.
 - A compaction puts a block of running lanes, unmerged review branches and sub scopes, read from the room with a 5 second limit, above the model's summary, and the next session gets it fresh.
 - Claude, OpenCode and Codex usage report cache reads and writes where they exist, unknown stays null, runs and lane costs keep them, and Meters shows the cache share of the reporting runs.
+- Settings can copy exact opt-in files into new worktrees, exclude them from commits and give each lane a port offset.
 - A test setup defaults every child_process call to windowsHide and passes it to node children through NODE_OPTIONS, four scripts hide their windows, and an audit test fails on any call in server, scripts or bin without it.
 - Checks hide child process windows on Windows, including processes started by tests.
 - Usage summaries and lane run records keep cache read and write counts when reported, laneCosts sums them per lane, and Meters shows the cache share over reporting runs only (P489).

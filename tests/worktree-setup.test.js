@@ -113,6 +113,25 @@ function runLane(args, extra = {}) {
 }
 
 describe('the worktree setup command', () => {
+  it('passes the lane slot offset to the run', { timeout: 60000 }, async () => {
+    const base = tempDir()
+    const project = initRepo(base)
+    addLaneFiles(project, { name: 'setup.cjs', text: '' })
+    writeFileSync(join(project, 'run'), "require('node:fs').writeFileSync('offset.txt', process.env.MACHINEROOM_PORT_OFFSET)\n")
+    git(project, ['add', 'run'])
+    git(project, ['commit', '-q', '-m', 'Record the offset'])
+    const runs = join(base, 'machineroom-runs')
+    mkdirSync(runs)
+    const lanes = lanesFile(base)
+    const lane = JSON.parse(readFileSync(lanes, 'utf8')).opencode
+    writeFileSync(lanes, JSON.stringify({ first: lane, opencode: lane }))
+    const result = await runLane(
+      ['opencode', '--project', project, '--task', 'Write the lane note.', '--worktree'],
+      { TEMP: base, MACHINEROOM_RUNS: runs, MACHINEROOM_LANES_FILE: lanes }
+    )
+    expect(result.code, `${result.stdout}\n${result.stderr}`).toBe(0)
+    expect(readFileSync(join(worktreeFor(project, 'opencode'), 'offset.txt'), 'utf8')).toBe('10')
+  })
   it('runs once in a new worktree and writes its time to the run log', { timeout: 60000 }, async () => {
     const base = tempDir()
     const project = initRepo(base)

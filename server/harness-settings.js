@@ -1,5 +1,5 @@
 import { mkdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
-import { isAbsolute, join } from 'node:path'
+import { isAbsolute, join, win32 } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { maskKeys } from '../src/briefs/audit.js'
 import { maskProfilePaths } from '../src/model/paths.js'
@@ -22,6 +22,20 @@ export function worktreeSetupOf(settings) {
   return typeof settings?.worktreeSetup === 'string' ? settings.worktreeSetup.trim() : ''
 }
 
+export function worktreeCopiesProblem(copies, project) {
+  if (!Array.isArray(copies) || copies.length > 20 || copies.some((path) => typeof path !== 'string' || !path.trim() || /[\r\n]/.test(path))) return 'Choose at most 20 file paths.'
+  for (const path of copies) {
+    if (isAbsolute(path) || win32.isAbsolute(path) || /^[A-Za-z]:/.test(path)) return 'Use project-relative paths for worktree copies.'
+    const parts = path.split(/[\\/]/)
+    if (parts.includes('..')) return 'Worktree copy paths cannot contain .. components.'
+    if (parts.some((part) => part.toLowerCase() === '.git')) return 'Worktree copy paths cannot be inside .git.'
+    try {
+      if (project && statSync(join(project, path)).isDirectory()) return 'Worktree copies must be files, not folders.'
+    } catch {}
+  }
+  return ''
+}
+
 export function readHarnessSettings(folder) {
   try {
     const data = JSON.parse(readFileSync(join(folder, 'harnesses.json'), 'utf8'))
@@ -31,10 +45,11 @@ export function readHarnessSettings(folder) {
       off: Array.isArray(data?.off) ? data.off.filter((key) => typeof key === 'string') : [],
       laneReplies: data?.laneReplies === 'interrupt' ? 'interrupt' : 'next-turn',
       laneCountWarning: laneCountWarningOf(data?.laneCountWarning),
+      worktreeCopies: worktreeCopiesProblem(data?.worktreeCopies) ? [] : data.worktreeCopies,
       ...(worktreeSetup ? { worktreeSetup } : {}),
     }
   } catch {
-    return { programs: {}, off: [], laneReplies: 'next-turn', laneCountWarning: 0 }
+    return { programs: {}, off: [], laneReplies: 'next-turn', laneCountWarning: 0, worktreeCopies: [] }
   }
 }
 
@@ -55,16 +70,23 @@ export function saveHarnessSettings(folder, settings, { rename = renameSync } = 
   }
 }
 
-export function updateHarnessSettings(folder, body) {
+export function updateHarnessSettings(folder, body, project) {
   const settings = readHarnessSettings(folder)
-  if (Object.hasOwn(body ?? {}, 'worktreeSetup')) {
+  if (Object.hasOwn(body ?? {}, 'worktreeSetup') || Object.hasOwn(body ?? {}, 'worktreeCopies')) {
     if (Object.hasOwn(body, 'program') || Object.hasOwn(body, 'enabled') || Object.hasOwn(body, 'laneReplies') || Object.hasOwn(body, 'laneCountWarning')) {
       return 'Change one setting at a time.'
     }
-    if (typeof body.worktreeSetup !== 'string' || /[\r\n]/.test(body.worktreeSetup)) return WORKTREE_SETUP_PROBLEM
-    const command = body.worktreeSetup.trim()
-    if (command) settings.worktreeSetup = command
-    else delete settings.worktreeSetup
+    if (Object.hasOwn(body, 'worktreeSetup')) {
+      if (typeof body.worktreeSetup !== 'string' || /[\r\n]/.test(body.worktreeSetup)) return WORKTREE_SETUP_PROBLEM
+      const command = body.worktreeSetup.trim()
+      if (command) settings.worktreeSetup = command
+      else delete settings.worktreeSetup
+    }
+    if (Object.hasOwn(body, 'worktreeCopies')) {
+      const problem = worktreeCopiesProblem(body.worktreeCopies, project)
+      if (problem) return problem
+      settings.worktreeCopies = body.worktreeCopies
+    }
     saveHarnessSettings(folder, settings)
     return ''
   }
@@ -128,6 +150,7 @@ export async function harnessStatus(key, { runsFolder, lanes, env, platform, ava
   const enabled = !settings.off.includes(key)
   const laneCountWarning = settings.laneCountWarning
   const worktreeSetup = worktreeSetupOf(settings)
+  const worktreeCopies = settings.worktreeCopies
   if (key === 'machineroom') {
     return {
       enabled,
@@ -137,10 +160,11 @@ export async function harnessStatus(key, { runsFolder, lanes, env, platform, ava
       reason: available ? '' : 'No key or endpoint is saved.',
       laneCountWarning,
       worktreeSetup,
+      worktreeCopies,
     }
   }
   const program = resolveHarnessProgram(key, { runsFolder, lanes, env, platform })
-  if (!program) return { enabled, ready: false, program: '', version: '', reason: 'No program was found.', laneCountWarning, worktreeSetup }
+  if (!program) return { enabled, ready: false, program: '', version: '', reason: 'No program was found.', laneCountWarning, worktreeSetup, worktreeCopies }
   let checks = cache.get(runsFolder)
   if (!checks) {
     checks = new Map()
@@ -161,5 +185,6 @@ export async function harnessStatus(key, { runsFolder, lanes, env, platform, ava
     reason: ready ? '' : 'The program did not answer a version check.',
     laneCountWarning,
     worktreeSetup,
+    worktreeCopies,
   }
 }
