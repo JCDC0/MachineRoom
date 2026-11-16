@@ -3628,3 +3628,8 @@ Item 6 (sub harness, model and effort routes leave the ladder stale) waits for P
 2. Tests, each failing before your change except the last: a `claude` primary in `bypass` failing over to a `codex` backup with no `cli.mode` builds codex args with `--sandbox workspace-write` and without `--dangerously-bypass-approvals-and-sandbox`; the same with a `choice` backup; a backup saved as `bypass` still runs in bypass. Follow how `tests/failover-ticket-mode.test.js` builds its lanes and reads the args.
 3. FREE-HIERARCHY.md line 30 adds that a Bypass run never passes Bypass to a backup lane that is not saved as Bypass.
 4. Run `node node_modules/vitest/vitest.mjs run tests/failover-default-mode.test.js tests/failover-ticket-mode.test.js tests/failover-mode.test.js tests/run-failover.test.js` and report the counts.
+
+**P435. The ladder end-to-end tests wait for their own steps (OpenCode).** Read this brief only. Commit each step as you finish it. Run every command in the foreground. Files: tests/ladder-e2e.test.js, docs/agents/CHANGELOG.md. Change no source file.
+
+1. Both tests in `tests/ladder-e2e.test.js` hit vitest's 20 second test limit while their own waits allow 12, 15 and 15 seconds in turn (lines 345 to 373 and 413 to 433), so under load they fail with `Test timed out in 20000ms` before a wait gives its own message. Give each test (or the describe) a limit larger than the sum of its waits plus setup, as P423 did for the slow tests. Do not shorten or loosen any wait or expectation.
+2. Run `node node_modules/vitest/vitest.mjs run tests/ladder-e2e.test.js` three times and report each count.
