@@ -65,7 +65,7 @@ it('saves valid programs and refuses invalid paths and disabled lanes', async ()
   expect((await request('/api/harnesses/settings', { confirmed: true, key: 'claude', enabled: false })).body.enabled).toBe(false)
   expect(createAgentLane({ confirmed: true, name: 'Lane', harness: 'claude' }, { runsFolder: dir, env: { PATH: '' } }).error).toBe('That harness is turned off in Settings.')
   writeFileSync(join(dir, 'harnesses.json'), '{')
-  expect(readHarnessSettings(dir)).toEqual({ programs: {}, off: [], laneReplies: 'next-turn' })
+  expect(readHarnessSettings(dir)).toEqual({ programs: {}, off: [], laneReplies: 'next-turn', laneCountWarning: 0 })
 })
 
 it('reports Direct API readiness from a key or endpoint', async () => {
