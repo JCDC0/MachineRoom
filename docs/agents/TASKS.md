@@ -4059,3 +4059,9 @@ Review 48 fixes, P478 to P480. `docs/agents/AUDIT-2026-11-REVIEW-48.md` (P477, G
 1. CI on ubuntu-latest at `95a8fa8e` failed `stopLane creation time rules > treats a process missing from the list as gone` with `expected 1 to be +0`: `stopLane` (scripts/run-lane.mjs near line 391) calls the real `processAlive` for the fake pids 100 and 200, and on a Linux runner those pids can be real processes.
 2. Give every `stopLane(...)` call in the file that uses fake pids an `alive` stub that answers from the test's own fake process list (or `() => false` where the test means the run is gone), so no test depends on which pids exist on the machine. Change no expectation.
 3. Run `node node_modules/vitest/vitest.mjs run tests/run-lane-stop.test.js` and report the counts.
+
+**P482. CI: the projects.json test does not depend on test file order (AGY, Hydrogen).** Read this brief only. Commit each step as you finish it. Run every command in the foreground. Never use git stash. Files: tests/projects.test.js only.
+
+1. CI on windows-latest at `ea8dc51d` failed `projects api > records projects.json under the test temp root and not under %TEMP%\machineroom-runs when runsFolder is unset` (tests/projects.test.js near line 945): `stored.recent[0].path` was another test file's repository (`mr-git-repo-...` from tests/git.test.js). Test files in the same process share `MACHINEROOM_RUNS`, so a bridge started at the same time can record its project first.
+2. Assert that `stored.recent` contains an entry whose path is `resolve(env.root)`, not that it is first. Keep every other expectation.
+3. Run `node node_modules/vitest/vitest.mjs run tests/projects.test.js tests/git.test.js` and report the counts.
