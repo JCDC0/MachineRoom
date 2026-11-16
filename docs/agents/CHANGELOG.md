@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- Review 43 (Sol): all six review 42 findings are fixed; two P2 findings remain, a failed scope read with no Merge anyway and a sub restore test that cannot fail.
 - The inspector shows the orchestrator's live harness and model, and Harness default for an empty model, instead of the lane config's.
 - P419: The inspector shows the orchestrator's live harness and model, and Harness default when the live model is empty.
 - A sub made with a harness keeps it when an old saved conversation of that id names another harness, and drops that conversation's sessions and mode.
