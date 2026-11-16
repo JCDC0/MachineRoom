@@ -3827,3 +3827,43 @@ The owner chose all 15 items of `docs/agents/PLAN-RESEARCH.md`, in Sol's order, 
 1. `listAllMcpTools` keeps each server's tool list for 60 seconds, keyed by the runs folder and the server's full effective config (command, arguments, environment names and URL). A change to `mcp.json` or the config clears it. A failed list is not cached. Two calls at once for the same key share one request.
 2. Tests, each failing before your change: two lists within 60 seconds start the server once; a config change starts it again; a failure is retried on the next call; two parallel calls start it once.
 3. Run `node node_modules/vitest/vitest.mjs run tests/mcp-list-cache.test.js tests/mcp.test.js` (skip a file that does not exist) and report the counts. Progress-aware call timeouts are a later brief.
+
+Research plan, second batch, P456 to P460 (first steps as Sol narrowed them). Items 5 and 8 wait for P438b. Codex briefs keep the paragraph above P449 about baseline failures, `node_modules` and file scope.
+
+**P456. Item 3: warn before two lanes work on the same declared files (OpenCode).** Read this brief, item 3 and its paragraph in `Sol's review` only. Commit each step as you finish it. Run every command in the foreground. Files: src/briefs/plan.js (or a new src/briefs/overlap.js), src/ui/panels/runs.js, src/ui/panels/DispatchPanel.jsx, server/harness-settings.js, src/ui/HarnessesSettings.jsx, tests/dispatch-overlap.test.js (new), docs/agents/CHANGELOG.md, docs/agents/architecture/ROOM.md. No CSS: reuse the warning class Dispatch already uses.
+
+1. `overlappingLanes({ files, active })` compares a task's declared files (`briefFileList` in `src/briefs/briefs.js`) with the declared files of running lane tasks, after normalizing slashes and case on Windows, and answers `[{ lane, files }]`. A task with no file list answers `unknown`.
+2. Dispatch's confirm card shows `Also declared by LANE: a, b` for each overlap, `Overlap unknown: this task names no files.` for a free-text task, and the number of lanes running now.
+3. Settings keep `laneCountWarning` (a whole number, 0 by default meaning off). When it is above 0 and the start would make more running lanes than it, the card adds `N lanes will be running.` It never blocks a start.
+4. Tests, each failing before your change: two briefs sharing a file overlap; case and slash differences still match; a free-text task is unknown; the count line shows only above a set threshold.
+5. Run `node node_modules/vitest/vitest.mjs run tests/dispatch-overlap.test.js tests/harness-settings.test.js` and `npm run build`, and report the counts.
+
+**P457. Item 10: a compaction says where the full history is (OpenCode).** Read this brief, item 10 and its paragraph in `Sol's review` only. Commit each step as you finish it. Run every command in the foreground. Files: server/orchestrator.js (the compaction end near line 2151 and `COMPACTED_MESSAGE`), tests/compaction-links.test.js (new), docs/agents/CHANGELOG.md, docs/agents/architecture/LIMITS.md.
+
+1. When a compaction succeeds, the room message names what was kept and where the earlier turns are: the chat file's saved messages (still shown) and the turn logs in the runs folder by name, with the limits that apply today (the chat cap and the saved-session history bound, read from the code).
+2. The kept summary starts with a line naming the source turn logs it summarized, so a later reader can open them.
+3. LIMITS.md states the retention limits in one short section.
+4. Tests, each failing before your change: the compaction message names the logs and limits; the summary's first line names the logs.
+5. Run `node node_modules/vitest/vitest.mjs run tests/compaction-links.test.js tests/orchestrator.test.js` (skip a file that does not exist) and report the counts.
+
+**P458. Item 12: a first task for a new project, and a plain note on where records live (AGY, Hydrogen).** Read this brief, item 12 and its paragraph in `Sol's review` only. Commit each step as you finish it. Run every command in the foreground. Files: src/ui/panels/DispatchPanel.jsx, src/ui/Connect.jsx, README.md, tests/first-task-card.test.jsx (new), docs/agents/CHANGELOG.md, docs/agents/architecture/ROOM.md. No CSS: reuse existing card classes.
+
+1. When the project has no recorded runs, Dispatch shows a `First task` card that picks the first ready lane whose harness offers Plan, sets Plan for this run only, and fills the task `Read this repository and say what it does, how to run it and how to test it. Change nothing.` The owner can edit or dismiss it; it never starts by itself. No lane with Plan means no card. It never substitutes Bypass or Auto.
+2. Connect and README say in one sentence each: `MachineRoom keeps its records, logs and costs on this computer; the agents still send your code to their model providers.`
+3. Tests, each failing before your change: the card shows for a project with no runs and a Plan-capable lane; it is absent with runs or with no Plan-capable lane; it sets Plan only for that run.
+4. Run `node node_modules/vitest/vitest.mjs run tests/first-task-card.test.jsx` and `npm run build`, and report the counts.
+
+**P459. Item 9: one setup command for a new lane worktree (OpenCode).** Read this brief, item 9 and its paragraph in `Sol's review` only. Commit each step as you finish it. Run every command in the foreground. Files: scripts/run-lane.mjs (`prepareWorktree` near line 621), server/harness-settings.js, src/ui/HarnessesSettings.jsx, tests/worktree-setup.test.js (new), docs/agents/CHANGELOG.md, docs/agents/architecture/LIVE.md. No CSS.
+
+1. Settings keep `worktreeSetup`: one command line, empty by default. When it is set, `prepareWorktree` runs it once in a worktree it has just made (not on reuse), with a 5 minute limit, and the run log records `worktree setup: COMMAND (N s, exit X)`. A failing setup stops the run with that line and leaves the worktree. No file copying and no port handling in this brief.
+2. Settings shows a `Worktree setup command` field with the help `Runs once in each new lane worktree, for example npm ci.`
+3. Tests, each failing before your change: a new worktree runs the command and logs its time; a reused one does not; a failing command stops the run; empty runs nothing.
+4. Run `node node_modules/vitest/vitest.mjs run tests/worktree-setup.test.js tests/harness-settings.test.js` and report the counts.
+
+**P460. Item 15: every run records when it finished, and outcomes count repair runs (Codex, Terra).** Read this brief, item 15 and its paragraph in `Sol's review` only. Files: src/briefs/run.js (the run record near line 1172), server/outcomes.js, scripts/run-lane.mjs (only the `--outcomes` printer near line 1343), tests/outcomes-repair.test.js (new), docs/agents/CHANGELOG.md, docs/agents/architecture/COMMANDS.md. The design is fixed; do not redesign it.
+
+1. Each new run record gains `finishedAt` (ISO time). Older records have none and stay unknown.
+2. `outcomeTable` counts, per brief, the runs before its merge that were not failovers or continuations (`failoverFrom`, `continues`) beyond the first, as `repairRuns`, and the minutes from the last run's `finishedAt` to the merge commit's time as `reviewWaitMinutes` when both are known, else `null`. Read merge commit times with `git log --format=%H %cI` where it already reads subjects.
+3. `--outcomes` prints both columns, `?` for unknown.
+4. Tests, each failing before your change: a record gains `finishedAt`; two plain runs before a merge make `repairRuns: 1`; a failover does not count; a missing time gives `null` and `?`.
+5. Run `node ../../node_modules/vitest/vitest.mjs run tests/outcomes-repair.test.js tests/outcomes.test.js` (skip a file that does not exist) and report the counts.
