@@ -139,5 +139,6 @@ Every file in this folder, and what it is for:
 - `history/BACKUPS.md`: history. Paperclip's backup routes, from before 2026-10-24.
 - `history/CONTROL-CLIENT.md`: history. The control client contract: the MCP methods added at 0.1.388, then the older Paperclip-era methods.
 - `history/PAPERCLIP-API.md`: history. Paperclip's routes and shapes, from before 2026-10-24.
+- `research/HARNESS-SURVEY-CLAUDE.md`, `research/HARNESS-SURVEY-SOL.md` and `research/HARNESS-SURVEY-ARGON.md`: research. Three independent surveys of coding agent harnesses and what their users want (P442, 2026-11-16), merged into `PLAN-RESEARCH.md` by P443.
 - `history/PLUGIN-PAGE.md`: history. The study of shipping the room as a Paperclip plugin page.
 - `history/SOURCES.md`: history. What Paperclip cost the room and the plan for a direct source.

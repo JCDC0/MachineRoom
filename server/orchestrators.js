@@ -56,6 +56,9 @@ export const LANE_MESSAGE_LIMIT = 4
 export const LANE_SELF_PROBLEM = 'A lane cannot message itself.'
 export const PAGE_INBOX_PROBLEM = 'A page cannot read a lane inbox.'
 export const TOKEN_INBOX_PROBLEM = 'A lane inbox is read with a lane ticket, not an orchestrator token.'
+export const PAGE_FAILOVER_PROBLEM = 'A page cannot take over a lane ticket.'
+export const TOKEN_FAILOVER_PROBLEM = 'A lane ticket is taken over with the lane ticket, not an orchestrator token.'
+export const LANE_BACKUP_PROBLEM = 'Name the backup lane the run moves to.'
 export const LANE_INBOX_LIMIT = 20
 
 export function laneNoRunProblem(key) {
@@ -675,6 +678,7 @@ export function createOrchestrators({
 
   const sentMessages = new Map()
   const laneSent = new Map()
+  const laneBackups = new Map()
   const clock = typeof now === 'function' ? now : Date.now
 
   function laneKeyOf(value) {
@@ -682,9 +686,28 @@ export function createOrchestrators({
     return target.startsWith('lane:') ? target.slice(5).trim() : ''
   }
 
-  function receiveLaneMessage(lane, from, text, at) {
+  function laneName(ticket, held) {
+    const claimed = laneBackups.get(ticket)
+    return typeof claimed === 'string' && claimed !== '' ? claimed : held.lane
+  }
+
+  function backupHeld(lane) {
+    for (const [ticket, backup] of laneBackups) {
+      if (backup !== lane) continue
+      const held = typeof laneTicket === 'function' ? laneTicket(ticket) : null
+      if (held) return held
+      laneBackups.delete(ticket)
+    }
+    return null
+  }
+
+  function lastLaneTicket(lane) {
     const tickets = typeof laneTickets === 'function' ? laneTickets(lane) : null
-    const held = Array.isArray(tickets) && tickets.length > 0 ? tickets[tickets.length - 1] : null
+    return Array.isArray(tickets) && tickets.length > 0 ? tickets[tickets.length - 1] : null
+  }
+
+  function receiveLaneMessage(lane, from, text, at) {
+    const held = backupHeld(lane) ?? lastLaneTicket(lane)
     if (!held || !Array.isArray(held.inbox)) return false
     held.inbox.push({ from, text, at: new Date(at).toISOString() })
     while (held.inbox.length > LANE_INBOX_LIMIT) held.inbox.shift()
@@ -717,11 +740,30 @@ export function createOrchestrators({
     return { status: 200, body: { messages } }
   }
 
+  function takeOver(body, page, tokenValue = '', laneTicketValue = '') {
+    if (page) return { status: 403, body: { error: PAGE_FAILOVER_PROBLEM } }
+    if (typeof tokenValue === 'string' && tokenValue.trim()) {
+      return { status: 403, body: { error: TOKEN_FAILOVER_PROBLEM } }
+    }
+    const ticket = typeof laneTicketValue === 'string' ? laneTicketValue.trim() : ''
+    const held = ticket && typeof laneTicket === 'function' ? laneTicket(ticket) : null
+    if (!held) return { status: 403, body: { error: LANE_ENDED_PROBLEM } }
+    const lane = typeof body.lane === 'string' ? body.lane.trim() : ''
+    const allLanes = typeof lanes === 'function' ? lanes() : (lanes ?? {})
+    if (lane === '' || !Object.hasOwn(allLanes, lane)) {
+      return { status: 400, body: { error: LANE_BACKUP_PROBLEM } }
+    }
+    if (lane === held.lane) laneBackups.delete(ticket)
+    else laneBackups.set(ticket, lane)
+    return { status: 200, body: { lane: laneName(ticket, held), from: held.lane } }
+  }
+
   async function message(body, page, tokenValue = '', laneTicketValue = '') {
     const ticketValue = typeof laneTicketValue === 'string' ? laneTicketValue.trim() : ''
     if (!page && !tokenValue && ticketValue) {
       const held = typeof laneTicket === 'function' ? laneTicket(ticketValue) : null
       if (!held) return { status: 403, body: { error: LANE_ENDED_PROBLEM } }
+      const senderLane = laneName(ticketValue, held)
       const text = typeof body.text === 'string' ? body.text.trim() : ''
       if (text.length < 1 || text.length > ORCHESTRATOR_MESSAGE_LIMIT) {
         return { status: 400, body: { error: MESSAGE_PROBLEM } }
@@ -732,10 +774,10 @@ export function createOrchestrators({
         return { status: 400, body: { error: MESSAGE_PROBLEM } }
       }
       if (laneTarget) {
-        if (laneTarget === held.lane) return { status: 400, body: { error: LANE_SELF_PROBLEM } }
+        if (laneTarget === senderLane) return { status: 400, body: { error: LANE_SELF_PROBLEM } }
         const sentCount = laneSent.get(ticketValue) ?? 0
         if (sentCount >= LANE_MESSAGE_LIMIT) return { status: 429, body: { error: LANE_LIMIT_PROBLEM } }
-        const sender = `lane:${held.lane}`
+        const sender = `lane:${senderLane}`
         if (!receiveLaneMessage(laneTarget, sender, text, clock())) {
           return { status: 409, body: { error: laneNoRunProblem(laneTarget) } }
         }
@@ -752,7 +794,7 @@ export function createOrchestrators({
       if (!instances.has(target)) return { status: 404, body: { error: NO_ORCHESTRATOR_PROBLEM } }
       const sentCount = laneSent.get(ticketValue) ?? 0
       if (sentCount >= LANE_MESSAGE_LIMIT) return { status: 429, body: { error: LANE_LIMIT_PROBLEM } }
-      const sender = `lane:${held.lane}`
+      const sender = `lane:${senderLane}`
       const delivered = instances.get(target).deliver(sender, text)
       if (!delivered) return { status: 500, body: { error: 'The message did not reach that orchestrator.' } }
       laneSent.set(ticketValue, sentCount + 1)
@@ -769,6 +811,13 @@ export function createOrchestrators({
         : ORCHESTRATOR_KEY
     const laneTarget = laneKeyOf(target)
     if (laneTarget && !page) {
+      if (actor !== ORCHESTRATOR_KEY) {
+        const own = sector(actor)
+        if (!own || !Array.isArray(own.lanes) || !own.lanes.includes(laneTarget)) {
+          const name = own?.name?.trim() || actor
+          return { status: 403, body: { error: `The ${name} sector does not hold the lane ${laneTarget}.` } }
+        }
+      }
       const from =
         body.from === undefined || body.from === null || body.from === ''
           ? 'orchestrator'
@@ -1062,6 +1111,16 @@ export function createOrchestrators({
       const body = await readJsonBody(req, res)
       if (body === null) return true
       const out = await message(body, page, token, laneValue)
+      sendJson(req, res, out.status, out.body)
+      return true
+    }
+    if (path === '/api/orchestrator/failover') {
+      if (method !== 'POST') return methodNotAllowed(req, res)
+      const laneHeader = req.headers['x-machineroom-lane']
+      const laneValue = typeof laneHeader === 'string' ? laneHeader.trim() : Array.isArray(laneHeader) ? laneHeader[0].trim() : ''
+      const body = await readJsonBody(req, res)
+      if (body === null) return true
+      const out = takeOver(body, page, token, laneValue)
       sendJson(req, res, out.status, out.body)
       return true
     }

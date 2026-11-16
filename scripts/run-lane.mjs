@@ -16,7 +16,7 @@ import { isLockHolderStale, killTree, descendantProcesses, leftoverProcesses, li
 import { codexProgramFor } from '../server/agents-config.js'
 import { HARNESS_OFF_PROBLEM, readHarnessSettings } from '../server/harness-settings.js'
 import { codexHarness } from '../src/harnesses/codex.js'
-import { defaultMode } from '../src/control/modes.js'
+import { defaultMode, legacyMode } from '../src/control/modes.js'
 import { harnessByKey } from '../src/harnesses/index.js'
 import { gitPath, programPath } from '../server/programPath.js'
 import { isWindowsPath, printedRunsFolder, realPath } from '../server/printed-path.js'
@@ -130,6 +130,7 @@ export function helpLines() {
     '  --minutes <n>        stop the run after n minutes (100 by default)',
     '  --test <command>     run this check after each task; repeat for more, or npm test when the package has one',
     '  --started-by <id>    name the orchestrator that started the run',
+    '  --allowed-lanes <keys> keep a failover inside these lane keys, separated by commas',
     '  --force              run a retired lane or a brief marked done',
     '',
     `Lanes: ${names.length > 0 ? names.join(', ') : 'none'}`,
@@ -666,6 +667,18 @@ export function sessionStartedBy(env = {}) {
   return null
 }
 
+function allowedLanesOption(argv) {
+  const index = argv.findIndex((arg) => arg === '--allowed-lanes' || arg.startsWith('--allowed-lanes='))
+  if (index === -1) return { args: argv, allowedLanes: null }
+  const arg = argv[index]
+  const value = arg === '--allowed-lanes' ? argv[index + 1] : arg.slice('--allowed-lanes='.length)
+  if (typeof value !== 'string' || value.trim() === '' || value.startsWith('-')) throw new Error('--allowed-lanes needs one or more lane keys.')
+  const lanes = value.split(',').map((key) => key.trim()).filter((key) => key !== '')
+  if (lanes.length === 0 || lanes.some((key) => !/^[A-Za-z0-9_-]+$/.test(key))) throw new Error('--allowed-lanes needs lane keys separated by commas.')
+  const args = [...argv.slice(0, index), ...(arg === '--allowed-lanes' ? argv.slice(index + 2) : argv.slice(index + 1))]
+  return { args, allowedLanes: [...new Set(lanes)] }
+}
+
 function startedByOption(argv) {
   const index = argv.findIndex((arg) => arg === '--started-by' || arg.startsWith('--started-by='))
   if (index === -1) return { args: argv, startedBy: '' }
@@ -687,9 +700,15 @@ function startedAtOption(argv) {
 }
 
 function runOptions(argv) {
-  const queued = argv.some((arg) => arg === '--queue' || arg.startsWith('--queue='))
-  if (!queued) return parseRunArgs(argv)
-  const started = startedByOption(argv)
+  const allowed = allowedLanesOption(argv)
+  const queued = allowed.args.some((arg) => arg === '--queue' || arg.startsWith('--queue='))
+  if (!queued) {
+    return {
+      ...parseRunArgs(allowed.args),
+      ...(allowed.allowedLanes ? { allowedLanes: allowed.allowedLanes } : {}),
+    }
+  }
+  const started = startedByOption(allowed.args)
   const timed = startedAtOption(started.args)
   const worktree = timed.args.includes('--worktree')
   const queueArgs = timed.args.filter((arg) => arg !== '--worktree')
@@ -710,6 +729,7 @@ function runOptions(argv) {
     ...(started.startedBy ? { startedBy: started.startedBy } : {}),
     ...(timed.startedAt ? { startedAt: timed.startedAt } : {}),
     ...(worktree ? { worktree: true } : {}),
+    ...(allowed.allowedLanes ? { allowedLanes: allowed.allowedLanes } : {}),
   }
 }
 
@@ -1524,6 +1544,7 @@ async function runQueueProject({ options, lane, lanes }) {
 const VALUE_FLAGS = new Set([
   '--project', '--task', '--task-file', '--since', '--minutes', '--started-by',
   '--started-at', '--model', '--reasoning', '--mode', '--queue', '--test',
+  '--allowed-lanes',
 ])
 
 function helpRequested(argv) {
@@ -1739,7 +1760,29 @@ function recordRoom(record, toolLines, lanes) {
   }
 }
 
+async function claimBackupTicket(ticket, lane) {
+  const bridge = typeof process.env.MACHINEROOM_BRIDGE === 'string' ? process.env.MACHINEROOM_BRIDGE.trim().replace(/\/+$/, '') : ''
+  const held = typeof ticket === 'string' ? ticket.trim() : ''
+  if (bridge === '' || held === '' || typeof fetch !== 'function') return false
+  try {
+    const answer = await fetch(`${bridge}/api/orchestrator/failover`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'X-MachineRoom-Lane': held },
+      body: JSON.stringify({ lane }),
+      signal: AbortSignal.timeout(2000),
+    })
+    return answer.ok
+  } catch {
+    return false
+  }
+}
+
 async function startFailover({ laneKey, target, lanes, options, wanted, prompt, promptFor = null, folder, project, task, queue = null, base = '', deferRecord, openLog, failedRecord, failedStartBranch, onStart = null }) {
+  const allowedLanes = Array.isArray(options?.allowedLanes) && options.allowedLanes.length > 0 ? options.allowedLanes : null
+  if (allowedLanes && !allowedLanes.includes(target)) {
+    console.log(`The backup lane ${target} is outside the sector that started this run.`)
+    return null
+  }
   const savedTarget = lanes?.[target]
   const targetMode = typeof savedTarget?.cli?.mode === 'string' ? savedTarget.cli.mode.trim() : ''
   const fixedTarget = targetMode !== '' && targetMode !== 'choice'
@@ -1750,7 +1793,12 @@ async function startFailover({ laneKey, target, lanes, options, wanted, prompt, 
   const modeToCarry = fixedTarget
     ? undefined
     : (primaryMode ?? (targetMode === 'choice' ? (defaultMode(savedTarget?.cli?.harness) ?? undefined) : undefined))
-  const carriedMode = modeToCarry === 'bypass' && targetMode !== 'bypass' ? undefined : modeToCarry
+  const refusedBypass = modeToCarry === 'bypass' && targetMode !== 'bypass'
+  const targetDefault = defaultMode(savedTarget?.cli?.harness) ?? undefined
+  const targetLegacyMode = legacyMode(savedTarget?.cli?.harness) ?? undefined
+  const carriedMode = refusedBypass
+    ? (targetDefault !== targetLegacyMode ? targetDefault : undefined)
+    : modeToCarry
   const fallbackLane = laneWithOverrides(savedTarget, carriedMode !== undefined ? { mode: carriedMode } : {})
   if (!fallbackLane) return null
   if (!fixedTarget && carriedMode === undefined && fallbackLane.cli && (fallbackLane.cli.mode === '' || fallbackLane.cli.mode === 'choice')) {
@@ -1799,6 +1847,7 @@ async function startFailover({ laneKey, target, lanes, options, wanted, prompt, 
         return null
       }
     }
+    await claimBackupTicket(process.env.MACHINEROOM_LANE_TICKET, target)
     return await startLane({
       options: { ...options, lane: target, failedOver: true },
       lane: fallbackLane,
@@ -1817,6 +1866,7 @@ async function startFailover({ laneKey, target, lanes, options, wanted, prompt, 
       base,
       branchSuffix: `-on-${target}`,
       failoverFrom: { lane: laneKey, startedAt: failedRecord?.startedAt },
+      laneTicket: process.env.MACHINEROOM_LANE_TICKET,
       openLog,
       startedAt,
       onStart,
@@ -1855,7 +1905,7 @@ export function laneConfigBody({ harness, mode, enabledServers, needsMcp }) {
   return config
 }
 
-export async function startLane({ options, lane, lanes, wanted, prompt, logPath, usageFile, name, project = '', task = '', queue = null, lockPath = '', projectBranch = null, deferRecord = false, base = '', openLog = createWriteStream, branchSuffix = '', failoverFrom = null, promptFor = null, startedAt: givenStartedAt = null, onStart = null }) {
+export async function startLane({ options, lane, lanes, wanted, prompt, logPath, usageFile, name, project = '', task = '', queue = null, lockPath = '', projectBranch = null, deferRecord = false, base = '', openLog = createWriteStream, branchSuffix = '', failoverFrom = null, promptFor = null, startedAt: givenStartedAt = null, onStart = null, laneTicket = '' }) {
   if (readHarnessSettings(runsFolder()).off.includes(lane?.cli?.harness)) throw new Error(HARNESS_OFF_PROBLEM)
   if (options?.failedOver !== true) {
     const problem = fallbackProblem({ laneKey: options?.lane, fallback: lane?.fallback, lanes })
@@ -1944,6 +1994,7 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
     const runsDir = options?.runs || (logPath ? dirname(logPath) : runsFolder())
     const endpoints = readEndpoints(runsDir)
     const extra = { ...command.env }
+    if (typeof laneTicket === 'string' && laneTicket.trim() !== '') extra.MACHINEROOM_LANE_TICKET = laneTicket.trim()
     if (lane.cli.harness === 'machineroom' && Number.isFinite(Number(options?.minutes))) {
       extra.MR_AGENT_MINUTES = String(options.minutes)
     }
@@ -2216,7 +2267,7 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
         lane, lanes, wanted, prompt,
         logPath: join(dirname(logPath), `${retryName}.log`),
         usageFile: join(dirname(usageFile), `${retryName}.usage.json`),
-        name: retryName, project, task, queue, lockPath, projectBranch, deferRecord, base: runBase, openLog, branchSuffix, failoverFrom, promptFor, onStart,
+        name: retryName, project, task, queue, lockPath, projectBranch, deferRecord, base: runBase, openLog, branchSuffix, failoverFrom, promptFor, onStart, laneTicket,
       })
     }
     const record = laneRunRecord({
