@@ -159,7 +159,7 @@ describe('native agent loop', () => {
     const api = await startFakeApi(() => chatAnswer({ calls: [failingRead('call_same')] }))
     const result = await runAgent({ folder, api })
 
-    expect(result.code).toBe(1)
+    expect(result.code).toBe(4)
     expect(api.calls).toHaveLength(5)
     const lines = jsonLines(result.stdout)
     const final = lines.at(-1)

@@ -36,6 +36,7 @@ const NUDGE = 'Continue with the task. Use tools, or say you are done.'
 const LOOP_WARNING = 'This call has failed the same way three times. Try something else or stop and report.'
 const LOOP_WARN_AT = 3
 const LOOP_STOP_AT = 5
+const LOOP_STOP_EXIT_CODE = 4
 const SEARCH_MATCH_LIMIT = 200
 const SEARCH_LINE_LIMIT = 300
 const SEARCH_FILE_LIMIT = 2000000
@@ -1702,7 +1703,7 @@ async function main() {
           },
         })
         if (failureRun >= LOOP_STOP_AT) {
-          finish(true, loopStopText(call.name, inputs[index].args))
+          finish(true, loopStopText(call.name, inputs[index].args), LOOP_STOP_EXIT_CODE)
           return
         }
       }

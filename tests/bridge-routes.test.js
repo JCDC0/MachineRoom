@@ -668,7 +668,7 @@ describe('run routes', () => {
     const { url, dir } = await startRunsBridge()
     const res = await fetch(`${url}/api/control/runs`)
     expect(res.status).toBe(200)
-    expect(await res.json()).toEqual({ project: basename(RUN_ROOM), running: [], recent: [], last: [] })
+    expect(await res.json()).toEqual({ project: basename(RUN_ROOM), running: [], recent: [], last: [], attention: [] })
   })
 
   it('reads the last 20 records newest first and skips lines that do not parse', async () => {
@@ -726,6 +726,34 @@ describe('run routes', () => {
     expect(recent.some((record) => record.lane === 'opencode')).toBe(false)
     expect(last).toHaveLength(25)
     expect(last.find((record) => record.lane === 'opencode')).toMatchObject({ lane: 'opencode', exitCode: 1 })
+  })
+
+  it('serves attention items from visible records and clears a lane when a newer run ends', async () => {
+    const tempDirRuns = useRunsTemp()
+    const { url } = await startRunsBridge()
+    writeRuns(tempDirRuns, [
+      JSON.stringify({ lane: 'opencode', briefs: ['P465'], startedAt: '2026-11-16T10:00:00.000Z', exitCode: 1, killed: false }),
+      JSON.stringify({ lane: 'codex', briefs: ['P466'], startedAt: '2026-11-16T10:05:00.000Z', exitCode: 1, killed: true }),
+      JSON.stringify({ lane: 'direct', briefs: ['P467'], startedAt: '2026-11-16T10:10:00.000Z', exitCode: 4, killed: false, stopReason: 'repeated failure' }),
+      JSON.stringify({ lane: 'other', project: join(tempDir(), 'other-project'), briefs: ['P999'], startedAt: '2026-11-16T10:15:00.000Z', exitCode: 1, killed: false }),
+    ])
+
+    const first = await fetch(`${url}/api/control/runs`).then((response) => response.json())
+    expect(first.attention).toEqual([
+      { lane: 'direct', startedAt: '2026-11-16T10:10:00.000Z', text: 'direct stopped: the same call failed five times.' },
+      { lane: 'opencode', startedAt: '2026-11-16T10:00:00.000Z', text: 'opencode failed on P465.' },
+    ])
+
+    writeRuns(tempDirRuns, [
+      JSON.stringify({ lane: 'opencode', briefs: ['P465'], startedAt: '2026-11-16T10:00:00.000Z', exitCode: 1, killed: false }),
+      JSON.stringify({ lane: 'direct', briefs: ['P467'], startedAt: '2026-11-16T10:10:00.000Z', exitCode: 4, killed: false, stopReason: 'repeated failure' }),
+      JSON.stringify({ lane: 'direct', briefs: ['P467'], startedAt: '2026-11-16T10:20:00.000Z', exitCode: 0, killed: false, commits: [] }),
+    ])
+
+    const second = await fetch(`${url}/api/control/runs`).then((response) => response.json())
+    expect(second.attention).toEqual([
+      { lane: 'opencode', startedAt: '2026-11-16T10:00:00.000Z', text: 'opencode failed on P465.' },
+    ])
   })
 
   it('refuses a stop with no Origin and no orchestrator token', async () => {

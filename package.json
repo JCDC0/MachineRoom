@@ -30,6 +30,7 @@
     "docs/agents/history/TASKS-ARCHIVE.md",
     "docs/agents/lanes.json",
     "docs/agents/policy.json",
+    "src/briefs/attention.js",
     "src/briefs/audit.js",
     "src/briefs/briefs.js",
     "src/briefs/plan.js",

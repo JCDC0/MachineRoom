@@ -105,7 +105,7 @@ export default function DispatchPanel({
   const [startingRun, setStartingRun] = useState(false)
   const [runError, setRunError] = useState(null)
 
-  const [runsState, setRunsState] = useState({ running: [], recent: [] })
+  const [runsState, setRunsState] = useState({ running: [], recent: [], attention: [] })
   const [runsLoading, setRunsLoading] = useState(() => typeof client?.runs === 'function')
   const [runsError, setRunsError] = useState(null)
   const [stopTarget, setStopTarget] = useState(null)
@@ -167,6 +167,9 @@ export default function DispatchPanel({
   const hasOrchestrator = typeof client?.sendOrchestrator === 'function'
   const canStopRun = typeof client?.stopRun === 'function'
 
+  const attentionRows = (Array.isArray(runsState.attention) ? runsState.attention : []).filter(
+    (item) => item && typeof item.text === 'string' && item.text.trim() !== ''
+  )
   const selectedBrief = briefs.find((item) => item.id === selectedBriefId)
   const runLane = selectedBrief ? runLaneFor(selectedBrief, runsState.running, agents) : null
   const canRunBrief = typeof client?.startRun === 'function' && Boolean(runLane)
@@ -262,6 +265,7 @@ export default function DispatchPanel({
       setRunsState({
         running: Array.isArray(data?.running) ? data.running : [],
         recent: Array.isArray(data?.recent) ? data.recent : [],
+        attention: Array.isArray(data?.attention) ? data.attention : [],
       })
       const nextProject = typeof data?.project === 'string' ? data.project : ''
       const startedProject = splitProjectRef.current
@@ -393,7 +397,7 @@ export default function DispatchPanel({
       setRunsLoading(true)
       loadRuns()
     } else {
-      setRunsState({ running: [], recent: [] })
+      setRunsState({ running: [], recent: [], attention: [] })
       setRunsLoading(false)
       setRunsError(null)
       setProjectName('')
@@ -1639,7 +1643,7 @@ export default function DispatchPanel({
               <span className="panel-error-message">{runsError}</span>
               <button type="button" onClick={loadRuns}>Retry</button>
             </div>
-          ) : runsState.running.length === 0 && runsState.recent.length === 0 ? (
+          ) : runsState.running.length === 0 && runsState.recent.length === 0 && attentionRows.length === 0 ? (
             <div className="runs-state is-dim mono">No runs yet.</div>
           ) : (
             <div className="runs-list">
@@ -1721,6 +1725,21 @@ export default function DispatchPanel({
                   </div>
                 )
               })}
+              {attentionRows.length > 0 && (
+                <>
+                  <div className="panel-field-head">
+                    <label>Needs you</label>
+                  </div>
+                  {attentionRows.slice(0, 5).map((item, index) => (
+                    <div
+                      key={`attention-${item.lane || 'lane'}-${item.startedAt || index}`}
+                      className="runs-entry is-recent is-failed mono"
+                    >
+                      {item.text}
+                    </div>
+                  ))}
+                </>
+              )}
               {runsState.recent.map((record, index) => {
                 const key = `recent-${record.lane}-${record.startedAt || index}`
                 const canRecover = hasOrchestrator && queueRecoveryAvailable(record)

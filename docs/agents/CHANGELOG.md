@@ -1,9 +1,11 @@
 # Changelog
 
 ## Unreleased
+- Dispatch shows Needs you for lanes whose newest run failed, could not start or stopped on five repeated failures, and native loop stops exit 4 with a stop reason.
 - A checkpoint counts untracked files apart, writes a recovery ref only when a tracked file changed, and the Inspector row says what was not kept.
 - Each lane inbox entry gets an id and a queued, fetched or interrupted status, and a lane message answers its id.
 - P461: Each lane inbox message carries a stable id and a status of queued, fetched or interrupted, and both lane message replies answer that id.
+- P465: Native repeated-failure loop stops exit 4 with `stopReason: 'repeated failure'`, `GET /api/control/runs` adds `attention`, and Dispatch shows `Needs you` with up to five items above recent runs.
 - A compaction lists only the turn logs written since the previous one, the ten newest, then how many earlier.
 - The stop confirm adds Stop with its lanes, or Stop everything for Main, and reports the lanes the server stopped and any still running.
 - A Reviews row shows the head its checks ran on, the agent's own words under their own heading, and the linked runs with totals that say what they do not know.
