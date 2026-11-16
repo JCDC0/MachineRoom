@@ -3745,3 +3745,12 @@ P438 is split in two (Terra stopped three times on its size). P438a is the setti
 4. Tests in `tests/lane-interrupt.test.js`, each failing before your change, with fake CLI lanes as `tests/run-failover.test.js` uses: with `next-turn` a message never stops a run; with `interrupt` the run is stopped and a continuation starts on the same branch and worktree, its prompt holds the paragraph and the message, its record names `continues`; uncommitted work in the worktree survives into the continuation; the fourth interrupt in a chain does not stop the run.
 5. FREE-HIERARCHY.md moves "Nothing interrupts a lane run" to what works, naming the choice.
 6. Run `node ../../node_modules/vitest/vitest.mjs run tests/lane-interrupt.test.js tests/orchestrators.test.js tests/run-failover.test.js` and report the counts.
+
+**P439b. A lane ticket can take over only its own lane's backup name (OpenCode).** Read this brief and P439 above only. Commit each step as you finish it. Run every command in the foreground. Files: server/orchestrators.js (`takeOver` and `receiveLaneMessage`), tests/failover-inbox-identity.test.js, docs/agents/CHANGELOG.md.
+
+P439's `POST /api/orchestrator/failover` lets any running lane's ticket claim any lane key, and `receiveLaneMessage` checks claimed names before the real lane's own ticket. So a running lane can send as another lane and catch that lane's messages.
+
+1. `takeOver` accepts `body.lane` only when it is the `fallback` of the ticket's own lane in the current lanes (`allLanes[held.lane].fallback`); any other key answers 403 `A lane can take over only its own backup lane.` A ticket can claim at most once.
+2. `receiveLaneMessage` prefers the lane's own running ticket (`lastLaneTicket(lane)`) and uses a claimed backup only when the lane has no run of its own.
+3. Tests, each failing before your change: a ticket claiming a lane that is not its fallback gets 403 and messages to that lane still reach that lane's own run; a second claim gets 403; when the backup lane has its own running run, a message to `lane:BACKUP` reaches that run, not the claimed ticket.
+4. Run `node node_modules/vitest/vitest.mjs run tests/failover-inbox-identity.test.js tests/failover-messages.test.js` and report the counts.
