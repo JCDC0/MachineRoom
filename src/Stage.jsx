@@ -4,7 +4,7 @@ import { createClient } from './control/client.js'
 import { createMockClient } from './control/mock.js'
 import { createRoom } from './engine/room.js'
 import { costModeFor } from './engine/board.js'
-import { openBridge } from './live/bridge.js'
+import { createNoticeRelay, openBridge } from './live/bridge.js'
 import { createLivePlayer } from './live/livePlayer.js'
 import { openSimulated } from './live/simulated.js'
 import { toAgents, diffRoster, loadAgents } from './live/source.js'
@@ -615,10 +615,11 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
       resetSoundFiles()
     } })
   }, [data, live, agents])
+  const notices = useMemo(() => (live && !live.simulated && live.bridge ? createNoticeRelay() : null), [live])
   const client = useMemo(() => {
     if (!live || live.simulated) return createMockClient()
-    return live.bridge ? createClient({ baseUrl: live.bridge }) : null
-  }, [live])
+    return live.bridge ? createClient({ baseUrl: live.bridge, notices }) : null
+  }, [live, notices])
   const health = useBridgeHealth(live && !live.simulated ? live.bridge ?? null : null)
   const [snapshot, setSnapshot] = useState(() => player.snapshot())
   const [focused, setFocused] = useState(null)
@@ -1299,13 +1300,13 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
     if (!live.simulated && !live.bridge) return undefined
     const link = live.simulated
       ? openSimulated({ frames: live.frames, speed: live.speed, ...handlers })
-      : openBridge({ url: live.bridge, ...handlers })
+      : openBridge({ url: live.bridge, onNotice: notices ? (notice) => notices.push(notice) : undefined, ...handlers })
     const stopWarm = afterIdle(() => pipeline.warm())
     return () => {
       stopWarm()
       link.close()
     }
-  }, [agents, data, live, player])
+  }, [agents, data, live, notices, player])
 
   useEffect(() => {
     function onKey(event) {

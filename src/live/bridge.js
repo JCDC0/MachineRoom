@@ -39,7 +39,22 @@ export async function discoverBridge({ url, root, fetchImpl = fetch }) {
 export const REOPEN_START = 1000
 export const REOPEN_LIMIT = 15000
 
-export function openBridge({ url, since, onFrame, onTree, onStatus, onReset = () => {}, EventSourceImpl = EventSource, setTimer = setTimeout, clearTimer = clearTimeout }) {
+export function createNoticeRelay() {
+  const listeners = new Set()
+  return {
+    subscribe(listener) {
+      listeners.add(listener)
+      return () => {
+        listeners.delete(listener)
+      }
+    },
+    push(notice) {
+      for (const listener of [...listeners]) listener(notice)
+    },
+  }
+}
+
+export function openBridge({ url, since, onFrame, onTree, onStatus, onReset = () => {}, onNotice = () => {}, EventSourceImpl = EventSource, setTimer = setTimeout, clearTimer = clearTimeout }) {
   let source = null
   let timer = null
   let delay = REOPEN_START
@@ -110,6 +125,15 @@ export function openBridge({ url, since, onFrame, onTree, onStatus, onReset = ()
         rememberTreeVersion(url, cursor)
       }
       onTree(tree)
+    })
+    current.addEventListener('change', (event) => {
+      let notice
+      try {
+        notice = JSON.parse(event.data)
+      } catch {
+        return
+      }
+      onNotice(notice)
     })
   }
 
