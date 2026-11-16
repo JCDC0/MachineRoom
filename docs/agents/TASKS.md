@@ -3516,3 +3516,17 @@ On 2026-11-16 the Codex model picker showed a red `The command failed with exit 
 2. When there is no list command, answer the static models with no `error`, so the picker shows the known models without a red line.
 3. Tests, each failing before your change: Codex-like help text with only `-m, --model <MODEL>` and sentences that say "model" gives no list command; help with a `  models     List models` line gives `['models']`; a harness with no list command answers its static models and no error.
 4. Run `node node_modules/vitest/vitest.mjs run tests/help-list-command.test.js tests/harness-models.test.js` (skip a file that does not exist) and report the counts.
+
+Review 43 fixes, P421 and P422. `docs/agents/AUDIT-2026-11-REVIEW-43.md` (P414, GPT-6.1 Sol): all six R42 findings are fixed; two P2 findings remain.
+
+**P421. A failed scope read still offers Merge anyway (OpenCode).** Read this brief and the review 43 finding about failed scope reads only. Commit each step as you finish it. Run every command in the foreground. Files: server/reviews.js (only the 409 body `scopeRefusal` answers when the changed-file read fails), src/ui/panels/ReviewsPanel.jsx (only if it needs a change to offer `Merge anyway` for that answer), tests/reviews-scope.test.js (add tests here), docs/agents/CHANGELOG.md.
+
+1. The 409 for a failed changed-file read carries `outside: true` and `files: []`, so the page treats it like an out-of-scope refusal: it shows the error and offers `Merge anyway`, which sends `allowOutside: true` as today. With no files, the page shows the error line and no file list.
+2. Tests, each failing before your change: the failed-read 409 body has `outside: true`; the Reviews panel given that refusal shows `Merge anyway`.
+3. Run `node node_modules/vitest/vitest.mjs run tests/reviews-scope.test.js tests/reviews.test.js` and report the counts.
+
+**P422. The sub restore test fails when the fix is undone (OpenCode).** Read this brief and the review 43 finding about the sub restore test only. Commit each step as you finish it. Run every command in the foreground. Files: tests/sub-restore-harness.test.js only. Change no source file.
+
+1. Make the test keep the saved conversation of the old harness on disk until the new sub restores it (do not overwrite the fixture before the restore), so it checks that P413 drops that conversation's sessions and mode.
+2. Prove it: undo P413's guards in `server/orchestrator.js` locally, run the test and see it fail, then restore the file exactly (`git checkout -- server/orchestrator.js`) and see it pass. Commit only the test.
+3. Run `node node_modules/vitest/vitest.mjs run tests/sub-restore-harness.test.js tests/orchestrators.test.js` and report the counts, and the failing count with the guards undone.
