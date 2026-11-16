@@ -120,6 +120,7 @@ describe('ACP permissions', () => {
     const { cwd } = project()
     const calls = [
       ...['read', 'search', 'think'].map((kind) => request(kind)),
+      request('edit', ['existing.txt']),
       request('edit', [join(cwd, 'existing.txt')]),
       request('edit', ['new/folder/file.txt']),
       request('delete', ['existing.txt']),
@@ -146,6 +147,15 @@ describe('ACP permissions', () => {
     const { answers, stderr } = await permissions(cwd, 'auto', calls)
     expect(answers).toEqual(calls.map(() => selected('deny')))
     expect(stderr.split('\n').filter((line) => line.startsWith('refused '))).toHaveLength(calls.length)
+  })
+
+  it.each(['escape/../victim.txt', '..\\x'])('Auto refuses parent components in %s before resolving paths', async (path) => {
+    const { cwd, outside } = project()
+    mkdirSync(join(outside, 'sub'))
+    symlinkSync(join(outside, 'sub'), join(cwd, 'escape'), 'junction')
+    const { answers, stderr } = await permissions(cwd, 'auto', [request('edit', [path])])
+    expect(stderr).toContain('refused edit: A location uses .. in its path.\n')
+    expect(answers).toEqual([selected('deny')])
   })
 
   it('Auto resolves directory links and refuses escapes, including new files behind links', async () => {
