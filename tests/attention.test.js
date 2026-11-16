@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { startLane } from '../scripts/run-lane.mjs'
 import { gitPath } from '../server/programPath.js'
+import { attentionItems } from '../src/briefs/attention.js'
 import { runRecord } from '../src/briefs/run.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 
@@ -144,5 +145,145 @@ describe('loop stop record', () => {
     expect(fail1.record.exitCode).toBe(1)
     expect(Object.hasOwn(fail1.record, 'stopReason')).toBe(false)
     expect(Object.hasOwn(runRecord({ lane: 'direct', exitCode: 4 }), 'stopReason')).toBe(false)
+  })
+})
+
+describe('attentionItems', () => {
+  it('turns plain failures, start failures and repeated-failure loop stops into items newest first', () => {
+    const items = attentionItems([
+      { lane: 'opencode', startedAt: '2026-11-16T10:00:00.000Z', briefs: ['P465'], exitCode: 1, killed: false },
+      { lane: 'codex', startedAt: '2026-11-16T10:05:00.000Z', briefs: ['P466', 'P467'], exitCode: 2, killed: false },
+      { lane: 'claude', startedAt: '2026-11-16T10:10:00.000Z', briefs: [], task: 'Fix the parser.\nMore details.', exitCode: 1, killed: false },
+      { lane: 'agy', startedAt: '2026-11-16T10:15:00.000Z', briefs: ['P468'], exitCode: null, killed: false, startFailed: true },
+      { lane: 'direct', startedAt: '2026-11-16T10:20:00.000Z', briefs: ['P469'], exitCode: 4, killed: false, stopReason: 'repeated failure' },
+      { lane: 'hermes', startedAt: '2026-11-16T09:55:00.000Z', briefs: [], exitCode: 1, killed: false },
+    ])
+
+    expect(items).toEqual([
+      { lane: 'direct', startedAt: '2026-11-16T10:20:00.000Z', text: 'direct stopped: the same call failed five times.' },
+      { lane: 'agy', startedAt: '2026-11-16T10:15:00.000Z', text: 'agy could not start.' },
+      { lane: 'claude', startedAt: '2026-11-16T10:10:00.000Z', text: 'claude failed on Fix the parser.' },
+      { lane: 'codex', startedAt: '2026-11-16T10:05:00.000Z', text: 'codex failed on P466 P467.' },
+      { lane: 'opencode', startedAt: '2026-11-16T10:00:00.000Z', text: 'opencode failed on P465.' },
+      { lane: 'hermes', startedAt: '2026-11-16T09:55:00.000Z', text: 'hermes failed.' },
+    ])
+  })
+
+  it('leaves out stopped runs, zero-exit runs with no commits and silent or incomplete records', () => {
+    expect(attentionItems(null)).toEqual([])
+    expect(attentionItems([])).toEqual([])
+    expect(attentionItems([
+      { lane: 'opencode', startedAt: '2026-11-16T10:00:00.000Z', briefs: ['P1'], exitCode: 1, killed: true },
+      { lane: 'claude', startedAt: '2026-11-16T10:01:00.000Z', briefs: ['P2'], exitCode: null, killed: true, startFailed: true },
+      { lane: 'codex', startedAt: '2026-11-16T10:02:00.000Z', briefs: ['P3'], exitCode: 0, killed: false, commits: [] },
+      { lane: 'agy', startedAt: '2026-11-16T10:03:00.000Z', briefs: ['P4'], exitCode: 0, killed: false, commits: ['abc1234 0.1.402: Done'] },
+      { lane: 'direct', startedAt: '2026-11-16T10:04:00.000Z', briefs: ['P5'] },
+      { lane: 'hermes', startedAt: '2026-11-16T10:05:00.000Z', briefs: ['P6'], exitCode: null, killed: false },
+    ])).toEqual([])
+  })
+
+  it('leaves out a failure whose failover backup ran later, and keeps refused or untaken failovers', () => {
+    const takenOver = attentionItems([
+      {
+        lane: 'opencode',
+        startedAt: '2026-11-16T10:00:00.000Z',
+        briefs: ['P1'],
+        exitCode: 1,
+        killed: false,
+        failover: { kind: 'quota', to: 'agy' },
+      },
+      {
+        lane: 'agy',
+        startedAt: '2026-11-16T10:01:00.000Z',
+        briefs: ['P1'],
+        exitCode: 0,
+        killed: false,
+        failoverFrom: { lane: 'opencode', startedAt: '2026-11-16T10:00:00.000Z' },
+      },
+    ])
+    expect(takenOver).toEqual([])
+
+    const sameTimestampTakeover = attentionItems([
+      {
+        lane: 'opencode',
+        startedAt: '2026-11-16T10:00:00.000Z',
+        briefs: ['P1'],
+        exitCode: 1,
+        killed: false,
+        failover: { kind: 'rate-limit', to: 'agy' },
+      },
+      {
+        lane: 'agy',
+        startedAt: '2026-11-16T10:00:00.000Z',
+        briefs: ['P1'],
+        exitCode: 1,
+        killed: false,
+        failoverFrom: { lane: 'opencode', startedAt: '2026-11-16T10:00:00.000Z' },
+      },
+    ])
+    expect(sameTimestampTakeover).toEqual([
+      { lane: 'agy', startedAt: '2026-11-16T10:00:00.000Z', text: 'agy failed on P1.' },
+    ])
+
+    const refused = attentionItems([
+      {
+        lane: 'opencode',
+        startedAt: '2026-11-16T10:00:00.000Z',
+        briefs: ['P1'],
+        exitCode: 1,
+        killed: false,
+        failover: { kind: 'quota', to: 'agy', refused: true },
+      },
+      {
+        lane: 'agy',
+        startedAt: '2026-11-16T10:01:00.000Z',
+        briefs: ['P2'],
+        exitCode: 0,
+        killed: false,
+      },
+    ])
+    expect(refused).toEqual([
+      { lane: 'opencode', startedAt: '2026-11-16T10:00:00.000Z', text: 'opencode failed on P1.' },
+    ])
+
+    const earlierBackupOnly = attentionItems([
+      {
+        lane: 'agy',
+        startedAt: '2026-11-16T09:00:00.000Z',
+        briefs: ['P0'],
+        exitCode: 0,
+        killed: false,
+      },
+      {
+        lane: 'opencode',
+        startedAt: '2026-11-16T10:00:00.000Z',
+        briefs: ['P1'],
+        exitCode: 1,
+        killed: false,
+        failover: { kind: 'quota', to: 'agy' },
+      },
+    ])
+    expect(earlierBackupOnly).toEqual([
+      { lane: 'opencode', startedAt: '2026-11-16T10:00:00.000Z', text: 'opencode failed on P1.' },
+    ])
+  })
+
+  it('clears a lane item when a newer run ends well or is stopped', () => {
+    expect(attentionItems([
+      { lane: 'opencode', startedAt: '2026-11-16T10:00:00.000Z', briefs: ['P1'], exitCode: 1, killed: false },
+      { lane: 'opencode', startedAt: '2026-11-16T10:05:00.000Z', briefs: ['P1'], exitCode: 0, killed: false, commits: [] },
+    ])).toEqual([])
+
+    expect(attentionItems([
+      { lane: 'opencode', startedAt: '2026-11-16T10:05:00.000Z', briefs: ['P1'], exitCode: 1, killed: true },
+      { lane: 'opencode', startedAt: '2026-11-16T10:00:00.000Z', briefs: ['P1'], exitCode: 1, killed: false },
+    ])).toEqual([])
+
+    expect(attentionItems([
+      { lane: 'opencode', startedAt: '2026-11-16T10:00:00.000Z', briefs: ['P1'], exitCode: 1, killed: false },
+      { lane: 'opencode', startedAt: '2026-11-16T10:05:00.000Z', briefs: ['P2'], exitCode: 1, killed: false },
+    ])).toEqual([
+      { lane: 'opencode', startedAt: '2026-11-16T10:05:00.000Z', text: 'opencode failed on P2.' },
+    ])
   })
 })
