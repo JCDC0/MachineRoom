@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { maskKeys } from '../src/briefs/audit.js'
@@ -9,11 +9,20 @@ import { HARNESS_OFF_PROBLEM, readHarnessSettings } from './harness-settings.js'
 import { resolveHarnessProgram } from './harness-models.js'
 import { harnessUnavailableProblem } from './model-list.js'
 import { killTree } from './processTree.js'
+import { endpointModels } from './models.js'
 
 export const PROBE_PROMPT = 'Reply with the word OK and nothing else.'
 export const PROBE_LIMIT_MS = 60000
 export const PROBE_RUNNING_PROBLEM = 'A connection test is already running.'
 export const PROBE_ACP_PROBLEM = 'A connection test is not available for ACP.'
+export const PROBE_DIRECT_PROBLEM = 'Set a Direct API model first.'
+const PROBE_TITLE = 'MachineRoom connection test'
+const PROBE_PLAN_CONFIG = { permission: { external_directory: 'deny', edit: 'deny', bash: 'deny' } }
+
+function directModel(runsFolder, lanes) {
+  const lane = Object.values(lanes ?? {}).find((item) => item?.cli?.harness === 'machineroom' && item.enabled !== false && String(item.cli.model ?? '').trim() !== '')
+  return lane ? String(lane.cli.model).trim() : (endpointModels(runsFolder)[0]?.id ?? '')
+}
 
 const running = new Set()
 
@@ -72,7 +81,14 @@ export async function probeHarness(key, { runsFolder, lanes = {}, env = process.
   const folder = mkdtempSync(join(tmpdir(), 'machineroom-probe-'))
   const started = Date.now()
   try {
-    const command = descriptor.command({ cli: { bin: program, model: '' }, prompt: PROBE_PROMPT, env, folder, mode: 'plan' })
+    const model = key === 'machineroom' ? directModel(runsFolder, lanes) : ''
+    if (key === 'machineroom' && !model) return { status: 200, body: { key, status: 'unknown', line: PROBE_DIRECT_PROBLEM, seconds: 0 } }
+    let mcpConfig = ''
+    if (key === 'opencode') {
+      mcpConfig = join(folder, 'probe.mcp.json')
+      writeFileSync(mcpConfig, JSON.stringify(PROBE_PLAN_CONFIG))
+    }
+    const command = descriptor.command({ cli: { bin: program, model }, prompt: PROBE_PROMPT, env, folder, mode: 'plan', title: PROBE_TITLE, mcpConfig })
     const { code, output, timedOut } = await oneTurn(command, { env, limitMs, platform })
     const seconds = Math.round((Date.now() - started) / 100) / 10
     const failure = descriptor.failure?.(output) || (descriptor.limited?.(output) ? firstLine(output) : '')

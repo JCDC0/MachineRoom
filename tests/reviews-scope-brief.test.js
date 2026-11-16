@@ -1,5 +1,10 @@
+import { execFileSync } from 'node:child_process'
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { groupFiles, LARGE_DIFF_LINES, outsideBriefFor } from '../server/reviews.js'
+import { gitPath } from '../server/programPath.js'
+import { createReviewsApi, groupFiles, LARGE_DIFF_LINES, outsideBriefFor } from '../server/reviews.js'
+import { makeTempDir } from './helpers/tempRoot.js'
 
 const TASKS = [
   '## Open',
@@ -41,5 +46,46 @@ describe('review scope', () => {
 
   it('names the large diff line count as a constant', () => {
     expect(LARGE_DIFF_LINES).toBe(400)
+  })
+})
+
+describe('review scope brief source', () => {
+  it('reads TASKS.md from the base ref and ignores the worktree copy', async () => {
+    const dir = makeTempDir('mr-scope-brief-')
+    try {
+      const env = { ...process.env, GIT_AUTHOR_NAME: 'T', GIT_AUTHOR_EMAIL: 't@example.invalid', GIT_COMMITTER_NAME: 'T', GIT_COMMITTER_EMAIL: 't@example.invalid' }
+      const git = (cwd, ...args) => execFileSync(gitPath(), args, { cwd, env, encoding: 'utf8', windowsHide: true })
+      const repo = join(dir, 'repo')
+      mkdirSync(join(repo, 'docs', 'agents'), { recursive: true })
+      git(repo, 'init', '-q', '-b', 'main')
+      writeFileSync(join(repo, 'docs', 'agents', 'TASKS.md'), TASKS)
+      git(repo, 'add', '.')
+      git(repo, '-c', 'commit.gpgsign=false', 'commit', '-q', '-m', 'base')
+      const worktree = join(dir, 'wt')
+      git(repo, 'worktree', 'add', '-q', '-b', 'feat/x', worktree)
+      writeFileSync(join(worktree, 'docs', 'agents', 'TASKS.md'), TASKS.replace('server/a.js,', 'server/a.js, server/z.js,'))
+      mkdirSync(join(worktree, 'server'))
+      writeFileSync(join(worktree, 'server', 'z.js'), 'x')
+      git(worktree, 'add', '.')
+      git(worktree, '-c', 'commit.gpgsign=false', 'commit', '-q', '-m', 'work')
+      const agents = join(dir, 'agents')
+      mkdirSync(agents)
+      writeFileSync(join(agents, 'lanes.json'), JSON.stringify({ opencode: { name: 'OpenCode', worktree } }))
+      const answers = []
+      const api = createReviewsApi({
+        projectRoot: repo,
+        briefsDir: agents,
+        runsFolder: join(dir, 'runs'),
+        sendJson: (req, res, status, body) => answers.push({ status, body }),
+        readJsonBody: async () => null,
+        orchestrators: () => null,
+        readRuns: () => [{ lane: 'opencode', project: worktree, briefs: ['P1'], startedAt: '2026-01-01T00:00:00Z' }],
+      })
+      await api.handle({ method: 'GET', headers: { origin: 'http://localhost:5173' } }, {}, new URL('http://127.0.0.1/api/control/reviews'))
+      const entry = answers[0].body.lanes[0]
+      expect(entry.outsideBrief).toEqual(expect.arrayContaining(['server/z.js']))
+    } finally {
+      rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })
+    }
   })
 })

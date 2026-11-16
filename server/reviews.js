@@ -775,15 +775,14 @@ export function createReviewsApi({
     const status = await runGit(worktree, ['status', '--porcelain'])
     const stat = parseNumstat(await runGit(worktree, ['diff', '--no-ext-diff', '--no-textconv', '--numstat', `${base.ref}...HEAD`]))
     const lastRun = lastRunFor(lane, worktree, runs)
-    const briefsText = [join(lanesDir, 'TASKS.md'), join(worktree, 'docs', 'agents', 'TASKS.md')]
-      .map((file) => {
-        try {
-          return readFileSync(file, 'utf8')
-        } catch {
-          return null
-        }
-      })
-      .find((text) => text !== null)
+    let briefsText
+    try {
+      briefsText = readFileSync(join(lanesDir, 'TASKS.md'), 'utf8')
+    } catch {
+      try {
+        briefsText = await runGit(worktree, ['show', `${base.ref}:docs/agents/TASKS.md`])
+      } catch {}
+    }
     const laneRuns = linkedRuns(lane, worktree, runs, base.name).map((record) => runEntry(record, laneList))
     return {
       lane,

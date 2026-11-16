@@ -913,7 +913,7 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
       cached.harness === harness &&
       cached.worktree === worktree
     ) {
-      return [...cached.touched]
+      return cached.partial ? Object.assign([...cached.touched], { partial: true }) : [...cached.touched]
     }
     let text
     try {
@@ -946,14 +946,16 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
       touched.push(safe)
       if (touched.length >= LIVE_TOUCH_LIMIT) break
     }
+    const partial = summary.shellUnplaced > 0
     touchedCache.set(resolvedLog, {
+      partial,
       size: info.size,
       mtimeMs: info.mtimeMs,
       harness,
       worktree,
       touched,
     })
-    return [...touched]
+    return partial ? Object.assign([...touched], { partial }) : [...touched]
   }
 
   function touchedForItem(item, lanes, openRuns) {
@@ -999,13 +1001,17 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
     return touchedForLog(resolvedLog, { harness, worktree })
   }
 
+  function touchedFields(list) {
+    return { touched: list === null ? null : [...list], ...(list?.partial ? { touchedPartial: true } : {}) }
+  }
+
   function snapshot(item, { lanes = null, openRuns = [] } = {}) {
     const out = {
       lane: item.entry.lane,
       briefs: [...item.entry.briefs],
       startedAt: item.entry.startedAt,
       lastLines: [...item.entry.lastLines],
-      touched: touchedForItem(item, lanes, openRuns),
+      ...touchedFields(touchedForItem(item, lanes, openRuns)),
       ...(item.entry.queue ? { queue: true, tasks: item.entry.tasks } : {}),
     }
     const taskLabel = item.task || (item.entry.queue && item.entry.tasks === 1 ? item.firstTask : '')

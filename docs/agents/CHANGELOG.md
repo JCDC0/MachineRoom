@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- The worktree copy ignore line is written once and only after a copy, Codex input no longer counts cached tokens twice, the Direct API and OpenCode probes get a model and Plan, a shell-editing lane is flagged as maybe editing, and the review scope reads the brief from the base ref.
+- Worktree copies write the shared exclude line only after the copy works, once, and not when the main checkout already ignores the path; Codex input counts were high by the cached amount before (`inputTokens` is now `input_tokens` alone); the Direct API probe uses a lane or endpoint model and says `Set a Direct API model first.` without one; the OpenCode probe has a title and the Plan config; a lane with shell calls the parser cannot place carries `touchedPartial` and the overlap card says it may be editing by shell; the review scope reads TASKS.md from the lanes folder or the base ref, never the worktree's copy (P495).
 - The rewind takes the lane's run lock, lane runs record commits since their checkpoint, the recovery ref is never replaced and names keep lane keys apart, late notices cannot turn a done rewind into a failure, and the port offset is a stable hash of the lane key.
 - The rewind takes the lane's run lock, refuses commits from before the last run (a lane run now records `checkpoint.head..HEAD`), answers 200 once the reset is done, never replaces a recovery ref, and MACHINEROOM_PORT_OFFSET comes from a hash of the lane key (P494).
 - Ten findings: the rewind lock, recorded commits and late errors, worktree copy excludes, the Codex cache share, the Direct API and OpenCode probes, unknown touched lists, the brief source and the port offset.

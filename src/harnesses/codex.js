@@ -1,5 +1,5 @@
 import { createCodexParser } from '../model/parsers/codex.js'
-import { expandBin, headLines, jsonLineReader, lastJsonLine, sumTokens, terminalText, tokenCount } from './common.js'
+import { expandBin, headLines, jsonLineReader, lastJsonLine, terminalText, tokenCount } from './common.js'
 
 function codexReply(log) {
   let text = null
@@ -88,7 +88,7 @@ function codexUsage(log) {
   }
   return {
     costUsd: null,
-    inputTokens: sumTokens([usage.input_tokens, usage.cached_input_tokens]),
+    inputTokens: tokenCount(usage.input_tokens),
     outputTokens: tokenCount(usage.output_tokens),
     cacheReadTokens: tokenCount(usage.cached_input_tokens),
     cacheWriteTokens: null,

@@ -91,3 +91,24 @@ describe('probe route', () => {
     expect(data.status).toBe('reached')
   })
 })
+
+describe('probeHarness inputs', () => {
+  it('answers unknown for Direct API with no model', async () => {
+    const { status, body } = await probeHarness('machineroom', { runsFolder: runs, lanes: {} })
+    expect(status).toBe(200)
+    expect(body).toMatchObject({ status: 'unknown', line: 'Set a Direct API model first.' })
+  })
+
+  it('gives OpenCode a title and a Plan config', async () => {
+    const out = join(runs, 'args.json')
+    const file = join(runs, 'oc.mjs')
+    writeFileSync(file, `import { writeFileSync, readFileSync } from 'node:fs'
+writeFileSync(${JSON.stringify(out)}, JSON.stringify({ argv: process.argv.slice(2), config: JSON.parse(readFileSync(process.env.OPENCODE_CONFIG, 'utf8')) }))
+console.log(JSON.stringify({ type: 'text', part: { text: 'OK' } }))`)
+    writeFileSync(join(runs, 'harnesses.json'), JSON.stringify({ programs: { opencode: file } }))
+    await probeHarness('opencode', { runsFolder: runs })
+    const seen = JSON.parse(readFileSync(out, 'utf8'))
+    expect(seen.argv[seen.argv.indexOf('--title') + 1]).toBe('MachineRoom connection test')
+    expect(seen.config.permission).toMatchObject({ edit: 'deny', bash: 'deny' })
+  })
+})

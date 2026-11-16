@@ -86,3 +86,22 @@ describe('port offset', () => {
     expect(portOffsetFor('missing')).toBeLessThan(1000)
   })
 })
+
+describe('worktree copy exclude line', () => {
+  it('adds the line once for two new lanes', () => {
+    const { folder } = project()
+    writeFileSync(join(folder, 'local.env'), 'x')
+    prepareWorktree(folder, 'lane1', { copies: ['local.env'] })
+    prepareWorktree(folder, 'lane2', { copies: ['local.env'] })
+    const exclude = readFileSync(join(folder, '.git', 'info', 'exclude'), 'utf8')
+    expect(exclude.split('\n').filter((line) => line.trim() === '/local.env')).toHaveLength(1)
+  })
+  it('adds no line for a path whose copy is refused', () => {
+    const { folder } = project()
+    mkdirSync(join(folder, 'adir'))
+    expect(() => prepareWorktree(folder, 'lane', { copies: ['adir'] })).toThrow('must be files')
+    let exclude = ''
+    try { exclude = readFileSync(join(folder, '.git', 'info', 'exclude'), 'utf8') } catch {}
+    expect(exclude).not.toContain('/adir')
+  })
+})
