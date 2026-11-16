@@ -45,6 +45,7 @@ import {
   statusDetail,
   statusTone,
   teamLines,
+  visibleChatText,
   workRows,
   workText,
 } from './orchestratorChat.js'
@@ -183,6 +184,7 @@ export default function OrchestratorChat({
   })
   const [sending, setSending] = useState(false)
   const [stopping, setStopping] = useState(false)
+  const [stopResult, setStopResult] = useState(null)
   const [unavailable, setUnavailable] = useState(false)
   const [error, setError] = useState(null)
   const [copiedId, setCopiedId] = useState('')
@@ -228,6 +230,7 @@ export default function OrchestratorChat({
   const focusAtRef = useRef(Number(focusRequest) || 0)
   const confirmRef = useRef(null)
   const modeConfirmRef = useRef(null)
+  const prevSelectedRef = useRef(selected)
   const modeSavedTimer = useRef(null)
   const copyTimer = useRef(null)
   const compactRef = useRef(null)
@@ -617,6 +620,11 @@ export default function OrchestratorChat({
   }, [selected])
 
   useEffect(() => {
+    if (prevSelectedRef.current !== selected) {
+      prevSelectedRef.current = selected
+      closeConfirm()
+    }
+    setStopping(false)
     setEffortOpen(false)
     setCompactOpen(false)
     setModelError('')
@@ -706,7 +714,8 @@ export default function OrchestratorChat({
         return
       }
       if (confirm) {
-        setConfirm(null)
+        if (confirm === 'stop' && stopping) return
+        closeConfirm()
         return
       }
       onClose?.()
@@ -716,6 +725,7 @@ export default function OrchestratorChat({
   }, [
     open,
     confirm,
+    stopping,
     onClose,
     effortOpen,
     modeOpen,
@@ -729,7 +739,7 @@ export default function OrchestratorChat({
       const id = event && event.detail ? event.detail.id : ''
       if (typeof id !== 'string' || !id) return
       changeSelected(id)
-      setConfirm(null)
+      closeConfirm()
       setError(null)
       setReadError(null)
     }
@@ -925,7 +935,7 @@ export default function OrchestratorChat({
     if (command.kind === 'stop') {
       setDraft('')
       setSlashOpen(false)
-      setConfirm('stop')
+      openStopConfirm()
       return
     }
     setDraft('')
@@ -960,23 +970,62 @@ export default function OrchestratorChat({
     if (canSend(text)) deliver(text, toRecipient)
   }
 
-  function stopConfirmed() {
-    if (!client || typeof client.stopOrchestrator !== 'function') {
+  function openStopConfirm() {
+    setStopResult(null)
+    setError(null)
+    setConfirm('stop')
+  }
+
+  function closeConfirm() {
+    setConfirm(null)
+    setStopResult(null)
+  }
+
+  async function confirmStop(tree = false) {
+    if (stopping) return
+    const method = tree ? 'stopTree' : 'stopOrchestrator'
+    if (!client || typeof client[method] !== 'function') {
       setError('The orchestrator is not connected.')
       return
     }
+    const version = selectionRef.current.version
     setStopping(true)
     setError(null)
     const options = selected === 'orchestrator' ? { confirmed: true } : { confirmed: true, id: selected }
-    client
-      .stopOrchestrator(options)
-      .then(async () => {
-        setConfirm(null)
-        await readChatRef.current?.()
-        await readListRef.current?.()
-      })
-      .catch((failure) => setError(errorText(failure, 'Could not stop the orchestrator.')))
-      .finally(() => setStopping(false))
+    try {
+      const answer = await client[method](options)
+      if (selectionRef.current.version !== version) return
+      if (tree) {
+        const stoppedLanes = Array.isArray(answer?.stoppedLanes)
+          ? answer.stoppedLanes.filter((lane) => typeof lane === 'string' && lane.trim() !== '')
+          : []
+        const stillRunning = Array.isArray(answer?.stillRunning)
+          ? answer.stillRunning
+              .map((lane) => (typeof lane === 'string' ? visibleChatText(lane.trim()) : ''))
+              .filter(Boolean)
+          : []
+        setStopResult({ stoppedCount: stoppedLanes.length, stillRunning })
+      } else {
+        closeConfirm()
+      }
+      await readChatRef.current?.()
+      await readListRef.current?.()
+      onOrchestratorChange()
+    } catch (failure) {
+      if (selectionRef.current.version === version) {
+        setError(errorText(failure, 'Could not stop the orchestrator.'))
+      }
+    } finally {
+      setStopping(false)
+    }
+  }
+
+  function stopConfirmed() {
+    return confirmStop(false)
+  }
+
+  function stopTreeConfirmed() {
+    return confirmStop(true)
   }
 
   function handleSubmit(event) {
@@ -1221,7 +1270,7 @@ export default function OrchestratorChat({
   function selectTab(id) {
     if (id === TEAM_TAB) {
       setTeamOpen(true)
-      setConfirm(null)
+      closeConfirm()
       setError(null)
       setReadError(null)
       setTeamFailed([])
@@ -1232,7 +1281,7 @@ export default function OrchestratorChat({
     if (id === selected) return
     setToRecipient(id)
     changeSelected(id)
-    setConfirm(null)
+    closeConfirm()
     setError(null)
     setReadError(null)
   }
@@ -1511,25 +1560,59 @@ export default function OrchestratorChat({
 
           {confirm === 'stop' ? (
             <section ref={confirmRef} className="mr-orch-confirm is-stop" aria-label="Stop the orchestrator">
-              <p className="mr-orch-confirm-text">{ORCH_STOP_CONFIRM}</p>
-              <div className="mr-orch-confirm-actions">
-                <button
-                  type="button"
-                  className="mr-orch-confirm-btn is-stop"
-                  onClick={stopConfirmed}
-                  disabled={stopping}
-                >
-                  Stop
-                </button>
-                <button
-                  type="button"
-                  className="mr-orch-confirm-btn is-cancel"
-                  onClick={() => setConfirm(null)}
-                  disabled={stopping}
-                >
-                  Cancel
-                </button>
-              </div>
+              {stopResult ? (
+                <>
+                  <p className="mr-orch-confirm-text">
+                    {stopResult.stoppedCount === 1
+                      ? 'Stopped 1 lane.'
+                      : `Stopped ${stopResult.stoppedCount} lanes.`}
+                  </p>
+                  {stopResult.stillRunning.length > 0 ? (
+                    <p className="mr-orch-confirm-text">
+                      {`Still running: ${stopResult.stillRunning.join(', ')}.`}
+                    </p>
+                  ) : null}
+                  <div className="mr-orch-confirm-actions">
+                    <button
+                      type="button"
+                      className="mr-orch-confirm-btn is-cancel"
+                      onClick={closeConfirm}
+                    >
+                      Close
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <p className="mr-orch-confirm-text">{ORCH_STOP_CONFIRM}</p>
+                  <div className="mr-orch-confirm-actions">
+                    <button
+                      type="button"
+                      className="mr-orch-confirm-btn is-stop"
+                      onClick={stopConfirmed}
+                      disabled={stopping}
+                    >
+                      Stop
+                    </button>
+                    <button
+                      type="button"
+                      className="mr-orch-confirm-btn is-stop"
+                      onClick={stopTreeConfirmed}
+                      disabled={stopping}
+                    >
+                      {selected === 'orchestrator' ? 'Stop everything' : 'Stop with its lanes'}
+                    </button>
+                    <button
+                      type="button"
+                      className="mr-orch-confirm-btn is-cancel"
+                      onClick={closeConfirm}
+                      disabled={stopping}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </>
+              )}
             </section>
           ) : null}
 
@@ -1705,7 +1788,7 @@ export default function OrchestratorChat({
                   <button
                     type="button"
                     className="mr-orch-stop hud-lower-stop"
-                    onClick={() => setConfirm('stop')}
+                    onClick={openStopConfirm}
                     disabled={stopping}
                   >
                     Stop
@@ -1883,7 +1966,7 @@ export default function OrchestratorChat({
                   <button
                     type="button"
                     className="mr-orch-stop"
-                    onClick={() => setConfirm('stop')}
+                    onClick={openStopConfirm}
                     disabled={stopping}
                   >
                     Stop

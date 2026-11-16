@@ -103,6 +103,77 @@ export function formatLastRun(lastRun) {
   return `${minutes}, ${cost}, ${exit}`
 }
 
+export const CLAIMS_PREVIEW_LINES = 3
+
+export function formatEvidence(evidence) {
+  if (!evidence || typeof evidence !== 'object') return null
+  const staleNote = evidence.stale === true ? ' (an older head was checked)' : ''
+  const checkedHead =
+    typeof evidence.checkedHead === 'string' ? evidence.checkedHead.trim() : ''
+  if (checkedHead === '') {
+    return `Not checked on this head${staleNote}`
+  }
+  const checks = Array.isArray(evidence.checks) ? evidence.checks : []
+  const result = checks.length > 0 ? checks[0]?.result : null
+  if (result !== 'passed' && result !== 'failed') return null
+  return `Checked on ${checkedHead.slice(0, 7)}: ${result}${staleNote}`
+}
+
+export function formatClaims(claims) {
+  if (typeof claims !== 'string') return []
+  const text = claims.trim()
+  if (text === '') return []
+  return text.split(/\r?\n/)
+}
+
+function formatRunMinutes(minutes) {
+  return Number.isFinite(minutes) ? `${minutes}` : '?'
+}
+
+function formatRunOne(run) {
+  const lane = typeof run?.lane === 'string' && run.lane.trim() !== '' ? run.lane.trim() : '?'
+  const model =
+    typeof run?.model === 'string' && run.model.trim() !== '' ? run.model.trim() : '?'
+  return `${lane} (${model}), ${formatRunMinutes(run?.minutes)} min`
+}
+
+export function formatRuns(runs) {
+  if (!Array.isArray(runs) || runs.length < 2) return null
+  return runs.map(formatRunOne).join(' then ')
+}
+
+function sumKnownRuns(runs, field) {
+  let total = 0
+  let known = 0
+  for (const run of runs) {
+    if (typeof run?.[field] !== 'number' || !Number.isFinite(run[field])) continue
+    total += run[field]
+    known += 1
+  }
+  if (known === 0) return { total: null, known }
+  return { total: Math.round(total * 1e6) / 1e6, known }
+}
+
+export function formatRunTotals(runs, runTotals) {
+  if (!Array.isArray(runs) || runs.length < 2) return null
+  let totals = runTotals && typeof runTotals === 'object' ? runTotals : null
+  if (!totals) {
+    const minutes = sumKnownRuns(runs, 'minutes')
+    const cost = sumKnownRuns(runs, 'costUsd')
+    totals = {
+      runs: runs.length,
+      runMinutes: minutes.total,
+      costUsd: cost.total,
+      partial: minutes.known < runs.length || cost.known < runs.length,
+    }
+  }
+  const count = Number.isFinite(totals.runs) ? totals.runs : runs.length
+  const minutes = formatRunMinutes(totals.runMinutes)
+  const cost = Number.isFinite(totals.costUsd) ? `$${totals.costUsd.toFixed(2)}` : '?'
+  const partial = totals.partial === true ? ' (some runs did not report)' : ''
+  return `${count} runs, ${minutes} run minutes, ${cost}${partial}`
+}
+
 export function reviewRow(review) {
   if (!review || typeof review !== 'object') {
     return {
@@ -124,6 +195,11 @@ export function reviewRow(review) {
       dirtyText: null,
       checks: 'unchecked',
       checksText: formatChecks('unchecked'),
+      evidenceText: null,
+      claimsLines: [],
+      claimsMore: false,
+      runsText: null,
+      runTotalsText: null,
       lastRunText: 'no run yet',
       error: null,
       canMerge: false,
@@ -159,6 +235,11 @@ export function reviewRow(review) {
       dirtyText: null,
       checks: null,
       checksText: null,
+      evidenceText: null,
+      claimsLines: [],
+      claimsMore: false,
+      runsText: null,
+      runTotalsText: null,
       lastRunText: null,
       error: String(review.error),
       canMerge: false,
@@ -174,6 +255,7 @@ export function reviewRow(review) {
   const checks = normalizeChecks(review.checks)
   const diffCountsText = `+${added} -${deleted}`
   const filesWord = files === 1 ? 'file' : 'files'
+  const claimsLines = formatClaims(review.claims)
 
   return {
     lane,
@@ -194,6 +276,11 @@ export function reviewRow(review) {
     dirtyText: dirty ? 'uncommitted changes' : null,
     checks,
     checksText: formatChecks(checks),
+    evidenceText: formatEvidence(review.evidence),
+    claimsLines,
+    claimsMore: claimsLines.length > CLAIMS_PREVIEW_LINES,
+    runsText: formatRuns(review.runs),
+    runTotalsText: formatRunTotals(review.runs, review.runTotals),
     lastRunText: formatLastRun(review.lastRun),
     error: null,
     canMerge: canMerge(review),

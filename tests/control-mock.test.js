@@ -143,6 +143,33 @@ describe('mock orchestrators and the ladder', () => {
     await expect(client.sendOrchestrator('   ', { id: 'frontend' })).rejects.toThrow(/message/i)
     await expect(client.orchestrator('nobody')).rejects.toThrow(/exist/i)
     await expect(client.stopOrchestrator({ confirmed: true, id: 'nobody' })).rejects.toThrow(/exist/i)
+    await expect(client.stopTree({ id: 'nobody' })).rejects.toThrow(/exist/i)
+    await expect(client.stopTree({ confirmed: false })).rejects.toThrow(/confirm/i)
+  })
+
+  it('stops a sub sector or the whole tree with stopTree and returns the server shape', async () => {
+    const client = createMockClient({ latencyMs: 0, runMs: 10000, now: () => Date.parse('2026-10-18T00:00:00Z') })
+    await client.startRun('opencode2', { task: 'Build UI', worktree: true })
+    await client.startRun('opencode', { task: 'Build bridge', worktree: true })
+
+    const subStopped = await client.stopTree({ id: 'frontend' })
+    expect(subStopped).toEqual({
+      stoppedOrchestrators: ['frontend'],
+      stoppedLanes: ['opencode2'],
+      stillRunning: [],
+    })
+    expect((await client.orchestrators()).find((entry) => entry.id === 'frontend').state).toBe('paused')
+    expect((await client.orchestrator()).state).toBe('idle')
+    expect((await client.runs()).running.map((entry) => entry.lane)).toEqual(['opencode'])
+
+    const allStopped = await client.stopTree()
+    expect(allStopped).toEqual({
+      stoppedOrchestrators: ['orchestrator', 'frontend'],
+      stoppedLanes: ['opencode'],
+      stillRunning: [],
+    })
+    expect((await client.orchestrator()).state).toBe('paused')
+    expect((await client.runs()).running).toEqual([])
   })
 
   it('adds a sub through setLadder and starts its chat', async () => {

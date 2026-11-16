@@ -472,6 +472,26 @@ export default function Inspector({
     const kind = typeof failed?.failover?.kind === 'string' ? failed.failover.kind.trim() : ''
     if (from) failoverLine = `Taken over from ${from}${kind ? `: ${kind}` : ''}`
   }
+  let checkpointLine = ''
+  if (!orchestratorAgent && laneRecord?.checkpoint) {
+    const reading = laneRecord.checkpoint
+    const head = shortSha(reading.head)
+    if (head !== '') {
+      const branch = typeof reading.branch === 'string' && reading.branch.trim() !== '' ? reading.branch.trim() : 'a detached HEAD'
+      const count = Number.isInteger(reading.dirtyCount)
+        ? reading.dirtyCount
+        : Array.isArray(reading.dirtyFiles)
+          ? reading.dirtyFiles.length
+          : 0
+      const recovery = typeof reading.recovery === 'string' ? shortSha(reading.recovery) : ''
+      checkpointLine = `Checkpoint: ${head} on ${branch}`
+      if (reading.dirty === true) {
+        checkpointLine += recovery !== ''
+          ? `, ${count} changed files kept as ${recovery}`
+          : `, ${count} changed files kept without a recovery ref`
+      }
+    }
+  }
 
   if (!item) return null
 
@@ -555,6 +575,7 @@ export default function Inspector({
                 )}
               </Row>
               {failoverLine ? <Row label="Run">{failoverLine}</Row> : null}
+              {checkpointLine ? <Row label="Checkpoint">{checkpointLine}</Row> : null}
               <Row label="Harness">{context.harness}</Row>
               <Row label="Model">{modelName(context.model)}</Row>
               <Row label="Effort">{effort}</Row>

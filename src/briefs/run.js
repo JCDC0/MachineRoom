@@ -258,6 +258,16 @@ function outcomeCost(value) {
   return `$${value.toFixed(2)} a merge`
 }
 
+function outcomeRepairs(value) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return '?'
+  return String(Math.round(value))
+}
+
+function outcomeWait(value) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return '?'
+  return `${Math.round(value * 10) / 10} min`
+}
+
 export function formatOutcomes(rows) {
   const list = Array.isArray(rows) ? rows : []
   if (list.length === 0) return ['No runs yet.']
@@ -265,7 +275,7 @@ export function formatOutcomes(rows) {
   return list.map((row) => {
     const lane = String(row?.lane ?? '')
     const model = String(row?.model ?? MODEL_UNKNOWN)
-    return `${lane}  ${model}  runs ${count(row?.runs)}, merged ${count(row?.merged)} (${count(row?.ungraded)} not graded), rejected ${count(row?.rejected)}, pending ${count(row?.pending)}, merge rate ${outcomePercent(row?.mergeRate)}, fixes ${outcomeFixes(row?.averageFixes)}, ${outcomeCost(row?.costPerMerge)}`
+    return `${lane}  ${model}  runs ${count(row?.runs)}, merged ${count(row?.merged)} (${count(row?.ungraded)} not graded), rejected ${count(row?.rejected)}, pending ${count(row?.pending)}, merge rate ${outcomePercent(row?.mergeRate)}, fixes ${outcomeFixes(row?.averageFixes)}, ${outcomeCost(row?.costPerMerge)}, repair runs ${outcomeRepairs(row?.repairRuns)}, review wait ${outcomeWait(row?.reviewWaitMinutes)}`
   })
 }
 
@@ -1207,18 +1217,43 @@ function quotaField(quota) {
 }
 
 const RECORD_TEXT_LIMIT = 200
+const CHECKPOINT_FILE_LIMIT = 20
+
+function checkpointField(checkpoint) {
+  if (!checkpoint || typeof checkpoint !== 'object' || Array.isArray(checkpoint)) return null
+  const head = typeof checkpoint.head === 'string' ? checkpoint.head.trim() : ''
+  if (head === '') return null
+  const branch = typeof checkpoint.branch === 'string' ? checkpoint.branch.trim() : ''
+  const dirty = checkpoint.dirty === true
+  const files = (Array.isArray(checkpoint.dirtyFiles) ? checkpoint.dirtyFiles : [])
+    .map((path) => (typeof path === 'string' ? path.trim() : ''))
+    .filter((path) => path !== '')
+    .slice(0, CHECKPOINT_FILE_LIMIT)
+  const givenCount = Number(checkpoint.dirtyCount)
+  const dirtyCount = Number.isInteger(givenCount) && givenCount >= files.length ? givenCount : files.length
+  const recovery = typeof checkpoint.recovery === 'string' ? checkpoint.recovery.trim() : ''
+  return {
+    head,
+    branch,
+    dirty,
+    dirtyFiles: files,
+    dirtyCount,
+    ...(dirty && recovery !== '' ? { recovery } : {}),
+  }
+}
 
 export function maskedQueueTasks(tasks) {
   return (Array.isArray(tasks) ? tasks : []).map((task) => maskProfilePaths(maskKeys(String(task ?? '')).text).slice(0, RECORD_TEXT_LIMIT))
 }
 
-export function runRecord({ lane, briefs, model, reasoning, mode, startedAt, minutes, exitCode, killed, costUsd, inputTokens, outputTokens, peakTokens, log, branch, commits, base, head, tests, project, task, startedBy, stoppedLeftovers, queue, startFailed, note, retried, failover, failoverFrom, quota, continues, interruptedBy } = {}) {
+export function runRecord({ lane, briefs, model, reasoning, mode, startedAt, finishedAt, minutes, exitCode, killed, costUsd, inputTokens, outputTokens, peakTokens, log, branch, commits, base, head, checkpoint, tests, project, task, startedBy, stoppedLeftovers, queue, startFailed, note, retried, failover, failoverFrom, quota, continues, interruptedBy } = {}) {
   const record = {
     lane: String(lane ?? ''),
     briefs: Array.isArray(briefs) ? briefs.map(String) : [],
     model: model ? String(model) : null,
     reasoning: reasoning ? String(reasoning) : null,
     startedAt: isoTime(startedAt),
+    finishedAt: isoTime(finishedAt ?? new Date()),
     minutes: Number.isFinite(minutes) ? minutes : null,
     exitCode: Number.isInteger(exitCode) ? exitCode : null,
     killed: killed === true,
@@ -1233,6 +1268,8 @@ export function runRecord({ lane, briefs, model, reasoning, mode, startedAt, min
   if (mode !== undefined) record.mode = mode
   if (typeof base === 'string' && base.trim() !== '') record.base = base.trim()
   if (typeof head === 'string' && head.trim() !== '') record.head = head.trim()
+  const checkpointReading = checkpointField(checkpoint)
+  if (checkpointReading !== null) record.checkpoint = checkpointReading
   if (tests === 'passed' || tests === 'failed' || tests === 'none') record.tests = tests
   const queueBranch = typeof queue?.branch === 'string' ? queue.branch.trim() : ''
   if (queueBranch !== '') {

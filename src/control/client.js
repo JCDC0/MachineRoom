@@ -255,6 +255,12 @@ export function createClient({
       return request('POST', '/api/orchestrator/stop', body)
     },
 
+    stopTree: ({ id, confirmed = true } = {}) => {
+      const omitId = id === undefined || id === null || id === '' || id === 'orchestrator'
+      const body = omitId ? { confirmed } : { confirmed, id }
+      return request('POST', '/api/orchestrator/stop-tree', body)
+    },
+
     compactOrchestrator: ({ id, keep, confirmed = true } = {}) => {
       const body = { confirmed }
       if (id !== undefined && id !== null && id !== '') body.id = id

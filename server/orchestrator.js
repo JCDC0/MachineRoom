@@ -56,6 +56,7 @@ export const COMPACT_PROMPT =
   'Write a summary of the work so far, the open runs and the next steps, in at most 40 lines. Reply with the summary only.'
 export const COMPACTED_MESSAGE = 'The session was compacted. The next turn starts a new session with the summary.'
 export const COMPACT_FAILED_MESSAGE = 'The compact failed. The session is still open.'
+export const COMPACTION_LOG_LIMIT = 10
 
 function turnLogNameList(logs) {
   const list = Array.isArray(logs) ? logs : []
@@ -66,25 +67,35 @@ function turnLogNameList(logs) {
     if (!name || !TURN_LOG.test(name) || names.includes(name)) continue
     names.push(name)
   }
-  return names
+  return names.sort()
+}
+
+function turnLogLinks(logs) {
+  const names = turnLogNameList(logs)
+  const shown = names.slice(-COMPACTION_LOG_LIMIT)
+  const earlier = names.length - shown.length
+  return {
+    count: names.length,
+    text: earlier > 0 ? `${shown.join(', ')}, and ${earlier} earlier` : shown.join(', '),
+  }
 }
 
 export function compactedMessage({ chatFile = '', logs = [] } = {}) {
   const file = typeof chatFile === 'string' ? basename(chatFile.trim()) : ''
-  const names = turnLogNameList(logs)
+  const links = turnLogLinks(logs)
   const kept = file
     ? `Kept: the summary and the saved messages in ${file}, which the chat still shows.`
     : 'Kept: the summary and the chat messages, which the chat still shows.'
-  const earlier = names.length > 0
-    ? `The earlier turns are in these turn logs in the runs folder: ${names.join(', ')}.`
+  const earlier = links.count > 0
+    ? `The earlier turns are in these turn logs in the runs folder: ${links.text}.`
     : 'No earlier turn logs were found in the runs folder.'
   return `${COMPACTED_MESSAGE} ${kept} ${earlier} Limits: the chat keeps the last ${ORCHESTRATOR_CHAT_LIMIT} messages, and each saved conversation keeps the last ${SESSION_MESSAGES_LIMIT} messages and at most ${BRANCH_TRANSCRIPT_LIMIT} characters of branch transcript.`
 }
 
 export function compactedSummary(report, logs = []) {
-  const names = turnLogNameList(logs)
-  const line = names.length > 0
-    ? `Summarized from these turn logs in the runs folder: ${names.join(', ')}.`
+  const links = turnLogLinks(logs)
+  const line = links.count > 0
+    ? `Summarized from these turn logs in the runs folder: ${links.text}.`
     : 'Summarized from the saved chat. No earlier turn logs were found in the runs folder.'
   const text = typeof report === 'string' ? report.trim() : ''
   return text ? `${line}\n\n${text}` : line
@@ -1064,6 +1075,7 @@ export function createOrchestrator({
   let currentUnread = false
   const sessions = []
   let summary = ''
+  const compactionCutoffs = new Map()
   let branchTranscript = ''
   let pendingCompaction = null
   let persistError = null
@@ -1302,12 +1314,14 @@ export function createOrchestrator({
       return []
     }
     const ownProject = root ? pathKey(root) : ''
+    const compacted = compactionCutoffs.get(currentConversationId) ?? ''
     return names
       .filter((name) => {
         if (!ownProject) return true
         const metaProject = metaProjectFor(join(folder, name))
         return !metaProject || pathKey(metaProject) === ownProject
       })
+      .filter((name) => !compacted || name > compacted)
       .sort()
   }
 
@@ -2203,6 +2217,7 @@ export function createOrchestrator({
         if (!stopped) setState(state === 'paused' ? 'paused' : 'idle')
         addMessage('room', COMPACT_FAILED_MESSAGE)
       } else {
+        compactionCutoffs.set(currentConversationId, turn.logFile)
         summary = compactedSummary(maskText(String(report ?? '')), turn.sourceLogs)
         sessionId = null
         contextTokens = null

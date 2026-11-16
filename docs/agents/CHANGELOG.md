@@ -2,7 +2,22 @@
 
 ## Unreleased
 - P461: Each lane inbox message carries a stable id and a status of queued, fetched or interrupted, and both lane message replies answer that id.
+- A compaction lists only the turn logs written since the previous one, the ten newest, then how many earlier.
+- The stop confirm adds Stop with its lanes, or Stop everything for Main, and reports the lanes the server stopped and any still running.
+- A Reviews row shows the head its checks ran on, the agent's own words under their own heading, and the linked runs with totals that say what they do not know.
+- Settings keep a worktree setup command that runs once in each new lane worktree, with its time and exit code in the run log.
+- A run record keeps the worktree's head, branch and changed files at start, with a stash-create recovery commit for dirty work, and Inspector shows it.
+- P462: Each lane run records its worktree checkpoint, and a dirty start also keeps a recovery commit made with git stash create.
+- P463: A Reviews row shows the checked head and its result apart from what the agent said, plus its linked runs and an honest total.
+- P464: The orchestrator Stop confirm adds `Stop everything` on Main and `Stop with its lanes` on a sub tab via `stopTree`, showing the stopped lane count and any `stillRunning` lanes.
+- Dispatch offers a First task card in Plan for a project with no runs, and Connect and the README say records stay on this computer.
+- P458: Dispatch shows a First task card in Plan mode for a project with no runs when a ready lane offers Plan, and Connect and the README note that records stay local while agents send code to their model providers.
+- Run records gain finishedAt, and the outcome table and --outcomes show repair runs and review wait, with ? for unknown.
+- P460: Every new run record carries `finishedAt`, the ISO time the run ended, and older records stay unknown.
+- P460: The outcome table counts extra plain runs before a merge as `repairRuns` and the median wait from the last run to the merge commit as `reviewWaitMinutes`.
+- P460: `run-lane --outcomes` prints repair runs and review wait, with `?` when a time is unknown.
 - The compaction message and the kept summary name the turn logs and the retention limits.
+- P459: Settings keep one worktree setup command, run once in a new lane worktree and written to the run log.
 - Dispatch's confirm card names lanes that declared the same files, says when overlap is unknown, and can warn above a set lane count.
 - A continuation's own record carries continues and interruptedBy; no earlier line of runs.jsonl is changed.
 - POST /api/orchestrator/stop-tree stops an orchestrator's sector, or the whole tree, refusing new work there until it answers.
@@ -14,6 +29,7 @@
 - With Replies set to interrupt, a reply stops a working CLI lane run and continues it on the same branch, worktree, ticket and inbox, at most three times.
 - P456: Dispatch warns when another running lane declares the same files, says when the overlap is unknown, and can warn above a set lane count.
 - Ready says it means the program was found, and doctor warns when the project has no AGENTS.md, CLAUDE.md or GEMINI.md.
+- P457b: A compaction names only the turn logs written since the previous compaction, at most the ten newest, then "and N earlier" when there are more.
 - P457: A compaction names the chat file, the turn logs in the runs folder and the limits, and the saved summary starts with those log names.
 - Each MCP server's tool list is kept 60 seconds per runs folder and config, failures are not kept, and parallel lists share one request.
 - The native agent adds a warning after a tool call fails the same way three times and ends the run on the fifth.

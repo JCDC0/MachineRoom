@@ -9,15 +9,54 @@ import {
 import { subscribeToNotices } from './notices.js'
 import { briefFileList } from '../../briefs/briefs.js'
 import { laneModesFor, defaultMode } from '../../control/modes.js'
+import { harnessByAdapter } from '../../harnesses/index.js'
+import { harnessList, harnessReady } from '../family.js'
 import { useHarnessModels } from '../ModelRefresh.jsx'
 import { laneNeedsNetwork } from '../../model/online.js'
 import { TIERS } from '../../policy/route.js'
 import { PROJECT_CONFIRM_LIMIT, PROJECT_QUEUE_TEXT_LIMIT, cancelSplitRun, clearProjectDraft, clearSplitRun, laneCountWarningFrom, overlapCardLines, planLaneTasks, projectCheckLine, projectDraftKey, projectFormNotice, projectRunBody, projectRunConfirm, projectRunLabel, projectRunLanes, projectSplitLabel, projectSplitWorktreeLine, projectTaskProblem, projectWorktreeLine, queueRecoveryAvailable, queueRecoveryMessage, queueRecoveryPlan, readProjectDraft, recordLine, resultWord, runningLaneFiles, splitRunProgress, splitRunSnapshot, splitTasks, startSplitRun, subscribeSplitRun, timeSinceStart, writeProjectDraft } from './runs.js'
 import { formatTime } from '../inspector.js'
 
+const FIRST_TASK_TEXT =
+  'Read this repository and say what it does, how to run it and how to test it. Change nothing.'
+
 function projectKey(value) {
   if (typeof value !== 'string') return ''
   return value.trim().replace(/[\\/]+$/, '').toLowerCase()
+}
+
+function agentHarnessKey(agent) {
+  if (!agent || typeof agent !== 'object') return ''
+  const direct = typeof agent.harness === 'string' ? agent.harness.trim().toLowerCase() : ''
+  if (direct) return direct
+  const adapter = typeof agent.adapterType === 'string' ? agent.adapterType.trim() : ''
+  if (adapter && Object.hasOwn(harnessByAdapter, adapter)) return harnessByAdapter[adapter].key
+  return typeof agent.parser === 'string' ? agent.parser.trim().toLowerCase() : ''
+}
+
+function harnessOffersPlan(harnessKey) {
+  return Boolean(harnessKey) && laneModesFor(harnessKey).some((mode) => mode.id === 'plan')
+}
+
+function pickFirstPlanLane(agents, running, harnesses, { hasHarnesses, harnessesLoaded }) {
+  if (hasHarnesses && !harnessesLoaded) return null
+  const byKey = new Map(harnessList(harnesses).map((row) => [row.key, row]))
+  const lanes = projectRunLanes(agents, running)
+  for (const lane of lanes) {
+    if (lane.running) continue
+    const agent = agents.find((entry) => entry && entry.key === lane.key) ?? null
+    if (!agent || agent.active === false) continue
+    const harness = agentHarnessKey(agent)
+    if (!harnessOffersPlan(harness)) continue
+    if (hasHarnesses) {
+      const row = byKey.get(harness)
+      if (!row || !harnessReady(row) || agent.ready === false) continue
+    } else if (agent.ready !== true) {
+      continue
+    }
+    return { key: lane.key, name: lane.name, harness, agent }
+  }
+  return null
 }
 
 function runWorkText(entry) {
@@ -101,6 +140,10 @@ export default function DispatchPanel({
   const [recoveryKey, setRecoveryKey] = useState('')
   const [recoverySending, setRecoverySending] = useState(false)
   const [recoveryStatus, setRecoveryStatus] = useState({})
+  const [harnesses, setHarnesses] = useState([])
+  const [harnessesLoaded, setHarnessesLoaded] = useState(() => typeof client?.harnesses !== 'function')
+  const [firstTaskDismissed, setFirstTaskDismissed] = useState(false)
+  const [firstTaskStarted, setFirstTaskStarted] = useState(false)
 
   const splitRun = useSyncExternalStore(subscribeSplitRun, splitRunSnapshot, splitRunSnapshot)
   const splitAnswers = splitRun.answers
@@ -109,6 +152,8 @@ export default function DispatchPanel({
   const splitDoneRef = useRef(false)
   const splitProjectRef = useRef('')
   const loadedProjectRef = useRef('')
+  const firstTaskAppliedRef = useRef(false)
+  const pendingFirstTaskLaneRef = useRef('')
   const promptReqRef = useRef(0)
   const routeReqRef = useRef(0)
   const gitReqRef = useRef(0)
@@ -116,6 +161,7 @@ export default function DispatchPanel({
 
   const hasBriefs = typeof client?.briefs === 'function'
   const hasRuns = typeof client?.runs === 'function'
+  const hasHarnesses = typeof client?.harnesses === 'function'
   const hasProjectSettings = typeof client?.projectSettings === 'function' && typeof client?.saveProjectSettings === 'function'
   const hasRouteLane = typeof client?.routeLane === 'function'
   const hasOrchestrator = typeof client?.sendOrchestrator === 'function'
@@ -126,6 +172,21 @@ export default function DispatchPanel({
   const canRunBrief = typeof client?.startRun === 'function' && Boolean(runLane)
   const projectLanes = projectRunLanes(agents, runsState.running)
   const projectFormLine = lanesKnown && !loading ? projectFormNotice({ lanesMode, lanes: projectLanes }) : ''
+  const noRecordedRuns =
+    lanesKnown &&
+    !loading &&
+    !loadError &&
+    lanesMode &&
+    !projectFormLine &&
+    hasRuns &&
+    !runsLoading &&
+    !runsError &&
+    runsState.running.length === 0 &&
+    runsState.recent.length === 0
+  const firstTaskLane = noRecordedRuns
+    ? pickFirstPlanLane(agents, runsState.running, harnesses, { hasHarnesses, harnessesLoaded })
+    : null
+  const showFirstTaskCard = Boolean(firstTaskLane) && !firstTaskDismissed && !firstTaskStarted
   const routeTasks = splitTasks(projectTask).map((task) => task.trim()).filter((task) => task !== '')
   const routeText = routeTasks.join('\n---\n')
   const routeAnswer = hasRouteLane && projectLane === 'auto' && autoRoute.text === routeText ? autoRoute.answer : null
@@ -143,6 +204,11 @@ export default function DispatchPanel({
 
   useEffect(() => {
     setProjectModel('')
+    if (pendingFirstTaskLaneRef.current && pendingFirstTaskLaneRef.current === effectiveLane) {
+      pendingFirstTaskLaneRef.current = ''
+      setProjectMode('plan')
+      return
+    }
     const agent = laneAgentFor(effectiveLane)
     setProjectMode(agent?.mode && agent.mode !== 'choice' ? agent.mode : defaultMode(agent?.harness) ?? '')
   }, [effectiveLane, projectLaneHarness])
@@ -311,6 +377,10 @@ export default function DispatchPanel({
   }
 
   useEffect(() => {
+    setFirstTaskDismissed(false)
+    setFirstTaskStarted(false)
+    firstTaskAppliedRef.current = false
+    pendingFirstTaskLaneRef.current = ''
     loadData()
     if (typeof client?.briefs === 'function') {
       loadBriefs()
@@ -327,6 +397,30 @@ export default function DispatchPanel({
       setRunsLoading(false)
       setRunsError(null)
       setProjectName('')
+    }
+  }, [client])
+
+  useEffect(() => {
+    if (typeof client?.harnesses !== 'function') {
+      setHarnesses([])
+      setHarnessesLoaded(true)
+      return undefined
+    }
+    let alive = true
+    setHarnessesLoaded(false)
+    Promise.resolve(client.harnesses())
+      .then((answer) => {
+        if (!alive) return
+        setHarnesses(harnessList(answer))
+        setHarnessesLoaded(true)
+      })
+      .catch(() => {
+        if (!alive) return
+        setHarnesses([])
+        setHarnessesLoaded(true)
+      })
+    return () => {
+      alive = false
     }
   }, [client])
 
@@ -411,8 +505,29 @@ export default function DispatchPanel({
     setProjectAllowDirty(false)
     setProjectDiscardConfirm(false)
     setProjectDraftPresent(Boolean(draft))
+    setFirstTaskDismissed(false)
+    setFirstTaskStarted(false)
+    firstTaskAppliedRef.current = false
+    pendingFirstTaskLaneRef.current = ''
     dismissProjectConfirm()
   }, [projectName, hasRouteLane])
+
+  useEffect(() => {
+    if (!showFirstTaskCard || !firstTaskLane) return
+    if (firstTaskAppliedRef.current || projectShowConfirm) return
+    const draft = readProjectDraft(projectName)
+    if (draft?.task || draft?.lane) {
+      firstTaskAppliedRef.current = true
+      return
+    }
+    if (projectTask !== '') return
+    firstTaskAppliedRef.current = true
+    pendingFirstTaskLaneRef.current = effectiveLane === firstTaskLane.key ? '' : firstTaskLane.key
+    setProjectLane(firstTaskLane.key)
+    setProjectModel('')
+    setProjectMode('plan')
+    setProjectTask(FIRST_TASK_TEXT)
+  }, [showFirstTaskCard, firstTaskLane?.key, projectName, projectTask, projectShowConfirm, effectiveLane])
 
   useEffect(() => {
     return subscribeToNotices(client, 'agents', () => {
@@ -423,6 +538,20 @@ export default function DispatchPanel({
   useEffect(() => {
     return subscribeToNotices(client, 'runs', () => {
       loadRuns()
+    })
+  }, [client])
+
+  useEffect(() => {
+    if (typeof client?.harnesses !== 'function') return undefined
+    return subscribeToNotices(client, 'harnesses', () => {
+      Promise.resolve(client.harnesses())
+        .then((answer) => {
+          if (mountedRef.current) {
+            setHarnesses(harnessList(answer))
+            setHarnessesLoaded(true)
+          }
+        })
+        .catch(() => {})
     })
   }, [client])
 
@@ -634,6 +763,21 @@ export default function DispatchPanel({
     if (writeProjectDraft(projectName, patch)) setProjectDraftPresent(true)
   }
 
+  function dismissFirstTask() {
+    setFirstTaskDismissed(true)
+    firstTaskAppliedRef.current = true
+    pendingFirstTaskLaneRef.current = ''
+    if (projectTask === FIRST_TASK_TEXT) setProjectTask('')
+    const draft = readProjectDraft(projectName)
+    if (!draft?.lane) {
+      const fallbackLane = hasRouteLane ? 'auto' : ''
+      setProjectLane(fallbackLane)
+      setProjectModel('')
+      if (!fallbackLane || fallbackLane === 'auto') setProjectMode('')
+    }
+    dismissProjectConfirm()
+  }
+
   function discardProjectDraft() {
     clearProjectDraft(projectName)
     setProjectTask('')
@@ -692,7 +836,10 @@ export default function DispatchPanel({
       }
       if (!splitRunSnapshot().failed) {
         clearProjectDraft(projectName)
-        if (mountedRef.current) setProjectDraftPresent(false)
+        if (mountedRef.current) {
+          setProjectDraftPresent(false)
+          setFirstTaskStarted(true)
+        }
       }
       return
     }
@@ -738,6 +885,9 @@ export default function DispatchPanel({
       setProjectTask('')
       setProjectAllowDirty(false)
       setProjectModel('')
+      const ranAgent = laneAgentFor(lane)
+      setProjectMode(ranAgent?.mode && ranAgent.mode !== 'choice' ? ranAgent.mode : defaultMode(ranAgent?.harness) ?? '')
+      setFirstTaskStarted(true)
       loadRuns()
     } catch (err) {
       const message = err.message || 'Could not start run.'
@@ -812,6 +962,8 @@ export default function DispatchPanel({
     (projectSplitRun || (Boolean(effectiveLane) && !projectLaneRunning))
   const splitProgress = splitRun.pairs.length === 0 ? '' : splitRunProgress(splitRun)
   const splitStopped = splitRun.done && splitRun.cancelled
+  const modeHarness = projectLaneHarness || (projectMode ? agentHarnessKey(laneAgentFor(effectiveLane)) : '')
+  const projectModes = laneModesFor(modeHarness)
   const activeLaneFiles = runningLaneFiles(runsState.running, briefs)
   const runningLaneCount = runsState.running.length
   const briefOverlapLines = showConfirm && selectedBrief
@@ -848,6 +1000,28 @@ export default function DispatchPanel({
             <label>Run on this project</label>
           </div>
 
+          {showFirstTaskCard && (
+            <div className="meters-summary-card" role="region" aria-label="First task">
+              <div className="panel-field-head">
+                <label>First task</label>
+                <button
+                  type="button"
+                  className="brief-cancel-btn"
+                  onClick={dismissFirstTask}
+                >
+                  Dismiss
+                </button>
+              </div>
+              <div className="brief-confirm-meta mono">
+                <span>Lane: {firstTaskLane.name}</span>
+                <span>Mode: Plan (this run only)</span>
+              </div>
+              <div className="brief-confirm-warning">
+                Reads this repository without changing files. Edit the task below or dismiss.
+              </div>
+            </div>
+          )}
+
           <div className="panel-field">
             <label htmlFor="project-run-lane">Lane</label>
             <select
@@ -855,6 +1029,8 @@ export default function DispatchPanel({
               value={projectLane}
               disabled={projectSplitRun}
               onChange={(event) => {
+                firstTaskAppliedRef.current = true
+                pendingFirstTaskLaneRef.current = ''
                 setProjectLane(event.target.value)
                 setProjectModel('')
                 rememberProjectDraft({ lane: event.target.value })
@@ -911,11 +1087,20 @@ export default function DispatchPanel({
             </div>
           ) : null}
 
-          {!projectSplitRun && effectiveLane && laneModesFor(projectLaneHarness).length > 0 ? (
+          {!projectSplitRun && effectiveLane && projectModes.length > 0 ? (
             <div className="panel-field">
               <label htmlFor="project-run-mode">Mode for this run</label>
-              <select id="project-run-mode" value={projectMode} onChange={(event) => { setProjectMode(event.target.value); dismissProjectConfirm() }}>
-                {laneModesFor(projectLaneHarness).map((mode) => <option key={mode.id} value={mode.id}>{mode.label}</option>)}
+              <select
+                id="project-run-mode"
+                value={projectMode}
+                onChange={(event) => {
+                  firstTaskAppliedRef.current = true
+                  pendingFirstTaskLaneRef.current = ''
+                  setProjectMode(event.target.value)
+                  dismissProjectConfirm()
+                }}
+              >
+                {projectModes.map((mode) => <option key={mode.id} value={mode.id}>{mode.label}</option>)}
               </select>
             </div>
           ) : null}
@@ -941,6 +1126,7 @@ export default function DispatchPanel({
               placeholder="What should the agent do in this project? Separate tasks with a line of ---"
               onChange={(event) => {
                 const value = event.target.value
+                firstTaskAppliedRef.current = true
                 setProjectTask(value)
                 rememberProjectDraft({ task: value })
                 setProjectDiscardConfirm(false)
