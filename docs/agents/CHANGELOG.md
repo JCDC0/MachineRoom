@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- P480: Split project runs honour `Start new runs in Plan` by sending `mode: 'plan'` for Plan-capable lanes, keeping the usual mode with no `mode` override for lanes without Plan, and showing `This lane has no Plan mode.` once per such lane on the confirm card.
 - Five findings: malformed and CRLF MCP progress, a link plus .. escape in ACP Auto, split tasks that skip Plan by default, and the ACP choice default.
 - The page sends to lane:KEY as owner with a per-message interrupt choice, and LaneConversation shows Send, Send and interrupt and each message's status.
 - P475: The owner page can send to a running lane with per-message interrupt override, and LaneConversation shows Send, Send and interrupt and live message status.

@@ -38,9 +38,18 @@ function harnessOffersPlan(harnessKey) {
   return Boolean(harnessKey) && laneModesFor(harnessKey).some((mode) => mode.id === 'plan')
 }
 
+function laneOffersPlan(agent) {
+  return harnessOffersPlan(agentHarnessKey(agent))
+}
+
+function splitPairWithDefault(pair, agent, planByDefault) {
+  if (!planByDefault || !laneOffersPlan(agent)) return pair
+  return { ...pair, mode: 'plan' }
+}
+
 function initialProjectMode(agent, planByDefault) {
   if (!agent) return ''
-  if (planByDefault && harnessOffersPlan(agentHarnessKey(agent))) return 'plan'
+  if (planByDefault && laneOffersPlan(agent)) return 'plan'
   return agent.mode && agent.mode !== 'choice' ? agent.mode : defaultMode(agent.harness) ?? ''
 }
 
@@ -884,7 +893,10 @@ export default function DispatchPanel({
       setProjectError(null)
       if (!(await saveProjectCheckCommand())) return
       splitProjectRef.current = projectName
-      const started = await startSplitRun({ client, pairs: projectSplitPlan.pairs, checkCommand: projectCheckCommand, worktree: projectOwnWorktree })
+      const pairs = projectSplitPlan.pairs.map((pair) =>
+        splitPairWithDefault(pair, laneAgentFor(pair.lane), projectPlanByDefault)
+      )
+      const started = await startSplitRun({ client, pairs, checkCommand: projectCheckCommand, worktree: projectOwnWorktree })
       if (!started) {
         splitProjectRef.current = ''
         setProjectError('The split run is already starting.')
@@ -1012,7 +1024,7 @@ export default function DispatchPanel({
   const projectConfirmNoPlan =
     projectPlanByDefault &&
     Boolean(projectConfirmAgent) &&
-    !harnessOffersPlan(agentHarnessKey(projectConfirmAgent))
+    !laneOffersPlan(projectConfirmAgent)
   const offlineFor = (key) => networkOnline === false && laneNeedsNetwork(laneAgent(key))
   const projectOffline = offlineFor(projectConfirm.lane)
   const splitOffline = Boolean(projectSplitPlan?.pairs?.some((pair) => offlineFor(pair.lane)))
@@ -1359,6 +1371,7 @@ export default function DispatchPanel({
                 <div className="runs-list">
                   {projectSplitPlan.pairs.map((pair, index) => {
                     const answer = splitAnswers[index]
+                    const pairNoPlan = projectPlanByDefault && !laneOffersPlan(laneAgent(pair.lane))
                     return (
                       <div
                         key={`split-${pair.lane}-${index}`}
@@ -1370,6 +1383,11 @@ export default function DispatchPanel({
                             {pair.task.slice(0, PROJECT_CONFIRM_LIMIT)}
                           </span>
                         </div>
+                        {pairNoPlan && (
+                          <div className="brief-confirm-warning">
+                            This lane has no Plan mode.
+                          </div>
+                        )}
                         {answer && (
                           <div
                             className="runs-entry-lines mono is-dim"
