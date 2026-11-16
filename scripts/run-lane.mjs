@@ -1988,6 +1988,7 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
       'MACHINEROOM_RUNS',
       'MACHINEROOM_LANES_FILE',
       'MACHINEROOM_LANE_TICKET',
+      'MACHINEROOM_LANE_REPLIES',
       'MACHINEROOM_BRIDGE',
     ]
       .filter((name) => typeof process.env[name] === 'string' && process.env[name] !== '')

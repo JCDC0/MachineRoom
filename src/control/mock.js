@@ -789,6 +789,10 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
       efforts: [],
     },
   ]
+  let laneReplies = 'next-turn'
+  function harnessRows() {
+    return harnessState.map((row) => ({ ...row, laneReplies }))
+  }
   let modelPinState = []
   let mcpServerState = clone(SAMPLE_MCP_SERVERS)
   let gitState = {
@@ -2091,7 +2095,7 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
         return backups
       }),
 
-    harnesses: () => call('harnesses', () => clone(harnessState)),
+    harnesses: () => call('harnesses', () => clone(harnessRows())),
 
     checkHarnesses: (options = {}) =>
       call('checkHarnesses', () => {
@@ -2099,7 +2103,7 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
           options && typeof options === 'object' && Object.hasOwn(options, 'confirmed') ? options.confirmed : true
         if (confirmed !== true) throw new Error('Confirm checking harnesses first.')
         emit({ topic: 'harnesses' })
-        return clone(harnessState)
+        return clone(harnessRows())
       }),
 
     harnessSettings: (options = {}) =>
@@ -2107,6 +2111,14 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
         const opts = options && typeof options === 'object' ? options : {}
         const confirmed = Object.hasOwn(opts, 'confirmed') ? opts.confirmed : true
         if (confirmed !== true) throw new Error('Confirm changing harness settings first.')
+        if (Object.hasOwn(opts, 'laneReplies')) {
+          if (opts.laneReplies !== 'next-turn' && opts.laneReplies !== 'interrupt') {
+            throw new Error("Choose whether a reply waits for the lane's next turn or interrupts it at once.")
+          }
+          laneReplies = opts.laneReplies
+          emit({ topic: 'harnesses' })
+          return { harnesses: clone(harnessRows()) }
+        }
         const target = harnessState.find((entry) => entry.key === opts.key)
         if (!target) throw new Error(`The harness ${String(opts.key ?? '')} is not known.`)
         if (Object.hasOwn(opts, 'program') && opts.program !== undefined) {
@@ -2145,7 +2157,7 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
           target.reason = 'Program not found on PATH.'
         }
         emit({ topic: 'harnesses' })
-        return { harness: clone(target), harnesses: clone(harnessState) }
+        return { harness: clone(target), harnesses: clone(harnessRows()) }
       }),
 
     harnessModels: (harnessOrOptions = {}) =>

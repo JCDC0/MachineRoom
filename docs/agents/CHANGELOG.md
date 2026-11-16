@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- Settings choose whether a reply to a working lane waits for its next turn or interrupts it; the native agent aborts its model call for a new reply.
 - Every OpenCode lane run that is not Bypass denies writes outside the project (external_directory deny), and the mode lines say where writes may go.
 - P440: An OpenCode lane that is not Bypass denies writes outside the project, and more mode lines say where writes go.
 - Argon drafts PLAN-RESEARCH.md, one ranked plan of 15 items from the three harness surveys.
@@ -9,6 +10,7 @@
 - A failover that refuses to carry Bypass gives the backup its harness default mode, so Claude, AGY and native backups do not get their skip-permissions flags.
 - Draft the merged research plan in docs/agents/PLAN-RESEARCH.md from the Claude, Sol and Argon harness surveys (P443).
 - A sub orchestrator's lane:KEY message to a lane outside its sector is refused with 403.
+- A reply to a working lane waits for its next turn or interrupts the native agent's model call, as Settings say.
 - Argon's survey of coding agent harnesses and what their users want (P442c).
 - P445: A sub token's prefixed lane message is refused outside its sector before it reaches the lane.
 - P444: A failover that drops Bypass gives the backup its harness default mode, so a Claude, AGY or native backup runs in Auto instead of its skip-permissions flags.

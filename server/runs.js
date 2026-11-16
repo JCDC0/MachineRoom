@@ -15,6 +15,7 @@ import { readLaneCosts } from './lane-costs.js'
 import { defaultMode, legacyMode } from '../src/control/modes.js'
 import { modelUnavailableProblem } from './model-list.js'
 import { modelAllowed } from './harness-models.js'
+import { readHarnessSettings } from './harness-settings.js'
 import { outcomeTable, subjectsFromLog } from './outcomes.js'
 import { gitEnv, gitPath } from './programPath.js'
 import { killTree, listProcesses, treeSpawnOptions } from './processTree.js'
@@ -875,6 +876,7 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
         ...process.env,
         MACHINEROOM_RUNS: recordsDir(),
         MACHINEROOM_LANE_TICKET: ticket,
+        MACHINEROOM_LANE_REPLIES: readHarnessSettings(recordsDir()).laneReplies,
         MACHINEROOM_BRIDGE: bridgeAddress(),
         ...(lanesFile && projectRun ? { MACHINEROOM_LANES_FILE: laneFile } : {}),
       },
