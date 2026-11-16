@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- P461: Each lane inbox message carries a stable id and a status of queued, fetched or interrupted, and both lane message replies answer that id.
 - The compaction message and the kept summary name the turn logs and the retention limits.
 - Dispatch's confirm card names lanes that declared the same files, says when overlap is unknown, and can warn above a set lane count.
 - A continuation's own record carries continues and interruptedBy; no earlier line of runs.jsonl is changed.

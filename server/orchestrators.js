@@ -1,5 +1,6 @@
 import { HARNESS_OFF_PROBLEM, readHarnessSettings } from './harness-settings.js'
 import { execFileSync } from 'node:child_process'
+import { randomUUID } from 'node:crypto'
 import { isAbsolute, join, relative, resolve } from 'node:path'
 import { maskKeys } from '../src/briefs/audit.js'
 import { defaultMode, legacyMode, modesFor } from '../src/control/modes.js'
@@ -853,7 +854,8 @@ export function createOrchestrators({
   function receiveLaneMessage(lane, from, text, at) {
     const held = lastLaneTicket(lane) ?? backupHeld(lane)
     if (!held || !Array.isArray(held.inbox)) return false
-    held.inbox.push({ from, text, at: new Date(at).toISOString() })
+    const entry = { id: randomUUID(), from, text, at: new Date(at).toISOString(), status: 'queued' }
+    held.inbox.push(entry)
     while (held.inbox.length > LANE_INBOX_LIMIT) held.inbox.shift()
     if (
       !stopped &&
@@ -868,15 +870,18 @@ export function createOrchestrators({
             lane,
             held,
             takeUnseen: () => {
-              const unseen = held.inbox.filter((entry) => !seenLaneEntries.has(entry))
-              for (const entry of unseen) seenLaneEntries.add(entry)
+              const unseen = held.inbox.filter((item) => !seenLaneEntries.has(item))
+              for (const item of unseen) {
+                seenLaneEntries.add(item)
+                item.status = 'interrupted'
+              }
               return unseen
             },
           })
         ).catch(() => {})
       })
     }
-    return true
+    return entry
   }
 
   function takeOrchestratorSlot(actor, at) {
@@ -902,7 +907,11 @@ export function createOrchestrators({
     const messages = Array.isArray(held.inbox)
       ? held.inbox.map((entry) => {
           seenLaneEntries.add(entry)
-          return { from: entry.from, text: entry.text, at: entry.at }
+          if (entry.status === 'queued') {
+            entry.status = 'fetched'
+            entry.fetchedAt = new Date(clock()).toISOString()
+          }
+          return { id: entry.id, from: entry.from, text: entry.text, at: entry.at }
         })
       : []
     return { status: 200, body: { messages } }
@@ -956,12 +965,13 @@ export function createOrchestrators({
         const sentCount = laneSent.get(ticketValue) ?? 0
         if (sentCount >= LANE_MESSAGE_LIMIT) return { status: 429, body: { error: LANE_LIMIT_PROBLEM } }
         const sender = `lane:${senderLane}`
-        if (!receiveLaneMessage(laneTarget, sender, text, clock())) {
+        const delivered = receiveLaneMessage(laneTarget, sender, text, clock())
+        if (!delivered) {
           return { status: 409, body: { error: laneNoRunProblem(laneTarget) } }
         }
         laneSent.set(ticketValue, sentCount + 1)
         announce(sender, laneTarget, 'message', text)
-        return { status: 202, body: { id: null } }
+        return { status: 202, body: { id: delivered.id } }
       }
       const starter = typeof held.startedBy === 'string' ? held.startedBy.trim() : ''
       const target = hasTarget
@@ -1012,11 +1022,12 @@ export function createOrchestrators({
         return { status: 429, body: { error: 'Too many messages from this orchestrator. Wait, or ask the owner.' } }
       }
       const sender = actor === ORCHESTRATOR_KEY ? ORCHESTRATOR_KEY : `sub:${actor}`
-      if (!receiveLaneMessage(laneTarget, sender, text, at)) {
+      const delivered = receiveLaneMessage(laneTarget, sender, text, at)
+      if (!delivered) {
         return { status: 409, body: { error: laneNoRunProblem(laneTarget) } }
       }
       announce(agentKey(actor), laneTarget, 'message', text)
-      return { status: 202, body: { id: null } }
+      return { status: 202, body: { id: delivered.id } }
     }
     if (!instances.has(target)) {
       const currentLanes = typeof lanes === 'function' ? lanes() : (lanes ?? {})
