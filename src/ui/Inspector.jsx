@@ -478,17 +478,26 @@ export default function Inspector({
     const head = shortSha(reading.head)
     if (head !== '') {
       const branch = typeof reading.branch === 'string' && reading.branch.trim() !== '' ? reading.branch.trim() : 'a detached HEAD'
-      const count = Number.isInteger(reading.dirtyCount)
+      const count = Number.isInteger(reading.dirtyCount) && reading.dirtyCount >= 0
         ? reading.dirtyCount
         : Array.isArray(reading.dirtyFiles)
           ? reading.dirtyFiles.length
           : 0
+      const untracked = Number.isInteger(reading.untrackedCount) && reading.untrackedCount > 0
+        ? reading.untrackedCount
+        : 0
+      const tracked = Math.max(0, count - untracked)
       const recovery = typeof reading.recovery === 'string' ? shortSha(reading.recovery) : ''
-      checkpointLine = `Checkpoint: ${head} on ${branch}`
+      checkpointLine = `${head} on ${branch}`
       if (reading.dirty === true) {
-        checkpointLine += recovery !== ''
-          ? `, ${count} changed files kept as ${recovery}`
-          : `, ${count} changed files kept without a recovery ref`
+        if (tracked > 0) {
+          checkpointLine += recovery !== ''
+            ? `, ${tracked} changed files kept as ${recovery}`
+            : `, ${tracked} changed files kept without a recovery ref`
+        }
+        if (untracked > 0) {
+          checkpointLine += `, ${untracked} untracked files not kept`
+        }
       }
     }
   }

@@ -275,7 +275,7 @@ describe('a lane run checkpoint', { timeout: 60000 }, () => {
         )
       })
       await settle(20)
-      expect(rowValue(container, 'Checkpoint')).toBe('Checkpoint: abcdef1 on feat/x, 3 changed files kept as 1234567')
+      expect(rowValue(container, 'Checkpoint')).toBe('abcdef1 on feat/x, 3 changed files kept as 1234567')
 
       answer = { running: [], last: [older] }
       await act(async () => {
