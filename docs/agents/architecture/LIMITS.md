@@ -36,3 +36,7 @@ What the room does not do, and the measurements behind each limit.
 
 Each live room page holds one event stream: `src/live/bridge.js` opens `/events` for the frames and the same stream carries the control change notices, which `src/control/client.js` takes through a notice relay. A browser opens at most six connections to one host over HTTP/1.1. Six tabs of the same room use all six, so every later request waits for one to free: on 2026-11-16 three tabs stalled every request for 30 seconds while curl answered the bridge in 28 milliseconds, and the page said `The bridge did not answer within 30 seconds.` The browser's Network tab shows the requests still pending. That measurement was taken while each page held two streams, the frames from the bridge and the control notices from their own stream, so three tabs used all six. With one stream a page, six tabs fit before a stall; a seventh tab or any other request waits. Close the extra tabs, or open the room once on `127.0.0.1` and once on `localhost`, which count as two hosts.
 
+## Compaction retention
+
+A compaction keeps the summary and the messages in the chat file, and starts the next turn in a new session. The chat keeps its last 200 messages (`ORCHESTRATOR_CHAT_LIMIT`). A saved conversation keeps its last 200 messages (`SESSION_MESSAGES_LIMIT`) and at most 20000 characters of its branch transcript (`BRANCH_TRANSCRIPT_LIMIT`). The turn logs stay in the runs folder as `<lane>-chat-YYYYMMDD-HHMMSS-mmm.log`, and the compaction message and the summary's first line name them. Nothing older is archived.
+

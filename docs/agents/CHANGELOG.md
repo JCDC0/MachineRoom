@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- P457: A compaction names the chat file, the turn logs in the runs folder and the limits, and the saved summary starts with those log names.
 - Each MCP server's tool list is kept 60 seconds per runs folder and config, failures are not kept, and parallel lists share one request.
 - The native agent adds a warning after a tool call fails the same way three times and ends the run on the fifth.
 - A page opens one /events stream and the control client takes its notices from it, so six tabs fit before the browser's connection limit.
