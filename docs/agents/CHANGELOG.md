@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- The Inspector shows each lane's Sandbox line from its harness and effective mode, and an ACP run says its requests are approved automatically.
 - Meters labels a lane total with its unreported runs, shows failed or stopped spend, and shows when a quota window was seen and resets.
 - A lane review keeps the checks run on its head apart from the agent's report and lists every run of the task by its failover and continuation links.
 - With Replies set to interrupt, a reply stops a working CLI lane run and continues it on the same branch, worktree, ticket and inbox, at most three times.
@@ -17,6 +18,7 @@
 - P452: A lane cost row counts the runs with no cost and the spend of runs that failed or were stopped.
 - P452: The costs answer keeps those counts and the quota for the page, so the cost board now shows the quota rows it used to leave out.
 - P452: Meters labels a lane total with its unreported runs, shows failed or stopped spend and the quota's seen and reset times.
+- P449: Show each agent's effective Sandbox line in the Inspector via `sandboxSummary(harness, mode)` and log ACP's automatic permission approval at run start.
 - The native agent keeps a reply its inbox watch read as the model call ended, and gives it to the next call.
 - A sub's harness change also changes its program, and a ladder save that gives a sub's model and effort keeps them over the saved chat file.
 - A sub's harness route change updates its live program override, and a ladder recreation keeps given model and effort values over the saved chat file.
