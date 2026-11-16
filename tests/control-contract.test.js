@@ -242,6 +242,11 @@ describe('the control client contract', () => {
     for (const name of CLIENT_METHODS) expect(typeof client[name], `bridge ${name}`).toBe('function')
   })
 
+  it('refuses a connection test for Direct API with no key saved', async () => {
+    const { client } = await makeHarness()
+    await expect(client.probeHarness('machineroom')).rejects.toThrow('Add a Direct API key in Settings first.')
+  })
+
   it('saves, reads back and clears the project check command and planByDefault', async () => {
     const { client } = await makeHarness()
     expect(await client.projectSettings()).toEqual({

@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- Harnesses in Settings gain Test connection, which sends one short prompt through the harness and shows reached, failed or unknown (P487).
 - Each lane review carries fileGroups, largeDiff above 400 lines and outsideBrief from the brief's Files list, null when unknown, and Reviews shows one line for them.
 - A lane review groups its files by risk, lists files outside the newest run's brief Files list (or says Scope unknown) and flags a diff over 400 lines (P486).
 - The test checks that recent holds its project, not that it is first, since test files in one process share the runs folder.

@@ -496,6 +496,8 @@ export function createClient({
       return request('POST', '/api/harnesses/check', { confirmed })
     },
 
+    probeHarness: (key) => request('POST', `/api/harnesses/${encodeURIComponent(key)}/probe`, { confirmed: true }),
+
     harnessSettings: (options = {}) => {
       const body = options && typeof options === 'object' ? { ...options } : {}
       const confirmed = Object.hasOwn(body, 'confirmed') ? body.confirmed : true

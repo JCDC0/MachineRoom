@@ -259,6 +259,13 @@ describe('mock orchestrators and the ladder', () => {
     )
   })
 
+  it('answers a connection test with the real shape and refuses a harness that is not ready', async () => {
+    const client = fast()
+    expect(await client.probeHarness('claude')).toMatchObject({ key: 'claude', status: 'reached', line: '' })
+    await expect(client.probeHarness('codex')).rejects.toThrow('not available')
+    await expect(client.probeHarness('nope')).rejects.toThrow()
+  })
+
   it('sets orchestrator harness and lists harnesses on orchestrators in mock', async () => {
     const client = fast()
     const list = await client.orchestrators()
