@@ -174,6 +174,22 @@ export function formatRunTotals(runs, runTotals) {
   return `${count} runs, ${minutes} run minutes, ${cost}${partial}`
 }
 
+export function formatScope(review) {
+  const groups = review?.fileGroups && typeof review.fileGroups === 'object' ? review.fileGroups : {}
+  const counts = Object.entries(groups)
+    .filter(([, group]) => group?.count > 0)
+    .map(([name, group]) => `${name} ${group.count}`)
+    .join(', ')
+  const outside = Array.isArray(review?.outsideBrief) ? review.outsideBrief : null
+  const lines = review?.added + review?.deleted
+  return {
+    groupsText: counts || null,
+    outsidePaths: outside ?? [],
+    outsideText: outside === null ? 'Scope unknown' : outside.length > 0 ? `${outside.length} ${outside.length === 1 ? 'file' : 'files'} outside the brief` : null,
+    largeText: review?.largeDiff === true ? `Large change: ${Number.isFinite(lines) ? lines : 0} lines` : null,
+  }
+}
+
 export function reviewRow(review) {
   if (!review || typeof review !== 'object') {
     return {
@@ -196,6 +212,7 @@ export function reviewRow(review) {
       checks: 'unchecked',
       checksText: formatChecks('unchecked'),
       evidenceText: null,
+      scope: formatScope(null),
       claimsLines: [],
       claimsMore: false,
       runsText: null,
@@ -236,6 +253,7 @@ export function reviewRow(review) {
       checks: null,
       checksText: null,
       evidenceText: null,
+      scope: formatScope(null),
       claimsLines: [],
       claimsMore: false,
       runsText: null,
@@ -277,6 +295,7 @@ export function reviewRow(review) {
     checks,
     checksText: formatChecks(checks),
     evidenceText: formatEvidence(review.evidence),
+    scope: formatScope(review),
     claimsLines,
     claimsMore: claimsLines.length > CLAIMS_PREVIEW_LINES,
     runsText: formatRuns(review.runs),
