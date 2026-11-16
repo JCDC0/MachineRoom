@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- The interrupt test gives its temporary repository a local Git identity so lane commits work without a global identity.
 - An interrupted backup restarts with its own saved model and mode in the interrupted run's worktree and branch, and the three-interrupt limit holds across a failover.
 - A removed lane with unknown cost keeps its row and Meters shows ? and (partial), and the MCP tool list cache key hashes the whole server config.
 - P471: A removed lane with unknown costs keeps its row and marks spend partial, and the MCP list cache key hashes the whole server configuration, environment values included, and the Meters panel shows ? and (partial) for unknown costs.
