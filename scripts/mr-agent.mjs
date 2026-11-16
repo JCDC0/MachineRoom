@@ -1362,44 +1362,32 @@ export function boundMessages(messages, limit) {
         replies.shift()
         messages[index] = { ...message, content: `${heading}\n${replies.join('\n')}` }
       }
-      if (messageChars(messages) <= limit) return
       const rawReply = replies.join('\n')
+      if (messageChars(messages) <= limit) return
       if (rawReply === '') continue
-      const match = rawReply.match(/^([^\n]{1,80}?): ([\s\S]*)$/)
-      let body = match ? match[2] : rawReply
-      let prefix = match ? `${match[1]}: [start cut] ` : '[start cut] '
-      if (heading.length + 1 + prefix.length >= NEWEST_READABLE_CHARS) {
-        body = rawReply
-        prefix = '[start cut] '
-      }
-      const base = `${heading}\n${prefix}`
+      const [, sender, rest] = rawReply.match(/^([^\n]{1,80}?): ([\s\S]*)$/) ?? []
+      const keepSender = sender && heading.length + 15 + sender.length < NEWEST_READABLE_CHARS
+      const base = `${heading}\n${keepSender ? `${sender}: [start cut] ` : '[start cut] '}`
+      const body = keepSender ? rest : rawReply
+      const shortest = base.slice(0, -1)
       messages[index] = { ...message, content: base }
-      const remaining = limit - messageChars(messages)
-      let budget = Math.min(NEWEST_READABLE_CHARS - base.length, remaining, body.length - 1)
+      const room = limit - messageChars(messages)
+      let budget = Math.min(NEWEST_READABLE_CHARS - base.length, room, body.length - 1)
       const tailAtWord = (text, maxChars) => {
-        if (maxChars <= 0) return ''
-        if (text.length <= maxChars) return text.replace(/^\s+/, '')
-        const cutAt = text.length - maxChars
-        const rawTail = text.slice(cutAt)
-        if (!/\s/.test(text[cutAt - 1]) && !/\s/.test(text[cutAt])) {
-          const next = rawTail.search(/\s+\S/)
-          if (next >= 0) return rawTail.slice(next).replace(/^\s+/, '')
-          return rawTail.search(/\s/) >= 0 ? '' : rawTail
-        }
-        return rawTail.replace(/^\s+/, '')
+        const cutAt = Math.max(0, text.length - maxChars)
+        const cut = text.slice(cutAt)
+        if (cutAt === 0 || /\s/.test(text[cutAt - 1])) return cut.trimStart()
+        const next = cut.search(/\s+\S/)
+        return next >= 0 ? cut.slice(next).trimStart() : /\s/.test(cut) ? '' : cut
       }
       while (budget > 0) {
         const tail = tailAtWord(body, budget)
-        const nextContent = tail === '' ? `${heading}\n${prefix.trimEnd()}` : `${base}${tail}`
-        messages[index] = { ...message, content: nextContent }
+        messages[index] = { ...message, content: tail === '' ? shortest : `${base}${tail}` }
         if (messageChars(messages) <= limit) return
-        if (tail === '') break
         const excess = messageChars(messages) - limit
-        const scaled = Math.floor((tail.length * remaining) / (remaining + excess))
-        budget = Math.min(budget - 1, scaled)
+        budget = Math.min(budget - 1, Math.floor((tail.length * room) / (room + excess)))
       }
-      const fallback = `${heading}\n${prefix.trimEnd()}`
-      messages[index] = { ...message, content: fallback.length < content.length ? fallback : content }
+      messages[index] = { ...message, content: shortest.length < content.length ? shortest : content }
     } else {
       messages[index] = { ...message, content: content.slice(0, NEWEST_READABLE_CHARS) }
     }

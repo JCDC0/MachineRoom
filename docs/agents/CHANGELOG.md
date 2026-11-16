@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- The inbox cut in boundMessages is 32 lines instead of 44, with the same rule and every test unchanged.
 - ROOM.md, LIVE.md and FREE-HIERARCHY.md describe the lane Mode select, sub Scope and Restricted, Merge anyway, Separate worktree, Codex Edits and Bypass, and same-harness agents.
 - Codex's Edits mode line says it can run commands inside its workspace sandbox, since Codex has no edits-only mode.
 - The sub scope box and the chat's Separate worktree box take their look from CSS classes instead of inline styles.
@@ -10,6 +11,7 @@
 - P416: The sub Scope box and the chat's Separate worktree box use classes instead of inline styles.
 - P417: Codex Edits says it can run commands inside its workspace sandbox, since Codex has no edits-only mode.
 - P415: ROOM.md, FREE-HIERARCHY.md and LIVE.md describe lane modes, sub scope and restricted merges, Separate worktree, Codex Edits and Bypass, same-harness agent additions and ladder model checks.
+- P418: The inbox cut in boundMessages is shorter and still keeps the heading, the newest reply's sender, [start cut] and a whole word.
 - A sub made with a harness keeps it when an old saved conversation of that id names another harness, and drops that conversation's sessions and mode.
 - Switching an orchestrator to another harness keeps its saved mode unless that is Bypass or only implied, so a switch never turns on Codex Bypass.
 - A restricted sub's merge is refused when the bridge cannot read its changed files, and a moved file names both paths.
