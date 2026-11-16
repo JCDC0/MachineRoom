@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- Ten findings: the rewind lock, recorded commits and late errors, worktree copy excludes, the Codex cache share, the Direct API and OpenCode probes, unknown touched lists, the brief source and the port offset.
 - Reviews previews and, on the owner's confirm with the head read, moves a lane back to its last run's checkpoint only when it is clean, idle, on the same branch and every dropped commit is that run's, after writing a recovery ref.
 - Reviews offers Rewind last run: `GET` and `POST /api/control/reviews/LANE/rewind` move a lane back to its last run's checkpoint only when the lane is idle, clean and on the run's branch and every dropped commit is the run's, after writing a recovery ref.
 - Owner-listed files are copied into a new worktree only, checked against links and never overwritten or committed, and each run gets MACHINEROOM_PORT_OFFSET.
