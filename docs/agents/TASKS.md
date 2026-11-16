@@ -3585,3 +3585,39 @@ Review 45 fixes, P429. `docs/agents/AUDIT-2026-11-REVIEW-45.md` (P428, GPT-6.1 S
 3. `tests/helpers/gitEnv.js` reuses the server helper instead of its own set.
 4. Tests in `tests/git-env.test.js`, each failing before your change: `gitEnv` drops all four names in mixed case and keeps others; the review runner (`defaultGitRunner` in `server/reviews.js`) with GIT_COMMON_DIR set to another repository's git directory still reads its own worktree's HEAD; `server/git.js`'s runner with GIT_DIR set to another repository reads the folder it was given (a plain temp folder rejects).
 5. Run `node node_modules/vitest/vitest.mjs run tests/git-env.test.js tests/git.test.js tests/reviews.test.js tests/reviews-scope.test.js tests/lanes-source.test.js tests/orchestrators.test.js` and report the counts.
+
+Argon's second plan, P430 to P434. `docs/agents/PLAN-NEXT-ARGON-2.md` (P427, Gemini 4 Argon) lists eight gaps. Each brief below adds its tests in a file of its own so the merges do not collide. If a gap does not reproduce on `main`, write that in your report with the file and line you read, and change nothing for it.
+
+**P430. Failover never carries the primary's mode onto a backup with no saved mode (OpenCode).** Read this brief and item 1 of `docs/agents/PLAN-NEXT-ARGON-2.md` only. Commit each step as you finish it. Run every command in the foreground. Files: scripts/run-lane.mjs (only `startFailover`), tests/failover-default-mode.test.js (new), docs/agents/CHANGELOG.md.
+
+1. In `startFailover`, the primary's mode is carried only when the backup's saved `cli.mode` is `choice`. A backup with no saved mode, or an empty one, runs at its own harness's default as if it had started alone, never at the primary's mode. A fixed backup mode stays as today.
+2. Tests, each failing before your change: a `claude` primary in `bypass` failing over to a `codex` backup with no `cli.mode` builds codex args with `--sandbox workspace-write` and without `--dangerously-bypass-approvals-and-sandbox`; a primary in `plan` failing over to a `choice` backup still carries `plan`. Follow how `tests/failover-mode.test.js` builds its lanes and reads the args.
+3. Run `node node_modules/vitest/vitest.mjs run tests/failover-default-mode.test.js tests/failover-mode.test.js tests/run-failover.test.js` and report the counts.
+
+**P431. A sub token cannot start, stop or merge outside its own sector (Codex, Terra).** Read this brief and items 2, 3 and 4 of `docs/agents/PLAN-NEXT-ARGON-2.md` only. Known sandbox baseline failures, not yours: process tests in `tests/run-lane-stop.test.js`, `tests/run-lane.test.js` and `mr-agent > stops the whole shell tree on the time limit`. Files: server/orchestrators.js (the bare-lane branch of the message route and `POST /api/orchestrator/stop`), server/runs.js (`POST /api/control/runs/stop`), server/reviews.js (the merge route's caller check), tests/sub-token-gates.test.js (new), docs/agents/CHANGELOG.md, docs/agents/FREE-HIERARCHY.md (one sentence if it says otherwise). If one more file must change only to pass the actor through, change it and name it; do not stop for that.
+
+1. Messages: when a token caller (no Origin) names a bare lane key in `to`, apply the run route's gate (`readActor` and `finishActor` in `server/runs.js`, or the same `registry.sector(actor).lanes` check): Main may start any lane, a sub only a lane in its sector, else 403 with the run route's sector text. A token caller's message is added to Main's chat under its own sender (`orchestrator` or `sub:ID`), never as `owner`. The page path (Origin) stays exactly as today.
+2. Stop: `POST /api/orchestrator/stop` from a sub token stops only that sub (`body.id` equal to the actor, or no id), else 403; Main's token and the page stop any. `POST /api/control/runs/stop` from a sub token passes `finishActor(actor, body.lane)` first, so a lane outside its sector answers 403.
+3. Merge: `POST /api/control/reviews/LANE/merge` from a sub token answers 403 unless LANE is in that sub's sector. Main's token and the page are unchanged. Keep `allowOutside` rules from P402 as they are.
+4. Tests in `tests/sub-token-gates.test.js`, each failing before your change: a sub token messaging a bare lane outside its sector gets 403 and starts no run; inside its sector it starts one and the chat line is not `owner`; a sub token stopping Main gets 403; a sub token stopping a lane outside its sector gets 403; a sub token merging a lane outside its sector gets 403 and `main` does not move; Main's token can do all four.
+5. Run `node node_modules/vitest/vitest.mjs run tests/sub-token-gates.test.js tests/orchestrators.test.js tests/reviews-scope.test.js tests/runs.test.js` (skip a file that does not exist) and report the counts.
+
+**P432. The turn-end scope check sees both sides of a rename (OpenCode).** Read this brief and item 5 of `docs/agents/PLAN-NEXT-ARGON-2.md` only. Commit each step as you finish it. Run every command in the foreground. Files: server/orchestrators.js (only `branchChanges`), tests/branch-changes-renames.test.js (new), docs/agents/CHANGELOG.md.
+
+1. `branchChanges` passes `--no-renames` to its `git diff`, as `server/reviews.js` does since R42-2.
+2. Test, failing before your change: in a temp repo, a lane branch that runs `git mv docs/a.md src/a.md` makes `branchChanges` return both `docs/a.md` and `src/a.md`. Export `branchChanges` for the test only if it is not exported yet.
+3. Run `node node_modules/vitest/vitest.mjs run tests/branch-changes-renames.test.js tests/orchestrators.test.js` and report the counts.
+
+**P433. An existing sub cannot be moved to another harness by a ladder save (OpenCode).** Read this brief and item 7 of `docs/agents/PLAN-NEXT-ARGON-2.md` only. Commit each step as you finish it. Run every command in the foreground. Files: server/orchestrators.js (only `ladderChange`'s same-harness check), tests/same-harness-change.test.js (new), docs/agents/CHANGELOG.md.
+
+1. The same-harness check (`sameHarnessProblem`) runs for a new sub and for an existing sub whose harness changes (`!previous || harnessFor(previous) !== harness`), like the `off` check beside it. It still applies only to an orchestrator token, never to the page.
+2. Tests, each failing before your change: an `agy` orchestrator token that saves the ladder with an existing `agy` sub changed to `codex` gets 400 with `sameHarnessProblem('agy')`'s text and the sub stays `agy`; the page can still make that change. Follow how `tests/same-harness-agents.test.js` sets up.
+3. Run `node node_modules/vitest/vitest.mjs run tests/same-harness-change.test.js tests/same-harness-agents.test.js` and report the counts.
+
+**P434. Lane proposals read the saved harness settings (OpenCode).** Read this brief and item 8 of `docs/agents/PLAN-NEXT-ARGON-2.md` only. Commit each step as you finish it. Run every command in the foreground. Files: server/family.js (only the proposals route's harness check), tests/proposal-harness-settings.test.js (new), docs/agents/CHANGELOG.md.
+
+1. `POST /api/family/proposals` refuses a harness listed in `readHarnessSettings(runsDir).off` with 400 `HARNESS_OFF_PROBLEM`, and passes `runsFolder: runsDir` to `isHarnessAvailable` so a program path saved in `harnesses.json` counts, as the approve route does.
+2. Tests, each failing before your change: with `opencode` turned off, a proposal for `opencode` gets 400 with `HARNESS_OFF_PROBLEM`; with a saved `codex` program that exists, a proposal for `codex` gets 200 even when `codex` is not on PATH. Follow how `tests/owner-tree.test.js` sets up.
+3. Run `node node_modules/vitest/vitest.mjs run tests/proposal-harness-settings.test.js tests/owner-tree.test.js` and report the counts.
+
+Item 6 (sub harness, model and effort routes leave the ladder stale) waits for P429 and P431, since it touches the same routes.
