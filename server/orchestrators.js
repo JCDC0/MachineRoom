@@ -154,7 +154,7 @@ export function branchChanges(record, lanes = {}, options = {}) {
       return prefix && path.startsWith(prefix) ? path.slice(prefix.length) : path
     }
     const range = commit ? `${commit}..HEAD` : `${branch}...HEAD`
-    const committed = gitText(folder, ['diff', '--no-ext-diff', '--no-textconv', '--name-only', '--relative', range])
+    const committed = gitText(folder, ['diff', '--no-ext-diff', '--no-textconv', '--no-renames', '--name-only', '--relative', range])
       .split(/\r?\n/)
       .map((line) => line.trim())
       .filter(Boolean)
