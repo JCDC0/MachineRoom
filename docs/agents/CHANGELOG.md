@@ -1,6 +1,8 @@
 # Changelog
 
 ## Unreleased
+- A removed lane with unknown cost keeps its row and Meters shows ? and (partial), and the MCP tool list cache key hashes the whole server config.
+- P471: A removed lane with unknown costs keeps its row and marks spend partial, and the MCP list cache key hashes the whole server configuration, environment values included, and the Meters panel shows ? and (partial) for unknown costs.
 - Review 47 (GPT-6.1 Sol) lists ten findings in the interrupts, failover, stop-tree, review totals, removed-lane costs and the MCP cache.
 - GET /api/orchestrator/messages/status answers a lane message's status to its sender or the page, and 404 to anyone else.
 - Dispatch shows Needs you for lanes whose newest run failed, could not start or stopped on five repeated failures, and native loop stops exit 4 with a stop reason.

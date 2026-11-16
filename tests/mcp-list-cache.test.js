@@ -116,6 +116,17 @@ describe('listAllMcpTools cache', () => {
     expect(spawnImpl.calls[1].args).toEqual(['other.mjs'])
   })
 
+  it('starts the server again when only an environment value changes', async () => {
+    const runsDir = useTempDir('mr-mcp-cache-')
+    writeMcpServers(runsDir, [STDIO_SERVER])
+    const spawnImpl = fakeSpawn()
+
+    await listAllMcpTools(runsDir, { spawnImpl })
+    writeMcpServers(runsDir, [{ ...STDIO_SERVER, env: { ROOM: 'two' } }])
+    await listAllMcpTools(runsDir, { spawnImpl })
+    expect(spawnImpl.calls).toHaveLength(2)
+  })
+
   it('retries a failed list on the next call and keeps the next answer', async () => {
     const runsDir = useTempDir('mr-mcp-cache-')
     writeMcpServers(runsDir, [STDIO_SERVER])
