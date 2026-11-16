@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- P415: ROOM.md, FREE-HIERARCHY.md and LIVE.md describe lane modes, sub scope and restricted merges, Separate worktree, Codex Edits and Bypass, same-harness agent additions and ladder model checks.
 - A sub made with a harness keeps it when an old saved conversation of that id names another harness, and drops that conversation's sessions and mode.
 - Switching an orchestrator to another harness keeps its saved mode unless that is Bypass or only implied, so a switch never turns on Codex Bypass.
 - A restricted sub's merge is refused when the bridge cannot read its changed files, and a moved file names both paths.
