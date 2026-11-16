@@ -73,11 +73,10 @@ function ScopeFields({
       <label className="mr-side-field">
         <span className="mr-side-field-label mono">Scope</span>
         <textarea
-          className="mr-side-input mono"
+          className="mr-side-input mr-side-scope mono"
           rows={rows}
           placeholder="**"
           aria-label={scopeAriaLabel}
-          style={{ height: 'auto', minHeight: '42px', padding: '4px', resize: 'vertical' }}
           value={scope ?? '**'}
           disabled={disabled}
           onChange={(event) => onScopeChange(event.target.value)}
