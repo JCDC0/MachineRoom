@@ -852,17 +852,21 @@ export function createOrchestrators({
     return Array.isArray(tickets) && tickets.length > 0 ? tickets[tickets.length - 1] : null
   }
 
-  function receiveLaneMessage(lane, from, text, at, sender) {
+  function receiveLaneMessage(lane, from, text, at, sender, interrupt) {
     const held = lastLaneTicket(lane) ?? backupHeld(lane)
     if (!held || !Array.isArray(held.inbox)) return false
     const entry = { id: randomUUID(), from, text, at: new Date(at).toISOString(), status: 'queued', sender }
     held.inbox.push(entry)
     laneMessageEntries.set(entry.id, entry)
     while (held.inbox.length > LANE_INBOX_LIMIT) laneMessageEntries.delete(held.inbox.shift().id)
+    const shouldInterrupt =
+      typeof interrupt === 'boolean'
+        ? interrupt
+        : readHarnessSettings(folder).laneReplies === 'interrupt'
     if (
       !stopped &&
       typeof interruptLane === 'function' &&
-      readHarnessSettings(folder).laneReplies === 'interrupt' &&
+      shouldInterrupt &&
       laneHarnessFor(lane) !== 'machineroom'
     ) {
       setImmediate(() => {
@@ -959,6 +963,7 @@ export function createOrchestrators({
 
   async function message(body, page, tokenValue = '', laneTicketValue = '') {
     const ticketValue = typeof laneTicketValue === 'string' ? laneTicketValue.trim() : ''
+    const interrupt = typeof body?.interrupt === 'boolean' ? body.interrupt : undefined
     if (!page && !tokenValue && ticketValue) {
       const held = typeof laneTicket === 'function' ? laneTicket(ticketValue) : null
       if (!held) return { status: 403, body: { error: LANE_ENDED_PROBLEM } }
@@ -978,7 +983,7 @@ export function createOrchestrators({
         if (sentCount >= LANE_MESSAGE_LIMIT) return { status: 429, body: { error: LANE_LIMIT_PROBLEM } }
         const sender = `lane:${senderLane}`
         const identity = createHash('sha256').update(`lane:${ticketValue}`).digest('hex')
-        const delivered = receiveLaneMessage(laneTarget, sender, text, clock(), identity)
+        const delivered = receiveLaneMessage(laneTarget, sender, text, clock(), identity, interrupt)
         if (!delivered) {
           return { status: 409, body: { error: laneNoRunProblem(laneTarget) } }
         }
@@ -1011,8 +1016,11 @@ export function createOrchestrators({
         ? body.id.trim()
         : ORCHESTRATOR_KEY
     const laneTarget = laneKeyOf(target)
-    if (laneTarget && !page) {
-      if (actor !== ORCHESTRATOR_KEY) {
+    if (!laneTarget && target.startsWith('lane:')) {
+      return { status: 400, body: { error: MESSAGE_PROBLEM } }
+    }
+    if (laneTarget) {
+      if (!page && actor !== ORCHESTRATOR_KEY) {
         const own = sector(actor)
         if (!own || !Array.isArray(own.lanes) || !own.lanes.includes(laneTarget)) {
           const name = own?.name?.trim() || actor
@@ -1021,9 +1029,14 @@ export function createOrchestrators({
       }
       const from =
         body.from === undefined || body.from === null || body.from === ''
-          ? 'orchestrator'
+          ? page
+            ? 'owner'
+            : 'orchestrator'
           : body.from
-      if (from !== 'orchestrator' && from !== actor && from !== `sub:${actor}`) {
+      if (page) {
+        if (from === 'orchestrator') return { status: 403, body: { error: PAGE_MESSAGE_PROBLEM } }
+        if (from !== 'owner') return { status: 400, body: { error: MESSAGE_FROM_PROBLEM } }
+      } else if (from !== 'orchestrator' && from !== actor && from !== `sub:${actor}`) {
         return { status: 400, body: { error: MESSAGE_FROM_PROBLEM } }
       }
       const text = typeof body.text === 'string' ? body.text.trim() : ''
@@ -1031,16 +1044,16 @@ export function createOrchestrators({
         return { status: 400, body: { error: MESSAGE_PROBLEM } }
       }
       const at = clock()
-      if (!takeOrchestratorSlot(actor, at)) {
+      if (!page && !takeOrchestratorSlot(actor, at)) {
         return { status: 429, body: { error: 'Too many messages from this orchestrator. Wait, or ask the owner.' } }
       }
-      const sender = actor === ORCHESTRATOR_KEY ? ORCHESTRATOR_KEY : `sub:${actor}`
-      const identity = createHash('sha256').update(`orchestrator:${tokenValue}`).digest('hex')
-      const delivered = receiveLaneMessage(laneTarget, sender, text, at, identity)
+      const sender = page ? 'owner' : actor === ORCHESTRATOR_KEY ? ORCHESTRATOR_KEY : `sub:${actor}`
+      const identity = page ? 'owner' : createHash('sha256').update(`orchestrator:${tokenValue}`).digest('hex')
+      const delivered = receiveLaneMessage(laneTarget, sender, text, at, identity, interrupt)
       if (!delivered) {
         return { status: 409, body: { error: laneNoRunProblem(laneTarget) } }
       }
-      announce(agentKey(actor), laneTarget, 'message', text)
+      announce(page ? 'owner' : agentKey(actor), laneTarget, 'message', text)
       return { status: 202, body: { id: delivered.id } }
     }
     if (!instances.has(target)) {

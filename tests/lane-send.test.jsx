@@ -1,0 +1,391 @@
+import { spawnSync } from 'node:child_process'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { join, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { afterEach, describe, expect, it } from 'vitest'
+import { createBridge } from '../server/index.js'
+import { activeLanesFileFor, writeActiveLanes } from '../server/active-lanes.js'
+import { saveHarnessSettings } from '../server/harness-settings.js'
+import { chatFileFor } from '../server/orchestrator.js'
+import { gitPath } from '../server/programPath.js'
+import { clearRunsCache } from '../server/runs.js'
+import { getJson, waitFor } from './helpers/bridge.js'
+import { makeTempDir, removeTempDir } from './helpers/tempRoot.js'
+
+const REPO_ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)))
+const GIT_IDENTITY = {
+  GIT_AUTHOR_NAME: 'MachineRoom Test',
+  GIT_AUTHOR_EMAIL: 'test@example.invalid',
+  GIT_COMMITTER_NAME: 'MachineRoom Test',
+  GIT_COMMITTER_EMAIL: 'test@example.invalid',
+}
+
+const cleanups = []
+
+afterEach(async () => {
+  clearRunsCache()
+  while (cleanups.length > 0) {
+    const fn = cleanups.pop()
+    await fn()
+  }
+})
+
+function tempDir(prefix) {
+  const dir = makeTempDir(prefix)
+  cleanups.push(() => removeTempDir(dir))
+  return dir
+}
+
+function gitIn(folder, args) {
+  const result = spawnSync(gitPath(), ['-c', 'commit.gpgsign=false', ...args], {
+    cwd: folder,
+    encoding: 'utf8',
+    windowsHide: true,
+    env: { ...process.env, ...GIT_IDENTITY },
+  })
+  if (result.error) throw result.error
+  if (result.status !== 0) {
+    throw new Error(`git ${args.join(' ')} failed in ${folder}: ${String(result.stderr ?? '').trim()}`)
+  }
+  return String(result.stdout ?? '').trim()
+}
+
+function makeRepo(folder, script = '') {
+  mkdirSync(folder, { recursive: true })
+  gitIn(folder, ['init', '-q', '-b', 'main'])
+  gitIn(folder, ['config', 'user.name', GIT_IDENTITY.GIT_AUTHOR_NAME])
+  gitIn(folder, ['config', 'user.email', GIT_IDENTITY.GIT_AUTHOR_EMAIL])
+  writeFileSync(join(folder, 'readme.txt'), 'start\n')
+  if (script !== '') writeFileSync(join(folder, 'run'), script)
+  gitIn(folder, ['add', '-A'])
+  gitIn(folder, ['commit', '-q', '-m', 'Start the repository'])
+}
+
+function readLines(file) {
+  if (!existsSync(file)) return []
+  return readFileSync(file, 'utf8')
+    .split(/\r?\n/)
+    .filter((line) => line.trim() !== '')
+    .map((line) => JSON.parse(line))
+}
+
+function pagePost(url, path, body) {
+  return getJson(url + path, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', origin: 'http://localhost:5173' },
+    body: JSON.stringify(body),
+  })
+}
+
+function pageGet(url, path) {
+  return getJson(url + path, {
+    headers: { origin: 'http://localhost:5173' },
+  })
+}
+
+function fakeCliScript({ callsFile, releaseFile, stopAtCall = 0, holdUntilSeenText = '' }) {
+  return [
+    "const { appendFileSync, existsSync, readFileSync } = require('node:fs')",
+    `const callsFile = ${JSON.stringify(callsFile)}`,
+    `const releaseFile = ${JSON.stringify(releaseFile)}`,
+    `const stopAtCall = ${JSON.stringify(stopAtCall)}`,
+    `const holdUntilSeenText = ${JSON.stringify(holdUntilSeenText)}`,
+    "const args = process.argv.slice(2)",
+    "const prompt = args[args.length - 1] ?? ''",
+    "const prior = existsSync(callsFile) ? readFileSync(callsFile, 'utf8').split(/\\r?\\n/).filter(Boolean).filter((line) => JSON.parse(line).callNumber).length : 0",
+    "const callNumber = prior + 1",
+    "async function run() {",
+    "  const ticket = process.env.MACHINEROOM_LANE_TICKET ?? ''",
+    "  const bridge = process.env.MACHINEROOM_BRIDGE ?? ''",
+    "  appendFileSync(callsFile, JSON.stringify({ callNumber, pid: process.pid, prompt, ticket }) + '\\n')",
+    "  if (holdUntilSeenText && bridge && ticket) {",
+    "    while (true) {",
+    "      const response = await fetch(`${bridge}/api/orchestrator/messages`, { headers: { 'X-MachineRoom-Lane': ticket } })",
+    "      const data = await response.json()",
+    "      const messages = data.messages ?? []",
+    "      if (messages.some((message) => String(message.text).includes(holdUntilSeenText))) {",
+    "        appendFileSync(callsFile, JSON.stringify({ seenInInbox: messages, callNumber }) + '\\n')",
+    "        break",
+    "      }",
+    "      if (existsSync(releaseFile)) break",
+    "      await new Promise((done) => setTimeout(done, 25))",
+    "    }",
+    "  } else if (stopAtCall === 0 || callNumber < stopAtCall) {",
+    "    while (!existsSync(releaseFile)) await new Promise((done) => setTimeout(done, 25))",
+    "  }",
+    "  console.log('{\"type\":\"step_finish\",\"part\":{\"cost\":0,\"tokens\":{\"input\":1,\"output\":1}}}')",
+    "}",
+    "run().catch((error) => { console.error(error); process.exit(1) })",
+    '',
+  ].join('\n')
+}
+
+async function makeBridgeRig({ laneReplies = 'next-turn', script = '', harness = 'opencode', laneKey = 'opencode' } = {}) {
+  const base = tempDir('mr-lane-send-')
+  const runs = join(base, 'runs')
+  const project = join(base, 'project')
+  mkdirSync(runs, { recursive: true })
+  saveHarnessSettings(runs, { programs: {}, off: [], laneReplies })
+  makeRepo(project, script)
+
+  const promptFile = join(base, 'orchestrator-agent.md')
+  writeFileSync(promptFile, 'project={{PROJECT}}\nruns={{RUNS}}\nbridge={{BRIDGE}}\n')
+  writeFileSync(
+    chatFileFor(project, runs, 'orchestrator'),
+    `${JSON.stringify({ project, sessionId: null, state: 'idle', messages: [], pending: [] })}\n`
+  )
+  const lanes = {
+    orchestrator: { name: 'Orchestrator', harness: 'Claude Code', cli: { harness: 'claude', bin: 'claude', model: 'opus' } },
+    [laneKey]: {
+      name: harness === 'machineroom' ? 'Direct API' : 'OpenCode',
+      harness: harness === 'machineroom' ? 'MachineRoom' : 'OpenCode',
+      cli: { harness, bin: process.execPath, model: 'fake/model' },
+    },
+  }
+  const lanesFile = join(base, 'lanes.json')
+  writeFileSync(lanesFile, `${JSON.stringify(lanes, null, 2)}\n`)
+  writeActiveLanes(activeLanesFileFor(project, runs), [laneKey])
+
+  const bridge = createBridge({
+    projectRoot: project,
+    port: 0,
+    env: {},
+    briefsDir: join(REPO_ROOT, 'docs', 'agents'),
+    lanesFile,
+    runsFolder: runs,
+    orchestratorPrompt: promptFile,
+    lanesSource: { folder: runs, lanes, repoRoot: project, pollMs: 20, quietMs: 60000 },
+  })
+  cleanups.push(() => bridge.stop())
+  const { url } = await bridge.start()
+  return { base, runs, project, url, bridge }
+}
+
+describe('page sends to a running lane', { timeout: 60000 }, () => {
+  it('lets the page send to lane:KEY, sets owner as sender, returns an id and answers 409 when idle', async () => {
+    const tmp = tempDir('mr-lane-send-owner-')
+    const callsFile = join(tmp, 'calls.jsonl')
+    const releaseFile = join(tmp, 'release')
+    const rig = await makeBridgeRig({
+      laneReplies: 'next-turn',
+      script: fakeCliScript({ callsFile, releaseFile, holdUntilSeenText: 'Check the header.' }),
+    })
+
+    const before = await pagePost(rig.url, '/api/orchestrator/messages', {
+      to: 'lane:opencode',
+      text: 'Nobody home.',
+    })
+    expect(before.status).toBe(409)
+    expect(before.body).toEqual({ error: 'The lane opencode has no run that can read a message now.' })
+
+    const started = await pagePost(rig.url, '/api/control/runs', {
+      lane: 'opencode',
+      task: 'Do the work.',
+      worktree: true,
+      confirmed: true,
+    })
+    expect(started.status).toBe(202)
+    await waitFor(() => readLines(callsFile).find((line) => line.callNumber === 1), {
+      timeoutMs: 15000,
+      what: 'first CLI invocation',
+    })
+
+    const sent = await pagePost(rig.url, '/api/orchestrator/messages', {
+      to: 'lane:opencode',
+      text: 'Check the header.',
+    })
+    expect(sent.status).toBe(202)
+    expect(sent.body).toEqual({ id: expect.stringMatching(/^[0-9a-f-]{36}$/) })
+
+    const queuedOrFetched = await pageGet(rig.url, `/api/orchestrator/messages/status?id=${sent.body.id}`)
+    expect(queuedOrFetched.status).toBe(200)
+    expect(queuedOrFetched.body.id).toBe(sent.body.id)
+
+    const seen = await waitFor(() => readLines(callsFile).find((line) => Array.isArray(line.seenInInbox)), {
+      timeoutMs: 15000,
+      what: 'lane to read owner message',
+    })
+    expect(seen.seenInInbox).toEqual([
+      {
+        id: sent.body.id,
+        from: 'owner',
+        text: 'Check the header.',
+        at: expect.any(String),
+      },
+    ])
+
+    await waitFor(
+      async () => (await getJson(`${rig.url}/api/control/runs`)).body.running.length === 0,
+      { timeoutMs: 15000, what: 'run to end' }
+    )
+    const after = await pageGet(rig.url, `/api/orchestrator/messages/status?id=${sent.body.id}`)
+    expect(after.status).toBe(200)
+    expect(after.body.status).toBe('fetched')
+  })
+
+  it('does not interrupt when interrupt is false even if laneReplies is interrupt', async () => {
+    const tmp = tempDir('mr-lane-send-no-int-')
+    const callsFile = join(tmp, 'calls.jsonl')
+    const releaseFile = join(tmp, 'release')
+    const rig = await makeBridgeRig({
+      laneReplies: 'interrupt',
+      script: fakeCliScript({ callsFile, releaseFile, holdUntilSeenText: 'Stay on this turn.' }),
+    })
+
+    const started = await pagePost(rig.url, '/api/control/runs', {
+      lane: 'opencode',
+      task: 'Do the work.',
+      worktree: true,
+      confirmed: true,
+    })
+    expect(started.status).toBe(202)
+    await waitFor(() => readLines(callsFile).find((line) => line.callNumber === 1), {
+      timeoutMs: 15000,
+      what: 'first CLI invocation',
+    })
+
+    const sent = await pagePost(rig.url, '/api/orchestrator/messages', {
+      to: 'lane:opencode',
+      text: 'Stay on this turn.',
+      interrupt: false,
+    })
+    expect(sent.status).toBe(202)
+
+    await waitFor(() => readLines(callsFile).find((line) => Array.isArray(line.seenInInbox)), {
+      timeoutMs: 15000,
+      what: 'lane to fetch queued message',
+    })
+    await waitFor(
+      async () => (await getJson(`${rig.url}/api/control/runs`)).body.running.length === 0,
+      { timeoutMs: 15000, what: 'single run to end' }
+    )
+
+    const invocations = readLines(callsFile).filter((line) => line.callNumber && !line.seenInInbox)
+    expect(invocations).toHaveLength(1)
+    const status = await pageGet(rig.url, `/api/orchestrator/messages/status?id=${sent.body.id}`)
+    expect(status.body.status).toBe('fetched')
+  })
+
+  it('interrupts when interrupt is true even if laneReplies is next-turn', async () => {
+    const tmp = tempDir('mr-lane-send-int-')
+    const callsFile = join(tmp, 'calls.jsonl')
+    const releaseFile = join(tmp, 'release')
+    const rig = await makeBridgeRig({
+      laneReplies: 'next-turn',
+      script: fakeCliScript({ callsFile, releaseFile, stopAtCall: 2 }),
+    })
+
+    const started = await pagePost(rig.url, '/api/control/runs', {
+      lane: 'opencode',
+      task: 'Build widget.',
+      worktree: true,
+      confirmed: true,
+    })
+    expect(started.status).toBe(202)
+    await waitFor(() => readLines(callsFile).find((line) => line.callNumber === 1), {
+      timeoutMs: 15000,
+      what: 'first CLI invocation',
+    })
+
+    const sent = await pagePost(rig.url, '/api/orchestrator/messages', {
+      to: 'lane:opencode',
+      text: 'Switch to helper.',
+      interrupt: true,
+    })
+    expect(sent.status).toBe(202)
+
+    const second = await waitFor(() => readLines(callsFile).find((line) => line.callNumber === 2), {
+      timeoutMs: 20000,
+      what: 'continuation CLI invocation',
+    })
+    expect(second.prompt).toContain('owner: Switch to helper.')
+
+    await waitFor(
+      async () => (await getJson(`${rig.url}/api/control/runs`)).body.running.length === 0,
+      { timeoutMs: 15000, what: 'continuation run to end' }
+    )
+    const status = await pageGet(rig.url, `/api/orchestrator/messages/status?id=${sent.body.id}`)
+    expect(status.body.status).toBe('interrupted')
+  })
+
+  it('ignores interrupt: true on a machineroom lane as today', async () => {
+    const tmp = tempDir('mr-lane-send-native-')
+    const callsFile = join(tmp, 'calls.jsonl')
+    const releaseFile = join(tmp, 'release')
+    const base = tempDir('mr-lane-native-rig-')
+    const runs = join(base, 'runs')
+    const project = join(base, 'project')
+    mkdirSync(runs, { recursive: true })
+    saveHarnessSettings(runs, { programs: {}, off: [], laneReplies: 'next-turn' })
+    makeRepo(project)
+    const promptFile = join(base, 'orchestrator-agent.md')
+    writeFileSync(promptFile, 'project={{PROJECT}}\nruns={{RUNS}}\nbridge={{BRIDGE}}\n')
+    writeFileSync(
+      chatFileFor(project, runs, 'orchestrator'),
+      `${JSON.stringify({ project, sessionId: null, state: 'idle', messages: [], pending: [] })}\n`
+    )
+    const runner = join(base, 'native-runner.mjs')
+    writeFileSync(
+      runner,
+      [
+        "import { appendFileSync, existsSync } from 'node:fs'",
+        `appendFileSync(${JSON.stringify(callsFile)}, JSON.stringify({ ticket: process.env.MACHINEROOM_LANE_TICKET ?? '' }) + '\\n')`,
+        `while (!existsSync(${JSON.stringify(releaseFile)})) await new Promise((done) => setTimeout(done, 25))`,
+      ].join('\n')
+    )
+    const lanes = {
+      orchestrator: { name: 'Orchestrator', harness: 'Claude Code', cli: { harness: 'claude', bin: 'claude', model: 'opus' } },
+      native: { name: 'Direct API', harness: 'MachineRoom', cli: { harness: 'machineroom', model: 'test/model' } },
+    }
+    const lanesFile = join(base, 'lanes.json')
+    writeFileSync(lanesFile, `${JSON.stringify(lanes, null, 2)}\n`)
+    writeActiveLanes(activeLanesFileFor(project, runs), ['native'])
+
+    const bridge = createBridge({
+      projectRoot: project,
+      port: 0,
+      env: {},
+      briefsDir: join(REPO_ROOT, 'docs', 'agents'),
+      lanesFile,
+      runsFolder: runs,
+      orchestratorPrompt: promptFile,
+      lanesSource: { folder: runs, lanes, repoRoot: project, pollMs: 20, quietMs: 60000 },
+      runnerCommand: { file: process.execPath, args: [runner] },
+    })
+    cleanups.push(() => bridge.stop())
+    const { url } = await bridge.start()
+
+    const started = await pagePost(url, '/api/control/runs', {
+      lane: 'native',
+      task: 'Run native.',
+      confirmed: true,
+    })
+    expect(started.status).toBe(202)
+    const call = await waitFor(() => readLines(callsFile)[0], { timeoutMs: 15000, what: 'native runner' })
+
+    const sent = await pagePost(url, '/api/orchestrator/messages', {
+      to: 'lane:native',
+      text: 'Handle internally.',
+      interrupt: true,
+    })
+    expect(sent.status).toBe(202)
+    await new Promise((done) => setTimeout(done, 150))
+
+    expect(readLines(callsFile)).toHaveLength(1)
+    const statusBefore = await pageGet(url, `/api/orchestrator/messages/status?id=${sent.body.id}`)
+    expect(statusBefore.body.status).toBe('queued')
+
+    const inbox = await getJson(`${url}/api/orchestrator/messages`, {
+      headers: { 'X-MachineRoom-Lane': call.ticket },
+    })
+    expect(inbox.body.messages.map((message) => message.text)).toEqual(['Handle internally.'])
+
+    writeFileSync(releaseFile, 'go\n')
+    await waitFor(
+      async () => (await getJson(`${url}/api/control/runs`)).body.running.length === 0,
+      { timeoutMs: 15000, what: 'native runner to finish' }
+    )
+    const statusAfter = await pageGet(url, `/api/orchestrator/messages/status?id=${sent.body.id}`)
+    expect(statusAfter.body.status).toBe('fetched')
+  })
+})
