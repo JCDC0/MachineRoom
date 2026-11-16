@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- Dispatch's confirm card names lanes that declared the same files, says when overlap is unknown, and can warn above a set lane count.
 - A continuation's own record carries continues and interruptedBy; no earlier line of runs.jsonl is changed.
 - POST /api/orchestrator/stop-tree stops an orchestrator's sector, or the whole tree, refusing new work there until it answers.
 - P450: Add `POST /api/orchestrator/stop-tree` to stop a sector or the whole tree in one call while gating dispatches into the stopping sector and checking the process tree for `stillRunning`.
@@ -9,6 +10,7 @@
 - A lane review keeps the checks run on its head apart from the agent's report and lists every run of the task by its failover and continuation links.
 - An interrupt never rewrites runs.jsonl; the continuation record carries continues and interruptedBy.
 - With Replies set to interrupt, a reply stops a working CLI lane run and continues it on the same branch, worktree, ticket and inbox, at most three times.
+- P456: Dispatch warns when another running lane declares the same files, says when the overlap is unknown, and can warn above a set lane count.
 - Ready says it means the program was found, and doctor warns when the project has no AGENTS.md, CLAUDE.md or GEMINI.md.
 - Each MCP server's tool list is kept 60 seconds per runs folder and config, failures are not kept, and parallel lists share one request.
 - The native agent adds a warning after a tool call fails the same way three times and ends the run on the fifth.
