@@ -1003,9 +1003,9 @@ export function isResultLine(line) {
   return false
 }
 
-export function laneSpawn({ command, minutes = DEFAULT_MINUTES, model = '', effort = '' } = {}) {
+export function laneSpawn({ command, minutes = DEFAULT_MINUTES, model = '', effort = '', mode } = {}) {
   if (command?.transport !== 'acp') return { file: command?.file, args: command?.args ?? [], input: false }
-  return { ...acpRunCommand({ command, minutes, model, effort }), input: true }
+  return { ...acpRunCommand({ command, minutes, model, effort, mode }), input: true }
 }
 
 export function printCommand(command, prompt, { mcpConfig = '', mcpServers = [] } = {}) {
@@ -2154,7 +2154,7 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
         }
       : null
     // OpenCode takes its folder from PWD, which a shell started elsewhere leaves pointing at that shell's folder.
-    const spawnSpec = laneSpawn({ command, minutes: options.minutes, model: lane.cli.model, effort: lane.reasoning })
+    const spawnSpec = laneSpawn({ command, minutes: options.minutes, model: lane.cli.model, effort: lane.reasoning, mode: lane.cli.mode })
     const runnerNames = [
       'MACHINEROOM_RUNS',
       'MACHINEROOM_LANES_FILE',

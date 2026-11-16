@@ -2,8 +2,9 @@
 import { spawn } from 'node:child_process'
 import { once } from 'node:events'
 import { createInterface } from 'node:readline'
+import { lstatSync, realpathSync } from 'node:fs'
 import { fileURLToPath, pathToFileURL } from 'node:url'
-import { resolve } from 'node:path'
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { killTree, treeSpawnOptions } from '../server/processTree.js'
 import { mcpServersForAcp } from './mcp-bridge.mjs'
 
@@ -22,6 +23,7 @@ export function parseAcpArgs(argv = []) {
     prompt: null,
     model: '',
     effort: '',
+    mode: 'bypass',
     minutes: DEFAULT_MINUTES,
     seconds: null,
     help: false,
@@ -39,8 +41,8 @@ export function parseAcpArgs(argv = []) {
       index += 1
       continue
     }
-    if (!['--file', '--cwd', '--prompt', '--model', '--effort', '--minutes', '--seconds'].includes(arg)) {
-      throw new Error(`Unknown option ${arg}. Use --file, --arg, --cwd, --prompt, --model, --effort, --minutes or --seconds.`)
+    if (!['--file', '--cwd', '--prompt', '--model', '--effort', '--mode', '--minutes', '--seconds'].includes(arg)) {
+      throw new Error(`Unknown option ${arg}. Use --file, --arg, --cwd, --prompt, --model, --effort, --mode, --minutes or --seconds.`)
     }
     const value = argv[index + 1]
     if (value === undefined) throw new Error(`${arg} needs a value.`)
@@ -57,15 +59,16 @@ export function parseAcpArgs(argv = []) {
       options[arg.slice(2)] = value
     }
   }
+  if (!['plan', 'auto', 'bypass'].includes(options.mode)) throw new Error('--mode needs plan, auto or bypass.')
   if (!options.help && !options.file.trim()) throw new Error('--file needs the ACP agent program.')
   return options
 }
 
-export function acpRunCommand({ command, minutes = DEFAULT_MINUTES, seconds = null, model = '', effort = '', script = fileURLToPath(import.meta.url) } = {}) {
+export function acpRunCommand({ command, minutes = DEFAULT_MINUTES, seconds = null, model = '', effort = '', mode = 'bypass', script = fileURLToPath(import.meta.url) } = {}) {
   if (!command || typeof command.file !== 'string' || command.file.trim() === '') throw new Error('There is no ACP agent command to run.')
   const args = [script, '--file', command.file]
   for (const arg of Array.isArray(command.args) ? command.args : []) args.push('--arg', String(arg))
-  args.push('--cwd', command.cwd || process.cwd())
+  args.push('--cwd', command.cwd || process.cwd(), '--mode', mode)
   if (Number.isInteger(seconds) && seconds > 0) args.push('--seconds', String(seconds))
   else args.push('--minutes', String(minutes))
   if (model) args.push('--model', String(model))
@@ -100,10 +103,43 @@ function configOption(options, category) {
   return list.find((option) => option?.category === category) ?? (category === 'model' ? list.find((option) => option?.id === 'model') : null) ?? (category === 'effort' ? list.find((option) => option?.id === 'effort') : null) ?? null
 }
 
+function permissionPath(path) {
+  try {
+    return realpathSync.native(path)
+  } catch (failure) {
+    if (failure.code !== 'ENOENT' || lstatSync(path, { throwIfNoEntry: false }) || dirname(path) === path) throw failure
+    return join(permissionPath(dirname(path)), basename(path))
+  }
+}
+
+function permissionRefusal(mode, toolCall, cwd) {
+  if (mode === 'bypass') return null
+  const kind = toolCall?.kind
+  if (['read', 'search', 'think'].includes(kind)) return null
+  if (mode !== 'auto' || !['edit', 'delete', 'move'].includes(kind)) return 'This mode does not allow that request kind.'
+  const locations = toolCall?.locations
+  if (!Array.isArray(locations) || locations.length === 0) return 'The request needs file locations.'
+  try {
+    const root = realpathSync.native(cwd)
+    for (const location of locations) {
+      if (typeof location?.path !== 'string' || !location.path.trim()) return 'The request needs a file path for every location.'
+      const path = relative(root, permissionPath(resolve(cwd, location.path)))
+      if (path === '..' || path.startsWith(`..${sep}`) || isAbsolute(path)) return 'A location is outside the project.'
+    }
+  } catch {
+    return 'A location could not be resolved safely.'
+  }
+  return null
+}
+
 export async function runAcp(options, { log = process.stdout, error = process.stderr, input = null } = {}) {
   const prompt = typeof options.prompt === 'string' ? options.prompt : input === null ? await readInput() : input
   if (!prompt.trim()) throw new Error('The ACP run needs a prompt.')
-  error.write("This ACP agent's permission requests are approved automatically.\n")
+  const mode = options.mode ?? 'bypass'
+  if (!['plan', 'auto', 'bypass'].includes(mode)) throw new Error('--mode needs plan, auto or bypass.')
+  error.write(mode === 'bypass'
+    ? "This ACP agent's permission requests are approved automatically.\n"
+    : `This ACP agent's permission requests use ${mode} mode.\n`)
   const limitMs = options.seconds ? options.seconds * 1000 : options.minutes * 60000
   const deadline = Date.now() + limitMs
   const cwd = resolve(options.cwd || process.cwd())
@@ -186,9 +222,14 @@ export async function runAcp(options, { log = process.stdout, error = process.st
     const params = message.params ?? {}
     if (message.method === 'session/request_permission') {
       const offered = Array.isArray(params.options) ? params.options : []
-      const choice = offered.find((option) => option.kind === 'allow_always')
-        ?? offered.find((option) => option.kind === 'allow_once')
-        ?? offered.find((option) => String(option.kind ?? '').startsWith('allow'))
+      const refusal = permissionRefusal(mode, params.toolCall, cwd)
+      if (refusal) error.write(`refused ${typeof params.toolCall?.kind === 'string' ? params.toolCall.kind.replace(/[\r\n]/g, ' ') : 'unknown'}: ${refusal}\n`)
+      const choice = refusal
+        ? offered.find((option) => option?.kind === 'reject_once')
+          ?? offered.find((option) => String(option?.kind ?? '').startsWith('reject'))
+        : offered.find((option) => option?.kind === (mode === 'bypass' ? 'allow_always' : 'allow_once'))
+          ?? offered.find((option) => option?.kind === 'allow_once')
+          ?? offered.find((option) => String(option?.kind ?? '').startsWith('allow'))
       respond(message.id, choice ? { outcome: { outcome: 'selected', optionId: choice.optionId } } : { outcome: { outcome: 'cancelled' } })
       return
     }
@@ -314,10 +355,10 @@ if (isMain) {
   try {
     const options = parseAcpArgs(process.argv.slice(2))
     if (options.help) {
-      console.log('Usage: node scripts/acp-run.mjs --file PROGRAM [--arg VALUE] [--cwd FOLDER] [--prompt TEXT] [--model ID] [--effort LEVEL] [--minutes N | --seconds N]')
+      console.log('Usage: node scripts/acp-run.mjs --file PROGRAM [--arg VALUE] [--cwd FOLDER] [--mode plan|auto|bypass] [--prompt TEXT] [--model ID] [--effort LEVEL] [--minutes N | --seconds N]')
       console.log('')
       console.log('Starts an Agent Client Protocol agent, opens a session, sends the prompt from --prompt or standard input,')
-      console.log('answers each permission request with the first allow option, and writes each session/update to stdout, one JSON object per line.')
+      console.log('checks permission requests in Plan or Auto, approves every request in Bypass (the default), and writes each session/update to stdout, one JSON object per line.')
       console.log('It writes an acp_session line after session/new and an acp_result line at the end.')
     } else {
       const result = await runAcp(options)
