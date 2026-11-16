@@ -81,8 +81,8 @@ describe('harness-models parsers', () => {
   it('detects list commands in help output', () => {
     expect(parseHelpForListCommand('Commands:\n  models list  List all models')).toEqual(['models', 'list'])
     expect(parseHelpForListCommand('Commands:\n  model list  List models')).toEqual(['model', 'list'])
-    expect(parseHelpForListCommand('Flags:\n  --list-models  Show models')).toEqual(['list-models'])
-    expect(parseHelpForListCommand('Usage: codex models [options]')).toEqual(['models'])
+    expect(parseHelpForListCommand('Commands:\n  list-models  Show models')).toEqual(['list-models'])
+    expect(parseHelpForListCommand('Commands:\n  models  List models')).toEqual(['models'])
     expect(parseHelpForListCommand('No command here')).toBeNull()
   })
 })

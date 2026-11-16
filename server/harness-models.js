@@ -307,12 +307,10 @@ export function parseOpencodeModels(stdout) {
 }
 
 export function parseHelpForListCommand(helpText) {
-  if (/\bmodels\s+list\b/i.test(helpText)) return ['models', 'list']
-  if (/\bmodel\s+list\b/i.test(helpText)) return ['model', 'list']
-  if (/\blist-models\b/i.test(helpText)) return ['list-models']
-  if (/\bmodels\b/i.test(helpText)) return ['models']
-  if (/\bmodel\b/i.test(helpText)) return ['model']
-  return null
+  const match = /^[ \t]+(models list|model list|list-models|models|model)(?=[ \t]|\r?$)/m.exec(
+    typeof helpText === 'string' ? helpText : '',
+  )
+  return match ? match[1].toLowerCase().split(/[ \t]+/) : null
 }
 
 export function parseCommandModels(stdout) {
@@ -418,7 +416,6 @@ export async function getHarnessModels(harness, {
         models: staticModels,
         source: 'list',
         fetchedAt: new Date().toISOString(),
-        error: `The harness ${harness} has no model list command.`,
       }
     }
     args = listArgs

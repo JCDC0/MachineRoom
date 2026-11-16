@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- A harness's model list command comes only from an indented subcommand line of its help, so Codex's --model option no longer runs codex model, and no list command is no error.
 - The inbox cut in boundMessages is 32 lines instead of 44, with the same rule and every test unchanged.
 - ROOM.md, LIVE.md and FREE-HIERARCHY.md describe the lane Mode select, sub Scope and Restricted, Merge anyway, Separate worktree, Codex Edits and Bypass, and same-harness agents.
 - Codex's Edits mode line says it can run commands inside its workspace sandbox, since Codex has no edits-only mode.
@@ -1267,6 +1268,7 @@
 - The hub's `setWorking` brightens a sector's arc to full white while its sub or one of its lanes works and returns it over 1 second when none does, at once under reduced motion, and leaves the rest of the ring as it is (task V43).
 - Above four agents at work, only the focused agent, the agent under the pointer and the two that started work most recently keep the full callout, and the rest show the name block alone (`fullCalloutKeys`, pure, with tests; task U123).
 - A bulk folder such as `node_modules`, `dist` or `vendor` stays one closed card with no child cards until an agent touches a path inside it, a pin names it or the owner clicks it, and the child folders a card draws rank by focus, recent touches, changed files and then file count (task U123).
+- P420: A harness's model list command comes only from an indented subcommand line, and a harness with no list command answers its static models without an error.
 
 ## 0.1.400
 
