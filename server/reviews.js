@@ -20,6 +20,7 @@ import {
   WRITE_IN_FLIGHT_PROBLEM,
 } from './git.js'
 import { readAllRunRecords, runsFile } from './runs.js'
+import { processAlive, readLaneLock } from '../scripts/lane-lock.mjs'
 
 const GIT_MAX_BUFFER = 64 * 1024 * 1024
 const COMMIT_LIMIT = 50
@@ -33,6 +34,7 @@ export const DEFAULT_PATCH_LIMIT = 400 * 1024
 export const DEFAULT_REVIEW_CONCURRENCY = 4
 export const NOT_OWNER_PROBLEM = 'The caller is not the owner, so the lane was not merged.'
 export const MERGE_TIMEOUT_PROBLEM = 'The merge took too long, so it was stopped.'
+export const REWIND_CONFIRM_PROBLEM = 'Confirm the rewind first, with the head you read.'
 export const FAILED_CHECKS_PROBLEM = 'Checks failed on this head, so the lane was not merged.'
 let codeCheckoutPath = ''
 
@@ -1011,12 +1013,123 @@ export function createReviewsApi({
     return { status: 200, body: { ok: true, lane, branch, head: laneHead, commit } }
   }
 
+  function recoveryRefFor(lane, record) {
+    const part = (value) => String(value ?? '').replace(/[^A-Za-z0-9.-]+/g, '-').replace(/^[.-]+|[.-]+$/g, '') || 'run'
+    return `refs/machineroom/recovery/${part(lane)}-${part(record.startedAt)}`
+  }
+
+  async function rewindState(lane, worktree, expectedHead) {
+    const record = projectRunsFor(lane, worktree)
+      .filter((entry) => entry.checkpoint && typeof entry.checkpoint === 'object')
+      .reduce((newest, entry) => (newest ? newestRecord([newest, entry]) : entry), null)
+    const checkpoint = record?.checkpoint
+    if (!checkpoint || !HEAD_PATTERN.test(String(checkpoint.head ?? ''))) {
+      return { reason: 'No run of this lane recorded a checkpoint.' }
+    }
+    const holder = readLaneLock(join(dirname(recordsFile()), `${lane}.lock`))
+    if (processAlive(holder.pid) || processAlive(holder.child)) return { reason: 'The lane has a run going, so stop it first.' }
+    const head = (await runGit(worktree, ['rev-parse', 'HEAD'])).trim()
+    if (expectedHead !== null && head !== expectedHead) return { reason: 'The lane moved since you read it. Read it again.' }
+    if ((await runGit(worktree, ['status', '--porcelain'])).trim() !== '') {
+      return { reason: 'The lane has uncommitted changes, so it was not rewound.' }
+    }
+    const branch = (await runGit(worktree, ['branch', '--show-current'])).trim()
+    if (branch === '' || branch !== checkpoint.branch) return { reason: 'The lane is not on the branch the run started on.' }
+    if (checkpoint.dirty !== false) return { reason: 'The run started on unsaved work, so it cannot be rewound to its start.' }
+    if (!(await isAncestor(runGit, worktree, checkpoint.head, head))) {
+      return { reason: 'The run start is not in the lane history any more.' }
+    }
+    const range = `${checkpoint.head}..${head}`
+    const full = (await runGit(worktree, ['rev-list', range])).split(/\r?\n/).filter(Boolean)
+    if (full.length === 0) return { reason: 'The last run made no commits to drop.' }
+    const recorded = (Array.isArray(record.commits) ? record.commits : String(record.commits ?? '').split(/\r?\n/))
+      .map((line) => /^([0-9a-f]{7,40})\b/i.exec(String(line).trim())?.[1]?.toLowerCase())
+      .filter(Boolean)
+    if (!full.every((hash) => recorded.some((short) => hash.startsWith(short)))) {
+      return { reason: 'The lane has commits that the last run did not make, so it was not rewound.' }
+    }
+    const commits = (await runGit(worktree, ['log', '--oneline', range])).split(/\r?\n/).filter(Boolean)
+    const files = (await runGit(worktree, ['diff', '--name-only', checkpoint.head, head])).split(/\r?\n/).filter(Boolean)
+    return { record, checkpointHead: checkpoint.head, head, commits, files }
+  }
+
+  async function rewindLane(req, res, lane, worktree) {
+    if (req.method === 'GET') {
+      const state = await rewindState(lane, worktree, null)
+      if (state.reason) return sendJson(req, res, 200, { allowed: false, reason: state.reason })
+      const { checkpointHead, head, commits, files, record } = state
+      return sendJson(req, res, 200, { checkpointHead, head, commits, files, recoveryRef: recoveryRefFor(lane, record) })
+    }
+    const body = typeof readJsonBody === 'function' ? await readJsonBody(req, res) : null
+    if (body === null) return undefined
+    if (body.confirmed !== true || typeof body.expectedHead !== 'string' || !HEAD_PATTERN.test(body.expectedHead)) {
+      return sendJson(req, res, 400, { error: REWIND_CONFIRM_PROBLEM })
+    }
+    const lockKey = beginRepoWrite(resolvedRoot)
+    if (!lockKey) return sendJson(req, res, 409, { error: WRITE_IN_FLIGHT_PROBLEM })
+    try {
+      const state = await rewindState(lane, worktree, body.expectedHead.toLowerCase())
+      if (state.reason) return sendJson(req, res, 409, { error: state.reason })
+      const ref = recoveryRefFor(lane, state.record)
+      await runGit(worktree, ['update-ref', ref, state.head])
+      await runGit(worktree, ['reset', '--keep', state.checkpointHead])
+      invalidateGitCache(resolvedRoot)
+      notify({ topic: 'git' })
+      const short = state.checkpointHead.slice(0, 7)
+      orchestratorRegistry()?.find?.('orchestrator')?.deliver?.(
+        'room',
+        `${lane} was rewound to ${short}; its last run's commits are kept at ${ref}.`
+      )
+      return sendJson(req, res, 200, {
+        ok: true,
+        lane,
+        head: state.checkpointHead,
+        recoveryRef: ref,
+        restore: `git reset --keep ${ref}`,
+      })
+    } catch {
+      return sendJson(req, res, 500, { error: 'The rewind failed.' })
+    } finally {
+      endRepoWrite(lockKey)
+    }
+  }
+
   async function handle(req, res, url) {
     const path = url.pathname
     const method = req.method ?? 'GET'
     const diffRoute = /^\/api\/control\/reviews\/([^/]+)\/diff$/.exec(path)
     const mergeRoute = /^\/api\/control\/reviews\/([^/]+)\/merge$/.exec(path)
-    if (path !== '/api/control/reviews' && !diffRoute && !mergeRoute) return false
+    const rewindRoute = /^\/api\/control\/reviews\/([^/]+)\/rewind$/.exec(path)
+    if (path !== '/api/control/reviews' && !diffRoute && !mergeRoute && !rewindRoute) return false
+
+    if (rewindRoute) {
+      if (method !== 'GET' && method !== 'POST') {
+        sendJson(req, res, 405, { error: 'Method not allowed.' })
+        return true
+      }
+      if (method === 'POST' && !req.headers?.origin) {
+        sendJson(req, res, 403, { error: 'Only the owner page can rewind a lane.' })
+        return true
+      }
+      const read = readLanes()
+      if (read.status) {
+        sendJson(req, res, read.status, { error: read.error })
+        return true
+      }
+      let lane
+      try {
+        lane = decodeURIComponent(rewindRoute[1])
+      } catch {
+        lane = ''
+      }
+      const worktree = lane ? laneFolder(read.lanes, lane) : ''
+      if (!worktree || !existsSync(worktree)) {
+        sendJson(req, res, 404, { error: 'Choose a lane from the list.' })
+        return true
+      }
+      await rewindLane(req, res, lane, worktree)
+      return true
+    }
 
     if (mergeRoute) {
       if (method !== 'POST') {

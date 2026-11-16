@@ -92,6 +92,8 @@ export const CLIENT_METHODS = [
   'reviews',
   'reviewDiff',
   'mergeReview',
+  'reviewRewind',
+  'rewindReview',
   'askPlanner',
   'plan',
   'acceptPlan',
@@ -2849,6 +2851,39 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
         review.deleted = 0
         emit({ topic: 'git' })
         return { ok: true, lane: review.lane, branch: review.branch, head: review.head, commit }
+      }),
+
+    reviewRewind: (lane) =>
+      call('reviewRewind', () => {
+        const review = typeof lane === 'string' && Object.hasOwn(reviewState, lane) ? reviewState[lane] : null
+        if (!review) throw new Error('Choose a lane from the list.')
+        if (review.dirty) return { allowed: false, reason: 'The lane has uncommitted changes, so it was not rewound.' }
+        if (review.ahead === 0) return { allowed: false, reason: 'The last run made no commits to drop.' }
+        return {
+          checkpointHead: SAMPLE_MERGE_COMMIT,
+          head: review.head,
+          commits: clone(review.commits),
+          recoveryRef: `refs/machineroom/recovery/${lane}-sample`,
+          files: SAMPLE_REVIEW_DIFF_FILES.map((file) => file.path),
+        }
+      }),
+
+    rewindReview: (lane, options = {}) =>
+      call('rewindReview', () => {
+        const review = typeof lane === 'string' && Object.hasOwn(reviewState, lane) ? reviewState[lane] : null
+        if (!review) throw new Error('Choose a lane from the list.')
+        if (typeof options.expectedHead !== 'string' || !/^[0-9a-fA-F]{40}$/.test(options.expectedHead)) {
+          throw new Error('Confirm the rewind first, with the head you read.')
+        }
+        if (options.expectedHead !== review.head) throw new Error('The lane moved since you read it. Read it again.')
+        if (review.dirty) throw new Error('The lane has uncommitted changes, so it was not rewound.')
+        if (review.ahead === 0) throw new Error('The last run made no commits to drop.')
+        const recoveryRef = `refs/machineroom/recovery/${lane}-sample`
+        review.head = SAMPLE_MERGE_COMMIT
+        review.ahead = 0
+        review.commits = []
+        emit({ topic: 'git' })
+        return { ok: true, lane, head: SAMPLE_MERGE_COMMIT, recoveryRef, restore: `git reset --keep ${recoveryRef}` }
       }),
 
     askPlanner: (goal) =>
