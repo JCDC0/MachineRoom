@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { spawn, spawnSync } from 'node:child_process'
 import { createHash, randomUUID } from 'node:crypto'
-import { appendFileSync, closeSync, constants, createWriteStream, existsSync, fstatSync, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, renameSync, rmSync, statSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs'
+import { appendFileSync, closeSync, constants, createWriteStream, existsSync, fstatSync, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import { finished } from 'node:stream'
@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url'
 import { branchFor, briefFileList, buildPrompt, nextVersion, parseBriefs, parseRules } from '../src/briefs/briefs.js'
 import { commitAuthorFor, formatQueueSummary, parseQueue, parseQueueArgs, runQueue } from '../src/briefs/queue.js'
 import { maskKeys } from '../src/briefs/audit.js'
-import { briefProblems, briefWorktreeProblems, checkCommandLines, checkCommandProblem, childEnvironment, commandFor, createLaneLog, DEFAULT_MINUTES, fallbackProblem, failoverKind, filterRunsSince, formatOutcomes, formatStats, formatSummary, laneCommandProblem, laneLockStartedAt, laneLockText, laneModeProblem, laneStats, laneStopProblem, laneWithOverrides, limitedFor, maskProfilePaths, maskedQueueTasks, ORCHESTRATOR_LANE_PROBLEM, parseRunArgs, projectProblems, projectRunGit, readinessLine, retryStartProblem, runListLine, runRecord, sessionToolLines, splitCheckCommand, startFailureText, summarizeRun, unattendedPrompt, worktreeFor, WORKTREES_FOLDER } from '../src/briefs/run.js'
+import { briefProblems, briefWorktreeProblems, checkCommandLines, checkCommandProblem, childEnvironment, commandFor, createLaneLog, DEFAULT_MINUTES, fallbackProblem, failoverKind, filterRunsSince, formatOutcomes, formatStats, formatSummary, interruptSenderFrom, laneCommandProblem, laneLockStartedAt, laneLockText, laneModeProblem, laneStats, laneStopProblem, laneWithOverrides, limitedFor, maskProfilePaths, maskedQueueTasks, ORCHESTRATOR_LANE_PROBLEM, parseRunArgs, projectProblems, projectRunGit, readinessLine, retryStartProblem, runListLine, runRecord, sessionToolLines, splitCheckCommand, startFailureText, summarizeRun, unattendedPrompt, worktreeFor, WORKTREES_FOLDER } from '../src/briefs/run.js'
 import { outcomeTable } from '../server/outcomes.js'
 import { readMainSubjectsSync } from '../server/runs.js'
 import { isLockHolderStale, killTree, descendantProcesses, leftoverProcesses, listProcesses } from '../server/processTree.js'
@@ -1342,19 +1342,6 @@ function findRunRecordByName(records, name) {
   return null
 }
 
-function interruptSenderFrom(text) {
-  const raw = String(text ?? '').replace(/\r\n/g, '\n')
-  const split = raw.indexOf('\n\n')
-  const body = split === -1 ? raw : raw.slice(split + 2)
-  for (const line of body.split('\n')) {
-    const trimmed = line.trim()
-    if (trimmed === '') continue
-    const colon = trimmed.indexOf(': ')
-    if (colon > 0) return trimmed.slice(0, colon).trim()
-  }
-  return ''
-}
-
 function interruptFileText(folder, name) {
   const target = typeof name === 'string' ? name.trim() : ''
   if (!target) return { text: '', sender: '' }
@@ -1366,52 +1353,6 @@ function interruptFileText(folder, name) {
   } catch {
     return { text: '', sender: '' }
   }
-}
-
-function markRecordInterruptedBy(name, sender, { file = runsFile() } = {}) {
-  const target = typeof name === 'string' ? name.trim() : ''
-  const by = typeof sender === 'string' ? sender.trim() : ''
-  if (!target || !by || !existsSync(file)) return false
-  let lines
-  try {
-    lines = readFileSync(file, 'utf8').split(/\r?\n/)
-  } catch {
-    return false
-  }
-  let changed = false
-  for (let index = lines.length - 1; index >= 0; index -= 1) {
-    const line = lines[index]
-    if (!line.trim()) continue
-    let record
-    try {
-      record = JSON.parse(line)
-    } catch {
-      continue
-    }
-    if (runNameOfRecord(record) !== target) continue
-    if (record.interruptedBy === by) return false
-    record.interruptedBy = by
-    lines[index] = JSON.stringify(record)
-    changed = true
-    break
-  }
-  if (!changed) return false
-  const kept = lines.filter((line) => line.trim() !== '')
-  const text = `${kept.join('\n')}\n`
-  const tmp = `${file}.tmp.${process.pid}`
-  try {
-    writeFileSync(tmp, text, 'utf8')
-    try {
-      renameSync(tmp, file)
-    } catch {
-      writeFileSync(file, text, 'utf8')
-    }
-  } finally {
-    try {
-      unlinkSync(tmp)
-    } catch {}
-  }
-  return true
 }
 
 function readOutcomes() {
@@ -2049,6 +1990,7 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
   let effectivePrompt = prompt
   let continuedBase = ''
   let continuedBranch = ''
+  let interruptedBy = ''
   if (continueFrom !== '') {
     const prevRecordsFile = join(runsDir, 'runs.jsonl')
     const prev = findRunRecordByName(readRecords(prevRecordsFile), continueFrom)
@@ -2056,9 +1998,9 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
     if (typeof prev.record.base === 'string' && prev.record.base.trim() !== '') continuedBase = prev.record.base.trim()
     if (typeof prev.record.branch === 'string' && prev.record.branch.trim() !== '') continuedBranch = prev.record.branch.trim()
     const interrupt = interruptFileText(runsDir, continueFrom)
-    if (options?.retried !== true) {
-      if (interrupt.sender) markRecordInterruptedBy(continueFrom, interrupt.sender, { file: prevRecordsFile })
-      if (interrupt.text !== '') effectivePrompt = `${prompt}\n\n${interrupt.text}`
+    interruptedBy = interrupt.sender
+    if (options?.retried !== true && interrupt.text !== '') {
+      effectivePrompt = `${prompt}\n\n${interrupt.text}`
     }
   }
   let start = null
@@ -2412,6 +2354,7 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
         ...(queue ? { queue } : {}),
         ...(failoverFrom ? { failoverFrom } : {}),
         ...(continueFrom !== '' ? { continues: continueFrom } : {}),
+        ...(continueFrom !== '' && interruptedBy !== '' ? { interruptedBy } : {}),
       })
       if (startedBy) retryRecord.startedBy = startedBy
       if (appendRunRecord(retryRecord)) console.log(`record: ${printedRunsFolder(runsFile())}`)
@@ -2452,6 +2395,7 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
       ...(queue ? { queue } : {}),
       ...(failoverFrom ? { failoverFrom } : {}),
       ...(continueFrom !== '' ? { continues: continueFrom } : {}),
+      ...(continueFrom !== '' && interruptedBy !== '' ? { interruptedBy } : {}),
     })
     if (startedBy) record.startedBy = startedBy
     const kind = failoverKind({ exitCode: result.code, limited, startFailed: startFailure !== '', killed })
