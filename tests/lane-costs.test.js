@@ -82,7 +82,7 @@ describe('laneCosts', () => {
       { agentId: 'agent-agy', agentName: 'agy', costCents: null, todayCents: null, inputTokens: null, outputTokens: null, missingCostRuns: 1, failedCost: 0 },
       { agentId: 'removed-lanes', agentName: 'Removed lanes', costCents: 200, todayCents: 0, inputTokens: null, outputTokens: null, missingCostRuns: 0, failedCost: 0 },
     ])
-    expect(costs.summary).toEqual({ spendCents: 272, budgetCents: 0, utilizationPercent: null })
+    expect(costs.summary).toEqual({ spendCents: 272, budgetCents: 0, utilizationPercent: null, partial: true })
     expect(costs.quota).toEqual([])
   })
 
@@ -226,7 +226,7 @@ describe('laneCosts', () => {
     expect(costs.summary.spendCents).toBe(50)
   })
 
-  it('shows no removed lanes row for unmatched runs with no cost', () => {
+  it('keeps a removed lanes row for unmatched runs with unknown cost', () => {
     const costs = laneCosts({
       records: [
         record('gone', localTime(0, 9), null, { inputTokens: 5000, outputTokens: 600 }),
@@ -236,8 +236,9 @@ describe('laneCosts', () => {
       now: NOW,
     })
 
-    expect(costs.byAgent.some((row) => row.agentId === 'removed-lanes')).toBe(false)
+    expect(costs.byAgent.find((row) => row.agentId === 'removed-lanes')).toMatchObject({ costCents: 0, inputTokens: 5000, missingCostRuns: 1 })
     expect(costs.summary.spendCents).toBe(0)
+    expect(costs.summary.partial).toBe(true)
   })
 
   it('sums today per lane by the local calendar day and leaves yesterday out', () => {

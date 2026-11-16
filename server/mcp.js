@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { killTree } from './processTree.js'
@@ -525,17 +526,14 @@ export async function listAllMcpTools(runsDir, options = {}) {
 const toolListCache = new Map()
 const toolListRequests = new Map()
 
+function sortedKeys(_key, value) {
+  if (!isPlainObject(value)) return value
+  return Object.fromEntries(Object.keys(value).sort().map((name) => [name, value[name]]))
+}
+
 function toolListKey(runsDir, server) {
-  const env = isPlainObject(server?.env) ? server.env : {}
-  return JSON.stringify([
-    runsDir,
-    server.name,
-    server.transport,
-    server.command,
-    server.args,
-    Object.keys(env).sort(),
-    server.url,
-  ])
+  const digest = createHash('sha256').update(JSON.stringify(server, sortedKeys)).digest('hex')
+  return JSON.stringify([runsDir, server.name, digest])
 }
 
 function cachedToolList(runsDir, server, load) {

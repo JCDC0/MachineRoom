@@ -139,8 +139,9 @@ export function laneCosts({ records = [], agents = [], now = Date.now() } = {}) 
   for (const [lane, total] of totals) {
     if (rosterKeys.has(lane)) continue
     if (!removed) {
-      removed = { costCents: 0, todayCents: 0, failedCost: 0, missingCostRuns: 0, input: 0, output: 0, hasInput: false, hasOutput: false }
+      removed = { hasCost: false, costCents: 0, todayCents: 0, failedCost: 0, missingCostRuns: 0, input: 0, output: 0, hasInput: false, hasOutput: false }
     }
+    if (total.hasCost) removed.hasCost = true
     removed.costCents += Math.round(total.cost * 100)
     removed.todayCents += Math.round(total.today * 100)
     removed.failedCost += Math.round(total.failed * 100)
@@ -154,12 +155,12 @@ export function laneCosts({ records = [], agents = [], now = Date.now() } = {}) 
       removed.hasOutput = true
     }
   }
-  if (removed && removed.costCents > 0) {
+  if (removed && (removed.costCents > 0 || removed.missingCostRuns > 0 || removed.hasInput || removed.hasOutput)) {
     byAgent.push({
       agentId: 'removed-lanes',
       agentName: 'Removed lanes',
-      costCents: removed.costCents,
-      todayCents: removed.todayCents,
+      costCents: removed.hasCost ? removed.costCents : null,
+      todayCents: removed.hasCost ? removed.todayCents : null,
       inputTokens: removed.hasInput ? removed.input : null,
       outputTokens: removed.hasOutput ? removed.output : null,
       missingCostRuns: removed.missingCostRuns,
@@ -167,9 +168,10 @@ export function laneCosts({ records = [], agents = [], now = Date.now() } = {}) 
     })
   }
 
-  const spendCents = byAgent.reduce((sum, row) => sum + row.costCents, 0)
+  const spendCents = byAgent.reduce((sum, row) => sum + (row.costCents ?? 0), 0)
+  const partial = byAgent.some((row) => row.missingCostRuns > 0)
   return {
-    summary: { spendCents, budgetCents: 0, utilizationPercent: null },
+    summary: { spendCents, budgetCents: 0, utilizationPercent: null, ...(partial ? { partial: true } : {}) },
     byAgent,
     quota: quotaRows(records, now),
   }

@@ -131,6 +131,7 @@ export default function MetersPanel({ client, initialCosts = null }) {
                   {companyBudget > 0
                     ? `${formatCents(companySpend)} of ${formatCents(companyBudget)}`
                     : formatCents(companySpend)}
+                  {costs.summary?.partial ? ' (partial)' : ''}
                 </span>
               </div>
               {companyBudget > 0 && (
@@ -160,7 +161,7 @@ export default function MetersPanel({ client, initialCosts = null }) {
                     <div className="meter-agent-head">
                       <span className="meter-agent-name">{name}</span>
                       <span className="mono">
-                        {formatCents(row.costCents)}
+                        {row.costCents == null ? '?' : formatCents(row.costCents)}
                         {missingCostRuns > 0 ? ` (${runCountText(missingCostRuns)})` : ''}
                       </span>
                     </div>
