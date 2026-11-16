@@ -38,6 +38,12 @@ function harnessOffersPlan(harnessKey) {
   return Boolean(harnessKey) && laneModesFor(harnessKey).some((mode) => mode.id === 'plan')
 }
 
+function initialProjectMode(agent, planByDefault) {
+  if (!agent) return ''
+  if (planByDefault && harnessOffersPlan(agentHarnessKey(agent))) return 'plan'
+  return agent.mode && agent.mode !== 'choice' ? agent.mode : defaultMode(agent.harness) ?? ''
+}
+
 function pickFirstPlanLane(agents, running, harnesses, { hasHarnesses, harnessesLoaded }) {
   if (hasHarnesses && !harnessesLoaded) return null
   const byKey = new Map(harnessList(harnesses).map((row) => [row.key, row]))
@@ -121,6 +127,9 @@ export default function DispatchPanel({
   const [autoRoute, setAutoRoute] = useState({ text: '', answer: null, error: null })
   const [projectTask, setProjectTask] = useState('')
   const [projectCheckCommand, setProjectCheckCommand] = useState('')
+  const [projectPlanByDefault, setProjectPlanByDefault] = useState(false)
+  const [projectPlanSaving, setProjectPlanSaving] = useState(false)
+  const [projectPlanError, setProjectPlanError] = useState('')
   const [projectHasTestScript, setProjectHasTestScript] = useState(false)
   const [projectOwnWorktree, setProjectOwnWorktree] = useState(true)
   const [projectOneLanePerTask, setProjectOneLanePerTask] = useState(false)
@@ -154,6 +163,7 @@ export default function DispatchPanel({
   const loadedProjectRef = useRef('')
   const firstTaskAppliedRef = useRef(false)
   const pendingFirstTaskLaneRef = useRef('')
+  const modeChosenRef = useRef(false)
   const promptReqRef = useRef(0)
   const routeReqRef = useRef(0)
   const gitReqRef = useRef(0)
@@ -197,24 +207,33 @@ export default function DispatchPanel({
   const effectiveLane = projectLane === 'auto' ? routeAnswer?.lane ?? '' : projectLane
   const projectLaneRunning = projectLanes.some((lane) => lane.key === effectiveLane && lane.running)
   const laneAgentFor = (key) => agents.find((agent) => agent && agent.key === key) ?? null
-  const projectLaneHarness = laneAgentFor(effectiveLane)?.harness ?? ''
+  const effectiveAgent = laneAgentFor(effectiveLane)
+  const projectLaneHarness = effectiveAgent?.harness ?? ''
+  const effectiveHarness = agentHarnessKey(effectiveAgent)
   const projectModels = useHarnessModels({
     client,
     harness: projectLaneHarness,
     open: Boolean(effectiveLane),
-    value: laneAgentFor(effectiveLane)?.model ?? '',
+    value: effectiveAgent?.model ?? '',
   })
 
   useEffect(() => {
     setProjectModel('')
+    modeChosenRef.current = false
     if (pendingFirstTaskLaneRef.current && pendingFirstTaskLaneRef.current === effectiveLane) {
       pendingFirstTaskLaneRef.current = ''
       setProjectMode('plan')
       return
     }
-    const agent = laneAgentFor(effectiveLane)
-    setProjectMode(agent?.mode && agent.mode !== 'choice' ? agent.mode : defaultMode(agent?.harness) ?? '')
-  }, [effectiveLane, projectLaneHarness])
+    setProjectMode(initialProjectMode(laneAgentFor(effectiveLane), projectPlanByDefault))
+  }, [effectiveLane, projectLaneHarness, effectiveHarness])
+
+  useEffect(() => {
+    if (modeChosenRef.current) return
+    if (pendingFirstTaskLaneRef.current && pendingFirstTaskLaneRef.current === effectiveLane) return
+    if (showFirstTaskCard && firstTaskAppliedRef.current && effectiveLane === firstTaskLane?.key) return
+    setProjectMode(initialProjectMode(laneAgentFor(effectiveLane), projectPlanByDefault))
+  }, [projectPlanByDefault])
 
   useEffect(() => {
     if (typeof client?.laneBackups !== 'function') return undefined
@@ -476,6 +495,8 @@ export default function DispatchPanel({
   useEffect(() => {
     if (!hasProjectSettings) {
       setProjectCheckCommand('')
+      setProjectPlanByDefault(false)
+      setProjectPlanError('')
       setProjectHasTestScript(false)
       return undefined
     }
@@ -488,6 +509,8 @@ export default function DispatchPanel({
         if (!draft || typeof draft.checkCommand !== 'string') {
           setProjectCheckCommand(typeof answer?.checkCommand === 'string' ? answer.checkCommand : '')
         }
+        setProjectPlanByDefault(answer?.planByDefault === true)
+        setProjectPlanError('')
         setProjectHasTestScript(answer?.hasTestScript === true)
       } catch {}
     }
@@ -509,10 +532,12 @@ export default function DispatchPanel({
     setProjectAllowDirty(false)
     setProjectDiscardConfirm(false)
     setProjectDraftPresent(Boolean(draft))
+    setProjectPlanError('')
     setFirstTaskDismissed(false)
     setFirstTaskStarted(false)
     firstTaskAppliedRef.current = false
     pendingFirstTaskLaneRef.current = ''
+    modeChosenRef.current = false
     dismissProjectConfirm()
   }, [projectName, hasRouteLane])
 
@@ -771,6 +796,7 @@ export default function DispatchPanel({
     setFirstTaskDismissed(true)
     firstTaskAppliedRef.current = true
     pendingFirstTaskLaneRef.current = ''
+    modeChosenRef.current = false
     if (projectTask === FIRST_TASK_TEXT) setProjectTask('')
     const draft = readProjectDraft(projectName)
     if (!draft?.lane) {
@@ -784,6 +810,7 @@ export default function DispatchPanel({
 
   function discardProjectDraft() {
     clearProjectDraft(projectName)
+    modeChosenRef.current = false
     setProjectTask('')
     setProjectLane(hasRouteLane ? 'auto' : '')
     setProjectCheckCommand('')
@@ -814,11 +841,36 @@ export default function DispatchPanel({
     try {
       const answer = await client.saveProjectSettings({ checkCommand: projectCheckCommand.trim() })
       if (typeof answer?.checkCommand === 'string') setProjectCheckCommand(answer.checkCommand)
+      if (typeof answer?.planByDefault === 'boolean') setProjectPlanByDefault(answer.planByDefault)
       if (typeof answer?.hasTestScript === 'boolean') setProjectHasTestScript(answer.hasTestScript)
       return true
     } catch (err) {
       setProjectError(err?.message || 'Could not save the check command.')
       return false
+    }
+  }
+
+  async function handlePlanByDefaultChange(event) {
+    if (!hasProjectSettings) return
+    const next = Boolean(event.target.checked)
+    const previous = projectPlanByDefault
+    const targetProject = projectName
+    modeChosenRef.current = false
+    setProjectPlanByDefault(next)
+    setProjectPlanError('')
+    setProjectPlanSaving(true)
+    dismissProjectConfirm()
+    try {
+      const answer = await client.saveProjectSettings({ planByDefault: next })
+      if (!mountedRef.current || (targetProject && projectKey(projectName) !== projectKey(targetProject))) return
+      if (typeof answer?.planByDefault === 'boolean') setProjectPlanByDefault(answer.planByDefault)
+      if (typeof answer?.hasTestScript === 'boolean') setProjectHasTestScript(answer.hasTestScript)
+    } catch (err) {
+      if (!mountedRef.current || (targetProject && projectKey(projectName) !== projectKey(targetProject))) return
+      setProjectPlanByDefault(previous)
+      setProjectPlanError(err?.message || 'Could not save the Plan default.')
+    } finally {
+      if (mountedRef.current) setProjectPlanSaving(false)
     }
   }
 
@@ -890,7 +942,8 @@ export default function DispatchPanel({
       setProjectAllowDirty(false)
       setProjectModel('')
       const ranAgent = laneAgentFor(lane)
-      setProjectMode(ranAgent?.mode && ranAgent.mode !== 'choice' ? ranAgent.mode : defaultMode(ranAgent?.harness) ?? '')
+      modeChosenRef.current = false
+      setProjectMode(initialProjectMode(ranAgent, projectPlanByDefault))
       setFirstTaskStarted(true)
       loadRuns()
     } catch (err) {
@@ -955,6 +1008,11 @@ export default function DispatchPanel({
   const projectSplitRun = projectOneLanePerTask && projectTasks.length > 1
   const projectSplitTaskCount = projectSplitPlan?.pairs.length || projectTasks.length
   const laneAgent = (key) => agents.find((agent) => agent && agent.key === key) ?? null
+  const projectConfirmAgent = projectConfirm.lane ? laneAgent(projectConfirm.lane) : null
+  const projectConfirmNoPlan =
+    projectPlanByDefault &&
+    Boolean(projectConfirmAgent) &&
+    !harnessOffersPlan(agentHarnessKey(projectConfirmAgent))
   const offlineFor = (key) => networkOnline === false && laneNeedsNetwork(laneAgent(key))
   const projectOffline = offlineFor(projectConfirm.lane)
   const splitOffline = Boolean(projectSplitPlan?.pairs?.some((pair) => offlineFor(pair.lane)))
@@ -1035,6 +1093,7 @@ export default function DispatchPanel({
               onChange={(event) => {
                 firstTaskAppliedRef.current = true
                 pendingFirstTaskLaneRef.current = ''
+                modeChosenRef.current = false
                 setProjectLane(event.target.value)
                 setProjectModel('')
                 rememberProjectDraft({ lane: event.target.value })
@@ -1100,6 +1159,7 @@ export default function DispatchPanel({
                 onChange={(event) => {
                   firstTaskAppliedRef.current = true
                   pendingFirstTaskLaneRef.current = ''
+                  modeChosenRef.current = true
                   setProjectMode(event.target.value)
                   dismissProjectConfirm()
                 }}
@@ -1172,6 +1232,26 @@ export default function DispatchPanel({
               <div className="brief-state is-dim mono">
                 One command per line, run in order after each task; the queue commits what is left only when all pass. Empty uses npm test when package.json has one.
               </div>
+            </div>
+          )}
+
+          {hasProjectSettings && (
+            <div className="panel-checkbox-field">
+              <label>
+                <input
+                  id="project-plan-default"
+                  type="checkbox"
+                  checked={projectPlanByDefault}
+                  disabled={projectPlanSaving}
+                  onChange={handlePlanByDefaultChange}
+                />
+                <span>Start new runs in Plan</span>
+              </label>
+              {projectPlanError && (
+                <div className="brief-confirm-error mono" role="alert">
+                  {projectPlanError}
+                </div>
+              )}
             </div>
           )}
 
@@ -1396,6 +1476,11 @@ export default function DispatchPanel({
               {projectConfirm.backup && (
                 <div className="brief-confirm-warning">
                   {`Backup lane: ${projectConfirm.backup}`}
+                </div>
+              )}
+              {projectConfirmNoPlan && (
+                <div className="brief-confirm-warning">
+                  This lane has no Plan mode.
                 </div>
               )}
               {projectOverlapLines.map((line, index) => (
