@@ -416,7 +416,9 @@ export function createOrchestrators({
     const { harness, model, effort } = instance.answer()
     Object.assign(sub, { harness, model, effort })
     main.setLadder(ladder)
-    configs.set(id, subConfig(sub))
+    const nextConfig = subConfig(sub)
+    instance.setBin?.(nextConfig.bin)
+    configs.set(id, nextConfig)
   }
 
   function createSub(sub) {

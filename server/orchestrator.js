@@ -961,9 +961,10 @@ export function createOrchestrator({
   let harness = harnessOption || String(lane.cli.harness ?? 'claude')
   let model = String(modelOption ?? lane.cli.model ?? '')
   model = MODEL_ALIASES[model] ?? model
+  let binOverride = binOption
   function binFor(name) {
-    if (binOption) {
-      const chosen = String(binOption)
+    if (binOverride) {
+      const chosen = String(binOverride)
       return codexProgramFor(name, chosen, { env, platform }) ?? chosen
     }
     let bin = ''
@@ -2384,6 +2385,11 @@ export function createOrchestrator({
     const keptMode = changedHarness ? mode : (mode ?? legacyMode(harness))
     harness = nextHarness
     model = nextModel
+    if (changedHarness) {
+      binOverride = typeof body?.bin === 'string' ? body.bin.trim() : ''
+    } else if (typeof body?.bin === 'string') {
+      binOverride = body.bin.trim()
+    }
     if (effort !== null && !effortLevelsFor(harness).includes(effort)) effort = null
     sessionId = null
     for (const s of sessions) {
@@ -2888,6 +2894,10 @@ export function createOrchestrator({
     notify()
   }
 
+  function setBin(nextBin) {
+    binOverride = typeof nextBin === 'string' ? nextBin.trim() : ''
+  }
+
   try {
     mkdirSync(folder, { recursive: true })
   } catch {}
@@ -2908,6 +2918,7 @@ export function createOrchestrator({
     setEffort,
     setHarness,
     setMode,
+    setBin,
     requestApproval,
     answerApproval,
     listSessions,
