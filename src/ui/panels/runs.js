@@ -1,4 +1,6 @@
 import { harnessByAdapter } from '../../harnesses/index.js'
+import { briefFileList } from '../../briefs/briefs.js'
+import { overlappingLanes } from '../../briefs/plan.js'
 import { checkCommandLines, maskProfilePaths } from '../../briefs/run.js'
 
 export function resultWord(record) {
@@ -64,6 +66,67 @@ export function recordLine(record) {
   const note = result === 'failed' || record.startFailed === true ? singleLine(record.note) : ''
   if (note !== '') parts.push(note)
   return parts.join(' | ')
+}
+
+export function laneCountWarningFrom(answer) {
+  const rows = Array.isArray(answer) ? answer : Array.isArray(answer?.harnesses) ? answer.harnesses : []
+  const value = rows[0]?.laneCountWarning
+  return Number.isInteger(value) && value >= 0 ? value : 0
+}
+
+function declaredFilesOf(...texts) {
+  const files = []
+  for (const text of texts) {
+    for (const file of briefFileList(text)) {
+      if (!files.includes(file)) files.push(file)
+    }
+  }
+  return files
+}
+
+export function runningLaneFiles(running, briefs) {
+  const byId = new Map()
+  for (const brief of Array.isArray(briefs) ? briefs : []) {
+    if (brief && typeof brief.id === 'string') byId.set(brief.id, brief)
+  }
+  const active = []
+  for (const entry of Array.isArray(running) ? running : []) {
+    if (!entry || typeof entry !== 'object') continue
+    const lane = typeof entry.lane === 'string' ? entry.lane.trim() : ''
+    if (!lane) continue
+    const texts = [entry.task]
+    for (const id of Array.isArray(entry.briefs) ? entry.briefs : []) {
+      const brief = byId.get(id)
+      if (brief) texts.push(brief.text)
+    }
+    active.push({ lane, files: declaredFilesOf(...texts) })
+  }
+  return active
+}
+
+export function laneRunningLine(count) {
+  const lanes = Number.isInteger(count) && count >= 0 ? count : 0
+  return `${lanes} lane${lanes === 1 ? ' is' : 's are'} running now.`
+}
+
+export function laneCountWarningLine({ runningCount = 0, startingCount = 1, laneCountWarning = 0 } = {}) {
+  const warning = Number.isInteger(laneCountWarning) && laneCountWarning > 0 ? laneCountWarning : 0
+  if (warning === 0) return ''
+  const running = Number.isInteger(runningCount) && runningCount >= 0 ? runningCount : 0
+  const starting = Number.isInteger(startingCount) && startingCount > 0 ? startingCount : 1
+  const total = running + starting
+  return total > warning ? `${total} lane${total === 1 ? '' : 's'} will be running.` : ''
+}
+
+export function overlapCardLines({ files, active, runningCount = 0, startingCount = 1, laneCountWarning = 0 } = {}) {
+  const overlaps = overlappingLanes({ files, active })
+  const lines = []
+  if (overlaps === 'unknown') lines.push('Overlap unknown: this task names no files.')
+  else for (const item of overlaps) lines.push(`Also declared by ${item.lane}: ${item.files.join(', ')}`)
+  lines.push(laneRunningLine(runningCount))
+  const countLine = laneCountWarningLine({ runningCount, startingCount, laneCountWarning })
+  if (countLine !== '') lines.push(countLine)
+  return lines
 }
 
 export function queueRecoveryAvailable(record) {

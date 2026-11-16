@@ -12,26 +12,58 @@ function briefIds(run) {
     .map((id) => id.trim())
 }
 
-function mergedBySubject(run, subjects) {
-  const ids = briefIds(run)
-  if (ids.length === 0) return false
-  for (const subject of Array.isArray(subjects) ? subjects : []) {
-    if (typeof subject !== 'string') continue
-    const found = MERGE_WORD.exec(subject)
-    if (!found) continue
-    const tail = subject.slice(found.index + found[0].length)
-    for (const id of ids) {
-      if (new RegExp(`(^|[^A-Za-z0-9])${escapeText(id)}(?![A-Za-z0-9])`).test(tail)) return true
-    }
+function mergeEntry(value) {
+  if (typeof value === 'string') return { hash: '', committedAt: null, subject: value }
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const subject = typeof value.subject === 'string' ? value.subject : ''
+  if (subject.trim() === '') return null
+  return {
+    hash: typeof value.hash === 'string' ? value.hash : '',
+    committedAt: typeof value.committedAt === 'string' ? value.committedAt : null,
+    subject,
   }
-  return false
 }
 
-export function subjectsFromLog(text) {
+function mergedBySubject(run, merges) {
+  const ids = briefIds(run)
+  if (ids.length === 0) return null
+  for (const merge of merges) {
+    const found = MERGE_WORD.exec(merge.subject)
+    if (!found) continue
+    const tail = merge.subject.slice(found.index + found[0].length)
+    for (const id of ids) {
+      if (new RegExp(`(^|[^A-Za-z0-9])${escapeText(id)}(?![A-Za-z0-9])`).test(tail)) return merge
+    }
+  }
+  return null
+}
+
+function timeOf(value) {
+  if (typeof value !== 'string' || value.trim() === '') return null
+  const time = Date.parse(value)
+  return Number.isFinite(time) ? time : null
+}
+
+function mergeTime(merge) {
+  return merge ? timeOf(merge.committedAt) : null
+}
+
+function isRepair(run) {
+  return !run.failoverFrom && !run.continues
+}
+
+export function mergeCommitsFromLog(text) {
   return String(text ?? '')
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter(Boolean)
+    .map((line) => {
+      const parts = line.split(' ')
+      if (parts.length >= 3 && /^[0-9a-f]{7,64}$/i.test(parts[0]) && timeOf(parts[1]) !== null) {
+        return { hash: parts[0], committedAt: parts[1], subject: parts.slice(2).join(' ') }
+      }
+      return { hash: '', committedAt: null, subject: line }
+    })
 }
 
 function newestOutcomes(outcomes) {
@@ -47,11 +79,19 @@ function newestOutcomes(outcomes) {
 }
 
 function emptyRow(lane, model) {
-  return { lane, model, runs: 0, merged: 0, rejected: 0, pending: 0, ungraded: 0, fixes: [], cost: 0, decidedCost: 0, costSeen: false }
+  return { lane, model, runs: 0, merged: 0, rejected: 0, pending: 0, ungraded: 0, fixes: [], repairRuns: 0, waits: [], cost: 0, decidedCost: 0, costSeen: false }
+}
+
+function medianOf(values) {
+  const sorted = values.slice().sort((left, right) => left - right)
+  if (sorted.length === 0) return null
+  const middle = Math.floor(sorted.length / 2)
+  return sorted.length % 2 === 1 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2
 }
 
 function rowOf(row) {
   const decided = row.merged + row.rejected
+  const wait = medianOf(row.waits)
   return {
     lane: row.lane,
     model: row.model,
@@ -62,6 +102,8 @@ function rowOf(row) {
     ungraded: row.ungraded,
     mergeRate: decided === 0 ? null : row.merged / decided,
     averageFixes: row.fixes.length === 0 ? null : row.fixes.reduce((sum, value) => sum + value, 0) / row.fixes.length,
+    repairRuns: row.repairRuns,
+    reviewWaitMinutes: wait === null ? null : Math.round(wait * 10) / 10,
     costUsd: row.cost,
     decidedCostUsd: row.decidedCost,
     costPerMerge: row.merged === 0 || !row.costSeen ? null : row.decidedCost / row.merged,
@@ -79,18 +121,42 @@ function usable(run) {
 export function outcomeTable(runs, outcomes, subjects = []) {
   const latest = newestOutcomes(outcomes)
   const list = Array.isArray(runs) ? runs : []
+  const merges = (Array.isArray(subjects) ? subjects : []).map(mergeEntry).filter(Boolean)
   const newestRun = new Map()
+  const branchRuns = new Map()
   list.forEach((run, index) => {
-    if (usable(run) && branchOf(run)) newestRun.set(branchOf(run), index)
+    if (!usable(run) || !branchOf(run)) return
+    const branch = branchOf(run)
+    newestRun.set(branch, index)
+    const group = branchRuns.get(branch)
+    if (group) group.push(run)
+    else branchRuns.set(branch, [run])
   })
   const settled = new Map()
   for (const [branch, index] of newestRun) {
     const outcome = latest.get(branch)
+    const merge = mergedBySubject(list[index], merges)
     if (outcome) {
-      settled.set(branch, { merged: outcome.outcome === 'merged', ungraded: false, fixes: outcome.fixes })
-    } else if (mergedBySubject(list[index], subjects)) {
-      settled.set(branch, { merged: true, ungraded: true, fixes: null })
+      const merged = outcome.outcome === 'merged'
+      settled.set(branch, {
+        merged,
+        ungraded: false,
+        fixes: outcome.fixes,
+        mergedAt: merged ? mergeTime(merge) : null,
+      })
+    } else if (merge) {
+      settled.set(branch, { merged: true, ungraded: true, fixes: null, mergedAt: mergeTime(merge) })
     }
+  }
+  const branchMetrics = new Map()
+  for (const [branch, decision] of settled) {
+    if (!decision.merged) continue
+    const group = branchRuns.get(branch) ?? []
+    const plain = group.filter(isRepair)
+    const last = list[newestRun.get(branch)]
+    const finished = timeOf(last?.finishedAt)
+    const wait = decision.mergedAt !== null && finished !== null ? Math.max(0, (decision.mergedAt - finished) / 60000) : null
+    branchMetrics.set(branch, { repairRuns: Math.max(0, plain.length - 1), reviewWaitMinutes: wait })
   }
   const rows = new Map()
   for (const [index, run] of list.entries()) {
@@ -120,6 +186,11 @@ export function outcomeTable(runs, outcomes, subjects = []) {
       row.merged += 1
       if (decision.ungraded) row.ungraded += 1
       else if (typeof decision.fixes === 'number' && Number.isFinite(decision.fixes)) row.fixes.push(decision.fixes)
+      const metrics = branchMetrics.get(branch)
+      if (metrics) {
+        row.repairRuns += metrics.repairRuns
+        if (metrics.reviewWaitMinutes !== null) row.waits.push(metrics.reviewWaitMinutes)
+      }
     } else {
       row.rejected += 1
     }

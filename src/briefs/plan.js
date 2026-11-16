@@ -1,4 +1,4 @@
-import { parseBriefs } from './briefs.js'
+import { briefFileList, parseBriefs } from './briefs.js'
 
 const ID_SHAPE = /^[A-Z]\d+[a-z]?$/
 const SIZES = ['small', 'medium', 'large']
@@ -23,6 +23,50 @@ function listOf(value) {
     return value.split(',').map((entry) => entry.trim()).filter(Boolean)
   }
   return []
+}
+
+function onWindows() {
+  const platform = typeof globalThis === 'object' ? globalThis.process?.platform : ''
+  if (typeof platform === 'string' && platform !== '') return platform === 'win32'
+  return typeof navigator !== 'undefined' && /Windows/i.test(String(navigator.userAgent ?? ''))
+}
+
+function compareFile(value) {
+  const text = normalizePath(value)
+  return onWindows() ? text.toLowerCase() : text
+}
+
+function declaredList(value) {
+  if (Array.isArray(value)) {
+    return value
+      .filter((entry) => typeof entry === 'string')
+      .map((entry) => entry.trim())
+      .filter(Boolean)
+  }
+  if (typeof value === 'string') return briefFileList(value)
+  return []
+}
+
+export function overlappingLanes({ files, active } = {}) {
+  const target = declaredList(files)
+  if (target.length === 0) return 'unknown'
+  const wanted = new Map(target.map((file) => [compareFile(file), file]))
+  const lanes = new Map()
+  for (const entry of Array.isArray(active) ? active : []) {
+    if (!entry || typeof entry !== 'object') continue
+    const lane = typeof entry.lane === 'string' ? entry.lane.trim() : ''
+    if (!lane) continue
+    const bucket = lanes.get(lane) ?? { files: [], seen: new Set() }
+    for (const file of declaredList(entry.files)) {
+      const key = compareFile(file)
+      const shared = wanted.get(key)
+      if (shared === undefined || bucket.seen.has(key)) continue
+      bucket.seen.add(key)
+      bucket.files.push(shared)
+    }
+    if (bucket.files.length > 0) lanes.set(lane, bucket)
+  }
+  return [...lanes].map(([lane, bucket]) => ({ lane, files: bucket.files }))
 }
 
 function idIndex(ids) {

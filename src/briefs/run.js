@@ -21,6 +21,19 @@ export function formatInterruptMessage(messages) {
   return lines.length === 0 ? `${INTERRUPT_PARAGRAPH}\n` : `${INTERRUPT_PARAGRAPH}\n\n${lines.join('\n')}\n`
 }
 
+export function interruptSenderFrom(text) {
+  const raw = String(text ?? '').replace(/\r\n/g, '\n')
+  const split = raw.indexOf('\n\n')
+  const body = split === -1 ? raw : raw.slice(split + 2)
+  for (const line of body.split('\n')) {
+    const trimmed = line.trim()
+    if (trimmed === '') continue
+    const colon = trimmed.indexOf(': ')
+    if (colon > 0) return trimmed.slice(0, colon).trim()
+  }
+  return ''
+}
+
 export function continueFromProblem(value) {
   const name = typeof value === 'string' ? value.trim() : ''
   if (name === '' || name.startsWith('-') || !/^[A-Za-z0-9_-]+$/.test(name)) {
@@ -245,6 +258,16 @@ function outcomeCost(value) {
   return `$${value.toFixed(2)} a merge`
 }
 
+function outcomeRepairs(value) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return '?'
+  return String(Math.round(value))
+}
+
+function outcomeWait(value) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return '?'
+  return `${Math.round(value * 10) / 10} min`
+}
+
 export function formatOutcomes(rows) {
   const list = Array.isArray(rows) ? rows : []
   if (list.length === 0) return ['No runs yet.']
@@ -252,7 +275,7 @@ export function formatOutcomes(rows) {
   return list.map((row) => {
     const lane = String(row?.lane ?? '')
     const model = String(row?.model ?? MODEL_UNKNOWN)
-    return `${lane}  ${model}  runs ${count(row?.runs)}, merged ${count(row?.merged)} (${count(row?.ungraded)} not graded), rejected ${count(row?.rejected)}, pending ${count(row?.pending)}, merge rate ${outcomePercent(row?.mergeRate)}, fixes ${outcomeFixes(row?.averageFixes)}, ${outcomeCost(row?.costPerMerge)}`
+    return `${lane}  ${model}  runs ${count(row?.runs)}, merged ${count(row?.merged)} (${count(row?.ungraded)} not graded), rejected ${count(row?.rejected)}, pending ${count(row?.pending)}, merge rate ${outcomePercent(row?.mergeRate)}, fixes ${outcomeFixes(row?.averageFixes)}, ${outcomeCost(row?.costPerMerge)}, repair runs ${outcomeRepairs(row?.repairRuns)}, review wait ${outcomeWait(row?.reviewWaitMinutes)}`
   })
 }
 
@@ -1199,13 +1222,14 @@ export function maskedQueueTasks(tasks) {
   return (Array.isArray(tasks) ? tasks : []).map((task) => maskProfilePaths(maskKeys(String(task ?? '')).text).slice(0, RECORD_TEXT_LIMIT))
 }
 
-export function runRecord({ lane, briefs, model, reasoning, mode, startedAt, minutes, exitCode, killed, costUsd, inputTokens, outputTokens, peakTokens, log, branch, commits, base, head, tests, project, task, startedBy, stoppedLeftovers, queue, startFailed, note, retried, failover, failoverFrom, quota, continues, interruptedBy } = {}) {
+export function runRecord({ lane, briefs, model, reasoning, mode, startedAt, finishedAt, minutes, exitCode, killed, costUsd, inputTokens, outputTokens, peakTokens, log, branch, commits, base, head, tests, project, task, startedBy, stoppedLeftovers, queue, startFailed, note, retried, failover, failoverFrom, quota, continues, interruptedBy } = {}) {
   const record = {
     lane: String(lane ?? ''),
     briefs: Array.isArray(briefs) ? briefs.map(String) : [],
     model: model ? String(model) : null,
     reasoning: reasoning ? String(reasoning) : null,
     startedAt: isoTime(startedAt),
+    finishedAt: isoTime(finishedAt ?? new Date()),
     minutes: Number.isFinite(minutes) ? minutes : null,
     exitCode: Number.isInteger(exitCode) ? exitCode : null,
     killed: killed === true,
@@ -1247,8 +1271,10 @@ export function runRecord({ lane, briefs, model, reasoning, mode, startedAt, min
     const lane = typeof failoverFrom.lane === 'string' ? failoverFrom.lane.trim() : ''
     if (lane !== '') record.failoverFrom = { lane, startedAt: isoTime(failoverFrom.startedAt) }
   }
-  if (typeof continues === 'string' && continues.trim() !== '') record.continues = continues.trim()
-  if (typeof interruptedBy === 'string' && interruptedBy.trim() !== '') record.interruptedBy = interruptedBy.trim()
+  if (typeof continues === 'string' && continues.trim() !== '') {
+    record.continues = continues.trim()
+    if (typeof interruptedBy === 'string' && interruptedBy.trim() !== '') record.interruptedBy = interruptedBy.trim()
+  }
   return record
 }
 

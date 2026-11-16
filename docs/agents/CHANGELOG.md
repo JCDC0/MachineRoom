@@ -2,11 +2,23 @@
 
 ## Unreleased
 - P458: Dispatch shows a First task card in Plan mode for a project with no runs when a ready lane offers Plan, and Connect and the README note that records stay local while agents send code to their model providers.
+- Run records gain finishedAt, and the outcome table and --outcomes show repair runs and review wait, with ? for unknown.
+- P460: Every new run record carries `finishedAt`, the ISO time the run ended, and older records stay unknown.
+- P460: The outcome table counts extra plain runs before a merge as `repairRuns` and the median wait from the last run to the merge commit as `reviewWaitMinutes`.
+- P460: `run-lane --outcomes` prints repair runs and review wait, with `?` when a time is unknown.
+- The compaction message and the kept summary name the turn logs and the retention limits.
+- Dispatch's confirm card names lanes that declared the same files, says when overlap is unknown, and can warn above a set lane count.
+- A continuation's own record carries continues and interruptedBy; no earlier line of runs.jsonl is changed.
+- POST /api/orchestrator/stop-tree stops an orchestrator's sector, or the whole tree, refusing new work there until it answers.
+- P450: Add `POST /api/orchestrator/stop-tree` to stop a sector or the whole tree in one call while gating dispatches into the stopping sector and checking the process tree for `stillRunning`.
 - The Inspector shows each lane's Sandbox line from its harness and effective mode, and an ACP run says its requests are approved automatically.
 - Meters labels a lane total with its unreported runs, shows failed or stopped spend, and shows when a quota window was seen and resets.
 - A lane review keeps the checks run on its head apart from the agent's report and lists every run of the task by its failover and continuation links.
+- An interrupt never rewrites runs.jsonl; the continuation record carries continues and interruptedBy.
 - With Replies set to interrupt, a reply stops a working CLI lane run and continues it on the same branch, worktree, ticket and inbox, at most three times.
+- P456: Dispatch warns when another running lane declares the same files, says when the overlap is unknown, and can warn above a set lane count.
 - Ready says it means the program was found, and doctor warns when the project has no AGENTS.md, CLAUDE.md or GEMINI.md.
+- P457: A compaction names the chat file, the turn logs in the runs folder and the limits, and the saved summary starts with those log names.
 - Each MCP server's tool list is kept 60 seconds per runs folder and config, failures are not kept, and parallel lists share one request.
 - The native agent adds a warning after a tool call fails the same way three times and ends the run on the fifth.
 - A page opens one /events stream and the control client takes its notices from it, so six tabs fit before the browser's connection limit.

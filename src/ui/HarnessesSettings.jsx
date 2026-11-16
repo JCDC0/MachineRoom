@@ -11,6 +11,7 @@ import {
   isNativeHarness,
   programDraftsFrom,
 } from './harnessesSettings.js'
+import { laneCountWarningFrom } from './panels/runs.js'
 
 const READY_MEANS = 'Ready means the program was found. It does not prove sign-in, a model or the sandbox.'
 
@@ -44,6 +45,8 @@ export default function HarnessesSettings({ client }) {
   const [busyKey, setBusyKey] = useState('')
   const [savingReplies, setSavingReplies] = useState(false)
   const [laneReplies, setLaneReplies] = useState('next-turn')
+  const [savingLaneCount, setSavingLaneCount] = useState(false)
+  const [laneCountWarning, setLaneCountWarning] = useState('0')
   const [checking, setChecking] = useState(false)
   const [confirm, setConfirm] = useState(null)
   const [sectionError, setSectionError] = useState('')
@@ -100,6 +103,7 @@ export default function HarnessesSettings({ client }) {
       setDrafts({})
       setCounts(null)
       setLaneReplies('next-turn')
+      setLaneCountWarning('0')
       setSectionError('')
       setRowErrors({})
       return
@@ -111,6 +115,7 @@ export default function HarnessesSettings({ client }) {
       setRows(nextRows)
       setDrafts(programDraftsFrom(nextRows))
       setLaneReplies(laneRepliesFrom(answer))
+      setLaneCountWarning(String(laneCountWarningFrom(answer)))
       setSectionError('')
       await loadCounts()
     } catch (error) {
@@ -186,6 +191,36 @@ export default function HarnessesSettings({ client }) {
       setSectionError(error?.message || 'Could not save the reply choice.')
     } finally {
       if (mountedRef.current) setSavingReplies(false)
+    }
+  }
+
+  async function applyLaneCountWarning(value) {
+    if (!client || typeof client.harnessSettings !== 'function') return
+    const text = String(value ?? '').trim()
+    const count = text === '' ? Number.NaN : Number(text)
+    if (!Number.isInteger(count) || count < 0) {
+      setSectionError('Write the lane count warning as a whole number, 0 or more.')
+      return
+    }
+    setSavingLaneCount(true)
+    setSectionError('')
+    try {
+      const result = await client.harnessSettings({ laneCountWarning: count, confirmed: true })
+      if (!mountedRef.current) return
+      setLaneCountWarning(String(count))
+      const nextRows = updateRowsWithResult(rows, result)
+      if (nextRows) {
+        setRows(nextRows)
+        setDrafts(programDraftsFrom(nextRows))
+        await loadCounts()
+      } else {
+        await loadAll()
+      }
+    } catch (error) {
+      if (!mountedRef.current) return
+      setSectionError(error?.message || 'Could not save the lane count warning.')
+    } finally {
+      if (mountedRef.current) setSavingLaneCount(false)
     }
   }
 
@@ -276,6 +311,31 @@ export default function HarnessesSettings({ client }) {
               <option value="next-turn">Wait for its next turn</option>
               <option value="interrupt">Interrupt it at once</option>
             </select>
+          </div>
+          <div className="endpoints-field">
+            <label className="endpoints-label mono" htmlFor="harness-lane-count-warning">
+              Warn above this many running lanes
+            </label>
+            <input
+              id="harness-lane-count-warning"
+              type="number"
+              min="0"
+              step="1"
+              value={laneCountWarning}
+              disabled={checking || savingLaneCount || Boolean(busyKey)}
+              onChange={(event) => setLaneCountWarning(event.target.value)}
+            />
+            <div className="endpoints-actions">
+              <button
+                type="button"
+                className="hud-settings-switch"
+                disabled={checking || savingLaneCount || Boolean(busyKey)}
+                onClick={() => applyLaneCountWarning(laneCountWarning)}
+              >
+                Save
+              </button>
+            </div>
+            <p className="endpoints-note mono">0 turns the warning off.</p>
           </div>
           {rows.map((row) => {
             const status = harnessStatus(row)

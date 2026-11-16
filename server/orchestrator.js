@@ -56,6 +56,39 @@ export const COMPACT_PROMPT =
   'Write a summary of the work so far, the open runs and the next steps, in at most 40 lines. Reply with the summary only.'
 export const COMPACTED_MESSAGE = 'The session was compacted. The next turn starts a new session with the summary.'
 export const COMPACT_FAILED_MESSAGE = 'The compact failed. The session is still open.'
+
+function turnLogNameList(logs) {
+  const list = Array.isArray(logs) ? logs : []
+  const names = []
+  for (const value of list) {
+    if (typeof value !== 'string') continue
+    const name = basename(value.trim())
+    if (!name || !TURN_LOG.test(name) || names.includes(name)) continue
+    names.push(name)
+  }
+  return names
+}
+
+export function compactedMessage({ chatFile = '', logs = [] } = {}) {
+  const file = typeof chatFile === 'string' ? basename(chatFile.trim()) : ''
+  const names = turnLogNameList(logs)
+  const kept = file
+    ? `Kept: the summary and the saved messages in ${file}, which the chat still shows.`
+    : 'Kept: the summary and the chat messages, which the chat still shows.'
+  const earlier = names.length > 0
+    ? `The earlier turns are in these turn logs in the runs folder: ${names.join(', ')}.`
+    : 'No earlier turn logs were found in the runs folder.'
+  return `${COMPACTED_MESSAGE} ${kept} ${earlier} Limits: the chat keeps the last ${ORCHESTRATOR_CHAT_LIMIT} messages, and each saved conversation keeps the last ${SESSION_MESSAGES_LIMIT} messages and at most ${BRANCH_TRANSCRIPT_LIMIT} characters of branch transcript.`
+}
+
+export function compactedSummary(report, logs = []) {
+  const names = turnLogNameList(logs)
+  const line = names.length > 0
+    ? `Summarized from these turn logs in the runs folder: ${names.join(', ')}.`
+    : 'Summarized from the saved chat. No earlier turn logs were found in the runs folder.'
+  const text = typeof report === 'string' ? report.trim() : ''
+  return text ? `${line}\n\n${text}` : line
+}
 export const CONFIRM_MESSAGE_PROBLEM = 'Confirm the message first.'
 export const CONFIRM_STOP_PROBLEM = 'Confirm the stop first.'
 export const CONFIRM_AUTOCOMPACT_PROBLEM = 'Confirm the autocompact change first.'
@@ -1261,6 +1294,23 @@ export function createOrchestrator({
     return value
   }
 
+  function turnLogNames() {
+    let names
+    try {
+      names = readdirSync(folder).filter((name) => name.startsWith(`${logPrefix}-chat-`) && TURN_LOG.test(name))
+    } catch {
+      return []
+    }
+    const ownProject = root ? pathKey(root) : ''
+    return names
+      .filter((name) => {
+        if (!ownProject) return true
+        const metaProject = metaProjectFor(join(folder, name))
+        return !metaProject || pathKey(metaProject) === ownProject
+      })
+      .sort()
+  }
+
   function recoverTurnLog(saved) {
     if (saved && Object.hasOwn(saved, 'turnLog')) {
       const name = validTurnLogName(saved.turnLog)
@@ -1856,7 +1906,7 @@ export function createOrchestrator({
     const needsOpencodeConfig = harness === 'opencode' && (needsMcp || turnMode === 'edits' || turnMode === 'plan')
     const mcpConfigPath = needsMcp || needsOpencodeConfig ? join(folder, `${logName}.mcp.json`) : ''
     let mcpEnv = null
-    const turn = { startedAt, logFile, logPath, metaPath, mcpConfigPath, killed: false, done: false, started: false, provisionalSessionId: first ? sessionId : null, child: null, timer: null, compacting: compaction, stderr: '', anchorId: turnMessages[0]?.id ?? '', steps: [], parser: null }
+    const turn = { startedAt, logFile, logPath, metaPath, mcpConfigPath, killed: false, done: false, started: false, provisionalSessionId: first ? sessionId : null, child: null, timer: null, compacting: compaction, stderr: '', anchorId: turnMessages[0]?.id ?? '', steps: [], parser: null, sourceLogs: compaction ? turnLogNames() : [] }
     turn.parser = compaction ? null : stepParserFor(harness)
     running = turn
     if (state === 'working') persist()
@@ -2153,11 +2203,11 @@ export function createOrchestrator({
         if (!stopped) setState(state === 'paused' ? 'paused' : 'idle')
         addMessage('room', COMPACT_FAILED_MESSAGE)
       } else {
-        summary = maskText(String(report ?? '')).trim()
+        summary = compactedSummary(maskText(String(report ?? '')), turn.sourceLogs)
         sessionId = null
         contextTokens = null
         if (!stopped) setState(state === 'paused' ? 'paused' : 'idle')
-        addMessage('room', COMPACTED_MESSAGE)
+        addMessage('room', compactedMessage({ chatFile: conversationFile, logs: turn.sourceLogs }))
       }
       if (!stopped) maybeStartTurn()
       return

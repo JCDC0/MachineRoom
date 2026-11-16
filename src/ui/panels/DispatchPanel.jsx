@@ -7,13 +7,14 @@ import {
   runLaneFor,
 } from './briefs.js'
 import { subscribeToNotices } from './notices.js'
+import { briefFileList } from '../../briefs/briefs.js'
 import { laneModesFor, defaultMode } from '../../control/modes.js'
 import { harnessByAdapter } from '../../harnesses/index.js'
 import { harnessList, harnessReady } from '../family.js'
 import { useHarnessModels } from '../ModelRefresh.jsx'
 import { laneNeedsNetwork } from '../../model/online.js'
 import { TIERS } from '../../policy/route.js'
-import { PROJECT_CONFIRM_LIMIT, PROJECT_QUEUE_TEXT_LIMIT, cancelSplitRun, clearProjectDraft, clearSplitRun, planLaneTasks, projectCheckLine, projectDraftKey, projectFormNotice, projectRunBody, projectRunConfirm, projectRunLabel, projectRunLanes, projectSplitLabel, projectSplitWorktreeLine, projectTaskProblem, projectWorktreeLine, queueRecoveryAvailable, queueRecoveryMessage, queueRecoveryPlan, readProjectDraft, recordLine, resultWord, splitRunProgress, splitRunSnapshot, splitTasks, startSplitRun, subscribeSplitRun, timeSinceStart, writeProjectDraft } from './runs.js'
+import { PROJECT_CONFIRM_LIMIT, PROJECT_QUEUE_TEXT_LIMIT, cancelSplitRun, clearProjectDraft, clearSplitRun, laneCountWarningFrom, overlapCardLines, planLaneTasks, projectCheckLine, projectDraftKey, projectFormNotice, projectRunBody, projectRunConfirm, projectRunLabel, projectRunLanes, projectSplitLabel, projectSplitWorktreeLine, projectTaskProblem, projectWorktreeLine, queueRecoveryAvailable, queueRecoveryMessage, queueRecoveryPlan, readProjectDraft, recordLine, resultWord, runningLaneFiles, splitRunProgress, splitRunSnapshot, splitTasks, startSplitRun, subscribeSplitRun, timeSinceStart, writeProjectDraft } from './runs.js'
 import { formatTime } from '../inspector.js'
 
 const FIRST_TASK_TEXT =
@@ -133,6 +134,7 @@ export default function DispatchPanel({
   const [projectDiscardConfirm, setProjectDiscardConfirm] = useState(false)
   const [projectDraftPresent, setProjectDraftPresent] = useState(false)
   const [networkOnline, setNetworkOnline] = useState(true)
+  const [laneCountWarning, setLaneCountWarning] = useState(0)
   const [projectGitState, setProjectGitState] = useState(null)
   const [routeNonce, setRouteNonce] = useState(0)
   const [recoveryKey, setRecoveryKey] = useState('')
@@ -444,6 +446,26 @@ export default function DispatchPanel({
     loadHealth()
     return () => {
       alive = false
+    }
+  }, [client])
+
+  useEffect(() => {
+    if (typeof client?.harnesses !== 'function') {
+      setLaneCountWarning(0)
+      return undefined
+    }
+    let alive = true
+    async function loadLaneCountWarning() {
+      try {
+        const answer = await client.harnesses()
+        if (alive) setLaneCountWarning(laneCountWarningFrom(answer))
+      } catch {}
+    }
+    loadLaneCountWarning()
+    const unsubscribe = subscribeToNotices(client, 'harnesses', loadLaneCountWarning)
+    return () => {
+      alive = false
+      unsubscribe()
     }
   }, [client])
 
@@ -942,6 +964,29 @@ export default function DispatchPanel({
   const splitStopped = splitRun.done && splitRun.cancelled
   const modeHarness = projectLaneHarness || (projectMode ? agentHarnessKey(laneAgentFor(effectiveLane)) : '')
   const projectModes = laneModesFor(modeHarness)
+  const activeLaneFiles = runningLaneFiles(runsState.running, briefs)
+  const runningLaneCount = runsState.running.length
+  const briefOverlapLines = showConfirm && selectedBrief
+    ? overlapCardLines({
+        files: selectedBrief.text,
+        active: activeLaneFiles,
+        runningCount: runningLaneCount,
+        startingCount: 1,
+        laneCountWarning,
+      })
+    : []
+  const projectStartFiles = projectSplitPlan
+    ? projectSplitPlan.pairs.flatMap((pair) => briefFileList(pair.task))
+    : projectTasks.flatMap((task) => briefFileList(task))
+  const projectOverlapLines = projectShowConfirm
+    ? overlapCardLines({
+        files: projectStartFiles,
+        active: activeLaneFiles,
+        runningCount: runningLaneCount,
+        startingCount: projectSplitPlan ? projectSplitPlan.pairs.length : 1,
+        laneCountWarning,
+      })
+    : []
 
   return (
     <div className="dispatch-form">
@@ -1264,6 +1309,11 @@ export default function DispatchPanel({
                       ? projectSplitWorktreeLine(projectGitState)
                       : 'Each task runs in the project folder.'}
                   </div>
+                  {projectOverlapLines.map((line, index) => (
+                    <div key={`split-overlap-${index}`} className="brief-confirm-warning">
+                      {line}
+                    </div>
+                  ))}
                   <div className="brief-confirm-warning">
                     This starts {projectSplitTaskCount} agents on this computer three seconds apart and spends money.
                   </div>
@@ -1344,6 +1394,11 @@ export default function DispatchPanel({
                   {`Backup lane: ${projectConfirm.backup}`}
                 </div>
               )}
+              {projectOverlapLines.map((line, index) => (
+                <div key={`project-overlap-${index}`} className="brief-confirm-warning">
+                  {line}
+                </div>
+              ))}
               <div className="brief-confirm-warning">
                 {projectCheckLine({ checkCommand: projectCheckCommand, hasTestScript: projectHasTestScript })}
               </div>
@@ -1518,6 +1573,11 @@ export default function DispatchPanel({
                     <span className="brief-confirm-model">Model: {promptModel || 'Default model'}</span>
                     <span className="brief-confirm-id">Brief: {selectedBriefId}</span>
                   </div>
+                  {briefOverlapLines.map((line, index) => (
+                    <div key={`brief-overlap-${index}`} className="brief-confirm-warning">
+                      {line}
+                    </div>
+                  ))}
                   <div className="brief-confirm-warning">
                     This starts the agent on this computer and spends money.
                   </div>
