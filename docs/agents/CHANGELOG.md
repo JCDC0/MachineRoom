@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- Review 44 (Sol) of P415 to P422: two P2 findings, Main's harness shown for a lane or sub named like an orchestrator, and a doc promising a message a failed read never sends.
 - A restricted sub's merge refused because its changed files could not be read now offers Merge anyway in Reviews, with no file list.
 - The sub restore test keeps the old harness's saved conversation on disk until the restore, so it fails if P413's guards are undone.
 - A harness's model list command comes only from an indented subcommand line of its help, so Codex's --model option no longer runs codex model, and no list command is no error.
