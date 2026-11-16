@@ -1,4 +1,10 @@
+import './hide-windows.mjs'
 import { testRunsFolder } from './tempRoot.js'
+
+const hideWindowsImport = `--import=${new URL('./hide-windows.mjs', import.meta.url).href}`
+const escapedImport = hideWindowsImport.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+const nodeOptions = (process.env.NODE_OPTIONS ?? '').replace(new RegExp(`(?:^|\\s)${escapedImport}(?=\\s|$)`, 'g'), '').trim()
+process.env.NODE_OPTIONS = `${nodeOptions} ${hideWindowsImport}`.trim()
 
 // A lane or the orchestrator runs tests with its own runs folder and lane list set; a test must never write there.
 process.env.MACHINEROOM_RUNS = testRunsFolder()

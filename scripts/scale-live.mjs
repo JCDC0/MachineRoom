@@ -397,6 +397,7 @@ function openTreeStream(port, path) {
 function openBridgeChild(dir, serverDir = '') {
   const child = fork(fileURLToPath(import.meta.url), ['--bridge-child', dir, serverDir], {
     stdio: ['ignore', 'ignore', 'ignore', 'ipc'],
+    windowsHide: true,
   })
   const pending = new Map()
   let sequence = 0
