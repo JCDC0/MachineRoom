@@ -574,7 +574,8 @@ export function createAgentsConfigApi(options = {}) {
   const env = options.env ?? process.env
 
   async function rowsFor(lanes) {
-    return Promise.all(listHarnesses({ lanes, env, runsFolder: runsDir }).map(async (row) => ({ ...row, ...await harnessStatus(row.key, { runsFolder: runsDir, lanes, env, available: row.available }) })))
+    const laneReplies = readHarnessSettings(runsDir).laneReplies
+    return Promise.all(listHarnesses({ lanes, env, runsFolder: runsDir }).map(async (row) => ({ ...row, laneReplies, ...await harnessStatus(row.key, { runsFolder: runsDir, lanes, env, available: row.available }) })))
   }
 
   async function handle(req, res, url) {
@@ -605,7 +606,7 @@ export function createAgentsConfigApi(options = {}) {
       } else clearHarnessChecks(runsDir)
       const rows = await rowsFor(getBaseLanes())
       if (typeof notify === 'function') notify({ topic: 'harnesses' })
-      sendJson(req, res, 200, path.endsWith('/settings') ? rows.find((row) => row.key === body.key) : rows)
+      sendJson(req, res, 200, path.endsWith('/settings') && typeof body.key === 'string' ? rows.find((row) => row.key === body.key) : rows)
       return true
     }
 

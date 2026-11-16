@@ -143,6 +143,7 @@ export function subFromForm(form, allowed = null) {
   const id = typedId || idFromName(name)
   const harness = keepHarness(value.harness, allowed)
   const effort = String(value.effort ?? '').trim()
+  const mode = String(value.mode ?? '').trim()
   const lanes = []
   for (const lane of Array.isArray(value.lanes) ? value.lanes : []) {
     const key = String(lane ?? '').trim()
@@ -154,6 +155,7 @@ export function subFromForm(form, allowed = null) {
     harness,
     model: String(value.model ?? '').trim(),
     ...(effort ? { effort } : {}),
+    ...(mode ? { mode } : {}),
     lanes,
     scope: scopeLines(value.scope),
     restricted: value.restricted !== false,
@@ -197,11 +199,13 @@ export function ladderFromOrchestrators(list) {
   for (const entry of Array.isArray(list) ? list : []) {
     if (!entry || typeof entry !== 'object' || typeof entry.id !== 'string' || !entry.id) continue
     if (entry.id === RESERVED_ID) continue
+    const mode = typeof entry.mode === 'string' ? entry.mode.trim() : ''
     subs.push({
       id: entry.id,
       name: typeof entry.name === 'string' && entry.name ? entry.name : entry.id,
       harness: typeof entry.harness === 'string' ? entry.harness : '',
       model: typeof entry.model === 'string' ? entry.model : '',
+      ...(mode ? { mode } : {}),
       lanes: Array.isArray(entry.lanes) ? entry.lanes.filter((lane) => typeof lane === 'string' && lane) : [],
       scope: Array.isArray(entry.scope) ? entry.scope.filter((line) => typeof line === 'string' && line) : [],
       restricted: entry.restricted !== false,

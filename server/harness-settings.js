@@ -10,15 +10,18 @@ export const HARNESS_OFF_PROBLEM = 'That harness is turned off in Settings.'
 const CHECK_TTL_MS = 10 * 60 * 1000
 const cache = new Map()
 
+export const LANE_REPLIES = ['next-turn', 'interrupt']
+
 export function readHarnessSettings(folder) {
   try {
     const data = JSON.parse(readFileSync(join(folder, 'harnesses.json'), 'utf8'))
     return {
       programs: data?.programs && typeof data.programs === 'object' && !Array.isArray(data.programs) ? data.programs : {},
       off: Array.isArray(data?.off) ? data.off.filter((key) => typeof key === 'string') : [],
+      laneReplies: data?.laneReplies === 'interrupt' ? 'interrupt' : 'next-turn',
     }
   } catch {
-    return { programs: {}, off: [] }
+    return { programs: {}, off: [], laneReplies: 'next-turn' }
   }
 }
 
@@ -40,12 +43,19 @@ export function saveHarnessSettings(folder, settings, { rename = renameSync } = 
 }
 
 export function updateHarnessSettings(folder, body) {
+  const settings = readHarnessSettings(folder)
+  if (Object.hasOwn(body ?? {}, 'laneReplies')) {
+    if (Object.hasOwn(body, 'program') || Object.hasOwn(body, 'enabled')) return 'Change one setting at a time.'
+    if (!LANE_REPLIES.includes(body.laneReplies)) return "Choose whether a reply waits for the lane's next turn or interrupts it at once."
+    settings.laneReplies = body.laneReplies
+    saveHarnessSettings(folder, settings)
+    return ''
+  }
   const key = body?.key
   if (typeof key !== 'string' || !Object.hasOwn(harnessByKey, key)) return 'Choose a known harness.'
   const hasProgram = Object.hasOwn(body, 'program')
   const hasEnabled = Object.hasOwn(body, 'enabled')
   if (hasProgram === hasEnabled) return 'Choose a program or whether the harness is enabled.'
-  const settings = readHarnessSettings(folder)
   if (hasProgram) {
     const program = body.program
     if (typeof program !== 'string' || (program !== '' && (!isAbsolute(program) || !isFile(program)))) {

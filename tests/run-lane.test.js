@@ -2000,7 +2000,7 @@ describe('scripts/run-lane.mjs', () => {
     }
   })
 
-  it('writes and cleans up MCP config during lane run and writes nothing when none is enabled', async () => {
+  it('writes and cleans up an OpenCode config during a lane run', async () => {
     const folder = makeTempDir('machine-room-mcp-run-')
     try {
       const runs = join(folder, 'runs')
@@ -2038,8 +2038,8 @@ describe('scripts/run-lane.mjs', () => {
         task: 'task',
       })
       const noMcpResult = JSON.parse(readFileSync(checkFile, 'utf8'))
-      expect(noMcpResult.cfg).toBe('')
-      expect(noMcpResult.existed).toBe(false)
+      expect(noMcpResult.cfg).toBe(join(runs, 'run-no-mcp.mcp.json'))
+      expect(noMcpResult.existed).toBe(true)
       expect(existsSync(join(runs, 'run-no-mcp.mcp.json'))).toBe(false)
 
       writeFileSync(join(runs, 'mcp.json'), JSON.stringify({

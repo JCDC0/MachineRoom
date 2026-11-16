@@ -2,7 +2,27 @@
 
 ## Unreleased
 - A sub's harness route change updates its live program override, and a ladder recreation keeps given model and effort values over the saved chat file.
+- Add sub and the sub editor in Agents offer a Mode select, saved with the sub and kept across ladder saves.
+- Sol reviews the research plan against the surveys and the code, narrows each item's first step and reorders the plan.
+- A lane ticket can take over only its own lane's backup, once, and a lane's own run gets its messages first.
+- Settings choose whether a reply to a working lane waits for its next turn or interrupts it; the native agent aborts its model call for a new reply.
+- Every OpenCode lane run that is not Bypass denies writes outside the project (external_directory deny), and the mode lines say where writes may go.
+- P440: An OpenCode lane that is not Bypass denies writes outside the project, and more mode lines say where writes go.
+- P439b: A lane ticket can take over only its own lane's fallback, only once, and a lane's own run gets its messages first.
+- Argon drafts PLAN-RESEARCH.md, one ranked plan of 15 items from the three harness surveys.
+- A failover backup sends as its own lane and keeps the primary's inbox and send count.
+- A sub's task or queue start passes its allowed lanes to the runner, and a failover to a backup outside them is refused before it touches the backup.
+- A failover that refuses to carry Bypass gives the backup its harness default mode, so Claude, AGY and native backups do not get their skip-permissions flags.
+- Draft the merged research plan in docs/agents/PLAN-RESEARCH.md from the Claude, Sol and Argon harness surveys (P443).
+- A sub orchestrator's lane:KEY message to a lane outside its sector is refused with 403.
+- A reply to a working lane waits for its next turn or interrupts the native agent's model call, as Settings say.
+- Argon's survey of coding agent harnesses and what their users want (P442c).
+- P445: A sub token's prefixed lane message is refused outside its sector before it reaches the lane.
+- P444: A failover that drops Bypass gives the backup its harness default mode, so a Claude, AGY or native backup runs in Auto instead of its skip-permissions flags.
+- P446: A sub's failover stays in its sector: the runner receives the sub's allowed lanes and refuses a backup outside them before it takes the backup's lock or branch.
 - Review 46 (GPT-6.1 Sol) finds five gaps in the sector gates, the failover mode and the sub settings saves.
+- P439: A failover backup messages as lane:BACKUP, keeps the primary's replies in its inbox, takes a reply sent to either lane name, and shares the primary's four sends.
+- Add sub and the sub editor in Agents offer a Mode select from modesFor and save and keep the sub's mode across later ladder saves.
 - A sub's harness, model or effort change is saved to the ladder and its config, so a later ladder save keeps it and does not close the sub's running turn.
 - A Bypass run that fails over never passes Bypass to a backup lane not saved as Bypass; the backup runs at its own mode or its harness default.
 - Sub harness, model and effort changes update the saved ladder and keep unchanged working turns alive.

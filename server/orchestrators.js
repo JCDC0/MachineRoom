@@ -2,7 +2,7 @@ import { HARNESS_OFF_PROBLEM, readHarnessSettings } from './harness-settings.js'
 import { execFileSync } from 'node:child_process'
 import { isAbsolute, join, relative, resolve } from 'node:path'
 import { maskKeys } from '../src/briefs/audit.js'
-import { legacyMode, modesFor } from '../src/control/modes.js'
+import { defaultMode, legacyMode, modesFor } from '../src/control/modes.js'
 import { HARNESSES } from '../src/harnesses/index.js'
 import { canChange, outsideScope, readLadder, subPrompt } from '../src/model/hierarchy.js'
 import { HARNESS_EFFORTS, harnessUnavailableProblem, isHarnessAvailable, modelAllowed, modelUnavailableProblem } from './agents-config.js'
@@ -56,6 +56,10 @@ export const LANE_MESSAGE_LIMIT = 4
 export const LANE_SELF_PROBLEM = 'A lane cannot message itself.'
 export const PAGE_INBOX_PROBLEM = 'A page cannot read a lane inbox.'
 export const TOKEN_INBOX_PROBLEM = 'A lane inbox is read with a lane ticket, not an orchestrator token.'
+export const PAGE_FAILOVER_PROBLEM = 'A page cannot take over a lane ticket.'
+export const TOKEN_FAILOVER_PROBLEM = 'A lane ticket is taken over with the lane ticket, not an orchestrator token.'
+export const LANE_BACKUP_PROBLEM = 'Name the backup lane the run moves to.'
+export const LANE_TAKEOVER_PROBLEM = 'A lane can take over only its own backup lane.'
 export const LANE_INBOX_LIMIT = 20
 
 export function laneNoRunProblem(key) {
@@ -322,12 +326,14 @@ export function createOrchestrators({
     if (!raw) return { ladder: { subs: [] }, problems: [] }
     const read = readLadder(raw, { lanes: eligibleLaneKeys() })
     const efforts = new Map()
+    const modes = new Map()
     for (const sub of Array.isArray(raw.subs) ? raw.subs : []) {
       if (!sub || typeof sub !== 'object' || typeof sub.id !== 'string') continue
       if (sub.effort === null) efforts.set(sub.id, null)
       else if (typeof sub.effort === 'string' && sub.effort.trim()) efforts.set(sub.id, sub.effort.trim())
+      if (typeof sub.mode === 'string' && sub.mode.trim()) modes.set(sub.id, sub.mode.trim())
     }
-    if (efforts.size === 0) {
+    if (efforts.size === 0 && modes.size === 0) {
       return { ...read, ladder: { ...read.ladder, subs: read.ladder.subs.map(withAliasModel) } }
     }
     return {
@@ -336,7 +342,13 @@ export function createOrchestrators({
         ...read.ladder,
         subs: read.ladder.subs.map((sub) => {
           const withModel = withAliasModel(sub)
-          return efforts.has(sub.id) ? { ...withModel, effort: efforts.get(sub.id) } : withModel
+          const effort = efforts.get(sub.id)
+          const mode = modes.get(sub.id)
+          return {
+            ...withModel,
+            ...(efforts.has(sub.id) ? { effort } : {}),
+            ...(mode ? { mode } : {}),
+          }
         }),
       },
     }
@@ -414,8 +426,10 @@ export function createOrchestrators({
     const { ladder } = readSaved()
     const sub = ladder.subs.find((entry) => entry.id === id)
     if (!sub) return
-    const { harness, model, effort } = instance.answer()
+    const { harness, model, effort, mode } = instance.answer()
     Object.assign(sub, { harness, model, effort })
+    if (mode) sub.mode = mode
+    else delete sub.mode
     main.setLadder(ladder)
     const nextConfig = subConfig(sub)
     instance.setBin?.(nextConfig.bin)
@@ -678,6 +692,7 @@ export function createOrchestrators({
 
   const sentMessages = new Map()
   const laneSent = new Map()
+  const laneBackups = new Map()
   const clock = typeof now === 'function' ? now : Date.now
 
   function laneKeyOf(value) {
@@ -685,9 +700,28 @@ export function createOrchestrators({
     return target.startsWith('lane:') ? target.slice(5).trim() : ''
   }
 
-  function receiveLaneMessage(lane, from, text, at) {
+  function laneName(ticket, held) {
+    const claimed = laneBackups.get(ticket)
+    return typeof claimed === 'string' && claimed !== '' ? claimed : held.lane
+  }
+
+  function backupHeld(lane) {
+    for (const [ticket, backup] of laneBackups) {
+      if (backup !== lane) continue
+      const held = typeof laneTicket === 'function' ? laneTicket(ticket) : null
+      if (held) return held
+      laneBackups.delete(ticket)
+    }
+    return null
+  }
+
+  function lastLaneTicket(lane) {
     const tickets = typeof laneTickets === 'function' ? laneTickets(lane) : null
-    const held = Array.isArray(tickets) && tickets.length > 0 ? tickets[tickets.length - 1] : null
+    return Array.isArray(tickets) && tickets.length > 0 ? tickets[tickets.length - 1] : null
+  }
+
+  function receiveLaneMessage(lane, from, text, at) {
+    const held = lastLaneTicket(lane) ?? backupHeld(lane)
     if (!held || !Array.isArray(held.inbox)) return false
     held.inbox.push({ from, text, at: new Date(at).toISOString() })
     while (held.inbox.length > LANE_INBOX_LIMIT) held.inbox.shift()
@@ -720,11 +754,37 @@ export function createOrchestrators({
     return { status: 200, body: { messages } }
   }
 
+  function takeOver(body, page, tokenValue = '', laneTicketValue = '') {
+    if (page) return { status: 403, body: { error: PAGE_FAILOVER_PROBLEM } }
+    if (typeof tokenValue === 'string' && tokenValue.trim()) {
+      return { status: 403, body: { error: TOKEN_FAILOVER_PROBLEM } }
+    }
+    const ticket = typeof laneTicketValue === 'string' ? laneTicketValue.trim() : ''
+    const held = ticket && typeof laneTicket === 'function' ? laneTicket(ticket) : null
+    if (!held) return { status: 403, body: { error: LANE_ENDED_PROBLEM } }
+    const lane = typeof body.lane === 'string' ? body.lane.trim() : ''
+    const allLanes = typeof lanes === 'function' ? lanes() : (lanes ?? {})
+    if (laneBackups.has(ticket)) {
+      return { status: 403, body: { error: LANE_TAKEOVER_PROBLEM } }
+    }
+    if (lane === '' || !Object.hasOwn(allLanes, lane)) {
+      return { status: 400, body: { error: LANE_BACKUP_PROBLEM } }
+    }
+    const own = Object.hasOwn(allLanes, held.lane) ? allLanes[held.lane] : null
+    const ownBackup = typeof own?.fallback === 'string' ? own.fallback.trim() : ''
+    if (ownBackup === '' || lane !== ownBackup) {
+      return { status: 403, body: { error: LANE_TAKEOVER_PROBLEM } }
+    }
+    laneBackups.set(ticket, lane)
+    return { status: 200, body: { lane: laneName(ticket, held), from: held.lane } }
+  }
+
   async function message(body, page, tokenValue = '', laneTicketValue = '') {
     const ticketValue = typeof laneTicketValue === 'string' ? laneTicketValue.trim() : ''
     if (!page && !tokenValue && ticketValue) {
       const held = typeof laneTicket === 'function' ? laneTicket(ticketValue) : null
       if (!held) return { status: 403, body: { error: LANE_ENDED_PROBLEM } }
+      const senderLane = laneName(ticketValue, held)
       const text = typeof body.text === 'string' ? body.text.trim() : ''
       if (text.length < 1 || text.length > ORCHESTRATOR_MESSAGE_LIMIT) {
         return { status: 400, body: { error: MESSAGE_PROBLEM } }
@@ -735,10 +795,10 @@ export function createOrchestrators({
         return { status: 400, body: { error: MESSAGE_PROBLEM } }
       }
       if (laneTarget) {
-        if (laneTarget === held.lane) return { status: 400, body: { error: LANE_SELF_PROBLEM } }
+        if (laneTarget === senderLane) return { status: 400, body: { error: LANE_SELF_PROBLEM } }
         const sentCount = laneSent.get(ticketValue) ?? 0
         if (sentCount >= LANE_MESSAGE_LIMIT) return { status: 429, body: { error: LANE_LIMIT_PROBLEM } }
-        const sender = `lane:${held.lane}`
+        const sender = `lane:${senderLane}`
         if (!receiveLaneMessage(laneTarget, sender, text, clock())) {
           return { status: 409, body: { error: laneNoRunProblem(laneTarget) } }
         }
@@ -755,7 +815,7 @@ export function createOrchestrators({
       if (!instances.has(target)) return { status: 404, body: { error: NO_ORCHESTRATOR_PROBLEM } }
       const sentCount = laneSent.get(ticketValue) ?? 0
       if (sentCount >= LANE_MESSAGE_LIMIT) return { status: 429, body: { error: LANE_LIMIT_PROBLEM } }
-      const sender = `lane:${held.lane}`
+      const sender = `lane:${senderLane}`
       const delivered = instances.get(target).deliver(sender, text)
       if (!delivered) return { status: 500, body: { error: 'The message did not reach that orchestrator.' } }
       laneSent.set(ticketValue, sentCount + 1)
@@ -772,6 +832,13 @@ export function createOrchestrators({
         : ORCHESTRATOR_KEY
     const laneTarget = laneKeyOf(target)
     if (laneTarget && !page) {
+      if (actor !== ORCHESTRATOR_KEY) {
+        const own = sector(actor)
+        if (!own || !Array.isArray(own.lanes) || !own.lanes.includes(laneTarget)) {
+          const name = own?.name?.trim() || actor
+          return { status: 403, body: { error: `The ${name} sector does not hold the lane ${laneTarget}.` } }
+        }
+      }
       const from =
         body.from === undefined || body.from === null || body.from === ''
           ? 'orchestrator'
@@ -969,26 +1036,44 @@ export function createOrchestrators({
       if (Object.hasOwn(sub, 'effort')) namedEfforts.set(sub.id, sub.effort)
     }
     const savedEfforts = new Map()
+    const savedModes = new Map()
+    const savedHarnesses = new Map()
     const savedRaw = main.getLadder()
     for (const sub of Array.isArray(savedRaw?.subs) ? savedRaw.subs : []) {
       if (!sub || typeof sub !== 'object' || typeof sub.id !== 'string') continue
       if (typeof sub.effort === 'string' && sub.effort.trim()) savedEfforts.set(sub.id, sub.effort.trim())
+      if (typeof sub.mode === 'string' && sub.mode.trim()) savedModes.set(sub.id, sub.mode.trim())
+      const oldHarness = harnessFor(sub)
+      if (oldHarness) savedHarnesses.set(sub.id, oldHarness)
     }
     const effortProblems = []
     const savedSubs = next.ladder.subs.map((sub) => {
-      const levels = HARNESS_EFFORTS[harnessFor(sub)]?.length ? HARNESS_EFFORTS[harnessFor(sub)] : HARNESS_EFFORTS.opencode
+      const harness = harnessFor(sub)
+      const levels = HARNESS_EFFORTS[harness]?.length ? HARNESS_EFFORTS[harness] : HARNESS_EFFORTS.opencode
+      let nextSub = sub
       if (namedEfforts.has(sub.id)) {
         const named = namedEfforts.get(sub.id)
-        if (named === null) return { ...sub, effort: null }
-        const value = typeof named === 'string' ? named.trim() : ''
-        if (!value || !levels.includes(value)) {
-          if (!effortProblems.includes(EFFORT_PROBLEM)) effortProblems.push(EFFORT_PROBLEM)
-          return sub
+        if (named === null) {
+          nextSub = { ...sub, effort: null }
+        } else {
+          const value = typeof named === 'string' ? named.trim() : ''
+          if (!value || !levels.includes(value)) {
+            if (!effortProblems.includes(EFFORT_PROBLEM)) effortProblems.push(EFFORT_PROBLEM)
+          } else {
+            nextSub = { ...sub, effort: value }
+          }
         }
-        return { ...sub, effort: value }
+      } else {
+        const kept = savedEfforts.get(sub.id)
+        if (kept && levels.includes(kept)) nextSub = { ...sub, effort: kept }
       }
-      const kept = savedEfforts.get(sub.id)
-      return kept && levels.includes(kept) ? { ...sub, effort: kept } : sub
+      const previousHarness = savedHarnesses.get(sub.id)
+      const keptMode =
+        previousHarness && previousHarness !== harness
+          ? defaultMode(harness)
+          : savedModes.get(sub.id) ?? null
+      const validMode = keptMode && modesFor(harness).some((entry) => entry.id === keptMode) ? keptMode : null
+      return validMode ? { ...nextSub, mode: validMode } : nextSub
     })
     if (effortProblems.length > 0) {
       return { status: 400, body: { error: effortProblems.join(' '), problems: effortProblems } }
@@ -1065,6 +1150,16 @@ export function createOrchestrators({
       const body = await readJsonBody(req, res)
       if (body === null) return true
       const out = await message(body, page, token, laneValue)
+      sendJson(req, res, out.status, out.body)
+      return true
+    }
+    if (path === '/api/orchestrator/failover') {
+      if (method !== 'POST') return methodNotAllowed(req, res)
+      const laneHeader = req.headers['x-machineroom-lane']
+      const laneValue = typeof laneHeader === 'string' ? laneHeader.trim() : Array.isArray(laneHeader) ? laneHeader[0].trim() : ''
+      const body = await readJsonBody(req, res)
+      if (body === null) return true
+      const out = takeOver(body, page, token, laneValue)
       sendJson(req, res, out.status, out.body)
       return true
     }
@@ -1174,6 +1269,7 @@ export function createOrchestrators({
         return true
       }
       const out = instance.setMode(body)
+      if (out.status === 200) saveSubSettings(body.id, instance)
       sendJson(req, res, out.status, out.body)
       return true
     }
