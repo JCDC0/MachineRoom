@@ -257,7 +257,13 @@ function closeChild(child) {
 }
 
 function isProgress(message, tokens) {
-  return message?.method === 'notifications/progress' && tokens.has(message.params?.progressToken)
+  return (
+    isPlainObject(message) &&
+    message.id === undefined &&
+    message.method === 'notifications/progress' &&
+    tokens.has(message.params?.progressToken) &&
+    Number.isFinite(message.params?.progress)
+  )
 }
 
 function stdioSession(server, timeoutMs, ceilingMs, spawnImpl, work) {
@@ -483,13 +489,14 @@ async function httpSession(server, timeoutMs, ceilingMs, fetchImpl, work) {
       const { done, value } = await reader.read()
       if (done) return text
       text += typeof value === 'string' ? value : decoder.decode(value, { stream: true })
-      const cut = text.lastIndexOf('\n\n')
-      if (cut + 2 <= seen) continue
+      let cut = seen
+      for (const gap of text.slice(seen).matchAll(/\r?\n\r?\n/g)) cut = seen + gap.index + gap[0].length
+      if (cut === seen) continue
       let found = false
-      for (const message of sseMessages(text.slice(seen, cut + 2))) {
+      for (const message of sseMessages(text.slice(seen, cut))) {
         if (isProgress(message, tokens)) found = true
       }
-      seen = cut + 2
+      seen = cut
       if (found) {
         idle()
         arm()

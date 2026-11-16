@@ -94,4 +94,85 @@ describe('MCP call progress', () => {
     await vi.advanceTimersByTimeAsync(MCP_CALL_TIMEOUT_MS + 1)
     expect(await run).toEqual({ ok: false, problem: MCP_TIMEOUT_PROBLEM })
   })
+
+  it.each([
+    ['an id', { ...progress('t'), id: 9 }],
+    ['no numeric progress', { jsonrpc: '2.0', method: 'notifications/progress', params: { progressToken: 't', progress: 'x' } }],
+  ])('does not keep a stdio call alive on a notice with %s', async (_name, notice) => {
+    const run = callMcpServerTool(SERVER, 'go', {}, {
+      spawnImpl: fakeSpawn((message, send) => {
+        setTimeout(() => send({ ...notice, params: { ...notice.params, progressToken: message.params._meta.progressToken } }), MCP_CALL_TIMEOUT_MS - 1000)
+      }),
+    })
+    await vi.advanceTimersByTimeAsync(MCP_CALL_TIMEOUT_MS + 1)
+    expect(await run).toEqual({ ok: false, problem: MCP_TIMEOUT_PROBLEM })
+  })
+})
+
+const HTTP = { name: 'web', transport: 'http', command: '', args: [], env: {}, url: 'http://127.0.0.1:9/mcp', enabled: true }
+
+function httpFetch(chunksFor) {
+  return async (_url, init) => {
+    const message = JSON.parse(init.body)
+    const json = (body) => ({ ok: true, status: 200, headers: new Headers({ 'content-type': 'application/json' }), text: async () => JSON.stringify(body), body: null })
+    if (message.method === 'initialize') return json({ jsonrpc: '2.0', id: message.id, result: {} })
+    if (message.method !== 'tools/call') return { ok: true, status: 202, headers: new Headers(), body: { cancel: async () => {} } }
+    const token = message.params._meta.progressToken
+    const encoder = new TextEncoder()
+    const body = new ReadableStream({
+      async start(controller) {
+        for (const [wait, chunk] of chunksFor(token, message.id)) {
+          await new Promise((resolve) => setTimeout(resolve, wait))
+          if (init.signal.aborted) return controller.error(new DOMException('aborted', 'AbortError'))
+          if (chunk === null) return controller.close()
+          controller.enqueue(encoder.encode(chunk))
+        }
+      },
+    })
+    return { ok: true, status: 200, headers: new Headers({ 'content-type': 'text/event-stream' }), body, text: async () => '' }
+  }
+}
+
+const event = (message, eol = '\n') => `data: ${JSON.stringify(message)}${eol}${eol}`
+const nearLimit = MCP_CALL_TIMEOUT_MS - 1000
+
+describe('MCP call progress over HTTP', () => {
+  const run = (chunksFor) => callMcpServerTool(HTTP, 'go', {}, { fetchImpl: httpFetch(chunksFor) })
+
+  it('resets the timer on progress with CRLF separators', async () => {
+    const result = run((token, id) => [
+      [nearLimit, event(progress(token), '\r\n')],
+      [nearLimit, event({ jsonrpc: '2.0', id, result: { content: ['done'] } }, '\r\n')],
+      [0, null],
+    ])
+    for (let i = 0; i < 31; i += 1) await vi.advanceTimersByTimeAsync(1000)
+    expect(await result).toEqual({ ok: true, result: { content: ['done'] } })
+  })
+
+  it('resets the timer on an event split after its first byte', async () => {
+    const result = run((token, id) => {
+      const text = event(progress(token))
+      return [
+        [nearLimit, text.slice(0, 1)],
+        [0, text.slice(1)],
+        [nearLimit, event({ jsonrpc: '2.0', id, result: { content: ['done'] } })],
+        [0, null],
+      ]
+    })
+    for (let i = 0; i < 31; i += 1) await vi.advanceTimersByTimeAsync(1000)
+    expect(await result).toEqual({ ok: true, result: { content: ['done'] } })
+  })
+
+  it.each([
+    ['an id', (token) => ({ ...progress(token), id: 9 })],
+    ['no numeric progress', (token) => ({ jsonrpc: '2.0', method: 'notifications/progress', params: { progressToken: token } })],
+  ])('does not keep a call alive on a notice with %s', async (_name, make) => {
+    const result = run((token) => [
+      [nearLimit, event(make(token))],
+      [nearLimit, event({ jsonrpc: '2.0', id: 99, result: {} })],
+      [0, null],
+    ])
+    for (let i = 0; i < 31; i += 1) await vi.advanceTimersByTimeAsync(1000)
+    expect(await result).toEqual({ ok: false, problem: MCP_TIMEOUT_PROBLEM })
+  })
 })
