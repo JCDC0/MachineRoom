@@ -36,7 +36,9 @@ import {
 } from '../server/git.js'
 import { REQUEST_LIMITS, REQUEST_TIMEOUT_MS, createClient } from '../src/control/client.js'
 import { createMockClient } from '../src/control/mock.js'
+import { withoutRepoEnv } from './helpers/gitEnv.js'
 import { makeTempDir, removeTempDir } from './helpers/tempRoot.js'
+import { SLOW_TEST_TIMEOUT_MS } from './helpers/timeout.js'
 
 const NO_GIT_CONFIG = join(tmpdir(), 'machineroom-git-no-config')
 const GIT_WRITE_REQUEST_MS = REQUEST_LIMITS.createBranch
@@ -60,7 +62,7 @@ function testGit(cwd, args) {
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'pipe'],
     env: {
-      ...process.env,
+      ...withoutRepoEnv(),
       GIT_CONFIG_SYSTEM: NO_GIT_CONFIG,
       GIT_CONFIG_GLOBAL: NO_GIT_CONFIG,
       GIT_CONFIG_NOSYSTEM: '1',
@@ -125,38 +127,31 @@ async function getJson(url, path) {
   return { status: response.status, body: text ? JSON.parse(text) : null }
 }
 
-async function listenForChange(url, topic, onOpen = () => {}) {
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), 10000)
-  try {
-    const response = await fetch(`${url}/events`, { signal: controller.signal })
-    onOpen()
-    const decoder = new TextDecoder()
-    let buffer = ''
-    for await (const chunk of response.body) {
-      buffer += decoder.decode(chunk, { stream: true })
-      let cut = buffer.indexOf('\n\n')
-      while (cut !== -1) {
-        const block = buffer.slice(0, cut)
-        buffer = buffer.slice(cut + 2)
-        const lines = block.split(/\r?\n/)
-        if (lines.includes('event: change')) {
-          const dataLine = lines.find((line) => line.startsWith('data: '))
-          if (dataLine) {
-            const parsed = JSON.parse(dataLine.slice(6))
-            if (!topic || parsed.topic === topic) {
-              return parsed
-            }
+async function listenForChange(url, topic, onOpen = () => {}, signal = undefined) {
+  const response = await fetch(`${url}/events`, { signal })
+  onOpen()
+  const decoder = new TextDecoder()
+  let buffer = ''
+  for await (const chunk of response.body) {
+    buffer += decoder.decode(chunk, { stream: true })
+    let cut = buffer.indexOf('\n\n')
+    while (cut !== -1) {
+      const block = buffer.slice(0, cut)
+      buffer = buffer.slice(cut + 2)
+      const lines = block.split(/\r?\n/)
+      if (lines.includes('event: change')) {
+        const dataLine = lines.find((line) => line.startsWith('data: '))
+        if (dataLine) {
+          const parsed = JSON.parse(dataLine.slice(6))
+          if (!topic || parsed.topic === topic) {
+            return parsed
           }
         }
-        cut = buffer.indexOf('\n\n')
       }
+      cut = buffer.indexOf('\n\n')
     }
-    return null
-  } finally {
-    clearTimeout(timer)
-    controller.abort()
   }
+  return null
 }
 
 describe('parseStatus', () => {
@@ -565,12 +560,12 @@ describe('switch branch refusals', () => {
 })
 
 describe('successful switch and notices', () => {
-  it('switches the branch, updates state and notifies SSE clients', async () => {
+  it('switches the branch, updates state and notifies SSE clients', async ({ signal }) => {
     const repo = makeRepo()
     testGit(repo, ['branch', 'feature-a'])
 
     const { url, client } = await startBridge({ projectRoot: repo })
-    const changePromise = listenForChange(url, 'git')
+    const changePromise = listenForChange(url, 'git', () => {}, signal)
 
     const nextState = await client.switchBranch({ branch: 'feature-a', confirmed: true })
     expect(nextState.branch).toBe('feature-a')
@@ -583,7 +578,7 @@ describe('successful switch and notices', () => {
 
     const change = await changePromise
     expect(change).toEqual({ topic: 'git' })
-  })
+  }, SLOW_TEST_TIMEOUT_MS)
 })
 
 describe('git write limits', () => {
@@ -739,10 +734,10 @@ describe('create branch refusals', () => {
 })
 
 describe('successful create branch and branch/tag sharing', () => {
-  it('creates a new branch without switching to it and sends notice', async () => {
+  it('creates a new branch without switching to it and sends notice', async ({ signal }) => {
     const repo = makeRepo()
     const { url, client } = await startBridge({ projectRoot: repo })
-    const changePromise = listenForChange(url, 'git')
+    const changePromise = listenForChange(url, 'git', () => {}, signal)
 
     const nextState = await client.createBranch({ name: 'feature-b', from: 'main', confirmed: true })
     expect(nextState.branch).toBe('main')
@@ -756,9 +751,9 @@ describe('successful create branch and branch/tag sharing', () => {
 
     const change = await changePromise
     expect(change).toEqual({ topic: 'git' })
-  })
+  }, SLOW_TEST_TIMEOUT_MS)
 
-  it('sends a git notice after a lane run ends', async () => {
+  it('sends a git notice after a lane run ends', async ({ signal }) => {
     const repo = makeRepo()
     const runsDir = makeTempDir('mr-runs-')
     cleanups.push(() => removeTempDir(runsDir))
@@ -773,9 +768,9 @@ describe('successful create branch and branch/tag sharing', () => {
         join(runsDir, 'runs.jsonl'),
         JSON.stringify({ log: join(runsDir, `${logName}.log`), lane: 'opencode', exitCode: 0, killed: false }) + '\n'
       )
-    })
+    }, signal)
     expect(change).toEqual({ topic: 'git' })
-  })
+  }, SLOW_TEST_TIMEOUT_MS)
 
   it('handles a branch name that a tag shares correctly', async () => {
     const repo = makeRepo()
@@ -812,7 +807,7 @@ describe('caching and throttling', () => {
     let gitCalls = 0
     const countingRunner = async (cwd, args, opts) => {
       gitCalls += 1
-      return execFileSync('git', args, { cwd, encoding: 'utf8', windowsHide: true })
+      return execFileSync('git', args, { cwd, encoding: 'utf8', windowsHide: true, env: withoutRepoEnv() })
     }
 
     const { client } = await startBridge({

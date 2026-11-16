@@ -10,6 +10,7 @@ import { gitPath } from '../server/programPath.js'
 import { buildActivities } from '../src/model/pipeline.js'
 import { makeTree } from '../src/model/paths.js'
 import { readFrames, waitFor } from './helpers/bridge.js'
+import { withoutRepoEnv } from './helpers/gitEnv.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 
 const realLanes = JSON.parse(readFileSync(new URL('../docs/agents/lanes.json', import.meta.url), 'utf8'))
@@ -80,6 +81,7 @@ function git(cwd, args) {
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'ignore'],
     windowsHide: true,
+    env: withoutRepoEnv(),
   }).trim()
 }
 

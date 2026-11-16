@@ -1,11 +1,14 @@
 # Changelog
 
 ## Unreleased
+- Two slow tests wait for their own timeout instead of a fixed ten seconds, and git calls in mainCheckoutOf and the lane source tests ignore a parent GIT_DIR.
 - Only Main itself takes Main's live harness and model in the inspector and dock, so a lane or sub named like an orchestrator keeps its own.
 - FREE-HIERARCHY.md says the orchestrator above a restricted sub is told only when its lane changed files outside the scope; a failed read refuses with no message.
 - P426: FREE-HIERARCHY.md says the parent is told once per branch head only for files outside the sub's scope, so a refused merge on an unread file list sends no message and Merge anyway still allows it.
 - A lane or sub named like an orchestrator keeps its own harness and model in the inspector and dock, and only Main takes Main's live harness and model.
 - Review 44 (Sol) of P415 to P422: two P2 findings, Main's harness shown for a lane or sub named like an orchestrator, and a doc promising a message a failed read never sends.
+- P423: Test helpers and mainCheckoutOf run git without a parent's GIT_DIR, GIT_WORK_TREE, GIT_INDEX_FILE or GIT_COMMON_DIR, so X15 reads the test's own repository inside a merge.
+- P423: The git notice and file tree waits follow the test's own timeout, and the slow tests allow 60 seconds, so a busy machine no longer cuts them at 10 seconds.
 - A restricted sub's merge refused because its changed files could not be read now offers Merge anyway in Reviews, with no file list.
 - The sub restore test keeps the old harness's saved conversation on disk until the restore, so it fails if P413's guards are undone.
 - A harness's model list command comes only from an indented subcommand line of its help, so Codex's --model option no longer runs codex model, and no list command is no error.
