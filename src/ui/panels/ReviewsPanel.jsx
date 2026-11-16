@@ -706,6 +706,22 @@ export default function ReviewsPanel({
                       {row.evidenceText && (
                         <div className="review-last-run mono">{row.evidenceText}</div>
                       )}
+                      <div className="review-last-run mono">
+                        {row.scope.groupsText}
+                        {row.scope.groupsText && ' | '}
+                        {row.scope.outsideText}
+                        {row.scope.largeText && (
+                          <span className="review-dirty"> | {row.scope.largeText}</span>
+                        )}
+                        {row.scope.outsidePaths.length > 0 && (
+                          <details>
+                            <summary>Files outside the brief</summary>
+                            {row.scope.outsidePaths.map((path) => (
+                              <div key={path}>{path}</div>
+                            ))}
+                          </details>
+                        )}
+                      </div>
                       {row.claimsLines.length > 0 && (
                         <div className="review-last-run mono">
                           <div>The agent said:</div>

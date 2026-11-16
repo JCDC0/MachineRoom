@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { maskKeys } from '../src/briefs/audit.js'
+import { briefFileList, parseBriefs } from '../src/briefs/briefs.js'
 import { maskProfilePaths, worktreeFor } from '../src/briefs/run.js'
 import { harnessByKey } from '../src/harnesses/index.js'
 import { outsideScope } from '../src/model/hierarchy.js'
@@ -220,6 +221,41 @@ function parseNumstat(output) {
     files.push({ path: rest.join('\t'), added: fileAdded, deleted: fileDeleted })
   }
   return { files, added, deleted }
+}
+
+export const LARGE_DIFF_LINES = 400
+const FILE_GROUP_NAMES = ['server', 'ui', 'scripts', 'tests', 'docs', 'other']
+
+function fileGroupOf(path) {
+  if (path.startsWith('server/')) return 'server'
+  if (path.startsWith('src/')) return 'ui'
+  if (path.startsWith('scripts/')) return 'scripts'
+  if (path.startsWith('tests/')) return 'tests'
+  if (path.startsWith('docs/')) return 'docs'
+  return 'other'
+}
+
+export function groupFiles(files) {
+  const groups = Object.fromEntries(FILE_GROUP_NAMES.map((name) => [name, { count: 0, paths: [] }]))
+  for (const file of files) {
+    const group = groups[fileGroupOf(file.path)]
+    group.count += 1
+    group.paths.push(file.path)
+  }
+  return groups
+}
+
+const cleanPath = (path) => path.split('\\').join('/').replace(/^\.\//, '')
+
+export function outsideBriefFor(files, ids, briefsText) {
+  if (!Array.isArray(ids) || ids.length === 0 || typeof briefsText !== 'string') return null
+  const wanted = new Set(ids)
+  const named = parseBriefs(briefsText)
+    .filter((brief) => wanted.has(brief.id))
+    .flatMap((brief) => briefFileList(brief.text))
+    .map(cleanPath)
+  if (named.length === 0) return null
+  return files.map((file) => file.path).filter((path) => !named.some((entry) => path === entry || (entry.endsWith('/') && path.startsWith(entry))))
 }
 
 function laneEntry(lanes, lane) {
@@ -737,6 +773,15 @@ export function createReviewsApi({
     const status = await runGit(worktree, ['status', '--porcelain'])
     const stat = parseNumstat(await runGit(worktree, ['diff', '--no-ext-diff', '--no-textconv', '--numstat', `${base.ref}...HEAD`]))
     const lastRun = lastRunFor(lane, worktree, runs)
+    const briefsText = [join(lanesDir, 'TASKS.md'), join(worktree, 'docs', 'agents', 'TASKS.md')]
+      .map((file) => {
+        try {
+          return readFileSync(file, 'utf8')
+        } catch {
+          return null
+        }
+      })
+      .find((text) => text !== null)
     const laneRuns = linkedRuns(lane, worktree, runs, base.name).map((record) => runEntry(record, laneList))
     return {
       lane,
@@ -753,6 +798,9 @@ export function createReviewsApi({
       files: stat.files.length,
       added: stat.added,
       deleted: stat.deleted,
+      fileGroups: groupFiles(stat.files),
+      largeDiff: stat.added + stat.deleted > LARGE_DIFF_LINES,
+      outsideBrief: outsideBriefFor(stat.files, lastRun?.briefs, briefsText),
       checks: checkStateFor(lane, worktree, head, runs),
       evidence: evidenceFor(lane, worktree, head, runs),
       claims: claimsFor(lastRun, laneList),
