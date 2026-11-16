@@ -1,8 +1,10 @@
 # Changelog
 
 ## Unreleased
+- The native agent keeps a reply its inbox watch read as the model call ended, and gives it to the next call.
 - A sub's harness change also changes its program, and a ladder save that gives a sub's model and effort keeps them over the saved chat file.
 - A sub's harness route change updates its live program override, and a ladder recreation keeps given model and effort values over the saved chat file.
+- The native agent keeps a reply read as its model call ends and hands it to the next call.
 - Add sub and the sub editor in Agents offer a Mode select, saved with the sub and kept across ladder saves.
 - Sol reviews the research plan against the surveys and the code, narrows each item's first step and reorders the plan.
 - A lane ticket can take over only its own lane's backup, once, and a lane's own run gets its messages first.

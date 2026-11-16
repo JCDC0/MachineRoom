@@ -211,6 +211,38 @@ describe('the native agent and the reply choice', () => {
     expect(result.stdout).toContain('"result":"Done."')
   }, 30000)
 
+  it('carries a reply read while the model call ended into the next call', async () => {
+    const folder = setup()
+    writeFileSync(join(folder, 'a.txt'), 'hello\n')
+    let inboxRead = null
+    const inboxStarted = new Promise((resolve) => {
+      inboxRead = resolve
+    })
+    const bridge = await startBridge(async (req, res, record) => {
+      if (record.url === '/api/orchestrator/messages') {
+        inboxRead()
+        await new Promise((done) => setTimeout(done, 800))
+        return { messages: [MESSAGE] }
+      }
+      if (chatCalls(bridge.requests).length === 1) {
+        await inboxStarted
+        await new Promise((done) => setTimeout(done, 300))
+        return chatAnswer({ calls: [{ name: 'read_file', arguments: { path: 'a.txt' } }] })
+      }
+      return chatAnswer({ text: 'Done.' })
+    })
+
+    const result = await runAgent({ folder, env: agentEnv(bridge, 'interrupt') })
+
+    expect(result.code).toBe(0)
+    const calls = chatCalls(bridge.requests)
+    expect(calls.length).toBeGreaterThanOrEqual(2)
+    const second = JSON.stringify(calls[1].body.messages)
+    expect(second).toContain('Messages for you while you work:')
+    expect(second).toContain('Stop and read this.')
+    expect(result.stdout).toContain('"result":"Done."')
+  }, 30000)
+
   it('waits for the model call to end with next-turn', async () => {
     const folder = setup()
     writeFileSync(join(folder, 'a.txt'), 'hello\n')
