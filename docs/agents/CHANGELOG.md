@@ -1,6 +1,8 @@
 # Changelog
 
 ## Unreleased
+- P453: Ready says it means only that the program was found, in Settings and in doctor.
+- P453: doctor warns when the project has no AGENTS.md, CLAUDE.md or GEMINI.md, and names the one it found.
 - The native agent keeps a reply its inbox watch read as the model call ended, and gives it to the next call.
 - A sub's harness change also changes its program, and a ladder save that gives a sub's model and effort keeps them over the saved chat file.
 - A sub's harness route change updates its live program override, and a ladder recreation keeps given model and effort values over the saved chat file.
