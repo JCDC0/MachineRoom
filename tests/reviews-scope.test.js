@@ -339,6 +339,8 @@ describe('a restricted sub and an out-of-scope lane merge', { timeout: 30000 }, 
     expect(answer.status).toBe(409)
     expect(answer.body).toEqual({
       error: "The bridge could not read the lane's changed files, so it was not merged.",
+      files: [],
+      outside: true,
     })
     expect(mainHead(repo)).toBe(baseHead)
 
@@ -458,6 +460,79 @@ describe('Reviews shows the files and merges anyway', () => {
       expect(container.querySelector('.review-merged-banner')?.textContent).toContain(
         `Merged as ${head.slice(0, 7)}.`
       )
+    })
+  })
+
+  it('offers Merge anyway for a failed changed-file read with no files', async () => {
+    const { repo, worktree } = makeRepo()
+    const failingScopeRead = async (cwd, args, options) => {
+      if (args[0] === 'diff' && args[1] === '--name-only' && args.includes('--no-ext-diff')) {
+        throw new Error('git failed')
+      }
+      return defaultGitRunner(cwd, args, options)
+    }
+    const { merge } = scopeApi(repo, worktree, { gitRunner: failingScopeRead })
+    const refused = await merge()
+    expect(refused.status).toBe(409)
+    expect(refused.body.outside).toBe(true)
+    expect(refused.body.files).toEqual([])
+
+    const head = '1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d'
+    const baseHead = '9f8e7d6c5b4a39281706f5e4d3c2b1a09f8e7d6c'
+    const review = {
+      lane: 'opencode',
+      branch: 'feat/x',
+      head,
+      base: 'main',
+      baseHead,
+      strategy: 'merge-commit',
+      ahead: 1,
+      dirty: false,
+      files: 1,
+      added: 1,
+      deleted: 0,
+      checks: 'passed',
+    }
+    const calls = []
+    const client = {
+      reviews: async () => [review],
+      mergeReview: async (lane, options) => {
+        calls.push({ lane, options })
+        if (!options.allowOutside) {
+          const error = new Error(refused.body.error)
+          error.files = refused.body.files
+          if (refused.body.outside === true) error.outside = true
+          throw error
+        }
+        return { ok: true, lane, head: options.head, commit: options.head }
+      },
+      subscribe: () => () => {},
+    }
+
+    await withDom(async ({ container, root }) => {
+      await act(async () => {
+        root.render(createElement(ReviewsPanel, { client, initialReviews: [review] }))
+      })
+      await click(root, container.querySelector('.review-merge-btn'))
+      await click(root, buttonWithText(container.querySelector('.review-confirm-card'), 'Merge'))
+      await settle()
+
+      const refusal = container.querySelector('.review-scope-refusal')
+      expect(refusal).not.toBeNull()
+      expect(refusal.textContent).toContain("The bridge could not read the lane's changed files")
+      expect(refusal.querySelector('.review-conflict-files')).toBeNull()
+      const button = buttonWithText(refusal, 'Merge anyway')
+      expect(button).not.toBeNull()
+
+      await click(root, button)
+      const card = container.querySelector('.review-outside-card')
+      expect(card).not.toBeNull()
+      expect(card.querySelectorAll('li')).toHaveLength(0)
+      await click(root, buttonWithText(card, 'Merge anyway'))
+      await settle()
+
+      expect(calls).toHaveLength(2)
+      expect(calls[1].options.allowOutside).toBe(true)
     })
   })
 })
