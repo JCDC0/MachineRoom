@@ -26,6 +26,11 @@ function updateRowsWithResult(currentRows, result) {
   return null
 }
 
+function laneRepliesFrom(answer) {
+  const rows = Array.isArray(answer) ? answer : Array.isArray(answer?.harnesses) ? answer.harnesses : []
+  return rows[0]?.laneReplies === 'interrupt' ? 'interrupt' : 'next-turn'
+}
+
 /**
  * Renders the Harnesses section in Settings to inspect and configure runners.
  */
@@ -35,6 +40,8 @@ export default function HarnessesSettings({ client }) {
   const [drafts, setDrafts] = useState({})
   const [counts, setCounts] = useState(null)
   const [busyKey, setBusyKey] = useState('')
+  const [savingReplies, setSavingReplies] = useState(false)
+  const [laneReplies, setLaneReplies] = useState('next-turn')
   const [checking, setChecking] = useState(false)
   const [confirm, setConfirm] = useState(null)
   const [sectionError, setSectionError] = useState('')
@@ -90,6 +97,7 @@ export default function HarnessesSettings({ client }) {
       setRows([])
       setDrafts({})
       setCounts(null)
+      setLaneReplies('next-turn')
       setSectionError('')
       setRowErrors({})
       return
@@ -100,6 +108,7 @@ export default function HarnessesSettings({ client }) {
       const nextRows = harnessListFrom(answer)
       setRows(nextRows)
       setDrafts(programDraftsFrom(nextRows))
+      setLaneReplies(laneRepliesFrom(answer))
       setSectionError('')
       await loadCounts()
     } catch (error) {
@@ -151,6 +160,30 @@ export default function HarnessesSettings({ client }) {
       }))
     } finally {
       if (mountedRef.current) setBusyKey('')
+    }
+  }
+
+  async function applyLaneReplies(value) {
+    if (!client || typeof client.harnessSettings !== 'function') return
+    setSavingReplies(true)
+    setSectionError('')
+    try {
+      const result = await client.harnessSettings({ laneReplies: value, confirmed: true })
+      if (!mountedRef.current) return
+      setLaneReplies(value)
+      const nextRows = updateRowsWithResult(rows, result)
+      if (nextRows) {
+        setRows(nextRows)
+        setDrafts(programDraftsFrom(nextRows))
+        await loadCounts()
+      } else {
+        await loadAll()
+      }
+    } catch (error) {
+      if (!mountedRef.current) return
+      setSectionError(error?.message || 'Could not save the reply choice.')
+    } finally {
+      if (mountedRef.current) setSavingReplies(false)
     }
   }
 
@@ -223,6 +256,20 @@ export default function HarnessesSettings({ client }) {
               {sectionError}
             </p>
           ) : null}
+          <div className="endpoints-field">
+            <label className="endpoints-label mono" htmlFor="harness-lane-replies">
+              Replies to a working lane
+            </label>
+            <select
+              id="harness-lane-replies"
+              value={laneReplies}
+              disabled={checking || savingReplies || Boolean(busyKey)}
+              onChange={(event) => applyLaneReplies(event.target.value)}
+            >
+              <option value="next-turn">Wait for its next turn</option>
+              <option value="interrupt">Interrupt it at once</option>
+            </select>
+          </div>
           {rows.map((row) => {
             const status = harnessStatus(row)
             const name = harnessDisplayName(row)
