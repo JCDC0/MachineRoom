@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- An interrupt never rewrites runs.jsonl; the continuation record carries continues and interruptedBy.
 - With Replies set to interrupt, a reply stops a working CLI lane run and continues it on the same branch, worktree, ticket and inbox, at most three times.
 - Ready says it means the program was found, and doctor warns when the project has no AGENTS.md, CLAUDE.md or GEMINI.md.
 - Each MCP server's tool list is kept 60 seconds per runs folder and config, failures are not kept, and parallel lists share one request.
