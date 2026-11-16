@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- The native agent warns on the third identical failing call and ends the run on the fifth; a success or a different call resets the count.
 - The native agent keeps a reply its inbox watch read as the model call ended, and gives it to the next call.
 - A sub's harness change also changes its program, and a ladder save that gives a sub's model and effort keeps them over the saved chat file.
 - A sub's harness route change updates its live program override, and a ladder recreation keeps given model and effort values over the saved chat file.
