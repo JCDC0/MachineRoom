@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- Continuations use saved worktree metadata when the bridge records an interrupted run against the project root.
 - Interrupted backups continue with their saved settings and recorded worktree, and the interrupt limit carries across failover.
 - Backup continuation dry runs show the recorded backup branch; three regressions cover settings, partial work and the interrupt limit.
 - Review 47 (GPT-6.1 Sol) lists ten findings in the interrupts, failover, stop-tree, review totals, removed-lane costs and the MCP cache.

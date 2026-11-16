@@ -1487,7 +1487,13 @@ async function runQueueProject({ options, lane, lanes }) {
   if (continueFrom && !prevRun) throw new Error(`There is no run named ${continueFrom}.`)
   const project = projectFolder(options.project)
   if (!gitCheckout(project)) throw new Error(`The project folder ${printedRunsFolder(project)} is not a git folder. A queue needs one.`)
-  const previousProject = continueFrom && typeof prevRun.record.project === 'string' ? realPath(prevRun.record.project) : ''
+  let previousProject = continueFrom && typeof prevRun.record.project === 'string' ? realPath(prevRun.record.project) : ''
+  if (continueFrom && options.worktree && previousProject === project) {
+    try {
+      const meta = JSON.parse(readFileSync(join(runsFolder(), `${continueFrom}.meta.json`), 'utf8'))
+      if (typeof meta?.project === 'string' && meta.project.trim()) previousProject = realPath(meta.project)
+    } catch {}
+  }
   const continuedBranch = prevRun?.record.failoverFrom ? prevRun.record.checkpoint?.branch || prevRun.record.branch : prevRun?.record.branch
   const continuedWorktree = options.worktree && previousProject && realPath(dirname(previousProject)) === realPath(join(project, '.worktrees')) ? previousProject : ''
   if (continueFrom && (options.worktree ? !continuedWorktree : previousProject !== project)) throw new Error('The interrupted run has a different project worktree.')

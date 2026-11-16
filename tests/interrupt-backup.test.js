@@ -43,7 +43,7 @@ afterEach(() => {
   clearRunsCache()
 })
 
-function rig() {
+function rig(primaryHarness = 'claude') {
   const base = makeTempDir('mr-interrupt-backup-')
   cleanups.push(() => removeTempDir(base))
   const runs = join(base, 'runs')
@@ -51,7 +51,7 @@ function rig() {
   mkdirSync(runs)
   mkdirSync(project)
   const lanes = {
-    primary: { fallback: 'backup', cli: { harness: 'claude', bin: process.execPath, model: 'primary/model', mode: 'bypass' } },
+    primary: { fallback: 'backup', cli: { harness: primaryHarness, bin: process.execPath, model: 'primary/model', mode: primaryHarness === 'claude' ? 'bypass' : 'auto' } },
     backup: { cli: { harness: 'opencode', bin: process.execPath, model: 'backup/model', mode: 'plan' } },
   }
   const lanesFile = join(base, 'lanes.json')
@@ -144,6 +144,21 @@ describe('interrupted backups', () => {
     continueRun(r, args)
     expect(records(r.runs).at(-1)).toMatchObject({ project: worktree, branch, continues: 'backup-interrupted' })
     expect(git(worktree, ['branch', '--show-current'])).toBe(branch)
+    expect(readFileSync(join(worktree, 'note.txt'), 'utf8')).toBe('partial work\n')
+  }, 60000)
+
+  it.each(['primary', 'backup'])('continues %s from bridge records using the saved worktree metadata', (lane) => {
+    const r = rig('opencode')
+    repository(r.project)
+    const worktree = join(r.project, '.worktrees', 'primary')
+    const branch = `machineroom/queue-primary${lane === 'backup' ? '-on-backup' : ''}`
+    git(r.project, ['worktree', 'add', '-b', branch, worktree])
+    writeFileSync(join(worktree, 'note.txt'), 'partial work\n')
+    saveRun(r.runs, 'bridge-interrupted', { lane, project: r.project, branch, note: 'interrupted' })
+    writeFileSync(join(r.runs, 'bridge-interrupted.meta.json'), JSON.stringify({ project: worktree, queue: branch }))
+
+    continueRun(r, [lane, '--project', r.project, '--worktree', '--task', 'Continue.', '--continue-from', 'bridge-interrupted'])
+    expect(records(r.runs).at(-1)).toMatchObject({ project: worktree, branch, continues: 'bridge-interrupted' })
     expect(readFileSync(join(worktree, 'note.txt'), 'utf8')).toBe('partial work\n')
   }, 60000)
 
