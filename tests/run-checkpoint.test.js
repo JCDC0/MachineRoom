@@ -130,6 +130,7 @@ describe('a lane run checkpoint', { timeout: 60000 }, () => {
       dirty: false,
       dirtyFiles: [],
       dirtyCount: 0,
+      untrackedCount: 0,
     })
   })
 

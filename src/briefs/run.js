@@ -1231,14 +1231,18 @@ function checkpointField(checkpoint) {
     .slice(0, CHECKPOINT_FILE_LIMIT)
   const givenCount = Number(checkpoint.dirtyCount)
   const dirtyCount = Number.isInteger(givenCount) && givenCount >= files.length ? givenCount : files.length
+  const givenUntracked = Number(checkpoint.untrackedCount)
+  const untrackedCount = Number.isInteger(givenUntracked) && givenUntracked >= 0 ? Math.min(givenUntracked, dirtyCount) : 0
   const recovery = typeof checkpoint.recovery === 'string' ? checkpoint.recovery.trim() : ''
+  const hasTracked = dirty && dirtyCount > untrackedCount
   return {
     head,
     branch,
     dirty,
     dirtyFiles: files,
     dirtyCount,
-    ...(dirty && recovery !== '' ? { recovery } : {}),
+    untrackedCount,
+    ...(hasTracked && recovery !== '' ? { recovery } : {}),
   }
 }
 
