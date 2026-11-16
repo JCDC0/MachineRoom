@@ -2,7 +2,7 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { prepareWorktree } from '../scripts/run-lane.mjs'
+import { portOffsetFor, prepareWorktree } from '../scripts/run-lane.mjs'
 import { readHarnessSettings, updateHarnessSettings } from '../server/harness-settings.js'
 import { gitPath } from '../server/programPath.js'
 import { makeTempDir } from './helpers/tempRoot.js'
@@ -75,5 +75,14 @@ describe('worktree copies', () => {
     expect(updateHarnessSettings(root, { worktreeCopies: Array(21).fill('x') }, folder)).not.toBe('')
     expect(updateHarnessSettings(root, { worktreeCopies: ['local.env'] }, folder)).toBe('')
     expect(readHarnessSettings(root).worktreeCopies).toEqual(['local.env'])
+  })
+})
+
+describe('port offset', () => {
+  it('is stable per lane key and differs between keys', () => {
+    expect(portOffsetFor('lane1')).toBe(portOffsetFor('lane1'))
+    expect(portOffsetFor('lane1')).not.toBe(portOffsetFor('lane2'))
+    expect(portOffsetFor('lane1') % 10).toBe(0)
+    expect(portOffsetFor('missing')).toBeLessThan(1000)
   })
 })

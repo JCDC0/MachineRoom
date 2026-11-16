@@ -1118,6 +1118,10 @@ function gitText(cwd, args) {
   return String(result.stdout ?? '')
 }
 
+export function portOffsetFor(laneKey) {
+  return (createHash('sha256').update(String(laneKey)).digest().readUInt32BE(0) % 100) * 10
+}
+
 function checkpointFor(folder) {
   if (!folder) return null
   const head = (gitText(folder, ['rev-parse', 'HEAD']) ?? '').trim()
@@ -2212,7 +2216,7 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
     ]
       .filter((name) => typeof process.env[name] === 'string' && process.env[name] !== '')
     const endpoints = readEndpoints(runsDir)
-    const extra = { ...command.env, MACHINEROOM_PORT_OFFSET: String(Math.max(0, Object.keys(lanes ?? {}).indexOf(options.lane)) * 10) }
+    const extra = { ...command.env, MACHINEROOM_PORT_OFFSET: String(portOffsetFor(options.lane)) }
     if (typeof laneTicket === 'string' && laneTicket.trim() !== '') extra.MACHINEROOM_LANE_TICKET = laneTicket.trim()
     if (lane.cli.harness === 'machineroom' && Number.isFinite(Number(options?.minutes))) {
       extra.MR_AGENT_MINUTES = String(options.minutes)
@@ -2431,7 +2435,7 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
         })
       : {
           branch: gitRead(lane.worktree, ['branch', '--show-current']) ?? '',
-          commits: (gitRead(lane.worktree, ['log', '--oneline', 'refs/heads/main..HEAD']) ?? '')
+          commits: (gitRead(lane.worktree, ['log', '--oneline', checkpoint?.head ? `${checkpoint.head}..HEAD` : 'refs/heads/main..HEAD']) ?? '')
             .split(/\r?\n/)
             .filter(Boolean)
             .map((line) => maskProfilePaths(maskKeys(line).text)),

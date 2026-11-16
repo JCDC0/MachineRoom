@@ -262,6 +262,7 @@ function RewindControl({ client, lane, head, onDone }) {
           <div className="brief-confirm-text">
             {`Rewind ${lane} to ${preview.checkpointHead.slice(0, 7)}? It drops these commits from the branch and keeps them at the recovery ref ${preview.recoveryRef}.`}
           </div>
+          <div className="brief-confirm-text">Commits on this branch since the run started</div>
           <ul className="review-conflict-files">
             {preview.commits.map((commit) => (
               <li key={commit}>{commit}</li>
