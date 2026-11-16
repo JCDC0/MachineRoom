@@ -1366,7 +1366,7 @@ export function boundMessages(messages, limit) {
       if (messageChars(messages) <= limit) return
       if (rawReply === '') continue
       const [, sender, rest] = rawReply.match(/^([^\n]{1,80}?): ([\s\S]*)$/) ?? []
-      const keepSender = sender && heading.length + 13 + sender.length < NEWEST_READABLE_CHARS
+      const keepSender = sender && heading.length + 15 + sender.length < NEWEST_READABLE_CHARS
       const base = `${heading}\n${keepSender ? `${sender}: [start cut] ` : '[start cut] '}`
       const body = keepSender ? rest : rawReply
       const shortest = base.slice(0, -1)
