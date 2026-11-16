@@ -1487,6 +1487,17 @@ async function runQueueProject({ options, lane, lanes }) {
   if (continueFrom && !prevRun) throw new Error(`There is no run named ${continueFrom}.`)
   const project = projectFolder(options.project)
   if (!gitCheckout(project)) throw new Error(`The project folder ${printedRunsFolder(project)} is not a git folder. A queue needs one.`)
+  let previousProject = continueFrom && typeof prevRun.record.project === 'string' ? realPath(prevRun.record.project) : ''
+  if (continueFrom && options.worktree && previousProject === project) {
+    try {
+      const meta = JSON.parse(readFileSync(join(runsFolder(), `${continueFrom}.meta.json`), 'utf8'))
+      if (typeof meta?.project === 'string' && meta.project.trim()) previousProject = realPath(meta.project)
+    } catch {}
+  }
+  const continuedBranch = prevRun?.record.failoverFrom ? prevRun.record.checkpoint?.branch || prevRun.record.branch : prevRun?.record.branch
+  const continuedWorktree = options.worktree && previousProject && realPath(dirname(previousProject)) === realPath(join(project, '.worktrees')) ? previousProject : ''
+  if (continueFrom && (options.worktree ? !continuedWorktree : previousProject !== project)) throw new Error('The interrupted run has a different project worktree.')
+  if (continuedWorktree && !existsSync(continuedWorktree)) throw new Error('The interrupted run worktree no longer exists.')
   const problems = projectRefusals(project, lanes, (options.allowDirty === true && !options.queue) || Boolean(continueFrom))
   if (problems.length > 0) {
     printProjectRefusals(problems, project)
@@ -1510,9 +1521,9 @@ async function runQueueProject({ options, lane, lanes }) {
   const branch = `machineroom/queue-${options.lane}-${queueId}`
   if (options.dryRun) {
     const plan = options.worktree
-      ? (continueFrom ? { path: worktreeFor(project, options.lane), made: false } : worktreePlan(project, options.lane))
+      ? (continueFrom ? { path: continuedWorktree, made: false } : worktreePlan(project, options.lane))
       : { path: project, made: false }
-    const dryBranch = continueFrom ? (prevRun.record.queue || prevRun.record.branch || branch) : branch
+    const dryBranch = continueFrom ? (continuedBranch || prevRun.record.queue || branch) : branch
     const test = checkDisplay(testCommandFor(project, options.test))
     console.log(`lane: ${options.lane}`)
     console.log(`project: ${printedRunsFolder(project)}`)
@@ -1528,7 +1539,7 @@ async function runQueueProject({ options, lane, lanes }) {
   const laneProblem = laneCommandProblem(lane)
   if (laneProblem !== '') throw new Error(laneProblem)
   const worktreeSetup = options.worktree ? worktreeSetupOf(readHarnessSettings(folder)) : ''
-  const lockTarget = options.worktree ? worktreeFor(project, options.lane) || project : project
+  const lockTarget = options.worktree ? continuedWorktree || worktreeFor(project, options.lane) || project : project
   await refuseRunningLane(options.lane, options.worktree ? lockTarget : '', folder)
   const projectLock = takeProjectLock(folder, lockTarget)
   const startedAt = laneStartTime(options)
@@ -1542,7 +1553,7 @@ async function runQueueProject({ options, lane, lanes }) {
   try {
     let plan
     if (options.worktree) {
-      const wtPath = worktreeFor(project, options.lane)
+      const wtPath = continuedWorktree || worktreeFor(project, options.lane)
       if (continueFrom && wtPath && existsSync(wtPath)) {
         linkNodeModules(project, wtPath)
         plan = { path: wtPath, made: false }
@@ -1554,6 +1565,7 @@ async function runQueueProject({ options, lane, lanes }) {
     }
     const target = options.worktree && (!continueFrom || plan.made) ? prepareWorktree(project, options.lane, { setup: worktreeSetup }) : plan
     const currentWtBranch = gitRead(target.path, ['branch', '--show-current']) || ''
+    if (continueFrom && continuedBranch && currentWtBranch !== continuedBranch) throw new Error('The interrupted run worktree is on a different branch.')
     const activeBranch = continueFrom
       ? (currentWtBranch || prevRun.record.queue || prevRun.record.branch || branch)
       : branch
