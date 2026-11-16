@@ -8,6 +8,26 @@ import { branchFor, briefFileList } from './briefs.js'
 import { pathAllowed } from './plan.js'
 
 export const UNATTENDED_NOTE = 'You are running unattended in a one-shot command started for the owner, who may be away. Nobody can answer a question. If something blocks you, stop, leave the branch as it is, and say why in your report.'
+export const INTERRUPT_PARAGRAPH = 'You were interrupted. Your work so far is in this worktree on this branch, committed or not. Read these messages, then carry on with the brief.'
+
+export function formatInterruptMessage(messages) {
+  const lines = (Array.isArray(messages) ? messages : [])
+    .map((entry) => {
+      const from = typeof entry?.from === 'string' && entry.from.trim() !== '' ? entry.from.trim() : 'unknown'
+      const text = typeof entry?.text === 'string' ? entry.text : ''
+      return text.trim() === '' ? '' : `${from}: ${text}`
+    })
+    .filter(Boolean)
+  return lines.length === 0 ? `${INTERRUPT_PARAGRAPH}\n` : `${INTERRUPT_PARAGRAPH}\n\n${lines.join('\n')}\n`
+}
+
+export function continueFromProblem(value) {
+  const name = typeof value === 'string' ? value.trim() : ''
+  if (name === '' || name.startsWith('-') || !/^[A-Za-z0-9_-]+$/.test(name)) {
+    return '--continue-from needs a run name.'
+  }
+  return ''
+}
 
 const OVERRIDES = [
   { key: 'mode', pattern: /^(?!-).+$/, problem: '--mode needs a permission mode.' },
@@ -413,6 +433,7 @@ export function parseRunArgs(argv) {
   let worktree = false
   let startedBy = ''
   let startedAt = ''
+  let continueFrom = ''
   const testLines = []
   const overrides = {}
   for (let index = 0; index < args.length; index += 1) {
@@ -502,6 +523,14 @@ export function parseRunArgs(argv) {
       startedAt = value.trim()
       continue
     }
+    if (arg === '--continue-from' || arg.startsWith('--continue-from=')) {
+      const value = arg === '--continue-from' ? args[index + 1] : arg.slice('--continue-from='.length)
+      if (arg === '--continue-from') index += 1
+      const problem = continueFromProblem(value)
+      if (problem !== '') throw new Error(problem)
+      continueFrom = value.trim()
+      continue
+    }
     if (arg === '--test' || arg.startsWith('--test=')) {
       const value = arg === '--test' ? args[index + 1] : arg.slice('--test='.length)
       if (arg === '--test') index += 1
@@ -544,11 +573,12 @@ export function parseRunArgs(argv) {
       ...(test ? { test } : {}),
       ...(allowDirty ? { allowDirty: true } : {}),
       ...(startedAt ? { startedAt } : {}),
+      ...(continueFrom ? { continueFrom } : {}),
     }
   }
   if (test !== '') throw new Error('--test needs a --project task.')
   if (briefs.length === 0) throw new Error('Name at least one brief id.')
-  return { lane, briefs, dryRun, minutes, list, ...(force ? { force: true } : {}), ...overrides, ...(startedBy ? { startedBy } : {}), ...(startedAt ? { startedAt } : {}) }
+  return { lane, briefs, dryRun, minutes, list, ...(force ? { force: true } : {}), ...overrides, ...(startedBy ? { startedBy } : {}), ...(startedAt ? { startedAt } : {}), ...(continueFrom ? { continueFrom } : {}) }
 }
 
 function lockLogName(value) {
@@ -1169,7 +1199,7 @@ export function maskedQueueTasks(tasks) {
   return (Array.isArray(tasks) ? tasks : []).map((task) => maskProfilePaths(maskKeys(String(task ?? '')).text).slice(0, RECORD_TEXT_LIMIT))
 }
 
-export function runRecord({ lane, briefs, model, reasoning, mode, startedAt, minutes, exitCode, killed, costUsd, inputTokens, outputTokens, peakTokens, log, branch, commits, base, head, tests, project, task, startedBy, stoppedLeftovers, queue, startFailed, note, retried, failover, failoverFrom, quota } = {}) {
+export function runRecord({ lane, briefs, model, reasoning, mode, startedAt, minutes, exitCode, killed, costUsd, inputTokens, outputTokens, peakTokens, log, branch, commits, base, head, tests, project, task, startedBy, stoppedLeftovers, queue, startFailed, note, retried, failover, failoverFrom, quota, continues, interruptedBy } = {}) {
   const record = {
     lane: String(lane ?? ''),
     briefs: Array.isArray(briefs) ? briefs.map(String) : [],
@@ -1217,6 +1247,8 @@ export function runRecord({ lane, briefs, model, reasoning, mode, startedAt, min
     const lane = typeof failoverFrom.lane === 'string' ? failoverFrom.lane.trim() : ''
     if (lane !== '') record.failoverFrom = { lane, startedAt: isoTime(failoverFrom.startedAt) }
   }
+  if (typeof continues === 'string' && continues.trim() !== '') record.continues = continues.trim()
+  if (typeof interruptedBy === 'string' && interruptedBy.trim() !== '') record.interruptedBy = interruptedBy.trim()
   return record
 }
 

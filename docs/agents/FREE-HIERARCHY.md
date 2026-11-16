@@ -19,6 +19,7 @@ The owner wants a free hierarchy of coding agents in one project:
    - Any orchestrator can message any other (`POST /api/orchestrator/messages`, capped at 6 per 10 minutes per sender), shown in the `Team` tab: `P333`.
    - A bridge-started lane run receives a one-run ticket (`MACHINEROOM_LANE_TICKET`) to message its coordinator, any orchestrator or another running lane up to 4 times and poll its replies with `GET /api/orchestrator/messages` (`P341`, `P342`).
    - A failover backup run messages under its own lane's name, keeps the replies already sent to the primary's run in its inbox, takes a reply sent to either lane name while it runs, and counts the primary's sends toward its 4 (`P439`).
+   - Replies to a working lane follow the `Replies to a working lane` choice in `Settings` (`next-turn` waits for the lane to read its inbox, and `interrupt` interrupts at once): the native `machineroom` harness aborts its model call (`P438a`, `P438c`), and CLI lanes stop and continue on the same branch and worktree with `--continue-from` and the same ticket, up to 3 interrupts per first run (`P438b`).
    - Lane end reports wake only the `startedBy` orchestrator: `O2` (0.1.305), `O8` (0.1.356).
 3. The owner watches file access:
    - The owner sets a sub's `Scope` (one glob per line, `**` when empty) and `Restricted` box in `Agents` (`FamilyTree.jsx`), and only the owner can change the scope or restriction of a sub the owner set. Commit diffs and `git status` are checked against a restricted sub's `scope` (`outsideFiles` in `server/orchestrators.js`) at turn end: `O2`, `O7`, `X3`.
@@ -32,7 +33,6 @@ The owner wants a free hierarchy of coding agents in one project:
    - Lane runs take a permission mode via `--mode`, `cli.mode` or `POST /api/control/runs`, validated per harness (including OpenCode `plan` and `edits` via `OPENCODE_CONFIG`) while refusing `ask` (`P338`, `P343`, `P344`, `P376`, `P407`). Add child and the custom lane editor in `Agents` save a lane's mode from `laneModesFor` (no `Ask`) or `Orchestrator's choice` (`choice`), and `Dispatch` picks a mode for one run. On `POST /api/control/runs`, the owner can pick any valid lane mode, while an orchestrator can pick a mode different from the lane's fixed mode only when the lane is saved as `choice`; on failover, a backup lane with a fixed saved mode keeps its own mode (`P403`, `P412`). A Bypass run never passes Bypass to a backup lane that is not saved as Bypass (`P430b`).
 
 ## What Does Not Work Yet
-- Nothing interrupts a lane run: a run is one call, so a lane gets a reply only when it reads its inbox (`P341`), and the main orchestrator's instructions name the reply form since review 36.
 - A touch outside the project is shown, not stopped (`P346`). The modes are the guard: Codex's sandbox, Claude's print-mode permissions and OpenCode's `external_directory: deny` keep the file tools inside the project, and the native harness refuses a path outside its folder. AGY has no folder guard, and a shell command in any harness can still write outside; the Inspector's `Outside the project` list shows them (`P440`).
 
 ## Added on 2026-11-15
@@ -48,6 +48,7 @@ The owner wants a free hierarchy of coding agents in one project:
 - An orchestrator may propose or add a new agent only on its own harness, with any model that harness lists, and the ladder route checks a new or changed sub's model; the owner may make any agent on any harness: `P404`.
 - The sub orchestrator form and editor in `Agents` set `Scope` and `Restricted`, and a chat lane message and a split run carry a `Separate worktree` choice: `P405`, `P406`, `P408`.
 - An OpenCode lane that is not Bypass denies writes outside the project with `permission.external_directory` in its `OPENCODE_CONFIG`, merged with the mode's rules and MCP servers, and each mode line says where writes go: `P440`.
+- Replies to a working lane follow the `Replies to a working lane` setting (`next-turn` or `interrupt`): the native harness interrupts a model call and CLI lanes stop and continue on the same branch and worktree with `--continue-from` and the same ticket, up to 3 interrupts per first run: `P438a`, `P438b`, `P438c`.
 
 ## Runbook: Build and Run the Owner's Test Tree
 Target tree: Main on `claude` (`claude-opus-5-5`, `high`); Sub 1 on `codex` (`gpt-6.1-terra`, `high`) with 2 AGY lanes (`gemini-4-hydrogen-xhigh`); Sub 2 on `machineroom` (GLM 5.3 Flash) with 3 OpenCode lanes. Simple form: no subs, all lanes under Main.
