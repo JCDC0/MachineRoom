@@ -1747,9 +1747,10 @@ async function startFailover({ laneKey, target, lanes, options, wanted, prompt, 
   const primaryMode = primaryRaw === 'choice'
     ? (defaultMode(lanes?.[laneKey]?.cli?.harness) ?? undefined)
     : (primaryRaw !== undefined && primaryRaw !== '' ? primaryRaw : undefined)
-  const carriedMode = fixedTarget
+  const modeToCarry = fixedTarget
     ? undefined
     : (primaryMode ?? (targetMode === 'choice' ? (defaultMode(savedTarget?.cli?.harness) ?? undefined) : undefined))
+  const carriedMode = modeToCarry === 'bypass' && targetMode !== 'bypass' ? undefined : modeToCarry
   const fallbackLane = laneWithOverrides(savedTarget, carriedMode !== undefined ? { mode: carriedMode } : {})
   if (!fallbackLane) return null
   if (!fixedTarget && carriedMode === undefined && fallbackLane.cli && (fallbackLane.cli.mode === '' || fallbackLane.cli.mode === 'choice')) {

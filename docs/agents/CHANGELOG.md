@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- P430b: A failover never passes Bypass to a backup lane that is not saved as Bypass, so the backup runs at its own saved mode or its harness default.
 - A lane proposal is refused for a harness turned off in Settings, and a program path saved there counts as available.
 - Argon lists eight free hierarchy gaps to fix next (PLAN-NEXT-ARGON-2.md).
 - Every server git call drops GIT_DIR, GIT_WORK_TREE, GIT_INDEX_FILE and GIT_COMMON_DIR through one helper, gitEnv.
