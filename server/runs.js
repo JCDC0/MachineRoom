@@ -1565,8 +1565,11 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
     const runKey = typeof held?.lane === 'string' && held.lane.trim() ? held.lane.trim() : lane
     const item = running.get(runKey) ?? running.get(lane)
     if (!item || item.closed || item.stopping || item.interrupting) return false
+    const backup = lane !== item.entry.lane
+    if (backup && !readStartLanes({ lanesFile: laneFile, runsFolder: recordsDir() })?.[lane]) return false
     if (activeInterrupts.has(item.ticket)) return false
-    if (continuesChainCount(item.continueFrom) >= 3) return false
+    const interruptCount = laneTickets.get(item.ticket)?.interruptCount ?? continuesChainCount(item.continueFrom)
+    if (interruptCount >= 3) return false
     activeInterrupts.add(item.ticket)
     try {
       const runName = await waitForRunName(item, lane, runKey)
@@ -1603,14 +1606,15 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
       startRun(
         nextLane,
         item.briefs,
-        item.projectRun,
+        backup && item.projectRun ? { ...item.projectRun, model: '' } : item.projectRun,
         item.startedBy,
         item.reasoning,
-        item.model,
-        item.mode,
+        backup ? '' : item.model,
+        backup ? '' : item.mode,
         item.allowedLanes,
         { continueFrom: runName, ticket: item.ticket, interruptedBy: sender }
       )
+      laneTickets.get(item.ticket).interruptCount = interruptCount + 1
       notify({ topic: 'runs' })
       return true
     } catch {
