@@ -49,3 +49,40 @@ export function legacyMode(harness) {
 export function defaultMode(harness) {
   return modesFor(harness).some((mode) => mode.id === 'auto') ? 'auto' : legacyMode(harness)
 }
+
+function normalizeHarness(harness) {
+  const text = typeof harness === 'string' ? harness.trim().toLowerCase() : ''
+  if (!text || text === 'not reported') return ''
+  return text.replace(/_(local|remote|adapter)$/, '').replace(/-local$/, '')
+}
+
+function effectiveSandboxMode(harness, mode) {
+  const clean = typeof mode === 'string' ? mode.trim().toLowerCase() : ''
+  if (clean === 'choice') return defaultMode(harness) ?? legacyMode(harness) ?? ''
+  if (clean) return clean
+  return legacyMode(harness) ?? defaultMode(harness) ?? ''
+}
+
+export function sandboxSummary(harness, mode) {
+  const key = normalizeHarness(harness)
+  const effective = effectiveSandboxMode(key, mode)
+  if (key === 'codex') {
+    if (effective === 'plan') return 'Read-only OS sandbox'
+    if (effective === 'bypass') return 'No sandbox'
+    return 'OS sandbox, writes stay in the worktree'
+  }
+  if (key === 'claude') {
+    if (effective === 'plan' || effective === 'ask' || effective === 'edits' || effective === 'auto') {
+      return 'Permission checks, file edits stay in the project; shell commands are not sandboxed'
+    }
+    return 'No permission checks'
+  }
+  if (key === 'opencode') {
+    if (effective === 'bypass') return 'No permission rules'
+    return 'Permission rules, file edits stay in the project; no OS sandbox'
+  }
+  if (key === 'machineroom') return 'File tools stay in the project; shell commands are not sandboxed'
+  if (key === 'agy') return 'No permission checks'
+  if (key === 'acp') return 'Approves every request the agent asks for'
+  return 'Unknown'
+}
