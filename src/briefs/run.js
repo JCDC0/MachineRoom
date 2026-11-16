@@ -1217,12 +1217,36 @@ function quotaField(quota) {
 }
 
 const RECORD_TEXT_LIMIT = 200
+const CHECKPOINT_FILE_LIMIT = 20
+
+function checkpointField(checkpoint) {
+  if (!checkpoint || typeof checkpoint !== 'object' || Array.isArray(checkpoint)) return null
+  const head = typeof checkpoint.head === 'string' ? checkpoint.head.trim() : ''
+  if (head === '') return null
+  const branch = typeof checkpoint.branch === 'string' ? checkpoint.branch.trim() : ''
+  const dirty = checkpoint.dirty === true
+  const files = (Array.isArray(checkpoint.dirtyFiles) ? checkpoint.dirtyFiles : [])
+    .map((path) => (typeof path === 'string' ? path.trim() : ''))
+    .filter((path) => path !== '')
+    .slice(0, CHECKPOINT_FILE_LIMIT)
+  const givenCount = Number(checkpoint.dirtyCount)
+  const dirtyCount = Number.isInteger(givenCount) && givenCount >= files.length ? givenCount : files.length
+  const recovery = typeof checkpoint.recovery === 'string' ? checkpoint.recovery.trim() : ''
+  return {
+    head,
+    branch,
+    dirty,
+    dirtyFiles: files,
+    dirtyCount,
+    ...(dirty && recovery !== '' ? { recovery } : {}),
+  }
+}
 
 export function maskedQueueTasks(tasks) {
   return (Array.isArray(tasks) ? tasks : []).map((task) => maskProfilePaths(maskKeys(String(task ?? '')).text).slice(0, RECORD_TEXT_LIMIT))
 }
 
-export function runRecord({ lane, briefs, model, reasoning, mode, startedAt, finishedAt, minutes, exitCode, killed, costUsd, inputTokens, outputTokens, peakTokens, log, branch, commits, base, head, tests, project, task, startedBy, stoppedLeftovers, queue, startFailed, note, retried, failover, failoverFrom, quota, continues, interruptedBy } = {}) {
+export function runRecord({ lane, briefs, model, reasoning, mode, startedAt, finishedAt, minutes, exitCode, killed, costUsd, inputTokens, outputTokens, peakTokens, log, branch, commits, base, head, checkpoint, tests, project, task, startedBy, stoppedLeftovers, queue, startFailed, note, retried, failover, failoverFrom, quota, continues, interruptedBy } = {}) {
   const record = {
     lane: String(lane ?? ''),
     briefs: Array.isArray(briefs) ? briefs.map(String) : [],
@@ -1244,6 +1268,8 @@ export function runRecord({ lane, briefs, model, reasoning, mode, startedAt, fin
   if (mode !== undefined) record.mode = mode
   if (typeof base === 'string' && base.trim() !== '') record.base = base.trim()
   if (typeof head === 'string' && head.trim() !== '') record.head = head.trim()
+  const checkpointReading = checkpointField(checkpoint)
+  if (checkpointReading !== null) record.checkpoint = checkpointReading
   if (tests === 'passed' || tests === 'failed' || tests === 'none') record.tests = tests
   const queueBranch = typeof queue?.branch === 'string' ? queue.branch.trim() : ''
   if (queueBranch !== '') {
