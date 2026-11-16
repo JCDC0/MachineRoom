@@ -408,6 +408,17 @@ export function createOrchestrators({
     return Boolean(left) && sameConfig({ ...left, effort: right.effort }, right)
   }
 
+  function saveSubSettings(id, instance) {
+    if (!id || id === ORCHESTRATOR_KEY) return
+    const { ladder } = readSaved()
+    const sub = ladder.subs.find((entry) => entry.id === id)
+    if (!sub) return
+    const { harness, model, effort } = instance.answer()
+    Object.assign(sub, { harness, model, effort })
+    main.setLadder(ladder)
+    configs.set(id, subConfig(sub))
+  }
+
   function createSub(sub) {
     const config = subConfig(sub)
     configs.set(config.id, config)
@@ -1124,6 +1135,7 @@ export function createOrchestrators({
         return true
       }
       const out = instance.setModel(body)
+      if (out.status === 200) saveSubSettings(body.id, instance)
       sendJson(req, res, out.status, out.body)
       return true
     }
@@ -1141,15 +1153,7 @@ export function createOrchestrators({
         return true
       }
       const out = instance.setHarness(body)
-      if (out.status === 200 && body.id && body.id !== ORCHESTRATOR_KEY) {
-        const { ladder } = readSaved()
-        const targetSub = ladder.subs.find((s) => s.id === body.id)
-        if (targetSub) {
-          targetSub.harness = typeof body.harness === 'string' ? body.harness.trim() : targetSub.harness
-          targetSub.model = typeof body.model === 'string' ? body.model.trim() : targetSub.model
-          main.setLadder(ladder)
-        }
-      }
+      if (out.status === 200) saveSubSettings(body.id, instance)
       sendJson(req, res, out.status, out.body)
       return true
     }
@@ -1257,6 +1261,7 @@ export function createOrchestrators({
         return true
       }
       const out = instance.setEffort(body)
+      if (out.status === 200) saveSubSettings(body.id, instance)
       sendJson(req, res, out.status, out.body)
       return true
     }

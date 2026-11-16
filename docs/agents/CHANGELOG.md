@@ -1,7 +1,9 @@
 # Changelog
 
 ## Unreleased
+- A sub's harness, model or effort change is saved to the ladder and its config, so a later ladder save keeps it and does not close the sub's running turn.
 - A Bypass run that fails over never passes Bypass to a backup lane not saved as Bypass; the backup runs at its own mode or its harness default.
+- Sub harness, model and effort changes update the saved ladder and keep unchanged working turns alive.
 - The ladder end-to-end tests allow 120 seconds, more than their own waits add up to.
 - A sub orchestrator's token can start, stop or merge only the lanes in its own sector and stop only itself; its lane messages show it as the sender.
 - P435: Both ladder end-to-end tests allow 120 seconds, more than their waits add up to.
