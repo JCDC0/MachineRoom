@@ -250,6 +250,16 @@ export function createClient({
     sendToOrchestrator: (text, { confirmed } = {}) =>
       request('POST', '/api/orchestrator/messages', { text, confirmed }),
 
+    sendLaneMessage: ({ lane = '', text = '', interrupt } = {}) => {
+      const target = typeof lane === 'string' ? lane.trim() : ''
+      const body = { to: `lane:${target}`, text }
+      if (typeof interrupt === 'boolean') body.interrupt = interrupt
+      return request('POST', '/api/orchestrator/messages', body)
+    },
+
+    laneMessageStatus: (id) =>
+      request('GET', `/api/orchestrator/messages/status?id=${encodeURIComponent(id ?? '')}`),
+
     stopOrchestrator: ({ confirmed = true, id } = {}) => {
       const body = id === undefined || id === null || id === '' ? { confirmed } : { confirmed, id }
       return request('POST', '/api/orchestrator/stop', body)

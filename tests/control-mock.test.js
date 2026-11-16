@@ -316,6 +316,41 @@ describe('mock orchestrators and the ladder', () => {
     expect(state.changes).toEqual([])
     expect(state.changeCount).toBe(0)
   })
+
+  it('sends a message to a running lane and reports its status in mock', async () => {
+    const client = createMockClient({ latencyMs: 0, runMs: 5000, now: () => Date.parse('2026-10-18T00:00:00Z') })
+    await expect(client.sendLaneMessage({ lane: 'opencode', text: '   ' })).rejects.toThrow(
+      'Write a message from 1 to 8000 characters.'
+    )
+    await expect(client.sendLaneMessage({ lane: 'opencode', text: 'Hi' })).rejects.toThrow(
+      'The lane opencode has no run that can read a message now.'
+    )
+    await expect(client.laneMessageStatus('missing')).rejects.toThrow('not found')
+
+    const run = await client.startRun('opencode', { task: 'Build UI', worktree: true })
+    const queued = await client.sendLaneMessage({ lane: 'opencode', text: 'Wait for turn.', interrupt: false })
+    expect(queued).toEqual({ id: expect.any(String) })
+    expect(await client.laneMessageStatus(queued.id)).toEqual({
+      id: queued.id,
+      status: 'queued',
+      at: '2026-10-18T00:00:00.000Z',
+    })
+
+    const interrupted = await client.sendLaneMessage({ lane: 'opencode', text: 'Stop now.', interrupt: true })
+    expect(interrupted.id).not.toBe(queued.id)
+    expect(await client.laneMessageStatus(interrupted.id)).toEqual({
+      id: interrupted.id,
+      status: 'interrupted',
+      at: '2026-10-18T00:00:00.000Z',
+    })
+
+    await client.harnessSettings({ laneReplies: 'interrupt', confirmed: true })
+    const bySetting = await client.sendLaneMessage({ lane: 'opencode', text: 'Follow setting.' })
+    expect((await client.laneMessageStatus(bySetting.id)).status).toBe('interrupted')
+
+    await client.stopRun({ lane: 'opencode', startedAt: run.startedAt, confirmed: true })
+    expect((await client.laneMessageStatus(queued.id)).status).toBe('queued')
+  })
 })
 
 describe('mock check command', () => {
