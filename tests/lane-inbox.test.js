@@ -201,9 +201,9 @@ describe('a lane inbox', () => {
     expect(read.status).toBe(200)
     expect(Object.keys(read.body)).toEqual(['messages'])
     expect(read.body.messages).toEqual([
-      { from: 'orchestrator', text: 'Which header?', at: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/) },
+      { id: expect.any(String), from: 'orchestrator', text: 'Which header?', at: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/) },
     ])
-    expect(Object.keys(read.body.messages[0])).toEqual(['from', 'text', 'at'])
+    expect(Object.keys(read.body.messages[0])).toEqual(['id', 'from', 'text', 'at'])
 
     const team = rig.chat('orchestrator').messages.filter((message) => message.from === 'agent' && message.agent?.kind === 'message')
     expect(team).toEqual([
@@ -223,7 +223,7 @@ describe('a lane inbox', () => {
 
     const read = await laneGet(rig.url, ticket)
     expect(read.body.messages).toEqual([
-      { from: 'sub:frontend', text: 'Use the new header.', at: expect.any(String) },
+      { id: expect.any(String), from: 'sub:frontend', text: 'Use the new header.', at: expect.any(String) },
     ])
     await releaseRun(rig)
   })
@@ -237,7 +237,7 @@ describe('a lane inbox', () => {
     expect(first.status).toBe(202)
     const read = await laneGet(rig.url, other)
     expect(read.body.messages).toEqual([
-      { from: 'lane:opencode', text: 'The field is ready.', at: expect.any(String) },
+      { id: expect.any(String), from: 'lane:opencode', text: 'The field is ready.', at: expect.any(String) },
     ])
 
     for (let index = 2; index <= 4; index += 1) {
