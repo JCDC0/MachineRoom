@@ -205,6 +205,18 @@ function runGitCommand(resolved, args) {
   })
 }
 
+export async function unmergedBranches(resolved, run = runGitCommand) {
+  const result = await run(resolved, ['for-each-ref', '--no-merged=main', '--format=%(refname:short)|%(worktreepath)', 'refs/heads'])
+  if (!result.ok) return null
+  return result.stdout
+    .split(/\r?\n/)
+    .filter(Boolean)
+    .map((row) => {
+      const [branch, path = ''] = row.split('|')
+      return { lane: basename(path.trim()), branch }
+    })
+}
+
 async function isGitWorkTree(resolved) {
   const result = await runGitCommand(resolved, ['rev-parse', '--is-inside-work-tree'])
   if (!result.ok) return result.notRepo ? false : null
@@ -802,6 +814,10 @@ export function createBridge(options = {}) {
       onMessage: sendAgentMessage,
       sendJson,
       readJsonBody,
+      readTaskState: async () => ({
+        running: lanesSource ? lanesSource.openRuns().map((run) => ({ lane: run.lane, task: run.name })) : null,
+        reviews: await unmergedBranches(projectRoot),
+      }),
       isWorking: (key) => {
         const fromSource = lanesSource ? lanesSource.openRuns().some((r) => r.lane === key) : false
         const fromRuns = runs && typeof runs.isRunning === 'function' ? runs.isRunning(key) : false

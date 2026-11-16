@@ -248,6 +248,7 @@ export function createOrchestrators({
   laneTickets,
   runs = null,
   interruptLane,
+  readTaskState = null,
 } = {}) {
   const root = projectRoot ? resolve(projectRoot) : ''
   const folder = resolve(runsFolder)
@@ -309,6 +310,13 @@ export function createOrchestrators({
     })
   }
 
+  const scopesNow = () =>
+    readSaved().ladder.subs.map((sub) => ({
+      name: sub.name ?? sub.id,
+      folders: [...(sub.scope ?? []), ...(sub.lanes ?? []).filter((lane) => !isLaneHidden(lane))],
+    }))
+  const stateReader = typeof readTaskState === 'function' ? async () => ({ ...(await readTaskState()), scopes: scopesNow() }) : null
+
   const main = createOrchestrator({
     id: ORCHESTRATOR_KEY,
     name: mainName,
@@ -326,6 +334,7 @@ export function createOrchestrators({
     home,
     recordsCache: sharedCache,
     approvalTimeoutMs,
+    readTaskState: stateReader,
   })
   instances.set(ORCHESTRATOR_KEY, main)
 
@@ -467,6 +476,7 @@ export function createOrchestrators({
       onMasked,
       recordsCache: sharedCache,
       approvalTimeoutMs,
+      readTaskState: stateReader,
       onMessage: (message) => announce(message?.from, agentKey(message?.to), message?.kind, message?.text),
       extraInstructions: () => {
         const ladder = readSaved().ladder

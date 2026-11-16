@@ -20,6 +20,7 @@ import { homedir, tmpdir } from 'node:os'
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { maskKeys } from '../src/briefs/audit.js'
+import { readTaskStateBlock } from '../src/briefs/taskState.js'
 import { isWindowsPath, printedRunsFolder } from './printed-path.js'
 import { childEnvironment, mcpConfigForClaude, mcpConfigForOpencode, normalizeMcpServers, replyText, runRecord, summarizeRun } from '../src/briefs/run.js'
 import { defaultMode, legacyMode, modesFor } from '../src/control/modes.js'
@@ -992,6 +993,7 @@ export function createOrchestrator({
   mergeWaitMs = ORCHESTRATOR_MERGE_WAIT_MS,
   gitTimeoutMs = GIT_OPERATION_TIMEOUT_MS,
   appendRecord = (file, line) => appendFileSync(file, line),
+  readTaskState = null,
 } = {}) {
   const token = typeof tokenOption === 'string' && tokenOption ? tokenOption : randomBytes(24).toString('base64url')
   const root = projectRoot ? resolve(projectRoot) : ''
@@ -1075,6 +1077,9 @@ export function createOrchestrator({
   let currentUnread = false
   const sessions = []
   let summary = ''
+  let stateAtCompaction = ''
+  let freshState = null
+  let compactionSettling = false
   const compactionCutoffs = new Map()
   let branchTranscript = ''
   let pendingCompaction = null
@@ -1882,6 +1887,23 @@ export function createOrchestrator({
   }
 
   function startTurn(options = null) {
+    if (compactionSettling) return
+    const wantsState =
+      !options?.compacting && !pendingCompaction && !sessionId && summary !== '' && branchTranscript === '' && stateAtCompaction !== ''
+    if (!wantsState) {
+      startTurnNow(options)
+      return
+    }
+    compactionSettling = true
+    readTaskStateBlock(readTaskState, maskText).then((block) => {
+      compactionSettling = false
+      freshState = block
+      if (stopped || running) return
+      startTurnNow(options)
+    })
+  }
+
+  function startTurnNow(options = null) {
     if (roomTimer) {
       clearTimeout(roomTimer)
       roomTimer = null
@@ -1901,7 +1923,15 @@ export function createOrchestrator({
     if (!hasOwner) roomTurns.push(now())
     const first = !sessionId
     if (first && harness === 'claude') sessionId = randomUUID()
-    const carried = first ? branchTranscript || summary : ''
+    let carried = first ? branchTranscript || summary : ''
+    if (carried && carried === summary && stateAtCompaction) {
+      const current = freshState
+      freshState = null
+      if (current !== null && current !== stateAtCompaction) carried = `${carried}
+
+Room state now:
+${current}`
+    }
     const carriedBranch =
       (harness === 'claude' || harness === 'opencode') && carried !== '' && branchTranscript !== ''
     if (carried && (harness === 'claude' || harness === 'opencode')) {
@@ -2218,11 +2248,27 @@ export function createOrchestrator({
         addMessage('room', COMPACT_FAILED_MESSAGE)
       } else {
         compactionCutoffs.set(currentConversationId, turn.logFile)
-        summary = compactedSummary(maskText(String(report ?? '')), turn.sourceLogs)
-        sessionId = null
-        contextTokens = null
-        if (!stopped) setState(state === 'paused' ? 'paused' : 'idle')
-        addMessage('room', compactedMessage({ chatFile: conversationFile, logs: turn.sourceLogs }))
+        const modelSummary = compactedSummary(maskText(String(report ?? '')), turn.sourceLogs)
+        const finish = (block) => {
+          compactionSettling = false
+          stateAtCompaction = block
+          summary = block ? `Room state at compaction (from the room, not the model):
+${block}
+
+${modelSummary}` : modelSummary
+          sessionId = null
+          contextTokens = null
+          if (!stopped) setState(state === 'paused' ? 'paused' : 'idle')
+          addMessage('room', compactedMessage({ chatFile: conversationFile, logs: turn.sourceLogs }))
+          if (!stopped) maybeStartTurn()
+        }
+        if (typeof readTaskState === 'function') {
+          compactionSettling = true
+          readTaskStateBlock(readTaskState, maskText).then(finish)
+        } else {
+          finish('')
+        }
+        return
       }
       if (!stopped) maybeStartTurn()
       return
