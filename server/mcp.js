@@ -7,6 +7,7 @@ export const MCP_PROTOCOL_VERSION = '2024-11-05'
 export const MCP_SERVER_NAME_PATTERN = /^[a-zA-Z0-9_-]{1,40}$/
 export const MCP_LIST_TIMEOUT_MS = 8000
 export const MCP_CALL_TIMEOUT_MS = 15000
+export const MCP_LIST_CACHE_MS = 60000
 
 export const MCP_NAME_PROBLEM = 'The MCP server name must be 1 to 40 letters, digits, dashes or underscores.'
 export const MCP_TRANSPORT_PROBLEM = 'The MCP transport must be stdio or http.'
@@ -502,7 +503,10 @@ export async function callMcpServerTool(serverConfig, toolName, toolArgs = {}, o
 export async function listAllMcpTools(runsDir, options = {}) {
   const enabled = readMcpServers(runsDir).filter((server) => server.enabled)
   const answers = await Promise.all(
-    enabled.map(async (server) => ({ server, answer: await listMcpServerTools(server, options) }))
+    enabled.map(async (server) => ({
+      server,
+      answer: await cachedToolList(runsDir, server, () => listMcpServerTools(server, options)),
+    }))
   )
   const tools = []
   const errors = []
@@ -516,6 +520,47 @@ export async function listAllMcpTools(runsDir, options = {}) {
     }
   }
   return { ok: errors.length === 0, tools, errors }
+}
+
+const toolListCache = new Map()
+const toolListRequests = new Map()
+
+function toolListKey(runsDir, server) {
+  const env = isPlainObject(server?.env) ? server.env : {}
+  return JSON.stringify([
+    runsDir,
+    server.name,
+    server.transport,
+    server.command,
+    server.args,
+    Object.keys(env).sort(),
+    server.url,
+  ])
+}
+
+function cachedToolList(runsDir, server, load) {
+  const key = toolListKey(runsDir, server)
+  const now = Date.now()
+  for (const [held, entry] of toolListCache) {
+    if (entry.expiresAt <= now) toolListCache.delete(held)
+  }
+  const entry = toolListCache.get(key)
+  if (entry) return Promise.resolve(entry.answer)
+  const running = toolListRequests.get(key)
+  if (running) return running
+  const request = load().then(
+    (answer) => {
+      toolListRequests.delete(key)
+      if (answer.ok) toolListCache.set(key, { answer, expiresAt: Date.now() + MCP_LIST_CACHE_MS })
+      return answer
+    },
+    (error) => {
+      toolListRequests.delete(key)
+      throw error
+    }
+  )
+  toolListRequests.set(key, request)
+  return request
 }
 
 export async function callMcpTool(runsDir, request = {}, options = {}) {
