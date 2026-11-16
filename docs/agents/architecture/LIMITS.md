@@ -40,3 +40,4 @@ Each live room page holds one event stream: `src/live/bridge.js` opens `/events`
 
 A compaction keeps the summary and the messages in the chat file, and starts the next turn in a new session. The chat keeps its last 200 messages (`ORCHESTRATOR_CHAT_LIMIT`). A saved conversation keeps its last 200 messages (`SESSION_MESSAGES_LIMIT`) and at most 20000 characters of its branch transcript (`BRANCH_TRANSCRIPT_LIMIT`). The turn logs stay in the runs folder as `<lane>-chat-YYYYMMDD-HHMMSS-mmm.log`, and the compaction message and the summary's first line name them. Nothing older is archived.
 
+- An MCP tool call ends after 15 seconds with no answer or progress notice for its own token (`MCP_CALL_TIMEOUT_MS`) and after 10 minutes however much progress arrives (`MCP_CALL_CEILING_MS`); `tools/list` keeps its fixed 8 second limit (P473).

@@ -674,7 +674,7 @@ describe('callMcpServerTool', () => {
       jsonrpc: '2.0',
       id: 2,
       method: 'tools/call',
-      params: { name: 'echo', arguments: { text: 'hi' } },
+      params: { name: 'echo', arguments: { text: 'hi' }, _meta: { progressToken: expect.any(String) } },
     })
     expect(call.child.killed).toBe(true)
   })
@@ -684,7 +684,7 @@ describe('callMcpServerTool', () => {
     const spawnImpl = fakeSpawn(stdioResponder({ callResult }))
     const answer = await callMcpServerTool(STDIO_SERVER, 'echo', null, { spawnImpl })
     expect(answer).toEqual({ ok: true, result: callResult })
-    expect(spawnImpl.calls[0].written.at(-1).params).toEqual({ name: 'echo', arguments: {} })
+    expect(spawnImpl.calls[0].written.at(-1).params).toEqual({ name: 'echo', arguments: {}, _meta: { progressToken: expect.any(String) } })
   })
 
   it('calls a tool on an http server', async () => {
@@ -695,7 +695,7 @@ describe('callMcpServerTool', () => {
       jsonrpc: '2.0',
       id: 2,
       method: 'tools/call',
-      params: { name: 'search', arguments: { query: 'room' } },
+      params: { name: 'search', arguments: { query: 'room' }, _meta: { progressToken: expect.any(String) } },
     })
   })
 
@@ -787,6 +787,7 @@ describe('listAllMcpTools and callMcpTool', () => {
     expect(fetchImpl.requests.at(-1).message.params).toEqual({
       name: 'read_file',
       arguments: { path: 'README.md' },
+      _meta: { progressToken: expect.any(String) },
     })
   })
 

@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process'
-import { createHash } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { killTree } from './processTree.js'
@@ -8,6 +8,7 @@ export const MCP_PROTOCOL_VERSION = '2024-11-05'
 export const MCP_SERVER_NAME_PATTERN = /^[a-zA-Z0-9_-]{1,40}$/
 export const MCP_LIST_TIMEOUT_MS = 8000
 export const MCP_CALL_TIMEOUT_MS = 15000
+export const MCP_CALL_CEILING_MS = 600000
 export const MCP_LIST_CACHE_MS = 60000
 
 export const MCP_NAME_PROBLEM = 'The MCP server name must be 1 to 40 letters, digits, dashes or underscores.'
@@ -29,6 +30,7 @@ export const MCP_TOOL_ARGS_PROBLEM = 'The tool arguments must be a JSON object.'
 export const MCP_START_PROBLEM = 'The MCP server could not be started.'
 export const MCP_STOPPED_PROBLEM = 'The MCP server stopped before it answered.'
 export const MCP_TIMEOUT_PROBLEM = 'The MCP server did not answer in time.'
+export const MCP_CEILING_PROBLEM = 'The MCP tool call ran past its ten minute limit.'
 export const MCP_HTTP_PROBLEM = 'The MCP server did not answer.'
 export const MCP_HTTP_STATUS_PROBLEM = 'The MCP server refused the request.'
 export const MCP_JSON_PROBLEM = 'The MCP server answer was not JSON.'
@@ -254,11 +256,17 @@ function closeChild(child) {
   } catch {}
 }
 
-function stdioSession(server, timeoutMs, spawnImpl, work) {
+function isProgress(message, tokens) {
+  return message?.method === 'notifications/progress' && tokens.has(message.params?.progressToken)
+}
+
+function stdioSession(server, timeoutMs, ceilingMs, spawnImpl, work) {
   return new Promise((resolveSession) => {
     let child = null
     let settled = false
     let timer = null
+    let ceilingTimer = null
+    const tokens = new Set()
     let nextId = 0
     let buffer = ''
     const pending = new Map()
@@ -270,6 +278,7 @@ function stdioSession(server, timeoutMs, spawnImpl, work) {
         clearTimeout(timer)
         timer = null
       }
+      clearTimeout(ceilingTimer)
       pending.clear()
       closeChild(child)
       resolveSession(value)
@@ -285,6 +294,11 @@ function stdioSession(server, timeoutMs, spawnImpl, work) {
       try {
         message = JSON.parse(text)
       } catch {
+        return
+      }
+      if (isProgress(message, tokens)) {
+        clearTimeout(timer)
+        timer = setTimeout(() => fail(MCP_TIMEOUT_PROBLEM), timeoutMs)
         return
       }
       if (!isPlainObject(message) || message.id === undefined || message.id === null) return
@@ -310,6 +324,7 @@ function stdioSession(server, timeoutMs, spawnImpl, work) {
         }
         nextId += 1
         const id = nextId
+        if (params?._meta?.progressToken !== undefined) tokens.add(params._meta.progressToken)
         pending.set(id, (message) => {
           if (message.error) {
             rejectRequest(new McpError(`${MCP_RPC_PROBLEM} ${rpcDetail(message.error)}`))
@@ -360,6 +375,7 @@ function stdioSession(server, timeoutMs, spawnImpl, work) {
     })
 
     timer = setTimeout(() => fail(MCP_TIMEOUT_PROBLEM), timeoutMs)
+    if (ceilingMs) ceilingTimer = setTimeout(() => fail(MCP_CEILING_PROBLEM), ceilingMs)
 
     const start = async () => {
       await request('initialize', {
@@ -378,29 +394,49 @@ function stdioSession(server, timeoutMs, spawnImpl, work) {
   })
 }
 
-async function httpSession(server, timeoutMs, fetchImpl, work) {
-  const deadline = Date.now() + timeoutMs
+async function httpSession(server, timeoutMs, ceilingMs, fetchImpl, work) {
+  let deadline = Date.now() + timeoutMs
+  const ceilingAt = ceilingMs ? Date.now() + ceilingMs : Infinity
+  const tokens = new Set()
+  const expired = () => (Date.now() >= ceilingAt ? new McpError(MCP_CEILING_PROBLEM) : timeoutProblem())
+  const idle = () => {
+    deadline = Date.now() + timeoutMs
+  }
   let nextId = 0
   let sessionId = ''
 
   const post = async (message, { reply = true } = {}) => {
-    const remaining = deadline - Date.now()
-    if (remaining <= 0) throw timeoutProblem()
+    if (Math.min(deadline, ceilingAt) - Date.now() <= 0) throw expired()
     const headers = {
       'content-type': 'application/json',
       accept: 'application/json, text/event-stream',
     }
     if (sessionId !== '') headers['mcp-session-id'] = sessionId
+    const controller = new AbortController()
+    let abortTimer = null
+    const arm = () => {
+      clearTimeout(abortTimer)
+      abortTimer = setTimeout(() => controller.abort(), Math.max(1, Math.min(deadline, ceilingAt) - Date.now()))
+    }
+    arm()
+    try {
+      return await exchange(message, headers, controller.signal, reply, arm)
+    } finally {
+      clearTimeout(abortTimer)
+    }
+  }
+
+  const exchange = async (message, headers, signal, reply, arm) => {
     let response
     try {
       response = await fetchImpl(server.url, {
         method: 'POST',
         headers,
         body: JSON.stringify(message),
-        signal: AbortSignal.timeout(Math.max(1, remaining)),
+        signal,
       })
     } catch (error) {
-      throw isAbort(error) ? timeoutProblem() : new McpError(MCP_HTTP_PROBLEM)
+      throw isAbort(error) ? expired() : new McpError(MCP_HTTP_PROBLEM)
     }
     const nextSession = response?.headers?.get?.('mcp-session-id')
     if (typeof nextSession === 'string' && nextSession !== '') sessionId = nextSession
@@ -420,9 +456,13 @@ async function httpSession(server, timeoutMs, fetchImpl, work) {
     const type = String(response.headers?.get?.('content-type') ?? '').toLowerCase()
     let text
     try {
-      text = await response.text()
+      if (tokens.size > 0 && type.includes('text/event-stream') && response.body?.getReader) {
+        text = await readStream(response.body.getReader(), arm)
+      } else {
+        text = await response.text()
+      }
     } catch (error) {
-      throw isAbort(error) ? timeoutProblem() : new McpError(MCP_HTTP_PROBLEM)
+      throw isAbort(error) ? expired() : error instanceof McpError ? error : new McpError(MCP_HTTP_PROBLEM)
     }
     if (String(text).trim() === '') throw new McpError(MCP_NO_ANSWER_PROBLEM)
     if (type.includes('text/event-stream')) return sseMessages(text)
@@ -435,9 +475,32 @@ async function httpSession(server, timeoutMs, fetchImpl, work) {
     return parsed
   }
 
+  const readStream = async (reader, arm) => {
+    const decoder = new TextDecoder()
+    let text = ''
+    let seen = 0
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) return text
+      text += typeof value === 'string' ? value : decoder.decode(value, { stream: true })
+      const cut = text.lastIndexOf('\n\n')
+      if (cut + 2 <= seen) continue
+      let found = false
+      for (const message of sseMessages(text.slice(seen, cut + 2))) {
+        if (isProgress(message, tokens)) found = true
+      }
+      seen = cut + 2
+      if (found) {
+        idle()
+        arm()
+      }
+    }
+  }
+
   const request = async (method, params) => {
     nextId += 1
     const id = nextId
+    if (params?._meta?.progressToken !== undefined) tokens.add(params._meta.progressToken)
     const messages = await post({ jsonrpc: '2.0', id, method, params })
     return answerFrom(messages, id)
   }
@@ -453,13 +516,13 @@ async function httpSession(server, timeoutMs, fetchImpl, work) {
   return work({ request, notify })
 }
 
-async function runSession(serverConfig, { timeoutMs, spawnImpl, fetchImpl }, work) {
+async function runSession(serverConfig, { timeoutMs, ceilingMs, spawnImpl, fetchImpl }, work) {
   const problem = mcpServerProblem(serverConfig)
   if (problem !== null) return { ok: false, problem }
   const server = cleanMcpServer(serverConfig)
   try {
-    if (server.transport === 'http') return await httpSession(server, timeoutMs, fetchImpl ?? fetch, work)
-    return await stdioSession(server, timeoutMs, spawnImpl ?? spawn, work)
+    if (server.transport === 'http') return await httpSession(server, timeoutMs, ceilingMs, fetchImpl ?? fetch, work)
+    return await stdioSession(server, timeoutMs, ceilingMs, spawnImpl ?? spawn, work)
   } catch (error) {
     return { ok: false, problem: error instanceof McpError ? error.message : MCP_STOPPED_PROBLEM }
   }
@@ -495,8 +558,10 @@ export async function callMcpServerTool(serverConfig, toolName, toolArgs = {}, o
   const args = toolArgs === undefined || toolArgs === null ? {} : toolArgs
   if (!isPlainObject(args)) return { ok: false, problem: MCP_TOOL_ARGS_PROBLEM }
   const timeoutMs = timeoutValue(options.timeoutMs, MCP_CALL_TIMEOUT_MS)
-  return runSession(serverConfig, { timeoutMs, spawnImpl: options.spawnImpl, fetchImpl: options.fetchImpl }, async (session) => {
-    const result = await session.request('tools/call', { name, arguments: args })
+  const ceilingMs = timeoutValue(options.ceilingMs, MCP_CALL_CEILING_MS)
+  const progressToken = `mr-${randomUUID()}`
+  return runSession(serverConfig, { timeoutMs, ceilingMs, spawnImpl: options.spawnImpl, fetchImpl: options.fetchImpl }, async (session) => {
+    const result = await session.request('tools/call', { name, arguments: args, _meta: { progressToken } })
     return { ok: true, result: result ?? null }
   })
 }
