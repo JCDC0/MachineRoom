@@ -37,6 +37,7 @@
     "src/briefs/queue.js",
     "src/briefs/recording.js",
     "src/briefs/run.js",
+    "src/briefs/taskState.js",
     "src/control/agents.js",
     "src/control/modes.js",
     "src/decider/decide.js",
