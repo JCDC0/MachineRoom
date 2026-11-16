@@ -634,6 +634,14 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
     return null
   }
 
+  function allowedLanesFor(info) {
+    if (!info || !info.sector || !Array.isArray(info.sector.lanes)) return null
+    const lanes = info.sector.lanes
+      .map((lane) => (typeof lane === 'string' ? lane.trim() : ''))
+      .filter((lane) => lane !== '')
+    return lanes.length > 0 ? lanes : null
+  }
+
   function laneStartProblem(lane, lanes) {
     if (!Object.hasOwn(lanes, lane) || !lanes[lane] || typeof lanes[lane] !== 'object') {
       return { status: 400, error: 'Choose a lane from the list.' }
@@ -681,7 +689,7 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
     return modelAllowed(harness, wanted, recordsDir()) ? '' : modelUnavailableProblem(wanted, harness)
   }
 
-  async function startProjectTask({ lane = '', task = '', worktree = false, allowDirty = false, startedBy = '', checkCommand = '', model = '', mode = '' } = {}) {
+  async function startProjectTask({ lane = '', task = '', worktree = false, allowDirty = false, startedBy = '', checkCommand = '', model = '', mode = '', allowedLanes = null } = {}) {
     const lanesText = readPath(laneFile)
     if (lanesText === null) return { status: 404, body: { error: 'The brief files are missing.' } }
     const lanes = readStartLanes({ lanesFile: laneFile, runsFolder: recordsDir() })
@@ -724,7 +732,7 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
     let entry
     try {
       const reasoning = lanes[lane]?.effort || ''
-      entry = startRun(lane, [], { project: resolvedRoot, task, allowDirty, worktree, checkCommand, model }, startedBy, reasoning, '', mode)
+      entry = startRun(lane, [], { project: resolvedRoot, task, allowDirty, worktree, checkCommand, model }, startedBy, reasoning, '', mode, allowedLanes)
     } catch {
       return { status: 500, body: { error: 'The bridge could not start that run.' } }
     }
@@ -806,7 +814,7 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
     } catch {}
   }
 
-  function startRun(lane, briefs, projectRun = null, startedBy = '', reasoning = '', model = '', mode = '') {
+  function startRun(lane, briefs, projectRun = null, startedBy = '', reasoning = '', model = '', mode = '', allowedLanes = null) {
     const entry = { lane, briefs: [...briefs], startedAt: new Date().toISOString(), lastLines: [] }
     const ticket = randomBytes(16).toString('hex')
     if (projectRun?.queue) {
@@ -814,6 +822,7 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
       entry.tasks = projectRun.taskCount
     }
     const startedArgs = startedBy ? ['--started-by', startedBy] : []
+    const allowedArgs = Array.isArray(allowedLanes) && allowedLanes.length > 0 ? ['--allowed-lanes', allowedLanes.join(',')] : []
     const reasoningArgs = reasoning ? ['--reasoning', reasoning] : []
     const testArgs = projectRun?.checkCommand
       ? checkCommandLines(projectRun.checkCommand).flatMap((command) => ['--test', command])
@@ -836,7 +845,7 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
     }
     const args = projectRun
       ? projectRun.queue
-        ? [...command.args, lane, '--project', projectRun.project, ...(projectRun.worktree ? ['--worktree'] : []), '--queue', projectRun.queue, ...testArgs, ...modelArgs, ...modeArgs, ...startedArgs, ...reasoningArgs, '--started-at', entry.startedAt]
+        ? [...command.args, lane, '--project', projectRun.project, ...(projectRun.worktree ? ['--worktree'] : []), '--queue', projectRun.queue, ...testArgs, ...modelArgs, ...modeArgs, ...allowedArgs, ...startedArgs, ...reasoningArgs, '--started-at', entry.startedAt]
         : [
             ...command.args,
             lane,
@@ -849,12 +858,13 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
             ...testArgs,
             ...modelArgs,
             ...modeArgs,
+            ...allowedArgs,
             ...startedArgs,
             ...reasoningArgs,
             '--started-at',
             entry.startedAt,
           ]
-      : [...command.args, lane, ...briefs, ...modeArgs, ...startedArgs, '--started-at', entry.startedAt]
+      : [...command.args, lane, ...briefs, ...modeArgs, ...allowedArgs, ...startedArgs, '--started-at', entry.startedAt]
     laneTickets.set(ticket, { lane, startedBy, startedAt: entry.startedAt, inbox: [] })
     const child = spawn(command.file, args, {
       cwd: projectRun ? REPO_ROOT : resolvedRoot || undefined,
@@ -1481,6 +1491,7 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
       startedBy = finish.startedBy
     }
 
+    const allowedLanes = allowedLanesFor(startInfo)
     const modelProblem = modelProblemFor(lanes[lane], model)
     if (modelProblem) {
       sendJson(req, res, 400, { error: modelProblem })
@@ -1501,7 +1512,7 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
     }
 
     if (projectRun && !hasTasks) {
-      const started = await startProjectTask({ lane, task, worktree, allowDirty, startedBy, checkCommand, model, mode: chosenMode })
+      const started = await startProjectTask({ lane, task, worktree, allowDirty, startedBy, checkCommand, model, mode: chosenMode, allowedLanes })
       sendJson(
         req,
         res,
@@ -1569,7 +1580,8 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
         startedBy,
         reasoning,
         model,
-        chosenMode
+        chosenMode,
+        allowedLanes
       )
     } catch {
       sendJson(req, res, 500, { error: 'The bridge could not start that run.' })

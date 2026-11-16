@@ -130,6 +130,7 @@ export function helpLines() {
     '  --minutes <n>        stop the run after n minutes (100 by default)',
     '  --test <command>     run this check after each task; repeat for more, or npm test when the package has one',
     '  --started-by <id>    name the orchestrator that started the run',
+    '  --allowed-lanes <keys> keep a failover inside these lane keys, separated by commas',
     '  --force              run a retired lane or a brief marked done',
     '',
     `Lanes: ${names.length > 0 ? names.join(', ') : 'none'}`,
@@ -666,6 +667,18 @@ export function sessionStartedBy(env = {}) {
   return null
 }
 
+function allowedLanesOption(argv) {
+  const index = argv.findIndex((arg) => arg === '--allowed-lanes' || arg.startsWith('--allowed-lanes='))
+  if (index === -1) return { args: argv, allowedLanes: null }
+  const arg = argv[index]
+  const value = arg === '--allowed-lanes' ? argv[index + 1] : arg.slice('--allowed-lanes='.length)
+  if (typeof value !== 'string' || value.trim() === '' || value.startsWith('-')) throw new Error('--allowed-lanes needs one or more lane keys.')
+  const lanes = value.split(',').map((key) => key.trim()).filter((key) => key !== '')
+  if (lanes.length === 0 || lanes.some((key) => !/^[A-Za-z0-9_-]+$/.test(key))) throw new Error('--allowed-lanes needs lane keys separated by commas.')
+  const args = [...argv.slice(0, index), ...(arg === '--allowed-lanes' ? argv.slice(index + 2) : argv.slice(index + 1))]
+  return { args, allowedLanes: [...new Set(lanes)] }
+}
+
 function startedByOption(argv) {
   const index = argv.findIndex((arg) => arg === '--started-by' || arg.startsWith('--started-by='))
   if (index === -1) return { args: argv, startedBy: '' }
@@ -687,9 +700,15 @@ function startedAtOption(argv) {
 }
 
 function runOptions(argv) {
-  const queued = argv.some((arg) => arg === '--queue' || arg.startsWith('--queue='))
-  if (!queued) return parseRunArgs(argv)
-  const started = startedByOption(argv)
+  const allowed = allowedLanesOption(argv)
+  const queued = allowed.args.some((arg) => arg === '--queue' || arg.startsWith('--queue='))
+  if (!queued) {
+    return {
+      ...parseRunArgs(allowed.args),
+      ...(allowed.allowedLanes ? { allowedLanes: allowed.allowedLanes } : {}),
+    }
+  }
+  const started = startedByOption(allowed.args)
   const timed = startedAtOption(started.args)
   const worktree = timed.args.includes('--worktree')
   const queueArgs = timed.args.filter((arg) => arg !== '--worktree')
@@ -710,6 +729,7 @@ function runOptions(argv) {
     ...(started.startedBy ? { startedBy: started.startedBy } : {}),
     ...(timed.startedAt ? { startedAt: timed.startedAt } : {}),
     ...(worktree ? { worktree: true } : {}),
+    ...(allowed.allowedLanes ? { allowedLanes: allowed.allowedLanes } : {}),
   }
 }
 
@@ -1524,6 +1544,7 @@ async function runQueueProject({ options, lane, lanes }) {
 const VALUE_FLAGS = new Set([
   '--project', '--task', '--task-file', '--since', '--minutes', '--started-by',
   '--started-at', '--model', '--reasoning', '--mode', '--queue', '--test',
+  '--allowed-lanes',
 ])
 
 function helpRequested(argv) {
@@ -1740,6 +1761,11 @@ function recordRoom(record, toolLines, lanes) {
 }
 
 async function startFailover({ laneKey, target, lanes, options, wanted, prompt, promptFor = null, folder, project, task, queue = null, base = '', deferRecord, openLog, failedRecord, failedStartBranch, onStart = null }) {
+  const allowedLanes = Array.isArray(options?.allowedLanes) && options.allowedLanes.length > 0 ? options.allowedLanes : null
+  if (allowedLanes && !allowedLanes.includes(target)) {
+    console.log(`The backup lane ${target} is outside the sector that started this run.`)
+    return null
+  }
   const savedTarget = lanes?.[target]
   const targetMode = typeof savedTarget?.cli?.mode === 'string' ? savedTarget.cli.mode.trim() : ''
   const fixedTarget = targetMode !== '' && targetMode !== 'choice'
