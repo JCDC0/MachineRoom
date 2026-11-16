@@ -1,9 +1,11 @@
 # Changelog
 
 ## Unreleased
+- A lane ticket can take over only its own lane's backup, once, and a lane's own run gets its messages first.
 - Settings choose whether a reply to a working lane waits for its next turn or interrupts it; the native agent aborts its model call for a new reply.
 - Every OpenCode lane run that is not Bypass denies writes outside the project (external_directory deny), and the mode lines say where writes may go.
 - P440: An OpenCode lane that is not Bypass denies writes outside the project, and more mode lines say where writes go.
+- P439b: A lane ticket can take over only its own lane's fallback, only once, and a lane's own run gets its messages first.
 - Argon drafts PLAN-RESEARCH.md, one ranked plan of 15 items from the three harness surveys.
 - A failover backup sends as its own lane and keeps the primary's inbox and send count.
 - A sub's task or queue start passes its allowed lanes to the runner, and a failover to a backup outside them is refused before it touches the backup.
