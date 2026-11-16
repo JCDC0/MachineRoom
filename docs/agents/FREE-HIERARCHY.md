@@ -24,6 +24,7 @@ The owner wants a free hierarchy of coding agents in one project:
    - The owner sets a sub's `Scope` (one glob per line, `**` when empty) and `Restricted` box in `Agents` (`FamilyTree.jsx`), and only the owner can change the scope or restriction of a sub the owner set. Commit diffs and `git status` are checked against a restricted sub's `scope` (`outsideFiles` in `server/orchestrators.js`) at turn end: `O2`, `O7`, `X3`.
    - A merge of a restricted sub's lane (`POST /api/control/reviews/LANE/merge`) is refused with 409 when git cannot read its changed files or when any changed file (read with `--no-renames`) is outside the sub's scope. The orchestrator above the sub is told once per branch head only when the lane changed files outside the scope; a refusal because the changed files could not be read sends no message. Only the owner (with `Merge anyway` in `Reviews`) or that parent orchestrator can merge it with `allowOutside: true`, for either refusal (`P402`, `P410`, `P426`).
    - An agent's `Inspector` lists the distinct paths it read, wrote or edited outside the project and its lane worktrees newest-first under `Outside the project`, with home prefixes masked (`P339`, `P346`).
+   - An OpenCode lane run that is not Bypass gets an `OPENCODE_CONFIG` whose `permission` sets `external_directory` to `deny`, merged with the mode's `bash` and `edit` rules and the MCP servers, so its file tools stay in the project (`P440`).
 4. Worktrees are a choice:
    - `Control` -> `Dispatch` and a lane message in `OrchestratorChat` offer `Separate worktree` (on by default), for a single task, a queue or a split run (`One lane per task`, `startSplitRun` in `src/ui/panels/runs.js`), while no run uses a worktree outside a git checkout (`U78`, `P293`, `P406`, `P408`), and process tree stops release locks (`U75`, `P313`, `P322`, `P330`).
 5. Modes guard the edges:
@@ -32,7 +33,7 @@ The owner wants a free hierarchy of coding agents in one project:
 
 ## What Does Not Work Yet
 - Nothing interrupts a lane run: a run is one call, so a lane gets a reply only when it reads its inbox (`P341`), and the main orchestrator's instructions name the reply form since review 36.
-- A touch outside the project is shown, not stopped (`P346`). The modes are the guard, and only the native harness refuses a path outside its folder by itself.
+- A touch outside the project is shown, not stopped (`P346`). The modes are the guard: Codex's sandbox, Claude's print-mode permissions and OpenCode's `external_directory: deny` keep the file tools inside the project, and the native harness refuses a path outside its folder. AGY has no folder guard, and a shell command in any harness can still write outside; the Inspector's `Outside the project` list shows them (`P440`).
 
 ## Added on 2026-11-15
 - A lane run the room started messages its coordinator, any orchestrator or another running lane while it works, at most 4 times, and reads its replies with its ticket: `P335`, `P336`, `P337`, `P341`, `P342`.
@@ -46,6 +47,7 @@ The owner wants a free hierarchy of coding agents in one project:
 - Add child, the custom lane editor and `Dispatch` pick a lane's mode without `Ask`, and a lane saved as `Orchestrator's choice` (`choice`) lets its orchestrator choose the mode per run while failover keeps a backup lane's fixed mode: `P403`, `P407`, `P412`.
 - An orchestrator may propose or add a new agent only on its own harness, with any model that harness lists, and the ladder route checks a new or changed sub's model; the owner may make any agent on any harness: `P404`.
 - The sub orchestrator form and editor in `Agents` set `Scope` and `Restricted`, and a chat lane message and a split run carry a `Separate worktree` choice: `P405`, `P406`, `P408`.
+- An OpenCode lane that is not Bypass denies writes outside the project with `permission.external_directory` in its `OPENCODE_CONFIG`, merged with the mode's rules and MCP servers, and each mode line says where writes go: `P440`.
 
 ## Runbook: Build and Run the Owner's Test Tree
 Target tree: Main on `claude` (`claude-opus-5-5`, `high`); Sub 1 on `codex` (`gpt-6.1-terra`, `high`) with 2 AGY lanes (`gemini-4-hydrogen-xhigh`); Sub 2 on `machineroom` (GLM 5.3 Flash) with 3 OpenCode lanes. Simple form: no subs, all lanes under Main.
