@@ -3548,3 +3548,16 @@ On 2026-11-16 these failed once each during `npm run merge-lane` while other lan
 2. Look for: a doc sentence the code contradicts; an inbox cut whose behaviour changed (sender, `[start cut]`, word start, bound); a harness whose real model list command is no longer found (check the help text of `opencode`, `agy`, `codex` and `copilot` if their help is in the tests or fixtures); an inspector that shows a sub's or lane's harness wrongly now; a Merge anyway that sends `allowOutside` for a refusal that is not a scope refusal; a test that would pass with its change undone.
 3. Each finding: `R44-N`, a severity, the file and line, what goes wrong, how to see it, one fix. At most 8. No finding without a file and line you read.
 4. End with `Checked and fine`. Under 80 lines. Plain words, no em dashes.
+
+Review 44 fixes, P425 and P426. `docs/agents/AUDIT-2026-11-REVIEW-44.md` (P424, GPT-6.1 Sol): two P2 findings.
+
+**P425. Only Main takes Main's live harness in the inspector and dock (OpenCode).** Read this brief and R44-1 only. Commit each step as you finish it. Run every command in the foreground. Files: src/ui/agentContext.js (only `withOrchestratorData` or the line that calls it), tests/inspector-orchestrator-harness.test.js (add tests here), docs/agents/CHANGELOG.md.
+
+1. The live harness and model from P419 apply only when the selected agent is Main itself: its `key` or `id` is `orchestrator` or `agent-orchestrator`, not any name holding `orchestrat`. The context numbers and autocompact keep today's rule.
+2. Tests, each failing before your change: a Codex lane named `Codex orchestrator helper` with Main's row on `claude` and `opus` keeps `codex` and its own model; a sub named `UI orchestrator` keeps its own harness; Main still shows its live harness.
+3. Run `node node_modules/vitest/vitest.mjs run tests/inspector-orchestrator-harness.test.js tests/agent-context.test.js` and report the counts.
+
+**P426. FREE-HIERARCHY.md says a failed scope read sends no message (OpenCode).** Read this brief and R44-2 only. Commit when done. Change only docs. Files: docs/agents/FREE-HIERARCHY.md (only lines 24 and 45 and the sentences they repeat), docs/agents/CHANGELOG.md.
+
+1. Say that the parent is told once per branch head only when the lane changed files outside the scope. A refused merge because the changed files could not be read sends no message; the owner or the orchestrator above can still allow it with `Merge anyway`. Read `server/reviews.js` `scopeRefusal` to confirm before writing. Plain words, no em dashes.
+2. Run `node node_modules/vitest/vitest.mjs run tests/docs.test.js` if it exists and report the counts.
