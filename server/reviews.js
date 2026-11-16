@@ -797,6 +797,14 @@ export function createReviewsApi({
         sendJson(req, res, 404, { error: 'Choose a lane from the list.' })
         return true
       }
+      if (mergeRoute && !req.headers?.origin) {
+        const actor = callerId(req)
+        const sector = actor === 'orchestrator' ? null : orchestratorRegistry()?.sector?.(actor)
+        if (actor !== 'orchestrator' && (!sector || !Array.isArray(sector.lanes) || !sector.lanes.includes(lane))) {
+          sendJson(req, res, 403, { error: `The ${sector?.name?.trim() || actor} sector does not hold the lane ${lane}.` })
+          return true
+        }
+      }
       const worktree = laneFolder(read.lanes, lane)
       if (!worktree) {
         sendJson(req, res, 404, { error: 'Choose a lane from the list.' })

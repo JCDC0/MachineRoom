@@ -1178,6 +1178,11 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
         sendJson(req, res, actor.status, { error: actor.error })
         return true
       }
+      const finish = finishActor(actor, typeof body.lane === 'string' ? body.lane.trim() : body.lane)
+      if (finish.status) {
+        sendJson(req, res, finish.status, { error: finish.error })
+        return true
+      }
       const out = await stopRun(body)
       sendJson(req, res, out.status, out.body)
       return true

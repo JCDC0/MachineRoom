@@ -784,6 +784,13 @@ export function createOrchestrators({
       const currentLanes = typeof lanes === 'function' ? lanes() : (lanes ?? {})
       const isLaneTarget = Object.hasOwn(currentLanes, target) || eligibleLaneKeys().includes(target)
       if (isLaneTarget) {
+        if (!page && actor !== ORCHESTRATOR_KEY) {
+          const own = sector(actor)
+          if (!own || !Array.isArray(own.lanes) || !own.lanes.includes(target)) {
+            const name = own?.name?.trim() || actor
+            return { status: 403, body: { error: `The ${name} sector does not hold the lane ${target}.` } }
+          }
+        }
         if (typeof isWorking === 'function' && isWorking(target)) {
           return { status: 409, body: { error: 'That lane is working. Wait for it, or stop it.' } }
         }
@@ -809,7 +816,7 @@ export function createOrchestrators({
           }
         }
         main.markDirectLaneTask?.(target)
-        main.addMessage?.('owner', text)
+        main.addMessage?.(page ? 'owner' : actor === ORCHESTRATOR_KEY ? ORCHESTRATOR_KEY : `sub:${actor}`, text)
         return { status: 202, body: { ok: true, started: true } }
       }
       return { status: 404, body: { error: NO_ORCHESTRATOR_PROBLEM } }
@@ -1049,16 +1056,18 @@ export function createOrchestrators({
     }
     if (path === '/api/orchestrator/stop') {
       if (method !== 'POST') return methodNotAllowed(req, res)
-      if (!page) {
-        const actor = idForToken(token)
-        if (!actor) {
-          sendJson(req, res, 403, { error: NO_TOKEN_PROBLEM })
-          return true
-        }
+      const actor = page ? null : idForToken(token)
+      if (!page && !actor) {
+        sendJson(req, res, 403, { error: NO_TOKEN_PROBLEM })
+        return true
       }
       const body = await readJsonBody(req, res)
       if (body === null) return true
-      const instance = find(body.id)
+      if (actor && actor !== ORCHESTRATOR_KEY && Object.hasOwn(body, 'id') && body.id !== actor) {
+        sendJson(req, res, 403, { error: 'A sub can only stop itself.' })
+        return true
+      }
+      const instance = find(actor && actor !== ORCHESTRATOR_KEY ? actor : body.id)
       if (!instance) {
         sendJson(req, res, 404, { error: NO_ORCHESTRATOR_PROBLEM })
         return true
