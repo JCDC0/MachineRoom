@@ -119,10 +119,13 @@ function permissionRefusal(mode, toolCall, cwd) {
   if (mode !== 'auto' || !['edit', 'delete', 'move'].includes(kind)) return 'This mode does not allow that request kind.'
   const locations = toolCall?.locations
   if (!Array.isArray(locations) || locations.length === 0) return 'The request needs file locations.'
+  for (const location of locations) {
+    if (typeof location?.path !== 'string' || !location.path.trim()) return 'The request needs a file path for every location.'
+    if (location.path.split(/[\\/]/).includes('..')) return 'A location uses .. in its path.'
+  }
   try {
     const root = realpathSync.native(cwd)
     for (const location of locations) {
-      if (typeof location?.path !== 'string' || !location.path.trim()) return 'The request needs a file path for every location.'
       const path = relative(root, permissionPath(resolve(cwd, location.path)))
       if (path === '..' || path.startsWith(`..${sep}`) || isAbsolute(path)) return 'A location is outside the project.'
     }
