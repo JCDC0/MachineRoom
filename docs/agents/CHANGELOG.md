@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- P456: Dispatch warns when another running lane declares the same files, says when the overlap is unknown, and can warn above a set lane count.
 - Ready says it means the program was found, and doctor warns when the project has no AGENTS.md, CLAUDE.md or GEMINI.md.
 - Each MCP server's tool list is kept 60 seconds per runs folder and config, failures are not kept, and parallel lists share one request.
 - The native agent adds a warning after a tool call fails the same way three times and ends the run on the fifth.
