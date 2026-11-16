@@ -121,17 +121,28 @@ it('keeps a new Claude sub when a removed Codex sub had the same id', async () =
   expect(created.status).toBe(200)
   expect((await getJson(`${rig.url}/api/orchestrator?id=backend`)).body.harness).toBe('codex')
 
-  const saved = readChat(rig, 'backend')
-  saved.sessionId = 'codex-session'
-  saved.mode = 'plan'
-  writeFileSync(chatFileFor(rig.base, rig.runs, 'backend'), `${JSON.stringify(saved, null, 2)}\n`)
-
   const removed = await pagePost(`${rig.url}/api/orchestrator/ladder`, {
     ladder: { subs: [] },
     by: 'owner',
     confirmed: true,
   })
   expect(removed.status).toBe(200)
+
+  const saved = readChat(rig, 'backend')
+  expect(saved.harness).toBe('codex')
+  saved.sessionId = 'codex-session'
+  saved.mode = 'plan'
+  saved.currentConversationId = 'codex-conversation'
+  saved.currentSessionId = 'codex-conversation'
+  saved.sessions = [
+    {
+      id: 'codex-conversation',
+      sessionId: 'codex-session',
+      opencodeSessionId: 'codex-opencode-session',
+      messages: [],
+    },
+  ]
+  writeFileSync(chatFileFor(rig.base, rig.runs, 'backend'), `${JSON.stringify(saved, null, 2)}\n`)
 
   const token = rig.bridge.orchestrators().token('orchestrator')
   const added = await tokenPost(
@@ -149,6 +160,10 @@ it('keeps a new Claude sub when a removed Codex sub had the same id', async () =
   expect(restored.model).toBe('claude-sonnet-5-5')
   expect(restored.sessionId).toBeNull()
   expect(restored.mode).not.toBe('plan')
+  expect(restored.currentConversationId).not.toBe('codex-conversation')
+  expect(restored.currentSessionId).not.toBe('codex-conversation')
+  expect(restored.sessions[0].sessionId).toBeNull()
+  expect(restored.sessions[0].opencodeSessionId).toBeNull()
 })
 
 it('keeps a sub session when it is restored on its own harness', async () => {
