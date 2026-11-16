@@ -8,6 +8,7 @@ import {
   ALL_CHECKS_PASSED,
   NEXT_STEP,
   PROJECT_READ_LIMIT_MS,
+  READY_MEANS,
   checksPassedLine,
   doctorSettings,
   openBrowser,
@@ -125,6 +126,7 @@ function runBin(args, env, bin = BIN) {
 describe('machine-room doctor', () => {
   it('passes the folder, git, the runs folder and the lane programs', () => {
     const project = makeFolder('machine-room-doctor-project-')
+    writeFileSync(join(project, 'AGENTS.md'), '# Guide')
     const base = makeFolder('machine-room-doctor-runs-')
     const runs = join(base, 'machineroom-runs')
     const lanes = writeLanes({
@@ -142,16 +144,17 @@ describe('machine-room doctor', () => {
 
     expect(result.exitCode).toBe(0)
     expect(failures(result.lines)).toEqual([])
-    expect(result.lines).toHaveLength(7)
+    expect(result.lines).toHaveLength(8)
     expect(result.lines[0]).toContain('The project folder')
     expect(result.lines[1]).toContain('Git is found at')
     expect(result.lines[2]).toBe('warn This folder is not a git repository. Source control stays empty. Run git init here to fill it.')
-    expect(result.lines[3]).toContain('The built viewer is ready')
-    expect(result.lines[4]).toBe(`ok The runs folder ${printedRunsFolder(runs, env)} is ready.`)
-    expect(result.lines[4]).toContain('%TEMP%')
-    expect(result.lines[4]).not.toContain(runs)
-    expect(result.lines[5]).toContain('The OpenCode lane starts from')
-    expect(result.lines[6]).toContain('The Claude Code lane starts from')
+    expect(result.lines[3]).toBe('ok The project has an agent guide: AGENTS.md.')
+    expect(result.lines[4]).toContain('The built viewer is ready')
+    expect(result.lines[5]).toBe(`ok The runs folder ${printedRunsFolder(runs, env)} is ready.`)
+    expect(result.lines[5]).toContain('%TEMP%')
+    expect(result.lines[5]).not.toContain(runs)
+    expect(result.lines[6]).toContain('The OpenCode lane starts from')
+    expect(result.lines[7]).toContain('The Claude Code lane starts from')
     expect(statSync(runs).isDirectory()).toBe(true)
   })
 
@@ -386,7 +389,9 @@ describe('the doctor summary', () => {
   })
 
   it('counts a warning without failing the checks', () => {
-    const result = doctor()
+    const project = makeFolder('machine-room-doctor-project-')
+    writeFileSync(join(project, 'AGENTS.md'), '# Guide')
+    const result = doctor({ projectRoot: project })
 
     expect(result.exitCode).toBe(0)
     expect(result.warnings).toBe(1)
@@ -525,12 +530,14 @@ describe('the machine-room doctor command', () => {
     expect(run.stderr).toBe('')
     const lines = run.stdout.trim().split(/\r?\n/)
     expect(lines.length).toBeGreaterThan(3)
-    expect(lines.every((line) => /^(ok|warn) /.test(line) || line === checksPassedLine(1) || line === NEXT_STEP)).toBe(true)
+    expect(lines.every((line) => /^(ok|warn|info) /.test(line) || line === checksPassedLine(2) || line === NEXT_STEP)).toBe(true)
     expect(lines).toContain(
       'warn This folder is not a git repository. Source control stays empty. Run git init here to fill it.'
     )
+    expect(lines).toContain('warn The project has no agent guide (AGENTS.md, CLAUDE.md or GEMINI.md).')
+    expect(lines).toContain(`info ${READY_MEANS}`)
     expect(lines[1]).toBe('ok The project holds 0 files in 0 folders.')
-    expect(lines.slice(-2)).toEqual([NEXT_STEP, checksPassedLine(1)])
+    expect(lines.slice(-2)).toEqual([NEXT_STEP, checksPassedLine(2)])
     const runs = process.platform === 'win32'
       ? join(temp, 'localappdata', 'MachineRoom', 'runs')
       : join(temp, 'state', 'machineroom', 'runs')
@@ -541,6 +548,7 @@ describe('the machine-room doctor command', () => {
     const temp = makeFolder('machine-room-doctor-temp-')
     const project = join(temp, 'project')
     mkdirSync(join(project, '.git'), { recursive: true })
+    writeFileSync(join(project, 'AGENTS.md'), '# Guide')
     const env = childEnv(temp)
     const run = await runBin(['doctor', project, '--dist', makeDist()], env)
 

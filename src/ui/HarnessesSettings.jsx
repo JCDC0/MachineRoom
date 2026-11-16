@@ -12,6 +12,8 @@ import {
   programDraftsFrom,
 } from './harnessesSettings.js'
 
+const READY_MEANS = 'Ready means the program was found. It does not prove sign-in, a model or the sandbox.'
+
 function updateRowsWithResult(currentRows, result) {
   if (Array.isArray(result) || Array.isArray(result?.harnesses)) {
     return harnessListFrom(result)
@@ -254,6 +256,11 @@ export default function HarnessesSettings({ client }) {
           {sectionError ? (
             <p className="endpoints-error mono" role="alert">
               {sectionError}
+            </p>
+          ) : null}
+          {rows.some((row) => harnessStatus(row).state === 'ready') ? (
+            <p className="endpoints-note mono" data-harness-ready-help="true">
+              {READY_MEANS}
             </p>
           ) : null}
           <div className="endpoints-field">

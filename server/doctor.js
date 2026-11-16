@@ -14,6 +14,9 @@ const VARIABLE = /%([A-Za-z_][A-Za-z0-9_]*)%/g
 
 export const ALL_CHECKS_PASSED = 'All checks passed.'
 export const NEXT_STEP = 'Press C in the room for Dispatch.'
+export const READY_MEANS = 'Ready means the program was found. It does not prove sign-in, a model or the sandbox.'
+export const NO_AGENT_GUIDE = 'The project has no agent guide (AGENTS.md, CLAUDE.md or GEMINI.md).'
+const AGENT_GUIDES = ['AGENTS.md', 'CLAUDE.md', 'GEMINI.md']
 
 export function checksPassedLine(warnings = 0) {
   const count = Number.isInteger(warnings) && warnings > 0 ? warnings : 0
@@ -83,6 +86,13 @@ function folderLine(projectRoot, env) {
   }
   if (!stats.isDirectory()) return { ok: false, text: `The project folder ${shown} is not a folder.` }
   return { ok: true, text: `The project folder ${shown} exists.` }
+}
+
+export function agentGuideLine(projectRoot) {
+  const folder = resolve(projectRoot)
+  const found = AGENT_GUIDES.filter((name) => isFile(join(folder, name)))
+  if (found.length === 0) return { warn: true, text: NO_AGENT_GUIDE }
+  return { ok: true, text: `The project has an agent guide: ${found.join(', ')}.` }
 }
 
 function insideGitRepository(projectRoot) {
@@ -217,6 +227,7 @@ export function runDoctor(options = {}) {
   add(folder)
   if (!folder.ok) return { exitCode: 1, lines, folderOk: false, warnings }
   for (const line of gitLines(settings.projectRoot, env)) add(line)
+  add(agentGuideLine(settings.projectRoot))
   add(viewerLine(settings.dist, env))
   add(runsLine(settings.runsFolder, env))
   for (const line of laneLines(settings.lanesFile, env, settings.runsFolder, platform)) add(line)
@@ -301,6 +312,7 @@ export async function runDoctorWithProject(options = {}) {
   const laneFile = readLaneFile(settings.lanesFile, env)
   const lines = [...result.lines]
   lines.push(...await harnessLines({ runsFolder: settings.runsFolder, lanes: laneFile.lanes ?? {}, env, platform }))
+  lines.push(`info ${READY_MEANS}`)
   lines.splice(1, 0, `${project.ok ? 'ok' : 'FAIL'} ${project.text}`)
   return {
     ...result,
