@@ -86,6 +86,22 @@ function pageGet(url, path) {
   })
 }
 
+function tokenPost(url, path, body, token) {
+  return getJson(url + path, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'X-MachineRoom-Orchestrator': token },
+    body: JSON.stringify(body),
+  })
+}
+
+function lanePost(url, path, ticket, body) {
+  return getJson(url + path, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'X-MachineRoom-Lane': ticket },
+    body: JSON.stringify(body),
+  })
+}
+
 function fakeCliScript({ callsFile, releaseFile, stopAtCall = 0, holdUntilSeenText = '' }) {
   return [
     "const { appendFileSync, existsSync, readFileSync } = require('node:fs')",
@@ -123,7 +139,13 @@ function fakeCliScript({ callsFile, releaseFile, stopAtCall = 0, holdUntilSeenTe
   ].join('\n')
 }
 
-async function makeBridgeRig({ laneReplies = 'next-turn', script = '', harness = 'opencode', laneKey = 'opencode' } = {}) {
+async function makeBridgeRig({
+  laneReplies = 'next-turn',
+  script = '',
+  harness = 'opencode',
+  laneKey = 'opencode',
+  extraLanes = {},
+} = {}) {
   const base = tempDir('mr-lane-send-')
   const runs = join(base, 'runs')
   const project = join(base, 'project')
@@ -144,10 +166,11 @@ async function makeBridgeRig({ laneReplies = 'next-turn', script = '', harness =
       harness: harness === 'machineroom' ? 'MachineRoom' : 'OpenCode',
       cli: { harness, bin: process.execPath, model: 'fake/model' },
     },
+    ...extraLanes,
   }
   const lanesFile = join(base, 'lanes.json')
   writeFileSync(lanesFile, `${JSON.stringify(lanes, null, 2)}\n`)
-  writeActiveLanes(activeLanesFileFor(project, runs), [laneKey])
+  writeActiveLanes(activeLanesFileFor(project, runs), [laneKey, ...Object.keys(extraLanes)])
 
   const bridge = createBridge({
     projectRoot: project,
@@ -390,6 +413,91 @@ describe('page sends to a running lane', { timeout: 60000 }, () => {
     )
     const statusAfter = await pageGet(url, `/api/orchestrator/messages/status?id=${sent.body.id}`)
     expect(statusAfter.body.status).toBe('fetched')
+  })
+
+  it('ignores interrupt: true from a lane ticket and an orchestrator token when laneReplies is next-turn', async () => {
+    const tmp = tempDir('mr-lane-send-nonpage-')
+    const callsFile = join(tmp, 'calls.jsonl')
+    const releaseFile = join(tmp, 'release')
+    const rig = await makeBridgeRig({
+      laneReplies: 'next-turn',
+      script: fakeCliScript({ callsFile, releaseFile }),
+      extraLanes: {
+        opencode2: {
+          name: 'OpenCode 2',
+          harness: 'OpenCode',
+          cli: { harness: 'opencode', bin: process.execPath, model: 'fake/model' },
+        },
+      },
+    })
+
+    const startOne = await pagePost(rig.url, '/api/control/runs', {
+      lane: 'opencode',
+      task: 'Target one.',
+      worktree: true,
+      confirmed: true,
+    })
+    expect(startOne.status).toBe(202)
+    const callOne = await waitFor(
+      () => readLines(callsFile).find((line) => String(line.prompt ?? '').includes('Target one.')),
+      { timeoutMs: 15000, what: 'opencode invocation' }
+    )
+
+    const startTwo = await pagePost(rig.url, '/api/control/runs', {
+      lane: 'opencode2',
+      task: 'Target two.',
+      worktree: true,
+      confirmed: true,
+    })
+    expect(startTwo.status).toBe(202)
+    const callTwo = await waitFor(
+      () => readLines(callsFile).find((line) => String(line.prompt ?? '').includes('Target two.')),
+      { timeoutMs: 15000, what: 'opencode2 invocation' }
+    )
+
+    const laneSent = await lanePost(rig.url, '/api/orchestrator/messages', callTwo.ticket, {
+      to: 'lane:opencode',
+      text: 'From lane.',
+      interrupt: true,
+    })
+    expect(laneSent.status).toBe(202)
+
+    const token = rig.bridge.orchestrators().token('orchestrator')
+    const tokenSent = await tokenPost(
+      rig.url,
+      '/api/orchestrator/messages',
+      { to: 'lane:opencode2', text: 'From token.', interrupt: true },
+      token
+    )
+    expect(tokenSent.status).toBe(202)
+
+    await new Promise((done) => setTimeout(done, 300))
+
+    const laneInboxOne = await getJson(`${rig.url}/api/orchestrator/messages`, {
+      headers: { 'X-MachineRoom-Lane': callOne.ticket },
+    })
+    expect(laneInboxOne.body.messages.map((message) => message.text)).toEqual(['From lane.'])
+
+    const laneInboxTwo = await getJson(`${rig.url}/api/orchestrator/messages`, {
+      headers: { 'X-MachineRoom-Lane': callTwo.ticket },
+    })
+    expect(laneInboxTwo.body.messages.map((message) => message.text)).toEqual(['From token.'])
+
+    writeFileSync(releaseFile, 'go\n')
+    await waitFor(
+      async () => (await getJson(`${rig.url}/api/control/runs`)).body.running.length === 0,
+      { timeoutMs: 15000, what: 'both runs to end' }
+    )
+
+    expect(readLines(callsFile).filter((line) => line.callNumber)).toHaveLength(2)
+    const laneStatus = await getJson(`${rig.url}/api/orchestrator/messages/status?id=${laneSent.body.id}`, {
+      headers: { 'X-MachineRoom-Lane': callTwo.ticket },
+    })
+    expect(laneStatus.body.status).toBe('fetched')
+    const tokenStatus = await getJson(`${rig.url}/api/orchestrator/messages/status?id=${tokenSent.body.id}`, {
+      headers: { 'X-MachineRoom-Orchestrator': token },
+    })
+    expect(tokenStatus.body.status).toBe('fetched')
   })
 })
 

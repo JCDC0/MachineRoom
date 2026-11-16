@@ -963,7 +963,7 @@ export function createOrchestrators({
 
   async function message(body, page, tokenValue = '', laneTicketValue = '') {
     const ticketValue = typeof laneTicketValue === 'string' ? laneTicketValue.trim() : ''
-    const interrupt = typeof body?.interrupt === 'boolean' ? body.interrupt : undefined
+    const interrupt = page === true && typeof body?.interrupt === 'boolean' ? body.interrupt : undefined
     if (!page && !tokenValue && ticketValue) {
       const held = typeof laneTicket === 'function' ? laneTicket(ticketValue) : null
       if (!held) return { status: 403, body: { error: LANE_ENDED_PROBLEM } }
@@ -983,7 +983,7 @@ export function createOrchestrators({
         if (sentCount >= LANE_MESSAGE_LIMIT) return { status: 429, body: { error: LANE_LIMIT_PROBLEM } }
         const sender = `lane:${senderLane}`
         const identity = createHash('sha256').update(`lane:${ticketValue}`).digest('hex')
-        const delivered = receiveLaneMessage(laneTarget, sender, text, clock(), identity, interrupt)
+        const delivered = receiveLaneMessage(laneTarget, sender, text, clock(), identity)
         if (!delivered) {
           return { status: 409, body: { error: laneNoRunProblem(laneTarget) } }
         }
