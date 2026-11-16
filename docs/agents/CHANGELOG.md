@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- P458: Dispatch shows a First task card in Plan mode for a project with no runs when a ready lane offers Plan, and Connect and the README note that records stay local while agents send code to their model providers.
 - The Inspector shows each lane's Sandbox line from its harness and effective mode, and an ACP run says its requests are approved automatically.
 - Meters labels a lane total with its unreported runs, shows failed or stopped spend, and shows when a quota window was seen and resets.
 - A lane review keeps the checks run on its head apart from the agent's report and lists every run of the task by its failover and continuation links.
