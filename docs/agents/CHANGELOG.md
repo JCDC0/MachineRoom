@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- P462b: A checkpoint records untrackedCount, skips stash create when only untracked files exist, and Inspector shows tracked and untracked counts without a doubled label.
 - A run record keeps the worktree's head, branch and changed files at start, with a stash-create recovery commit for dirty work, and Inspector shows it.
 - P462: Each lane run records its worktree checkpoint, and a dirty start also keeps a recovery commit made with git stash create.
 - Dispatch offers a First task card in Plan for a project with no runs, and Connect and the README say records stay on this computer.
