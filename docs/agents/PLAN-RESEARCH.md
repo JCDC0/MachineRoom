@@ -232,4 +232,16 @@ Every item has at least one survey recommendation behind it. None supports treat
 
 ## Settled
 
-Left for Claude to settle each disagreement before the owner chooses what to build.
+Settled by Claude (Opus 5.5 High), 2026-11-16, after Argon's draft and Sol's review. Sol's narrower first steps are taken for every item: each item below is its first step only, and the later steps Sol names (enforced ACP modes, rewind, automatic Plan-then-Edit, cache ingestion per provider, live touch overlap) wait until the first step is merged and used.
+
+**The five disagreements.**
+
+1. How many agents. The owner runs eight or more lanes, so a fixed warning above three would nag the owner on every start. Overlap warnings come from declared files only and say `unknown` for free-text tasks; the lane count is shown, and a warning threshold is a Settings number that is off by default.
+2. Rewind. Record the checkpoint (base, head and dirty state) before each continuation and interrupt now. No rewind button until Sol's conditions hold (retained recovery ref, expected head, no active writer, a stated rule for the chat).
+3. ACP. Warn that the ACP runner approves every request automatically and show the effective mode honestly first. The registry browser waits for enforced modes.
+4. Context. Link each compaction marker to the retained logs, and make `doctor` warn when a project has no `AGENTS.md`, `CLAUDE.md` or other guide. The structured state block and the native symbol map wait.
+5. Quota. Show the provenance the cost board already has (`at`, `resetsAt`), label partial totals, and call failed spend failed, not waste. No local estimate of a provider's billing window.
+
+**Order to build, Sol's order.** 1, 13, 6, 2, 7, 11, 5, 4, 3, 10, 12, 9, 8, 14, 15. Item 13 (the three-tab stall) is a bug fix with no visible design change, so it can start before the owner's answer. Every other item changes what the owner sees, so each waits for the owner's yes, and the owner may take them in any order or drop any.
+
+**What the owner is asked.** Which items to build, and whether item 3's lane count warning should exist at all.
