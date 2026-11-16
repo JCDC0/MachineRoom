@@ -14,9 +14,13 @@ const LISTS = {
   opencode: ['plan', 'edits', 'auto'],
   codex: ['plan', 'edits', 'auto', 'bypass'],
   agy: ['plan', 'edits', 'auto', 'bypass'],
+  acp: ['plan', 'auto', 'bypass'],
 }
 
 const LINES = {
+  acp: {
+    auto: 'Allows reads and edits inside the project; refuses commands.',
+  },
   codex: {
     edits: 'Edits files and can run commands inside its workspace sandbox. Codex has no edits-only mode.',
   },
@@ -28,6 +32,7 @@ const LEGACY = {
   machineroom: 'bypass',
   opencode: 'auto',
   codex: 'auto',
+  acp: 'bypass',
 }
 
 export function modesFor(harness) {
@@ -83,6 +88,10 @@ export function sandboxSummary(harness, mode) {
   }
   if (key === 'machineroom') return 'File tools stay in the project; shell commands are not sandboxed'
   if (key === 'agy') return 'No permission checks'
-  if (key === 'acp') return 'Approves every request the agent asks for'
+  if (key === 'acp') {
+    if (effective === 'plan') return 'Allows reads only'
+    if (effective === 'auto') return 'Allows reads and edits inside the project; refuses commands'
+    return 'Approves every request the agent asks for'
+  }
   return 'Unknown'
 }
