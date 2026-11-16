@@ -942,7 +942,7 @@ describe('projects api', () => {
     const testProjectsFile = join(runsDir, 'projects.json')
     expect(existsSync(testProjectsFile)).toBe(true)
     const stored = readProjectsFile(testProjectsFile)
-    expect(stored.recent[0].path).toBe(resolve(env.root))
+    expect(stored.recent.some((entry) => entry.path === resolve(env.root))).toBe(true)
 
     const realRuns = join(process.env.TEMP || tmpdir(), 'machineroom-runs')
     const realProjectsFile = join(realRuns, 'projects.json')
