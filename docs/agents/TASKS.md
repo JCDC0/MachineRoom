@@ -3621,3 +3621,10 @@ Argon's second plan, P430 to P434. `docs/agents/PLAN-NEXT-ARGON-2.md` (P427, Gem
 3. Run `node node_modules/vitest/vitest.mjs run tests/proposal-harness-settings.test.js tests/owner-tree.test.js` and report the counts.
 
 Item 6 (sub harness, model and effort routes leave the ladder stale) waits for P429 and P431, since it touches the same routes.
+
+**P430b. Failover never hands Bypass to a backup that did not save it (OpenCode).** Replaces P430, whose rule broke `tests/failover-ticket-mode.test.js`: a backup with no saved mode keeps taking the primary's mode on purpose (a Plan run stays Plan on its backup). Read this brief only. Commit each step as you finish it. Run every command in the foreground. Files: scripts/run-lane.mjs (only `startFailover`), tests/failover-default-mode.test.js (new), docs/agents/CHANGELOG.md, docs/agents/FREE-HIERARCHY.md (the failover sentence on line 30).
+
+1. In `startFailover`, when the mode to carry is `bypass` and the backup's saved `cli.mode` is not `bypass`, carry nothing: the backup runs at its own saved mode, or its harness default when it has none or `choice`. Every other carry stays exactly as today.
+2. Tests, each failing before your change except the last: a `claude` primary in `bypass` failing over to a `codex` backup with no `cli.mode` builds codex args with `--sandbox workspace-write` and without `--dangerously-bypass-approvals-and-sandbox`; the same with a `choice` backup; a backup saved as `bypass` still runs in bypass. Follow how `tests/failover-ticket-mode.test.js` builds its lanes and reads the args.
+3. FREE-HIERARCHY.md line 30 adds that a Bypass run never passes Bypass to a backup lane that is not saved as Bypass.
+4. Run `node node_modules/vitest/vitest.mjs run tests/failover-default-mode.test.js tests/failover-ticket-mode.test.js tests/failover-mode.test.js tests/run-failover.test.js` and report the counts.
