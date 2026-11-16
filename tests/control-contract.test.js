@@ -304,8 +304,8 @@ describe('the control client contract', () => {
     const { summary, byAgent, quota } = await client.costs()
     expect(summary).toEqual({ spendCents: 100, budgetCents: 0, utilizationPercent: null })
     expect(byAgent).toEqual([
-      { agentId: 'agent-opencode', agentName: 'OpenCode', costCents: 100, todayCents: 100, inputTokens: null, outputTokens: null },
-      { agentId: 'agent-claude', agentName: 'Claude Code', costCents: 0, todayCents: 0, inputTokens: 0, outputTokens: 0 },
+      { agentId: 'agent-opencode', agentName: 'OpenCode', costCents: 100, todayCents: 100, inputTokens: null, outputTokens: null, missingCostRuns: 0, failedCost: 0 },
+      { agentId: 'agent-claude', agentName: 'Claude Code', costCents: 0, todayCents: 0, inputTokens: 0, outputTokens: 0, missingCostRuns: 0, failedCost: 0 },
     ])
     expect(quota).toEqual([])
   })

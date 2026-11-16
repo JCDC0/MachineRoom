@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { sandboxSummary } from '../control/modes.js'
 import { basename, visibleText } from '../model/paths.js'
 import { agentContext, waitingForOwner } from './agentContext.js'
 import { orchestratorEntry, orchestratorId } from './agentStrip.js'
@@ -65,6 +66,33 @@ function runningEntryFor(running, ...ids) {
   return running.find((entry) => targets.includes(String(entry?.lane ?? '').trim().toLowerCase())) ?? null
 }
 
+function familyEntry(family, ...ids) {
+  if (!Array.isArray(family)) return null
+  const targets = ids
+    .map((id) => String(id ?? '').trim().toLowerCase())
+    .filter(Boolean)
+  if (targets.length === 0) return null
+  return (
+    family.find((row) => {
+      if (!row || typeof row !== 'object') return false
+      const id = String(row.id ?? '').trim().toLowerCase()
+      if (!id) return false
+      if (row.kind === 'sub') return targets.includes(`sub-${id}`) || targets.includes(id)
+      return targets.includes(id)
+    }) ?? null
+  )
+}
+
+function laneEntryMode(answer, ...ids) {
+  const list = Array.isArray(answer?.lanes) ? answer.lanes : []
+  const targets = ids
+    .map((id) => String(id ?? '').trim().toLowerCase())
+    .filter(Boolean)
+  if (targets.length === 0) return ''
+  const found = list.find((entry) => targets.includes(String(entry?.key ?? '').trim().toLowerCase()))
+  return typeof found?.mode === 'string' ? found.mode.trim() : ''
+}
+
 function runningWorkInfo(entry, fallbackTask = '') {
   const briefs = Array.isArray(entry?.briefs) ? entry.briefs.filter(Boolean) : []
   if (briefs.length > 0) return { label: 'Briefs', text: briefs.join(' ') }
@@ -110,7 +138,9 @@ export default function Inspector({
   const lane = useMemo(() => roster.find((agent) => sameAgent(agent, item?.id)) ?? null, [roster, item?.id])
   const subOrchestrator = String(item?.id ?? '').toLowerCase().startsWith('sub-')
   const orchestratorAgent = subOrchestrator || isOrchestratorAgent(lane ?? { key: item?.id, name: item?.id })
-  const orchestratorRow = orchestratorAgent ? orchestratorEntry(orchestrator, item?.id) : null
+  const orchestratorRow = orchestratorAgent
+    ? (orchestratorEntry(orchestrator, item?.id) ?? (lane?.key ? orchestratorEntry(orchestrator, lane.key) : null))
+    : null
   const agentInput =
     item?.kind === 'agent'
       ? orchestratorAgent
@@ -164,6 +194,7 @@ export default function Inspector({
   const [chat, setChat] = useState(null)
   const [runs, setRuns] = useState(null)
   const [lastRuns, setLastRuns] = useState(null)
+  const [laneConfig, setLaneConfig] = useState({ target: '', loaded: false, mode: '' })
   const [confirmStop, setConfirmStop] = useState(false)
   const [stoppingRun, setStoppingRun] = useState(false)
   const [stopError, setStopError] = useState('')
@@ -336,9 +367,55 @@ export default function Inspector({
     }
   }, [item?.kind, item?.id, orchestratorAgent, bridge, client])
 
+  useEffect(() => {
+    const targetId = String(item?.id ?? '')
+    if (item?.kind !== 'agent' || orchestratorAgent || !bridge || !client || typeof client.lanes !== 'function') {
+      setLaneConfig({ target: '', loaded: false, mode: '' })
+      return undefined
+    }
+    setLaneConfig({ target: '', loaded: false, mode: '' })
+    let active = true
+    let ticket = 0
+    async function readLanes() {
+      ticket += 1
+      const mine = ticket
+      try {
+        const answer = await client.lanes()
+        if (!active || mine !== ticket) return
+        setLaneConfig({
+          target: targetId,
+          loaded: true,
+          mode: laneEntryMode(answer, lane?.key, context.key, item?.id),
+        })
+      } catch {
+        if (active && mine === ticket) setLaneConfig({ target: '', loaded: false, mode: '' })
+      }
+    }
+    readLanes()
+    const unsubscribe = subscribeToNotices(client, ['agents', 'family'], readLanes, 50)
+    return () => {
+      active = false
+      unsubscribe()
+    }
+  }, [item?.kind, item?.id, lane?.key, context.key, orchestratorAgent, bridge, client])
+
   const runningRun = !orchestratorAgent
     ? runningEntryFor(runs, lane?.key, context.key, item?.id)
     : null
+  const familyNode = useMemo(
+    () => (item?.kind === 'agent' ? familyEntry(family, context.key, lane?.key, item?.id) : null),
+    [item?.kind, item?.id, family, context.key, lane?.key]
+  )
+  const laneConfigFresh = laneConfig.loaded && laneConfig.target === String(item?.id ?? '')
+  const sandboxHarness =
+    (context.harness && context.harness !== 'not reported' ? context.harness : '') ||
+    orchestratorRow?.harness ||
+    familyNode?.harness ||
+    ''
+  const sandboxMode = orchestratorAgent
+    ? orchestratorRow?.mode || chat?.chat?.mode || familyNode?.mode || lane?.mode || ''
+    : runningRun?.mode || lane?.mode || (laneConfigFresh ? laneConfig.mode : familyNode?.mode) || ''
+  const sandbox = sandboxSummary(sandboxHarness, sandboxMode)
 
   useEffect(() => {
     setConfirmStop(false)
@@ -481,6 +558,7 @@ export default function Inspector({
               <Row label="Harness">{context.harness}</Row>
               <Row label="Model">{modelName(context.model)}</Row>
               <Row label="Effort">{effort}</Row>
+              <Row label="Sandbox">{sandbox}</Row>
               <Row label="Task">{context.task}</Row>
               <Row label="Context">
                 {context.isOrchestrator

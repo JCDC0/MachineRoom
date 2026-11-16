@@ -246,6 +246,7 @@ export function createOrchestrators({
   laneTicket,
   laneTickets,
   runs = null,
+  interruptLane,
 } = {}) {
   const root = projectRoot ? resolve(projectRoot) : ''
   const folder = resolve(runsFolder)
@@ -699,6 +700,7 @@ export function createOrchestrators({
   const sentMessages = new Map()
   const laneSent = new Map()
   const laneBackups = new Map()
+  const seenLaneEntries = new WeakSet()
   const clock = typeof now === 'function' ? now : Date.now
 
   function attachRuns(nextRuns) {
@@ -814,6 +816,15 @@ export function createOrchestrators({
     }
   }
 
+  function laneHarnessFor(laneKey) {
+    const given = typeof lanes === 'function' ? lanes() : (lanes ?? {})
+    const all = readAllLanes({ folder: root, runsFolder: folder, lanesJson: given })
+    const entry =
+      (all && typeof all === 'object' && Object.hasOwn(all, laneKey) ? all[laneKey] : null) ??
+      (given && typeof given === 'object' && Object.hasOwn(given, laneKey) ? given[laneKey] : null)
+    return typeof entry?.cli?.harness === 'string' ? entry.cli.harness.trim() : ''
+  }
+
   function laneKeyOf(value) {
     const target = typeof value === 'string' ? value.trim() : ''
     return target.startsWith('lane:') ? target.slice(5).trim() : ''
@@ -844,6 +855,27 @@ export function createOrchestrators({
     if (!held || !Array.isArray(held.inbox)) return false
     held.inbox.push({ from, text, at: new Date(at).toISOString() })
     while (held.inbox.length > LANE_INBOX_LIMIT) held.inbox.shift()
+    if (
+      !stopped &&
+      typeof interruptLane === 'function' &&
+      readHarnessSettings(folder).laneReplies === 'interrupt' &&
+      laneHarnessFor(lane) !== 'machineroom'
+    ) {
+      setImmediate(() => {
+        if (stopped) return
+        void Promise.resolve(
+          interruptLane({
+            lane,
+            held,
+            takeUnseen: () => {
+              const unseen = held.inbox.filter((entry) => !seenLaneEntries.has(entry))
+              for (const entry of unseen) seenLaneEntries.add(entry)
+              return unseen
+            },
+          })
+        ).catch(() => {})
+      })
+    }
     return true
   }
 
@@ -868,7 +900,10 @@ export function createOrchestrators({
     const held = ticket && typeof laneTicket === 'function' ? laneTicket(ticket) : null
     if (!held) return { status: 403, body: { error: LANE_ENDED_PROBLEM } }
     const messages = Array.isArray(held.inbox)
-      ? held.inbox.map((entry) => ({ from: entry.from, text: entry.text, at: entry.at }))
+      ? held.inbox.map((entry) => {
+          seenLaneEntries.add(entry)
+          return { from: entry.from, text: entry.text, at: entry.at }
+        })
       : []
     return { status: 200, body: { messages } }
   }

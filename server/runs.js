@@ -7,7 +7,7 @@ import { StringDecoder } from 'node:string_decoder'
 import { fileURLToPath } from 'node:url'
 import { parseBriefs } from '../src/briefs/briefs.js'
 import { KEY_MASK, maskKeys } from '../src/briefs/audit.js'
-import { SINCE_PROBLEM, checkCommandLines, dayStart, laneLockStartedAt, laneModeProblem as runnerModeProblem, laneStats, laneWithOverrides, maskProfilePaths, pathInside, projectProblems, runRecord, worktreeFor } from '../src/briefs/run.js'
+import { SINCE_PROBLEM, checkCommandLines, dayStart, formatInterruptMessage, laneLockLog, laneLockStartedAt, laneModeProblem as runnerModeProblem, laneStats, laneWithOverrides, maskProfilePaths, pathInside, projectProblems, runRecord, worktreeFor } from '../src/briefs/run.js'
 import { profileFromBrief, profileFromTask } from '../src/policy/profile.js'
 import { readPolicy, routeLane, tierFor, TIERS } from '../src/policy/route.js'
 import { conversationFromLog } from '../src/model/conversation.js'
@@ -287,11 +287,23 @@ export function laneStatesFor({
 }
 
 export const RUN_READ_CHUNK_BYTES = 4 * 1024 * 1024
+const TAIL_CHECK_BYTES = 64
 
 const runRecordCaches = new Map()
 
 export function clearRunsCache() {
   runRecordCaches.clear()
+}
+
+function readFdSlice(fd, start, length) {
+  const buffer = Buffer.alloc(length)
+  let read = 0
+  while (read < length) {
+    const got = readSync(fd, buffer, read, length - read, start + read)
+    if (got <= 0) break
+    read += got
+  }
+  return read === length ? buffer : null
 }
 
 export function cachedRunRecords(file = runsFile()) {
@@ -312,15 +324,23 @@ export function cachedRunRecords(file = runsFile()) {
       records: Object.freeze([]),
       tail: '',
       decoder: new StringDecoder('utf8'),
+      ino: 0,
+      tailSlice: null,
     }
     runRecordCaches.set(target, entry)
   }
 
-  if (stat.size < entry.offset || stat.mtimeMs < entry.mtimeMs || (stat.size === entry.offset && stat.mtimeMs !== entry.mtimeMs)) {
+  const resetEntry = () => {
     entry.offset = 0
     entry.records = Object.freeze([])
     entry.tail = ''
     entry.decoder = new StringDecoder('utf8')
+    entry.ino = 0
+    entry.tailSlice = null
+  }
+
+  if (stat.size < entry.offset || stat.mtimeMs < entry.mtimeMs || (stat.size === entry.offset && stat.mtimeMs !== entry.mtimeMs)) {
+    resetEntry()
   } else if (stat.size === entry.offset && stat.mtimeMs === entry.mtimeMs) {
     return entry.records
   }
@@ -334,6 +354,16 @@ export function cachedRunRecords(file = runsFile()) {
 
   const fresh = []
   try {
+    if (entry.offset > 0 && stat.size > entry.offset) {
+      const inoChanged = Boolean(entry.ino && stat.ino && entry.ino !== stat.ino)
+      let sliceChanged = false
+      if (!inoChanged && entry.tailSlice && entry.tailSlice.length > 0) {
+        const start = entry.offset - entry.tailSlice.length
+        const current = start >= 0 ? readFdSlice(fd, start, entry.tailSlice.length) : null
+        sliceChanged = !current || !current.equals(entry.tailSlice)
+      }
+      if (inoChanged || sliceChanged) resetEntry()
+    }
     let remaining = stat.size - entry.offset
     if (remaining > 0) {
       const buffer = Buffer.alloc(Math.min(remaining, RUN_READ_CHUNK_BYTES))
@@ -361,6 +391,13 @@ export function cachedRunRecords(file = runsFile()) {
       }
     }
     entry.mtimeMs = stat.mtimeMs
+    entry.ino = stat.ino ?? 0
+    if (entry.offset > 0) {
+      const length = Math.min(entry.offset, TAIL_CHECK_BYTES)
+      entry.tailSlice = readFdSlice(fd, entry.offset - length, length)
+    } else {
+      entry.tailSlice = null
+    }
   } finally {
     if (fresh.length > 0) entry.records = Object.freeze(entry.records.concat(fresh))
     closeSync(fd)
@@ -496,6 +533,8 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
   })
   const running = new Map()
   const laneTickets = new Map()
+  const activeInterrupts = new Set()
+  let lastStartMs = 0
   let stopped = false
   let rootCommonDirPromise = null
 
@@ -879,19 +918,89 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
 
   function finish(item) {
     if (running.get(item.entry.lane) !== item) return
-    if (item.ticket) laneTickets.delete(item.ticket)
+    if (item.ticket && !item.interrupting) laneTickets.delete(item.ticket)
     flushTail(item)
     running.delete(item.entry.lane)
     if (stopped) return
     notify({ topic: 'runs' })
   }
 
-  function hasRecordForLaneSince(lane, startedAt) {
+  function logRunName(logPath) {
+    const raw = typeof logPath === 'string' ? logPath.trim() : ''
+    if (!raw) return ''
+    return basename(raw).replace(/\.log$/i, '')
+  }
+
+  function readLockInfo(laneKey) {
+    const text = readTextAt(join(recordsDir(), `${laneKey}.lock`))
+    if (!text) return { log: '', startedAt: '' }
+    return {
+      log: laneLockLog(text),
+      startedAt: laneLockStartedAt(text),
+    }
+  }
+
+  function readMeta(logPath) {
+    if (!logPath) return null
+    const text = readTextAt(logPath.replace(/\.log$/i, '.meta.json'))
+    if (!text) return null
+    try {
+      const parsed = JSON.parse(text)
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null
+    } catch {
+      return null
+    }
+  }
+
+  function gitReadSync(folder, args) {
+    if (!folder) return ''
+    let file
+    try {
+      file = gitPath()
+    } catch {
+      return ''
+    }
+    const result = spawnSync(file, args, {
+      cwd: folder,
+      env: gitEnv(),
+      encoding: 'utf8',
+      windowsHide: true,
+      timeout: GIT_TIMEOUT_MS,
+      maxBuffer: GIT_MAX_BUFFER,
+    })
+    if (result.error || result.status !== 0) return ''
+    return String(result.stdout ?? '').trim()
+  }
+
+  function continuesChainCount(startFrom) {
+    const first = typeof startFrom === 'string' ? startFrom.trim() : ''
+    if (first === '') return 0
+    const records = readAllRunRecords(recordsPath())
+    const byName = new Map()
+    for (const record of records) {
+      const name = logRunName(record?.log)
+      if (name !== '') byName.set(name, record)
+    }
+    let count = 0
+    let cursor = first
+    const visited = new Set()
+    while (cursor !== '' && !visited.has(cursor)) {
+      visited.add(cursor)
+      count += 1
+      const rec = byName.get(cursor)
+      cursor = typeof rec?.continues === 'string' ? rec.continues.trim() : ''
+    }
+    return count
+  }
+
+  function hasRecordForLaneSince(lane, startedAt, logPath = '') {
     try {
       const records = readAllRunRecords(recordsPath())
       const startTime = new Date(startedAt).getTime()
+      const wantedName = logPath ? logRunName(logPath) : ''
       for (let i = records.length - 1; i >= 0; i--) {
         const r = records[i]
+        if (wantedName !== '' && logRunName(r.log) === wantedName) return true
         if (r.lane === lane && new Date(r.startedAt).getTime() >= startTime) {
           return true
         }
@@ -907,31 +1016,79 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
   }
 
   function recordRefusal(item, exitCode) {
-    if (hasRecordForLaneSince(item.entry.lane, item.entry.startedAt)) return
+    if (hasRecordForLaneSince(item.entry.lane, item.entry.startedAt, item.logPath)) return
     const note = maskRunText(item.entry.lastLines.join(' ').trim(), item.ticket)
-    const record = runRecord({
-      lane: item.entry.lane,
-      briefs: item.entry.briefs,
-      startedAt: item.entry.startedAt,
-      minutes: 0,
-      exitCode,
-      killed: Boolean(item.stoppedByOwner),
-      note: item.stoppedByOwner
+    const meta = item.logPath ? readMeta(item.logPath) : null
+    let branch = ''
+    let queueInfo
+    let laneModel = item.model || null
+    let workFolder = meta?.project || item.project || ''
+    try {
+      const lanes = readStartLanes({ lanesFile: laneFile, runsFolder: recordsDir() })
+      const entry = lanes?.[item.entry.lane]
+      if (!laneModel && entry?.cli?.model) laneModel = entry.cli.model
+      if (!workFolder && entry?.worktree) workFolder = entry.worktree
+    } catch {}
+    if (workFolder && item.logPath) {
+      branch = gitReadSync(workFolder, ['branch', '--show-current'])
+    }
+    let taskText = item.task || item.firstTask
+    if (meta?.queue) {
+      queueInfo = {
+        branch: meta.queue,
+        ...(Number.isInteger(meta.index) ? { index: meta.index } : {}),
+        ...(Number.isInteger(item.entry.tasks) ? { size: item.entry.tasks } : {}),
+      }
+      if (Number.isInteger(meta.index) && meta.index >= 1 && item.projectRun?.queue) {
+        const queueRaw = readTextAt(item.projectRun.queue)
+        if (queueRaw !== null) {
+          const items = queueRaw.split(/\r?\n---\r?\n/)
+          const chosen = items[meta.index - 1]?.trim()
+          if (chosen) taskText = chosen
+        }
+      }
+    }
+    const minutes = Math.max(0, Math.round(((Date.now() - Date.parse(item.entry.startedAt)) / 60000) * 10) / 10)
+    const killed = Boolean(item.stoppedByOwner || item.interruptedBy)
+    const recordNote = item.interruptedBy
+      ? 'interrupted'
+      : item.stoppedByOwner
         ? 'stopped by the owner'
         : note !== ''
           ? note.slice(0, 200)
-          : 'the runner refused to start or could not start',
-      ...(item.project ? { project: item.project, task: item.task } : {}),
+          : 'the runner refused to start or could not start'
+    const record = runRecord({
+      lane: item.entry.lane,
+      briefs: item.entry.briefs,
+      model: laneModel,
+      reasoning: item.reasoning || null,
+      ...(item.mode ? { mode: item.mode } : {}),
+      startedAt: item.entry.startedAt,
+      minutes: Number.isFinite(minutes) ? minutes : 0,
+      exitCode,
+      killed,
+      ...(item.logPath ? { log: item.logPath } : {}),
+      ...(branch ? { branch } : {}),
+      ...(meta?.base ? { base: meta.base } : {}),
+      note: recordNote,
+      ...(item.project ? { project: item.project, task: taskText } : {}),
+      ...(queueInfo ? { queue: queueInfo } : {}),
       ...(item.startedBy ? { startedBy: item.startedBy } : {}),
+      ...(item.continueFrom ? { continues: item.continueFrom } : {}),
+      ...(item.interruptedBy ? { interruptedBy: item.interruptedBy } : {}),
     })
     try {
       appendFileSync(recordsPath(), `${JSON.stringify(record)}\n`)
     } catch {}
   }
 
-  function startRun(lane, briefs, projectRun = null, startedBy = '', reasoning = '', model = '', mode = '', allowedLanes = null) {
-    const entry = { lane, briefs: [...briefs], startedAt: new Date().toISOString(), lastLines: [] }
-    const ticket = randomBytes(16).toString('hex')
+  function startRun(lane, briefs, projectRun = null, startedBy = '', reasoning = '', model = '', mode = '', allowedLanes = null, extraOptions = {}) {
+    const startMs = Math.max(Date.now(), lastStartMs + 1)
+    lastStartMs = startMs
+    const entry = { lane, briefs: [...briefs], startedAt: new Date(startMs).toISOString(), lastLines: [] }
+    const givenTicket = typeof extraOptions?.ticket === 'string' ? extraOptions.ticket.trim() : ''
+    const ticket = givenTicket || randomBytes(16).toString('hex')
+    const continueFrom = typeof extraOptions?.continueFrom === 'string' ? extraOptions.continueFrom.trim() : ''
     if (projectRun?.queue) {
       entry.queue = true
       entry.tasks = projectRun.taskCount
@@ -945,22 +1102,33 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
     const chosenModel = typeof model === 'string' && model.trim() ? model.trim() : projectRun?.model && String(projectRun.model).trim()
     const modelArgs = chosenModel ? ['--model', chosenModel] : []
     const modeArgs = mode ? ['--mode', mode] : []
+    const continueArgs = continueFrom ? ['--continue-from', continueFrom] : []
     const item = {
       entry,
       ticket,
       tail: '',
+      briefs: [...briefs],
+      projectRun: projectRun ? { ...projectRun } : null,
       project: projectRun?.project || '',
       task: projectRun?.task || '',
       firstTask: projectRun?.firstTask || '',
       startedBy,
+      reasoning,
+      model: chosenModel || '',
+      mode,
+      allowedLanes: Array.isArray(allowedLanes) ? [...allowedLanes] : null,
+      continueFrom,
       stopping: false,
       stoppedByOwner: false,
+      interrupting: false,
+      interruptedBy: '',
+      logPath: '',
       closed: false,
       onClose: [],
     }
     const args = projectRun
       ? projectRun.queue
-        ? [...command.args, lane, '--project', projectRun.project, ...(projectRun.worktree ? ['--worktree'] : []), '--queue', projectRun.queue, ...testArgs, ...modelArgs, ...modeArgs, ...allowedArgs, ...startedArgs, ...reasoningArgs, '--started-at', entry.startedAt]
+        ? [...command.args, lane, '--project', projectRun.project, ...(projectRun.worktree ? ['--worktree'] : []), '--queue', projectRun.queue, ...testArgs, ...modelArgs, ...modeArgs, ...allowedArgs, ...startedArgs, ...reasoningArgs, ...continueArgs, '--started-at', entry.startedAt]
         : [
             ...command.args,
             lane,
@@ -976,11 +1144,18 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
             ...allowedArgs,
             ...startedArgs,
             ...reasoningArgs,
+            ...continueArgs,
             '--started-at',
             entry.startedAt,
           ]
-      : [...command.args, lane, ...briefs, ...modeArgs, ...allowedArgs, ...startedArgs, '--started-at', entry.startedAt]
-    laneTickets.set(ticket, { lane, startedBy, startedAt: entry.startedAt, inbox: [] })
+      : [...command.args, lane, ...briefs, ...modeArgs, ...allowedArgs, ...startedArgs, ...continueArgs, '--started-at', entry.startedAt]
+    const existingTicket = givenTicket ? laneTickets.get(ticket) : null
+    laneTickets.set(ticket, {
+      lane: existingTicket?.lane ?? lane,
+      startedBy: existingTicket?.startedBy ?? startedBy,
+      startedAt: entry.startedAt,
+      inbox: existingTicket?.inbox ?? [],
+    })
     const child = spawn(command.file, args, {
       cwd: projectRun ? REPO_ROOT : resolvedRoot || undefined,
       shell: false,
@@ -992,7 +1167,7 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
         MACHINEROOM_LANE_TICKET: ticket,
         MACHINEROOM_LANE_REPLIES: readHarnessSettings(recordsDir()).laneReplies,
         MACHINEROOM_BRIDGE: bridgeAddress(),
-        ...(lanesFile && projectRun ? { MACHINEROOM_LANES_FILE: laneFile } : {}),
+        ...(lanesFile ? { MACHINEROOM_LANES_FILE: laneFile } : {}),
       },
       ...treeSpawnOptions(),
     })
@@ -1087,7 +1262,7 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
           env: {
             ...process.env,
             MACHINEROOM_RUNS: recordsDir(),
-            ...(lanesFile && projectRun ? { MACHINEROOM_LANES_FILE: laneFile } : {}),
+            ...(lanesFile ? { MACHINEROOM_LANES_FILE: laneFile } : {}),
           },
         })
       } catch {
@@ -1172,6 +1347,29 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
     }
   }
 
+  async function stopRunningItem(item, targetLane, wantedStart) {
+    const result = await runStopCommand(targetLane, Boolean(item?.project), wantedStart)
+    if (stopped) {
+      return { ok: false, status: 500, error: 'The bridge stopped.', output: '' }
+    }
+    if (!result.ok) {
+      return result
+    }
+    if (item && running.get(item.entry.lane) === item && !item.closed) {
+      await waitForItemClose(item, STOP_SETTLE_MS)
+      if (!item.closed && running.get(item.entry.lane) === item) {
+        if (item.child?.pid) killTree(item.child)
+        await waitForItemClose(item, STOP_SETTLE_MS)
+        if (!item.closed) {
+          recordRefusal(item, 1)
+          finish(item)
+          item.closed = true
+        }
+      }
+    }
+    return result
+  }
+
   async function stopRun({ lane = '', startedAt = '', confirmed = false } = {}) {
     if (confirmed !== true) return { status: 400, body: { error: CONFIRM_STOP_PROBLEM } }
     const targetLane = typeof lane === 'string' ? lane.trim() : ''
@@ -1210,8 +1408,12 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
       }
       item.stopping = true
       item.stoppedByOwner = true
+      if (!item.logPath) {
+        const lockInfo = readLockInfo(targetLane)
+        if (lockInfo.log) item.logPath = join(recordsDir(), lockInfo.log)
+      }
     }
-    const result = await runStopCommand(targetLane, Boolean(item?.project), wantedStart)
+    const result = await stopRunningItem(item, targetLane, wantedStart)
     if (stopped) {
       return { status: 500, body: { error: 'The bridge stopped.' } }
     }
@@ -1223,18 +1425,6 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
       return {
         status: result.status,
         body: { error: result.error, ...(result.output ? { output: result.output } : {}) },
-      }
-    }
-    if (item && running.get(targetLane) === item && !item.closed) {
-      await waitForItemClose(item, STOP_SETTLE_MS)
-      if (!item.closed && running.get(targetLane) === item) {
-        if (item.child?.pid) killTree(item.child)
-        await waitForItemClose(item, STOP_SETTLE_MS)
-        if (!item.closed) {
-          recordRefusal(item, 1)
-          finish(item)
-          item.closed = true
-        }
       }
     }
     const stoppedAt = new Date().toISOString()
@@ -1350,6 +1540,119 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
       }
     }
     return { stoppedLanes, stillRunning }
+  }
+
+  function matchesLockStart(lockStartedAt, itemStartedAt) {
+    if (!lockStartedAt || !itemStartedAt) return false
+    if (lockStartedAt === itemStartedAt) return true
+    const lockMs = Date.parse(lockStartedAt)
+    const itemMs = Date.parse(itemStartedAt)
+    return Number.isFinite(lockMs) && Number.isFinite(itemMs) && lockMs === itemMs
+  }
+
+  function currentRunName(item, activeLane, runKey) {
+    const candidates = activeLane !== runKey ? [activeLane, runKey] : [runKey]
+    for (const key of candidates) {
+      const info = readLockInfo(key)
+      if (info.log !== '' && (key !== item.entry.lane || matchesLockStart(info.startedAt, item.entry.startedAt))) {
+        return logRunName(info.log)
+      }
+    }
+    try {
+      const source = typeof lanesSource === 'function' ? lanesSource() : lanesSource
+      const open = source && typeof source.openRuns === 'function' ? source.openRuns() : []
+      if (Array.isArray(open)) {
+        const found = open.find((run) => {
+          if (!run || !run.name) return false
+          if (!candidates.includes(run.lane)) return false
+          return run.lane !== item.entry.lane || matchesLockStart(run.startedAt, item.entry.startedAt)
+        })
+        if (found?.name) return found.name
+      }
+    } catch {}
+    return ''
+  }
+
+  async function waitForRunName(item, activeLane, runKey) {
+    const deadline = Date.now() + 5000
+    for (;;) {
+      if (stopped || item.closed) return ''
+      const found = currentRunName(item, activeLane, runKey)
+      if (found) return found
+      if (Date.now() >= deadline) return ''
+      await new Promise((done) => {
+        const timer = setTimeout(done, 20)
+        timer.unref?.()
+      })
+    }
+  }
+
+  function writeInterruptFile(folder, runName, messages) {
+    mkdirSync(folder, { recursive: true })
+    writeFileSync(join(folder, `${runName}.interrupt.txt`), formatInterruptMessage(messages), 'utf8')
+  }
+
+  async function interruptLane({ lane = '', held = null, takeUnseen } = {}) {
+    if (stopped) return false
+    const runKey = typeof held?.lane === 'string' && held.lane.trim() ? held.lane.trim() : lane
+    const item = running.get(runKey) ?? running.get(lane)
+    if (!item || item.closed || item.stopping || item.interrupting) return false
+    if (activeInterrupts.has(item.ticket)) return false
+    if (continuesChainCount(item.continueFrom) >= 3) return false
+    activeInterrupts.add(item.ticket)
+    try {
+      const runName = await waitForRunName(item, lane, runKey)
+      if (!runName || stopped || item.closed || item.stopping || item.interrupting) return false
+      const unseen = typeof takeUnseen === 'function' ? takeUnseen() : []
+      if (!Array.isArray(unseen) || unseen.length === 0) return false
+      const sender = String(unseen[0]?.from ?? '').trim() || 'orchestrator'
+      item.interrupting = true
+      item.stopping = true
+      item.interruptedBy = sender
+      item.logPath = join(recordsDir(), `${runName}.log`)
+      writeInterruptFile(recordsDir(), runName, unseen)
+      const stopTarget = lane !== item.entry.lane && existsSync(join(recordsDir(), `${lane}.lock`)) ? lane : item.entry.lane
+      const stopStartedAt = stopTarget === item.entry.lane ? item.entry.startedAt : readLockInfo(stopTarget).startedAt
+      const stopResult = await stopRunningItem(item, stopTarget, stopStartedAt)
+      if (stopped) {
+        laneTickets.delete(item.ticket)
+        return false
+      }
+      if (!stopResult.ok) {
+        item.stopping = false
+        item.interrupting = false
+        item.interruptedBy = ''
+        if (item.closed) laneTickets.delete(item.ticket)
+        return false
+      }
+      if (stopTarget !== item.entry.lane && existsSync(join(recordsDir(), `${item.entry.lane}.lock`))) {
+        await runStopCommand(item.entry.lane, Boolean(item.project), item.entry.startedAt)
+      }
+      const more = typeof takeUnseen === 'function' ? takeUnseen() : []
+      if (Array.isArray(more) && more.length > 0) {
+        unseen.push(...more)
+        writeInterruptFile(recordsDir(), runName, unseen)
+      }
+      const nextLane = lane !== item.entry.lane ? lane : item.entry.lane
+      startRun(
+        nextLane,
+        item.briefs,
+        item.projectRun,
+        item.startedBy,
+        item.reasoning,
+        item.model,
+        item.mode,
+        item.allowedLanes,
+        { continueFrom: runName, ticket: item.ticket }
+      )
+      notify({ topic: 'runs' })
+      return true
+    } catch {
+      if (item.closed) laneTickets.delete(item.ticket)
+      return false
+    } finally {
+      activeInterrupts.delete(item.ticket)
+    }
   }
 
   function stopAll() {
@@ -1841,6 +2144,7 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
     stopAll,
     stopRun,
     stopSectorLanes,
+    interruptLane,
     isRunning: (lane) => (lane !== undefined ? running.has(lane) : running.size > 0),
     startRun,
     startProjectTask,

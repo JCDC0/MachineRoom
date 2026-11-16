@@ -103,6 +103,7 @@ function configOption(options, category) {
 export async function runAcp(options, { log = process.stdout, error = process.stderr, input = null } = {}) {
   const prompt = typeof options.prompt === 'string' ? options.prompt : input === null ? await readInput() : input
   if (!prompt.trim()) throw new Error('The ACP run needs a prompt.')
+  error.write("This ACP agent's permission requests are approved automatically.\n")
   const limitMs = options.seconds ? options.seconds * 1000 : options.minutes * 60000
   const deadline = Date.now() + limitMs
   const cwd = resolve(options.cwd || process.cwd())

@@ -33,6 +33,9 @@ const RETRY_BASE_MS = 2000
 const RETRY_MAX_MS = 60000
 const RETRY_STATUS = new Set([429, 500, 502, 503, 529])
 const NUDGE = 'Continue with the task. Use tools, or say you are done.'
+const LOOP_WARNING = 'This call has failed the same way three times. Try something else or stop and report.'
+const LOOP_WARN_AT = 3
+const LOOP_STOP_AT = 5
 const SEARCH_MATCH_LIMIT = 200
 const SEARCH_LINE_LIMIT = 300
 const SEARCH_FILE_LIMIT = 2000000
@@ -1463,6 +1466,12 @@ function startInboxWatch(seen, env, onMessage) {
   }
 }
 
+function loopStopText(name, args) {
+  const raw = JSON.stringify(args ?? {})
+  const shown = raw.length > 200 ? `${raw.slice(0, 197)}...` : raw
+  return `Stopped: the call ${name} with ${shown} failed the same way five times.`
+}
+
 async function main() {
   const options = parseArgs(process.argv.slice(2))
   if (!options) return
@@ -1519,6 +1528,8 @@ async function main() {
   let step = 0
   let damagedAnswers = 0
   let nudged = false
+  let lastFailure = ''
+  let failureRun = 0
   const seenInbox = new Set()
   const interruptReplies = String(process.env.MACHINEROOM_LANE_REPLIES ?? '').trim() === 'interrupt'
   let heldInbox = ''
@@ -1660,14 +1671,27 @@ async function main() {
         const outcome = inputs[index].error !== ''
           ? { text: inputs[index].error, isError: true }
           : await runTool(call.name, inputs[index].args, options.cwd, web)
+        const failureKey = outcome.isError
+          ? `${call.name}\n${JSON.stringify(inputs[index].args)}\n${outcome.text}`
+          : ''
+        if (failureKey === '') {
+          lastFailure = ''
+          failureRun = 0
+        } else if (failureKey === lastFailure) {
+          failureRun += 1
+        } else {
+          lastFailure = failureKey
+          failureRun = 1
+        }
         let text = outcome.text
+        if (failureRun === LOOP_WARN_AT) text = `${text}\n${LOOP_WARNING}`
         if (minuteLimit !== null) {
           const now = readClock(process.env)
           const elapsedMs = Math.max(0, now - startedAt)
           const used = Math.floor(elapsedMs / 60000)
           const shouldWarn = !warned60 && elapsedMs >= minuteLimit * 60000 * 0.6
           if (shouldWarn) warned60 = true
-          text = toolResultWithMinutes(outcome.text, { used, limit: minuteLimit, warned: shouldWarn })
+          text = toolResultWithMinutes(text, { used, limit: minuteLimit, warned: shouldWarn })
         }
         messages.push({ role: 'tool', tool_call_id: call.id, content: text })
         writeJson({
@@ -1677,6 +1701,10 @@ async function main() {
             content: [{ type: 'tool_result', tool_use_id: call.id, content: text, is_error: Boolean(outcome.isError) }],
           },
         })
+        if (failureRun >= LOOP_STOP_AT) {
+          finish(true, loopStopText(call.name, inputs[index].args))
+          return
+        }
       }
     }
     finish(true, lastText !== '' ? lastText : `Stopped after ${stepLimit} steps.`)
