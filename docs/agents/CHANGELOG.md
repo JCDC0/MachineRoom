@@ -1,6 +1,9 @@
 # Changelog
 
 ## Unreleased
+- P460: Every new run record carries `finishedAt`, the ISO time the run ended, and older records stay unknown.
+- P460: The outcome table counts extra plain runs before a merge as `repairRuns` and the median wait from the last run to the merge commit as `reviewWaitMinutes`.
+- P460: `run-lane --outcomes` prints repair runs and review wait, with `?` when a time is unknown.
 - Ready says it means the program was found, and doctor warns when the project has no AGENTS.md, CLAUDE.md or GEMINI.md.
 - Each MCP server's tool list is kept 60 seconds per runs folder and config, failures are not kept, and parallel lists share one request.
 - The native agent adds a warning after a tool call fails the same way three times and ends the run on the fifth.

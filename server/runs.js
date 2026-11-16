@@ -16,7 +16,7 @@ import { defaultMode, legacyMode } from '../src/control/modes.js'
 import { modelUnavailableProblem } from './model-list.js'
 import { modelAllowed } from './harness-models.js'
 import { readHarnessSettings } from './harness-settings.js'
-import { outcomeTable, subjectsFromLog } from './outcomes.js'
+import { mergeCommitsFromLog, outcomeTable } from './outcomes.js'
 import { gitEnv, gitPath } from './programPath.js'
 import { killTree, listProcesses, treeSpawnOptions } from './processTree.js'
 import { createLaneLockCheck, laneAgents, lanesFolder, readAllLanes, runsFolder as defaultRunsFolder } from './lanes-source.js'
@@ -120,7 +120,7 @@ export async function isGitCheckout(folder) {
 }
 
 export function readMainSubjects() {
-  return git(REPO_ROOT, ['log', '--format=%s', 'refs/heads/main']).then((text) => (text === null ? [] : subjectsFromLog(text)))
+  return git(REPO_ROOT, ['log', '--format=%H %cI %s', 'refs/heads/main']).then((text) => (text === null ? [] : mergeCommitsFromLog(text)))
 }
 
 export function readMainSubjectsSync() {
@@ -130,7 +130,7 @@ export function readMainSubjectsSync() {
   } catch {
     return []
   }
-  const result = spawnSync(file, ['log', '--format=%s', 'refs/heads/main'], {
+  const result = spawnSync(file, ['log', '--format=%H %cI %s', 'refs/heads/main'], {
     cwd: REPO_ROOT,
     env: gitEnv(),
     encoding: 'utf8',
@@ -139,7 +139,7 @@ export function readMainSubjectsSync() {
     maxBuffer: GIT_MAX_BUFFER,
   })
   if (result.error || result.status !== 0) return []
-  return subjectsFromLog(String(result.stdout ?? ''))
+  return mergeCommitsFromLog(String(result.stdout ?? ''))
 }
 
 async function projectDirty(folder) {
