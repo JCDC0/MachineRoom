@@ -1140,9 +1140,11 @@ function sleep(ms) {
   return new Promise((done) => setTimeout(done, ms))
 }
 
-async function post(url, key, payload, { onDamaged, costLimit } = {}) {
+async function post(url, key, payload, { onDamaged, costLimit, signal } = {}) {
   const headers = { 'content-type': 'application/json' }
   if (key) headers.authorization = `Bearer ${key}`
+  const timeout = AbortSignal.timeout(FETCH_TIMEOUT_MS)
+  const requestSignal = signal ? AbortSignal.any([timeout, signal]) : timeout
   let damagedRetries = 0
   for (let attempt = 0; attempt <= RETRY_LIMIT; attempt += 1) {
     let response
@@ -1151,9 +1153,10 @@ async function post(url, key, payload, { onDamaged, costLimit } = {}) {
         method: 'POST',
         headers,
         body: JSON.stringify(payload),
-        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+        signal: requestSignal,
       })
     } catch (error) {
+      if (signal?.aborted) throw error
       if (costLimit !== null && costLimit !== undefined) {
         const failure = new Error('The cost limit is set but the provider did not report a cost; stopped.')
         failure.isCostLimit = true
@@ -1395,6 +1398,7 @@ export function boundMessages(messages, limit) {
 }
 
 const INBOX_TIMEOUT_MS = 3000
+const INBOX_POLL_MS = 1000
 
 async function readLaneInbox(seen, env = process.env) {
   const bridge = String(env?.MACHINEROOM_BRIDGE ?? '').trim().replace(/\/+$/, '')
@@ -1426,6 +1430,35 @@ async function readLaneInbox(seen, env = process.env) {
   }
   if (lines.length === 0) return ''
   return `Messages for you while you work:\n${lines.join('\n')}`
+}
+
+function startInboxWatch(seen, env, onMessage) {
+  let stopped = false
+  let timer = null
+  let wake = null
+  const wait = (ms) => new Promise((done) => {
+    wake = done
+    timer = setTimeout(done, ms)
+  })
+  const loop = (async () => {
+    while (!stopped) {
+      await wait(INBOX_POLL_MS)
+      if (stopped) return
+      const inbox = await readLaneInbox(seen, env)
+      if (stopped) return
+      if (inbox === '') continue
+      onMessage(inbox)
+      return
+    }
+  })()
+  return {
+    stop() {
+      stopped = true
+      if (timer) clearTimeout(timer)
+      if (wake) wake()
+    },
+    done: loop,
+  }
 }
 
 async function main() {
@@ -1485,6 +1518,8 @@ async function main() {
   let damagedAnswers = 0
   let nudged = false
   const seenInbox = new Set()
+  const interruptReplies = String(process.env.MACHINEROOM_LANE_REPLIES ?? '').trim() === 'interrupt'
+  let heldInbox = ''
 
   const finish = (isError, result, exitCode = isError ? 1 : 0) => {
     writeJson({
@@ -1513,7 +1548,10 @@ async function main() {
         process.stdout.write(`${sentence}\n`)
         return
       }
-      if (step > 0) {
+      if (heldInbox !== '') {
+        messages.push({ role: 'user', content: heldInbox })
+        heldInbox = ''
+      } else if (step > 0) {
         const inbox = await readLaneInbox(seenInbox)
         if (inbox !== '') messages.push({ role: 'user', content: inbox })
       }
@@ -1526,10 +1564,32 @@ async function main() {
         max_tokens: MAX_TOKENS,
       }
       if (options.reasoning !== '') payload.reasoning = { effort: options.reasoning }
-      const data = await post(url, key, payload, {
+      const postOptions = {
         costLimit,
         onDamaged: () => { damagedAnswers += 1 },
-      })
+      }
+      let data = null
+      if (interruptReplies) {
+        const controller = new AbortController()
+        let inbox = ''
+        const watch = startInboxWatch(seenInbox, process.env, (text) => {
+          inbox = text
+          controller.abort()
+        })
+        try {
+          data = await post(url, key, payload, { ...postOptions, signal: controller.signal })
+        } catch (error) {
+          watch.stop()
+          if (inbox !== '') {
+            heldInbox = inbox
+            continue
+          }
+          throw error
+        }
+        watch.stop()
+      } else {
+        data = await post(url, key, payload, postOptions)
+      }
       const choice = Array.isArray(data?.choices) ? data.choices[0] : null
       const providerError = providerErrorOf(data, choice)
       if (providerError !== '') throw new Error(sanitize(providerError, key))
