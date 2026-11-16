@@ -3507,3 +3507,12 @@ On 2026-11-16 the room's orchestrator ran on OpenCode at Harness default (`/api/
 1. `withOrchestratorData` also copies `harness` from the live main orchestrator row when it is a non-empty string, and `model` when it is a string; an empty model shows as `Harness default` (use `modelName` from `src/ui/modelRefresh.js` if it already gives that for an empty id, else the plain text).
 2. Tests, each failing before your change: an orchestrator agent whose lane says `claude` with a live row saying `opencode` and model `""` gives harness `opencode` and model `Harness default`; a live row with `claude-opus-5-5` gives that model's name.
 3. Run `node node_modules/vitest/vitest.mjs run tests/inspector-orchestrator-harness.test.js tests/agent-context.test.js tests/inspector.test.js` (skip a file that does not exist) and report the counts.
+
+**P420. A harness's model list command is read from its subcommands only (OpenCode).** Read this brief only. Commit each step as you finish it. Run every command in the foreground. Files: server/harness-models.js (only `parseHelpForListCommand` and the no-list-command answer after it), tests/help-list-command.test.js (new; add no test to another file except to keep an existing one passing), docs/agents/CHANGELOG.md.
+
+On 2026-11-16 the Codex model picker showed a red `The command failed with exit code 1.` while its list was fine. `parseHelpForListCommand` falls back to `\bmodel\b` anywhere in `codex --help`, which matches the `-m, --model <MODEL>` option, so the room runs `codex model`, which does not exist.
+
+1. Only a subcommand counts: a line of the help text that starts with whitespace, then `models list`, `model list`, `list-models`, `models` or `model` as its first word, then whitespace or the end of the line. Options such as `--model` and words inside sentences never count.
+2. When there is no list command, answer the static models with no `error`, so the picker shows the known models without a red line.
+3. Tests, each failing before your change: Codex-like help text with only `-m, --model <MODEL>` and sentences that say "model" gives no list command; help with a `  models     List models` line gives `['models']`; a harness with no list command answers its static models and no error.
+4. Run `node node_modules/vitest/vitest.mjs run tests/help-list-command.test.js tests/harness-models.test.js` (skip a file that does not exist) and report the counts.
