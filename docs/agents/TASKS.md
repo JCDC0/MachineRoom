@@ -4031,3 +4031,25 @@ Research plan, later steps the owner approved on 2026-11-17 ("Yes, go"): items 1
 2. Look for, first: an MCP call that runs past ten minutes, or a progress notice from another call or a malformed one that keeps a call alive; a `planByDefault` save that wipes other project settings or reaches a lane with no Plan as Bypass or Auto; a `lane:KEY` message that a lane ticket, a sub token outside its sector or a cross-origin page can send, or whose `interrupt` flag any sender other than the owner page can set; a status line that says the model acted on a message; an ACP request that Plan or Auto allows when it should refuse (a link or `..` out of the folder, a missing kind, a missing location, a path that does not exist yet under a link), or a mode that does not reach the runner (a run-level mode, a `choice` lane, a backup lane); a saved `choice` ACP lane whose default changed from Bypass without a doc saying so; a doc sentence the code contradicts; a test that passes with its change undone.
 3. Each finding: `R48-N`, a severity, the file and line, what goes wrong, how to see it, one fix. At most 10. No finding without a file and line you read.
 4. End with `Checked and fine`. Under 100 lines. Plain words, no em dashes.
+
+Review 48 fixes, P478 to P480. `docs/agents/AUDIT-2026-11-REVIEW-48.md` (P477, GPT-6.1 Sol): five findings, read back by the orchestrator. Every brief: read the brief and its findings only; commit each step as you finish it unless the brief says the runner commits; run every command in the foreground; never use git stash; you may change any existing test whose expectation the brief changes, and name it.
+
+**P478. R48-1 and R48-2: MCP progress is checked and read whole (Claude, Sonnet).** Files: server/mcp.js (`isProgress` near line 259 and `readStream` near line 478), tests/mcp-progress.test.js, docs/agents/CHANGELOG.md.
+
+1. `isProgress` resets the timer only for a notification: no `id`, `method` `notifications/progress`, a token of this call, and a finite number `params.progress`. Anything else is ignored.
+2. `readStream` reads only complete SSE events, accepts both `\n\n` and `\r\n\r\n` separators, and keeps an incomplete event whole for the next chunk.
+3. Tests, each failing before your change: a notice with an `id` or without a numeric `progress` does not keep a call alive on stdio or HTTP; HTTP progress with CRLF separators resets the timer; an event split after its first byte still resets it.
+4. Run `node node_modules/vitest/vitest.mjs run tests/mcp-progress.test.js tests/mcp.test.js tests/mcp-list-cache.test.js` (skip a file that does not exist) and report the counts.
+
+**P479. R48-3 and R48-5: ACP Auto refuses `..` and the choice default is written down (Codex, Sol).** Leave your changes uncommitted; the runner commits them. Tests that make their own temporary folders are allowed. Known sandbox baseline failures, not yours: process tests in `tests/run-lane-stop.test.js`, `tests/run-lane.test.js`, `mr-agent > stops the whole shell tree on the time limit`, and the removed-sub test in `tests/orchestrators.test.js`. Do not install or copy `node_modules`. Files: scripts/acp-run.mjs (`permissionRefusal` near line 116), tests/acp-permissions.test.js, docs/agents/CHANGELOG.md, docs/agents/FREE-HIERARCHY.md.
+
+1. Auto refuses any location whose path has a `..` component (split on both `/` and `\`) with `A location uses .. in its path.`, before any resolve.
+2. CHANGELOG and FREE-HIERARCHY each say in one sentence that a saved ACP lane with mode `choice` now starts in Auto, and that `cli.mode: "bypass"` keeps the old behaviour.
+3. Tests, each failing before your change: `escape/../victim.txt` and `..\x` are refused in Auto; a plain path inside the folder is still allowed.
+4. Run `node node_modules/vitest/vitest.mjs run tests/acp-permissions.test.js tests/inspector-sandbox.test.jsx` and report the counts.
+
+**P480. R48-4: split tasks honour Start new runs in Plan (AGY, Hydrogen).** Files: src/ui/panels/DispatchPanel.jsx (the split start near line 887), src/ui/panels/runs.js (`startSplitRun` near line 369), tests/plan-default.test.jsx, docs/agents/CHANGELOG.md. No CSS.
+
+1. With `planByDefault` on, each split pair whose lane offers Plan starts with `mode: 'plan'`. A pair whose lane has no Plan keeps its usual mode, and the confirm shows `This lane has no Plan mode.` once per such lane. With it off nothing changes.
+2. Tests, each failing before your change: with the setting on, two split tasks on Plan-capable lanes each send `mode: 'plan'`; a lane without Plan sends no mode and shows the line; with it off no mode is sent.
+3. Run `node node_modules/vitest/vitest.mjs run tests/plan-default.test.jsx tests/first-task-card.test.jsx` and `npm run build`, and report the counts.
