@@ -14,7 +14,7 @@ import { outcomeTable } from '../server/outcomes.js'
 import { readMainSubjectsSync } from '../server/runs.js'
 import { isLockHolderStale, killTree, descendantProcesses, leftoverProcesses, listProcesses } from '../server/processTree.js'
 import { codexProgramFor } from '../server/agents-config.js'
-import { HARNESS_OFF_PROBLEM, readHarnessSettings } from '../server/harness-settings.js'
+import { HARNESS_OFF_PROBLEM, readHarnessSettings, worktreeSetupOf } from '../server/harness-settings.js'
 import { codexHarness } from '../src/harnesses/codex.js'
 import { defaultMode, legacyMode } from '../src/control/modes.js'
 import { harnessByKey } from '../src/harnesses/index.js'
@@ -624,7 +624,30 @@ export function excludeWorktrees(project) {
   appendFileSync(file, `${text && !text.endsWith('\n') ? '\n' : ''}${line}\n`)
 }
 
-export function prepareWorktree(project, lane) {
+const WORKTREE_SETUP_LIMIT_MS = 5 * 60 * 1000
+
+function worktreeSetupLine(command, startedAt, exitCode) {
+  const seconds = Math.max(0, Math.round((Date.now() - startedAt) / 1000))
+  return `worktree setup: ${command} (${seconds} s, exit ${exitCode})`
+}
+
+function runWorktreeSetup(worktree, command) {
+  const startedAt = Date.now()
+  const result = spawnSync(command, {
+    cwd: worktree,
+    shell: true,
+    encoding: 'utf8',
+    windowsHide: true,
+    timeout: WORKTREE_SETUP_LIMIT_MS,
+    maxBuffer: 16 * 1024 * 1024,
+  })
+  const exitCode = result.error && result.status === null ? 'none' : String(result.status)
+  const line = worktreeSetupLine(command, startedAt, exitCode)
+  if (result.error || result.status !== 0) throw new Error(line)
+  return line
+}
+
+export function prepareWorktree(project, lane, { setup = '' } = {}) {
   const plan = worktreePlan(project, lane)
   excludeWorktrees(project)
   if (plan.made) {
@@ -656,6 +679,8 @@ export function prepareWorktree(project, lane) {
     const moved = spawnSync(gitPath(), ['switch', '--detach', sha], { cwd: plan.path, encoding: 'utf8', windowsHide: true })
     if (moved.status !== 0) throw new Error(`Could not move the worktree ${plan.path} to the project's HEAD: ${String(moved.stderr ?? '').trim()}`)
   }
+  const command = plan.made ? String(setup ?? '').trim() : ''
+  if (command !== '') plan.worktreeSetup = runWorktreeSetup(plan.path, command)
   linkNodeModules(project, plan.path)
   return plan
 }
@@ -1465,6 +1490,7 @@ async function runQueueProject({ options, lane, lanes }) {
   mkdirSync(folder, { recursive: true })
   const laneProblem = laneCommandProblem(lane)
   if (laneProblem !== '') throw new Error(laneProblem)
+  const worktreeSetup = options.worktree ? worktreeSetupOf(readHarnessSettings(folder)) : ''
   const lockTarget = options.worktree ? worktreeFor(project, options.lane) || project : project
   await refuseRunningLane(options.lane, options.worktree ? lockTarget : '', folder)
   const projectLock = takeProjectLock(folder, lockTarget)
@@ -1489,7 +1515,7 @@ async function runQueueProject({ options, lane, lanes }) {
     } else {
       plan = { path: project, made: false }
     }
-    const target = options.worktree && (!continueFrom || plan.made) ? prepareWorktree(project, options.lane) : plan
+    const target = options.worktree && (!continueFrom || plan.made) ? prepareWorktree(project, options.lane, { setup: worktreeSetup }) : plan
     const currentWtBranch = gitRead(target.path, ['branch', '--show-current']) || ''
     const activeBranch = continueFrom
       ? (currentWtBranch || prevRun.record.queue || prevRun.record.branch || branch)
@@ -1543,6 +1569,7 @@ async function runQueueProject({ options, lane, lanes }) {
             options, lane, lanes, wanted: [], prompt, logPath, usageFile, name,
             project: target.path, task, queue: { branch: activeBranch, index: number, size: tasks.length }, lockPath: lock,
             projectBranch: startBranch, deferRecord: true, base,
+            worktreeSetup: target.worktreeSetup ?? '',
           })
           pending = { record: run.record, folder: target.path, startHead: run.startHead ?? startHead, startBranch, tests: '', keepGit: run.keepGit === true }
           if (run.code !== 0 || run.killed) finishPending(run.killed ? 'stopped' : 'failed', true)
@@ -1979,7 +2006,7 @@ export function laneConfigBody({ harness, mode, enabledServers, needsMcp }) {
   return config
 }
 
-export async function startLane({ options, lane, lanes, wanted, prompt, logPath, usageFile, name, project = '', task = '', queue = null, lockPath = '', projectBranch = null, deferRecord = false, base = '', openLog = createWriteStream, branchSuffix = '', failoverFrom = null, promptFor = null, startedAt: givenStartedAt = null, onStart = null, laneTicket = '' }) {
+export async function startLane({ options, lane, lanes, wanted, prompt, logPath, usageFile, name, project = '', task = '', queue = null, lockPath = '', projectBranch = null, deferRecord = false, base = '', openLog = createWriteStream, branchSuffix = '', failoverFrom = null, promptFor = null, startedAt: givenStartedAt = null, onStart = null, laneTicket = '', worktreeSetup = '' }) {
   if (readHarnessSettings(runsFolder()).off.includes(lane?.cli?.harness)) throw new Error(HARNESS_OFF_PROBLEM)
   if (options?.failedOver !== true) {
     const problem = fallbackProblem({ laneKey: options?.lane, fallback: lane?.fallback, lanes })
@@ -2067,6 +2094,8 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
       },
       runId: name,
     })
+    const setupLine = typeof worktreeSetup === 'string' ? worktreeSetup.trim() : ''
+    if (setupLine !== '') laneLog.push('stdout', `${setupLine}\n`)
     const startedAt = Number.isFinite(Number(givenStartedAt)) && Number(givenStartedAt) > 0 ? Number(givenStartedAt) : Date.now()
     const projectStart = project
       ? {

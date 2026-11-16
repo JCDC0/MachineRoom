@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- P459: Settings keep one worktree setup command, run once in a new lane worktree and written to the run log.
 - Dispatch's confirm card names lanes that declared the same files, says when overlap is unknown, and can warn above a set lane count.
 - A continuation's own record carries continues and interruptedBy; no earlier line of runs.jsonl is changed.
 - POST /api/orchestrator/stop-tree stops an orchestrator's sector, or the whole tree, refusing new work there until it answers.
