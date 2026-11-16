@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- P485: LaneConversation shows Edit from this plan for a finished exit-0 Plan run, opening a confirm card with the report text, a non-Plan mode select, Start and Cancel.
 - The test checks that recent holds its project, not that it is first, since test files in one process share the runs folder.
 - Every stopLane test with fake pids gets an alive stub from its own process list, so a Linux runner's real pids cannot change the result.
 - A progress notice resets the timer only as a notification with a numeric progress for this call, and the HTTP stream is read as whole events with LF or CRLF.
