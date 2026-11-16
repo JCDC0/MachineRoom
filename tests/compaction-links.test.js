@@ -13,6 +13,7 @@ import {
   compactedSummary,
   createOrchestrator,
 } from '../server/orchestrator.js'
+import { createOrchestrators } from '../server/orchestrators.js'
 import { makeTempDir, removeTempDir } from './helpers/tempRoot.js'
 
 const CHAT = 'orchestrator-abc12345.json'
@@ -349,5 +350,36 @@ describe('the room state across a compaction', () => {
     const saved = JSON.parse(readFileSync(chatFileFor(rig.project, rig.runs), 'utf8'))
 
     expect(saved.summary).not.toContain('Room state')
+  })
+
+  it('fills the scopes from the ladder, hidden lanes left out', async () => {
+    const rig = makeRig()
+    rig.orchestrator.close()
+    const registry = createOrchestrators({
+      projectRoot: rig.project,
+      runsFolder: rig.runs,
+      lanes: {
+        orchestrator: { name: 'Orchestrator', harness: 'Claude Code', cli: { harness: 'claude', bin: 'claude', model: 'opus', contextWindow: 200000 } },
+        one: { name: 'One', cli: { harness: 'claude', bin: 'claude' } },
+        two: { name: 'Two', cli: { harness: 'claude', bin: 'claude' } },
+      },
+      harnessAvailable: () => true,
+      activeLanes: { isLaneHidden: (lane) => lane === 'two' },
+      spawn: (file, args, options) => spawn(process.execPath, [join(rig.base, 'fake-claude.mjs'), ...args], options),
+      promptFile: join(rig.base, 'orchestrator-agent.md'),
+      bridgeUrl: () => 'http://127.0.0.1:5999',
+      readTaskState: () => ({ running: [], reviews: [] }),
+    })
+    cleanups.push(() => registry.close())
+    const ladder = { subs: [{ id: 'scout', name: 'Scout', harness: 'claude', model: '', lanes: ['one', 'two'], scope: [], restricted: false, setBy: 'owner' }] }
+    registry.main.setLadder(ladder)
+    registry.main.send({ text: 'Build the room.', confirmed: true })
+    await waitFor(() => registry.main.answer().state === 'idle', 20000, 'the first turn')
+    registry.main.compact({ confirmed: true })
+    await waitFor(() => turnLogsIn(rig.runs).length === 2 && registry.main.answer().state === 'idle', 20000, 'the compaction')
+    const saved = JSON.parse(readFileSync(chatFileFor(rig.project, rig.runs), 'utf8'))
+
+    expect(saved.summary).toContain('Sub scopes:\n- Scout: one')
+    expect(saved.summary).not.toContain('two')
   })
 })

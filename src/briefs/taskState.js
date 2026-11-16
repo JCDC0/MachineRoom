@@ -27,10 +27,17 @@ export function taskStateBlock({ running = null, reviews = null, scopes = null }
   ].join('\n\n')
 }
 
-export function readTaskStateBlock(read, mask) {
+export const TASK_STATE_WAIT_MS = 5000
+
+export async function readTaskStateBlock(read, mask, waitMs = TASK_STATE_WAIT_MS) {
   let state = {}
+  let timer
   try {
-    state = read() ?? {}
+    const limit = new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error('slow')), waitMs)
+    })
+    state = (await Promise.race([Promise.resolve().then(read), limit])) ?? {}
   } catch {}
+  clearTimeout(timer)
   return taskStateBlock(state, mask)
 }

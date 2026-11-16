@@ -1078,6 +1078,8 @@ export function createOrchestrator({
   const sessions = []
   let summary = ''
   let stateAtCompaction = ''
+  let freshState = null
+  let compactionSettling = false
   const compactionCutoffs = new Map()
   let branchTranscript = ''
   let pendingCompaction = null
@@ -1885,6 +1887,23 @@ export function createOrchestrator({
   }
 
   function startTurn(options = null) {
+    if (compactionSettling) return
+    const wantsState =
+      !options?.compacting && !pendingCompaction && !sessionId && summary !== '' && branchTranscript === '' && stateAtCompaction !== ''
+    if (!wantsState) {
+      startTurnNow(options)
+      return
+    }
+    compactionSettling = true
+    readTaskStateBlock(readTaskState, maskText).then((block) => {
+      compactionSettling = false
+      freshState = block
+      if (stopped || running) return
+      startTurnNow(options)
+    })
+  }
+
+  function startTurnNow(options = null) {
     if (roomTimer) {
       clearTimeout(roomTimer)
       roomTimer = null
@@ -1906,8 +1925,9 @@ export function createOrchestrator({
     if (first && harness === 'claude') sessionId = randomUUID()
     let carried = first ? branchTranscript || summary : ''
     if (carried && carried === summary && stateAtCompaction) {
-      const current = readTaskStateBlock(readTaskState, maskText)
-      if (current !== stateAtCompaction) carried = `${carried}
+      const current = freshState
+      freshState = null
+      if (current !== null && current !== stateAtCompaction) carried = `${carried}
 
 Room state now:
 ${current}`
@@ -2228,16 +2248,27 @@ ${current}`
         addMessage('room', COMPACT_FAILED_MESSAGE)
       } else {
         compactionCutoffs.set(currentConversationId, turn.logFile)
-        summary = compactedSummary(maskText(String(report ?? '')), turn.sourceLogs)
-        stateAtCompaction = typeof readTaskState === 'function' ? readTaskStateBlock(readTaskState, maskText) : ''
-        if (stateAtCompaction) summary = `Room state at compaction (from the room, not the model):
-${stateAtCompaction}
+        const modelSummary = compactedSummary(maskText(String(report ?? '')), turn.sourceLogs)
+        const finish = (block) => {
+          compactionSettling = false
+          stateAtCompaction = block
+          summary = block ? `Room state at compaction (from the room, not the model):
+${block}
 
-${summary}`
-        sessionId = null
-        contextTokens = null
-        if (!stopped) setState(state === 'paused' ? 'paused' : 'idle')
-        addMessage('room', compactedMessage({ chatFile: conversationFile, logs: turn.sourceLogs }))
+${modelSummary}` : modelSummary
+          sessionId = null
+          contextTokens = null
+          if (!stopped) setState(state === 'paused' ? 'paused' : 'idle')
+          addMessage('room', compactedMessage({ chatFile: conversationFile, logs: turn.sourceLogs }))
+          if (!stopped) maybeStartTurn()
+        }
+        if (typeof readTaskState === 'function') {
+          compactionSettling = true
+          readTaskStateBlock(readTaskState, maskText).then(finish)
+        } else {
+          finish('')
+        }
+        return
       }
       if (!stopped) maybeStartTurn()
       return

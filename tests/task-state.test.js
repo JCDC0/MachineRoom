@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { unmergedBranches } from '../server/index.js'
 import { readTaskStateBlock, taskStateBlock } from '../src/briefs/taskState.js'
 
 describe('taskStateBlock', () => {
@@ -17,8 +18,8 @@ describe('taskStateBlock', () => {
     )
   })
 
-  it('says unknown, not none, for a source that could not be read', () => {
-    const text = readTaskStateBlock(() => {
+  it('says unknown, not none, for a source that could not be read', async () => {
+    const text = await readTaskStateBlock(() => {
       throw new Error('no')
     })
 
@@ -32,5 +33,32 @@ describe('taskStateBlock', () => {
     expect(text.split('\n').filter((line) => line.startsWith('- ')).length).toBe(21)
     expect(text).toContain('- ***')
     expect(text).toContain('- and 5 more')
+  })
+
+  it('says unknown when the reader is slower than the limit', async () => {
+    const text = await readTaskStateBlock(() => new Promise(() => {}), undefined, 20)
+
+    expect(text).toBe('Running lanes:\nunknown\n\nWaiting for review:\nunknown\n\nSub scopes:\nunknown')
+  })
+
+  it('awaits an async reader', async () => {
+    const text = await readTaskStateBlock(async () => ({ running: [], reviews: [{ lane: 'a', branch: 'b' }], scopes: [] }))
+
+    expect(text).toContain('Waiting for review:\n- a, b')
+  })
+})
+
+describe('unmergedBranches', () => {
+  it('reads each unmerged branch with its worktree lane', async () => {
+    const run = async () => ({ ok: true, stdout: 'feat/a|C:/p/.worktrees/codex\nfeat/b|\n' })
+
+    expect(await unmergedBranches('x', run)).toEqual([
+      { lane: 'codex', branch: 'feat/a' },
+      { lane: '', branch: 'feat/b' },
+    ])
+  })
+
+  it('answers null when git fails', async () => {
+    expect(await unmergedBranches('x', async () => ({ ok: false, stdout: '' }))).toBeNull()
   })
 })
