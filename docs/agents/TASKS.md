@@ -3568,3 +3568,10 @@ Review 44 fixes, P425 and P426. `docs/agents/AUDIT-2026-11-REVIEW-44.md` (P424, 
 2. Leave out anything that changes what the owner sees or adds a feature; list such ideas separately at the end under `Needs the owner's yes`, one line each.
 3. For each gap: the gap in one or two sentences with file and line, the files a fix touches, the test that would fail before the fix, a size (minutes) and a harness (OpenCode for small, Codex Terra for server work across files, AGY Hydrogen for UI that touches no CSS).
 4. Rank by risk to the owner's work. Under 90 lines. Plain words, no em dashes.
+
+**P428. Review 45: P423 to P426 (Codex, GPT-6.1 Sol, report).** Read this brief only. Change no file except the one you write. Your sandbox keeps git read-only: write the file in your worktree and the runner commits it. Known sandbox baseline failures, not yours: process tests in `tests/run-lane-stop.test.js`, `tests/run-lane.test.js` and `mr-agent > stops the whole shell tree on the time limit`. Files: docs/agents/AUDIT-2026-11-REVIEW-45.md.
+
+1. Review `git diff ba2a37a9..562a7441`: P423 (three load flakes and the GIT_ variables stripped from the main checkout lookup), P424 (review 44), P425 (only the main orchestrator takes the live harness in the inspector), P426 (FREE-HIERARCHY doc fix).
+2. Look for: a git call in `server/` that still inherits GIT_DIR, GIT_WORK_TREE, GIT_INDEX_FILE or GIT_COMMON_DIR from a parent process and so reads the wrong repository; the same env stripping written twice where one helper would do; a test made less strict by the flake fixes (a timeout that hides a real hang, a wait that passes on any state); an agent other than the main orchestrator that still shows the live harness, or the main one that no longer does; a doc sentence the code contradicts.
+3. Each finding: `R45-N`, a severity, the file and line, what goes wrong, how to see it, one fix. At most 8. No finding without a file and line you read.
+4. End with `Checked and fine`. Under 80 lines. Plain words, no em dashes.
