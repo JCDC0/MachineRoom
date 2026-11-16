@@ -602,7 +602,7 @@ export function createAgentsConfigApi(options = {}) {
       if (body === null) return true
       if (body.confirmed !== true) { sendJson(req, res, 400, { error: 'Confirm the harness change first.' }); return true }
       if (path.endsWith('/settings')) {
-        const error = updateHarnessSettings(runsDir, body)
+        const error = updateHarnessSettings(runsDir, body, projectRoot)
         if (error) { sendJson(req, res, 400, { error }); return true }
       } else clearHarnessChecks(runsDir)
       const rows = await rowsFor(getBaseLanes())
