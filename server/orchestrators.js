@@ -248,6 +248,7 @@ export function createOrchestrators({
   laneTickets,
   runs = null,
   interruptLane,
+  readTaskState = null,
 } = {}) {
   const root = projectRoot ? resolve(projectRoot) : ''
   const folder = resolve(runsFolder)
@@ -326,6 +327,7 @@ export function createOrchestrators({
     home,
     recordsCache: sharedCache,
     approvalTimeoutMs,
+    readTaskState,
   })
   instances.set(ORCHESTRATOR_KEY, main)
 
@@ -467,6 +469,7 @@ export function createOrchestrators({
       onMasked,
       recordsCache: sharedCache,
       approvalTimeoutMs,
+      readTaskState,
       onMessage: (message) => announce(message?.from, agentKey(message?.to), message?.kind, message?.text),
       extraInstructions: () => {
         const ladder = readSaved().ladder

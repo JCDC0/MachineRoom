@@ -23,10 +23,12 @@ const LOGS = [
 const TURN_LOG = /-chat-\d{8}-\d{6}-\d{3}\.log$/
 
 const FAKE_CLAUDE = [
+  "import { appendFileSync } from 'node:fs'",
   "const args = process.argv.slice(2)",
   "const at = args.indexOf('-p')",
   "const prompt = at === -1 ? '' : String(args[at + 1] ?? '')",
   "console.log(JSON.stringify({ type: 'system', subtype: 'init', session_id: 'fake' }))",
+  "if (process.env.MR_DUMP) appendFileSync(process.env.MR_DUMP, prompt + '\\n=====\\n')",
   "const input = Number(process.env.MR_INPUT ?? 12)",
   "const reply = 'Summary: ' + prompt.split('\\n')[0].slice(0, 40)",
   "console.log(JSON.stringify({ type: 'result', subtype: 'success', result: reply, total_cost_usd: 0.1, usage: { input_tokens: input, output_tokens: 3 } }))",
@@ -54,7 +56,7 @@ async function waitFor(check, timeoutMs, what) {
   }
 }
 
-function makeRig(inputs = null) {
+function makeRig(inputs = null, extra = {}) {
   const base = makeTempDir('mr-compaction-links-')
   const runs = join(base, 'runs')
   const project = join(base, 'project')
@@ -69,7 +71,7 @@ function makeRig(inputs = null) {
     spawned += 1
     const fallback = spawned === 1 ? 160000 : 12
     const input = Array.isArray(inputs) ? (inputs[spawned - 1] ?? 12) : fallback
-    const env = { ...(options.env ?? process.env), MR_INPUT: String(input) }
+    const env = { ...(options.env ?? process.env), MR_INPUT: String(input), MR_DUMP: join(base, 'prompts.txt') }
     return spawn(process.execPath, [script, ...args], { ...options, env })
   }
   const orchestrator = createOrchestrator({
@@ -87,6 +89,7 @@ function makeRig(inputs = null) {
     spawn: spawnFake,
     promptFile,
     bridgeUrl: () => 'http://127.0.0.1:5999',
+    ...extra,
   })
   cleanups.push(async () => {
     orchestrator.close()
@@ -302,5 +305,49 @@ describe('a compaction after another compaction', () => {
       expect(text).not.toContain(name)
       expect(summaryLine).not.toContain(name)
     }
+  })
+})
+
+describe('the room state across a compaction', () => {
+  const state = (lane) => ({ running: [{ lane, task: 'Build it' }], reviews: [], scopes: [] })
+
+  async function compacted(extra) {
+    const rig = makeRig(null, extra)
+    rig.orchestrator.send({ text: 'Build the room.', confirmed: true })
+    await waitFor(
+      () => rig.orchestrator.answer().state === 'idle' && turnLogsIn(rig.runs).length === 2,
+      20000,
+      'the compacted session'
+    )
+    return rig
+  }
+
+  it('stores the block above the summary', async () => {
+    const rig = await compacted({ readTaskState: () => state('codex') })
+    const saved = JSON.parse(readFileSync(chatFileFor(rig.project, rig.runs), 'utf8'))
+
+    expect(saved.summary.startsWith('Room state at compaction (from the room, not the model):\nRunning lanes:\n- codex, Build it')).toBe(true)
+    expect(saved.summary.indexOf('Summarized from')).toBeGreaterThan(saved.summary.indexOf('Running lanes:'))
+  })
+
+  it('puts both blocks in the next session when the state changed', async () => {
+    let lane = 'codex'
+    const rig = await compacted({ readTaskState: () => state(lane) })
+    lane = 'agy'
+    rig.orchestrator.send({ text: 'Go on.', confirmed: true })
+    const dump = join(rig.base, 'prompts.txt')
+    await waitFor(() => readFileSync(dump, 'utf8').split('=====').length > 3, 20000, 'the next session')
+    const prompts = readFileSync(dump, 'utf8').split('\n=====\n')
+    const next = prompts[2]
+
+    expect(next).toContain('- codex, Build it')
+    expect(next).toContain('Room state now:\nRunning lanes:\n- agy, Build it')
+  })
+
+  it('changes nothing without a reader', async () => {
+    const rig = await compacted({})
+    const saved = JSON.parse(readFileSync(chatFileFor(rig.project, rig.runs), 'utf8'))
+
+    expect(saved.summary).not.toContain('Room state')
   })
 })

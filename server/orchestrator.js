@@ -20,6 +20,7 @@ import { homedir, tmpdir } from 'node:os'
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { maskKeys } from '../src/briefs/audit.js'
+import { readTaskStateBlock } from '../src/briefs/taskState.js'
 import { isWindowsPath, printedRunsFolder } from './printed-path.js'
 import { childEnvironment, mcpConfigForClaude, mcpConfigForOpencode, normalizeMcpServers, replyText, runRecord, summarizeRun } from '../src/briefs/run.js'
 import { defaultMode, legacyMode, modesFor } from '../src/control/modes.js'
@@ -992,6 +993,7 @@ export function createOrchestrator({
   mergeWaitMs = ORCHESTRATOR_MERGE_WAIT_MS,
   gitTimeoutMs = GIT_OPERATION_TIMEOUT_MS,
   appendRecord = (file, line) => appendFileSync(file, line),
+  readTaskState = null,
 } = {}) {
   const token = typeof tokenOption === 'string' && tokenOption ? tokenOption : randomBytes(24).toString('base64url')
   const root = projectRoot ? resolve(projectRoot) : ''
@@ -1075,6 +1077,7 @@ export function createOrchestrator({
   let currentUnread = false
   const sessions = []
   let summary = ''
+  let stateAtCompaction = ''
   const compactionCutoffs = new Map()
   let branchTranscript = ''
   let pendingCompaction = null
@@ -1901,7 +1904,14 @@ export function createOrchestrator({
     if (!hasOwner) roomTurns.push(now())
     const first = !sessionId
     if (first && harness === 'claude') sessionId = randomUUID()
-    const carried = first ? branchTranscript || summary : ''
+    let carried = first ? branchTranscript || summary : ''
+    if (carried && carried === summary && stateAtCompaction) {
+      const current = readTaskStateBlock(readTaskState, maskText)
+      if (current !== stateAtCompaction) carried = `${carried}
+
+Room state now:
+${current}`
+    }
     const carriedBranch =
       (harness === 'claude' || harness === 'opencode') && carried !== '' && branchTranscript !== ''
     if (carried && (harness === 'claude' || harness === 'opencode')) {
@@ -2219,6 +2229,11 @@ export function createOrchestrator({
       } else {
         compactionCutoffs.set(currentConversationId, turn.logFile)
         summary = compactedSummary(maskText(String(report ?? '')), turn.sourceLogs)
+        stateAtCompaction = typeof readTaskState === 'function' ? readTaskStateBlock(readTaskState, maskText) : ''
+        if (stateAtCompaction) summary = `Room state at compaction (from the room, not the model):
+${stateAtCompaction}
+
+${summary}`
         sessionId = null
         contextTokens = null
         if (!stopped) setState(state === 'paused' ? 'paused' : 'idle')

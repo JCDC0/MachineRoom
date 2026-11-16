@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- A compaction puts the room's own running lanes, review branches and sub scopes above the summary, read from the room and not the model, and the next session adds a fresh `Room state now:` block when it differs (P490).
 - LaneConversation shows Edit from this plan on a finished exit-0 Plan run, and a confirm card with the editable plan text and a non-Plan mode starts one run only when the owner presses Start.
 - POST /api/harnesses/KEY/probe runs one hidden, time-limited prompt in an empty folder and answers reached, failed or unknown, and Settings asks before it runs.
 - The run summary finds five or more consecutive failed identical calls from an exact call key the parsers keep for the summary only, the record keeps tool and count, and Needs you shows it.

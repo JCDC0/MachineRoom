@@ -802,6 +802,11 @@ export function createBridge(options = {}) {
       onMessage: sendAgentMessage,
       sendJson,
       readJsonBody,
+      readTaskState: () => ({
+        running: lanesSource ? lanesSource.openRuns().map((run) => ({ lane: run.lane, task: run.name })) : null,
+        reviews: null,
+        scopes: null,
+      }),
       isWorking: (key) => {
         const fromSource = lanesSource ? lanesSource.openRuns().some((r) => r.lane === key) : false
         const fromRuns = runs && typeof runs.isRunning === 'function' ? runs.isRunning(key) : false
