@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- Sol reviews the research plan against the surveys and the code, narrows each item's first step and reorders the plan.
 - A lane ticket can take over only its own lane's backup, once, and a lane's own run gets its messages first.
 - Settings choose whether a reply to a working lane waits for its next turn or interrupts it; the native agent aborts its model call for a new reply.
 - Every OpenCode lane run that is not Bypass denies writes outside the project (external_directory deny), and the mode lines say where writes may go.
