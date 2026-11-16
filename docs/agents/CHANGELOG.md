@@ -1,6 +1,8 @@
 # Changelog
 
 ## Unreleased
+- Dispatch offers a First task card in Plan for a project with no runs, and Connect and the README say records stay on this computer.
+- P458: Dispatch shows a First task card in Plan mode for a project with no runs when a ready lane offers Plan, and Connect and the README note that records stay local while agents send code to their model providers.
 - Run records gain finishedAt, and the outcome table and --outcomes show repair runs and review wait, with ? for unknown.
 - P460: Every new run record carries `finishedAt`, the ISO time the run ended, and older records stay unknown.
 - P460: The outcome table counts extra plain runs before a merge as `repairRuns` and the median wait from the last run to the merge commit as `reviewWaitMinutes`.
