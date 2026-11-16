@@ -3935,7 +3935,7 @@ Research plan, third batch, P461 and P462 (first steps as Sol narrowed them; bot
 4. Tests, each failing before your change: a loop stop records the reason; a plain failure is an item; a stopped run, a 0-exit run with no commits and a failure taken over by its backup are not; a newer run clears the item; Dispatch shows the heading only with items.
 5. Run `node node_modules/vitest/vitest.mjs run tests/attention.test.js tests/mr-agent.test.js` (skip a file that does not exist) and `npm run build`, and report the counts.
 
-**P461b. Item 5: the sender reads a lane message's status (AGY, Hydrogen; OpenCode stopped at its monthly quota after P461's first two steps).** Read this brief and P461 above only. Commit each step as you finish it. Run every command in the foreground. Files: server/orchestrators.js (the `/api/orchestrator/messages` route near line 1180, and a `messageStatus` function beside `laneInbox`), tests/lane-message-status.test.js, docs/agents/CHANGELOG.md, docs/agents/architecture/LIVE.md. No UI.
+**P461b. Item 5: the sender reads a lane message's status (Claude, Sonnet; OpenCode stopped at its monthly quota after P461's first two steps, and AGY ran out of credits).** Read this brief and P461 above only. Commit each step as you finish it. Run every command in the foreground. Files: server/orchestrators.js (the `/api/orchestrator/messages` route near line 1180, and a `messageStatus` function beside `laneInbox`), tests/lane-message-status.test.js, docs/agents/CHANGELOG.md, docs/agents/architecture/LIVE.md. No UI.
 
 P461 gives each inbox entry an `id` and a `status` (`queued`, `fetched` with `fetchedAt`, `interrupted`) and answers a lane message with `{ id }`. Nothing reads the status yet.
 
