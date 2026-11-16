@@ -10,6 +10,7 @@ import { createAgentsConfigApi } from '../server/agents-config.js'
 import { readHarnessSettings, saveHarnessSettings } from '../server/harness-settings.js'
 import { killTree } from '../server/processTree.js'
 import { createRunsApi } from '../server/runs.js'
+import { createMockClient } from '../src/control/mock.js'
 import HarnessesSettings from '../src/ui/HarnessesSettings.jsx'
 import { waitFor } from './helpers/bridge.js'
 import { settle, type, withDom } from './helpers/uiDom.js'
@@ -302,6 +303,15 @@ describe('the reply choice in harness settings', () => {
 })
 
 describe('the reply choice in Settings', () => {
+  it('saves the choice in the mock client and reads it back', async () => {
+    const client = createMockClient({ latencyMs: 0 })
+    expect((await client.harnesses()).every((row) => row.laneReplies === 'next-turn')).toBe(true)
+    const saved = await client.harnessSettings({ laneReplies: 'interrupt', confirmed: true })
+    expect(saved.harnesses.every((row) => row.laneReplies === 'interrupt')).toBe(true)
+    expect((await client.harnesses()).every((row) => row.laneReplies === 'interrupt')).toBe(true)
+    await expect(client.harnessSettings({ laneReplies: 'sometimes', confirmed: true })).rejects.toThrow()
+  })
+
   it('shows the select and saves the choice', async () => {
     const client = fakeClient()
     await withDom(async ({ container, root }) => {
