@@ -111,6 +111,30 @@ function unique(values) {
 export function summaryOf(harness, activities, head, usage = {}) {
   const { costUsd = null, inputTokens = null, outputTokens = null, peakTokens = null } = usage ?? {}
   const calls = activities.filter((activity) => activity.type === 'tool.start')
+  const pending = new Map()
+  const results = new Map()
+  for (const activity of activities) {
+    const id = JSON.stringify([activity.agent ?? 'agent', activity.id])
+    if (activity.type === 'tool.start') pending.set(id, activity)
+    if (activity.type === 'tool.end' && pending.has(id)) {
+      results.set(pending.get(id), activity.ok)
+      pending.delete(id)
+    }
+  }
+  let previous = null
+  let count = 0
+  let repeatedFailure
+  for (const call of calls) {
+    const key = call.callKey === undefined ? null : JSON.stringify([call.agent ?? 'agent', call.callKey])
+    if (key === null || results.get(call) !== false) {
+      previous = null
+      count = 0
+      continue
+    }
+    count = key === previous ? count + 1 : 1
+    previous = key
+    if (count >= 5 && (!repeatedFailure || count > repeatedFailure.count)) repeatedFailure = { tool: call.callName, count }
+  }
   const written = []
   const read = []
   for (const call of calls) {
@@ -122,6 +146,7 @@ export function summaryOf(harness, activities, head, usage = {}) {
   }
   return {
     harness,
+    ...(repeatedFailure ? { repeatedFailure } : {}),
     toolCalls: calls.length,
     failed: activities.filter((activity) => activity.type === 'tool.end' && activity.ok === false).length,
     written: unique(written),

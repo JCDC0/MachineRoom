@@ -52,7 +52,7 @@ export function createOpencodeParser(ctx) {
     const json = parseJson(line)
     if (!json) {
       const recovered = recoverCall(line)
-      if (recovered) report(recovered.name, recovered.input, recovered.status, '', recovered.id, time)
+      if (recovered) report(recovered.name, recovered.input, recovered.status, '', recovered.id, time, false)
       return
     }
     if (json.type === 'error') {
@@ -65,7 +65,7 @@ export function createOpencodeParser(ctx) {
     report(part.tool, state.input ?? {}, state.status, state.output, part.id, time)
   })
 
-  function report(name, input, status, output, id, time) {
+  function report(name, input, status, output, id, time, exact = true) {
     const lower = String(name ?? '').toLowerCase()
     const mcp = MCP_TOOL.test(lower)
     const tool = mcp ? 'mcp' : Object.hasOwn(TOOLS, lower) ? TOOLS[lower] : 'other'
@@ -112,7 +112,7 @@ export function createOpencodeParser(ctx) {
       label = description ? `subagent: ${description}` : 'subagent'
     }
     const failed = status === 'error' || (tool === 'shell' && looksFailed(output))
-    out.push(toolStart({ time: time - 300, id: callId, tool, label, touches, outsidePath }))
+    out.push(toolStart({ time: time - 300, id: callId, tool, label, touches, outsidePath, ...(ctx.trackCalls && exact && name ? { callKey: JSON.stringify([name, input]), callName: name } : {}) }))
     out.push(toolEnd({ time, id: callId, ok: !failed }))
     if (name === 'subagent') {
       const parent = ctx.agentKey ?? 'agent'

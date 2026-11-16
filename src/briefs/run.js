@@ -1135,7 +1135,7 @@ export function replyText(harness, log) {
 export function summarizeRun({ harness, log, worktree } = {}) {
   if (!Object.hasOwn(harnessByKey, harness)) throw new Error(`The summary does not know the ${harness} log.`)
   const descriptor = harnessByKey[harness]
-  const parser = descriptor.createParser({ rootName: basename(String(worktree ?? '')), files: [], dirs: [] })
+  const parser = descriptor.createParser({ rootName: basename(String(worktree ?? '')), files: [], dirs: [], trackCalls: true })
   const activities = [...parser.push(String(log ?? ''), 0), ...parser.flush(0)]
   return summaryOf(descriptor.key, activities, descriptor.report(log), descriptor.usage(log))
 }
@@ -1250,7 +1250,7 @@ export function maskedQueueTasks(tasks) {
   return (Array.isArray(tasks) ? tasks : []).map((task) => maskProfilePaths(maskKeys(String(task ?? '')).text).slice(0, RECORD_TEXT_LIMIT))
 }
 
-export function runRecord({ lane, briefs, model, reasoning, mode, startedAt, finishedAt, minutes, exitCode, killed, costUsd, inputTokens, outputTokens, peakTokens, log, branch, commits, base, head, checkpoint, tests, project, task, startedBy, stoppedLeftovers, queue, startFailed, stopReason, note, retried, failover, failoverFrom, quota, continues, interruptedBy } = {}) {
+export function runRecord({ lane, briefs, model, reasoning, mode, startedAt, finishedAt, minutes, exitCode, killed, costUsd, inputTokens, outputTokens, peakTokens, log, branch, commits, base, head, checkpoint, tests, project, task, startedBy, stoppedLeftovers, queue, startFailed, stopReason, note, retried, failover, failoverFrom, quota, continues, interruptedBy, repeatedFailure } = {}) {
   const record = {
     lane: String(lane ?? ''),
     briefs: Array.isArray(briefs) ? briefs.map(String) : [],
@@ -1269,6 +1269,7 @@ export function runRecord({ lane, briefs, model, reasoning, mode, startedAt, fin
     branch: branch ? String(branch) : '',
     commits: Array.isArray(commits) ? commits.map(String) : [],
   }
+  if (typeof repeatedFailure?.tool === 'string' && repeatedFailure.tool && Number.isInteger(repeatedFailure.count) && repeatedFailure.count >= 5) record.repeatedFailure = { tool: maskKeys(repeatedFailure.tool).text, count: repeatedFailure.count }
   if (mode !== undefined) record.mode = mode
   if (typeof base === 'string' && base.trim() !== '') record.base = base.trim()
   if (typeof head === 'string' && head.trim() !== '') record.head = head.trim()

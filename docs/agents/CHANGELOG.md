@@ -1,8 +1,10 @@
 # Changelog
 
 ## Unreleased
+- The run summary finds five or more consecutive failed identical calls from an exact call key the parsers keep for the summary only, the record keeps tool and count, and Needs you shows it.
 - Each lane review carries fileGroups, largeDiff above 400 lines and outsideBrief from the brief's Files list, null when unknown, and Reviews shows one line for them.
 - A lane review groups its files by risk, lists files outside the newest run's brief Files list (or says Scope unknown) and flags a diff over 400 lines (P486).
+- Run summaries record repeated identical failing calls and show them in Needs you.
 - The test checks that recent holds its project, not that it is first, since test files in one process share the runs folder.
 - Every stopLane test with fake pids gets an alive stub from its own process list, so a Linux runner's real pids cannot change the result.
 - A progress notice resets the timer only as a notification with a numeric progress for this call, and the HTTP stream is read as whole events with LF or CRLF.
