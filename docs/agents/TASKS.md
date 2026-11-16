@@ -3694,3 +3694,31 @@ Research round, P442a to P442c and P443 (2026-11-16 evening, at the owner's requ
 4. Rules: only claims you read in a source; say when a source is a vendor's own claim; dates for everything time-sensitive. Under 250 lines. Plain words, no em dashes.
 
 **P443. One plan from the three surveys (merge).** After P442a to P442c are on `main`. Argon drafts `docs/agents/PLAN-RESEARCH.md` from the three surveys: the user wants all three agree on, where they disagree and why, and one ranked plan of up to 15 items with briefs-sized steps. Sol then reviews the draft against the three surveys and the code, and writes its changes in a section `Sol's review`. Claude settles each disagreement in a section `Settled` and the owner decides what to build.
+
+Review 46 fixes, P444 to P447. `docs/agents/AUDIT-2026-11-REVIEW-46.md` (P437, GPT-6.1 Sol): five findings. Each brief adds its tests in a new file.
+
+**P444. A failover that drops Bypass picks the backup's own default mode (OpenCode).** Read this brief and R46-1 in `docs/agents/AUDIT-2026-11-REVIEW-46.md` only. Commit each step as you finish it. Run every command in the foreground. Files: scripts/run-lane.mjs (only `startFailover`), tests/failover-bypass-default.test.js (new), docs/agents/CHANGELOG.md.
+
+1. When `startFailover` refuses to carry Bypass (P430b), it sets the backup's mode to `defaultMode(backup harness)` explicitly, unless the backup has a fixed saved mode, which it keeps. A harness whose `defaultMode` is null keeps today's behaviour.
+2. Tests, each failing before your change: a Bypass primary failing over to a Claude backup with no saved mode builds Claude args without `--dangerously-skip-permissions`; the same for an AGY backup and for a native (`machineroom`) backup's mode; a `choice` backup gets its harness default; a backup saved as `bypass` still runs in Bypass. Follow `tests/failover-default-mode.test.js`.
+3. Run `node node_modules/vitest/vitest.mjs run tests/failover-bypass-default.test.js tests/failover-default-mode.test.js tests/failover-mode.test.js` and report the counts.
+
+**P445. A sub's `lane:KEY` message is held to its sector too (OpenCode).** Read this brief and R46-2 only. Commit each step as you finish it. Run every command in the foreground. Files: server/orchestrators.js (only the `lane:KEY` branch of the message route for orchestrator tokens), tests/lane-message-sector.test.js (new), docs/agents/CHANGELOG.md.
+
+1. Before `receiveLaneMessage`, a sub token (not Main, not the page, not a lane ticket) whose sector does not hold the lane gets 403 with the same text as the bare lane key check (P431). Main's token, the page and lane tickets keep today's rules.
+2. Tests, each failing before your change: a sub token messaging `lane:outside` gets 403 and the outside inbox stays empty; `lane:inside` still answers 202; Main's token can message `lane:outside`. Follow `tests/sub-token-gates.test.js`.
+3. Run `node node_modules/vitest/vitest.mjs run tests/lane-message-sector.test.js tests/sub-token-gates.test.js` and report the counts.
+
+**P446. A failover stays inside the sector that started the run (OpenCode).** Read this brief and R46-3 only. Commit each step as you finish it. Run every command in the foreground. Files: server/runs.js (where a task or queue start spawns the runner), scripts/run-lane.mjs (`startFailover` and the option parsing), tests/failover-sector.test.js (new), docs/agents/CHANGELOG.md. If one more file must change only to pass the allowed lanes through, change it and name it; do not stop for that.
+
+1. When a sub starts a task or a queue, the runner gets the sub's allowed lanes (a new `--allowed-lanes a,b,c` option or an environment variable, your choice; name it in the report). Main's and the owner's starts pass nothing and keep today's behaviour.
+2. `startFailover` refuses a backup not in the allowed lanes before it takes the backup's lock or touches its branch, prints `The backup lane KEY is outside the sector that started this run.`, and the run ends failed as when no backup exists.
+3. Tests, each failing before your change: a sub start whose lane's fallback is outside the sector does not start the fallback and prints the line; the same through a queue start; a Main start still fails over to that lane. Follow `tests/run-failover.test.js`.
+4. Run `node node_modules/vitest/vitest.mjs run tests/failover-sector.test.js tests/run-failover.test.js tests/sub-token-gates.test.js` and report the counts.
+
+**P447. A sub's saved settings and its live instance agree (AGY, Hydrogen).** Read this brief and R46-4 and R46-5 only. Commit each step as you finish it. Run every command in the foreground. Files: server/orchestrators.js (`saveSubSettings` and the sub recreation in `sync`), server/orchestrator.js (the program override on a harness change, and `restore` taking an explicit model and effort over the saved chat file), tests/sub-settings-live.test.js (new), docs/agents/CHANGELOG.md. If one more file must change only to pass the program through, change it and name it; do not stop for that.
+
+1. R46-4: when a sub's harness changes through its route, the live instance takes the new harness's program as well, so a later ladder save never runs the old harness's program with the new harness's arguments.
+2. R46-5: when a ladder save recreates a sub with a model or effort given in that save, the new instance uses the given values over the ones in its saved chat file. Values not given still come from the chat file as today.
+3. Tests, each failing before your change: with distinct fake programs for Codex and Claude, a sub changed from Codex to Claude through the route and then an unchanged ladder save spawns the Claude program; a ladder save that changes a sub's scope and its model and effort together leaves the live sub on the saved model and effort; a later effort route change keeps the saved model.
+4. Run `node node_modules/vitest/vitest.mjs run tests/sub-settings-live.test.js tests/sub-settings-ladder.test.js tests/sub-effort.test.js` and report the counts.
