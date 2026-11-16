@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- P469: A native final answer no longer drops a reply read at the same time; the agent delivers it and makes one more model call.
 - A removed lane with unknown cost keeps its row and Meters shows ? and (partial), and the MCP tool list cache key hashes the whole server config.
 - P471: A removed lane with unknown costs keeps its row and marks spend partial, and the MCP list cache key hashes the whole server configuration, environment values included, and the Meters panel shows ? and (partial) for unknown costs.
 - Review 47 (GPT-6.1 Sol) lists ten findings in the interrupts, failover, stop-tree, review totals, removed-lane costs and the MCP cache.

@@ -1654,6 +1654,10 @@ async function main() {
           },
         })
       }
+      if (calls.length === 0 && heldInbox !== '') {
+        messages.push({ role: 'assistant', content: text })
+        continue
+      }
       if (calls.length === 0) {
         finish(false, lastText)
         return
