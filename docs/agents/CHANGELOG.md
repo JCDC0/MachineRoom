@@ -1,11 +1,13 @@
 # Changelog
 
 ## Unreleased
+- The stop confirm adds Stop with its lanes, or Stop everything for Main, and reports the lanes the server stopped and any still running.
 - A Reviews row shows the head its checks ran on, the agent's own words under their own heading, and the linked runs with totals that say what they do not know.
 - Settings keep a worktree setup command that runs once in each new lane worktree, with its time and exit code in the run log.
 - A run record keeps the worktree's head, branch and changed files at start, with a stash-create recovery commit for dirty work, and Inspector shows it.
 - P462: Each lane run records its worktree checkpoint, and a dirty start also keeps a recovery commit made with git stash create.
 - P463: A Reviews row shows the checked head and its result apart from what the agent said, plus its linked runs and an honest total.
+- P464: The orchestrator Stop confirm adds `Stop everything` on Main and `Stop with its lanes` on a sub tab via `stopTree`, showing the stopped lane count and any `stillRunning` lanes.
 - Dispatch offers a First task card in Plan for a project with no runs, and Connect and the README say records stay on this computer.
 - P458: Dispatch shows a First task card in Plan mode for a project with no runs when a ready lane offers Plan, and Connect and the README note that records stay local while agents send code to their model providers.
 - Run records gain finishedAt, and the outcome table and --outcomes show repair runs and review wait, with ? for unknown.

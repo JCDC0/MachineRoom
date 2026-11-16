@@ -41,6 +41,7 @@ export const CLIENT_METHODS = [
   'sendOrchestrator',
   'sendToOrchestrator',
   'stopOrchestrator',
+  'stopTree',
   'compactOrchestrator',
   'setAutocompact',
   'setOrchestratorModel',
@@ -1136,6 +1137,63 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
     emit({ topic: 'liveRuns' })
   }
 
+  function stopRunningEntry(entry) {
+    const index = runsState.running.indexOf(entry)
+    if (index !== -1) runsState.running.splice(index, 1)
+    const meta = runningMeta.get(entry)
+    if (meta) {
+      runningMeta.delete(entry)
+      if (meta.timer) clearTimeout(meta.timer)
+      if (meta.liveRun) endLiveRun(meta.liveRun)
+    }
+    const lane = entry.lane
+    const info = SAMPLE_LANES[lane]
+    const record = {
+      lane,
+      briefs: [...entry.briefs],
+      model: entry.model || (typeof info?.cli?.model === 'string' && info.cli.model ? info.cli.model : null),
+      reasoning: info?.reasoning ? String(info.reasoning) : null,
+      startedAt: entry.startedAt,
+      minutes: 0,
+      exitCode: 1,
+      killed: true,
+      note: 'stopped by the owner',
+      costUsd: null,
+      log: null,
+      branch: '',
+      commits: [],
+    }
+    if (meta?.projectRun) {
+      record.project = 'MachineRoom'
+      if (meta.worktree) record.worktree = true
+      if (meta.queue) {
+        record.queue = true
+        record.tasks = meta.tasksLength
+      } else if (meta.task) {
+        record.task = meta.task.slice(0, 200)
+      }
+    }
+    runsState.recent.unshift(record)
+    if (runsState.recent.length > RUN_RECENT_LIMIT) runsState.recent.pop()
+    emit({ topic: 'runs' })
+    const sub = ladder.subs.find((s) => s.lanes.includes(lane))
+    const headId = sub ? sub.id : 'orchestrator'
+    const chat = chatStore(headId)
+    const stoppedAt = new Date(now()).toISOString()
+    const taskLabel = entry.briefs.length > 0
+      ? entry.briefs.join(' ')
+      : entry.task || (entry.queue ? `${entry.tasks} task${entry.tasks === 1 ? '' : 's'} in order` : 'current work')
+    orchestratorMessageCounter += 1
+    chat.messages.push({
+      id: `orchestrator-message-${orchestratorMessageCounter}`,
+      from: 'room',
+      text: `The owner stopped ${lane}'s run on ${taskLabel} at ${stoppedAt}.`,
+      at: stoppedAt,
+    })
+    while (chat.messages.length > 200) chat.messages.shift()
+    emit({ topic: 'orchestrator', id: headId })
+  }
+
   const client = {
     agents: () =>
       call('agents', () => {
@@ -1336,6 +1394,38 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
         chat.state = 'paused'
         emit({ topic: 'orchestrator' })
         return { ok: true }
+      }),
+
+    stopTree: ({ id, confirmed = true } = {}) =>
+      call('stopTree', () => {
+        if (confirmed !== true) throw new Error('Confirm the stop first.')
+        if (id !== undefined && id !== null && typeof id !== 'string') {
+          throw new Error('That orchestrator does not exist.')
+        }
+        const targetId = typeof id === 'string' && id.trim() ? id.trim() : 'orchestrator'
+        const isWholeTree = targetId === 'orchestrator'
+        const targetOrchestrators = isWholeTree
+          ? ['orchestrator', ...ladder.subs.map((entry) => entry.id)]
+          : [targetId]
+        const stoppedOrchestrators = []
+        for (const orchId of targetOrchestrators) {
+          const chat = chatStore(orchId)
+          chat.state = 'paused'
+          stoppedOrchestrators.push(orchId)
+        }
+        const targetLanes = isWholeTree
+          ? null
+          : new Set(ladder.subs.find((entry) => entry.id === targetId)?.lanes ?? [])
+        const entries = runsState.running.filter(
+          (entry) => isWholeTree || targetLanes.has(entry.lane)
+        )
+        const stoppedLanes = []
+        for (const entry of entries) {
+          stopRunningEntry(entry)
+          stoppedLanes.push(entry.lane)
+        }
+        emit({ topic: 'orchestrator' })
+        return { stoppedOrchestrators, stoppedLanes, stillRunning: [] }
       }),
 
     compactOrchestrator: (options = {}) =>
@@ -2004,58 +2094,7 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
         if (index === -1) throw new Error(`No run is running on ${lane}.`)
         const entry = runsState.running[index]
         if (entry.startedAt !== startedAt) throw new Error('That start time does not match the running run.')
-        runsState.running.splice(index, 1)
-        const meta = runningMeta.get(entry)
-        if (meta) {
-          runningMeta.delete(entry)
-          if (meta.timer) clearTimeout(meta.timer)
-          if (meta.liveRun) endLiveRun(meta.liveRun)
-        }
-        const info = SAMPLE_LANES[lane]
-        const record = {
-          lane,
-          briefs: [...entry.briefs],
-          model: entry.model || (typeof info?.cli?.model === 'string' && info.cli.model ? info.cli.model : null),
-          reasoning: info?.reasoning ? String(info.reasoning) : null,
-          startedAt: entry.startedAt,
-          minutes: 0,
-          exitCode: 1,
-          killed: true,
-          note: 'stopped by the owner',
-          costUsd: null,
-          log: null,
-          branch: '',
-          commits: [],
-        }
-        if (meta?.projectRun) {
-          record.project = 'MachineRoom'
-          if (meta.worktree) record.worktree = true
-          if (meta.queue) {
-            record.queue = true
-            record.tasks = meta.tasksLength
-          } else if (meta.task) {
-            record.task = meta.task.slice(0, 200)
-          }
-        }
-        runsState.recent.unshift(record)
-        if (runsState.recent.length > RUN_RECENT_LIMIT) runsState.recent.pop()
-        emit({ topic: 'runs' })
-        const sub = ladder.subs.find((s) => s.lanes.includes(lane))
-        const headId = sub ? sub.id : 'orchestrator'
-        const chat = chatStore(headId)
-        const stoppedAt = new Date(now()).toISOString()
-        const taskLabel = entry.briefs.length > 0
-          ? entry.briefs.join(' ')
-          : entry.task || (entry.queue ? `${entry.tasks} task${entry.tasks === 1 ? '' : 's'} in order` : 'current work')
-        orchestratorMessageCounter += 1
-        chat.messages.push({
-          id: `orchestrator-message-${orchestratorMessageCounter}`,
-          from: 'room',
-          text: `The owner stopped ${lane}'s run on ${taskLabel} at ${stoppedAt}.`,
-          at: stoppedAt,
-        })
-        while (chat.messages.length > 200) chat.messages.shift()
-        emit({ topic: 'orchestrator', id: headId })
+        stopRunningEntry(entry)
         return {
           ok: true,
           lane,

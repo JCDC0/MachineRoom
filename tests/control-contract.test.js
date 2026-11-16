@@ -474,6 +474,21 @@ describe('the control client contract', () => {
     await mock.stopRun({ lane: 'opencode', startedAt: mockRun.startedAt, confirmed: true })
   })
 
+  it('stops an orchestrator tree with the same answer shape on bridge and mock', async () => {
+    const { client } = await makeHarness()
+    const mock = createMockClient({ latencyMs: 0 })
+    const bridgeAnswer = await client.stopTree({ id: 'orchestrator' })
+    const mockAnswer = await mock.stopTree({ id: 'orchestrator' })
+    expect(Object.keys(bridgeAnswer).sort()).toEqual(['stillRunning', 'stoppedLanes', 'stoppedOrchestrators'])
+    expect(Object.keys(mockAnswer).sort()).toEqual(['stillRunning', 'stoppedLanes', 'stoppedOrchestrators'])
+    expect(bridgeAnswer.stoppedOrchestrators).toEqual(['orchestrator'])
+    expect(mockAnswer.stoppedOrchestrators).toEqual(['orchestrator', 'frontend'])
+    expect(bridgeAnswer.stoppedLanes).toEqual([])
+    expect(mockAnswer.stoppedLanes).toEqual([])
+    expect(bridgeAnswer.stillRunning).toEqual([])
+    expect(mockAnswer.stillRunning).toEqual([])
+  })
+
   it('asks the planner and reads the plan through the lane records only', async () => {
     const { client } = await makeHarness()
     await expect(client.askPlanner('Split the work into briefs.')).rejects.toThrow(PLAN_REFUSAL)
@@ -696,6 +711,20 @@ describe('the control client orchestrator routes', () => {
       ['POST', 'http://127.0.0.1:9/api/orchestrator/messages', { text: 'Go', id: 'frontend', confirmed: true }],
       ['POST', 'http://127.0.0.1:9/api/orchestrator/stop', { confirmed: true }],
       ['POST', 'http://127.0.0.1:9/api/orchestrator/stop', { confirmed: true, id: 'frontend' }],
+    ])
+  })
+
+  it('posts /api/orchestrator/stop-tree for a sub and leaves out id for Main', async () => {
+    const { calls, client } = recorder({ stoppedOrchestrators: [], stoppedLanes: [], stillRunning: [] })
+    await client.stopTree()
+    await client.stopTree({ id: 'orchestrator' })
+    await client.stopTree({ id: 'frontend' })
+    await client.stopTree({ id: 'frontend', confirmed: false })
+    expect(calls.map((call) => [call.method, call.url, JSON.parse(call.body ?? 'null')])).toEqual([
+      ['POST', 'http://127.0.0.1:9/api/orchestrator/stop-tree', { confirmed: true }],
+      ['POST', 'http://127.0.0.1:9/api/orchestrator/stop-tree', { confirmed: true }],
+      ['POST', 'http://127.0.0.1:9/api/orchestrator/stop-tree', { confirmed: true, id: 'frontend' }],
+      ['POST', 'http://127.0.0.1:9/api/orchestrator/stop-tree', { confirmed: false, id: 'frontend' }],
     ])
   })
 
