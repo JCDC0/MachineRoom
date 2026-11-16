@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- The compaction message and the kept summary name the turn logs and the retention limits.
 - Dispatch's confirm card names lanes that declared the same files, says when overlap is unknown, and can warn above a set lane count.
 - A continuation's own record carries continues and interruptedBy; no earlier line of runs.jsonl is changed.
 - POST /api/orchestrator/stop-tree stops an orchestrator's sector, or the whole tree, refusing new work there until it answers.
@@ -12,6 +13,7 @@
 - With Replies set to interrupt, a reply stops a working CLI lane run and continues it on the same branch, worktree, ticket and inbox, at most three times.
 - P456: Dispatch warns when another running lane declares the same files, says when the overlap is unknown, and can warn above a set lane count.
 - Ready says it means the program was found, and doctor warns when the project has no AGENTS.md, CLAUDE.md or GEMINI.md.
+- P457: A compaction names the chat file, the turn logs in the runs folder and the limits, and the saved summary starts with those log names.
 - Each MCP server's tool list is kept 60 seconds per runs folder and config, failures are not kept, and parallel lists share one request.
 - The native agent adds a warning after a tool call fails the same way three times and ends the run on the fifth.
 - A page opens one /events stream and the control client takes its notices from it, so six tabs fit before the browser's connection limit.

@@ -748,13 +748,13 @@ describe('the orchestrator registry', () => {
     files.behaviour.input = 500000
     frontend.send({ text: 'Frontend Claude turn reaching 500,000 tokens', confirmed: true })
     await waitFor(
-      () => files.chat('frontend').messages.some((m) => m.from === 'room' && m.text === COMPACTED_MESSAGE),
+      () => files.chat('frontend').messages.some((m) => m.from === 'room' && m.text.startsWith(COMPACTED_MESSAGE)),
       15000,
       'frontend compact message'
     )
     await waitIdle(rig.registry, 'frontend', 2)
 
-    expect(files.chat('frontend').messages.some((m) => m.from === 'room' && m.text === COMPACTED_MESSAGE)).toBe(true)
+    expect(files.chat('frontend').messages.some((m) => m.from === 'room' && m.text.startsWith(COMPACTED_MESSAGE))).toBe(true)
     expect(files.chat('frontend').sessionId).toBeNull()
     expect(files.chat('frontend').summary).toBeTruthy()
 
@@ -773,13 +773,13 @@ describe('the orchestrator registry', () => {
     files.behaviour.input = 500000
     backend.send({ text: 'Backend OpenCode turn reaching 500,000 tokens', confirmed: true })
     await waitFor(
-      () => files.chat('backend').messages.some((m) => m.from === 'room' && m.text === COMPACTED_MESSAGE),
+      () => files.chat('backend').messages.some((m) => m.from === 'room' && m.text.startsWith(COMPACTED_MESSAGE)),
       15000,
       'backend compact message'
     )
     await waitIdle(rig.registry, 'backend', 2)
 
-    expect(files.chat('backend').messages.some((m) => m.from === 'room' && m.text === COMPACTED_MESSAGE)).toBe(true)
+    expect(files.chat('backend').messages.some((m) => m.from === 'room' && m.text.startsWith(COMPACTED_MESSAGE))).toBe(true)
     expect(files.chat('backend').sessionId).toBeNull()
     expect(files.chat('backend').summary).toBeTruthy()
 
