@@ -3867,3 +3867,11 @@ Research plan, second batch, P456 to P460 (first steps as Sol narrowed them). It
 3. `--outcomes` prints both columns, `?` for unknown.
 4. Tests, each failing before your change: a record gains `finishedAt`; two plain runs before a merge make `repairRuns: 1`; a failover does not count; a missing time gives `null` and `?`.
 5. Run `node node_modules/vitest/vitest.mjs run tests/outcomes-repair.test.js tests/outcomes.test.js` and report the counts.
+
+**P438d. An interrupt never rewrites `runs.jsonl` (AGY, Hydrogen).** Read this brief and P438b above only. Commit each step as you finish it. Run every command in the foreground. Files: scripts/run-lane.mjs (the function that sets `interruptedBy` on an earlier record), server/runs.js (only if it reads `interruptedBy` from the first record), src/briefs/run.js, tests/lane-interrupt.test.js, docs/agents/CHANGELOG.md.
+
+P438b sets `interruptedBy` by reading all of `runs.jsonl`, changing the earlier run's line and writing the whole file back. Many runs append to that file at once, so a record appended between the read and the rename is lost.
+
+1. Remove the rewrite. The continuation's own record carries `continues: NAME` and `interruptedBy: SENDER`; nothing else writes to an earlier line. Anything that showed `interruptedBy` on the first run reads it from the record that `continues` it. If P438b changed `cachedRunRecords` only to notice in-place edits, put that change back.
+2. Tests, each failing before your change: an interrupt leaves every earlier line of `runs.jsonl` byte for byte as it was; the continuation record holds `continues` and `interruptedBy`; a record appended by another writer during the interrupt is still there afterwards.
+3. Run `node node_modules/vitest/vitest.mjs run tests/lane-interrupt.test.js tests/run-failover.test.js` and report the counts.
