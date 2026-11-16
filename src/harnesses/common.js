@@ -139,7 +139,9 @@ export function summaryOf(harness, activities, head, usage = {}) {
   }
   const written = []
   const read = []
+  let shellUnplaced = 0
   for (const call of calls) {
+    if (String(call.label ?? '').startsWith('$ ') && !(call.touches ?? []).some((touch) => touch.kind === 'file')) shellUnplaced += 1
     for (const touch of call.touches ?? []) {
       if (touch.kind !== 'file') continue
       if (touch.mode === 'write') written.push(touch.path)
@@ -153,6 +155,7 @@ export function summaryOf(harness, activities, head, usage = {}) {
     failed: activities.filter((activity) => activity.type === 'tool.end' && activity.ok === false).length,
     written: unique(written),
     read: unique(read),
+    ...(shellUnplaced > 0 ? { shellUnplaced } : {}),
     head,
     costUsd,
     inputTokens,

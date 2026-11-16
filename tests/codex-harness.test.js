@@ -376,7 +376,7 @@ describe('codex harness report and usage', () => {
     )
     expect(codexHarness.usage(log)).toEqual({
       costUsd: null,
-      inputTokens: 2000,
+      inputTokens: 1500,
       outputTokens: 320,
       cacheReadTokens: 500,
       cacheWriteTokens: null,

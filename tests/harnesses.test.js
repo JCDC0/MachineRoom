@@ -271,7 +271,7 @@ describe('harness reports and usage', () => {
     )
     expect(harnessByKey.codex.report(log)).toEqual(['Fixed.', 'Done.'])
     expect(harnessByKey.codex.reply(log)).toBe('Fixed.\nDone.')
-    expect(harnessByKey.codex.usage(log)).toEqual({ costUsd: null, inputTokens: 120, outputTokens: 45, cacheReadTokens: 20, cacheWriteTokens: null })
+    expect(harnessByKey.codex.usage(log)).toEqual({ costUsd: null, inputTokens: 100, outputTokens: 45, cacheReadTokens: 20, cacheWriteTokens: null })
   })
 
   it('reads the Copilot message and usage lines', () => {

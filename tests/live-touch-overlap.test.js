@@ -459,6 +459,19 @@ describe('Dispatch live touched overlap warning', () => {
     })
   })
 
+  it('says a lane may be editing by shell when the log has shell calls the parser could not place', () => {
+    const log = `${JSON.stringify({ type: 'tool_use', part: { id: 's1', tool: 'bash', state: { status: 'completed', input: { command: 'node build.mjs' } } } })}
+`
+    const summary = summarizeRun({ harness: 'opencode', log, worktree: 'project' })
+    expect(summary.written).toEqual([])
+    expect(summary.shellUnplaced).toBe(1)
+    const lines = overlapCardLines({
+      files: ['src/a.js'],
+      active: runningLaneFiles([{ lane: 'opencode', briefs: [], task: 'Work.', touched: [], touchedPartial: true }], []),
+    })
+    expect(lines).toContain('opencode may also be editing by shell.')
+  })
+
   it('omits Now editing in when the running lane only read the file or its log is unreadable', () => {
     const readOnlyLines = overlapCardLines({
       files: ['src/a.js'],

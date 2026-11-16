@@ -103,6 +103,7 @@ export function runningLaneFiles(running, briefs) {
       lane,
       files: declaredFilesOf(...texts),
       touched: Array.isArray(entry.touched) ? [...entry.touched] : null,
+      touchedPartial: entry.touchedPartial === true,
     })
   }
   return active
@@ -130,6 +131,9 @@ export function overlapCardLines({ files, active, runningCount = 0, startingCoun
     for (const item of overlaps) {
       const prefix = item.source === 'touched' ? 'Now editing in' : 'Also declared by'
       lines.push(`${prefix} ${item.lane}: ${item.files.join(', ')}`)
+    }
+    for (const item of Array.isArray(active) ? active : []) {
+      if (item?.touchedPartial) lines.push(`${item.lane} may also be editing by shell.`)
     }
   }
   lines.push(laneRunningLine(runningCount))

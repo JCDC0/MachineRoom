@@ -583,7 +583,7 @@ describe('summarizeRun', () => {
     ].map((item) => JSON.stringify(item)).join('\n')
     const summary = summarizeRun({ harness: 'claude', log, worktree: 'C:\\GitHub\\MachineRoom-claude' })
     expect(summary).toEqual({
-      harness: 'claude', toolCalls: 3, failed: 1, written: [], read: ['src/math.js'], head: [], costUsd: null, inputTokens: null, outputTokens: null, peakTokens: null,
+      harness: 'claude', toolCalls: 3, failed: 1, written: [], read: ['src/math.js'], shellUnplaced: 1, head: [], costUsd: null, inputTokens: null, outputTokens: null, peakTokens: null,
     })
   })
 
@@ -719,6 +719,7 @@ describe('summarizeRun', () => {
       failed: 0,
       written: [],
       read: [],
+      shellUnplaced: 1,
       head: ['Files in current directory:', '- err.txt', '- out.txt'],
       costUsd: null,
       inputTokens: null,

@@ -680,6 +680,9 @@ function copyWorktreeFiles(project, worktree, copies) {
     } catch (error) { if (error.code !== 'ENOENT') throw error }
     mkdirSync(dirname(target), { recursive: true })
     if (!inside(targetRoot, realpathSync(dirname(target)))) throw new Error(`Worktree copy ${path} must resolve inside the worktree.`)
+    const ignored = spawnSync(gitPath(), ['check-ignore', '-q', '--', path], { cwd: project, windowsHide: true }).status === 0
+    copyFileSync(resolvedSource, target, constants.COPYFILE_EXCL)
+    if (ignored) continue
     const found = spawnSync(gitPath(), ['rev-parse', '--git-common-dir'], { cwd: worktree, encoding: 'utf8', windowsHide: true })
     const common = String(found.stdout ?? '').trim()
     if (found.status !== 0 || !common) throw new Error('Could not find the worktree exclude file.')
@@ -689,7 +692,6 @@ function copyWorktreeFiles(project, worktree, copies) {
     try { text = readFileSync(exclude, 'utf8') } catch (error) { if (error.code !== 'ENOENT') throw error }
     const pattern = '/' + relative(worktree, target).replace(/\\/g, '/').replace(/[\\*?\[\]#!]/g, '\\$&').replace(/ /g, '\\ ')
     appendFileSync(exclude, `${text && !text.endsWith('\n') ? '\n' : ''}${pattern}\n`)
-    copyFileSync(resolvedSource, target, constants.COPYFILE_EXCL)
   }
 }
 

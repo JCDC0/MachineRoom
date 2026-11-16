@@ -416,7 +416,7 @@ export default function HarnessesSettings({ client }) {
               disabled={checking || savingWorktreeSetup || Boolean(busyKey)}
               onChange={(event) => setWorktreeCopies(event.target.value)}
             />
-            <p className="endpoints-note mono">One project-relative file path per line.</p>
+            <p className="endpoints-note mono">One project-relative file path per line. Each copy adds an ignore line shared with the main checkout.</p>
             <div className="endpoints-actions">
               <button
                 type="button"

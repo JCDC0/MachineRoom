@@ -77,7 +77,7 @@ describe('harness cache usage', () => {
     })
     expect(codexHarness.usage(log)).toEqual({
       costUsd: null,
-      inputTokens: 2000,
+      inputTokens: 1500,
       outputTokens: 80,
       cacheReadTokens: 500,
       cacheWriteTokens: null,
@@ -148,7 +148,7 @@ describe('laneCosts cache totals', () => {
         { lane: 'claude', startedAt: localIso(9), costUsd: 0.2, inputTokens: 1000, outputTokens: 50, cacheReadTokens: 400, cacheWriteTokens: 100 },
         { lane: 'claude', startedAt: localIso(10), costUsd: 0.3, inputTokens: 1000, outputTokens: 60, cacheReadTokens: 600, cacheWriteTokens: 50 },
         { lane: 'claude', startedAt: localIso(11), costUsd: 0.1, inputTokens: 5000, outputTokens: 20 },
-        { lane: 'codex', startedAt: localIso(11), costUsd: null, inputTokens: 2000, outputTokens: 40, cacheReadTokens: 500 },
+        { lane: 'codex', startedAt: localIso(11), costUsd: null, inputTokens: 1500, outputTokens: 40, cacheReadTokens: 500 },
         { lane: 'hermes', startedAt: localIso(11), costUsd: 0.05, inputTokens: 300, outputTokens: 30 },
       ],
       agents,
@@ -168,10 +168,10 @@ describe('laneCosts cache totals', () => {
 
     const codex = mapped.byAgent.find((row) => row.agentId === 'agent-codex')
     expect(codex).toMatchObject({
-      inputTokens: 2000,
+      inputTokens: 1500,
       cacheReadTokens: 500,
       cacheWriteTokens: null,
-      cacheInputTokens: 2000,
+      cacheInputTokens: 1500,
       cacheKnownRuns: 1,
       runs: 1,
     })
