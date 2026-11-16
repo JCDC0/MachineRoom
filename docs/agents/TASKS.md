@@ -3499,3 +3499,11 @@ P393 and P397 left about 40 lines for one rule: keep the inbox heading, keep the
 
 1. Rewrite that branch to do the same in as few plain lines as you can. Keep behaviour identical: every test in `tests/review-39-fixes.test.js`, `tests/mr-agent-inbox.test.js` and `tests/mr-agent.test.js` must pass unchanged.
 2. Run `node node_modules/vitest/vitest.mjs run tests/review-39-fixes.test.js tests/mr-agent-inbox.test.js tests/mr-agent.test.js` before and after and report both counts, and the line count of the branch before and after.
+
+**P419. The inspector shows the orchestrator's live harness and model (OpenCode).** Read this brief only. Commit each step as you finish it. Run every command in the foreground. Files: src/ui/agentContext.js (only `withOrchestratorData`), tests/inspector-orchestrator-harness.test.js (new; add no test to another file except to keep an existing one passing), docs/agents/CHANGELOG.md.
+
+On 2026-11-16 the room's orchestrator ran on OpenCode at Harness default (`/api/orchestrator` said `opencode`, model `""`), but the inspector said `Harness claude`: `withOrchestratorData` copies only the context numbers and autocompact from the live orchestrator, so the harness and model come from the lane config.
+
+1. `withOrchestratorData` also copies `harness` from the live main orchestrator row when it is a non-empty string, and `model` when it is a string; an empty model shows as `Harness default` (use `modelName` from `src/ui/modelRefresh.js` if it already gives that for an empty id, else the plain text).
+2. Tests, each failing before your change: an orchestrator agent whose lane says `claude` with a live row saying `opencode` and model `""` gives harness `opencode` and model `Harness default`; a live row with `claude-opus-5-5` gives that model's name.
+3. Run `node node_modules/vitest/vitest.mjs run tests/inspector-orchestrator-harness.test.js tests/agent-context.test.js tests/inspector.test.js` (skip a file that does not exist) and report the counts.
