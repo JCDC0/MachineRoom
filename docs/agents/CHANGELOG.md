@@ -1,7 +1,9 @@
 # Changelog
 
 ## Unreleased
+- POST /api/harnesses/KEY/probe runs one hidden, time-limited prompt in an empty folder and answers reached, failed or unknown, and Settings asks before it runs.
 - The run summary finds five or more consecutive failed identical calls from an exact call key the parsers keep for the summary only, the record keeps tool and count, and Needs you shows it.
+- Harnesses in Settings gain Test connection, which sends one short prompt through the harness and shows reached, failed or unknown (P487).
 - Each lane review carries fileGroups, largeDiff above 400 lines and outsideBrief from the brief's Files list, null when unknown, and Reviews shows one line for them.
 - A lane review groups its files by risk, lists files outside the newest run's brief Files list (or says Scope unknown) and flags a diff over 400 lines (P486).
 - Run summaries record repeated identical failing calls and show them in Needs you.

@@ -67,6 +67,7 @@ export const CLIENT_METHODS = [
   'laneBackups',
   'harnesses',
   'checkHarnesses',
+  'probeHarness',
   'harnessSettings',
   'harnessModels',
   'providers',
@@ -2203,6 +2204,15 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
         if (confirmed !== true) throw new Error('Confirm checking harnesses first.')
         emit({ topic: 'harnesses' })
         return clone(harnessRows())
+      }),
+
+    probeHarness: (key) =>
+      call('probeHarness', () => {
+        const target = harnessState.find((entry) => entry.key === key)
+        if (!target) throw new Error('Choose a known harness.')
+        if (!target.enabled) throw new Error('That harness is turned off in Settings.')
+        if (!target.ready) throw new Error(`The harness ${key} is not available on this computer.`)
+        return { key, status: 'reached', line: '', seconds: 0.1 }
       }),
 
     harnessSettings: (options = {}) =>

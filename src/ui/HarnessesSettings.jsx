@@ -58,6 +58,7 @@ export default function HarnessesSettings({ client }) {
   const [confirm, setConfirm] = useState(null)
   const [sectionError, setSectionError] = useState('')
   const [rowErrors, setRowErrors] = useState({})
+  const [probes, setProbes] = useState({})
   const mountedRef = useRef(true)
   const confirmRef = useRef(null)
 
@@ -290,10 +291,27 @@ export default function HarnessesSettings({ client }) {
     applySetting(row.key, { enabled: true })
   }
 
+  async function runProbe(key) {
+    setProbes((current) => ({ ...current, [key]: { running: true } }))
+    let text
+    try {
+      const answer = await client.probeHarness(key)
+      const seconds = answer?.seconds
+      text = answer?.status === 'reached' ? `Reached in ${seconds}s` : answer?.status === 'failed' ? `Failed: ${answer.line}` : `Unknown: no clear reply in ${seconds}s`
+    } catch (error) {
+      text = `Failed: ${error?.message || 'The test did not run.'}`
+    }
+    if (mountedRef.current) setProbes((current) => ({ ...current, [key]: { text } }))
+  }
+
   async function handleConfirm() {
     if (!confirm) return
     const action = confirm
     setConfirm(null)
+    if (action.kind === 'probe') {
+      await runProbe(action.key)
+      return
+    }
     if (action.kind === 'disable') {
       await applySetting(action.key, { enabled: false })
       return
@@ -476,7 +494,30 @@ export default function HarnessesSettings({ client }) {
                   >
                     Offer in forms
                   </button>
+                  {status.state === 'ready' && row.enabled && typeof client.probeHarness === 'function' ? (
+                    <button
+                      type="button"
+                      className="hud-settings-switch"
+                      disabled={busy || probes[row.key]?.running}
+                      onClick={() =>
+                        setConfirm({
+                          kind: 'probe',
+                          key: row.key,
+                          label: `Test connection to ${name}`,
+                          text: `This sends one short prompt to ${row.key}, which may use a little quota.`,
+                          confirmText: 'Test',
+                        })
+                      }
+                    >
+                      {probes[row.key]?.running ? 'Testing...' : 'Test connection'}
+                    </button>
+                  ) : null}
                 </div>
+                {probes[row.key]?.text ? (
+                  <div className="endpoints-meta mono" data-harness-probe={row.key}>
+                    {probes[row.key].text}
+                  </div>
+                ) : null}
                 {native ? (
                   <p className="endpoints-note mono">{directApiSummary(counts)}</p>
                 ) : folded ? (

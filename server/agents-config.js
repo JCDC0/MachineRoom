@@ -11,6 +11,7 @@ import { defaultMode, laneModesFor } from '../src/control/modes.js'
 import { harnessByKey } from '../src/harnesses/index.js'
 import { harnessUnavailableProblem, modelUnavailableProblem } from './model-list.js'
 import { machineroomModels, modelAllowed, readHarnessModelsCache } from './harness-models.js'
+import { probeHarness } from './harness-probe.js'
 import { fallbackProblem } from '../src/briefs/run.js'
 
 export const MAX_AGENTS = 30
@@ -607,6 +608,25 @@ export function createAgentsConfigApi(options = {}) {
       const rows = await rowsFor(getBaseLanes())
       if (typeof notify === 'function') notify({ topic: 'harnesses' })
       sendJson(req, res, 200, path.endsWith('/settings') && typeof body.key === 'string' ? rows.find((row) => row.key === body.key) : rows)
+      return true
+    }
+
+    const probeMatch = /^\/api\/harnesses\/([a-z0-9_-]+)\/probe$/.exec(path)
+    if (probeMatch) {
+      if (method !== 'POST') { sendJson(req, res, 405, { error: 'Method not allowed.' }); return true }
+      if (!page) { sendJson(req, res, 403, { error: ORIGIN_CREATE_PROBLEM }); return true }
+      const body = await readJsonBody(req, res)
+      if (body === null) return true
+      if (body.confirmed !== true) { sendJson(req, res, 400, { error: 'Confirm the connection test first.' }); return true }
+      const lanes = getBaseLanes()
+      const key = probeMatch[1]
+      const result = await probeHarness(key, {
+        runsFolder: runsDir,
+        lanes,
+        env,
+        available: isHarnessAvailable(key, { lanes, env, endpoints: readEndpoints(runsDir), runsFolder: runsDir }),
+      })
+      sendJson(req, res, result.status, result.body ?? { error: result.error })
       return true
     }
 
