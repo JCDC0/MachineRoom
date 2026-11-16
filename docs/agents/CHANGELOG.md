@@ -1,6 +1,8 @@
 # Changelog
 
 ## Unreleased
+- POST /api/orchestrator/stop-tree stops an orchestrator's sector, or the whole tree, refusing new work there until it answers.
+- P450: Add `POST /api/orchestrator/stop-tree` to stop a sector or the whole tree in one call while gating dispatches into the stopping sector and checking the process tree for `stillRunning`.
 - The Inspector shows each lane's Sandbox line from its harness and effective mode, and an ACP run says its requests are approved automatically.
 - Meters labels a lane total with its unreported runs, shows failed or stopped spend, and shows when a quota window was seen and resets.
 - A lane review keeps the checks run on its head apart from the agent's report and lists every run of the task by its failover and continuation links.

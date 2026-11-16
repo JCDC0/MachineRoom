@@ -1,6 +1,6 @@
 import { execFile, spawn, spawnSync } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
-import { appendFileSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, readSync, realpathSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
+import { appendFileSync, closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, realpathSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { basename, dirname, join, resolve } from 'node:path'
 import { StringDecoder } from 'node:string_decoder'
@@ -18,8 +18,9 @@ import { modelAllowed } from './harness-models.js'
 import { readHarnessSettings } from './harness-settings.js'
 import { outcomeTable, subjectsFromLog } from './outcomes.js'
 import { gitEnv, gitPath } from './programPath.js'
-import { killTree, listProcesses, treeSpawnOptions } from './processTree.js'
-import { createLaneLockCheck, laneAgents, lanesFolder, readAllLanes, runsFolder as defaultRunsFolder } from './lanes-source.js'
+import { descendantProcesses, isLockHolderStale, killTree, leftoverProcesses, listProcesses, treeSpawnOptions } from './processTree.js'
+import { createLaneLockCheck, laneAgents, laneLockAlive, lanesFolder, readAllLanes, runsFolder as defaultRunsFolder } from './lanes-source.js'
+import { readLaneLock } from '../scripts/lane-lock.mjs'
 import { NO_ACTIVE_CHOICE_PROBLEM, activeLanesFileFor, hiddenLaneProblem, projectLanesFileFor, readActiveLanesChoice, readHiddenLanes } from './active-lanes.js'
 import { checkCommandProblem, createProjectSettingsApi, readProjectCheckCommand } from './project-settings.js'
 
@@ -42,6 +43,7 @@ export const STOP_LANE_PROBLEM = 'Choose a lane to stop.'
 export const STOP_TIME_PROBLEM = 'Name the start time to stop.'
 export const STOP_MISMATCH_PROBLEM = 'That start time does not match the running run.'
 export const STOP_BUSY_PROBLEM = 'That run is already stopping.'
+export const SECTOR_STOPPING_PROBLEM = 'That sector is stopping.'
 export const CONVERSATION_UNKNOWN_PROBLEM = 'No run of that lane started at that time.'
 export const CONVERSATION_LOG_OUTSIDE_PROBLEM = "The run's log is outside the runs folder."
 export const CONVERSATION_LOG_MISSING_PROBLEM = "The run's log is missing."
@@ -682,6 +684,113 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
     return lanes.length > 0 ? lanes : null
   }
 
+  function sectorStoppingError(lane = '', startedBy = '') {
+    const registry = typeof orchestrators === 'function' ? orchestrators() : null
+    if (!registry) return ''
+    if (lane && typeof registry.isLaneStopping === 'function' && registry.isLaneStopping(lane)) {
+      return SECTOR_STOPPING_PROBLEM
+    }
+    if (startedBy && typeof registry.isSectorStopping === 'function' && registry.isSectorStopping(startedBy)) {
+      return SECTOR_STOPPING_PROBLEM
+    }
+    return ''
+  }
+
+  function safeListProcesses() {
+    try {
+      const items = list({ platform })
+      return Array.isArray(items) ? items : []
+    } catch {
+      return []
+    }
+  }
+
+  function safeLockMtime(path) {
+    try {
+      return stat(path).mtimeMs
+    } catch {
+      return null
+    }
+  }
+
+  function lockFileNames(folder) {
+    try {
+      return readdirSync(folder)
+        .filter((name) => name.endsWith('.lock') && !name.endsWith('.takeover.lock'))
+        .map((name) => name.slice(0, -5))
+    } catch {
+      return []
+    }
+  }
+
+  function captureTrackedLane(lane, item, processesBefore, byPidBefore, lanesConfig) {
+    const rootPid = item?.child?.pid ?? 0
+    const lockPath = join(recordsDir(), `${lane}.lock`)
+    const holder = readLaneLock(lockPath)
+    const lockMtime = safeLockMtime(lockPath)
+    const rootCreated = rootPid > 0 ? (byPidBefore.get(rootPid)?.created ?? null) : null
+    const holderPid = holder.pid > 0 && !isLockHolderStale(holder.pid, lockMtime, { platform, processes: byPidBefore }) ? holder.pid : 0
+    const holderChild = holder.child > 0 && !isLockHolderStale(holder.child, lockMtime, { platform, processes: byPidBefore }) ? holder.child : 0
+    const holderPidCreated = holderPid > 0 ? (byPidBefore.get(holderPid)?.created ?? null) : null
+    const holderChildCreated = holderChild > 0 ? (byPidBefore.get(holderChild)?.created ?? null) : null
+    const descendants = new Map()
+    for (const pid of [rootPid, holderPid, holderChild]) {
+      if (!pid) continue
+      for (const proc of descendantProcesses(processesBefore, { rootPid: pid, ownPid: process.pid })) {
+        descendants.set(proc.pid, proc.created ?? null)
+      }
+    }
+    const worktree = holder.projectRun !== true
+      ? (holder.folder || (!item?.project && typeof lanesConfig?.[lane]?.worktree === 'string' ? lanesConfig[lane].worktree : ''))
+      : ''
+    return {
+      lane,
+      item,
+      rootPid,
+      rootCreated,
+      holderPid,
+      holderPidCreated,
+      holderChild,
+      holderChildCreated,
+      descendants,
+      worktree,
+    }
+  }
+
+  function pidMatchesProcess(pid, created, byPid) {
+    if (!pid || !byPid.has(pid)) return false
+    const row = byPid.get(pid)
+    if (typeof created === 'number' && typeof row?.created === 'number') {
+      return row.created === created
+    }
+    return true
+  }
+
+  function isTrackedLaneAlive(tracked, processesAfter, byPidAfter) {
+    if (tracked.item?.child && (tracked.item.child.exitCode ?? tracked.item.child.signalCode ?? null) === null) {
+      return true
+    }
+    if (pidMatchesProcess(tracked.rootPid, tracked.rootCreated, byPidAfter)) return true
+    if (pidMatchesProcess(tracked.holderPid, tracked.holderPidCreated, byPidAfter)) return true
+    if (pidMatchesProcess(tracked.holderChild, tracked.holderChildCreated, byPidAfter)) return true
+    for (const [pid, created] of tracked.descendants) {
+      if (pidMatchesProcess(pid, created, byPidAfter)) return true
+    }
+    for (const [pid, created] of [
+      [tracked.rootPid, tracked.rootCreated],
+      [tracked.holderPid, tracked.holderPidCreated],
+      [tracked.holderChild, tracked.holderChildCreated],
+    ]) {
+      if (!pid) continue
+      if (byPidAfter.has(pid) && !pidMatchesProcess(pid, created, byPidAfter)) continue
+      if (descendantProcesses(processesAfter, { rootPid: pid, ownPid: process.pid }).length > 0) return true
+    }
+    if (tracked.worktree && leftoverProcesses(processesAfter, { worktree: tracked.worktree, ownPid: process.pid, platform }).length > 0) {
+      return true
+    }
+    return laneLockAlive(recordsDir(), tracked.lane, { platform, list: () => processesAfter, stat })
+  }
+
   function laneStartProblem(lane, lanes) {
     if (!Object.hasOwn(lanes, lane) || !lanes[lane] || typeof lanes[lane] !== 'object') {
       return { status: 400, error: 'Choose a lane from the list.' }
@@ -730,6 +839,7 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
   }
 
   async function startProjectTask({ lane = '', task = '', worktree = false, allowDirty = false, startedBy = '', checkCommand = '', model = '', mode = '', allowedLanes = null } = {}) {
+    syncOrchestratorsRuns()
     const lanesText = readPath(laneFile)
     if (lanesText === null) return { status: 404, body: { error: 'The brief files are missing.' } }
     const lanes = readStartLanes({ lanesFile: laneFile, runsFolder: recordsDir() })
@@ -740,6 +850,8 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
     if (checkProblem) return { status: 400, body: { error: checkProblem } }
     const laneProblem = laneStartProblem(lane, lanes)
     if (laneProblem) return { status: laneProblem.status, body: { error: laneProblem.error } }
+    const stoppingBefore = sectorStoppingError(lane, startedBy)
+    if (stoppingBefore) return { status: 409, body: { error: stoppingBefore } }
     const modelProblem = modelProblemFor(lanes[lane], model)
     if (modelProblem) return { status: 400, body: { error: modelProblem } }
     if (typeof task !== 'string' || task.trim().length < 1 || task.length > TASK_LIMIT) {
@@ -766,6 +878,8 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
     if (problems.length > 0) {
       return { status: 400, body: { error: problems.join(' ') } }
     }
+    const stoppingAfter = sectorStoppingError(lane, startedBy)
+    if (stoppingAfter) return { status: 409, body: { error: stoppingAfter } }
     if (running.has(lane)) {
       return { status: 409, body: { error: 'That lane is already running.' } }
     }
@@ -1322,6 +1436,112 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
     }
   }
 
+  async function stopSectorLanes({ isWholeTree = false, targetOrchestrators = [], targetLanes = null, backupLanes = null } = {}) {
+    const orchSet = new Set(targetOrchestrators)
+    const laneSet = targetLanes instanceof Set ? targetLanes : new Set(targetLanes ?? [])
+    const extraSet = backupLanes instanceof Set ? backupLanes : new Set(backupLanes ?? [])
+    const folder = recordsDir()
+    const lanesConfig = readStartLanes({ lanesFile: laneFile, runsFolder: folder }) ?? {}
+    let open = []
+    try {
+      const source = typeof lanesSource === 'function' ? lanesSource() : lanesSource
+      open = source && typeof source.openRuns === 'function' ? source.openRuns() : []
+    } catch {
+      open = []
+    }
+    const openList = Array.isArray(open) ? open : []
+    const lockLanes = lockFileNames(folder)
+    if (running.size === 0 && openList.length === 0 && lockLanes.length === 0) {
+      return { stoppedLanes: [], stillRunning: [] }
+    }
+
+    const seedRuns = []
+    const targets = new Map()
+    for (const item of running.values()) {
+      const lane = item.entry.lane
+      const matches = isWholeTree || laneSet.has(lane) || extraSet.has(lane) || (item.startedBy && orchSet.has(item.startedBy))
+      if (!matches) continue
+      seedRuns.push({ lane, startedAt: item.entry.startedAt })
+      targets.set(lane, { lane, startedAt: item.entry.startedAt, item, lockOnly: false })
+    }
+    for (const held of laneTickets.values()) {
+      if (isWholeTree || laneSet.has(held.lane) || extraSet.has(held.lane) || (held.startedBy && orchSet.has(held.startedBy))) {
+        seedRuns.push({ lane: held.lane, startedAt: held.startedAt })
+      }
+    }
+    if (!isWholeTree && seedRuns.length > 0) {
+      const records = readAllRunRecords(recordsPath())
+      for (const record of records) {
+        if (!record || typeof record !== 'object') continue
+        const recStart = Date.parse(record.startedAt)
+        const to = typeof record.failover?.to === 'string' ? record.failover.to.trim() : ''
+        if (to && seedRuns.some((seed) => seed.lane === record.lane && (!Number.isFinite(Date.parse(seed.startedAt)) || recStart >= Date.parse(seed.startedAt)))) {
+          extraSet.add(to)
+        }
+        const fromLane = typeof record.failoverFrom?.lane === 'string' ? record.failoverFrom.lane.trim() : ''
+        const fromStart = Date.parse(record.failoverFrom?.startedAt)
+        if (fromLane && seedRuns.some((seed) => seed.lane === fromLane && (!Number.isFinite(Date.parse(seed.startedAt)) || !Number.isFinite(fromStart) || fromStart >= Date.parse(seed.startedAt)))) {
+          extraSet.add(record.lane)
+        }
+      }
+    }
+
+    const isOrchestratorAgent = (lane) => lane === 'orchestrator' || (lane.startsWith('sub-') && !Object.hasOwn(lanesConfig, lane))
+    for (const run of openList) {
+      if (!run || !run.lane || isOrchestratorAgent(run.lane)) continue
+      const matches = isWholeTree || laneSet.has(run.lane) || extraSet.has(run.lane) || (run.startedBy && orchSet.has(run.startedBy))
+      if (!matches || targets.has(run.lane)) continue
+      targets.set(run.lane, { lane: run.lane, startedAt: run.startedAt, item: running.get(run.lane) ?? null, lockOnly: false })
+    }
+
+    const candidateLockLanes = lockLanes.filter((lane) => !isOrchestratorAgent(lane) && (isWholeTree || laneSet.has(lane) || extraSet.has(lane)) && !targets.has(lane))
+    const processesBefore = targets.size > 0 || candidateLockLanes.length > 0 ? safeListProcesses() : []
+    const byPidBefore = new Map(processesBefore.map((proc) => [proc.pid, proc]))
+
+    for (const lane of candidateLockLanes) {
+      if (!laneLockAlive(folder, lane, { platform, list: () => processesBefore, stat })) continue
+      const lockStart = laneLockStartedAt(readTextAt(join(folder, `${lane}.lock`)) ?? '')
+      if (!lockStart) continue
+      targets.set(lane, { lane, startedAt: lockStart, item: null, lockOnly: true })
+    }
+
+    if (targets.size === 0) {
+      return { stoppedLanes: [], stillRunning: [] }
+    }
+
+    const tracked = [...targets.values()].map((entry) => captureTrackedLane(entry.lane, entry.item ?? running.get(entry.lane) ?? null, processesBefore, byPidBefore, lanesConfig))
+
+    await Promise.all([...targets.values()].map(async (entry) => {
+      if (!entry.lockOnly) {
+        await stopRun({ lane: entry.lane, startedAt: entry.startedAt, confirmed: true })
+        return
+      }
+      const result = await runStopCommand(entry.lane, false, entry.startedAt)
+      if (!stopped && result.ok) {
+        notifyHeadStop({ entry: { lane: entry.lane, briefs: [], startedAt: entry.startedAt }, task: '' }, entry.lane, new Date().toISOString())
+      }
+    }))
+
+    let processesAfter = safeListProcesses()
+    let byPidAfter = new Map(processesAfter.map((proc) => [proc.pid, proc]))
+    if (tracked.some((entry) => isTrackedLaneAlive(entry, processesAfter, byPidAfter))) {
+      await new Promise((done) => setTimeout(done, STOP_SETTLE_MS))
+      processesAfter = safeListProcesses()
+      byPidAfter = new Map(processesAfter.map((proc) => [proc.pid, proc]))
+    }
+
+    const stoppedLanes = []
+    const stillRunning = []
+    for (const entry of tracked) {
+      if (isTrackedLaneAlive(entry, processesAfter, byPidAfter)) {
+        stillRunning.push(entry.lane)
+      } else {
+        stoppedLanes.push(entry.lane)
+      }
+    }
+    return { stoppedLanes, stillRunning }
+  }
+
   function matchesLockStart(lockStartedAt, itemStartedAt) {
     if (!lockStartedAt || !itemStartedAt) return false
     if (lockStartedAt === itemStartedAt) return true
@@ -1479,6 +1699,7 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
   }
 
   async function handle(req, res, url) {
+    syncOrchestratorsRuns()
     const path = url.pathname
     const method = req.method ?? 'GET'
     if (path === '/api/control/runs/stop') {
@@ -1704,6 +1925,11 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
         sendJson(req, res, startInfo.status, { error: startInfo.error })
         return true
       }
+      const stoppingActor = sectorStoppingError('', startInfo.actor || startInfo.startedBy)
+      if (stoppingActor) {
+        sendJson(req, res, 409, { error: stoppingActor })
+        return true
+      }
     }
 
     let lane = typeof body.lane === 'string' ? body.lane : ''
@@ -1725,6 +1951,11 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
         return true
       }
       startedBy = finish.startedBy
+      const stoppingLane = sectorStoppingError(lane, startedBy)
+      if (stoppingLane) {
+        sendJson(req, res, 409, { error: stoppingLane })
+        return true
+      }
     }
 
     let briefs = []
@@ -1794,6 +2025,11 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
         return true
       }
       startedBy = finish.startedBy
+      const stoppingRouted = sectorStoppingError(lane, startedBy)
+      if (stoppingRouted) {
+        sendJson(req, res, 409, { error: stoppingRouted })
+        return true
+      }
     }
 
     const allowedLanes = allowedLanesFor(startInfo)
@@ -1856,6 +2092,12 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
       }
     }
 
+    const stoppingAfter = sectorStoppingError(lane, startedBy)
+    if (stoppingAfter) {
+      sendJson(req, res, 409, { error: stoppingAfter })
+      return true
+    }
+
     if (running.has(lane)) {
       sendJson(req, res, 409, { error: 'That lane is already running.' })
       return true
@@ -1897,10 +2139,11 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
     return true
   }
 
-  return {
+  const runsApi = {
     handle,
     stopAll,
     stopRun,
+    stopSectorLanes,
     interruptLane,
     isRunning: (lane) => (lane !== undefined ? running.has(lane) : running.size > 0),
     startRun,
@@ -1922,4 +2165,14 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
       return found
     },
   }
+
+  function syncOrchestratorsRuns() {
+    const registry = typeof orchestrators === 'function' ? orchestrators() : null
+    if (registry && typeof registry.attachRuns === 'function') {
+      registry.attachRuns(runsApi)
+    }
+    return registry
+  }
+
+  return runsApi
 }
