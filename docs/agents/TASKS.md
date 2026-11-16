@@ -3917,3 +3917,12 @@ Research plan, third batch, P461 and P462 (first steps as Sol narrowed them; bot
 3. After it answers, the confirm area shows `Stopped N lanes.` and, when `stillRunning` is not empty, `Still running: a, b.` It never says a lane stopped unless the server listed it.
 4. Tests, each failing before your change: the client posts the right body for a sub and for Main; the mock shape matches; the button calls `stopTree` and shows both lines; a failure shows the server's error.
 5. Run `node node_modules/vitest/vitest.mjs run tests/orchestrator-stop-tree.test.jsx tests/control-contract.test.js tests/control-mock.test.js tests/orchestrator-chat.test.js` and `npm run build`, and report the counts.
+
+**P462b. A checkpoint says which changed files its recovery ref does not keep (OpenCode).** Read this brief and P462 above only. Commit each step as you finish it. Run every command in the foreground. Files: scripts/run-lane.mjs (`checkpointFor`), src/briefs/run.js (`checkpointField`), src/ui/Inspector.jsx (the checkpoint row), tests/run-checkpoint.test.js, docs/agents/CHANGELOG.md, docs/agents/architecture/LIVE.md.
+
+`git stash create` keeps changes to tracked files only, but the Inspector says every changed file was kept.
+
+1. The checkpoint also records `untrackedCount`, the number of `??` lines in the status. `recovery` is written only when at least one tracked file changed.
+2. The Inspector row's text drops its own `Checkpoint:` prefix (the row label already says it) and reads `SHORT_HEAD on BRANCH`, then `, N changed files kept as RECOVERY_SHORT` for the tracked ones, then `, U untracked files not kept` when there are any. Untracked only reads `, U untracked files not kept`.
+3. Tests, each failing before your change: an untracked-only worktree has no `recovery` and the row says the files were not kept; a mixed worktree counts both; the row has no doubled `Checkpoint`.
+4. Run `node node_modules/vitest/vitest.mjs run tests/run-checkpoint.test.js` and report the counts.
