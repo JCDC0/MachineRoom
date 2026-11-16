@@ -1,7 +1,9 @@
 # Changelog
 
 ## Unreleased
+- The ladder end-to-end tests allow 120 seconds, more than their own waits add up to.
 - A sub orchestrator's token can start, stop or merge only the lanes in its own sector and stop only itself; its lane messages show it as the sender.
+- P435: Both ladder end-to-end tests allow 120 seconds, more than their waits add up to.
 - An orchestrator's ladder save refuses to move an existing sub to another harness, as it refuses a new one.
 - The turn-end scope check lists both paths of a renamed file, so a move out of a restricted sub's scope is warned about.
 - Sub tokens can start, stop and merge only lanes in their sector, and can stop only their own orchestrator.

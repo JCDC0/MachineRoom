@@ -322,7 +322,7 @@ afterEach(async () => {
   while (dirs.length > 0) removeTempDir(dirs.pop())
 })
 
-describe('ladder end to end on non-Claude harnesses', () => {
+describe('ladder end to end on non-Claude harnesses', { timeout: 120000 }, () => {
   it('runs main -> codex sub -> sector lane -> wake -> sub:ID answer and refuses outside lane with 403', async () => {
     const { url, project, runs, orchLog, spawns } = await setupLadderRig()
     await attachCodexSub(url)
