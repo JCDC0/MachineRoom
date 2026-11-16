@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- P450: Add `POST /api/orchestrator/stop-tree` to stop a sector or the whole tree in one call while gating dispatches into the stopping sector and checking the process tree for `stillRunning`.
 - A page opens one /events stream and the control client takes its notices from it, so six tabs fit before the browser's connection limit.
 - The native agent keeps a reply its inbox watch read as the model call ended, and gives it to the next call.
 - A sub's harness change also changes its program, and a ladder save that gives a sub's model and effort keeps them over the saved chat file.
