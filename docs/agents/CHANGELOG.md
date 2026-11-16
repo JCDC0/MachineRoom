@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- Draft the merged research plan in docs/agents/PLAN-RESEARCH.md from the Claude, Sol and Argon harness surveys (P443).
 - A sub orchestrator's lane:KEY message to a lane outside its sector is refused with 403.
 - Argon's survey of coding agent harnesses and what their users want (P442c).
 - P445: A sub token's prefixed lane message is refused outside its sector before it reaches the lane.
