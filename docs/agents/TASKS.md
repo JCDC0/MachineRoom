@@ -3982,3 +3982,10 @@ Review 47 fixes, P467 to P471. `docs/agents/AUDIT-2026-11-REVIEW-47.md` (P466, G
 1. A removed lane with runs keeps its row when its costs are unknown, with its known tokens and its `missingCostRuns`, and the summary marks spend as partial instead of showing 0.
 2. The MCP list cache key is a hash of the whole normalized server configuration, environment values included; the values are never logged or stored in plain text.
 3. Tests, each failing before your change: a removed lane with only unknown cost and 100 input tokens keeps its row and the partial mark; changing only an environment value lists the tools again.
+
+**P472. CI: the interrupt test's repository has its own git identity (Codex, Terra).** Read this brief only. Leave your changes uncommitted; the runner commits them. Tests that make their own temporary git repositories are allowed. Run every command in the foreground. Files: tests/lane-interrupt.test.js (only `makeRepo` near line 77), docs/agents/CHANGELOG.md.
+
+CI at `bfeeae12` fails `interrupting a working CLI lane run > stops the run, keeps uncommitted work and branch...` on Ubuntu and Windows: `expected 'M  readme.txt\nA  wip.txt' to be ''`. The test gives only its own git calls an identity (`GIT_IDENTITY`); the runner that the bridge starts makes the queue commit with the machine's identity, and the CI runners have none, so the add works and the commit fails. Running the test with `GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1` shows the same failure locally.
+
+1. `makeRepo` sets `user.name` and `user.email` in the new repository's own config (the values in `GIT_IDENTITY`) right after `git init`, so every commit in it works with no global identity.
+2. Run `GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 node node_modules/vitest/vitest.mjs run tests/lane-interrupt.test.js` in a bash shell (in PowerShell set the two variables with `$env:` first) and report the counts. It must pass with no global identity.
