@@ -7,7 +7,7 @@ import { StringDecoder } from 'node:string_decoder'
 import { fileURLToPath } from 'node:url'
 import { parseBriefs } from '../src/briefs/briefs.js'
 import { KEY_MASK, maskKeys } from '../src/briefs/audit.js'
-import { SINCE_PROBLEM, checkCommandLines, dayStart, formatInterruptMessage, laneLockLog, laneLockStartedAt, laneModeProblem as runnerModeProblem, laneStats, laneWithOverrides, maskProfilePaths, pathInside, projectProblems, runRecord, worktreeFor } from '../src/briefs/run.js'
+import { SINCE_PROBLEM, checkCommandLines, dayStart, formatInterruptMessage, interruptSenderFrom, laneLockLog, laneLockStartedAt, laneModeProblem as runnerModeProblem, laneStats, laneWithOverrides, maskProfilePaths, pathInside, projectProblems, runRecord, worktreeFor } from '../src/briefs/run.js'
 import { profileFromBrief, profileFromTask } from '../src/policy/profile.js'
 import { readPolicy, routeLane, tierFor, TIERS } from '../src/policy/route.js'
 import { conversationFromLog } from '../src/model/conversation.js'
@@ -287,23 +287,11 @@ export function laneStatesFor({
 }
 
 export const RUN_READ_CHUNK_BYTES = 4 * 1024 * 1024
-const TAIL_CHECK_BYTES = 64
 
 const runRecordCaches = new Map()
 
 export function clearRunsCache() {
   runRecordCaches.clear()
-}
-
-function readFdSlice(fd, start, length) {
-  const buffer = Buffer.alloc(length)
-  let read = 0
-  while (read < length) {
-    const got = readSync(fd, buffer, read, length - read, start + read)
-    if (got <= 0) break
-    read += got
-  }
-  return read === length ? buffer : null
 }
 
 export function cachedRunRecords(file = runsFile()) {
@@ -324,23 +312,15 @@ export function cachedRunRecords(file = runsFile()) {
       records: Object.freeze([]),
       tail: '',
       decoder: new StringDecoder('utf8'),
-      ino: 0,
-      tailSlice: null,
     }
     runRecordCaches.set(target, entry)
   }
 
-  const resetEntry = () => {
+  if (stat.size < entry.offset || stat.mtimeMs < entry.mtimeMs || (stat.size === entry.offset && stat.mtimeMs !== entry.mtimeMs)) {
     entry.offset = 0
     entry.records = Object.freeze([])
     entry.tail = ''
     entry.decoder = new StringDecoder('utf8')
-    entry.ino = 0
-    entry.tailSlice = null
-  }
-
-  if (stat.size < entry.offset || stat.mtimeMs < entry.mtimeMs || (stat.size === entry.offset && stat.mtimeMs !== entry.mtimeMs)) {
-    resetEntry()
   } else if (stat.size === entry.offset && stat.mtimeMs === entry.mtimeMs) {
     return entry.records
   }
@@ -354,16 +334,6 @@ export function cachedRunRecords(file = runsFile()) {
 
   const fresh = []
   try {
-    if (entry.offset > 0 && stat.size > entry.offset) {
-      const inoChanged = Boolean(entry.ino && stat.ino && entry.ino !== stat.ino)
-      let sliceChanged = false
-      if (!inoChanged && entry.tailSlice && entry.tailSlice.length > 0) {
-        const start = entry.offset - entry.tailSlice.length
-        const current = start >= 0 ? readFdSlice(fd, start, entry.tailSlice.length) : null
-        sliceChanged = !current || !current.equals(entry.tailSlice)
-      }
-      if (inoChanged || sliceChanged) resetEntry()
-    }
     let remaining = stat.size - entry.offset
     if (remaining > 0) {
       const buffer = Buffer.alloc(Math.min(remaining, RUN_READ_CHUNK_BYTES))
@@ -391,13 +361,6 @@ export function cachedRunRecords(file = runsFile()) {
       }
     }
     entry.mtimeMs = stat.mtimeMs
-    entry.ino = stat.ino ?? 0
-    if (entry.offset > 0) {
-      const length = Math.min(entry.offset, TAIL_CHECK_BYTES)
-      entry.tailSlice = readFdSlice(fd, entry.offset - length, length)
-    } else {
-      entry.tailSlice = null
-    }
   } finally {
     if (fresh.length > 0) entry.records = Object.freeze(entry.records.concat(fresh))
     closeSync(fd)
@@ -1049,14 +1012,17 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
       }
     }
     const minutes = Math.max(0, Math.round(((Date.now() - Date.parse(item.entry.startedAt)) / 60000) * 10) / 10)
-    const killed = Boolean(item.stoppedByOwner || item.interruptedBy)
-    const recordNote = item.interruptedBy
+    const killed = Boolean(item.stoppedByOwner || item.interrupting)
+    const recordNote = item.interrupting
       ? 'interrupted'
       : item.stoppedByOwner
         ? 'stopped by the owner'
         : note !== ''
           ? note.slice(0, 200)
           : 'the runner refused to start or could not start'
+    const interruptedBy = item.continueFrom
+      ? (item.interruptedBy || interruptSenderFrom(readTextAt(join(recordsDir(), `${item.continueFrom}.interrupt.txt`)) ?? ''))
+      : ''
     const record = runRecord({
       lane: item.entry.lane,
       briefs: item.entry.briefs,
@@ -1075,7 +1041,7 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
       ...(queueInfo ? { queue: queueInfo } : {}),
       ...(item.startedBy ? { startedBy: item.startedBy } : {}),
       ...(item.continueFrom ? { continues: item.continueFrom } : {}),
-      ...(item.interruptedBy ? { interruptedBy: item.interruptedBy } : {}),
+      ...(item.continueFrom && interruptedBy ? { interruptedBy } : {}),
     })
     try {
       appendFileSync(recordsPath(), `${JSON.stringify(record)}\n`)
@@ -1089,6 +1055,7 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
     const givenTicket = typeof extraOptions?.ticket === 'string' ? extraOptions.ticket.trim() : ''
     const ticket = givenTicket || randomBytes(16).toString('hex')
     const continueFrom = typeof extraOptions?.continueFrom === 'string' ? extraOptions.continueFrom.trim() : ''
+    const interruptedBy = continueFrom !== '' && typeof extraOptions?.interruptedBy === 'string' ? extraOptions.interruptedBy.trim() : ''
     if (projectRun?.queue) {
       entry.queue = true
       entry.tasks = projectRun.taskCount
@@ -1121,7 +1088,7 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
       stopping: false,
       stoppedByOwner: false,
       interrupting: false,
-      interruptedBy: '',
+      interruptedBy,
       logPath: '',
       closed: false,
       onClose: [],
@@ -1608,7 +1575,6 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
       const sender = String(unseen[0]?.from ?? '').trim() || 'orchestrator'
       item.interrupting = true
       item.stopping = true
-      item.interruptedBy = sender
       item.logPath = join(recordsDir(), `${runName}.log`)
       writeInterruptFile(recordsDir(), runName, unseen)
       const stopTarget = lane !== item.entry.lane && existsSync(join(recordsDir(), `${lane}.lock`)) ? lane : item.entry.lane
@@ -1621,7 +1587,6 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
       if (!stopResult.ok) {
         item.stopping = false
         item.interrupting = false
-        item.interruptedBy = ''
         if (item.closed) laneTickets.delete(item.ticket)
         return false
       }
@@ -1643,7 +1608,7 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
         item.model,
         item.mode,
         item.allowedLanes,
-        { continueFrom: runName, ticket: item.ticket }
+        { continueFrom: runName, ticket: item.ticket, interruptedBy: sender }
       )
       notify({ topic: 'runs' })
       return true

@@ -17,6 +17,24 @@ import { INTERRUPT_PARAGRAPH, parseRunArgs } from '../src/briefs/run.js'
 import { getJson, waitFor } from './helpers/bridge.js'
 import { makeTempDir, removeTempDir } from './helpers/tempRoot.js'
 
+const fsHooks = vi.hoisted(() => ({
+  onReadRunsFile: null,
+}))
+
+vi.mock('node:fs', async (importOriginal) => {
+  const actual = await importOriginal()
+  return {
+    ...actual,
+    readFileSync: (...args) => {
+      const result = actual.readFileSync(...args)
+      if (typeof fsHooks.onReadRunsFile === 'function' && typeof args[0] === 'string' && args[0].endsWith('runs.jsonl')) {
+        fsHooks.onReadRunsFile(args[0], actual.appendFileSync)
+      }
+      return result
+    },
+  }
+})
+
 const REPO_ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)))
 const RECORDINGS = join(REPO_ROOT, 'public', 'recordings')
 const GIT_IDENTITY = {
@@ -30,6 +48,7 @@ const BRIEF = { id: 'P438X', title: 'Interrupt test brief', text: 'Do it.\n\nFil
 const cleanups = []
 
 afterEach(async () => {
+  fsHooks.onReadRunsFile = null
   clearRunsCache()
   while (cleanups.length > 0) {
     const fn = cleanups.pop()
@@ -170,7 +189,7 @@ function fakeCliScript({ callsFile, releaseFile, stopAtCall = 0, writeWipOnFirst
   ].join('\n')
 }
 
-async function makeBridgeRig({ laneReplies = 'next-turn', script = '', harness = 'opencode', laneKey = 'opencode' } = {}) {
+async function makeBridgeRig({ laneReplies = 'next-turn', script = '', harness = 'opencode', laneKey = 'opencode', extraLanes = {} } = {}) {
   const base = tempDir('mr-lane-interrupt-')
   const runs = join(base, 'runs')
   const project = join(base, 'project')
@@ -191,10 +210,11 @@ async function makeBridgeRig({ laneReplies = 'next-turn', script = '', harness =
       harness: harness === 'machineroom' ? 'MachineRoom' : 'OpenCode',
       cli: { harness, bin: process.execPath, model: 'fake/model' },
     },
+    ...extraLanes,
   }
   const lanesFile = join(base, 'lanes.json')
   writeFileSync(lanesFile, `${JSON.stringify(lanes, null, 2)}\n`)
-  writeActiveLanes(activeLanesFileFor(project, runs), [laneKey])
+  writeActiveLanes(activeLanesFileFor(project, runs), [laneKey, ...Object.keys(extraLanes)])
 
   const bridge = createBridge({
     projectRoot: project,
@@ -336,8 +356,9 @@ describe('interrupting a working CLI lane run', { timeout: 60000 }, () => {
     const firstName = runNameOf(records[0])
     expect(firstName).not.toBe('')
     expect(records[0].killed).toBe(true)
-    expect(records[0].interruptedBy).toBe('orchestrator')
+    expect(Object.hasOwn(records[0], 'interruptedBy')).toBe(false)
     expect(records[1].continues).toBe(firstName)
+    expect(records[1].interruptedBy).toBe('orchestrator')
     expect(records[1].exitCode).toBe(0)
     expect(records[1].branch).toBe(firstCall.branch)
     expect(gitIn(secondCall.cwd, ['status', '--porcelain'])).toBe('')
@@ -443,14 +464,14 @@ describe('interrupting a working CLI lane run', { timeout: 60000 }, () => {
 
     const records = readRecords(rig.runs)
     expect(records).toHaveLength(4)
-    expect(records[0].interruptedBy).toBe('orchestrator')
+    expect(Object.hasOwn(records[0], 'interruptedBy')).toBe(false)
     expect(records[1].continues).toBe(runNameOf(records[0]))
     expect(records[1].interruptedBy).toBe('orchestrator')
     expect(records[2].continues).toBe(runNameOf(records[1]))
     expect(records[2].interruptedBy).toBe('orchestrator')
     expect(records[3].continues).toBe(runNameOf(records[2]))
+    expect(records[3].interruptedBy).toBe('orchestrator')
     expect(records[3].exitCode).toBe(0)
-    expect(Object.hasOwn(records[3], 'interruptedBy')).toBe(false)
   })
 
   it('continues a brief run on the same branch with uncommitted work via startLane', async () => {
@@ -479,8 +500,9 @@ describe('interrupting a working CLI lane run', { timeout: 60000 }, () => {
     const firstName = 'opencode-P438X-20261116-120000'
     const firstLog = join(runs, `${firstName}.log`)
     writeFileSync(firstLog, '')
+    const runsPath = join(runs, 'runs.jsonl')
     writeFileSync(
-      join(runs, 'runs.jsonl'),
+      runsPath,
       `${JSON.stringify({
         lane: 'opencode',
         briefs: ['P438X'],
@@ -494,6 +516,7 @@ describe('interrupting a working CLI lane run', { timeout: 60000 }, () => {
         commits: [],
       })}\n`
     )
+    const beforeRaw = readFileSync(runsPath, 'utf8')
     writeFileSync(
       join(runs, `${firstName}.interrupt.txt`),
       `${INTERRUPT_PARAGRAPH}\n\nsub:backend: Keep the existing branch.\n`
@@ -546,11 +569,228 @@ describe('interrupting a working CLI lane run', { timeout: 60000 }, () => {
     expect(continuedPrompt).toContain(INTERRUPT_PARAGRAPH)
     expect(continuedPrompt).toContain('sub:backend: Keep the existing branch.')
 
+    const afterRaw = readFileSync(runsPath, 'utf8')
+    expect(afterRaw.startsWith(beforeRaw)).toBe(true)
     const records = readRecords(runs)
     expect(records).toHaveLength(2)
-    expect(records[0].interruptedBy).toBe('sub:backend')
+    expect(Object.hasOwn(records[0], 'interruptedBy')).toBe(false)
     expect(records[1].continues).toBe(firstName)
+    expect(records[1].interruptedBy).toBe('sub:backend')
     expect(records[1].branch).toBe(firstBranch)
+  })
+
+  it('leaves every earlier line of runs.jsonl byte for byte as it was and keeps a record appended during the interrupt', async () => {
+    const base = tempDir('mr-interrupt-append-')
+    const worktree = join(base, '.worktrees', 'opencode')
+    const runs = join(base, 'runs')
+    const script = [
+      "const { writeFileSync } = require('node:fs')",
+      "writeFileSync('note.txt', 'done\\n')",
+      "console.log('{\"type\":\"step_finish\",\"part\":{\"cost\":0,\"tokens\":{\"input\":1,\"output\":1}}}')",
+      '',
+    ].join('\n')
+    const firstBranch = branchFor(BRIEF)
+    makeRepo(worktree, script)
+    mkdirSync(runs, { recursive: true })
+    gitIn(worktree, ['switch', '-c', firstBranch])
+
+    const firstName = 'opencode-P438X-20261116-120500'
+    const firstLog = join(runs, `${firstName}.log`)
+    writeFileSync(firstLog, '')
+    const runsPath = join(runs, 'runs.jsonl')
+    const earlierLine = '{"lane": "agy", "briefs": ["P100"], "startedAt": "2026-11-16T11:00:00.000Z", "exitCode": 0}\n'
+    const firstLine = `{"lane": "opencode", "briefs": ["P438X"], "model": "fake/model", "startedAt": "2026-11-16T12:05:00.000Z", "minutes": 0.1, "exitCode": 1, "killed": true, "log": ${JSON.stringify(firstLog)}, "branch": ${JSON.stringify(firstBranch)}, "commits": []}\n`
+    writeFileSync(runsPath, `${earlierLine}${firstLine}`)
+    const beforeRaw = readFileSync(runsPath, 'utf8')
+    writeFileSync(
+      join(runs, `${firstName}.interrupt.txt`),
+      `${INTERRUPT_PARAGRAPH}\n\nsub:backend: Keep concurrent records.\n`
+    )
+
+    let concurrentSeq = 0
+    fsHooks.onReadRunsFile = (filePath, append) => {
+      if (resolve(filePath) !== resolve(runsPath)) return
+      concurrentSeq += 1
+      append(
+        filePath,
+        `${JSON.stringify({
+          lane: 'agy2',
+          briefs: ['P999'],
+          startedAt: `2026-11-16T12:05:0${concurrentSeq}.000Z`,
+          exitCode: 0,
+          marker: `concurrent-${concurrentSeq}`,
+        })}\n`
+      )
+    }
+
+    const lanes = {
+      opencode: {
+        name: 'OpenCode',
+        worktree,
+        cli: { harness: 'opencode', bin: process.execPath, model: 'fake/model', commits: 'runner' },
+      },
+    }
+    const indexPath = join(RECORDINGS, 'index.json')
+    const recordingsExisted = existsSync(RECORDINGS)
+    const indexBefore = existsSync(indexPath) ? readFileSync(indexPath, 'utf8') : null
+    const saved = process.env.MACHINEROOM_RUNS
+    process.env.MACHINEROOM_RUNS = runs
+    const spy = vi.spyOn(console, 'log').mockImplementation(() => {})
+    try {
+      const check = { mainCheckout: dirname(runs), lanes, home: join(dirname(runs), 'home'), temp: join(dirname(runs), 'temp'), runs }
+      const result = await startLane({
+        options: { lane: 'opencode', minutes: 1, continueFrom: firstName, folderCheck: check },
+        lane: lanes.opencode,
+        lanes,
+        wanted: [BRIEF],
+        prompt: 'Original brief prompt.',
+        logPath: join(runs, 'opencode-P438X-20261116-120501.log'),
+        usageFile: join(runs, 'opencode-P438X-20261116-120501.usage.json'),
+        name: 'opencode-P438X-20261116-120501',
+      })
+      expect(result.code).toBe(0)
+    } finally {
+      fsHooks.onReadRunsFile = null
+      spy.mockRestore()
+      if (saved === undefined) delete process.env.MACHINEROOM_RUNS
+      else process.env.MACHINEROOM_RUNS = saved
+      for (const name of [firstName, 'opencode-P438X-20261116-120501']) {
+        for (const suffix of ['run.jsonl', 'agents.json', 'tree.json']) {
+          rmSync(join(RECORDINGS, `${name}-${suffix}`), { force: true })
+        }
+      }
+      if (!recordingsExisted) rmSync(RECORDINGS, { recursive: true, force: true })
+      else if (indexBefore !== null) writeFileSync(indexPath, indexBefore)
+      else rmSync(indexPath, { force: true })
+    }
+
+    const afterRaw = readFileSync(runsPath, 'utf8')
+    expect(afterRaw.startsWith(beforeRaw)).toBe(true)
+    const records = readRecords(runs)
+    expect(concurrentSeq).toBeGreaterThan(0)
+    for (let i = 1; i <= concurrentSeq; i += 1) {
+      expect(records.some((record) => record.marker === `concurrent-${i}`)).toBe(true)
+    }
+    const continuation = records.find((record) => record.continues === firstName)
+    expect(continuation).toBeDefined()
+    expect(continuation.interruptedBy).toBe('sub:backend')
+    expect(Object.hasOwn(records[1], 'interruptedBy')).toBe(false)
+  })
+
+  it('keeps each interrupt sender on its own continuation record across multiple senders', async () => {
+    const tmp = tempDir('mr-interrupt-senders-')
+    const callsFile = join(tmp, 'calls.jsonl')
+    const releaseFile = join(tmp, 'release')
+    const script = [
+      "const { appendFileSync, existsSync, readFileSync } = require('node:fs')",
+      `const callsFile = ${JSON.stringify(callsFile)}`,
+      `const releaseFile = ${JSON.stringify(releaseFile)}`,
+      "const args = process.argv.slice(2)",
+      "const titleIndex = args.indexOf('--title')",
+      "const title = titleIndex !== -1 ? args[titleIndex + 1] : ''",
+      "const lane = title.startsWith('helper-') ? 'helper' : 'opencode'",
+      "const existing = existsSync(callsFile) ? readFileSync(callsFile, 'utf8').split(/\\r?\\n/).filter(Boolean).map((l) => JSON.parse(l)).filter((l) => l.lane === lane).length : 0",
+      "const callNumber = existing + 1",
+      "appendFileSync(callsFile, JSON.stringify({ lane, callNumber, ticket: process.env.MACHINEROOM_LANE_TICKET ?? '' }) + '\\n')",
+      "async function run() {",
+      "  if (!(lane === 'opencode' && callNumber === 3)) {",
+      "    while (!existsSync(releaseFile)) await new Promise((done) => setTimeout(done, 25))",
+      "  }",
+      "  console.log('{\"type\":\"step_finish\",\"part\":{\"cost\":0,\"tokens\":{\"input\":1,\"output\":1}}}')",
+      "}",
+      "run().catch((err) => { console.error(err); process.exit(1) })",
+      '',
+    ].join('\n')
+
+    const rig = await makeBridgeRig({
+      laneReplies: 'interrupt',
+      script,
+      extraLanes: {
+        helper: {
+          name: 'Helper CLI Lane',
+          harness: 'OpenCode',
+          cli: { harness: 'opencode', bin: process.execPath, model: 'fake/model' },
+        },
+      },
+    })
+
+    try {
+      expect((await pagePost(rig.url, '/api/control/runs', { lane: 'opencode', task: 'Main task.', worktree: true, confirmed: true })).status).toBe(202)
+      expect((await pagePost(rig.url, '/api/control/runs', { lane: 'helper', task: 'Helper task.', worktree: true, confirmed: true })).status).toBe(202)
+
+      await waitFor(() => readLines(callsFile).find((line) => line.lane === 'opencode' && line.callNumber === 1), {
+        timeoutMs: 15000,
+        what: 'opencode call 1',
+      })
+      const helperCall = await waitFor(() => readLines(callsFile).find((line) => line.lane === 'helper' && line.callNumber === 1), {
+        timeoutMs: 15000,
+        what: 'helper call 1',
+      })
+
+      expect(
+        (
+          await tokenPost(
+            rig.url,
+            '/api/orchestrator/messages',
+            { to: 'lane:opencode', text: 'First from orchestrator.' },
+            rig.token('orchestrator')
+          )
+        ).status
+      ).toBe(202)
+
+      await waitFor(() => readLines(callsFile).find((line) => line.lane === 'opencode' && line.callNumber === 2), {
+        timeoutMs: 20000,
+        what: 'opencode call 2',
+      })
+
+      const firstRecordRaw = await waitFor(
+        () => {
+          const runsPath = join(rig.runs, 'runs.jsonl')
+          if (!existsSync(runsPath)) return null
+          const lines = readFileSync(runsPath, 'utf8').split(/\r?\n/).filter(Boolean)
+          return lines.find((line) => JSON.parse(line).lane === 'opencode') ?? null
+        },
+        { timeoutMs: 15000, what: 'first opencode record in runs.jsonl' }
+      )
+      expect(Object.hasOwn(JSON.parse(firstRecordRaw), 'interruptedBy')).toBe(false)
+
+      const fromHelper = await getJson(`${rig.url}/api/orchestrator/messages`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'X-MachineRoom-Lane': helperCall.ticket },
+        body: JSON.stringify({ to: 'lane:opencode', text: 'Second from helper.' }),
+      })
+      expect(fromHelper.status).toBe(202)
+
+      await waitFor(() => readLines(callsFile).find((line) => line.lane === 'opencode' && line.callNumber === 3), {
+        timeoutMs: 20000,
+        what: 'opencode call 3',
+      })
+
+      writeFileSync(releaseFile, 'go\n')
+      await waitFor(
+        async () => (await getJson(`${rig.url}/api/control/runs`)).body.running.length === 0,
+        { timeoutMs: 15000, what: 'all runs to finish' }
+      )
+
+      const rawLines = readFileSync(join(rig.runs, 'runs.jsonl'), 'utf8').split(/\r?\n/).filter(Boolean)
+      const opencodeRawLines = rawLines.filter((line) => JSON.parse(line).lane === 'opencode')
+      expect(opencodeRawLines[0]).toBe(firstRecordRaw)
+
+      const records = readRecords(rig.runs)
+      const opencodeRecords = records.filter((record) => record.lane === 'opencode')
+      const helperRecords = records.filter((record) => record.lane === 'helper')
+      expect(opencodeRecords).toHaveLength(3)
+      expect(helperRecords).toHaveLength(1)
+      expect(Object.hasOwn(opencodeRecords[0], 'continues')).toBe(false)
+      expect(Object.hasOwn(opencodeRecords[0], 'interruptedBy')).toBe(false)
+      expect(opencodeRecords[1].continues).toBe(runNameOf(opencodeRecords[0]))
+      expect(opencodeRecords[1].interruptedBy).toBe('orchestrator')
+      expect(opencodeRecords[2].continues).toBe(runNameOf(opencodeRecords[1]))
+      expect(opencodeRecords[2].interruptedBy).toBe('lane:helper')
+      expect(helperRecords[0].exitCode).toBe(0)
+    } finally {
+      writeFileSync(releaseFile, 'go\n')
+    }
   })
 
   it('parses and validates --continue-from for run and queue arguments', () => {

@@ -21,6 +21,19 @@ export function formatInterruptMessage(messages) {
   return lines.length === 0 ? `${INTERRUPT_PARAGRAPH}\n` : `${INTERRUPT_PARAGRAPH}\n\n${lines.join('\n')}\n`
 }
 
+export function interruptSenderFrom(text) {
+  const raw = String(text ?? '').replace(/\r\n/g, '\n')
+  const split = raw.indexOf('\n\n')
+  const body = split === -1 ? raw : raw.slice(split + 2)
+  for (const line of body.split('\n')) {
+    const trimmed = line.trim()
+    if (trimmed === '') continue
+    const colon = trimmed.indexOf(': ')
+    if (colon > 0) return trimmed.slice(0, colon).trim()
+  }
+  return ''
+}
+
 export function continueFromProblem(value) {
   const name = typeof value === 'string' ? value.trim() : ''
   if (name === '' || name.startsWith('-') || !/^[A-Za-z0-9_-]+$/.test(name)) {
@@ -1247,8 +1260,10 @@ export function runRecord({ lane, briefs, model, reasoning, mode, startedAt, min
     const lane = typeof failoverFrom.lane === 'string' ? failoverFrom.lane.trim() : ''
     if (lane !== '') record.failoverFrom = { lane, startedAt: isoTime(failoverFrom.startedAt) }
   }
-  if (typeof continues === 'string' && continues.trim() !== '') record.continues = continues.trim()
-  if (typeof interruptedBy === 'string' && interruptedBy.trim() !== '') record.interruptedBy = interruptedBy.trim()
+  if (typeof continues === 'string' && continues.trim() !== '') {
+    record.continues = continues.trim()
+    if (typeof interruptedBy === 'string' && interruptedBy.trim() !== '') record.interruptedBy = interruptedBy.trim()
+  }
   return record
 }
 
