@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- P439: A failover backup messages as lane:BACKUP, keeps the primary's replies in its inbox, takes a reply sent to either lane name, and shares the primary's four sends.
 - A sub's harness, model or effort change is saved to the ladder and its config, so a later ladder save keeps it and does not close the sub's running turn.
 - A Bypass run that fails over never passes Bypass to a backup lane not saved as Bypass; the backup runs at its own mode or its harness default.
 - Sub harness, model and effort changes update the saved ladder and keep unchanged working turns alive.
