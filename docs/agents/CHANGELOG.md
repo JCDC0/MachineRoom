@@ -1,9 +1,11 @@
 # Changelog
 
 ## Unreleased
+- Argon drafts PLAN-RESEARCH.md, one ranked plan of 15 items from the three harness surveys.
 - A failover backup sends as its own lane and keeps the primary's inbox and send count.
 - A sub's task or queue start passes its allowed lanes to the runner, and a failover to a backup outside them is refused before it touches the backup.
 - A failover that refuses to carry Bypass gives the backup its harness default mode, so Claude, AGY and native backups do not get their skip-permissions flags.
+- Draft the merged research plan in docs/agents/PLAN-RESEARCH.md from the Claude, Sol and Argon harness surveys (P443).
 - A sub orchestrator's lane:KEY message to a lane outside its sector is refused with 403.
 - Argon's survey of coding agent harnesses and what their users want (P442c).
 - P445: A sub token's prefixed lane message is refused outside its sector before it reaches the lane.
