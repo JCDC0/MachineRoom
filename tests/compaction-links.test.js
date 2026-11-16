@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import {
   BRANCH_TRANSCRIPT_LIMIT,
   COMPACTED_MESSAGE,
+  COMPACTION_LOG_LIMIT,
   ORCHESTRATOR_CHAT_LIMIT,
   SESSION_MESSAGES_LIMIT,
   chatFileFor,
@@ -53,7 +54,7 @@ async function waitFor(check, timeoutMs, what) {
   }
 }
 
-function makeRig() {
+function makeRig(inputs = null) {
   const base = makeTempDir('mr-compaction-links-')
   const runs = join(base, 'runs')
   const project = join(base, 'project')
@@ -66,7 +67,9 @@ function makeRig() {
   let spawned = 0
   const spawnFake = (file, args, options) => {
     spawned += 1
-    const env = { ...(options.env ?? process.env), MR_INPUT: String(spawned === 1 ? 160000 : 12) }
+    const fallback = spawned === 1 ? 160000 : 12
+    const input = Array.isArray(inputs) ? (inputs[spawned - 1] ?? 12) : fallback
+    const env = { ...(options.env ?? process.env), MR_INPUT: String(input) }
     return spawn(process.execPath, [script, ...args], { ...options, env })
   }
   const orchestrator = createOrchestrator({
@@ -91,6 +94,26 @@ function makeRig() {
     removeTempDir(base)
   })
   return { base, runs, project, orchestrator }
+}
+
+function writeTurnLogs(runs, stamp, count) {
+  const names = []
+  for (let index = 0; index < count; index += 1) {
+    const name = `orchestrator-chat-${stamp}-${String(index).padStart(3, '0')}.log`
+    writeFileSync(join(runs, name), '')
+    names.push(name)
+  }
+  return names
+}
+
+function turnLogsIn(runs) {
+  return readdirSync(runs).filter((name) => TURN_LOG.test(name)).sort()
+}
+
+function compactionMessages(rig) {
+  return rig.orchestrator
+    .answer()
+    .messages.filter((message) => message.from === 'room' && message.text.startsWith(COMPACTED_MESSAGE))
 }
 
 describe('the compaction message', () => {
@@ -138,6 +161,27 @@ describe('the kept summary', () => {
   })
 })
 
+describe('the turn log list', () => {
+  it('names the ten newest logs and counts the rest as earlier', () => {
+    const logs = Array.from(
+      { length: 15 },
+      (_, index) => `orchestrator-chat-20260101-000000-${String(index).padStart(3, '0')}.log`
+    )
+    const text = compactedMessage({ chatFile: CHAT, logs })
+    const first = compactedSummary('The work so far.', logs).split('\n')[0]
+    const more = `and ${logs.length - COMPACTION_LOG_LIMIT} earlier`
+
+    expect(text).toContain(more)
+    expect(first).toContain(more)
+    expect(text).not.toContain(logs[4])
+    expect(first).not.toContain(logs[4])
+    expect(text).toContain(logs[5])
+    expect(text).toContain(logs[14])
+    expect(first).toContain(logs[5])
+    expect(first).toContain(logs[14])
+  })
+})
+
 describe('a compaction in a real turn', () => {
   it('posts the links in the room and starts the saved summary with the log names', async () => {
     const rig = makeRig()
@@ -161,5 +205,102 @@ describe('a compaction in a real turn', () => {
     expect(text).toContain(`last ${SESSION_MESSAGES_LIMIT} messages`)
     expect(saved.summary.split('\n')[0]).toBe(`Summarized from these turn logs in the runs folder: ${logs[0]}.`)
     expect(saved.summary).toContain('Summary: Write a summary')
+  })
+})
+
+describe('a compaction after another compaction', () => {
+  it('names only the turn logs written since the previous compaction', async () => {
+    const rig = makeRig([160000, 12, 12])
+    const old = writeTurnLogs(rig.runs, '20260101-000000', 19)
+    rig.orchestrator.send({ text: 'Build the room.', confirmed: true })
+    await waitFor(
+      () => compactionMessages(rig).length === 1 && rig.orchestrator.answer().state === 'idle',
+      20000,
+      'the first compaction'
+    )
+    expect(compactionMessages(rig)[0].text).toContain('and 10 earlier')
+    const firstReal = turnLogsIn(rig.runs).filter((name) => !old.includes(name))
+    expect(firstReal).toHaveLength(2)
+
+    const since = writeTurnLogs(rig.runs, '20270101-000000', 9)
+    rig.orchestrator.send({ text: 'Go on.', confirmed: true })
+    await waitFor(
+      () =>
+        rig.orchestrator.answer().state === 'idle' &&
+        turnLogsIn(rig.runs).filter((name) => !old.includes(name) && !since.includes(name)).length === 3,
+      20000,
+      'the next turn'
+    )
+    rig.orchestrator.compact({ confirmed: true })
+    await waitFor(
+      () => compactionMessages(rig).length === 2 && rig.orchestrator.answer().state === 'idle',
+      20000,
+      'the second compaction'
+    )
+
+    const real = turnLogsIn(rig.runs).filter((name) => !old.includes(name) && !since.includes(name))
+    const expected = [real[2], ...since]
+    const text = compactionMessages(rig)[1].text
+    const saved = JSON.parse(readFileSync(chatFileFor(rig.project, rig.runs), 'utf8'))
+    const summaryLine = saved.summary.split('\n')[0]
+
+    expect(expected).toHaveLength(COMPACTION_LOG_LIMIT)
+    expect(/and \d+ earlier/.test(text)).toBe(false)
+    for (const name of expected) {
+      expect(text).toContain(name)
+      expect(summaryLine).toContain(name)
+    }
+    for (const name of [...old, ...firstReal]) {
+      expect(text).not.toContain(name)
+      expect(summaryLine).not.toContain(name)
+    }
+  })
+
+  it('names ten and says five earlier when fifteen were written since', async () => {
+    const rig = makeRig([160000, 12, 12])
+    const old = writeTurnLogs(rig.runs, '20260101-000000', 19)
+    rig.orchestrator.send({ text: 'Build the room.', confirmed: true })
+    await waitFor(
+      () => compactionMessages(rig).length === 1 && rig.orchestrator.answer().state === 'idle',
+      20000,
+      'the first compaction'
+    )
+
+    const since = writeTurnLogs(rig.runs, '20270101-000000', 14)
+    rig.orchestrator.send({ text: 'Go on.', confirmed: true })
+    await waitFor(
+      () =>
+        rig.orchestrator.answer().state === 'idle' &&
+        turnLogsIn(rig.runs).filter((name) => !old.includes(name) && !since.includes(name)).length === 3,
+      20000,
+      'the next turn'
+    )
+    rig.orchestrator.compact({ confirmed: true })
+    await waitFor(
+      () => compactionMessages(rig).length === 2 && rig.orchestrator.answer().state === 'idle',
+      20000,
+      'the second compaction'
+    )
+
+    const real = turnLogsIn(rig.runs).filter((name) => !old.includes(name) && !since.includes(name))
+    const all = [real[2], ...since]
+    const expected = all.slice(-COMPACTION_LOG_LIMIT)
+    const older = all.slice(0, all.length - COMPACTION_LOG_LIMIT)
+    const text = compactionMessages(rig)[1].text
+    const saved = JSON.parse(readFileSync(chatFileFor(rig.project, rig.runs), 'utf8'))
+    const summaryLine = saved.summary.split('\n')[0]
+
+    expect(all).toHaveLength(15)
+    expect(older).toHaveLength(5)
+    expect(text).toContain('and 5 earlier')
+    expect(summaryLine).toContain('and 5 earlier')
+    for (const name of expected) {
+      expect(text).toContain(name)
+      expect(summaryLine).toContain(name)
+    }
+    for (const name of older) {
+      expect(text).not.toContain(name)
+      expect(summaryLine).not.toContain(name)
+    }
   })
 })
