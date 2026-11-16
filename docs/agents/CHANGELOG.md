@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- P474: Project settings save `planByDefault` (false by default), Dispatch shows a `Start new runs in Plan` checkbox saved on change, and `Mode for this run` starts in Plan for Plan-capable lanes while lanes without Plan keep their usual mode and show `This lane has no Plan mode.` on the confirm card.
 - When the process list cannot be read, Stop sector reports its lanes as still running, and a review's runs and totals include retries and earlier repair runs on the task branch.
 - The interrupt test's repository sets its own user.name and user.email, so CI runners with no global identity pass it.
 - Replies are marked interrupted only after the continuation starts, and a Stop sector or Stop everything cancels interrupts in progress inside its target.
