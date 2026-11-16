@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- An orchestrator's ladder save refuses to move an existing sub to another harness, as it refuses a new one.
 - The turn-end scope check lists both paths of a renamed file, so a move out of a restricted sub's scope is warned about.
 - A lane proposal is refused for a harness turned off in Settings, and a program path saved there counts as available.
 - Argon lists eight free hierarchy gaps to fix next (PLAN-NEXT-ARGON-2.md).
@@ -8,6 +9,7 @@
 - Server git calls ignore inherited repository variables so they use the selected project.
 - P434: Lane proposals read the saved harness settings, so a harness turned off in Settings is refused and a program path saved there counts.
 - The turn-end scope check lists both sides of a rename, so a moved file is checked at its old and new path.
+- P433: An orchestrator's ladder save refuses to move an existing sub to another harness, so only the page can make that change.
 - Review 45 (GPT-6.1 Sol) finds git calls that keep a parent's repository variables.
 - Two slow tests wait for their own timeout instead of a fixed ten seconds, and git calls in mainCheckoutOf and the lane source tests ignore a parent GIT_DIR.
 - Only Main itself takes Main's live harness and model in the inspector and dock, so a lane or sub named like an orchestrator keeps its own.
