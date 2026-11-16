@@ -1,8 +1,10 @@
 # Changelog
 
 ## Unreleased
+- Claude, OpenCode and Codex usage report cache reads and writes where they exist, unknown stays null, runs and lane costs keep them, and Meters shows the cache share of the reporting runs.
 - A test setup defaults every child_process call to windowsHide and passes it to node children through NODE_OPTIONS, four scripts hide their windows, and an audit test fails on any call in server, scripts or bin without it.
 - Checks hide child process windows on Windows, including processes started by tests.
+- Usage summaries and lane run records keep cache read and write counts when reported, laneCosts sums them per lane, and Meters shows the cache share over reporting runs only (P489).
 - LaneConversation shows Edit from this plan on a finished exit-0 Plan run, and a confirm card with the editable plan text and a non-Plan mode starts one run only when the owner presses Start.
 - POST /api/harnesses/KEY/probe runs one hidden, time-limited prompt in an empty folder and answers reached, failed or unknown, and Settings asks before it runs.
 - The run summary finds five or more consecutive failed identical calls from an exact call key the parsers keep for the summary only, the record keeps tool and count, and Needs you shows it.

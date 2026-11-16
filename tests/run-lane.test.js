@@ -542,6 +542,8 @@ describe('summarizeRun', () => {
       inputTokens: 8427,
       outputTokens: 107,
       peakTokens: 8427,
+      cacheReadTokens: 2146,
+      cacheWriteTokens: 0,
     })
     expect(formatSummary(summary)).toEqual([
       'summary: 2 tool calls, 0 failed',

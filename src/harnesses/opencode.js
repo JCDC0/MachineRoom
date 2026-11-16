@@ -66,6 +66,8 @@ function opencodeUsage(log) {
   let peakTokens = null
   const inputs = []
   const outputs = []
+  const cacheReads = []
+  const cacheWrites = []
   for (const line of String(log ?? '').split(/\r?\n/)) {
     if (!line.trim()) continue
     let item
@@ -86,11 +88,15 @@ function opencodeUsage(log) {
     }
     inputs.push(tokens.input, cache.read, cache.write)
     outputs.push(tokens.output, tokens.reasoning)
+    cacheReads.push(cache.read)
+    cacheWrites.push(cache.write)
   }
   return {
     costUsd: cost === null ? null : Math.round(cost * 1e6) / 1e6,
     inputTokens: sumTokens(inputs),
     outputTokens: sumTokens(outputs),
+    cacheReadTokens: sumTokens(cacheReads),
+    cacheWriteTokens: sumTokens(cacheWrites),
     peakTokens,
   }
 }

@@ -77,10 +77,10 @@ describe('laneCosts', () => {
     const costs = laneCosts({ records, agents: AGENTS, now: NOW })
 
     expect(costs.byAgent).toEqual([
-      { agentId: 'agent-opencode', agentName: 'OpenCode', costCents: 60, todayCents: 0, inputTokens: null, outputTokens: null, missingCostRuns: 0, failedCost: 0 },
-      { agentId: 'agent-opencode2', agentName: 'OpenCode 2', costCents: 12, todayCents: 0, inputTokens: null, outputTokens: null, missingCostRuns: 0, failedCost: 0 },
-      { agentId: 'agent-agy', agentName: 'agy', costCents: null, todayCents: null, inputTokens: null, outputTokens: null, missingCostRuns: 1, failedCost: 0 },
-      { agentId: 'removed-lanes', agentName: 'Removed lanes', costCents: 200, todayCents: 0, inputTokens: null, outputTokens: null, missingCostRuns: 0, failedCost: 0 },
+      { agentId: 'agent-opencode', agentName: 'OpenCode', costCents: 60, todayCents: 0, inputTokens: null, outputTokens: null, cacheReadTokens: null, cacheWriteTokens: null, cacheInputTokens: null, cacheKnownRuns: 0, runs: 2, missingCostRuns: 0, failedCost: 0 },
+      { agentId: 'agent-opencode2', agentName: 'OpenCode 2', costCents: 12, todayCents: 0, inputTokens: null, outputTokens: null, cacheReadTokens: null, cacheWriteTokens: null, cacheInputTokens: null, cacheKnownRuns: 0, runs: 1, missingCostRuns: 0, failedCost: 0 },
+      { agentId: 'agent-agy', agentName: 'agy', costCents: null, todayCents: null, inputTokens: null, outputTokens: null, cacheReadTokens: null, cacheWriteTokens: null, cacheInputTokens: null, cacheKnownRuns: 0, runs: 1, missingCostRuns: 1, failedCost: 0 },
+      { agentId: 'removed-lanes', agentName: 'Removed lanes', costCents: 200, todayCents: 0, inputTokens: null, outputTokens: null, cacheReadTokens: null, cacheWriteTokens: null, cacheInputTokens: null, cacheKnownRuns: 0, runs: 1, missingCostRuns: 0, failedCost: 0 },
     ])
     expect(costs.summary).toEqual({ spendCents: 272, budgetCents: 0, utilizationPercent: null, partial: true })
     expect(costs.quota).toEqual([])
@@ -100,6 +100,11 @@ describe('laneCosts', () => {
       todayCents: 0,
       inputTokens: 0,
       outputTokens: 0,
+      cacheReadTokens: null,
+      cacheWriteTokens: null,
+      cacheInputTokens: null,
+      cacheKnownRuns: 0,
+      runs: 0,
       missingCostRuns: 0,
       failedCost: 0,
     })
@@ -119,6 +124,11 @@ describe('laneCosts', () => {
       todayCents: 0,
       inputTokens: 0,
       outputTokens: 0,
+      cacheReadTokens: null,
+      cacheWriteTokens: null,
+      cacheInputTokens: null,
+      cacheKnownRuns: 0,
+      runs: 1,
       missingCostRuns: 0,
       failedCost: 0,
     })
@@ -138,6 +148,11 @@ describe('laneCosts', () => {
       todayCents: null,
       inputTokens: null,
       outputTokens: null,
+      cacheReadTokens: null,
+      cacheWriteTokens: null,
+      cacheInputTokens: null,
+      cacheKnownRuns: 0,
+      runs: 1,
       missingCostRuns: 1,
       failedCost: 0,
     })
@@ -161,6 +176,11 @@ describe('laneCosts', () => {
       todayCents: 40,
       inputTokens: 1000,
       outputTokens: 100,
+      cacheReadTokens: null,
+      cacheWriteTokens: null,
+      cacheInputTokens: null,
+      cacheKnownRuns: 0,
+      runs: 3,
       missingCostRuns: 1,
       failedCost: 0,
     })
@@ -186,6 +206,11 @@ describe('laneCosts', () => {
       todayCents: 40,
       inputTokens: 1000,
       outputTokens: 200,
+      cacheReadTokens: null,
+      cacheWriteTokens: null,
+      cacheInputTokens: null,
+      cacheKnownRuns: 0,
+      runs: 1,
       missingCostRuns: 0,
       failedCost: 0,
     })
@@ -287,9 +312,9 @@ describe('laneCosts', () => {
 
     const costs = laneCosts({ records, agents, now: NOW })
     expect(costs.byAgent).toEqual([
-      { agentId: 'agent-opencode', agentName: 'OpenCode', costCents: 50, todayCents: 0, inputTokens: 2000, outputTokens: 500, missingCostRuns: 1, failedCost: 0 },
-      { agentId: 'agent-agy', agentName: 'agy', costCents: null, todayCents: null, inputTokens: 5000, outputTokens: 600, missingCostRuns: 1, failedCost: 0 },
-      { agentId: 'agent-claude', agentName: 'Claude Code', costCents: 20, todayCents: 0, inputTokens: 400, outputTokens: null, missingCostRuns: 0, failedCost: 0 },
+      { agentId: 'agent-opencode', agentName: 'OpenCode', costCents: 50, todayCents: 0, inputTokens: 2000, outputTokens: 500, cacheReadTokens: null, cacheWriteTokens: null, cacheInputTokens: null, cacheKnownRuns: 0, runs: 2, missingCostRuns: 1, failedCost: 0 },
+      { agentId: 'agent-agy', agentName: 'agy', costCents: null, todayCents: null, inputTokens: 5000, outputTokens: 600, cacheReadTokens: null, cacheWriteTokens: null, cacheInputTokens: null, cacheKnownRuns: 0, runs: 1, missingCostRuns: 1, failedCost: 0 },
+      { agentId: 'agent-claude', agentName: 'Claude Code', costCents: 20, todayCents: 0, inputTokens: 400, outputTokens: null, cacheReadTokens: null, cacheWriteTokens: null, cacheInputTokens: null, cacheKnownRuns: 0, runs: 1, missingCostRuns: 0, failedCost: 0 },
     ])
     expect(costs.summary.spendCents).toBe(70)
   })
@@ -459,8 +484,8 @@ describe('the lane costs routes', () => {
     const body = await costs.json()
     expect(body.summary).toEqual({ spendCents: 72, budgetCents: 0, utilizationPercent: null })
     expect(body.byAgent).toEqual([
-      { agentId: 'agent-opencode', agentName: 'OpenCode', costCents: 60, todayCents: 60, inputTokens: 2000, outputTokens: 500, missingCostRuns: 0, failedCost: 0 },
-      { agentId: 'agent-opencode2', agentName: 'OpenCode 2', costCents: 12, todayCents: 12, inputTokens: null, outputTokens: null, missingCostRuns: 0, failedCost: 0 },
+      { agentId: 'agent-opencode', agentName: 'OpenCode', costCents: 60, todayCents: 60, inputTokens: 2000, outputTokens: 500, cacheReadTokens: null, cacheWriteTokens: null, cacheInputTokens: null, cacheKnownRuns: 0, runs: 2, missingCostRuns: 0, failedCost: 0 },
+      { agentId: 'agent-opencode2', agentName: 'OpenCode 2', costCents: 12, todayCents: 12, inputTokens: null, outputTokens: null, cacheReadTokens: null, cacheWriteTokens: null, cacheInputTokens: null, cacheKnownRuns: 0, runs: 1, missingCostRuns: 0, failedCost: 0 },
     ])
     expect(body.quota).toEqual([])
 

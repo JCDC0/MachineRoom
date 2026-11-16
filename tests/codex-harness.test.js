@@ -378,6 +378,8 @@ describe('codex harness report and usage', () => {
       costUsd: null,
       inputTokens: 2000,
       outputTokens: 320,
+      cacheReadTokens: 500,
+      cacheWriteTokens: null,
     })
   })
 
@@ -386,6 +388,8 @@ describe('codex harness report and usage', () => {
       costUsd: null,
       inputTokens: null,
       outputTokens: null,
+      cacheReadTokens: null,
+      cacheWriteTokens: null,
     })
   })
 })

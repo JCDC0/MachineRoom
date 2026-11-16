@@ -83,11 +83,15 @@ function quotaFrom(line) {
 function codexUsage(log) {
   const line = lastJsonLine(log, (item) => item?.type === 'turn.completed' && item?.usage) ?? lastJsonLine(log, (item) => item?.usage)
   const usage = line?.usage
-  if (!usage || typeof usage !== 'object') return { costUsd: null, inputTokens: null, outputTokens: null }
+  if (!usage || typeof usage !== 'object') {
+    return { costUsd: null, inputTokens: null, outputTokens: null, cacheReadTokens: null, cacheWriteTokens: null }
+  }
   return {
     costUsd: null,
     inputTokens: sumTokens([usage.input_tokens, usage.cached_input_tokens]),
     outputTokens: tokenCount(usage.output_tokens),
+    cacheReadTokens: tokenCount(usage.cached_input_tokens),
+    cacheWriteTokens: null,
   }
 }
 
