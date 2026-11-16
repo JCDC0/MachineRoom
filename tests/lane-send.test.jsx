@@ -2,15 +2,18 @@ import { spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { afterEach, describe, expect, it } from 'vitest'
+import { act, createElement } from 'react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createBridge } from '../server/index.js'
 import { activeLanesFileFor, writeActiveLanes } from '../server/active-lanes.js'
 import { saveHarnessSettings } from '../server/harness-settings.js'
 import { chatFileFor } from '../server/orchestrator.js'
 import { gitPath } from '../server/programPath.js'
 import { clearRunsCache } from '../server/runs.js'
+import LaneConversation from '../src/ui/LaneConversation.jsx'
 import { getJson, waitFor } from './helpers/bridge.js'
 import { makeTempDir, removeTempDir } from './helpers/tempRoot.js'
+import { buttonWithText, click, settle, type, withDom } from './helpers/uiDom.js'
 
 const REPO_ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)))
 const GIT_IDENTITY = {
@@ -387,5 +390,258 @@ describe('page sends to a running lane', { timeout: 60000 }, () => {
     )
     const statusAfter = await pageGet(url, `/api/orchestrator/messages/status?id=${sent.body.id}`)
     expect(statusAfter.body.status).toBe('fetched')
+  })
+})
+
+describe('LaneConversation message box and status updates', () => {
+  const STARTED = '2026-11-16T10:00:00.000Z'
+  const FINISHED = '2026-11-16T09:00:00.000Z'
+  const LANES = [{ key: 'opencode', name: 'OpenCode', color: '#ff8c1a' }]
+
+  it('shows the text box, Send and Send and interrupt only for a running lane', async () => {
+    const client = {
+      runs: async () => ({
+        running: [{ lane: 'opencode', startedAt: STARTED, running: true }],
+        recent: [{ lane: 'opencode', startedAt: FINISHED, exitCode: 0 }],
+      }),
+      runConversation: async ({ startedAt }) => ({
+        lane: 'opencode',
+        startedAt,
+        harness: 'opencode',
+        running: startedAt === STARTED,
+        entries: [{ role: 'agent', text: 'Working.', at: startedAt }],
+      }),
+      sendLaneMessage: async () => ({ id: 'msg-1' }),
+      laneMessageStatus: async () => ({ id: 'msg-1', status: 'queued', at: STARTED }),
+      subscribe: () => () => {},
+    }
+
+    await withDom(async ({ container, root }) => {
+      await act(async () => {
+        root.render(
+          createElement(LaneConversation, {
+            client,
+            lane: 'opencode',
+            laneName: 'OpenCode',
+            project: 'MachineRoom',
+            lanes: LANES,
+            initialStartedAt: FINISHED,
+          })
+        )
+      })
+      await settle(15)
+
+      expect(container.querySelector('textarea')).toBeNull()
+      expect(buttonWithText(container, 'Send')).toBeNull()
+      expect(buttonWithText(container, 'Send and interrupt')).toBeNull()
+
+      await act(async () => {
+        const picker = container.querySelector('.mr-lane-conv-select')
+        picker.value = STARTED
+        picker.dispatchEvent({ type: 'change', bubbles: true })
+      })
+      await settle(15)
+
+      expect(container.querySelector('textarea')).not.toBeNull()
+      expect(buttonWithText(container, 'Send')).not.toBeNull()
+      expect(buttonWithText(container, 'Send and interrupt')).not.toBeNull()
+    })
+  })
+
+  it('sends with interrupt false on Send and refreshes status every 5 seconds and once more when the run ends', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'Date'] })
+    try {
+      let live = true
+      const sentCalls = []
+      const statusCalls = []
+      const statuses = ['queued', 'fetched', 'fetched', 'interrupted']
+      const listeners = new Set()
+      const client = {
+        runs: async () => ({
+          running: live ? [{ lane: 'opencode', startedAt: STARTED, running: true }] : [],
+          recent: live ? [] : [{ lane: 'opencode', startedAt: STARTED, exitCode: 0 }],
+        }),
+        runConversation: async ({ startedAt }) => ({
+          lane: 'opencode',
+          startedAt,
+          harness: 'opencode',
+          running: live,
+          entries: [{ role: 'agent', text: 'Working.', at: startedAt }],
+        }),
+        sendLaneMessage: async (payload) => {
+          sentCalls.push(payload)
+          return { id: 'msg-1' }
+        },
+        laneMessageStatus: async (id) => {
+          statusCalls.push(id)
+          const next = statuses.shift() ?? 'interrupted'
+          return { id, status: next, at: STARTED }
+        },
+        subscribe: (fn) => {
+          listeners.add(fn)
+          return () => listeners.delete(fn)
+        },
+      }
+      const baseProps = {
+        client,
+        lane: 'opencode',
+        laneName: 'OpenCode',
+        project: 'MachineRoom',
+        lanes: LANES,
+        initialStartedAt: STARTED,
+        tick: 0,
+      }
+
+      await withDom(async ({ container, root }) => {
+        await act(async () => {
+          root.render(createElement(LaneConversation, baseProps))
+        })
+        await settle(15)
+
+        const input = container.querySelector('textarea')
+        await type(root, input, 'Check the header.')
+        await click(root, buttonWithText(container, 'Send'))
+        await settle(10)
+
+        expect(sentCalls).toEqual([{ lane: 'opencode', text: 'Check the header.', interrupt: false }])
+        expect(input.value).toBe('')
+        expect(container.textContent).toContain('Check the header.')
+        expect(container.textContent).toContain('Queued')
+        expect(statusCalls).toEqual(['msg-1'])
+
+        await act(async () => {
+          vi.advanceTimersByTime(4999)
+        })
+        await settle(5)
+        expect(statusCalls).toHaveLength(1)
+
+        await act(async () => {
+          vi.advanceTimersByTime(1)
+        })
+        await settle(10)
+        expect(statusCalls).toHaveLength(2)
+        expect(container.textContent).toContain('Read by the runner')
+        expect(container.textContent).not.toMatch(/model\s+(read|acted)/i)
+
+        await act(async () => {
+          vi.advanceTimersByTime(5000)
+        })
+        await settle(10)
+        expect(statusCalls).toHaveLength(3)
+
+        live = false
+        await act(async () => {
+          root.render(createElement(LaneConversation, { ...baseProps, tick: 1 }))
+        })
+        await settle(15)
+
+        expect(statusCalls).toHaveLength(4)
+        expect(container.textContent).toContain('Interrupted the run')
+        expect(container.textContent).toContain('Check the header.')
+        expect(buttonWithText(container, 'Send')).toBeNull()
+
+        await act(async () => {
+          vi.advanceTimersByTime(5000)
+        })
+        await settle(5)
+        expect(statusCalls).toHaveLength(4)
+      })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('sends with interrupt true on Send and interrupt and shows Interrupted the run', async () => {
+    const sentCalls = []
+    const client = {
+      runs: async () => ({
+        running: [{ lane: 'opencode', startedAt: STARTED, running: true }],
+        recent: [],
+      }),
+      runConversation: async ({ startedAt }) => ({
+        lane: 'opencode',
+        startedAt,
+        harness: 'opencode',
+        running: true,
+        entries: [{ role: 'agent', text: 'Working.', at: startedAt }],
+      }),
+      sendLaneMessage: async (payload) => {
+        sentCalls.push(payload)
+        return { id: 'msg-int' }
+      },
+      laneMessageStatus: async (id) => ({ id, status: 'interrupted', at: STARTED }),
+      subscribe: () => () => {},
+    }
+
+    await withDom(async ({ container, root }) => {
+      await act(async () => {
+        root.render(
+          createElement(LaneConversation, {
+            client,
+            lane: 'opencode',
+            laneName: 'OpenCode',
+            project: 'MachineRoom',
+            lanes: LANES,
+            initialStartedAt: STARTED,
+          })
+        )
+      })
+      await settle(15)
+
+      await type(root, container.querySelector('textarea'), 'Switch to helper.')
+      await click(root, buttonWithText(container, 'Send and interrupt'))
+      await settle(15)
+
+      expect(sentCalls).toEqual([{ lane: 'opencode', text: 'Switch to helper.', interrupt: true }])
+      expect(container.textContent).toContain('Switch to helper.')
+      expect(container.textContent).toContain('Interrupted the run')
+    })
+  })
+
+  it('keeps the draft and shows an error when sending fails', async () => {
+    const client = {
+      runs: async () => ({
+        running: [{ lane: 'opencode', startedAt: STARTED, running: true }],
+        recent: [],
+      }),
+      runConversation: async ({ startedAt }) => ({
+        lane: 'opencode',
+        startedAt,
+        harness: 'opencode',
+        running: true,
+        entries: [{ role: 'agent', text: 'Working.', at: startedAt }],
+      }),
+      sendLaneMessage: async () => {
+        throw new Error('The lane opencode has no run that can read a message now.')
+      },
+      laneMessageStatus: async () => ({ id: 'msg-x', status: 'queued', at: STARTED }),
+      subscribe: () => () => {},
+    }
+
+    await withDom(async ({ container, root }) => {
+      await act(async () => {
+        root.render(
+          createElement(LaneConversation, {
+            client,
+            lane: 'opencode',
+            laneName: 'OpenCode',
+            project: 'MachineRoom',
+            lanes: LANES,
+            initialStartedAt: STARTED,
+          })
+        )
+      })
+      await settle(15)
+
+      const input = container.querySelector('textarea')
+      await type(root, input, 'Hold on.')
+      await click(root, buttonWithText(container, 'Send'))
+      await settle(15)
+
+      expect(input.value).toBe('Hold on.')
+      expect(container.querySelector('.mr-orch-error').textContent).toContain(
+        'The lane opencode has no run that can read a message now.'
+      )
+    })
   })
 })
