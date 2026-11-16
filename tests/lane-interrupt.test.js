@@ -77,6 +77,8 @@ function gitIn(folder, args) {
 function makeRepo(folder, script = '') {
   mkdirSync(folder, { recursive: true })
   gitIn(folder, ['init', '-q', '-b', 'main'])
+  gitIn(folder, ['config', 'user.name', GIT_IDENTITY.GIT_AUTHOR_NAME])
+  gitIn(folder, ['config', 'user.email', GIT_IDENTITY.GIT_AUTHOR_EMAIL])
   writeFileSync(join(folder, 'readme.txt'), 'start\n')
   if (script !== '') writeFileSync(join(folder, 'run'), script)
   gitIn(folder, ['add', '-A'])
