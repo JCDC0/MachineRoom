@@ -44,4 +44,53 @@ describe('the orchestrator harness and model in the inspector', () => {
     expect(result.harness).toBe('claude')
     expect(result.model).toBe('opus')
   })
+
+  it('keeps a lane harness and model when its name holds orchestrator', () => {
+    const lane = {
+      id: 'agent-codex-helper',
+      key: 'codex-helper',
+      name: 'Codex orchestrator helper',
+      harness: 'codex',
+      model: 'gpt-5-codex',
+      status: 'idle',
+    }
+    const result = agentContext({
+      agent: 'codex-helper',
+      lanes: [orchestrator, lane],
+      orchestrator: { id: 'orchestrator', harness: 'claude', model: 'opus' },
+    })
+
+    expect(result.harness).toBe('codex')
+    expect(result.model).toBe('gpt-5-codex')
+  })
+
+  it('keeps a sub harness when its name holds orchestrator', () => {
+    const sub = {
+      id: 'sub-ui',
+      key: 'sub-ui',
+      name: 'UI orchestrator',
+      harness: 'codex',
+      model: 'gpt-5',
+      status: 'idle',
+    }
+    const result = agentContext({
+      agent: 'sub-ui',
+      lanes: [orchestrator, sub],
+      orchestrator: { id: 'orchestrator', harness: 'claude', model: 'opus' },
+    })
+
+    expect(result.harness).toBe('codex')
+    expect(result.model).toBe('gpt-5')
+  })
+
+  it('shows the live harness and model for Main by its id', () => {
+    const result = agentContext({
+      agent: 'agent-orchestrator',
+      lanes: [orchestrator],
+      orchestrator: { id: 'orchestrator', harness: 'opencode', model: 'deepseek-v4.1' },
+    })
+
+    expect(result.harness).toBe('opencode')
+    expect(result.model).toBe('deepseek-v4.1')
+  })
 })
