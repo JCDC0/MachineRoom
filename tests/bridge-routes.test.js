@@ -887,6 +887,27 @@ describe('run routes', () => {
     expect(done.recent[0]).toMatchObject({ lane: 'opencode', briefs: ['C3e', 'B6'], exitCode: 0, killed: false })
   })
 
+  it('records the lock log when a runner fails', async () => {
+    const tempDirRuns = useRunsTemp()
+    const script = [
+      "import { mkdirSync, writeFileSync } from 'node:fs'",
+      "import { join } from 'node:path'",
+      "const folder = join(process.env.TEMP, 'machineroom-runs')",
+      'const args = process.argv.slice(2)',
+      "const startedAt = args[args.indexOf('--started-at') + 1]",
+      "mkdirSync(folder, { recursive: true })",
+      "writeFileSync(join(folder, 'opencode-run.log'), 'failed')",
+      "writeFileSync(join(folder, 'opencode.lock'), JSON.stringify({ startedAt, log: 'opencode-run.log' }))",
+      'process.exit(1)',
+    ].join('\n')
+    const { url, token } = await startRunsBridge({ script })
+    const res = await tokenPost(`${url}/api/control/runs`, { lane: 'opencode', briefs: ['B6'], confirmed: true }, token)
+    expect(res.status).toBe(202)
+    const file = join(tempDirRuns, 'machineroom-runs', 'runs.jsonl')
+    await waitFor(() => { try { return readFileSync(file, 'utf8').trim() !== '' } catch { return false } }, { what: 'the refused run record' })
+    expect(JSON.parse(readFileSync(file, 'utf8').trim()).log).toBe(join(tempDirRuns, 'machineroom-runs', 'opencode-run.log'))
+  })
+
   it('refuses a bad lane, a bad brief and a second run on a busy lane with plain sentences', async () => {
     useRunsTemp()
     const { url, token } = await startRunsBridge({ script: TINY_SLEEPER })
@@ -1037,6 +1058,36 @@ describe('run routes', () => {
       ['search', 'glob scratch'],
     ])
     expect(res.body.entries.at(-1)).toMatchObject({ role: 'result', text: 'The run ended.' })
+  })
+
+  it('finds the closest matching lane and briefs log when the record has no log', async () => {
+    const tempDirRuns = useRunsTemp()
+    const { url } = await startRunsBridge()
+    const folder = join(tempDirRuns, 'machineroom-runs')
+    const date = new Date(2026, 9, 24, 12, 0, 0)
+    const startedAt = date.toISOString()
+    mkdirSync(folder, { recursive: true })
+    writeFileSync(join(folder, 'opencode-B6-C3e-20261024-120003.log'), 'farther')
+    writeFileSync(join(folder, 'opencode-B6-C3e-20261024-120001.log'), opencodeConversationLog())
+    writeFileSync(join(folder, 'opencode2-B6-C3e-20261024-120000.log'), 'other lane')
+    writeConversationRun(folder, { lane: 'opencode', briefs: ['B6', 'C3e'], startedAt, log: null })
+    const res = await getJson(conversationUrl(url, 'opencode', startedAt))
+    expect(res.status).toBe(200)
+    expect(res.body.entries.some((entry) => entry.tool === 'read')).toBe(true)
+  })
+
+  it('does not find another lane or a log outside the runs folder', async () => {
+    const tempDirRuns = useRunsTemp()
+    const { url } = await startRunsBridge()
+    const folder = join(tempDirRuns, 'machineroom-runs')
+    const startedAt = new Date(2026, 9, 24, 12, 0, 0).toISOString()
+    mkdirSync(folder, { recursive: true })
+    writeFileSync(join(folder, 'opencode2-B6-20261024-120000.log'), opencodeConversationLog())
+    writeFileSync(join(tempDirRuns, 'opencode-B6-20261024-120000.log'), opencodeConversationLog())
+    writeConversationRun(folder, { lane: 'opencode', briefs: ['B6'], startedAt, log: null })
+    const res = await getJson(conversationUrl(url, 'opencode', startedAt))
+    expect(res.status).toBe(404)
+    expect(res.body.error).toBe("The run's log is missing.")
   })
 
   it('writes the brief text as the prompt for a brief run', async () => {

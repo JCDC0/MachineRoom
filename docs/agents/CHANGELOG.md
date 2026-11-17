@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- A run record with no log finds its log by lane, briefs and local start stamp inside the runs folder, and a bridge-written record keeps the log path.
 - An orchestrator fetches missing model details when it loads and after a model or harness change, so the window shows before the first turn.
 - The window comes from the owner's setting, the harness's own report, or the endpoint's model details fetched once in the background; with none known the line shows tokens only.
 - The lane view asks the bridge for its own lane's runs and always has its newest one, the empty lane says No runs yet, and the footer list scrolls inside the lens.

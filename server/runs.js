@@ -162,6 +162,29 @@ function stamp(date = new Date()) {
   return `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}-${pad(date.getHours())}${pad(date.getMinutes())}${pad(date.getSeconds())}`
 }
 
+function findRunLog(folder, record) {
+  const started = Date.parse(record.startedAt)
+  const briefs = Array.isArray(record.briefs) ? record.briefs : []
+  const parts = [record.lane, ...(briefs.length ? briefs : ['project'])]
+  if (!Number.isFinite(started) || parts.some((part) => typeof part !== 'string' || !part || /[/\\]/.test(part))) return ''
+  let names
+  try { names = readdirSync(folder) } catch { return '' }
+  const prefix = `${parts.join('-')}-`
+  const candidates = []
+  for (let offset = -5; offset <= 5; offset += 1) {
+    const time = Math.floor(started / 1000) * 1000 + offset * 1000
+    const base = `${prefix}${stamp(new Date(time))}`.toLowerCase()
+    for (const name of names) {
+      const lower = name.toLowerCase()
+      if (lower !== `${base}.log` && !(lower.startsWith(`${base}-`) && /^\d+\.log$/.test(lower.slice(base.length + 1)))) continue
+      const path = realPath(join(folder, name))
+      if (pathInside(path, folder) && existsSync(path)) candidates.push({ path, distance: Math.abs(time - started) })
+    }
+  }
+  candidates.sort((a, b) => a.distance - b.distance || a.path.localeCompare(b.path))
+  return candidates[0]?.path ?? ''
+}
+
 function hasSeparatorLine(text) {
   return text.split(/\r?\n/).some((line) => line.trim() === '---')
 }
@@ -1135,6 +1158,11 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
   }
 
   function recordRefusal(item, exitCode) {
+    const folder = realPath(recordsDir())
+    const lock = readLockInfo(item.entry.lane)
+    const lockedLog = matchesLockStart(lock.startedAt, item.entry.startedAt) && lock.log ? realPath(join(folder, lock.log)) : ''
+    if (!item.logPath && lockedLog && pathInside(lockedLog, folder) && existsSync(lockedLog)) item.logPath = lockedLog
+    if (!item.logPath) item.logPath = findRunLog(folder, item.entry)
     if (hasRecordForLaneSince(item.entry.lane, item.entry.startedAt, item.logPath)) return
     const note = maskRunText(item.entry.lastLines.join(' ').trim(), item.ticket)
     const meta = item.logPath ? readMeta(item.logPath) : null
@@ -1913,7 +1941,7 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
         const name = typeof liveRun.name === 'string' ? liveRun.name.trim() : ''
         logPath = name === '' ? '' : realPath(join(folder, `${name}.log`))
       } else {
-        logPath = typeof record.log === 'string' && record.log.trim() !== '' ? realPath(record.log.trim()) : ''
+        logPath = typeof record.log === 'string' && record.log.trim() !== '' ? realPath(record.log.trim()) : findRunLog(folder, record)
       }
       if (logPath !== '' && !pathInside(logPath, folder)) {
         sendJson(req, res, 400, { error: CONVERSATION_LOG_OUTSIDE_PROBLEM })
