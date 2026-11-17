@@ -136,7 +136,7 @@ describe('Stage lens labels', () => {
     expect(center).toBeGreaterThan(badge)
     expect(html).toContain('>Center<')
     expect(html).not.toContain('Live feed')
-    expect(html).toContain('Demo // connecting')
+    expect(html).toContain('>connecting</span>')
     expect(html).not.toContain('class="stage-badge"')
   })
 })

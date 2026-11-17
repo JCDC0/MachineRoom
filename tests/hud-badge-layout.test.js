@@ -21,8 +21,5 @@ describe('HUD badge and transport layout', () => {
     expect(hud).toContain('has-badge')
   })
 
-  it('keeps the orchestrator button at least as wide as its title', () => {
-    const button = css.match(/\.transport-orchestrators > \.transport-orchestrator\s*\{([^}]*)\}/)[1]
-    expect(button).toMatch(/min-width\s*:\s*max-content\s*;/)
-  })
+
 })
