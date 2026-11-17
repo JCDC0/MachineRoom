@@ -1969,9 +1969,6 @@ summary:focus-visible,
 }
 
 .hud-action-badge {
-  position: absolute;
-  top: -6px;
-  right: -6px;
   min-width: 16px;
   height: 16px;
   padding: 0 4px;
@@ -9205,7 +9202,7 @@ body:has(#hud-orchestrator-chat) .lens-waiting {
     align-items: baseline;
     gap: 10px;
     flex: 0 10 auto;
-    min-width: 0;
+    min-width: max-content;
     padding: 0;
     border: 0;
     background: none;

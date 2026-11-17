@@ -722,10 +722,11 @@ export default function Hud({
             </button>
           )}
           {client && (
-            <span className="hud-action-slot">
+            <span className="hud-action-slot" style={badges.control > 0 ? { display: 'inline-grid', gridTemplateColumns: 'auto max-content' } : undefined}>
               <button
                 type="button"
                 className="hud-action is-control"
+                style={badges.control > 0 ? { gridColumn: '1 / 3', gridRow: 1, paddingRight: `calc(26px + ${String(badges.control).length}ch)` } : undefined}
                 aria-pressed={controlOpen}
                 aria-expanded={controlOpen}
                 aria-controls="hud-control-drawer"
@@ -749,6 +750,7 @@ export default function Hud({
                 <button
                   type="button"
                   className="hud-action-badge mono"
+                  style={{ gridColumn: 2, gridRow: 1, alignSelf: 'center', marginRight: 8 }}
                   title={`${badges.control} lane ${badges.control === 1 ? 'branch has' : 'branches have'} commits ahead. Open Reviews`}
                   aria-label={`Open Reviews, ${badges.control} lane ${badges.control === 1 ? 'branch has' : 'branches have'} commits ahead`}
                   onClick={(event) => {
@@ -783,6 +785,7 @@ export default function Hud({
               }}
             >
               <span>Orchestrator</span>
+              <span className="agent-key mono">/</span>
               {badges.orchestrator > 0 && (
                 <span
                   className="hud-action-badge mono"
@@ -791,7 +794,6 @@ export default function Hud({
                   {badges.orchestrator}
                 </span>
               )}
-              <span className="agent-key mono">/</span>
             </button>
           )}
           <button
