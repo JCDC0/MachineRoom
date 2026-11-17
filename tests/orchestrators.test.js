@@ -565,7 +565,7 @@ describe('the orchestrator registry', () => {
     expect(basename(record.log)).toMatch(/^orchestrator-chat-/)
     expect(rig.calls()[0].args).toContain('-p')
 
-    appendRecord(rig, { logName: 'opencode-K1-20261025-120000' })
+    appendRecord(rig, { logName: 'opencode-K1-20261025-120000', startedBy: 'orchestrator' })
     rig.registry.onFrame(frame('opencode-K1-20261025-120000'))
     await waitIdle(rig.registry, 'orchestrator', 2)
     expect(rig.calls()[1].args[1]).toContain('Run opencode-K1-20261025-120000 on lane opencode ended: succeeded.')
@@ -825,7 +825,7 @@ describe('the orchestrator registry', () => {
     rig.registry.main.send({ text: 'Main task', confirmed: true })
     await waitIdle(rig.registry, 'orchestrator', 1)
 
-    appendRecord(rig, { logName: 'opencode-K1-20261025-120000', inputTokens: 600000, costUsd: 1.5 })
+    appendRecord(rig, { logName: 'opencode-K1-20261025-120000', startedBy: 'orchestrator', inputTokens: 600000, costUsd: 1.5 })
     rig.registry.onFrame(frame('opencode-K1-20261025-120000'))
     await waitIdle(rig.registry, 'orchestrator', 2)
 
@@ -1975,7 +1975,6 @@ describe('starting lanes from a sub orchestrator', () => {
     )
     expect(seen.filter((message) => message.kind === 'wake')).toEqual([
       { from: 'opencode', to: 'sub-frontend', kind: 'wake' },
-      { from: 'opencode', to: 'orchestrator', kind: 'wake' },
     ])
   })
 
