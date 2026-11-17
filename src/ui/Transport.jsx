@@ -1,13 +1,11 @@
-import { createContext, useContext } from 'react'
+import { createContext, useContext, useEffect, useRef, useState } from 'react'
 import {
   contextLabel,
   contextShare,
   contextTitle,
   contextTone,
-  orchestratorStateWord,
 } from './contextRing.js'
 import { OPEN_CHAT_EVENT, hasWaitingApproval, orchestratorChips } from './transportOrchestrators.js'
-import { waitingForOwner } from './agentContext.js'
 import { inspectLane, lanePillTitle, lanePills } from './transportLanes.js'
 import { showCostBoard, spendText } from './transportSpend.js'
 
@@ -108,14 +106,24 @@ export default function Transport({ snapshot, speeds, markers = [], orchestrator
   const { position, duration, playing, speed } = snapshot
   const finished = position >= duration
   const main = orchestrator && typeof orchestrator === 'object' ? orchestrator : null
-  const badgeKind = useContext(LiveBadgeContext)
+  const [listOpen, setListOpen] = useState(false)
+  const listRef = useRef(null)
+  useEffect(() => {
+    if (!listOpen) return undefined
+    const closeOutside = (event) => { if (!listRef.current?.contains(event.target)) setListOpen(false) }
+    const closeEscape = (event) => { if (event.key === 'Escape') setListOpen(false) }
+    document.addEventListener('pointerdown', closeOutside)
+    document.addEventListener('keydown', closeEscape)
+    return () => {
+      document.removeEventListener('pointerdown', closeOutside)
+      document.removeEventListener('keydown', closeEscape)
+    }
+  }, [listOpen])
   const orchestrators = useContext(OrchestratorsContext)
   const laneFeed = useContext(LanePillsContext)
   const costs = useContext(TransportCostsContext)
-  const badge = (
-    <span className={`transport-badge is-${snapshot.status === 'live' ? 'live' : 'down'}`} role="status">
-      {liveBadgeText(snapshot.status, badgeKind)}
-    </span>
+  const badge = snapshot.status === 'live' ? null : (
+    <span className="transport-badge is-down" role="status">{snapshot.status || 'connecting'}</span>
   )
 
   if (snapshot.live) {
@@ -138,9 +146,7 @@ export default function Transport({ snapshot, speeds, markers = [], orchestrator
         </div>
       )
     }
-    const waiting = hasWaitingApproval(main) || waitingForOwner(orchestrators)
-    const state = waiting ? 'waiting for you' : orchestratorStateWord(main.state)
-    const { chips, more } = orchestratorChips(orchestrators)
+    const { chips } = orchestratorChips(orchestrators, Number.MAX_SAFE_INTEGER)
     const lanes =
       laneFeed && typeof laneFeed === 'object'
         ? lanePills({
@@ -150,8 +156,12 @@ export default function Transport({ snapshot, speeds, markers = [], orchestrator
             records: laneFeed.records,
             labels: laneFeed.labels,
             now: laneFeed.now ?? Date.now(),
+            limit: Number.MAX_SAFE_INTEGER,
+            includeIdle: true,
           })
         : { pills: [], more: 0 }
+    const working = chips.filter((chip) => chip.tone === 'working').length + lanes.pills.filter((lane) => lane.state === 'working').length
+    const waiting = chips.filter((chip) => chip.waiting).length + (hasWaitingApproval(main) ? 1 : 0)
     const spend = spendText(costs)
     return (
       <div className="transport is-live has-orchestrator">
@@ -167,58 +177,25 @@ export default function Transport({ snapshot, speeds, markers = [], orchestrator
             Center
           </button>
         </div>
-        <div className="transport-orchestrators">
-          <button
-            type="button"
-            className="transport-orchestrator"
-            aria-label={`Orchestrator ${state}. Open the conversation`}
-            title={state}
-            onClick={openConversation}
-          >
-            <span className="transport-orchestrator-title mono">Orchestrator</span>
-            <span className="transport-orchestrator-state mono">{state}</span>
+        <div className="transport-agents" ref={listRef}>
+          <button type="button" className="transport-agents-toggle transport-orchestrator mono" aria-expanded={listOpen} onClick={() => setListOpen(!listOpen)}>
+            {chips.length + lanes.pills.length} agents{working > 0 ? ` · ${working} working` : null}
+            {waiting > 0 ? <span className="transport-agents-waiting"> · {waiting} waiting</span> : null}
           </button>
-          {chips.map((chip) => (
-            <button
-              key={chip.id}
-              type="button"
-              className={`transport-chip is-${chip.tone} mono`}
-              aria-label={`${chip.name}. Open the conversation`}
-              title={`${chip.name} ${chip.tone}${chip.waiting ? ', waiting for you' : ''}`}
-              onClick={() => openOrchestratorChat(chip.id)}
-            >
-              <span className="transport-chip-dot" aria-hidden="true" />
-              <span className="transport-chip-name">{chip.name}</span>
-            </button>
-          ))}
-          {more > 0 ? (
-            <span className="transport-chip-overflow mono" title={`${more} more`}>
-              +{more}
-            </span>
-          ) : null}
-          {lanes.pills.length > 0 ? (
-            <div className="transport-lanes" role="group" aria-label="Lanes">
-              {lanes.pills.map((pill) => (
-                <button
-                  key={pill.key}
-                  type="button"
-                  className={`transport-lane is-${pill.tone} mono`}
-                  title={lanePillTitle(pill)}
-                  aria-label={`${lanePillTitle(pill)}. Inspect this lane`}
-                  onClick={() => inspectLane(pill.key)}
-                >
-                  <span className="transport-lane-label">{pill.label}</span>
-                  {pill.task ? <span className="transport-lane-task">{pill.task}</span> : null}
-                  <span className="transport-lane-dot" aria-hidden="true" />
-                  {pill.minutes !== null ? <span className="transport-lane-time">{pill.minutes}m</span> : null}
-                  {pill.step ? <span className="transport-lane-step">{pill.step}</span> : null}
+          {listOpen ? (
+            <div className="transport-agents-list" role="group" aria-label="Agents">
+              {chips.map((chip) => (
+                <button key={chip.id} type="button" className="transport-agent mono" onClick={() => { setListOpen(false); openOrchestratorChat(chip.id) }}>
+                  <span>{chip.name}</span><span>{chip.waiting ? 'waiting for you' : chip.tone}</span>
                 </button>
               ))}
-              {lanes.more > 0 ? (
-                <span className="transport-lane-overflow mono" title={`${lanes.more} more`}>
-                  +{lanes.more}
-                </span>
-              ) : null}
+              {lanes.pills.map((pill) => (
+                <button key={pill.key} type="button" className="transport-agent mono" aria-label={`${lanePillTitle(pill)}. Inspect this lane`} onClick={() => { setListOpen(false); inspectLane(pill.key) }}>
+                  <span>{pill.label}</span><span>{pill.state}</span>{pill.task ? <span>{pill.task}</span> : null}
+                  {pill.minutes !== null && pill.state !== 'failed' ? <span>{pill.minutes} min</span> : null}
+                  {pill.step ? <span>{pill.step}</span> : null}
+                </button>
+              ))}
             </div>
           ) : null}
         </div>

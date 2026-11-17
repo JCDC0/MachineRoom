@@ -41,15 +41,10 @@ describe('the transport state word and the spend', () => {
     expect(columns).toBe('minmax(max-content, 1fr) minmax(0, auto) minmax(max-content, 1fr)')
   })
 
-  it('shrinks the state word before the chips and ends it in an ellipsis', () => {
-    const button = rule('.transport-orchestrators > .transport-orchestrator')
-    const shrink = Number(button.flex.split(/\s+/)[1])
-    expect(shrink).toBeGreaterThan(1)
-
-    const word = rule('.transport-orchestrator .transport-orchestrator-state')
-    expect(word['min-width']).toBe('0')
-    expect(word.overflow).toBe('hidden')
-    expect(word['text-overflow']).toBe('ellipsis')
+  it('keeps the summary readable and lets the list scroll', () => {
+    expect(rule('.transport-agents-toggle')['white-space']).toBe('nowrap')
+    expect(rule('.transport-agents-list').overflow).toBe('auto')
+    expect(rule('.transport-agent')['overflow-wrap']).toBe('anywhere')
   })
 })
 

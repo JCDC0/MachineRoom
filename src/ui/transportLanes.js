@@ -1,5 +1,4 @@
 import { harnessByAdapter } from '../harnesses/index.js'
-import { agentTasks } from '../model/liveTasks.js'
 import { visibleText } from '../model/paths.js'
 import { INSPECT_EVENT } from './inspector.js'
 
@@ -53,13 +52,13 @@ function issueTask(issue) {
     text(issue?.name) ||
     text(issue?.title) ||
     (typeof issue?.identifier === 'number' ? String(issue.identifier) : '')
-  return text(visibleText(raw)).slice(0, LANE_TASK_LIMIT)
+  return text(visibleText(raw))
 }
 
 function recordTask(record) {
   const briefs = Array.isArray(record?.briefs) ? record.briefs.map(text).filter(Boolean) : []
-  if (briefs.length > 0) return briefs.join('+').slice(0, LANE_TASK_LIMIT)
-  return text(visibleText(text(record?.task))).slice(0, LANE_TASK_LIMIT)
+  if (briefs.length > 0) return briefs.join('+')
+  return text(visibleText(text(record?.task)))
 }
 
 export function runFailed(record) {
@@ -146,6 +145,7 @@ export function lanePills({
   labels = null,
   now = Date.now(),
   limit = LANE_PILL_LIMIT,
+  includeIdle = false,
 } = {}) {
   const roster = Array.isArray(agents) ? agents : []
   const lanes = laneAgents(roster)
@@ -156,7 +156,6 @@ export function lanePills({
     const key = text(agent?.key)
     if (id && key) byAgentId.set(id, key)
   }
-  const tasks = agentTasks(liveRuns, issues, roster)
   const issueIndex = new Map()
   for (const issue of Array.isArray(issues) ? issues : []) {
     if (issue && typeof issue === 'object' && issue.id != null) issueIndex.set(String(issue.id), issue)
@@ -165,15 +164,15 @@ export function lanePills({
 
   const active = []
   const failed = []
+  const idle = []
   for (const agent of lanes) {
     const key = text(agent.key)
     const label = pillLabel(agent, labels, key)
     const live = liveRunFor(liveRuns, key, byAgentId)
     if (live) {
       const task =
-        tasks.get(key) ||
         issueTask(issueIndex.get(String(live.run.issueId ?? ''))) ||
-        text(live.run.issueId).slice(0, LANE_TASK_LIMIT)
+        text(live.run.issueId)
       active.push({
         key,
         label,
@@ -187,7 +186,10 @@ export function lanePills({
       continue
     }
     const last = lastRecordFor(records?.last ?? records?.recent, key, byAgentId)
-    if (!last || !runFailed(last.record)) continue
+    if (!last || !runFailed(last.record)) {
+      if (includeIdle) idle.push({ key, label, task: '', state: 'idle', tone: 'idle', minutes: null, step: null })
+      continue
+    }
     failed.push({
       key,
       label,
@@ -217,7 +219,7 @@ export function lanePills({
     return left.key.localeCompare(right.key)
   })
 
-  const all = [...active, ...failed]
+  const all = [...active, ...failed, ...idle]
   const shown = all.slice(0, size)
   return { pills: shown, more: all.length - shown.length }
 }

@@ -143,6 +143,11 @@ describe('the lane pill list', () => {
     expect(runFailed(null)).toBe(false)
   })
 
+  it('includes idle lanes when the agent list asks for them', () => {
+    const { pills } = lanePills({ agents: AGENTS, includeIdle: true, limit: 20 })
+    expect(pills.map((pill) => [pill.label, pill.state])).toEqual([['OpenCode', 'idle'], ['OpenCode 2', 'idle'], ['agy', 'idle']])
+  })
+
   it('keeps the newest record per lane as that lane last run', () => {
     const records = {
       running: [],
