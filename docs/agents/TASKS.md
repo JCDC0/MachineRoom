@@ -4329,11 +4329,11 @@ Sweep S1 fixes, P514 to P516. `docs/agents/AUDIT-2026-11-SWEEP-S1.md` (P506, Cod
 2. Runs: the recent, last and attention lists return a masked public copy of each record's free text (note, task, error lines) and profile paths in displayed log paths; the record on disk stays as it is.
 3. Reviews: the diff reply masks the patch before it is cut to size; merges keep using git's own bytes.
 4. Tests: a canary assignment and a `C:\Users\someone` path in each of the three places come back masked.
-5. Run `node node_modules/vitest/vitest.mjs run tests/public-masking.test.js tests/bridge-reviews.test.js tests/mcp.test.js` (skip a file that does not exist and name the MCP test you used) and `npm run build`, and report the counts.
+5. Run `node node_modules/vitest/vitest.mjs run tests/public-masking.test.js tests/bridge-reviews.test.js tests/mcp-server.test.js tests/mcp-settings.test.js` and `npm run build`, and report the counts.
 
 **P516. S1-2 and S1-6: a late model fetch keeps newer endpoint edits, and a failed temp folder frees the connection test (Codex, Terra).** Files: server/endpoints.js (quick connect near line 551), server/harness-probe.js (near line 80), tests/endpoints-quick-race.test.js (new), tests/harness-probe.test.js, docs/agents/CHANGELOG.md.
 
 1. After the model fetch, quick connect reads the current list again and updates only the same endpoint, and only when its connection settings still match; a deleted or changed entry is left alone, and the answer says so plainly.
 2. The probe adds the harness to its running set inside the `try` whose `finally` removes it, and removes the temp folder only if it was made.
 3. Tests: a second endpoint saved during the fetch survives; a first probe whose temp folder fails leaves the next probe free to run.
-4. Run `node node_modules/vitest/vitest.mjs run tests/endpoints-quick-race.test.js tests/harness-probe.test.js tests/endpoints.test.js` (skip a file that does not exist) and `npm run build`, and report the counts.
+4. Run `node node_modules/vitest/vitest.mjs run tests/endpoints-quick-race.test.js tests/harness-probe.test.js tests/endpoints.test.js` and `npm run build`, and report the counts.
