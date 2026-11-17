@@ -1,8 +1,8 @@
 import { execFile, spawn, spawnSync } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
-import { appendFileSync, closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, realpathSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
+import { appendFileSync, closeSync, existsSync, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, realpathSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
-import { basename, dirname, join, resolve } from 'node:path'
+import { basename, dirname, join, relative, resolve, sep } from 'node:path'
 import { StringDecoder } from 'node:string_decoder'
 import { fileURLToPath } from 'node:url'
 import { parseBriefs } from '../src/briefs/briefs.js'
@@ -90,6 +90,23 @@ function realPath(value) {
   }
 }
 
+export function runLogInside(log, folder, resolveReal = realPath) {
+  if (pathInside(resolveReal(log), resolveReal(folder))) return true
+  const root = resolve(folder)
+  const path = resolve(log)
+  if (!pathInside(path, root)) return false
+  let part = root
+  try {
+    for (const name of relative(root, path).split(sep).filter(Boolean)) {
+      part = join(part, name)
+      if (lstatSync(part).isSymbolicLink()) return false
+    }
+    return true
+  } catch {
+    return false
+  }
+}
+
 function readTextAt(path) {
   if (!path) return null
   try {
@@ -162,7 +179,7 @@ function stamp(date = new Date()) {
   return `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}-${pad(date.getHours())}${pad(date.getMinutes())}${pad(date.getSeconds())}`
 }
 
-function findRunLog(folder, record) {
+export function findRunLog(folder, record, resolveReal = realPath) {
   const started = Date.parse(record.startedAt)
   const briefs = Array.isArray(record.briefs) ? record.briefs : []
   const parts = [record.lane, ...(briefs.length ? briefs : ['project'])]
@@ -177,8 +194,8 @@ function findRunLog(folder, record) {
     for (const name of names) {
       const lower = name.toLowerCase()
       if (lower !== `${base}.log` && !(lower.startsWith(`${base}-`) && /^\d+\.log$/.test(lower.slice(base.length + 1)))) continue
-      const path = realPath(join(folder, name))
-      if (pathInside(path, folder) && existsSync(path)) candidates.push({ path, distance: Math.abs(time - started) })
+      const path = join(folder, name)
+      if (runLogInside(path, folder, resolveReal) && existsSync(path)) candidates.push({ path, distance: Math.abs(time - started) })
     }
   }
   candidates.sort((a, b) => a.distance - b.distance || a.path.localeCompare(b.path))
@@ -908,9 +925,9 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
 
   function touchedForLog(logPath, { harness = '', worktree = '' } = {}) {
     if (!logPath) return null
-    const folder = realPath(recordsDir())
-    const resolvedLog = realPath(logPath)
-    if (!resolvedLog || !pathInside(resolvedLog, folder)) return null
+    const folder = recordsDir()
+    if (!runLogInside(logPath, folder)) return null
+    const resolvedLog = resolve(logPath)
     let info
     try {
       info = stat(resolvedLog)
@@ -988,7 +1005,7 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
   }
 
   function touchedForItem(item, lanes, openRuns) {
-    const folder = realPath(recordsDir())
+    const folder = recordsDir()
     const lane = item.entry.lane
     const lock = readLockState(lane)
     const lockMatches = lock.startedAt !== '' && matchesLockStart(lock.startedAt, item.entry.startedAt)
@@ -1007,7 +1024,7 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
       }
       return null
     }
-    const resolvedLog = realPath(candidate)
+    const resolvedLog = resolve(candidate)
     if (item.liveLogPath && item.liveLogPath !== resolvedLog) {
       touchedCache.delete(item.liveLogPath)
     }
@@ -1158,10 +1175,10 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
   }
 
   function recordRefusal(item, exitCode) {
-    const folder = realPath(recordsDir())
+    const folder = recordsDir()
     const lock = readLockInfo(item.entry.lane)
-    const lockedLog = matchesLockStart(lock.startedAt, item.entry.startedAt) && lock.log ? realPath(join(folder, lock.log)) : ''
-    if (!item.logPath && lockedLog && pathInside(lockedLog, folder) && existsSync(lockedLog)) item.logPath = lockedLog
+    const lockedLog = matchesLockStart(lock.startedAt, item.entry.startedAt) && lock.log ? join(folder, lock.log) : ''
+    if (!item.logPath && lockedLog && runLogInside(lockedLog, folder) && existsSync(lockedLog)) item.logPath = lockedLog
     if (!item.logPath) item.logPath = findRunLog(folder, item.entry)
     if (hasRecordForLaneSince(item.entry.lane, item.entry.startedAt, item.logPath)) return
     const note = maskRunText(item.entry.lastLines.join(' ').trim(), item.ticket)
@@ -1935,15 +1952,15 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
         sendJson(req, res, 404, { error: CONVERSATION_UNKNOWN_PROBLEM })
         return true
       }
-      const folder = realPath(recordsDir())
+      const folder = recordsDir()
       let logPath = ''
       if (liveRun) {
         const name = typeof liveRun.name === 'string' ? liveRun.name.trim() : ''
-        logPath = name === '' ? '' : realPath(join(folder, `${name}.log`))
+        logPath = name === '' ? '' : resolve(folder, `${name}.log`)
       } else {
-        logPath = typeof record.log === 'string' && record.log.trim() !== '' ? realPath(record.log.trim()) : findRunLog(folder, record)
+        logPath = typeof record.log === 'string' && record.log.trim() !== '' ? resolve(record.log.trim()) : findRunLog(folder, record)
       }
-      if (logPath !== '' && !pathInside(logPath, folder)) {
+      if (logPath !== '' && !runLogInside(logPath, folder)) {
         sendJson(req, res, 400, { error: CONVERSATION_LOG_OUTSIDE_PROBLEM })
         return true
       }
