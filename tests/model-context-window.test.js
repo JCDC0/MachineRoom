@@ -59,7 +59,7 @@ describe('resolveContextWindow', () => {
       'Context size 16.5k'
     )
     expect(contextLine({ context: { tokens: 16500, window: 1048576 } })).toBe(
-      'Context size 16.5k / 1048.6k'
+      'Context size 16.5k / 1M'
     )
   })
 

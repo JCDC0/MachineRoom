@@ -1,3 +1,4 @@
+import { formatCount } from './agentStrip.js'
 import { agentTasks } from '../model/liveTasks.js'
 import { visibleText } from '../model/paths.js'
 import { addressIn, addressUrl, consoleRows } from '../engine/terminals.js'
@@ -54,12 +55,6 @@ function statusWord(value) {
 
 function formatCents(cents) {
   return `$${(cents / 100).toFixed(2)}`
-}
-
-function formatTokens(count) {
-  if (count == null || !Number.isFinite(count)) return '?'
-  if (count < 1000) return String(Math.floor(count))
-  return `${(count / 1000).toFixed(1)}k`
 }
 
 function sameAgent(agent, key, id) {
@@ -412,7 +407,7 @@ export function agentContext({ agent = null, working = null, lanes = null, costs
   const tokensReported = reported && (inputTokens !== null || outputTokens !== null)
   const cost = reported ? formatCents(costCents) : NOT_REPORTED
   const tokens = tokensReported
-    ? `${formatTokens(inputTokens)} in / ${formatTokens(outputTokens)} out`
+    ? `${formatCount(inputTokens)} in / ${formatCount(outputTokens)} out`
     : NOT_REPORTED
 
   const sectorInfo = sectorData(source, orchestrator)

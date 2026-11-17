@@ -647,14 +647,14 @@ describe('agent strip layout', () => {
 describe('the context line', () => {
   it('gives the used tokens and the window', () => {
     expect(contextLine({ context: { tokens: 128400, window: 200000 } })).toBe(
-      'Context size 128.4k / 200.0k'
+      'Context size 128.4k / 200k'
     )
     expect(contextLine({ context: { tokens: 128400, window: 200000, assumed: false } })).toBe(
-      'Context size 128.4k / 200.0k'
+      'Context size 128.4k / 200k'
     )
-    expect(contextLine({ context: { tokens: 900, window: 2000 } })).toBe('Context size 900 / 2.0k')
+    expect(contextLine({ context: { tokens: 900, window: 2000 } })).toBe('Context size 900 / 2k')
     expect(contextLine({ context: { tokens: 16500, window: 1048576 } })).toBe(
-      'Context size 16.5k / 1048.6k'
+      'Context size 16.5k / 1M'
     )
   })
 
@@ -671,8 +671,13 @@ describe('the context line', () => {
   it('formats small and large counts the way the dock does', () => {
     expect(formatCount(0)).toBe('0')
     expect(formatCount(999)).toBe('999')
-    expect(formatCount(1000)).toBe('1.0k')
-    expect(formatCount(200000)).toBe('200.0k')
+    expect(formatCount(1000)).toBe('1k')
+    expect(formatCount(1500)).toBe('1.5k')
+    expect(formatCount(999950)).toBe('1M')
+    expect(formatCount(1000000)).toBe('1M')
+    expect(formatCount(1048576)).toBe('1M')
+    expect(formatCount(30206300)).toBe('30.2M')
+    expect(formatCount(200000)).toBe('200k')
     expect(formatCount(null)).toBe('?')
   })
 })

@@ -1686,7 +1686,7 @@ describe('OrchestratorChat panel', () => {
     expect(html).toContain('opus')
     expect(html).toContain('Effort:')
     expect(html).toContain('high')
-    expect(html).toContain('Context size 96.0k / 200.0k')
+    expect(html).toContain('Context size 96k / 200k')
     expect(html).toContain('class="mr-orch-line is-owner"')
     expect(html).toContain('class="mr-orch-block is-heading"')
     expect(html).toContain('>Stop</button>')

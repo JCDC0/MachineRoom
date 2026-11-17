@@ -1,3 +1,4 @@
+import { formatCount } from '../agentStrip.js'
 import { createContext, useContext, useEffect, useState } from 'react'
 import { visibleText } from '../../model/paths.js'
 import { costLabels } from '../../engine/board.js'
@@ -12,17 +13,11 @@ function tokenCount(value) {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null
 }
 
-function formatTokens(count) {
-  if (count == null) return '?'
-  if (count < 1000) return String(Math.floor(count))
-  return `${(count / 1000).toFixed(1)}k`
-}
-
 function tokenText(row) {
   const input = tokenCount(row.inputTokens)
   const output = tokenCount(row.outputTokens)
   if (input === null && output === null) return 'tokens not reported'
-  return `${formatTokens(input)} in / ${formatTokens(output)} out`
+  return `${formatCount(input)} in / ${formatCount(output)} out`
 }
 
 function countOf(value) {
@@ -52,12 +47,12 @@ function cacheText(row) {
     return `Cache: ${share}% of input read from cache (${known} of ${totalRuns} runs reported)`
   }
   if (read !== null && write !== null) {
-    return `Cache: ${formatTokens(read)} read / ${formatTokens(write)} write (${known} of ${totalRuns} runs reported)`
+    return `Cache: ${formatCount(read)} read / ${formatCount(write)} write (${known} of ${totalRuns} runs reported)`
   }
   if (read !== null) {
-    return `Cache: ${formatTokens(read)} read (${known} of ${totalRuns} runs reported)`
+    return `Cache: ${formatCount(read)} read (${known} of ${totalRuns} runs reported)`
   }
-  return `Cache: ${formatTokens(write)} write (${known} of ${totalRuns} runs reported)`
+  return `Cache: ${formatCount(write)} write (${known} of ${totalRuns} runs reported)`
 }
 
 export default function MetersPanel({ client, initialCosts = null }) {
