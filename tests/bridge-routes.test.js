@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:http'
 import { connect } from 'node:net'
 import { basename, join, resolve } from 'node:path'
@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createBridge } from '../server/index.js'
 import { extractReplyText } from '../server/assistant.js'
 import { activeLanesFileFor, writeActiveLanes } from '../server/active-lanes.js'
-import { NO_TOKEN_PROBLEM } from '../server/runs.js'
+import { findRunLog, NO_TOKEN_PROBLEM, runLogInside } from '../server/runs.js'
 import { SINCE_PROBLEM } from '../src/briefs/run.js'
 import { createClient } from '../src/control/client.js'
 import { choice } from '../src/decider/wire.js'
@@ -1159,6 +1159,33 @@ describe('run routes', () => {
     const unknownLane = await getJson(conversationUrl(url, 'nobody', startedAt))
     expect(unknownLane.status).toBe(404)
     expect(unknownLane.body).toEqual({ error: 'No run of that lane started at that time.' })
+  })
+
+  it('accepts redirected logs and finds them by run name', () => {
+    const folder = join(tempDir(), 'runs')
+    mkdirSync(folder)
+    const log = join(folder, 'opencode-B6-20261024-120000.log')
+    writeFileSync(log, 'log')
+    const redirected = (path) => path === folder ? folder : join(folder, '..', 'redirected', 'log')
+    const startedAt = new Date(2026, 9, 24, 12, 0, 0).toISOString()
+    expect(runLogInside(log, folder, redirected)).toBe(true)
+    expect(findRunLog(folder, { lane: 'opencode', briefs: ['B6'], startedAt }, redirected)).toBe(log)
+  })
+
+  it('refuses a log through a junction outside the runs folder', async () => {
+    const tempDirRuns = useRunsTemp()
+    const { url } = await startRunsBridge()
+    const folder = join(tempDirRuns, 'machineroom-runs')
+    const outside = join(tempDirRuns, 'outside')
+    mkdirSync(folder, { recursive: true })
+    mkdirSync(outside)
+    writeFileSync(join(outside, 'run.log'), opencodeConversationLog())
+    symlinkSync(outside, join(folder, 'link'), 'junction')
+    const startedAt = '2026-10-24T12:00:00.000Z'
+    writeConversationRun(folder, { lane: 'opencode', briefs: [], startedAt, log: join(folder, 'link', 'run.log') })
+    const res = await getJson(conversationUrl(url, 'opencode', startedAt))
+    expect(res.status).toBe(400)
+    expect(res.body.error).toBe("The run's log is outside the runs folder.")
   })
 
   it('refuses a log outside the runs folder', async () => {
