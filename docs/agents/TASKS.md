@@ -4244,3 +4244,20 @@ Audit follow-ups, 2026-11-17 (P502, P503). Codex, Terra. Every brief: read the b
 2. The Reviews panel opens one rewind request per lane at once (21 requests). Ask for a lane's rewind state only for lanes with commits ahead, and the rest when the owner expands a card, if cards expand; otherwise only the lanes with commits ahead.
 3. Tests: a lane with 0 commits ahead shows no rewind line and makes no rewind request; a lane with commits ahead and a refusal shows the line.
 4. Run `node node_modules/vitest/vitest.mjs run tests/reviews-rewind.test.jsx tests/reviews-scope.test.jsx tests/reviews-evidence.test.jsx` and `npm run build`, and report the counts.
+
+Review 51 fixes, P504 and P505. `docs/agents/AUDIT-2026-11-REVIEW-51.md` (P501, Codex Sol): three findings, read back by the orchestrator. Codex, Terra. Every brief: read the brief and its findings only; leave your changes uncommitted, the runner commits them; run every command in the foreground; never use git stash; do not run the full suite; you may change any existing test whose expectation the brief changes, and name it. Sandbox baseline failures you may ignore: process tests and any test that fails only because the sandbox denies the home folder.
+
+**P504. R51-1 and R51-2: every lane keeps one saved port offset (Codex, Terra).** Files: scripts/run-lane.mjs (`portOffsetFor` near line 1127 and its caller near the lane spawn environment), tests/worktree-copies.test.js, tests/worktree-setup.test.js, docs/agents/CHANGELOG.md, docs/agents/architecture/LIVE.md.
+
+1. Keep the assignments in `port-offsets.json` in the runs folder (`{ "lane": offset }`, written atomically with the existing `writeAtomic` helper or a temp file and rename). A lane that has an offset keeps it forever, whatever the lanes files say. A lane without one, whether from `lanes.json` or a room-made lane in `agents.json`, gets the lowest multiple of 10 from 0 to 990 that no saved lane holds, and it is saved before the lane's process starts. Take the assignment under the lane lock the run already holds, and re-read the file just before writing so two lanes starting at once cannot take the same offset; if the write races, re-read and pick again.
+2. When all 100 offsets are taken, fail the start with `No free port offset is left; remove old lanes from port-offsets.json.` and no process.
+3. `LIVE.md` says what is true: offsets are saved per lane in the runs folder, never move, and are given lowest-free first.
+4. Tests: `opencode` and `opencode-11` get different offsets; adding a key that sorts first does not move a saved lane; two assignments in one folder never repeat; a full table refuses.
+5. Run `node node_modules/vitest/vitest.mjs run tests/worktree-copies.test.js tests/worktree-setup.test.js tests/lane-env.test.js` and `npm run build`, and report the counts.
+
+**P505. R51-3: a test that guards the Control count on the lens seam (Codex, Terra).** Files: tests/stage-seam.test.js, tests/hud-badge-layout.test.js. Change no source file.
+
+1. In `tests/stage-seam.test.js`, build a menu with a `.hud-action-slot` holding a `.hud-action` and a `.hud-action-badge`, run the seam pass with the real `SEAM_TOP` selector from `src/Stage.jsx` (import it, or read it from the source if it is not exported), and assert the badge gets `--seam-y` and `--seam-r`. Assert a badge inside the Orchestrator `.hud-action` button does not get its own pose.
+2. In `tests/hud-badge-layout.test.js`, assert `.hud-action-slot > .hud-action-badge` is in the seam transform rule in `src/styles.css`.
+3. Show each new assertion fails with its line removed from the source (save a patch and apply it in reverse, then restore; never commit the removal), and say so in the report.
+4. Run `node node_modules/vitest/vitest.mjs run tests/stage-seam.test.js tests/hud-badge-layout.test.js` and report the counts.
