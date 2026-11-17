@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- A check's time limit stops the process tree, including descendants of an exited child, and settles the check as failed within 5 seconds even if the child never closes; merge-lane and review-lane share one helper.
 - MCP server details, tool results and problems, run history free text and review diffs are masked for display; saved values and record paths stay whole.
 - Static and music requests resolve real paths and answer 404 outside their roots; music serves only audio names.
 - Quick connect re-reads the endpoint list after its model fetch and answers 409 when the entry changed; the probe frees its slot when its temp folder fails.
