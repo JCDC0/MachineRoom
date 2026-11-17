@@ -4,6 +4,8 @@ What the room does not do, and the measurements behind each limit.
 
 ## Known limits
 
+- P502: the owner measured the 21-lane reviews list at 4.8 to 5.1 seconds before caching. On 2026-11-17 a two-lane test fixture took 280 ms on its first list and 118 ms on its cached list; this is not a 21-lane comparison.
+
 - Only the top-level ring is spaced from the card sizes (each card's diagonal plus a 40 unit gap), so top-level cards never overlap. A folder's children are placed in one pass: their fan is a fixed offset per sibling, so siblings in a deep fan can overlap by design (V27).
 - The overview fits the hub, the root and the top-level ring from the overview angle, aimed at the hub centre (V18, V27). In the seeded replay its distance is a median of 1,754 units (largest 1,754) at 40,000 files and 1,826 (1,826) at 200,000, down from 3,633 (4,129) and 3,264 (3,647) after U24, because the room is flat and the fit no longer reaches up a sphere (`npm run scale-probe` prints the `overview distance` row). The projected ring is wider than it is tall, so the fit fills the lens width and leaves the top and bottom emptier. A name shrinks with its card, so from far away it is small. The covered row is 0 of 399 layouts at 40,000 files on 2026-10-26, and following the touched card (V15) is what makes the rows readable.
 - Hermes read lines carry only a file name. When two files share it, the parser picks the one in or nearest the folder of that run's last file; with no folder yet, or a tie, the name lands at the root.
