@@ -1264,7 +1264,7 @@ describe('talking to a lane and seeing agent messages', () => {
     await withDom(async ({ container, root }) => {
       await act(async () => { root.render(createElement(OrchestratorChat, { client, lanes, initialChat: chat, initialRecipient: 'opencode' })) })
       await act(async () => {})
-      expect(container.textContent).toContain('The lane opencode has no run that can read a message now.')
+      expect(container.textContent).toContain('No runs yet.')
       await click(root, buttonWithText(container, 'Back'))
       expect(container.querySelector('[aria-label="Orchestrator chat"]')).not.toBeNull()
     })
