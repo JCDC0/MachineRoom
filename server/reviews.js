@@ -16,6 +16,7 @@ import {
   endRepoWrite,
   GIT_TIMEOUT_MS,
   GIT_WRITE_TIMEOUT_MS,
+  gitCacheGeneration,
   invalidateGitCache,
   WRITE_IN_FLIGHT_PROBLEM,
 } from './git.js'
@@ -325,6 +326,7 @@ export function createReviewsApi({
   const onProject = Boolean(resolvedRoot && !sameCheckout)
   const runGit = (cwd, args, options = {}) => gitRunner(cwd, args, { timeout: GIT_TIMEOUT_MS, ...options })
   let merging = false
+  const reviewCache = new Map()
   const scopeWarned = new Set()
 
   function orchestratorRegistry() {
@@ -767,24 +769,29 @@ export function createReviewsApi({
 
   async function laneReview(lane, worktree, base, runs = null, lanes = null) {
     const laneList = lanes ?? readLanes().lanes ?? {}
-    const branch = (await runGit(worktree, ['branch', '--show-current'])).trim()
-    const head = (await runGit(worktree, ['rev-parse', 'HEAD'])).trim()
-    const log = await runGit(worktree, ['log', '--oneline', `${base.ref}..HEAD`])
-    const commits = log.split(/\r?\n/).filter(Boolean)
-    const behind = Number.parseInt((await runGit(worktree, ['rev-list', '--count', `HEAD..${base.ref}`])).trim(), 10)
-    const status = await runGit(worktree, ['status', '--porcelain'])
-    const stat = parseNumstat(await runGit(worktree, ['diff', '--no-ext-diff', '--no-textconv', '--numstat', `${base.ref}...HEAD`]))
-    const lastRun = lastRunFor(lane, worktree, runs)
-    let briefsText
-    try {
-      briefsText = readFileSync(join(lanesDir, 'TASKS.md'), 'utf8')
-    } catch {
+    const [branchText, headText, status] = await Promise.all([
+      runGit(worktree, ['branch', '--show-current']),
+      runGit(worktree, ['rev-parse', 'HEAD']),
+      runGit(worktree, ['status', '--porcelain']),
+    ])
+    const branch = branchText.trim()
+    const head = headText.trim()
+    let briefsText = readText(join(lanesDir, 'TASKS.md'))
+    if (briefsText === null) {
       try {
         briefsText = await runGit(worktree, ['show', `${base.ref}:docs/agents/TASKS.md`])
       } catch {}
     }
     const laneRuns = linkedRuns(lane, worktree, runs, base.name).map((record) => runEntry(record, laneList))
-    return {
+    const lastRun = lastRunFor(lane, worktree, runs)
+    const key = createHash('sha256').update(JSON.stringify([worktree, branch, head, base, status, briefsText, laneList, projectRunsFor(lane, worktree, runs), laneRuns, gitCacheGeneration])).digest('hex')
+    const cached = reviewCache.get(lane)
+    if (cached?.key === key) return cached.entry
+    const log = await runGit(worktree, ['log', '--oneline', `${base.ref}..HEAD`])
+    const commits = log.split(/\r?\n/).filter(Boolean)
+    const behind = Number.parseInt((await runGit(worktree, ['rev-list', '--count', `HEAD..${base.ref}`])).trim(), 10)
+    const stat = parseNumstat(await runGit(worktree, ['diff', '--no-ext-diff', '--no-textconv', '--numstat', `${base.ref}...HEAD`]))
+    const entry = {
       lane,
       worktree,
       branch,
@@ -809,6 +816,8 @@ export function createReviewsApi({
       runs: laneRuns,
       runTotals: runTotalsFor(laneRuns),
     }
+    reviewCache.set(lane, { key, entry })
+    return entry
   }
 
   async function laneDiff(lane, worktree, base) {
@@ -1291,6 +1300,8 @@ export function createReviewsApi({
       if (onProject && !existsSync(worktree)) continue
       targets.push({ lane, worktree })
     }
+    const activeLanes = new Set(targets.map(({ lane }) => lane))
+    for (const lane of reviewCache.keys()) if (!activeLanes.has(lane)) reviewCache.delete(lane)
     const entries = await mapConcurrent(targets, concurrency, async ({ lane, worktree }) => {
       try {
         return await laneReview(lane, worktree, base, runs, read.lanes)

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Cache each lane's review until its inputs or the Git cache change (P502).
+
 - Conversations sort from one Sort by select, and pinned conversations show a pin toggle and sit under Pinned.
 - The menu badges sit inside their buttons, and the transport orchestrator title keeps its full width.
 - The Harnesses confirm card has its own id, and the dialog focus lookup can no longer throw.
