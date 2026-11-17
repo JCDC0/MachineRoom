@@ -181,7 +181,7 @@ export default function HarnessesSettings({ client }) {
     try {
       const result = await client.harnessSettings({ key, ...payload, confirmed: true })
       if (!mountedRef.current) return
-      dirtyRef.current.delete(`program:${key}`)
+      if ('program' in payload) dirtyRef.current.delete(`program:${key}`)
       const nextRows = updateRowsWithResult(rows, result)
       if (nextRows) {
         setRows(nextRows)
