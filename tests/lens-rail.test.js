@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { act, createElement } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import LensRail, { RAIL_WHEEL_HOLD_MS, railNear } from '../src/ui/LensRail.jsx'
@@ -5,7 +6,7 @@ import { withDom } from './helpers/uiDom.js'
 
 const LENS_RECT = { left: 100, right: 900, top: 0, bottom: 600, width: 800, height: 600 }
 
-async function renderRail(root, side = 'right', onWheel = () => {}) {
+async function renderRail(root, side = 'right', onWheel = () => {}, inner = false) {
   await act(async () => {
     root.render(
       createElement(
@@ -13,6 +14,7 @@ async function renderRail(root, side = 'right', onWheel = () => {}) {
         { className: 'lens' },
         createElement(LensRail, {
           side,
+          inner,
           label: side === 'left' ? 'Height' : 'Zoom',
           share: 0.5,
           multiplier: '1.0x',
@@ -65,6 +67,32 @@ describe('LensRail fade', () => {
       expect(rail.className).toContain('is-shown')
       await act(async () => lens.dispatchEvent({ type: 'pointermove', bubbles: true, clientX: 700 }))
       expect(rail.className).not.toContain('is-shown')
+    })
+  })
+
+  it('places the inner rail beside the outer rail and shows it near the right edge', async () => {
+    await withDom(async ({ container, root }) => {
+      await renderRail(root, 'right', () => {}, true)
+      const lens = container.querySelector('.lens')
+      const rail = container.querySelector('.lens-rail')
+      lens.getBoundingClientRect = () => LENS_RECT
+      expect(rail.className).toContain('is-right is-inner')
+      await act(async () => lens.dispatchEvent({ type: 'pointermove', bubbles: true, clientX: 850 }))
+      expect(rail.className).toContain('is-shown')
+      const css = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8')
+      expect(css).toMatch(/\.lens-rail\.is-right\.is-inner\s*\{\s*right:\s*54px/)
+      expect(css).not.toMatch(/\.lens-rail\.is-left\s*\{\s*display:\s*flex/)
+    })
+  })
+
+  it('renders quarter and twentieth marks without taking pointer events', async () => {
+    await withDom(async ({ container, root }) => {
+      await renderRail(root)
+      const marks = container.querySelector('.lens-rail-marks')
+      expect(marks.querySelectorAll('.is-quarter')).toHaveLength(5)
+      expect(marks.querySelectorAll('.is-twentieth')).toHaveLength(16)
+      const css = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8')
+      expect(css).toMatch(/\.lens-rail-marks\s*\{[^}]*pointer-events:\s*none/)
     })
   })
 
