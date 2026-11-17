@@ -1,5 +1,6 @@
-import { useContext, useEffect, useId, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import MenuIcon from './MenuIcon.jsx'
+import LaneConversation from './LaneConversation.jsx'
 import CompactCard from './AgentStrip.jsx'
 import { useDialogFocus } from './dialogFocus.js'
 import { useHarnessModels } from './ModelRefresh.jsx'
@@ -15,7 +16,6 @@ import {
   ORCH_MAX_LINES,
   ORCH_REFRESH_MS,
   ORCH_STOP_CONFIRM,
-  OrchestratorActivity,
   TEAM_TAB,
   agentColor,
   approvalInputText,
@@ -42,7 +42,6 @@ import {
   sendChatMessage,
   startConfirmText,
   startModeText,
-  statusDetail,
   statusTone,
   teamLines,
   visibleChatText,
@@ -150,7 +149,8 @@ export default function OrchestratorChat({
   initialOrchestrators = null,
   initialSelected = 'orchestrator',
   initialRecipient = 'orchestrator',
-  activity = '',
+  liveRuns = [],
+  tick = 0,
 }) {
   const [chats, setChats] = useState(() => ({ orchestrator: initialChatState(initialChat) }))
   const [list, setList] = useState(() => initialList(initialOrchestrators))
@@ -234,7 +234,6 @@ export default function OrchestratorChat({
   const modeSavedTimer = useRef(null)
   const copyTimer = useRef(null)
   const compactRef = useRef(null)
-  const roomActivity = useContext(OrchestratorActivity)
 
   useDialogFocus(Boolean(confirm), { containerRef: confirmRef })
   useDialogFocus(Boolean(modeConfirm), { containerRef: modeConfirmRef })
@@ -246,8 +245,7 @@ export default function OrchestratorChat({
   const chat = chats[selected] ?? normalizeChat(null)
   const loaded = Boolean(loadedIds[selected])
   const state = loaded ? chat.state : current?.state ?? chat.state
-  const doing = selected === 'orchestrator' ? activity || roomActivity : ''
-  const status = teamSelected ? "Every orchestrator's messages" : statusDetail(state, doing)
+  const status = teamSelected ? "Every orchestrator's messages" : state === 'working' ? 'Working' : state === 'paused' ? 'Paused' : 'Waiting for you'
   const tone = teamSelected ? 'waiting' : statusTone(state)
   const count = charCount(draft)
   const slashQuery = slashOpen ? commandQuery(draft) : null
@@ -1345,6 +1343,13 @@ export default function OrchestratorChat({
   }
 
   if (!open) return null
+  if (laneRecipient) {
+    const lane = availableLanes.find((entry) => entry.key === toRecipient)
+    return <LaneConversation key={lane.key} client={client} lane={lane.key} laneName={lane.name} project={project} lanes={lanesData}
+      liveRuns={liveRuns} tick={tick} inline={inline} recipientOptions={availableLanes} recipients={subs}
+      onRecipientChange={(id) => { setToRecipient(id); if (list.some((entry) => entry.id === id)) selectTab(id) }} onBack={() => setToRecipient('orchestrator')}
+      onRecipientSend={(text) => sendToLane(text, lane.key)} worktreeChoice={worktreeChoice()} />
+  }
 
   return (
     <aside
@@ -1397,11 +1402,6 @@ export default function OrchestratorChat({
         </div>
       ) : null}
 
-      <p className={`mr-orch-status is-${tone} mono`} role="status" aria-live="polite">
-        <span className="mr-orch-dot" aria-hidden="true" />
-        <span>{status}</span>
-      </p>
-
       {problem || listError ? (
         <div className="mr-orch-error" role="alert">
           {problem ? <p>{problem}</p> : null}
@@ -1410,7 +1410,7 @@ export default function OrchestratorChat({
       ) : null}
 
       {teamSelected ? (
-        <div className="mr-orch-log is-team" role="log" aria-live="polite" ref={logRef}>
+        <div className="mr-orch-log is-team" aria-label="Every orchestrator chat" role="log" aria-live="polite" ref={logRef}>
           {teamRows.length === 0 ? (
             <p className="mr-orch-empty">
               {teamFailed.length > 0
@@ -1439,18 +1439,6 @@ export default function OrchestratorChat({
         </div>
       ) : (
         <>
-          <div className="mr-orch-toggle-bar">
-            <label className="mr-orch-toggle mono">
-              <input
-                type="checkbox"
-                className="mr-orch-toggle-input"
-                checked={showAgentMessages}
-                onChange={() => toggleAgentMessages(!showAgentMessages)}
-                onClick={() => toggleAgentMessages(!showAgentMessages)}
-              />
-              Show agent messages
-            </label>
-          </div>
           <div className="mr-orch-log" role="log" aria-live="polite" ref={logRef} onScroll={onLogScroll}>
             {lines.length === 0 ? (
               <p className="mr-orch-empty">
@@ -1783,7 +1771,7 @@ export default function OrchestratorChat({
                 >
                   Compact
                 </button>
-                <span className="hud-lower-context mono">{context}</span>
+                <button type="button" className="hud-strip-compact" aria-pressed={showAgentMessages} onClick={() => toggleAgentMessages()}>Agent messages</button>
                 {working ? (
                   <button
                     type="button"
@@ -1812,6 +1800,7 @@ export default function OrchestratorChat({
                   </svg>
                 </button>
               </div>
+              <p className={`mr-orch-status is-${tone} mono`} role="status" aria-live="polite"><span className="mr-orch-dot" aria-hidden="true" />{status} {'\u00b7'} {context}</p>
               {canSetMode && modeError ? (
                 <p className="mr-mode-error mono" role="alert">
                   {modeError}
@@ -1838,7 +1827,7 @@ export default function OrchestratorChat({
                       disabled={modeSaving}
                     >
                       <span className="mr-mode-choice-label">{entry.label || entry.id}</span>
-                      {entry.line ? <span className="mr-mode-choice-line">{entry.line}</span> : null}
+                      {entry.line ? <><span aria-hidden="true"> - </span><span className="mr-mode-choice-line">{entry.line}</span></> : null}
                     </button>
                   ))}
                 </div>
@@ -1959,6 +1948,7 @@ export default function OrchestratorChat({
               </div>
               <div className="mr-orch-actions">
                 {worktreeChoice()}
+                <button type="button" className="hud-strip-compact" aria-pressed={showAgentMessages} onClick={() => toggleAgentMessages()}>Agent messages</button>
                 <button type="submit" className="mr-orch-send" disabled={!canSend(draft) || sending || unavailable}>
                   {sending ? 'Sending' : 'Send'}
                 </button>
@@ -1973,6 +1963,7 @@ export default function OrchestratorChat({
                   </button>
                 ) : null}
               </div>
+              <p className={`mr-orch-status is-${tone} mono`} role="status" aria-live="polite"><span className="mr-orch-dot" aria-hidden="true" />{status} {'\u00b7'} {context}</p>
             </form>
           )}
         </>

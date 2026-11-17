@@ -90,7 +90,7 @@ describe('friendly chat forms', () => {
       })
     )
     expect(html).toContain('Frontend runs on this project in Plan mode.')
-    expect(html).toContain('Reads and plans. Makes no edits and runs no commands.')
+    expect(html).toContain('Reads and plans. No edits or commands.')
     expect(html).not.toContain('full permissions')
   })
 

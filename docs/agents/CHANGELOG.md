@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The chat status sits on one line under the composer, agent messages is a toggle, modes read on one line, and To: a lane opens that lane's window.
 - The footer drops the live badge and orchestrator text and folds the chips and lane pills into one readable agents list.
 - A session reader parks in a gap between the main ring lane slots, so a new lane is never hidden behind it.
 - The parent sends a pen line to the new agent's place and its shape draws segment by segment.
