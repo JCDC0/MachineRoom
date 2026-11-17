@@ -89,11 +89,8 @@ describe('the transport under the lens', () => {
       })
     )
     expect(html).toContain('class="transport is-live has-orchestrator"')
-    expect(html).toContain('class="transport-orchestrator"')
-    expect(html).toContain('>Orchestrator<')
-    expect(html).toContain('class="transport-orchestrator-state mono">working<')
+    expect(html).not.toContain('transport-orchestrator-state')
     expect(html).toContain('class="transport-center mono"')
-    expect(html.indexOf('transport-badge')).toBeLessThan(html.indexOf('transport-center'))
     expect(html).not.toContain('Live feed')
     expect(html).toContain('class="transport-context is-white"')
     expect(html).toContain('width="22"')
@@ -114,7 +111,6 @@ describe('the transport under the lens', () => {
     )
     expect(html).toContain('class="transport-context is-white"')
     expect(html).toContain('>context not reported<')
-    expect(html).toContain('>waiting for you<')
     expect(html).not.toContain('transport-context-arc')
     expect(html).not.toContain('stroke-dasharray')
   })
@@ -134,7 +130,6 @@ describe('the transport under the lens', () => {
     )
     expect(yellow).toContain('transport-context is-yellow')
     expect(yellow).toContain('>80%<')
-    expect(yellow).toContain('>paused<')
 
     const red = renderToString(
       createElement(Transport, {
@@ -175,20 +170,18 @@ describe('the transport under the lens', () => {
       createElement(Transport, { snapshot: { ...LIVE, status: 'live' }, speeds: [1] })
     )
     expect(connected).toContain('class="transport-live-head"')
-    expect(connected).toContain('class="transport-badge is-live"')
-    expect(connected).toContain('Live // connected')
+    expect(connected).not.toContain('transport-badge')
     expect(connected).toContain('class="transport-center mono"')
     expect(connected).toContain('aria-label="Center camera"')
     expect(connected).toContain('title="Center camera"')
     expect(connected).toContain('>Center<')
     expect(connected).not.toContain('Live feed')
-    expect(connected.indexOf('transport-badge')).toBeLessThan(connected.indexOf('transport-center'))
 
     const down = renderToString(
       createElement(Transport, { snapshot: { ...LIVE, status: 'reconnecting' }, speeds: [1] })
     )
     expect(down).toContain('class="transport-badge is-down"')
-    expect(down).toContain('Live // reconnecting')
+    expect(down).toContain('>reconnecting<')
   })
 
   it('says Demo in the tag when the room plays the demo', () => {
@@ -199,7 +192,7 @@ describe('the transport under the lens', () => {
         createElement(Transport, { snapshot: { ...LIVE, status: 'live' }, speeds: [1] })
       )
     )
-    expect(html).toContain('Demo // connected')
+    expect(html).not.toContain('transport-badge')
     expect(liveBadgeText('live')).toBe('Live // connected')
     expect(liveBadgeText('disconnected')).toBe('Live // disconnected')
     expect(liveBadgeText(undefined)).toBe('Live // connecting')

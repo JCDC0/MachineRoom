@@ -93,6 +93,24 @@ describe('the lane pill list', () => {
     expect(pills[0]).toMatchObject({ key: 'agy', label: 'agy', task: 'U120', state: 'queued', tone: 'working', minutes: 5 })
   })
 
+  it('prefers the running task id and keeps long task text whole', () => {
+    const running = run('opencode', '2026-11-03T11:48:00.000Z')
+    const queued = { ...run('opencode', '2026-11-03T11:50:00.000Z', 'queued'), issueId: 'queued-issue' }
+    const { pills } = lanePills({
+      agents: AGENTS,
+      liveRuns: [running, queued],
+      issues: [
+        { id: running.issueId, identifier: 'P525', name: 'A much longer issue name' },
+        { id: queued.issueId, name: 'A different and longer queued issue name' },
+      ],
+      now: NOW,
+    })
+    expect(pills[0].task).toBe('P525')
+
+    const longTask = 'P525-a-long-task-identifier'
+    expect(lanePills({ agents: AGENTS, liveRuns: [running], issues: [{ id: running.issueId, identifier: longTask }] }).pills[0].task).toBe(longTask)
+  })
+
   it('shows a red pill for a lane whose last run failed, and drops it once the lane runs again', () => {
     const records = { running: [], recent: [record('opencode2', '2026-11-03T10:30:00.000Z', 1, { task: 'A broken task' })] }
     const failed = lanePills({ agents: AGENTS, records, now: NOW })
@@ -141,6 +159,11 @@ describe('the lane pill list', () => {
     expect(runFailed({ killed: true })).toBe(true)
     expect(runFailed({ exitCode: null })).toBe(false)
     expect(runFailed(null)).toBe(false)
+  })
+
+  it('includes idle lanes when the agent list asks for them', () => {
+    const { pills } = lanePills({ agents: AGENTS, includeIdle: true, limit: 20 })
+    expect(pills.map((pill) => [pill.label, pill.state])).toEqual([['OpenCode', 'idle'], ['OpenCode 2', 'idle'], ['agy', 'idle']])
   })
 
   it('keeps the newest record per lane as that lane last run', () => {

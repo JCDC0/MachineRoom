@@ -1,6 +1,7 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { defaultMode, laneModesFor } from '../control/modes.js'
 import { HARNESSES, harnessByAdapter, harnessByKey } from '../harnesses/index.js'
+import { contextLine } from './agentStrip.js'
 import { agentColor } from './orchestratorChat.js'
 import { useLogFollow } from './logScroll.js'
 import { runStartLine } from './panels/runs.js'
@@ -124,6 +125,11 @@ export default function LaneConversation({
   inline = false,
   tick = 0,
   onBack = () => {},
+  recipientOptions = null,
+  recipients = [],
+  onRecipientChange = () => {},
+  onRecipientSend = null,
+  worktreeChoice = null,
 }) {
   const [runs, setRuns] = useState(givenRuns)
   const [selected, setSelected] = useState(initialStartedAt)
@@ -166,6 +172,7 @@ export default function LaneConversation({
   const running = conversation.data !== null && (
     typeof conversation.data?.running === 'boolean' ? conversation.data.running : currentRun?.running === true
   )
+  const recipientRunning = onRecipientSend && (running || options.some((run) => run.running && (run.startedAt !== selected || conversation.data === null)))
   const outcome = runOutcome(currentRun, conversation.data)
   const colour = agentColor(lane, lanes)
   const entries = Array.isArray(conversation.data?.entries) ? conversation.data.entries : []
@@ -390,11 +397,13 @@ export default function LaneConversation({
   }, [client, lane, selected, running, loaded])
 
   async function sendMessage(interrupt) {
-    if (!canSend || sending || !running || !client || typeof client.sendLaneMessage !== 'function') return
+    const sendToRunning = onRecipientSend ? recipientRunning : running
+    if (!canSend || sending || (sendToRunning ? !client || typeof client.sendLaneMessage !== 'function' : !onRecipientSend)) return
     setSending(true)
     setSendError('')
     try {
-      const answer = await client.sendLaneMessage({ lane, text: trimmedDraft, interrupt: Boolean(interrupt) })
+      const answer = sendToRunning ? await client.sendLaneMessage({ lane, text: trimmedDraft, interrupt: Boolean(interrupt) }) : await onRecipientSend(trimmedDraft)
+      if (answer?.ok === false) throw new Error(answer.error)
       if (!mountedRef.current) return
       setDraft('')
       const id = typeof answer?.id === 'string' ? answer.id : ''
@@ -495,6 +504,7 @@ export default function LaneConversation({
           Back
         </button>
       </header>
+      {recipientOptions ? <label className="mono">To: <select aria-label="To" value={lane} onChange={(event) => onRecipientChange(event.target.value)}><option value="orchestrator">Orchestrator</option>{recipients.map((item) => <option key={item.id} value={item.id}>{item.name || item.id}</option>)}{recipientOptions.map((item) => <option key={item.key} value={item.key}>{item.name || item.key}</option>)}</select></label> : null}
       <div className="mr-lane-conv-tools">
         <label className="mr-lane-conv-picker">
           <span className="mono">Run</span>
@@ -628,10 +638,10 @@ export default function LaneConversation({
       ) : null}
 
       {conversation.error ? <p className="mr-orch-error mono">{conversation.error}</p> : null}
-      {conversation.loading ? <p className="mr-orch-empty">Reading the conversation.</p> : null}
+      {conversation.loading && (selected || !runs) ? <p className="mr-orch-empty">Reading the conversation.</p> : null}
 
       <div className="mr-orch-log mr-lane-conv-log" ref={follow.ref} onScroll={follow.onScroll}>
-        {!conversation.loading && !conversation.error && entries.length === 0 ? (
+        {(!conversation.loading || (runs && !selected)) && !conversation.error && entries.length === 0 ? (
           <p className="mr-orch-empty">Nothing has been said yet.</p>
         ) : null}
         {promptEntry ? (
@@ -704,7 +714,9 @@ export default function LaneConversation({
         })}
       </div>
 
-      {running ? (
+      {recipientOptions && runs && options.length === 0 ? <p className="mr-orch-empty">{`The lane ${lane} has no run that can read a message now.`}</p> : null}
+
+      {running || onRecipientSend ? (
         <form
           className={inline ? 'mr-orch-form hud-lower-input' : 'mr-orch-form'}
           onSubmit={(event) => {
@@ -722,11 +734,12 @@ export default function LaneConversation({
             maxLength={MAX_MESSAGE_CHARS}
             rows={2}
             spellCheck="false"
-            placeholder="Message this running lane"
+            placeholder={onRecipientSend ? (recipientRunning ? `Message ${label}` : `Start ${label} with a message`) : 'Message this running lane'}
             aria-label={`Message ${label}`}
             onChange={(event) => setDraft(event.target.value)}
           />
           <div className="mr-orch-actions">
+            {!recipientRunning && worktreeChoice}
             <button
               type="button"
               className="mr-orch-send"
@@ -735,14 +748,14 @@ export default function LaneConversation({
             >
               Send
             </button>
-            <button
+            {(!onRecipientSend || recipientRunning) ? <button
               type="button"
               className="mr-orch-stop"
               disabled={!canSend || sending}
               onClick={() => sendMessage(true)}
             >
               Send and interrupt
-            </button>
+            </button> : null}
           </div>
           {sendError ? (
             <p className="mr-orch-error mono" role="alert">
@@ -752,6 +765,7 @@ export default function LaneConversation({
         </form>
       ) : null}
 
+      {recipientOptions ? <p className={`mr-orch-status is-${running ? 'working' : 'waiting'} mono`} role="status" aria-live="polite"><span className="mr-orch-dot" aria-hidden="true" />{running ? 'Working' : outcome || 'Idle'}{typeof currentRun?.contextTokens === 'number' ? ` \u00b7 ${contextLine({ context: { tokens: currentRun.contextTokens, window: currentRun.contextWindow } })}` : ''}</p> : null}
       {visibleSent.length > 0 ? (
         <div className="mr-lane-conv-tool-group" role="region" aria-label="Sent messages">
           {visibleSent.map((item) => (

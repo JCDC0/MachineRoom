@@ -1082,6 +1082,8 @@ export default function Hud({
                 open
                 inline
                 focusRequest={chatFocus}
+                liveRuns={liveRuns ?? []}
+                tick={log.length}
                 orchestrators={orchestratorList}
                 selected={chatTab}
                 onSelect={setChatTab}
@@ -1256,6 +1258,8 @@ export default function Hud({
         <OrchestratorChat
           client={client}
           open={chatOpen}
+          liveRuns={liveRuns ?? []}
+          tick={log.length}
           orchestrators={orchestratorList}
           selected={chatTab}
           onSelect={setChatTab}

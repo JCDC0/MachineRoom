@@ -115,11 +115,8 @@ describe('the transport with lanes and spend', () => {
 
   it('shows one pill per lane and the spend just left of the ring', () => {
     const html = renderTransport()
-    expect(html).toContain('transport-lanes')
-    expect(html).toContain('transport-lane is-working')
-    expect(html).toContain('OpenCode')
-    expect(html).toContain('U120')
-    expect(html).toContain('OpenCode · U120 · working · 12 min')
+    expect(html).toContain('2<!-- --> agents')
+    expect(html).toContain('1 working')
     expect(html).toContain('transport-spend')
     expect(html).toContain('$1.25 today · $3.50 mo')
     expect(html).toContain('title="Show the cost board"')
@@ -142,7 +139,7 @@ describe('the transport with lanes and spend', () => {
         )
       )
     )
-    expect(html).not.toContain('transport-lane')
+    expect(html).toContain('0<!-- --> agents')
     expect(html).not.toContain('transport-spend')
   })
 })
