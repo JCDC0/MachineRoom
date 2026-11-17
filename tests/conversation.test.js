@@ -59,6 +59,16 @@ describe('a conversation read from a lane log', () => {
     expect(entries.at(-1)).toMatchObject({ role: 'result', text: 'Done.' })
   })
 
+  it('reads MachineRoom stream-json like Claude and keeps unknown harness lines raw', () => {
+    const prompt = 'Read the file and run the tests.'
+    const entries = conversationFromLog('machineroom', claudeLog, prompt)
+    expect(entries).toEqual(conversationFromLog('claude', claudeLog, prompt))
+    expect(entries.some((item) => item.role === 'line')).toBe(false)
+    expect(conversationFromLog('unknown', claudeLog).map((item) => item.text)).toEqual(
+      claudeLog.trim().split('\n')
+    )
+  })
+
   it('gives the prompt, the agent words and the OpenCode tool calls in order', () => {
     const entries = conversationFromLog('opencode', opencodeLog(), 'List the files.')
     expect(entries[0]).toEqual({ role: 'prompt', text: 'List the files.', tool: null, at: null })

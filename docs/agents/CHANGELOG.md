@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- conversationFromLog reads a machineroom log with the Claude reader; unknown harnesses keep raw lines.
 - A run log counts as inside the runs folder by its real path, or by its plain path when no link or junction sits between, so lane conversations open inside a packaged app too.
 - A run record with no log finds its log by lane, briefs and local start stamp inside the runs folder, and a bridge-written record keeps the log path.
 - An orchestrator fetches missing model details when it loads and after a model or harness change, so the window shows before the first turn.
