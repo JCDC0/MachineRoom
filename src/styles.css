@@ -7239,30 +7239,35 @@ body:has(#hud-orchestrator-chat) .lens-waiting {
 }
 
 .mr-side-sort {
-  display: flex;
-  gap: 2px;
+  flex-direction: row;
+  align-items: end;
 }
 
-.mr-side .mr-side-sort-button {
-  flex: 1 1 auto;
-  height: 24px;
-  padding: 0 4px;
-  border: 1px solid transparent;
-  border-radius: 2px;
-  font-family: var(--mono);
+.mr-side-sort .mr-side-search {
+  min-width: 0;
+}
+
+.mr-side-sort label {
+  flex: 0 0 80px;
   font-size: 9px;
-  font-weight: 400;
-  color: rgb(255 255 255 / 0.45);
+  color: rgb(255 255 255 / 0.55);
 }
 
-.mr-side .mr-side-sort-button.is-on {
-  border-color: rgb(255 255 255 / 0.24);
+.mr-side .mr-side-pin {
+  flex: 0 0 auto;
+  padding: 2px;
   color: var(--white);
+  opacity: 0;
 }
 
-.mr-side .mr-side-sort-button:hover:not(:disabled) {
-  color: var(--white);
-  background: rgb(255 255 255 / 0.06);
+.mr-side .mr-side-pin[aria-pressed='true'] {
+  color: var(--yellow);
+  opacity: 1;
+}
+
+.mr-side-row:hover .mr-side-pin,
+.mr-side-row:focus-within .mr-side-pin {
+  opacity: 1;
 }
 
 .mr-side-group {
