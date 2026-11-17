@@ -4313,3 +4313,27 @@ Sweep S2 fixes, P511 to P513. `docs/agents/AUDIT-2026-11-SWEEP-S2.md` (P507, Cod
 1. Track which fields the owner has edited and not saved (program drafts per harness, the lane warning count, the worktree setup command, the copy list). A background `loadAll` updates every other field but keeps those drafts. A successful save of a field clears its dirty mark and adopts the saved value; saving one field never resets another field's draft.
 2. Test: edit the setup command and the copy list, fire a family notice, and both drafts stay; save the setup and the saved value shows while a program draft in another row stays.
 3. Run `node node_modules/vitest/vitest.mjs run tests/harnesses-drafts.test.jsx tests/harnesses-settings.test.js tests/harness-probe.test.jsx tests/worktree-copies.test.js` and `npm run build`, and report the counts.
+
+Sweep S1 fixes, P514 to P516. `docs/agents/AUDIT-2026-11-SWEEP-S1.md` (P506, Codex Sol): six findings, read back by the orchestrator (S1-1 confirmed: `server/static.js` checks the spelled path and never the real one). Codex, Terra. Every brief: read the brief and its findings only; leave your changes uncommitted, the runner commits them; run every command in the foreground; never use git stash; do not run the full suite; you may change any existing test whose expectation the brief changes, and name it. Tests use invented canary values, never a real key, and make links only inside their own temporary folders. Sandbox baseline failures you may ignore: process tests and any test that fails only because the sandbox denies the home folder.
+
+**P514. S1-1: static and music files are served only from inside their real roots (Codex, Terra).** Files: server/static.js, server/music.js, tests/static-links.test.js (new), docs/agents/CHANGELOG.md, docs/agents/architecture/LIVE.md.
+
+1. Resolve the root once with `realpath` and each target with `realpath` before `stat`, `readFile` or a stream opens it; answer 404 when the real target is outside the real root (compare with `relative`, refusing `..` and absolute results, case-insensitive on Windows).
+2. Music serves only names whose extension is in its audio list, after the same real-path check.
+3. Tests: a junction (Windows) or symlink (elsewhere) inside a temporary static root and music root pointing at an outside temporary file answers 404; a normal file still answers 200; a non-audio name under music answers 404.
+4. Run `node node_modules/vitest/vitest.mjs run tests/static-links.test.js` plus the existing static and music tests (name them) and `npm run build`, and report the counts.
+
+**P515. S1-3, S1-4 and S1-5: MCP replies, run history and review diffs mask keys and home paths (Codex, Terra).** Files: server/mcp.js (`publicMcpServer` near line 117 and the call reply near line 747), server/runs.js (`maskRecordCommits` near line 1831 and the recent and last lists near line 1995), server/reviews.js (the diff reply near line 828), tests/public-masking.test.js (new), docs/agents/CHANGELOG.md.
+
+1. Reuse `maskKeys` and `maskProfilePaths` (already imported in these files or beside them). MCP: the public server's args and URL, every tool result and every problem text are masked; the saved private settings stay unmasked and an edit of a masked display never replaces a saved value.
+2. Runs: the recent, last and attention lists return a masked public copy of each record's free text (note, task, error lines) and profile paths in displayed log paths; the record on disk stays as it is.
+3. Reviews: the diff reply masks the patch before it is cut to size; merges keep using git's own bytes.
+4. Tests: a canary assignment and a `C:\Users\someone` path in each of the three places come back masked.
+5. Run `node node_modules/vitest/vitest.mjs run tests/public-masking.test.js tests/bridge-reviews.test.js tests/mcp.test.js` (skip a file that does not exist and name the MCP test you used) and `npm run build`, and report the counts.
+
+**P516. S1-2 and S1-6: a late model fetch keeps newer endpoint edits, and a failed temp folder frees the connection test (Codex, Terra).** Files: server/endpoints.js (quick connect near line 551), server/harness-probe.js (near line 80), tests/endpoints-quick-race.test.js (new), tests/harness-probe.test.js, docs/agents/CHANGELOG.md.
+
+1. After the model fetch, quick connect reads the current list again and updates only the same endpoint, and only when its connection settings still match; a deleted or changed entry is left alone, and the answer says so plainly.
+2. The probe adds the harness to its running set inside the `try` whose `finally` removes it, and removes the temp folder only if it was made.
+3. Tests: a second endpoint saved during the fetch survives; a first probe whose temp folder fails leaves the next probe free to run.
+4. Run `node node_modules/vitest/vitest.mjs run tests/endpoints-quick-race.test.js tests/harness-probe.test.js tests/endpoints.test.js` (skip a file that does not exist) and `npm run build`, and report the counts.
