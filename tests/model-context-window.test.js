@@ -1,6 +1,6 @@
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createEndpointsApi, readEndpoints, saveEndpoints } from '../server/endpoints.js'
 import { resolveContextWindow } from '../server/model-list.js'
 import { createOrchestrator } from '../server/orchestrator.js'
@@ -80,6 +80,47 @@ describe('resolveContextWindow', () => {
 })
 
 describe('orchestrator context window and autocompact', () => {
+  it('fetches missing details on creation and on model and harness changes', async () => {
+    const temp = makeTempDir('mr-test-refresh-window-')
+    cleanups.push(() => removeTempDir(temp))
+    const endpoint = {
+      name: 'test', provider: 'OpenRouter', baseUrl: 'https://openrouter.ai/api/v1',
+      keyName: 'test', models: ['first', 'second'],
+    }
+    saveEndpoints(temp, [endpoint])
+    const notice = vi.fn()
+    const refresh = vi.fn(async (model) => {
+      await Promise.resolve()
+      const id = model.split('/')[1]
+      saveEndpoints(temp, [{ ...endpoint, modelDetails: [{ id, contextLength: id === 'first' ? 100000 : 200000 }] }])
+      return true
+    })
+    const orch = createOrchestrator({
+      projectRoot: join(temp, 'project'), runsFolder: temp,
+      harness: 'machineroom', model: 'test/first', refreshModelDetails: refresh, onNotice: notice,
+    })
+    cleanups.push(() => orch.close())
+
+    expect(refresh).toHaveBeenCalledTimes(1)
+    expect(orch.answer().contextWindow).toBeNull()
+    await vi.waitFor(() => expect(orch.answer().contextWindow).toBe(100000))
+    expect(notice).toHaveBeenCalledWith({ topic: 'orchestrator' })
+    expect(orch.answer().state).toBe('idle')
+
+    notice.mockClear()
+    expect(orch.setModel({ model: 'test/second', confirmed: true }).status).toBe(200)
+    expect(refresh).toHaveBeenLastCalledWith('test/second', undefined)
+    expect(orch.answer().contextWindow).toBeNull()
+    notice.mockClear()
+    await vi.waitFor(() => expect(orch.answer().contextWindow).toBe(200000))
+    expect(notice).toHaveBeenCalledWith({ topic: 'orchestrator' })
+
+    expect(orch.setHarness({ harness: 'machineroom', model: 'test/first', confirmed: true }).status).toBe(200)
+    expect(refresh).toHaveBeenCalledTimes(3)
+    expect(refresh).toHaveBeenLastCalledWith('test/first', undefined)
+    await vi.waitFor(() => expect(orch.answer().contextWindow).toBe(100000))
+  })
+
   it('reads the context window from endpoints in the runs folder and lets lane window win', () => {
     const temp1 = makeTempDir('mr-test-context-1-')
     cleanups.push(() => removeTempDir(temp1))
