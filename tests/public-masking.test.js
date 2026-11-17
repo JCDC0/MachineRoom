@@ -71,7 +71,7 @@ it('masks public run records and attention without changing the disk record', as
       safe(row.task)
       safe(row.note)
       safe(row.errors[0])
-      expect(row.log).not.toContain('someone')
+      expect(row.log).toBe(home)
     }
     safe(answer.attention[0].text)
     expect(JSON.parse(readFileSync(file, 'utf8'))).toEqual(record)

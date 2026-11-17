@@ -480,6 +480,8 @@ export function readOutcomeRecords(file) {
   return readJsonLines(file)
 }
 
+const RECORD_PATH_KEYS = new Set(['log', 'project', 'worktree', 'folder', 'path', 'cwd'])
+
 export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand, sendJson, readJsonBody, notify = () => {}, orchestrators = () => null, lanesSource = () => null, lanesFile = '', runsFolder = '', activeLanes = null, isLaneActive = null, onMessage = () => {}, platform = process.platform, list = listProcesses, stat = statSync, readFile = readFileSync, summarize = summarizeRun, bridgeUrl = '' }) {
   const resolvedRoot = projectRoot ? realPath(projectRoot) : ''
   const resolvedBriefs = briefsDir ? resolve(briefsDir) : resolvedRoot ? join(resolvedRoot, 'docs', 'agents') : ''
@@ -1828,10 +1830,13 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
     })
   }
 
-  function maskRecordCommits(record) {
-    if (typeof record === 'string') return maskProfilePaths(maskKeys(record).text)
-    if (Array.isArray(record)) return record.map(maskRecordCommits)
-    if (record && typeof record === 'object') return Object.fromEntries(Object.entries(record).map(([key, value]) => [key, maskRecordCommits(value)]))
+  function maskRecordCommits(record, key = '') {
+    if (typeof record === 'string') {
+      const text = maskKeys(record).text
+      return RECORD_PATH_KEYS.has(key) ? text : maskProfilePaths(text)
+    }
+    if (Array.isArray(record)) return record.map((item) => maskRecordCommits(item, key))
+    if (record && typeof record === 'object') return Object.fromEntries(Object.entries(record).map(([name, value]) => [name, maskRecordCommits(value, name)]))
     return record
   }
 
