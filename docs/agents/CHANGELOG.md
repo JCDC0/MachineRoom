@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Review 51 (Sol): port offsets can still collide or move, and the badge seam fix has no guard test.
 - Conversations sort from one Sort by select, and pinned conversations show a pin toggle and sit under Pinned.
 - The menu badges sit inside their buttons, and the transport orchestrator title keeps its full width.
 - The Harnesses confirm card has its own id, and the dialog focus lookup can no longer throw.
