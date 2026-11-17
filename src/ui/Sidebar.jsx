@@ -666,6 +666,18 @@ export function Sidebar({ client = null, live = false, project = '', tasks = nul
           <span className="mr-side-title">{row.title}</span>
         </button>
         {row.current && <span className="mr-side-current mono">Current</span>}
+        <button
+          type="button"
+          className="mr-side-pin"
+          aria-label={`${row.pinned ? 'Unpin' : 'Pin'} ${row.title}`}
+          aria-pressed={row.pinned}
+          disabled={items[0].disabled}
+          onClick={() => runMenuAction(row, items[0])}
+        >
+          <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M16 3 21 8 18 9 15 14 16 17 14 19 10 15 4 21 9 14 5 10 7 8 10 9 15 6Z" />
+          </svg>
+        </button>
         <span className="mr-side-age mono">{sessionAge(row, now)}</span>
         <span className="mr-side-actions">
           <button
@@ -703,8 +715,9 @@ export function Sidebar({ client = null, live = false, project = '', tasks = nul
 
   function renderSessionRows() {
     let group = ''
+    const showActiveLabels = rows.rows.some((row) => row.group === 'pinned') && rows.rows.some((row) => row.group === 'recent')
     return rows.rows.map((row) => {
-      const label = row.group !== 'current' && row.group !== group ? GROUP_LABEL[row.group] : ''
+      const label = row.group !== 'current' && row.group !== group && (row.group === 'archived' || showActiveLabels) ? GROUP_LABEL[row.group] : ''
       group = row.group
       return (
         <Fragment key={row.id || 'current'}>
@@ -741,7 +754,7 @@ export function Sidebar({ client = null, live = false, project = '', tasks = nul
               </span>
             </div>
             {sessions ? (
-              <div className="mr-side-tools">
+              <div className="mr-side-tools mr-side-sort">
                 <input
                   type="search"
                   className="mr-side-search mono"
@@ -750,19 +763,12 @@ export function Sidebar({ client = null, live = false, project = '', tasks = nul
                   aria-label="Search conversations"
                   onChange={(event) => setSearch(event.target.value)}
                 />
-                <div className="mr-side-sort mono" role="group" aria-label="Sort conversations">
-                  {SESSION_SORTS.map((choice) => (
-                    <button
-                      type="button"
-                      className={`mr-side-sort-button${sort === choice.key ? ' is-on' : ''}`}
-                      key={choice.key}
-                      aria-pressed={sort === choice.key}
-                      onClick={() => chooseSort(choice.key)}
-                    >
-                      {choice.label}
-                    </button>
-                  ))}
-                </div>
+                <label className="mono">
+                  Sort by
+                  <select className="mr-side-select mono" value={sort} onChange={(event) => chooseSort(event.target.value)}>
+                    {SESSION_SORTS.map((choice) => <option key={choice.key} value={choice.key}>{choice.label}</option>)}
+                  </select>
+                </label>
               </div>
             ) : null}
             <div className="mr-side-conversations">

@@ -2,10 +2,12 @@
 
 ## Unreleased
 
+- Conversations sort from one Sort by select, and pinned conversations show a pin toggle and sit under Pinned.
 - The menu badges sit inside their buttons, and the transport orchestrator title keeps its full width.
 - The Harnesses confirm card has its own id, and the dialog focus lookup can no longer throw.
 - Harnesses confirm cards keep the room open and return focus to their opener (P498).
 - The Control count sits inside its button border, and the transport keeps the orchestrator title clear of lane chips (P499). The count rides the lens seam with its button, so it no longer floats above it.
+- The conversation list has a Sort by select and visible pin toggles, with Pinned and Recent labels when both groups are shown (P500).
 
 - Review 50 fixes: listed lanes get distinct port offsets, a failed exclude write removes the copy, rewind refusals say what happened.
 - Review 50 fixes (P497): a lane in the lanes file takes its port offset from its sorted place so none share ports, a copy that fails after writing is removed and the ignore check runs in the worktree, a rewind answers 409 for unrecorded commits, 409 `This run was already rewound.` and 500 for a lock error that is not a live run, `touchedPartial` is also true when the list was cut at 50, and the worktree setup help line sits under its own field.
