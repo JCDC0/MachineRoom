@@ -79,6 +79,7 @@ export function changeEvents(frame) {
   const type = frame?.type
   const payload = frame?.payload ?? {}
   if (type === 'agent.status') return [{ topic: 'agents' }]
+  if (type === 'heartbeat.run.context') return [{ topic: 'liveRuns' }]
   if (RUN_NOTICES.has(type)) {
     const costs = type === 'heartbeat.run.status' && ['succeeded', 'failed', 'cancelled', 'timed_out'].includes(payload.status) ? [{ topic: 'costs' }] : []
     return [{ topic: 'agents' }, { topic: 'issues' }, ...costs, { topic: 'liveRuns' }, { topic: 'runs' }]
