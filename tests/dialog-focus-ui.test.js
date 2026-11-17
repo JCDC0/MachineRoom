@@ -1,3 +1,5 @@
+import { readdirSync, readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { act, createElement, useRef } from 'react'
 import { describe, expect, it } from 'vitest'
 import Launcher from '../src/ui/Launcher.jsx'
@@ -8,9 +10,9 @@ import { useDialogFocus } from '../src/ui/dialogFocus.js'
 import { createMockClient } from '../src/control/mock.js'
 import { click, settle, withDom } from './helpers/uiDom.js'
 
-function TestDialog({ open, children }) {
+function TestDialog({ open, children, openerSelector }) {
   const ref = useRef(null)
-  useDialogFocus(open, { containerRef: ref })
+  useDialogFocus(open, { containerRef: ref, openerSelector })
   return createElement('section', { ref }, children)
 }
 
@@ -36,6 +38,37 @@ function openerFor(dom) {
 }
 
 describe('dialog focus', () => {
+  it('uses plain ids for every opener selector in source', () => {
+    const files = readdirSync('src', { recursive: true, withFileTypes: true })
+      .filter((entry) => entry.isFile() && /\.[jt]sx?$/.test(entry.name))
+    const selectors = files.flatMap((entry) => {
+      const source = readFileSync(join(entry.parentPath, entry.name), 'utf8')
+      return [...source.matchAll(/\bopenerSelector\s*:\s*([^,}\n]+)/g)].map((match) => match[1].trim())
+    })
+    expect(selectors.length).toBeGreaterThan(0)
+    for (const selector of selectors) expect(selector).toMatch(/^['"][A-Za-z][\w-]*['"]$/)
+  })
+
+  it('focuses the card and restores the active opener when lookup throws', async () => {
+    await withDom(async ({ container, root, dom }) => {
+      const opener = openerFor(dom)
+      const querySelector = dom.document.querySelector
+      dom.document.querySelector = () => { throw new Error('Invalid selector') }
+      try {
+        await act(async () => {
+          root.render(createElement(TestDialog, { open: true, openerSelector: 'bad-id' }, createElement('button', null, 'Inside')))
+        })
+        expect(dom.document.activeElement).toBe(container.querySelector('button'))
+        await act(async () => {
+          root.render(createElement(TestDialog, { open: false, openerSelector: 'bad-id' }))
+        })
+        expect(dom.document.activeElement).toBe(opener)
+      } finally {
+        dom.document.querySelector = querySelector
+      }
+    })
+  })
+
   it('keeps Tab inside a dialog with no focusable child', async () => {
     await withDom(async ({ container, root, dom, window }) => {
       const outside = openerFor(dom)

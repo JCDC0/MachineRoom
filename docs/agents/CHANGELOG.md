@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Harnesses confirm cards keep the room open and return focus to their opener (P498).
 - Review 50 fixes: listed lanes get distinct port offsets, a failed exclude write removes the copy, rewind refusals say what happened.
 - Review 50 fixes (P497): a lane in the lanes file takes its port offset from its sorted place so none share ports, a copy that fails after writing is removed and the ignore check runs in the worktree, a rewind answers 409 for unrecorded commits, 409 `This run was already rewound.` and 500 for a lock error that is not a live run, `touchedPartial` is also true when the list was cut at 50, and the worktree setup help line sits under its own field.
 - Review 50: eight findings on the rewind, copies, port offset and touched list.
