@@ -660,6 +660,34 @@ describe('the file tree', () => {
 })
 
 describe('frames from a lane log', () => {
+  it('sends context changes as notices without streaming or keeping a frame', async () => {
+    const runs = tempDir()
+    const { url, writeLog } = await laneBridge({ runsDir: runs, lanesSource: { quietMs: 60000 } })
+    const stream = await openSse(url)
+    cleanups.push(() => stream.close())
+    writeLog('opencode-Y1-20261024-120000', `${toolLine('docs/a.md')}\n`)
+
+    const liveFrames = []
+    for (;;) {
+      const event = await stream.next()
+      if (event.event === 'frame') liveFrames.push(JSON.parse(event.data))
+      if (liveFrames.some((frame) => frame.type === 'heartbeat.run.log')) break
+    }
+    const notice = await stream.next()
+    expect(notice.event).toBe('change')
+    expect(JSON.parse(notice.data)).toEqual({ topic: 'liveRuns' })
+    await expect(stream.next((event) => event.event === 'frame', 300)).rejects.toThrow('timed out waiting for SSE event')
+
+    const late = await openSse(url, {}, '?history=1')
+    cleanups.push(() => late.close())
+    const history = []
+    for (let index = 0; index < liveFrames.length; index += 1) {
+      history.push(JSON.parse((await late.next()).data))
+    }
+    expect(history).toEqual(liveFrames)
+    await expect(late.next((event) => event.event === 'frame', 300)).rejects.toThrow('timed out waiting for SSE event')
+  })
+
   it('streams queued, running, each read line and the end', async () => {
     const runs = tempDir()
     const name = 'opencode-Y1-20261024-120000'

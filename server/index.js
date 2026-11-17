@@ -1665,6 +1665,12 @@ export function createBridge(options = {}) {
   }
 
   function emit(parsed) {
+    if (parsed?.type === 'heartbeat.run.context') {
+      for (const client of clients) {
+        for (const notice of changeEvents(parsed)) writeSseChange(client, notice)
+      }
+      return
+    }
     nextId += 1
     const seq = nextId
     const id = `${treeStart}:${seq}`
