@@ -1,5 +1,7 @@
 # Commands
 
+Lane continuations require the saved lane, brief ids, project kind and branch to match. Run records are appended under a lock, with torn tails kept on a separate line. Lane logs and Hermes exports mask child credentials and native key assignments. Stale port locks are claimed under a takeover guard before removal.
+
 Every command, with its flags and what it prints.
 
 ## Commands

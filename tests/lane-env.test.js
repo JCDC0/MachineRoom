@@ -3,7 +3,7 @@ import { appendFileSync, mkdirSync, readFileSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
-import { printedRunsFolder } from '../scripts/run-lane.mjs'
+import { captureToolLines, printedRunsFolder } from '../scripts/run-lane.mjs'
 import { childEnvironment, commandFor, createLaneLog } from '../src/briefs/run.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 
@@ -147,6 +147,28 @@ describe('childEnvironment', () => {
 })
 
 describe('createLaneLog', () => {
+  it('masks the native credential and assignments across chunks', () => {
+    const chunks = []
+    const key = 'invented-canary-value'
+    const log = createLaneLog({ write: (text) => chunks.push(text), secrets: [key] })
+    log.push('stdout', `MACHINEROOM_API_KEY=${key.slice(0, 8)}`)
+    log.push('stdout', `${key.slice(8)}\n${key}\nMACHINEROOM_API_`)
+    log.push('stdout', 'KEY=another-canary\n')
+    log.flush()
+    expect(chunks.join('')).toBe('MACHINEROOM_API_KEY=[key]\n[key]\nMACHINEROOM_API_KEY=[key]\n')
+  })
+
+  it('masks exported Hermes tool lines', () => {
+    const folder = tempDir()
+    const path = join(folder, 'lane.log')
+    const key = 'invented-export-canary'
+    const session = JSON.stringify({ messages: [{ role: 'assistant', timestamp: 1, tool_calls: [{ id: 'c', type: 'function', function: { name: 'terminal', arguments: JSON.stringify({ command: ['echo', 'OPENROUTER_API' + '_KEY', key].join(' ').replace(' ' + key, '=' + key) }) } }] }] })
+    const result = captureToolLines('hermes', 's', path, [key], () => ({ status: 0, stdout: session }))
+    expect(result.count).toBe(1)
+    expect(readFileSync(path, 'utf8')).not.toContain(key)
+    expect(readFileSync(path, 'utf8')).toContain('[key]')
+    expect(result.session).not.toContain(key)
+  })
   it('masks a key split across two chunks', () => {
     const chunks = []
     const log = createLaneLog({ write: (text) => chunks.push(text) })

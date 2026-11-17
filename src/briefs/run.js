@@ -868,32 +868,70 @@ export function mcpConfigForOpencode(servers) {
   return { mcp }
 }
 
-export function createLaneLog({ write, runId = 'lane', holdMs, ticket } = {}) {
+export function createLaneLog({ write, runId = 'lane', holdMs, ticket, secrets = [] } = {}) {
   if (typeof write !== 'function') throw new Error('The lane log needs a writer.')
   const fromEnv =
     typeof process !== 'undefined' && process.env && typeof process.env.MACHINEROOM_LANE_TICKET === 'string'
       ? process.env.MACHINEROOM_LANE_TICKET.trim()
       : ''
-  const secret = typeof ticket === 'string' ? ticket.trim() : fromEnv
+  const values = [...new Set([typeof ticket === 'string' ? ticket.trim() : fromEnv, ...secrets].filter((value) => typeof value === 'string' && value !== ''))].sort((a, b) => b.length - a.length)
   const masker = createSplitMasker(holdMs === undefined ? {} : { holdMs })
   const seqs = new Map()
   const timers = new Set()
   const carries = new Map()
+  const assignments = new Map()
+
+  function maskAssignment(stream, text, flush = false) {
+    let pending = (assignments.get(stream) ?? '') + text
+    let safe = ''
+    const name = 'MACHINEROOM_API_KEY'
+    while (pending) {
+      const upper = pending.toUpperCase()
+      const at = upper.indexOf(name)
+      if (at < 0) {
+        let keep = 0
+        if (!flush) for (let n = Math.min(name.length - 1, pending.length); n > 0; n -= 1) {
+          if (name.startsWith(upper.slice(-n))) { keep = n; break }
+        }
+        safe += keep ? pending.slice(0, -keep) : pending
+        pending = keep ? pending.slice(-keep) : ''
+        break
+      }
+      safe += pending.slice(0, at)
+      pending = pending.slice(at)
+      const match = pending.match(/^(MACHINEROOM_API_KEY\s*[:=]\s*['"]?)([^\s'"]*)/i)
+      if (!match) {
+        if (!flush && /^MACHINEROOM_API_KEY\s*[:=]?\s*$/i.test(pending)) break
+        safe += pending[0]
+        pending = pending.slice(1)
+      } else if (!flush && match[0].length === pending.length) {
+        break
+      } else {
+        safe += match[1] + (match[2] ? KEY_MASK : '')
+        pending = pending.slice(match[0].length)
+      }
+    }
+    if (pending) assignments.set(stream, pending)
+    else assignments.delete(stream)
+    return safe
+  }
 
   function scrub(stream, text) {
-    if (secret === '') return text
+    if (values.length === 0) return text
     const joined = (carries.get(stream) ?? '') + text
     carries.delete(stream)
     let keep = 0
-    const most = Math.min(secret.length - 1, joined.length)
-    for (let length = most; length > 0; length -= 1) {
-      if (joined.endsWith(secret.slice(0, length))) {
-        keep = length
-        break
+    for (const secret of values) {
+      const most = Math.min(secret.length - 1, joined.length)
+      for (let length = most; length > keep; length -= 1) {
+        if (joined.endsWith(secret.slice(0, length))) {
+          keep = length
+          break
+        }
       }
     }
     if (keep > 0) carries.set(stream, joined.slice(-keep))
-    return (keep > 0 ? joined.slice(0, -keep) : joined).split(secret).join(KEY_MASK)
+    return values.reduce((safe, secret) => safe.split(secret).join(KEY_MASK), keep > 0 ? joined.slice(0, -keep) : joined)
   }
 
   function emit(result) {
@@ -930,7 +968,7 @@ export function createLaneLog({ write, runId = 'lane', holdMs, ticket } = {}) {
   return {
     push(stream, chunk) {
       if (typeof chunk !== 'string' || chunk === '') return
-      const safe = scrub(stream, chunk)
+      const safe = scrub(stream, maskAssignment(stream, chunk))
       if (safe === '') return
       send(stream, safe)
       schedule()
@@ -938,6 +976,10 @@ export function createLaneLog({ write, runId = 'lane', holdMs, ticket } = {}) {
     flush() {
       for (const timer of timers) clearTimeout(timer)
       timers.clear()
+      for (const stream of assignments.keys()) {
+        const safe = scrub(stream, maskAssignment(stream, '', true))
+        if (safe) send(stream, safe)
+      }
       for (const [stream, text] of carries) send(stream, text)
       carries.clear()
       emit(masker.flush())

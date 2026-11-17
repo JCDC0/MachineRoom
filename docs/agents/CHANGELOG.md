@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Lane logs and Hermes exports mask child credentials and native key assignments.
+- Continuations check the saved lane, briefs, project kind and branch before starting.
+- Run record appends lock the file and separate a torn tail from the next record.
+- Stale port locks are claimed under a takeover guard before removal.
 - Sweep S3 (Sol): six findings in the lane runner, three high.
 - Tests now fail if the Control count leaves the lens seam selector or rule.
 - Port offsets are saved per lane in the runs folder, given lowest-free first, and never move.
