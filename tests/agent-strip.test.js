@@ -647,7 +647,7 @@ describe('agent strip layout', () => {
 describe('the context line', () => {
   it('gives the used tokens and the window', () => {
     expect(contextLine({ context: { tokens: 128400, window: 200000 } })).toBe(
-      'Context size 128.4k / 200.0k (assumed)'
+      'Context size 128.4k / 200.0k'
     )
     expect(contextLine({ context: { tokens: 128400, window: 200000, assumed: false } })).toBe(
       'Context size 128.4k / 200.0k'
@@ -665,7 +665,7 @@ describe('the context line', () => {
     expect(contextLine({ context: { tokens: null, window: 200000 } })).toBe(
       'Context size not reported'
     )
-    expect(contextLine({ context: { tokens: 20, window: 0 } })).toBe('Context size not reported')
+    expect(contextLine({ context: { tokens: 20, window: 0 } })).toBe('Context size 20')
   })
 
   it('formats small and large counts the way the dock does', () => {

@@ -482,7 +482,7 @@ export function readOutcomeRecords(file) {
 
 const RECORD_PATH_KEYS = new Set(['log', 'project', 'worktree', 'folder', 'path', 'cwd'])
 
-export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand, sendJson, readJsonBody, notify = () => {}, orchestrators = () => null, lanesSource = () => null, lanesFile = '', runsFolder = '', activeLanes = null, isLaneActive = null, onMessage = () => {}, platform = process.platform, list = listProcesses, stat = statSync, readFile = readFileSync, summarize = summarizeRun, bridgeUrl = '' }) {
+export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand, sendJson, readJsonBody, notify = () => {}, orchestrators = () => null, lanesSource = () => null, lanesFile = '', runsFolder = '', activeLanes = null, isLaneActive = null, onMessage = () => {}, platform = process.platform, list = listProcesses, stat = statSync, readFile = readFileSync, summarize = summarizeRun, bridgeUrl = '', refreshModelDetails = () => {} }) {
   const resolvedRoot = projectRoot ? realPath(projectRoot) : ''
   const resolvedBriefs = briefsDir ? resolve(briefsDir) : resolvedRoot ? join(resolvedRoot, 'docs', 'agents') : ''
   const laneFile = lanesFile ? resolve(lanesFile) : join(lanesFolder(), 'lanes.json')
@@ -2262,6 +2262,7 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
     let entry
     try {
       const laneConfig = lanes[lane]
+      refreshModelDetails(model || laneConfig?.cli?.model || '', laneConfig?.cli?.endpoint || '')
       const reasoning = laneConfig?.effort || ''
       const firstTask = hasTasks && body.tasks.length > 0 ? body.tasks[0].trim() : ''
       entry = startRun(

@@ -57,7 +57,7 @@ describe('the context ring helpers', () => {
     expect(contextPercent(null)).toBeNull()
     expect(contextLabel(84000, 200000)).toBe('42%')
     expect(contextLabel(null, 200000)).toBe('context not reported')
-    expect(contextLabel(84000, null)).toBe('context not reported')
+    expect(contextLabel(84000, null)).toBe('84000 tokens')
     expect(contextTitle(84000, 200000)).toBe('84000 of 200000 tokens')
     expect(contextTitle(250000, 200000)).toBe('250000 of 200000 tokens')
     expect(contextTitle(null, 200000)).toBe('')

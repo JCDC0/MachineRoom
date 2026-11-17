@@ -651,6 +651,7 @@ export function createBridge(options = {}) {
     projectRoot,
     briefsDir: options.briefsDir ?? process.env.BRIEFS_DIR,
     runnerCommand: options.runnerCommand,
+    refreshModelDetails: (...args) => endpoints.refreshMissing(...args),
     lanesFile: options.lanesFile,
     runsFolder: options.runsFolder ?? options.orchestratorFolder,
     sendJson,
@@ -798,6 +799,7 @@ export function createBridge(options = {}) {
   if (lanesSourceOn) {
     orchestrators = createOrchestrators({
       projectRoot,
+      refreshModelDetails: (...args) => endpoints.refreshMissing(...args),
       runsFolder: resolve(options.orchestratorFolder ?? lanesSourceObject.folder ?? runsFolder()),
       lanes: lanesConfig,
       spawn: options.orchestratorSpawn,
