@@ -409,6 +409,7 @@ export default function HarnessesSettings({ client }) {
               disabled={checking || savingWorktreeSetup || Boolean(busyKey)}
               onChange={(event) => setWorktreeSetup(event.target.value)}
             />
+            <p className="endpoints-note mono">Runs once in each new lane worktree, for example npm ci.</p>
             <label className="endpoints-label mono" htmlFor="harness-worktree-copies">Copy into new worktrees</label>
             <textarea
               id="harness-worktree-copies"
@@ -427,7 +428,6 @@ export default function HarnessesSettings({ client }) {
                 Save
               </button>
             </div>
-            <p className="endpoints-note mono">Runs once in each new lane worktree, for example npm ci.</p>
           </div>
           {rows.map((row) => {
             const status = harnessStatus(row)

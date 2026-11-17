@@ -130,7 +130,7 @@ describe('the worktree setup command', () => {
       { TEMP: base, MACHINEROOM_RUNS: runs, MACHINEROOM_LANES_FILE: lanes }
     )
     expect(result.code, `${result.stdout}\n${result.stderr}`).toBe(0)
-    expect(readFileSync(join(worktreeFor(project, 'opencode'), 'offset.txt'), 'utf8')).toBe(String(portOffsetFor('opencode')))
+    expect(readFileSync(join(worktreeFor(project, 'opencode'), 'offset.txt'), 'utf8')).toBe(String(portOffsetFor('opencode', ['first', 'opencode'])))
   })
   it('runs once in a new worktree and writes its time to the run log', { timeout: 60000 }, async () => {
     const base = tempDir()
