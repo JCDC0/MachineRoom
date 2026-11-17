@@ -61,9 +61,8 @@ afterAll(() => {
   globalThis.document = savedDocument
 })
 
-function harness() {
+function harness(roster = [{ key: 'a', name: 'Alpha', shape: 'claude' }]) {
   const scene = new THREE.Scene()
-  const roster = [{ key: 'a', name: 'Alpha', shape: 'claude' }]
   const agents = createAgents(scene, roster, new THREE.Scene())
   const state = createState({ files: [], dirs: [], created: [] }, roster)
   const chips = new Map()
@@ -101,6 +100,23 @@ describe('spawnDrawState', () => {
 })
 
 describe('new views', () => {
+  it('draws a lane added to the roster after the first sync', () => {
+    const orchestrator = { key: 'orchestrator', name: 'Orchestrator' }
+    const first = { key: 'first', name: 'First' }
+    const second = { key: 'second', name: 'Second' }
+    const { agents, state, terminals, world } = harness([orchestrator])
+    agents.setRoster([orchestrator, first])
+    expect(agents.views.get('first').shape.geometry.drawRange.count).toBe(Infinity)
+    agents.update(state, 0.016, 1000, world, terminals)
+    agents.setRoster([orchestrator, first, second])
+    const shape = agents.views.get('second').shape
+    expect(shape.geometry.drawRange.count).toBeLessThan(shape.geometry.getAttribute('position').count)
+    agents.update(state, 0.016, 1100, world, terminals)
+    agents.update(state, 0.016, 3100, world, terminals)
+    expect(shape.geometry.drawRange.count).toBe(Infinity)
+    agents.dispose()
+  })
+
   it('draws a child added after the first sync and leaves initial views complete', () => {
     const { agents, state, terminals, world } = harness()
     state.agents.set('first', { key: 'first', name: 'First', parent: 'a', status: 'working' })

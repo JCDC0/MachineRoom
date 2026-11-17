@@ -1084,6 +1084,18 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
     view.spawn = null
   }
 
+  function startSpawn(view) {
+    const parent = views.get(view.parentKey ?? lineParentKey(view.key, currentLadder))
+      ?? [...views.values()].find((candidate) => candidate.orchestrator)
+    if (!synced || !parent || parent === view || still() || globalThis.document?.hidden) return
+    const pen = lineBetween(lineMaterial(parent.color, 1))
+    const head = new THREE.Points(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3()]), new THREE.PointsMaterial({ color: view.color, size: 12 }))
+    scene.add(pen)
+    view.group.add(head)
+    view.shape.geometry.setDrawRange(0, 0)
+    view.spawn = { pen, head, parent, start: null }
+  }
+
   function removeView(view, chips = null) {
     clearSpawn(view)
     if (chips) chips.remove?.(view.key)
@@ -1151,16 +1163,7 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
         childIndex: index,
         color: parentView.color,
       })
-      const parent = views.get(view.parentKey ?? lineParentKey(view.key, currentLadder))
-        ?? [...views.values()].find((candidate) => candidate.orchestrator)
-      if (synced && animate && parent && !still() && !globalThis.document?.hidden) {
-        const pen = lineBetween(lineMaterial(parent.color, 1))
-        const head = new THREE.Points(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3()]), new THREE.PointsMaterial({ color: view.color, size: 12 }))
-        scene.add(pen)
-        view.group.add(head)
-        view.shape.geometry.setDrawRange(0, 0)
-        view.spawn = { pen, head, parent, start: null }
-      }
+      if (animate) startSpawn(view)
     }
     synced = true
   }
@@ -1261,6 +1264,7 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
     for (const view of added) {
       view.group.position.copy(view.home)
       view.touch.copy(view.home)
+      startSpawn(view)
     }
   }
 
