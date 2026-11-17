@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Sweep S3 (Sol): six findings in the lane runner, three high.
 - Tests now fail if the Control count leaves the lens seam selector or rule.
 - Port offsets are saved per lane in the runs folder, given lowest-free first, and never move.
 - Reviews caches each lane's entry on its head, base, status, brief, runs and the git cache generation.
