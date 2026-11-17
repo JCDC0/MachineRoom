@@ -67,6 +67,17 @@ export default function HarnessesSettings({ client }) {
   const [probes, setProbes] = useState({})
   const mountedRef = useRef(true)
   const confirmRef = useRef(null)
+  const dirtyRef = useRef(new Set())
+
+  const mergeDrafts = useCallback((nextRows) => {
+    setDrafts((current) => {
+      const next = programDraftsFrom(nextRows)
+      for (const key of Object.keys(next)) {
+        if (dirtyRef.current.has(`program:${key}`) && key in current) next[key] = current[key]
+      }
+      return next
+    })
+  }, [])
 
   useDialogFocus(Boolean(confirm), {
     containerRef: confirmRef,
@@ -113,6 +124,7 @@ export default function HarnessesSettings({ client }) {
 
   const loadAll = useCallback(async () => {
     if (!live) {
+      dirtyRef.current.clear()
       setRows([])
       setDrafts({})
       setCounts(null)
@@ -129,18 +141,18 @@ export default function HarnessesSettings({ client }) {
       if (!mountedRef.current) return
       const nextRows = harnessListFrom(answer)
       setRows(nextRows)
-      setDrafts(programDraftsFrom(nextRows))
+      mergeDrafts(nextRows)
       setLaneReplies(laneRepliesFrom(answer))
-      setLaneCountWarning(String(laneCountWarningFrom(answer)))
-      setWorktreeSetup(worktreeSetupFrom(answer))
-      setWorktreeCopies(worktreeCopiesFrom(answer))
+      if (!dirtyRef.current.has('laneCount')) setLaneCountWarning(String(laneCountWarningFrom(answer)))
+      if (!dirtyRef.current.has('setup')) setWorktreeSetup(worktreeSetupFrom(answer))
+      if (!dirtyRef.current.has('copies')) setWorktreeCopies(worktreeCopiesFrom(answer))
       setSectionError('')
       await loadCounts()
     } catch (error) {
       if (!mountedRef.current) return
       setSectionError(error?.message || 'Could not load harnesses.')
     }
-  }, [client, live, loadCounts])
+  }, [client, live, loadCounts, mergeDrafts])
 
   useEffect(() => {
     loadAll()
@@ -169,10 +181,11 @@ export default function HarnessesSettings({ client }) {
     try {
       const result = await client.harnessSettings({ key, ...payload, confirmed: true })
       if (!mountedRef.current) return
+      dirtyRef.current.delete(`program:${key}`)
       const nextRows = updateRowsWithResult(rows, result)
       if (nextRows) {
         setRows(nextRows)
-        setDrafts(programDraftsFrom(nextRows))
+        mergeDrafts(nextRows)
         await loadCounts()
       } else {
         await loadAll()
@@ -199,7 +212,7 @@ export default function HarnessesSettings({ client }) {
       const nextRows = updateRowsWithResult(rows, result)
       if (nextRows) {
         setRows(nextRows)
-        setDrafts(programDraftsFrom(nextRows))
+        mergeDrafts(nextRows)
         await loadCounts()
       } else {
         await loadAll()
@@ -225,11 +238,12 @@ export default function HarnessesSettings({ client }) {
     try {
       const result = await client.harnessSettings({ laneCountWarning: count, confirmed: true })
       if (!mountedRef.current) return
+      dirtyRef.current.delete('laneCount')
       setLaneCountWarning(String(count))
       const nextRows = updateRowsWithResult(rows, result)
       if (nextRows) {
         setRows(nextRows)
-        setDrafts(programDraftsFrom(nextRows))
+        mergeDrafts(nextRows)
         await loadCounts()
       } else {
         await loadAll()
@@ -251,11 +265,13 @@ export default function HarnessesSettings({ client }) {
       const copies = worktreeCopies.split(/\r?\n/).map((path) => path.trim()).filter(Boolean)
       const result = await client.harnessSettings({ worktreeSetup: command, worktreeCopies: copies, confirmed: true })
       if (!mountedRef.current) return
+      dirtyRef.current.delete('setup')
+      dirtyRef.current.delete('copies')
       setWorktreeSetup(command)
       const nextRows = updateRowsWithResult(rows, result)
       if (nextRows) {
         setRows(nextRows)
-        setDrafts(programDraftsFrom(nextRows))
+        mergeDrafts(nextRows)
         await loadCounts()
       } else {
         await loadAll()
@@ -279,7 +295,7 @@ export default function HarnessesSettings({ client }) {
       const nextRows = updateRowsWithResult(rows, answer)
       if (nextRows) {
         setRows(nextRows)
-        setDrafts(programDraftsFrom(nextRows))
+        mergeDrafts(nextRows)
         await loadCounts()
       } else {
         await loadAll()
@@ -384,7 +400,10 @@ export default function HarnessesSettings({ client }) {
               step="1"
               value={laneCountWarning}
               disabled={checking || savingLaneCount || Boolean(busyKey)}
-              onChange={(event) => setLaneCountWarning(event.target.value)}
+              onChange={(event) => {
+                dirtyRef.current.add('laneCount')
+                setLaneCountWarning(event.target.value)
+              }}
             />
             <div className="endpoints-actions">
               <button
@@ -407,7 +426,10 @@ export default function HarnessesSettings({ client }) {
               type="text"
               value={worktreeSetup}
               disabled={checking || savingWorktreeSetup || Boolean(busyKey)}
-              onChange={(event) => setWorktreeSetup(event.target.value)}
+              onChange={(event) => {
+                dirtyRef.current.add('setup')
+                setWorktreeSetup(event.target.value)
+              }}
             />
             <p className="endpoints-note mono">Runs once in each new lane worktree, for example npm ci.</p>
             <label className="endpoints-label mono" htmlFor="harness-worktree-copies">Copy into new worktrees</label>
@@ -415,7 +437,10 @@ export default function HarnessesSettings({ client }) {
               id="harness-worktree-copies"
               value={worktreeCopies}
               disabled={checking || savingWorktreeSetup || Boolean(busyKey)}
-              onChange={(event) => setWorktreeCopies(event.target.value)}
+              onChange={(event) => {
+                dirtyRef.current.add('copies')
+                setWorktreeCopies(event.target.value)
+              }}
             />
             <p className="endpoints-note mono">One project-relative file path per line. Each copy adds an ignore line shared with the main checkout.</p>
             <div className="endpoints-actions">
@@ -454,6 +479,7 @@ export default function HarnessesSettings({ client }) {
                     placeholder="Program name or path"
                     onChange={(event) => {
                       const nextValue = event.target.value
+                      dirtyRef.current.add(`program:${row.key}`)
                       setDrafts((current) => ({ ...current, [row.key]: nextValue }))
                     }}
                   />

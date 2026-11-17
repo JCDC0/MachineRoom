@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- The Harnesses settings keep the owner's unsaved edits when a background notice reloads; saving one field clears only its own draft.
+
 - merge-lane and review-lane share runCheck, which stops the tree at the time limit and settles as failed within 5 seconds even without close.
 - A check's time limit stops the process tree, including descendants of an exited child, and settles the check as failed within 5 seconds even if the child never closes; merge-lane and review-lane share one helper.
 - MCP server details, tool results and problems, run history free text and review diffs are masked for display; saved values and record paths stay whole.
