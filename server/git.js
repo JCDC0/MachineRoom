@@ -116,13 +116,16 @@ export function defaultGitRunner(cwd, args, { timeout = GIT_TIMEOUT_MS, env = pr
 
 const cacheByProject = new Map()
 const writesInFlight = new Set()
+export let gitCacheGeneration = 0
 
 export function resetGitCache() {
+  gitCacheGeneration += 1
   cacheByProject.clear()
   writesInFlight.clear()
 }
 
 export function invalidateGitCache(folder) {
+  gitCacheGeneration += 1
   if (folder) cacheByProject.delete(pathKey(folder))
   else cacheByProject.clear()
 }
