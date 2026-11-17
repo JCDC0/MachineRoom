@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Lane conversations and Reviews keep the newest response when reads overlap.
 - Assistant reads storage through the guarded helper; the Log, Inspector and Settings have their own boundaries, and the whole room has a Reload fallback.
 - Denied storage keeps the room open, and render faults stay in their HUD part or show a room reload.
 
