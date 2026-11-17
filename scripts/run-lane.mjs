@@ -2208,7 +2208,7 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
     if (prev.record.lane !== options.lane) throw new Error('The interrupted run has a different lane.')
     if (Boolean(prev.record.project) !== Boolean(project)) throw new Error('The interrupted run has a different project kind.')
     if (JSON.stringify(prev.record.briefs ?? []) !== JSON.stringify(project ? [] : wanted.map((brief) => brief.id))) throw new Error('The interrupted run has different brief ids.')
-    if (gitRead(project || lane.worktree, ['branch', '--show-current']) !== String(prev.record.branch ?? '').trim()) throw new Error('The interrupted run worktree is on a different branch.')
+    if (!project && gitRead(lane.worktree, ['branch', '--show-current']) !== String(prev.record.branch ?? '').trim()) throw new Error('The interrupted run worktree is on a different branch.')
     if (typeof prev.record.base === 'string' && prev.record.base.trim() !== '') continuedBase = prev.record.base.trim()
     if (typeof prev.record.branch === 'string' && prev.record.branch.trim() !== '') continuedBranch = prev.record.branch.trim()
     const interrupt = interruptFileText(runsDir, continueFrom)
