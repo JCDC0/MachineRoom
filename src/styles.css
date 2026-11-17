@@ -1987,6 +1987,16 @@ summary:focus-visible,
   box-shadow: 0 0 0 2px var(--black);
 }
 
+.hud-action.has-badge {
+  padding-right: 40px;
+}
+
+.hud-action-slot > .hud-action-badge {
+  position: absolute;
+  top: calc(50% - 8px);
+  right: 8px;
+}
+
 .hud-action[aria-pressed='true'] {
   border-color: var(--yellow);
   color: var(--yellow);
@@ -9464,6 +9474,7 @@ body:has(#hud-orchestrator-chat) .lens-waiting {
   .hud-band-switch,
   .hud-modes button,
   .hud-action,
+  .hud-action-slot > .hud-action-badge,
   .hud-health-chip,
   .transport-badge,
   .transport-center,

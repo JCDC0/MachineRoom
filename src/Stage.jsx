@@ -65,7 +65,7 @@ const DEMO_SUBS = [
   { id: 'backend', name: 'Backend', lanes: ['claude'], scope: ['server/**'], restricted: true, setBy: 'owner' },
 ]
 const SEAM_MIN_WIDTH = 900
-const SEAM_TOP = '.hud-band-project, .hud-band-switch, .hud-modes button, .hud-action, .hud-health-chip'
+const SEAM_TOP = '.hud-band-project, .hud-band-switch, .hud-modes button, .hud-action, .hud-action-slot > .hud-action-badge, .hud-health-chip'
 const SEAM_BOTTOM = '.transport-badge, .transport-center, .transport-orchestrator, .transport-chip, .transport-chip-overflow, .transport-lane, .transport-lane-overflow, .transport-spend, .transport-context, .transport-tail > .mono, .transport.is-live > .mono, .transport:not(.is-live) > button, .transport:not(.is-live) > .mono, .speeds button'
 const SEAM_QUIET = ['hud-dropdown', 'hud-band-list', 'hud-health-popover']
 export const LENS_MOVE = 0.0005

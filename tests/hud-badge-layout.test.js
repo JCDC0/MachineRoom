@@ -9,7 +9,11 @@ describe('HUD badge and transport layout', () => {
     const badge = css.match(/\.hud-action-badge\s*\{([^}]*)\}/)[1]
     expect(badge).not.toMatch(/position\s*:\s*absolute|(?:top|right|bottom|left)\s*:\s*-/)
     expect(hud).toMatch(/agent-key mono">C<\/span>[\s\S]*?className="hud-action-badge mono"[\s\S]*?aria-label=\{`Open Reviews,/)
-    expect(hud).toContain("gridTemplateColumns: 'auto max-content'")
+    const slotted = css.match(/\.hud-action-slot > \.hud-action-badge\s*\{([^}]*)\}/)[1]
+    expect(slotted).toMatch(/top\s*:\s*calc\(50% - 8px\)/)
+    expect(slotted).not.toMatch(/(?:top|right|bottom|left)\s*:\s*-/)
+    expect(css).toMatch(/\.hud-action\.has-badge\s*\{[^}]*padding-right/)
+    expect(hud).toContain('has-badge')
   })
 
   it('keeps the orchestrator button at least as wide as its title', () => {
