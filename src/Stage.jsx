@@ -1623,7 +1623,8 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
             )}
           </div>
           <LensRail
-            side="left"
+            side="right"
+            inner
             label="Height"
             share={heightRailShare(lensShare)}
             multiplier={multiplierText(lensShare / LENS_SHARE_DEFAULT)}
