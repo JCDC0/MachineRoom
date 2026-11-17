@@ -3,7 +3,7 @@ import { copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, rmSync, unli
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
-import { portOffsetFor, prepareWorktree } from '../scripts/run-lane.mjs'
+import { prepareWorktree } from '../scripts/run-lane.mjs'
 import { harnessStatus, readHarnessSettings, saveHarnessSettings, updateHarnessSettings, WORKTREE_SETUP_PROBLEM, worktreeSetupOf } from '../server/harness-settings.js'
 import { gitPath } from '../server/programPath.js'
 import { worktreeFor } from '../src/briefs/run.js'
@@ -130,7 +130,7 @@ describe('the worktree setup command', () => {
       { TEMP: base, MACHINEROOM_RUNS: runs, MACHINEROOM_LANES_FILE: lanes }
     )
     expect(result.code, `${result.stdout}\n${result.stderr}`).toBe(0)
-    expect(readFileSync(join(worktreeFor(project, 'opencode'), 'offset.txt'), 'utf8')).toBe(String(portOffsetFor('opencode', ['first', 'opencode'])))
+    expect(readFileSync(join(worktreeFor(project, 'opencode'), 'offset.txt'), 'utf8')).toBe(String(JSON.parse(readFileSync(join(runs, 'port-offsets.json'), 'utf8')).opencode))
   })
   it('runs once in a new worktree and writes its time to the run log', { timeout: 60000 }, async () => {
     const base = tempDir()

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Lane port offsets stay saved in the runs folder and new lanes take the lowest free offset.
+
 - Reviews asks for rewind state only for lanes with commits ahead or an open diff.
 - Review 51 (Sol): port offsets can still collide or move, and the badge seam fix has no guard test.
 - Conversations sort from one Sort by select, and pinned conversations show a pin toggle and sit under Pinned.
