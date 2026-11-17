@@ -2943,9 +2943,11 @@ ${modelSummary}` : modelSummary
         pending.splice(pendingIndex, 1)
       }
     }
-    try {
-      onMessage({ from: laneKey, to: key, kind: 'wake', text })
-    } catch {}
+    if (recordedStarter) {
+      try {
+        onMessage({ from: laneKey, to: key, kind: 'wake', text })
+      } catch {}
+    }
     if (directLaneTasks.has(laneKey)) {
       directLaneTasks.delete(laneKey)
       let laneReply = ''
@@ -2969,13 +2971,13 @@ ${modelSummary}` : modelSummary
       addMessage(laneKey, laneReply)
     }
     const message = addMessage('room', text)
-    pending.push(message)
+    if (recordedStarter) pending.push(message)
     if (runId) {
       completedRuns.set(runId, { status, messageId: message.id })
       while (completedRuns.size > 200) completedRuns.delete(completedRuns.keys().next().value)
       persist()
     }
-    maybeStartTurn()
+    if (recordedStarter) maybeStartTurn()
   }
 
   function close(options = {}) {

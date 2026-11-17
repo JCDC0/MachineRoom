@@ -234,7 +234,7 @@ const FAKE_AGENT_SCRIPT = [
   'if (exitCode !== 0) process.exitCode = exitCode',
 ].join('\n')
 
-function makeRig({ prompt = PROMPT, mode = 'reply', lanes = LANES, harness = 'claude', model = undefined, bin = '', contextWindow = 0, harnesses = undefined, project = true, id = undefined, mergeWaitMs = undefined, gitSpawn = undefined, gitTimeoutMs = undefined, env = undefined, platform = undefined, extraInstructions = undefined } = {}) {
+function makeRig({ prompt = PROMPT, mode = 'reply', lanes = LANES, harness = 'claude', model = undefined, bin = '', contextWindow = 0, harnesses = undefined, project = true, id = undefined, mergeWaitMs = undefined, gitSpawn = undefined, gitTimeoutMs = undefined, env = undefined, platform = undefined, extraInstructions = undefined, subExists = undefined } = {}) {
   const base = makeTempDir('mr-orchestrator-')
   const runs = join(base, 'runs')
   const projectRoot = project ? join(base, 'project') : ''
@@ -276,6 +276,7 @@ function makeRig({ prompt = PROMPT, mode = 'reply', lanes = LANES, harness = 'cl
   const masked = { total: 0 }
   const orchestrator = createOrchestrator({
     ...(id ? { id } : {}),
+    ...(subExists ? { hasSub: subExists } : {}),
     projectRoot,
     runsFolder: runs,
     lanes,
@@ -1562,6 +1563,45 @@ describe('autocompact', () => {
 })
 
 describe('waking the orchestrator', () => {
+  it.each([
+    ['an outside session', { startedBy: { harness: 'claude', session: 'x' } }],
+    ['a terminal run', {}],
+    ['a run without a record', null],
+  ])('keeps the note without waking for %s', async (_, starter) => {
+    const rig = makeRig()
+    rig.send('Ready')
+    await waitIdle(rig, 1)
+    rig.orchestrator.onFrame(frame('run-opencode7-external', 'succeeded'), starter && { lane: 'opencode7', ...starter })
+    await sleep(300)
+    expect(rig.calls()).toHaveLength(1)
+    expect(rig.answer().messages.some((m) => m.from === 'room' && m.text.includes('Run opencode7-external'))).toBe(true)
+    expect(stateFile(rig).pending).toHaveLength(0)
+  })
+
+  it('wakes the main orchestrator for its own run', async () => {
+    const rig = makeRig()
+    rig.orchestrator.onFrame(frame('run-opencode7-owned', 'succeeded'), { lane: 'opencode7', startedBy: 'orchestrator' })
+    await waitIdle(rig, 1)
+    rig.orchestrator.onFrame(frame('run-opencode7-external', 'succeeded'), { lane: 'opencode7', startedBy: { harness: 'claude', session: 'x' } })
+    await sleep(300)
+    expect(rig.calls()).toHaveLength(1)
+  })
+
+  it('wakes only the sub that started a run', async () => {
+    const main = makeRig({ subExists: (id) => id === 'team-1' })
+    const sub = makeRig({ id: 'team-1' })
+    main.send('Ready')
+    await waitIdle(main, 1)
+    const record = { lane: 'opencode7', startedBy: 'team-1' }
+    main.orchestrator.onFrame(frame('run-opencode7-sub', 'succeeded'), record)
+    sub.orchestrator.onFrame(frame('run-opencode7-sub', 'succeeded'), record)
+    await waitIdle(sub, 1)
+    main.orchestrator.onFrame(frame('run-opencode7-external', 'succeeded'), { lane: 'opencode7' })
+    await sleep(300)
+    expect(main.calls()).toHaveLength(1)
+    expect(sub.calls()).toHaveLength(1)
+  })
+
   it('wakes a sub with no goal yet for a run credited to it by name, and not the main for an unnamed run', async () => {
     const write = (rig, name, startedBy) => {
       const log = join(rig.runs, `${name}.log`)
@@ -1625,7 +1665,7 @@ describe('waking the orchestrator', () => {
     const mergeHead = join(rig.projectRoot, '.git', 'MERGE_HEAD')
     writeFileSync(mergeHead, `${'a'.repeat(40)}\n`)
 
-    rig.orchestrator.onFrame(frame('run-opencode7-merge-wait', 'succeeded'))
+    rig.orchestrator.onFrame(frame('run-opencode7-merge-wait', 'succeeded'), { lane: 'opencode7', startedBy: 'orchestrator' })
     await waitFor(
       () => rig.answer().messages.some((m) => m.from === 'room' && m.text.includes('Run opencode7-merge-wait')),
       15000,
@@ -1668,7 +1708,7 @@ describe('waking the orchestrator', () => {
       ticks += 1
     }, 10)
     try {
-      rig.orchestrator.onFrame(frame('run-opencode7-slow-check', 'succeeded'))
+      rig.orchestrator.onFrame(frame('run-opencode7-slow-check', 'succeeded'), { lane: 'opencode7', startedBy: 'orchestrator' })
       await waitFor(
         () => existsSync(join(rig.projectRoot, '.git', 'check-started')),
         15000,
@@ -1704,7 +1744,7 @@ describe('waking the orchestrator', () => {
     rig.send('Ready')
     await waitIdle(rig, 1)
 
-    rig.orchestrator.onFrame(frame('run-opencode7-failed-check', 'succeeded'))
+    rig.orchestrator.onFrame(frame('run-opencode7-failed-check', 'succeeded'), { lane: 'opencode7', startedBy: 'orchestrator' })
     await waitFor(() => checks === 1, 5000, 'the merge check to start')
     child.emit('close', 128)
 
@@ -1718,7 +1758,7 @@ describe('waking the orchestrator', () => {
     rig.send('Ready')
     await waitIdle(rig, 1)
 
-    rig.orchestrator.onFrame(frame('run-opencode7-check-timeout', 'succeeded'))
+    rig.orchestrator.onFrame(frame('run-opencode7-check-timeout', 'succeeded'), { lane: 'opencode7', startedBy: 'orchestrator' })
     await waitFor(() => rig.calls().length === 2, 5000, 'the room turn after a timed out check')
     await waitIdle(rig, 2)
   })
@@ -1734,14 +1774,14 @@ describe('waking the orchestrator', () => {
 
     rig.orchestrator.onFrame({
       type: 'heartbeat.run.status',
-      payload: { runId: 'run-opencode7-reopen-1', agentId: 'agent-opencode7', status: 'failed', error: 'no record' },
-    })
-    await waitFor(() => rig.calls().length === 2, 15000, 'the failed no record turn to start')
+      payload: { runId: 'run-opencode7-reopen-1', agentId: 'agent-opencode7', status: 'failed' },
+    }, { lane: 'opencode7', startedBy: 'orchestrator' })
+    await waitFor(() => rig.calls().length === 2, 15000, 'the failed run turn to start')
     await waitIdle(rig, 2)
 
     appendFileSync(
       join(rig.runs, 'runs.jsonl'),
-      `${JSON.stringify({ lane: 'opencode7', model: 'm', startedAt: '2026-10-30T12:00:00.000Z', minutes: 1, exitCode: 1, killed: false, log: log1 })}\n`
+      `${JSON.stringify({ lane: 'opencode7', model: 'm', startedAt: '2026-10-30T12:00:00.000Z', minutes: 1, exitCode: 1, killed: false, startedBy: 'orchestrator', log: log1 })}\n`
     )
 
     rig.orchestrator.onFrame({
@@ -1761,14 +1801,14 @@ describe('waking the orchestrator', () => {
     writeFileSync(log2, 'partial\n')
     rig.orchestrator.onFrame({
       type: 'heartbeat.run.status',
-      payload: { runId: 'run-opencode7-reopen-2', agentId: 'agent-opencode7', status: 'failed', error: 'no record' },
-    })
-    await waitFor(() => rig.calls().length === 3, 15000, 'the failed no record turn for run 2')
+      payload: { runId: 'run-opencode7-reopen-2', agentId: 'agent-opencode7', status: 'failed' },
+    }, { lane: 'opencode7', startedBy: 'orchestrator' })
+    await waitFor(() => rig.calls().length === 3, 15000, 'the failed run turn for run 2')
     await waitIdle(rig, 3)
 
     appendFileSync(
       join(rig.runs, 'runs.jsonl'),
-      `${JSON.stringify({ lane: 'opencode7', model: 'm', startedAt: '2026-10-30T12:05:00.000Z', minutes: 1, exitCode: 0, killed: false, log: log2 })}\n`
+      `${JSON.stringify({ lane: 'opencode7', model: 'm', startedAt: '2026-10-30T12:05:00.000Z', minutes: 1, exitCode: 0, killed: false, startedBy: 'orchestrator', log: log2 })}\n`
     )
 
     rig.orchestrator.onFrame({
@@ -1797,7 +1837,7 @@ describe('waking the orchestrator', () => {
 
     appendFileSync(
       join(rig.runs, 'runs.jsonl'),
-      `${JSON.stringify({ lane: 'opencode7', model: 'm', startedAt: '2026-10-30T12:00:00.000Z', minutes: 1, exitCode: 1, killed: false, log })}\n`
+      `${JSON.stringify({ lane: 'opencode7', model: 'm', startedAt: '2026-10-30T12:00:00.000Z', minutes: 1, exitCode: 1, killed: false, startedBy: 'orchestrator', log })}\n`
     )
 
     rig.orchestrator.onFrame(frame('run-opencode7-big-1', 'failed'))
@@ -1832,7 +1872,7 @@ describe('waking the orchestrator', () => {
     writeFileSync(log, 'done\n')
     appendFileSync(
       join(rig.runs, 'runs.jsonl'),
-      `${JSON.stringify({ lane: 'opencode7', model: 'm', startedAt: '2026-10-30T12:00:00.000Z', minutes: 1, exitCode: 0, killed: false, log })}\n`
+      `${JSON.stringify({ lane: 'opencode7', model: 'm', startedAt: '2026-10-30T12:00:00.000Z', minutes: 1, exitCode: 0, killed: false, startedBy: 'orchestrator', log })}\n`
     )
     rig.orchestrator.onFrame(frame('run-opencode7-restart-1', 'succeeded'))
     await waitIdle(rig, 2)
@@ -1865,6 +1905,7 @@ describe('waking the orchestrator', () => {
         minutes: 4,
         exitCode: 0,
         killed: false,
+        startedBy: 'orchestrator',
         costUsd: 0.5,
         log,
         branch: 'feat/k1-the-orchestrator-in',
@@ -1889,7 +1930,7 @@ describe('waking the orchestrator', () => {
     writeFileSync(queueLog, 'a log\n')
     appendFileSync(
       join(rig.runs, 'runs.jsonl'),
-      `${JSON.stringify({ lane: 'opencode2', briefs: [], exitCode: 0, killed: false, log: queueLog, branch: '', commits: [], project: rig.projectRoot, queue: 'machineroom/queue-20261024-120500', queueIndex: 2 })}\n`
+      `${JSON.stringify({ lane: 'opencode2', briefs: [], exitCode: 0, killed: false, startedBy: 'orchestrator', log: queueLog, branch: '', commits: [], project: rig.projectRoot, queue: 'machineroom/queue-20261024-120500', queueIndex: 2 })}\n`
     )
     rig.orchestrator.onFrame(frame('run-opencode2-queue-20261024-120500-2', 'succeeded'))
     await waitFor(() => rig.calls().length === 3)
@@ -1918,7 +1959,7 @@ describe('waking the orchestrator', () => {
     writeFileSync(log, 'done\n')
     appendFileSync(
       join(rig.runs, 'runs.jsonl'),
-      `${JSON.stringify({ lane: 'opencode7', model: 'm', startedAt: '2026-10-30T12:00:00.000Z', minutes: 1, exitCode: 0, killed: false, log })}\n`
+      `${JSON.stringify({ lane: 'opencode7', model: 'm', startedAt: '2026-10-30T12:00:00.000Z', minutes: 1, exitCode: 0, killed: false, startedBy: 'orchestrator', log })}\n`
     )
     rig.orchestrator.onFrame(frame('run-opencode7-paused-1', 'succeeded'))
     await waitFor(
@@ -1962,6 +2003,7 @@ describe('waking the orchestrator', () => {
         minutes: 1,
         exitCode: 1,
         killed: false,
+        startedBy: 'orchestrator',
         log,
       })}\n`
     )
@@ -1990,6 +2032,7 @@ describe('waking the orchestrator', () => {
         minutes: 1,
         exitCode: 2,
         killed: false,
+        startedBy: 'orchestrator',
         log: noErrorLog,
       })}\n`
     )
@@ -2027,10 +2070,11 @@ describe('waking the orchestrator', () => {
         minutes: 1,
         exitCode: 1,
         killed: false,
+        startedBy: 'orchestrator',
         log: outsideLog,
       })}\n`
     )
-    rig.orchestrator.onFrame(frame('run-opencode-traversal', 'failed'))
+    rig.orchestrator.onFrame(frame('run-opencode-traversal', 'failed'), { lane: 'opencode7', startedBy: 'orchestrator', log: outsideLog })
     await waitFor(() => rig.calls().length === 2)
     await waitIdle(rig, 2)
 
@@ -2039,7 +2083,7 @@ describe('waking the orchestrator', () => {
     expect(prompt1).not.toContain('LEAKED_SECRET_VALUE')
     expect(prompt1).not.toContain('Error:')
 
-    rig.orchestrator.onFrame(frame('run-../outside-secret', 'failed'))
+    rig.orchestrator.onFrame(frame('run-../outside-secret', 'failed'), { lane: 'opencode7', startedBy: 'orchestrator' })
     await waitFor(() => rig.calls().length === 3)
     await waitIdle(rig, 3)
 
@@ -2054,10 +2098,10 @@ describe('waking the orchestrator', () => {
     await waitIdle(rig, 1)
 
     for (let index = 0; index < 30; index += 1) {
-      rig.orchestrator.onFrame(frame(`run-opencode7-cap-${index}`, 'succeeded'))
+      rig.orchestrator.onFrame(frame(`run-opencode7-cap-${index}`, 'succeeded'), { lane: 'opencode7', startedBy: 'orchestrator' })
       await waitIdle(rig, 2 + index)
     }
-    rig.orchestrator.onFrame(frame('run-opencode7-cap-30', 'succeeded'))
+    rig.orchestrator.onFrame(frame('run-opencode7-cap-30', 'succeeded'), { lane: 'opencode7', startedBy: 'orchestrator' })
     await waitFor(() => rig.answer().messages.some((message) => message.text.includes('cap-30')))
     await sleep(250)
     expect(rig.calls()).toHaveLength(31)
@@ -2267,7 +2311,7 @@ describe('waking the orchestrator', () => {
       rmSync(base, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
     })
 
-    orchestrator.onFrame(frame('run-opencode7-cap-wait', 'succeeded'))
+    orchestrator.onFrame(frame('run-opencode7-cap-wait', 'succeeded'), { lane: 'opencode7', startedBy: 'orchestrator' })
     expect(spawned).toBe(false)
     await waitFor(() => spawned, 5000, 'the capped room turn to start')
   })
@@ -3332,7 +3376,7 @@ describe('the orchestrator chat file', () => {
     const rig = makeRig()
     rig.send('Start')
     await waitIdle(rig, 1)
-    rig.orchestrator.onFrame(frame('run-opencode7-saved-time', 'succeeded'))
+    rig.orchestrator.onFrame(frame('run-opencode7-saved-time', 'succeeded'), { lane: 'opencode7', startedBy: 'orchestrator' })
     await waitIdle(rig, 2)
     const saved = stateFile(rig)
     expect(saved.roomTurns).toHaveLength(1)
@@ -3671,7 +3715,7 @@ describe('orchestrator reasoning effort and sessions', () => {
     writeFileSync(log, 'done\n')
     appendFileSync(
       join(rig.runs, 'runs.jsonl'),
-      `${JSON.stringify({ lane: 'opencode7', model: 'm', startedAt: '2026-10-30T12:00:00.000Z', minutes: 1, exitCode: 0, killed: false, log })}\n`
+      `${JSON.stringify({ lane: 'opencode7', model: 'm', startedAt: '2026-10-30T12:00:00.000Z', minutes: 1, exitCode: 0, killed: false, startedBy: 'orchestrator', log })}\n`
     )
     rig.orchestrator.onFrame(frame('run-opencode7-waiting-1', 'succeeded'))
     expect(rig.orchestrator.newSession({ confirmed: true })).toEqual({

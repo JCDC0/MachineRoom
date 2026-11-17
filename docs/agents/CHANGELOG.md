@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Runs with a session or no starter keep their chat note and start no turn.
 - Fixes R53-3 and R53-4.
 - Fixes R53-1 and R53-5.
 - Fixes R53-2 and R53-6.
