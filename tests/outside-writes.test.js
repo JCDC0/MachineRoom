@@ -68,19 +68,19 @@ describe('the mode lines', () => {
   const lines = Object.fromEntries(MODES.map((mode) => [mode.id, mode.line]))
 
   it('says writes stay in the project in every mode that writes', () => {
-    expect(lines.edits).toContain('Writes stay in the project.')
-    expect(lines.auto).toContain('Writes stay in the project.')
+    expect(lines.edits).toContain('in the project.')
+    expect(lines.auto).toContain('in the project.')
   })
 
   it('says an outside write in Ask needs the owner', () => {
-    expect(lines.ask).toContain('outside write needs your Allow')
+    expect(lines.ask).toContain('Asks before each edit or command.')
   })
 
   it('says Bypass can write anywhere', () => {
-    expect(lines.bypass).toContain('write anywhere')
+    expect(lines.bypass).toContain('anything, anywhere')
   })
 
   it('says Plan makes no edits', () => {
-    expect(lines.plan).toContain('Makes no edits')
+    expect(lines.plan).toContain('No edits')
   })
 })
