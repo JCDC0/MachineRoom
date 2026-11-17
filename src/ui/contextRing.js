@@ -1,3 +1,5 @@
+import { formatCount } from './agentStrip.js'
+
 export const DEFAULT_CONTEXT_RULE = 80
 export const CONTEXT_RED_SHARE = 0.95
 
@@ -34,12 +36,12 @@ export function contextPercent(share) {
 
 export function contextLabel(tokens, window) {
   const share = contextShare(tokens, window)
-  return share === null ? 'context not reported' : `${contextPercent(share)}%`
+  return share === null ? (numberOrNull(tokens) !== null && tokens >= 0 ? `${formatCount(tokens)} tokens` : 'context not reported') : `${contextPercent(share)}%`
 }
 
 export function contextTitle(tokens, window) {
-  if (contextShare(tokens, window) === null) return ''
-  return `${tokens} of ${window} tokens`
+  if (contextShare(tokens, window) === null) return numberOrNull(tokens) !== null && tokens >= 0 ? `${formatCount(tokens)} tokens` : ''
+  return `${formatCount(tokens)} of ${formatCount(window)} tokens`
 }
 
 export function orchestratorStateWord(state) {

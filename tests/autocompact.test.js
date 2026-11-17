@@ -7,7 +7,6 @@ import CompactCard from '../src/ui/AgentStrip.jsx'
 import AutocompactInput from '../src/ui/AutocompactInput.jsx'
 import {
   DEFAULT_COMPACT_RULES,
-  DEFAULT_CONTEXT_WINDOW,
   RULES_LIMIT,
   autocompactRequest,
   autocompactState,
@@ -62,7 +61,7 @@ describe('the autocompact answer', () => {
       mode: 'percent',
       value: 80,
       rules: '',
-      window: DEFAULT_CONTEXT_WINDOW,
+      window: null,
     })
     expect(state.defaultCompactRules).toBe(DEFAULT_COMPACT_RULES)
     expect(autocompactState({ autocompactMode: 'hours' }).mode).toBe('percent')
@@ -89,7 +88,7 @@ describe('the unit conversion', () => {
 
   it('leaves an empty value and an unknown window alone', () => {
     expect(convertAutocompactValue('', 'percent', 'tokens', 200000)).toBe('')
-    expect(convertAutocompactValue(80, 'percent', 'tokens', 0)).toBe(160000)
+    expect(convertAutocompactValue(80, 'percent', 'tokens', 0)).toBe(80)
     expect(convertAutocompactValue(80, 'percent', 'percent', 200000)).toBe(80)
   })
 })

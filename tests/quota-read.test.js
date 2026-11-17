@@ -120,6 +120,7 @@ describe('a codex run record quota', () => {
       type: 'event_msg',
       payload: {
         type: 'token_count',
+        info: { model_context_window: 163840 },
         rate_limits: {
           primary: { used_percent: 22, window_minutes: 300, resets_at: RESET },
           secondary: { used_percent: 64, window_minutes: 10080, resets_at: RESET + 86400 },
@@ -157,6 +158,7 @@ describe('a codex run record quota', () => {
     })
     expect(result.code).toBe(0)
     const saved = JSON.parse(readFileSync(join(runs, 'runs.jsonl'), 'utf8').trim().split(/\r?\n/).at(-1))
+    expect(saved.contextWindow).toBe(163840)
     expect(saved.quota).toEqual({
       windows: [
         { label: 'primary', usedPercent: 22, resetsAt: new Date(RESET * 1000).toISOString() },
@@ -170,6 +172,13 @@ describe('a codex run record quota', () => {
 })
 
 describe('the codex rollout read', () => {
+  it('reads the context window without rate limits', () => {
+    const folder = tempDir('machine-room-window-')
+    const file = join(folder, 'rollout-test.jsonl')
+    writeFileSync(file, JSON.stringify({ type: 'event_msg', payload: { type: 'token_count', info: { model_context_window: 163840, last_token_usage: { total_tokens: 116800 } } } }))
+    expect(readCodexQuota(file)).toEqual({ contextWindow: 163840, contextTokens: 116800 })
+  })
+
   it('keeps the newest reading and reads only the last 64 KB', () => {
     const folder = tempDir('machine-room-rollout-')
     const file = join(folder, 'rollout-test.jsonl')

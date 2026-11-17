@@ -7,6 +7,11 @@ import { fileURLToPath } from 'node:url'
 import { isHolderAlive } from '../scripts/lane-lock.mjs'
 import { agentsFile, createRunLineReader, failureText } from '../src/briefs/recording.js'
 import { laneLockLog, laneLockPids, laneLockStartedAt } from '../src/briefs/run.js'
+import { codexThreadId, findCodexRollout, readCodexQuota } from './codex-rollout.js'
+import { readEndpoints } from './endpoints.js'
+import { resolveContextWindow } from './model-list.js'
+import { claudeContextWindow } from '../src/harnesses/claude.js'
+import { contextTokensFromLog } from './orchestrator.js'
 import { activeLanesFileFor, readActiveLanesChoice } from './active-lanes.js'
 import { readAllLanes } from './agents-config.js'
 import { listProcesses } from './processTree.js'
@@ -493,6 +498,11 @@ export function createLanesSource(options = {}) {
       feed: createRunLineReader(agent.parser),
       rewrite: keepPaths ? (line) => line : rewriter(project || currentLanes()[agent.key]?.worktree, roomRoot),
       readLines: 0,
+      threadId: '',
+      contextWindow: null,
+      contextTokens: null,
+      contextCheckAt: 0,
+      contextSignature: '',
       plainLines: [],
       startedAt,
       lastGrowth: startedAt,
@@ -698,6 +708,10 @@ export function createLanesSource(options = {}) {
     run.buffer = final ? '' : parts.pop() ?? ''
     for (const line of parts) {
       if (!line.trim()) continue
+      const cli = currentLanes()[run.agent.key]?.cli ?? {}
+      if (cli.harness === 'codex') run.threadId ||= codexThreadId(line)
+      if (cli.harness === 'claude') run.contextWindow = claudeContextWindow(line, cli.model) ?? run.contextWindow
+      run.contextTokens = contextTokensFromLog(cli.harness, line) ?? run.contextTokens
       const entry = run.feed(run.rewrite(line))
       if (!entry || entry.read !== true) {
         // A plain line can be megabytes long, and only its start helps the error text.
@@ -848,6 +862,18 @@ export function createLanesSource(options = {}) {
           }
         }
       }
+      if ([...active.values()].some((run) => now() - run.contextCheckAt >= 2000)) {
+        for (const item of openRuns()) {
+          const run = [...active.values()].find((entry) => entry.name === item.name)
+          if (!run || now() - run.contextCheckAt < 2000) continue
+          run.contextCheckAt = now()
+          const signature = JSON.stringify([item.contextTokens, item.contextWindow])
+          if (signature !== run.contextSignature) {
+            run.contextSignature = signature
+            emit({ type: 'heartbeat.run.context', companyId: run.companyId, createdAt: iso(now()), payload: { ...run.base } })
+          }
+        }
+      }
     } finally {
       ticking = false
     }
@@ -924,13 +950,20 @@ export function createLanesSource(options = {}) {
   }
 
   function openRuns() {
-    return [...active.values()].map((run) => ({
-      name: run.name,
-      lane: run.agent.key,
-      startedAt: iso(run.startedAt),
-      project: run.project || null,
-      ...(run.startedBy ? { startedBy: run.startedBy } : {}),
-    }))
+    return [...active.values()].map((run) => {
+      const cli = currentLanes()[run.agent.key]?.cli ?? {}
+      const file = cli.harness === 'codex' && run.threadId ? findCodexRollout({ threadId: run.threadId, env: process.env, startedAt: run.startedAt, now: now() }) : ''
+      const reading = file ? readCodexQuota(file) : null
+      return {
+        name: run.name,
+        lane: run.agent.key,
+        startedAt: iso(run.startedAt),
+        project: run.project || null,
+        ...(run.startedBy ? { startedBy: run.startedBy } : {}),
+        contextTokens: reading?.contextTokens ?? run.contextTokens,
+        contextWindow: resolveContextWindow(cli.model, cli.harness, cli.contextWindow) ?? reading?.contextWindow ?? run.contextWindow ?? resolveContextWindow(cli.model, cli.harness, 0, readEndpoints(folder)),
+      }
+    })
   }
 
   return {

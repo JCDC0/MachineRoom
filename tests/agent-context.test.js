@@ -788,3 +788,8 @@ describe('Hud dock', () => {
     expect(html).not.toContain('Pick an agent on the left')
   })
 })
+
+it('shows the live lane context', () => {
+  const result = agentContext({ agent: lane, lanes: [lane], liveRuns: [{ agentId: lane.id, status: 'running', contextTokens: 116800, contextWindow: 163840 }] })
+  expect(result.context).toMatchObject({ tokens: 116800, window: 163840 })
+})

@@ -3,7 +3,6 @@ export const TOKENS_MIN = 1000
 export const TOKENS_MAX = 10000000
 export const RULES_LIMIT = 2000
 export const DEFAULT_AUTOCOMPACT_PERCENT = 80
-export const DEFAULT_CONTEXT_WINDOW = 200000
 export const DEFAULT_COMPACT_RULES =
   "Keep the owner's goals and standing rules in the owner's words, the decisions made and why, each lane run started with its branch and result, the files changed, what is unfinished or blocked, and the next steps. Leave out tool output, logs and work already merged and checked."
 
@@ -24,7 +23,7 @@ export function autocompactMode(mode) {
 
 export function contextWindowOf(value) {
   const number = isObject(value) ? parseNumber(value.contextWindow) : parseNumber(value)
-  if (number === null || number <= 0) return DEFAULT_CONTEXT_WINDOW
+  if (number === null || number <= 0) return null
   return Math.round(number)
 }
 
@@ -70,28 +69,30 @@ export function autocompactState(value) {
   }
 }
 
-export function convertAutocompactValue(value, from, to, window = DEFAULT_CONTEXT_WINDOW) {
+export function convertAutocompactValue(value, from, to, window = null) {
   const number = parseNumber(value)
   if (number === null) return value
   if (from === to) return number
   const size = contextWindowOf(window)
+  if (size === null) return number
   if (from === 'percent' && to === 'tokens') return Math.round((number / 100) * size)
   if (from === 'tokens' && to === 'percent') return Math.round((number / size) * 10000) / 100
   return number
 }
 
-export function compactsAtTokens(mode, value, window = DEFAULT_CONTEXT_WINDOW) {
+export function compactsAtTokens(mode, value, window = null) {
   const number = parseNumber(value)
   if (number === null) return null
   const size = contextWindowOf(window)
   if (autocompactMode(mode) === 'tokens') return Math.round(number)
-  return Math.round((number / 100) * size)
+  return size === null ? null : Math.round((number / 100) * size)
 }
 
-export function compactsAtLine(mode, value, window = DEFAULT_CONTEXT_WINDOW) {
+export function compactsAtLine(mode, value, window = null) {
   const tokens = compactsAtTokens(mode, value, window)
-  if (tokens === null) return ''
-  return `Compacts at ${tokens} of ${contextWindowOf(window)} tokens`
+  if (tokens === null) return parseNumber(value) !== null && mode === 'percent' ? "Waits for the model's context window" : ''
+  const size = contextWindowOf(window)
+  return size === null ? `Compacts at ${tokens} tokens` : `Compacts at ${tokens} of ${size} tokens`
 }
 
 export function valueProblem(mode, value) {

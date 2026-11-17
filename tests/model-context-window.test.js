@@ -1,10 +1,11 @@
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { saveEndpoints } from '../server/endpoints.js'
-import { DEFAULT_CONTEXT_WINDOW, resolveContextWindow } from '../server/model-list.js'
+import { createEndpointsApi, readEndpoints, saveEndpoints } from '../server/endpoints.js'
+import { resolveContextWindow } from '../server/model-list.js'
 import { createOrchestrator } from '../server/orchestrator.js'
 import { createOrchestrators } from '../server/orchestrators.js'
+import { claudeContextWindow } from '../src/harnesses/claude.js'
 import { contextLine } from '../src/ui/agentStrip.js'
 import { makeTempDir, removeTempDir } from './helpers/tempRoot.js'
 
@@ -52,10 +53,10 @@ describe('resolveContextWindow', () => {
     ).toBe(32000)
   })
 
-  it('gives the default window and assumed label when a model has no details', () => {
-    expect(resolveContextWindow('unknown/model', 'machineroom', 0, [])).toBe(DEFAULT_CONTEXT_WINDOW)
-    expect(contextLine({ context: { tokens: 16500, window: DEFAULT_CONTEXT_WINDOW } })).toBe(
-      'Context size 16.5k / 200.0k (assumed)'
+  it('shows only tokens when a model has no details', () => {
+    expect(resolveContextWindow('unknown/model', 'machineroom', 0, [])).toBe(null)
+    expect(contextLine({ context: { tokens: 16500, window: null } })).toBe(
+      'Context size 16.5k'
     )
     expect(contextLine({ context: { tokens: 16500, window: 1048576 } })).toBe(
       'Context size 16.5k / 1048.6k'
@@ -69,7 +70,7 @@ describe('resolveContextWindow', () => {
     ]
     expect(resolveContextWindow('first/model', 'machineroom', 0, details)).toBe(1000000)
     expect(resolveContextWindow('second/model', 'machineroom', 0, details)).toBe(32000)
-    expect(resolveContextWindow('vendor/model', 'machineroom', 0, details)).toBe(DEFAULT_CONTEXT_WINDOW)
+    expect(resolveContextWindow('vendor/model', 'machineroom', 0, details)).toBe(null)
     expect(
       resolveContextWindow('vendor/model', 'machineroom', 0, [
         { name: 'only', modelDetails: [{ id: 'model', contextLength: 32000 }] },
@@ -243,11 +244,11 @@ describe('orchestrator context window and autocompact', () => {
     })
     cleanups.push(() => orch.stop())
 
-    expect(orch.answer().contextWindow).toBe(1000000)
+    expect(orch.answer().contextWindow).toBeNull()
     expect(orch.answer().autocompactPercent).toBe(80)
 
     orch.setModel({ model: 'claude-opus-5-5', confirmed: true })
-    expect(orch.answer().contextWindow).toBe(1000000)
+    expect(orch.answer().contextWindow).toBeNull()
     expect(orch.answer().autocompactPercent).toBe(80)
   })
 })
@@ -346,5 +347,45 @@ describe('a sub orchestrator context window', () => {
     )
     expect(added.status).toBe(200)
     expect(registry.find('frontend').answer().contextWindow).toBe(64000)
+  })
+})
+
+
+describe('reported context windows', () => {
+  it('reads the model window from the latest Claude result', () => {
+    const log = JSON.stringify({ type: 'result', modelUsage: { 'claude-sonnet-5-5': { contextWindow: 1000000 } } })
+    expect(claudeContextWindow(log, 'claude-sonnet-5-5')).toBe(1000000)
+    expect(claudeContextWindow(log, 'other')).toBeNull()
+  })
+
+  it('fetches and saves missing endpoint details', async () => {
+    const temp = makeTempDir('mr-test-window-fetch-')
+    cleanups.push(() => removeTempDir(temp))
+    const id = 'deepseek/deepseek-v4.1-flash-1017'
+    saveEndpoints(temp, [{ name: 'OpenRouter', provider: 'OpenRouter', baseUrl: 'https://openrouter.ai/api/v1', keyName: 'slot', models: [id] }])
+    const notices = []
+    let calls = 0
+    const api = createEndpointsApi({ runsFolder: temp, readKey: async () => 'test', notify: (notice) => notices.push(notice), fetchImpl: async () => { calls++; return { ok: true, json: async () => ({ data: [{ id, context_length: 163840 }] }) } } })
+    expect(await api.refreshMissing('OpenRouter/' + id)).toBe(true)
+    expect(await api.refreshMissing('OpenRouter/' + id)).toBe(false)
+    expect(calls).toBe(1)
+    const window = resolveContextWindow('OpenRouter/' + id, 'machineroom', 0, readEndpoints(temp))
+    expect(contextLine({ context: { tokens: 116800, window } })).toBe('Context size 116.8k / 163.8k')
+    expect(notices).toContainEqual({ topic: 'endpoints' })
+  })
+
+  it('keeps the saved model list and existing details when refreshing', async () => {
+    const temp = makeTempDir('mr-test-window-models-')
+    cleanups.push(() => removeTempDir(temp))
+    saveEndpoints(temp, [{ name: 'OpenRouter', provider: 'OpenRouter', baseUrl: 'https://openrouter.ai/api/v1', keyName: 'slot', models: ['first', 'second'], modelDetails: [{ id: 'first', contextLength: 32000 }] }])
+    const api = createEndpointsApi({ runsFolder: temp, readKey: async () => 'test', fetchImpl: async () => ({ ok: true, json: async () => ({ data: ['first', 'second', 'third', 'fourth', 'fifth'].map((id) => ({ id, context_length: 163840 })) }) }) })
+    expect(await api.refreshMissing('OpenRouter/second')).toBe(true)
+    const [endpoint] = readEndpoints(temp)
+    expect(endpoint.models).toEqual(['first', 'second'])
+    expect(endpoint.modelDetails.map(({ id, contextLength }) => ({ id, contextLength }))).toEqual([{ id: 'first', contextLength: 163840 }, { id: 'second', contextLength: 163840 }])
+    saveEndpoints(temp, [{ ...endpoint, modelDetails: endpoint.modelDetails.filter(({ id }) => id === 'first') }])
+    const partial = createEndpointsApi({ runsFolder: temp, readKey: async () => 'test', fetchImpl: async () => ({ ok: true, json: async () => ({ data: [{ id: 'second', context_length: 64000 }] }) }) })
+    expect(await partial.refreshMissing('OpenRouter/second')).toBe(true)
+    expect(readEndpoints(temp)[0].modelDetails.map(({ id, contextLength }) => ({ id, contextLength }))).toEqual([{ id: 'first', contextLength: 163840 }, { id: 'second', contextLength: 64000 }])
   })
 })

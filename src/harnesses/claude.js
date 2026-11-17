@@ -107,6 +107,12 @@ function claudeUsage(log) {
   }
 }
 
+export function claudeContextWindow(log, model) {
+  const line = lastJsonLine(log, (item) => item?.type === 'result')
+  const value = line?.modelUsage?.[model]?.contextWindow
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? Math.round(value) : null
+}
+
 export const claudeHarness = {
   key: 'claude',
   name: 'Claude Code',

@@ -2,7 +2,6 @@ export const WIDE_LAYOUT_MIN = 900
 export const AUTOCOMPACT_MIN = 50
 export const AUTOCOMPACT_MAX = 95
 export const DEFAULT_AUTOCOMPACT_PERCENT = 80
-export const DEFAULT_CONTEXT_WINDOW = 200000
 export const EFFORT_LEVELS = {
   claude: ['low', 'medium', 'high', 'xhigh', 'max'],
   opencode: ['low', 'medium', 'high', 'max'],
@@ -35,12 +34,8 @@ export function contextLine(context) {
   if (!isObject(contextUse)) return ''
   const window = typeof contextUse.window === 'number' ? contextUse.window : null
   const tokens = typeof contextUse.tokens === 'number' ? contextUse.tokens : null
-  if (window === null || window <= 0 || tokens === null || tokens < 0) {
-    return 'Context size not reported'
-  }
-  const assumed = contextUse.assumed === true || (contextUse.assumed !== false && window === DEFAULT_CONTEXT_WINDOW)
-  const suffix = assumed ? ' (assumed)' : ''
-  return `Context size ${formatCount(tokens)} / ${formatCount(window)}${suffix}`
+  if (tokens === null || tokens < 0) return 'Context size not reported'
+  return `Context size ${formatCount(tokens)}${window !== null && window > 0 ? ` / ${formatCount(window)}` : ''}`
 }
 
 export function harnessKey(value) {

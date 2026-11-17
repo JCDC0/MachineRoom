@@ -1307,7 +1307,7 @@ describe('autocompact', () => {
       rig.orchestrator.setAutocompact({ on: true, mode: 'tokens', value: 500000, confirmed: true })
     ).toEqual({
       status: 200,
-      body: { id: 'orchestrator', autocompact: true, autocompactMode: 'tokens', autocompactValue: 500000, compactRules: '', autocompactPercent: 250 },
+      body: { id: 'orchestrator', autocompact: true, autocompactMode: 'tokens', autocompactValue: 500000, compactRules: '', autocompactPercent: null },
     })
 
     rig.behaviour.input = 499999
@@ -4330,7 +4330,7 @@ describe('the lane source and the orchestrator turn', () => {
   })
 
   describe('the context window', () => {
-    it('uses the model contextWindow when listed in models.js', () => {
+    it('has no window for a model until its harness reports one', () => {
       const rig = makeRig({
         model: 'claude-haiku-5-5',
         lanes: {
@@ -4341,10 +4341,10 @@ describe('the lane source and the orchestrator turn', () => {
           },
         },
       })
-      expect(rig.answer().contextWindow).toBe(1000000)
+      expect(rig.answer().contextWindow).toBe(null)
     })
 
-    it('falls back to cli.contextWindow or 200000 when model has no window listed', () => {
+    it('uses cli.contextWindow, and has no window without one', () => {
       const rigWithLaneWindow = makeRig({
         model: 'opus',
         lanes: {
@@ -4367,7 +4367,7 @@ describe('the lane source and the orchestrator turn', () => {
           },
         },
       })
-      expect(rigDefault.answer().contextWindow).toBe(200000)
+      expect(rigDefault.answer().contextWindow).toBe(null)
     })
 
     it('starts the first turn of a sub on an order from the main orchestrator, and not on a room message', async () => {
@@ -4403,7 +4403,7 @@ describe('the lane source and the orchestrator turn', () => {
       expect(rig.spawned[0].args[0]).toBe('run')
     })
 
-    it('changes the window when the model changes', () => {
+    it('guesses no window when the model or harness changes', () => {
       const rig = makeRig({
         model: 'claude-opus-legacy',
         lanes: {
@@ -4419,18 +4419,18 @@ describe('the lane source and the orchestrator turn', () => {
           },
         },
       })
-      expect(rig.answer().contextWindow).toBe(200000)
+      expect(rig.answer().contextWindow).toBe(null)
 
       rig.orchestrator.setModel({ model: 'claude-sonnet-5-5', confirmed: true })
-      expect(rig.answer().contextWindow).toBe(1000000)
+      expect(rig.answer().contextWindow).toBe(null)
 
       const opencodeRes = rig.orchestrator.setHarness({ harness: 'opencode', model: 'opencode-go/qwen3.8-flash', confirmed: true })
       expect(opencodeRes.status).toBe(200)
-      expect(rig.answer().contextWindow).toBe(200000)
+      expect(rig.answer().contextWindow).toBe(null)
 
       const claudeRes = rig.orchestrator.setHarness({ harness: 'claude', model: 'claude-opus-5-5', confirmed: true })
       expect(claudeRes.status).toBe(200)
-      expect(rig.answer().contextWindow).toBe(1000000)
+      expect(rig.answer().contextWindow).toBe(null)
     })
   })
 
@@ -4643,7 +4643,7 @@ describe('the lane source and the orchestrator turn', () => {
         rig.orchestrator.setAutocompact({ on: true, mode: 'tokens', value: 500000, confirmed: true })
       ).toEqual({
         status: 200,
-        body: { id: 'orchestrator', autocompact: true, autocompactMode: 'tokens', autocompactValue: 500000, compactRules: '', autocompactPercent: 250 },
+        body: { id: 'orchestrator', autocompact: true, autocompactMode: 'tokens', autocompactValue: 500000, compactRules: '', autocompactPercent: null },
       })
 
       rig.send('Fresh turn consuming 500,000 tokens')

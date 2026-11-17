@@ -767,7 +767,7 @@ describe('the orchestrator registry', () => {
       backend.setAutocompact({ on: true, mode: 'tokens', value: 500000, confirmed: true })
     ).toEqual({
       status: 200,
-      body: { id: 'backend', autocompact: true, autocompactMode: 'tokens', autocompactValue: 500000, compactRules: '', autocompactPercent: 250 },
+      body: { id: 'backend', autocompact: true, autocompactMode: 'tokens', autocompactValue: 500000, compactRules: '', autocompactPercent: null },
     })
 
     files.behaviour.input = 500000
@@ -905,12 +905,12 @@ describe('the orchestrator registry', () => {
       id: 'orchestrator',
       harness: 'claude',
       model: 'claude-sonnet-5-5',
-      contextWindow: 1000000,
+      contextWindow: null,
     })
     expect(rig.chat('orchestrator')).toMatchObject({
       harness: 'claude',
       model: 'claude-sonnet-5-5',
-      contextWindow: 1000000,
+      contextWindow: null,
       sessionId: null,
     })
 
@@ -920,7 +920,7 @@ describe('the orchestrator registry', () => {
       id: 'frontend',
       harness: 'opencode',
       model: 'opencode/deepseek-v4.1-flash-free',
-      contextWindow: 200000,
+      contextWindow: null,
     })
     expect(rig.chat('frontend')).toMatchObject({
       harness: 'opencode',
@@ -943,7 +943,7 @@ describe('the orchestrator registry', () => {
     const claudeEntry = list[0].harnesses.find((item) => item.harness === 'claude')
     expect(claudeEntry.models).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ id: 'claude-sonnet-5-5', contextWindow: 1000000 }),
+        expect.objectContaining({ id: 'claude-sonnet-5-5' }),
       ])
     )
 

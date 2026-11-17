@@ -1,7 +1,7 @@
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { AGENT_REFUSAL } from '../server/control.js'
+import { AGENT_REFUSAL, changeEvents } from '../server/control.js'
 import { activeLanesFileFor, writeActiveLanes } from '../server/active-lanes.js'
 import { createBridge } from '../server/index.js'
 import { createLanesSource } from '../server/lanes-source.js'
@@ -405,4 +405,30 @@ describe('the lane routes', () => {
     expect(await getJson(url, '/api/control/approvals')).toEqual({ status: 200, body: [] })
     expect(await getJson(url, '/api/control/comments?issueId=x')).toEqual({ status: 200, body: [] })
   })
+})
+
+it('carries live lane context into the control response', () => {
+  const [run] = laneLiveRuns({ openRuns: [{ name: 'opencode-test', lane: 'opencode', contextTokens: 116800, contextWindow: 163840 }], agents: AGENTS })
+  expect(run).toMatchObject({ contextTokens: 116800, contextWindow: 163840 })
+  expect(changeEvents({ type: 'heartbeat.run.context' })).toEqual([{ topic: 'liveRuns' }])
+})
+
+it('reads a Codex rollout into a live lane', async () => {
+  const base = tempDir()
+  const runs = join(base, 'runs')
+  const home = join(base, 'codex')
+  const date = new Date()
+  const day = join(home, 'sessions', String(date.getFullYear()), String(date.getMonth() + 1).padStart(2, '0'), String(date.getDate()).padStart(2, '0'))
+  mkdirSync(runs, { recursive: true })
+  mkdirSync(day, { recursive: true })
+  const previous = process.env.CODEX_HOME
+  process.env.CODEX_HOME = home
+  cleanups.push(() => { if (previous === undefined) delete process.env.CODEX_HOME; else process.env.CODEX_HOME = previous })
+  const source = createLanesSource({ folder: runs, lanes: { codex: { name: 'Codex', cli: { harness: 'codex', model: 'test' } } }, pollMs: 20 })
+  cleanups.push(() => source.stop())
+  source.start()
+  writeFileSync(join(day, 'rollout-test-thread-1.jsonl'), JSON.stringify({ type: 'event_msg', payload: { type: 'token_count', info: { model_context_window: 163840, last_token_usage: { total_tokens: 116800 } } } }) + '\n')
+  writeFileSync(join(runs, 'codex-project-20261117-120000.log'), JSON.stringify({ type: 'thread.started', thread_id: 'thread-1' }) + '\n')
+  const open = await waitFor(() => source.openRuns().find((run) => run.contextWindow === 163840), 10000)
+  expect(open.contextTokens).toBe(116800)
 })

@@ -1,7 +1,7 @@
 import { readEndpoints } from './endpoints.js'
 import { MODELS } from './model-list.js'
 
-export { DEFAULT_CONTEXT_WINDOW, MODELS, resolveContextWindow } from './model-list.js'
+export { MODELS, resolveContextWindow } from './model-list.js'
 
 export function endpointModels(runsFolder) {
   const models = []

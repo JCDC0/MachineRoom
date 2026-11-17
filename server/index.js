@@ -651,6 +651,7 @@ export function createBridge(options = {}) {
     projectRoot,
     briefsDir: options.briefsDir ?? process.env.BRIEFS_DIR,
     runnerCommand: options.runnerCommand,
+    refreshModelDetails: (...args) => endpoints.refreshMissing(...args),
     lanesFile: options.lanesFile,
     runsFolder: options.runsFolder ?? options.orchestratorFolder,
     sendJson,
@@ -798,6 +799,7 @@ export function createBridge(options = {}) {
   if (lanesSourceOn) {
     orchestrators = createOrchestrators({
       projectRoot,
+      refreshModelDetails: (...args) => endpoints.refreshMissing(...args),
       runsFolder: resolve(options.orchestratorFolder ?? lanesSourceObject.folder ?? runsFolder()),
       lanes: lanesConfig,
       spawn: options.orchestratorSpawn,
@@ -1663,6 +1665,12 @@ export function createBridge(options = {}) {
   }
 
   function emit(parsed) {
+    if (parsed?.type === 'heartbeat.run.context') {
+      for (const client of clients) {
+        for (const notice of changeEvents(parsed)) writeSseChange(client, notice)
+      }
+      return
+    }
     nextId += 1
     const seq = nextId
     const id = `${treeStart}:${seq}`

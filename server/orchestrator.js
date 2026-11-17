@@ -25,12 +25,13 @@ import { isWindowsPath, printedRunsFolder } from './printed-path.js'
 import { childEnvironment, mcpConfigForClaude, mcpConfigForOpencode, normalizeMcpServers, replyText, runRecord, summarizeRun } from '../src/briefs/run.js'
 import { defaultMode, legacyMode, modesFor } from '../src/control/modes.js'
 import { harnessByKey } from '../src/harnesses/index.js'
+import { claudeContextWindow } from '../src/harnesses/claude.js'
 import { agentDepthLine } from '../src/model/hierarchy.js'
 import { readAgentDepth } from './agent-depth.js'
 import { HARNESS_EFFORTS, codexProgramFor, harnessUnavailableProblem, isHarnessAvailable, modelUnavailableProblem } from './agents-config.js'
 import { readEndpoints } from './endpoints.js'
 import { modelAllowed } from './harness-models.js'
-import { DEFAULT_CONTEXT_WINDOW, MODELS, resolveContextWindow } from './models.js'
+import { MODELS, resolveContextWindow } from './models.js'
 import { MODEL_ALIASES } from './model-list.js'
 import { isLockHolderStale, killTree, listProcesses } from './processTree.js'
 import { gitEnv, gitPath, programPath } from './programPath.js'
@@ -43,7 +44,6 @@ export const ORCHESTRATOR_ROOM_TURNS = 30
 export const ORCHESTRATOR_ROOM_WINDOW_MS = 60 * 60 * 1000
 export const ORCHESTRATOR_MERGE_WAIT_MS = 30 * 1000
 export const ORCHESTRATOR_MESSAGE_LIMIT = 8000
-export { DEFAULT_CONTEXT_WINDOW } from './models.js'
 export const AUTOCOMPACT_SHARE = 0.8
 export const DEFAULT_AUTOCOMPACT_MODE = 'percent'
 const SPAWN_DEPTH_LINE = /Spawn subagents at most \d+ levels deep\. A subagent at depth \d+ spawns none\.\s*/g
@@ -994,6 +994,7 @@ export function createOrchestrator({
   gitTimeoutMs = GIT_OPERATION_TIMEOUT_MS,
   appendRecord = (file, line) => appendFileSync(file, line),
   readTaskState = null,
+  refreshModelDetails = () => Promise.resolve(false),
 } = {}) {
   const token = typeof tokenOption === 'string' && tokenOption ? tokenOption : randomBytes(24).toString('base64url')
   const root = projectRoot ? resolve(projectRoot) : ''
@@ -1059,6 +1060,7 @@ export function createOrchestrator({
   let running = null
   let stopped = false
   let contextTokens = null
+  let reportedWindow = null
   let contextWindow = resolveContextWindow(model, harness, windowOption, laneDetails())
   let autocompact = true
   let autocompactMode = DEFAULT_AUTOCOMPACT_MODE
@@ -1219,7 +1221,7 @@ export function createOrchestrator({
         autocompactMode,
         autocompactValue,
         compactRules,
-        autocompactPercent: autocompactMode === 'percent' ? autocompactValue : Math.round((autocompactValue / contextWindow) * 100),
+        autocompactPercent: autocompactMode === 'percent' ? autocompactValue : (contextWindow > 0 ? Math.round((autocompactValue / contextWindow) * 100) : null),
         effort,
         ...(mode ? { mode } : {}),
         currentConversationId,
@@ -1904,6 +1906,11 @@ export function createOrchestrator({
   }
 
   function startTurnNow(options = null) {
+    refreshModelDetails(model, lane.cli?.endpoint).then((changed) => {
+      if (!changed || stopped) return
+      contextWindow = windowOption || reportedWindow || resolveContextWindow(model, harness, 0, laneDetails())
+      notify()
+    }).catch(() => {})
     if (roomTimer) {
       clearTimeout(roomTimer)
       roomTimer = null
@@ -2197,6 +2204,8 @@ ${current}`
         report = replyText(harness, logText)
       }
     }
+    if (harness === 'claude') reportedWindow = claudeContextWindow(logText, model)
+    contextWindow = windowOption || reportedWindow || resolveContextWindow(model, harness, 0, laneDetails())
     const seen = contextTokensFromLog(harness, logText)
     if (seen !== null) {
       contextTokens = seen
@@ -2303,7 +2312,7 @@ ${modelSummary}` : modelSummary
       autocompactValue,
       compactRules,
       defaultCompactRules: DEFAULT_COMPACT_RULES,
-      autocompactPercent: autocompactMode === 'percent' ? autocompactValue : Math.round((autocompactValue / contextWindow) * 100),
+      autocompactPercent: autocompactMode === 'percent' ? autocompactValue : (contextWindow > 0 ? Math.round((autocompactValue / contextWindow) * 100) : null),
       effort: effort ?? null,
       mode: mode ?? legacyMode(harness),
       modes: modesFor(harness),
@@ -2433,7 +2442,7 @@ ${modelSummary}` : modelSummary
         autocompactMode,
         autocompactValue,
         compactRules,
-        autocompactPercent: autocompactMode === 'percent' ? autocompactValue : Math.round((autocompactValue / contextWindow) * 100),
+        autocompactPercent: autocompactMode === 'percent' ? autocompactValue : (contextWindow > 0 ? Math.round((autocompactValue / contextWindow) * 100) : null),
       },
     }
   }
@@ -2463,6 +2472,7 @@ ${modelSummary}` : modelSummary
     const allowed = modelAllowed(harness, nextModel, folder)
     if (!allowed) return { status: 400, body: { error: MODEL_PROBLEM } }
     model = nextModel
+    reportedWindow = null
     contextWindow = resolveContextWindow(model, harness, windowOption, laneDetails())
     persist()
     notify()
@@ -2498,6 +2508,7 @@ ${modelSummary}` : modelSummary
     const keptMode = changedHarness ? mode : (mode ?? legacyMode(harness))
     harness = nextHarness
     model = nextModel
+    reportedWindow = null
     if (changedHarness) {
       binOverride = typeof body?.bin === 'string' ? body.bin.trim() : ''
     } else if (typeof body?.bin === 'string') {

@@ -202,7 +202,8 @@ function readContext(selected, run) {
     if (!isObject(source)) continue
     const tokens = numberOrNull(source.contextTokens)
     const window = numberOrNull(source.contextWindow)
-    if (tokens === null || tokens < 0 || window === null || window <= 0) continue
+    if (tokens === null || tokens < 0) continue
+    if (window === null || window <= 0) return { tokens, window: null, share: null, percent: null, label: `${tokens} tokens` }
     const share = Math.min(1, tokens / window)
     const percent = Math.round(share * 100)
     return { tokens, window, share, percent, label: `${percent}%` }
@@ -440,7 +441,7 @@ export function agentContext({ agent = null, working = null, lanes = null, costs
     log: entries.slice(-DOCK_LOG_LIMIT),
     address: address.address,
     addressUrl: address.url,
-    context: isOrchestrator ? readContext(source, run) : null,
+    context: readContext(source, run),
     autocompact: isOrchestrator && typeof source?.autocompact === 'boolean' ? source.autocompact : null,
   }
 }

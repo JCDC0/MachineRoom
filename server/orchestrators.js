@@ -20,7 +20,6 @@ import {
   DEFAULT_COMPACT_RULES,
   DEFAULT_AUTOCOMPACT_PERCENT,
   DEFAULT_AUTOCOMPACT_VALUE,
-  DEFAULT_CONTEXT_WINDOW,
   EFFORT_PROBLEM,
   MESSAGE_PROBLEM,
   NO_NEW_REPORT,
@@ -249,6 +248,7 @@ export function createOrchestrators({
   runs = null,
   interruptLane,
   readTaskState = null,
+  refreshModelDetails,
 } = {}) {
   const root = projectRoot ? resolve(projectRoot) : ''
   const folder = resolve(runsFolder)
@@ -335,6 +335,7 @@ export function createOrchestrators({
     recordsCache: sharedCache,
     approvalTimeoutMs,
     readTaskState: stateReader,
+    refreshModelDetails,
   })
   instances.set(ORCHESTRATOR_KEY, main)
 
@@ -477,6 +478,7 @@ export function createOrchestrators({
       recordsCache: sharedCache,
       approvalTimeoutMs,
       readTaskState: stateReader,
+      refreshModelDetails,
       onMessage: (message) => announce(message?.from, agentKey(message?.to), message?.kind, message?.text),
       extraInstructions: () => {
         const ladder = readSaved().ladder
@@ -621,7 +623,7 @@ export function createOrchestrators({
         model: state?.model ?? subConfig(sub).model,
         state: state?.state ?? 'idle',
         contextTokens: state?.contextTokens ?? null,
-        contextWindow: state?.contextWindow ?? subConfig(sub).contextWindow ?? DEFAULT_CONTEXT_WINDOW,
+        contextWindow: state?.contextWindow ?? subConfig(sub).contextWindow ?? null,
         autocompact: state?.autocompact ?? true,
         autocompactMode: state?.autocompactMode ?? DEFAULT_AUTOCOMPACT_MODE,
         autocompactValue: state?.autocompactValue ?? DEFAULT_AUTOCOMPACT_VALUE,

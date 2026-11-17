@@ -164,6 +164,8 @@ export function laneLiveRuns({ openRuns = [], agents = [] } = {}) {
       issueId: name,
       startedAt: isoOrEmpty(run?.startedAt) || null,
       lastOutputAt: null,
+      ...(run.contextTokens != null ? { contextTokens: run.contextTokens } : {}),
+      ...(run.contextWindow != null ? { contextWindow: run.contextWindow } : {}),
       ...(run?.startedBy ? { startedBy: run.startedBy } : {}),
     })
   }
