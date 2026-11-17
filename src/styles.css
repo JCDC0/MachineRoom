@@ -5921,6 +5921,33 @@ body:has(#hud-orchestrator-chat) .lens-waiting {
   white-space: pre-wrap;
 }
 
+.mr-orch-line.is-run-notice {
+  width: 100%;
+  min-width: 0;
+}
+
+.mr-orch-run-summary {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.mr-orch-run-subject {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.mr-orch-run-summary button {
+  flex: none;
+}
+
+.mr-orch-run-status.is-succeeded { color: var(--green); }
+.mr-orch-run-status.is-failed { color: var(--red); }
+.mr-orch-run-status.is-other { color: var(--yellow); }
+
 .mr-orch-blocks {
   display: flex;
   flex-direction: column;

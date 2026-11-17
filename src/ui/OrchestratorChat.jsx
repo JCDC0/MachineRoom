@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import MenuIcon from './MenuIcon.jsx'
+import { roomNoticeSummary } from './roomNotice.js'
 import LaneConversation from './LaneConversation.jsx'
 import CompactCard from './AgentStrip.jsx'
 import { useDialogFocus } from './dialogFocus.js'
@@ -158,6 +159,7 @@ export default function OrchestratorChat({
   const [toRecipient, setToRecipient] = useState(() => initialRecipient)
   const [separateWorktree, setSeparateWorktree] = useState(true)
   const [openAgentAll, setOpenAgentAll] = useState({})
+  const [openRoomDetails, setOpenRoomDetails] = useState({})
   const [showAgentMessages, setShowAgentMessages] = useState(() => {
     try {
       const saved = localStorage.getItem('machineroom:show-agent-messages')
@@ -1470,6 +1472,24 @@ export default function OrchestratorChat({
                         </button>
                       ) : null}
                       {renderMessageActions(line, index)}
+                    </div>
+                  )
+                }
+                const notice = line.from === 'room' ? roomNoticeSummary(line.text) : null
+                if (notice) {
+                  const expanded = Boolean(openRoomDetails[line.id])
+                  const tone = notice.status === 'succeeded' ? 'succeeded' : ['failed', 'stopped'].includes(notice.status) ? 'failed' : 'other'
+                  return (
+                    <div key={line.id} className="mr-orch-line is-room is-run-notice">
+                      <div className="mr-orch-run-summary mono">
+                        <span style={{ color: agentColor(notice.lane, lanesData) }}>{notice.lane}</span>
+                        {notice.briefs && <span>{notice.briefs}</span>}
+                        <span className={`mr-orch-run-status is-${tone}`}>{notice.status}</span>
+                        {notice.subject && <span className="mr-orch-run-subject">{notice.subject}</span>}
+                        <button type="button" className="mr-orch-line-action" aria-expanded={expanded} onClick={() => setOpenRoomDetails((prev) => ({ ...prev, [line.id]: !prev[line.id] }))}>Details</button>
+                      </div>
+                      {expanded && <div className="mr-orch-blocks is-room"><ChatBlocks text={line.text} /></div>}
+                      {expanded && renderMessageActions(line, index)}
                     </div>
                   )
                 }
