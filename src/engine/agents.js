@@ -23,6 +23,16 @@ const STYLE = {
 export const UNSEEN_OPACITY = 0.35
 export const UNSEEN_SCALE = 0.7
 export const PRESENCE_GROW_MS = 600
+export function spawnDrawState(elapsedMs, segmentCount, reduced = false) {
+  const count = Math.max(0, segmentCount)
+  const elapsed = reduced ? 2000 : Math.max(0, elapsedMs)
+  return {
+    penProgress: Math.min(1, elapsed / 400),
+    segments: Math.floor(count * Math.min(1, Math.max(0, (elapsed - 400) / 1200))),
+    penOpacity: elapsed < 1600 ? 1 : Math.max(0, 1 - (elapsed - 1600) / 400),
+  }
+}
+
 const AIM_HOLD = 4500
 const DONE_GLOW_MS = 5000
 const CHILD_FADE_MS = 1500
@@ -713,6 +723,7 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
   const onRemove = typeof options.onRemove === 'function' ? options.onRemove : null
   const views = new Map()
   const pickables = []
+  let synced = false
   const shapes = shapesFor(roster)
   let currentRoster = [...roster]
   let parkedKeys = parkedKeysFor(currentRoster)
@@ -1061,7 +1072,32 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
     return view
   }
 
+  function clearSpawn(view) {
+    if (!view.spawn) return
+    view.spawn.pen.removeFromParent()
+    view.spawn.pen.geometry.dispose()
+    view.spawn.pen.material.dispose()
+    view.spawn.head.removeFromParent()
+    view.spawn.head.geometry.dispose()
+    view.spawn.head.material.dispose()
+    view.shape.geometry.setDrawRange(0, Infinity)
+    view.spawn = null
+  }
+
+  function startSpawn(view) {
+    const parent = views.get(view.parentKey ?? lineParentKey(view.key, currentLadder))
+      ?? [...views.values()].find((candidate) => candidate.orchestrator)
+    if (!synced || !parent || parent === view || still() || globalThis.document?.hidden) return
+    const pen = lineBetween(lineMaterial(parent.color, 1))
+    const head = new THREE.Points(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3()]), new THREE.PointsMaterial({ color: view.color, size: 12 }))
+    scene.add(pen)
+    view.group.add(head)
+    view.shape.geometry.setDrawRange(0, 0)
+    view.spawn = { pen, head, parent, start: null }
+  }
+
   function removeView(view, chips = null) {
+    clearSpawn(view)
     if (chips) chips.remove?.(view.key)
     else pendingChipRemovals.add(view.key)
     view.callout.object.removeFromParent()
@@ -1097,7 +1133,7 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
     return index
   }
 
-  function syncViews(state, chips = null) {
+  function syncViews(state, chips = null, animate = true) {
     viewScratch.length = 0
     for (const view of views.values()) viewScratch.push(view)
     for (const view of viewScratch) {
@@ -1118,7 +1154,7 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
         if (other.parentKey === entry.parent) count += 1
       }
       const place = childOrbit({ x: parentView.home.x, y: parentView.home.y, z: parentView.home.z, radius: parentView.shellRadius * parentView.scale }, index, count, 0)
-      addView(entry, {
+      const view = addView(entry, {
         index: -1,
         shapeName,
         home: new THREE.Vector3(place.x, place.y, place.z),
@@ -1127,7 +1163,9 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
         childIndex: index,
         color: parentView.color,
       })
+      if (animate) startSpawn(view)
     }
+    synced = true
   }
 
   function placeViews() {
@@ -1226,6 +1264,7 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
     for (const view of added) {
       view.group.position.copy(view.home)
       view.touch.copy(view.home)
+      startSpawn(view)
     }
   }
 
@@ -1423,6 +1462,24 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
       } else if (view.presence < 1) {
         view.presence = isStill ? 1 : Math.min(1, view.presence + (delta * 1000) / PRESENCE_GROW_MS)
       }
+      let drawing = false
+      if (view.spawn) {
+        const spawn = view.spawn
+        if (spawn.start === null) spawn.start = now
+        const count = view.shape.geometry.getAttribute('position').count / 2
+        const draw = spawnDrawState(now - spawn.start, count, isStill || globalThis.document?.hidden)
+        if (draw.penOpacity <= 0) {
+          clearSpawn(view)
+        } else {
+          drawing = draw.segments < count
+          view.shape.geometry.setDrawRange(0, draw.segments * 2)
+          const end = spawn.parent.group.position.clone().lerp(view.group.position, draw.penProgress)
+          setEnds(spawn.pen, spawn.parent.group.position, end)
+          writeOpacity(spawn.pen.material, draw.penOpacity)
+          spawn.head.visible = draw.segments > 0 && drawing
+          if (spawn.head.visible) spawn.head.position.fromBufferAttribute(view.shape.geometry.getAttribute('position'), draw.segments * 2 - 1)
+        }
+      }
       const opacityFactor = UNSEEN_OPACITY + (1 - UNSEEN_OPACITY) * view.presence
       const scaleFactor = UNSEEN_SCALE + (1 - UNSEEN_SCALE) * view.presence
       const swayWave = 0.5 + 0.5 * Math.sin(now * SWAY_RATE + Math.atan2(view.home.z, view.home.x))
@@ -1439,7 +1496,7 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
       if (view.parentKey) {
         const parentName = state.agents.get(view.parentKey)?.name ?? view.parentKey
         terminals.ensure?.(view.key, `${parentName} > ${entry?.name ?? view.name}`, view.color)
-        terminals.setVisible?.(view.key, true)
+        terminals.setVisible?.(view.key, !drawing)
         terminals.setFade?.(view.key, fade)
         if (fade <= 0) {
           const item = endedPool[endedList.length] ?? (endedPool[endedList.length] = { view: null, entry: null })
@@ -1466,14 +1523,14 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
 
       const fresh = status === 'done' && now - view.doneAt < DONE_GLOW_MS
       const opacity = status === 'done' ? (fresh ? 1 : 0.6) : style.opacity
-      writeColor(view.shape.material, style.color)
-      writeOpacity(view.shape.material, opacity * fade * opacityFactor)
-      writeOpacity(view.label.material, fade * opacityFactor)
+      writeColor(view.shape.material, drawing ? view.color : style.color)
+      writeOpacity(view.shape.material, drawing ? 1 : opacity * fade * opacityFactor)
+      writeOpacity(view.label.material, drawing ? 0 : fade * opacityFactor)
       const ringColor = status === 'working' || status === 'queued' ? view.color : style.color
       for (let index = 0; index < view.rings.length; index += 1) {
         const ring = view.rings[index]
         writeColor(ring.material, ringColor)
-        writeOpacity(ring.material, opacity * fade * opacityFactor * (index === 0 ? 0.55 : 0.4))
+        writeOpacity(ring.material, (drawing ? 0 : opacity * fade * opacityFactor) * (index === 0 ? 0.55 : 0.4))
       }
       if (!isStill) {
         const spin = style.spin + (THINKING_SPIN - style.spin) * view.thinking
@@ -1566,11 +1623,15 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
         view.calloutLine.visible = false
       }
 
+      if (drawing) {
+        view.callout.object.visible = false
+        view.calloutLine.visible = false
+      }
       terminals.edgePoint(view.key, -view.chipSide, chipNear)
       setEnds(view.link, view.group.position, chipNear)
       writeColor(view.link.material, style.color)
       writeOpacity(view.link.material, (working ? 0.6 : status === 'idle' ? 0.18 : 0.4) * fade * opacityFactor)
-      view.link.visible = !presence.dim
+      view.link.visible = !presence.dim && !drawing
       if (view.parentLink) {
         const parentView = views.get(view.parentKey)
         if (parentView) {
@@ -1655,8 +1716,9 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
 
   function snap(state, world) {
     retired = new WeakSet()
-    syncViews(state)
+    syncViews(state, null, false)
     for (const view of views.values()) {
+      clearSpawn(view)
       view.aim = null
       view.pointer = null
       view.side = -1

@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The parent sends a pen line to the new agent's place and its shape draws segment by segment.
 - Runs with a session or no starter keep their chat note and start no turn.
 - Fixes R53-3 and R53-4.
 - Fixes R53-1 and R53-5.
