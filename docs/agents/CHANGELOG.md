@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Tests now fail if the Control count leaves the lens seam selector or rule.
 - Port offsets are saved per lane in the runs folder, given lowest-free first, and never move.
 - Reviews caches each lane's entry on its head, base, status, brief, runs and the git cache generation.
 - Lane port offsets stay saved in the runs folder and new lanes take the lowest free offset.

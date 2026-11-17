@@ -146,6 +146,31 @@ function setup(width = 1200) {
 }
 
 describe('seam sync', () => {
+  it('poses the Control badge but not a badge inside the Orchestrator button', () => {
+    const seam = setup()
+    const slot = fakeNode({ className: 'hud-action-slot' })
+    const control = fakeNode({ className: 'hud-action', width: 80, left: 560 })
+    const badge = fakeNode({ className: 'hud-action-badge', width: 16, left: 600 })
+    const orchestrator = fakeNode({ className: 'hud-action', width: 80, left: 700 })
+    const innerBadge = fakeNode({ className: 'hud-action-badge', width: 16, left: 730 })
+    control.parentNode = slot
+    badge.parentNode = slot
+    innerBadge.parentNode = orchestrator
+    const nodes = [control, badge, orchestrator, innerBadge]
+    seam.menu.querySelectorAll = (selector) => nodes.filter((node) => selector.split(',').some((part) => {
+      const classes = part.trim().split(/\s*>\s*/).map((item) => item.slice(1))
+      return classes.length === 1
+        ? node.className === classes[0]
+        : classes.length === 2 && node.className === classes[1] && node.parentNode?.className === classes[0]
+    }))
+
+    seam.sync.measure()
+
+    expect(badge.props.map(({ name }) => name)).toEqual(['--seam-y', '--seam-r'])
+    expect(innerBadge.props).toEqual([])
+    seam.sync.stop()
+  })
+
   it('runs one measure in the animation frame however many changes arrive', () => {
     const seam = setup()
     const chip = fakeNode({ className: 'transport-chip', width: 80, left: 560 })
