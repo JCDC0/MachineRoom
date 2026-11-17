@@ -2,6 +2,8 @@
 
 How a live room connects, follows its sources and takes its query parameters.
 
+Static files and music tracks resolve their real paths inside their respective real roots before serving. Links outside those roots answer 404. Music serves only the listed audio extensions.
+
 ## Live mode
 
 The first visit opens a connect screen (`src/ui/Connect.jsx`). The choice is saved in localStorage (`machineroom.settings`) with the replay speed, and the next visit reconnects by itself. A live room reads through the bridge or the simulated feed only. A saved connection with no bridge opens the connect screen. A failed live connection returns to the connect screen with a message naming the address. While a live room has had no run yet, or the link is down, a waiting overlay (`Waiting.jsx`) says why; at 900 pixels and wider it sits inside the lens at its bottom middle, and below that it stays fixed over the page. When the feed is connected, the room's file list is empty and no agent has run, one line above the card reads `This folder is empty. Open another project in Projects, or start a lane in Dispatch with C.` (`emptyRoomLine` in `src/ui/emptyRoom.js`, U124); a file, a run or an agent at work takes it away, and a replay never shows it. A close button at the right end of its header hides the card until the feed status changes, so a new connection error or a state transition shows it again. Addresses override the saved choice: `?connect` shows the screen, `?replay` opens the replay of this page's recorded session, or of the fixture or recording the address names. Ways to connect:

@@ -1,9 +1,10 @@
 import { spawn } from 'node:child_process'
 import { createReadStream } from 'node:fs'
-import { mkdir, readdir, stat } from 'node:fs/promises'
+import { mkdir, readdir, realpath, stat } from 'node:fs/promises'
 import { dirname, extname, join, resolve, win32 } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { programPath } from './programPath.js'
+import { isInsideRoot } from './static.js'
 
 const INSTALL_FOLDER = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
@@ -271,9 +272,20 @@ export function createMusicApi({
       sendBadName(res, cors)
       return true
     }
+    if (!MUSIC_EXTENSIONS.has(extname(name).toLowerCase())) {
+      sendNotFound(res, cors)
+      return true
+    }
     let info
+    let realFile
     try {
-      info = await stat(file)
+      const realRoot = await realpath(root)
+      realFile = await realpath(file)
+      if (!isInsideRoot(realRoot, realFile)) {
+        sendNotFound(res, cors)
+        return true
+      }
+      info = await stat(realFile)
     } catch {
       sendNotFound(res, cors)
       return true
@@ -307,7 +319,7 @@ export function createMusicApi({
       res.end()
       return true
     }
-    const stream = createStream(file, { start, end })
+    const stream = createStream(realFile, { start, end })
     stream.on('error', () => {
       if (!res.headersSent) res.writeHead(500)
       res.destroy()
