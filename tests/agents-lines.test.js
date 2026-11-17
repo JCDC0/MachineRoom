@@ -7,7 +7,7 @@ import {
   lineParentKey,
   starOriginKey,
 } from '../src/engine/agents.js'
-import { ORCHESTRATOR_HOME, readerPoint } from '../src/engine/hub.js'
+import { ORCHESTRATOR_HOME, readerAngles, readerPoint, slotAngle } from '../src/engine/hub.js'
 import { apply, createState } from '../src/model/state.js'
 
 const LADDER = {
@@ -223,7 +223,7 @@ describe('the session that starts a lane sits at the top', () => {
     const lane = agents.views.get('opencode')
     expect(agents.topKey()).toBe('claude-session')
     expectAt(session.group.position, ORCHESTRATOR_HOME)
-    const side = readerPoint(0, 1)
+    const side = readerPoint(0, 1, new THREE.Vector3(), readerAngles([0, 1, 2].map((index) => slotAngle(index, 3)), 1)[0])
     expectAt(main.group.position, side)
     expectAt(lineEnds(lane.orchestratorLink).start, session.group.position)
 
