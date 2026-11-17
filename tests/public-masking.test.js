@@ -88,7 +88,26 @@ it('masks public run records and attention without changing the disk record', as
       expect(row.log).toBe(home)
     }
     safe(answer.attention[0].text)
+    await api.handle({ method: 'GET', headers: {} }, {}, new URL('http://localhost/api/control/runs?lane=test'))
+    safe(answer.recent[0].task)
+    await api.handle({ method: 'GET', headers: {} }, {}, new URL('http://localhost/api/control/runs?lane=other'))
+    expect(answer.recent).toEqual([])
     expect(JSON.parse(readFileSync(file, 'utf8'))).toEqual(record)
+  } finally { api.stopAll() }
+})
+
+it('returns only the newest twenty records for a lane', async () => {
+  const dir = temp()
+  const rows = Array.from({ length: 25 }, (_, index) => ({ lane: 'test', project: dir, startedAt: `2026-01-${String(index + 1).padStart(2, '0')}T00:00:00Z`, exitCode: 0 }))
+  rows.push({ lane: 'other', project: dir, startedAt: '2026-02-01T00:00:00Z', exitCode: 0 })
+  writeFileSync(join(dir, 'runs.jsonl'), [...rows].reverse().map((row) => JSON.stringify(row)).join('\n') + '\n')
+  let answer
+  const api = createRunsApi({ projectRoot: dir, runsFolder: dir, sendJson: (_req, _res, _status, body) => { answer = body } })
+  try {
+    await api.handle({ method: 'GET', headers: {} }, {}, new URL('http://localhost/api/control/runs?lane=test'))
+    expect(answer.recent).toHaveLength(20)
+    expect(answer.recent.map((row) => row.startedAt)).toEqual(rows.slice(5, 25).reverse().map((row) => row.startedAt))
+    expect(answer.last.map((row) => row.lane)).toEqual(['test'])
   } finally { api.stopAll() }
 })
 

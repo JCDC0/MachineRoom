@@ -1,4 +1,4 @@
-export const LANE_RUN_LIMIT = 10
+export const LANE_RUN_LIMIT = 20
 export const LANE_READ_GAP_MS = 2000
 export const PROMPT_LINES = 3
 export const PROMPT_CHARS = 360
@@ -42,6 +42,7 @@ export function runOptions(runs, lane, { liveRuns = [], lanes = [] } = {}) {
   } else if (runs && typeof runs === 'object') {
     for (const run of Array.isArray(runs.running) ? runs.running : []) add(run, true)
     for (const run of Array.isArray(runs.recent) ? runs.recent : []) add(run, false)
+    for (const run of Array.isArray(runs.last) ? runs.last : []) add(run, false)
   }
   for (const run of Array.isArray(liveRuns) ? liveRuns : []) {
     if (liveRunLane(run, lanes) !== wanted) continue

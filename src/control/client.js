@@ -208,7 +208,7 @@ export function createClient({
       return request('GET', `/api/control/brief-prompt?ids=${list}&lane=${encodeURIComponent(lane ?? '')}`)
     },
 
-    runs: () => request('GET', '/api/control/runs'),
+    runs: ({ lane = '' } = {}) => request('GET', `/api/control/runs${lane ? `?lane=${encodeURIComponent(lane)}` : ''}`),
 
     runConversation: ({ lane = '', startedAt = '' } = {}) =>
       request(
