@@ -152,6 +152,22 @@ describe('the hub roster in place', () => {
 })
 
 describe('the agent views when the roster changes', () => {
+  it('moves a reader off a new lane ray and returns it when the lane is removed', () => {
+    const initial = [ROSTER[0], ROSTER[2]]
+    const { agents, terminals } = harness(initial)
+    const reader = agents.views.get('claude-session')
+    const old = readerPoint(0, 1)
+    expect(reader.home.z).toBeCloseTo(old.z)
+    agents.setRoster(ROSTER, terminals)
+    const lane = agents.views.get('opencode')
+    expect(reader.home.z / READER_RADIUS).toBeCloseTo(-lane.home.z / HUB_RADIUS)
+    expect(reader.home.x / READER_RADIUS).toBeCloseTo(-lane.home.x / HUB_RADIUS)
+    agents.setRoster(initial, terminals)
+    expect(reader.home.x).toBeCloseTo(old.x)
+    expect(reader.home.z).toBeCloseTo(old.z)
+    agents.dispose()
+  })
+
   it('adds a view and a chip for a new lane and re-spaces the parked lanes', () => {
     const first = harness([ROSTER[0], { key: 'opencode', name: 'OpenCode', shape: 'opencode' }])
     const opencode = first.agents.views.get('opencode')

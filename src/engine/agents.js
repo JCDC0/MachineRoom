@@ -7,7 +7,7 @@ import { ownerOf, sectorArcs } from '../model/hierarchy.js'
 import { laneStarterTop } from '../model/laneStarter.js'
 import { dirname } from '../model/paths.js'
 import { CHILD_LIFE_MS } from '../model/state.js'
-import { AGENT_RING_BASE, AGENT_RING_GROW, AGENT_RING_MAX_OPACITY, AGENT_RING_MS, AGENT_RING_OPACITY_FLOOR, AGENT_RING_POOL, HUB_RADIUS, HUB_Y, ORCHESTRATOR_HOME, ORCHESTRATOR_LIFT, PARK_LIFT, SWAY_LIFT, SWAY_RATE, SWAY_SCALE, danceEnvelope, hasSubs, isSessionReader, parkedKeysFor, readerPoint, ringPulse, sectorSlotAngles, slotAngle, startDanceEnvelope, subRingPlace, writeColor, writeOpacity } from './hub.js'
+import { AGENT_RING_BASE, AGENT_RING_GROW, AGENT_RING_MAX_OPACITY, AGENT_RING_MS, AGENT_RING_OPACITY_FLOOR, AGENT_RING_POOL, HUB_RADIUS, HUB_Y, ORCHESTRATOR_HOME, ORCHESTRATOR_LIFT, PARK_LIFT, SWAY_LIFT, SWAY_RATE, SWAY_SCALE, danceEnvelope, hasSubs, isSessionReader, parkedKeysFor, readerAngles, readerPoint, ringPulse, sectorSlotAngles, slotAngle, startDanceEnvelope, subRingPlace, writeColor, writeOpacity } from './hub.js'
 import { INTERNET_RADIUS } from './internet.js'
 import { ORCHESTRATOR_PULSE_SCALE, ORCHESTRATOR_SHAPE, PREFERRED, PULSE_BANDS, PULSE_SCALE, SUB_PULSE_SCALE, bandForPoint, isOrchestrator, isSubOrchestrator, nextSpareShape, shapeGeometry, shapesFor, vertexOffset } from './shapes.js'
 import { GREEN, RED, TUNNEL_GREY, WEB, WHITE, agentColor, agentColors, cssColor, easeRate, lineMaterial, paintAgentColor, still, textSprite } from './sprites.js'
@@ -1172,6 +1172,10 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
     const readers = [...views.values()].filter((view) => view.sessionReader && !view.parentKey)
     const topView = topKey === 'orchestrator' ? null : views.get(topKey) ?? null
     const topReader = topView ? Math.max(0, readers.indexOf(topView)) : 0
+    const mainAngles = parkedKeys.flatMap((key, index) =>
+      currentLadder && ownerOf(currentLadder, key) !== 'orchestrator'
+        ? [] : [slotAngles.get(key) ?? slotAngle(index, parkedKeys.length)])
+    const angles = readerAngles(mainAngles, readers.length)
     for (const view of views.values()) {
       if (view.parentKey) continue
       const agent = agentByKey.get(view.key) ?? { key: view.key, name: view.name }
@@ -1183,7 +1187,7 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
       }
       if (view.orchestrator) {
         view.index = -1
-        if (topView) readerPoint(topReader, readers.length, view.home)
+        if (topView) readerPoint(topReader, readers.length, view.home, angles[topReader])
         else view.home.copy(ORCHESTRATOR_HOME)
       } else if (view === topView) {
         view.index = -1
@@ -1195,7 +1199,7 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
         view.index = -1
         const readerIndex = readers.indexOf(view)
         view.readerIndex = readerIndex
-        readerPoint(readerIndex, readers.length, view.home)
+        readerPoint(readerIndex, readers.length, view.home, angles[readerIndex])
       } else {
         view.index = parkedKeys.indexOf(view.key)
         view.home.copy(laneHome(view.key, view.index))

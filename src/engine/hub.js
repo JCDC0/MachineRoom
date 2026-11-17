@@ -84,8 +84,24 @@ export function parkedKeysFor(roster) {
   return keys
 }
 
-export function readerPoint(index, count, out = new THREE.Vector3()) {
-  const angle = slotAngle(index, count)
+export function readerAngles(laneAngles, readerCount) {
+  if (laneAngles.length === 0) return Array.from({ length: readerCount }, (_, index) => slotAngle(index, readerCount))
+  const turn = Math.PI * 2
+  const lanes = [...new Set(laneAngles.map((angle) => ((angle % turn) + turn) % turn))].sort((a, b) => a - b)
+  const gaps = lanes.map((start, index) => ({
+    start,
+    width: (lanes[index + 1] ?? lanes[0] + turn) - start,
+    count: 0,
+  }))
+  for (let index = 0; index < readerCount; index += 1) {
+    const widest = gaps.reduce((best, gap) => gap.width / (gap.count + 2) > best.width / (best.count + 2) ? gap : best)
+    widest.count += 1
+  }
+  return gaps.flatMap(({ start, width, count }) =>
+    Array.from({ length: count }, (_, index) => (start + width * (index + 1) / (count + 1)) % turn))
+}
+
+export function readerPoint(index, count, out = new THREE.Vector3(), angle = slotAngle(index, count)) {
   return out.set(Math.cos(angle) * READER_RADIUS, HUB_Y + PARK_LIFT, Math.sin(angle) * READER_RADIUS)
 }
 
