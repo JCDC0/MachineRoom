@@ -26,6 +26,20 @@ afterEach(() => {
   while (dirs.length) removeTempDir(dirs.pop())
 })
 
+it('restores masked arguments by position and refuses ambiguous edits', () => {
+  const dir = temp()
+  const args = ['C:\\Users\\someone\\data', 'C:\\Users\\another\\data', 'plain']
+  const server = { name: 'test', transport: 'stdio', command: 'node', args, enabled: true }
+  expect(upsertMcpServer(dir, server).ok).toBe(true)
+  const displayed = publicMcpServer(readMcpServers(dir)[0])
+  expect(displayed.args[0]).toBe(displayed.args[1])
+  expect(upsertMcpServer(dir, { ...displayed, enabled: false }).ok).toBe(true)
+  expect(readMcpServers(dir)[0].args).toEqual(args)
+  expect(upsertMcpServer(dir, { ...displayed, args: displayed.args.slice(1) }).ok).toBe(false)
+  expect(upsertMcpServer(dir, { ...displayed, args: [displayed.args[0], 'plain', displayed.args[1]] }).ok).toBe(false)
+  expect(readMcpServers(dir)[0].args).toEqual(args)
+})
+
 it('masks MCP displays and responses while retaining private settings on edits', async () => {
   const dir = temp()
   const server = { name: 'test', transport: 'http', url: `https://example.invalid/?${secret}`, args: [sample], enabled: true }

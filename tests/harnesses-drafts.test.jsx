@@ -8,6 +8,32 @@ function row(key, fields) {
 }
 
 describe('Harnesses drafts', () => {
+  test('offer switches keep an unsaved program', async () => {
+    let enabled = false
+    const rows = () => [row('acp1', { enabled, ready: false, program: '' })]
+    const client = {
+      harnesses: vi.fn().mockImplementation(async () => rows()),
+      harnessSettings: vi.fn().mockImplementation(async (payload) => {
+        enabled = payload.enabled
+        return rows()
+      }),
+    }
+    await withDom(async ({ container, root }) => {
+      await act(async () => root.render(createElement(HarnessesSettings, { client })))
+      await settle()
+      await type(root, container.querySelector('#harness-program-acp1'), 'my-prog')
+      await click(root, container.querySelector('[role="switch"]'))
+      await settle()
+      expect(container.querySelector('#harness-program-acp1').value).toBe('my-prog')
+      await click(root, container.querySelector('[role="switch"]'))
+      await settle()
+      await click(root, container.querySelector('[role="dialog"]').querySelectorAll('button').find((button) => button.textContent.trim() === 'Turn off'))
+      await settle()
+      expect(container.querySelector('#harness-program-acp1').value).toBe('my-prog')
+      expect(client.harnessSettings.mock.calls.map(([payload]) => payload.enabled)).toEqual([true, false])
+    })
+  })
+
   test('a family notice keeps unsaved edits and a save clears only its own field', async () => {
     let notify
     const rows = () => [

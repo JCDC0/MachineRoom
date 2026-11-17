@@ -190,8 +190,14 @@ export function upsertMcpServer(runsDir, entry) {
       const previous = field === 'args' ? saved.args : [saved[field]]
       const incoming = field === 'args' ? merged.args : [merged[field]]
       if (!Array.isArray(incoming)) continue
-      const restored = incoming.map((value) => {
-        const original = previous.find((item) => maskText(item) === value && item !== value)
+      if (field === 'args' && incoming.some((value, index) => {
+        const matches = previous.filter((item) => item !== value && maskText(item) === value)
+        return matches.length > 0 && (incoming.length !== previous.length || (matches.length > 1 && maskText(previous[index]) !== value))
+      })) return { ok: false, problem: 'Replace the masked arguments with complete values before changing their order or count.' }
+      const restored = incoming.map((value, index) => {
+        const original = previous[index] !== value && maskText(previous[index] ?? '') === value
+          ? previous[index]
+          : previous.find((item) => maskText(item) === value && item !== value)
         return original ?? value
       })
       if (restored.some((value, index) => value === incoming[index] && previous.some((item) => item !== maskText(item) && /\[key\]|%USERPROFILE%|%LOCALAPPDATA%|%APPDATA%|%TEMP%|\$XDG_STATE_HOME|~/.test(value)))) {
