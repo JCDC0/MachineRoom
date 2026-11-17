@@ -1,11 +1,11 @@
 #!/usr/bin/env node
-import { spawn, spawnSync } from 'node:child_process'
+import { spawnSync } from 'node:child_process'
 import { existsSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { newestRunFor, parseDiff, unreleasedRange } from '../src/briefs/review.js'
 import { readAllRunRecords, runsFile } from '../server/runs.js'
-import { killTree, treeSpawnOptions } from '../server/processTree.js'
+import { runCheck } from '../server/processTree.js'
 import { gitPath } from '../server/programPath.js'
 import { lanesFolder, readAllLanes, runsFolder } from '../server/lanes-source.js'
 import { worktreeFor } from '../src/briefs/run.js'
@@ -118,37 +118,7 @@ export function defaultGitRunner(cwd, args, { timeoutMs = GIT_TIMEOUT_MS, env = 
 }
 
 export function defaultRunCommand(command, { cwd, env = process.env, timeoutMs = 60000 } = {}) {
-  return new Promise((settle) => {
-    const child = spawn(command[0], command.slice(1), {
-      cwd,
-      env,
-      shell: false,
-      windowsHide: true,
-      stdio: ['ignore', 'pipe', 'pipe'],
-      ...treeSpawnOptions(),
-    })
-    let output = ''
-    let timedOut = false
-    let settled = false
-    const collect = (chunk) => {
-      output += chunk.toString('utf8')
-      if (output.length > OUTPUT_LIMIT) output = output.slice(-OUTPUT_LIMIT)
-    }
-    const finish = (result) => {
-      if (settled) return
-      settled = true
-      clearTimeout(timer)
-      settle({ ...result, output })
-    }
-    const timer = setTimeout(() => {
-      timedOut = true
-      killTree(child)
-    }, timeoutMs)
-    child.stdout.on('data', collect)
-    child.stderr.on('data', collect)
-    child.once('error', (error) => finish({ ok: false, code: null, timedOut, error }))
-    child.once('close', (code) => finish({ ok: !timedOut && code === 0, code, timedOut, error: null }))
-  })
+  return runCheck(command, { cwd, env, timeoutMs, outputLimit: OUTPUT_LIMIT })
 }
 
 export function tailLines(output, count = 40) {

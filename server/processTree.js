@@ -1,4 +1,4 @@
-import { spawnSync } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
 
 export const KILL_TIMEOUT_MS = 10000
 export const LIST_TIMEOUT_MS = 20000
@@ -203,4 +203,78 @@ export function isLockHolderStale(pid, lockMtime, { platform = process.platform,
   if (!Array.isArray(listItems) || listItems.length === 0) return false
   const found = listItems.find((item) => item?.pid === pid)
   return isCreatedAfterLock(found?.created, lockMtime, platform)
+}
+
+export const TIMEOUT_MESSAGE = 'The check passed its time limit.'
+export const SETTLE_WAIT_MS = 5000
+const EXIT_SNAPSHOT_MS = 1000
+
+export function runCheck(command, {
+  cwd,
+  env = process.env,
+  timeoutMs = 60000,
+  outputLimit = 2 * 1024 * 1024,
+  settleWaitMs = SETTLE_WAIT_MS,
+  spawnChild = spawn,
+  kill = killTree,
+  list = listProcesses,
+  killPid = (pid) => spawnSync('taskkill', ['/T', '/F', '/PID', String(pid)], { windowsHide: true, timeout: KILL_TIMEOUT_MS }),
+} = {}) {
+  return new Promise((settle) => {
+    const child = spawnChild(command[0], command.slice(1), {
+      cwd,
+      env,
+      shell: false,
+      windowsHide: true,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      ...treeSpawnOptions(),
+    })
+    let output = ''
+    let timedOut = false
+    let settled = false
+    let recorded = []
+    let snapshotTimer = null
+    let timer = null
+    let waitTimer = null
+    const collect = (chunk) => {
+      output += chunk.toString('utf8')
+      if (output.length > outputLimit) output = output.slice(-outputLimit)
+    }
+    const finish = (result) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      clearTimeout(snapshotTimer)
+      clearTimeout(waitTimer)
+      if (result.timedOut) output += `${output && !output.endsWith('\n') ? '\n' : ''}${TIMEOUT_MESSAGE}\n`
+      settle({ ...result, output })
+    }
+    const stopRecorded = () => {
+      for (const item of recorded) {
+        try {
+          killPid(item.pid)
+        } catch {}
+      }
+    }
+    timer = setTimeout(() => {
+      timedOut = true
+      waitTimer = setTimeout(() => finish({ ok: false, code: null, timedOut: true, error: null }), settleWaitMs)
+      try {
+        kill(child)
+        stopRecorded()
+      } catch {}
+    }, timeoutMs)
+    child.stdout?.on('data', collect)
+    child.stderr?.on('data', collect)
+    child.once('exit', () => {
+      if (settled || process.platform !== 'win32') return
+      snapshotTimer = setTimeout(() => {
+        try {
+          recorded = descendantProcesses(list(), { rootPid: child.pid, ownPid: process.pid })
+        } catch {}
+      }, EXIT_SNAPSHOT_MS)
+    })
+    child.once('error', (error) => finish({ ok: false, code: null, timedOut, error }))
+    child.once('close', (code) => finish({ ok: !timedOut && code === 0, code, timedOut, error: null }))
+  })
 }
