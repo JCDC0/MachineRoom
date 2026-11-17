@@ -2,6 +2,8 @@ import { spawn } from 'node:child_process'
 import { createHash, randomUUID } from 'node:crypto'
 import { mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
+import { maskKeys } from '../src/briefs/audit.js'
+import { maskProfilePaths } from '../src/model/paths.js'
 import { killTree } from './processTree.js'
 
 export const MCP_PROTOCOL_VERSION = '2024-11-05'
@@ -108,14 +110,25 @@ export function cleanMcpServer(draft) {
   }
 }
 
+function maskText(text) {
+  return maskProfilePaths(maskKeys(text).text)
+}
+
+function maskPublic(value) {
+  if (typeof value === 'string') return maskText(value)
+  if (Array.isArray(value)) return value.map(maskPublic)
+  if (isPlainObject(value)) return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, maskPublic(item)]))
+  return value
+}
+
 export function publicMcpServer(server) {
   const env = isPlainObject(server?.env) ? server.env : {}
   return {
     name: server.name,
     transport: server.transport,
-    command: server.command,
-    args: server.args,
-    url: server.url,
+    command: maskText(server.command),
+    args: maskPublic(server.args),
+    url: maskText(server.url),
     enabled: server.enabled,
     envNames: Object.keys(env),
   }
@@ -171,7 +184,22 @@ export function upsertMcpServer(runsDir, entry) {
   if (entry.create === true && saved) {
     return { ok: false, conflict: true, problem: mcpExistsProblem(saved.name) }
   }
-  const merged = saved && entry.env === undefined ? { ...entry, env: saved.env } : entry
+  let merged = saved && entry.env === undefined ? { ...entry, env: saved.env } : { ...entry }
+  if (saved) {
+    for (const field of ['command', 'url', 'args']) {
+      const previous = field === 'args' ? saved.args : [saved[field]]
+      const incoming = field === 'args' ? merged.args : [merged[field]]
+      if (!Array.isArray(incoming)) continue
+      const restored = incoming.map((value) => {
+        const original = previous.find((item) => maskText(item) === value && item !== value)
+        return original ?? value
+      })
+      if (restored.some((value, index) => value === incoming[index] && previous.some((item) => item !== maskText(item) && /\[key\]|%USERPROFILE%|%LOCALAPPDATA%|%APPDATA%|%TEMP%|\$XDG_STATE_HOME|~/.test(value)))) {
+        return { ok: false, problem: 'Replace the masked value with a complete new value.' }
+      }
+      merged = { ...merged, [field]: field === 'args' ? restored : restored[0] }
+    }
+  }
   const server = cleanMcpServer(merged)
   if (index === -1) servers.push(server)
   else servers[index] = server
@@ -728,7 +756,7 @@ export function createMcpApi(options = {}) {
         sendJson(req, res, 405, { error: 'Method not allowed.' })
         return true
       }
-      sendJson(req, res, 200, await listAllMcpTools(runsDir))
+      sendJson(req, res, 200, maskPublic(await listAllMcpTools(runsDir)))
       return true
     }
 
@@ -744,7 +772,7 @@ export function createMcpApi(options = {}) {
         return true
       }
       const answer = await callMcpTool(runsDir, body)
-      sendJson(req, res, 200, { ok: answer.ok === true, result: answer.result ?? null, problem: answer.problem ?? null })
+      sendJson(req, res, 200, maskPublic({ ok: answer.ok === true, result: answer.result ?? null, problem: answer.problem ?? null }))
       return true
     }
 

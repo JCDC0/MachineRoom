@@ -825,7 +825,7 @@ export function createReviewsApi({
     const head = (await runGit(worktree, ['rev-parse', 'HEAD'])).trim()
     const range = `${base.ref}...${head}`
     const stat = parseNumstat(await runGit(worktree, ['diff', '--no-ext-diff', '--no-textconv', '--numstat', range]))
-    const full = await runGit(worktree, ['diff', '--no-ext-diff', '--no-textconv', range])
+    const full = maskProfilePaths(maskKeys(await runGit(worktree, ['diff', '--no-ext-diff', '--no-textconv', range])).text)
     const truncated = full.length > limit
     return {
       lane,

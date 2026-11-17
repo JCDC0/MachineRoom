@@ -1829,11 +1829,10 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
   }
 
   function maskRecordCommits(record) {
-    if (!Array.isArray(record?.commits) || record.commits.length === 0) return record
-    return {
-      ...record,
-      commits: record.commits.map((line) => maskProfilePaths(maskKeys(String(line ?? '')).text)),
-    }
+    if (typeof record === 'string') return maskProfilePaths(maskKeys(record).text)
+    if (Array.isArray(record)) return record.map(maskRecordCommits)
+    if (record && typeof record === 'object') return Object.fromEntries(Object.entries(record).map(([key, value]) => [key, maskRecordCommits(value)]))
+    return record
   }
 
   async function handle(req, res, url) {
