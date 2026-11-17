@@ -85,6 +85,11 @@ describe('port offset', () => {
     expect(portOffsetFor('lane1') % 10).toBe(0)
     expect(portOffsetFor('missing')).toBeLessThan(1000)
   })
+  it('gives every lane in lanes.json its own offset', () => {
+    const keys = Object.keys(JSON.parse(readFileSync(join(process.cwd(), 'docs', 'agents', 'lanes.json'), 'utf8'))).sort()
+    const offsets = keys.map((key) => portOffsetFor(key, keys))
+    expect(new Set(offsets).size).toBe(keys.length)
+  })
 })
 
 describe('worktree copy exclude line', () => {
@@ -103,5 +108,16 @@ describe('worktree copy exclude line', () => {
     let exclude = ''
     try { exclude = readFileSync(join(folder, '.git', 'info', 'exclude'), 'utf8') } catch {}
     expect(exclude).not.toContain('/adir')
+  })
+})
+
+describe('worktree copy failure', () => {
+  it('removes the copied file when the exclude write fails', () => {
+    const { folder } = project()
+    writeFileSync(join(folder, 'local.env'), 'x')
+    rmSync(join(folder, '.git', 'info', 'exclude'), { force: true })
+    mkdirSync(join(folder, '.git', 'info', 'exclude'), { recursive: true })
+    expect(() => prepareWorktree(folder, 'lane1', { copies: ['local.env'] })).toThrow()
+    expect(existsSync(join(folder, '.worktrees', 'lane1', 'local.env'))).toBe(false)
   })
 })

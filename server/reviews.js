@@ -1046,7 +1046,7 @@ export function createReviewsApi({
       .map((line) => /^([0-9a-f]{7,40})\b/i.exec(String(line).trim())?.[1]?.toLowerCase())
       .filter(Boolean)
     if (!full.every((hash) => recorded.some((short) => hash.startsWith(short)))) {
-      return { reason: 'The lane has commits from before the last run, so it was not rewound.' }
+      return { reason: 'The lane has commits the last run did not record, so it was not rewound.' }
     }
     const commits = (await runGit(worktree, ['log', '--oneline', range])).split(/\r?\n/).filter(Boolean)
     const files = (await runGit(worktree, ['diff', '--name-only', checkpoint.head, head])).split(/\r?\n/).filter(Boolean)
@@ -1071,12 +1071,15 @@ export function createReviewsApi({
     try {
       try {
         laneLock = takeLaneLock(dirname(recordsFile()), lane)
-      } catch {
-        return sendJson(req, res, 409, { error: 'The lane has a run going, so stop it first.' })
+      } catch (error) {
+        const going = /^The .*is already running/.test(String(error?.message ?? ''))
+        return sendJson(req, res, going ? 409 : 500, { error: going ? 'The lane has a run going, so stop it first.' : 'The rewind failed.' })
       }
       const state = await rewindState(lane, worktree, body.expectedHead.toLowerCase(), true)
       if (state.reason) return sendJson(req, res, 409, { error: state.reason })
       const ref = recoveryRefFor(lane, state.record)
+      const existing = await runGit(worktree, ['rev-parse', '--verify', '--quiet', ref]).catch(() => '')
+      if (String(existing).trim()) return sendJson(req, res, 409, { error: 'This run was already rewound.' })
       await runGit(worktree, ['update-ref', ref, state.head, '0000000000000000000000000000000000000000'])
       await runGit(worktree, ['reset', '--keep', state.checkpointHead])
       try {

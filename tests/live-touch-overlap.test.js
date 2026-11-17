@@ -352,6 +352,7 @@ describe('live touched files in GET /api/control/runs', () => {
     }, { what: '50-path cap answer' })
 
     expect(answer.body.running[0].touched).toHaveLength(50)
+    expect(answer.body.running[0].touchedPartial).toBe(true)
 
     appendFileSync(join(runs, 'opencode-cap.log'), opencodeWriteLine('src/extra.js', 'w-extra'))
     await api.handle({ method: 'GET', headers: {} }, {}, new URL('http://127.0.0.1/api/control/runs'))

@@ -680,18 +680,22 @@ function copyWorktreeFiles(project, worktree, copies) {
     } catch (error) { if (error.code !== 'ENOENT') throw error }
     mkdirSync(dirname(target), { recursive: true })
     if (!inside(targetRoot, realpathSync(dirname(target)))) throw new Error(`Worktree copy ${path} must resolve inside the worktree.`)
-    const ignored = spawnSync(gitPath(), ['check-ignore', '-q', '--', path], { cwd: project, windowsHide: true }).status === 0
     copyFileSync(resolvedSource, target, constants.COPYFILE_EXCL)
-    if (ignored) continue
-    const found = spawnSync(gitPath(), ['rev-parse', '--git-common-dir'], { cwd: worktree, encoding: 'utf8', windowsHide: true })
-    const common = String(found.stdout ?? '').trim()
-    if (found.status !== 0 || !common) throw new Error('Could not find the worktree exclude file.')
-    const exclude = join(isAbsolute(common) ? common : join(worktree, common), 'info', 'exclude')
-    mkdirSync(dirname(exclude), { recursive: true })
-    let text = ''
-    try { text = readFileSync(exclude, 'utf8') } catch (error) { if (error.code !== 'ENOENT') throw error }
-    const pattern = '/' + relative(worktree, target).replace(/\\/g, '/').replace(/[\\*?\[\]#!]/g, '\\$&').replace(/ /g, '\\ ')
-    appendFileSync(exclude, `${text && !text.endsWith('\n') ? '\n' : ''}${pattern}\n`)
+    try {
+      if (spawnSync(gitPath(), ['check-ignore', '-q', '--', path], { cwd: worktree, windowsHide: true }).status === 0) continue
+      const found = spawnSync(gitPath(), ['rev-parse', '--git-common-dir'], { cwd: worktree, encoding: 'utf8', windowsHide: true })
+      const common = String(found.stdout ?? '').trim()
+      if (found.status !== 0 || !common) throw new Error('Could not find the worktree exclude file.')
+      const exclude = join(isAbsolute(common) ? common : join(worktree, common), 'info', 'exclude')
+      mkdirSync(dirname(exclude), { recursive: true })
+      let text = ''
+      try { text = readFileSync(exclude, 'utf8') } catch (error) { if (error.code !== 'ENOENT') throw error }
+      const pattern = '/' + relative(worktree, target).replace(/\\/g, '/').replace(/[\\*?\[\]#!]/g, '\\$&').replace(/ /g, '\\ ')
+      appendFileSync(exclude, `${text && !text.endsWith('\n') ? '\n' : ''}${pattern}\n`)
+    } catch (error) {
+      rmSync(target, { force: true })
+      throw error
+    }
   }
 }
 
@@ -1120,7 +1124,9 @@ function gitText(cwd, args) {
   return String(result.stdout ?? '')
 }
 
-export function portOffsetFor(laneKey) {
+export function portOffsetFor(laneKey, keys = lanesInFile().map(([key]) => key).sort()) {
+  const index = keys.indexOf(String(laneKey))
+  if (index >= 0) return index * 10
   return (createHash('sha256').update(String(laneKey)).digest().readUInt32BE(0) % 100) * 10
 }
 

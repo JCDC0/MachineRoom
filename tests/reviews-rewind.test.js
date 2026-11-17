@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import { mkdirSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { gitPath } from '../server/programPath.js'
@@ -111,10 +111,11 @@ describe('lane rewind', () => {
     writeFileSync(join(s.worktree, 'c.txt'), 'loose\n')
     const answer = await s.post({ confirmed: true, expectedHead: s.head })
     expect(answer).toEqual({ status: 409, body: { error: 'The lane has uncommitted changes, so it was not rewound.' } })
+    expect(existsSync(join(s.runsFolder, 'lane1.lock'))).toBe(false)
     expect(git(s.worktree, ['rev-parse', 'HEAD'])).toBe(s.head)
   })
 
-  it('refuses a commit made before the last run', async () => {
+  it('refuses a commit the last run did not record', async () => {
     const s = setup()
     writeFileSync(join(s.worktree, 'hand.txt'), 'hand\n')
     git(s.worktree, ['add', '.'])
@@ -123,7 +124,7 @@ describe('lane rewind', () => {
     const answer = await s.post({ confirmed: true, expectedHead: head })
     expect(answer).toEqual({
       status: 409,
-      body: { error: 'The lane has commits from before the last run, so it was not rewound.' },
+      body: { error: 'The lane has commits the last run did not record, so it was not rewound.' },
     })
     expect(git(s.worktree, ['rev-parse', 'HEAD'])).toBe(head)
   })
@@ -148,18 +149,36 @@ describe('lane rewind', () => {
     s.record.commits = ''
     const answer = await s.post({ confirmed: true, expectedHead: s.head })
     expect(answer.status).toBe(409)
-    expect(answer.body.error).toBe('The lane has commits from before the last run, so it was not rewound.')
+    expect(answer.body.error).toBe('The lane has commits the last run did not record, so it was not rewound.')
   })
 
   it('answers 200 when the room message throws, and refuses a second rewind of the same run', async () => {
     const s = setup({ throwing: true })
     const answer = await s.post({ confirmed: true, expectedHead: s.head })
     expect(answer.status).toBe(200)
+    expect(existsSync(join(s.runsFolder, 'lane1.lock'))).toBe(false)
     expect(git(s.worktree, ['rev-parse', 'HEAD'])).toBe(s.checkpointHead)
     expect(git(s.worktree, ['rev-parse', answer.body.recoveryRef])).toBe(s.head)
     git(s.worktree, ['reset', '--hard', s.head])
-    expect((await s.post({ confirmed: true, expectedHead: s.head })).status).toBe(500)
+    expect(await s.post({ confirmed: true, expectedHead: s.head })).toEqual({ status: 409, body: { error: 'This run was already rewound.' } })
+    expect(existsSync(join(s.runsFolder, 'lane1.lock'))).toBe(false)
     expect(git(s.worktree, ['rev-parse', 'HEAD'])).toBe(s.head)
+  })
+
+  it('answers 500 with no path and frees the lock when the recovery ref cannot be written', async () => {
+    const s = setup()
+    writeFileSync(join(s.repo, '.git', 'refs', 'machineroom'), 'blocked')
+    const answer = await s.post({ confirmed: true, expectedHead: s.head })
+    expect(answer).toEqual({ status: 500, body: { error: 'The rewind failed.' } })
+    expect(existsSync(join(s.runsFolder, 'lane1.lock'))).toBe(false)
+    expect(git(s.worktree, ['rev-parse', 'HEAD'])).toBe(s.head)
+  })
+
+  it('answers 500, not a run going, when the lock cannot be taken for another reason', async () => {
+    const s = setup()
+    mkdirSync(join(s.runsFolder, 'lane1.lock'))
+    const answer = await s.post({ confirmed: true, expectedHead: s.head })
+    expect(answer).toEqual({ status: 500, body: { error: 'The rewind failed.' } })
   })
 
   it('refuses while the lane lock is held and moves nothing', async () => {

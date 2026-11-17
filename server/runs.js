@@ -939,14 +939,18 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
     }
     const touched = []
     const seen = new Set()
+    let cut = false
     for (const raw of summary.written) {
       const safe = maskProfilePaths(maskKeys(String(raw ?? '')).text).trim()
       if (!safe || seen.has(safe)) continue
+      if (touched.length >= LIVE_TOUCH_LIMIT) {
+        cut = true
+        break
+      }
       seen.add(safe)
       touched.push(safe)
-      if (touched.length >= LIVE_TOUCH_LIMIT) break
     }
-    const partial = summary.shellUnplaced > 0
+    const partial = summary.shellUnplaced > 0 || cut
     touchedCache.set(resolvedLog, {
       partial,
       size: info.size,
