@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Quick connect re-reads the endpoint list after its model fetch and answers 409 when the entry changed; the probe frees its slot when its temp folder fails.
+- Quick connect keeps newer endpoint edits after loading models, and a failed probe folder no longer locks connection tests.
 - Sweep S1 (Sol): six bridge findings, one P1 (static and music follow links outside their roots).
 - Lane conversation reads take a sequence number and Reviews lists use latestOnly, so a slow older answer is dropped.
 - Hermes tool lines and child credentials are masked in run logs, --continue-from checks lane, briefs, kind and branch, torn record tails stay apart, and stale port lock takeover is guarded.
