@@ -1223,10 +1223,37 @@ describe('talking to a lane and seeing agent messages', () => {
       await act(async () => { root.render(createElement(OrchestratorChat, { client, inline: true, lanes, initialChat: chat, initialRecipient: 'opencode' })) })
       await act(async () => {})
       expect(container.textContent).toContain('2026-11-17T10:00:00Z')
-      expect(container.querySelector('textarea').getAttribute('placeholder')).toBe('Message OpenCode')
+      expect(container.querySelector('textarea').getAttribute('placeholder')).toBe('Start OpenCode with a message')
+      expect(buttonWithText(container, 'Send and interrupt')).toBeNull()
       await type(root, container.querySelector('textarea'), 'Build it')
       await act(async () => { container.querySelector('form').dispatchEvent({ type: 'submit', bubbles: true, cancelable: true }) })
       expect(calls).toEqual([{ text: 'Build it', options: { id: 'opencode', worktree: true } }])
+    })
+  })
+
+  it('sends to a running lane with the option to interrupt', async () => {
+    const chat = { state: 'idle', messages: [] }
+    const lanes = [{ key: 'opencode', name: 'OpenCode', cli: { bin: 'opencode' } }]
+    const calls = []
+    const startedAt = '2026-11-17T10:00:00Z'
+    const client = { ...fakeClient(chat),
+      runs: async () => ({ running: [{ lane: 'opencode', startedAt }] }),
+      runConversation: async () => ({ running: true, entries: [] }),
+      sendLaneMessage: async (payload) => { calls.push(payload); return { id: 'msg-1' } },
+      sendOrchestrator: async () => { throw new Error('Unexpected task start') },
+    }
+    await withDom(async ({ container, root }) => {
+      await act(async () => { root.render(createElement(OrchestratorChat, { client, inline: true, lanes, initialChat: chat, initialRecipient: 'opencode' })) })
+      await act(async () => {})
+      expect(container.querySelector('textarea').getAttribute('placeholder')).toBe('Message OpenCode')
+      await type(root, container.querySelector('textarea'), 'Keep going')
+      await click(root, buttonWithText(container, 'Send'))
+      await type(root, container.querySelector('textarea'), 'Change course')
+      await click(root, buttonWithText(container, 'Send and interrupt'))
+      expect(calls).toEqual([
+        { lane: 'opencode', text: 'Keep going', interrupt: false },
+        { lane: 'opencode', text: 'Change course', interrupt: true },
+      ])
     })
   })
 

@@ -172,6 +172,7 @@ export default function LaneConversation({
   const running = conversation.data !== null && (
     typeof conversation.data?.running === 'boolean' ? conversation.data.running : currentRun?.running === true
   )
+  const recipientRunning = onRecipientSend && (running || options.some((run) => run.running && (run.startedAt !== selected || conversation.data === null)))
   const outcome = runOutcome(currentRun, conversation.data)
   const colour = agentColor(lane, lanes)
   const entries = Array.isArray(conversation.data?.entries) ? conversation.data.entries : []
@@ -396,11 +397,12 @@ export default function LaneConversation({
   }, [client, lane, selected, running, loaded])
 
   async function sendMessage(interrupt) {
-    if (!canSend || sending || (!onRecipientSend && (!running || !client || typeof client.sendLaneMessage !== 'function'))) return
+    const sendToRunning = onRecipientSend ? recipientRunning : running
+    if (!canSend || sending || (sendToRunning ? !client || typeof client.sendLaneMessage !== 'function' : !onRecipientSend)) return
     setSending(true)
     setSendError('')
     try {
-      const answer = onRecipientSend ? await onRecipientSend(trimmedDraft) : await client.sendLaneMessage({ lane, text: trimmedDraft, interrupt: Boolean(interrupt) })
+      const answer = sendToRunning ? await client.sendLaneMessage({ lane, text: trimmedDraft, interrupt: Boolean(interrupt) }) : await onRecipientSend(trimmedDraft)
       if (answer?.ok === false) throw new Error(answer.error)
       if (!mountedRef.current) return
       setDraft('')
@@ -732,12 +734,12 @@ export default function LaneConversation({
             maxLength={MAX_MESSAGE_CHARS}
             rows={2}
             spellCheck="false"
-            placeholder={onRecipientSend ? `Message ${label}` : 'Message this running lane'}
+            placeholder={onRecipientSend ? (recipientRunning ? `Message ${label}` : `Start ${label} with a message`) : 'Message this running lane'}
             aria-label={`Message ${label}`}
             onChange={(event) => setDraft(event.target.value)}
           />
           <div className="mr-orch-actions">
-            {worktreeChoice}
+            {!recipientRunning && worktreeChoice}
             <button
               type="button"
               className="mr-orch-send"
@@ -746,7 +748,7 @@ export default function LaneConversation({
             >
               Send
             </button>
-            {!onRecipientSend ? <button
+            {(!onRecipientSend || recipientRunning) ? <button
               type="button"
               className="mr-orch-stop"
               disabled={!canSend || sending}
