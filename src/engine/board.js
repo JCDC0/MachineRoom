@@ -1,3 +1,4 @@
+import { formatCount } from '../ui/agentStrip.js'
 import { visibleText } from '../model/paths.js'
 
 export const BOARD_MIN_WIDTH = 900
@@ -29,12 +30,6 @@ export function costLabels(mode) {
 function formatMoney(cents) {
   const value = typeof cents === 'number' && Number.isFinite(cents) ? cents : 0
   return `$${(value / 100).toFixed(2)}`
-}
-
-function formatTokens(count) {
-  if (count == null || !Number.isFinite(count)) return '?'
-  if (count < 1000) return String(Math.floor(count))
-  return `${(count / 1000).toFixed(1)}k`
 }
 
 export function boardLines(board) {
@@ -86,7 +81,7 @@ export function boardLines(board) {
     }
 
     const cost = formatMoney(row.costCents)
-    const tokens = `${formatTokens(row.inputTokens)} in / ${formatTokens(row.outputTokens)} out`
+    const tokens = `${formatCount(row.inputTokens)} in / ${formatCount(row.outputTokens)} out`
     const share = typeof row.share === 'number' && Number.isFinite(row.share) ? row.share : null
 
     return {

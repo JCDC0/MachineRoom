@@ -541,7 +541,7 @@ describe('the board in lane mode', () => {
       key: 'opencode',
       name: 'OpenCode',
       cost: '$0.60',
-      tokens: '2.0k in / 500 out',
+      tokens: '2k in / 500 out',
       share: 0.833,
       reported: true,
     })

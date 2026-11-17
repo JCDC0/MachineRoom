@@ -97,6 +97,11 @@ const freeLane = {
 
 
 describe('agentContext', () => {
+  it('formats large and unknown token counts', () => {
+    const result = agentContext({ agent: lane, costs: board([{ ...costRow, inputTokens: 30206300, outputTokens: null }]) })
+    expect(result.tokens).toBe('30.2M in / ? out')
+  })
+
   it('an idle lane', () => {
     const result = agentContext({
       agent: lane,

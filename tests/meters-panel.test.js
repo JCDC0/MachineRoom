@@ -29,6 +29,12 @@ function renderPanel(costs = COSTS, costMode = null) {
 }
 
 describe('MetersPanel', () => {
+  it('formats large and unknown token and cache counts', () => {
+    const html = renderPanel({ summary: {}, byAgent: [{ agentName: 'Lane', inputTokens: 30206300, outputTokens: null, cacheKnownRuns: 1, runs: 1, cacheInputTokens: null, cacheReadTokens: 1048576, cacheWriteTokens: 1500 }] })
+    expect(html).toContain('30.2M in / ? out')
+    expect(html).toContain('Cache: 1M read / 1.5k write')
+  })
+
   it('labels made-up costs in a replay and a demo', () => {
     for (const costMode of ['replay', 'demo']) {
       const html = renderPanel(COSTS, costMode)
@@ -50,10 +56,10 @@ describe('MetersPanel', () => {
     expect(html).toContain('$4.05')
     expect(html).toContain('Claude Code')
     expect(html).toContain('$2.18')
-    expect(html).toContain('310.0k in / 26.0k out')
+    expect(html).toContain('310k in / 26k out')
     expect(html).toContain('OpenCode')
     expect(html).toContain('$1.87')
-    expect(html).toContain('214.0k in / 31.0k out')
+    expect(html).toContain('214k in / 31k out')
     expect(html).toContain('agy')
     expect(html).toContain('tokens not reported')
     expect(html).toContain('500 in / 0 out')
@@ -93,7 +99,7 @@ describe('MetersPanel', () => {
     expect(html).toContain('Removed lanes')
     expect(html).toContain('$4.45')
     expect(html).toContain('$0.40')
-    expect(html).toContain('1.0k in / 200 out')
+    expect(html).toContain('1k in / 200 out')
     expect(html.indexOf('Removed lanes')).toBeGreaterThan(html.indexOf('New lane'))
   })
 

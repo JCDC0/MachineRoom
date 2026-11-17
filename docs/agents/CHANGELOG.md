@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- One formatCount for the strip, context, meters and cost board: 12k, 30.2M, 1M.
 - roomNoticeSummary reads run-end room lines; the chat shows lane, briefs, status and subject with a Details toggle.
 - The lattice ceiling is the globe top, its floor follows the git tree bottom, 4 blocks each way.
 - LensRail takes inner; ruler marks every quarter and twentieth; the left rail stays hidden.

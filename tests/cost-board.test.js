@@ -97,6 +97,11 @@ afterAll(() => {
 })
 
 describe('boardLines', () => {
+  it('formats large and unknown token counts', () => {
+    const lines = boardLines({ summary: {}, rows: [{ reported: true, inputTokens: 30206300, outputTokens: null }] })
+    expect(lines.rows[0].tokens).toBe('30.2M in / ? out')
+  })
+
   it('formats the mock costs and agents in roster order', async () => {
     const client = createMockClient()
     const [agentsRaw, costsRaw] = await Promise.all([client.agents(), client.costs()])
@@ -117,7 +122,7 @@ describe('boardLines', () => {
       key: 'claude',
       name: 'Claude Code',
       cost: '$2.18',
-      tokens: '310.0k in / 26.0k out',
+      tokens: '310k in / 26k out',
       share: 0.445,
       reported: true,
     })
@@ -125,7 +130,7 @@ describe('boardLines', () => {
       key: 'opencode',
       name: 'OpenCode',
       cost: '$1.43',
-      tokens: '214.0k in / 31.0k out',
+      tokens: '214k in / 31k out',
       share: 0.292,
       reported: true,
     })
@@ -133,7 +138,7 @@ describe('boardLines', () => {
       key: 'opencode2',
       name: 'OpenCode 2',
       cost: '$0.87',
-      tokens: '96.0k in / 14.0k out',
+      tokens: '96k in / 14k out',
       share: 0.178,
       reported: true,
     })
@@ -141,7 +146,7 @@ describe('boardLines', () => {
       key: 'opencode3',
       name: 'OpenCode 3',
       cost: '$0.42',
-      tokens: '51.0k in / 7.2k out',
+      tokens: '51k in / 7.2k out',
       share: 0.086,
       reported: true,
     })
