@@ -22,7 +22,7 @@ function lensAround(node) {
   return null
 }
 
-export default function LensRail({ side, label, share, multiplier, ariaLabel, valueText, onShare, onWheel }) {
+export default function LensRail({ side, inner = false, label, share, multiplier, ariaLabel, valueText, onShare, onWheel }) {
   const dragRef = useRef(null)
   const railRef = useRef(null)
   const wheelRef = useRef(onWheel)
@@ -111,7 +111,7 @@ export default function LensRail({ side, label, share, multiplier, ariaLabel, va
 
   return (
     <div
-      className={`lens-rail is-${side}${shown ? ' is-shown' : ''}`}
+      className={`lens-rail is-${side}${inner ? ' is-inner' : ''}${shown ? ' is-shown' : ''}`}
       onPointerDown={down}
       onPointerMove={move}
       onPointerUp={up}
@@ -132,6 +132,11 @@ export default function LensRail({ side, label, share, multiplier, ariaLabel, va
         aria-valuetext={valueText}
         onKeyDown={key}
       >
+        <svg className="lens-rail-marks" viewBox="0 0 20 100" preserveAspectRatio="none" aria-hidden="true">
+          {Array.from({ length: 21 }, (_, i) => (
+            <line key={i} className={i % 5 === 0 ? 'is-quarter' : 'is-twentieth'} x1={i % 5 === 0 ? 2 : 6} x2="10" y1={i * 5} y2={i * 5} vectorEffect="non-scaling-stroke" />
+          ))}
+        </svg>
         <span className="lens-rail-fill" style={{ height: `${(position * 100).toFixed(1)}%` }} />
         <span className="lens-rail-handle" style={{ bottom: `${(position * 100).toFixed(1)}%` }} />
       </div>
