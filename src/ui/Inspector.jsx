@@ -592,7 +592,7 @@ export default function Inspector({
               <Row label="Task">{context.task}</Row>
               <Row label="Context">
                 {context.context
-                  ? context.context.window ? `${context.context.percent}% ? ${context.context.tokens} of ${context.context.window} tokens` : `${context.context.tokens} tokens`
+                  ? context.context.window ? `${context.context.percent}% · ${context.context.tokens} of ${context.context.window} tokens` : `${context.context.tokens} tokens`
                   : CONTEXT_NOT_REPORTED}
               </Row>
               {live && <Row label="Cost">{context.cost}</Row>}
