@@ -371,6 +371,49 @@ export function createEndpointsApi(options = {}) {
   const timeoutMs = options.timeoutMs ?? MODELS_TIMEOUT_MS
   const readKey = options.readKey ?? readEndpointKey
 
+  const pending = new Map()
+  const failed = new Map()
+
+  function saveFetched(endpoint, fetched) {
+    const current = readEndpoints(runsDir)
+    const currentEndpoint = current.find((entry) => entry.name === endpoint.name)
+    if (!currentEndpoint || ['provider', 'baseUrl', 'keyName'].some ( (field) => currentEndpoint[field] !== endpoint[field])) return null
+    if (Array.isArray(fetched.modelDetails)) {
+      const details = [...new Map(fetched.modelDetails.map((detail) => [detail.id, detail])).values()].slice(0, MAX_ENDPOINT_MODELS)
+      currentEndpoint.models = details.map((detail) => detail.id)
+      currentEndpoint.modelDetails = details
+      saveEndpoints(runsDir, current)
+    }
+    return currentEndpoint
+  }
+
+  function refreshMissing(model, endpointName = '') {
+    const endpoints = readEndpoints(runsDir)
+    const endpoint = endpoints.find((entry) => entry.name === endpointName) ?? endpoints.find((entry) => model.startsWith(`${entry.name}/`))
+    if (!endpoint) return Promise.resolve(false)
+    const id = model.startsWith(`${endpoint.name}/`) ? model.slice(endpoint.name.length + 1) : model
+    if (endpoint.modelDetails.some((detail) => detail.id === id)) return Promise.resolve(false)
+    if (pending.has(endpoint.name)) return pending.get(endpoint.name)
+    if ((failed.get(endpoint.name) ?? 0) > Date.now()) return Promise.resolve(false)
+    const work = (async () => {
+      try {
+        const key = endpoint.keyName ? await readKey(runsDir, endpoint.keyName) : ''
+        if (endpoint.keyName && !key) throw new Error('Missing key')
+        const fetched = await fetchEndpointModelList(endpoint, key, { fetchImpl, timeoutMs })
+        if (fetched.error || !saveFetched(endpoint, fetched)) throw new Error('Fetch failed')
+        if (typeof notify === 'function') { notify({ topic: 'endpoints' }); notify({ topic: 'family' }) }
+        return true
+      } catch {
+        failed.set(endpoint.name, Date.now() + 600000)
+        return false
+      } finally {
+        pending.delete(endpoint.name)
+      }
+    })()
+    pending.set(endpoint.name, work)
+    return work
+  }
+
   async function handle(req, res, url) {
     const path = url.pathname
     const method = req.method ?? 'GET'
@@ -549,26 +592,10 @@ export function createEndpointsApi(options = {}) {
         notify({ topic: 'endpoints' })
       }
       const fetched = await fetchEndpointModelList(endpoint, key, { fetchImpl, timeoutMs })
-      const current = readEndpoints(runsDir)
-      const currentEndpoint = current.find((entry) => entry.name === endpoint.name)
-      if (!currentEndpoint || ['provider', 'baseUrl', 'keyName'].some((field) => currentEndpoint[field] !== endpoint[field])) {
+      const currentEndpoint = saveFetched(endpoint, fetched)
+      if (!currentEndpoint) {
         sendJson(req, res, 409, { error: 'The endpoint was deleted or its connection settings changed while models were loading. No models were saved.' })
         return true
-      }
-      if (Array.isArray(fetched.modelDetails)) {
-        const seen = new Set()
-        const models = []
-        const details = []
-        for (const detail of fetched.modelDetails) {
-          if (seen.has(detail.id)) continue
-          seen.add(detail.id)
-          models.push(detail.id)
-          details.push(detail)
-          if (models.length >= MAX_ENDPOINT_MODELS) break
-        }
-        currentEndpoint.models = models
-        currentEndpoint.modelDetails = details
-        saveEndpoints(runsDir, current)
       }
       const answer = {
         endpoint: {
@@ -646,7 +673,7 @@ export function createEndpointsApi(options = {}) {
     return false
   }
 
-  return { handle }
+  return { handle, refreshMissing }
 }
 
 export function createModelPinsApi(options = {}) {

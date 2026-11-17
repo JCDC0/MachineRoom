@@ -34,11 +34,11 @@ export function contextPercent(share) {
 
 export function contextLabel(tokens, window) {
   const share = contextShare(tokens, window)
-  return share === null ? 'context not reported' : `${contextPercent(share)}%`
+  return share === null ? (numberOrNull(tokens) !== null && tokens >= 0 ? `${tokens} tokens` : 'context not reported') : `${contextPercent(share)}%`
 }
 
 export function contextTitle(tokens, window) {
-  if (contextShare(tokens, window) === null) return ''
+  if (contextShare(tokens, window) === null) return numberOrNull(tokens) !== null && tokens >= 0 ? `${tokens} tokens` : ''
   return `${tokens} of ${window} tokens`
 }
 
