@@ -42,12 +42,22 @@ describe('static and music real paths', () => {
     }
   })
 
-  it('refuses an index linked outside the static root', async () => {
+  it('refuses an index linked outside the static root', async ({ skip }) => {
     const { staticDir, url } = await setup()
+    const outsideIndex = join(staticDir, '..', 'outside', 'index.html')
+    const marker = 'outside index marker'
+    writeFileSync(outsideIndex, marker)
     rmSync(join(staticDir, 'index.html'))
-    const kind = process.platform === 'win32' ? 'junction' : 'dir'
-    symlinkSync(join(staticDir, '..', 'outside'), join(staticDir, 'index.html'), kind)
-    expect((await fetch(`${url}/`)).status).toBe(404)
-    expect((await fetch(`${url}/client-route`)).status).toBe(404)
+    try {
+      symlinkSync(outsideIndex, join(staticDir, 'index.html'), 'file')
+    } catch (error) {
+      if (!['EPERM', 'EACCES', 'ENOSYS', 'ENOTSUP'].includes(error.code)) throw error
+      skip(`File symlinks are unavailable: ${error.code}`)
+    }
+    for (const path of ['/', '/client-route']) {
+      const response = await fetch(`${url}${path}`)
+      expect(response.status).toBe(404)
+      expect(await response.text()).not.toContain(marker)
+    }
   })
 })

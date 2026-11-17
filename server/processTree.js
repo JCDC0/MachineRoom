@@ -250,7 +250,9 @@ export function runCheck(command, {
       settle({ ...result, output })
     }
     const stopRecorded = () => {
+      const current = list()
       for (const item of recorded) {
+        if (!Number.isFinite(item.created) || !current.some((row) => row.pid === item.pid && row.created === item.created)) continue
         try {
           killPid(item.pid)
         } catch {}
