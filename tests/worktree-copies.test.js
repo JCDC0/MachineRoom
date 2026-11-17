@@ -1,5 +1,5 @@
 ﻿import { spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { portOffsetFor, prepareWorktree } from '../scripts/run-lane.mjs'
@@ -79,16 +79,41 @@ describe('worktree copies', () => {
 })
 
 describe('port offset', () => {
-  it('is stable per lane key and differs between keys', () => {
-    expect(portOffsetFor('lane1')).toBe(portOffsetFor('lane1'))
-    expect(portOffsetFor('lane1')).not.toBe(portOffsetFor('lane2'))
-    expect(portOffsetFor('lane1') % 10).toBe(0)
-    expect(portOffsetFor('missing')).toBeLessThan(1000)
+  it('saves distinct offsets and keeps them when lane names change', async () => {
+    const root = makeTempDir('mr-offsets-')
+    roots.push(root)
+    expect(await portOffsetFor('opencode', root)).toBe(0)
+    expect(await portOffsetFor('opencode-11', root)).toBe(10)
+    expect(await portOffsetFor('alpha', root)).toBe(20)
+    expect(await portOffsetFor('opencode', root)).toBe(0)
+    expect(JSON.parse(readFileSync(join(root, 'port-offsets.json'), 'utf8'))).toEqual({ opencode: 0, 'opencode-11': 10, alpha: 20 })
   })
-  it('gives every lane in lanes.json its own offset', () => {
-    const keys = Object.keys(JSON.parse(readFileSync(join(process.cwd(), 'docs', 'agents', 'lanes.json'), 'utf8'))).sort()
-    const offsets = keys.map((key) => portOffsetFor(key, keys))
-    expect(new Set(offsets).size).toBe(keys.length)
+  it('reads the assignments after another allocator releases the lock', async () => {
+    const root = makeTempDir('mr-offsets-')
+    roots.push(root)
+    const lock = join(root, '.port-offsets.lock')
+    writeFileSync(lock, 'held')
+    const pending = portOffsetFor('second', root)
+    writeFileSync(join(root, 'port-offsets.json'), JSON.stringify({ first: 0 }))
+    rmSync(lock)
+    expect(await pending).toBe(10)
+  })
+  it('takes over a lock left by a dead process', async () => {
+    const root = makeTempDir('mr-offsets-')
+    roots.push(root)
+    const lock = join(root, '.port-offsets.lock')
+    writeFileSync(lock, '999999999')
+    const old = new Date(Date.now() - 60000)
+    utimesSync(lock, old, old)
+    expect(await portOffsetFor('after-crash', root)).toBe(0)
+    expect(existsSync(lock)).toBe(false)
+  })
+  it('refuses a new lane when all offsets are saved', async () => {
+    const root = makeTempDir('mr-offsets-')
+    roots.push(root)
+    writeFileSync(join(root, 'port-offsets.json'), JSON.stringify(Object.fromEntries(Array.from({ length: 100 }, (_, i) => [`lane${i}`, i * 10]))))
+    await expect(portOffsetFor('extra', root)).rejects.toThrow('No free port offset is left; remove old lanes from port-offsets.json.')
+    expect(await portOffsetFor('lane0', root)).toBe(0)
   })
 })
 

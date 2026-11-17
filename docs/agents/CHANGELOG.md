@@ -2,7 +2,10 @@
 
 ## Unreleased
 
+- Port offsets are saved per lane in the runs folder, given lowest-free first, and never move.
 - Reviews caches each lane's entry on its head, base, status, brief, runs and the git cache generation.
+- Lane port offsets stay saved in the runs folder and new lanes take the lowest free offset.
+
 - Reviews asks for rewind state only for lanes with commits ahead or an open diff.
 - Review 51 (Sol): port offsets can still collide or move, and the badge seam fix has no guard test.
 - Cache each lane's review until its inputs or the Git cache change (P502).

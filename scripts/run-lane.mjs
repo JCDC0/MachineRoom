@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { spawn, spawnSync } from 'node:child_process'
 import { createHash, randomUUID } from 'node:crypto'
-import { appendFileSync, closeSync, constants, copyFileSync, createWriteStream, existsSync, fstatSync, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
+import { appendFileSync, closeSync, constants, copyFileSync, createWriteStream, existsSync, fstatSync, linkSync, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, realpathSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import { finished } from 'node:stream'
@@ -1124,10 +1124,57 @@ function gitText(cwd, args) {
   return String(result.stdout ?? '')
 }
 
-export function portOffsetFor(laneKey, keys = lanesInFile().map(([key]) => key).sort()) {
-  const index = keys.indexOf(String(laneKey))
-  if (index >= 0) return index * 10
-  return (createHash('sha256').update(String(laneKey)).digest().readUInt32BE(0) % 100) * 10
+export async function portOffsetFor(laneKey, folder = runsFolder()) {
+  mkdirSync(folder, { recursive: true })
+  const lock = join(folder, '.port-offsets.lock')
+  const candidate = join(folder, `.port-offsets.${randomUUID()}.tmp`)
+  writeFileSync(candidate, laneLockText({ pid: process.pid }))
+  const deadline = Date.now() + 10000
+  try {
+    while (true) {
+      try {
+        linkSync(candidate, lock)
+        break
+      } catch (error) {
+        if (error.code !== 'EEXIST') throw error
+        try {
+          const holder = readLaneLock(lock).pid
+          if (!processAlive(holder) && Date.now() - statSync(lock).mtimeMs > 5000) {
+            rmSync(lock, { force: true })
+            continue
+          }
+        } catch {}
+        if (Date.now() >= deadline) throw new Error('Could not take the port offset lock. Check .port-offsets.lock in the runs folder.')
+        await new Promise((resolve) => setTimeout(resolve, 20))
+      }
+    }
+  } finally {
+    rmSync(candidate, { force: true })
+  }
+  const path = join(folder, 'port-offsets.json')
+  try {
+    let offsets = {}
+    try {
+      offsets = JSON.parse(readFileSync(path, 'utf8'))
+    } catch (error) {
+      if (error.code !== 'ENOENT') throw error
+    }
+    if (Object.hasOwn(offsets, laneKey)) return offsets[laneKey]
+    const used = new Set(Object.values(offsets))
+    let offset = 0
+    while (offset < 1000 && used.has(offset)) offset += 10
+    if (offset === 1000) throw new Error('No free port offset is left; remove old lanes from port-offsets.json.')
+    const temp = `${path}.${randomUUID()}.tmp`
+    try {
+      writeFileSync(temp, `${JSON.stringify({ ...offsets, [laneKey]: offset }, null, 2)}\n`)
+      renameSync(temp, path)
+    } finally {
+      rmSync(temp, { force: true })
+    }
+    return offset
+  } finally {
+    releaseLaneLock(lock)
+  }
 }
 
 function checkpointFor(folder) {
@@ -2224,7 +2271,7 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
     ]
       .filter((name) => typeof process.env[name] === 'string' && process.env[name] !== '')
     const endpoints = readEndpoints(runsDir)
-    const extra = { ...command.env, MACHINEROOM_PORT_OFFSET: String(portOffsetFor(options.lane)) }
+    const extra = { ...command.env, MACHINEROOM_PORT_OFFSET: String(await portOffsetFor(options.lane, runsDir)) }
     if (typeof laneTicket === 'string' && laneTicket.trim() !== '') extra.MACHINEROOM_LANE_TICKET = laneTicket.trim()
     if (lane.cli.harness === 'machineroom' && Number.isFinite(Number(options?.minutes))) {
       extra.MR_AGENT_MINUTES = String(options.minutes)
