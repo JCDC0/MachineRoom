@@ -5,6 +5,7 @@ import Transport, { OrchestratorsContext, openConversation } from './Transport.j
 import { useDialogFocus } from './dialogFocus.js'
 import { useLogFollow } from './logScroll.js'
 import ControlDrawer from './panels/ControlDrawer.jsx'
+import PanelBoundary from './panels/PanelBoundary.jsx'
 import AgentDock from './AgentDock.jsx'
 import Assistant from './Assistant.jsx'
 import Guide from './Guide.jsx'
@@ -908,6 +909,7 @@ export default function Hud({
             </nav>
           </div>
           {logOpen && (
+            <PanelBoundary label="Log">
             <aside id="hud-log-drawer" className="hud-log" aria-label="Event log">
               <header className="hud-log-header hud-header-strip">
                 <span className="hud-log-title">Event Log</span>
@@ -915,9 +917,11 @@ export default function Hud({
               </header>
               <EventLogBody entries={visibleLog} bodyRef={logFollow.ref} onScroll={logFollow.onScroll} />
             </aside>
+            </PanelBoundary>
           )}
         </div>
         <div className="hud-dock-context">
+          <PanelBoundary label="Inspector">
           <AgentDock
             agent={focused}
             working={workingAgent}
@@ -933,9 +937,11 @@ export default function Hud({
             onOpenChat={() => chatAvailable && setChatOpen(true)}
             onSaved={() => setOrchestratorNonce((value) => value + 1)}
           />
+          </PanelBoundary>
         </div>
         <div className="hud-dock-side">
           {settingsOpen && (
+            <PanelBoundary label="Settings">
             <Settings
               effects={effects}
               onChange={onSettingsChange}
@@ -944,6 +950,7 @@ export default function Hud({
               project={project}
               focusDirectApi={settingsDirectApi}
             />
+            </PanelBoundary>
           )}
           <div id="hud-dock-costs" className="hud-dock-costs" />
         </div>
@@ -969,7 +976,7 @@ export default function Hud({
         />
       )}
 
-      {!wide && inspector}
+      {!wide && <PanelBoundary label="Inspector">{inspector}</PanelBoundary>}
 
       {wide && (
         <Transport
@@ -986,7 +993,8 @@ export default function Hud({
 
       {wide && settingsOpen && (
         <div className="hud-dropdown is-settings">
-          <Settings
+          <PanelBoundary label="Settings">
+            <Settings
             effects={effects}
             onChange={onSettingsChange}
             onClose={() => setSettingsOpen(false)}
@@ -994,10 +1002,12 @@ export default function Hud({
             project={project}
             focusDirectApi={settingsDirectApi}
           />
+          </PanelBoundary>
         </div>
       )}
 
       {wide && logOpen && (
+        <PanelBoundary label="Log">
         <aside id="hud-log-drawer" className="hud-dropdown hud-log" aria-label="Event log">
           <header className="hud-log-header hud-header-strip">
             <span className="hud-log-title">Event Log</span>
@@ -1008,11 +1018,13 @@ export default function Hud({
           </header>
           <EventLogBody entries={visibleLog} bodyRef={logFollow.ref} onScroll={logFollow.onScroll} />
         </aside>
+        </PanelBoundary>
       )}
 
       {wide && (
         <div className="hud-lower">
           <div className="hud-lower-left">
+            <PanelBoundary label="Sidebar">
             {sidebar ?? (
               <Sidebar
                 client={client}
@@ -1025,8 +1037,10 @@ export default function Hud({
                 }}
               />
             )}
+            </PanelBoundary>
           </div>
           <div className="hud-lower-main">
+            <PanelBoundary label="Conversation">
             {!laneChat && <p className="hud-lower-crumb mono">{lowerBreadcrumb(project, sessionTitle)}</p>}
             {laneChat ? (
               <LaneConversation
@@ -1084,8 +1098,10 @@ export default function Hud({
                 </div>
               </div>
             )}
+            </PanelBoundary>
           </div>
           <div className="hud-lower-right">
+            <PanelBoundary label="Inspector">
             {inspector ?? (
               <div className="hud-lower-detail">
                 <AgentDock
@@ -1107,6 +1123,7 @@ export default function Hud({
                 />
               </div>
             )}
+            </PanelBoundary>
             <div className="hud-lower-costs">
               <div id="hud-dock-costs" className="hud-dock-costs" />
             </div>
@@ -1141,6 +1158,7 @@ export default function Hud({
               Close
             </button>
           </header>
+          <PanelBoundary label="Sidebar">
           <Sidebar
             client={client}
             live={mode === 'live'}
@@ -1151,6 +1169,7 @@ export default function Hud({
               toggleSettings()
             }}
           />
+          </PanelBoundary>
         </div>
       )}
 
@@ -1201,6 +1220,7 @@ export default function Hud({
       <Launcher client={client} live={mode === 'live'} />
 
       {!chatAvailable && (
+        <PanelBoundary label="Assistant">
         <Assistant
           context={context}
           onAction={onAssistantAction}
@@ -1209,9 +1229,11 @@ export default function Hud({
           askAssistant={askAssistant}
           initialOpen={assistantOpen}
         />
+        </PanelBoundary>
       )}
 
       {client && laneChat && !wide && (
+        <PanelBoundary label="Conversation">
         <LaneConversation
           client={client}
           lane={laneChat.lane}
@@ -1226,9 +1248,11 @@ export default function Hud({
             setChatOpen(true)
           }}
         />
+        </PanelBoundary>
       )}
 
       {client && chatAvailable && floatingChat && !laneChat && (
+        <PanelBoundary label="Conversation">
         <OrchestratorChat
           client={client}
           open={chatOpen}
@@ -1237,6 +1261,7 @@ export default function Hud({
           onSelect={setChatTab}
           onClose={() => setChatOpen(false)}
         />
+        </PanelBoundary>
       )}
     </div>
   )
