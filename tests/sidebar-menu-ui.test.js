@@ -465,15 +465,15 @@ describe('the conversation list', () => {
       await mount(root, makeClient())
 
       expect(titles(container)).toEqual(['Live one', 'Beta', 'Alpha', 'Zulu'])
-      await click(root, buttonWithText(container, 'Oldest'))
+      await type(root, container.querySelector('.mr-side-sort').querySelector('select'), 'oldest')
       expect(titles(container)).toEqual(['Live one', 'Beta', 'Zulu', 'Alpha'])
       expect(dom.window.localStorage.getItem('machineroom.sessionSort')).toBe('oldest')
 
-      await click(root, buttonWithText(container, 'Name'))
+      await type(root, container.querySelector('.mr-side-sort').querySelector('select'), 'name')
       expect(titles(container)).toEqual(['Live one', 'Beta', 'Alpha', 'Zulu'])
       expect(dom.window.localStorage.getItem('machineroom.sessionSort')).toBe('name')
 
-      await click(root, buttonWithText(container, 'Newest'))
+      await type(root, container.querySelector('.mr-side-sort').querySelector('select'), 'newest')
       expect(titles(container)).toEqual(['Live one', 'Beta', 'Alpha', 'Zulu'])
       expect(dom.window.localStorage.getItem('machineroom.sessionSort')).toBe('newest')
     })
