@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Six findings: R53-1 to R53-6.
 - Harnesses tracks edited fields; a background reload or another save keeps unsaved drafts.
 - The Harnesses settings keep the owner's unsaved edits when a background notice reloads; saving one field clears only its own draft.
 
