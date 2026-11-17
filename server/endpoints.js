@@ -374,14 +374,19 @@ export function createEndpointsApi(options = {}) {
   const pending = new Map()
   const failed = new Map()
 
-  function saveFetched(endpoint, fetched) {
+  function saveFetched(endpoint, fetched, preserveModels = false) {
     const current = readEndpoints(runsDir)
     const currentEndpoint = current.find((entry) => entry.name === endpoint.name)
     if (!currentEndpoint || ['provider', 'baseUrl', 'keyName'].some ( (field) => currentEndpoint[field] !== endpoint[field])) return null
     if (Array.isArray(fetched.modelDetails)) {
       const details = [...new Map(fetched.modelDetails.map((detail) => [detail.id, detail])).values()].slice(0, MAX_ENDPOINT_MODELS)
-      currentEndpoint.models = details.map((detail) => detail.id)
-      currentEndpoint.modelDetails = details
+      if (preserveModels) {
+        const allowed = new Set(currentEndpoint.models)
+        currentEndpoint.modelDetails = [...new Map([...currentEndpoint.modelDetails, ...details.filter((detail) => allowed.has(detail.id))].map((detail) => [detail.id, detail])).values()]
+      } else {
+        currentEndpoint.models = details.map((detail) => detail.id)
+        currentEndpoint.modelDetails = details
+      }
       saveEndpoints(runsDir, current)
     }
     return currentEndpoint
@@ -400,7 +405,7 @@ export function createEndpointsApi(options = {}) {
         const key = endpoint.keyName ? await readKey(runsDir, endpoint.keyName) : ''
         if (endpoint.keyName && !key) throw new Error('Missing key')
         const fetched = await fetchEndpointModelList(endpoint, key, { fetchImpl, timeoutMs })
-        if (fetched.error || !saveFetched(endpoint, fetched)) throw new Error('Fetch failed')
+        if (fetched.error || !saveFetched(endpoint, fetched, true)) throw new Error('Fetch failed')
         if (typeof notify === 'function') { notify({ topic: 'endpoints' }); notify({ topic: 'family' }) }
         return true
       } catch {
