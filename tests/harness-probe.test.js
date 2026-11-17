@@ -1,10 +1,15 @@
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { userInfo } from 'node:os'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createAgentsConfigApi } from '../server/agents-config.js'
 import { PROBE_RUNNING_PROBLEM, probeHarness } from '../server/harness-probe.js'
 import { makeTempDir } from './helpers/tempRoot.js'
+
+vi.mock('node:fs', async (importOriginal) => {
+  const fs = await importOriginal()
+  return { ...fs, mkdtempSync: vi.fn(fs.mkdtempSync) }
+})
 
 let runs
 const PRINT_OK = `console.log(JSON.stringify({ type: 'result', result: 'OK' }))`
@@ -22,6 +27,13 @@ beforeEach(() => {
 afterEach(() => rmSync(runs, { recursive: true, force: true }))
 
 describe('probeHarness', () => {
+  it('releases the harness when making the temporary folder fails', async () => {
+    fakeProgram('retry.mjs', PRINT_OK)
+    vi.mocked(mkdtempSync).mockImplementationOnce(() => { throw new Error('disk full') })
+    await expect(probeHarness('claude', { runsFolder: runs })).rejects.toThrow('disk full')
+    expect((await probeHarness('claude', { runsFolder: runs })).body.status).toBe('reached')
+  })
+
   it('reaches a harness whose reply says OK', async () => {
     fakeProgram('ok.mjs', PRINT_OK)
     const { status, body } = await probeHarness('claude', { runsFolder: runs })

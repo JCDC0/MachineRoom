@@ -549,6 +549,12 @@ export function createEndpointsApi(options = {}) {
         notify({ topic: 'endpoints' })
       }
       const fetched = await fetchEndpointModelList(endpoint, key, { fetchImpl, timeoutMs })
+      const current = readEndpoints(runsDir)
+      const currentEndpoint = current.find((entry) => entry.name === endpoint.name)
+      if (!currentEndpoint || ['provider', 'baseUrl', 'keyName'].some((field) => currentEndpoint[field] !== endpoint[field])) {
+        sendJson(req, res, 409, { error: 'The endpoint was deleted or its connection settings changed while models were loading. No models were saved.' })
+        return true
+      }
       if (Array.isArray(fetched.modelDetails)) {
         const seen = new Set()
         const models = []
@@ -560,9 +566,9 @@ export function createEndpointsApi(options = {}) {
           details.push(detail)
           if (models.length >= MAX_ENDPOINT_MODELS) break
         }
-        endpoint.models = models
-        endpoint.modelDetails = details
-        saveEndpoints(runsDir, endpoints)
+        currentEndpoint.models = models
+        currentEndpoint.modelDetails = details
+        saveEndpoints(runsDir, current)
       }
       const answer = {
         endpoint: {
@@ -570,7 +576,7 @@ export function createEndpointsApi(options = {}) {
           provider: endpoint.provider,
           baseUrl: endpoint.baseUrl,
           keyName: endpoint.keyName,
-          models: endpoint.models.length,
+          models: currentEndpoint.models.length,
         },
       }
       if (fetched.error) answer.error = fetched.error

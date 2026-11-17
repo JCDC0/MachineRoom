@@ -77,10 +77,11 @@ export async function probeHarness(key, { runsFolder, lanes = {}, env = process.
   const program = key === 'machineroom' ? '' : resolveHarnessProgram(key, { runsFolder, lanes, env, platform })
   if (!available || (key !== 'machineroom' && !program)) return { status: 409, error: harnessUnavailableProblem(key) }
   if (running.has(key)) return { status: 409, error: PROBE_RUNNING_PROBLEM }
-  running.add(key)
-  const folder = mkdtempSync(join(tmpdir(), 'machineroom-probe-'))
+  let folder
   const started = Date.now()
   try {
+    running.add(key)
+    folder = mkdtempSync(join(tmpdir(), 'machineroom-probe-'))
     const model = key === 'machineroom' ? directModel(runsFolder, lanes) : ''
     if (key === 'machineroom' && !model) return { status: 200, body: { key, status: 'unknown', line: PROBE_DIRECT_PROBLEM, seconds: 0 } }
     let mcpConfig = ''
@@ -103,6 +104,6 @@ export async function probeHarness(key, { runsFolder, lanes = {}, env = process.
     return { status: 200, body: { key, status, line, seconds } }
   } finally {
     running.delete(key)
-    rmSync(folder, { recursive: true, force: true })
+    if (folder) rmSync(folder, { recursive: true, force: true })
   }
 }
