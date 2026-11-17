@@ -70,7 +70,7 @@ export default function HarnessesSettings({ client }) {
 
   useDialogFocus(Boolean(confirm), {
     containerRef: confirmRef,
-    openerSelector: '.hud-settings-section[aria-label="Harnesses"] button',
+    openerSelector: 'mr-harness-confirm',
     trap: true,
   })
 
@@ -463,6 +463,7 @@ export default function HarnessesSettings({ client }) {
                     type="button"
                     className="hud-settings-switch"
                     disabled={busy || draft.trim() === ''}
+                    aria-controls="mr-harness-confirm"
                     onClick={() =>
                       setConfirm(
                         harnessConfirmSpec({
@@ -504,6 +505,7 @@ export default function HarnessesSettings({ client }) {
                     type="button"
                     role="switch"
                     aria-checked={row.enabled}
+                    aria-controls="mr-harness-confirm"
                     aria-label={`Offer ${name} in forms`}
                     className={row.enabled ? 'hud-settings-switch is-on' : 'hud-settings-switch'}
                     disabled={busy}
@@ -516,6 +518,7 @@ export default function HarnessesSettings({ client }) {
                       type="button"
                       className="hud-settings-switch"
                       disabled={busy || probes[row.key]?.running}
+                      aria-controls="mr-harness-confirm"
                       onClick={() =>
                         setConfirm({
                           kind: 'probe',
@@ -563,6 +566,7 @@ export default function HarnessesSettings({ client }) {
       {confirm ? (
         <div
           ref={confirmRef}
+          id="mr-harness-confirm"
           className="mr-side-confirm"
           role="dialog"
           aria-modal="true"

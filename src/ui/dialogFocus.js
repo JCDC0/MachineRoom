@@ -21,7 +21,13 @@ export function useDialogFocus(open, { containerRef = null, getInitialFocus = nu
     if (!open || typeof document === 'undefined') return undefined
     const container = containerRef?.current ?? null
     const active = document.activeElement ?? null
-    const named = openerSelector ? document.querySelector?.(`[aria-controls="${openerSelector}"]`) : null
+    let named = null
+    try {
+      const id = globalThis.CSS?.escape ? globalThis.CSS.escape(openerSelector) : openerSelector
+      named = openerSelector ? document.querySelector?.(`[aria-controls="${id}"]`) : null
+    } catch {
+      named = null
+    }
     openerRef.current =
       openerSelector && active?.getAttribute?.('aria-controls') === openerSelector ? active : named || active
     const first = focusableIn(container)[0] ?? container
