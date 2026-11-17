@@ -1298,13 +1298,14 @@ summary:focus-visible,
 }
 
 .strip-pop.is-modes {
-  min-width: 280px;
+  min-width: max-content;
 }
 
 .mr-mode-choice {
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
+  flex-direction: row;
+  align-items: center;
+  white-space: nowrap;
+  gap: 0;
   width: 100%;
 }
 
@@ -5829,7 +5830,8 @@ body:has(#hud-orchestrator-chat) .lens-waiting {
   display: flex;
   align-items: center;
   gap: var(--space);
-  font-size: 12px;
+  font-size: 10px;
+  color: rgb(255 255 255 / 0.55);
   letter-spacing: 0.02em;
   overflow-wrap: anywhere;
 }
@@ -5842,7 +5844,7 @@ body:has(#hud-orchestrator-chat) .lens-waiting {
 }
 
 .mr-orch-status.is-working {
-  color: var(--yellow);
+  color: rgb(255 255 255 / 0.55);
 }
 
 .mr-orch-status.is-working .mr-orch-dot {
@@ -5850,7 +5852,7 @@ body:has(#hud-orchestrator-chat) .lens-waiting {
 }
 
 .mr-orch-status.is-waiting {
-  color: var(--white);
+  color: rgb(255 255 255 / 0.55);
 }
 
 .mr-orch-status.is-waiting .mr-orch-dot {
@@ -5858,7 +5860,7 @@ body:has(#hud-orchestrator-chat) .lens-waiting {
 }
 
 .mr-orch-status.is-paused {
-  color: var(--red);
+  color: rgb(255 255 255 / 0.55);
 }
 
 .mr-orch-status.is-paused .mr-orch-dot {

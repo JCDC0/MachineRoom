@@ -762,6 +762,8 @@ describe('message actions', () => {
         toSelect.dispatchEvent({ type: 'change', bubbles: true })
       })
       expect(toSelect.value).toBe('opencode')
+      expect(container.querySelector('[aria-label="OpenCode conversation"]')).not.toBeNull()
+      await click(root, buttonWithText(container, 'Back'))
       const lines = container.querySelectorAll('.mr-orch-line')
       await click(root, buttonWithText(lines[5], 'Retry'))
       expect(calls).toEqual([{ text: 'Third', options: {} }])
@@ -1208,6 +1210,39 @@ describe('talking to a lane and seeing agent messages', () => {
     expect(html).toContain('Tests fixed and passing.')
   })
 
+  it('shows the newest lane run and sends through the lane task path', async () => {
+    const chat = { state: 'idle', messages: [] }
+    const lanes = [{ key: 'opencode', name: 'OpenCode', cli: { bin: 'opencode' } }]
+    const calls = []
+    const client = { ...fakeClient(chat),
+      runs: async () => ({ recent: [{ lane: 'opencode', startedAt: '2026-11-17T10:00:00Z' }, { lane: 'opencode', startedAt: '2026-11-16T10:00:00Z' }] }),
+      runConversation: async ({ startedAt }) => ({ running: false, entries: [{ role: 'agent', text: startedAt }] }),
+      sendOrchestrator: async (text, options) => { calls.push({ text, options }) },
+    }
+    await withDom(async ({ container, root }) => {
+      await act(async () => { root.render(createElement(OrchestratorChat, { client, inline: true, lanes, initialChat: chat, initialRecipient: 'opencode' })) })
+      await act(async () => {})
+      expect(container.textContent).toContain('2026-11-17T10:00:00Z')
+      expect(container.querySelector('textarea').getAttribute('placeholder')).toBe('Message OpenCode')
+      await type(root, container.querySelector('textarea'), 'Build it')
+      await act(async () => { container.querySelector('form').dispatchEvent({ type: 'submit', bubbles: true, cancelable: true }) })
+      expect(calls).toEqual([{ text: 'Build it', options: { id: 'opencode', worktree: true } }])
+    })
+  })
+
+  it('explains an empty lane and returns to the orchestrator', async () => {
+    const chat = { state: 'idle', messages: [] }
+    const lanes = [{ key: 'opencode', name: 'OpenCode', cli: { bin: 'opencode' } }]
+    const client = { ...fakeClient(chat), runs: async () => ({ running: [], recent: [] }) }
+    await withDom(async ({ container, root }) => {
+      await act(async () => { root.render(createElement(OrchestratorChat, { client, lanes, initialChat: chat, initialRecipient: 'opencode' })) })
+      await act(async () => {})
+      expect(container.textContent).toContain('The lane opencode has no run that can read a message now.')
+      await click(root, buttonWithText(container, 'Back'))
+      expect(container.querySelector('[aria-label="Orchestrator chat"]')).not.toBeNull()
+    })
+  })
+
   it('refuses sending to a busy lane with the sentence', async () => {
     const chat = { state: 'idle', messages: [] }
     const lanes = [{ key: 'opencode', name: 'OpenCode', cli: { bin: 'opencode' } }]
@@ -1321,9 +1356,9 @@ describe('talking to a lane and seeing agent messages', () => {
         await act(async () => {})
 
         expect(container.querySelectorAll('.mr-orch-line.is-agent')).toHaveLength(1)
-        const toggle = container.querySelector('.mr-orch-toggle-input')
+        const toggle = buttonWithText(container, 'Agent messages')
         expect(toggle).not.toBeNull()
-        expect(toggle.checked).toBe(true)
+        expect(toggle.getAttribute('aria-pressed')).toBe('true')
 
         await click(root, toggle)
         expect(container.querySelectorAll('.mr-orch-line.is-agent')).toHaveLength(0)
@@ -1574,7 +1609,7 @@ describe('OrchestratorChat panel', () => {
     expect(html).toContain('class="mr-orch-line is-room"')
     expect(html).toContain('>room</span>')
     expect(html).toContain('What name?\nLine two')
-    expect(html).toContain('Orchestrator is working')
+    expect(html).toContain('>Working')
     expect(html).toContain('maxLength="8000"')
     expect(html).toContain('Enter sends. Shift+Enter adds a line.')
     expect(html).toContain('>Send</button>')
@@ -1751,7 +1786,8 @@ describe('OrchestratorChat panel', () => {
         activity: 'npm test',
       })
     )
-    expect(withProp).toContain('Orchestrator is working: npm test')
+    expect(withProp).toContain('>Working')
+    expect(withProp).not.toContain('npm test')
 
     const withRoom = renderToString(
       createElement(
@@ -1760,7 +1796,8 @@ describe('OrchestratorChat panel', () => {
         createElement(OrchestratorChat, { open: true, client: fakeClient(chat), initialChat: chat })
       )
     )
-    expect(withRoom).toContain('Orchestrator is working: npm run build')
+    expect(withRoom).toContain('>Working')
+    expect(withRoom).not.toContain('npm run build')
   })
 
   it('shows the confirm card with the exact first message before the first send', () => {
@@ -1994,7 +2031,7 @@ describe('OrchestratorChat panel', () => {
       })
     )
     expect(html).toContain('7001 / 8000')
-    expect(html).toContain('Orchestrator is waiting for you')
+    expect(html).toContain('>Waiting for you')
   })
 
   it('draws a tab per orchestrator with Main first and a state dot', () => {
@@ -2053,7 +2090,7 @@ describe('OrchestratorChat panel', () => {
     expect(html).toContain('aria-pressed="true"')
     expect(html).not.toContain('>Attach</button>')
     expect(html).not.toContain('aria-label="Detach Frontend"')
-    expect(html).toContain('Orchestrator is working')
+    expect(html).toContain('>Working')
   })
 
   it('adds a read-only Team view after the sub tabs', () => {

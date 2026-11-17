@@ -1,11 +1,11 @@
 export const ASK_READY = true
 
 export const MODES = [
-  { id: 'plan', label: 'Plan', line: 'Reads and plans. Makes no edits and runs no commands.' },
-  { id: 'ask', label: 'Ask', line: 'Asks before every write or command. An outside write needs your Allow.' },
-  { id: 'edits', label: 'Edits', line: 'Edits files. Writes stay in the project. Runs no commands.' },
-  { id: 'auto', label: 'Auto', line: 'Edits files and runs commands. Writes stay in the project. The harness guards risky ones.' },
-  { id: 'bypass', label: 'Bypass', line: 'Allows every edit and command. It can write anywhere.' },
+  { id: 'plan', label: 'Plan', line: 'Reads and plans. No edits or commands.' },
+  { id: 'ask', label: 'Ask', line: 'Asks before each edit or command.' },
+  { id: 'edits', label: 'Edits', line: 'Edits in the project. No commands.' },
+  { id: 'auto', label: 'Auto', line: 'Edits and runs commands in the project.' },
+  { id: 'bypass', label: 'Bypass', line: 'Edits and runs anything, anywhere.' },
 ]
 
 const LISTS = {
@@ -19,10 +19,10 @@ const LISTS = {
 
 const LINES = {
   acp: {
-    auto: 'Allows reads and edits inside the project; refuses commands.',
+    auto: 'Reads and edits in the project. No commands.',
   },
   codex: {
-    edits: 'Edits files and can run commands inside its workspace sandbox. Codex has no edits-only mode.',
+    edits: 'Edits and runs commands in its sandbox.',
   },
 }
 

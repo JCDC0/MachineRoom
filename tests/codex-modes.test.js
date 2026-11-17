@@ -22,11 +22,11 @@ describe('the Codex permission modes', () => {
   })
 
   it('says Edits can run commands inside its workspace sandbox', () => {
-    expect(editsLine('codex')).toBe('Edits files and can run commands inside its workspace sandbox. Codex has no edits-only mode.')
+    expect(editsLine('codex')).toBe('Edits and runs commands in its sandbox.')
   })
 
   it('keeps Claude Code on the shared Edits line', () => {
-    expect(editsLine('claude')).toBe('Edits files. Writes stay in the project. Runs no commands.')
+    expect(editsLine('claude')).toBe('Edits in the project. No commands.')
     expect(editsLine('codex')).not.toBe(editsLine('claude'))
   })
 
