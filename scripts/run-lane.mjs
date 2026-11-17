@@ -68,8 +68,27 @@ export function appendRunRecord(record, { env = process.env, print = console.log
       mkdirSync(folder, { recursive: true })
       print(`The runs folder was gone; made it again at ${printedRunsFolder(folder, env)}.`)
     }
-    const line = typeof record === 'string' ? record : JSON.stringify(record)
-    write(targetFile, `${line.endsWith('\n') ? line : `${line}\n`}`)
+    let lock
+    const deadline = Date.now() + 10000
+    while (!lock) {
+      try { lock = takeLaneLock(folder, '.runs-append') } catch (error) {
+        if (Date.now() >= deadline) throw error
+        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 20)
+      }
+    }
+    try {
+      const line = typeof record === 'string' ? record : JSON.stringify(record)
+      let prefix = ''
+      if (existsSync(targetFile)) {
+        const fd = openSync(targetFile, 'r')
+        try {
+          const size = fstatSync(fd).size
+          const last = Buffer.alloc(1)
+          if (size && readSync(fd, last, 0, 1, size - 1) && last[0] !== 10) prefix = '\n'
+        } finally { closeSync(fd) }
+      }
+      write(targetFile, `${prefix}${line.endsWith('\n') ? line : `${line}\n`}`)
+    } finally { releaseLaneLock(lock) }
     return true
   } catch (error) {
     recordFailed = true
@@ -1133,16 +1152,22 @@ export async function portOffsetFor(laneKey, folder = runsFolder()) {
   try {
     while (true) {
       try {
-        linkSync(candidate, lock)
+        const guard = takeLaneLock(folder, '.port-offsets-takeover')
+        try { linkSync(candidate, lock) } finally { releaseLaneLock(guard) }
         break
       } catch (error) {
-        if (error.code !== 'EEXIST') throw error
+        if (error.code && error.code !== 'EEXIST') throw error
         try {
-          const holder = readLaneLock(lock).pid
-          if (!processAlive(holder) && Date.now() - statSync(lock).mtimeMs > 5000) {
-            rmSync(lock, { force: true })
-            continue
-          }
+          const guard = takeLaneLock(folder, '.port-offsets-takeover')
+          try {
+            const holder = readLaneLock(lock).pid
+            if (!processAlive(holder) && Date.now() - statSync(lock).mtimeMs > 5000) {
+              const claimed = `${lock}.${randomUUID()}.stale`
+              renameSync(lock, claimed)
+              if (readLaneLock(claimed).pid === holder && !processAlive(holder)) rmSync(claimed, { force: true })
+              else if (!existsSync(lock)) renameSync(claimed, lock)
+            }
+          } finally { releaseLaneLock(guard) }
         } catch {}
         if (Date.now() >= deadline) throw new Error('Could not take the port offset lock. Check .port-offsets.lock in the runs folder.')
         await new Promise((resolve) => setTimeout(resolve, 20))
@@ -1431,17 +1456,19 @@ export function quotaForRun({ harness, log, env = process.env, startedAt = Date.
   return { windows: reading.windows, at: new Date(now).toISOString() }
 }
 
-function captureToolLines(file, sessionId, logPath) {
+export function captureToolLines(file, sessionId, logPath, secrets = [], exportSession = spawnSync) {
   if (!sessionId) return { count: 0, session: '' }
-  const result = spawnSync(file, ['sessions', 'export', '--session-id', String(sessionId), '--format', 'jsonl', '-'], {
+  const result = exportSession(file, ['sessions', 'export', '--session-id', String(sessionId), '--format', 'jsonl', '-'], {
     encoding: 'utf8',
     windowsHide: true,
     timeout: 120000,
     maxBuffer: 64 * 1024 * 1024,
   })
   if (result.error || result.status !== 0) return { count: 0, session: '' }
-  const session = String(result.stdout ?? '')
-  const lines = sessionToolLines(session)
+  let session = maskKeys(String(result.stdout ?? '')).text
+  for (const secret of secrets) if (secret) session = session.split(secret).join('[key]')
+  session = session.replace(/(MACHINEROOM_API_KEY\s*[:=]\s*)[^\s'"\\]+/gi, '$1[key]')
+  const lines = sessionToolLines(session).map((line) => maskKeys(line).text.replace(/(MACHINEROOM_API_KEY\s*[:=]\s*['"]?)[^\s'"]+/gi, '$1[key]'))
   if (lines.length === 0) return { count: 0, session }
   appendFileSync(logPath, `\n${lines.join('\n')}\n`)
   return { count: lines.length, session }
@@ -2178,6 +2205,10 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
     const prevRecordsFile = join(runsDir, 'runs.jsonl')
     const prev = findRunRecordByName(readRecords(prevRecordsFile), continueFrom)
     if (!prev) throw new Error(`There is no run named ${continueFrom}.`)
+    if (prev.record.lane !== options.lane) throw new Error('The interrupted run has a different lane.')
+    if (Boolean(prev.record.project) !== Boolean(project)) throw new Error('The interrupted run has a different project kind.')
+    if (JSON.stringify(prev.record.briefs ?? []) !== JSON.stringify(project ? [] : wanted.map((brief) => brief.id))) throw new Error('The interrupted run has different brief ids.')
+    if (!project && gitRead(lane.worktree, ['branch', '--show-current']) !== String(prev.record.branch ?? '').trim()) throw new Error('The interrupted run worktree is on a different branch.')
     if (typeof prev.record.base === 'string' && prev.record.base.trim() !== '') continuedBase = prev.record.base.trim()
     if (typeof prev.record.branch === 'string' && prev.record.branch.trim() !== '') continuedBranch = prev.record.branch.trim()
     const interrupt = interruptFileText(runsDir, continueFrom)
@@ -2240,19 +2271,6 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
       } catch {}
     }
     log.on('error', onLogError)
-    const laneLog = createLaneLog({
-      write: (text) => {
-        if (logBroken) return
-        try {
-          log.write(text)
-        } catch (error) {
-          onLogError(error)
-        }
-      },
-      runId: name,
-    })
-    const setupLine = typeof worktreeSetup === 'string' ? worktreeSetup.trim() : ''
-    if (setupLine !== '') laneLog.push('stdout', `${setupLine}\n`)
     const startedAt = Number.isFinite(Number(givenStartedAt)) && Number(givenStartedAt) > 0 ? Number(givenStartedAt) : Date.now()
     const projectStart = project
       ? {
@@ -2283,6 +2301,21 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
       model: lane.cli.model,
       endpoints,
     })
+    const secrets = Object.entries(childEnv).filter(([key]) => /key|ticket|token|secret/i.test(key)).map(([, value]) => String(value ?? '')).filter((value) => value.length >= 8)
+    const laneLog = createLaneLog({
+      write: (text) => {
+        if (logBroken) return
+        try {
+          log.write(text)
+        } catch (error) {
+          onLogError(error)
+        }
+      },
+      runId: name,
+      secrets,
+    })
+    const setupLine = typeof worktreeSetup === 'string' ? worktreeSetup.trim() : ''
+    if (setupLine !== '') laneLog.push('stdout', `${setupLine}\n`)
     const child = spawn(spawnSpec.file, spawnSpec.args, { cwd: command.cwd, env: childEnv, stdio: spawnSpec.input ? ['pipe', 'pipe', 'pipe'] : ['ignore', 'pipe', 'pipe'], windowsHide: true })
     if (typeof onStart === 'function') onStart()
     const lockStart = queue && lockPath ? laneLockStartedAt(lockText(lockPath)) || startedAt : startedAt
@@ -2471,7 +2504,7 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
     let toolLines = { count: 0, session: '' }
     if (harness === 'hermes') {
       printUsage(usageFile)
-      toolLines = captureToolLines(command.file, report?.session_id, logPath)
+      toolLines = captureToolLines(command.file, report?.session_id, logPath, secrets)
       console.log(`tool lines: ${toolLines.count}`)
     }
 

@@ -108,6 +108,16 @@ describe('port offset', () => {
     expect(await portOffsetFor('after-crash', root)).toBe(0)
     expect(existsSync(lock)).toBe(false)
   })
+  it('serializes two requests after a stale port lock', async () => {
+    const root = makeTempDir('mr-offsets-')
+    roots.push(root)
+    const lock = join(root, '.port-offsets.lock')
+    writeFileSync(lock, '999999999')
+    const old = new Date(Date.now() - 60000)
+    utimesSync(lock, old, old)
+    expect((await Promise.all([portOffsetFor('first', root), portOffsetFor('second', root)])).sort((a, b) => a - b)).toEqual([0, 10])
+    expect(existsSync(lock)).toBe(false)
+  })
   it('refuses a new lane when all offsets are saved', async () => {
     const root = makeTempDir('mr-offsets-')
     roots.push(root)

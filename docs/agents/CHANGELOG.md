@@ -2,10 +2,15 @@
 
 ## Unreleased
 
+- Hermes tool lines and child credentials are masked in run logs, --continue-from checks lane, briefs, kind and branch, torn record tails stay apart, and stale port lock takeover is guarded.
 - Assistant reads storage through the guarded helper; the Log, Inspector and Settings have their own boundaries, and the whole room has a Reload fallback.
 - Denied storage keeps the room open, and render faults stay in their HUD part or show a room reload.
 
 - Sweep S2 (Sol): four page findings, one high (denied storage blanks the room).
+- Lane logs and Hermes exports mask child credentials and native key assignments.
+- Continuations check the saved lane, briefs, project kind and branch before starting.
+- Run record appends lock the file and separate a torn tail from the next record.
+- Stale port locks are claimed under a takeover guard before removal.
 - Sweep S3 (Sol): six findings in the lane runner, three high.
 - Tests now fail if the Control count leaves the lens seam selector or rule.
 - Port offsets are saved per lane in the runs folder, given lowest-free first, and never move.
