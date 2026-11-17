@@ -1,5 +1,5 @@
-import { readFile, stat } from 'node:fs/promises'
-import { extname, resolve, sep } from 'node:path'
+import { readFile, realpath, stat } from 'node:fs/promises'
+import { extname, isAbsolute, relative, resolve, sep } from 'node:path'
 
 const CONTENT_TYPES = {
   '.html': 'text/html; charset=utf-8',
@@ -15,6 +15,13 @@ const CONTENT_TYPES = {
   '.woff2': 'font/woff2',
   '.ico': 'image/x-icon',
   '.txt': 'text/plain; charset=utf-8',
+}
+
+export function isInsideRoot(root, target) {
+  const from = process.platform === 'win32' ? root.toLowerCase() : root
+  const to = process.platform === 'win32' ? target.toLowerCase() : target
+  const path = relative(from, to)
+  return path !== '..' && !path.startsWith(`..${sep}`) && !isAbsolute(path)
 }
 
 function sendNotFound(res) {
@@ -76,22 +83,38 @@ export function createStaticHandler({ staticDir } = {}) {
       return true
     }
     if (target.pathname.startsWith('/api/')) return false
-    if (target.pathname === '/') {
-      await sendFile(req, res, resolve(staticRoot, 'index.html'))
+    let realRoot
+    try {
+      realRoot = await realpath(staticRoot)
+    } catch {
+      sendNotFound(res)
       return true
     }
-    try {
-      const info = await stat(target.full)
-      if (info.isFile()) {
-        await sendFile(req, res, target.full)
-        return true
-      }
-    } catch {}
+    if (target.pathname !== '/') {
+      try {
+        const file = await realpath(target.full)
+        if (!isInsideRoot(realRoot, file)) {
+          sendNotFound(res)
+          return true
+        }
+        const info = await stat(file)
+        if (info.isFile()) {
+          await sendFile(req, res, file)
+          return true
+        }
+      } catch {}
+    }
     if (hasDot(target.pathname)) {
       sendNotFound(res)
       return true
     }
-    await sendFile(req, res, resolve(staticRoot, 'index.html'))
+    try {
+      const index = await realpath(resolve(realRoot, 'index.html'))
+      if (isInsideRoot(realRoot, index)) await sendFile(req, res, index)
+      else sendNotFound(res)
+    } catch {
+      sendNotFound(res)
+    }
     return true
   }
 }

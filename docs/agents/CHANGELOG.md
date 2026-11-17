@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Static and music files resolve real paths inside their roots, and music serves audio extensions only.
 - Sweep S1 (Sol): six bridge findings, one P1 (static and music follow links outside their roots).
 - Lane conversation reads take a sequence number and Reviews lists use latestOnly, so a slow older answer is dropped.
 - Hermes tool lines and child credentials are masked in run logs, --continue-from checks lane, briefs, kind and branch, torn record tails stay apart, and stale port lock takeover is guarded.
