@@ -147,6 +147,19 @@ describe('childEnvironment', () => {
 })
 
 describe('createLaneLog', () => {
+  it.each([
+    ['alone', (key) => [key], '[key]'],
+    ['across chunks', (key) => [key.slice(0, 9), key.slice(9)], '[key]'],
+    ['inside text', (key) => [`canary text ${key} end`], 'canary text [key] end'],
+  ])('masks a credential with a repeated prefix %s', (_label, parts, expected) => {
+    const chunks = []
+    const key = ['canary', 'ab', 'canary'].join('-')
+    const log = createLaneLog({ write: (text) => chunks.push(text), secrets: [key] })
+    for (const part of parts(key)) log.push('stdout', part)
+    log.flush()
+    expect(chunks.join('')).toBe(expected)
+  })
+
   it('masks the native credential and assignments across chunks', () => {
     const chunks = []
     const key = 'invented-canary-value'

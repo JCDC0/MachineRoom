@@ -1143,7 +1143,7 @@ function gitText(cwd, args) {
   return String(result.stdout ?? '')
 }
 
-export async function portOffsetFor(laneKey, folder = runsFolder()) {
+export async function portOffsetFor(laneKey, folder = runsFolder(), { beforeStaleRemove } = {}) {
   mkdirSync(folder, { recursive: true })
   const lock = join(folder, '.port-offsets.lock')
   const candidate = join(folder, `.port-offsets.${randomUUID()}.tmp`)
@@ -1162,6 +1162,7 @@ export async function portOffsetFor(laneKey, folder = runsFolder()) {
           try {
             const holder = readLaneLock(lock).pid
             if (!processAlive(holder) && Date.now() - statSync(lock).mtimeMs > 5000) {
+              beforeStaleRemove?.()
               const claimed = `${lock}.${randomUUID()}.stale`
               renameSync(lock, claimed)
               if (readLaneLock(claimed).pid === holder && !processAlive(holder)) rmSync(claimed, { force: true })

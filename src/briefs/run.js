@@ -918,7 +918,7 @@ export function createLaneLog({ write, runId = 'lane', holdMs, ticket, secrets =
 
   function scrub(stream, text) {
     if (values.length === 0) return text
-    const joined = (carries.get(stream) ?? '') + text
+    const joined = values.reduce((safe, secret) => safe.split(secret).join(KEY_MASK), (carries.get(stream) ?? '') + text)
     carries.delete(stream)
     let keep = 0
     for (const secret of values) {
@@ -931,7 +931,7 @@ export function createLaneLog({ write, runId = 'lane', holdMs, ticket, secrets =
       }
     }
     if (keep > 0) carries.set(stream, joined.slice(-keep))
-    return values.reduce((safe, secret) => safe.split(secret).join(KEY_MASK), keep > 0 ? joined.slice(0, -keep) : joined)
+    return keep > 0 ? joined.slice(0, -keep) : joined
   }
 
   function emit(result) {
