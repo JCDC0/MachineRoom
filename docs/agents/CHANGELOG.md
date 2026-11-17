@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- An orchestrator fetches missing model details when it loads and after a model or harness change, so the window shows before the first turn.
 - The window comes from the owner's setting, the harness's own report, or the endpoint's model details fetched once in the background; with none known the line shows tokens only.
 - The lane view asks the bridge for its own lane's runs and always has its newest one, the empty lane says No runs yet, and the footer list scrolls inside the lens.
 - The chat status sits on one line under the composer, agent messages is a toggle, modes read on one line, and To: a lane opens that lane's window.
