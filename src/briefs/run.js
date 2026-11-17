@@ -1292,7 +1292,7 @@ export function maskedQueueTasks(tasks) {
   return (Array.isArray(tasks) ? tasks : []).map((task) => maskProfilePaths(maskKeys(String(task ?? '')).text).slice(0, RECORD_TEXT_LIMIT))
 }
 
-export function runRecord({ lane, briefs, model, reasoning, mode, startedAt, finishedAt, minutes, exitCode, killed, costUsd, inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens, peakTokens, log, branch, commits, base, head, checkpoint, tests, project, task, startedBy, stoppedLeftovers, queue, startFailed, stopReason, note, retried, failover, failoverFrom, quota, continues, interruptedBy, repeatedFailure } = {}) {
+export function runRecord({ lane, briefs, model, reasoning, mode, startedAt, finishedAt, minutes, exitCode, killed, costUsd, inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens, peakTokens, log, branch, commits, base, head, checkpoint, tests, project, task, startedBy, stoppedLeftovers, queue, startFailed, stopReason, note, retried, failover, failoverFrom, quota, contextWindow, continues, interruptedBy, repeatedFailure } = {}) {
   const record = {
     lane: String(lane ?? ''),
     briefs: Array.isArray(briefs) ? briefs.map(String) : [],
@@ -1338,6 +1338,7 @@ export function runRecord({ lane, briefs, model, reasoning, mode, startedAt, fin
   if (typeof startedBy === 'string' && startedBy.trim() !== '') record.startedBy = startedBy.trim()
   if (typeof project === 'string' && project.trim() !== '') record.project = project
   if (typeof task === 'string' && task !== '') record.task = maskKeys(task).text.slice(0, RECORD_TEXT_LIMIT)
+  if (typeof contextWindow === 'number' && Number.isFinite(contextWindow) && contextWindow > 0) record.contextWindow = Math.round(contextWindow)
   const reading = quotaField(quota)
   if (reading !== null) record.quota = reading
   if (failover && typeof failover === 'object' && !Array.isArray(failover)) {

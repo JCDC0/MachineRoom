@@ -591,10 +591,8 @@ export default function Inspector({
               <Row label="Sandbox">{sandbox}</Row>
               <Row label="Task">{context.task}</Row>
               <Row label="Context">
-                {context.isOrchestrator
-                  ? context.context
-                    ? context.context.window ? `${context.context.percent}% ? ${context.context.tokens} of ${context.context.window} tokens` : `${context.context.tokens} tokens`
-                    : 'not reported'
+                {context.context
+                  ? context.context.window ? `${context.context.percent}% ? ${context.context.tokens} of ${context.context.window} tokens` : `${context.context.tokens} tokens`
                   : CONTEXT_NOT_REPORTED}
               </Row>
               {live && <Row label="Cost">{context.cost}</Row>}

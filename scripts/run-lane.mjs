@@ -11,6 +11,8 @@ import { commitAuthorFor, formatQueueSummary, parseQueue, parseQueueArgs, runQue
 import { maskKeys } from '../src/briefs/audit.js'
 import { briefProblems, briefWorktreeProblems, checkCommandLines, checkCommandProblem, childEnvironment, commandFor, createLaneLog, DEFAULT_MINUTES, fallbackProblem, failoverKind, filterRunsSince, formatOutcomes, formatStats, formatSummary, interruptSenderFrom, laneCommandProblem, laneLockStartedAt, laneLockText, laneModeProblem, laneStats, laneStopProblem, laneWithOverrides, limitedFor, maskProfilePaths, maskedQueueTasks, ORCHESTRATOR_LANE_PROBLEM, parseRunArgs, projectProblems, projectRunGit, readinessLine, retryStartProblem, runListLine, runRecord, sessionToolLines, splitCheckCommand, startFailureText, summarizeRun, unattendedPrompt, worktreeFor, WORKTREES_FOLDER } from '../src/briefs/run.js'
 import { outcomeTable } from '../server/outcomes.js'
+import { codexThreadId, findCodexRollout, quotaForRun, readCodexQuota } from '../server/codex-rollout.js'
+export { codexThreadId, quotaForRun, readCodexQuota } from '../server/codex-rollout.js'
 import { readMainSubjectsSync } from '../server/runs.js'
 import { isLockHolderStale, killTree, descendantProcesses, leftoverProcesses, listProcesses } from '../server/processTree.js'
 import { codexProgramFor } from '../server/agents-config.js'
@@ -1323,139 +1325,6 @@ function readLog(path) {
   }
 }
 
-const CODEX_ROLLOUT_TAIL_BYTES = 64 * 1024
-
-function codexHome(env = process.env) {
-  const value = typeof env?.CODEX_HOME === 'string' ? env.CODEX_HOME.trim() : ''
-  return value || join(homedir(), '.codex')
-}
-
-export function codexThreadId(log) {
-  for (const line of String(log ?? '').split(/\r?\n/)) {
-    if (!line.includes('"thread.started"')) continue
-    let item
-    try {
-      item = JSON.parse(line)
-    } catch {
-      continue
-    }
-    if (item?.type !== 'thread.started') continue
-    const threadId = typeof item.thread_id === 'string' ? item.thread_id.trim() : ''
-    if (/^[A-Za-z0-9-]+$/.test(threadId)) return threadId
-  }
-  return ''
-}
-
-function codexMonthFolders({ env, startedAt, now }) {
-  const sessions = join(codexHome(env), 'sessions')
-  const folders = []
-  const seen = new Set()
-  for (const time of [startedAt, now]) {
-    const date = new Date(time)
-    if (Number.isNaN(date.getTime())) continue
-    for (const [year, month] of [[date.getFullYear(), date.getMonth() + 1], [date.getUTCFullYear(), date.getUTCMonth() + 1]]) {
-      const key = `${year}-${month}`
-      if (seen.has(key)) continue
-      seen.add(key)
-      folders.push(join(sessions, String(year), String(month).padStart(2, '0')))
-    }
-  }
-  return folders
-}
-
-function findCodexRollout({ threadId, env, startedAt, now }) {
-  if (!/^[A-Za-z0-9-]+$/.test(threadId)) return ''
-  const suffix = `-${threadId}.jsonl`
-  const sessions = realPath(join(codexHome(env), 'sessions'))
-  for (const monthFolder of codexMonthFolders({ env, startedAt, now })) {
-    let days
-    try {
-      days = readdirSync(monthFolder, { withFileTypes: true })
-    } catch {
-      continue
-    }
-    const names = days.filter((entry) => entry.isDirectory() && /^\d{2}$/.test(entry.name)).map((entry) => entry.name).sort().reverse()
-    for (const day of names) {
-      let files
-      try {
-        files = readdirSync(join(monthFolder, day))
-      } catch {
-        continue
-      }
-      const match = files.find((name) => name.startsWith('rollout-') && name.endsWith(suffix))
-      if (!match) continue
-      const candidate = join(monthFolder, day, match)
-      let stat
-      try {
-        stat = lstatSync(candidate)
-      } catch {
-        continue
-      }
-      if (stat.isSymbolicLink()) continue
-      const file = realPath(candidate)
-      const inside = relative(sessions, file)
-      if (inside === '' || inside.startsWith('..') || isAbsolute(inside)) continue
-      return file
-    }
-  }
-  return ''
-}
-
-export function readCodexQuota(file, limit = CODEX_ROLLOUT_TAIL_BYTES) {
-  let before
-  try {
-    before = lstatSync(file, { bigint: true })
-  } catch {
-    return null
-  }
-  if (before.isSymbolicLink() || !before.isFile() || before.size <= 0n) return null
-  const flags = constants?.O_NOFOLLOW ? (constants.O_RDONLY ?? 0) | constants.O_NOFOLLOW : 'r'
-  let fd
-  try {
-    fd = openSync(file, flags)
-  } catch {
-    return null
-  }
-  try {
-    const after = fstatSync(fd, { bigint: true })
-    if (!after.isFile() || after.dev !== before.dev || after.ino !== before.ino || after.size <= 0n) return null
-    const cap = Number.isFinite(limit) ? Math.trunc(limit) : limit === Infinity ? Infinity : 0
-    if (cap <= 0) return null
-    const length = cap !== Infinity && after.size >= BigInt(cap) ? cap : Number(after.size)
-    if (!Number.isSafeInteger(length) || length <= 0) return null
-    const buffer = Buffer.alloc(length)
-    const got = readSync(fd, buffer, 0, length, after.size - BigInt(length))
-    if (got <= 0) return null
-    let text = buffer.subarray(0, got).toString('utf8')
-    if (after.size > BigInt(length)) {
-      const newline = text.indexOf('\n')
-      text = newline === -1 ? '' : text.slice(newline + 1)
-    }
-    let newest = null
-    for (const line of text.split(/\r?\n/)) {
-      const reading = codexHarness.quotaFrom(line)
-      if (reading) newest = reading
-    }
-    return newest
-  } catch {
-    return null
-  } finally {
-    try {
-      closeSync(fd)
-    } catch {}
-  }
-}
-
-export function quotaForRun({ harness, log, env = process.env, startedAt = Date.now(), now = Date.now() } = {}) {
-  if (harness !== 'codex') return null
-  const threadId = codexThreadId(log)
-  if (threadId === '') return null
-  const file = findCodexRollout({ threadId, env, startedAt, now })
-  if (file === '') return null
-  const reading = readCodexQuota(file)
-  if (!reading) return null
-  return { windows: reading.windows, at: new Date(now).toISOString() }
-}
 
 export function captureToolLines(file, sessionId, logPath, secrets = [], exportSession = spawnSync) {
   if (!sessionId) return { count: 0, session: '' }
@@ -2512,6 +2381,8 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
     const worktree = project || lane.worktree
     const logText = readLog(logPath)
     const quota = quotaForRun({ harness, log: logText, env: process.env, startedAt, now: Date.now() })
+    const rollout = harness === 'codex' ? findCodexRollout({ threadId: codexThreadId(logText), env: process.env, startedAt, now: Date.now() }) : ''
+    const contextWindow = lane.cli.contextWindow || (rollout ? readCodexQuota(rollout)?.contextWindow : null)
     const summary = summarizeRun({ harness, log: logText, worktree })
     const limited = limitedFor(harness, logText)
     formatSummary(summary).forEach((line) => console.log(line))
@@ -2571,6 +2442,7 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
         base: runBase,
         checkpoint,
         quota,
+        contextWindow,
         retried: true,
         startFailed: startFailure !== '' ? true : undefined,
         ...(start ? { startBranch: start.startBranch } : {}),
@@ -2616,6 +2488,7 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
       base: runBase,
       checkpoint,
       quota,
+      contextWindow,
       stoppedLeftovers: totalStoppedLeftovers > 0 ? totalStoppedLeftovers : undefined,
       note: note || undefined,
       startFailed: startFailure !== '' ? true : undefined,

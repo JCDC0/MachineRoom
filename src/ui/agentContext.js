@@ -441,7 +441,7 @@ export function agentContext({ agent = null, working = null, lanes = null, costs
     log: entries.slice(-DOCK_LOG_LIMIT),
     address: address.address,
     addressUrl: address.url,
-    context: isOrchestrator ? readContext(source, run) : null,
+    context: readContext(source, run),
     autocompact: isOrchestrator && typeof source?.autocompact === 'boolean' ? source.autocompact : null,
   }
 }
