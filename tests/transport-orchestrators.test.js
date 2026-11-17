@@ -1,7 +1,7 @@
-import { createElement } from 'react'
+import { act, createElement } from 'react'
 import { renderToString } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
-import Transport, { OrchestratorsContext } from '../src/ui/Transport.jsx'
+import Transport, { LanePillsContext, OrchestratorsContext } from '../src/ui/Transport.jsx'
 import {
   OPEN_CHAT_EVENT,
   TRANSPORT_CHIP_LIMIT,
@@ -9,6 +9,8 @@ import {
   orchestratorAnswerList,
   orchestratorChips,
 } from '../src/ui/transportOrchestrators.js'
+
+import { withDom } from './helpers/uiDom.js'
 
 const LIVE = { live: true, position: 65000, duration: 0, playing: true, speed: 1 }
 const MAIN = { id: 'orchestrator', name: 'Orchestrator', state: 'working' }
@@ -94,61 +96,46 @@ describe('the transport chip list', () => {
   })
 })
 
-describe('the transport chips', () => {
-  it('shows a chip per sub after the main state word', () => {
-    const html = renderTransport([MAIN, sub('frontend', 'Frontend', 'working'), sub('backend', 'Backend', 'paused')])
-    expect(html).toContain('class="transport-orchestrators"')
-    expect(html.indexOf('transport-orchestrator-state')).toBeLessThan(html.indexOf('transport-chip'))
-    expect(html).toContain('class="transport-chip is-working mono"')
-    expect(html).toContain('class="transport-chip is-paused mono"')
-    expect(html).toContain('>Frontend<')
-    expect(html).toContain('>Backend<')
-    expect(html).not.toContain('transport-chip-overflow')
-  })
-
-  it('shows +N after TRANSPORT_CHIP_LIMIT chips', () => {
-    const names = ['One', 'Two', 'Three', 'Four', 'Five', 'Six']
-    const list = [MAIN, ...names.map((name) => sub(name.toLowerCase(), name))]
-    const hidden = names.length - TRANSPORT_CHIP_LIMIT
+describe('the transport agent list', () => {
+  it('summarizes every sub and approval without showing old chips', () => {
+    const list = [MAIN, ...Array.from({ length: 6 }, (_, i) => sub(String(i), `Sub ${i}`, 'working'))]
+    list[1].approvals = [{}]
     const html = renderTransport(list)
-    expect(html.match(/class="transport-chip /g)).toHaveLength(TRANSPORT_CHIP_LIMIT)
-    expect(html).toContain('class="transport-chip-overflow mono"')
-    expect(html).toContain(`title="${hidden} more"`)
-    expect(html).not.toContain(`>${names[names.length - 1]}<`)
+    expect(html).toContain('6<!-- --> agents')
+    expect(html).toContain('6 working')
+    expect(html).toContain('1<!-- --> waiting')
+    expect(html).not.toContain('transport-chip')
+    expect(html).not.toContain('transport-orchestrator-state')
   })
 
-  it('reads waiting for you while an approval waits', () => {
-    const html = renderToString(
-      createElement(Transport, {
-        snapshot: LIVE,
-        speeds: [1],
-        orchestrator: { ...MAIN, approvals: [{ approvalId: 'a1', tool: 'shell' }] },
-      })
-    )
-    expect(html).toContain('class="transport-orchestrator-state mono">waiting for you<')
-    const clear = renderTransport([MAIN])
-    expect(clear).toContain('class="transport-orchestrator-state mono">working<')
-  })
-
-  it('reads waiting for you while a sub holds an approval', () => {
-    const html = renderTransport([
-      { ...MAIN, state: 'idle' },
-      { ...sub('frontend', 'Frontend', 'working'), approvals: [{ approvalId: 'a1' }] },
-    ])
-    expect(html).toContain('class="transport-orchestrator-state mono">waiting for you<')
-    expect(html).toContain('title="Frontend working, waiting for you"')
-    expect(html).toContain('class="transport-chip is-working mono"')
-  })
-
-  it('shows no chips for a replay or with no sub', () => {
-    expect(renderTransport([MAIN])).not.toContain('transport-chip')
-    const replay = renderToString(
-      createElement(Transport, {
-        snapshot: { position: 12.5, duration: 60, playing: false, speed: 1 },
-        speeds: [1],
-      })
-    )
-    expect(replay).not.toContain('transport-chip')
-    expect(OPEN_CHAT_EVENT).toBe('machineroom:open-chat')
+  it('opens complete rows, dispatches their actions, and closes on Escape or outside', async () => {
+    await withDom(async ({ container, root, dom, window }) => {
+      const events = []
+      window.addEventListener('machineroom:open-chat', (event) => events.push(event.detail))
+      window.addEventListener('machineroom:inspect', (event) => events.push(event.detail))
+      const subs = [MAIN, sub('sub-one', 'A long sub name', 'working')]
+      const feed = { agents: [{ id: 'a', key: 'lane', name: 'A long lane name', adapterType: 'opencode_local', role: null }], liveRuns: [{ agentId: 'a', status: 'running', issueId: 'issue', startedAt: 1000 }], issues: [{ id: 'issue', identifier: 'A-very-long-task-identifier' }], now: 721000 }
+      await act(async () => root.render(createElement(OrchestratorsContext.Provider, { value: subs }, createElement(LanePillsContext.Provider, { value: feed }, createElement(Transport, { snapshot: { ...LIVE, status: 'live' }, speeds: [1], orchestrator: MAIN })))))
+      const toggle = container.querySelector('.transport-agents-toggle')
+      expect(toggle.textContent).toContain('2 agents · 2 working')
+      await act(async () => toggle.click())
+      expect(container.textContent).toContain('A long sub name')
+      expect(container.textContent).toContain('A long lane name')
+      expect(container.textContent).toContain('A-very-long-task-identifier')
+      expect(container.textContent).toContain('12 min')
+      let rows = container.querySelectorAll('.transport-agent')
+      await act(async () => rows[0].click())
+      expect(events[0]).toEqual({ id: 'sub-one' })
+      await act(async () => toggle.click())
+      rows = container.querySelectorAll('.transport-agent')
+      await act(async () => rows[1].click())
+      expect(events[1]).toEqual({ kind: 'agent', id: 'lane' })
+      await act(async () => toggle.click())
+      await act(async () => dom.document.dispatchEvent({ type: 'keydown', key: 'Escape' }))
+      expect(container.querySelector('.transport-agents-list')).toBeNull()
+      await act(async () => toggle.click())
+      await act(async () => dom.document.dispatchEvent({ type: 'pointerdown' }))
+      expect(container.querySelector('.transport-agents-list')).toBeNull()
+    })
   })
 })

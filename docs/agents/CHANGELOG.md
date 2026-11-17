@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The footer drops the live badge and orchestrator text and folds the chips and lane pills into one readable agents list.
 - A session reader parks in a gap between the main ring lane slots, so a new lane is never hidden behind it.
 - The parent sends a pen line to the new agent's place and its shape draws segment by segment.
 - Runs with a session or no starter keep their chat note and start no turn.
