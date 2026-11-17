@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { visibleText } from '../../model/paths.js'
-import { subscribeToNotices } from './notices.js'
+import { latestOnly, subscribeToNotices } from './notices.js'
 import {
   canAskMain,
   canMerge,
@@ -307,6 +307,7 @@ export default function ReviewsPanel({
   const [diffError, setDiffError] = useState(null)
   const diffReqRef = useRef(0)
   const mountedRef = useRef(true)
+  const latestReviews = useRef(latestOnly()).current
 
   const [confirmTarget, setConfirmTarget] = useState(null)
   const [mergeMessage, setMergeMessage] = useState('')
@@ -363,6 +364,7 @@ export default function ReviewsPanel({
   }
 
   async function loadReviews({ isInitial = false } = {}) {
+    const isLatest = latestReviews()
     if (typeof client?.reviews !== 'function') {
       setLoading(false)
       return
@@ -374,18 +376,18 @@ export default function ReviewsPanel({
     }
     try {
       const list = await client.reviews()
-      if (!mountedRef.current) return
+      if (!mountedRef.current || !isLatest()) return
       setReviews(Array.isArray(list) ? list : [])
       setLoadError(null)
     } catch (err) {
-      if (!mountedRef.current) return
+      if (!mountedRef.current || !isLatest()) return
       if (isInitial) {
         setLoadError(err.message || 'Could not load reviews.')
       } else {
         setRefreshError(err?.message || 'Could not refresh reviews.')
       }
     } finally {
-      if (isInitial && mountedRef.current) {
+      if (mountedRef.current && isLatest()) {
         setLoading(false)
       }
     }
@@ -402,9 +404,13 @@ export default function ReviewsPanel({
     if (initialReviews == null) {
       loadReviews({ isInitial: true })
     }
-    return subscribeToNotices(client, 'runs', () => {
+    const unsubscribe = subscribeToNotices(client, 'runs', () => {
       loadReviews({ isInitial: false })
     })
+    return () => {
+      latestReviews()
+      unsubscribe()
+    }
   }, [client])
 
   async function loadDiffForLane(lane) {

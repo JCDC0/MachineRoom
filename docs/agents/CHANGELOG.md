@@ -2,7 +2,9 @@
 
 ## Unreleased
 
+- Lane conversation reads take a sequence number and Reviews lists use latestOnly, so a slow older answer is dropped.
 - Hermes tool lines and child credentials are masked in run logs, --continue-from checks lane, briefs, kind and branch, torn record tails stay apart, and stale port lock takeover is guarded.
+- Lane conversations and Reviews keep the newest response when reads overlap.
 - Assistant reads storage through the guarded helper; the Log, Inspector and Settings have their own boundaries, and the whole room has a Reload fallback.
 - Denied storage keeps the room open, and render faults stay in their HUD part or show a room reload.
 

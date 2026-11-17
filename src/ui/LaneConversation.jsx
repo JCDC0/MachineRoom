@@ -146,6 +146,7 @@ export default function LaneConversation({
   const [planStartStatus, setPlanStartStatus] = useState('')
   const mountedRef = useRef(true)
   const lastReadRef = useRef(null)
+  const readSequenceRef = useRef(0)
   const readRef = useRef(null)
   const selectionRef = useRef(null)
   const sentRef = useRef(sentMessages)
@@ -311,16 +312,17 @@ export default function LaneConversation({
     if (!isSelected()) return
     const at = Date.now()
     if (!force && !readDue(lastReadRef.current, at)) return
+    const sequence = ++readSequenceRef.current
     lastReadRef.current = at
     setConversation((current) => current.lane === lane && current.startedAt === startedAt
       ? { ...current, loading: current.data === null }
       : { lane, startedAt, loading: true, data: null, error: '' })
     try {
       const data = await client.runConversation({ lane, startedAt })
-      if (!isSelected()) return
+      if (!isSelected() || sequence !== readSequenceRef.current) return
       setConversation({ lane, startedAt, loading: false, data: data && typeof data === 'object' ? data : null, error: '' })
     } catch (failure) {
-      if (!isSelected()) return
+      if (!isSelected() || sequence !== readSequenceRef.current) return
       setConversation({
         lane,
         startedAt,
@@ -336,6 +338,7 @@ export default function LaneConversation({
     lastReadRef.current = null
     setConversation({ lane, startedAt: selected, loading: true, data: null, error: '' })
     readRef.current?.(selected, { force: true })
+    return () => { readSequenceRef.current += 1 }
   }, [client, lane, selected])
 
   useEffect(() => {
