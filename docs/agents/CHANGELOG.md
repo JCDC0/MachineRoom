@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Seven findings, R54-1 to R54-7; fixes briefed as P540 to P543.
 - One formatCount for the strip, context, meters and cost board: 12k, 30.2M, 1M.
 - roomNoticeSummary reads run-end room lines; the chat shows lane, briefs, status and subject with a Details toggle.
 - The lattice ceiling is the globe top, its floor follows the git tree bottom, 4 blocks each way.
