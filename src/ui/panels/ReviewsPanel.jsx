@@ -216,7 +216,7 @@ export function OutsideConfirmCard({ target, files, mergeError, merging, onConfi
   )
 }
 
-function RewindControl({ client, lane, head, onDone }) {
+function RewindControl({ client, lane, head, enabled, onDone }) {
   const [preview, setPreview] = useState(null)
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -225,7 +225,8 @@ function RewindControl({ client, lane, head, onDone }) {
   useEffect(() => {
     let live = true
     setOpen(false)
-    if (typeof client?.reviewRewind !== 'function') return undefined
+    setPreview(null)
+    if (!enabled || typeof client?.reviewRewind !== 'function') return undefined
     client
       .reviewRewind(lane)
       .then((data) => live && setPreview(data))
@@ -233,7 +234,7 @@ function RewindControl({ client, lane, head, onDone }) {
     return () => {
       live = false
     }
-  }, [client, lane, head])
+  }, [client, lane, head, enabled])
 
   async function rewind() {
     setBusy(true)
@@ -249,7 +250,7 @@ function RewindControl({ client, lane, head, onDone }) {
     }
   }
 
-  const allowed = preview && preview.allowed !== false
+  const allowed = enabled && preview && preview.allowed !== false
   return (
     <div className="review-last-run mono" onClick={(e) => e.stopPropagation()}>
       {allowed && !open && (
@@ -283,7 +284,7 @@ function RewindControl({ client, lane, head, onDone }) {
           </div>
         </div>
       )}
-      {preview?.allowed === false && <div>{`Rewind unavailable: ${preview.reason}`}</div>}
+      {enabled && preview?.allowed === false && <div>{`Rewind unavailable: ${preview.reason}`}</div>}
       {message?.text && <div role="status">{message.text}</div>}
       {message?.error && <div role="alert">{message.error}</div>}
     </div>
@@ -829,6 +830,7 @@ export default function ReviewsPanel({
                         client={client}
                         lane={row.lane}
                         head={row.head}
+                        enabled={row.ahead > 0 || isSelected}
                         onDone={() => loadReviews({ isInitial: false })}
                       />
                       {movedByLane[row.lane] && (
