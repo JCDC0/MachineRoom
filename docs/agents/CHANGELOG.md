@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The lattice ceiling is the globe top, its floor follows the git tree bottom, 4 blocks each way.
 - LensRail takes inner; ruler marks every quarter and twentieth; the left rail stays hidden.
 - conversationFromLog reads a machineroom log with the Claude reader; unknown harnesses keep raw lines.
 - A run log counts as inside the runs folder by its real path, or by its plain path when no link or junction sits between, so lane conversations open inside a packaged app too.

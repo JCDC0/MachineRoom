@@ -329,6 +329,7 @@ function trunkMiddle(layout) {
 export function createGitTree(scene) {
   const group = new THREE.Group()
   group.name = 'git-tree'
+  group.position.y = -GIT_ROOT_GAP
   scene.add(group)
 
   const lineGeometry = new THREE.BufferGeometry()
@@ -377,6 +378,7 @@ export function createGitTree(scene) {
   let frozen = false
   let top = null
   let centerX = GIT_START.x
+  let bottomY = GIT_START.y
 
   function placeCenter() {
     worldCenter.set(centerX, group.position.y + GIT_START.y, GIT_START.z)
@@ -450,6 +452,7 @@ export function createGitTree(scene) {
     lines.visible = false
     points.visible = false
     layout = null
+    bottomY = GIT_START.y
     headIndex = -1
     colorArray = null
     colorAttribute = null
@@ -466,6 +469,9 @@ export function createGitTree(scene) {
     lineGeometry.dispose()
     pointGeometry.dispose()
     layout = next
+    bottomY = GIT_START.y
+    for (const place of next.commits) bottomY = Math.min(bottomY, place.y)
+    for (const label of next.labels) bottomY = Math.min(bottomY, label.y)
     headIndex = next.headIndex
     centerX = trunkMiddle(next)
     placeCenter()
@@ -576,6 +582,7 @@ export function createGitTree(scene) {
     update,
     ready,
     center: () => worldCenter,
+    bottom: () => group.position.y + bottomY,
     layout: () => layout,
     builds: () => builds,
     dispose,

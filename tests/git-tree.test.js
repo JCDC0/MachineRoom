@@ -478,6 +478,7 @@ describe('createGitTree', () => {
     const middle = (Math.min(...trunk.map((place) => place.x)) + Math.max(...trunk.map((place) => place.x))) / 2
     expect(tree.setTop(-500)).toBe(true)
     expect(tree.group.position.y).toBe(-620)
+    expect(tree.bottom()).toBeCloseTo(-620 + Math.min(...[...tree.layout().commits, ...tree.layout().labels].map((place) => place.y)), 6)
     expect(tree.center()).toBe(tree.center())
     expect(tree.center().x).toBeCloseTo(middle, 6)
     expect(tree.center().y).toBeCloseTo(-620, 6)
@@ -487,6 +488,8 @@ describe('createGitTree', () => {
     expect(tree.setTop(-400)).toBe(true)
     expect(tree.group.position.y).toBe(-520)
     expect(tree.center().y).toBeCloseTo(-520, 6)
+    tree.setState({ git: false })
+    expect(tree.bottom()).toBe(-520)
     tree.dispose()
   })
 

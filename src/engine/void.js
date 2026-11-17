@@ -1,9 +1,11 @@
 import * as THREE from 'three'
 import { WHITE, seeded, still } from './sprites.js'
+import { GIT_ROOT_GAP, GIT_START } from './gitTree.js'
+import { INTERNET_HOME, INTERNET_RADIUS } from './internet.js'
 
 export const LATTICE_STEP = 2000
-export const LATTICE_CELLS = 5
-export const LATTICE_LAYER = 1
+export const LATTICE_CELLS = 4
+export const LATTICE_FLOOR_STEP = 1
 const TICK = 50
 export const DUST = 1800
 export const DUST_INNER = 4500
@@ -178,29 +180,33 @@ function applyDustOpacity() {
   }
 }
 
-export function latticeLines(step = LATTICE_STEP, cells = LATTICE_CELLS) {
+export function latticeLevels(floor = GIT_START.y - GIT_ROOT_GAP, ceiling = INTERNET_HOME.y + INTERNET_RADIUS) {
+  return { floor, ceiling }
+}
+
+export function latticeLines(levels = latticeLevels(), step = LATTICE_STEP, cells = LATTICE_CELLS) {
   const extent = step * cells
-  const layer = LATTICE_LAYER * step
   const values = []
   for (let a = -cells; a <= cells; a++) {
+    const u = a * step
+    for (const y of [levels.floor, levels.ceiling]) {
+      values.push(-extent, y, u, extent, y, u)
+      values.push(u, y, -extent, u, y, extent)
+    }
     for (let b = -cells; b <= cells; b++) {
-      const u = a * step
       const v = b * step
-      if (Math.abs(a) === LATTICE_LAYER) values.push(-extent, u, v, extent, u, v)
-      values.push(u, -layer, v, u, layer, v)
-      if (Math.abs(b) === LATTICE_LAYER) values.push(u, v, -extent, u, v, extent)
+      values.push(u, levels.floor, v, u, levels.ceiling, v)
     }
   }
   return values
 }
 
-export function latticeTicks(step = LATTICE_STEP, cells = LATTICE_CELLS) {
+export function latticeTicks(levels = latticeLevels(), step = LATTICE_STEP, cells = LATTICE_CELLS) {
   const values = []
-  for (const layer of [-LATTICE_LAYER, LATTICE_LAYER]) {
+  for (const py of [levels.floor, levels.ceiling]) {
     for (let x = -cells; x <= cells; x++) {
       for (let z = -cells; z <= cells; z++) {
         const px = x * step
-        const py = layer * step
         const pz = z * step
         values.push(px - TICK, py, pz, px + TICK, py, pz)
         values.push(px, py, pz - TICK, px, py, pz + TICK)
@@ -218,8 +224,21 @@ function lineSet(values, opacity) {
 
 export function createVoid(scene, texture) {
   const group = new THREE.Group()
-  group.add(lineSet(latticeLines(), 0.035))
-  group.add(lineSet(latticeTicks(), 0.12))
+  let levels = latticeLevels()
+  const lines = lineSet(latticeLines(levels), 0.035)
+  const ticks = lineSet(latticeTicks(levels), 0.12)
+  group.add(lines, ticks)
+
+  function setLevels(floor, ceiling = levels.ceiling) {
+    if (!Number.isFinite(floor) || !Number.isFinite(ceiling)) return false
+    if (Math.abs(floor - levels.floor) <= LATTICE_FLOOR_STEP && ceiling === levels.ceiling) return false
+    levels = latticeLevels(floor, ceiling)
+    for (const [object, values] of [[lines, latticeLines(levels)], [ticks, latticeTicks(levels)]]) {
+      object.geometry.dispose()
+      object.geometry = new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute(values, 3))
+    }
+    return true
+  }
 
   const dustGeometry = new THREE.BufferGeometry().setFromPoints(dustPoints())
   dustGeometry.userData.base = new Float32Array(dustGeometry.attributes.position.array)
@@ -331,6 +350,6 @@ export function createVoid(scene, texture) {
     })
   }
 
-  return { group, update, dispose }
+  return { group, setLevels, update, dispose }
 }
 

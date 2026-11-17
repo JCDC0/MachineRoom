@@ -1,5 +1,7 @@
 import * as THREE from 'three'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { GIT_ROOT_GAP, GIT_START } from '../src/engine/gitTree.js'
+import { INTERNET_HOME, INTERNET_RADIUS } from '../src/engine/internet.js'
 import {
   DRIFT_SPEED,
   DRIFT_WANDER,
@@ -7,7 +9,7 @@ import {
   DUST_INNER,
   DUST_OUTER,
   LATTICE_CELLS,
-  LATTICE_LAYER,
+  LATTICE_FLOOR_STEP,
   LATTICE_STEP,
   MOTE_INNER,
   MOTE_OUTER,
@@ -18,6 +20,7 @@ import {
   driftSpecks,
   dustPoints,
   latticeLines,
+  latticeLevels,
   latticeTicks,
   motePoints,
   setFineDust,
@@ -47,8 +50,8 @@ function radii(layer) {
 
 describe('lattice', () => {
   const extent = LATTICE_STEP * LATTICE_CELLS
-  const low = -LATTICE_LAYER * LATTICE_STEP
-  const high = LATTICE_LAYER * LATTICE_STEP
+  const low = GIT_START.y - GIT_ROOT_GAP
+  const high = INTERNET_HOME.y + INTERNET_RADIUS
   const layers = [low, high]
 
   function segments(values) {
@@ -74,7 +77,8 @@ describe('lattice', () => {
   }
 
   it('keeps one layer above the hub and one below', () => {
-    expect(LATTICE_LAYER).toBe(1)
+    expect(LATTICE_CELLS).toBe(4)
+    expect(latticeLevels(-900)).toEqual({ floor: -900, ceiling: high })
     const levels = [...new Set(yValues(latticeLines()))].sort((a, b) => a - b)
     expect(levels).toEqual(layers)
   })
@@ -116,6 +120,21 @@ describe('lattice', () => {
       if (object.isSprite) sprites += 1
     })
     expect(sprites).toBe(0)
+    space.dispose()
+  })
+
+  it('rebuilds only after a floor move exceeds the step, or the ceiling changes', () => {
+    const space = createVoid(new THREE.Scene(), null)
+    const [lines, ticks] = space.group.children
+    const before = [lines.geometry, ticks.geometry]
+    expect(space.setLevels(low - LATTICE_FLOOR_STEP)).toBe(false)
+    expect([lines.geometry, ticks.geometry]).toEqual(before)
+    expect(space.setLevels(low - LATTICE_FLOOR_STEP - 1)).toBe(true)
+    expect(lines.geometry).not.toBe(before[0])
+    expect(ticks.geometry).not.toBe(before[1])
+    expect(space.setLevels(low - LATTICE_FLOOR_STEP - 1, high + 5)).toBe(true)
+    const levels = [...new Set(yValues(Array.from(lines.geometry.attributes.position.array)))].sort((a, b) => a - b)
+    expect(levels).toEqual([low - LATTICE_FLOOR_STEP - 1, high + 5])
     space.dispose()
   })
 })

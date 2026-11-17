@@ -1066,7 +1066,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     space.update(delta)
     hub.update(now / 1000, delta, camera, height)
     internet.update(delta, agentSet.webActive() > 0)
-    gitTree.setTop(cards.bottom(''))
+    if (gitTree.setTop(cards.bottom(''))) space.setLevels(gitTree.bottom())
     gitTree.update(delta)
     if (cards.update(state, delta, camera, mask, replaySpeed)) {
       const holdLost = releaseLostHold()
@@ -1271,7 +1271,9 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
       board.update(costBoardData)
     },
     setGitState(state) {
-      return gitTree.setState(state)
+      const changed = gitTree.setState(state)
+      if (changed) space.setLevels(gitTree.bottom())
+      return changed
     },
     focusGitTree,
     inspectGitTree,
