@@ -2,11 +2,11 @@ import { Component } from 'react'
 
 const MESSAGE_LIMIT = 120
 
-export function panelStoppedText(error) {
+export function panelStoppedText(error, label) {
   const raw = error && typeof error === 'object' ? error.message : error
   const message = typeof raw === 'string' ? raw : ''
   const shown = message.length > 0 ? message.slice(0, MESSAGE_LIMIT) : 'no message'
-  return `This panel stopped: ${shown}. Pick another tab, then come back.`
+  return label ? `This panel stopped: ${label}: ${shown}.` : `This panel stopped: ${shown}. Pick another tab, then come back.`
 }
 
 export default class PanelBoundary extends Component {
@@ -23,7 +23,7 @@ export default class PanelBoundary extends Component {
     if (this.state.error) {
       return (
         <div className="panel-boundary-message" role="alert">
-          {panelStoppedText(this.state.error)}
+          {panelStoppedText(this.state.error, this.props.label)}
         </div>
       )
     }

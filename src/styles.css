@@ -11660,3 +11660,7 @@ body:has(#hud-orchestrator-chat) .lens-waiting {
   font-size: 10px;
   font-weight: 400;
 }
+
+.room-boundary {
+  padding: 24px;
+}

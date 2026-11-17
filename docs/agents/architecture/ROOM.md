@@ -4,6 +4,8 @@ What the room shows and how it behaves.
 
 Settings offers exact, opt-in file copies for new worktrees. These copies are excluded from commits. The lane port offset does not reserve a port across projects.
 
+Denied storage leaves the room usable. A render fault in a HUD part shows that part's error while the others stay open. A room-level fault shows its message and a Reload button.
+
 ## What it shows
 
 The Control count is a Reviews button inside the Control button border, after its key hint. The transport keeps the orchestrator title at its full width while lane text can end in an ellipsis (P499).

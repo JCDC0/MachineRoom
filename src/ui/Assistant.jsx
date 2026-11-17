@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react'
+import { store } from '../storage.js'
 import { containsSecret, interpret } from '../assistant/intent.js'
 import {
   addToHistory,
@@ -34,7 +35,7 @@ export default function Assistant({
   open: controlledOpen,
   onClose,
   initialOpen = false,
-  storage = (typeof window !== 'undefined' ? window.localStorage : null),
+  storage = store(),
 }) {
   const handleAction = onAssistantAction ?? onAction ?? (() => {})
   const handleAsk = askAssistant ?? ask ?? null

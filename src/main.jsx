@@ -3,6 +3,7 @@ import '@fontsource/jost/400.css'
 import '@fontsource/jost/500.css'
 import '@fontsource/space-mono/400.css'
 import App from './App.jsx'
+import RoomBoundary from './ui/RoomBoundary.jsx'
 import './styles.css'
 
-createRoot(document.getElementById('root')).render(<App />)
+createRoot(document.getElementById('root')).render(<RoomBoundary><App /></RoomBoundary>)
