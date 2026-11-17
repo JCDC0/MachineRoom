@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Fixes R53-1 and R53-5.
 - Fixes R53-2 and R53-6.
 - Six findings: R53-1 to R53-6.
 - Harnesses tracks edited fields; a background reload or another save keeps unsaved drafts.

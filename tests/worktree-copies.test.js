@@ -118,6 +118,33 @@ describe('port offset', () => {
     expect((await Promise.all([portOffsetFor('first', root), portOffsetFor('second', root)])).sort((a, b) => a - b)).toEqual([0, 10])
     expect(existsSync(lock)).toBe(false)
   })
+  it('keeps a live replacement of a stale lock until its holder releases it', async () => {
+    const root = makeTempDir('mr-offsets-')
+    roots.push(root)
+    const lock = join(root, '.port-offsets.lock')
+    writeFileSync(lock, '999999999')
+    const old = new Date(Date.now() - 60000)
+    utimesSync(lock, old, old)
+    const replacement = String(process.pid)
+    let called = false
+    let settled = false
+    const pending = portOffsetFor('second', root, { beforeStaleRemove: () => {
+      called = true
+      rmSync(lock)
+      writeFileSync(lock, replacement)
+    } }).finally(() => { settled = true })
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 80))
+      expect(called).toBe(true)
+      expect(readFileSync(lock, 'utf8')).toBe(replacement)
+      expect(settled).toBe(false)
+      writeFileSync(join(root, 'port-offsets.json'), JSON.stringify({ first: 0 }))
+    } finally {
+      rmSync(lock, { force: true })
+      await pending
+    }
+    expect(await pending).toBe(10)
+  })
   it('refuses a new lane when all offsets are saved', async () => {
     const root = makeTempDir('mr-offsets-')
     roots.push(root)
