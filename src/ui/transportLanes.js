@@ -1,4 +1,5 @@
 import { harnessByAdapter } from '../harnesses/index.js'
+import { agentTasks } from '../model/liveTasks.js'
 import { visibleText } from '../model/paths.js'
 import { INSPECT_EVENT } from './inspector.js'
 
@@ -156,6 +157,7 @@ export function lanePills({
     const key = text(agent?.key)
     if (id && key) byAgentId.set(id, key)
   }
+  const tasks = agentTasks(liveRuns, issues, roster)
   const issueIndex = new Map()
   for (const issue of Array.isArray(issues) ? issues : []) {
     if (issue && typeof issue === 'object' && issue.id != null) issueIndex.set(String(issue.id), issue)
@@ -170,8 +172,11 @@ export function lanePills({
     const label = pillLabel(agent, labels, key)
     const live = liveRunFor(liveRuns, key, byAgentId)
     if (live) {
+      const issue = issueTask(issueIndex.get(String(live.run.issueId ?? '')))
+      const mappedTask = tasks.get(key)
       const task =
-        issueTask(issueIndex.get(String(live.run.issueId ?? ''))) ||
+        (mappedTask && issue.slice(0, LANE_TASK_LIMIT) === mappedTask ? issue : mappedTask) ||
+        issue ||
         text(live.run.issueId)
       active.push({
         key,
