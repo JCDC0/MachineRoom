@@ -67,3 +67,5 @@ The Keys section (`KeysSettings.jsx`, U124) lists the names `client.keys()` retu
 - Strands: each string between folder tabs carries a strand of small points on the line, about one per 24 units, spaced by a seed from the folder pair, white at low opacity, and the strand follows the same two tab ends as its line. The points stand still. The strand into a folder on a working agent's path turns yellow and fades back over 1.5 seconds when the path moves on (at once under reduced motion).
 
 - Settings, Harnesses: a ready, enabled harness has `Test connection`. It asks `This sends one short prompt to KEY, which may use a little quota.` with `Test` and `Cancel`, then shows `Reached in Ns`, `Failed: LINE` or `Unknown: no clear reply in Ns`. Nothing runs on page load (P487).
+
+Run-end room messages show the lane, briefs, status and first commit subject on one line, with the full message under Details.
