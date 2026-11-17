@@ -1137,6 +1137,13 @@ export async function portOffsetFor(laneKey, folder = runsFolder()) {
         break
       } catch (error) {
         if (error.code !== 'EEXIST') throw error
+        try {
+          const holder = readLaneLock(lock).pid
+          if (!processAlive(holder) && Date.now() - statSync(lock).mtimeMs > 5000) {
+            rmSync(lock, { force: true })
+            continue
+          }
+        } catch {}
         if (Date.now() >= deadline) throw new Error('Could not take the port offset lock. Check .port-offsets.lock in the runs folder.')
         await new Promise((resolve) => setTimeout(resolve, 20))
       }

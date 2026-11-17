@@ -1,5 +1,5 @@
 ﻿import { spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { portOffsetFor, prepareWorktree } from '../scripts/run-lane.mjs'
@@ -97,6 +97,16 @@ describe('port offset', () => {
     writeFileSync(join(root, 'port-offsets.json'), JSON.stringify({ first: 0 }))
     rmSync(lock)
     expect(await pending).toBe(10)
+  })
+  it('takes over a lock left by a dead process', async () => {
+    const root = makeTempDir('mr-offsets-')
+    roots.push(root)
+    const lock = join(root, '.port-offsets.lock')
+    writeFileSync(lock, '999999999')
+    const old = new Date(Date.now() - 60000)
+    utimesSync(lock, old, old)
+    expect(await portOffsetFor('after-crash', root)).toBe(0)
+    expect(existsSync(lock)).toBe(false)
   })
   it('refuses a new lane when all offsets are saved', async () => {
     const root = makeTempDir('mr-offsets-')
