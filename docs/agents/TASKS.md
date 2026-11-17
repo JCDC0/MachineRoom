@@ -4290,3 +4290,26 @@ Sweep S3 fixes, P509 and P510. `docs/agents/AUDIT-2026-11-SWEEP-S3.md` (P508, Co
 2. Apply the same bounded wait in both commands; reuse one helper rather than two copies.
 3. Test: a fake child that emits `exit` but never `close` settles as failed within the bounded wait after the time limit.
 4. Run `node node_modules/vitest/vitest.mjs run tests/check-timeout.test.js tests/merge-lane.test.js tests/review-lane.test.js` and `npm run build`, and report the counts.
+
+Sweep S2 fixes, P511 to P513. `docs/agents/AUDIT-2026-11-SWEEP-S2.md` (P507, Codex Sol): four findings, read back by the orchestrator (S2-1 confirmed at `src/ui/Assistant.jsx:37`; the only error boundary is `src/ui/panels/PanelBoundary.jsx` around Control panels). Codex, Terra. Every brief: read the brief and its findings only; leave your changes uncommitted, the runner commits them; run every command in the foreground; never use git stash; do not run the full suite; you may change any existing test whose expectation the brief changes, and name it. No new CSS colours or fonts. The check by eye is left to the orchestrator.
+
+**P511. S2-1: denied storage no longer blanks the room, and a fault in one part of the HUD stays in that part (Codex, Terra).** Files: src/ui/Assistant.jsx, src/ui/Hud.jsx (wrapping only), src/ui/panels/PanelBoundary.jsx, src/main.jsx, src/ui/RoomBoundary.jsx (new), src/styles.css (one rule for the room fallback, reuse `.panel-boundary-message` where it fits), tests/storage-denied.test.jsx (new), tests/panel-boundary.test.jsx (or the existing boundary test, named), docs/agents/CHANGELOG.md, docs/agents/architecture/ROOM.md.
+
+1. Assistant's storage default goes through the existing guarded storage helper, so a throwing `localStorage` getter never throws in render. Grep `src/` for any other bare `window.localStorage` or `localStorage.` read outside a try and route each through the same helper; name them.
+2. In `Hud.jsx`, wrap each independent part (the sidebar, the conversation, the inspector, Settings, the Assistant, the Log drawer) in `PanelBoundary` with a part name, so one part's render fault shows `This panel stopped: ...` in that part and the rest of the room keeps working. Give `PanelBoundary` an optional `label` prop for the text; keep its current text when no label is given.
+3. `src/main.jsx` wraps `<App />` in a new `RoomBoundary`: on a fault above the HUD it shows one plain line, `The room stopped: MESSAGE.`, and a `Reload` button (`location.reload()`), on the black page in the room's fonts, instead of a blank page. The message is cut to 120 characters and never includes a stack.
+4. Tests: rendering the HUD with a `localStorage` getter that throws does not throw; a part that throws in render shows its boundary text while a sibling part still renders; `RoomBoundary` shows the line and the button.
+5. Run `node node_modules/vitest/vitest.mjs run tests/storage-denied.test.jsx tests/panel-boundary.test.jsx tests/hud-menu.test.js tests/hud-style.test.js` (name the boundary test you used) and `npm run build`, and report the counts.
+
+**P512. S2-2 and S2-3: an older answer never replaces a newer one in the lane conversation or Reviews (Codex, Terra).** Files: src/ui/LaneConversation.jsx (the read near line 308), src/ui/panels/ReviewsPanel.jsx (`loadReviews` near line 365), tests/lane-conversation-order.test.jsx (new), tests/reviews-order.test.jsx (new), docs/agents/CHANGELOG.md.
+
+1. Each lane conversation read takes a sequence number; only the newest read's answer or error is applied, and the sequence moves on when the client or the selected run changes or the view unmounts.
+2. `loadReviews` uses the existing `latestOnly()` pattern (find it in `src/ui/`) so a slow older list never replaces a newer one, invalidated on client change and unmount.
+3. Tests: two overlapping reads answered newest first leave the newest result on screen (the final report stays, Stop stays gone; the newer lane list stays).
+4. Run `node node_modules/vitest/vitest.mjs run tests/lane-conversation-order.test.jsx tests/reviews-order.test.jsx tests/reviews-rewind.test.jsx tests/reviews-scope.test.jsx` and `npm run build`, and report the counts.
+
+**P513. S2-4: background notices keep the owner's unsaved Harnesses edits (Codex, Terra).** Files: src/ui/HarnessesSettings.jsx (`loadAll` near line 132 and the saves near line 175), tests/harnesses-drafts.test.jsx (new), docs/agents/CHANGELOG.md.
+
+1. Track which fields the owner has edited and not saved (program drafts per harness, the lane warning count, the worktree setup command, the copy list). A background `loadAll` updates every other field but keeps those drafts. A successful save of a field clears its dirty mark and adopts the saved value; saving one field never resets another field's draft.
+2. Test: edit the setup command and the copy list, fire a family notice, and both drafts stay; save the setup and the saved value shows while a program draft in another row stays.
+3. Run `node node_modules/vitest/vitest.mjs run tests/harnesses-drafts.test.jsx tests/harnesses-settings.test.js tests/harness-probe.test.jsx tests/worktree-copies.test.js` and `npm run build`, and report the counts.
