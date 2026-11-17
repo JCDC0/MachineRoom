@@ -5,8 +5,7 @@
     "cli": {
       "harness": "claude",
       "bin": "claude",
-      "model": "claude-opus-5-5",
-      "contextWindow": 200000
+      "model": "claude-opus-5-5"
     }
   },
   "hermes": {

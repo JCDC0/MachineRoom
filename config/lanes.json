@@ -4,8 +4,7 @@
     "harness": "Claude Code",
     "cli": {
       "harness": "claude",
-      "bin": "claude",
-      "contextWindow": 200000
+      "bin": "claude"
     }
   }
 }

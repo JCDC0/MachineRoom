@@ -497,7 +497,7 @@ describe('the orchestrator lane', () => {
     expect(lanes.orchestrator).toEqual({
       name: 'Orchestrator',
       harness: 'Claude Code',
-      cli: { harness: 'claude', bin: 'claude', model: 'claude-opus-5-5', contextWindow: 200000 },
+      cli: { harness: 'claude', bin: 'claude', model: 'claude-opus-5-5' },
     })
     expect(briefProblems({ briefs: [], ids: ['K1'], laneKey: 'orchestrator', branchExists: () => false })).toEqual([
       'The orchestrator lane runs from the room, not from run-lane.',
