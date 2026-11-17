@@ -129,7 +129,8 @@ function knownEvent(harness, json) {
 }
 
 export function conversationFromLog(harness, text, prompt = '') {
-  const reader = typeof harness === 'string' ? harness.trim().toLowerCase() : ''
+  const name = typeof harness === 'string' ? harness.trim().toLowerCase() : ''
+  const reader = name === 'machineroom' ? 'claude' : name
   const entries = []
   const promptText = clean(prompt).trim()
   if (promptText !== '') entries.push(entry('prompt', promptText, null, null))
