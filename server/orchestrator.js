@@ -1905,12 +1905,16 @@ export function createOrchestrator({
     })
   }
 
-  function startTurnNow(options = null) {
+  function refreshContextWindow() {
     refreshModelDetails(model, lane.cli?.endpoint).then((changed) => {
       if (!changed || stopped) return
       contextWindow = windowOption || reportedWindow || resolveContextWindow(model, harness, 0, laneDetails())
       notify()
     }).catch(() => {})
+  }
+
+  function startTurnNow(options = null) {
+    refreshContextWindow()
     if (roomTimer) {
       clearTimeout(roomTimer)
       roomTimer = null
@@ -2476,6 +2480,7 @@ ${modelSummary}` : modelSummary
     contextWindow = resolveContextWindow(model, harness, windowOption, laneDetails())
     persist()
     notify()
+    refreshContextWindow()
     return { status: 200, body: { id: key, model } }
   }
 
@@ -2525,6 +2530,7 @@ ${modelSummary}` : modelSummary
     mode = keepsMode && modesFor(harness).some((entry) => entry.id === keptMode) ? keptMode : defaultMode(harness)
     persist()
     notify()
+    refreshContextWindow()
     return { status: 200, body: answer() }
   }
 
@@ -3030,6 +3036,7 @@ ${modelSummary}` : modelSummary
   if (lockFile) takeRoomLock(lockFile)
   if (!restore()) mode = defaultMode(harness)
   persist()
+  refreshContextWindow()
   maybeStartTurn()
 
   return {
