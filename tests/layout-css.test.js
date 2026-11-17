@@ -44,7 +44,10 @@ describe('the transport state word and the spend', () => {
   it('keeps the summary readable and lets the list scroll', () => {
     expect(rule('.transport-agents-toggle')['white-space']).toBe('nowrap')
     expect(rule('.transport-agents-list').overflow).toBe('auto')
-    expect(rule('.transport-agent')['overflow-wrap']).toBe('anywhere')
+    expect(rule('.transport-agents-list')['max-height']).toContain('--agents-list-height')
+    expect(rule('.transport-agents-list')['grid-template-columns']).toBe('repeat(4, max-content)')
+    expect(rule('.transport-agent')['grid-template-columns']).toBe('subgrid')
+    expect(rule('.transport-agent')['white-space']).toBe('nowrap')
   })
 })
 

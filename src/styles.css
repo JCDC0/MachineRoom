@@ -9226,19 +9226,22 @@ body:has(#hud-orchestrator-chat) .lens-waiting {
     z-index: 10;
     width: max-content;
     max-width: min(600px, 90vw);
-    max-height: 50vh;
+    max-height: var(--agents-list-height, calc(100vh - var(--menu-h) - var(--transport-h) - 24px));
     overflow: auto;
+    display: grid;
+    grid-template-columns: repeat(4, max-content);
     background: var(--black);
     border: 1px solid var(--line);
   }
 
   .transport-agent {
-    display: flex;
-    flex-wrap: wrap;
+    display: grid;
+    grid-column: 1 / -1;
+    grid-template-columns: subgrid;
     gap: 8px;
     width: 100%;
     text-align: left;
-    overflow-wrap: anywhere;
+    white-space: nowrap;
   }
 
   .transport-spend {

@@ -1,6 +1,7 @@
 import { act, createElement } from 'react'
 import { describe, expect, it } from 'vitest'
 import Hud from '../src/ui/Hud.jsx'
+import { createClient } from '../src/control/client.js'
 import LaneConversation from '../src/ui/LaneConversation.jsx'
 import {
   LANE_READ_GAP_MS,
@@ -56,7 +57,7 @@ async function mount(root, props) {
 }
 
 describe('lane conversation helpers', () => {
-  it('keeps the lane newest ten runs, including a live run with no record', () => {
+  it('keeps the lane runs, including a live run with no record', () => {
     const recent = Array.from({ length: 12 }, (_, index) => ({
       lane: 'opencode',
       startedAt: `2026-10-24T12:${String(index).padStart(2, '0')}:00.000Z`,
@@ -69,13 +70,18 @@ describe('lane conversation helpers', () => {
     const liveRuns = [{ runId: 'run-opencode-project-20261024-140000', startedAt: '2026-10-24T14:00:00.000Z' }]
 
     const options = runOptions(runs, 'opencode', { liveRuns, lanes: LANES })
-    expect(options).toHaveLength(10)
+    expect(options).toHaveLength(13)
     expect(options[0]).toMatchObject({
       startedAt: '2026-10-24T14:00:00.000Z',
       running: true,
     })
     expect(options.map((run) => run.startedAt)).not.toContain('2026-10-24T13:00:00.000Z')
-    expect(options.map((run) => run.startedAt)).not.toContain('2026-10-24T12:00:00.000Z')
+    expect(options.map((run) => run.startedAt)).toContain('2026-10-24T12:00:00.000Z')
+  })
+
+  it('includes a lane absent from the fleet recent runs through last', () => {
+    const runs = { recent: [{ lane: 'other', startedAt: STARTED }], last: [{ lane: 'opencode', startedAt: STARTED }] }
+    expect(runOptions(runs, 'opencode')).toHaveLength(1)
   })
 
   it('folds a run of tool calls and opens the prompt after three lines', () => {
@@ -103,6 +109,41 @@ describe('lane conversation helpers', () => {
 })
 
 describe('the lane conversation view', () => {
+  it('requests a lane with an encoded key while preserving the fleet request', async () => {
+    const urls = []
+    const client = createClient({ fetchImpl: async (url) => { urls.push(url); return { ok: true, json: async () => ({}) } } })
+    await client.runs()
+    await client.runs({ lane: 'lane + one' })
+    expect(urls).toEqual(['/api/control/runs', '/api/control/runs?lane=lane%20%2B%20one'])
+  })
+
+  it('loads older runs for the lane picker', async () => {
+    const earlier = '2026-10-23T12:00:00.000Z'
+    const client = {
+      runs: async () => ({ running: [], recent: [{ lane: 'opencode', startedAt: STARTED }, { lane: 'opencode', startedAt: earlier }] }),
+      runConversation: async () => ({ running: false, entries: [] }),
+    }
+    await withDom(async ({ container, root }) => {
+      await mount(root, { client, lane: 'opencode', laneName: 'OpenCode' })
+      const picker = container.querySelector('[aria-label="Run"]')
+      expect(picker.querySelectorAll('option')).toHaveLength(2)
+      expect(picker.querySelectorAll('option')[1].getAttribute('value')).toBe(earlier)
+    })
+  })
+
+  it('loads the selected lane history and shows no runs only when empty', async () => {
+    const requested = []
+    const client = { runs: async (options) => { requested.push(options); return { running: [], recent: [] } } }
+    await withDom(async ({ container, root }) => {
+      await mount(root, { client, lane: 'opencode', laneName: 'OpenCode', onRecipientSend: () => {}, recipientOptions: [] })
+      expect(requested).toEqual([{ lane: 'opencode' }])
+      expect(container.textContent).toContain('No runs yet.')
+      expect(container.textContent).not.toContain('Nothing has been said yet.')
+      expect(container.textContent).not.toContain('has no run that can read')
+      expect(container.querySelector('textarea').getAttribute('placeholder')).toBe('Start OpenCode with a message')
+    })
+  })
+
   it('folds ten tool calls into one line and opens them on a click', async () => {
     const calls = []
     const client = makeClient({
@@ -188,7 +229,7 @@ describe('the lane conversation view', () => {
 
       const card = container.querySelector('.brief-confirm-card')
       expect(card).not.toBeNull()
-      expect(card.textContent).toContain('Lane: opencode')
+      expect(card.textContent).toContain('Lane: OpenCode')
       expect(card.textContent).toContain(`Started: ${STARTED}`)
       expect(stopCalls).toEqual([])
 

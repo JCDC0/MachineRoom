@@ -112,9 +112,19 @@ export default function Transport({ snapshot, speeds, markers = [], orchestrator
     if (!listOpen) return undefined
     const closeOutside = (event) => { if (!listRef.current?.contains(event.target)) setListOpen(false) }
     const closeEscape = (event) => { if (event.key === 'Escape') setListOpen(false) }
+    const measure = () => {
+      const top = listRef.current?.getBoundingClientRect().top ?? 0
+      const menuBottom = document.querySelector('.hud-menu')?.getBoundingClientRect().bottom ?? 0
+      listRef.current?.style.setProperty('--agents-list-height', `${Math.max(0, top - menuBottom - 24)}px`)
+    }
+    measure()
+    window.addEventListener('resize', measure)
+    window.addEventListener('scroll', measure, true)
     document.addEventListener('pointerdown', closeOutside)
     document.addEventListener('keydown', closeEscape)
     return () => {
+      window.removeEventListener('resize', measure)
+      window.removeEventListener('scroll', measure, true)
       document.removeEventListener('pointerdown', closeOutside)
       document.removeEventListener('keydown', closeEscape)
     }
@@ -186,14 +196,13 @@ export default function Transport({ snapshot, speeds, markers = [], orchestrator
             <div className="transport-agents-list" role="group" aria-label="Agents">
               {chips.map((chip) => (
                 <button key={chip.id} type="button" className="transport-agent mono" onClick={() => { setListOpen(false); openOrchestratorChat(chip.id) }}>
-                  <span>{chip.name}</span><span>{chip.waiting ? 'waiting for you' : chip.tone}</span>
+                  <span>{chip.name}</span><span>{chip.waiting ? 'waiting for you' : chip.tone}</span><span></span><span></span>
                 </button>
               ))}
               {lanes.pills.map((pill) => (
                 <button key={pill.key} type="button" className="transport-agent mono" aria-label={`${lanePillTitle(pill)}. Inspect this lane`} onClick={() => { setListOpen(false); inspectLane(pill.key) }}>
-                  <span>{pill.label}</span><span>{pill.state}</span>{pill.task ? <span>{pill.task}</span> : null}
-                  {pill.minutes !== null && pill.state !== 'failed' ? <span>{pill.minutes} min</span> : null}
-                  {pill.step ? <span>{pill.step}</span> : null}
+                  <span>{pill.label}</span><span>{pill.state}</span><span>{[pill.task, pill.step].filter(Boolean).join(' ')}</span>
+                  <span>{pill.minutes !== null && pill.state !== 'failed' ? `${pill.minutes} min` : ''}</span>
                 </button>
               ))}
             </div>

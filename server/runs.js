@@ -1989,14 +1989,15 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
       const records = readAllRunRecords(recordsPath())
       noteFailovers(records)
       const thisRepo = await inThisRepository()
-      const visible = roomRecords(records, thisRepo).map(maskRecordCommits)
-      const runningItems = [...running.values()]
+      const lane = (url.searchParams.get('lane') ?? '').trim()
+      const visible = roomRecords(records, thisRepo).map(maskRecordCommits).filter((record) => !lane || record.lane === lane)
+      const runningItems = [...running.values()].filter((item) => !lane || item.entry.lane === lane)
       const lanes = runningItems.length > 0 ? readStartLanes({ lanesFile: laneFile, runsFolder: recordsDir() }) : null
       const openRuns = runningItems.length > 0 ? currentOpenRuns() : []
       sendJson(req, res, 200, {
         project: resolvedRoot ? basename(resolvedRoot) : '',
         running: runningItems.map((item) => snapshot(item, { lanes, openRuns })),
-        recent: visible.slice(-RECENT_LIMIT).reverse(),
+        recent: lane ? [...visible].sort((a, b) => Date.parse(b.startedAt) - Date.parse(a.startedAt)).slice(0, RECENT_LIMIT) : visible.slice(-RECENT_LIMIT).reverse(),
         last: newestRecordPerLane(visible),
         attention: attentionItems(visible),
       })

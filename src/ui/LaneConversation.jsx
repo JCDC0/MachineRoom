@@ -180,7 +180,7 @@ export default function LaneConversation({
   const prompt = foldPrompt(promptEntry?.text ?? '')
   const rows = foldToolCalls(entries.filter((entry) => entry.role !== 'prompt'))
   const follow = useLogFollow(running, entries.length)
-  const label = laneName || lane || 'Lane'
+  const label = (laneName && laneName !== lane ? laneName : '') || lanes.find((entry) => entry?.key === lane)?.name || 'Lane'
   const projectLabel = String(project || 'PROJECT').toUpperCase()
   const loaded = conversation.data !== null
   const isFinishedPlan = isFinishedPlanRun(currentRun, conversation.data)
@@ -214,7 +214,7 @@ export default function LaneConversation({
     let active = true
     async function readRuns(fromNotice = false) {
       try {
-        const answer = await client.runs()
+        const answer = await client.runs({ lane })
         if (!active) return
         const nextRuns = answer && typeof answer === 'object' ? answer : null
         setRuns(nextRuns)
@@ -243,14 +243,17 @@ export default function LaneConversation({
       active = false
       if (typeof unsubscribe === 'function') unsubscribe()
     }
-  }, [client, givenRuns])
+  }, [client, givenRuns, lane])
 
   useEffect(() => {
-    if (options.length === 0) return
+    if (options.length === 0) {
+      if (runs && selected) setSelected('')
+      return
+    }
     if (!selected || !options.some((run) => run.startedAt === selected)) {
       setSelected(options[0].startedAt)
     }
-  }, [options, selected])
+  }, [options, selected, runs])
 
   useEffect(() => {
     setDraft('')
@@ -537,9 +540,9 @@ export default function LaneConversation({
       </div>
 
       {confirmStop ? (
-        <div className="brief-confirm-card" role="region" aria-label={`Confirm stop ${lane}`}>
+        <div className="brief-confirm-card" role="region" aria-label={`Confirm stop ${label}`}>
           <div className="brief-confirm-meta mono">
-            <span className="brief-confirm-lane">Lane: {lane}</span>
+            <span className="brief-confirm-lane">Lane: {label}</span>
             <span className="brief-confirm-model">{taskText(currentRun)}</span>
             <span className="brief-confirm-id">Started: {selected}</span>
           </div>
@@ -571,7 +574,7 @@ export default function LaneConversation({
       {isFinishedPlan && planConfirmOpen ? (
         <div className="brief-confirm-card" role="region" aria-label="Confirm edit from this plan">
           <div className="brief-confirm-meta mono">
-            <span className="brief-confirm-lane">Lane: {lane}</span>
+            <span className="brief-confirm-lane">Lane: {label}</span>
           </div>
           <label className="mr-orch-label mono" htmlFor={planTaskId}>
             Task
@@ -642,7 +645,7 @@ export default function LaneConversation({
 
       <div className="mr-orch-log mr-lane-conv-log" ref={follow.ref} onScroll={follow.onScroll}>
         {(!conversation.loading || (runs && !selected)) && !conversation.error && entries.length === 0 ? (
-          <p className="mr-orch-empty">Nothing has been said yet.</p>
+          <p className="mr-orch-empty">{options.length === 0 ? 'No runs yet.' : 'Nothing has been said yet.'}</p>
         ) : null}
         {promptEntry ? (
           <section className="mr-lane-conv-prompt" aria-label="Prompt">
@@ -713,8 +716,6 @@ export default function LaneConversation({
           )
         })}
       </div>
-
-      {recipientOptions && runs && options.length === 0 ? <p className="mr-orch-empty">{`The lane ${lane} has no run that can read a message now.`}</p> : null}
 
       {running || onRecipientSend ? (
         <form
