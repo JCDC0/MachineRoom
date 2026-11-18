@@ -50,6 +50,7 @@ function runLane(args, env) {
     const child = spawn(process.execPath, [RUN_LANE_SCRIPT, ...args], {
       stdio: ['ignore', 'pipe', 'pipe'],
       env: { ...process.env, ...env },
+      windowsHide: true,
     })
     cleanups.push(() => killTree(child))
     let stdout = ''
@@ -428,6 +429,38 @@ describe('stopLane creation time rules', () => {
       return rows.some((item) => item.pid === pid)
     }
   }
+
+  it('stops a recorded orphan and its new child after the lock is gone', () => {
+    const { runs, env } = setup('mr-stop-orphan-')
+    const state = join(runs, 'fake.lock.processes')
+    writeFileSync(state, JSON.stringify({ log: 'prior.log', worktree: 'C:/lane', recorded: [[300, 9600], [301, 9605]] }))
+    const processes = [
+      { pid: 300, ppid: 1, created: 9600, command: 'bash /tmp/worker.sh' },
+      { pid: 301, ppid: 1, created: 9705, command: 'node C:/lane/worker.js' },
+      { pid: 302, ppid: 300, created: 9800 },
+      { pid: 303, ppid: 301, created: 9805 },
+    ]
+    const killed = []
+    const lines = []
+    const log = console.log
+    console.log = (msg) => lines.push(msg)
+    try {
+      const code = withEnv(env, () => stopLane('fake', {
+        platform: 'win32',
+        list: () => processes,
+        kill: ({ pid }) => {
+          killed.push(pid)
+          return true
+        },
+      }))
+      expect(code).toBe(0)
+      expect(killed).toEqual([300, 302])
+      expect(lines).toContain('Stopped 2 leftover processes for the fake lane.')
+      expect(existsSync(state)).toBe(false)
+    } finally {
+      console.log = log
+    }
+  })
 
   it('stops a process created no later than the lock file last change plus 2 seconds', () => {
     const { runs, env } = setup('mr-stop-rules-')

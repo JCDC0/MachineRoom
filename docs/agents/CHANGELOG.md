@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- GPT-6.2 Sol.
 - Sonnet.
 - Sonnet, from a partial branch.
 - DeepSeek native lane.
