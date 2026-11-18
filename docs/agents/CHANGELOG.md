@@ -2,57 +2,55 @@
 
 ## Unreleased
 
-- Hydrogen XHigh.
-- GPT-6.2 Sol.
-- GPT-6.2 Sol.
-- GPT-6.2 Sol.
-- GPT-6.2 Sol.
-- GPT-6.2 Sol.
-- GPT-6.2 Sol.
-- Sonnet.
-- GPT-6.2 Sol.
-- GPT-6.2 Sol.
-- GPT-6.2 Sol.
-- DeepSeek.
-- Sonnet.
-- DeepSeek.
-- DeepSeek.
-- DeepSeek.
-- DeepSeek.
-- GPT-6.2 Sol.
-- Sonnet.
-- Sonnet.
-- GPT-6.2 Sol.
-- GPT-6.2 Sol.
-- Sonnet review.
-- Sonnet.
-- DeepSeek native lane.
-- GPT-6.2 Sol.
+- The control routes stay fast on a large run log (P602).
+- Review 60 fixes: a lane switch keeps sent messages, Retry and a failed read say so (P595).
+- Review 60 fixes: Needs you shows each open failure, Tasks masks its titles (P594).
+- Review 60 fixes: the marker chooser opens at its marker (P596).
+- The Agents list: quiet rows, actions on hover, slide to select (P599).
+- The chat and a lane's conversation share one clean composer (P598).
+- Review 60: the review 59 fix batch P588 to P592 (P593).
+- Review 59 fixes: Tasks and Needs you agree on a failed run (P588).
+- Review 59 fixes: Open, Settings retry and the Direct API link (P589).
+- Review 59 fixes: seek markers stop catching the slider (P590).
+- Docs audit 5 fixes in DOCUMENTS.md and ARCHITECTURE.md (P587).
+- Review 59 fix: a run subject keeps its semicolons (P592).
+- Docs audit 5 fixes in CODE.md and LIMITS.md (P586).
+- Docs audit 5 fixes in LIVE.md (P585).
+- Docs audit 5 fixes in ROOM.md (P584).
+- Review 59 fix: a filter keeps Show all (P591).
+- Review 59 by GPT-6.2 Sol: the UI batch P567 to P570, P576 and P577 (P583).
+- Docs audit 5, the architecture files against the code of 2026-11-18 (P582).
+- Tests never write recordings into the repo (P581).
+- Review 58 fixes: the runner never stops a process it did not start (P580).
+- Review 57b by GPT-6.2 Sol, read blind (P575).
+- Review 58 of the runner batch, seven findings (P579).
+- Review 57b fixes: a plan does not clear a failed edit, Open selects the run asked for, lane settings wait for their read, the Direct API link fires once (P577).
+- Four more small buttons get 24 pixel hit areas (P576).
 - A Plan mode success no longer clears a failed edit, Open selects the run asked for, lane settings wait for their first read, and the Direct API link fires once (P577, review 57b).
-- Sonnet.
-- GPT-6.2 Sol.
-- Sonnet.
-- GPT-6.2 Sol.
-- GPT-6.2 Sol.
-- Sonnet.
-- Sonnet, from a partial branch.
-- DeepSeek native lane.
-- Sonnet audit.
-- DeepSeek native lane.
-- GPT-6.2 Sol.
-- DeepSeek native lane.
-- DeepSeek native lane.
-- DeepSeek native lane.
+- Each native request gets its own timeout (P574).
+- A continued run on a Claude lane resumes its session (P561).
+- Test audit 3 fixes: the bridge and source tests (P571).
+- Test audit 3 fixes: the stylesheet tests (P572).
+- The runner stops every process its lane started, even one that lost its parent (P562).
+- Test audit 3 fixes for the room and lane chat tests (P573).
+- Review 57 fixes: dismiss keys, rows that stay in Reviews, drafts that survive a tab switch (P565).
+- The interrupt test waits scale with CI (P560).
+- Test audit 3, thirteen fixes that their tests do not catch (P558).
+- Tasks reads a failed run as done once a later run fixed it (P570).
+- A run stopped hard can still be continued (P566).
+- Six small controls get a 24 pixel hit area from the shared rule (P568).
+- The branch list shows twenty branches until asked for more (P567).
+- Cut text in the chat shows in full on hover (P569).
 - Needs you dismisses by lane, start time and text, Reviews keeps a lane that is selected or mid-action visible, and Settings tabs keep their drafts (P565, review 57).
-- Sonnet review.
+- Review 57 of the Sonnet batch, grade B, seven findings (P564).
 - The interrupt test waits scale with CI and the cap test's fake CLI writes its call line before any git spawn (P560).
 
-- Sonnet.
-- Sonnet did P559 in one run.
+- Reviews says 1 lane has nothing to review for one folded lane (P563).
+- Settings opens on one section at a time behind tabs, with the lane settings under Lanes (P559).
 - Reviews reads `1 lane has nothing to review` for one folded lane (P563).
-- Sonnet finished Codex's partial P556.
+- Needs you drops fixed failures, rows read the same with Open and Dismiss, and briefs list newest first (P556).
 - Settings opens on one section at a time behind a row of tabs that remembers the open one, and the four lane settings sit under Lanes (P559).
-- Sonnet finished Codex's partial work.
+- Reviews folds lanes with nothing to review and Team names the harness (P557).
 - Reviews lists only lanes with commits ahead, changes or a read error and folds the rest under one line; Team names each lane by its harness and model (P557).
 - The Teams alert sits outside the fold; family action rows are at least 24 px high; CODE.md names the Repository order.
 - Three findings, R56-1 to R56-3; fixed by P555.
@@ -464,7 +462,6 @@
 - A lane is told to read its replies mid-run and how to message another running lane, and a sub is told how to answer one (P342).
 - A lane run the bridge started gets its ticket and the bridge address, and its prompt says how to message its coordinator (P336).
 - A lane's message shows the lane's name in the chat and in a conversation preview, or its key when the lane is unknown (P337).
-- A lane's message shows the lane's name in the chat and in a conversation preview, or its key when the lane is unknown (P337).
 - The runner hands a lane its ticket and the bridge address, and its prompt says how to message the coordinator without printing the ticket (P336).
 - A lane run the bridge started may message its coordinator mid-run with its run's ticket, at most 4 times, and receives nothing back (P335).
 - Added the owner's test tree end-to-end test in `tests/owner-tree.test.js` and the `docs/agents/FREE-HIERARCHY.md` runbook (P340).
@@ -850,7 +847,6 @@
 - Renamed titles, restored titles, compact rules and summaries, and a compaction report are masked before they are capped or saved (P151).
 - printedRunsFolder masks a posix path with ~ even when USERPROFILE is set, so the masked log line test runs on Linux again (P154).
 - The detail docs describe P143 to P148 and the Windows-only masked log test (P155).
-- run-lane's missing, non-folder and non-git project errors and a finished queue's worktree summary print the project with profile folders masked (P152).
 - run-lane's missing, non-folder and non-git project errors and a finished queue's worktree summary print the project with profile folders masked (P152).
 - printedRunsFolder masks a posix path with ~ even when USERPROFILE is set, because the Windows labels apply only to Windows paths (P154).
 - The masked log and record line test runs on Linux again, with a case for USERPROFILE on a posix path, and two test files no longer import printedRunsFolder unused (P154).
