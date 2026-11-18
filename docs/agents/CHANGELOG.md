@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Three findings, R55-1 to R55-3; fixes briefed as P549.
 - The list is placed from its button, 8 px above it; state words take the room colours; finished and failed rows show their age.
 - FamilyTree first; Teams is one head with its count, closed by default and remembered; Build a team after it.
 - findRunLog refuses a name another lane could claim unless the record or lane lock names it.
