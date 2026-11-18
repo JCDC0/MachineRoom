@@ -188,8 +188,29 @@ function rowByLabel(container, label) {
   )
 }
 
+async function chooseAction(root, region, label) {
+  const trigger = region.querySelector('[aria-haspopup="menu"]')
+  await click(root, trigger)
+  await click(root, buttonWithText(trigger.ownerDocument.body.querySelector('[role="menu"]'), label))
+}
+
+async function cardFor(row) {
+  const anchor = row.querySelector('.ui-hover-anchor')
+  await act(async () => {
+    anchor.focus()
+    anchor.dispatchEvent({ type: 'focusin', bubbles: true })
+  })
+  const card = row.ownerDocument.body.querySelector(`[id="${anchor.getAttribute('aria-describedby')}"]`)
+  expect(card.hasAttribute('hidden')).toBe(false)
+  return card
+}
+
+function laneSwitch(container, label) {
+  return rowByLabel(container, label).querySelector('[role="switch"]')
+}
+
 describe('FamilyTree rows', () => {
-  it('shows the bridge sentence when the family read fails', async () => {
+  it('shows one muted note below Agents when the family and lane reads fail', async () => {
     const { client } = makeClient()
     client.family = async () => {
       throw new Error('The lane file is missing.')
@@ -199,8 +220,34 @@ describe('FamilyTree rows', () => {
     }
     await withDom(async ({ container, root }) => {
       await mount(root, client)
-      expect(container.textContent).toContain('The lane file is missing.')
-      expect(container.querySelector('.mr-side-count').textContent).toBe('Lanes failed to load.')
+      const notes = container.querySelector('.mr-family-body').querySelectorAll('.mr-side-note')
+      expect(notes.map((note) => note.textContent)).toEqual(['Could not read the agents list.'])
+      expect(notes[0].getAttribute('title')).toBe('The lane file is missing.')
+      expect(container.querySelector('.mr-side-count')).toBeNull()
+      expect(container.querySelector('.mr-side-error')).toBeNull()
+    })
+  })
+
+  it('shows a failed refresh below Agents and clears the note on recovery', async () => {
+    const { client } = makeClient()
+    const readLanes = client.lanes
+    const listeners = new Set()
+    client.subscribe = (listener) => {
+      listeners.add(listener)
+      return () => listeners.delete(listener)
+    }
+    const notify = () => listeners.forEach((listener) => listener({ topic: 'family' }))
+    await withDom(async ({ container, root }) => {
+      await mount(root, client)
+      client.lanes = () => { throw new Error('not found') }
+      await act(async () => notify())
+      const body = container.querySelector('.mr-family-body')
+      expect(body.querySelector('.mr-side-note').textContent).toBe('Could not read the lanes.')
+      expect(container.querySelector('.mr-side-error')).toBeNull()
+      expect(container.querySelector('.mr-side-count').textContent).toBe('1 of 3 working')
+      client.lanes = readLanes
+      await act(async () => notify())
+      expect(body.querySelector('.mr-side-note')).toBeNull()
     })
   })
 
@@ -222,26 +269,22 @@ describe('FamilyTree rows', () => {
         'Claude',
       ])
       expect(tree.map((row) => Number(row.getAttribute('data-depth')))).toEqual([0, 1, 1, 1])
-      expect(tree[0].querySelector('.mr-family-kind').textContent).toBe('orchestrator')
-      expect(tree[1].querySelector('.mr-family-kind').textContent).toBe('sub')
-      expect(tree[2].querySelector('.mr-family-kind').textContent).toBe('lane')
-      expect(container.querySelector('.mr-side-count').textContent).toBe('2 of 3 lanes in this project')
-      expect(container.querySelectorAll('.mr-family-check')).toHaveLength(2)
-      expect(container.querySelectorAll('.mr-family-check-space')).toHaveLength(2)
+      expect(container.querySelectorAll('.mr-family-kind')).toHaveLength(0)
+      expect(container.querySelector('.mr-side-count').textContent).toBe('1 of 3 working')
+      expect(container.querySelectorAll('[role="switch"], input[type="checkbox"]')).toHaveLength(0)
       expect(container.textContent).not.toContain('agy')
 
       const more = container.querySelector('.mr-family-more-head')
-      expect(more.textContent).toContain('1 more lane')
+      expect(more.textContent).toBe('Show 1 more lane')
       expect(more.getAttribute('aria-expanded')).toBe('false')
       await click(root, more)
       expect(container.querySelector('.mr-family-more-head').getAttribute('aria-expanded')).toBe('true')
-      expect(rowByLabel(container, 'OpenCode 2')).not.toBeNull()
-      expect(container.querySelectorAll('.mr-family-check')).toHaveLength(3)
+      expect(rowByLabel(container, 'OpenCode 2').getAttribute('data-depth')).toBe('2')
     })
   })
 
-  it('marks a working lane and keeps a turned-off lane with an off dot', async () => {
-    const { client } = makeClient()
+  it('marks a working lane and lets an off lane be turned on from its menu', async () => {
+    const { client, calls } = makeClient()
     await withDom(async ({ container, root }) => {
       await mount(root, client)
       const working = rowByLabel(container, 'OpenCode')
@@ -251,60 +294,48 @@ describe('FamilyTree rows', () => {
       const off = rowByLabel(container, 'OpenCode 2')
       expect(off.getAttribute('data-kind')).toBe('lane')
       expect(classesOf(off.querySelector('.mr-family-dot'))).toContain('is-off')
-      const toggle = off.querySelector('.mr-side-switch')
-      expect(toggle.getAttribute('aria-checked')).toBe('false')
-      expect(toggle.getAttribute('aria-label')).toBe('Turn on OpenCode 2')
+      expect(off.querySelector('.mr-family-state').textContent).toBe('off')
+      expect(classesOf(off.querySelector('.mr-family-row'))).toContain('is-off')
+      await chooseAction(root, off, 'Turn on')
+      expect(calls.setActiveLanes).toEqual([{ lanes: ['opencode', 'opencode2', 'claude'], confirmed: true }])
+      await chooseAction(root, rowByLabel(container, 'Claude'), 'Turn off')
+      expect(calls.setActiveLanes[1]).toEqual({ lanes: ['opencode'], confirmed: true })
 
       const sub = rowByLabel(container, 'Frontend')
       expect(classesOf(sub.querySelector('.mr-family-dot'))).toContain('is-idle')
     })
   })
 
-  it('gives the label the first line and the state, meta and controls the second', async () => {
+  it('puts the name and status over harness and model, with shared trailing actions', async () => {
     const { client } = makeClient()
     await withDom(async ({ container, root }) => {
-      await mount(root, client, {
-        tasks: new Map([['opencode', 'JC-19']]),
-      })
+      await mount(root, client)
       const main = rowByLabel(container, 'Orchestrator')
-      const top = main.querySelector('.mr-family-top')
-      expect(top.children.map((child) => String(child.className))).toEqual([
+      expect(main.querySelector('.mr-family-top').children.map((child) => String(child.className))).toEqual([
         'mr-family-dot is-idle',
-        'mr-family-label',
+        'mr-family-label mr-family-open',
+        'mr-family-state mono',
       ])
-      const under = main.querySelector('.mr-family-under')
-      expect(under).not.toBeNull()
-      expect(under.querySelector('.mr-family-state').textContent).toBe('waiting')
-      expect(under.querySelector('.mr-family-kind').textContent).toBe('orchestrator')
-      expect(under.querySelector('.mr-family-meta').textContent).toBe('claude · opus · high')
-      expect(under.querySelector('.mr-family-add').textContent).toBe('+')
-      expect(under.querySelector('.mr-family-chat')).not.toBeNull()
+      expect(main.querySelector('.mr-family-state').textContent).toBe('waiting')
+      expect(main.querySelector('.ui-row-detail').textContent).toBe('claude · opus')
+      expect(container.querySelector('.mr-family-header').querySelector('.mr-family-add').getAttribute('aria-label')).toBe('Add a lane')
 
       const lane = rowByLabel(container, 'OpenCode')
-      const laneTop = lane.querySelector('.mr-family-top')
-      expect(laneTop.children.map((child) => String(child.className))).toEqual([
-        'mr-family-dot is-working',
-        'mr-family-label',
-      ])
-      const laneUnder = lane.querySelector('.mr-family-under')
-      expect(laneUnder.querySelector('.mr-family-state').textContent).toBe('JC-19')
-      expect(laneUnder.querySelector('.mr-side-switch')).not.toBeNull()
-      expect(laneUnder.querySelector('.mr-family-trash')).not.toBeNull()
-      expect(laneUnder.querySelector('.mr-family-add')).not.toBeNull()
-      expect(laneUnder.querySelector('.mr-family-chat')).not.toBeNull()
-      expect(lane.querySelector('.mr-family-row').children.map((child) => String(child.className))).toEqual([
-        'mr-family-indent',
-        'mr-family-check',
-        'mr-family-main',
-      ])
+      const detail = lane.querySelector('.ui-row-detail')
+      expect(detail.textContent).toBe('opencode · DeepSeek V4.1 Flash')
+      expect(detail.getAttribute('title')).toBe(detail.textContent)
+      expect(lane.querySelector('.mr-family-state').textContent).toBe('working')
+      const trailing = lane.querySelector('.ui-row-trailing')
+      expect(trailing.querySelector('.mr-family-chat').getAttribute('title')).toBe('Open conversation with OpenCode')
+      expect(trailing.querySelector('[aria-haspopup="menu"]')).not.toBeNull()
     })
   })
 
   it('gives the lower half sidebar room for a full label', () => {
     const css = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8')
     expect(css).toContain('grid-template-columns: clamp(280px, 22vw, 340px) minmax(0, 1fr) 280px')
-    expect(css).toContain('.mr-family-under {')
-    expect(css).toContain('.mr-family-actions {')
+    expect(css).toContain('.mr-family-row:is(:hover, :focus-within,')
+    expect(css).toMatch(/\.mr-family-row\.is-off \.mr-family-label \{\s*opacity: 0\.55;/)
   })
 
   it('shows each orchestrator state word beside its dot', async () => {
@@ -316,7 +347,8 @@ describe('FamilyTree rows', () => {
     await withDom(async ({ container, root }) => {
       await mount(root, client)
       const main = rowByLabel(container, 'Orchestrator')
-      expect(main.querySelector('.mr-family-state').textContent).toBe('paused')
+      expect(main.querySelector('.mr-family-state').textContent).toBe('waiting')
+      expect((await cardFor(main)).textContent).toContain('Status paused')
       expect(classesOf(main.querySelector('.mr-family-dot'))).toContain('is-paused')
       const sub = rowByLabel(container, 'Frontend')
       expect(sub.querySelector('.mr-family-state').textContent).toBe('working')
@@ -324,8 +356,16 @@ describe('FamilyTree rows', () => {
     })
   })
 
-  it('shows the task of a working lane and none for an idle lane', async () => {
+  it('shows the working task and latest completed run in the hover card', async () => {
     const { client } = makeClient()
+    client.family = async () => ({
+      ...FAMILY,
+      nodes: FAMILY.nodes.map((node) => node.id === 'opencode' ? { ...node, mode: 'build' } : node),
+    })
+    client.runs = async () => ({
+      last: [{ lane: 'opencode', startedAt: '2026-11-18T11:20:16Z', exitCode: 0 }],
+      recent: [{ lane: 'opencode', startedAt: '2026-11-17T10:00:00Z', exitCode: 1 }],
+    })
     await withDom(async ({ container, root }) => {
       await mount(root, client, {
         tasks: new Map([
@@ -333,8 +373,15 @@ describe('FamilyTree rows', () => {
           ['claude', 'JC-20'],
         ]),
       })
-      expect(rowByLabel(container, 'OpenCode').querySelector('.mr-family-state').textContent).toBe('JC-19')
-      expect(rowByLabel(container, 'Claude').querySelector('.mr-family-state')).toBeNull()
+      const card = await cardFor(rowByLabel(container, 'OpenCode'))
+      expect(card.querySelector('.ui-hovercard-title').textContent).toBe('OpenCode')
+      expect(card.textContent).toContain('Effort max · Mode build')
+      expect(card.textContent).toContain('Status working · JC-19')
+      expect(card.textContent).toContain('Last run 11:20:16 · finished')
+      expect(card.textContent).not.toContain('10:00:00')
+      const idle = await cardFor(rowByLabel(container, 'Claude'))
+      expect(idle.textContent).toContain('Status idle')
+      expect(idle.textContent).not.toContain('JC-20')
     })
   })
 
@@ -355,7 +402,7 @@ describe('FamilyTree rows', () => {
     ]
     await withDom(async ({ container, root }) => {
       await mount(root, client)
-      expect(rowByLabel(container, 'OpenCode').querySelector('.mr-family-state').textContent).toBe('JC-19')
+      expect((await cardFor(rowByLabel(container, 'OpenCode'))).textContent).toContain('Status working · JC-19')
     })
   })
 
@@ -439,47 +486,59 @@ describe('FamilyTree rows', () => {
     })
   })
 
-  it('counts the checked lanes from their selection checkboxes and clears them', async () => {
+  it('selects lanes by switch and row, and supports Clear, Escape and Done', async () => {
     const { client } = makeClient()
-    await withDom(async ({ container, root }) => {
+    await withDom(async ({ container, root, dom }) => {
       await mount(root, client)
-      const opencode = rowByLabel(container, 'OpenCode').querySelector('.mr-family-check')
-      const claude = rowByLabel(container, 'Claude').querySelector('.mr-family-check')
+      const header = container.querySelector('.mr-family-header')
+      expect(laneSwitch(container, 'OpenCode')).toBeNull()
+      await chooseAction(root, header, 'Select lanes')
+      const opencode = laneSwitch(container, 'OpenCode')
+      const claude = laneSwitch(container, 'Claude')
       expect(opencode.getAttribute('aria-label')).toBe('Select OpenCode')
       expect(claude.getAttribute('aria-label')).toBe('Select Claude')
-
-      await act(async () => {
-        opencode.checked = true
-        opencode.click()
-      })
-      await act(async () => {
-        claude.checked = true
-        claude.click()
-      })
+      expect(opencode.getAttribute('aria-checked')).toBe('false')
+      await click(root, opencode)
+      await click(root, rowByLabel(container, 'Claude').querySelector('.mr-family-label'))
+      expect(opencode.getAttribute('aria-checked')).toBe('true')
+      expect(claude.getAttribute('aria-checked')).toBe('true')
       expect(container.textContent).toContain('2 selected')
-      expect(buttonWithText(container, 'Add sub orchestrator')).not.toBeNull()
+      const makeSub = container.querySelector('button[aria-label="Make sub orchestrator"]')
+      expect(makeSub.textContent).toBe('Make sub')
+      expect(makeSub.querySelector('.ui-chip-chevron')).toBeNull()
+      expect(makeSub.hasAttribute('disabled')).toBe(false)
 
       await click(root, buttonWithText(container, 'Clear'))
-      expect(container.textContent).not.toContain('2 selected')
+      expect(container.textContent).toContain('0 selected')
+      expect(opencode.getAttribute('aria-checked')).toBe('false')
+      expect(makeSub.hasAttribute('disabled')).toBe(true)
+      await act(async () => {
+        dom.window.dispatchEvent({ type: 'keydown', key: 'Escape' })
+      })
       expect(container.querySelector('.mr-family-selection')).toBeNull()
+      expect(dom.document.activeElement).toBe(header.querySelector('[aria-haspopup="menu"]'))
+
+      await chooseAction(root, header, 'Add sub orchestrator…')
+      await click(root, laneSwitch(container, 'Claude'))
+      await click(root, buttonWithText(container, 'Done'))
+      expect(container.querySelector('.mr-family-selection')).toBeNull()
+      expect(laneSwitch(container, 'Claude')).toBeNull()
     })
   })
 
-  it('keeps every checked lane when the plus on a lane opens the form', async () => {
+  it('keeps the current selection when a lane menu adds a lane to the sub form', async () => {
     const { client } = makeClient()
     await withDom(async ({ container, root }) => {
       await mount(root, client)
       await click(root, container.querySelector('.mr-family-more-head'))
+      await chooseAction(root, container.querySelector('.mr-family-header'), 'Select lanes')
       for (const label of ['OpenCode', 'OpenCode 2']) {
-        const check = rowByLabel(container, label).querySelector('.mr-family-check')
-        await act(async () => {
-          check.checked = true
-          check.click()
-        })
+        await click(root, laneSwitch(container, label))
       }
       expect(container.textContent).toContain('2 selected')
-      await click(root, rowByLabel(container, 'Claude').querySelector('.mr-family-add'))
+      await chooseAction(root, rowByLabel(container, 'Claude'), 'Add sub orchestrator…')
       expect(container.textContent).toContain('3 selected')
+      expect(container.querySelector('.mr-family-sub-form')).not.toBeNull()
     })
   })
 
@@ -488,12 +547,9 @@ describe('FamilyTree rows', () => {
     await withDom(async ({ container, root }) => {
       await mount(root, client)
       await click(root, container.querySelector('.mr-family-more-head'))
-      const check = rowByLabel(container, 'OpenCode 2').querySelector('.mr-family-check')
-      await act(async () => {
-        check.checked = true
-        check.click()
-      })
-      await click(root, buttonWithText(container, 'Add sub orchestrator'))
+      await chooseAction(root, container.querySelector('.mr-family-header'), 'Select lanes')
+      await click(root, laneSwitch(container, 'OpenCode 2'))
+      await click(root, container.querySelector('button[aria-label="Make sub orchestrator"]'))
       const form = container.querySelector('.mr-family-sub-form')
       const label = form.querySelector('input[aria-label="Sub orchestrator label"]')
       await act(async () => {
@@ -513,19 +569,13 @@ describe('FamilyTree rows', () => {
     })
   })
 
-  it('removes a lanes.json lane from this project from its trash button behind a confirm', async () => {
+  it('removes a lanes.json lane from this project from its action menu behind a confirm', async () => {
     const { client, calls } = makeClient()
     await withDom(async ({ container, root }) => {
       await mount(root, client, { project: '/work/machine-room' })
-      expect(container.querySelectorAll('.mr-family-trash')).toHaveLength(3)
-      expect(rowByLabel(container, 'Orchestrator').querySelector('.mr-family-trash')).toBeNull()
-
-      const trash = rowByLabel(container, 'OpenCode').querySelector('.mr-family-trash')
-      expect(trash.getAttribute('aria-label')).toBe('Remove OpenCode')
       await click(root, container.querySelector('.mr-family-more-head'))
-      expect(rowByLabel(container, 'OpenCode 2').querySelector('.mr-family-trash')).not.toBeNull()
-
-      await click(root, trash)
+      expect(rowByLabel(container, 'OpenCode 2').querySelector('[aria-haspopup="menu"]')).not.toBeNull()
+      await chooseAction(root, rowByLabel(container, 'OpenCode'), 'Delete…')
       const card = container.querySelector('.mr-side-confirm-card')
       expect(card.textContent).toContain(
         'Remove OpenCode from machine-room? It stays in your other projects.'
@@ -541,10 +591,7 @@ describe('FamilyTree rows', () => {
     await client.createLane({ name: 'Writer', harness: 'opencode', model: 'opencode-go/deepseek-v4.1-flash', confirmed: true })
     await withDom(async ({ container, root }) => {
       await mount(root, client, { project: '/work/machine-room' })
-      const trash = rowByLabel(container, 'Writer').querySelector('.mr-family-trash')
-      expect(trash.getAttribute('aria-label')).toBe('Hide Writer')
-
-      await click(root, trash)
+      await chooseAction(root, rowByLabel(container, 'Writer'), 'Delete…')
       const card = container.querySelector('.mr-side-confirm-card')
       expect(card.textContent).toContain(
         'Hide Writer in machine-room? It stays in your other projects.'
@@ -555,14 +602,27 @@ describe('FamilyTree rows', () => {
     })
   })
 
-  it('removes a sub orchestrator from its trash button and returns its lanes', async () => {
+  it('opens the add lane form under a sub from its action menu', async () => {
     const { client, calls } = makeClient()
     await withDom(async ({ container, root }) => {
       await mount(root, client)
-      const trash = rowByLabel(container, 'Frontend').querySelector('.mr-family-trash')
-      expect(trash.getAttribute('aria-label')).toBe('Delete Frontend')
+      const sub = rowByLabel(container, 'Frontend')
+      await chooseAction(root, sub, 'Add a lane under this…')
+      const form = sub.querySelector('.mr-family-child')
+      await type(root, form.querySelector('[aria-label="New agent label"]'), 'Writer')
+      await act(async () => {
+        form.dispatchEvent({ type: 'submit', bubbles: true, cancelable: true })
+      })
+      expect(container.querySelector('.mr-side-confirm-card').textContent).toContain('Create "Writer" under Frontend?')
+      expect(calls.createLane).toHaveLength(0)
+    })
+  })
 
-      await click(root, trash)
+  it('removes a sub orchestrator from its action menu and returns its lanes', async () => {
+    const { client, calls } = makeClient()
+    await withDom(async ({ container, root }) => {
+      await mount(root, client)
+      await chooseAction(root, rowByLabel(container, 'Frontend'), 'Delete…')
       const card = container.querySelector('.mr-side-confirm-card')
       expect(card.textContent).toContain('Remove "Frontend"? Its agents return to the orchestrator.')
       await click(root, buttonWithText(card, 'Remove'))
@@ -574,7 +634,7 @@ describe('FamilyTree rows', () => {
     const { client, calls } = makeClient()
     await withDom(async ({ container, root }) => {
       await mount(root, client)
-      await click(root, rowByLabel(container, 'Orchestrator').querySelector('.mr-family-add'))
+      await click(root, container.querySelector('.mr-family-add'))
 
       const form = container.querySelector('.mr-family-child')
       expect(form).not.toBeNull()
@@ -617,7 +677,7 @@ describe('FamilyTree rows', () => {
       const writer = rowByLabel(container, 'Writer')
       expect(writer).not.toBeNull()
       expect(writer.getAttribute('data-kind')).toBe('lane')
-      expect(writer.querySelector('.mr-family-meta').textContent).toContain('opencode')
+      expect(writer.querySelector('.ui-row-detail').textContent).toContain('opencode')
     })
   })
 
@@ -626,7 +686,7 @@ describe('FamilyTree rows', () => {
     directModels.push({ id: 'OpenRouter/flash' })
     await withDom(async ({ container, root }) => {
       await mount(root, client)
-      await click(root, rowByLabel(container, 'Orchestrator').querySelector('.mr-family-add'))
+      await click(root, container.querySelector('.mr-family-add'))
       const form = container.querySelector('.mr-family-child')
       const direct = form
         .querySelectorAll('.mr-side-harness')
@@ -657,7 +717,7 @@ describe('FamilyTree rows', () => {
       dom.window.addEventListener('machineroom:open-settings', onOpen)
       try {
         await mount(root, client)
-        await click(root, rowByLabel(container, 'Orchestrator').querySelector('.mr-family-add'))
+        await click(root, container.querySelector('.mr-family-add'))
         const form = container.querySelector('.mr-family-child')
         const direct = form
           .querySelectorAll('.mr-side-harness')
@@ -733,7 +793,8 @@ describe('FamilyTeams', () => {
     await withDom(async ({ container, root, dom }) => {
       await mountTeams(root, client, container, false)
       let head = container.querySelector('button[aria-expanded="false"]')
-      expect(head.textContent).toContain('Teams 2')
+      expect(head.querySelector('.mr-side-head-title').textContent).toBe('Teams')
+      expect(head.querySelector('.mr-side-count').textContent).toBe('2')
       expect(container.querySelector('input[aria-label="Team name"]')).toBeNull()
       await click(root, head)
       expect(container.querySelector('input[aria-label="Team name"]')).not.toBeNull()
@@ -757,6 +818,8 @@ describe('FamilyTeams', () => {
       await settle()
       const parts = container.querySelector('.mr-side-agents').children
       expect([...parts].map((part) => part.className)).toEqual(['mr-family', 'mr-teams', 'mr-team'])
+      await chooseAction(root, container.querySelector('.mr-family-header'), 'Build a team…')
+      expect(container.querySelector('.mr-team-form')).not.toBeNull()
     })
   })
 
@@ -946,7 +1009,7 @@ describe('FamilyTree session rows', () => {
       expect(row).not.toBe(null)
       expect(row.getAttribute('data-kind')).toBe('session')
       expect(row.textContent).toContain('working')
-      expect(row.textContent).toContain('started opencode')
+      expect((await cardFor(row)).textContent).toContain('started opencode')
       const orchestrator = rowByLabel(container, 'Orchestrator')
       expect(orchestrator).not.toBe(null)
       const all = Array.from(rows(container))

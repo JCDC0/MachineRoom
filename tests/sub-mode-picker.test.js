@@ -184,12 +184,9 @@ async function mount(root, client) {
 }
 
 async function openSubForm(root, container, laneLabel = 'OpenCode') {
-  const check = rowByLabel(container, laneLabel).querySelector('.mr-family-check')
-  await act(async () => {
-    check.checked = true
-    check.click()
-  })
-  await click(root, buttonWithText(container, 'Add sub orchestrator'))
+  const row = rowByLabel(container, laneLabel)
+  await click(root, row.querySelector('[aria-haspopup="menu"]'))
+  await click(root, buttonWithText(row.ownerDocument.body.querySelector('[role="menu"]'), 'Add sub orchestrator…'))
   return container.querySelector('.mr-family-sub-form')
 }
 

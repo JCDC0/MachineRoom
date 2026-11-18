@@ -174,7 +174,7 @@ describe('a node line', () => {
 
   it('names the state dot', () => {
     expect(stateWord({ working: true })).toBe('working')
-    expect(stateWord({ working: true, active: false })).toBe('working')
+    expect(stateWord({ working: true, active: false })).toBe('off')
     expect(stateWord({ active: false })).toBe('off')
     expect(stateWord({})).toBe('idle')
   })
@@ -465,17 +465,17 @@ describe('the requests', () => {
 })
 
 describe('the project lane count', () => {
-  it('counts the active lanes of the lanes this project shows', () => {
+  it('counts working lanes among the lanes this project shows', () => {
     expect(
       laneCountLine([
         { id: 'orchestrator', kind: 'orchestrator', active: true },
-        { id: 'a', kind: 'lane', active: true },
+        { id: 'a', kind: 'lane', active: true, working: true },
         { id: 'b', kind: 'lane', active: false },
         { id: 'c', kind: 'lane', active: true },
       ])
-    ).toBe('2 of 3 lanes in this project')
-    expect(laneCountLine([])).toBe('0 of 0 lanes in this project')
-    expect(laneCountLine(null)).toBe('0 of 0 lanes in this project')
+    ).toBe('1 of 3 working')
+    expect(laneCountLine([])).toBe('0 of 0 working')
+    expect(laneCountLine(null)).toBe('0 of 0 working')
   })
 
   it('splits the inactive lanes off the tree and labels the row', () => {

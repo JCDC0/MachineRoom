@@ -196,9 +196,26 @@ describe('small control targets', () => {
   })
 
   it('keeps family targets inside their row', () => {
-    expect(pixels(rule('.mr-family-under')['min-height'])).toBeGreaterThanOrEqual(24)
-    expect(rule('.mr-family-under')['align-items']).toBe('center')
-    expect(pixels(rule('.mr-family-check-space').width)).toBe(pixels(merged('.mr-family .mr-family-check')['min-width']))
+    const height = 'var(--control-h)'
+    expect(pixels(rule('.ui-row:has(.ui-row-detail)')['min-height'])).toBeGreaterThanOrEqual(28)
+    expect(rule('.ui-row')['align-items']).toBe('center')
+    expect(rule('button.ui-icon-btn')).toMatchObject({ width: height, height })
+    expect(rule('button.ui-switch')).toMatchObject({ 'min-width': height, height })
+    expect(rule('.mr-family-actions').gap).toBe('var(--space)')
+  })
+
+  it('reserves header action space and keeps selection on one line', () => {
+    const actions = merged('.mr-family-header-actions')
+    expect(actions.flex).toBe('0 0 auto')
+    expect(actions.opacity).toBe('0')
+    expect(actions.width).toBeUndefined()
+    expect(merged('.mr-family-selection')['flex-wrap']).toBeUndefined()
+    expect(rule('.mr-family-selection-count')['white-space']).toBe('nowrap')
+  })
+
+  it('hides hover cards while Agents menus are open and keeps sidebar read errors off Agents', () => {
+    expect(rule("body:has(.mr-family [aria-haspopup='menu'][aria-expanded='true']) > .ui-hovercard").visibility).toBe('hidden')
+    expect(rule('.mr-side:has(> .mr-side-body > .mr-side-agents) > .mr-side-error:not([role])').display).toBe('none')
   })
 
   it('checks every stylesheet rule that gives a button a side under 24 pixels', () => {
@@ -301,24 +318,19 @@ describe('small control targets', () => {
       '.mr-side .mr-side-open-folder::after',
       '.mr-side .mr-repo-tree::after',
       '.mr-side .mr-repo-switch::after',
-      '.mr-family .mr-family-add::after',
-      '.mr-family .mr-family-chat::after',
-      '.mr-family .mr-family-trash::after',
-      '.mr-family .mr-family-check',
     ]
     const shared = sharedBlock(selectors)
     expect(shared).toBeTruthy()
     const size = declarations(shared[2])
     expect(pixels(size['min-width'])).toBeGreaterThanOrEqual(24)
     expect(pixels(size['min-height'])).toBeGreaterThanOrEqual(24)
-    const targets = sharedBlock(selectors.slice(0, -1), (body) => body.includes("content: ''"))
+    const targets = sharedBlock(selectors, (body) => body.includes("content: ''"))
     expect(targets).toBeTruthy()
     expect(declarations(targets[2])).toMatchObject({ position: 'absolute', left: '50%', top: '50%', width: '100%', height: '100%', transform: 'translate(-50%, -50%)' })
     const anchors = selectors.filter((selector) => selector.endsWith('::after') && !selector.includes('hud-action-badge') && !selector.includes('mr-side-switch')).map((selector) => selector.slice(0, -7))
     expect(sharedBlock(anchors, (body) => declarations(body).position === 'relative')).toBeTruthy()
     expect(rule('.hud-action-slot > .hud-action-badge').position).toBe('absolute')
     expect(rule('.mr-side .mr-side-switch').position).toBe('relative')
-    expect(pixels(rule('.mr-family-actions').gap)).toBeGreaterThanOrEqual(6)
   })
 
   it('gives the six small controls a 24 pixel hit area without a neighbour overlap', () => {
