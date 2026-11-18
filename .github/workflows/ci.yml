@@ -30,6 +30,7 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm test
+        timeout-minutes: 25
       - run: npm run build
       - run: npm run pack-check
       - name: History audit
