@@ -273,9 +273,8 @@
       "model": "gemini-4-hydrogen-xhigh"
     },
     "worktree": "C:\\GitHub\\MachineRoom\\.worktrees\\agy",
-    "role": "You own backend work: server/**, scripts/**, src/control/**, src/assistant/**, src/decider/**, src/briefs/**, src/harnesses/** and src/model/**, with only the small UI change a backend change needs. UI design and the look of the room belong to the OpenCode lanes.",
+    "role": "You own backend work: server/**, scripts/**, src/control/**, src/assistant/**, src/decider/**, src/briefs/**, src/harnesses/** and src/model/**, and from 0.1.402 the UI briefs the owner moves from Codex (src/ui/**, src/styles.css).",
     "forbidden": [
-      "src/styles.css",
       "src/engine/**",
       "src/Stage.jsx",
       "src/App.jsx"
@@ -297,9 +296,8 @@
       "model": "gemini-4-hydrogen-xhigh"
     },
     "worktree": "C:\\GitHub\\MachineRoom\\.worktrees\\agy2",
-    "role": "You own backend work: server/**, scripts/**, src/control/**, src/assistant/**, src/decider/**, src/briefs/**, src/harnesses/** and src/model/**, with only the small UI change a backend change needs. UI design and the look of the room belong to the OpenCode lanes.",
+    "role": "You own backend work: server/**, scripts/**, src/control/**, src/assistant/**, src/decider/**, src/briefs/**, src/harnesses/** and src/model/**, and from 0.1.402 the UI briefs the owner moves from Codex (src/ui/**, src/styles.css).",
     "forbidden": [
-      "src/styles.css",
       "src/engine/**",
       "src/Stage.jsx",
       "src/App.jsx"
@@ -321,9 +319,8 @@
       "model": "gemini-4-hydrogen-high"
     },
     "worktree": "C:\\GitHub\\MachineRoom\\.worktrees\\agy3",
-    "role": "You own backend work: server/**, scripts/**, src/control/**, src/assistant/**, src/decider/**, src/briefs/**, src/harnesses/** and src/model/**, with only the small UI change a backend change needs. UI design and the look of the room belong to the OpenCode lanes.",
+    "role": "You own backend work: server/**, scripts/**, src/control/**, src/assistant/**, src/decider/**, src/briefs/**, src/harnesses/** and src/model/**, and from 0.1.402 the UI briefs the owner moves from Codex (src/ui/**, src/styles.css).",
     "forbidden": [
-      "src/styles.css",
       "src/engine/**",
       "src/Stage.jsx",
       "src/App.jsx"
