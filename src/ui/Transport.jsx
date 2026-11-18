@@ -37,8 +37,10 @@ function markerLayout(markers, duration, width) {
   const ticks = markers.map((marker, index) => ({
     ...marker,
     index,
+    row: 0,
     share: Math.min(1, Math.max(0, marker.at / duration)),
   })).sort((a, b) => a.share - b.share)
+  if (width === 0) return { ticks, groups: [], rows: 1 }
   const rowEnds = []
   const groups = []
   for (const tick of ticks) {
@@ -56,8 +58,18 @@ function markerLayout(markers, duration, width) {
   return { ticks, groups, rows: rowEnds.length }
 }
 
+function positionMarkerChooser(button, chooser) {
+  const { left, width, top, bottom } = button.getBoundingClientRect()
+  const spaceBelow = window.innerHeight - bottom
+  const above = top >= 64 || top >= spaceBelow
+  chooser.setAttribute('data-side', above ? 'above' : 'below')
+  chooser.style.setProperty('--marker-x', `${left + width / 2}px`)
+  chooser.style.setProperty('--marker-edge', `${above ? window.innerHeight - top : bottom}px`)
+}
+
 function ScrubberMarkers({ markers, duration, onSeek }) {
   const rail = useRef(null)
+  const chooserButton = useRef(null)
   const id = useId()
   const [width, setWidth] = useState(0)
   useLayoutEffect(() => {
@@ -68,7 +80,28 @@ function ScrubberMarkers({ markers, duration, onSeek }) {
     observer.observe(node)
     return () => observer.disconnect()
   }, [])
+  useEffect(() => {
+    const reposition = () => {
+      const button = chooserButton.current
+      const chooser = button?.popoverTargetElement
+      if (chooser?.matches(':popover-open')) positionMarkerChooser(button, chooser)
+    }
+    window.addEventListener('resize', reposition)
+    window.addEventListener('scroll', reposition, true)
+    return () => {
+      window.removeEventListener('resize', reposition)
+      window.removeEventListener('scroll', reposition, true)
+    }
+  }, [])
   const { ticks, groups, rows } = useMemo(() => markerLayout(markers, duration, width), [markers, duration, width])
+
+  const placeChooser = (event) => {
+    const button = event.currentTarget
+    const chooser = button.popoverTargetElement
+    if (!chooser) return
+    chooserButton.current = button
+    positionMarkerChooser(button, chooser)
+  }
 
   return (
     <div ref={rail} className="scrubber-markers" data-rows={rows} style={{ '--marker-rows': rows }} role="group" aria-label="Run markers">
@@ -81,7 +114,7 @@ function ScrubberMarkers({ markers, duration, onSeek }) {
             className={`scrubber-tick is-${tone}`}
             style={{ left: `${share * 100}%`, '--marker-row': row }}
             popoverTarget={shared ? `${id}-${group}` : undefined}
-            onClick={shared ? undefined : () => onSeek(at)}
+            onClick={shared ? placeChooser : () => onSeek(at)}
             aria-label={shared ? `Choose a run marker near ${clock(at)}` : `Seek to ${tone} at ${clock(at)}`}
           />
         )

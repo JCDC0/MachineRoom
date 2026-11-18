@@ -2706,13 +2706,26 @@ button.hud-health-chip:hover {
 }
 
 .scrubber-overflow:popover-open {
+  --chooser-width: min(14rem, calc(100% - 2 * var(--space)));
+  --chooser-inset: clamp(var(--space), calc(var(--marker-edge) + var(--space)), calc(100% - 2 * var(--space)));
+  position: fixed;
+  inset: auto;
+  margin: 0;
+  left: clamp(var(--space), calc(var(--marker-x) - var(--chooser-width) / 2), calc(100% - var(--chooser-width) - var(--space)));
+  bottom: var(--chooser-inset);
+  width: var(--chooser-width);
   display: grid;
   gap: var(--space);
-  max-height: 50vh;
+  max-height: min(50vh, calc(100% - var(--chooser-inset) - var(--space)));
   padding: var(--space);
   border: 1px solid var(--line);
   background: var(--black);
   overflow: auto;
+}
+
+.scrubber-overflow[data-side='below']:popover-open {
+  top: var(--chooser-inset);
+  bottom: auto;
 }
 
 .transport .mono {

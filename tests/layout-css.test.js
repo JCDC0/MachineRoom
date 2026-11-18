@@ -114,6 +114,21 @@ describe('run-end room notice layout', () => {
 })
 
 describe('small control targets', () => {
+  it('places the marker chooser above its tick and bounds it to the viewport', () => {
+    const chooser = rule('.scrubber-overflow:popover-open')
+    expect(chooser.position).toBe('fixed')
+    expect(chooser.inset).toBe('auto')
+    expect(chooser.margin).toBe('0')
+    expect(chooser.left).toMatch(/^clamp\(.*var\(--marker-x\).*100%/)
+    expect(chooser.bottom).toBe('var(--chooser-inset)')
+    expect(chooser['--chooser-inset']).toMatch(/^clamp\(.*var\(--marker-edge\).*100%/)
+    expect(chooser['max-height']).toContain('100% - var(--chooser-inset)')
+    expect(chooser.overflow).toBe('auto')
+    expect(rule(".scrubber-overflow[data-side='below']:popover-open")).toEqual({
+      top: 'var(--chooser-inset)', bottom: 'auto',
+    })
+  })
+
   it('keeps family targets inside their row', () => {
     expect(pixels(rule('.mr-family-under')['min-height'])).toBeGreaterThanOrEqual(24)
     expect(rule('.mr-family-under')['align-items']).toBe('center')
