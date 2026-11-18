@@ -113,7 +113,7 @@ describe('lane agents', () => {
 
   it('lists one agent per lane with a command line and leaves retired lanes out', () => {
     const agents = laneAgents(realLanes)
-    expect(agents.map((agent) => agent.key)).toEqual(['orchestrator', 'opencode', 'opencode2', 'opencode3', 'opencode4', 'opencode5', 'opencode6', 'opencode7', 'agy', 'agy2', 'agy3', 'claude', 'claude2', 'claude3', 'codex', 'native', 'native2', 'codex2', 'codex3'])
+    expect(agents.map((agent) => agent.key)).toEqual(['orchestrator', 'opencode', 'opencode2', 'opencode3', 'opencode4', 'opencode5', 'opencode6', 'opencode7', 'agy', 'agy2', 'agy3', 'claude', 'claude2', 'claude3', 'codex', 'native', 'native2', 'native3', 'native4', 'codex2', 'codex3'])
     expect(agents.filter((agent) => !agent.key.startsWith('agy') && !agent.key.startsWith('claude') && !agent.key.startsWith('codex') && !agent.key.startsWith('native') && agent.key !== 'orchestrator').every((agent) => agent.parser === 'opencode' && agent.adapterType === 'opencode_local')).toBe(true)
     expect(agents.find((agent) => agent.key === 'codex')).toMatchObject({ name: 'Codex', parser: 'codex', adapterType: 'codex_local' })
     expect(agents.find((agent) => agent.key === 'native')).toMatchObject({ name: 'MachineRoom native', adapterType: 'machineroom_local' })

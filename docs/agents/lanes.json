@@ -436,7 +436,7 @@
       "model": "OpenRouter/deepseek/deepseek-v4.1-flash-1017"
     },
     "worktree": "C:\\GitHub\\MachineRoom\\.worktrees\\native",
-    "role": "You work on the brief in your own worktree and report back. You suit reviews, hunts and small fixes.",
+    "role": "You work on the brief in your own worktree and report back. You take coding briefs: small, well-scoped changes with their tests.",
     "forbidden": [
       "src/Stage.jsx",
       "src/App.jsx"
@@ -444,7 +444,8 @@
     "notes": [
       "You run on the owner's OpenRouter key, which has its own spending limit. Keep every run small: read only what the brief names.",
       "You cannot see the screen. When a brief asks for a check by eye, say in your report that it is left to the orchestrator.",
-      "Touch only the files your brief names. Other lanes work at the same time in their own worktrees."
+      "Touch only the files your brief names. Other lanes work at the same time in their own worktrees.",
+      "Run every command in the foreground and wait for it to finish. Run only the test files your brief names or the related tests, never the full suite."
     ]
   },
   "native2": {
@@ -457,7 +458,7 @@
       "model": "OpenRouter/deepseek/deepseek-v4.1-flash-1017"
     },
     "worktree": "C:\\GitHub\\MachineRoom\\.worktrees\\native2",
-    "role": "You work on the brief in your own worktree and report back. You suit reviews, hunts and small fixes.",
+    "role": "You work on the brief in your own worktree and report back. You take coding briefs: small, well-scoped changes with their tests.",
     "forbidden": [
       "src/Stage.jsx",
       "src/App.jsx"
@@ -465,7 +466,52 @@
     "notes": [
       "You run on the owner's OpenRouter key, which has its own spending limit. Keep every run small: read only what the brief names.",
       "You cannot see the screen. When a brief asks for a check by eye, say in your report that it is left to the orchestrator.",
-      "Touch only the files your brief names. Other lanes work at the same time in their own worktrees."
+      "Touch only the files your brief names. Other lanes work at the same time in their own worktrees.",
+      "Run every command in the foreground and wait for it to finish. Run only the test files your brief names or the related tests, never the full suite."
+    ]
+  },
+  "native3": {
+    "name": "MachineRoom native 3",
+    "harness": "MachineRoom",
+    "model": "DeepSeek V4.1 Flash 1017 on OpenRouter",
+    "modelHint": "the testbench endpoint OpenRouter; the owner keeps the key in the testbench room, and only this model is allowed",
+    "cli": {
+      "harness": "machineroom",
+      "model": "OpenRouter/deepseek/deepseek-v4.1-flash-1017"
+    },
+    "worktree": "C:\\GitHub\\MachineRoom\\.worktrees\\native3",
+    "role": "You work on the brief in your own worktree and report back. You take coding briefs: small, well-scoped changes with their tests.",
+    "forbidden": [
+      "src/Stage.jsx",
+      "src/App.jsx"
+    ],
+    "notes": [
+      "You run on the owner's OpenRouter key, which has its own spending limit. Keep every run small: read only what the brief names.",
+      "You cannot see the screen. When a brief asks for a check by eye, say in your report that it is left to the orchestrator.",
+      "Touch only the files your brief names. Other lanes work at the same time in their own worktrees.",
+      "Run every command in the foreground and wait for it to finish. Run only the test files your brief names or the related tests, never the full suite."
+    ]
+  },
+  "native4": {
+    "name": "MachineRoom native 4",
+    "harness": "MachineRoom",
+    "model": "DeepSeek V4.1 Flash 1017 on OpenRouter",
+    "modelHint": "the testbench endpoint OpenRouter; the owner keeps the key in the testbench room, and only this model is allowed",
+    "cli": {
+      "harness": "machineroom",
+      "model": "OpenRouter/deepseek/deepseek-v4.1-flash-1017"
+    },
+    "worktree": "C:\\GitHub\\MachineRoom\\.worktrees\\native4",
+    "role": "You work on the brief in your own worktree and report back. You take coding briefs: small, well-scoped changes with their tests.",
+    "forbidden": [
+      "src/Stage.jsx",
+      "src/App.jsx"
+    ],
+    "notes": [
+      "You run on the owner's OpenRouter key, which has its own spending limit. Keep every run small: read only what the brief names.",
+      "You cannot see the screen. When a brief asks for a check by eye, say in your report that it is left to the orchestrator.",
+      "Touch only the files your brief names. Other lanes work at the same time in their own worktrees.",
+      "Run every command in the foreground and wait for it to finish. Run only the test files your brief names or the related tests, never the full suite."
     ]
   },
   "codex2": {
