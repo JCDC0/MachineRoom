@@ -1,4 +1,4 @@
-import { Fragment, useContext, useEffect, useRef, useState } from 'react'
+import { Fragment, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import MenuIcon from './MenuIcon.jsx'
 import { name } from './brand.js'
 import Transport, { OrchestratorsContext, openConversation } from './Transport.jsx'
@@ -141,7 +141,8 @@ export default function Hud({
   const [menuOpen, setMenuOpen] = useState(false)
   const [sessionsOpen, setSessionsOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
-  const [settingsDirectApi, setSettingsDirectApi] = useState(0)
+  const [settingsDirectApi, setSettingsDirectApi] = useState(false)
+  const clearSettingsDirectApi = useCallback(() => setSettingsDirectApi(false), [])
   const [controlOpen, setControlOpen] = useState(() => Boolean(controlTarget?.nonce != null))
   const [chatOpen, setChatOpen] = useState(false)
   const [chatFocus, setChatFocus] = useState(0)
@@ -308,13 +309,13 @@ export default function Hud({
   }, [settingsRequest, wide])
 
   useEffect(() => {
-    if (!settingsOpen) setSettingsDirectApi(0)
-  }, [settingsOpen])
+    if (!settingsOpen) clearSettingsDirectApi()
+  }, [settingsOpen, clearSettingsDirectApi])
 
   useEffect(() => {
     function onOpenSettings() {
       setSettingsOpen(true)
-      setSettingsDirectApi((value) => value + 1)
+      setSettingsDirectApi(true)
       if (wide) {
         setControlOpen(false)
         setLogOpen(false)
@@ -956,6 +957,7 @@ export default function Hud({
               client={client}
               project={project}
               focusDirectApi={settingsDirectApi}
+              onDirectApiFocused={clearSettingsDirectApi}
             />
             </PanelBoundary>
           )}
@@ -1008,6 +1010,7 @@ export default function Hud({
             client={client}
             project={project}
             focusDirectApi={settingsDirectApi}
+            onDirectApiFocused={clearSettingsDirectApi}
           />
           </PanelBoundary>
         </div>
@@ -1051,6 +1054,7 @@ export default function Hud({
             {!laneChat && <p className="hud-lower-crumb mono">{lowerBreadcrumb(project, sessionTitle)}</p>}
             {laneChat ? (
               <LaneConversation
+                key={laneChat.lane}
                 client={client}
                 lane={laneChat.lane}
                 laneName={laneChatAgent?.name || laneChat.lane}
@@ -1245,6 +1249,7 @@ export default function Hud({
       {client && laneChat && !wide && (
         <PanelBoundary label="Conversation">
         <LaneConversation
+          key={laneChat.lane}
           client={client}
           lane={laneChat.lane}
           laneName={laneChatAgent?.name || laneChat.lane}
@@ -1252,7 +1257,7 @@ export default function Hud({
           lanes={snapshot?.agents ?? []}
           liveRuns={liveRuns ?? []}
           initialStartedAt={laneChat.startedAt}
-                requestKey={laneChat.nonce}
+          requestKey={laneChat.nonce}
           tick={log.length}
           onBack={() => {
             setLaneChat(null)

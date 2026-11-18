@@ -539,9 +539,21 @@ export function LaneSettingsFields({ client }) {
     <section className="hud-settings-section endpoints-panel" aria-label="Lane settings">
       {!loaded && !error ? <p className="endpoints-note mono">Loading the saved settings. Save is off until they load.</p> : null}
       {error ? (
-        <p className="endpoints-error mono" role="alert">
-          {error}
-        </p>
+        <div className="endpoints-actions">
+          <span className="endpoints-error mono" role="alert">{error}</span>
+          {!loaded && (
+            <button
+              type="button"
+              className="hud-settings-switch"
+              onClick={() => {
+                setError('')
+                load()
+              }}
+            >
+              Retry
+            </button>
+          )}
+        </div>
       ) : null}
       <div className="endpoints-field">
         <label className="endpoints-label mono" htmlFor="harness-lane-replies">
