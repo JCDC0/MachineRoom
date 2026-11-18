@@ -1107,6 +1107,18 @@ describe('run routes', () => {
     expect(res.status).toBe(200)
   })
 
+  it('recovers a log when the longer lane key leaves no job segment', async () => {
+    const tempDirRuns = useRunsTemp()
+    const { url, dir } = await startRunsBridge()
+    const folder = join(tempDirRuns, 'machineroom-runs')
+    const startedAt = new Date(2026, 10, 17, 10, 0, 0).toISOString()
+    writeFileSync(join(dir, 'docs', 'agents', 'lanes.json'), JSON.stringify({ test: {}, 'test-P1': {} }))
+    mkdirSync(folder, { recursive: true })
+    writeFileSync(join(folder, 'test-P1-20261117-100000.log'), opencodeConversationLog())
+    writeConversationRun(folder, { lane: 'test', briefs: ['P1'], startedAt, log: null })
+    expect((await getJson(conversationUrl(url, 'test', startedAt))).status).toBe(200)
+  })
+
   it('does not find another lane or a log outside the runs folder', async () => {
     const tempDirRuns = useRunsTemp()
     const { url } = await startRunsBridge()
