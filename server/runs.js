@@ -195,7 +195,7 @@ export function findRunLog(folder, record, resolveReal = realPath, lanes = {}) {
     for (const name of names) {
       const lower = name.toLowerCase()
       if (lower !== `${base}.log` && !(lower.startsWith(`${base}-`) && /^\d+\.log$/.test(lower.slice(base.length + 1)))) continue
-      if (Object.keys(lanes).some((key) => key.toLowerCase().startsWith(`${record.lane.toLowerCase()}-`) && lower.startsWith(`${key.toLowerCase()}-`))) continue
+      if (Object.keys(lanes).some((key) => key.toLowerCase().startsWith(`${record.lane.toLowerCase()}-`) && prefix.toLowerCase().startsWith(`${key.toLowerCase()}-`) && prefix.length > key.length + 1)) continue
       const path = join(folder, name)
       if (runLogInside(path, folder, resolveReal) && existsSync(path)) candidates.push({ path, distance: Math.abs(time - started) })
     }

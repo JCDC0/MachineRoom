@@ -456,6 +456,28 @@ describe('reported context windows', () => {
     expect(readEndpoints(temp)[0].modelDetails[0].contextLength).toBe(163840)
   })
 
+  it('removes expired retries and retries whose window becomes known', async () => {
+    const temp = makeTempDir('mr-test-window-prune-')
+    cleanups.push(() => removeTempDir(temp))
+    const endpoint = { name: 'OpenRouter', provider: 'OpenRouter', baseUrl: 'https://openrouter.ai/api/v1', keyName: 'slot', models: ['first', 'second'] }
+    saveEndpoints(temp, [endpoint])
+    let time = 1000
+    const api = createEndpointsApi({ runsFolder: temp, readKey: async () => 'test', now: () => time, fetchImpl: async () => ({ ok: true, json: async () => ({ data: [] }) }) })
+    await api.refreshMissing('OpenRouter/first')
+    await api.refreshMissing('OpenRouter/second')
+    const deleted = vi.spyOn(Map.prototype, 'delete')
+    try {
+      saveEndpoints(temp, [{ ...endpoint, modelDetails: [{ id: 'first', contextLength: 32000 }] }])
+      await api.refreshMissing('OpenRouter/first')
+      expect(deleted).toHaveBeenCalledWith(JSON.stringify(['OpenRouter', 'first']))
+      time += 600000
+      await api.refreshMissing('unknown')
+      expect(deleted).toHaveBeenCalledWith(JSON.stringify(['OpenRouter', 'second']))
+    } finally {
+      deleted.mockRestore()
+    }
+  })
+
   it('keeps the saved model list and existing details when refreshing', async () => {
     const temp = makeTempDir('mr-test-window-models-')
     cleanups.push(() => removeTempDir(temp))

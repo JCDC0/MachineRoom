@@ -794,7 +794,7 @@ export function createOrchestrators({
         if (out?.status === 200) stoppedOrchestrators.push(id)
       }
       const backupLanes = new Set()
-      for (const [ticket, backup] of laneBackups) {
+      for (const [ticket, { lane: backup }] of laneBackups) {
         const held = typeof laneTicket === 'function' ? laneTicket(ticket) : null
         if (!held) {
           laneBackups.delete(ticket)
@@ -845,15 +845,15 @@ export function createOrchestrators({
   }
 
   function laneName(ticket, held) {
-    const claimed = laneBackups.get(ticket)
+    const claimed = laneBackups.get(ticket)?.lane
     return typeof claimed === 'string' && claimed !== '' ? claimed : held.lane
   }
 
   function backupHeld(lane) {
     for (const [ticket, backup] of laneBackups) {
-      if (backup !== lane) continue
+      if (backup.lane !== lane) continue
       const held = typeof laneTicket === 'function' ? laneTicket(ticket) : null
-      if (held) return held
+      if (held) return { ...held, startedAt: backup.startedAt ?? held.startedAt }
       laneBackups.delete(ticket)
     }
     return null
@@ -970,7 +970,8 @@ export function createOrchestrators({
     if (isLaneStopping(lane) || isLaneStopping(held.lane) || (held.startedBy && isSectorStopping(held.startedBy))) {
       return { status: 409, body: { error: SECTOR_STOPPING_PROBLEM } }
     }
-    laneBackups.set(ticket, lane)
+    const startedAt = typeof body.startedAt === 'string' && Number.isFinite(Date.parse(body.startedAt)) ? body.startedAt : held.startedAt
+    laneBackups.set(ticket, { lane, startedAt })
     return { status: 200, body: { lane: laneName(ticket, held), from: held.lane } }
   }
 
