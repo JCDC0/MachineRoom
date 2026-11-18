@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process'
-import { readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { expect, it } from 'vitest'
@@ -49,3 +49,24 @@ it.each(['--list', '--stats'])('%s counts a lost run once and leaves the live ru
     expect(readRunRecords(file)).toEqual([expect.objectContaining(record)])
   } finally { rmSync(root, { recursive: true, force: true }) }
 }, 45000)
+
+it('lists and counts unsaved lost runs without waiting for the append lock', () => {
+  const root = makeTempDir('mr-records-blocked-')
+  const command = fileURLToPath(new URL('../scripts/run-lane.mjs', import.meta.url))
+  try {
+    mkdirSync(join(root, '.runs-append.lock'))
+    for (const name of ['lost-P1-20261118-131340', 'lost-P1-20261118-131341']) {
+      writeFileSync(join(root, `${name}.log`), '')
+      writeFileSync(join(root, `${name}.meta.json`), JSON.stringify({ lane: 'lost', briefs: ['P1'], model: 'fake/model' }))
+    }
+    for (const [arg, expected] of [['--list', 'exit none (lost)'], ['--stats', 'lost | fake/model | 2 runs']]) {
+      const result = spawnSync(process.execPath, [command, arg], {
+        env: { ...process.env, MACHINEROOM_RUNS: root }, encoding: 'utf8', windowsHide: true, timeout: 4000,
+      })
+      expect(result.status, result.error?.message ?? result.stderr).toBe(0)
+      expect(result.stdout).toContain(expected)
+      expect(result.stdout.match(/were not all saved/g)).toHaveLength(1)
+    }
+    expect(existsSync(join(root, 'runs.jsonl'))).toBe(false)
+  } finally { rmSync(root, { recursive: true, force: true }) }
+}, 12000)

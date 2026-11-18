@@ -129,7 +129,11 @@ export function sampleProcesses(onSample, platform = process.platform) {
   if (!$parent) { return }
   $null = $parent.Handle
   while (!$parent.HasExited -and [Console]::Read() -ne -1 -and !$parent.HasExited) {
-    $rows = @(Get-CimInstance -Query 'SELECT ProcessId, ParentProcessId, CreationDate FROM Win32_Process' -ErrorAction Stop | Select-Object ProcessId,ParentProcessId,CreationDate)
+    try {
+      $rows = @(Get-CimInstance -Query 'SELECT ProcessId, ParentProcessId, CreationDate FROM Win32_Process' -ErrorAction Stop | Select-Object ProcessId,ParentProcessId,CreationDate)
+    } catch {
+      $rows = @()
+    }
     if ($parent.HasExited) { break }
     ConvertTo-Json -InputObject $rows -Compress
   }`
@@ -221,7 +225,7 @@ export function descendantProcesses(processes, { rootPid = 0, ownPid = 0, exclud
   return found.sort((left, right) => left.pid - right.pid)
 }
 
-export function leftoverProcesses(processes, { childPid = 0, childCreated, recorded = new Map(), worktree = '', worktrees = [], ownPid = 0, excludePids = [], platform = process.platform } = {}) {
+export function leftoverProcesses(processes, { childPid = 0, childCreated, recorded = new Map(), worktree = '', worktrees = [], namedAfter = null, ownPid = 0, excludePids = [], platform = process.platform } = {}) {
   const list = (Array.isArray(processes) ? processes : [])
     .filter((item) => Number.isInteger(item?.pid) && item.pid > 0 && Number.isInteger(item?.ppid))
   const byPid = new Map(list.map((item) => [item.pid, item]))
@@ -243,7 +247,8 @@ export function leftoverProcesses(processes, { childPid = 0, childCreated, recor
     const chain = roots.size > 0 ? parentChain(byPid, item.pid) : []
     const related = [...chain].some((pid) => roots.has(pid))
     if (!related && recorded.has(item.pid)) continue
-    const named = folders.some((folder) => namesFolder(processKey(item.command, platform), folder))
+    const named = (namedAfter === null || (Number.isFinite(item.created) && item.created > namedAfter))
+      && folders.some((folder) => namesFolder(processKey(item.command, platform), folder))
     if (related || named) found.push(item)
   }
   return found.sort((left, right) => left.pid - right.pid)

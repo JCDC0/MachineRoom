@@ -71,7 +71,7 @@ describe('refuseRunningLane leftover recheck', () => {
     }
 
     await expect(refuseRunningLane('opencode', worktree, runs, { list, wait })).rejects.toThrow(
-      'The opencode lane still has leftover process 4141 (node.exe); stop it with npm run run-lane -- --stop opencode.',
+      'The opencode lane still has leftover process 4141 (node.exe); check and close it before starting the lane.',
     )
     expect(calls).toBe(2)
     expect(waits).toEqual([500])
@@ -141,7 +141,7 @@ describe('refuseRunningLane leftover recheck', () => {
     }
 
     await expect(refuseRunningLane('opencode', worktree, runs, { list, wait: () => {} })).rejects.toThrow(
-      'The opencode lane still has leftover process 4142 (%USERPROFILE%\\My Tools\\opencode.exe); stop it with npm run run-lane -- --stop opencode.',
+      'The opencode lane still has leftover process 4142 (%USERPROFILE%\\My Tools\\opencode.exe); check and close it before starting the lane.',
     )
   })
 
@@ -153,7 +153,7 @@ describe('refuseRunningLane leftover recheck', () => {
     ])
 
     await expect(refuseRunningLane('opencode', 'C:/review-work', runs, probe)).rejects.toThrow(
-      'The opencode lane still has leftover process 4142 (node.exe); stop it with npm run run-lane -- --stop opencode.',
+      'The opencode lane still has leftover process 4142 (node.exe); check and close it before starting the lane.',
     )
     expect(probe.calls()).toBe(2)
     expect(probe.waits).toEqual([500])
@@ -167,7 +167,7 @@ describe('refuseRunningLane leftover recheck', () => {
     ])
 
     await expect(refuseRunningLane('opencode', 'C:/review-work', runs, probe)).rejects.toThrow(
-      'The opencode lane still has leftover process 4141 (python.exe); stop it with npm run run-lane -- --stop opencode.',
+      'The opencode lane still has leftover process 4141 (python.exe); check and close it before starting the lane.',
     )
     expect(probe.calls()).toBe(2)
     expect(probe.waits).toEqual([500])
@@ -182,13 +182,13 @@ describe('refuseRunningLane leftover recheck', () => {
     ])
 
     await expect(refuseRunningLane('opencode', '', runs, probe)).rejects.toThrow(
-      'The opencode lane still has leftover process 4142 (node.exe); stop it with npm run run-lane -- --stop opencode.',
+      'The opencode lane still has leftover process 4142 (node.exe); check and close it before starting the lane.',
     )
     expect(probe.calls()).toBe(2)
     expect(probe.waits).toEqual([500])
   })
 
-  it('lets stop find the same leftover after a start refusal without a lock', async () => {
+  it('leaves a name-only leftover alive after a start refusal without a lock', async () => {
     const runs = tempRuns()
     const worktree = join(runs, 'project', '.worktrees', 'opencode')
     const row = { pid: 4141, ppid: 1, created: 2000, command: `node.exe ${join(worktree, 'worker.js')}` }
@@ -199,8 +199,8 @@ describe('refuseRunningLane leftover recheck', () => {
     const print = vi.spyOn(console, 'log').mockImplementation(() => {})
     try {
       expect(stopLane('opencode', { list, kill })).toBe(0)
-      expect(kill).toHaveBeenCalledExactlyOnceWith({ pid: 4141 })
-      expect(print).toHaveBeenCalledWith('Stopped 1 leftover process for the opencode lane.')
+      expect(kill).not.toHaveBeenCalled()
+      expect(print).toHaveBeenCalledWith('Stopped 0 leftover processes for the opencode lane. Matched no names.')
     } finally {
       print.mockRestore()
     }
