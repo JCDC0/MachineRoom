@@ -333,7 +333,7 @@ export function laneStatesFor({
 }
 
 export const RUN_READ_CHUNK_BYTES = 4 * 1024 * 1024
-const HEAD_SAMPLE_BYTES = 512
+const RUN_SAMPLE_BYTES = 512
 
 const runRecordCaches = new Map()
 
@@ -357,9 +357,31 @@ function resetRunCacheEntry(entry) {
   entry.offset = 0
   entry.ino = null
   entry.headSample = null
+  entry.tailSample = null
   entry.records = Object.freeze([])
   entry.tail = ''
   entry.decoder = new StringDecoder('utf8')
+}
+
+function sampleMatches(fd, offset, expected) {
+  if (!expected || expected.length === 0) return true
+  const sample = Buffer.allocUnsafe(expected.length)
+  let sampleRead = 0
+  while (sampleRead < sample.length) {
+    const got = readSync(fd, sample, sampleRead, sample.length - sampleRead, offset + sampleRead)
+    if (got <= 0) break
+    sampleRead += got
+  }
+  return sampleRead === expected.length && Buffer.compare(sample, expected) === 0
+}
+
+function appendTailSample(prev, chunk) {
+  if (chunk.length >= RUN_SAMPLE_BYTES) {
+    return Buffer.from(chunk.subarray(chunk.length - RUN_SAMPLE_BYTES))
+  }
+  if (!prev || prev.length === 0) return Buffer.from(chunk)
+  const keep = Math.min(prev.length, RUN_SAMPLE_BYTES - chunk.length)
+  return Buffer.concat([prev.subarray(prev.length - keep), chunk])
 }
 
 export function cachedRunRecords(file = runsFile()) {
@@ -379,6 +401,7 @@ export function cachedRunRecords(file = runsFile()) {
       mtimeMs: 0,
       ino: null,
       headSample: null,
+      tailSample: null,
       records: Object.freeze([]),
       tail: '',
       decoder: new StringDecoder('utf8'),
@@ -408,15 +431,15 @@ export function cachedRunRecords(file = runsFile()) {
 
   const fresh = []
   try {
-    if (entry.offset > 0 && entry.headSample && entry.headSample.length > 0) {
-      const sample = Buffer.allocUnsafe(entry.headSample.length)
-      let sampleRead = 0
-      while (sampleRead < sample.length) {
-        const got = readSync(fd, sample, sampleRead, sample.length - sampleRead, sampleRead)
-        if (got <= 0) break
-        sampleRead += got
-      }
-      if (sampleRead !== entry.headSample.length || Buffer.compare(sample, entry.headSample) !== 0) {
+    if (entry.offset > 0) {
+      const headOk = sampleMatches(fd, 0, entry.headSample)
+      const tailOffset = entry.tailSample ? entry.offset - entry.tailSample.length : 0
+      const tailOk =
+        !entry.tailSample ||
+        entry.tailSample.length === 0 ||
+        entry.offset <= (entry.headSample?.length ?? 0) ||
+        sampleMatches(fd, tailOffset, entry.tailSample)
+      if (!headOk || !tailOk) {
         resetRunCacheEntry(entry)
       }
     }
@@ -430,13 +453,15 @@ export function cachedRunRecords(file = runsFile()) {
         const want = Math.min(remaining, buffer.length)
         const got = readSync(fd, buffer, 0, want, entry.offset)
         if (got <= 0) break
+        const chunk = buffer.subarray(0, got)
         if (entry.offset === 0) {
-          entry.headSample = Buffer.from(buffer.subarray(0, Math.min(got, HEAD_SAMPLE_BYTES)))
+          entry.headSample = Buffer.from(chunk.subarray(0, Math.min(got, RUN_SAMPLE_BYTES)))
         }
+        entry.tailSample = appendTailSample(entry.tailSample, chunk)
         entry.offset += got
         entry.bytesRead += got
         remaining -= got
-        const text = entry.decoder.write(buffer.subarray(0, got))
+        const text = entry.decoder.write(chunk)
         const parts = (entry.tail + text).split(/\r?\n/)
         entry.tail = parts.pop() ?? ''
         for (const line of parts) {
@@ -580,8 +605,27 @@ export function readOutcomeRecords(file) {
 
 const RECORD_PATH_KEYS = new Set(['log', 'project', 'worktree', 'folder', 'path', 'cwd'])
 
-export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand, sendJson, readJsonBody, notify = () => {}, orchestrators = () => null, lanesSource = () => null, lanesFile = '', runsFolder = '', activeLanes = null, isLaneActive = null, onMessage = () => {}, platform = process.platform, list = listProcesses, stat = statSync, readFile = readFileSync, summarize = summarizeRun, resolvePath = realPath, bridgeUrl = '', refreshModelDetails = () => {} }) {
-  const resolvedRoot = projectRoot ? resolvePath(projectRoot) : ''
+const REPO_CHECK_FLOOR_MS = 5000
+const PATH_CACHE_TTL_MS = 30 * 1000
+const PATH_CACHE_LIMIT = 1024
+
+function readTimedCache(map, key, timestamp) {
+  const entry = map.get(key)
+  if (!entry) return undefined
+  if (timestamp >= entry.at && timestamp - entry.at < PATH_CACHE_TTL_MS) {
+    return entry.value
+  }
+  map.delete(key)
+  return undefined
+}
+
+function writeTimedCache(map, key, value, timestamp) {
+  if (!map.has(key) && map.size >= PATH_CACHE_LIMIT) map.clear()
+  map.set(key, { value, at: timestamp })
+}
+
+export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand, sendJson, readJsonBody, notify = () => {}, orchestrators = () => null, lanesSource = () => null, lanesFile = '', runsFolder = '', activeLanes = null, isLaneActive = null, onMessage = () => {}, platform = process.platform, list = listProcesses, stat = statSync, readFile = readFileSync, summarize = summarizeRun, resolvePath = realPath, bridgeUrl = '', refreshModelDetails = () => {}, now = Date.now }) {
+  let resolvedRoot = projectRoot ? resolvePath(projectRoot) : ''
   const resolvedBriefs = briefsDir ? resolve(briefsDir) : resolvedRoot ? join(resolvedRoot, 'docs', 'agents') : ''
   const laneFile = lanesFile ? resolve(lanesFile) : join(lanesFolder(), 'lanes.json')
   const lanesDir = dirname(laneFile)
@@ -604,14 +648,44 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
   let lastStartMs = 0
   let stopped = false
   let rootCommonDirPromise = null
+  let rootCommonDirStamp = null
 
   function bridgeAddress() {
     const value = typeof bridgeUrl === 'function' ? bridgeUrl() : bridgeUrl
     return typeof value === 'string' ? value.trim() : ''
   }
 
+  function statStamp(target) {
+    try {
+      const info = stat(target)
+      return `${info.ino ?? ''}:${info.mtimeMs ?? ''}:${info.ctimeMs ?? ''}:${info.size ?? ''}`
+    } catch {
+      return 'missing'
+    }
+  }
+
+  function projectRepoStamp() {
+    if (!projectRoot) return ''
+    return `${statStamp(projectRoot)}|${statStamp(join(projectRoot, '.git'))}`
+  }
+
   function rootCommonDir() {
+    if (!projectRoot) return Promise.resolve('')
+    const stamp = projectRepoStamp()
+    if (rootCommonDirStamp !== null && stamp !== rootCommonDirStamp) {
+      const nextRoot = resolvePath(projectRoot)
+      if (nextRoot !== resolvedRoot) {
+        resolvedRoot = nextRoot
+        resolvedPathCache.clear()
+        rootMatchCache.clear()
+        worktreeResolvedCache.clear()
+        worktreeMatchCache.clear()
+        cachedRoomSource = null
+      }
+      rootCommonDirPromise = null
+    }
     if (!rootCommonDirPromise) {
+      rootCommonDirStamp = stamp
       rootCommonDirPromise = resolvedRoot ? gitCommonDir(resolvedRoot) : Promise.resolve('')
     }
     return rootCommonDirPromise
@@ -1908,8 +1982,14 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
   const worktreeResolvedCache = new Map()
   const worktreeMatchCache = new Map()
   let thisRepoCache = null
+  let thisRepoStamp = null
+  let thisRepoCheckedAt = 0
+  let thisRepoPending = null
   let cachedRoomSource = null
   let cachedRoomThisRepo = null
+  let cachedRoomAt = 0
+  let cachedRoomFallbacks = new Set()
+  let cachedRoomOverflow = false
   let cachedRoomList = Object.freeze([])
   let cachedRunsViewSource = null
   const cachedRunsViewByLane = new Map()
@@ -1922,8 +2002,17 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
     rootMatchCache.clear()
     worktreeResolvedCache.clear()
     worktreeMatchCache.clear()
+    thisRepoCache = null
+    thisRepoStamp = null
+    thisRepoCheckedAt = 0
+    thisRepoPending = null
+    rootCommonDirPromise = null
+    rootCommonDirStamp = null
     cachedRoomSource = null
     cachedRoomThisRepo = null
+    cachedRoomAt = 0
+    cachedRoomFallbacks = new Set()
+    cachedRoomOverflow = false
     cachedRoomList = Object.freeze([])
     cachedRunsViewSource = null
     cachedRunsViewByLane.clear()
@@ -1935,48 +2024,161 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
   }
 
   async function inThisRepository() {
-    if (!resolvedRoot) return false
-    return samePath(await rootCommonDir(), await repoCommonDir())
+    if (!projectRoot) return false
+    const stamp = projectRepoStamp()
+    const result = samePath(await rootCommonDir(), await repoCommonDir())
+    thisRepoStamp = stamp
+    thisRepoCache = result
+    thisRepoCheckedAt = now()
+    return result
   }
 
   async function isThisRepo() {
-    if (thisRepoCache === null) thisRepoCache = await inThisRepository()
-    return thisRepoCache
+    if (!projectRoot) return false
+    const timestamp = now()
+    if (thisRepoCache !== null && timestamp >= thisRepoCheckedAt && timestamp - thisRepoCheckedAt < REPO_CHECK_FLOOR_MS) {
+      return thisRepoCache
+    }
+    const stamp = projectRepoStamp()
+    if (thisRepoCache !== null && stamp === thisRepoStamp) {
+      thisRepoCheckedAt = timestamp
+      return thisRepoCache
+    }
+    if (thisRepoPending) return thisRepoPending
+    thisRepoPending = inThisRepository().finally(() => {
+      thisRepoPending = null
+    })
+    return thisRepoPending
   }
 
-  function resolveCached(folder) {
-    if (!resolvedPathCache.has(folder)) resolvedPathCache.set(folder, resolvePath(folder))
-    return resolvedPathCache.get(folder)
+  function resolveWithStatus(folder) {
+    const target = resolve(String(folder ?? ''))
+    if (resolvePath === realPath) {
+      try {
+        return { value: realpathSync.native(target), fallback: false }
+      } catch {
+        return { value: target, fallback: true }
+      }
+    }
+    const resolved = resolvePath(folder)
+    let fallback = false
+    try {
+      stat(target)
+    } catch {
+      fallback = true
+    }
+    return { value: resolved, fallback }
   }
 
-  function matchesRoom(record, thisRepo) {
+  function resolveCached(folder, memo, timestamp) {
+    if (memo) {
+      const local = memo.resolved.get(folder)
+      if (local !== undefined) return local
+    }
+    const cached = readTimedCache(resolvedPathCache, folder, timestamp)
+    if (cached !== undefined) {
+      const hit = { value: cached, fallback: false }
+      if (memo) memo.resolved.set(folder, hit)
+      return hit
+    }
+    const res = resolveWithStatus(folder)
+    if (!res.fallback) {
+      writeTimedCache(resolvedPathCache, folder, res.value, timestamp)
+    }
+    if (memo) memo.resolved.set(folder, res)
+    return res
+  }
+
+  function noteFallback(fallbacks, path) {
+    if (!fallbacks) return
+    if (fallbacks.paths.has(path)) return
+    if (fallbacks.paths.size >= PATH_CACHE_LIMIT) {
+      fallbacks.overflow = true
+      return
+    }
+    fallbacks.paths.add(path)
+  }
+
+  function hasFallbackAppeared(paths) {
+    for (const target of paths) {
+      try {
+        stat(target)
+        return true
+      } catch {}
+    }
+    return false
+  }
+
+  function matchesRoom(record, thisRepo, memo, timestamp, fallbacks) {
     if (!record || typeof record !== 'object') return false
     const raw = typeof record.project === 'string' ? record.project.trim() : ''
     if (raw === '') return thisRepo
     if (thisRepo || !resolvedRoot) return false
-    let matchesRoot = rootMatchCache.get(raw)
+
+    let matchesRoot = memo ? memo.rootMatch.get(raw) : undefined
+    let rawRes = null
     if (matchesRoot === undefined) {
-      matchesRoot = samePath(resolveCached(raw), resolvedRoot)
-      rootMatchCache.set(raw, matchesRoot)
+      const cachedRoot = readTimedCache(rootMatchCache, raw, timestamp)
+      if (cachedRoot !== undefined) {
+        matchesRoot = cachedRoot
+      } else {
+        rawRes = resolveCached(raw, memo, timestamp)
+        matchesRoot = samePath(rawRes.value, resolvedRoot)
+        if (!rawRes.fallback) {
+          writeTimedCache(rootMatchCache, raw, matchesRoot, timestamp)
+        } else {
+          noteFallback(fallbacks, raw)
+        }
+      }
+      if (memo) memo.rootMatch.set(raw, matchesRoot)
     }
     if (matchesRoot) return true
+
     const lane = typeof record.lane === 'string' ? record.lane.trim() : ''
     if (!lane) return false
-    let byLane = worktreeMatchCache.get(raw)
-    if (!byLane) {
-      byLane = new Map()
-      worktreeMatchCache.set(raw, byLane)
-    }
-    let matchesWt = byLane.get(lane)
+
+    const canKeyPair = !raw.includes('\u0000') && !lane.includes('\u0000')
+    const wtKey = `${raw}\u0000${lane}`
+    let matchesWt = memo && canKeyPair ? memo.wtMatch.get(wtKey) : undefined
     if (matchesWt === undefined) {
-      let wtReal = worktreeResolvedCache.get(lane)
-      if (wtReal === undefined) {
-        const worktree = worktreeFor(resolvedRoot, lane)
-        wtReal = worktree ? resolveCached(worktree) : ''
-        worktreeResolvedCache.set(lane, wtReal)
+      const cachedWtMatch = canKeyPair ? readTimedCache(worktreeMatchCache, wtKey, timestamp) : undefined
+      if (cachedWtMatch !== undefined) {
+        matchesWt = cachedWtMatch
+      } else {
+        let wtEntry = memo ? memo.wtResolved.get(lane) : undefined
+        if (wtEntry === undefined) {
+          const cachedWt = readTimedCache(worktreeResolvedCache, lane, timestamp)
+          if (cachedWt !== undefined) {
+            wtEntry = { value: cachedWt, fallback: false }
+          } else {
+            const worktree = worktreeFor(resolvedRoot, lane)
+            if (!worktree) {
+              wtEntry = { value: '', fallback: false }
+            } else {
+              wtEntry = resolveCached(worktree, memo, timestamp)
+              if (wtEntry.fallback) noteFallback(fallbacks, worktree)
+            }
+            if (!wtEntry.fallback) {
+              writeTimedCache(worktreeResolvedCache, lane, wtEntry.value, timestamp)
+            }
+          }
+          if (memo) memo.wtResolved.set(lane, wtEntry)
+        }
+        if (!wtEntry.value) {
+          matchesWt = false
+          if (canKeyPair && !wtEntry.fallback) {
+            writeTimedCache(worktreeMatchCache, wtKey, false, timestamp)
+          }
+        } else {
+          if (!rawRes) rawRes = resolveCached(raw, memo, timestamp)
+          matchesWt = samePath(rawRes.value, wtEntry.value)
+          if (rawRes.fallback) noteFallback(fallbacks, raw)
+          if (canKeyPair && !rawRes.fallback && !wtEntry.fallback) {
+            writeTimedCache(worktreeMatchCache, wtKey, matchesWt, timestamp)
+          }
+        }
       }
-      matchesWt = Boolean(wtReal && samePath(resolveCached(raw), wtReal))
-      byLane.set(lane, matchesWt)
+      if (memo && canKeyPair) memo.wtMatch.set(wtKey, matchesWt)
     }
     return matchesWt
   }
@@ -1984,24 +2186,51 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
   async function roomRecords(records) {
     const thisRepo = await isThisRepo()
     const list = Array.isArray(records) ? records : []
-    if (list === cachedRoomSource && thisRepo === cachedRoomThisRepo) {
+    const timestamp = now()
+    const freshCache =
+      thisRepo === cachedRoomThisRepo &&
+      cachedRoomSource !== null &&
+      !cachedRoomOverflow &&
+      timestamp >= cachedRoomAt &&
+      timestamp - cachedRoomAt < PATH_CACHE_TTL_MS &&
+      !hasFallbackAppeared(cachedRoomFallbacks)
+
+    if (freshCache && list === cachedRoomSource) {
       return cachedRoomList
     }
-    if (thisRepo === cachedRoomThisRepo && isAppendOnlyExtension(list, cachedRoomSource)) {
+    if (freshCache && isAppendOnlyExtension(list, cachedRoomSource)) {
+      const memo = {
+        resolved: new Map(),
+        rootMatch: new Map(),
+        wtResolved: new Map(),
+        wtMatch: new Map(),
+      }
+      const fallbacks = { paths: cachedRoomFallbacks, overflow: cachedRoomOverflow }
       const added = []
       for (let index = cachedRoomSource.length; index < list.length; index += 1) {
-        if (matchesRoom(list[index], thisRepo)) added.push(list[index])
+        if (matchesRoom(list[index], thisRepo, memo, timestamp, fallbacks)) added.push(list[index])
       }
       cachedRoomSource = list
+      cachedRoomOverflow = fallbacks.overflow
       if (added.length > 0) cachedRoomList = Object.freeze(cachedRoomList.concat(added))
       return cachedRoomList
     }
+    const memo = {
+      resolved: new Map(),
+      rootMatch: new Map(),
+      wtResolved: new Map(),
+      wtMatch: new Map(),
+    }
+    const fallbacks = { paths: new Set(), overflow: false }
     const matched = []
     for (const record of list) {
-      if (matchesRoom(record, thisRepo)) matched.push(record)
+      if (matchesRoom(record, thisRepo, memo, timestamp, fallbacks)) matched.push(record)
     }
     cachedRoomSource = list
     cachedRoomThisRepo = thisRepo
+    cachedRoomAt = timestamp
+    cachedRoomFallbacks = fallbacks.paths
+    cachedRoomOverflow = fallbacks.overflow
     cachedRoomList = Object.freeze(matched)
     return cachedRoomList
   }

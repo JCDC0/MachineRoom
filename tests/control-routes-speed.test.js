@@ -1,10 +1,16 @@
-import { appendFileSync, mkdirSync, realpathSync, renameSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
+import { execFileSync } from 'node:child_process'
+import { appendFileSync, mkdirSync, realpathSync, renameSync, rmSync, statSync, symlinkSync, unlinkSync, utimesSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
 import { activeLanesFileFor, writeActiveLanes } from '../server/active-lanes.js'
 import { createBridge } from '../server/index.js'
+import { gitEnv, gitPath } from '../server/programPath.js'
 import { clearRunsCache, createRunsApi, runRecordCacheStats } from '../server/runs.js'
+import { worktreeFor } from '../src/briefs/run.js'
 import { makeTempDir } from './helpers/tempRoot.js'
+
+const REPO_ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)))
 
 const cleanups = []
 
@@ -250,7 +256,192 @@ describe('control routes caching and speed on large run logs', () => {
     expect(runRecordCacheStats(file).fullReads).toBe(5)
   })
 
-  it('caches each project path resolution for the life of the bridge', async () => {
+  it('detects a copy-over restore that preserves the first 512 bytes by checking the tail sample at the old offset', async () => {
+    const base = tempDir()
+    const runsDir = join(base, 'runs')
+    const proj1 = join(base, 'proj1')
+    mkdirSync(runsDir, { recursive: true })
+    mkdirSync(proj1, { recursive: true })
+
+    const file = join(runsDir, 'runs.jsonl')
+    const headRecord = buildRecord({ lane: 'codex', project: proj1, index: 0, task: `Shared head ${'H'.repeat(540)}` })
+    const headLine = `${JSON.stringify(headRecord)}\n`
+    expect(Buffer.byteLength(headLine)).toBeGreaterThan(512)
+
+    const initialTail = [
+      buildRecord({ lane: 'claude', project: proj1, index: 1, task: 'Original middle record one' }),
+      buildRecord({ lane: 'agy', project: proj1, index: 2, task: 'Original middle record two' }),
+      buildRecord({ lane: 'opencode', project: proj1, index: 3, task: 'Original middle record three' }),
+    ]
+    const initialBody = headLine + initialTail.map((entry) => `${JSON.stringify(entry)}\n`).join('')
+    writeFileSync(file, initialBody)
+
+    const bridge = createBridge({
+      projectRoot: proj1,
+      runsFolder: runsDir,
+      lanesSource: null,
+      port: 0,
+      env: {},
+    })
+    cleanups.push(() => bridge.stop())
+    const { url } = await bridge.start()
+
+    const firstIssues = await getJson(url, '/api/control/issues')
+    expect(firstIssues.body.map((issue) => issue.title)).toEqual([
+      'Original middle record three',
+      'Original middle record two',
+      'Original middle record one',
+      headRecord.task.slice(0, 80),
+    ])
+    expect(runRecordCacheStats(file).fullReads).toBe(1)
+
+    const restoredTail = [
+      buildRecord({ lane: 'claude', project: proj1, index: 11, task: 'Restored backup record alpha' }),
+      buildRecord({ lane: 'agy', project: proj1, index: 12, task: 'Restored backup record beta' }),
+      buildRecord({ lane: 'opencode', project: proj1, index: 13, task: 'Restored backup record gamma' }),
+      buildRecord({ lane: 'native', project: proj1, index: 14, task: 'Restored backup record delta' }),
+    ]
+    const restoredBody = headLine + restoredTail.map((entry) => `${JSON.stringify(entry)}\n`).join('')
+    expect(Buffer.byteLength(restoredBody)).toBeGreaterThan(Buffer.byteLength(initialBody))
+    writeFileSync(file, restoredBody)
+
+    const afterRestoreIssues = await getJson(url, '/api/control/issues')
+    expect(afterRestoreIssues.body.map((issue) => issue.title)).toEqual([
+      'Restored backup record delta',
+      'Restored backup record gamma',
+      'Restored backup record beta',
+      'Restored backup record alpha',
+      headRecord.task.slice(0, 80),
+    ])
+    const afterRestoreRuns = await getJson(url, '/api/control/runs')
+    expect(afterRestoreRuns.body.recent.map((entry) => entry.task)).toEqual([
+      'Restored backup record delta',
+      'Restored backup record gamma',
+      'Restored backup record beta',
+      'Restored backup record alpha',
+      headRecord.task,
+    ])
+    expect(runRecordCacheStats(file).fullReads).toBe(2)
+    expect(runRecordCacheStats(file).incrementalReads).toBe(0)
+
+    const smallAppend = buildRecord({ lane: 'codex', project: proj1, index: 15, task: 'Small tail append' })
+    const smallLine = `${JSON.stringify(smallAppend)}\n`
+    expect(Buffer.byteLength(smallLine)).toBeLessThan(512)
+    appendFileSync(file, smallLine)
+    const afterSmallAppend = await getJson(url, '/api/control/runs')
+    expect(afterSmallAppend.body.recent[0].task).toBe('Small tail append')
+    expect(runRecordCacheStats(file).incrementalReads).toBe(1)
+
+    const secondRestore = [
+      headRecord,
+      restoredTail[0],
+      restoredTail[1],
+      restoredTail[2],
+      buildRecord({ lane: 'native', project: proj1, index: 24, task: 'Second restored tail omega' }),
+      buildRecord({ lane: 'codex', project: proj1, index: 25, task: 'Second restored tail sigma' }),
+    ]
+    const secondBody = secondRestore.map((entry) => `${JSON.stringify(entry)}\n`).join('')
+    expect(Buffer.byteLength(secondBody)).toBeGreaterThan(Buffer.byteLength(restoredBody) + Buffer.byteLength(smallLine))
+    writeFileSync(file, secondBody)
+
+    const afterSecondRestore = await getJson(url, '/api/control/runs')
+    expect(afterSecondRestore.body.recent.map((entry) => entry.task)).toEqual([
+      'Second restored tail sigma',
+      'Second restored tail omega',
+      'Restored backup record gamma',
+      'Restored backup record beta',
+      'Restored backup record alpha',
+      headRecord.task,
+    ])
+    expect(runRecordCacheStats(file).fullReads).toBe(3)
+  })
+
+  it('rechecks isThisRepo after the 5 second floor when .git changes or the project moves', async () => {
+    const base = tempDir()
+    const runsDir = join(base, 'runs')
+    const proj = join(base, 'proj')
+    const wt = join(base, 'wt')
+    const moved = join(base, 'proj-moved')
+    mkdirSync(runsDir, { recursive: true })
+    mkdirSync(proj, { recursive: true })
+    mkdirSync(wt, { recursive: true })
+
+    const mainCommon = resolve(
+      REPO_ROOT,
+      execFileSync(gitPath(), ['rev-parse', '--git-common-dir'], { cwd: REPO_ROOT, env: gitEnv(), encoding: 'utf8' }).trim()
+    )
+    writeFileSync(join(wt, 'HEAD'), 'ref: refs/heads/main\n')
+    writeFileSync(join(wt, 'commondir'), `${mainCommon.replace(/\\/g, '/')}\n`)
+    writeFileSync(join(proj, '.git'), `gitdir: ${wt.replace(/\\/g, '/')}\n`)
+
+    const file = join(runsDir, 'runs.jsonl')
+    writeFileSync(
+      file,
+      [
+        JSON.stringify(buildRecord({ lane: 'codex', project: '', index: 1, task: 'Repo brief run' })),
+        JSON.stringify(buildRecord({ lane: 'claude', project: proj, index: 2, task: 'Project folder run' })),
+      ].join('\n') + '\n'
+    )
+
+    let currentNow = 1000
+    let answer = null
+    const api = createRunsApi({
+      projectRoot: proj,
+      runsFolder: runsDir,
+      now: () => currentNow,
+      sendJson: (_req, _res, status, body) => {
+        answer = { status, body }
+      },
+    })
+    cleanups.push(() => api.stopAll())
+
+    await api.handle({ method: 'GET', headers: {} }, {}, new URL('http://localhost/api/control/issues'))
+    expect(answer.body.map((issue) => issue.title)).toEqual(['Repo brief run'])
+
+    unlinkSync(join(proj, '.git'))
+    execFileSync(gitPath(), ['init'], { cwd: proj, env: gitEnv(), stdio: 'ignore' })
+
+    currentNow += 1000
+    await api.handle({ method: 'GET', headers: {} }, {}, new URL('http://localhost/api/control/issues'))
+    expect(answer.body.map((issue) => issue.title)).toEqual(['Repo brief run'])
+
+    currentNow += 4000
+    await api.handle({ method: 'GET', headers: {} }, {}, new URL('http://localhost/api/control/issues'))
+    expect(answer.body.map((issue) => issue.title)).toEqual(['Project folder run'])
+    await api.handle({ method: 'GET', headers: {} }, {}, new URL('http://localhost/api/control/runs'))
+    expect(answer.body.recent.map((entry) => entry.task)).toEqual(['Project folder run'])
+
+    const runsDir2 = join(base, 'runs2')
+    const proj2 = join(base, 'proj2')
+    mkdirSync(runsDir2, { recursive: true })
+    mkdirSync(proj2, { recursive: true })
+    writeFileSync(join(proj2, '.git'), `gitdir: ${wt.replace(/\\/g, '/')}\n`)
+    writeFileSync(
+      join(runsDir2, 'runs.jsonl'),
+      `${JSON.stringify(buildRecord({ lane: 'codex', project: '', index: 3, task: 'Moved repo brief run' }))}\n`
+    )
+    let moveNow = 1000
+    let moveAnswer = null
+    const moveApi = createRunsApi({
+      projectRoot: proj2,
+      runsFolder: runsDir2,
+      now: () => moveNow,
+      sendJson: (_req, _res, status, body) => {
+        moveAnswer = { status, body }
+      },
+    })
+    cleanups.push(() => moveApi.stopAll())
+
+    await moveApi.handle({ method: 'GET', headers: {} }, {}, new URL('http://localhost/api/control/issues'))
+    expect(moveAnswer.body.map((issue) => issue.title)).toEqual(['Moved repo brief run'])
+
+    renameSync(proj2, moved)
+    moveNow += 5000
+    await moveApi.handle({ method: 'GET', headers: {} }, {}, new URL('http://localhost/api/control/issues'))
+    expect(moveAnswer.body).toEqual([])
+  })
+
+  it('caches each existing project path resolution for 30 seconds', async () => {
     const base = tempDir()
     const runsDir = join(base, 'runs')
     const proj1 = join(base, 'proj1')
@@ -260,6 +451,9 @@ describe('control routes caching and speed on large run logs', () => {
     mkdirSync(proj1, { recursive: true })
     mkdirSync(proj2, { recursive: true })
     mkdirSync(proj3, { recursive: true })
+    for (const lane of LANE_KEYS) {
+      mkdirSync(join(proj1, '.worktrees', lane), { recursive: true })
+    }
 
     const records = []
     for (let i = 0; i < 300; i += 1) {
@@ -281,11 +475,13 @@ describe('control routes caching and speed on large run logs', () => {
       }
     }
 
+    let currentNow = 1000
     let answer = null
     const api = createRunsApi({
       projectRoot: proj1,
       runsFolder: runsDir,
       resolvePath: countingResolve,
+      now: () => currentNow,
       sendJson: (_req, _res, status, body) => {
         answer = { status, body }
       },
@@ -310,6 +506,169 @@ describe('control routes caching and speed on large run logs', () => {
     await api.handle({ method: 'GET', headers: {} }, {}, new URL('http://localhost/api/control/runs?lane=codex'))
     expect(answer.body.recent[0]).toMatchObject({ lane: 'codex', task: 'Run task 900 on project' })
     expect(resolvedPaths.length).toBe(countAfterFirst)
+
+    currentNow += 30000
+    appendFileSync(file, `${JSON.stringify(buildRecord({ lane: 'codex', project: proj2, index: 902 }))}\n`)
+    await api.handle({ method: 'GET', headers: {} }, {}, new URL('http://localhost/api/control/runs?lane=codex'))
+    expect(resolvedPaths.length).toBeGreaterThan(countAfterFirst)
+  })
+
+  it('never caches a missing-folder fallback and expires path resolutions after 30 seconds', async () => {
+    const base = tempDir()
+    const runsDir = join(base, 'runs')
+    const proj1 = join(base, 'proj1')
+    const proj2 = join(base, 'proj2')
+    const missingFolder = join(base, 'missing-folder')
+    const dynamicLink = join(base, 'dynamic-link')
+    const timedLink = join(base, 'timed-link')
+    mkdirSync(runsDir, { recursive: true })
+    mkdirSync(proj1, { recursive: true })
+    mkdirSync(proj2, { recursive: true })
+    symlinkSync(proj2, timedLink, process.platform === 'win32' ? 'junction' : 'dir')
+
+    const file = join(runsDir, 'runs.jsonl')
+    writeFileSync(
+      file,
+      [
+        JSON.stringify(buildRecord({ lane: 'codex', project: missingFolder, index: 1, task: 'Missing folder one' })),
+        JSON.stringify(buildRecord({ lane: 'codex', project: dynamicLink, index: 2, task: 'Dynamic link run' })),
+        JSON.stringify(buildRecord({ lane: 'codex', project: timedLink, index: 3, task: 'Timed link run' })),
+      ].join('\n') + '\n'
+    )
+
+    const resolvedPaths = []
+    const countingResolve = (value) => {
+      const folder = resolve(String(value ?? ''))
+      resolvedPaths.push(folder)
+      try {
+        return realpathSync.native(folder)
+      } catch {
+        return folder
+      }
+    }
+
+    let currentNow = 1000
+    let answer = null
+    const api = createRunsApi({
+      projectRoot: proj1,
+      runsFolder: runsDir,
+      resolvePath: countingResolve,
+      now: () => currentNow,
+      sendJson: (_req, _res, status, body) => {
+        answer = { status, body }
+      },
+    })
+    cleanups.push(() => api.stopAll())
+
+    await api.handle({ method: 'GET', headers: {} }, {}, new URL('http://localhost/api/control/issues'))
+    expect(answer.body).toEqual([])
+    const afterFirst = resolvedPaths.length
+
+    currentNow += 100
+    appendFileSync(file, `${JSON.stringify(buildRecord({ lane: 'codex', project: missingFolder, index: 4, task: 'Missing folder two' }))}\n`)
+    await api.handle({ method: 'GET', headers: {} }, {}, new URL('http://localhost/api/control/issues'))
+    expect(resolvedPaths.length).toBeGreaterThan(afterFirst)
+    expect(answer.body).toEqual([])
+
+    symlinkSync(proj1, dynamicLink, process.platform === 'win32' ? 'junction' : 'dir')
+    currentNow += 100
+    await api.handle({ method: 'GET', headers: {} }, {}, new URL('http://localhost/api/control/issues'))
+    expect(answer.body.map((issue) => issue.title)).toEqual(['Dynamic link run'])
+
+    rmSync(timedLink, { recursive: true, force: true })
+    symlinkSync(proj1, timedLink, process.platform === 'win32' ? 'junction' : 'dir')
+    currentNow += 5000
+    await api.handle({ method: 'GET', headers: {} }, {}, new URL('http://localhost/api/control/issues'))
+    expect(answer.body.map((issue) => issue.title)).toEqual(['Dynamic link run'])
+
+    currentNow += 25000
+    await api.handle({ method: 'GET', headers: {} }, {}, new URL('http://localhost/api/control/issues'))
+    expect(answer.body.map((issue) => issue.title)).toEqual(['Timed link run', 'Dynamic link run'])
+  })
+
+  it('caps resolveCached and the three match caches by clearing at 1024 keys', async () => {
+    const base = tempDir()
+    const runsDir = join(base, 'runs')
+    const proj1 = join(base, 'proj1')
+    const otherProj = join(base, 'other-proj')
+    const otherProj2 = join(base, 'other-proj-2')
+    mkdirSync(runsDir, { recursive: true })
+    mkdirSync(proj1, { recursive: true })
+    mkdirSync(otherProj, { recursive: true })
+    mkdirSync(otherProj2, { recursive: true })
+
+    const p0 = join(base, 'p0')
+    const pSpecial = join(base, 'p-special')
+    const wtLane0 = worktreeFor(proj1, 'lane0')
+    const resolveMap = new Map([
+      [proj1, proj1],
+      [p0, otherProj2],
+      [otherProj, otherProj],
+      [pSpecial, otherProj2],
+      [wtLane0, otherProj],
+    ])
+    const resolveCounts = new Map()
+    const fakeResolve = (value) => {
+      const key = resolve(String(value ?? ''))
+      resolveCounts.set(key, (resolveCounts.get(key) ?? 0) + 1)
+      return resolveMap.get(key) ?? key
+    }
+    const fakeStat = (target) => {
+      if (target === proj1 || target === join(proj1, '.git')) return statSync(target)
+      return { ino: 1, mtimeMs: 1, ctimeMs: 1, size: 0 }
+    }
+
+    const file = join(runsDir, 'runs.jsonl')
+    const seed = [
+      JSON.stringify(buildRecord({ lane: 'lane0', project: p0, index: 0, task: 'Initial p0 miss' })),
+      JSON.stringify(buildRecord({ lane: 'lane0', project: otherProj, index: 1, task: 'Initial worktree hit' })),
+    ]
+    writeFileSync(file, `${seed.join('\n')}\n`)
+
+    let answer = null
+    const api = createRunsApi({
+      projectRoot: proj1,
+      runsFolder: runsDir,
+      resolvePath: fakeResolve,
+      stat: fakeStat,
+      now: () => 1000,
+      sendJson: (_req, _res, status, body) => {
+        answer = { status, body }
+      },
+    })
+    cleanups.push(() => api.stopAll())
+
+    await api.handle({ method: 'GET', headers: {} }, {}, new URL('http://localhost/api/control/issues'))
+    expect(answer.body.map((issue) => issue.title)).toEqual(['Initial worktree hit'])
+    expect(resolveCounts.get(p0)).toBe(1)
+    expect(resolveCounts.get(wtLane0)).toBe(1)
+
+    const overflow = []
+    for (let i = 1; i <= 1025; i += 1) {
+      overflow.push(JSON.stringify(buildRecord({ lane: `lane${i}`, project: join(base, `p${i}`), index: i + 10 })))
+    }
+    appendFileSync(file, `${overflow.join('\n')}\n`)
+    await api.handle({ method: 'GET', headers: {} }, {}, new URL('http://localhost/api/control/issues'))
+
+    resolveMap.set(p0, proj1)
+    resolveMap.set(wtLane0, otherProj2)
+
+    appendFileSync(
+      file,
+      [
+        JSON.stringify(buildRecord({ lane: 'lane0', project: p0, index: 2000, task: 'Cleared root match' })),
+        JSON.stringify(buildRecord({ lane: 'lane0', project: otherProj, index: 2001, task: 'Cleared worktree match' })),
+        JSON.stringify(buildRecord({ lane: 'lane0', project: pSpecial, index: 2002, task: 'Cleared worktree resolved' })),
+      ].join('\n') + '\n'
+    )
+
+    await api.handle({ method: 'GET', headers: {} }, {}, new URL('http://localhost/api/control/issues'))
+    const titles = answer.body.map((issue) => issue.title)
+    expect(titles).toContain('Cleared root match')
+    expect(titles).not.toContain('Cleared worktree match')
+    expect(titles).toContain('Cleared worktree resolved')
+    expect(resolveCounts.get(p0)).toBe(2)
+    expect(resolveCounts.get(wtLane0)).toBe(2)
   })
 
   it('serves 20,000 records across 15 lanes and 3 projects and picks up appended runs', async () => {
