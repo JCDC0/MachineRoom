@@ -352,6 +352,35 @@ describe('lane tasks', () => {
     expect(changed.find((brief) => brief.id === 'A1').title).toBe('The changed archived brief')
   })
 
+  it('reuses cached TASKS.md briefs until the file changes', () => {
+    const dir = tempDir()
+    const agents = join(dir, 'docs', 'agents')
+    mkdirSync(agents, { recursive: true })
+    const tasksFile = join(agents, 'TASKS.md')
+    writeFileSync(tasksFile, '## Open\n\n**N1. Initial brief.** Body.\n')
+
+    const first = readLaneBriefs(dir)
+    expect(readLaneBriefs(dir)).toBe(first)
+    expect(first.find((brief) => brief.id === 'N1').title).toBe('Initial brief')
+
+    writeFileSync(tasksFile, '## Open\n\n**N1. Updated brief title here.** Body.\n')
+    const changed = readLaneBriefs(dir)
+    expect(changed).not.toBe(first)
+    expect(changed.find((brief) => brief.id === 'N1').title).toBe('Updated brief title here')
+  })
+
+  it('resolves failed tasks with frozen recoveryRecords in laneTaskIssues', () => {
+    const failedPlan = { ...record({ lane: 'codex', briefs: ['P1'], log: '/tmp/runs/codex-P1-20261024-090000.log', startedAt: iso(40), exitCode: 1 }), mode: 'plan' }
+    const failedEdit = record({ lane: 'codex', briefs: ['P2'], log: '/tmp/runs/codex-P2-20261024-090100.log', startedAt: iso(35), exitCode: 1 })
+    const planFix = { ...record({ lane: 'codex', briefs: ['P1'], log: '/tmp/runs/codex-P1-20261024-080000.log', startedAt: iso(20), exitCode: 0 }), mode: 'plan' }
+    const planForEdit = { ...record({ lane: 'codex', briefs: ['P2'], log: '/tmp/runs/codex-P2-20261024-080100.log', startedAt: iso(15), exitCode: 0 }), mode: 'plan' }
+    const recovery = Object.freeze([failedPlan, failedEdit, planFix, planForEdit])
+
+    const issues = laneTaskIssues({ records: [failedPlan, failedEdit], recoveryRecords: recovery })
+    expect(issues.find((issue) => issue.id === 'codex-P1-20261024-090000').status).toBe('done')
+    expect(issues.find((issue) => issue.id === 'codex-P2-20261024-090100').status).toBe('blocked')
+  })
+
   it('leaves out records with no lane and keeps the newest 30', () => {
     const dir = tempDir()
     const file = join(dir, 'runs.jsonl')
