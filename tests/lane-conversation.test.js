@@ -208,12 +208,54 @@ describe('the lane conversation view', () => {
 
       const folded = buttonWithText(container, '10 tool calls')
       expect(folded).not.toBeNull()
+      expect(folded.className).toContain('ui-chip')
+      expect(folded.style.color).toBeUndefined()
+      expect(folded.className).not.toContain('is-failed')
+      expect(folded.className).not.toContain('is-working')
       expect(container.textContent).not.toContain('read f0')
       await click(root, folded)
       expect(container.textContent).toContain('read f0')
       expect(container.textContent).toContain('read f9')
       const line = container.querySelectorAll('.mr-lane-conv-tool')[0]
-      expect(line.style.color).toBe('#ff8c1a')
+      expect(line.className).toContain('ui-chip')
+      expect(line.style.color).toBeUndefined()
+      expect(line.className).not.toContain('is-failed')
+      expect(line.className).not.toContain('is-working')
+    })
+  })
+
+  it('highlights only failed or currently working tool calls', async () => {
+    const failedClient = makeClient({
+      entries: [
+        { role: 'tool', text: 'read src/a.js', tool: 'read', at: STARTED },
+        { role: 'tool', text: 'shell npm test', tool: 'shell', ok: false, at: STARTED },
+      ],
+    })
+    await withDom(async ({ container, root }) => {
+      await mount(root, { client: failedClient, lane: 'opencode', laneName: 'OpenCode', lanes: LANES, initialStartedAt: STARTED })
+      const folded = buttonWithText(container, '2 tool calls')
+      expect(folded.className).toContain('is-failed')
+      await click(root, folded)
+      const chips = container.querySelectorAll('.mr-lane-conv-tool')
+      expect(chips[0].className).not.toContain('is-failed')
+      expect(chips[1].className).toContain('is-failed')
+    })
+
+    const workingClient = makeClient({
+      running: true,
+      entries: [
+        { role: 'tool', text: 'read src/a.js', tool: 'read', at: STARTED },
+        { role: 'tool', text: 'read src/b.js', tool: 'read', at: STARTED },
+      ],
+    })
+    await withDom(async ({ container, root }) => {
+      await mount(root, { client: workingClient, lane: 'opencode', laneName: 'OpenCode', lanes: LANES, initialStartedAt: STARTED })
+      const folded = buttonWithText(container, '2 tool calls')
+      expect(folded.className).toContain('is-working')
+      await click(root, folded)
+      const chips = container.querySelectorAll('.mr-lane-conv-tool')
+      expect(chips[0].className).not.toContain('is-working')
+      expect(chips[1].className).toContain('is-working')
     })
   })
 
@@ -239,9 +281,14 @@ describe('the lane conversation view', () => {
       expect(container.querySelector('h2').textContent).toBe('Working on it')
       expect(container.querySelector('strong').textContent).toBe('Reading')
       expect(container.textContent).not.toContain('four')
-      await click(root, buttonWithText(container, 'Show all'))
+      const showAll = buttonWithText(container, 'Show all')
+      expect(showAll.className).toContain('ui-chip')
+      expect(showAll.className).toContain('mr-lane-conv-more')
+      expect(showAll.getAttribute('aria-expanded')).toBe('false')
+      await click(root, showAll)
       expect(container.textContent).toContain('four')
       expect(container.textContent).toContain('five')
+      expect(buttonWithText(container, 'Show less').getAttribute('aria-expanded')).toBe('true')
     })
   })
 
@@ -593,5 +640,154 @@ describe('the lane conversation view', () => {
       await settle(10)
       expect(calls.at(-1)).toEqual({ lane: 'opencode', startedAt: OTHER })
     })
+  })
+
+  it('restores the lane name from HUD labels or agents and falls back to the key', async () => {
+    for (const scenario of [
+      {
+        name: 'uses family labels when snapshot omits the lane',
+        agents: [],
+        labels: new Map([['opencode', 'OpenCode']]),
+        lane: 'opencode',
+        expected: '/MACHINEROOM / OPENCODE',
+      },
+      {
+        name: 'finds the lane name in HUD snapshot agents by key',
+        agents: [{ key: 'opencode', name: 'OpenCode', status: 'idle' }],
+        labels: null,
+        lane: 'opencode',
+        expected: '/MACHINEROOM / OPENCODE',
+      },
+      {
+        name: 'uses the key as the last fallback instead of Lane',
+        agents: [],
+        labels: null,
+        lane: 'codex-2',
+        expected: '/MACHINEROOM / CODEX-2',
+      },
+    ]) {
+      const client = {
+        ...makeClient({ entries: [] }),
+        runs: async () => ({ running: [], recent: [] }),
+        lanes: async () => ({ lanes: [], chosen: true }),
+      }
+      await withDom(async ({ container, dom, root }) => {
+        dom.window.localStorage.setItem('machineroom.guide', '1')
+        await act(async () => {
+          root.render(createElement(Hud, {
+            snapshot: { agents: scenario.agents, status: 'live', position: 0 },
+            labels: scenario.labels,
+            project: 'MachineRoom',
+            client,
+            mode: 'live',
+            liveRuns: [],
+            log: [],
+            health: { ok: true, orchestrator: true },
+            speeds: [1],
+            markers: [],
+          }))
+        })
+        await settle(10)
+        await act(async () => {
+          dom.window.dispatchEvent(
+            new dom.window.CustomEvent('machineroom:open-chat', { detail: { lane: scenario.lane } })
+          )
+        })
+        await settle(10)
+        expect(container.querySelector('.mr-lane-conv-crumb').textContent, scenario.name).toBe(scenario.expected)
+      })
+    }
+  })
+
+  it('gives an eligible idle lane the full composer from its row and a compact toolbar when off', async () => {
+    for (const width of [1200, 800]) {
+      const sent = []
+      const client = {
+        ...makeClient({ entries: [{ role: 'result', text: 'Previous run.', at: STARTED }] }),
+        lanes: async () => ({
+          lanes: [
+            { key: 'opencode', name: 'OpenCode', harness: 'opencode', active: true },
+            { key: 'claude', name: 'Claude', harness: 'claude', active: true },
+            { key: 'offlane', name: 'Off Lane', harness: 'opencode', active: false },
+          ],
+          chosen: true,
+        }),
+        orchestrators: async () => [{ id: 'orchestrator', name: 'Main', state: 'idle' }],
+        orchestrator: async () => ({ state: 'idle', messages: [] }),
+        sendOrchestrator: async (text, options) => {
+          sent.push({ text, options })
+          return { ok: true, started: true }
+        },
+        subscribe: () => () => {},
+      }
+      await withDom(async ({ container, dom, root }) => {
+        dom.window.innerWidth = width
+        dom.window.localStorage.setItem('machineroom.guide', '1')
+        await act(async () => {
+          root.render(createElement(Hud, {
+            snapshot: {
+              agents: [
+                { key: 'opencode', name: 'OpenCode', status: 'idle' },
+                { key: 'claude', name: 'Claude', status: 'idle' },
+              ],
+              status: 'live',
+              position: 0,
+            },
+            project: 'MachineRoom',
+            client,
+            mode: 'live',
+            liveRuns: [],
+            log: [],
+            health: { ok: true, orchestrator: true },
+            speeds: [1],
+            markers: [],
+          }))
+        })
+        await settle(15)
+
+        await act(async () => {
+          dom.window.dispatchEvent(
+            new dom.window.CustomEvent('machineroom:open-chat', { detail: { lane: 'opencode' } })
+          )
+        })
+        await settle(15)
+
+        expect(container.querySelector('.mr-composer-box')).not.toBeNull()
+        expect(container.querySelector('select[aria-label="To"]')).not.toBeNull()
+        const worktree = container.querySelector('button[role="switch"][aria-label="Worktree"]')
+        expect(worktree).not.toBeNull()
+        expect(worktree.getAttribute('aria-checked')).toBe('true')
+        expect(container.querySelector('textarea').getAttribute('placeholder')).toBe('Start OpenCode with a message')
+        await act(async () => worktree.click())
+        await type(root, container.querySelector('textarea'), 'Fix the header')
+        await act(async () => {
+          container.querySelector('.mr-composer-box').dispatchEvent({ type: 'submit', bubbles: true, cancelable: true })
+        })
+        await settle(10)
+        expect(sent).toEqual([{ text: 'Fix the header', options: { id: 'opencode', worktree: false } }])
+
+        const toSelect = container.querySelector('select[aria-label="To"]')
+        await act(async () => {
+          toSelect.value = 'claude'
+          toSelect.dispatchEvent({ type: 'change', bubbles: true })
+        })
+        await settle(15)
+        expect(container.querySelector('.mr-lane-conv-crumb').textContent).toBe('/MACHINEROOM / CLAUDE')
+
+        await act(async () => {
+          dom.window.dispatchEvent(
+            new dom.window.CustomEvent('machineroom:open-chat', { detail: { lane: 'offlane' } })
+          )
+        })
+        await settle(15)
+        expect(container.querySelector('.mr-lane-conv-crumb').textContent).toBe('/MACHINEROOM / OFF LANE')
+        expect(container.querySelector('.mr-composer-box')).toBeNull()
+        expect(container.querySelector('.mr-composer-history')).not.toBeNull()
+        expect(container.querySelector('textarea')).toBeNull()
+        expect(container.querySelector('button[role="switch"][aria-label="Worktree"]')).toBeNull()
+        expect(container.querySelector('select[aria-label="To"]')).toBeNull()
+        expect(container.querySelector('select[aria-label="Run"]')).not.toBeNull()
+      })
+    }
   })
 })

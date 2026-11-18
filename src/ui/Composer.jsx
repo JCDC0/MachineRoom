@@ -14,28 +14,34 @@ export default function Composer({
   input, toolbar, onSubmit, sendDisabled, sending, stop, status, tone, context, children,
 }) {
   const sendLabel = sending ? 'Sending' : 'Send'
-  return (
-    <div className="mr-composer">
-      <form className="mr-orch-form mr-composer-box" onSubmit={onSubmit}>
-        {input && <textarea className="mr-orch-input mono" rows={2} spellCheck={false} {...input} />}
-        {children}
-        <div className="mr-composer-toolbar">
-          <div className="mr-composer-controls">{toolbar}</div>
-          {(stop || input) && (
-            <div className="mr-composer-actions">
-              {stop && <Chip label="Stop" className="mr-orch-stop" {...stop} />}
-              {input && (
-                <button type="submit" className="ui-icon-btn mr-composer-send" aria-label={sendLabel}
-                  title={sendLabel} disabled={sendDisabled}>
-                  <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
-                    <path d="M2 8h11M9 4l4 4-4 4" fill="none" stroke="currentColor"
-                      strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                </button>
-              )}
-            </div>
+  const controls = (
+    <div className="mr-composer-toolbar">
+      <div className="mr-composer-controls">{toolbar}</div>
+      {(stop || input) && (
+        <div className="mr-composer-actions">
+          {stop && <Chip label="Stop" className="mr-orch-stop" {...stop} />}
+          {input && (
+            <button type="submit" className="ui-icon-btn mr-composer-send" aria-label={sendLabel}
+              title={sendLabel} disabled={sendDisabled}>
+              <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+                <path d="M2 8h11M9 4l4 4-4 4" fill="none" stroke="currentColor"
+                  strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
           )}
         </div>
+      )}
+    </div>
+  )
+  return (
+    <div className="mr-composer">
+      <form
+        className={input ? 'mr-orch-form mr-composer-box' : 'mr-composer-history'}
+        onSubmit={input ? onSubmit : (event) => event.preventDefault()}
+      >
+        {input && <textarea className="mr-orch-input mono" rows={2} spellCheck={false} {...input} />}
+        {children}
+        {controls}
       </form>
       <p className={`mr-orch-status is-${tone} mono`} role="status">
         <span className="mr-orch-dot" aria-hidden="true" />

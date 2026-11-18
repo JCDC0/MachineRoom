@@ -245,7 +245,7 @@ export default function OrchestratorChat({
   const canSetEffort = typeof client?.setOrchestratorEffort === 'function'
   const project = teamSelected ? chats.orchestrator?.project ?? '' : chat.project
   const projectLabel = projectBaseName(project)
-  const availableLanes = runnableLanes(lanesData)
+  const availableLanes = runnableLanes(lanesData).filter((lane) => lane.active !== false)
   const laneRecipient = availableLanes.some((lane) => lane.key === toRecipient)
   const lines = teamSelected
     ? []
@@ -1282,7 +1282,7 @@ export default function OrchestratorChat({
   if (!open) return null
   if (laneRecipient) {
     const lane = availableLanes.find((entry) => entry.key === toRecipient)
-    return <LaneConversation key={lane.key} client={client} lane={lane.key} laneName={lane.name} project={project} lanes={lanesData}
+    return <LaneConversation key={lane.key} client={client} lane={lane.key} laneName={lane.name || lane.key} project={project} lanes={lanesData}
       liveRuns={liveRuns} tick={tick} inline={inline} recipientOptions={availableLanes} recipients={subs}
       onRecipientChange={(id) => { setToRecipient(id); if (list.some((entry) => entry.id === id)) selectTab(id) }} onBack={() => setToRecipient('orchestrator')}
       onRecipientSend={(text) => sendToLane(text, lane.key)}

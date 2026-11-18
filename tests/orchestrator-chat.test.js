@@ -2380,3 +2380,43 @@ describe('Hud and Waiting with an orchestrator', () => {
     expect(html).not.toContain('Paperclip')
   })
 })
+
+describe('design review 2 panel layout and exclusions', () => {
+  it('excludes off lanes from To', async () => {
+    const chat = { state: 'idle', messages: [] }
+    const lanes = [
+      { key: 'opencode', name: 'OpenCode', harness: 'opencode', active: true },
+      { key: 'offlane', name: 'Off Lane', harness: 'opencode', active: false },
+    ]
+    await withDom(async ({ container, root }) => {
+      await act(async () => {
+        root.render(
+          createElement(OrchestratorChat, {
+            client: fakeClient(chat),
+            inline: true,
+            initialChat: chat,
+            lanes,
+          })
+        )
+      })
+      await act(async () => {})
+      const values = Array.from(container.querySelector('select[aria-label="To"]').querySelectorAll('option')).map((o) =>
+        o.getAttribute('value')
+      )
+      expect(values).toContain('opencode')
+      expect(values).not.toContain('offlane')
+    })
+  })
+
+  it('keeps message actions outside flow, uses muted secondary text and aligns the inline column inset', () => {
+    const css = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8')
+    expect(css).toMatch(/\.mr-orch-line\s*\{[^}]*position:\s*relative;/)
+    expect(css).toMatch(/\.mr-orch-line-actions\s*\{[^}]*position:\s*absolute;[^}]*top:\s*100%;/)
+    expect(css).toMatch(/\.mr-orch-input\s*\{[^}]*padding:\s*4px 0;/)
+    expect(css).toMatch(/\.mr-orch-input::placeholder\s*\{\s*color:\s*var\(--text-dim\);\s*\}/)
+    expect(css).toMatch(/\.mr-orch\.is-inline\s+\.mr-orch-line\.is-room\s*\{\s*color:\s*var\(--text-dim\);/)
+    expect(css).toMatch(/\.mr-orch\.is-inline\s+\.mr-lane-conv-head\s*\{[^}]*width:\s*100%;[^}]*padding-inline:\s*24px;/)
+    expect(css).toMatch(/\.mr-orch\.is-inline\s+\.mr-composer\s*\{[^}]*width:\s*100%;[^}]*padding-inline:\s*11px;/)
+    expect(css).toMatch(/\.mr-orch\.is-inline\s+\.mr-composer:has\(>\s*\.mr-composer-history\)\s*\{\s*padding-inline:\s*24px;\s*\}/)
+  })
+})

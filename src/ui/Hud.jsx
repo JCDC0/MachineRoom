@@ -1,5 +1,6 @@
 import { Fragment, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import MenuIcon from './MenuIcon.jsx'
+import { Switch } from './controls.jsx'
 import { name } from './brand.js'
 import Transport, { OrchestratorsContext, openConversation } from './Transport.jsx'
 import { useDialogFocus } from './dialogFocus.js'
@@ -28,7 +29,7 @@ import {
   replayFoot,
 } from './lowerHalf.js'
 import { latestOnly } from './panels/notices.js'
-import { orchestratorOn } from './orchestratorChat.js'
+import { errorText, orchestratorOn, runnableLanes } from './orchestratorChat.js'
 import {
   areAllTerminalsOpen,
   isTerminalOpen,
@@ -58,6 +59,35 @@ export const SHORTCUTS = [
   ['C', 'Toggle control drawer'],
   ['?', 'Toggle keyboard help'],
 ]
+
+function namedLabel(value, key) {
+  const text = typeof value === 'string' ? value.trim() : ''
+  return text && text !== key ? text : ''
+}
+
+function mergeHudLanes(agents, lanesData) {
+  const byKey = new Map()
+  for (const agent of Array.isArray(agents) ? agents : []) {
+    if (agent?.key) byKey.set(agent.key, agent)
+  }
+  for (const entry of Array.isArray(lanesData) ? lanesData : []) {
+    if (!entry?.key) continue
+    const prior = byKey.get(entry.key)
+    byKey.set(
+      entry.key,
+      prior
+        ? {
+            ...entry,
+            ...prior,
+            name: prior.name || entry.name,
+            harness: prior.harness || entry.harness,
+            mode: prior.mode || entry.mode,
+          }
+        : entry
+    )
+  }
+  return [...byKey.values()]
+}
 
 export function hudKeyBlocked(target) {
   const dialog = typeof document === 'undefined' ? null : document.querySelector('[role="dialog"]')
@@ -150,6 +180,8 @@ export default function Hud({
   const [chatListOpen, setChatListOpen] = useState(false)
   const [laneChat, setLaneChat] = useState(null)
   const laneSentMessages = useState([])
+  const [lanesData, setLanesData] = useState([])
+  const [separateWorktree, setSeparateWorktree] = useState(true)
   const [orchestratorList, setOrchestratorList] = useState([])
   const [sessionTitle, setSessionTitle] = useState('')
   const [idleOpen, setIdleOpen] = useState(false)
@@ -201,9 +233,30 @@ export default function Hud({
   const grouped = ladderGroups(list.rows, ladder)
   const nav = grouped ?? list
   const workingAgent = list.rows.find((row) => row.agent?.status === 'working')?.agent ?? null
+  const availableLanes = runnableLanes(lanesData).filter((entry) => entry.active !== false)
+  const subs = orchestratorList.filter((entry) => entry && entry.id !== 'orchestrator')
   const laneChatAgent = laneChat
     ? (snapshot?.agents ?? []).find((agent) => agent.key === laneChat.lane) ?? null
     : null
+  const laneChatEntry = laneChat
+    ? lanesData.find((entry) => entry?.key === laneChat.lane) ?? null
+    : null
+  const laneChatName = laneChat
+    ? namedLabel(labels ? displayName(laneChat.lane, labels) : '', laneChat.lane) ||
+      namedLabel(laneChatAgent?.name, laneChat.lane) ||
+      namedLabel(laneChatEntry?.name, laneChat.lane) ||
+      (typeof laneChatAgent?.name === 'string' && laneChatAgent.name.trim()) ||
+      (typeof laneChatEntry?.name === 'string' && laneChatEntry.name.trim()) ||
+      laneChat.lane
+    : ''
+  const hudLanes = mergeHudLanes(snapshot?.agents, lanesData)
+  const canStartLane = Boolean(
+    laneChat &&
+      mode === 'live' &&
+      chatAvailable &&
+      typeof client?.sendOrchestrator === 'function' &&
+      availableLanes.some((entry) => entry.key === laneChat.lane)
+  )
   const activeRows = list.rows.filter((row) => row.group !== 'idle')
   const idleRows = list.rows.filter((row) => row.group === 'idle')
   const listRef = useRef(nav)
@@ -416,6 +469,41 @@ export default function Hud({
       if (typeof unsubscribe === 'function') unsubscribe()
     }
   }, [chatAvailable, client, sharedOrchestrators, wide, orchestratorNonce])
+
+  useEffect(() => {
+    if (mode !== 'live' || !client || typeof client.lanes !== 'function') {
+      setLanesData([])
+      return undefined
+    }
+    let active = true
+    let sequence = 0
+    async function readLanes() {
+      const current = ++sequence
+      try {
+        const answer = await client.lanes()
+        if (!active || current !== sequence) return
+        const items = Array.isArray(answer)
+          ? answer
+          : Array.isArray(answer?.lanes)
+            ? answer.lanes
+            : []
+        setLanesData(items)
+      } catch {
+        if (active && current === sequence) setLanesData([])
+      }
+    }
+    readLanes()
+    const unsubscribe =
+      typeof client.subscribe === 'function'
+        ? client.subscribe((notice) => {
+            if (notice?.topic === 'agents' || notice?.topic === 'family') readLanes()
+          })
+        : null
+    return () => {
+      active = false
+      if (typeof unsubscribe === 'function') unsubscribe()
+    }
+  }, [client, mode])
 
   useEffect(() => {
     if (!client || mode !== 'live' || typeof client.reviews !== 'function') {
@@ -639,6 +727,65 @@ export default function Hud({
           <span className="agent-key mono">{idleOpen ? '-' : '+'}</span>
         </button>
       </div>
+    )
+  }
+
+  async function sendToLane(text, id) {
+    if (!client || typeof client.sendOrchestrator !== 'function') {
+      return { ok: false, error: 'The orchestrator is not connected.' }
+    }
+    try {
+      await client.sendOrchestrator(text, { id, worktree: separateWorktree })
+      return { ok: true }
+    } catch (failure) {
+      return { ok: false, error: errorText(failure, 'Could not send the message.') }
+    }
+  }
+
+  function changeLaneRecipient(id) {
+    if (id === 'orchestrator' || subs.some((entry) => entry.id === id)) {
+      setLaneChat(null)
+      setChatTab(id)
+      setChatOpen(true)
+      return
+    }
+    if (availableLanes.some((entry) => entry.key === id)) {
+      setLaneChat({ lane: id, startedAt: '', nonce: Date.now() + Math.random() })
+    }
+  }
+
+  function renderLaneConversation(inline) {
+    return (
+      <LaneConversation
+        key={laneChat.lane}
+        client={client}
+        lane={laneChat.lane}
+        laneName={laneChatName}
+        project={projectLabel}
+        lanes={hudLanes}
+        liveRuns={liveRuns ?? []}
+        initialStartedAt={laneChat.startedAt}
+        requestKey={laneChat.nonce}
+        inline={inline}
+        tick={log.length}
+        recipientOptions={canStartLane ? availableLanes : null}
+        recipients={canStartLane ? subs : []}
+        onRecipientChange={canStartLane ? changeLaneRecipient : undefined}
+        onRecipientSend={canStartLane ? (text) => sendToLane(text, laneChat.lane) : null}
+        worktreeChoice={
+          canStartLane ? (
+            <Switch
+              label="Worktree"
+              checked={separateWorktree}
+              onChange={(checked) => setSeparateWorktree(checked)}
+            />
+          ) : null
+        }
+        onBack={() => {
+          setLaneChat(null)
+          setChatOpen(true)
+        }}
+      />
     )
   }
 
@@ -1054,23 +1201,7 @@ export default function Hud({
             <PanelBoundary label="Conversation">
             {!laneChat && <p className="hud-lower-crumb mono">{lowerBreadcrumb(project, sessionTitle)}</p>}
             {laneChat ? (
-              <LaneConversation
-                key={laneChat.lane}
-                client={client}
-                lane={laneChat.lane}
-                laneName={laneChatAgent?.name || laneChat.lane}
-                project={projectLabel}
-                lanes={snapshot?.agents ?? []}
-                liveRuns={liveRuns ?? []}
-                initialStartedAt={laneChat.startedAt}
-                requestKey={laneChat.nonce}
-                inline
-                tick={log.length}
-                onBack={() => {
-                  setLaneChat(null)
-                  setChatOpen(true)
-                }}
-              />
+              renderLaneConversation(true)
             ) : mode === 'replay' ? (
               <div className="hud-lower-replay">
                 <div className="hud-lower-log">
@@ -1249,22 +1380,7 @@ export default function Hud({
 
       {client && laneChat && !wide && (
         <PanelBoundary label="Conversation">
-        <LaneConversation
-          key={laneChat.lane}
-          client={client}
-          lane={laneChat.lane}
-          laneName={laneChatAgent?.name || laneChat.lane}
-          project={projectLabel}
-          lanes={snapshot?.agents ?? []}
-          liveRuns={liveRuns ?? []}
-          initialStartedAt={laneChat.startedAt}
-          requestKey={laneChat.nonce}
-          tick={log.length}
-          onBack={() => {
-            setLaneChat(null)
-            setChatOpen(true)
-          }}
-        />
+          {renderLaneConversation(false)}
         </PanelBoundary>
       )}
 

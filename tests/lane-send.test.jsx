@@ -550,7 +550,8 @@ describe('LaneConversation message box and status updates', () => {
       expect(container.querySelector('button[aria-label="Send"]')).toBeNull()
       expect(container.querySelector('button[aria-label="Lane message options"]')).toBeNull()
       expect(container.querySelector('table').querySelector('td').textContent).toBe('npm run build')
-      const hint = container.querySelector('.mr-composer-box').querySelector('.mr-composer-hint')
+      expect(container.querySelector('.mr-composer-box')).toBeNull()
+      const hint = container.querySelector('.mr-composer-history').querySelector('.mr-composer-hint')
       expect(hint?.textContent.trim()).toBe(
         `OpenCode is working on run ${runClock(STARTED)}. Pick that run to message it.`
       )
