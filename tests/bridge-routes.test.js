@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { appendFileSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:http'
 import { connect } from 'node:net'
 import { basename, join, resolve } from 'node:path'
@@ -1074,6 +1074,37 @@ describe('run routes', () => {
     const res = await getJson(conversationUrl(url, 'opencode', startedAt))
     expect(res.status).toBe(200)
     expect(res.body.entries.some((entry) => entry.tool === 'read')).toBe(true)
+  })
+
+  it('refuses ambiguous recovered logs unless the record or matching lock names them', async () => {
+    const tempDirRuns = useRunsTemp()
+    const { url, dir } = await startRunsBridge()
+    const folder = join(tempDirRuns, 'machineroom-runs')
+    const startedAt = new Date(2026, 10, 17, 10, 0, 0).toISOString()
+    const name = 'test-P1-P2-20261117-100000.log'
+    const log = join(folder, name)
+    const record = { lane: 'test', briefs: ['P1', 'P2'], startedAt, log: null }
+    writeFileSync(join(dir, 'docs', 'agents', 'lanes.json'), JSON.stringify({ test: {}, 'test-P1': {} }))
+    mkdirSync(folder, { recursive: true })
+    writeFileSync(log, opencodeConversationLog())
+    writeConversationRun(folder, record)
+
+    let res = await getJson(conversationUrl(url, 'test', startedAt))
+    expect(res.status).toBe(404)
+    expect(res.body.error).toBe("The run's log is missing.")
+
+    writeFileSync(join(folder, 'test.lock'), JSON.stringify({ log: name, startedAt: new Date(2026, 10, 17, 9, 0, 0).toISOString() }))
+    res = await getJson(conversationUrl(url, 'test', startedAt))
+    expect(res.status).toBe(404)
+
+    writeFileSync(join(folder, 'test.lock'), JSON.stringify({ log: name, startedAt }))
+    res = await getJson(conversationUrl(url, 'test', startedAt))
+    expect(res.status).toBe(200)
+
+    writeFileSync(join(folder, 'test.lock'), '{}')
+    appendFileSync(join(folder, 'runs.jsonl'), `${JSON.stringify({ ...record, log })}\n`)
+    res = await getJson(conversationUrl(url, 'test', startedAt))
+    expect(res.status).toBe(200)
   })
 
   it('does not find another lane or a log outside the runs folder', async () => {
