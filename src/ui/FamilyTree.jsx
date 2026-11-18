@@ -4,6 +4,7 @@ import { defaultMode, laneModesFor, modesFor } from '../control/modes.js'
 import { sessionKeyFor } from '../model/laneStarter.js'
 import { agentTasks } from '../model/liveTasks.js'
 import AutocompactInput from './AutocompactInput.jsx'
+import { Chip, HoverCard, IconButton, Menu, Row, Switch } from './controls.jsx'
 import { useDialogFocus } from './dialogFocus.js'
 import {
   DIRECT_HARNESS,
@@ -20,6 +21,7 @@ import {
   convertPlan,
   droppedLaneLine,
   familyMeta,
+  familyModel,
   familyTree,
   findHarness,
   harnessEfforts,
@@ -50,6 +52,7 @@ import {
   subFromForm,
   subScope,
 } from './ladderForm.js'
+import { runClock, runOutcome } from './laneConversation.js'
 import { useHarnessModels } from './ModelRefresh.jsx'
 import ModelPicker from './ModelPicker.jsx'
 import { modelName, withHarnessModels, withModelRows } from './modelRefresh.js'
@@ -57,6 +60,25 @@ import { AGENT_NAME_MAX, cleanText, laneChoice, laneSummary, projectName } from 
 
 const SCOPE_NOTE =
   "A restricted sub's lanes cannot merge files outside its scope without the orchestrator above."
+
+function TreeIndent({ depth }) {
+  return (
+    <span className="mr-family-indent" style={{ width: `${depth * 16}px` }} aria-hidden="true">
+      {Array.from({ length: depth }, (_, level) => (
+        <span className="mr-family-vline" key={level} style={{ left: `${level * 16 + 7}px` }} />
+      ))}
+      {depth > 0 && (
+        <span className="mr-family-hline" style={{ left: `${(depth - 1) * 16 + 7}px` }} />
+      )}
+    </span>
+  )
+}
+
+const chatIcon = (
+  <svg viewBox="0 0 12 12" aria-hidden="true" focusable="false">
+    <path d="M2 2.5h8v5.5H6L3.5 10V8H2z" fill="none" stroke="currentColor" strokeLinejoin="round" />
+  </svg>
+)
 
 function ScopeFields({
   scope,
@@ -268,6 +290,7 @@ export function sessionRowsFor({ agents = [], liveRuns = [], records = [] } = {}
       kind: 'session',
       label: cleanText(agent.name, AGENT_NAME_MAX) || cleanText(agent.key, 80),
       harness: cleanText(agent.harness ?? agent.parser, 40),
+      model: cleanText(agent.model, 120),
       working: entry.open,
       open: entry.open,
       at,
@@ -499,7 +522,7 @@ export function FamilyTeams({ client = null, project = '' }) {
     <section className="mr-teams" aria-label="Saved teams">
       <button
         type="button"
-        className="mr-side-head is-button"
+        className="mr-side-head mr-family-heading is-button"
         aria-expanded={open}
         onClick={() => {
           const next = !open
@@ -509,8 +532,9 @@ export function FamilyTeams({ client = null, project = '' }) {
           } catch {}
         }}
       >
-        <span className="mr-side-head-title mono">Teams{rows.length ? ` ${rows.length}` : ''}</span>
-        <span className="mr-side-twist" aria-hidden="true">{open ? '-' : '+'}</span>
+        <span className="mr-side-head-title mono">Teams</span>
+        {rows.length > 0 && <span className="mr-side-count mono">{rows.length}</span>}
+        <span className="ui-chip-chevron" aria-hidden="true" />
       </button>
       {open ? <>
       {teams === null ? <p className="mr-side-note">Loading teams...</p> : null}
@@ -677,6 +701,7 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
   const [busy, setBusy] = useState(false)
   const confirmRef = useRef(null)
 
+  const [selecting, setSelecting] = useState(false)
   const [selectedLanes, setSelectedLanes] = useState([])
   const [groupOpen, setGroupOpen] = useState(false)
   const [subDraft, setSubDraft] = useState(null)
@@ -684,6 +709,8 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
   const [orchestrators, setOrchestrators] = useState(null)
   const [liveTaskMap, setLiveTaskMap] = useState(null)
   const [sessionRows, setSessionRows] = useState([])
+  const [lastRuns, setLastRuns] = useState(null)
+  const headerRef = useRef(null)
 
   useDialogFocus(Boolean(confirm), { containerRef: confirmRef })
 
@@ -852,6 +879,7 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
           records: Array.isArray(runsRaw?.recent) ? runsRaw.recent : [],
         })
       )
+      setLastRuns(runsRaw)
     }
     readSessions()
     const unsubscribe =
@@ -879,7 +907,31 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
     return () => window.removeEventListener('keydown', onKey, true)
   }, [confirm, busy])
 
+  useEffect(() => {
+    if (!selecting || confirm || busy) return undefined
+    function onKey(event) {
+      if (event.key !== 'Escape' || event.defaultPrevented) return
+      event.preventDefault()
+      endSelection()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [selecting, confirm, busy])
+
   const tree = useMemo(() => familyTree(family), [family])
+  const lastRunByLane = useMemo(() => {
+    const latest = new Map()
+    for (const list of [lastRuns?.last, lastRuns?.recent]) {
+      for (const run of Array.isArray(list) ? list : []) {
+        const at = Date.parse(run?.startedAt)
+        if (!run?.lane || !Number.isFinite(at)) continue
+        if (at > (latest.get(run.lane)?.at ?? -Infinity)) {
+          latest.set(run.lane, { at, text: `Last run ${runClock(run.startedAt)} · ${cleanText(runOutcome(run), 60)}` })
+        }
+      }
+    }
+    return latest
+  }, [lastRuns])
   const orchestratorStates = useMemo(() => {
     const map = new Map()
     const list = Array.isArray(orchestrators)
@@ -919,6 +971,8 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
     : readError
       ? 'Lanes failed to load.'
       : 'Loading lanes...'
+  const mainAgent = tree.nodes.find((node) => node.kind === 'orchestrator')
+  const hasLanes = tree.nodes.some((node) => node.kind === 'lane')
   const editingNode = editing ? tree.nodes.find((node) => node.id === editing) ?? null : null
 
   const editorHarness = useMemo(() => {
@@ -1398,9 +1452,13 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
 
   function clearSelection() {
     setSelectedLanes([])
-    setGroupOpen(false)
-    setSubDraft(null)
-    setSubProblem('')
+    closeGroupForm()
+  }
+
+  function endSelection() {
+    clearSelection()
+    setSelecting(false)
+    headerRef.current?.querySelector('[aria-haspopup="menu"]')?.focus()
   }
 
   function closeGroupForm() {
@@ -1487,7 +1545,7 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
           fresh.sub.lanes.join('\n') === plan.sub.lanes.join('\n')
         if (!same) throw new Error('The team changed while the card was open. Open it again.')
         await client.setLadder({ subs: fresh.subs })
-        clearSelection()
+        endSelection()
         const mode = chosenSubMode(fresh.sub.harness, draftForPlan.mode)
         const saveMode = modeSetter(client)
         if (mode && typeof saveMode === 'function') {
@@ -1667,10 +1725,11 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
   function toggleChild(node) {
     if (node.kind === 'lane') {
       if (groupOpen && selectedLanes.length === 1 && selectedLanes[0] === node.id) {
-        clearSelection()
+        endSelection()
         return
       }
       const next = selectedLanes.includes(node.id) ? selectedLanes : [...selectedLanes, node.id]
+      setSelecting(true)
       openGroupForm(next, true)
       return
     }
@@ -2452,23 +2511,19 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
   }
 
   function renderSelection() {
-    if (selectedLanes.length === 0) return null
+    if (!selecting) return null
     return (
       <>
         <div className="mr-family-selection" role="group" aria-label="Selected code agents">
-          <span className="mr-family-selection-count mono">{`${selectedLanes.length} selected`}</span>
-          <button
-            type="button"
-            className="mr-side-action mr-family-sub-open"
-            aria-expanded={groupOpen}
-            disabled={busy}
+          <span className="mr-family-selection-count mono" role="status">{`${selectedLanes.length} selected`}</span>
+          <Chip
+            label="Make sub orchestrator"
+            open={groupOpen}
+            disabled={busy || selectedLanes.length === 0}
             onClick={() => openGroupForm(selectedLanes)}
-          >
-            Add sub orchestrator
-          </button>
-          <button type="button" className="mr-side-action" disabled={busy} onClick={clearSelection}>
-            Clear
-          </button>
+          />
+          <Chip label="Clear" disabled={busy || selectedLanes.length === 0} onClick={clearSelection} />
+          <Chip label="Done" disabled={busy} onClick={endSelection} />
         </div>
         {groupOpen ? renderSubForm() : null}
       </>
@@ -2485,202 +2540,170 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
           aria-expanded={moreOpen}
           onClick={() => setMoreOpen((value) => !value)}
         >
-          <span className="mr-family-more-label mono">{moreLanesLabel(laneRows.more.length)}</span>
-          <span className="mr-side-twist" aria-hidden="true">
-            {moreOpen ? '-' : '+'}
+          <span className="mono">
+            {moreOpen ? 'Hide' : 'Show'} {moreLanesLabel(laneRows.more.length)}
           </span>
+          <span className="ui-chip-chevron" aria-hidden="true" />
         </button>
-        {moreOpen ? laneRows.more.map((row) => renderRow({ ...row, depth: 1 })) : null}
+        {moreOpen ? laneRows.more.map(renderRow) : null}
       </div>
     )
   }
 
-  function renderSessionRow(row) {
-    const dotState = row.working ? 'working' : 'idle'
-    return (
-      <div className="mr-family-node" key={row.id} data-kind="session" data-depth={row.depth}>
-        <div className="mr-family-row">
-          <span className="mr-family-indent" style={{ width: `${row.depth * 16}px` }} aria-hidden="true">
-            {Array.from({ length: row.depth }, (_, level) => (
-              <span className="mr-family-vline" key={level} style={{ left: `${level * 16 + 7}px` }} />
-            ))}
-            {row.depth > 0 ? (
-              <span className="mr-family-hline" style={{ left: `${(row.depth - 1) * 16 + 7}px` }} />
-            ) : null}
-          </span>
-          <span className="mr-family-check-space" aria-hidden="true" />
-          <div className="mr-family-main">
-            <span className="mr-family-top">
-              <span className={`mr-family-dot is-${dotState}`} aria-hidden="true" />
-              <span className="mr-family-label">{row.label}</span>
-            </span>
-            <div className="mr-family-under">
-              <span className={`mr-family-state is-${dotState} mono`}>{row.working ? 'working' : 'idle'}</span>
-              <span className="mr-family-kind mono">session</span>
-              <span className="mr-family-meta mono">{row.step}</span>
-            </div>
-          </div>
-        </div>
-      </div>
-    )
-  }
-
-  function renderRow(row) {
-    const node = row
-    const state = stateWord(node)
-    const text = rowText(node, orchestratorStates.get(node.id) ?? '', taskFor(taskMap, node.id))
-    const dotState =
-      node.kind === 'lane' ? state : text === 'working' ? 'working' : text === 'paused' ? 'paused' : 'idle'
+  function renderRow(node) {
+    const lane = node.kind === 'lane'
     const sub = node.kind === 'sub'
+    const session = node.kind === 'session'
+    const selectable = lane && selecting
+    const selected = selectable && selectedLanes.includes(node.id)
+    const orchestratorState = orchestratorStates.get(node.id) ?? ''
+    const task = lane ? rowText(node, '', taskFor(taskMap, node.id)) : ''
+    const state = lane || session ? stateWord(node) : rowText(node, orchestratorState)
+    const status = state === 'paused' ? 'waiting' : state
+    const dot = state === 'waiting' ? 'idle' : state
+    const detail = familyModel(node, { harnesses, models })
+    const mode = node.mode || defaultMode(node.harness)
+    const effortMode = `Effort ${node.effort || 'default'}${mode ? ` · Mode ${mode}` : ''}`
+    const items = [{
+      label: lane ? 'Add sub orchestrator…' : 'Add a lane under this…',
+      disabled: busy,
+      onSelect: () => toggleChild(node),
+    }]
+    if (lane) {
+      items.push({
+        label: node.active ? 'Turn off' : 'Turn on',
+        disabled: busy || typeof client?.setActiveLanes !== 'function',
+        onSelect: () => toggleLane(node, !node.active),
+      })
+    }
+    if (lane || sub) {
+      items.push({
+        label: 'Delete…',
+        danger: true,
+        disabled: busy || (sub
+          ? typeof client?.setLadder !== 'function' || typeof client?.orchestrators !== 'function'
+          : typeof client?.hideLane !== 'function'),
+        onSelect: () => (sub ? askRemoveSub(node) : askHide(node)),
+      })
+    }
     return (
-      <div className="mr-family-node" key={node.id} data-kind={node.kind} data-depth={row.depth}>
-        <div className="mr-family-row">
-          <span className="mr-family-indent" style={{ width: `${row.depth * 16}px` }} aria-hidden="true">
-            {Array.from({ length: row.depth }, (_, level) => (
-              <span
-                className="mr-family-vline"
-                key={level}
-                style={{ left: `${level * 16 + 7}px` }}
-              />
-            ))}
-            {row.depth > 0 ? (
-              <span className="mr-family-hline" style={{ left: `${(row.depth - 1) * 16 + 7}px` }} />
-            ) : null}
-          </span>
-          {node.kind === 'lane' ? (
-            <input
-              type="checkbox"
-              className="mr-family-check"
-              aria-label={`Select ${node.label}`}
-              checked={selectedLanes.includes(node.id)}
-              disabled={busy}
-              onChange={(event) => toggleSelected(node, event.target.checked)}
-            />
-          ) : (
-            <span className="mr-family-check-space" aria-hidden="true" />
-          )}
-          <div className="mr-family-main">
-            <button
-              type="button"
-              className={`mr-family-open is-${node.kind}`}
-              aria-expanded={editing === node.id}
-              aria-label={`Edit ${node.label}`}
-              onClick={() => openNode(node)}
-            >
+      <div className="mr-family-node" key={node.id} data-kind={node.kind} data-depth={node.depth}>
+        <HoverCard title={node.label} details={[
+          detail,
+          !session && effortMode,
+          `Status ${state}${task ? ` · ${task}` : ''}`,
+          session ? node.step : lastRunByLane.get(node.id)?.text,
+        ].filter(Boolean)}>
+          <Row
+            className={`mr-family-row${state === 'off' ? ' is-off' : ''}${selectable ? ' is-selectable' : ''}`}
+            selected={selected}
+            onClick={selectable && !busy ? () => toggleSelected(node, !selected) : undefined}
+            leading={
+              <>
+                {node.depth > 0 && <TreeIndent depth={node.depth} />}
+                {selectable && (
+                  <Switch
+                    label={`Select ${node.label}`}
+                    checked={selected}
+                    showLabel={false}
+                    disabled={busy}
+                    onChange={(on, event) => {
+                      event.stopPropagation()
+                      toggleSelected(node, on)
+                    }}
+                  />
+                )}
+              </>
+            }
+            label={
               <span className="mr-family-top">
-                <span className={`mr-family-dot is-${dotState}`} aria-hidden="true" />
-                <span className="mr-family-label">{node.label}</span>
+                <span className={`mr-family-dot is-${dot}`} aria-hidden="true" />
+                {session || selectable ? (
+                  <span className="mr-family-label">{node.label}</span>
+                ) : (
+                  <button type="button" className="mr-family-label mr-family-open"
+                    aria-expanded={editing === node.id} aria-label={`Edit ${node.label}`}
+                    onClick={() => openNode(node)}>
+                    {node.label}
+                  </button>
+                )}
+                <span className="mr-family-state mono">{status}</span>
               </span>
-            </button>
-            <div className="mr-family-under">
-              {text ? <span className={`mr-family-state is-${dotState} mono`}>{text}</span> : null}
-              <span className="mr-family-kind mono">{node.kind === 'lane' ? 'lane' : node.kind}</span>
-              <span className="mr-family-meta mono">{familyMeta(node, { harnesses, models })}</span>
+            }
+            detail={detail}
+            trailing={!session && (
               <span className="mr-family-actions">
-                {node.kind === 'lane' ? (
-                  <button
-                    type="button"
-                    role="switch"
-                    aria-checked={node.active}
-                    aria-label={`${node.active ? 'Turn off' : 'Turn on'} ${node.label}`}
-                    className={`mr-side-switch${node.active ? ' is-on' : ''}`}
-                    disabled={busy || typeof client?.setActiveLanes !== 'function'}
-                    onClick={() => toggleLane(node, !node.active)}
-                  >
-                    <span className="mr-side-switch-knob" aria-hidden="true" />
-                  </button>
-                ) : null}
-                {node.kind === 'lane' || sub ? (
-                  <button
-                    type="button"
-                    className="mr-family-trash"
-                    aria-label={sub ? `Delete ${node.label}` : node.custom === true ? `Hide ${node.label}` : `Remove ${node.label}`}
-                    title={sub ? `Delete ${node.label}` : node.custom === true ? `Hide ${node.label}` : `Remove ${node.label}`}
-                    disabled={
-                      busy ||
-                      (sub
-                        ? typeof client?.setLadder !== 'function' || typeof client?.orchestrators !== 'function'
-                        : typeof client?.hideLane !== 'function')
-                    }
-                    onClick={() => (sub ? askRemoveSub(node) : askHide(node))}
-                  >
-                    <svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true" focusable="false">
-                      <path
-                        d="M2 3.5h8M4.5 3.5V2.5h3v1M3.4 3.5l.4 6h4.4l.4-6M5 5.5v2.6M7 5.5v2.6"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="1"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                    </svg>
-                  </button>
-                ) : null}
-                <button
-                  type="button"
-                  className="mr-family-add"
-                  aria-label={
-                    node.kind === 'lane'
-                      ? `Add sub orchestrator for ${node.label}`
-                      : `Add child to ${node.label}`
-                  }
-                  aria-expanded={
-                    node.kind === 'lane' ? groupOpen && selectedLanes.includes(node.id) : childFor === node.id
-                  }
-                  disabled={busy}
-                  onClick={() => toggleChild(node)}
-                >
-                  +
-                </button>
-                <button
-                  type="button"
+                <IconButton
                   className="mr-family-chat"
-                  aria-label={
-                    node.kind === 'lane'
-                      ? `Open conversation with ${node.label}`
-                      : `Open chat with ${node.label}`
-                  }
-                  title={
-                    node.kind === 'lane'
-                      ? `Open conversation with ${node.label}`
-                      : `Open chat with ${node.label}`
-                  }
-                  onClick={() => (node.kind === 'lane' ? openLaneChat(node.id) : openChat(node.id))}
-                >
-                  <svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true" focusable="false">
-                    <path
-                      d="M2 2.5h8v5.5H6L3.5 10V8H2z"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="1"
-                      strokeLinejoin="round"
-                    />
-                  </svg>
-                </button>
+                  label={lane ? `Open conversation with ${node.label}` : `Open chat with ${node.label}`}
+                  icon={chatIcon}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    if (lane) openLaneChat(node.id)
+                    else openChat(node.id)
+                  }}
+                />
+                <Menu label={`Actions for ${node.label}`} items={items} disabled={busy} />
               </span>
-            </div>
-          </div>
-        </div>
-        {editing === node.id ? renderEditor(node, row.depth) : null}
-        {childFor === node.id ? renderChildForm(node, row.depth) : null}
+            )}
+          />
+        </HoverCard>
+        {editing === node.id ? renderEditor(node, node.depth) : null}
+        {childFor === node.id ? renderChildForm(node, node.depth) : null}
       </div>
     )
+  }
+
+  function openTeamBuilder() {
+    const header = headerRef.current?.parentNode?.querySelector('.mr-team')?.querySelector('.mr-side-head')
+    if (!header) return
+    if (header.getAttribute('aria-expanded') !== 'true') header.click()
+    header.focus()
+  }
+
+  function startSelection() {
+    setOpen(true)
+    setSelecting(true)
   }
 
   return (
-    <section className="mr-family" aria-label="Agents">
-      <button
-        type="button"
-        className="mr-side-head is-button"
-        aria-expanded={open}
-        onClick={() => setOpen((value) => !value)}
-      >
-        <span className="mr-side-head-title mono">Agents</span>
-        <span className="mr-side-count mono">{countLine}</span>
-        <span className="mr-side-twist" aria-hidden="true">
-          {open ? '-' : '+'}
+    <section className="mr-family" aria-label="Agents" ref={headerRef}>
+      <div className="mr-family-header">
+        <button
+          type="button"
+          className="mr-side-head mr-family-heading is-button"
+          aria-expanded={open}
+          onClick={() => setOpen((value) => !value)}
+        >
+          <span className="mr-side-head-title mono">Agents</span>
+          <span className="mr-side-count mono">{countLine}</span>
+          <span className="ui-chip-chevron" aria-hidden="true" />
+        </button>
+        <span className="mr-family-header-actions">
+          <IconButton className="mr-family-add" label="Add a lane" icon="+" disabled={busy || !mainAgent}
+            onClick={() => {
+              setOpen(true)
+              toggleChild(mainAgent)
+            }}
+          />
+          <Menu label="Agents actions" disabled={busy} items={[
+            {
+              label: 'Add sub orchestrator…',
+              disabled: !hasLanes,
+              onSelect: () => {
+                startSelection()
+                if (selectedLanes.length > 0) openGroupForm(selectedLanes)
+              },
+            },
+            {
+              label: 'Select lanes',
+              disabled: !hasLanes,
+              onSelect: startSelection,
+            },
+            { label: 'Build a team…', onSelect: openTeamBuilder },
+          ]} />
         </span>
-      </button>
+      </div>
       {open ? (
         <div className="mr-family-body">
           {actionError ? (
@@ -2696,7 +2719,7 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
               {renderRequests()}
               {renderSelection()}
               {tree.rows.length === 0 ? <p className="mr-side-note">No agents are listed.</p> : null}
-              {mainRows.map((row) => (row.kind === 'session' ? renderSessionRow(row) : renderRow(row)))}
+              {mainRows.map(renderRow)}
               {renderMoreLanes()}
             </>
           )}

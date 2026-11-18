@@ -42,6 +42,7 @@ function treeNode(raw) {
     harness: cleanText(raw.harness, 40),
     model: cleanText(raw.model, 120),
     effort: cleanText(raw.effort, 20),
+    mode: cleanText(raw.mode, 40),
     parent: cleanText(raw.parent, 80),
     requested: childRows(raw.children),
     active: raw.active !== false,
@@ -117,7 +118,7 @@ export function harnessLabel(harness) {
   return key
 }
 
-export function familyMeta(node, choices = null) {
+export function familyModel(node, choices = null) {
   const harness = harnessLabel(node?.harness) || 'harness unknown'
   const key = harnessKey(node?.harness)
   let list = Array.isArray(choices) ? choices : []
@@ -129,14 +130,17 @@ export function familyMeta(node, choices = null) {
     const fromModels = key ? modelChoices(extra, key) : []
     list = [...fromHarness, ...fromModels]
   }
-  const model = modelName(node?.model, list)
+  return `${harness} · ${modelName(node?.model, list)}`
+}
+
+export function familyMeta(node, choices = null) {
   const effort = cleanText(node?.effort, 20) || 'default'
-  return `${harness} · ${model} · ${effort}`
+  return `${familyModel(node, choices)} · ${effort}`
 }
 
 export function stateWord(node) {
-  if (node?.working === true) return 'working'
   if (node?.active === false) return 'off'
+  if (node?.working === true) return 'working'
   return 'idle'
 }
 
@@ -148,8 +152,8 @@ export function laneParentLabel(nodes, lane) {
 
 export function laneCountLine(nodes) {
   const lanes = (Array.isArray(nodes) ? nodes : []).filter((node) => node && node.kind === 'lane')
-  const active = lanes.filter((node) => node.active !== false).length
-  return `${active} of ${lanes.length} lanes in this project`
+  const working = lanes.filter((node) => node.active !== false && node.working === true).length
+  return `${working} of ${lanes.length} working`
 }
 
 export function splitMoreLanes(rows) {

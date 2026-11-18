@@ -2,7 +2,7 @@ import { act, createElement } from 'react'
 import { describe, expect, it } from 'vitest'
 import FamilyTeam from '../src/ui/FamilyTeam.jsx'
 import FamilyTree from '../src/ui/FamilyTree.jsx'
-import { buttonWithText, settle, withDom } from './helpers/uiDom.js'
+import { buttonWithText, click, settle, withDom } from './helpers/uiDom.js'
 
 const NODES = [
   {
@@ -109,6 +109,12 @@ function makeClient(orchestrators) {
   return { client, calls }
 }
 
+async function chooseAction(root, scope, label) {
+  const trigger = scope.querySelector('[aria-haspopup="menu"]')
+  await click(root, trigger)
+  await click(root, buttonWithText(trigger.ownerDocument.body.querySelector('[role="menu"]'), label))
+}
+
 function rowByLabel(container, label) {
   return (
     container.querySelectorAll('.mr-family-node').find((row) => {
@@ -134,15 +140,12 @@ describe('FamilyTree ladder changes', () => {
         container.querySelector('.mr-family-more-head').click()
       })
 
+      await chooseAction(root, container.querySelector('.mr-family-header'), 'Select lanes')
       for (const label of ['OpenCode 2', 'OpenCode']) {
-        const check = rowByLabel(container, label).querySelector('.mr-family-check')
-        await act(async () => {
-          check.checked = true
-          check.click()
-        })
+        await click(root, rowByLabel(container, label).querySelector('[role="switch"]'))
       }
       await act(async () => {
-        buttonWithText(container, 'Add sub orchestrator').click()
+        buttonWithText(container, 'Make sub orchestrator').click()
       })
       const form = container.querySelector('.mr-family-sub-form')
       await act(async () => {
@@ -166,10 +169,7 @@ describe('FamilyTree ladder changes', () => {
       })
       await settle()
 
-      const trash = rowByLabel(container, 'Frontend').querySelector('.mr-family-trash')
-      await act(async () => {
-        trash.click()
-      })
+      await chooseAction(root, rowByLabel(container, 'Frontend'), 'Delete…')
       const card = container.querySelector('.mr-side-confirm-card')
       expect(card.textContent).toContain('Remove "Frontend"?')
 
@@ -240,13 +240,10 @@ describe('Sub form harnesses from orchestrators', () => {
         root.render(createElement(FamilyTree, { client }))
       })
       await settle()
-      const check = rowByLabel(container, 'OpenCode').querySelector('.mr-family-check')
+      await chooseAction(root, container.querySelector('.mr-family-header'), 'Select lanes')
+      await click(root, rowByLabel(container, 'OpenCode').querySelector('[role="switch"]'))
       await act(async () => {
-        check.checked = true
-        check.click()
-      })
-      await act(async () => {
-        buttonWithText(container, 'Add sub orchestrator').click()
+        buttonWithText(container, 'Make sub orchestrator').click()
       })
       const form = container.querySelector('.mr-family-sub-form')
       const harnessSelect = form.querySelector('select[aria-label="Sub orchestrator harness"]')

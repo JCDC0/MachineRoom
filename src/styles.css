@@ -9562,33 +9562,123 @@ body:has(#hud-orchestrator-chat) .lens-waiting {
   flex-direction: column;
 }
 
+.mr-side-body:has(> .mr-side-agents) {
+  background: var(--black);
+}
+
+.mr-family-header {
+  display: flex;
+  align-items: center;
+  margin-top: var(--space);
+}
+
+.mr-family-header-actions,
+.mr-family-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space);
+}
+
+.mr-family-header-actions,
+.mr-family-row .ui-row-trailing {
+  width: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.mr-family-row .ui-row-trailing {
+  margin-left: calc(-1 * var(--space));
+  overflow: clip;
+}
+
+.mr-family-header-actions {
+  justify-content: flex-end;
+}
+
+.mr-family-header:is(:hover, :focus-within, :has([aria-haspopup='menu'][aria-expanded='true'])) .mr-family-header-actions,
+.mr-family-row:is(:hover, :focus-within, :has([aria-haspopup='menu'][aria-expanded='true'])) .ui-row-trailing,
+.ui-hover-anchor:focus-visible > .mr-family-row .ui-row-trailing {
+  width: auto;
+  margin-left: 0;
+  opacity: 1;
+  overflow: visible;
+  pointer-events: auto;
+}
+
+.mr-family-row:has(.mr-family-open[aria-expanded='true']) {
+  background: var(--surface-2);
+}
+
+.mr-family-heading,
+.mr-team > .mr-side-head {
+  min-width: 0;
+  margin-top: 0;
+  padding: 0 var(--space);
+  border-radius: var(--radius-s);
+}
+
+:is(.mr-family-heading, .mr-team > .mr-side-head) :is(.mr-side-head-title, .mr-side-count) {
+  color: var(--text-dim);
+  font-size: 11px;
+}
+
+.mr-family-heading .ui-chip-chevron,
+.mr-team > .mr-side-head .mr-side-twist {
+  flex: 0 0 8px;
+  margin-left: auto;
+}
+
+.mr-family-heading[aria-expanded='true'] .ui-chip-chevron,
+.mr-family-more-head[aria-expanded='true'] .ui-chip-chevron {
+  transform: rotate(180deg);
+}
+
+.mr-family-heading .mr-side-count + .ui-chip-chevron {
+  margin-left: 0;
+}
+
+.mr-team > .mr-side-head .mr-side-twist {
+  font-size: 0;
+}
+
+.mr-team > .mr-side-head .mr-side-twist::after {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-right: 1px solid currentColor;
+  border-bottom: 1px solid currentColor;
+  transform: translateY(-2px) rotate(45deg);
+}
+
+.mr-team > .mr-side-head[aria-expanded='true'] .mr-side-twist::after {
+  transform: translateY(2px) rotate(225deg);
+}
+
 .mr-family-more {
   display: flex;
   flex-direction: column;
 }
 
-.mr-family-more-head {
+.mr-family button.mr-family-more-head {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space);
   width: 100%;
-  padding: 4px 2px 4px 28px;
-  font-weight: 400;
+  min-height: 32px;
+  padding: 0 var(--space) 0 24px;
+  border-radius: var(--radius-s);
+  color: var(--text-dim);
+  font-size: 11px;
   text-transform: none;
-  letter-spacing: 0;
-  background: transparent;
-  border: 0;
-  border-radius: 2px;
+  letter-spacing: normal;
 }
 
-.mr-family-more-head:hover {
-  background: rgb(255 255 255 / 0.05);
+.mr-family-more-head .ui-chip-chevron {
+  margin-left: auto;
 }
 
-.mr-family-more-label {
-  flex: 1 1 auto;
-  font-size: 9px;
-  color: rgb(255 255 255 / 0.45);
+.mr-family .mr-family-more-head:hover {
+  background: var(--surface-1);
 }
 
 .mr-teams {
@@ -9687,192 +9777,101 @@ body:has(#hud-orchestrator-chat) .lens-waiting {
   flex-direction: column;
 }
 
-.mr-family-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 4px;
-}
-
-.mr-family-main {
-  display: flex;
-  flex: 1 1 auto;
-  flex-direction: column;
-  min-width: 0;
+.mr-family-row.is-selectable {
+  cursor: pointer;
 }
 
 .mr-family-indent {
   position: relative;
   flex: 0 0 auto;
   align-self: stretch;
+  margin-right: calc(-1 * var(--space));
+}
+
+.mr-family-vline,
+.mr-family-hline {
+  position: absolute;
+  background: var(--border-soft);
 }
 
 .mr-family-vline {
-  position: absolute;
   top: 0;
   bottom: 0;
   width: 1px;
-  background: rgb(255 255 255 / 0.14);
 }
 
 .mr-family-hline {
-  position: absolute;
   top: 50%;
   width: 9px;
   height: 1px;
-  background: rgb(255 255 255 / 0.14);
-}
-
-.mr-family .mr-family-open {
-  display: flex;
-  flex: 1 1 auto;
-  flex-direction: column;
-  min-width: 0;
-  padding: 4px 2px;
-  border-left: 2px solid transparent;
-  border-radius: 2px;
-}
-
-.mr-family-under {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  min-width: 0;
-  min-height: 24px;
-  padding: 0 2px;
-}
-
-.mr-family .mr-family-open:hover,
-.mr-family .mr-family-open[aria-expanded='true'] {
-  border-left-color: var(--yellow);
-  background: rgb(255 255 255 / 0.05);
 }
 
 .mr-family-top {
   display: flex;
   align-items: center;
-  gap: 6px;
-  min-width: 0;
+  gap: var(--space);
+}
+
+.mr-family-row .ui-row-label {
+  overflow: visible;
+}
+
+.mr-family-row .ui-row-detail {
+  padding-left: 16px;
 }
 
 .mr-family-label {
   flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
-  font-size: 11px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.mr-family-kind {
-  flex: 0 0 auto;
-  padding: 0 3px;
-  border: 1px solid rgb(255 255 255 / 0.14);
-  border-radius: 2px;
-  font-size: 7px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: rgb(255 255 255 / 0.32);
+.mr-family button.mr-family-open {
+  min-height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-s);
+  background: transparent;
+  color: var(--white);
+  font: inherit;
+  letter-spacing: normal;
+  text-align: left;
+  text-transform: none;
 }
 
-.mr-family-meta {
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  font-size: 8px;
-  line-height: 1.4;
-  color: rgb(255 255 255 / 0.35);
-  text-overflow: ellipsis;
-  white-space: nowrap;
+:is(.mr-family-heading, .mr-family-more-head, .mr-family-open, .mr-team > .mr-side-head):focus-visible {
+  outline: 1px solid var(--white);
+  outline-offset: 2px;
+}
+
+.mr-family-row.is-off .mr-family-label {
+  opacity: 0.55;
 }
 
 .mr-family-dot {
-  flex: 0 0 auto;
-  width: 6px;
-  height: 6px;
+  flex: 0 0 8px;
+  height: 8px;
   border-radius: 50%;
-  background: rgb(255 255 255 / 0.25);
+  background: var(--white);
 }
 
 .mr-family-dot.is-working {
   background: var(--yellow);
-  box-shadow: 0 0 6px rgb(229 255 0 / 0.6);
 }
 
 .mr-family-dot.is-off {
-  background: transparent;
-  border: 1px solid rgb(255 255 255 / 0.25);
+  background: var(--text-faint);
 }
 
 .mr-family-dot.is-paused {
   background: var(--red);
-  box-shadow: 0 0 6px rgb(255 42 42 / 0.5);
 }
 
 .mr-family-state {
-  flex: 0 0 auto;
-  max-width: 74px;
-  overflow: hidden;
-  font-size: 8px;
-  line-height: 1.4;
-  color: rgb(255 255 255 / 0.42);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.mr-family-actions {
-  display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: 6px;
-  margin-left: auto;
-}
-
-.mr-family-state.is-working {
-  color: var(--yellow);
-}
-
-.mr-family-state.is-paused {
-  color: var(--red);
-}
-
-.mr-family-row .mr-side-switch {
-  margin: 0;
-}
-
-.mr-family .mr-family-add {
-  flex: 0 0 auto;
-  width: 18px;
-  height: 18px;
-  border: 1px solid rgb(255 255 255 / 0.16);
-  border-radius: 2px;
-  font-family: var(--mono);
+  color: var(--text-dim);
   font-size: 11px;
-  line-height: 1;
-  color: rgb(255 255 255 / 0.5);
-  text-align: center;
-}
-
-.mr-family .mr-family-add:hover:not(:disabled),
-.mr-family .mr-family-add[aria-expanded='true'] {
-  border-color: var(--yellow);
-  color: var(--yellow);
-}
-
-.mr-family .mr-family-chat {
-  display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 18px;
-  border: 1px solid transparent;
-  border-radius: 2px;
-  color: rgb(255 255 255 / 0.4);
-}
-
-.mr-family .mr-family-chat:hover:not(:disabled) {
-  border-color: var(--yellow);
-  color: var(--yellow);
 }
 
 .mr-family-editor {
@@ -10786,50 +10785,8 @@ body:has(#hud-orchestrator-chat) .lens-waiting {
   }
 }
 
-/* U49: the family tree keeps turned-off lanes and deletes with a trash button. */
-.mr-family .mr-family-trash {
-  display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 18px;
-  border: 1px solid transparent;
-  border-radius: 2px;
-  color: rgb(255 255 255 / 0.4);
-}
-
-.mr-family .mr-family-trash:hover:not(:disabled) {
-  border-color: var(--red);
-  color: var(--red);
-}
-
-.mr-family .mr-family-trash:disabled {
-  color: rgb(255 255 255 / 0.18);
-}
-
-/* U54: lane multi-select, the sub orchestrator form and sub delete. */
-.mr-family .mr-family-check {
-  flex: 0 0 auto;
-  margin: 0;
-  accent-color: var(--yellow);
-  cursor: pointer;
-}
-
-.mr-family .mr-family-check:disabled {
-  cursor: default;
-}
-
-.mr-family-check-space {
-  flex: 0 0 auto;
-  width: 24px;
-}
-
 .lens-failures-clear,
 .mr-side .mr-side-menu-button,
-.mr-family .mr-family-add,
-.mr-family .mr-family-chat,
-.mr-family .mr-family-trash,
 .hud-band-switch,
 .transport-spend,
 .mr-side .mr-side-open-folder,
@@ -10852,11 +10809,7 @@ body:has(#hud-orchestrator-chat) .lens-waiting {
 .mr-side .mr-repo-switch::after,
 .mr-autocompact-unit::after,
 .mr-model-refresh::after,
-.waiting-close::after,
-.mr-family .mr-family-add::after,
-.mr-family .mr-family-chat::after,
-.mr-family .mr-family-trash::after,
-.mr-family .mr-family-check {
+.waiting-close::after {
   min-width: 24px;
   min-height: 24px;
 }
@@ -10872,10 +10825,7 @@ body:has(#hud-orchestrator-chat) .lens-waiting {
 .mr-side .mr-repo-switch::after,
 .mr-autocompact-unit::after,
 .mr-model-refresh::after,
-.waiting-close::after,
-.mr-family .mr-family-add::after,
-.mr-family .mr-family-chat::after,
-.mr-family .mr-family-trash::after {
+.waiting-close::after {
   content: '';
   position: absolute;
   left: 50%;
@@ -10889,25 +10839,17 @@ body:has(#hud-orchestrator-chat) .lens-waiting {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
-  margin: 2px 0 4px;
-  padding: 4px 6px;
-  border: 1px solid rgb(229 255 0 / 0.35);
-  border-radius: 3px;
-  background: rgb(229 255 0 / 0.06);
+  gap: var(--space);
+  margin: var(--space) 0;
+  padding: var(--space);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-m);
 }
 
 .mr-family-selection-count {
   flex: 1 1 auto;
-  min-width: 60px;
-  font-size: 9px;
-  letter-spacing: 0.06em;
-  color: var(--yellow);
-}
-
-.mr-family .mr-family-sub-open {
-  border-color: var(--yellow);
-  color: var(--yellow);
+  color: var(--text-dim);
+  font-size: 11px;
 }
 
 .mr-family-sub-form {

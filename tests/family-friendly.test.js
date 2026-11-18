@@ -115,6 +115,12 @@ function makeClient({ nodes = NODES, harnessModels = null, laneBackups = {} } = 
   return { client, calls }
 }
 
+async function chooseAction(root, scope, label) {
+  const trigger = scope.querySelector('[aria-haspopup="menu"]')
+  await click(root, trigger)
+  await click(root, buttonWithText(trigger.ownerDocument.body.querySelector('[role="menu"]'), label))
+}
+
 function rowByLabel(container, label) {
   return (
     container.querySelectorAll('.mr-family-node').find((row) => {
@@ -136,12 +142,9 @@ describe('the sub form keeps its effort', () => {
     const { client, calls } = makeClient()
     await withDom(async ({ container, root }) => {
       await mount(root, client)
-      const check = rowByLabel(container, 'OpenCode').querySelector('.mr-family-check')
-      await act(async () => {
-        check.checked = true
-        check.click()
-      })
-      await click(root, buttonWithText(container, 'Add sub orchestrator'))
+      await chooseAction(root, container.querySelector('.mr-family-header'), 'Select lanes')
+      await click(root, rowByLabel(container, 'OpenCode').querySelector('[role="switch"]'))
+      await click(root, buttonWithText(container, 'Make sub orchestrator'))
 
       const form = container.querySelector('.mr-family-sub-form')
       await type(root, form.querySelector('input[aria-label="Sub orchestrator label"]'), 'High Sub')
@@ -198,7 +201,7 @@ describe('a failed Direct API model read', () => {
     })
     await withDom(async ({ container, root }) => {
       await mount(root, client)
-      await click(root, rowByLabel(container, 'Orchestrator').querySelector('.mr-family-add'))
+      await click(root, container.querySelector('.mr-family-add'))
       const form = container.querySelector('.mr-family-child')
       const direct = form
         .querySelectorAll('.mr-side-harness')
@@ -219,7 +222,7 @@ describe('a failed Direct API model read', () => {
     })
     await withDom(async ({ container, root }) => {
       await mount(root, client)
-      await click(root, rowByLabel(container, 'Orchestrator').querySelector('.mr-family-add'))
+      await click(root, container.querySelector('.mr-family-add'))
       const form = container.querySelector('.mr-family-child')
       const direct = form
         .querySelectorAll('.mr-side-harness')
