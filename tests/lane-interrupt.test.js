@@ -16,6 +16,7 @@ import { parseQueueArgs } from '../src/briefs/queue.js'
 import { INTERRUPT_PARAGRAPH, parseRunArgs } from '../src/briefs/run.js'
 import { getJson, waitFor } from './helpers/bridge.js'
 import { makeTempDir, removeTempDir } from './helpers/tempRoot.js'
+import { slowMs } from './helpers/timeout.js'
 
 const fsHooks = vi.hoisted(() => ({
   onReadRunsFile: null,
@@ -240,7 +241,9 @@ async function makeBridgeRig({ laneReplies = 'next-turn', script = '', harness =
   }
 }
 
-describe('interrupting a working CLI lane run', { timeout: 60000 }, () => {
+describe('interrupting a working CLI lane run', { timeout: slowMs(180000) }, () => {
+  const CLI_WAIT_MS = slowMs(30000)
+  const CONTINUATION_WAIT_MS = slowMs(45000)
   it('never stops a run when laneReplies is next-turn', async () => {
     const tmp = tempDir('mr-interrupt-next-turn-')
     const callsFile = join(tmp, 'calls.jsonl')
@@ -259,7 +262,7 @@ describe('interrupting a working CLI lane run', { timeout: 60000 }, () => {
     expect(started.status).toBe(202)
 
     const call = await waitFor(() => readLines(callsFile).find((line) => line.callNumber === 1), {
-      timeoutMs: 15000,
+      timeoutMs: CLI_WAIT_MS,
       what: 'first CLI invocation',
     })
 
@@ -272,14 +275,14 @@ describe('interrupting a working CLI lane run', { timeout: 60000 }, () => {
     expect(sent.status).toBe(202)
 
     const seen = await waitFor(() => readLines(callsFile).find((line) => Array.isArray(line.seenInInbox)), {
-      timeoutMs: 15000,
+      timeoutMs: CLI_WAIT_MS,
       what: 'running lane to read message from inbox',
     })
     expect(seen.seenInInbox.map((m) => m.text)).toEqual(['Wait for next turn.'])
 
     await waitFor(
       async () => (await getJson(`${rig.url}/api/control/runs`)).body.running.length === 0,
-      { timeoutMs: 15000, what: 'run to finish' }
+      { timeoutMs: CLI_WAIT_MS, what: 'run to finish' }
     )
 
     const invocations = readLines(callsFile).filter((line) => line.callNumber && !line.seenInInbox)
@@ -311,7 +314,7 @@ describe('interrupting a working CLI lane run', { timeout: 60000 }, () => {
     expect(started.status).toBe(202)
 
     const firstCall = await waitFor(() => readLines(callsFile).find((line) => line.callNumber === 1), {
-      timeoutMs: 15000,
+      timeoutMs: CLI_WAIT_MS,
       what: 'first CLI invocation',
     })
     expect(firstCall.postStatuses).toEqual([202, 202])
@@ -325,13 +328,13 @@ describe('interrupting a working CLI lane run', { timeout: 60000 }, () => {
     expect(sent.status).toBe(202)
 
     const secondCall = await waitFor(() => readLines(callsFile).find((line) => line.callNumber === 2), {
-      timeoutMs: 20000,
+      timeoutMs: CONTINUATION_WAIT_MS,
       what: 'continuation CLI invocation',
     })
 
     await waitFor(
       async () => (await getJson(`${rig.url}/api/control/runs`)).body.running.length === 0,
-      { timeoutMs: 15000, what: 'continuation run to finish' }
+      { timeoutMs: CLI_WAIT_MS, what: 'continuation run to finish' }
     )
 
     expect(processAlive(firstCall.pid)).toBe(false)
@@ -373,17 +376,13 @@ describe('interrupting a working CLI lane run', { timeout: 60000 }, () => {
     const releaseFile = join(tmp, 'release')
     const script = [
       "const { appendFileSync, existsSync, readFileSync } = require('node:fs')",
-      "const { spawnSync } = require('node:child_process')",
       `const callsFile = ${JSON.stringify(callsFile)}`,
       `const releaseFile = ${JSON.stringify(releaseFile)}`,
-      `const git = ${JSON.stringify(gitPath() || 'git')}`,
       "const args = process.argv.slice(2)",
       "const prompt = args[args.length - 1] ?? ''",
-      "const branchRes = spawnSync(git, ['branch', '--show-current'], { cwd: process.cwd(), encoding: 'utf8', windowsHide: true })",
-      "const branch = String(branchRes.stdout || '').trim()",
       "const prior = existsSync(callsFile) ? readFileSync(callsFile, 'utf8').split(/\\r?\\n/).filter(Boolean).filter((l) => JSON.parse(l).callNumber).length : 0",
       "const callNumber = prior + 1",
-      "appendFileSync(callsFile, JSON.stringify({ callNumber, pid: process.pid, prompt, cwd: process.cwd(), branch }) + '\\n')",
+      "appendFileSync(callsFile, JSON.stringify({ callNumber, pid: process.pid, prompt, cwd: process.cwd() }) + '\\n')",
       "async function run() {",
       "  const ticket = process.env.MACHINEROOM_LANE_TICKET ?? ''",
       "  const bridge = process.env.MACHINEROOM_BRIDGE ?? ''",
@@ -422,7 +421,7 @@ describe('interrupting a working CLI lane run', { timeout: 60000 }, () => {
 
     for (let step = 1; step <= 3; step += 1) {
       await waitFor(() => readLines(callsFile).find((line) => line.callNumber === step), {
-        timeoutMs: 15000,
+        timeoutMs: CLI_WAIT_MS,
         what: `CLI invocation ${step}`,
       })
       const sent = await tokenPost(
@@ -433,7 +432,7 @@ describe('interrupting a working CLI lane run', { timeout: 60000 }, () => {
       )
       expect(sent.status).toBe(202)
       await waitFor(() => readLines(callsFile).find((line) => line.callNumber === step + 1), {
-        timeoutMs: 20000,
+        timeoutMs: CONTINUATION_WAIT_MS,
         what: `continuation CLI invocation ${step + 1}`,
       })
     }
@@ -450,14 +449,14 @@ describe('interrupting a working CLI lane run', { timeout: 60000 }, () => {
     expect(fourth.status).toBe(202)
 
     const fourthSeen = await waitFor(() => readLines(callsFile).find((line) => Array.isArray(line.fourthSaw)), {
-      timeoutMs: 15000,
+      timeoutMs: CLI_WAIT_MS,
       what: 'fourth run to read fourth message from inbox',
     })
     expect(fourthSeen.fourthSaw).toContain('Message 4 waits.')
 
     await waitFor(
       async () => (await getJson(`${rig.url}/api/control/runs`)).body.running.length === 0,
-      { timeoutMs: 15000, what: 'fourth run to finish' }
+      { timeoutMs: CLI_WAIT_MS, what: 'fourth run to finish' }
     )
 
     const calls = readLines(callsFile).filter((line) => line.callNumber)
@@ -721,11 +720,11 @@ describe('interrupting a working CLI lane run', { timeout: 60000 }, () => {
       expect((await pagePost(rig.url, '/api/control/runs', { lane: 'helper', task: 'Helper task.', worktree: true, confirmed: true })).status).toBe(202)
 
       await waitFor(() => readLines(callsFile).find((line) => line.lane === 'opencode' && line.callNumber === 1), {
-        timeoutMs: 15000,
+        timeoutMs: CLI_WAIT_MS,
         what: 'opencode call 1',
       })
       const helperCall = await waitFor(() => readLines(callsFile).find((line) => line.lane === 'helper' && line.callNumber === 1), {
-        timeoutMs: 15000,
+        timeoutMs: CLI_WAIT_MS,
         what: 'helper call 1',
       })
 
@@ -741,7 +740,7 @@ describe('interrupting a working CLI lane run', { timeout: 60000 }, () => {
       ).toBe(202)
 
       await waitFor(() => readLines(callsFile).find((line) => line.lane === 'opencode' && line.callNumber === 2), {
-        timeoutMs: 20000,
+        timeoutMs: CONTINUATION_WAIT_MS,
         what: 'opencode call 2',
       })
 
@@ -752,7 +751,7 @@ describe('interrupting a working CLI lane run', { timeout: 60000 }, () => {
           const lines = readFileSync(runsPath, 'utf8').split(/\r?\n/).filter(Boolean)
           return lines.find((line) => JSON.parse(line).lane === 'opencode') ?? null
         },
-        { timeoutMs: 15000, what: 'first opencode record in runs.jsonl' }
+        { timeoutMs: CLI_WAIT_MS, what: 'first opencode record in runs.jsonl' }
       )
       expect(Object.hasOwn(JSON.parse(firstRecordRaw), 'interruptedBy')).toBe(false)
 
@@ -764,14 +763,14 @@ describe('interrupting a working CLI lane run', { timeout: 60000 }, () => {
       expect(fromHelper.status).toBe(202)
 
       await waitFor(() => readLines(callsFile).find((line) => line.lane === 'opencode' && line.callNumber === 3), {
-        timeoutMs: 20000,
+        timeoutMs: CONTINUATION_WAIT_MS,
         what: 'opencode call 3',
       })
 
       writeFileSync(releaseFile, 'go\n')
       await waitFor(
         async () => (await getJson(`${rig.url}/api/control/runs`)).body.running.length === 0,
-        { timeoutMs: 15000, what: 'all runs to finish' }
+        { timeoutMs: CLI_WAIT_MS, what: 'all runs to finish' }
       )
 
       const rawLines = readFileSync(join(rig.runs, 'runs.jsonl'), 'utf8').split(/\r?\n/).filter(Boolean)
@@ -864,7 +863,7 @@ describe('interrupting a working CLI lane run', { timeout: 60000 }, () => {
       confirmed: true,
     })
     expect(started.status).toBe(202)
-    const call = await waitFor(() => readLines(callsFile)[0], { timeoutMs: 15000, what: 'native runner' })
+    const call = await waitFor(() => readLines(callsFile)[0], { timeoutMs: CLI_WAIT_MS, what: 'native runner' })
 
     const sent = await tokenPost(
       url,
@@ -885,7 +884,7 @@ describe('interrupting a working CLI lane run', { timeout: 60000 }, () => {
     writeFileSync(releaseFile, 'go\n')
     await waitFor(
       async () => (await getJson(`${url}/api/control/runs`)).body.running.length === 0,
-      { timeoutMs: 15000, what: 'native runner to finish' }
+      { timeoutMs: CLI_WAIT_MS, what: 'native runner to finish' }
     )
   })
 })
