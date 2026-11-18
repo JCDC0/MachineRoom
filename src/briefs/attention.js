@@ -73,7 +73,8 @@ export function succeededLater(record, records) {
   if (failedAt === null) return false
   const briefs = Array.isArray(record.briefs) ? record.briefs.map(text).filter(Boolean) : []
   const task = text(record.task)
-  const successes = records.filter((candidate) => candidate && candidate.exitCode === 0 && !candidate.killed && !candidate.startFailed && startTime(candidate) !== null && startTime(candidate) > failedAt && text(candidate.stopReason) !== REPEATED_FAILURE && !(candidate.repeatedFailure?.count >= 5))
+  const planFailure = record.mode === 'plan'
+  const successes = records.filter((candidate) => candidate && candidate.exitCode === 0 && (planFailure || candidate.mode !== 'plan') && !candidate.killed && !candidate.startFailed && startTime(candidate) !== null && startTime(candidate) > failedAt && text(candidate.stopReason) !== REPEATED_FAILURE && !(candidate.repeatedFailure?.count >= 5))
   if (briefs.length) return briefs.every((brief) => successes.some((candidate) => Array.isArray(candidate.briefs) && candidate.briefs.includes(brief)))
   return Boolean(task) && successes.some((candidate) => text(candidate.task) === task)
 }

@@ -451,6 +451,7 @@ export function LaneSettingsFields({ client }) {
   const [worktreeSetup, setWorktreeSetup] = useState('')
   const [worktreeCopies, setWorktreeCopies] = useState('')
   const [busy, setBusy] = useState(false)
+  const [loaded, setLoaded] = useState(false)
   const [error, setError] = useState('')
   const mountedRef = useRef(true)
   const dirtyRef = useRef(new Set())
@@ -472,6 +473,7 @@ export function LaneSettingsFields({ client }) {
       if (!dirtyRef.current.has('laneCount')) setLaneCountWarning(String(laneCountWarningFrom(answer)))
       if (!dirtyRef.current.has('setup')) setWorktreeSetup(typeof first?.worktreeSetup === 'string' ? first.worktreeSetup : '')
       if (!dirtyRef.current.has('copies')) setWorktreeCopies(Array.isArray(first?.worktreeCopies) ? first.worktreeCopies.join('\n') : '')
+      setLoaded(true)
       setError('')
     } catch (failure) {
       if (mountedRef.current) setError(failure?.message || 'Could not load the lane settings.')
@@ -535,6 +537,7 @@ export function LaneSettingsFields({ client }) {
 
   return (
     <section className="hud-settings-section endpoints-panel" aria-label="Lane settings">
+      {!loaded && !error ? <p className="endpoints-note mono">Loading the saved settings. Save is off until they load.</p> : null}
       {error ? (
         <p className="endpoints-error mono" role="alert">
           {error}
@@ -547,7 +550,7 @@ export function LaneSettingsFields({ client }) {
         <select
           id="harness-lane-replies"
           value={laneReplies}
-          disabled={busy}
+          disabled={busy || !loaded}
           onChange={(event) => saveReplies(event.target.value)}
         >
           <option value="next-turn">Wait for its next turn</option>
@@ -574,7 +577,8 @@ export function LaneSettingsFields({ client }) {
           <button
             type="button"
             className="hud-settings-switch"
-            disabled={busy}
+            disabled={busy || !loaded}
+            title={loaded ? undefined : 'Waiting for the saved settings.'}
             onClick={() => saveLaneCount()}
           >
             Save
@@ -612,7 +616,8 @@ export function LaneSettingsFields({ client }) {
           <button
             type="button"
             className="hud-settings-switch"
-            disabled={busy}
+            disabled={busy || !loaded}
+            title={loaded ? undefined : 'Waiting for the saved settings.'}
             onClick={() => saveWorktree()}
           >
             Save

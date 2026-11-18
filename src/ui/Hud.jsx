@@ -308,6 +308,10 @@ export default function Hud({
   }, [settingsRequest, wide])
 
   useEffect(() => {
+    if (!settingsOpen) setSettingsDirectApi(0)
+  }, [settingsOpen])
+
+  useEffect(() => {
     function onOpenSettings() {
       setSettingsOpen(true)
       setSettingsDirectApi((value) => value + 1)
@@ -328,6 +332,7 @@ export default function Hud({
         setLaneChat({
           lane,
           startedAt: typeof detail.startedAt === 'string' ? detail.startedAt : '',
+          nonce: Date.now() + Math.random(),
         })
         setChatOpen(true)
         setSessionsOpen(false)
@@ -1053,6 +1058,7 @@ export default function Hud({
                 lanes={snapshot?.agents ?? []}
                 liveRuns={liveRuns ?? []}
                 initialStartedAt={laneChat.startedAt}
+                requestKey={laneChat.nonce}
                 inline
                 tick={log.length}
                 onBack={() => {
@@ -1246,6 +1252,7 @@ export default function Hud({
           lanes={snapshot?.agents ?? []}
           liveRuns={liveRuns ?? []}
           initialStartedAt={laneChat.startedAt}
+                requestKey={laneChat.nonce}
           tick={log.length}
           onBack={() => {
             setLaneChat(null)

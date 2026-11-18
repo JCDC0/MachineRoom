@@ -458,3 +458,13 @@ it('lists newest briefs first in each owner group', async () => {
     expect(Array.from(options).map((option) => option.getAttribute('value'))).toEqual(['', 'P2', 'P1'])
   })
 })
+
+it('does not clear an edit failure with a later success in Plan mode', () => {
+  const failure = { lane: 'codex', startedAt: '2026-11-16T10:00:00.000Z', briefs: ['P1'], exitCode: 1 }
+  const plan = { lane: 'codex', startedAt: '2026-11-16T10:01:00.000Z', briefs: ['P1'], exitCode: 0, mode: 'plan' }
+  const edit = { ...plan, startedAt: '2026-11-16T10:02:00.000Z', mode: 'auto' }
+  expect(succeededLater(failure, [failure, plan])).toBe(false)
+  expect(succeededLater(failure, [failure, plan, edit])).toBe(true)
+  const planFailure = { ...failure, mode: 'plan' }
+  expect(succeededLater(planFailure, [planFailure, plan])).toBe(true)
+})
