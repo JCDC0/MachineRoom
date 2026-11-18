@@ -30,6 +30,8 @@ Every file in this folder, and what it is for:
 - `AUDIT-2026-11-DESIGN.md`: history. The November 2026 design review of how the room shows its work, with features and a full design.
 - `AUDIT-2026-11-DOCS-2.md`: history. The P252 audit of `ROOM.md`, `LIVE.md` and `COMMANDS.md` against the code since `1bb54a0f`, with 17 contradicted claims fixed by P264 and P265.
 - `AUDIT-2026-11-DOCS-3.md`: history. Audit of architecture doc claims against `HEAD`, recording sentences fixed in P297.
+- `AUDIT-2026-11-DOCS-4.md`: history. The P548 audit of `LIVE.md`, `ROOM.md`, `CODE.md` and `ACTIVITIES.md` against the code, with 21 findings fixed by P553.
+- `AUDIT-2026-11-DOCS-5.md`: history. The P582 audit of `ARCHITECTURE.md` and the seven detail files, with 11 findings fixed by P584 to P587.
 - `AUDIT-2026-11-DOCS-P70-P76.md`: history. The documentation audit for the P70 to P76 merges, read sentence by sentence against the code.
 - `AUDIT-2026-11-ENGINE.md`: history. The November 2026 audit of the engine.
 - `AUDIT-2026-11-LOGS.md`: history. The November 2026 hunt that ran 464 real run logs through the parsers.
@@ -88,13 +90,40 @@ Every file in this folder, and what it is for:
 - `AUDIT-2026-11-REVIEW-36.md`: history. The P347 review by GPT-6.1 Sol of lane messages, lane modes and the effort fix (P335 to P345), with nine findings closed by P348 to P351, the P343 merge and two doc fixes.
 - `UI-FRIENDLY.md`: the P361 review by GPT-6.1 Sol of how friendly the forms are, with 15 ranked findings and what not to change. Later briefs build from it.
 - `AUDIT-2026-11-REVIEW-37.md`: history. The P366 review by GPT-6.1 Sol of the harness settings and model batch (P352 to P365), with seven findings for P367 to P369.
+- `AUDIT-2026-11-REVIEW-38.md`: history. The P374 review by GPT-6.1 Sol of the friendlier forms batch (P370 to P373), with four P2 findings fixed by P377 and P379.
+- `AUDIT-2026-11-REVIEW-39.md`: history. The P383 review by GPT-6.1 Sol of lane modes, the forms' defaults and lane messages (P376 to P381b), with a P1 finding and two P2 findings fixed by P384 and P385.
+- `AUDIT-2026-11-REVIEW-40.md`: history. The P387 review by GPT-6.1 Sol of the leftover recheck, empty models on the command line and the inbox bound, with two P2 findings fixed by P388 and P389.
+- `AUDIT-2026-11-REVIEW-41.md`: history. The P391 review by GPT-6.1 Sol of Harness default in the forms, the leftover recheck and the inbox cut, with three P2 findings fixed by P392 to P394.
+- `AUDIT-2026-11-REVIEW-42.md`: history. The P409 review by GPT-6.1 Sol of the owner's plan items and the OpenCode batch, with four P1 and two P2 findings fixed by P410 to P413.
+- `AUDIT-2026-11-REVIEW-43.md`: history. The P414 review by GPT-6.1 Sol of the review 42 fixes, which confirms all six fixed, with two P2 findings fixed by P421 and P422.
+- `AUDIT-2026-11-REVIEW-44.md`: history. The P424 review by GPT-6.1 Sol of the merges after the shutdown (P415 to P422), with two P2 findings fixed by P425 and P426.
+- `AUDIT-2026-11-REVIEW-45.md`: history. The P428 review by GPT-6.1 Sol of P423 to P426, with a P1 finding and a smaller one about the git variables a parent process passes down, both fixed by P429.
+- `AUDIT-2026-11-REVIEW-46.md`: history. The P437 review by GPT-6.1 Sol of P429 to P436, with five findings fixed by P444 to P447.
+- `AUDIT-2026-11-REVIEW-47.md`: history. The P466 review by GPT-6.1 Sol of P438 to P465 against the research plan, with ten findings fixed by P467 to P471.
+- `AUDIT-2026-11-REVIEW-48.md`: history. The P477 review by GPT-6.1 Sol of P473 to P476, with five findings fixed by P478 to P480.
+- `AUDIT-2026-11-REVIEW-49.md`: history. The P493 review by Claude Sonnet of P483 to P492, with ten findings fixed by P494 and P495.
+- `AUDIT-2026-11-REVIEW-50.md`: history. The P496 review by Claude Sonnet of P494, P495 and the bridge, with eight findings fixed by P497.
+- `AUDIT-2026-11-REVIEW-51.md`: history. The P501 review by Codex Sol of P497 to P500 and the badge seam fix, with three findings fixed by P504 and P505.
+- `AUDIT-2026-11-REVIEW-53.md`: history. The P518 review by Codex Sol of the sweep fixes P509 to P516, with six findings fixed by P521, P522 and P523.
+- `AUDIT-2026-11-REVIEW-54.md`: history. The P537 review by Codex Sol of the chat, footer, context window and lane conversation work of P526 to P534, with seven findings fixed by P540 to P543.
+- `AUDIT-2026-11-REVIEW-55.md`: history. The P544 review by Codex Sol of the grid, the rails, counts, run-end rows and the review 54 fixes (P535 to P543), with three findings fixed by P549.
+- `AUDIT-2026-11-REVIEW-56.md`: history. The P554 review by Codex Sol of the UI cleanup P545 to P553, with three findings fixed by P555.
+- `AUDIT-2026-11-REVIEW-57.md`: history. The P564 review by Claude Sonnet of the Sonnet batch P556, P557, P559 and P563, with seven findings fixed by P565.
+- `AUDIT-2026-11-REVIEW-57B.md`: history. The P575 blind review by GPT-6.2 Sol of the same Sonnet batch, with seven findings; P565 fixed two and P577 the rest.
+- `AUDIT-2026-11-REVIEW-58.md`: history. The P579 review by Claude Sonnet of the runner batch P561, P562, P566 and P574, with seven findings fixed by P580.
+- `AUDIT-2026-11-REVIEW-59.md`: history. The P583 review by GPT-6.2 Sol of the UI batch P567 to P570, P576 and P577, with eleven findings fixed by P588 to P592.
 - `AUDIT-2026-11-RUNNER.md`: history. The November 2026 hunt of the runner, worktrees, reviews and merges.
 - `AUDIT-2026-11-SUMMARY.md`: plan. The five November 2026 audits ranked and checked, with the features, the design changes that need the owner and the proposed briefs.
+- `AUDIT-2026-11-SWEEP-S1.md`: history. The P506 sweep of the bridge, with six findings fixed by P514 to P516.
+- `AUDIT-2026-11-SWEEP-S2.md`: history. The P507 sweep of the page, with four findings fixed by P511 to P513.
+- `AUDIT-2026-11-SWEEP-S3.md`: history. The P508 sweep of the lane runner and its commands, with six findings fixed by P509 and P510.
 - `AUDIT-2026-11-TESTS.md`: history. The P255 audit of tests changed since `1bb54a0f`, listing four tests that could pass with their change undone, fixed by P266.
 - `AUDIT-2026-11-TESTS-2.md`: history. Second test audit of 37 commits from `12c25524..HEAD`, checking undo proofs and recording fixes in `tests/tree-read.test.js`.
+- `AUDIT-2026-11-TESTS-3.md`: history. The P558 test audit of the P526 to P555 merges, undoing one hunk at a time, with 13 findings fixed by P571 to P573.
 - `AUDIT-2026-11-TREE-COST.md`: history. The measurement of what the deleted-file list costs on every tree read, since P51.
 - `AUDIT-2026-11-TRIAL-PLAN.md`: history. Code review of the ulolTris trial plan against `1a0d6f81`, checking each claim and listing current guarantees.
 - `AUDIT-2026-11-UI.md`: history. The November 2026 audit of the page.
+- `AUDIT-2026-11-UI-3.md`: history. The P547 audit by Codex Sol of a clean HUD at 1280x800, with eleven findings; nine fixed by P550 to P552 and two held for the owner.
 - `AUDIT-2026-11-WORKTREE-SWITCH.md`: history. The P87 audit of the worktree branch switch on 2026-11-12.
 - `CANDIDATE.md`: current. How to build and serve one lane's worktree beside the stable room.
 - `CHANGELOG.md`: history. One line per change under the version it shipped in.
@@ -113,6 +142,9 @@ Every file in this folder, and what it is for:
 - `ORCHESTRATOR.md`: current. The orchestrator's guide: standing rules, the review and merge loop, ownership and lessons.
 - `OWNER.md`: current. What the owner wants the room to be, the settled design, and the steps for one of the owner's concerns.
 - `PLAN-CODEX-2026-11-12.md`: plan. Codex's plan for the work after P77 to P89, numbered C1 to C10, with C2 covered by P95 and the P87 audit.
+- `PLAN-NEXT-ARGON.md`: plan. P375's ranking of the next eight briefs for the free hierarchy; P401 to P406 build most of them.
+- `PLAN-NEXT-ARGON-2.md`: plan. P427's second ranking of eight fixes, ranked by risk; P430 to P436 build them.
+- `PLAN-RESEARCH.md`: plan. P443's merge of the three harness surveys into one research plan and the steps that follow.
 - `PLAN.md`: plan. Where the work stands and what comes next.
 - `policy.json`: config the code reads. The routing policy that `src/policy/route.js` parses.
 - `SLASH-COMMANDS.md`: current. What Claude Code and OpenCode do with a slash command in a headless turn, and the room's design for them.

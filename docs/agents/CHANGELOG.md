@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- DeepSeek.
 - Sonnet.
 - DeepSeek.
 - DeepSeek.
