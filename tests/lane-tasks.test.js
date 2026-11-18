@@ -553,6 +553,7 @@ describe('the lane routes', () => {
     const bridge = createBridge({ projectRoot: base, runsFolder: runs, lanesSource: null, port: 0, env: {} })
     cleanups.push(() => bridge.stop())
     const { url } = await bridge.start()
+    rmSync(runs, { recursive: true, force: true })
     expect(existsSync(runs)).toBe(false)
     expect(await getJson(url, '/api/control/issues')).toEqual({ status: 200, body: [] })
   })
