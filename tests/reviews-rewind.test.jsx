@@ -27,7 +27,7 @@ describe('Reviews rewind', () => {
       expect(requested).toEqual(['ahead'])
       expect(container.textContent).toContain('Rewind unavailable: Lane is dirty.')
       expect(container.textContent).not.toContain('No checkpoint.')
-      await click(root, buttonWithText(container, '1 lanes have nothing to review'))
+      await click(root, buttonWithText(container, '1 lane has nothing to review'))
       await click(root, container.querySelectorAll('.review-card')[1].querySelector('.review-expand-btn'))
       await settle()
       expect(requested).toEqual(['ahead', 'idle'])

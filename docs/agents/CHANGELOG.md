@@ -2,7 +2,9 @@
 
 ## Unreleased
 
+- Sonnet.
 - Sonnet did P559 in one run.
+- Reviews reads `1 lane has nothing to review` for one folded lane (P563).
 - Sonnet finished Codex's partial P556.
 - Settings opens on one section at a time behind a row of tabs that remembers the open one, and the four lane settings sit under Lanes (P559).
 - Sonnet finished Codex's partial work.
