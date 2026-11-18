@@ -1,4 +1,4 @@
-import { appendFileSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { appendFileSync, existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { AGENT_REFUSAL, changeEvents } from '../server/control.js'
@@ -545,6 +545,16 @@ describe('the lane routes', () => {
     expect(await getJson(url, '/api/control/live-runs')).toEqual({ status: 200, body: { runs: [] } })
     expect(await getJson(url, '/api/control/approvals')).toEqual({ status: 200, body: [] })
     expect(await getJson(url, '/api/control/comments?issueId=x')).toEqual({ status: 200, body: [] })
+  })
+
+  it('returns no tasks with a missing runs folder and no lane source', async () => {
+    const base = tempDir()
+    const runs = join(base, 'missing-runs')
+    const bridge = createBridge({ projectRoot: base, runsFolder: runs, lanesSource: null, port: 0, env: {} })
+    cleanups.push(() => bridge.stop())
+    const { url } = await bridge.start()
+    expect(existsSync(runs)).toBe(false)
+    expect(await getJson(url, '/api/control/issues')).toEqual({ status: 200, body: [] })
   })
 })
 
