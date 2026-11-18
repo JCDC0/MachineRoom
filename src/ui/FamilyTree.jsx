@@ -283,6 +283,13 @@ export function FamilyTeams({ client = null, project = '' }) {
   const canApply = typeof client?.applyTeam === 'function'
   const canDelete = typeof client?.deleteTeam === 'function'
   const canCopy = typeof client?.copyProjectTeam === 'function'
+  const [open, setOpen] = useState(() => {
+    try {
+      return window.localStorage.getItem('machineroom:teams-open') === 'true'
+    } catch {
+      return false
+    }
+  })
   const [teams, setTeams] = useState(null)
   const [choice, setChoice] = useState('')
   const [name, setName] = useState('')
@@ -490,9 +497,22 @@ export function FamilyTeams({ client = null, project = '' }) {
 
   return (
     <section className="mr-teams" aria-label="Saved teams">
-      <p className="mr-side-head">
-        <span className="mr-side-head-title mono">Teams</span>
-      </p>
+      <button
+        type="button"
+        className="mr-side-head is-button"
+        aria-expanded={open}
+        onClick={() => {
+          const next = !open
+          setOpen(next)
+          try {
+            window.localStorage.setItem('machineroom:teams-open', String(next))
+          } catch {}
+        }}
+      >
+        <span className="mr-side-head-title mono">Teams{rows.length ? ` ${rows.length}` : ''}</span>
+        <span className="mr-side-twist" aria-hidden="true">{open ? '-' : '+'}</span>
+      </button>
+      {open ? <>
       {teams === null ? <p className="mr-side-note">Loading teams...</p> : null}
       {teams !== null && rows.length === 0 ? (
         <p className="mr-side-note is-dim">No saved teams yet.</p>
@@ -629,6 +649,7 @@ export function FamilyTeams({ client = null, project = '' }) {
           </section>
         </div>
       ) : null}
+      </> : null}
     </section>
   )
 }

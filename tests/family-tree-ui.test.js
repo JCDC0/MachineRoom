@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs'
 import { act, createElement } from 'react'
 import { describe, expect, it } from 'vitest'
 import FamilyTeam from '../src/ui/FamilyTeam.jsx'
+import Sidebar from '../src/ui/Sidebar.jsx'
 import { FamilyTeams, FamilyTree } from '../src/ui/FamilyTree.jsx'
 import { DIRECT_KEY_PROBLEM } from '../src/ui/family.js'
 import { buttonWithText, classesOf, click, settle, type, withDom } from './helpers/uiDom.js'
@@ -707,17 +708,52 @@ describe('FamilyTeams', () => {
     return { client, calls }
   }
 
-  async function mountTeams(root, client) {
+  async function mountTeams(root, client, container, open = true) {
     await act(async () => {
       root.render(createElement(FamilyTeams, { client, project: '/work/machine-room' }))
     })
     await act(async () => {})
+    if (open && container.querySelector('button[aria-expanded="false"]')) {
+      await click(root, container.querySelector('button[aria-expanded="false"]'))
+    }
   }
+
+  it('starts closed, shows the count and remembers the choice', async () => {
+    const { client } = makeTeamClient({ teams: async () => ({ teams: [{ name: 'One' }, { name: 'Two' }] }) })
+    await withDom(async ({ container, root, dom }) => {
+      await mountTeams(root, client, container, false)
+      let head = container.querySelector('button[aria-expanded="false"]')
+      expect(head.textContent).toContain('Teams 2')
+      expect(container.querySelector('input[aria-label="Team name"]')).toBeNull()
+      await click(root, head)
+      expect(container.querySelector('input[aria-label="Team name"]')).not.toBeNull()
+      expect(dom.window.localStorage.getItem('machineroom:teams-open')).toBe('true')
+      await act(async () => root.render(null))
+      await mountTeams(root, client, container, false)
+      head = container.querySelector('button[aria-expanded="true"]')
+      expect(head).not.toBeNull()
+      await click(root, head)
+      expect(dom.window.localStorage.getItem('machineroom:teams-open')).toBe('false')
+    })
+  })
+
+  it('puts the agents before Teams and Build a team in the sidebar', async () => {
+    const { client } = makeClient()
+    client.teams = async () => ({ teams: [] })
+    client.setAgentLabel = async () => ({ ok: true })
+    await withDom(async ({ container, root, dom }) => {
+      dom.window.localStorage.setItem('machineroom.settings', JSON.stringify({ sidebarTab: 'agents' }))
+      await act(async () => root.render(createElement(Sidebar, { client, live: true })))
+      await settle()
+      const parts = container.querySelector('.mr-side-agents').children
+      expect([...parts].map((part) => part.className)).toEqual(['mr-family', 'mr-teams', 'mr-team'])
+    })
+  })
 
   it('applies the chosen team behind its card and shows the dropped lanes and the ladder sentence', async () => {
     const { client, calls } = makeTeamClient()
     await withDom(async ({ container, root }) => {
-      await mountTeams(root, client)
+      await mountTeams(root, client, container)
       expect(container.querySelector('.mr-teams')).not.toBeNull()
       expect(container.querySelector('select[aria-label="Saved team"]').querySelectorAll('option')).toHaveLength(1)
 
@@ -738,7 +774,7 @@ describe('FamilyTeams', () => {
   it('saves and deletes a team from their cards', async () => {
     const { client, calls } = makeTeamClient()
     await withDom(async ({ container, root }) => {
-      await mountTeams(root, client)
+      await mountTeams(root, client, container)
       const input = container.querySelector('input[aria-label="Team name"]')
       await type(root, input, 'Night')
       await act(async () => {
@@ -764,7 +800,7 @@ describe('FamilyTeams', () => {
   it('copies another project team from its card', async () => {
     const { client, calls } = makeTeamClient()
     await withDom(async ({ container, root }) => {
-      await mountTeams(root, client)
+      await mountTeams(root, client, container)
       const select = container.querySelector('select[aria-label="Copy from project"]')
       await act(async () => {
         select.value = '/work/other'
@@ -791,7 +827,7 @@ describe('FamilyTeams', () => {
       },
     }
     await withDom(async ({ container, root }) => {
-      await mountTeams(root, client)
+      await mountTeams(root, client, container)
       const select = container.querySelector('select[aria-label="Saved team"]')
       expect(select.querySelectorAll('option')).toHaveLength(1)
       rows = [{ name: 'Weekend', lanes: ['opencode'] }, { name: 'Night', lanes: ['opencode'] }]
@@ -808,7 +844,7 @@ describe('FamilyTeams', () => {
 
   it('shows nothing without the teams method', async () => {
     await withDom(async ({ container, root }) => {
-      await mountTeams(root, makeTeamClient({ teams: undefined }).client)
+      await mountTeams(root, makeTeamClient({ teams: undefined }).client, container, false)
       expect(container.querySelector('.mr-teams')).toBeNull()
     })
   })

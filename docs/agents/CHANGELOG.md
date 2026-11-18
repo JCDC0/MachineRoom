@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- FamilyTree first; Teams is one head with its count, closed by default and remembered; Build a team after it.
 - findRunLog refuses a name another lane could claim unless the record or lane lock names it.
 - The window reader matches the reported model or a single modelUsage entry; live context prefers the newest assistant usage.
 - Sends carry the selected start time; the bridge answers 409 for a stale run; live context fields survive the merge of running options.
