@@ -1475,7 +1475,7 @@ export default function OrchestratorChat({
                     </div>
                   )
                 }
-                const notice = line.from === 'room' ? roomNoticeSummary(line.text) : null
+                const notice = line.from === 'room' ? roomNoticeSummary(line.text, line.firstCommit) : null
                 if (notice) {
                   const expanded = Boolean(openRoomDetails[line.id])
                   const tone = notice.status === 'succeeded' ? 'succeeded' : ['failed', 'stopped'].includes(notice.status) ? 'failed' : 'other'
