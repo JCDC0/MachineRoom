@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The Teams alert sits outside the fold; family action rows are at least 24 px high; CODE.md names the Repository order.
 - Three findings, R56-1 to R56-3; fixed by P555.
 - Small controls get a 24 px hit area through one shared rule; the lane checkbox is 24 px.
 - Needs you leads Dispatch; projects lead the Projects tab; the dock reads Open address; the console is white.

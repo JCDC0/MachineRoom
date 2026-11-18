@@ -718,6 +718,16 @@ describe('FamilyTeams', () => {
     }
   }
 
+  it('shows a failed read while Teams stays closed', async () => {
+    const { client } = makeTeamClient({ teams: async () => { throw new Error('Teams could not load.') } })
+    await withDom(async ({ container, root }) => {
+      await mountTeams(root, client, container, false)
+      expect(container.querySelector('button[aria-expanded="false"]')).not.toBeNull()
+      expect(container.querySelector('[role="alert"]').textContent).toBe('Teams could not load.')
+      expect(container.querySelector('input[aria-label="Team name"]')).toBeNull()
+    })
+  })
+
   it('starts closed, shows the count and remembers the choice', async () => {
     const { client } = makeTeamClient({ teams: async () => ({ teams: [{ name: 'One' }, { name: 'Two' }] }) })
     await withDom(async ({ container, root, dom }) => {
