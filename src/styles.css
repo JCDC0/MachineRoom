@@ -8586,7 +8586,6 @@ button.ui-icon-btn.mr-composer-send:hover:not(:disabled) {
 .mr-side-agents {
   flex: 0 0 auto;
   padding-bottom: 6px;
-  border-bottom: 1px solid rgb(255 255 255 / 0.08);
 }
 
 .mr-side .mr-side-orch {
@@ -9348,6 +9347,7 @@ button.ui-icon-btn.mr-composer-send:hover:not(:disabled) {
   border-bottom: 1px solid rgb(255 255 255 / 0.08);
 }
 
+.mr-side-agents .mr-teams,
 .mr-side-agents .mr-team {
   border-bottom: 0;
 }
@@ -9440,6 +9440,7 @@ button.ui-icon-btn.mr-composer-send:hover:not(:disabled) {
 
 .mr-side-body:has(> .mr-side-agents) {
   background: var(--black);
+  scrollbar-gutter: stable;
 }
 
 .mr-side:has(> .mr-side-body > .mr-side-agents) > .mr-side-error:not([role]) {
@@ -9466,9 +9467,8 @@ button.ui-icon-btn.mr-composer-send:hover:not(:disabled) {
 }
 
 .mr-family-row .ui-row-trailing {
-  width: 0;
-  margin-left: calc(-1 * var(--space));
-  overflow: clip;
+  flex: 0 0 calc(var(--control-h) * 2 + var(--space));
+  justify-content: flex-end;
 }
 
 .mr-family-header-actions {
@@ -9482,10 +9482,7 @@ button.ui-icon-btn.mr-composer-send:hover:not(:disabled) {
 
 .mr-family-row:is(:hover, :focus-within, :has([aria-haspopup='menu'][aria-expanded='true'])) .ui-row-trailing,
 .ui-hover-anchor:focus-visible > .mr-family-row .ui-row-trailing {
-  width: auto;
-  margin-left: 0;
   opacity: 1;
-  overflow: visible;
   pointer-events: auto;
 }
 
@@ -9497,7 +9494,8 @@ body:has(.mr-family [aria-haspopup='menu'][aria-expanded='true']) > .ui-hovercar
   background: var(--surface-2);
 }
 
-.mr-family-heading,
+button.mr-family-heading,
+.mr-side .mr-family-heading,
 .mr-team > .mr-side-head {
   min-width: 0;
   margin-top: 0;
@@ -10728,9 +10726,10 @@ body:has(.mr-family [aria-haspopup='menu'][aria-expanded='true']) > .ui-hovercar
   align-items: center;
   gap: calc(var(--space) / 2);
   margin: var(--space) 0;
-  padding: var(--space);
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius-m);
+  padding: 6px var(--space);
+  border: 0;
+  border-radius: var(--radius-s);
+  background: var(--surface-1);
 }
 
 .mr-family-selection-count {
@@ -10742,6 +10741,23 @@ body:has(.mr-family [aria-haspopup='menu'][aria-expanded='true']) > .ui-hovercar
 
 .mr-family-selection .ui-chip {
   padding-inline: var(--space);
+}
+
+.mr-family-selection button.ui-chip.is-primary:not(:disabled) {
+  --ui-chip-border: var(--yellow);
+}
+
+.mr-family-selection button.ui-chip.is-primary:not(:disabled) .ui-chip-label {
+  color: var(--yellow);
+}
+
+.mr-family-selection button.ui-chip.is-quiet {
+  --ui-chip-border: transparent;
+}
+
+.mr-family-selection button.ui-chip.is-quiet:hover:not(:disabled) .ui-chip-label,
+.mr-family-selection button.ui-chip.is-done .ui-chip-label {
+  color: var(--white);
 }
 
 .mr-family-sub-form {

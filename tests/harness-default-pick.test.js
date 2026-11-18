@@ -137,7 +137,7 @@ describe('a harness pick keeps Harness default', () => {
     const { client } = makeClient()
     await withDom(async ({ container, root }) => {
       await mount(root, client)
-      await chooseAction(root, rowByLabel(container, 'OpenCode'), 'Add sub orchestrator…')
+      await chooseAction(root, rowByLabel(container, 'OpenCode'), 'Make sub from this lane…')
       const form = container.querySelector('.mr-family-sub-form')
       const picker = form.querySelector('select[aria-label="Sub orchestrator harness"]')
 

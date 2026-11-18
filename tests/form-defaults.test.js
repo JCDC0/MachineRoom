@@ -193,7 +193,7 @@ describe('form defaults and row model names', () => {
     const { client: subClient, calls: subCalls } = makeClient()
     await withDom(async ({ container, root }) => {
       await mountTree(root, subClient)
-      await chooseAction(root, rowByLabel(container, 'Coder'), 'Add sub orchestrator…')
+      await chooseAction(root, rowByLabel(container, 'Coder'), 'Make sub from this lane…')
       const form = container.querySelector('.mr-family-sub-form')
       const trigger = form.querySelector('.mr-picker-trigger[aria-label="Sub orchestrator model"]')
       expect(trigger.textContent).toContain('Harness default')
@@ -319,7 +319,7 @@ describe('form defaults and row model names', () => {
     const { client: subClient, calls: subCalls } = makeClient()
     await withDom(async ({ container, root }) => {
       await mountTree(root, subClient)
-      await chooseAction(root, rowByLabel(container, 'Coder'), 'Add sub orchestrator…')
+      await chooseAction(root, rowByLabel(container, 'Coder'), 'Make sub from this lane…')
       const form = container.querySelector('.mr-family-sub-form')
       const trigger = form.querySelector('.mr-picker-trigger[aria-label="Sub orchestrator model"]')
 

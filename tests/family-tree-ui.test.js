@@ -433,6 +433,24 @@ describe('FamilyTree rows', () => {
     })
   })
 
+  it('dismisses the row hover card when opening conversation and reopens on fresh focus', async () => {
+    const { client } = makeClient()
+    await withDom(async ({ container, root }) => {
+      await mount(root, client)
+      const row = rowByLabel(container, 'OpenCode')
+      const anchor = row.querySelector('.ui-hover-anchor')
+      const card = await cardFor(row)
+      expect(card.hasAttribute('hidden')).toBe(false)
+      await click(root, row.querySelector('.mr-family-chat'))
+      expect(card.hasAttribute('hidden')).toBe(true)
+      await act(async () => {
+        anchor.focus()
+        anchor.dispatchEvent({ type: 'focusin', bubbles: true })
+      })
+      expect(card.hasAttribute('hidden')).toBe(false)
+    })
+  })
+
   it('keeps Save off a lane from lanes.json and points at the file', async () => {
     const { client } = makeClient()
     client.updateLane = async () => ({ ok: true })
@@ -505,6 +523,9 @@ describe('FamilyTree rows', () => {
       expect(container.textContent).toContain('2 selected')
       const makeSub = container.querySelector('button[aria-label="Make sub orchestrator"]')
       expect(makeSub.textContent).toBe('Make sub')
+      expect(classesOf(makeSub)).toContain('is-primary')
+      expect(classesOf(buttonWithText(container, 'Clear'))).toContain('is-quiet')
+      expect(classesOf(buttonWithText(container, 'Done'))).toContain('is-done')
       expect(makeSub.querySelector('.ui-chip-chevron')).toBeNull()
       expect(makeSub.hasAttribute('disabled')).toBe(false)
 
@@ -536,7 +557,7 @@ describe('FamilyTree rows', () => {
         await click(root, laneSwitch(container, label))
       }
       expect(container.textContent).toContain('2 selected')
-      await chooseAction(root, rowByLabel(container, 'Claude'), 'Add sub orchestrator…')
+      await chooseAction(root, rowByLabel(container, 'Claude'), 'Make sub from this lane…')
       expect(container.textContent).toContain('3 selected')
       expect(container.querySelector('.mr-family-sub-form')).not.toBeNull()
     })
@@ -1008,6 +1029,8 @@ describe('FamilyTree session rows', () => {
       const row = rowByLabel(container, 'Claude Code session')
       expect(row).not.toBe(null)
       expect(row.getAttribute('data-kind')).toBe('session')
+      expect(row.querySelector('.ui-row-trailing')).not.toBeNull()
+      expect(row.querySelector('.ui-row-trailing').querySelector('button')).toBeNull()
       expect(row.textContent).toContain('working')
       expect((await cardFor(row)).textContent).toContain('started opencode')
       const orchestrator = rowByLabel(container, 'Orchestrator')
