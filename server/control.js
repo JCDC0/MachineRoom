@@ -113,6 +113,7 @@ export function mapAgent(raw, spendCents) {
     key: keyOf(raw),
     name,
     adapterType: String(raw?.adapterType ?? ''),
+    harness: typeof raw?.harness === 'string' ? raw.harness : (typeof raw?.parser === 'string' ? raw.parser : ''),
     role: String(raw?.role ?? 'general'),
     status: AGENT_STATUS[raw?.status] ?? 'idle',
     model: (typeof raw?.adapterConfig?.model === 'string' && raw.adapterConfig.model) || (typeof raw?.model === 'string' && raw.model) || null,

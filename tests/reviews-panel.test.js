@@ -228,7 +228,7 @@ describe('ReviewsPanel and ControlDrawer', () => {
         root.render(createElement(ReviewsPanel, { client }))
       })
       await settle()
-      expect(container.textContent).toContain('No lanes to review.')
+      expect(container.textContent).toContain('Nothing to review.')
 
       fail = true
       const refresh = container

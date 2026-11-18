@@ -9,6 +9,8 @@ const SAMPLE_AGENT = {
   key: 'claude-code',
   name: 'Claude Code',
   adapterType: 'claude_local',
+  harness: 'claude',
+  model: 'sonnet',
   role: 'engineer',
   status: 'idle',
 }
@@ -25,9 +27,16 @@ describe('AgentBuilder Team panel', () => {
     )
     expect(html).toContain('Lanes (')
     expect(html).toContain('Claude Code')
+    expect(html).toContain('Claude Code \u00b7 sonnet')
+    expect(html).not.toContain('claude_local')
     expect(html).toContain(NEW_LANES_TEXT)
     expect(html).not.toContain('Hire agent')
     expect(html).not.toContain('Monthly budget')
+  })
+
+  it('shows an unknown harness key', () => {
+    const html = renderToString(createElement(AgentBuilder, { client: createMockClient(), initialAgents: [{ ...SAMPLE_AGENT, harness: 'other' }] }))
+    expect(html).toContain('other \u00b7 sonnet')
   })
 
   it('says when there are no lanes', () => {

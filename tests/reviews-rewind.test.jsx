@@ -8,7 +8,7 @@ describe('Reviews rewind', () => {
   it('loads idle lanes only when expanded and shows refusals for lanes ahead', async () => {
     const client = createMockClient({ latencyMs: 0 })
     const reviews = await client.reviews()
-    const idle = { ...reviews[0], lane: 'idle', ahead: 0 }
+    const idle = { ...reviews[0], lane: 'idle', ahead: 0, dirty: false }
     const ahead = { ...reviews[0], lane: 'ahead', ahead: 1 }
     const requested = []
     const spy = {
@@ -27,11 +27,12 @@ describe('Reviews rewind', () => {
       expect(requested).toEqual(['ahead'])
       expect(container.textContent).toContain('Rewind unavailable: Lane is dirty.')
       expect(container.textContent).not.toContain('No checkpoint.')
-      await click(root, container.querySelectorAll('.review-card')[0].querySelector('.review-expand-btn'))
+      await click(root, buttonWithText(container, '1 lanes have nothing to review'))
+      await click(root, container.querySelectorAll('.review-card')[1].querySelector('.review-expand-btn'))
       await settle()
       expect(requested).toEqual(['ahead', 'idle'])
       expect(container.textContent).toContain('Rewind unavailable: No checkpoint.')
-      await click(root, container.querySelectorAll('.review-card')[0].querySelector('.review-expand-btn'))
+      await click(root, container.querySelectorAll('.review-card')[1].querySelector('.review-expand-btn'))
       expect(container.textContent).not.toContain('No checkpoint.')
     })
   })
