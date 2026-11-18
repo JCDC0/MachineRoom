@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url'
 import { branchFor, briefFileList, buildPrompt, nextVersion, parseBriefs, parseRules } from '../src/briefs/briefs.js'
 import { commitAuthorFor, formatQueueSummary, parseQueue, parseQueueArgs, runQueue } from '../src/briefs/queue.js'
 import { maskKeys } from '../src/briefs/audit.js'
-import { briefProblems, briefWorktreeProblems, checkCommandLines, checkCommandProblem, childEnvironment, commandFor, createLaneLog, DEFAULT_MINUTES, fallbackProblem, failoverKind, filterRunsSince, formatOutcomes, formatStats, formatSummary, interruptSenderFrom, laneCommandProblem, laneLockLog, laneLockStartedAt, laneLockText, laneModeProblem, laneStats, laneStopProblem, laneWithOverrides, limitedFor, maskProfilePaths, maskedQueueTasks, ORCHESTRATOR_LANE_PROBLEM, parseRunArgs, projectProblems, projectRunGit, readinessLine, retryStartProblem, runListLine, runRecord, sessionToolLines, splitCheckCommand, startFailureText, summarizeRun, unattendedPrompt, worktreeFor, WORKTREES_FOLDER } from '../src/briefs/run.js'
+import { briefProblems, briefWorktreeProblems, checkCommandLines, checkCommandProblem, childEnvironment, commandFor, continueFromProblem, createLaneLog, DEFAULT_MINUTES, fallbackProblem, failoverKind, filterRunsSince, formatOutcomes, formatStats, formatSummary, interruptSenderFrom, laneCommandProblem, laneLockLog, laneLockStartedAt, laneLockText, laneModeProblem, laneStats, laneStopProblem, laneWithOverrides, limitedFor, maskProfilePaths, maskedQueueTasks, ORCHESTRATOR_LANE_PROBLEM, parseRunArgs, projectProblems, projectRunGit, readinessLine, retryStartProblem, runListLine, runRecord, sessionToolLines, splitCheckCommand, startFailureText, summarizeRun, unattendedPrompt, worktreeFor, WORKTREES_FOLDER } from '../src/briefs/run.js'
 import { outcomeTable } from '../server/outcomes.js'
 import { codexThreadId, findCodexRollout, quotaForRun, readCodexQuota } from '../server/codex-rollout.js'
 export { codexThreadId, quotaForRun, readCodexQuota } from '../server/codex-rollout.js'
@@ -79,6 +79,7 @@ export function appendRunRecord(record, { env = process.env, print = console.log
       }
     }
     try {
+      if (record?.stopReason === 'lost' && findRunRecordByName(readRecords(targetFile), runNameOfRecord(record))) return true
       const line = typeof record === 'string' ? record : JSON.stringify(record)
       let prefix = ''
       if (existsSync(targetFile)) {
@@ -1464,11 +1465,76 @@ function runNameOfRecord(record) {
 function findRunRecordByName(records, name) {
   const target = typeof name === 'string' ? name.trim() : ''
   if (!target) return null
-  for (let index = records.length - 1; index >= 0; index -= 1) {
-    const record = records[index]
-    if (runNameOfRecord(record) === target) return { index, record }
+  return records.findLast((record) => runNameOfRecord(record) === target) ?? null
+}
+
+function lostRunRecord(file, name, required = false) {
+  const problem = continueFromProblem(name)
+  if (problem) {
+    if (required) throw new Error(problem)
+    return null
   }
-  return null
+  const folder = dirname(file)
+  const log = join(folder, `${name}.log`)
+  const sidecar = join(folder, `${name}.meta.json`)
+  const metaStat = lstatSync(sidecar, { throwIfNoEntry: false })
+  if (!metaStat?.isFile() || !lstatSync(log, { throwIfNoEntry: false })?.isFile()) return null
+  const meta = readUsage(sidecar)
+  const lane = meta?.lane
+  if (typeof lane !== 'string' || !/^[A-Za-z0-9_-]+$/.test(lane)) return null
+  const legacyName = name.startsWith(`${lane}-`) ? name.slice(lane.length + 1) : ''
+  const legacyBriefs = /^([A-Z]\d+[a-z]?(?:-[A-Z]\d+[a-z]?)*)-\d{8}-\d{6}(?:-\d+)?(?:-retry)?$/.exec(legacyName)
+  const legacyProject = meta.project && /^(?:project-\d{8}-\d{6}|queue-\d{8}-\d{6}-\d{3}-\d+)(?:-\d+)?(?:-retry)?$/.test(legacyName)
+  const briefs = meta.briefs ?? (legacyBriefs ? legacyBriefs[1].split('-') : legacyProject ? [] : null)
+  if (!Array.isArray(briefs) || !briefs.every((id) => typeof id === 'string' && /^[A-Z]\d+[a-z]?$/.test(id))) return null
+
+  const lock = join(folder, `${lane}.lock`)
+  const holder = readLaneLock(lock)
+  if (isHolderAlive(holder.pid, lock) || isHolderAlive(holder.child, lock) || (!holder.pid && existsSync(lock))) {
+    if (required) throw new Error(`The ${lane} lane still holds its run lock. Wait for it to stop before continuing ${name}.`)
+    return null
+  }
+
+  const record = runRecord({
+    lane, briefs, log, startedAt: meta.startedAt ?? metaStat.mtimeMs,
+    branch: meta.branch, base: meta.base, project: meta.project,
+    model: meta.model, reasoning: meta.reasoning, mode: meta.mode,
+    continues: meta.continues, failoverFrom: meta.failoverFrom,
+    queue: meta.queue ? { branch: meta.queue, index: meta.index } : null,
+    killed: true, stopReason: 'lost',
+  })
+  if (typeof meta.branch === 'string') record.branch = meta.branch
+  return record
+}
+
+function continuationRecord(name, file = runsFile()) {
+  const existing = findRunRecordByName(readRecords(file), name)
+  if (existing) return existing
+  const lost = lostRunRecord(file, name, true)
+  if (!lost) throw new Error(`There is no run named ${name}.`)
+  if (!appendRunRecord(lost, { file })) throw new Error(`The lost run ${name} could not be saved.`)
+  return findRunRecordByName(readRecords(file), name)
+}
+
+function recoverLostRuns(file = runsFile()) {
+  const records = readRecords(file)
+  const recorded = new Set(records.map(runNameOfRecord))
+  let entries
+  try {
+    entries = readdirSync(dirname(file))
+  } catch (error) {
+    if (error?.code === 'ENOENT') return records
+    throw error
+  }
+  let saved = false
+  for (const entry of entries) {
+    if (!entry.endsWith('.meta.json')) continue
+    const name = entry.slice(0, -'.meta.json'.length)
+    if (recorded.has(name)) continue
+    const lost = lostRunRecord(file, name)
+    if (lost && appendRunRecord(lost, { file })) saved = true
+  }
+  return saved ? readRecords(file) : records
 }
 
 function interruptFileText(folder, name) {
@@ -1500,7 +1566,7 @@ function readOutcomes() {
 }
 
 function listRuns() {
-  const records = readRecords()
+  const records = recoverLostRuns()
   if (records.length === 0) {
     console.log(`No runs recorded yet. The runs folder is ${printedRunsFolder(runsFolder())}.`)
     console.log('Start one with npm run run-lane -- <lane> <brief>. See --help for every form.')
@@ -1511,7 +1577,7 @@ function listRuns() {
 }
 
 function statsRuns(options) {
-  formatStats(laneStats(readRecords(), { since: options.since })).forEach((line) => console.log(line))
+  formatStats(laneStats(recoverLostRuns(), { since: options.since })).forEach((line) => console.log(line))
   return 0
 }
 
@@ -1550,18 +1616,17 @@ async function runQueueProject({ options, lane, lanes }) {
     if (problem !== '') throw new Error(problem)
   }
   const continueFrom = typeof options.continueFrom === 'string' ? options.continueFrom.trim() : ''
-  const prevRun = continueFrom ? findRunRecordByName(readRecords(), continueFrom) : null
-  if (continueFrom && !prevRun) throw new Error(`There is no run named ${continueFrom}.`)
+  const prevRun = continueFrom ? continuationRecord(continueFrom) : null
   const project = projectFolder(options.project)
   if (!gitCheckout(project)) throw new Error(`The project folder ${printedRunsFolder(project)} is not a git folder. A queue needs one.`)
-  let previousProject = continueFrom && typeof prevRun.record.project === 'string' ? realPath(prevRun.record.project) : ''
+  let previousProject = typeof prevRun?.project === 'string' ? realPath(prevRun.project) : ''
   if (continueFrom && options.worktree && previousProject === project) {
     try {
       const meta = JSON.parse(readFileSync(join(runsFolder(), `${continueFrom}.meta.json`), 'utf8'))
       if (typeof meta?.project === 'string' && meta.project.trim()) previousProject = realPath(meta.project)
     } catch {}
   }
-  const continuedBranch = prevRun?.record.failoverFrom ? prevRun.record.checkpoint?.branch || prevRun.record.branch : prevRun?.record.branch
+  const continuedBranch = prevRun?.failoverFrom ? prevRun.checkpoint?.branch || prevRun.branch : prevRun?.branch
   const continuedWorktree = options.worktree && previousProject && realPath(dirname(previousProject)) === realPath(join(project, '.worktrees')) ? previousProject : ''
   if (continueFrom && (options.worktree ? !continuedWorktree : previousProject !== project)) throw new Error('The interrupted run has a different project worktree.')
   if (continuedWorktree && !existsSync(continuedWorktree)) throw new Error('The interrupted run worktree no longer exists.')
@@ -1590,7 +1655,7 @@ async function runQueueProject({ options, lane, lanes }) {
     const plan = options.worktree
       ? (continueFrom ? { path: continuedWorktree, made: false } : worktreePlan(project, options.lane))
       : { path: project, made: false }
-    const dryBranch = continueFrom ? (continuedBranch || prevRun.record.queue || branch) : branch
+    const dryBranch = continueFrom ? (continuedBranch || prevRun.queue || branch) : branch
     const test = checkDisplay(testCommandFor(project, options.test))
     console.log(`lane: ${options.lane}`)
     console.log(`project: ${printedRunsFolder(project)}`)
@@ -1635,16 +1700,16 @@ async function runQueueProject({ options, lane, lanes }) {
     const currentWtBranch = gitRead(target.path, ['branch', '--show-current']) || ''
     if (continueFrom && continuedBranch && currentWtBranch !== continuedBranch) throw new Error('The interrupted run worktree is on a different branch.')
     const activeBranch = continueFrom
-      ? (currentWtBranch || prevRun.record.queue || prevRun.record.branch || branch)
+      ? (currentWtBranch || prevRun.queue || prevRun.branch || branch)
       : branch
     const startBranch = options.worktree
       ? (currentWtBranch || gitRead(project, ['branch', '--show-current']) || '')
       : currentWtBranch
     const startHead = gitRead(target.path, ['rev-parse', 'HEAD']) || ''
     let test = typeof options.test === 'string' && options.test.trim() !== '' ? options.test : ''
-    const base = (continueFrom && prevRun.record.base) || gitRead(target.path, ['rev-parse', 'HEAD']) || startHead
-    const startIndex = continueFrom && options.queue && Number.isInteger(prevRun.record.queueIndex) && prevRun.record.queueIndex >= 1
-      ? prevRun.record.queueIndex
+    const base = prevRun?.base || gitRead(target.path, ['rev-parse', 'HEAD']) || startHead
+    const startIndex = options.queue && Number.isInteger(prevRun?.queueIndex) && prevRun.queueIndex >= 1
+      ? prevRun.queueIndex
       : 1
     let pending = null
     let testsFailed = false
@@ -1869,6 +1934,7 @@ async function main() {
 
     mkdirSync(folder, { recursive: true })
     await refuseRunningLane(options.lane, '', folder)
+    if (options.continueFrom) continuationRecord(options.continueFrom)
     const projectLock = takeProjectLock(folder, project)
     const startedAt = laneStartTime(options)
     let lock
@@ -1958,6 +2024,7 @@ async function main() {
 
   mkdirSync(folder, { recursive: true })
   await refuseRunningLane(options.lane, lane.worktree, folder)
+  if (options.continueFrom) continuationRecord(options.continueFrom)
   const startedAt = laneStartTime(options)
   const lock = takeRunLock(folder, options.lane, { worktree: lane.worktree }, startedAt, basename(logPath))
   try {
@@ -2136,15 +2203,24 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
   let continuedBranch = ''
   let interruptedBy = ''
   if (continueFrom !== '') {
-    const prevRecordsFile = join(runsDir, 'runs.jsonl')
-    const prev = findRunRecordByName(readRecords(prevRecordsFile), continueFrom)
-    if (!prev) throw new Error(`There is no run named ${continueFrom}.`)
-    if (prev.record.lane !== options.lane) throw new Error('The interrupted run has a different lane.')
-    if (Boolean(prev.record.project) !== Boolean(project)) throw new Error('The interrupted run has a different project kind.')
-    if (JSON.stringify(prev.record.briefs ?? []) !== JSON.stringify(project ? [] : wanted.map((brief) => brief.id))) throw new Error('The interrupted run has different brief ids.')
-    if (!project && gitRead(lane.worktree, ['branch', '--show-current']) !== String(prev.record.branch ?? '').trim()) throw new Error('The interrupted run worktree is on a different branch.')
-    if (typeof prev.record.base === 'string' && prev.record.base.trim() !== '') continuedBase = prev.record.base.trim()
-    if (typeof prev.record.branch === 'string' && prev.record.branch.trim() !== '') continuedBranch = prev.record.branch.trim()
+    const record = continuationRecord(continueFrom, join(runsDir, 'runs.jsonl'))
+    if (record.lane !== options.lane) throw new Error('The interrupted run has a different lane.')
+    if (Boolean(record.project) !== Boolean(project)) throw new Error('The interrupted run has a different project kind.')
+    if (JSON.stringify(record.briefs ?? []) !== JSON.stringify(project ? [] : wanted.map((brief) => brief.id))) throw new Error('The interrupted run has different brief ids.')
+    continuedBase = typeof record.base === 'string' ? record.base.trim() : ''
+    continuedBranch = typeof record.branch === 'string' ? record.branch.trim() : ''
+    const lost = record.stopReason === 'lost'
+    if (lost && project && realPath(record.project) !== realPath(project)) throw new Error('The interrupted run has a different project worktree.')
+    if (!project || (lost && continuedBranch)) {
+      const worktree = project || lane.worktree
+      const currentBranch = gitRead(worktree, ['branch', '--show-current'])
+      const onBriefBranch = lost && !project && continuedBranch === '' && typeof wanted[0]?.title === 'string'
+        && currentBranch === `${branchFor(wanted[0])}${branchSuffix}`
+        && /^[a-f0-9]{40,64}$/i.test(continuedBase)
+        && gitRead(worktree, ['merge-base', '--is-ancestor', continuedBase, 'HEAD']) !== null
+      if (currentBranch !== continuedBranch && !onBriefBranch) throw new Error('The interrupted run worktree is on a different branch.')
+      continuedBranch = currentBranch
+    }
     const interrupt = interruptFileText(runsDir, continueFrom)
     interruptedBy = interrupt.sender
     if (options?.retried !== true && interrupt.text !== '') {
@@ -2185,7 +2261,15 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
       ...(project ? { cwd: project } : {}),
     })
     const startedBy = options.startedBy ? null : sessionStartedBy(process.env)
-    const meta = { lane: options.lane, sessionId, ...(runBase ? { base: runBase } : {}) }
+    const startedAt = Number.isFinite(Number(givenStartedAt)) && Number(givenStartedAt) > 0 ? Number(givenStartedAt) : Date.now()
+    const meta = {
+      lane: options.lane, sessionId, briefs: project ? [] : wanted.map((brief) => brief.id),
+      startedAt: new Date(startedAt).toISOString(), branch: checkpoint?.branch ?? '',
+      model: lane.cli.model, reasoning: lane.reasoning, mode: lane.cli.mode,
+      ...(runBase ? { base: runBase } : {}),
+      ...(continueFrom ? { continues: continueFrom } : {}),
+      ...(failoverFrom ? { failoverFrom } : {}),
+    }
     if (project) meta.project = project
     if (queue) {
       meta.queue = queue.branch
@@ -2205,7 +2289,6 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
       } catch {}
     }
     log.on('error', onLogError)
-    const startedAt = Number.isFinite(Number(givenStartedAt)) && Number(givenStartedAt) > 0 ? Number(givenStartedAt) : Date.now()
     const projectStart = project
       ? {
           branch: typeof projectBranch === 'string' ? projectBranch : gitRead(project, ['branch', '--show-current']) ?? '',

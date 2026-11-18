@@ -1362,7 +1362,7 @@ export default function OrchestratorChat({
       {!inline ? (
         <header className="mr-orch-head">
           <span className="mr-orch-title">Orchestrator</span>
-          {model ? <span className="mr-orch-model mono">{model}</span> : null}
+          {model ? <span className="mr-orch-model mono" title={model}>{model}</span> : null}
           {projectLabel ? (
             <span className="mr-orch-project mr-orch-model mono" title={project}>
               {projectLabel}
@@ -1485,7 +1485,7 @@ export default function OrchestratorChat({
                         <span style={{ color: agentColor(notice.lane, lanesData) }}>{notice.lane}</span>
                         {notice.briefs && <span>{notice.briefs}</span>}
                         <span className={`mr-orch-run-status is-${tone}`}>{notice.status}</span>
-                        {notice.subject && <span className="mr-orch-run-subject">{notice.subject}</span>}
+                        {notice.subject && <span className="mr-orch-run-subject" title={notice.subject}>{notice.subject}</span>}
                         <button type="button" className="mr-orch-line-action" aria-expanded={expanded} onClick={() => setOpenRoomDetails((prev) => ({ ...prev, [line.id]: !prev[line.id] }))}>Details</button>
                       </div>
                       {expanded && <div className="mr-orch-blocks is-room"><ChatBlocks text={line.text} /></div>}
@@ -1762,7 +1762,7 @@ export default function OrchestratorChat({
                     onClick={openEffort}
                   >
                     <span>Effort:</span>
-                    <span className="hud-lower-picker-value mono">{shownEffort}</span>
+                    <span className="hud-lower-picker-value mono" title={shownEffort}>{shownEffort}</span>
                     <span className="hud-lower-picker-v" aria-hidden="true">
                       <MenuIcon />
                     </span>
@@ -1777,7 +1777,7 @@ export default function OrchestratorChat({
                     onClick={toggleMode}
                   >
                     <span>Mode:</span>
-                    <span className="hud-lower-picker-value mono">{shownMode}</span>
+                    <span className="hud-lower-picker-value mono" title={shownMode}>{shownMode}</span>
                     <span className="hud-lower-picker-v" aria-hidden="true">
                       <MenuIcon />
                     </span>

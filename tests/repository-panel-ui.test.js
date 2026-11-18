@@ -405,7 +405,7 @@ describe('the Repository section', () => {
     })
   })
 
-  it('keeps two hundred branches inside the scrolling list', async () => {
+  it('keeps two hundred branches inside the scrolling list after Show all', async () => {
     const branches = Array.from({ length: 200 }, (_, index) => ({
       name: `branch-${String(index).padStart(3, '0')}`,
       current: index === 0,
@@ -418,9 +418,90 @@ describe('the Repository section', () => {
     await withDom(async ({ container, root }) => {
       await mount(root, { client, live: true, project: 'C:\\work\\demo' })
       const list = container.querySelector('.mr-repo-branches')
-      expect(list.querySelectorAll('.mr-repo-row')).toHaveLength(200)
+      expect(list.querySelectorAll('.mr-repo-row')).toHaveLength(21)
       expect(rowByName(container, 'branch-000').className).toContain('is-current')
+
+      await click(root, buttonWithText(container, 'Show all 200 branches'))
+      await settle()
+      const all = container.querySelector('.mr-repo-branches')
+      expect(all.querySelectorAll('.mr-repo-row')).toHaveLength(200)
       expect(rowByName(container, 'branch-199')).not.toBeNull()
+    })
+  })
+
+  it('shows the current branch, twenty others and a Show all button', async () => {
+    const branches = Array.from({ length: 199 }, (_, index) => ({
+      name: `branch-${String(index).padStart(3, '0')}`,
+      current: index === 120,
+      worktree: false,
+      ahead: 0,
+      behind: 0,
+    }))
+    const client = makeClient(gitState({ branch: 'branch-120', branches }))
+
+    await withDom(async ({ container, root }) => {
+      await mount(root, { client, live: true, project: 'C:\\work\\demo' })
+      const list = container.querySelector('.mr-repo-branches')
+      const rows = list.querySelectorAll('.mr-repo-row')
+      expect(rows).toHaveLength(21)
+      expect(rows[0].className).toContain('is-current')
+      expect(list.querySelector('.mr-repo-name').textContent).toBe('branch-120')
+      expect(rows[1].querySelector('.mr-repo-name').textContent).toBe('branch-000')
+      expect(rowByName(container, 'branch-021')).toBeNull()
+      expect(container.querySelector('.mr-repo-count').textContent).toBe('Showing 21 of 199 branches.')
+
+      await click(root, buttonWithText(container, 'Show all 199 branches'))
+      await settle()
+      expect(container.querySelectorAll('.mr-repo-row')).toHaveLength(199)
+      expect(buttonWithText(container, 'Show all 199 branches')).toBeNull()
+      expect(container.querySelector('.mr-repo-count')).toBeNull()
+    })
+  })
+
+  it('shows every match up to two hundred when the filter has text', async () => {
+    const branches = Array.from({ length: 199 }, (_, index) => ({
+      name: `branch-${String(index).padStart(3, '0')}`,
+      current: index === 0,
+      worktree: false,
+      ahead: 0,
+      behind: 0,
+    }))
+    const client = makeClient(gitState({ branches }))
+
+    await withDom(async ({ container, root }) => {
+      await mount(root, { client, live: true, project: 'C:\\work\\demo' })
+      await type(root, container.querySelector('.mr-repo-filter').querySelector('input'), 'branch')
+      await settle()
+      expect(container.querySelectorAll('.mr-repo-row')).toHaveLength(199)
+      expect(buttonWithText(container, 'Show all 199 branches')).toBeNull()
+      expect(container.querySelector('.mr-repo-count').textContent).toBe('Showing 199 of 199 branches.')
+    })
+  })
+
+  it('folds the list again when the filter is cleared', async () => {
+    const branches = Array.from({ length: 199 }, (_, index) => ({
+      name: `branch-${String(index).padStart(3, '0')}`,
+      current: index === 0,
+      worktree: false,
+      ahead: 0,
+      behind: 0,
+    }))
+    const client = makeClient(gitState({ branches }))
+
+    await withDom(async ({ container, root }) => {
+      await mount(root, { client, live: true, project: 'C:\\work\\demo' })
+      await click(root, buttonWithText(container, 'Show all 199 branches'))
+      await settle()
+      expect(container.querySelectorAll('.mr-repo-row')).toHaveLength(199)
+
+      await type(root, container.querySelector('.mr-repo-filter').querySelector('input'), 'branch-01')
+      await settle()
+      expect(container.querySelectorAll('.mr-repo-row')).toHaveLength(10)
+
+      await type(root, container.querySelector('.mr-repo-filter').querySelector('input'), '')
+      await settle()
+      expect(container.querySelectorAll('.mr-repo-row')).toHaveLength(21)
+      expect(buttonWithText(container, 'Show all 199 branches')).not.toBeNull()
     })
   })
 
@@ -437,10 +518,18 @@ describe('the Repository section', () => {
     await withDom(async ({ container, root }) => {
       await mount(root, { client, live: true, project: 'C:\\work\\demo' })
       const list = container.querySelector('.mr-repo-branches')
-      expect(list.querySelectorAll('.mr-repo-row').length).toBeLessThanOrEqual(200)
-      expect(container.querySelector('.mr-repo-count').textContent).toBe('Showing 200 of 10000 branches.')
+      expect(list.querySelectorAll('.mr-repo-row')).toHaveLength(21)
+      expect(container.querySelector('.mr-repo-count').textContent).toBe('Showing 21 of 10000 branches.')
       expect(list.querySelector('.mr-repo-name').textContent).toBe('branch-05000')
       expect(list.querySelector('.mr-repo-row').className).toContain('is-current')
+
+      await click(root, buttonWithText(container, 'Show all 10000 branches'))
+      await settle()
+      const all = container.querySelector('.mr-repo-branches')
+      expect(all.querySelectorAll('.mr-repo-row')).toHaveLength(200)
+      expect(container.querySelector('.mr-repo-count').textContent).toBe('Showing 200 of 10000 branches.')
+      expect(all.querySelector('.mr-repo-name').textContent).toBe('branch-05000')
+      expect(all.querySelector('.mr-repo-row').className).toContain('is-current')
 
       await type(root, container.querySelector('.mr-repo-filter').querySelector('input'), 'BRANCH-05000')
       await settle()
