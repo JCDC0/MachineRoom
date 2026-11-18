@@ -62,7 +62,7 @@ describe('Hud keys and surfaces', () => {
   it('does not let the health popover block the room keys', async () => {
     await withDom(async ({ container, root, window }) => {
       window.localStorage.setItem('machineroom.guide', '1')
-      await mountHud(root, { health: { runner: { alive: false } } })
+      await mountHud(root, { health: { ok: true, problems: ['A source stopped.'] } })
       const chip = buttonByClass(container, 'hud-health-chip')
       expect(chip).not.toBeNull()
       await click(root, chip)
