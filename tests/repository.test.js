@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   BRANCH_EMPTY_PROBLEM,
   BRANCH_EXISTS_PROBLEM,
+  BRANCH_FOLD_LIMIT,
   BRANCH_FROM_PROBLEM,
   BRANCH_LIST_LIMIT,
   BRANCH_NAME_PROBLEM,
@@ -16,6 +17,7 @@ import {
   repositoryHead,
   repositoryStatusNotice,
   repositoryProjectName,
+  showAllBranchesLabel,
   switchBlockReason,
   switchConfirmText,
   validBranchName,
@@ -144,9 +146,74 @@ describe('the visible branch list', () => {
     }))
   }
 
+  it('shows the fold button text with the whole count', () => {
+    expect(showAllBranchesLabel(199)).toBe('Show all 199 branches')
+  })
+
+  it('shows the current branch first and twenty others until asked for all', () => {
+    const rows = branchRows(gitState({ branches: manyBranches(199, 120) }))
+    const folded = visibleBranches(rows, '')
+    expect(folded.rows).toHaveLength(BRANCH_FOLD_LIMIT + 1)
+    expect(folded.rows[0].name).toBe('branch-00120')
+    expect(folded.rows[0].current).toBe(true)
+    expect(folded.rows.map((row) => row.name)).toEqual([
+      'branch-00120',
+      ...Array.from({ length: 20 }, (_, index) => `branch-${String(index).padStart(5, '0')}`),
+    ])
+    expect(folded.more).toBe('Show all 199 branches')
+    expect(folded.line).toBe('Showing 21 of 199 branches.')
+  })
+
+  it('shows twenty branches when no branch is current', () => {
+    const rows = branchRows(gitState({ branches: manyBranches(50, -1) }))
+    const folded = visibleBranches(rows, '')
+    expect(folded.rows).toHaveLength(BRANCH_FOLD_LIMIT)
+    expect(folded.more).toBe('Show all 50 branches')
+  })
+
+  it('shows the whole list up to the cap when asked for all', () => {
+    const rows = branchRows(gitState({ branches: manyBranches(199, 120) }))
+    const all = visibleBranches(rows, '', BRANCH_LIST_LIMIT, true)
+    expect(all.rows).toHaveLength(199)
+    expect(all.rows[0].name).toBe('branch-00120')
+    expect(all.more).toBe('')
+    expect(all.line).toBe('')
+  })
+
+  it('cuts ten thousand branches to two hundred when asked for all', () => {
+    const rows = branchRows(gitState({ branches: manyBranches(10000) }))
+    const all = visibleBranches(rows, '', BRANCH_LIST_LIMIT, true)
+    expect(all.rows).toHaveLength(BRANCH_LIST_LIMIT)
+    expect(all.line).toBe('Showing 200 of 10000 branches.')
+    expect(all.more).toBe('')
+  })
+
+  it('keeps the fold button while the whole list fits in the cap', () => {
+    const rows = branchRows(gitState({ branches: manyBranches(30) }))
+    const folded = visibleBranches(rows, '')
+    expect(folded.rows).toHaveLength(BRANCH_FOLD_LIMIT + 1)
+    expect(folded.more).toBe('Show all 30 branches')
+  })
+
+  it('shows no fold button for a list of twenty branches or fewer', () => {
+    const rows = branchRows(gitState({ branches: manyBranches(20) }))
+    const folded = visibleBranches(rows, '')
+    expect(folded.rows).toHaveLength(20)
+    expect(folded.more).toBe('')
+    expect(folded.line).toBe('')
+  })
+
+  it('shows every match up to the cap with a filter and no fold button', () => {
+    const rows = branchRows(gitState({ branches: manyBranches(10000, 5000) }))
+    const visible = visibleBranches(rows, 'branch')
+    expect(visible.rows).toHaveLength(BRANCH_LIST_LIMIT)
+    expect(visible.rows[0].name).toBe('branch-05000')
+    expect(visible.more).toBe('')
+  })
+
   it('cuts ten thousand branches to two hundred and says how many', () => {
     const rows = branchRows(gitState({ branches: manyBranches(10000) }))
-    const visible = visibleBranches(rows, '')
+    const visible = visibleBranches(rows, 'branch')
     expect(visible.rows).toHaveLength(BRANCH_LIST_LIMIT)
     expect(visible.line).toBe('Showing 200 of 10000 branches.')
   })
@@ -156,6 +223,7 @@ describe('the visible branch list', () => {
     const visible = visibleBranches(rows, 'branch-09999')
     expect(visible.rows.map((row) => row.name)).toEqual(['branch-09999'])
     expect(visible.line).toBe('Showing 1 of 10000 branches.')
+    expect(visible.more).toBe('')
   })
 
   it('puts the current branch first when it matches', () => {
@@ -175,6 +243,7 @@ describe('the visible branch list', () => {
     const visible = visibleBranches(branchRows(gitState()), '')
     expect(visible.rows.map((row) => row.name)).toEqual(['main', 'feat/login', 'feat/held'])
     expect(visible.line).toBe('')
+    expect(visible.more).toBe('')
   })
 
   it('counts the matches against every branch', () => {

@@ -1,4 +1,5 @@
 export const BRANCH_LIST_LIMIT = 200
+export const BRANCH_FOLD_LIMIT = 20
 export const BRANCH_EMPTY_PROBLEM = 'Write a name for the new branch.'
 export const BRANCH_LONG_PROBLEM = 'Keep the branch name to 200 characters.'
 export const BRANCH_NAME_PROBLEM = 'That is not a valid branch name.'
@@ -87,25 +88,32 @@ export function branchRows(state) {
   return rows
 }
 
-export function visibleBranches(rows, query, limit = BRANCH_LIST_LIMIT) {
+export function showAllBranchesLabel(total) {
+  return `Show all ${total} branches`
+}
+
+export function visibleBranches(rows, query, limit = BRANCH_LIST_LIMIT, showAll = false) {
   const list = Array.isArray(rows) ? rows : []
   const cap = Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : BRANCH_LIST_LIMIT
   const text = typeof query === 'string' ? query.trim().toLowerCase() : ''
-  const matching =
-    text === ''
-      ? list.slice()
-      : list.filter((row) => String(row?.name ?? '').toLowerCase().includes(text))
+  const filtering = text !== ''
+  const matching = filtering
+    ? list.filter((row) => String(row?.name ?? '').toLowerCase().includes(text))
+    : list.slice()
   const currentIndex = matching.findIndex((row) => row?.current === true)
   const ordered =
     currentIndex > 0
       ? [matching[currentIndex], ...matching.slice(0, currentIndex), ...matching.slice(currentIndex + 1)]
       : matching
-  const shown = ordered.slice(0, cap)
+  const folded = !filtering && showAll !== true
+  const fold = currentIndex === -1 ? BRANCH_FOLD_LIMIT : BRANCH_FOLD_LIMIT + 1
+  const shown = ordered.slice(0, folded ? Math.min(fold, cap) : cap)
+  const more = folded && ordered.length > shown.length ? showAllBranchesLabel(list.length) : ''
   const line =
-    text !== '' || shown.length < list.length
+    filtering || shown.length < list.length
       ? `Showing ${shown.length} of ${list.length} branches.`
       : ''
-  return { rows: shown, total: list.length, shown: shown.length, line }
+  return { rows: shown, total: list.length, shown: shown.length, line, more }
 }
 
 export function validBranchName(value) {

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
+  BRANCH_LIST_LIMIT,
   branchFromProblem,
   branchRows,
   createConfirmText,
@@ -31,6 +32,7 @@ export default function RepositoryPanel({ client = null, live = false, project =
   const [from, setFrom] = useState('')
   const [formError, setFormError] = useState('')
   const [filter, setFilter] = useState('')
+  const [showAll, setShowAll] = useState(false)
   const requestRef = useRef(0)
 
   const refresh = useCallback(async () => {
@@ -200,7 +202,7 @@ export default function RepositoryPanel({ client = null, live = false, project =
   const fromOptions = rows.map((row) => row.name)
   const statusNotice = ready ? repositoryStatusNotice(state) : ''
   const branchesNotice = ready ? repositoryBranchesNotice(state) : ''
-  const visible = visibleBranches(rows, filter)
+  const visible = visibleBranches(rows, filter, BRANCH_LIST_LIMIT, showAll)
 
   return (
     <section className="mr-repo" aria-label="Repository">
@@ -236,7 +238,10 @@ export default function RepositoryPanel({ client = null, live = false, project =
                 value={filter}
                 aria-label="Filter branches"
                 placeholder="Filter branches"
-                onChange={(event) => setFilter(event.target.value)}
+                onChange={(event) => {
+                  setFilter(event.target.value)
+                  setShowAll(false)
+                }}
               />
             </label>
           ) : null}
@@ -277,6 +282,13 @@ export default function RepositoryPanel({ client = null, live = false, project =
               ))
             )}
           </div>
+          {visible.more ? (
+            <div className="mr-repo-actions">
+              <button type="button" className="mr-repo-new" onClick={() => setShowAll(true)}>
+                {visible.more}
+              </button>
+            </div>
+          ) : null}
           {visible.line ? <p className="mr-side-note mr-repo-count">{visible.line}</p> : null}
           <div className="mr-repo-actions">
             <button type="button" className="mr-repo-new" onClick={toggleForm} disabled={busy !== ''}>
