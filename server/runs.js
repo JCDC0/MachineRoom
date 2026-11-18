@@ -14,6 +14,7 @@ import { profileFromBrief, profileFromTask } from '../src/policy/profile.js'
 import { readPolicy, routeLane, tierFor, TIERS } from '../src/policy/route.js'
 import { conversationFromLog } from '../src/model/conversation.js'
 import { readLaneCosts } from './lane-costs.js'
+import { laneAgentList, laneTaskState, readLaneBriefs, recentLaneRecords } from './lane-tasks.js'
 import { defaultMode, legacyMode } from '../src/control/modes.js'
 import { modelUnavailableProblem } from './model-list.js'
 import { modelAllowed } from './harness-models.js'
@@ -1856,7 +1857,8 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
     return samePath(await rootCommonDir(), await repoCommonDir())
   }
 
-  function roomRecords(records, thisRepo) {
+  async function roomRecords(records) {
+    const thisRepo = await inThisRepository()
     const resolvedProjects = new Map()
     const resolvedWorktrees = new Map()
     function resolveOnce(cache, folder) {
@@ -1891,6 +1893,19 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
     syncOrchestratorsRuns()
     const path = url.pathname
     const method = req.method ?? 'GET'
+    if (method === 'GET' && path === '/api/control/issues') {
+      const status = url.searchParams.get('status')
+      const records = await roomRecords(readAllRunRecords(recordsPath()))
+      const { issues } = laneTaskState({
+        openRuns: currentOpenRuns(),
+        agents: laneAgentList(lanesSource),
+        records: recentLaneRecords(records),
+        recoveryRecords: records,
+        briefs: readLaneBriefs(),
+      })
+      sendJson(req, res, 200, status ? issues.filter((issue) => issue.status === status) : issues)
+      return true
+    }
     if (path === '/api/control/runs/stop') {
       if (method !== 'POST') {
         sendJson(req, res, 405, { error: 'Method not allowed.' })
@@ -2037,9 +2052,9 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
     if (method === 'GET') {
       const records = readAllRunRecords(recordsPath())
       noteFailovers(records)
-      const thisRepo = await inThisRepository()
       const lane = (url.searchParams.get('lane') ?? '').trim()
-      const visible = roomRecords(records, thisRepo).map(maskRecordCommits).filter((record) => !lane || record.lane === lane)
+      const scoped = (await roomRecords(records)).filter((record) => !lane || record.lane === lane)
+      const visible = scoped.map(maskRecordCommits)
       const runningItems = [...running.values()].filter((item) => !lane || item.entry.lane === lane)
       const lanes = runningItems.length > 0 ? readStartLanes({ lanesFile: laneFile, runsFolder: recordsDir() }) : null
       const openRuns = runningItems.length > 0 ? currentOpenRuns() : []
@@ -2048,7 +2063,7 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
         running: runningItems.map((item) => snapshot(item, { lanes, openRuns })),
         recent: lane ? [...visible].sort((a, b) => Date.parse(b.startedAt) - Date.parse(a.startedAt)).slice(0, RECENT_LIMIT) : visible.slice(-RECENT_LIMIT).reverse(),
         last: newestRecordPerLane(visible),
-        attention: attentionItems(visible),
+        attention: attentionItems(scoped).map(maskRecordCommits),
       })
       return true
     }

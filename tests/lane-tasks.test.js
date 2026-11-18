@@ -1,4 +1,4 @@
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { appendFileSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { AGENT_REFUSAL, changeEvents } from '../server/control.js'
@@ -12,9 +12,11 @@ import {
   laneTaskState,
   readArchivedBriefs,
   readLaneBriefs,
-  readRecentLaneRecords,
+  recentLaneRecords,
   runNameOf,
 } from '../server/lane-tasks.js'
+import { readAllRunRecords } from '../server/runs.js'
+import { attentionItems } from '../src/briefs/attention.js'
 import { agentTasks } from '../src/model/liveTasks.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 
@@ -102,11 +104,11 @@ async function startLaneBridge({ lanes = true } = {}) {
   })
   cleanups.push(() => bridge.stop())
   const { url } = await bridge.start()
-  return { url, runs }
+  return { url, runs, base }
 }
 
-async function getJson(url, path) {
-  const response = await fetch(`${url}${path}`)
+async function getJson(url, path, options) {
+  const response = await fetch(`${url}${path}`, options)
   return { status: response.status, body: await response.json() }
 }
 
@@ -286,7 +288,7 @@ describe('lane tasks', () => {
     expect(laneTaskIssues({ records: [failed, plan] }).find((issue) => issue.id === id).status).toBe('blocked')
   })
 
-  it('reads a failed run as done when its failover backup ran later', () => {
+  it('reads a failed run as done when its failover backup succeeded later', () => {
     const failed = record({
       lane: 'opencode',
       briefs: ['L1'],
@@ -306,6 +308,22 @@ describe('lane tasks', () => {
 
     const issues = laneTaskIssues({ records: [failed, backup] })
     expect(issues.find((issue) => issue.id === 'opencode-L1-20261024-090000').status).toBe('done')
+  })
+
+  it('keeps the failed task blocked when its backup fails and Needs you shows the backup', () => {
+    const failed = {
+      ...record({ lane: 'opencode', briefs: ['L1'], log: '/tmp/runs/opencode-L1-20261024-090000.log', startedAt: iso(30), exitCode: 1 }),
+      failover: { kind: 'quota', to: 'agy' },
+    }
+    const other = record({ lane: 'agy', briefs: ['L2'], log: '/tmp/runs/agy-L2-20261024-090100.log', startedAt: iso(29) })
+    const backup = {
+      ...record({ lane: 'agy', briefs: ['L1'], log: '/tmp/runs/agy-L1-20261024-090200.log', startedAt: iso(28), exitCode: 1 }),
+      failoverFrom: { lane: 'opencode', startedAt: failed.startedAt },
+    }
+
+    expect(attentionItems([failed, other]).map((item) => item.lane)).toEqual(['opencode'])
+    expect(attentionItems([failed, backup]).map((item) => item.lane)).toEqual(['agy'])
+    expect(laneTaskIssues({ records: [failed, backup] }).map((issue) => issue.status)).toEqual(['blocked', 'blocked'])
   })
 
   it('takes a title from the archive when the brief has left TASKS.md', () => {
@@ -345,11 +363,12 @@ describe('lane tasks', () => {
     lines.push('not json')
     writeFileSync(file, `${lines.join('\n')}\n`)
 
-    const records = readRecentLaneRecords(file)
+    const all = readAllRunRecords(file)
+    const records = recentLaneRecords(all)
     expect(records).toHaveLength(30)
     expect(records[0].log).toContain('000031')
     expect(records.every((entry) => entry.lane === 'opencode')).toBe(true)
-    expect(readRecentLaneRecords(file, 2)).toHaveLength(2)
+    expect(recentLaneRecords(all, 2)).toHaveLength(2)
   })
 
   it('reads a run name from a Windows or a POSIX log path', () => {
@@ -399,10 +418,10 @@ describe('lane tasks', () => {
 
 describe('the lane routes', () => {
   it('answers tasks, live runs, comments and approvals from the lane runs', async () => {
-    const { url, runs } = await startLaneBridge()
+    const { url, runs, base } = await startLaneBridge()
     const openName = 'opencode-L2-20261024-120000'
-    const goodName = 'opencode-L1-20261024-100000'
-    const failedName = 'opencode2-S6g-20261024-090000'
+    const goodName = 'opencode-project-20261024-100000'
+    const failedName = 'opencode2-project-20261024-090000'
     const projectName = 'opencode-project-20261024-080000'
     const task = 'Update the sample project to the new layout and run its tests'
 
@@ -410,14 +429,14 @@ describe('the lane routes', () => {
     writeFileSync(
       join(runs, 'runs.jsonl'),
       [
-        record({ lane: 'opencode', briefs: ['L1'], log: join(runs, `${goodName}.log`), startedAt: iso(30), exitCode: 0, costUsd: 0.5 }),
-        record({ lane: 'opencode2', briefs: ['S6g'], log: join(runs, `${failedName}.log`), startedAt: iso(40), exitCode: 1 }),
+        record({ lane: 'opencode', task: 'Check the costs', log: join(runs, `${goodName}.log`), startedAt: iso(30), exitCode: 0, costUsd: 0.5, project: base }),
+        record({ lane: 'opencode2', task: 'Review the harness', log: join(runs, `${failedName}.log`), startedAt: iso(40), exitCode: 1, project: base }),
         record({
           lane: 'opencode',
           log: join(runs, `${projectName}.log`),
           startedAt: iso(50),
           exitCode: 0,
-          project: join(process.env.TEMP, 'other-project'),
+          project: base,
           task,
         }),
       ]
@@ -434,8 +453,8 @@ describe('the lane routes', () => {
     const open = issues.find((issue) => issue.id === openName)
     expect(open).toMatchObject({ identifier: 'L2', status: 'in_progress', assigneeAgentId: 'agent-opencode' })
     expect(open.title).toContain('Tasks, approvals')
-    expect(issues.find((issue) => issue.id === goodName)).toMatchObject({ identifier: 'L1', status: 'done' })
-    expect(issues.find((issue) => issue.id === failedName)).toMatchObject({ identifier: 'S6g', status: 'blocked' })
+    expect(issues.find((issue) => issue.id === goodName)).toMatchObject({ identifier: 'project', title: 'Check the costs', status: 'done' })
+    expect(issues.find((issue) => issue.id === failedName)).toMatchObject({ identifier: 'project', title: 'Review the harness', status: 'blocked' })
     expect(issues.find((issue) => issue.id === projectName)).toMatchObject({ identifier: 'project', title: task, status: 'done' })
 
     const live = await getJson(url, '/api/control/live-runs')
@@ -471,6 +490,29 @@ describe('the lane routes', () => {
     expect(commented).toEqual({ status: 409, body: { error: LANE_TASK_REFUSAL } })
   })
 
+  it('uses only the current project to decide if a later run fixed a failed task', async () => {
+    const { url, runs, base } = await startLaneBridge({ lanes: false })
+    const file = join(runs, 'runs.jsonl')
+    const id = 'opencode-project-failed'
+    const task = 'Run the checks'
+    const failed = record({ lane: 'opencode', project: base, task, log: join(runs, `${id}.log`), startedAt: iso(30), exitCode: 1 })
+    const foreign = record({ lane: 'agy', project: tempDir(), task, log: join(runs, 'agy-project-success.log'), startedAt: iso(20) })
+    writeFileSync(file, [failed, foreign].map((entry) => JSON.stringify(entry) + '\n').join(''))
+
+    const issues = await getJson(url, '/api/control/issues')
+    expect(issues.body.find((issue) => issue.id === id)).toMatchObject({ status: 'blocked' })
+    expect(issues.body.map((issue) => issue.id)).toEqual([id])
+    const page = { headers: { origin: url } }
+    const before = await getJson(url, '/api/control/runs', page)
+    expect(before.body.attention).toEqual([{ lane: 'opencode', startedAt: failed.startedAt, text: 'opencode failed on Run the checks' }])
+
+    const repair = { ...foreign, project: join(base, '.worktrees', 'agy') }
+    appendFileSync(file, JSON.stringify(repair) + '\n')
+    const after = await getJson(url, '/api/control/issues?status=done')
+    expect(after.body.map((issue) => issue.id)).toContain(id)
+    expect((await getJson(url, '/api/control/runs', page)).body.attention).toEqual([])
+  })
+
   it('lists the lane agents and refuses an agent budget write', async () => {
     const { url } = await startLaneBridge()
     const agents = await getJson(url, '/api/control/agents')
@@ -490,11 +532,11 @@ describe('the lane routes', () => {
   })
 
   it('reads the run records with the live lane source off', async () => {
-    const { url, runs } = await startLaneBridge({ lanes: false })
-    const name = 'opencode-L1-20261024-100000'
+    const { url, runs, base } = await startLaneBridge({ lanes: false })
+    const name = 'opencode-project-20261024-100000'
     writeFileSync(
       join(runs, 'runs.jsonl'),
-      `${JSON.stringify(record({ lane: 'opencode', briefs: ['L1'], log: join(runs, `${name}.log`), startedAt: iso(30), exitCode: 0 }))}\n`
+      `${JSON.stringify(record({ lane: 'opencode', task: 'Check the costs', log: join(runs, `${name}.log`), startedAt: iso(30), exitCode: 0, project: base }))}\n`
     )
 
     const issues = await getJson(url, '/api/control/issues')

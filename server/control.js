@@ -1,9 +1,7 @@
 import { EFFORTS } from '../src/control/agents.js'
 import { readLaneCosts } from './lane-costs.js'
-import { LANE_TASK_REFUSAL, laneTaskState, readLaneBriefs, readRecentLaneRecords } from './lane-tasks.js'
-import { laneAgents, readLanes } from './lanes-source.js'
+import { LANE_TASK_REFUSAL, laneAgentList, laneLiveRuns } from './lane-tasks.js'
 import { MODELS } from './models.js'
-import { runsFile } from './runs.js'
 
 const AGENT_STATUS = {
   active: 'idle',
@@ -187,15 +185,7 @@ export function createControlApi(options) {
     }
   }
 
-  function laneAgentList() {
-    try {
-      const source = lanes()
-      if (source && Array.isArray(source.agents)) return source.agents
-    } catch {}
-    return laneAgents(readLanes())
-  }
-
-  function laneCosts(agents = laneAgentList()) {
+  function laneCosts(agents = laneAgentList(lanes)) {
     try {
       return readLaneCosts({ agents })
     } catch {
@@ -203,7 +193,7 @@ export function createControlApi(options) {
     }
   }
 
-  function laneState() {
+  function liveRuns() {
     const source = laneNow()
     let openRuns = []
     if (source) {
@@ -213,12 +203,7 @@ export function createControlApi(options) {
         openRuns = []
       }
     }
-    return laneTaskState({
-      openRuns,
-      agents: laneAgentList(),
-      records: readRecentLaneRecords(runsFile()),
-      briefs: readLaneBriefs(),
-    })
+    return laneLiveRuns({ openRuns, agents: laneAgentList(lanes) })
   }
 
   function fail(req, res, status, message) {
@@ -235,7 +220,7 @@ export function createControlApi(options) {
     }
 
     if (method === 'GET' && path === '/api/control/agents') {
-      const agents = laneAgentList()
+      const agents = laneAgentList(lanes)
       const costs = laneCosts(agents)
       const cents = new Map(costs.byAgent.map((row) => [row.agentId, row.costCents]))
       sendJson(
@@ -247,15 +232,8 @@ export function createControlApi(options) {
       return true
     }
 
-    if (method === 'GET' && path === '/api/control/issues') {
-      const status = url.searchParams.get('status')
-      const issues = laneState().issues
-      sendJson(req, res, 200, status ? issues.filter((issue) => issue.status === status) : issues)
-      return true
-    }
-
     if (method === 'GET' && path === '/api/control/live-runs') {
-      sendJson(req, res, 200, { runs: laneState().liveRuns })
+      sendJson(req, res, 200, { runs: liveRuns() })
       return true
     }
 

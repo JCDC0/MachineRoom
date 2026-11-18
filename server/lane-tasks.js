@@ -1,9 +1,9 @@
 import { readFileSync, statSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { backupRanLater, succeededLater } from '../src/briefs/attention.js'
+import { succeededLater } from '../src/briefs/attention.js'
 import { parseBriefs } from '../src/briefs/briefs.js'
-import { readAllRunRecords } from './runs.js'
+import { laneAgents, readLanes } from './lanes-source.js'
 
 export const LANE_TASK_RECORDS = 30
 export const LANE_TASK_REFUSAL = 'Lane runs start from Dispatch, not from a task.'
@@ -35,6 +35,14 @@ function isoOrEmpty(value) {
 function agentFor(agents, lane) {
   const roster = Array.isArray(agents) ? agents : []
   return roster.find((agent) => agent?.key === lane) ?? roster.find((agent) => agent?.id === `agent-${lane}`) ?? null
+}
+
+export function laneAgentList(lanes) {
+  try {
+    const source = typeof lanes === 'function' ? lanes() : lanes
+    if (source && Array.isArray(source.agents)) return source.agents
+  } catch {}
+  return laneAgents(readLanes())
 }
 
 export function runNameOf(record) {
@@ -97,14 +105,14 @@ function issueFor({ id, lane, startedAt, updatedAt, project, briefs, task, statu
   }
 }
 
-function statusFor(record, lane, records) {
+function statusFor(record, records) {
   const failed = record?.killed === true || record?.exitCode !== 0
   if (!failed) return 'done'
-  if (backupRanLater(record, lane, records) || succeededLater(record, records)) return 'done'
+  if (succeededLater(record, records)) return 'done'
   return 'blocked'
 }
 
-export function laneTaskIssues({ openRuns = [], records = [], agents = [], briefs = [] } = {}) {
+export function laneTaskIssues({ openRuns = [], records = [], recoveryRecords, agents = [], briefs = [] } = {}) {
   const titles = new Map()
   for (const brief of Array.isArray(briefs) ? briefs : []) {
     if (brief && typeof brief.id === 'string' && typeof brief.title === 'string') titles.set(brief.id, brief.title)
@@ -128,7 +136,7 @@ export function laneTaskIssues({ openRuns = [], records = [], agents = [], brief
         project,
         briefs: record?.briefs,
         task: record?.task,
-        status: statusFor(record, lane, list),
+        status: statusFor(record, recoveryRecords ?? list),
         agents,
         titles,
       })
@@ -234,12 +242,11 @@ export function laneTaskState(options = {}) {
   }
 }
 
-export function readRecentLaneRecords(file, limit = LANE_TASK_RECORDS) {
+export function recentLaneRecords(records, limit = LANE_TASK_RECORDS) {
   const size = Number.isInteger(limit) && limit > 0 ? limit : LANE_TASK_RECORDS
-  const records = readAllRunRecords(file).filter(
+  return records.filter(
     (record) => record && typeof record === 'object' && !Array.isArray(record) && typeof record.lane === 'string'
-  )
-  return records.slice(-size).reverse()
+  ).slice(-size).reverse()
 }
 
 export function readLaneBriefs(folder = REPO_ROOT) {
