@@ -240,7 +240,6 @@ export default function RepositoryPanel({ client = null, live = false, project =
                 placeholder="Filter branches"
                 onChange={(event) => {
                   setFilter(event.target.value)
-                  setShowAll(false)
                 }}
               />
             </label>

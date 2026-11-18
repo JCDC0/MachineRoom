@@ -478,7 +478,7 @@ describe('the Repository section', () => {
     })
   })
 
-  it('folds the list again when the filter is cleared', async () => {
+  it('keeps the whole list when the filter is cleared after Show all', async () => {
     const branches = Array.from({ length: 199 }, (_, index) => ({
       name: `branch-${String(index).padStart(3, '0')}`,
       current: index === 0,
@@ -494,6 +494,30 @@ describe('the Repository section', () => {
       await settle()
       expect(container.querySelectorAll('.mr-repo-row')).toHaveLength(199)
 
+      await type(root, container.querySelector('.mr-repo-filter').querySelector('input'), 'branch-01')
+      await settle()
+      expect(container.querySelectorAll('.mr-repo-row')).toHaveLength(10)
+
+      await type(root, container.querySelector('.mr-repo-filter').querySelector('input'), '')
+      await settle()
+      expect(container.querySelectorAll('.mr-repo-row')).toHaveLength(199)
+      expect(buttonWithText(container, 'Show all 199 branches')).toBeNull()
+      expect(container.querySelector('.mr-repo-count')).toBeNull()
+    })
+  })
+
+  it('folds the list when the filter is cleared without Show all', async () => {
+    const branches = Array.from({ length: 199 }, (_, index) => ({
+      name: `branch-${String(index).padStart(3, '0')}`,
+      current: index === 0,
+      worktree: false,
+      ahead: 0,
+      behind: 0,
+    }))
+    const client = makeClient(gitState({ branches }))
+
+    await withDom(async ({ container, root }) => {
+      await mount(root, { client, live: true, project: 'C:\\work\\demo' })
       await type(root, container.querySelector('.mr-repo-filter').querySelector('input'), 'branch-01')
       await settle()
       expect(container.querySelectorAll('.mr-repo-row')).toHaveLength(10)
