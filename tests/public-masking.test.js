@@ -96,6 +96,21 @@ it('masks public run records and attention without changing the disk record', as
   } finally { api.stopAll() }
 })
 
+it('masks run task titles in the issues response', async () => {
+  const dir = temp()
+  const record = { lane: 'test', project: dir, log: 'test-project-20260101-000000.log', exitCode: 1, task: sample }
+  writeFileSync(join(dir, 'runs.jsonl'), `${JSON.stringify(record)}\n`)
+  let answer
+  const api = createRunsApi({ projectRoot: dir, runsFolder: dir, sendJson: (_req, _res, _status, body) => { answer = body } })
+  try {
+    for (const query of ['', '?status=blocked']) {
+      await api.handle({ method: 'GET', headers: {} }, {}, new URL(`http://localhost/api/control/issues${query}`))
+      expect(answer).toHaveLength(1)
+      safe(answer[0].title)
+    }
+  } finally { api.stopAll() }
+})
+
 it('returns only the newest twenty records for a lane', async () => {
   const dir = temp()
   const rows = Array.from({ length: 25 }, (_, index) => ({ lane: 'test', project: dir, startedAt: `2026-01-${String(index + 1).padStart(2, '0')}T00:00:00Z`, exitCode: 0 }))

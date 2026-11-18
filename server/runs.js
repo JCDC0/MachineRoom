@@ -1903,7 +1903,8 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
         recoveryRecords: records,
         briefs: readLaneBriefs(),
       })
-      sendJson(req, res, 200, status ? issues.filter((issue) => issue.status === status) : issues)
+      const visible = status ? issues.filter((issue) => issue.status === status) : issues
+      sendJson(req, res, 200, visible.map(maskRecordCommits))
       return true
     }
     if (path === '/api/control/runs/stop') {

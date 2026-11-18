@@ -279,7 +279,7 @@ describe('attentionItems', () => {
     expect(attentionItems([{ ...failure, briefs: [], task: 'Fix it' }, { ...success, briefs: [], task: 'Fix it' }])).toEqual([])
   })
 
-  it('keeps the newest unresolved Plan or edit failure per lane', () => {
+  it('keeps the newest unresolved failure per lane and mode', () => {
     const editFailure = { lane: 'codex', startedAt: 1, briefs: ['P1'], exitCode: 1 }
     const planSuccess = { lane: 'codex', startedAt: 2, briefs: ['P1'], mode: 'plan', exitCode: 0 }
     const planFailure = { ...planSuccess, startedAt: 3, briefs: ['P2'], exitCode: 1 }
@@ -288,7 +288,7 @@ describe('attentionItems', () => {
     const planItem = { lane: 'codex', startedAt: 3, text: 'codex failed on P2' }
 
     expect(attentionItems([editFailure, planSuccess])).toEqual([editItem])
-    expect(attentionItems([editFailure, planSuccess, planFailure])).toEqual([planItem])
+    expect(attentionItems([editFailure, planSuccess, planFailure])).toEqual([planItem, editItem])
     expect(attentionItems([editFailure, planFailure, { ...planSuccess, startedAt: 4, briefs: ['P2'] }])).toEqual([editItem])
     expect(attentionItems([editFailure, planFailure, editSuccess])).toEqual([planItem])
     expect(attentionItems([{ ...editFailure, failover: { to: 'agy' } }, { ...planSuccess, lane: 'agy' }])).toEqual([editItem])

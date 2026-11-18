@@ -123,10 +123,5 @@ export function attentionItems(records) {
     }
     return right.index - left.index
   })
-  const seen = new Set()
-  return items.flatMap(({ lane, startedAt, text: line }) => {
-    if (seen.has(lane)) return []
-    seen.add(lane)
-    return [{ lane, startedAt, text: line }]
-  })
+  return items.map(({ lane, startedAt, text }) => ({ lane, startedAt, text }))
 }
