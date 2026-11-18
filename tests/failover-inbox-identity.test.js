@@ -165,11 +165,11 @@ function laneGet(url, ticket) {
   return getJson(`${url}/api/orchestrator/messages`, { headers: { 'X-MachineRoom-Lane': ticket } })
 }
 
-function claimBackup(url, ticket, lane) {
+function claimBackup(url, ticket, lane, startedAt) {
   return getJson(`${url}/api/orchestrator/failover`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', 'X-MachineRoom-Lane': ticket },
-    body: JSON.stringify({ lane }),
+    body: JSON.stringify({ lane, startedAt }),
   })
 }
 
@@ -190,6 +190,19 @@ async function releaseRun(rig) {
 }
 
 describe('a failover backup in the bridge', () => {
+  it('delivers only messages for the backup start after takeover', async () => {
+    const rig = await makeBridge(makeBase())
+    const ticket = await startRun(rig, PRIMARY)
+    const primaryStart = (await getJson(`${rig.url}/api/control/runs`)).body.running.find((run) => run.lane === PRIMARY).startedAt
+    const backupStart = new Date(Date.parse(primaryStart) + 1000).toISOString()
+    expect((await claimBackup(rig.url, ticket, BACKUP, backupStart)).status).toBe(200)
+    const send = (startedAt) => pagePost(rig.url, '/api/orchestrator/messages', { to: `lane:${BACKUP}`, text: 'For this run.', startedAt })
+    expect((await send(primaryStart)).status).toBe(409)
+    expect((await send(backupStart)).status).toBe(202)
+    expect((await laneGet(rig.url, ticket)).body.messages.map((message) => message.text)).toEqual(['For this run.'])
+    await releaseRun(rig)
+  })
+
   it('sends its messages as lane:BACKUP', async () => {
     const rig = await makeBridge(makeBase())
     const ticket = await startRun(rig, PRIMARY)
@@ -481,7 +494,7 @@ describe('a failover run that claims its ticket', () => {
       const claim = requests.find((entry) => entry.method === 'POST' && entry.path === '/api/orchestrator/failover')
       expect(claim).toBeTruthy()
       expect(claim.ticket).toBe(TICKET_VALUE)
-      expect(JSON.parse(claim.body)).toEqual({ lane: BACKUP })
+      expect(JSON.parse(claim.body)).toEqual({ lane: BACKUP, startedAt: readLines(join(runs, 'runs.jsonl')).find((entry) => entry.lane === BACKUP).startedAt })
       expect(requests.filter((entry) => entry.path === '/api/orchestrator/failover')).toHaveLength(1)
       expect(readFileSync(join(backup, 'note.txt'), 'utf8')).toBe('done\n')
     } finally {
