@@ -11,6 +11,7 @@ import { commitAuthorFor, formatQueueSummary, parseQueue, parseQueueArgs, runQue
 import { maskKeys } from '../src/briefs/audit.js'
 import { briefProblems, briefWorktreeProblems, checkCommandLines, checkCommandProblem, childEnvironment, commandFor, continueFromProblem, createLaneLog, DEFAULT_MINUTES, fallbackProblem, failoverKind, filterRunsSince, formatOutcomes, formatStats, formatSummary, interruptSenderFrom, laneCommandProblem, laneLockLog, laneLockStartedAt, laneLockText, laneModeProblem, laneStats, laneStopProblem, laneWithOverrides, limitedFor, maskProfilePaths, maskedQueueTasks, ORCHESTRATOR_LANE_PROBLEM, parseRunArgs, projectProblems, projectRunGit, readinessLine, retryStartProblem, runListLine, runRecord, sessionToolLines, splitCheckCommand, startFailureText, summarizeRun, unattendedPrompt, worktreeFor, WORKTREES_FOLDER } from '../src/briefs/run.js'
 import { outcomeTable } from '../server/outcomes.js'
+import { claudeProjectSlug } from '../server/claude-sessions.js'
 import { codexThreadId, findCodexRollout, quotaForRun, readCodexQuota } from '../server/codex-rollout.js'
 export { codexThreadId, quotaForRun, readCodexQuota } from '../server/codex-rollout.js'
 import { readMainSubjectsSync } from '../server/runs.js'
@@ -1537,6 +1538,20 @@ function recoverLostRuns(file = runsFile()) {
   return saved ? readRecords(file) : records
 }
 
+function claudeResumeId(folder, name, worktree) {
+  try {
+    const meta = JSON.parse(readFileSync(join(folder, `${name}.meta.json`), 'utf8'))
+    const id = meta?.sessionId
+    if (typeof id !== 'string' || !/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(id)) return ''
+    const home = (process.platform === 'win32' ? process.env.USERPROFILE : process.env.HOME) || homedir()
+    const slug = claudeProjectSlug(realPath(worktree))
+    const file = join(home, '.claude', 'projects', slug, `${id}.jsonl`)
+    return lstatSync(file, { throwIfNoEntry: false })?.isFile() ? id : ''
+  } catch {
+    return ''
+  }
+}
+
 function interruptFileText(folder, name) {
   const target = typeof name === 'string' ? name.trim() : ''
   if (!target) return { text: '', sender: '' }
@@ -2198,10 +2213,12 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
   }
   const runsDir = options?.runs || (logPath ? dirname(logPath) : runsFolder())
   const continueFrom = typeof options?.continueFrom === 'string' ? options.continueFrom.trim() : ''
-  let effectivePrompt = prompt
+  let fullPrompt = prompt
   let continuedBase = ''
   let continuedBranch = ''
+  let interruptText = ''
   let interruptedBy = ''
+  let resumedSessionId = ''
   if (continueFrom !== '') {
     const record = continuationRecord(continueFrom, join(runsDir, 'runs.jsonl'))
     if (record.lane !== options.lane) throw new Error('The interrupted run has a different lane.')
@@ -2222,9 +2239,13 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
       continuedBranch = currentBranch
     }
     const interrupt = interruptFileText(runsDir, continueFrom)
+    interruptText = interrupt.text
     interruptedBy = interrupt.sender
-    if (options?.retried !== true && interrupt.text !== '') {
-      effectivePrompt = `${prompt}\n\n${interrupt.text}`
+    if (options?.retried !== true && interruptText !== '') {
+      fullPrompt = `${prompt}\n\n${interruptText}`
+    }
+    if (lane.cli.harness === 'claude' && (!queue || queue.index === (record.queueIndex ?? 1))) {
+      resumedSessionId = claudeResumeId(runsDir, continueFrom, project || lane.worktree)
     }
   }
   let start = null
@@ -2248,7 +2269,8 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
   }
 
   try {
-    const sessionId = randomUUID()
+    const sessionId = resumedSessionId || randomUUID()
+    const effectivePrompt = resumedSessionId ? (interruptText || 'Continue your brief from where you stopped.') : fullPrompt
     const codex = laneRunProgram(lane, { folder })
     const command = commandFor({
       lane: codex.lane,
@@ -2256,10 +2278,11 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
       env: process.env,
       usageFile,
       title: name,
-      sessionId,
+      sessionId: resumedSessionId ? undefined : sessionId,
       mcpConfig: mcpConfigPath,
       ...(project ? { cwd: project } : {}),
     })
+    if (resumedSessionId) command.args.push('--resume', resumedSessionId)
     const startedBy = options.startedBy ? null : sessionStartedBy(process.env)
     const startedAt = Number.isFinite(Number(givenStartedAt)) && Number(givenStartedAt) > 0 ? Number(givenStartedAt) : Date.now()
     const meta = {
@@ -2270,6 +2293,7 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
       ...(continueFrom ? { continues: continueFrom } : {}),
       ...(failoverFrom ? { failoverFrom } : {}),
     }
+    if (resumedSessionId) meta.resumed = true
     if (project) meta.project = project
     if (queue) {
       meta.queue = queue.branch
@@ -2645,7 +2669,7 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
       const retryName = `${name}-retry`
       return await startLane({
         options: { ...options, retried: true },
-        lane, lanes, wanted, prompt: effectivePrompt,
+        lane, lanes, wanted, prompt: fullPrompt,
         logPath: join(dirname(logPath), `${retryName}.log`),
         usageFile: join(dirname(usageFile), `${retryName}.usage.json`),
         name: retryName, project, task, queue, lockPath, projectBranch, deferRecord, base: runBase, openLog, branchSuffix, failoverFrom, promptFor, onStart, laneTicket,
