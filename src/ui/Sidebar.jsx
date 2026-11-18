@@ -818,7 +818,6 @@ export function Sidebar({ client = null, live = false, project = '', tasks = nul
   function renderProjects() {
     return (
       <section className="mr-side-projects" aria-label="Projects">
-        <RepositoryPanel client={client} live={connected} project={project} />
         {renderProjectsHead()}
         {!projects ? (
           <p className="mr-side-note">{readError ? 'Projects are not available.' : 'Loading projects...'}</p>
@@ -859,6 +858,7 @@ export function Sidebar({ client = null, live = false, project = '', tasks = nul
             <p className="mr-side-note">Projects and conversations appear when the room runs live.</p>
           </div>
         )}
+        <RepositoryPanel client={client} live={connected} project={project} />
       </section>
     )
   }
