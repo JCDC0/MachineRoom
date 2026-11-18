@@ -6,6 +6,7 @@ import Composer, { RecipientChip } from './Composer.jsx'
 import { Chip, Menu } from './controls.jsx'
 import Markdown from './markdown.jsx'
 import { useLogFollow } from './logScroll.js'
+import { agentColor } from './orchestratorChat.js'
 import { runStartLine } from './panels/runs.js'
 import {
   foldPrompt,
@@ -220,6 +221,7 @@ export default function LaneConversation({
   const emptyRunLabel = historyFailed ? 'Run history unavailable' : historyLoading ? 'Reading runs' : 'No runs'
   const options = useMemo(() => runOptions(runs, lane, { liveRuns, lanes }), [runs, lane, liveRuns, lanes])
   const currentRun = options.find((run) => run.startedAt === selected) ?? null
+  const colour = agentColor(lane, lanes)
   const running = conversation.data !== null && (
     typeof conversation.data?.running === 'boolean' ? conversation.data.running : currentRun?.running === true
   )
@@ -585,7 +587,10 @@ export default function LaneConversation({
   return (
     <aside className={`mr-orch mr-lane-conv${inline ? ' is-inline' : ''}`} aria-label={`${label} conversation`}>
       <header className="mr-lane-conv-head">
-        <p className="mr-lane-conv-crumb mono" title={breadcrumb}>{breadcrumb}</p>
+        <p className="mr-lane-conv-crumb mono" title={breadcrumb}>
+          <span className="mr-agent-dot" aria-hidden="true" style={{ background: colour }} />
+          {breadcrumb}
+        </p>
         <Chip label="Back" onClick={onBack} />
       </header>
       {isFinishedPlan && (

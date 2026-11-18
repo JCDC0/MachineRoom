@@ -1394,11 +1394,8 @@ export default function OrchestratorChat({
                   const displayed = isLong && !unfolded ? parts.slice(0, 3).join('\n') : line.text
                   const senderKey = line.agent?.from || (line.text.startsWith('Orchestrator') ? 'orchestrator' : line.text.split(' to ')[0].trim())
                   return (
-                    <div
-                      key={line.id}
-                      className="mr-orch-line is-agent mono"
-                      style={{ color: agentColor(senderKey, lanesData) }}
-                    >
+                    <div key={line.id} className="mr-orch-line is-agent mono">
+                      <span className="mr-agent-dot" aria-hidden="true" style={{ background: agentColor(senderKey, lanesData) }} />
                       <div className="mr-orch-blocks"><Markdown text={displayed} /></div>
                       {isLong ? (
                         <Chip
@@ -1419,7 +1416,10 @@ export default function OrchestratorChat({
                   return (
                     <div key={line.id} className="mr-orch-line is-room is-run-notice">
                       <div className="mr-orch-run-summary mono">
-                        <span style={{ color: agentColor(notice.lane, lanesData) }}>{notice.lane}</span>
+                        <span>
+                          <span className="mr-agent-dot" aria-hidden="true" style={{ background: agentColor(notice.lane, lanesData) }} />
+                          {notice.lane}
+                        </span>
                         {notice.briefs && <span>{notice.briefs}</span>}
                         <span className={`mr-orch-run-status is-${tone}`}>{notice.status}</span>
                         {notice.subject && <span className="mr-orch-run-subject" title={notice.subject}>{notice.subject}</span>}
@@ -1435,7 +1435,8 @@ export default function OrchestratorChat({
                     {line.from === 'room' ? <span className="mr-orch-who mono">room</span> : null}
                     {line.fromMain ? <span className="mr-orch-who mono">from main</span> : null}
                     {line.from === 'lane' ? (
-                      <span className="mr-orch-who mono" style={{ color: agentColor(line.lane, lanesData) }}>
+                      <span className="mr-orch-who mono">
+                        <span className="mr-agent-dot" aria-hidden="true" style={{ background: agentColor(line.lane, lanesData) }} />
                         {line.laneName || line.lane}
                       </span>
                     ) : null}

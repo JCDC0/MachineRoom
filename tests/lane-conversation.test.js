@@ -221,6 +221,9 @@ describe('the lane conversation view', () => {
       expect(line.style.color).toBeUndefined()
       expect(line.className).not.toContain('is-failed')
       expect(line.className).not.toContain('is-working')
+      const dot = container.querySelector('.mr-agent-dot')
+      expect(dot.getAttribute('aria-hidden')).toBe('true')
+      expect(dot.style.background).toBe('#ff8c1a')
     })
   })
 

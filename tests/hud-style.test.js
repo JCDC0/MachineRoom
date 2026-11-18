@@ -318,10 +318,10 @@ describe('HUD concept style structure', () => {
       )
       expect(html).toContain('class="hud-band"')
       expect(html).toContain('class="hud-band-project">/agent-sandbox')
-      expect(html).toContain('class="hud-band-v"')
-      expect(html).toContain('mr-menu-icon')
+      expect(html).not.toContain('hud-band-v')
+      expect(html).not.toContain('role="listbox"')
       expect(html).toContain('hud-band-title">Main')
-      expect(html).toContain('aria-label="Orchestrator conversations, showing Main"')
+      expect(html).toContain('aria-label="Main conversation, show the chat"')
       expect(html).not.toContain('class="hud-header-strip"')
     } finally {
       if (savedWindow === undefined) delete globalThis.window
