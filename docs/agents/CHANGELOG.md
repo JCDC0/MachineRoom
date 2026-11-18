@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Needs you dismisses by lane, start time and text, Reviews keeps a lane that is selected or mid-action visible, and Settings tabs keep their drafts (P565, review 57).
 - Sonnet review.
 - Sonnet.
 - Sonnet did P559 in one run.

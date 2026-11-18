@@ -163,8 +163,8 @@ describe('attentionItems', () => {
     ])
 
     expect(items).toEqual([
-      { lane: 'direct', startedAt: '2026-11-16T10:20:00.000Z', text: 'direct failed on P469' },
-      { lane: 'agy', startedAt: '2026-11-16T10:15:00.000Z', text: 'agy failed on P468' },
+      { lane: 'direct', startedAt: '2026-11-16T10:20:00.000Z', text: 'direct stopped on P469: the same call failed 5 times' },
+      { lane: 'agy', startedAt: '2026-11-16T10:15:00.000Z', text: 'agy could not start P468' },
       { lane: 'claude', startedAt: '2026-11-16T10:10:00.000Z', text: 'claude failed on Fix the parser' },
       { lane: 'codex', startedAt: '2026-11-16T10:05:00.000Z', text: 'codex failed on P466 P467' },
       { lane: 'opencode', startedAt: '2026-11-16T10:00:00.000Z', text: 'opencode failed on P465' },
