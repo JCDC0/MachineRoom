@@ -144,7 +144,7 @@ describe('the sub form keeps its effort', () => {
       await mount(root, client)
       await chooseAction(root, container.querySelector('.mr-family-header'), 'Select lanes')
       await click(root, rowByLabel(container, 'OpenCode').querySelector('[role="switch"]'))
-      await click(root, buttonWithText(container, 'Make sub orchestrator'))
+      await click(root, container.querySelector('button[aria-label="Make sub orchestrator"]'))
 
       const form = container.querySelector('.mr-family-sub-form')
       await type(root, form.querySelector('input[aria-label="Sub orchestrator label"]'), 'High Sub')

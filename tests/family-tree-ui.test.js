@@ -210,7 +210,7 @@ function laneSwitch(container, label) {
 }
 
 describe('FamilyTree rows', () => {
-  it('shows the bridge sentence when the family read fails', async () => {
+  it('shows one muted note below Agents when the family and lane reads fail', async () => {
     const { client } = makeClient()
     client.family = async () => {
       throw new Error('The lane file is missing.')
@@ -220,8 +220,34 @@ describe('FamilyTree rows', () => {
     }
     await withDom(async ({ container, root }) => {
       await mount(root, client)
-      expect(container.textContent).toContain('The lane file is missing.')
-      expect(container.querySelector('.mr-side-count').textContent).toBe('Lanes failed to load.')
+      const notes = container.querySelector('.mr-family-body').querySelectorAll('.mr-side-note')
+      expect(notes.map((note) => note.textContent)).toEqual(['Could not read the agents list.'])
+      expect(notes[0].getAttribute('title')).toBe('The lane file is missing.')
+      expect(container.querySelector('.mr-side-count')).toBeNull()
+      expect(container.querySelector('.mr-side-error')).toBeNull()
+    })
+  })
+
+  it('shows a failed refresh below Agents and clears the note on recovery', async () => {
+    const { client } = makeClient()
+    const readLanes = client.lanes
+    const listeners = new Set()
+    client.subscribe = (listener) => {
+      listeners.add(listener)
+      return () => listeners.delete(listener)
+    }
+    const notify = () => listeners.forEach((listener) => listener({ topic: 'family' }))
+    await withDom(async ({ container, root }) => {
+      await mount(root, client)
+      client.lanes = () => { throw new Error('not found') }
+      await act(async () => notify())
+      const body = container.querySelector('.mr-family-body')
+      expect(body.querySelector('.mr-side-note').textContent).toBe('Could not read the lanes.')
+      expect(container.querySelector('.mr-side-error')).toBeNull()
+      expect(container.querySelector('.mr-side-count').textContent).toBe('1 of 3 working')
+      client.lanes = readLanes
+      await act(async () => notify())
+      expect(body.querySelector('.mr-side-note')).toBeNull()
     })
   })
 
@@ -477,12 +503,15 @@ describe('FamilyTree rows', () => {
       expect(opencode.getAttribute('aria-checked')).toBe('true')
       expect(claude.getAttribute('aria-checked')).toBe('true')
       expect(container.textContent).toContain('2 selected')
-      expect(buttonWithText(container, 'Make sub orchestrator').hasAttribute('disabled')).toBe(false)
+      const makeSub = container.querySelector('button[aria-label="Make sub orchestrator"]')
+      expect(makeSub.textContent).toBe('Make sub')
+      expect(makeSub.querySelector('.ui-chip-chevron')).toBeNull()
+      expect(makeSub.hasAttribute('disabled')).toBe(false)
 
       await click(root, buttonWithText(container, 'Clear'))
       expect(container.textContent).toContain('0 selected')
       expect(opencode.getAttribute('aria-checked')).toBe('false')
-      expect(buttonWithText(container, 'Make sub orchestrator').hasAttribute('disabled')).toBe(true)
+      expect(makeSub.hasAttribute('disabled')).toBe(true)
       await act(async () => {
         dom.window.dispatchEvent({ type: 'keydown', key: 'Escape' })
       })
@@ -520,7 +549,7 @@ describe('FamilyTree rows', () => {
       await click(root, container.querySelector('.mr-family-more-head'))
       await chooseAction(root, container.querySelector('.mr-family-header'), 'Select lanes')
       await click(root, laneSwitch(container, 'OpenCode 2'))
-      await click(root, buttonWithText(container, 'Make sub orchestrator'))
+      await click(root, container.querySelector('button[aria-label="Make sub orchestrator"]'))
       const form = container.querySelector('.mr-family-sub-form')
       const label = form.querySelector('input[aria-label="Sub orchestrator label"]')
       await act(async () => {

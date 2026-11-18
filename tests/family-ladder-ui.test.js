@@ -144,9 +144,7 @@ describe('FamilyTree ladder changes', () => {
       for (const label of ['OpenCode 2', 'OpenCode']) {
         await click(root, rowByLabel(container, label).querySelector('[role="switch"]'))
       }
-      await act(async () => {
-        buttonWithText(container, 'Make sub orchestrator').click()
-      })
+      await click(root, container.querySelector('button[aria-label="Make sub orchestrator"]'))
       const form = container.querySelector('.mr-family-sub-form')
       await act(async () => {
         form.dispatchEvent({ type: 'submit', bubbles: true, cancelable: true })
@@ -242,9 +240,7 @@ describe('Sub form harnesses from orchestrators', () => {
       await settle()
       await chooseAction(root, container.querySelector('.mr-family-header'), 'Select lanes')
       await click(root, rowByLabel(container, 'OpenCode').querySelector('[role="switch"]'))
-      await act(async () => {
-        buttonWithText(container, 'Make sub orchestrator').click()
-      })
+      await click(root, container.querySelector('button[aria-label="Make sub orchestrator"]'))
       const form = container.querySelector('.mr-family-sub-form')
       const harnessSelect = form.querySelector('select[aria-label="Sub orchestrator harness"]')
       const keys = harnessSelect.querySelectorAll('option').map((option) => option.value ?? option.getAttribute('value'))

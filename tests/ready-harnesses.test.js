@@ -9,7 +9,7 @@ import {
   harnessGroups,
   harnessReady,
 } from '../src/ui/family.js'
-import { buttonWithText, settle, withDom } from './helpers/uiDom.js'
+import { buttonWithText, click, settle, withDom } from './helpers/uiDom.js'
 
 const NODES = [
   {
@@ -123,6 +123,11 @@ function makeClient({ harnesses = HARNESSES, nodes = NODES, orchestrators = ORCH
   }
 }
 
+async function chooseAction(root, row, label) {
+  await click(root, row.querySelector('[aria-haspopup="menu"]'))
+  await click(root, buttonWithText(row.ownerDocument.body.querySelector('[role="menu"]'), label))
+}
+
 function rowByLabel(container, label) {
   return (
     container.querySelectorAll('.mr-family-node').find((row) => {
@@ -192,10 +197,7 @@ describe('the add-agent pills', () => {
         root.render(createElement(FamilyTree, { client }))
       })
       await settle()
-      const add = rowByLabel(container, 'Orchestrator').querySelector('.mr-family-add')
-      await act(async () => {
-        add.click()
-      })
+      await chooseAction(root, rowByLabel(container, 'Orchestrator'), 'Add a lane under this…')
       expect(pillLabels(container)).toEqual(['Claude Code', 'OpenCode'])
     })
   })
@@ -213,10 +215,7 @@ describe('the add-agent pills', () => {
         root.render(createElement(FamilyTree, { client }))
       })
       await settle()
-      const add = rowByLabel(container, 'Orchestrator').querySelector('.mr-family-add')
-      await act(async () => {
-        add.click()
-      })
+      await chooseAction(root, rowByLabel(container, 'Orchestrator'), 'Add a lane under this…')
       expect(pillLabels(container)).toEqual(['Claude Code'])
     })
   })
@@ -230,14 +229,7 @@ describe('the sub form and the team form', () => {
         root.render(createElement(FamilyTree, { client }))
       })
       await settle()
-      const check = rowByLabel(container, 'OpenCode').querySelector('.mr-family-check')
-      await act(async () => {
-        check.checked = true
-        check.click()
-      })
-      await act(async () => {
-        buttonWithText(container, 'Add sub orchestrator').click()
-      })
+      await chooseAction(root, rowByLabel(container, 'OpenCode'), 'Add sub orchestrator…')
       const select = container.querySelector('select[aria-label="Sub orchestrator harness"]')
       expect(optionValues(select)).toEqual(['claude', 'opencode'])
     })
@@ -306,10 +298,7 @@ describe('a picker with nothing to offer', () => {
         root.render(createElement(FamilyTree, { client }))
       })
       await settle()
-      const add = rowByLabel(container, 'Orchestrator').querySelector('.mr-family-add')
-      await act(async () => {
-        add.click()
-      })
+      await chooseAction(root, rowByLabel(container, 'Orchestrator'), 'Add a lane under this…')
       const form = container.querySelector('.mr-family-child')
       expect(form.textContent).toContain(NO_READY_HARNESS)
       expect(isOff(buttonWithText(form, 'Create'))).toBe(true)
@@ -323,14 +312,7 @@ describe('a picker with nothing to offer', () => {
         root.render(createElement(FamilyTree, { client }))
       })
       await settle()
-      const check = rowByLabel(container, 'OpenCode').querySelector('.mr-family-check')
-      await act(async () => {
-        check.checked = true
-        check.click()
-      })
-      await act(async () => {
-        buttonWithText(container, 'Add sub orchestrator').click()
-      })
+      await chooseAction(root, rowByLabel(container, 'OpenCode'), 'Add sub orchestrator…')
       const form = container.querySelector('.mr-family-sub-form')
       expect(form.textContent).toContain(NO_READY_HARNESS)
       expect(isOff(buttonWithText(form, 'Create'))).toBe(true)

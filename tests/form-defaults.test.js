@@ -139,6 +139,11 @@ function makeClient({
   return { client, calls }
 }
 
+async function chooseAction(root, row, label) {
+  await click(root, row.querySelector('[aria-haspopup="menu"]'))
+  await click(root, buttonWithText(row.ownerDocument.body.querySelector('[role="menu"]'), label))
+}
+
 function rowByLabel(container, label) {
   return (
     container
@@ -166,7 +171,7 @@ describe('form defaults and row model names', () => {
     const { client: childClient, calls: childCalls } = makeClient()
     await withDom(async ({ container, root }) => {
       await mountTree(root, childClient)
-      await click(root, rowByLabel(container, 'Orchestrator').querySelector('.mr-family-add'))
+      await chooseAction(root, rowByLabel(container, 'Orchestrator'), 'Add a lane under this…')
       const form = container.querySelector('.mr-family-child')
       const trigger = form.querySelector('.mr-picker-trigger[aria-label="New agent model"]')
       expect(trigger.textContent).toContain('Harness default')
@@ -188,12 +193,7 @@ describe('form defaults and row model names', () => {
     const { client: subClient, calls: subCalls } = makeClient()
     await withDom(async ({ container, root }) => {
       await mountTree(root, subClient)
-      const check = rowByLabel(container, 'Coder').querySelector('.mr-family-check')
-      await act(async () => {
-        check.checked = true
-        check.click()
-      })
-      await click(root, buttonWithText(container, 'Add sub orchestrator'))
+      await chooseAction(root, rowByLabel(container, 'Coder'), 'Add sub orchestrator…')
       const form = container.querySelector('.mr-family-sub-form')
       const trigger = form.querySelector('.mr-picker-trigger[aria-label="Sub orchestrator model"]')
       expect(trigger.textContent).toContain('Harness default')
@@ -289,7 +289,7 @@ describe('form defaults and row model names', () => {
     const { client: childClient } = makeClient()
     await withDom(async ({ container, root }) => {
       await mountTree(root, childClient)
-      await click(root, rowByLabel(container, 'Orchestrator').querySelector('.mr-family-add'))
+      await chooseAction(root, rowByLabel(container, 'Orchestrator'), 'Add a lane under this…')
       const form = container.querySelector('.mr-family-child')
       const trigger = form.querySelector('.mr-picker-trigger[aria-label="New agent model"]')
 
@@ -319,12 +319,7 @@ describe('form defaults and row model names', () => {
     const { client: subClient, calls: subCalls } = makeClient()
     await withDom(async ({ container, root }) => {
       await mountTree(root, subClient)
-      const check = rowByLabel(container, 'Coder').querySelector('.mr-family-check')
-      await act(async () => {
-        check.checked = true
-        check.click()
-      })
-      await click(root, buttonWithText(container, 'Add sub orchestrator'))
+      await chooseAction(root, rowByLabel(container, 'Coder'), 'Add sub orchestrator…')
       const form = container.querySelector('.mr-family-sub-form')
       const trigger = form.querySelector('.mr-picker-trigger[aria-label="Sub orchestrator model"]')
 
@@ -406,25 +401,25 @@ describe('form defaults and row model names', () => {
     })
     await withDom(async ({ container, root }) => {
       await mountTree(root, modelsClient)
-      expect(rowByLabel(container, 'Orchestrator').querySelector('.mr-family-meta').textContent).toBe(
-        'claude · Claude Opus 5.5 · high'
+      expect(rowByLabel(container, 'Orchestrator').querySelector('.ui-row-detail').textContent).toBe(
+        'claude · Claude Opus 5.5'
       )
-      expect(rowByLabel(container, 'Helper').querySelector('.mr-family-meta').textContent).toBe(
-        'claude · claude-opus-5-5 · default'
+      expect(rowByLabel(container, 'Helper').querySelector('.ui-row-detail').textContent).toBe(
+        'claude · claude-opus-5-5'
       )
     })
 
     const { client: harnessesClient } = makeClient({ models: { models: [] } })
     await withDom(async ({ container, root }) => {
       await mountTree(root, harnessesClient)
-      expect(rowByLabel(container, 'Orchestrator').querySelector('.mr-family-meta').textContent).toBe(
-        'claude · Claude Opus 5.5 · high'
+      expect(rowByLabel(container, 'Orchestrator').querySelector('.ui-row-detail').textContent).toBe(
+        'claude · Claude Opus 5.5'
       )
-      expect(rowByLabel(container, 'Coder').querySelector('.mr-family-meta').textContent).toBe(
-        'opencode · DeepSeek V4.1 Flash · max'
+      expect(rowByLabel(container, 'Coder').querySelector('.ui-row-detail').textContent).toBe(
+        'opencode · DeepSeek V4.1 Flash'
       )
-      expect(rowByLabel(container, 'Helper').querySelector('.mr-family-meta').textContent).toBe(
-        'claude · claude-opus-5-5 · default'
+      expect(rowByLabel(container, 'Helper').querySelector('.ui-row-detail').textContent).toBe(
+        'claude · claude-opus-5-5'
       )
     })
   })

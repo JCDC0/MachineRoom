@@ -99,6 +99,11 @@ async function mount(root, client) {
   await act(async () => {})
 }
 
+async function chooseAction(root, row, label) {
+  await click(root, row.querySelector('[aria-haspopup="menu"]'))
+  await click(root, buttonWithText(row.ownerDocument.body.querySelector('[role="menu"]'), label))
+}
+
 function rowByLabel(container, label) {
   return (
     container.querySelectorAll('.mr-family-node').find((row) => {
@@ -117,7 +122,7 @@ describe('a harness pick keeps Harness default', () => {
     const { client } = makeClient()
     await withDom(async ({ container, root }) => {
       await mount(root, client)
-      await click(root, rowByLabel(container, 'Orchestrator').querySelector('.mr-family-add'))
+      await chooseAction(root, rowByLabel(container, 'Orchestrator'), 'Add a lane under this…')
       const form = container.querySelector('.mr-family-child')
 
       await click(root, harnessPill(form, 'Claude Code'))
@@ -132,12 +137,7 @@ describe('a harness pick keeps Harness default', () => {
     const { client } = makeClient()
     await withDom(async ({ container, root }) => {
       await mount(root, client)
-      const check = rowByLabel(container, 'OpenCode').querySelector('.mr-family-check')
-      await act(async () => {
-        check.checked = true
-        check.click()
-      })
-      await click(root, buttonWithText(container, 'Add sub orchestrator'))
+      await chooseAction(root, rowByLabel(container, 'OpenCode'), 'Add sub orchestrator…')
       const form = container.querySelector('.mr-family-sub-form')
       const picker = form.querySelector('select[aria-label="Sub orchestrator harness"]')
 
@@ -156,7 +156,7 @@ describe('a harness pick keeps Harness default', () => {
     ])
     await withDom(async ({ container, root }) => {
       await mount(root, client)
-      await click(root, rowByLabel(container, 'Orchestrator').querySelector('.mr-family-add'))
+      await chooseAction(root, rowByLabel(container, 'Orchestrator'), 'Add a lane under this…')
       const form = container.querySelector('.mr-family-child')
 
       await click(root, harnessPill(form, 'Direct API'))

@@ -685,7 +685,7 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
   const [harnesses, setHarnesses] = useState(null)
   const [models, setModels] = useState(null)
   const [backups, setBackups] = useState(null)
-  const [readError, setReadError] = useState('')
+  const [readError, setReadError] = useState(null)
   const [actionError, setActionError] = useState('')
   const [open, setOpen] = useState(true)
   const [moreOpen, setMoreOpen] = useState(false)
@@ -717,80 +717,31 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
   useEffect(() => {
     if (!canFamily) return undefined
     let active = true
-    setReadError('')
-    const jobs = [
-      ['family', () => client.family()],
-      ['lanes', () => client.lanes?.()],
-      ['backups', () => client.laneBackups?.()],
-      ['harnesses', () => client.harnesses?.()],
-      ['models', () => client.models?.()],
-      ['orchestrators', () => client.orchestrators?.()],
-    ]
-    const promises = jobs.map(([, read]) => {
-      try {
-        return Promise.resolve(read())
-      } catch (error) {
-        return Promise.reject(error)
-      }
-    })
-    Promise.allSettled(promises).then((results) => {
-      if (!active) return
-      const values = {}
-      results.forEach((result, index) => {
-        if (result.status === 'fulfilled' && result.value) values[jobs[index][0]] = result.value
-      })
-      if (values.family) setFamily(values.family)
-      if (values.lanes) setLanes(values.lanes)
-      if (values.backups) setBackups(values.backups)
-      if (values.harnesses) setHarnesses(values.harnesses)
-      if (values.models) setModels(values.models)
-      if (values.orchestrators) setOrchestrators(values.orchestrators)
-      const failed = results.find((result) => result.status === 'rejected')
-      if (failed) setReadError(messageOf(failed.reason))
-    })
+    setReadError(null)
+    refresh(true, () => active)
     return () => {
       active = false
     }
   }, [client, canFamily])
 
-  async function refresh() {
-    const jobs = []
-    if (typeof client?.harnesses === 'function') {
-      jobs.push(Promise.resolve(client.harnesses()).then((answer) => {
-        if (answer) setHarnesses(answer)
-      }))
-    }
-    if (typeof client?.family === 'function') {
-      jobs.push(
-        Promise.resolve(client.family()).then((answer) => {
-          if (answer) setFamily(answer)
-        })
-      )
-    }
-    if (typeof client?.lanes === 'function') {
-      jobs.push(
-        Promise.resolve(client.lanes()).then((answer) => {
-          if (answer) setLanes(answer)
-        })
-      )
-    }
-    if (typeof client?.laneBackups === 'function') {
-      jobs.push(
-        Promise.resolve(client.laneBackups()).then((answer) => {
-          if (answer && typeof answer === 'object') setBackups(answer)
-        })
-      )
-    }
-    if (typeof client?.orchestrators === 'function') {
-      jobs.push(
-        Promise.resolve(client.orchestrators()).then((answer) => {
-          if (answer) setOrchestrators(answer)
-        })
-      )
-    }
-    const results = await Promise.allSettled(jobs)
-    const failed = results.find((result) => result.status === 'rejected')
-    if (failed) setActionError(messageOf(failed.reason))
+  async function refresh(initial = false, isCurrent = () => true) {
+    const jobs = [
+      ['the agents list', () => client.family?.(), setFamily],
+      ['the lanes', () => client.lanes?.(), setLanes],
+      ['the lane backups', () => client.laneBackups?.(), setBackups],
+      ['the harnesses', () => client.harnesses?.(), setHarnesses],
+      ['the orchestrators', () => client.orchestrators?.(), setOrchestrators],
+    ]
+    if (initial) jobs.push(['the models', () => client.models?.(), setModels])
+    const results = await Promise.allSettled(jobs.map(async ([, read]) => read()))
+    if (!isCurrent()) return
+    results.forEach((result, index) => {
+      if (result.status === 'fulfilled' && result.value && typeof result.value === 'object') {
+        jobs[index][2](result.value)
+      }
+    })
+    const failed = results.findIndex((result) => result.status === 'rejected')
+    setReadError(failed === -1 ? null : { source: jobs[failed][0], detail: messageOf(results[failed].reason) })
   }
 
   async function readOrchestrators() {
@@ -966,11 +917,7 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
       ...laneRows.main.slice(at),
     ]
   }, [laneRows.main, sessionRows])
-  const countLine = family
-    ? laneCountLine(tree.nodes)
-    : readError
-      ? 'Lanes failed to load.'
-      : 'Loading lanes...'
+  const countLine = family ? laneCountLine(tree.nodes) : ''
   const mainAgent = tree.nodes.find((node) => node.kind === 'orchestrator')
   const hasLanes = tree.nodes.some((node) => node.kind === 'lane')
   const editingNode = editing ? tree.nodes.find((node) => node.id === editing) ?? null : null
@@ -2517,8 +2464,8 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
         <div className="mr-family-selection" role="group" aria-label="Selected code agents">
           <span className="mr-family-selection-count mono" role="status">{`${selectedLanes.length} selected`}</span>
           <Chip
-            label="Make sub orchestrator"
-            open={groupOpen}
+            label="Make sub"
+            aria-label="Make sub orchestrator"
             disabled={busy || selectedLanes.length === 0}
             onClick={() => openGroupForm(selectedLanes)}
           />
@@ -2676,7 +2623,7 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
           onClick={() => setOpen((value) => !value)}
         >
           <span className="mr-side-head-title mono">Agents</span>
-          <span className="mr-side-count mono">{countLine}</span>
+          {countLine ? <span className="mr-side-count mono">{countLine}</span> : null}
           <span className="ui-chip-chevron" aria-hidden="true" />
         </button>
         <span className="mr-family-header-actions">
@@ -2706,15 +2653,13 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
       </div>
       {open ? (
         <div className="mr-family-body">
+          {readError ? <p className="mr-side-note" title={readError.detail}>{`Could not read ${readError.source}.`}</p> : null}
           {actionError ? (
             <p className="mr-side-error mono" role="alert">
               {actionError}
             </p>
           ) : null}
-          {family && readError ? <p className="mr-side-note">{readError}</p> : null}
-          {!family ? (
-            <p className="mr-side-note">{readError || 'Loading agents...'}</p>
-          ) : (
+          {family ? (
             <>
               {renderRequests()}
               {renderSelection()}
@@ -2722,7 +2667,7 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
               {mainRows.map(renderRow)}
               {renderMoreLanes()}
             </>
-          )}
+          ) : readError ? null : <p className="mr-side-note">Loading agents...</p>}
         </div>
       ) : null}
       {confirm ? (

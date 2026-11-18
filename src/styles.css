@@ -9566,6 +9566,10 @@ body:has(#hud-orchestrator-chat) .lens-waiting {
   background: var(--black);
 }
 
+.mr-side:has(> .mr-side-body > .mr-side-agents) > .mr-side-error:not([role]) {
+  display: none;
+}
+
 .mr-family-header {
   display: flex;
   align-items: center;
@@ -9581,21 +9585,25 @@ body:has(#hud-orchestrator-chat) .lens-waiting {
 
 .mr-family-header-actions,
 .mr-family-row .ui-row-trailing {
-  width: 0;
   opacity: 0;
   pointer-events: none;
 }
 
 .mr-family-row .ui-row-trailing {
+  width: 0;
   margin-left: calc(-1 * var(--space));
   overflow: clip;
 }
 
 .mr-family-header-actions {
-  justify-content: flex-end;
+  flex: 0 0 auto;
 }
 
-.mr-family-header:is(:hover, :focus-within, :has([aria-haspopup='menu'][aria-expanded='true'])) .mr-family-header-actions,
+.mr-family-header:is(:hover, :focus-within, :has([aria-haspopup='menu'][aria-expanded='true'])) .mr-family-header-actions {
+  opacity: 1;
+  pointer-events: auto;
+}
+
 .mr-family-row:is(:hover, :focus-within, :has([aria-haspopup='menu'][aria-expanded='true'])) .ui-row-trailing,
 .ui-hover-anchor:focus-visible > .mr-family-row .ui-row-trailing {
   width: auto;
@@ -9603,6 +9611,10 @@ body:has(#hud-orchestrator-chat) .lens-waiting {
   opacity: 1;
   overflow: visible;
   pointer-events: auto;
+}
+
+body:has(.mr-family [aria-haspopup='menu'][aria-expanded='true']) > .ui-hovercard {
+  visibility: hidden;
 }
 
 .mr-family-row:has(.mr-family-open[aria-expanded='true']) {
@@ -10837,9 +10849,8 @@ body:has(#hud-orchestrator-chat) .lens-waiting {
 
 .mr-family-selection {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  gap: var(--space);
+  gap: calc(var(--space) / 2);
   margin: var(--space) 0;
   padding: var(--space);
   border: 1px solid var(--border-soft);
@@ -10850,6 +10861,11 @@ body:has(#hud-orchestrator-chat) .lens-waiting {
   flex: 1 1 auto;
   color: var(--text-dim);
   font-size: 11px;
+  white-space: nowrap;
+}
+
+.mr-family-selection .ui-chip {
+  padding-inline: var(--space);
 }
 
 .mr-family-sub-form {

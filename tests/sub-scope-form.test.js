@@ -164,9 +164,9 @@ async function toggleCheckbox(root, box, checked) {
 }
 
 async function openSubForm(root, container, laneLabel = 'OpenCode') {
-  const check = rowByLabel(container, laneLabel).querySelector('.mr-family-check')
-  await toggleCheckbox(root, check, true)
-  await click(root, buttonWithText(container, 'Add sub orchestrator'))
+  const row = rowByLabel(container, laneLabel)
+  await click(root, row.querySelector('[aria-haspopup="menu"]'))
+  await click(root, buttonWithText(row.ownerDocument.body.querySelector('[role="menu"]'), 'Add sub orchestrator…'))
   return container.querySelector('.mr-family-sub-form')
 }
 
