@@ -166,7 +166,7 @@ export function writeRecording({
   const toolCalls = activities.filter((activity) => activity.type === 'tool.start').length
   const name = basename(logPath).replace(/\.log$/i, '')
   if (!name) throw refusal('The log for that run has no name to give the recording.')
-  const folder = join(root, 'public', 'recordings')
+  const folder = env?.MACHINEROOM_RECORDINGS || join(root, 'public', 'recordings')
   const runPath = join(folder, `${name}-run.jsonl`)
   const agentsPath = join(folder, `${name}-agents.json`)
   const treePath = join(folder, `${name}-tree.json`)

@@ -242,7 +242,7 @@ function readFrames(path) {
     .map((line) => JSON.parse(line))
 }
 
-function recordingOnce({ root, worktree, sha, name, startedAt = '2026-10-19T15:05:15.000Z', exitCode = 0 }) {
+function recordingOnce({ root, worktree, sha, name, startedAt = '2026-10-19T15:05:15.000Z', exitCode = 0, env = {} }) {
   const logPath = join(root, `${name}.log`)
   writeFileSync(logPath, 'the report\n')
   const record = {
@@ -257,7 +257,7 @@ function recordingOnce({ root, worktree, sha, name, startedAt = '2026-10-19T15:0
     branch: 'feat/t11',
     commits: [`${sha} one`],
   }
-  return writeRecording({ record, lanes: { hermes: { ...lanes.hermes, worktree } }, root, env: {}, session: sessionFor(worktree) })
+  return writeRecording({ record, lanes: { hermes: { ...lanes.hermes, worktree } }, root, env, session: sessionFor(worktree) })
 }
 
 describe('recordingIndex', () => {
@@ -332,6 +332,16 @@ describe('writeRecording', () => {
     expect(agents.agents[0]).toMatchObject({ key: 'hermes', parser: 'hermes' })
     const tree = JSON.parse(readFileSync(written.treePath, 'utf8'))
     expect([...tree.files].sort()).toEqual(['docs/agents/CHANGELOG.md', 'src/briefs/run.js'])
+  })
+
+  it('writes into MACHINEROOM_RECORDINGS when it is set and keeps the index there', () => {
+    const { dir, sha } = worktreeWith({ 'README.md': 'x\n' })
+    const root = tempFolder()
+    const elsewhere = tempFolder()
+    const written = recordingOnce({ root, worktree: dir, sha, name: 'hermes-T11-20261020-101010', env: { MACHINEROOM_RECORDINGS: elsewhere } })
+    expect(written.runPath).toBe(join(elsewhere, 'hermes-T11-20261020-101010-run.jsonl'))
+    expect(existsSync(join(elsewhere, 'index.json'))).toBe(true)
+    expect(existsSync(join(root, 'public', 'recordings'))).toBe(false)
   })
 
   it('writes the three recording files for an OpenCode record and marks a failed run', () => {

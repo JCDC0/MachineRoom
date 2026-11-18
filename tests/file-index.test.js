@@ -442,9 +442,9 @@ describe('touchesForCommand with the file index', () => {
     expect(differences).toEqual([])
   })
 
-  it.skipIf(!existsSync(RECORDINGS))('matches the old walk on every shell command in the recordings', () => {
-    const commands = shellCommands(RECORDINGS, RECENT_RECORDINGS)
-    expect(commands.length).toBeGreaterThan(0)
+  const recordedCommands = existsSync(RECORDINGS) ? shellCommands(RECORDINGS, RECENT_RECORDINGS) : []
+  it.skipIf(recordedCommands.length === 0)('matches the old walk on every shell command in the recordings', () => {
+    const commands = recordedCommands
     const differences = commands
       .map(({ command, tree }) => difference(command, tree.files, tree.dirs))
       .filter(Boolean)
