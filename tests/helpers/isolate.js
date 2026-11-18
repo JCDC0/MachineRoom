@@ -8,4 +8,5 @@ process.env.NODE_OPTIONS = `${nodeOptions} ${hideWindowsImport}`.trim()
 
 // A lane or the orchestrator runs tests with its own runs folder and lane list set; a test must never write there.
 process.env.MACHINEROOM_RUNS = testRunsFolder()
+process.env.MACHINEROOM_SAMPLE_MS = '0'
 delete process.env.MACHINEROOM_LANES_DIR

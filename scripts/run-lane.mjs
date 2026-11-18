@@ -2458,6 +2458,7 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
 
     const onCloseTimeout = () => {
       if (settled) return
+      stopSampling()
       leftoversCleaned = true
       if (stopNote === '') stopNote = 'leftovers were stopped'
       sweep(child.exitCode === null && child.signalCode === null)
@@ -2496,6 +2497,7 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
     const onTerm = () => stopChild('stopped by SIGTERM')
     const onHup = () => stopChild('stopped by SIGHUP')
     const onExit = () => {
+      stopSampling()
       if (child.exitCode === null && child.signalCode === null) killTree(child)
     }
     process.on('SIGINT', onInt)
@@ -2510,6 +2512,7 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
       finish = (value) => {
         if (settled) return
         settled = true
+        stopSampling()
         if (closeTimer !== null) {
           clearTimeout(closeTimer)
           closeTimer = null
@@ -2533,7 +2536,6 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
       })
     })
     clearTimeout(timer)
-    stopSampling()
     if (closeTimer !== null) {
       clearTimeout(closeTimer)
       closeTimer = null
