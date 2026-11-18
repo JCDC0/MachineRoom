@@ -35,7 +35,7 @@ export function healthNotice(health) {
   if (health.ok !== false && health.runner?.alive === false) {
     return {
       tone: 'red',
-      title: 'The runner looks stopped',
+      title: 'The runner looks stopped. Restart MachineRoom to start it again.',
       lines: [],
     }
   }

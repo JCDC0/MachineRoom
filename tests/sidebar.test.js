@@ -197,7 +197,7 @@ describe('the conversation menu', () => {
     expect(items.map((item) => [item.label, item.key])).toEqual([
       ['Pin', 'P'],
       ['Rename', 'R'],
-      ['Fork', 'F'],
+      ['Branch', 'F'],
       ['Export', 'E'],
       ['Mark as unread', 'U'],
       ['Archive', 'A'],
@@ -218,6 +218,7 @@ describe('the conversation menu', () => {
     expect(sessionMenuActionForKey(current, 'f').action).toBe('fork')
     expect(sessionMenuActionForKey(current, 'e').action).toBe('export')
     const empty = sessionMenuItems({ id: 's2', title: 'Empty', count: 0 })
+    expect(sessionMenuItemForKey(empty, 'f').reason).toBe('This conversation has no messages to branch.')
     expect(sessionMenuActionForKey(empty, 'e')).toBeNull()
     expect(sessionMenuItemForKey(empty, 'e')).toMatchObject({
       disabled: true,

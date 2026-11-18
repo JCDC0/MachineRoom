@@ -90,8 +90,17 @@ describe('orchestratorChat helpers', () => {
   it('gives a tone for each state', () => {
     expect(statusTone('working')).toBe('working')
     expect(statusTone('paused')).toBe('paused')
-    expect(statusTone('idle')).toBe('waiting')
-    expect(statusTone('other')).toBe('waiting')
+    expect(statusTone('waiting')).toBe('waiting')
+    expect(statusTone('failed')).toBe('failed')
+    expect(statusTone('idle')).toBe('idle')
+    expect(statusTone('other')).toBe('idle')
+  })
+
+  it('uses room colors for chat tab dots', () => {
+    const css = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8')
+    expect(css).toMatch(/\.mr-orch-tab-dot\s*\{[^}]*background: rgb\(255 255 255 \/ 0\.4\)/)
+    expect(css).toMatch(/\.mr-orch-tab-dot\.is-working,\s*\.mr-orch-tab-dot\.is-waiting\s*\{\s*background: var\(--yellow\)/)
+    expect(css).toMatch(/\.mr-orch-tab-dot\.is-failed,\s*\.mr-orch-tab-dot\.is-paused\s*\{\s*background: var\(--red\)/)
   })
 
   it('keeps the lines that hold text, masks control characters and keeps new lines', () => {

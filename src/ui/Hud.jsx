@@ -833,15 +833,17 @@ export default function Hud({
 
         {notice && (
           <div className={`hud-health is-${notice.tone}`}>
-            <button
-              type="button"
-              className="hud-health-chip mono"
-              onClick={() => setHealthOpen((open) => !open)}
-              aria-expanded={healthOpen}
-            >
-              {notice.title}
-            </button>
-            {healthOpen && (
+            {notice.lines.length > 0 ? (
+              <button
+                type="button"
+                className="hud-health-chip mono"
+                onClick={() => setHealthOpen((open) => !open)}
+                aria-expanded={healthOpen}
+              >
+                {notice.title}
+              </button>
+            ) : <span className="hud-health-chip mono">{notice.title}</span>}
+            {notice.lines.length > 0 && healthOpen && (
               <div className="hud-health-popover" role="group" aria-label="Health details">
                 <ul className="hud-health-lines mono">
                   {notice.lines.map((line, index) => (

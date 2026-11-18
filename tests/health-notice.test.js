@@ -37,7 +37,7 @@ describe('healthNotice', () => {
   it('warns when the runner looks stopped', () => {
     expect(healthNotice({ ok: true, runner: { alive: false } })).toEqual({
       tone: 'red',
-      title: 'The runner looks stopped',
+      title: 'The runner looks stopped. Restart MachineRoom to start it again.',
       lines: [],
     })
     expect(healthNotice({ ok: true, runner: { alive: true } })).toBeNull()
@@ -203,7 +203,9 @@ describe('Hud health chip rendering', () => {
       })
     )
     expect(html).toContain('class="hud-health is-red"')
-    expect(html).toContain('The runner looks stopped')
+    expect(html).toContain('The runner looks stopped. Restart MachineRoom to start it again.')
+    expect(html).toContain('<span class="hud-health-chip mono">')
+    expect(html).not.toContain('Health details')
   })
 
   it('shows each source problem in the chip details and stays connected', async () => {

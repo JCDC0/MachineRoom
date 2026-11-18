@@ -33,21 +33,23 @@ function titles(container) {
   return container.querySelectorAll('.mr-side-title').map((node) => node.textContent)
 }
 
+async function pinAction(root, container, label) {
+  await click(root, container.querySelector('button[aria-label="Actions for Beta"]'))
+  const item = container.querySelectorAll('[role="menuitem"]').find((node) => node.textContent.startsWith(label))
+  await click(root, item)
+}
+
 describe('conversation pins', () => {
   it('pins and unpins a row, moving it into the labelled group', async () => {
     await withDom(async ({ container, root }) => {
       const { calls } = await mount(root)
       expect(labels(container)).toEqual([])
-      const pin = container.querySelector('button[aria-label="Pin Beta"]')
-      expect(pin.getAttribute('aria-pressed')).toBe('false')
-      await click(root, pin)
+      await pinAction(root, container, 'Pin')
       await settle()
       expect(calls[0]).toMatchObject({ session: 'beta', pinned: true })
       expect(titles(container)).toEqual(['Current', 'Beta', 'Alpha'])
       expect(labels(container)).toEqual(['Pinned', 'Recent'])
-      const unpin = container.querySelector('button[aria-label="Unpin Beta"]')
-      expect(unpin.getAttribute('aria-pressed')).toBe('true')
-      await click(root, unpin)
+      await pinAction(root, container, 'Unpin')
       await settle()
       expect(calls[1]).toMatchObject({ session: 'beta', pinned: false })
       expect(labels(container)).toEqual([])
@@ -57,7 +59,7 @@ describe('conversation pins', () => {
   it('hides group labels when search leaves only one group', async () => {
     await withDom(async ({ container, root }) => {
       await mount(root)
-      await click(root, container.querySelector('button[aria-label="Pin Beta"]'))
+      await pinAction(root, container, 'Pin')
       await settle()
       await type(root, container.querySelector('.mr-side-search'), 'Beta')
       expect(titles(container)).toEqual(['Beta'])
