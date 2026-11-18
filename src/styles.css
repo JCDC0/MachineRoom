@@ -5652,14 +5652,7 @@ body:has(#hud-orchestrator-chat) .lens-waiting {
 }
 
 .mr-lane-conv-more {
-  min-height: 24px;
-  margin-top: 6px;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--yellow);
-  font-size: 10px;
-  text-decoration: underline;
+  margin-top: var(--space);
 }
 
 .mr-lane-conv-line {
@@ -5687,6 +5680,7 @@ body:has(#hud-orchestrator-chat) .lens-waiting {
   height: auto;
   min-height: var(--control-h);
   margin: 0;
+  color: var(--text-dim);
   font-family: var(--mono);
   font-size: 11px;
   overflow-wrap: anywhere;
@@ -5697,7 +5691,19 @@ button.mr-lane-conv-tool-fold {
   align-self: flex-start;
 }
 
-.mr-lane-conv-tool-fold .ui-chip-label {
+.mr-lane-conv-tool.is-working,
+button.mr-lane-conv-tool-fold.is-working {
+  --ui-chip-border: var(--yellow);
+  color: var(--yellow);
+}
+
+.mr-lane-conv-tool.is-failed,
+button.mr-lane-conv-tool-fold.is-failed {
+  --ui-chip-border: var(--red);
+  color: var(--red);
+}
+
+:is(.mr-lane-conv-tool-fold.is-working, .mr-lane-conv-tool-fold.is-failed) .ui-chip-label {
   color: currentColor;
 }
 
@@ -5877,7 +5883,7 @@ button.mr-lane-conv-tool-fold {
   flex: 1 1 auto;
   min-height: 72px;
   max-height: 300px;
-  padding: var(--space);
+  padding: var(--space) var(--space) 16px;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
@@ -5891,6 +5897,7 @@ button.mr-lane-conv-tool-fold {
 }
 
 .mr-orch-line {
+  position: relative;
   display: flex;
   flex: 0 0 auto;
   flex-direction: column;
@@ -6060,19 +6067,28 @@ button.mr-orch-show-all {
 }
 
 .mr-orch-line-actions {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 1;
   display: flex;
   gap: 12px;
-  min-height: 14px;
+  padding-top: 2px;
+  white-space: nowrap;
   opacity: 0;
+  pointer-events: none;
 }
 
 .mr-orch-line.is-owner .mr-orch-line-actions {
+  left: auto;
+  right: 0;
   justify-content: flex-end;
 }
 
 .mr-orch-line:hover .mr-orch-line-actions,
 .mr-orch-line:focus-within .mr-orch-line-actions {
   opacity: 1;
+  pointer-events: auto;
 }
 
 .mr-orch-line-action {
@@ -6371,11 +6387,17 @@ button.mr-orch-team-meta:focus-visible {
   background: var(--black);
 }
 
+.mr-composer-history {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
 .mr-orch-input {
   width: 100%;
   min-height: 40px;
   max-height: 120px;
-  padding: 4px;
+  padding: 4px 0;
   resize: none;
   field-sizing: content;
   border: 0;
@@ -6475,7 +6497,7 @@ button.ui-icon-btn.mr-composer-send:hover:not(:disabled) {
 }
 
 .mr-orch-input::placeholder {
-  color: rgb(255 255 255 / 0.38);
+  color: var(--text-dim);
 }
 
 .mr-orch-slash {
@@ -8347,9 +8369,17 @@ button.ui-icon-btn.mr-composer-send:hover:not(:disabled) {
   }
 
   .mr-orch.is-inline .mr-lane-conv-head {
-    width: calc(100% - 48px);
+    width: 100%;
     max-width: 760px;
     margin-inline: auto;
+    padding-inline: 24px;
+  }
+
+  .mr-orch.is-inline .mr-lane-conv-tools {
+    width: 100%;
+    max-width: 760px;
+    margin-inline: auto;
+    padding-inline: 24px;
   }
 
   .hud-lower-main:has(> .mr-lane-conv) > .hud-lower-crumb {
@@ -8400,7 +8430,7 @@ button.ui-icon-btn.mr-composer-send:hover:not(:disabled) {
   }
 
   .mr-orch.is-inline .mr-orch-line.is-room {
-    color: rgb(255 255 255 / 0.45);
+    color: var(--text-dim);
     font-size: 11px;
   }
 
@@ -8412,9 +8442,14 @@ button.ui-icon-btn.mr-composer-send:hover:not(:disabled) {
   }
 
   .mr-orch.is-inline .mr-composer {
-    width: calc(100% - 48px);
+    width: 100%;
     max-width: 760px;
     margin: 0 auto 16px;
+    padding-inline: 11px;
+  }
+
+  .mr-orch.is-inline .mr-composer:has(> .mr-composer-history) {
+    padding-inline: 24px;
   }
 
   .hud-strip-compact-head {

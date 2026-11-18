@@ -5,7 +5,6 @@ import { contextLine } from './agentStrip.js'
 import Composer, { RecipientChip } from './Composer.jsx'
 import { Chip, Menu } from './controls.jsx'
 import Markdown from './markdown.jsx'
-import { agentColor } from './orchestratorChat.js'
 import { useLogFollow } from './logScroll.js'
 import { runStartLine } from './panels/runs.js'
 import {
@@ -105,6 +104,27 @@ function initialEditMode(harness, savedMode) {
 
 function statusLabel(status) {
   return STATUS_LABELS[status] ?? 'Queued'
+}
+
+function toolFailed(entry) {
+  if (!entry || typeof entry !== 'object') return false
+  if (entry.ok === false || entry.failed === true || Boolean(entry.error)) return true
+  const status = typeof entry.status === 'string' ? entry.status.trim().toLowerCase() : ''
+  return status === 'failed' || status === 'error'
+}
+
+function toolRunning(entry) {
+  if (!entry || typeof entry !== 'object') return false
+  if (entry.running === true) return true
+  const status = typeof entry.status === 'string' ? entry.status.trim().toLowerCase() : ''
+  return status === 'running' || status === 'working'
+}
+
+function toolToneClass(entries, active = false) {
+  const list = Array.isArray(entries) ? entries : [entries]
+  if (list.some(toolFailed)) return 'is-failed'
+  if (active || list.some(toolRunning)) return 'is-working'
+  return ''
 }
 
 function RunChip({ options, selected, runState, tone, emptyLabel, onChange }) {
@@ -217,13 +237,16 @@ export default function LaneConversation({
       context: { tokens: currentRun.contextTokens, window: currentRun.contextWindow },
     }).replace(/^Context size (?=\d)/, 'Context '),
   ].filter(Boolean).join(' · ')
-  const colour = agentColor(lane, lanes)
   const entries = Array.isArray(conversation.data?.entries) ? conversation.data.entries : []
   const promptEntry = entries.find((entry) => entry.role === 'prompt') ?? null
   const prompt = foldPrompt(promptEntry?.text ?? '')
   const rows = foldToolCalls(entries.filter((entry) => entry.role !== 'prompt'
     && !(outcome && entry.role === 'result' && GENERIC_RESULT_TEXTS.has(entry.text))))
-  const label = (laneName && laneName !== lane ? laneName : '') || lanes.find((entry) => entry?.key === lane)?.name || 'Lane'
+  const named = typeof laneName === 'string' ? laneName.trim() : ''
+  const laneKey = typeof lane === 'string' ? lane.trim() : ''
+  const matchedLane = lanes.find((entry) => entry?.key === lane)?.name
+  const matchedName = typeof matchedLane === 'string' ? matchedLane.trim() : ''
+  const label = (named && named !== laneKey ? named : '') || matchedName || named || laneKey || 'Lane'
   const projectLabel = String(project || 'PROJECT').toUpperCase()
   const breadcrumb = `${projectLabel} / ${String(label).toUpperCase()}`
   const loaded = conversation.data !== null
@@ -681,41 +704,45 @@ export default function LaneConversation({
               {showPrompt ? promptEntry.text : prompt.text}
             </p>
             {prompt.folded ? (
-              <button
-                type="button"
-                className="mr-lane-conv-more mono"
+              <Chip
+                className="mr-lane-conv-more"
+                label={showPrompt ? 'Show less' : 'Show all'}
+                open={showPrompt}
                 onClick={() => setShowPrompt((value) => !value)}
-              >
-                {showPrompt ? 'Show less' : 'Show all'}
-              </button>
+              />
             ) : null}
           </section>
         ) : null}
         {rows.map((row, index) => {
           if (row.kind === 'tools') {
+            const activeRow = selectedRunning && index === rows.length - 1
             if (row.count === 1) {
+              const toneClass = toolToneClass(row.entries[0], activeRow)
               return (
-                <p className="ui-chip mr-lane-conv-tool mono" style={{ color: colour }} key={`tool-${index}`}>
+                <p className={`ui-chip mr-lane-conv-tool mono${toneClass ? ` ${toneClass}` : ''}`} key={`tool-${index}`}>
                   {toolText(row.entries[0])}
                 </p>
               )
             }
             const open = openTools[index] === true
+            const groupTone = toolToneClass(row.entries, activeRow)
             return (
               <div className="mr-lane-conv-tool-group" key={`tools-${index}`}>
                 <Chip
                   label={`${row.count} tool calls`}
-                  className="mr-lane-conv-tool-fold"
-                  style={{ color: colour }}
+                  className={`mr-lane-conv-tool-fold${groupTone ? ` ${groupTone}` : ''}`}
                   open={open}
                   onClick={() => setOpenTools((current) => ({ ...current, [index]: !open }))}
                 />
                 {open
-                  ? row.entries.map((entry, at) => (
-                      <p className="ui-chip mr-lane-conv-tool mono" style={{ color: colour }} key={`tool-${index}-${at}`}>
-                        {toolText(entry)}
-                      </p>
-                    ))
+                  ? row.entries.map((entry, at) => {
+                      const entryTone = toolToneClass(entry, activeRow && at === row.entries.length - 1)
+                      return (
+                        <p className={`ui-chip mr-lane-conv-tool mono${entryTone ? ` ${entryTone}` : ''}`} key={`tool-${index}-${at}`}>
+                          {toolText(entry)}
+                        </p>
+                      )
+                    })
                   : null}
               </div>
             )
@@ -773,7 +800,7 @@ export default function LaneConversation({
                 wantedRef.current = ''
                 setSelected(startedAt)
               }} />
-            {canCompose && !recipientRunning && worktreeChoice}
+            {canCompose && !selectedRunning && onRecipientSend && worktreeChoice}
             {selectedRunning && (
               <Menu label="Lane message options" items={[
                 { label: 'Send and interrupt', disabled: !canSend || sending, onSelect: () => sendMessage(true) },

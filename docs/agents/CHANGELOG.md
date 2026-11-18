@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The chat keeps an even rhythm, the composer reads clearly, and a lane opened from its row gets the same composer and Worktree switch as one chosen in To (P606).
 - Agents rows keep one action width, the hover card closes when a chat opens, a lane's menu says Make sub from this lane, and the select bar sits on the row surface (P607).
 - Review 61 of P602 and P603: ten findings, the four cache ones fixed by P605 (P604).
 - The run and task routes notice a git init, a moved or recreated folder and a restored run log, and their path caches expire and stay bounded (P605).
