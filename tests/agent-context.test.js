@@ -688,7 +688,7 @@ describe('AgentDock', () => {
     expect(html).not.toContain('>Tokens<')
   })
 
-  it('draws Open ADDRESS when the console has an address', () => {
+  it('draws Open address with the full address as its title', () => {
     const html = renderToString(
       createElement(AgentDock, {
         agent: lane,
@@ -700,10 +700,11 @@ describe('AgentDock', () => {
       })
     )
 
-    expect(html).toContain('Open localhost:5173')
+    expect(html).toContain('title="localhost:5173"')
+    expect(html).toContain('>Open address</button>')
   })
 
-  it('leaves Open ADDRESS off when the console has no address', () => {
+  it('leaves Open address off when the console has no address', () => {
     const html = renderToString(
       createElement(AgentDock, {
         agent: lane,
@@ -715,7 +716,7 @@ describe('AgentDock', () => {
       })
     )
 
-    expect(html).not.toContain('Open ')
+    expect(html).not.toContain('Open address')
   })
 })
 

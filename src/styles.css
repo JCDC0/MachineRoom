@@ -4,7 +4,6 @@
   --yellow: #e5ff00;
   --green: #2aff80;
   --red: #ff2a2a;
-  --cyan: #38e8ff;
   --line: rgb(255 255 255 / 0.36);
   --text: #ffffff;
   --text-dim: rgb(255 255 255 / 0.55);
@@ -11236,7 +11235,6 @@ body:has(#hud-orchestrator-chat) .lens-waiting {
   color: var(--white);
 }
 
-/* U68: a cyan console above an agent that runs a command. */
 .mr-term-console {
   width: 220px;
   display: flex;
@@ -11244,13 +11242,12 @@ body:has(#hud-orchestrator-chat) .lens-waiting {
   font-family: var(--mono);
   font-size: 12px;
   line-height: 1.4;
-  color: var(--cyan);
+  color: var(--white);
   background: rgb(0 0 0 / 0.72);
-  border: 1px solid var(--cyan);
+  border: 1px solid var(--white);
   border-radius: 2px;
   pointer-events: auto;
   cursor: pointer;
-  box-shadow: 0 0 14px rgb(56 232 255 / 0.28);
   transition: opacity 300ms, border-color 300ms, box-shadow 300ms;
 }
 
@@ -11259,9 +11256,8 @@ body:has(#hud-orchestrator-chat) .lens-waiting {
   font-size: 9px;
   letter-spacing: 0.18em;
   text-transform: uppercase;
-  color: var(--cyan);
-  background: rgb(56 232 255 / 0.1);
-  border-bottom: 1px solid rgb(56 232 255 / 0.35);
+  color: var(--white);
+  border-bottom: 1px solid rgb(255 255 255 / 0.35);
 }
 
 .mr-term-console-link {
@@ -11271,7 +11267,7 @@ body:has(#hud-orchestrator-chat) .lens-waiting {
   font-weight: 400;
   letter-spacing: 0.02em;
   text-transform: none;
-  color: var(--cyan);
+  color: var(--white);
   text-decoration: none;
 }
 
@@ -11294,7 +11290,7 @@ body:has(#hud-orchestrator-chat) .lens-waiting {
 }
 
 .mr-term-console-line.is-dim {
-  color: rgb(56 232 255 / 0.62);
+  color: rgb(255 255 255 / 0.62);
 }
 
 .mr-term-console-line.is-error {
@@ -11303,10 +11299,6 @@ body:has(#hud-orchestrator-chat) .lens-waiting {
 
 .mr-term-console-line.is-done {
   color: var(--green);
-}
-
-.mr-term-console.is-address {
-  box-shadow: 0 0 18px rgb(56 232 255 / 0.5), inset 0 0 8px rgb(56 232 255 / 0.12);
 }
 
 .mr-term-console.is-muted {

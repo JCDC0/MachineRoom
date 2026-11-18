@@ -1065,6 +1065,21 @@ export default function DispatchPanel({
 
   return (
     <div className="dispatch-form">
+      {attentionRows.length > 0 && (
+        <div className="panel-field">
+          <div className="panel-field-head">
+            <label>Needs you</label>
+          </div>
+          {attentionRows.slice(0, 5).map((item, index) => (
+            <div
+              key={`attention-${item.lane || 'lane'}-${item.startedAt || index}`}
+              className="runs-entry is-recent is-failed mono"
+            >
+              {item.text}
+            </div>
+          ))}
+        </div>
+      )}
       {!lanesKnown || loading ? null : projectFormLine ? (
         <div className="panel-field project-run-section">
           <div className="brief-state is-dim mono" role="status">{projectFormLine}</div>
@@ -1830,21 +1845,6 @@ export default function DispatchPanel({
                   </div>
                 )
               })}
-              {attentionRows.length > 0 && (
-                <>
-                  <div className="panel-field-head">
-                    <label>Needs you</label>
-                  </div>
-                  {attentionRows.slice(0, 5).map((item, index) => (
-                    <div
-                      key={`attention-${item.lane || 'lane'}-${item.startedAt || index}`}
-                      className="runs-entry is-recent is-failed mono"
-                    >
-                      {item.text}
-                    </div>
-                  ))}
-                </>
-              )}
               {runsState.recent.map((record, index) => {
                 const key = `recent-${record.lane}-${record.startedAt || index}`
                 const canRecover = hasOrchestrator && queueRecoveryAvailable(record)

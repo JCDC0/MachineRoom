@@ -108,9 +108,10 @@ export default function AgentDock({
         {context.addressUrl && (
           <button
             type="button"
+            title={context.address}
             onClick={() => window.open(context.addressUrl, '_blank', 'noopener,noreferrer')}
           >
-            {`Open ${context.address}`}
+            Open address
           </button>
         )}
         {context.isOrchestrator && (
