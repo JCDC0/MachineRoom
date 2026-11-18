@@ -163,12 +163,12 @@ describe('attentionItems', () => {
     ])
 
     expect(items).toEqual([
-      { lane: 'direct', startedAt: '2026-11-16T10:20:00.000Z', text: 'direct stopped: the same call failed five times.' },
-      { lane: 'agy', startedAt: '2026-11-16T10:15:00.000Z', text: 'agy could not start.' },
-      { lane: 'claude', startedAt: '2026-11-16T10:10:00.000Z', text: 'claude failed on Fix the parser.' },
-      { lane: 'codex', startedAt: '2026-11-16T10:05:00.000Z', text: 'codex failed on P466 P467.' },
-      { lane: 'opencode', startedAt: '2026-11-16T10:00:00.000Z', text: 'opencode failed on P465.' },
-      { lane: 'hermes', startedAt: '2026-11-16T09:55:00.000Z', text: 'hermes failed.' },
+      { lane: 'direct', startedAt: '2026-11-16T10:20:00.000Z', text: 'direct failed on P469' },
+      { lane: 'agy', startedAt: '2026-11-16T10:15:00.000Z', text: 'agy failed on P468' },
+      { lane: 'claude', startedAt: '2026-11-16T10:10:00.000Z', text: 'claude failed on Fix the parser' },
+      { lane: 'codex', startedAt: '2026-11-16T10:05:00.000Z', text: 'codex failed on P466 P467' },
+      { lane: 'opencode', startedAt: '2026-11-16T10:00:00.000Z', text: 'opencode failed on P465' },
+      { lane: 'hermes', startedAt: '2026-11-16T09:55:00.000Z', text: 'hermes failed on unknown work' },
     ])
   })
 
@@ -225,7 +225,7 @@ describe('attentionItems', () => {
       },
     ])
     expect(sameTimestampTakeover).toEqual([
-      { lane: 'agy', startedAt: '2026-11-16T10:00:00.000Z', text: 'agy failed on P1.' },
+      { lane: 'agy', startedAt: '2026-11-16T10:00:00.000Z', text: 'agy failed on P1' },
     ])
 
     const refused = attentionItems([
@@ -246,7 +246,7 @@ describe('attentionItems', () => {
       },
     ])
     expect(refused).toEqual([
-      { lane: 'opencode', startedAt: '2026-11-16T10:00:00.000Z', text: 'opencode failed on P1.' },
+      { lane: 'opencode', startedAt: '2026-11-16T10:00:00.000Z', text: 'opencode failed on P1' },
     ])
 
     const earlierBackupOnly = attentionItems([
@@ -267,8 +267,16 @@ describe('attentionItems', () => {
       },
     ])
     expect(earlierBackupOnly).toEqual([
-      { lane: 'opencode', startedAt: '2026-11-16T10:00:00.000Z', text: 'opencode failed on P1.' },
+      { lane: 'opencode', startedAt: '2026-11-16T10:00:00.000Z', text: 'opencode failed on P1' },
     ])
+  })
+
+  it('clears work only after a later successful run on any lane', () => {
+    const failure = { lane: 'codex', startedAt: '2026-11-16T10:00:00Z', briefs: ['P1'], exitCode: 1 }
+    const success = { lane: 'agy', startedAt: '2026-11-16T10:01:00Z', briefs: ['P1'], exitCode: 0 }
+    expect(attentionItems([failure, success])).toEqual([])
+    expect(attentionItems([failure, { ...success, briefs: ['P2'] }])).toHaveLength(1)
+    expect(attentionItems([{ ...failure, briefs: [], task: 'Fix it' }, { ...success, briefs: [], task: 'Fix it' }])).toEqual([])
   })
 
   it('clears a lane item when a newer run ends well or is stopped', () => {
@@ -286,7 +294,7 @@ describe('attentionItems', () => {
       { lane: 'opencode', startedAt: '2026-11-16T10:00:00.000Z', briefs: ['P1'], exitCode: 1, killed: false },
       { lane: 'opencode', startedAt: '2026-11-16T10:05:00.000Z', briefs: ['P2'], exitCode: 1, killed: false },
     ])).toEqual([
-      { lane: 'opencode', startedAt: '2026-11-16T10:05:00.000Z', text: 'opencode failed on P2.' },
+      { lane: 'opencode', startedAt: '2026-11-16T10:05:00.000Z', text: 'opencode failed on P2' },
     ])
   })
 })
@@ -361,7 +369,7 @@ describe('DispatchPanel Needs you', () => {
         project: 'demo',
         running: [],
         recent: [],
-        attention: [{ lane: 'opencode', startedAt: '2026-11-16T10:00:00.000Z', text: 'opencode failed on P1.' }],
+        attention: [{ lane: 'opencode', startedAt: '2026-11-16T10:00:00.000Z', text: 'opencode failed on P1' }],
       }),
     }
     await withDom(async ({ container, root }) => {
@@ -370,13 +378,49 @@ describe('DispatchPanel Needs you', () => {
       })
       await settle()
       expect(container.textContent).toContain('Needs you')
-      expect(container.textContent).toContain('opencode failed on P1.')
+      expect(container.textContent).toContain('opencode failed on P1')
     })
   })
 })
 
 it('shows a repeated failure on a successful newest run and clears it on a later run', () => {
   const run = { lane: 'codex', startedAt: '2026-11-16T10:00:00.000Z', exitCode: 0, repeatedFailure: { tool: 'Read', count: 5 } }
-  expect(attentionItems([run])).toEqual([{ lane: 'codex', startedAt: run.startedAt, text: 'codex repeated one failing Read call 5 times.' }])
+  expect(attentionItems([run])).toEqual([{ lane: 'codex', startedAt: run.startedAt, text: 'codex failed on unknown work' }])
   expect(attentionItems([run, { lane: 'codex', startedAt: '2026-11-16T10:01:00.000Z', exitCode: 0 }])).toEqual([])
+})
+
+it('shows age and opens and remembers a dismissed failure', async () => {
+  const saved = new Map()
+  const oldStorage = globalThis.localStorage
+  globalThis.localStorage = { getItem: (key) => saved.get(key) ?? null, setItem: (key, value) => saved.set(key, value) }
+  const startedAt = new Date(Date.now() - 5 * 60000).toISOString()
+  const client = { health: async () => ({ lanes: true }), runs: async () => ({ running: [], recent: [], attention: [{ lane: 'codex', startedAt, text: 'codex failed on P1' }] }) }
+  try {
+    await withDom(async ({ container, root, window }) => {
+      let detail
+      window.addEventListener('machineroom:open-chat', (event) => { detail = event.detail })
+      await act(async () => { root.render(createElement(DispatchPanel, { client, initialAgents: [] })) })
+      await settle()
+      expect(container.textContent).toContain('codex failed on P1 · 5 min')
+      await act(async () => { buttonWithText(container, 'Open').click() })
+      expect(detail).toEqual({ lane: 'codex', startedAt })
+      await act(async () => { buttonWithText(container, 'Dismiss').click() })
+      expect(container.textContent).not.toContain('Needs you')
+      await act(async () => { root.render(null) })
+      await act(async () => { root.render(createElement(DispatchPanel, { client, initialAgents: [] })) })
+      await settle()
+      expect(container.textContent).not.toContain('Needs you')
+    })
+  } finally { globalThis.localStorage = oldStorage }
+})
+
+it('lists newest briefs first in each owner group', async () => {
+  const briefs = [{ id: 'P1', title: 'First', owner: 'codex' }, { id: 'P2', title: 'Second', owner: 'codex' }]
+  const client = { briefs: async () => briefs }
+  await withDom(async ({ container, root }) => {
+    await act(async () => { root.render(createElement(DispatchPanel, { client, initialAgents: [], initialBriefs: briefs })) })
+    await settle()
+    const options = container.querySelectorAll('option')
+    expect(Array.from(options).map((option) => option.getAttribute('value'))).toEqual(['', 'P2', 'P1'])
+  })
 })

@@ -740,8 +740,8 @@ describe('run routes', () => {
 
     const first = await fetch(`${url}/api/control/runs`).then((response) => response.json())
     expect(first.attention).toEqual([
-      { lane: 'direct', startedAt: '2026-11-16T10:10:00.000Z', text: 'direct stopped: the same call failed five times.' },
-      { lane: 'opencode', startedAt: '2026-11-16T10:00:00.000Z', text: 'opencode failed on P465.' },
+      { lane: 'direct', startedAt: '2026-11-16T10:10:00.000Z', text: 'direct failed on P467' },
+      { lane: 'opencode', startedAt: '2026-11-16T10:00:00.000Z', text: 'opencode failed on P465' },
     ])
 
     writeRuns(tempDirRuns, [
@@ -752,7 +752,7 @@ describe('run routes', () => {
 
     const second = await fetch(`${url}/api/control/runs`).then((response) => response.json())
     expect(second.attention).toEqual([
-      { lane: 'opencode', startedAt: '2026-11-16T10:00:00.000Z', text: 'opencode failed on P465.' },
+      { lane: 'opencode', startedAt: '2026-11-16T10:00:00.000Z', text: 'opencode failed on P465' },
     ])
   })
 
