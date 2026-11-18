@@ -10791,14 +10791,24 @@ body:has(#hud-orchestrator-chat) .lens-waiting {
 .mr-side .mr-side-menu-button,
 .mr-family .mr-family-add,
 .mr-family .mr-family-chat,
-.mr-family .mr-family-trash {
+.mr-family .mr-family-trash,
+.hud-band-switch,
+.transport-spend,
+.mr-side .mr-side-open-folder,
+.mr-side .mr-repo-tree,
+.mr-side .mr-repo-switch {
   position: relative;
 }
 
 .lens-failures-clear::after,
+.hud-band-switch::after,
 .hud-action-slot > button.hud-action-badge::after,
+.transport-spend::after,
 .mr-side .mr-side-menu-button::after,
 .mr-side .mr-side-switch::after,
+.mr-side .mr-side-open-folder::after,
+.mr-side .mr-repo-tree::after,
+.mr-side .mr-repo-switch::after,
 .mr-family .mr-family-add::after,
 .mr-family .mr-family-chat::after,
 .mr-family .mr-family-trash::after,
@@ -10808,9 +10818,14 @@ body:has(#hud-orchestrator-chat) .lens-waiting {
 }
 
 .lens-failures-clear::after,
+.hud-band-switch::after,
 .hud-action-slot > button.hud-action-badge::after,
+.transport-spend::after,
 .mr-side .mr-side-menu-button::after,
 .mr-side .mr-side-switch::after,
+.mr-side .mr-side-open-folder::after,
+.mr-side .mr-repo-tree::after,
+.mr-side .mr-repo-switch::after,
 .mr-family .mr-family-add::after,
 .mr-family .mr-family-chat::after,
 .mr-family .mr-family-trash::after {
