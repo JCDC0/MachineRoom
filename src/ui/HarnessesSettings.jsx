@@ -29,21 +29,6 @@ function updateRowsWithResult(currentRows, result) {
   return null
 }
 
-function laneRepliesFrom(answer) {
-  const rows = Array.isArray(answer) ? answer : Array.isArray(answer?.harnesses) ? answer.harnesses : []
-  return rows[0]?.laneReplies === 'interrupt' ? 'interrupt' : 'next-turn'
-}
-
-function worktreeSetupFrom(answer) {
-  const rows = Array.isArray(answer) ? answer : Array.isArray(answer?.harnesses) ? answer.harnesses : []
-  return typeof rows[0]?.worktreeSetup === 'string' ? rows[0].worktreeSetup : ''
-}
-
-function worktreeCopiesFrom(answer) {
-  const rows = Array.isArray(answer) ? answer : Array.isArray(answer?.harnesses) ? answer.harnesses : []
-  return Array.isArray(rows[0]?.worktreeCopies) ? rows[0].worktreeCopies.join('\n') : ''
-}
-
 /**
  * Renders the Harnesses section in Settings to inspect and configure runners.
  */
@@ -53,13 +38,6 @@ export default function HarnessesSettings({ client }) {
   const [drafts, setDrafts] = useState({})
   const [counts, setCounts] = useState(null)
   const [busyKey, setBusyKey] = useState('')
-  const [savingReplies, setSavingReplies] = useState(false)
-  const [laneReplies, setLaneReplies] = useState('next-turn')
-  const [savingLaneCount, setSavingLaneCount] = useState(false)
-  const [laneCountWarning, setLaneCountWarning] = useState('0')
-  const [savingWorktreeSetup, setSavingWorktreeSetup] = useState(false)
-  const [worktreeSetup, setWorktreeSetup] = useState('')
-  const [worktreeCopies, setWorktreeCopies] = useState('')
   const [checking, setChecking] = useState(false)
   const [confirm, setConfirm] = useState(null)
   const [sectionError, setSectionError] = useState('')
@@ -128,10 +106,6 @@ export default function HarnessesSettings({ client }) {
       setRows([])
       setDrafts({})
       setCounts(null)
-      setLaneReplies('next-turn')
-      setLaneCountWarning('0')
-      setWorktreeSetup('')
-      setWorktreeCopies('')
       setSectionError('')
       setRowErrors({})
       return
@@ -142,10 +116,6 @@ export default function HarnessesSettings({ client }) {
       const nextRows = harnessListFrom(answer)
       setRows(nextRows)
       mergeDrafts(nextRows)
-      setLaneReplies(laneRepliesFrom(answer))
-      if (!dirtyRef.current.has('laneCount')) setLaneCountWarning(String(laneCountWarningFrom(answer)))
-      if (!dirtyRef.current.has('setup')) setWorktreeSetup(worktreeSetupFrom(answer))
-      if (!dirtyRef.current.has('copies')) setWorktreeCopies(worktreeCopiesFrom(answer))
       setSectionError('')
       await loadCounts()
     } catch (error) {
@@ -198,89 +168,6 @@ export default function HarnessesSettings({ client }) {
       }))
     } finally {
       if (mountedRef.current) setBusyKey('')
-    }
-  }
-
-  async function applyLaneReplies(value) {
-    if (!client || typeof client.harnessSettings !== 'function') return
-    setSavingReplies(true)
-    setSectionError('')
-    try {
-      const result = await client.harnessSettings({ laneReplies: value, confirmed: true })
-      if (!mountedRef.current) return
-      setLaneReplies(value)
-      const nextRows = updateRowsWithResult(rows, result)
-      if (nextRows) {
-        setRows(nextRows)
-        mergeDrafts(nextRows)
-        await loadCounts()
-      } else {
-        await loadAll()
-      }
-    } catch (error) {
-      if (!mountedRef.current) return
-      setSectionError(error?.message || 'Could not save the reply choice.')
-    } finally {
-      if (mountedRef.current) setSavingReplies(false)
-    }
-  }
-
-  async function applyLaneCountWarning(value) {
-    if (!client || typeof client.harnessSettings !== 'function') return
-    const text = String(value ?? '').trim()
-    const count = text === '' ? Number.NaN : Number(text)
-    if (!Number.isInteger(count) || count < 0) {
-      setSectionError('Write the lane count warning as a whole number, 0 or more.')
-      return
-    }
-    setSavingLaneCount(true)
-    setSectionError('')
-    try {
-      const result = await client.harnessSettings({ laneCountWarning: count, confirmed: true })
-      if (!mountedRef.current) return
-      dirtyRef.current.delete('laneCount')
-      setLaneCountWarning(String(count))
-      const nextRows = updateRowsWithResult(rows, result)
-      if (nextRows) {
-        setRows(nextRows)
-        mergeDrafts(nextRows)
-        await loadCounts()
-      } else {
-        await loadAll()
-      }
-    } catch (error) {
-      if (!mountedRef.current) return
-      setSectionError(error?.message || 'Could not save the lane count warning.')
-    } finally {
-      if (mountedRef.current) setSavingLaneCount(false)
-    }
-  }
-
-  async function applyWorktreeSetup(value) {
-    if (!client || typeof client.harnessSettings !== 'function') return
-    const command = String(value ?? '').trim()
-    setSavingWorktreeSetup(true)
-    setSectionError('')
-    try {
-      const copies = worktreeCopies.split(/\r?\n/).map((path) => path.trim()).filter(Boolean)
-      const result = await client.harnessSettings({ worktreeSetup: command, worktreeCopies: copies, confirmed: true })
-      if (!mountedRef.current) return
-      dirtyRef.current.delete('setup')
-      dirtyRef.current.delete('copies')
-      setWorktreeSetup(command)
-      const nextRows = updateRowsWithResult(rows, result)
-      if (nextRows) {
-        setRows(nextRows)
-        mergeDrafts(nextRows)
-        await loadCounts()
-      } else {
-        await loadAll()
-      }
-    } catch (error) {
-      if (!mountedRef.current) return
-      setSectionError(error?.message || 'Could not save the worktree setup command.')
-    } finally {
-      if (mountedRef.current) setSavingWorktreeSetup(false)
     }
   }
 
@@ -375,85 +262,6 @@ export default function HarnessesSettings({ client }) {
               {READY_MEANS}
             </p>
           ) : null}
-          <div className="endpoints-field">
-            <label className="endpoints-label mono" htmlFor="harness-lane-replies">
-              Replies to a working lane
-            </label>
-            <select
-              id="harness-lane-replies"
-              value={laneReplies}
-              disabled={checking || savingReplies || Boolean(busyKey)}
-              onChange={(event) => applyLaneReplies(event.target.value)}
-            >
-              <option value="next-turn">Wait for its next turn</option>
-              <option value="interrupt">Interrupt it at once</option>
-            </select>
-          </div>
-          <div className="endpoints-field">
-            <label className="endpoints-label mono" htmlFor="harness-lane-count-warning">
-              Warn above this many running lanes
-            </label>
-            <input
-              id="harness-lane-count-warning"
-              type="number"
-              min="0"
-              step="1"
-              value={laneCountWarning}
-              disabled={checking || savingLaneCount || Boolean(busyKey)}
-              onChange={(event) => {
-                dirtyRef.current.add('laneCount')
-                setLaneCountWarning(event.target.value)
-              }}
-            />
-            <div className="endpoints-actions">
-              <button
-                type="button"
-                className="hud-settings-switch"
-                disabled={checking || savingLaneCount || Boolean(busyKey)}
-                onClick={() => applyLaneCountWarning(laneCountWarning)}
-              >
-                Save
-              </button>
-            </div>
-            <p className="endpoints-note mono">0 turns the warning off.</p>
-          </div>
-          <div className="endpoints-field">
-            <label className="endpoints-label mono" htmlFor="harness-worktree-setup">
-              Worktree setup command
-            </label>
-            <input
-              id="harness-worktree-setup"
-              type="text"
-              value={worktreeSetup}
-              disabled={checking || savingWorktreeSetup || Boolean(busyKey)}
-              onChange={(event) => {
-                dirtyRef.current.add('setup')
-                setWorktreeSetup(event.target.value)
-              }}
-            />
-            <p className="endpoints-note mono">Runs once in each new lane worktree, for example npm ci.</p>
-            <label className="endpoints-label mono" htmlFor="harness-worktree-copies">Copy into new worktrees</label>
-            <textarea
-              id="harness-worktree-copies"
-              value={worktreeCopies}
-              disabled={checking || savingWorktreeSetup || Boolean(busyKey)}
-              onChange={(event) => {
-                dirtyRef.current.add('copies')
-                setWorktreeCopies(event.target.value)
-              }}
-            />
-            <p className="endpoints-note mono">One project-relative file path per line. Each copy adds an ignore line shared with the main checkout.</p>
-            <div className="endpoints-actions">
-              <button
-                type="button"
-                className="hud-settings-switch"
-                disabled={checking || savingWorktreeSetup || Boolean(busyKey)}
-                onClick={() => applyWorktreeSetup(worktreeSetup)}
-              >
-                Save
-              </button>
-            </div>
-          </div>
           {rows.map((row) => {
             const status = harnessStatus(row)
             const name = harnessDisplayName(row)
@@ -625,6 +433,192 @@ export default function HarnessesSettings({ client }) {
           </section>
         </div>
       ) : null}
+    </section>
+  )
+}
+
+function harnessRowsOf(answer) {
+  return Array.isArray(answer) ? answer : Array.isArray(answer?.harnesses) ? answer.harnesses : []
+}
+
+/**
+ * The four lane settings the bridge keeps with the harness settings, shown in the Lanes section.
+ */
+export function LaneSettingsFields({ client }) {
+  const live = Boolean(client && typeof client.harnesses === 'function')
+  const [laneReplies, setLaneReplies] = useState('next-turn')
+  const [laneCountWarning, setLaneCountWarning] = useState('0')
+  const [worktreeSetup, setWorktreeSetup] = useState('')
+  const [worktreeCopies, setWorktreeCopies] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const mountedRef = useRef(true)
+  const dirtyRef = useRef(new Set())
+
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
+
+  const load = useCallback(async () => {
+    if (!live) return
+    try {
+      const answer = await client.harnesses()
+      if (!mountedRef.current) return
+      const first = harnessRowsOf(answer)[0]
+      setLaneReplies(first?.laneReplies === 'interrupt' ? 'interrupt' : 'next-turn')
+      if (!dirtyRef.current.has('laneCount')) setLaneCountWarning(String(laneCountWarningFrom(answer)))
+      if (!dirtyRef.current.has('setup')) setWorktreeSetup(typeof first?.worktreeSetup === 'string' ? first.worktreeSetup : '')
+      if (!dirtyRef.current.has('copies')) setWorktreeCopies(Array.isArray(first?.worktreeCopies) ? first.worktreeCopies.join('\n') : '')
+      setError('')
+    } catch (failure) {
+      if (mountedRef.current) setError(failure?.message || 'Could not load the lane settings.')
+    }
+  }, [client, live])
+
+  useEffect(() => {
+    load()
+  }, [load])
+
+  useEffect(() => {
+    if (!live || typeof client.subscribe !== 'function') return undefined
+    return client.subscribe((event) => {
+      if (event?.topic === 'harnesses') load()
+    })
+  }, [client, live, load])
+
+  async function save(payload, failure, done) {
+    if (!client || typeof client.harnessSettings !== 'function') return
+    setBusy(true)
+    setError('')
+    try {
+      await client.harnessSettings({ ...payload, confirmed: true })
+      if (!mountedRef.current) return
+      done()
+    } catch (problem) {
+      if (mountedRef.current) setError(problem?.message || failure)
+    } finally {
+      if (mountedRef.current) setBusy(false)
+    }
+  }
+
+  function saveReplies(value) {
+    return save({ laneReplies: value }, 'Could not save the reply choice.', () => setLaneReplies(value))
+  }
+
+  function saveLaneCount() {
+    const text = String(laneCountWarning ?? '').trim()
+    const count = text === '' ? Number.NaN : Number(text)
+    if (!Number.isInteger(count) || count < 0) {
+      setError('Write the lane count warning as a whole number, 0 or more.')
+      return undefined
+    }
+    return save({ laneCountWarning: count }, 'Could not save the lane count warning.', () => {
+      dirtyRef.current.delete('laneCount')
+      setLaneCountWarning(String(count))
+    })
+  }
+
+  function saveWorktree() {
+    const command = worktreeSetup.trim()
+    const copies = worktreeCopies.split(/\r?\n/).map((path) => path.trim()).filter(Boolean)
+    return save({ worktreeSetup: command, worktreeCopies: copies }, 'Could not save the worktree setup command.', () => {
+      dirtyRef.current.delete('setup')
+      dirtyRef.current.delete('copies')
+      setWorktreeSetup(command)
+    })
+  }
+
+  if (!live) return null
+
+  return (
+    <section className="hud-settings-section endpoints-panel" aria-label="Lane settings">
+      {error ? (
+        <p className="endpoints-error mono" role="alert">
+          {error}
+        </p>
+      ) : null}
+      <div className="endpoints-field">
+        <label className="endpoints-label mono" htmlFor="harness-lane-replies">
+          Replies to a working lane
+        </label>
+        <select
+          id="harness-lane-replies"
+          value={laneReplies}
+          disabled={busy}
+          onChange={(event) => saveReplies(event.target.value)}
+        >
+          <option value="next-turn">Wait for its next turn</option>
+          <option value="interrupt">Interrupt it at once</option>
+        </select>
+      </div>
+      <div className="endpoints-field">
+        <label className="endpoints-label mono" htmlFor="harness-lane-count-warning">
+          Warn above this many running lanes
+        </label>
+        <input
+          id="harness-lane-count-warning"
+          type="number"
+          min="0"
+          step="1"
+          value={laneCountWarning}
+          disabled={busy}
+          onChange={(event) => {
+            dirtyRef.current.add('laneCount')
+            setLaneCountWarning(event.target.value)
+          }}
+        />
+        <div className="endpoints-actions">
+          <button
+            type="button"
+            className="hud-settings-switch"
+            disabled={busy}
+            onClick={() => saveLaneCount()}
+          >
+            Save
+          </button>
+        </div>
+        <p className="endpoints-note mono">0 turns the warning off.</p>
+      </div>
+      <div className="endpoints-field">
+        <label className="endpoints-label mono" htmlFor="harness-worktree-setup">
+          Worktree setup command
+        </label>
+        <input
+          id="harness-worktree-setup"
+          type="text"
+          value={worktreeSetup}
+          disabled={busy}
+          onChange={(event) => {
+            dirtyRef.current.add('setup')
+            setWorktreeSetup(event.target.value)
+          }}
+        />
+        <p className="endpoints-note mono">Runs once in each new lane worktree, for example npm ci.</p>
+        <label className="endpoints-label mono" htmlFor="harness-worktree-copies">Copy into new worktrees</label>
+        <textarea
+          id="harness-worktree-copies"
+          value={worktreeCopies}
+          disabled={busy}
+          onChange={(event) => {
+            dirtyRef.current.add('copies')
+            setWorktreeCopies(event.target.value)
+          }}
+        />
+        <p className="endpoints-note mono">One project-relative file path per line. Each copy adds an ignore line shared with the main checkout.</p>
+        <div className="endpoints-actions">
+          <button
+            type="button"
+            className="hud-settings-switch"
+            disabled={busy}
+            onClick={() => saveWorktree()}
+          >
+            Save
+          </button>
+        </div>
+      </div>
     </section>
   )
 }

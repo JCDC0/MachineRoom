@@ -1,5 +1,4 @@
-import { createElement } from 'react'
-import { renderToString } from 'react-dom/server'
+import { act, createElement } from 'react'
 import { describe, expect, it } from 'vitest'
 import { validateBridgeUrl } from '../src/ui/Connect.jsx'
 import { readStorage, writeStorage } from '../src/storage.js'
@@ -7,6 +6,17 @@ import Settings, { EFFECTS } from '../src/ui/Settings.jsx'
 import { RECORD_MINUTES_DEFAULT, RECORD_MINUTES_MAX, RECORD_MINUTES_MIN, clampRecordMinutes } from '../src/model/recordLimits.js'
 import { DEFAULT_EFFECTS, DEFAULT_SETTINGS, clampFileLimit, effectSettings, FILE_LIMIT_DEFAULT, FILE_LIMIT_MAX, FILE_LIMIT_MIN, loadAssistantPosition, loadEffectSettings, loadSettings, loadSoundSettings, saveAssistantPosition, saveEffectSettings, saveSettings, saveSoundSettings, savedSource, SETTINGS_KEY, soundSettings } from '../src/ui/settings.js'
 import { saveMusicSettings } from '../src/ui/musicQueue.js'
+import { openTab, withDom } from './helpers/uiDom.js'
+
+async function settingsPanel(tab, check) {
+  await withDom(async ({ container, root }) => {
+    await act(async () => {
+      root.render(createElement(Settings, { effects: { alwaysDepth: 2 }, onChange: () => {}, onClose: () => {} }))
+    })
+    await openTab(root, container, tab)
+    check(container)
+  })
+}
 
 function makeStorage(initial = {}) {
   const map = new Map(Object.entries(initial))
@@ -221,17 +231,15 @@ describe('the record time setting', () => {
     expect(loadSettings(old).recordMinutes).toBe(RECORD_MINUTES_DEFAULT)
   })
 
-  it('renders the Replay section row with its hint and limits', () => {
-    const html = renderToString(
-      createElement(Settings, { effects: { alwaysDepth: 2 }, onChange: () => {}, onClose: () => {} })
-    )
-    expect(html).toContain('Replay')
-    expect(html).toContain('Record time')
-    expect(html).toContain('Replay keeps this many minutes, starting at the first conversation.')
-    expect(html).toContain('aria-label="Record time in minutes"')
-    expect(html).toContain(`min="${RECORD_MINUTES_MIN}"`)
-    expect(html).toContain(`max="${RECORD_MINUTES_MAX}"`)
-    expect(html).toContain(`value="${RECORD_MINUTES_DEFAULT}"`)
+  it('renders the Replay section row with its hint and limits', async () => {
+    await settingsPanel('Replay', (container) => {
+      expect(container.textContent).toContain('Record time')
+      expect(container.textContent).toContain('Replay keeps this many minutes, starting at the first conversation.')
+      const input = container.querySelector('[aria-label="Record time in minutes"]')
+      expect(input.getAttribute('min')).toBe(String(RECORD_MINUTES_MIN))
+      expect(input.getAttribute('max')).toBe(String(RECORD_MINUTES_MAX))
+      expect(input.value).toBe(String(RECORD_MINUTES_DEFAULT))
+    })
   })
 })
 
@@ -288,44 +296,44 @@ describe('the content files setting', () => {
     expect(loadEffectSettings(makeStorage()).maxFiles).toBe(FILE_LIMIT_DEFAULT)
   })
 
-  it('renders the Content files slider below Folder depth', () => {
-    const html = renderToString(
-      createElement(Settings, { effects: { alwaysDepth: 2 }, onChange: () => {}, onClose: () => {} })
-    )
-    expect(html).toContain('Content files')
-    expect(html).toContain('aria-label="Content files"')
-    expect(html).toContain(`min="${FILE_LIMIT_MIN}"`)
-    expect(html).toContain(`max="${FILE_LIMIT_MAX}"`)
-    expect(html).toContain(`value="${FILE_LIMIT_DEFAULT}"`)
-    expect(html).toContain(
-      `<span>${FILE_LIMIT_MIN}</span><span>${(FILE_LIMIT_MIN + FILE_LIMIT_MAX) / 2}</span><span>${FILE_LIMIT_MAX}</span>`
-    )
-    expect(html.indexOf('Content files')).toBeGreaterThan(html.indexOf('Folder depth'))
+  it('renders the Content files slider below Folder depth', async () => {
+    await settingsPanel('Screen effects', (container) => {
+      const text = container.textContent
+      expect(text.indexOf('Content files')).toBeGreaterThan(text.indexOf('Folder depth'))
+      const input = container.querySelector('[aria-label="Content files"]')
+      expect(input.getAttribute('min')).toBe(String(FILE_LIMIT_MIN))
+      expect(input.getAttribute('max')).toBe(String(FILE_LIMIT_MAX))
+      expect(input.value).toBe(String(FILE_LIMIT_DEFAULT))
+      const ticks = input.parentNode.querySelectorAll('span').map((span) => span.textContent)
+      expect(ticks).toEqual([FILE_LIMIT_MIN, (FILE_LIMIT_MIN + FILE_LIMIT_MAX) / 2, FILE_LIMIT_MAX].map(String))
+    })
   })
 
-  it('gives every effect, Beeps, Dance and Pulse switch an accessible name', () => {
-    const html = renderToString(
-      createElement(Settings, { effects: { alwaysDepth: 2 }, onChange: () => {}, onClose: () => {} })
-    )
-    for (const label of ['Chromatic aberration', 'Vignette', 'Grain', 'Fine dust', 'Bloom', 'Beeps', 'Dance', 'Pulse']) {
-      expect(html).toContain(`aria-label="${label}"`)
-    }
-    expect(html).toContain('aria-label="Bloom strength"')
+  it('gives every effect, Beeps, Dance and Pulse switch an accessible name', async () => {
+    await settingsPanel('Screen effects', (container) => {
+      for (const label of ['Chromatic aberration', 'Vignette', 'Grain', 'Fine dust', 'Bloom']) {
+        expect(container.querySelector(`[aria-label="${label}"]`)).not.toBeNull()
+      }
+      expect(container.querySelector('[aria-label="Bloom strength"]')).not.toBeNull()
+    })
+    await settingsPanel('Sound', (container) => {
+      for (const label of ['Beeps', 'Dance', 'Pulse']) {
+        expect(container.querySelector(`[aria-label="${label}"]`)).not.toBeNull()
+      }
+    })
   })
 
-  it('gives the Beeps volume a 0 to 100 slider with its percent beside it and one dim line', () => {
-    const html = renderToString(
-      createElement(Settings, { effects: { alwaysDepth: 2 }, onChange: () => {}, onClose: () => {} })
-    )
-    expect(html).toContain('aria-label="Beep volume"')
-    expect(html).toContain('type="range"')
-    expect(html).toContain('min="0"')
-    expect(html).toContain('max="100"')
-    expect(html).toContain('value="30"')
-    expect(html).toContain('30<!-- -->%')
-    expect(html).toContain('A short tone when an agent reads, writes, makes or deletes a file.')
-    expect(html.indexOf('Beeps')).toBeLessThan(html.indexOf('Beep volume'))
-    expect(html.indexOf('Beep volume')).toBeLessThan(html.indexOf('A short tone when an agent'))
+  it('gives the Beeps volume a 0 to 100 slider with its percent beside it and one dim line', async () => {
+    await settingsPanel('Sound', (container) => {
+      const slider = container.querySelector('[aria-label="Beep volume"]')
+      expect(slider.getAttribute('min')).toBe('0')
+      expect(slider.getAttribute('max')).toBe('100')
+      expect(slider.value).toBe('30')
+      const text = container.textContent
+      expect(text).toContain('30%')
+      expect(text).toContain('A short tone when an agent reads, writes, makes or deletes a file.')
+      expect(text.indexOf('Beeps')).toBeLessThan(text.indexOf('A short tone when an agent'))
+    })
   })
 })
 

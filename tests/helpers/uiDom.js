@@ -503,3 +503,9 @@ export function buttonWithText(scope, text) {
 export function classesOf(node) {
   return String(node.className).split(/\s+/).filter(Boolean)
 }
+
+export async function openTab(root, scope, label) {
+  const tab = scope.querySelectorAll('[role="tab"]').find((item) => item.textContent.trim() === label)
+  if (!tab) throw new Error(`No settings tab named ${label}`)
+  await click(root, tab)
+}

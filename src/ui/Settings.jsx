@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import EndpointsPanel from './EndpointsPanel.jsx'
-import HarnessesSettings from './HarnessesSettings.jsx'
+import HarnessesSettings, { LaneSettingsFields } from './HarnessesSettings.jsx'
 import AgentDepthSettings from './AgentDepthSettings.jsx'
 import KeysSettings from './KeysSettings.jsx'
 import LanesSettings from './LanesSettings.jsx'
@@ -8,7 +8,7 @@ import McpSettings from './McpSettings.jsx'
 import MusicPlayer from './MusicPlayer.jsx'
 import SearchSettings from './SearchSettings.jsx'
 import StorageSettings from './StorageSettings.jsx'
-import { store } from '../storage.js'
+import { readStorage, store, writeStorage } from '../storage.js'
 import { RECORD_MINUTES_MAX, RECORD_MINUTES_MIN, clampRecordMinutes } from '../model/recordLimits.js'
 import { effectSettings, clampFileLimit, FILE_LIMIT_MAX, FILE_LIMIT_MIN, loadSettings, loadSoundSettings, saveSettings, saveSoundSettings } from './settings.js'
 import { sound } from './sound.js'
@@ -21,6 +21,26 @@ export const EFFECTS = [
   { key: 'bloom', label: 'Bloom', costly: false },
 ]
 
+export const SETTINGS_TAB_KEY = 'machineroom.settingsTab'
+export const SETTINGS_TABS = [
+  { key: 'harnesses', label: 'Harnesses' },
+  { key: 'direct-api', label: 'Direct API' },
+  { key: 'keys', label: 'Keys' },
+  { key: 'lanes', label: 'Lanes' },
+  { key: 'effects', label: 'Screen effects' },
+  { key: 'replay', label: 'Replay' },
+  { key: 'sound', label: 'Sound' },
+  { key: 'subagents', label: 'Subagents' },
+  { key: 'mcp', label: 'MCP tools' },
+  { key: 'search', label: 'Web search' },
+  { key: 'storage', label: 'Storage' },
+]
+
+function savedTab() {
+  const key = readStorage(SETTINGS_TAB_KEY)
+  return SETTINGS_TABS.some((tab) => tab.key === key) ? key : SETTINGS_TABS[0].key
+}
+
 export default function Settings({ open = true, effects, onChange, onSettingsChange, onClose, client = null, project = '', focusDirectApi = 0 }) {
   const current = effectSettings(effects)
   const [soundState, setSoundState] = useState(() => loadSoundSettings(store()))
@@ -31,16 +51,42 @@ export default function Settings({ open = true, effects, onChange, onSettingsCha
   currentRef.current = current
   onSettingsChangeRef.current = onSettingsChange
   const seenDirectApi = useRef(0)
+  const [tab, setTab] = useState(savedTab)
+
+  function openTab(key) {
+    setTab(key)
+    writeStorage(SETTINGS_TAB_KEY, key)
+  }
+
+  function onTabKeyDown(event) {
+    const step = event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : 0
+    const edge = event.key === 'Home' ? 0 : event.key === 'End' ? SETTINGS_TABS.length - 1 : null
+    if (!step && edge === null) return
+    event.preventDefault()
+    const index = SETTINGS_TABS.findIndex((item) => item.key === tab)
+    const next = edge ?? (index + step + SETTINGS_TABS.length) % SETTINGS_TABS.length
+    openTab(SETTINGS_TABS[next].key)
+    event.currentTarget.querySelector(`#hud-settings-tab-${SETTINGS_TABS[next].key}`)?.focus()
+  }
+
+  const scrollPending = useRef(false)
 
   useEffect(() => {
     const nonce = Number(focusDirectApi) || 0
     if (!open || nonce === 0 || seenDirectApi.current === nonce) return
     seenDirectApi.current = nonce
+    scrollPending.current = true
+    setTab('direct-api')
+  }, [open, focusDirectApi])
+
+  useEffect(() => {
+    if (!open || tab !== 'direct-api' || !scrollPending.current) return
+    scrollPending.current = false
     const target = typeof document !== 'undefined' ? document.getElementById('settings-direct-api') : null
     if (target && typeof target.scrollIntoView === 'function') {
       target.scrollIntoView({ block: 'start' })
     }
-  }, [open, focusDirectApi])
+  }, [open, tab, focusDirectApi])
 
   function updateSound(patch) {
     const next = saveSoundSettings(store(), patch)
@@ -99,213 +145,244 @@ export default function Settings({ open = true, effects, onChange, onSettingsCha
         </button>
       </header>
 
-      <div className="hud-settings-body">
-        <HarnessesSettings client={client} />
-        <EndpointsPanel client={client} />
-        <KeysSettings client={client} />
-        <LanesSettings client={client} project={project} />
+      <div role="tablist" aria-label="Settings sections" className="hud-settings-tabs" onKeyDown={onTabKeyDown}>
+        {SETTINGS_TABS.map((item) => (
+          <button
+            key={item.key}
+            type="button"
+            role="tab"
+            id={`hud-settings-tab-${item.key}`}
+            aria-selected={tab === item.key}
+            aria-controls="hud-settings-panel"
+            tabIndex={tab === item.key ? 0 : -1}
+            className={`hud-settings-tab ${tab === item.key ? 'is-on' : ''}`}
+            onClick={() => openTab(item.key)}
+          >
+            {item.label}
+          </button>
+        ))}
+      </div>
 
-        <div className="hud-settings-section">
-          <div className="hud-settings-row">
-            <span className="hud-settings-label">Folder depth</span>
-            <span className="hud-settings-value mono">{current.alwaysDepth}</span>
-          </div>
-          <div className="hud-settings-control">
-            <input
-              type="range"
-              min="1"
-              max="3"
-              step="1"
-              value={current.alwaysDepth}
-              aria-label="Folder depth"
-              onChange={(event) => updateDepth(Number(event.target.value))}
-            />
-            <div className="hud-settings-ticks mono">
-              <span>1</span>
-              <span>2</span>
-              <span>3</span>
+      <div className="hud-settings-body" role="tabpanel" id="hud-settings-panel" aria-labelledby={`hud-settings-tab-${tab}`}>
+        {tab === 'harnesses' && <HarnessesSettings client={client} />}
+        {tab === 'direct-api' && <EndpointsPanel client={client} />}
+        {tab === 'keys' && <KeysSettings client={client} />}
+        {tab === 'lanes' && (
+          <>
+            <LaneSettingsFields client={client} />
+            <LanesSettings client={client} project={project} />
+          </>
+        )}
+        {tab === 'effects' && (
+          <>
+          <div className="hud-settings-section">
+            <div className="hud-settings-row">
+              <span className="hud-settings-label">Folder depth</span>
+              <span className="hud-settings-value mono">{current.alwaysDepth}</span>
+            </div>
+            <div className="hud-settings-control">
+              <input
+                type="range"
+                min="1"
+                max="3"
+                step="1"
+                value={current.alwaysDepth}
+                aria-label="Folder depth"
+                onChange={(event) => updateDepth(Number(event.target.value))}
+              />
+              <div className="hud-settings-ticks mono">
+                <span>1</span>
+                <span>2</span>
+                <span>3</span>
+              </div>
+            </div>
+            <div className="hud-settings-row">
+              <span className="hud-settings-label">Content files</span>
+              <span className="hud-settings-value mono">{current.maxFiles}</span>
+            </div>
+            <div className="hud-settings-control">
+              <input
+                type="range"
+                min={FILE_LIMIT_MIN}
+                max={FILE_LIMIT_MAX}
+                step="1"
+                value={current.maxFiles}
+                aria-label="Content files"
+                onChange={(event) => updateMaxFiles(Number(event.target.value))}
+              />
+              <div className="hud-settings-ticks mono">
+                <span>4</span>
+                <span>12</span>
+                <span>20</span>
+              </div>
             </div>
           </div>
-          <div className="hud-settings-row">
-            <span className="hud-settings-label">Content files</span>
-            <span className="hud-settings-value mono">{current.maxFiles}</span>
-          </div>
-          <div className="hud-settings-control">
-            <input
-              type="range"
-              min={FILE_LIMIT_MIN}
-              max={FILE_LIMIT_MAX}
-              step="1"
-              value={current.maxFiles}
-              aria-label="Content files"
-              onChange={(event) => updateMaxFiles(Number(event.target.value))}
-            />
-            <div className="hud-settings-ticks mono">
-              <span>4</span>
-              <span>12</span>
-              <span>20</span>
-            </div>
-          </div>
-        </div>
 
-        <div className="hud-settings-section">
-          <h3 className="hud-settings-section-title">Screen effects</h3>
-          <div className="hud-settings-effects">
-            {EFFECTS.map(({ key, label, costly }) => {
-              const effect = current[key] ?? { on: false, strength: 0.2 }
-              const displayLabel = costly ? `${label} (costly)` : label
-              return (
-                <div key={key} className="hud-settings-effect">
-                  <div className="hud-settings-row">
-                    <span className="hud-settings-label">{displayLabel}</span>
-                    <div className="hud-settings-actions">
-                      <button
-                        type="button"
-                        role="switch"
-                        aria-checked={effect.on}
-                        aria-label={displayLabel}
-                        className={`hud-settings-switch ${effect.on ? 'is-on' : ''}`}
-                        onClick={() => updateEffect(key, { on: !effect.on })}
-                      >
-                        {effect.on ? 'On' : 'Off'}
-                      </button>
-                      {key === 'dust' && (
+          <div className="hud-settings-section">
+            <h3 className="hud-settings-section-title">Screen effects</h3>
+            <div className="hud-settings-effects">
+              {EFFECTS.map(({ key, label, costly }) => {
+                const effect = current[key] ?? { on: false, strength: 0.2 }
+                const displayLabel = costly ? `${label} (costly)` : label
+                return (
+                  <div key={key} className="hud-settings-effect">
+                    <div className="hud-settings-row">
+                      <span className="hud-settings-label">{displayLabel}</span>
+                      <div className="hud-settings-actions">
                         <button
                           type="button"
                           role="switch"
-                          aria-checked={effect.pulse === true}
-                          aria-label="Fine dust pulse"
-                          className={`hud-settings-switch ${effect.pulse ? 'is-on' : ''}`}
-                          disabled={!effect.on}
-                          onClick={() => updateEffect(key, { pulse: !effect.pulse })}
+                          aria-checked={effect.on}
+                          aria-label={displayLabel}
+                          className={`hud-settings-switch ${effect.on ? 'is-on' : ''}`}
+                          onClick={() => updateEffect(key, { on: !effect.on })}
                         >
-                          {effect.pulse ? 'Pulse' : 'Steady'}
+                          {effect.on ? 'On' : 'Off'}
                         </button>
-                      )}
-                      <span className="hud-settings-value mono">
-                        {Math.round(effect.strength * 100)}%
-                      </span>
+                        {key === 'dust' && (
+                          <button
+                            type="button"
+                            role="switch"
+                            aria-checked={effect.pulse === true}
+                            aria-label="Fine dust pulse"
+                            className={`hud-settings-switch ${effect.pulse ? 'is-on' : ''}`}
+                            disabled={!effect.on}
+                            onClick={() => updateEffect(key, { pulse: !effect.pulse })}
+                          >
+                            {effect.pulse ? 'Pulse' : 'Steady'}
+                          </button>
+                        )}
+                        <span className="hud-settings-value mono">
+                          {Math.round(effect.strength * 100)}%
+                        </span>
+                      </div>
+                    </div>
+                    <div className="hud-settings-control">
+                      <input
+                        type="range"
+                        min="0"
+                        max="1"
+                        step="0.05"
+                        value={effect.strength}
+                        disabled={!effect.on}
+                        aria-label={`${label} strength`}
+                        onChange={(event) => updateEffect(key, { strength: Number(event.target.value) })}
+                      />
                     </div>
                   </div>
-                  <div className="hud-settings-control">
-                    <input
-                      type="range"
-                      min="0"
-                      max="1"
-                      step="0.05"
-                      value={effect.strength}
-                      disabled={!effect.on}
-                      aria-label={`${label} strength`}
-                      onChange={(event) => updateEffect(key, { strength: Number(event.target.value) })}
-                    />
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        </div>
-
-        <div className="hud-settings-section">
-          <h3 className="hud-settings-section-title">Replay</h3>
-          <div className="hud-settings-row">
-            <span className="hud-settings-label">Record time</span>
-            <div className="hud-settings-actions">
-              <input
-                type="number"
-                min={RECORD_MINUTES_MIN}
-                max={RECORD_MINUTES_MAX}
-                step="1"
-                value={recordDraft}
-                aria-label="Record time in minutes"
-                onChange={(event) => {
-                  recordDraftRef.current = event.target.value
-                  setRecordDraft(event.target.value)
-                }}
-                onBlur={commitRecordMinutes}
-                onKeyDown={(event) => {
-                  if (event.key !== 'Enter') return
-                  event.preventDefault()
-                  commitRecordMinutes()
-                }}
-              />
-              <span className="hud-settings-value mono">min</span>
+                )
+              })}
             </div>
           </div>
-          <p className="hud-settings-hint">Replay keeps this many minutes, starting at the first conversation.</p>
-        </div>
-
-        <div className="hud-settings-section">
-          <h3 className="hud-settings-section-title">Sound</h3>
-          <div className="hud-settings-effects">
-            <div className="hud-settings-effect">
-              <div className="hud-settings-row">
-                <span className="hud-settings-label">Beeps</span>
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={soundState.on}
-                  aria-label="Beeps"
-                  className={`hud-settings-switch ${soundState.on ? 'is-on' : ''}`}
-                  onClick={() => updateSound({ on: !soundState.on })}
-                >
-                  {soundState.on ? 'On' : 'Off'}
-                </button>
-              </div>
-              <div className="hud-settings-control hud-settings-slider">
+          </>
+        )}
+        {tab === 'replay' && (
+          <>
+          <div className="hud-settings-section">
+            <h3 className="hud-settings-section-title">Replay</h3>
+            <div className="hud-settings-row">
+              <span className="hud-settings-label">Record time</span>
+              <div className="hud-settings-actions">
                 <input
-                  type="range"
-                  min="0"
-                  max="100"
+                  type="number"
+                  min={RECORD_MINUTES_MIN}
+                  max={RECORD_MINUTES_MAX}
                   step="1"
-                  value={Math.round(soundState.volume * 100)}
-                  aria-label="Beep volume"
+                  value={recordDraft}
+                  aria-label="Record time in minutes"
                   onChange={(event) => {
-                    const percent = Math.min(100, Math.max(0, Number(event.target.value) || 0))
-                    updateSound({ volume: percent / 100 })
+                    recordDraftRef.current = event.target.value
+                    setRecordDraft(event.target.value)
+                  }}
+                  onBlur={commitRecordMinutes}
+                  onKeyDown={(event) => {
+                    if (event.key !== 'Enter') return
+                    event.preventDefault()
+                    commitRecordMinutes()
                   }}
                 />
-                <span className="hud-settings-value mono">{Math.round(soundState.volume * 100)}%</span>
-              </div>
-              <p className="hud-settings-hint">A short tone when an agent reads, writes, makes or deletes a file.</p>
-            </div>
-            <div className="hud-settings-effect">
-              <div className="hud-settings-row">
-                <span className="hud-settings-label">Dance</span>
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={soundState.dance}
-                  aria-label="Dance"
-                  className={`hud-settings-switch ${soundState.dance ? 'is-on' : ''}`}
-                  onClick={() => updateSound({ dance: !soundState.dance })}
-                >
-                  {soundState.dance ? 'On' : 'Off'}
-                </button>
+                <span className="hud-settings-value mono">min</span>
               </div>
             </div>
-            <div className="hud-settings-effect">
-              <div className="hud-settings-row">
-                <span className="hud-settings-label">Pulse</span>
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={soundState.pulse}
-                  aria-label="Pulse"
-                  className={`hud-settings-switch ${soundState.pulse ? 'is-on' : ''}`}
-                  onClick={() => updateSound({ pulse: !soundState.pulse })}
-                >
-                  {soundState.pulse ? 'On' : 'Off'}
-                </button>
-              </div>
-            </div>
-            <MusicPlayer />
+            <p className="hud-settings-hint">Replay keeps this many minutes, starting at the first conversation.</p>
           </div>
-        </div>
-
-        <AgentDepthSettings client={client} />
-        <McpSettings client={client} />
-        <SearchSettings client={client} />
-        <StorageSettings client={client} />
+          </>
+        )}
+        {tab === 'sound' && (
+          <>
+          <div className="hud-settings-section">
+            <h3 className="hud-settings-section-title">Sound</h3>
+            <div className="hud-settings-effects">
+              <div className="hud-settings-effect">
+                <div className="hud-settings-row">
+                  <span className="hud-settings-label">Beeps</span>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={soundState.on}
+                    aria-label="Beeps"
+                    className={`hud-settings-switch ${soundState.on ? 'is-on' : ''}`}
+                    onClick={() => updateSound({ on: !soundState.on })}
+                  >
+                    {soundState.on ? 'On' : 'Off'}
+                  </button>
+                </div>
+                <div className="hud-settings-control hud-settings-slider">
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    step="1"
+                    value={Math.round(soundState.volume * 100)}
+                    aria-label="Beep volume"
+                    onChange={(event) => {
+                      const percent = Math.min(100, Math.max(0, Number(event.target.value) || 0))
+                      updateSound({ volume: percent / 100 })
+                    }}
+                  />
+                  <span className="hud-settings-value mono">{Math.round(soundState.volume * 100)}%</span>
+                </div>
+                <p className="hud-settings-hint">A short tone when an agent reads, writes, makes or deletes a file.</p>
+              </div>
+              <div className="hud-settings-effect">
+                <div className="hud-settings-row">
+                  <span className="hud-settings-label">Dance</span>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={soundState.dance}
+                    aria-label="Dance"
+                    className={`hud-settings-switch ${soundState.dance ? 'is-on' : ''}`}
+                    onClick={() => updateSound({ dance: !soundState.dance })}
+                  >
+                    {soundState.dance ? 'On' : 'Off'}
+                  </button>
+                </div>
+              </div>
+              <div className="hud-settings-effect">
+                <div className="hud-settings-row">
+                  <span className="hud-settings-label">Pulse</span>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={soundState.pulse}
+                    aria-label="Pulse"
+                    className={`hud-settings-switch ${soundState.pulse ? 'is-on' : ''}`}
+                    onClick={() => updateSound({ pulse: !soundState.pulse })}
+                  >
+                    {soundState.pulse ? 'On' : 'Off'}
+                  </button>
+                </div>
+              </div>
+              <MusicPlayer />
+            </div>
+          </div>
+          </>
+        )}
+        {tab === 'subagents' && <AgentDepthSettings client={client} />}
+        {tab === 'mcp' && <McpSettings client={client} />}
+        {tab === 'search' && <SearchSettings client={client} />}
+        {tab === 'storage' && <StorageSettings client={client} />}
       </div>
     </section>
   )

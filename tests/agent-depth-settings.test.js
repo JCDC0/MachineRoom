@@ -2,7 +2,7 @@ import { act, createElement } from 'react'
 import { describe, expect, it } from 'vitest'
 import AgentDepthSettings, { UNLOCK_TEXT } from '../src/ui/AgentDepthSettings.jsx'
 import Settings from '../src/ui/Settings.jsx'
-import { buttonWithText, click, settle, withDom } from './helpers/uiDom.js'
+import { buttonWithText, click, settle, withDom, openTab } from './helpers/uiDom.js'
 
 function makeClient(start = { limit: 2, unlocked: false }) {
   const calls = { agentDepth: 0, setAgentDepth: [] }
@@ -157,6 +157,8 @@ describe('the Subagents section', () => {
       await act(async () => {
         root.render(createElement(Settings, { open: true, effects: {}, onClose: () => {}, client }))
       })
+      await settle()
+      await openTab(root, container, 'Subagents')
       await settle()
 
       expect(container.querySelector('.mr-depth')).not.toBeNull()

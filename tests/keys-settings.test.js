@@ -2,7 +2,7 @@ import { act, createElement } from 'react'
 import { describe, expect, it } from 'vitest'
 import KeysSettings, { deleteKeyText } from '../src/ui/KeysSettings.jsx'
 import Settings from '../src/ui/Settings.jsx'
-import { buttonWithText, click, settle, withDom } from './helpers/uiDom.js'
+import { buttonWithText, click, settle, withDom, openTab } from './helpers/uiDom.js'
 
 const SECRET = 'secret-that-must-not-render'
 
@@ -56,6 +56,8 @@ describe('the Keys section', () => {
       await act(async () => {
         root.render(createElement(Settings, { open: true, effects: {}, onClose: () => {}, client }))
       })
+      await settle()
+      await openTab(root, container, 'Keys')
       await settle()
 
       expect(container.querySelector('.mr-keys')).not.toBeNull()

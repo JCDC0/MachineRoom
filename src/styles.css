@@ -2349,6 +2349,31 @@ button.hud-health-chip:hover {
   border-color: var(--black);
 }
 
+.hud-settings-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: var(--space) calc(var(--space) * 2) 0;
+}
+
+.hud-settings-tab {
+  padding: 2px var(--space);
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 400;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  background: transparent;
+  color: rgb(255 255 255 / 0.55);
+  border: 1px solid rgb(255 255 255 / 0.12);
+}
+
+.hud-settings-tab:hover,
+.hud-settings-tab.is-on {
+  color: var(--yellow);
+  border-color: var(--yellow);
+}
+
 .hud-settings-body {
   padding: calc(var(--space) * 2);
   display: flex;

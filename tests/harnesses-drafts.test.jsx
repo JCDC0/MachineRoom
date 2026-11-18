@@ -1,6 +1,6 @@
-import { act, createElement } from 'react'
+import { act, createElement, Fragment } from 'react'
 import { describe, expect, test, vi } from 'vitest'
-import HarnessesSettings from '../src/ui/HarnessesSettings.jsx'
+import HarnessesSettings, { LaneSettingsFields } from '../src/ui/HarnessesSettings.jsx'
 import { click, settle, type, withDom } from './helpers/uiDom.js'
 
 function row(key, fields) {
@@ -19,7 +19,7 @@ describe('Harnesses drafts', () => {
       }),
     }
     await withDom(async ({ container, root }) => {
-      await act(async () => root.render(createElement(HarnessesSettings, { client })))
+      await act(async () => root.render(createElement(Fragment, null, createElement(LaneSettingsFields, { client }), createElement(HarnessesSettings, { client }))))
       await settle()
       await type(root, container.querySelector('#harness-program-acp1'), 'my-prog')
       await click(root, container.querySelector('[role="switch"]'))
@@ -50,7 +50,7 @@ describe('Harnesses drafts', () => {
     }
     await withDom(async ({ container, root }) => {
       await act(async () => {
-        root.render(createElement(HarnessesSettings, { client }))
+        root.render(createElement(Fragment, null, createElement(LaneSettingsFields, { client }), createElement(HarnessesSettings, { client })))
       })
       await settle()
       const setup = container.querySelector('#harness-worktree-setup')
