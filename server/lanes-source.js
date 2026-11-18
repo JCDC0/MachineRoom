@@ -501,6 +501,9 @@ export function createLanesSource(options = {}) {
       threadId: '',
       contextWindow: null,
       contextTokens: null,
+      contextAssistant: false,
+      contextResultIterations: false,
+      reportedModel: '',
       contextCheckAt: 0,
       contextSignature: '',
       plainLines: [],
@@ -710,8 +713,23 @@ export function createLanesSource(options = {}) {
       if (!line.trim()) continue
       const cli = currentLanes()[run.agent.key]?.cli ?? {}
       if (cli.harness === 'codex') run.threadId ||= codexThreadId(line)
-      if (cli.harness === 'claude') run.contextWindow = claudeContextWindow(line, cli.model) ?? run.contextWindow
-      run.contextTokens = contextTokensFromLog(cli.harness, line) ?? run.contextTokens
+      let item
+      try { item = JSON.parse(line) } catch { item = null }
+      if (cli.harness === 'claude') {
+        if (!item?.parent_tool_use_id && ((item?.type === 'system' && item.subtype === 'init') || item?.type === 'assistant')) {
+          run.reportedModel = item.message?.model || item.model || run.reportedModel
+        }
+        run.contextWindow = claudeContextWindow(line, run.reportedModel || cli.model) ?? run.contextWindow
+      }
+      const tokens = contextTokensFromLog(cli.harness, line)
+      const iterations = item?.type === 'result' && Array.isArray(item.usage?.iterations)
+        ? contextTokensFromLog(cli.harness, JSON.stringify({ type: 'result', usage: { iterations: item.usage.iterations } }))
+        : null
+      if (tokens !== null && (cli.harness === 'opencode' || item?.type !== 'result' || (!run.contextAssistant && (!run.contextResultIterations || iterations !== null)))) {
+        run.contextTokens = tokens
+        if (item?.type === 'assistant') run.contextAssistant = true
+        if (iterations !== null) run.contextResultIterations = true
+      }
       const entry = run.feed(run.rewrite(line))
       if (!entry || entry.read !== true) {
         // A plain line can be megabytes long, and only its start helps the error text.

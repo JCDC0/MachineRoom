@@ -396,7 +396,16 @@ describe('reported context windows', () => {
   it('reads the model window from the latest Claude result', () => {
     const log = JSON.stringify({ type: 'result', modelUsage: { 'claude-sonnet-5-5': { contextWindow: 1000000 } } })
     expect(claudeContextWindow(log, 'claude-sonnet-5-5')).toBe(1000000)
-    expect(claudeContextWindow(log, 'other')).toBeNull()
+    expect(claudeContextWindow(log, '')).toBe(1000000)
+    expect(claudeContextWindow(log, 'alias')).toBe(1000000)
+  })
+
+  it('selects the reported model among several usage entries', () => {
+    const usage = { first: { contextWindow: 32000 }, second: { contextWindow: 1000000 } }
+    const result = JSON.stringify({ type: 'result', modelUsage: usage })
+    expect(claudeContextWindow(result, 'alias')).toBeNull()
+    expect(claudeContextWindow(`${JSON.stringify({ type: 'system', subtype: 'init', model: 'second' })}\n${result}`, 'alias')).toBe(1000000)
+    expect(claudeContextWindow(`${JSON.stringify({ type: 'assistant', message: { model: 'first' } })}\n${result}`, 'alias')).toBe(32000)
   })
 
   it('fetches and saves missing endpoint details', async () => {

@@ -109,7 +109,12 @@ function claudeUsage(log) {
 
 export function claudeContextWindow(log, model) {
   const line = lastJsonLine(log, (item) => item?.type === 'result')
-  const value = line?.modelUsage?.[model]?.contextWindow
+  const reported = lastJsonLine(log, (item) => !item?.parent_tool_use_id && ((item?.type === 'system' && item.subtype === 'init' && item.model) || (item?.type === 'assistant' && (item.message?.model || item.model))))
+  const usage = line?.modelUsage ?? {}
+  const keys = Object.keys(usage)
+  const reportedModel = reported?.message?.model || reported?.model
+  const key = [reportedModel, model].find((name) => name && Object.hasOwn(usage, name)) ?? (keys.length === 1 ? keys[0] : null)
+  const value = usage[key]?.contextWindow
   return typeof value === 'number' && Number.isFinite(value) && value > 0 ? Math.round(value) : null
 }
 

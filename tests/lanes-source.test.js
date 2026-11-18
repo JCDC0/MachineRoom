@@ -86,6 +86,31 @@ function git(cwd, args) {
 }
 
 describe('lane agents', () => {
+  it('keeps current Claude assistant usage ahead of cumulative results', async () => {
+    const runs = tempDir()
+    const lanes = { claude: { name: 'Claude', cli: { harness: 'claude', model: 'alias' } } }
+    const { source } = startSource({ runs, lanes })
+    const log = join(runs, 'claude-P1-20261112-220000.log')
+    const line = (item) => `${JSON.stringify(item)}\n`
+    writeFileSync(log, line({ type: 'result', usage: { input_tokens: 200 } }))
+    await waitFor(() => source.openRuns()[0]?.contextTokens === 200, { what: 'result fallback' })
+    appendFileSync(log, line({ type: 'system', subtype: 'init', model: 'second' }) + line({ type: 'assistant', message: { usage: { input_tokens: 67491 } } }) + line({ type: 'result', usage: { input_tokens: 725456 }, modelUsage: { first: { contextWindow: 32000 }, second: { contextWindow: 1000000 } } }))
+    source.tick()
+    expect(source.openRuns()[0]).toMatchObject({ contextTokens: 67491, contextWindow: 1000000 })
+    appendFileSync(log, line({ type: 'assistant', message: { usage: { input_tokens: 123 } } }))
+    await waitFor(() => source.openRuns()[0]?.contextTokens === 123, { what: 'new assistant usage' })
+  })
+
+  it('keeps result iteration usage ahead of later totals when no assistant usage exists', async () => {
+    const runs = tempDir()
+    const lanes = { claude: { name: 'Claude', cli: { harness: 'claude' } } }
+    const { source } = startSource({ runs, lanes })
+    const log = join(runs, 'claude-P1-20261112-220000.log')
+    writeFileSync(log, `${JSON.stringify({ type: 'result', usage: { iterations: [{ input_tokens: 300 }] } })}\n${JSON.stringify({ type: 'result', usage: { input_tokens: 400 } })}\n`)
+    await waitFor(() => source.openRuns().length === 1, { what: 'open run' })
+    expect(source.openRuns()[0].contextTokens).toBe(300)
+  })
+
   it('lists one agent per lane with a command line and leaves retired lanes out', () => {
     const agents = laneAgents(realLanes)
     expect(agents.map((agent) => agent.key)).toEqual(['orchestrator', 'opencode', 'opencode2', 'opencode3', 'opencode4', 'opencode5', 'opencode6', 'opencode7', 'agy', 'agy2', 'agy3', 'claude', 'codex', 'native', 'native2', 'codex2', 'codex3'])
