@@ -4590,3 +4590,8 @@ Sweep S1 fixes, P514 to P516. `docs/agents/AUDIT-2026-11-SWEEP-S1.md` (P506, Cod
 1. The controls UI3-5 names (failure tray Clear, the Reviews count, conversation menus, agent switches, Add and Chat, lane selection boxes) get at least a 24 pixel hit area through one shared rule, keeping their icons and visible size where a larger box would crowd the row (a transparent padding or pseudo element is fine).
 2. A CSS test checks each selector reaches 24 pixels.
 3. Run the tests you changed and `npm run build`, and report the counts.
+
+**P553. Docs audit 4 fixes: the architecture files say what the code does (Codex, Terra).** Fixes D4-1 to D4-21 in `docs/agents/AUDIT-2026-11-DOCS-4.md`. Read that file first. Change docs only. Files: docs/agents/architecture/LIVE.md, docs/agents/architecture/ROOM.md, docs/agents/architecture/CODE.md, docs/agents/architecture/ACTIVITIES.md, docs/agents/ARCHITECTURE.md. Do not stop to ask about scope: decide, and list every decision and file in your report.
+1. For each finding, read the code lines it names, then replace the doc sentence with its corrected sentence, or a better one if the code says otherwise. Remove the repeated block D4-5 names. Keep plain words and no em dashes.
+2. Where another doc sentence repeats the same wrong claim, fix it too and name it in your report.
+3. Run `node node_modules/vitest/vitest.mjs run tests/docs-links.test.js tests/static-links.test.js` if they exist, and any test that reads these docs, and report the counts.
