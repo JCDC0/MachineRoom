@@ -3,13 +3,13 @@ import { createServer } from 'node:http'
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync, symlinkSync, writeFileSync, writeSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { summarizeRun } from '../src/briefs/run.js'
 import { createRunLineReader } from '../src/briefs/recording.js'
 import { harnessByKey } from '../src/harnesses/index.js'
 import { killTree } from '../server/processTree.js'
 import { gitPath } from '../server/programPath.js'
-import { minuteLimitOf, shellFor, toolResultWithMinutes } from '../scripts/mr-agent.mjs'
+import { minuteLimitOf, post, requestTimeoutMs, shellFor, toolResultWithMinutes } from '../scripts/mr-agent.mjs'
 import { makeTempDir, removeTempDir } from './helpers/tempRoot.js'
 
 const SCRIPT = fileURLToPath(new URL('../scripts/mr-agent.mjs', import.meta.url))
@@ -1811,5 +1811,89 @@ describe('mr-agent tools', () => {
     expect(users[2].is_error).toBe(true)
     expect(users[2].content).toContain('more than once')
     expect(readFileSync(join(folder, 'a.txt'), 'utf8')).toBe('y y y\n')
+  })
+})
+
+describe('each native request has its own timeout', () => {
+  const answer = { choices: [{ message: { content: 'ok' } }] }
+  let timeouts
+
+  function hangUntilAborted(init) {
+    return new Promise((resolve, reject) => {
+      const stop = () => reject(init.signal.reason)
+      if (init.signal.aborted) stop()
+      else init.signal.addEventListener('abort', stop)
+    })
+  }
+
+  function setup(fetchImpl) {
+    timeouts = []
+    vi.useFakeTimers()
+    vi.stubEnv('MR_AGENT_RETRY_BASE_MS', '1')
+    vi.spyOn(AbortSignal, 'timeout').mockImplementation((ms) => {
+      timeouts.push(ms)
+      const controller = new AbortController()
+      setTimeout(() => controller.abort(new DOMException('The operation was aborted due to timeout', 'TimeoutError')), ms)
+      return controller.signal
+    })
+    vi.stubGlobal('fetch', vi.fn(fetchImpl))
+  }
+
+  afterEach(() => {
+    vi.useRealTimers()
+    vi.unstubAllEnvs()
+    vi.unstubAllGlobals()
+    vi.restoreAllMocks()
+  })
+
+  it('retries an attempt that timed out and returns the answer', async () => {
+    let calls = 0
+    setup((url, init) => {
+      calls += 1
+      return calls === 1 ? hangUntilAborted(init) : Promise.resolve(new Response(JSON.stringify(answer)))
+    })
+    const result = post('http://x', null, {})
+    await vi.advanceTimersByTimeAsync(400000)
+    expect(await result).toEqual(answer)
+    expect(calls).toBe(2)
+    expect(timeouts).toEqual([300000, 300000])
+  })
+
+  it('fails after the last retry when every attempt times out', async () => {
+    let calls = 0
+    setup((url, init) => {
+      calls += 1
+      return hangUntilAborted(init)
+    })
+    const result = post('http://x', null, {})
+    const caught = result.catch((error) => error)
+    await vi.advanceTimersByTimeAsync(300000 * 6)
+    expect((await caught).message).toContain('The API request failed')
+    expect(calls).toBe(5)
+  })
+
+  it('stops at once with no retry when the caller aborts', async () => {
+    let calls = 0
+    setup((url, init) => {
+      calls += 1
+      return hangUntilAborted(init)
+    })
+    const controller = new AbortController()
+    const caught = post('http://x', null, {}, { signal: controller.signal }).catch((error) => error)
+    await vi.advanceTimersByTimeAsync(1000)
+    controller.abort(new Error('caller stop'))
+    await vi.advanceTimersByTimeAsync(1000)
+    expect((await caught).message).toBe('caller stop')
+    expect(calls).toBe(1)
+  })
+
+  it('reads the timeout from MR_AGENT_REQUEST_TIMEOUT_MS and ignores a bad value', () => {
+    expect(requestTimeoutMs({})).toBe(300000)
+    expect(requestTimeoutMs({ MR_AGENT_REQUEST_TIMEOUT_MS: '600000' })).toBe(600000)
+    expect(requestTimeoutMs({ MR_AGENT_REQUEST_TIMEOUT_MS: '10000' })).toBe(10000)
+    expect(requestTimeoutMs({ MR_AGENT_REQUEST_TIMEOUT_MS: '1800000' })).toBe(1800000)
+    for (const bad of ['9999', '1800001', '1.5e5', '-5', 'abc', '', '12000.5']) {
+      expect(requestTimeoutMs({ MR_AGENT_REQUEST_TIMEOUT_MS: bad })).toBe(300000)
+    }
   })
 })
