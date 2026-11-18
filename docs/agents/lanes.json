@@ -356,6 +356,48 @@
       "Never use git stash: the stash list is shared by every worktree. To show a test fails without your change, save the diff to a file and apply it in reverse, or make a temporary commit on your branch."
     ]
   },
+  "claude2": {
+    "name": "Claude Code 2",
+    "harness": "Claude Code",
+    "model": "Claude Sonnet",
+    "modelHint": "the alias passed to claude --model; the owner may change it",
+    "cli": {
+      "harness": "claude",
+      "bin": "claude",
+      "model": "claude-sonnet-5-5"
+    },
+    "worktree": "C:\\GitHub\\MachineRoom\\.worktrees\\claude2",
+    "role": "You work on the brief in your own worktree and report back.",
+    "forbidden": [
+      "src/Stage.jsx",
+      "src/App.jsx"
+    ],
+    "notes": [
+      "Do not start Claude Code headless outside a lane run; it spends the owner's Claude subscription.",
+      "Never use git stash: the stash list is shared by every worktree. To show a test fails without your change, save the diff to a file and apply it in reverse, or make a temporary commit on your branch."
+    ]
+  },
+  "claude3": {
+    "name": "Claude Code 3",
+    "harness": "Claude Code",
+    "model": "Claude Sonnet",
+    "modelHint": "the alias passed to claude --model; the owner may change it",
+    "cli": {
+      "harness": "claude",
+      "bin": "claude",
+      "model": "claude-sonnet-5-5"
+    },
+    "worktree": "C:\\GitHub\\MachineRoom\\.worktrees\\claude3",
+    "role": "You work on the brief in your own worktree and report back.",
+    "forbidden": [
+      "src/Stage.jsx",
+      "src/App.jsx"
+    ],
+    "notes": [
+      "Do not start Claude Code headless outside a lane run; it spends the owner's Claude subscription.",
+      "Never use git stash: the stash list is shared by every worktree. To show a test fails without your change, save the diff to a file and apply it in reverse, or make a temporary commit on your branch."
+    ]
+  },
   "codex": {
     "name": "Codex",
     "harness": "Codex",
