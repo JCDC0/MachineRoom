@@ -575,13 +575,13 @@ describe('the inspector git view after a failed read', () => {
 describe('the Repository section in the sidebar', () => {
   function sidebarClient() {
     return {
-      projects: async () => ({ current: { path: 'C:\\work\\demo' }, recent: [] }),
+      projects: async () => ({ current: { path: 'C:\\work\\demo' }, recent: [{ path: 'C:\\work\\recent' }] }),
       orchestratorSessions: async () => ({ current: { title: 'Current', startedAt: Date.now() }, sessions: [] }),
       gitState: async () => gitState(),
     }
   }
 
-  it('sits at the top of the Projects tab in a live room', async () => {
+  it('follows current and recent projects in a live room', async () => {
     await withDom(async ({ container, root }) => {
       await act(async () => {
         root.render(createElement(Sidebar, { client: sidebarClient(), live: true, project: 'C:\\work\\demo' }))
@@ -591,7 +591,10 @@ describe('the Repository section in the sidebar', () => {
 
       const projects = container.querySelector('.mr-side-projects')
       expect(projects).not.toBeNull()
-      expect(projects.childNodes[0].className).toBe('mr-repo')
+      const rows = [...projects.children]
+      expect(rows[0].className).toBe('mr-side-head')
+      expect(rows.filter((row) => row.className === 'mr-side-project-block')).toHaveLength(2)
+      expect(rows.indexOf(container.querySelector('.mr-repo'))).toBeGreaterThan(rows.lastIndexOf(container.querySelectorAll('.mr-side-project-block')[1]))
       expect(container.querySelector('.mr-repo-branch').textContent).toBe('main')
     })
   })

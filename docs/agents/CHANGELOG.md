@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- The Teams alert sits outside the fold; family action rows are at least 24 px high; CODE.md names the Repository order.
+- Three findings, R56-1 to R56-3; fixed by P555.
+- Small controls get a 24 px hit area through one shared rule; the lane checkbox is 24 px.
+- Needs you leads Dispatch; projects lead the Projects tab; the dock reads Open address; the console is white.
+- D4-1 to D4-21 fixed in LIVE, ROOM, CODE and ACTIVITIES; the repeated chat block removed.
+- Tab dots in the room colours; the row pin button is gone (Pin stays in the menu); Fork reads Branch; the stopped-runner notice says to restart.
+- Twenty-one contradicted doc sentences, D4-1 to D4-21; fixed by P553.
+- Eleven findings, UI3-1 to UI3-11; nine briefed as P550 to P552, UI3-3 and UI3-8 held for the owner.
 - Three findings, R55-1 to R55-3; fixes briefed as P549.
 - The list is placed from its button, 8 px above it; state words take the room colours; finished and failed rows show their age.
 - FamilyTree first; Teams is one head with its count, closed by default and remembered; Build a team after it.

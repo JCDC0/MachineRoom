@@ -143,6 +143,11 @@ describe('the conversation menu', () => {
   it('opens from the row button with every item and its key, and Escape closes it', async () => {
     await withDom(async ({ container, dom, root }) => {
       await mount(root, makeClient())
+      expect(container.querySelector('.mr-side-pin')).toBeNull()
+      expect(container.textContent).toContain('Pinned')
+      await openMenu(root, container, 'Beta')
+      expect(menuItem(container, 'Unpin')).not.toBeNull()
+      await press(root, dom.window, 'Escape')
       await openMenu(root, container, 'Alpha')
 
       expect(container.querySelectorAll('[role="menuitem"]')).toHaveLength(7)
@@ -255,7 +260,7 @@ describe('the conversation menu', () => {
       const client = makeClient()
       await mount(root, client)
       await openMenu(root, container, 'Alpha')
-      await click(root, menuItem(container, 'Fork'))
+      await click(root, menuItem(container, 'Branch'))
       await settle()
 
       expect(client.calls.open[0]).toMatchObject({ id: 'orchestrator', session: 'alpha', confirmed: true })
@@ -269,7 +274,7 @@ describe('the conversation menu', () => {
       client.orchestrator = async () => ({ id: 'orchestrator', messages: messages(4) })
       await mount(root, client)
       await openMenu(root, container, 'Live one')
-      await click(root, menuItem(container, 'Fork'))
+      await click(root, menuItem(container, 'Branch'))
       await settle()
 
       expect(client.calls.branch[0]).toMatchObject({ index: 4, confirmed: true })
@@ -285,7 +290,7 @@ describe('the conversation menu', () => {
       })
       await mount(root, client)
       await openMenu(root, container, 'Alpha')
-      await click(root, menuItem(container, 'Fork'))
+      await click(root, menuItem(container, 'Branch'))
       await settle()
 
       expect(client.calls.open[0]).toMatchObject({ session: 'alpha' })
@@ -300,7 +305,7 @@ describe('the conversation menu', () => {
       client.orchestrator = async () => ({ id: 'orchestrator', messages: [] })
       await mount(root, client)
       await openMenu(root, container, 'Live one')
-      expect(menuItem(container, 'Fork').hasAttribute('disabled')).toBe(true)
+      expect(menuItem(container, 'Branch').hasAttribute('disabled')).toBe(true)
 
       client.state.current.count = 4
       client.orchestrator = async () => ({ id: 'orchestrator', messages: messages(4) })
@@ -308,7 +313,7 @@ describe('the conversation menu', () => {
         client.notify()
       })
       await settle(250)
-      expect(menuItem(container, 'Fork').hasAttribute('disabled')).toBe(false)
+      expect(menuItem(container, 'Branch').hasAttribute('disabled')).toBe(false)
 
       await press(root, dom.window, 'f')
       expect(client.calls.branch[0]).toMatchObject({ index: 4, confirmed: true })

@@ -305,7 +305,7 @@ describe('DispatchPanel Needs you', () => {
     }
     await withDom(async ({ container, root }) => {
       await act(async () => {
-        root.render(createElement(DispatchPanel, { client, initialAgents: [] }))
+        root.render(createElement(DispatchPanel, { client, initialAgents: [{ id: 'agent-codex', key: 'codex', name: 'Codex', adapterType: 'codex_local', harness: 'codex', role: null }] }))
       })
       await settle()
       expect(container.textContent).not.toContain('Needs you')
@@ -333,6 +333,9 @@ describe('DispatchPanel Needs you', () => {
       expect(text).toContain('lane1 failed on P1.')
       expect(text).toContain('lane5 failed on P5.')
       expect(text).not.toContain('lane6 failed on P6.')
+      expect(text.match(/Needs you/g)).toHaveLength(1)
+      expect(text).toContain('Run on this project')
+      expect(text.indexOf('Needs you')).toBeLessThan(text.indexOf('Run on this project'))
       expect(text.indexOf('Needs you')).toBeLessThan(text.indexOf('opencode | P1'))
       const rows = container.querySelectorAll('.runs-entry.is-failed')
       expect(rows.some((row) => row.textContent.includes('lane1 failed on P1.'))).toBe(true)
