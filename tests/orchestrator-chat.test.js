@@ -1702,6 +1702,44 @@ describe('OrchestratorChat panel', () => {
     expect(html).toContain('aria-label="Send"')
   })
 
+  it('gives a cut run subject its full text in the title', () => {
+    const text =
+      'Run codex2-P536-20261118-012152 on lane codex2 ended: succeeded.\n' +
+      'lane codex2 | briefs P536, P537 | exit 0 | branch feat/test | commits a2d359be 0.1.402: Keep the inline orchestrator chat below the fixed lower half of the room; b1234567 0.1.403: Next | cost not reported'
+    const chat = { state: 'idle', messages: [{ id: 'r1', from: 'room', text }] }
+    const html = renderToString(
+      createElement(OrchestratorChat, { open: true, client: fakeClient(chat), initialChat: chat })
+    )
+    expect(html).toContain(
+      '<span class="mr-orch-run-subject" title="Keep the inline orchestrator chat below the fixed lower half of the room">Keep the inline orchestrator chat below the fixed lower half of the room</span>'
+    )
+  })
+
+  it('gives the cut model in the header its full text in the title', () => {
+    const chat = { state: 'idle', model: 'opus', messages: [] }
+    const html = renderToString(
+      createElement(OrchestratorChat, { open: true, client: fakeClient(chat), initialChat: chat })
+    )
+    expect(html).toContain('<span class="mr-orch-model mono" title="opus">opus</span>')
+  })
+
+  it('gives the cut effort and mode values their full text in the title', () => {
+    const chat = { state: 'idle', mode: 'plan', modes: MODES, messages: [] }
+    const html = renderToString(
+      createElement(OrchestratorChat, {
+        open: true,
+        inline: true,
+        client: { ...fakeClient(chat), setOrchestratorMode: async () => ({}) },
+        initialChat: chat,
+        initialOrchestrators: [
+          { id: 'orchestrator', name: 'Orchestrator', harness: 'claude', state: 'idle', effort: 'high' },
+        ],
+      })
+    )
+    expect(html).toContain('<span class="hud-lower-picker-value mono" title="high">high</span>')
+    expect(html).toContain('<span class="hud-lower-picker-value mono" title="Plan">Plan</span>')
+  })
+
   it('forgets a sub that left the list and reads it again when it comes back', async () => {
     const main = { id: 'orchestrator', name: 'Main', state: 'idle' }
     const sub = { id: 'sub-frontend', name: 'Frontend', state: 'idle' }
