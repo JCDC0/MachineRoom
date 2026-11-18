@@ -97,6 +97,20 @@ describe('the transport chip list', () => {
 })
 
 describe('the transport agent list', () => {
+  it('shows state classes and end ages in the rows', async () => {
+    await withDom(async ({ container, root }) => {
+      const agents = ['working', 'failed', 'finished', 'idle'].map((key) => ({ id: key, key, name: key, adapterType: 'opencode_local', role: null }))
+      const feed = { agents, now: 200000000, liveRuns: [{ agentId: 'working', status: 'running', startedAt: 199700000 }], records: { last: [{ lane: 'failed', startedAt: 1000, finishedAt: 199700000, exitCode: 1 }, { lane: 'finished', startedAt: 1000, finishedAt: 189200000, exitCode: 0 }] } }
+      const subs = [MAIN, { ...sub('waiting', 'Waiting', 'working'), approvals: [{}] }]
+      await act(async () => root.render(createElement(OrchestratorsContext.Provider, { value: subs }, createElement(LanePillsContext.Provider, { value: feed }, createElement(Transport, { snapshot: LIVE, speeds: [1], orchestrator: MAIN })))))
+      await act(async () => container.querySelector('.transport-agents-toggle').click())
+      const rows = [...container.querySelectorAll('.transport-agent')]
+      expect(rows.map((row) => row.querySelector('.transport-agent-state').className)).toEqual(['transport-agent-state is-waiting', 'transport-agent-state is-working', 'transport-agent-state is-failed', 'transport-agent-state is-finished', 'transport-agent-state is-idle'])
+      expect(rows[2].querySelectorAll('span')[3].textContent).toBe('5 min')
+      expect(rows[3].querySelectorAll('span')[3].textContent).toBe('3 h')
+    })
+  })
+
   it('summarizes every sub and approval without showing old chips', () => {
     const list = [MAIN, ...Array.from({ length: 6 }, (_, i) => sub(String(i), `Sub ${i}`, 'working'))]
     list[1].approvals = [{}]
@@ -119,16 +133,18 @@ describe('the transport agent list', () => {
       const toggle = container.querySelector('.transport-agents-toggle')
       expect(toggle.textContent).toContain('2 agents · 2 working')
       const wrapper = container.querySelector('.transport-agents')
-      wrapper.getBoundingClientRect = () => ({ top: 700 })
+      toggle.getBoundingClientRect = () => ({ top: 700, left: 100, width: 200 })
+      window.innerHeight = 800
       const menu = dom.document.createElement('header')
       menu.className = 'hud-menu'
       menu.getBoundingClientRect = () => ({ bottom: 52 })
       dom.document.body.appendChild(menu)
       await act(async () => toggle.click())
-      expect(wrapper.style['--agents-list-height']).toBe('624px')
-      wrapper.getBoundingClientRect = () => ({ top: 500 })
+      expect(wrapper.style['--agents-list-height']).toBe('632px')
+      expect(wrapper.style['--agents-list-bottom']).toBe('108px')
+      toggle.getBoundingClientRect = () => ({ top: 500, left: 100, width: 200 })
       await act(async () => window.dispatchEvent({ type: 'resize' }))
-      expect(wrapper.style['--agents-list-height']).toBe('424px')
+      expect(wrapper.style['--agents-list-height']).toBe('432px')
       expect(container.textContent).toContain('A long sub name')
       expect(container.textContent).toContain('A long lane name')
       expect(container.textContent).toContain('A-very-long-task-identifier')

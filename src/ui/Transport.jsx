@@ -6,7 +6,7 @@ import {
   contextTone,
 } from './contextRing.js'
 import { OPEN_CHAT_EVENT, hasWaitingApproval, orchestratorChips } from './transportOrchestrators.js'
-import { inspectLane, lanePillTitle, lanePills } from './transportLanes.js'
+import { agentListPosition, ageText, inspectLane, lanePillTitle, lanePills } from './transportLanes.js'
 import { showCostBoard, spendText } from './transportSpend.js'
 
 export const LiveBadgeContext = createContext('live')
@@ -113,9 +113,13 @@ export default function Transport({ snapshot, speeds, markers = [], orchestrator
     const closeOutside = (event) => { if (!listRef.current?.contains(event.target)) setListOpen(false) }
     const closeEscape = (event) => { if (event.key === 'Escape') setListOpen(false) }
     const measure = () => {
-      const top = listRef.current?.getBoundingClientRect().top ?? 0
+      const button = listRef.current?.querySelector('.transport-agents-toggle')?.getBoundingClientRect()
+      if (!button) return
       const menuBottom = document.querySelector('.hud-menu')?.getBoundingClientRect().bottom ?? 0
-      listRef.current?.style.setProperty('--agents-list-height', `${Math.max(0, top - menuBottom - 24)}px`)
+      const position = agentListPosition(button, window.innerHeight, menuBottom)
+      listRef.current?.style.setProperty('--agents-list-height', `${position.height}px`)
+      listRef.current?.style.setProperty('--agents-list-bottom', `${position.bottom}px`)
+      listRef.current?.style.setProperty('--agents-list-left', `${position.left}px`)
     }
     measure()
     window.addEventListener('resize', measure)
@@ -196,13 +200,13 @@ export default function Transport({ snapshot, speeds, markers = [], orchestrator
             <div className="transport-agents-list" role="group" aria-label="Agents">
               {chips.map((chip) => (
                 <button key={chip.id} type="button" className="transport-agent mono" onClick={() => { setListOpen(false); openOrchestratorChat(chip.id) }}>
-                  <span>{chip.name}</span><span>{chip.waiting ? 'waiting for you' : chip.tone}</span><span></span><span></span>
+                  <span>{chip.name}</span><span className={`transport-agent-state is-${chip.waiting ? 'waiting' : chip.tone}`}>{chip.waiting ? 'waiting for you' : chip.tone}</span><span></span><span></span>
                 </button>
               ))}
               {lanes.pills.map((pill) => (
                 <button key={pill.key} type="button" className="transport-agent mono" aria-label={`${lanePillTitle(pill)}. Inspect this lane`} onClick={() => { setListOpen(false); inspectLane(pill.key) }}>
-                  <span>{pill.label}</span><span>{pill.state}</span><span>{[pill.task, pill.step].filter(Boolean).join(' ')}</span>
-                  <span>{pill.minutes !== null && pill.state !== 'failed' ? `${pill.minutes} min` : ''}</span>
+                  <span>{pill.label}</span><span className={`transport-agent-state is-${pill.state}`}>{pill.state}</span><span>{[pill.task, pill.step].filter(Boolean).join(' ')}</span>
+                  <span>{pill.state === 'failed' || pill.state === 'finished' || pill.state === 'succeeded' ? ageText(pill.minutes) : pill.minutes !== null ? `${pill.minutes} min` : ''}</span>
                 </button>
               ))}
             </div>

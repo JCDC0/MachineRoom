@@ -9256,9 +9256,9 @@ body:has(#hud-orchestrator-chat) .lens-waiting {
   }
 
   .transport-agents-list {
-    position: absolute;
-    bottom: calc(100% + 8px);
-    left: 50%;
+    position: fixed;
+    bottom: var(--agents-list-bottom);
+    left: var(--agents-list-left);
     transform: translateX(-50%);
     z-index: 10;
     width: max-content;
@@ -9280,6 +9280,18 @@ body:has(#hud-orchestrator-chat) .lens-waiting {
     text-align: left;
     white-space: nowrap;
   }
+
+  .transport-agent-state.is-working,
+  .transport-agent-state.is-queued,
+  .transport-agent-state.is-waiting { color: var(--yellow); }
+
+  .transport-agent-state.is-failed,
+  .transport-agent-state.is-paused { color: var(--red); }
+
+  .transport-agent-state.is-finished,
+  .transport-agent-state.is-succeeded { color: var(--green); }
+
+  .transport-agent-state.is-idle { color: rgb(255 255 255 / 0.5); }
 
   .transport-spend {
     display: inline-block;
