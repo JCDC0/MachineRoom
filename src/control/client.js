@@ -251,10 +251,11 @@ export function createClient({
     sendToOrchestrator: (text, { confirmed } = {}) =>
       request('POST', '/api/orchestrator/messages', { text, confirmed }),
 
-    sendLaneMessage: ({ lane = '', text = '', interrupt } = {}) => {
+    sendLaneMessage: ({ lane = '', text = '', interrupt, startedAt } = {}) => {
       const target = typeof lane === 'string' ? lane.trim() : ''
       const body = { to: `lane:${target}`, text }
       if (typeof interrupt === 'boolean') body.interrupt = interrupt
+      if (startedAt !== undefined) body.startedAt = startedAt
       return request('POST', '/api/orchestrator/messages', body)
     },
 

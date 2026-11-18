@@ -172,7 +172,9 @@ export default function LaneConversation({
   const running = conversation.data !== null && (
     typeof conversation.data?.running === 'boolean' ? conversation.data.running : currentRun?.running === true
   )
-  const recipientRunning = onRecipientSend && (running || options.some((run) => run.running && (run.startedAt !== selected || conversation.data === null)))
+  const hasLiveRun = options.some((run) => run.running)
+  const selectedRunning = currentRun?.running === true ? conversation.data === null || running : running && !hasLiveRun
+  const recipientRunning = onRecipientSend && selectedRunning
   const outcome = runOutcome(currentRun, conversation.data)
   const colour = agentColor(lane, lanes)
   const entries = Array.isArray(conversation.data?.entries) ? conversation.data.entries : []
@@ -400,12 +402,12 @@ export default function LaneConversation({
   }, [client, lane, selected, running, loaded])
 
   async function sendMessage(interrupt) {
-    const sendToRunning = onRecipientSend ? recipientRunning : running
-    if (!canSend || sending || (sendToRunning ? !client || typeof client.sendLaneMessage !== 'function' : !onRecipientSend)) return
+    const sendToRunning = selectedRunning
+    if (!canSend || sending || (!sendToRunning && hasLiveRun) || (sendToRunning ? !client || typeof client.sendLaneMessage !== 'function' : !onRecipientSend)) return
     setSending(true)
     setSendError('')
     try {
-      const answer = sendToRunning ? await client.sendLaneMessage({ lane, text: trimmedDraft, interrupt: Boolean(interrupt) }) : await onRecipientSend(trimmedDraft)
+      const answer = sendToRunning ? await client.sendLaneMessage({ lane, startedAt: selected, text: trimmedDraft, interrupt: Boolean(interrupt) }) : await onRecipientSend(trimmedDraft)
       if (answer?.ok === false) throw new Error(answer.error)
       if (!mountedRef.current) return
       setDraft('')
@@ -717,7 +719,7 @@ export default function LaneConversation({
         })}
       </div>
 
-      {running || onRecipientSend ? (
+      {selectedRunning || (onRecipientSend && !hasLiveRun && !running) ? (
         <form
           className={inline ? 'mr-orch-form hud-lower-input' : 'mr-orch-form'}
           onSubmit={(event) => {

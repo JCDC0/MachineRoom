@@ -1,5 +1,7 @@
 import { act, createElement } from 'react'
 import { describe, expect, it } from 'vitest'
+import { createOrchestrators } from '../server/orchestrators.js'
+import { makeTempDir, removeTempDir } from './helpers/tempRoot.js'
 import Hud from '../src/ui/Hud.jsx'
 import { createClient } from '../src/control/client.js'
 import LaneConversation from '../src/ui/LaneConversation.jsx'
@@ -79,6 +81,14 @@ describe('lane conversation helpers', () => {
     expect(options.map((run) => run.startedAt)).toContain('2026-10-24T12:00:00.000Z')
   })
 
+  it('keeps live context on an existing running option', () => {
+    const runs = { running: [{ lane: 'opencode', startedAt: STARTED, briefs: ['P1'] }] }
+    const liveRuns = [{ lane: 'opencode', startedAt: STARTED, contextTokens: 42, contextWindow: 100, extra: 'live' }]
+    expect(runOptions(runs, 'opencode', { liveRuns })).toEqual([expect.objectContaining({
+      briefs: ['P1'], contextTokens: 42, contextWindow: 100, extra: 'live', running: true,
+    })])
+  })
+
   it('includes a lane absent from the fleet recent runs through last', () => {
     const runs = { recent: [{ lane: 'other', startedAt: STARTED }], last: [{ lane: 'opencode', startedAt: STARTED }] }
     expect(runOptions(runs, 'opencode')).toHaveLength(1)
@@ -109,6 +119,30 @@ describe('lane conversation helpers', () => {
 })
 
 describe('the lane conversation view', () => {
+  it('rejects a message for a previous run before it reaches the inbox', async () => {
+    const folder = makeTempDir('mr-message-start-')
+    const held = { lane: 'opencode', startedAt: STARTED, inbox: [] }
+    const orchestrators = createOrchestrators({ runsFolder: folder, laneTickets: () => [held] })
+    try {
+      const send = (startedAt) => orchestrators.message({ to: 'lane:opencode', text: 'Hello', interrupt: false, ...(startedAt === undefined ? {} : { startedAt }) }, true)
+      expect(await send('old')).toEqual({ status: 409, body: { error: 'That run is no longer running.' } })
+      expect(held.inbox).toHaveLength(0)
+      expect((await send(STARTED)).status).toBe(202)
+      expect((await send()).status).toBe(202)
+      expect(held.inbox).toHaveLength(2)
+    } finally {
+      orchestrators.close()
+      removeTempDir(folder)
+    }
+  })
+
+  it('includes the selected start time in lane message requests', async () => {
+    let body
+    const client = createClient({ fetchImpl: async (_url, options) => { body = JSON.parse(options.body); return { ok: true, json: async () => ({}) } } })
+    await client.sendLaneMessage({ lane: 'opencode', text: 'Hello', startedAt: STARTED })
+    expect(body).toEqual({ to: 'lane:opencode', text: 'Hello', startedAt: STARTED })
+  })
+
   it('requests a lane with an encoded key while preserving the fleet request', async () => {
     const urls = []
     const client = createClient({ fetchImpl: async (url) => { urls.push(url); return { ok: true, json: async () => ({}) } } })
