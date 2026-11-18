@@ -1432,7 +1432,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
   const linkTrouble = ['connecting', 'reconnecting', 'disconnected'].includes(snapshot.status)
   const bridgeDown = isBridgeDown(live, snapshot, health)
   bridgeDownRef.current = bridgeDown
-  const showWaiting = Boolean(live) && (idleSoFar || linkTrouble)
+  const showWaiting = Boolean(live) && ((idleSoFar && dockRuns.length === 0) || linkTrouble)
   const orchestratorActivity = orchestratorDoing(snapshot.agents)
 
   useEffect(() => {
