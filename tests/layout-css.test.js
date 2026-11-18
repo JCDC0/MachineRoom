@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs'
-import { parse } from 'postcss'
+import { list, parse } from 'postcss'
 import { describe, expect, it } from 'vitest'
 
 const css = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8')
@@ -43,6 +43,72 @@ function pixels(value) {
   const fixed = /^((?:\d*\.)?\d+)px$/.exec(value)
   return fixed ? Number(fixed[1]) : NaN
 }
+
+describe('shared panel controls', () => {
+  it('uses the panel tokens, room palette and the two room fonts', () => {
+    const sheet = parse(css)
+    const roots = sheet.nodes.filter((node) => node.selector === ':root')
+    const tokens = {
+      '--surface-1': 'rgb(255 255 255 / 0.04)',
+      '--surface-2': 'rgb(255 255 255 / 0.08)',
+      '--border-soft': 'rgb(255 255 255 / 0.16)',
+      '--text-faint': 'rgb(255 255 255 / 0.38)',
+      '--radius-s': '6px',
+      '--radius-m': '12px',
+      '--control-h': '28px',
+    }
+    const panelRoot = roots.find((node) => node.nodes.some(({ prop }) => prop === '--control-h'))
+    expect(panelRoot).toBeDefined()
+    expect(Object.fromEntries(panelRoot.nodes.map(({ prop, value }) => [prop, value]))).toEqual(tokens)
+    const room = Object.fromEntries(roots.flatMap((node) => node.nodes.map(({ prop, value }) => [prop, value])))
+    const colors = ['--black', '--white', '--yellow', '--red', '--green', '--text-dim',
+      '--surface-1', '--surface-2', '--border-soft', '--text-faint', '--ui-chip-border']
+    const colorLiteral = /^(?:transparent|currentcolor|#(?:000000|ffffff|e5ff00|ff2a2a|2aff80|2a9dff)|rgb\((?:255 255 255|0 0 0) \/ (?:0(?:\.\d+)?|1)\))$/i
+    for (const name of colors.filter((name) => name !== '--ui-chip-border')) {
+      expect(room[name], name).toMatch(colorLiteral)
+    }
+    expect(room['--sans']).toMatch(/^'Jost',/)
+    expect(room['--mono']).toMatch(/^'Space Mono',/)
+
+    sheet.walkRules(/\.ui-/, (block) => {
+      block.walkDecls(({ prop, value }) => {
+        const where = `${block.selector} ${prop}`
+        expect(prop, where).not.toBe('font')
+        if (prop === 'font-family') expect(['var(--sans)', 'var(--mono)'], where).toContain(value)
+        if (prop === 'font-weight') expect(['400', '500'], where).toContain(value)
+        if (!/^(?:--ui-chip-border|[\w-]*color|background(?:-image)?|outline|border(?:-(?:top|bottom|left|right))?|[\w-]*shadow|filter|fill|stroke)$/.test(prop)) return
+        for (const part of list.space(value)) {
+          const word = part.replace(/,$/, '')
+          if (/^(?:0|none|solid|-?\d+px)$/.test(word)) continue
+          if (word.startsWith('var(')) {
+            expect(word, where).toMatch(/^var\(--[\w-]+(?:, var\(--[\w-]+\))?\)$/)
+            for (const [, name] of word.matchAll(/var\((--[\w-]+)/g)) expect(colors, where).toContain(name)
+          } else {
+            expect(word, where).toMatch(colorLiteral)
+          }
+        }
+      })
+    })
+  })
+
+  it('keeps focus visible and row actions available to the keyboard', () => {
+    const controls = parse(css)
+    const rings = []
+    controls.walkRules(/\.ui-.*focus-visible/, (block) => {
+      if (block.nodes.some(({ prop, value }) => prop === 'outline' && value === '1px solid var(--white)')) {
+        expect(block.nodes.find(({ prop }) => prop === 'outline-offset')?.value).toBe('2px')
+        rings.push(block.selector)
+      }
+    })
+    for (const selector of ['.ui-chip', '.ui-chip-select', '.ui-icon-btn', '.ui-switch', '.ui-menu-item', '.ui-row', '.ui-hover-anchor']) {
+      expect(rings.join(' ')).toContain(selector)
+    }
+    expect(rule('.ui-chip-select > select').appearance).toBe('none')
+    expect(rule('.ui-row-trailing').opacity).toBe('0')
+    expect(rule('.ui-row-trailing').visibility).toBeUndefined()
+    expect(css).toMatch(/\.ui-row:is\(:hover, :focus-within, [^\n]+\.ui-row-trailing,[\s\S]*?opacity: 1/)
+  })
+})
 
 describe('the transport state word and the spend', () => {
   it('keeps at least 8 pixels between them', () => {

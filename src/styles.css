@@ -11664,3 +11664,320 @@ body:has(#hud-orchestrator-chat) .lens-waiting {
 .room-boundary {
   padding: 24px;
 }
+
+:root {
+  --surface-1: rgb(255 255 255 / 0.04);
+  --surface-2: rgb(255 255 255 / 0.08);
+  --border-soft: rgb(255 255 255 / 0.16);
+  --text-faint: rgb(255 255 255 / 0.38);
+  --radius-s: 6px;
+  --radius-m: 12px;
+  --control-h: 28px;
+}
+
+:is(button.ui-chip, button.ui-icon-btn, button.ui-switch, button.ui-menu-item) {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--white);
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: normal;
+  text-transform: none;
+}
+
+:is(button.ui-chip, button.ui-icon-btn, button.ui-switch, button.ui-menu-item):hover:not(:disabled) {
+  background: var(--surface-2);
+}
+
+:is(button.ui-chip, button.ui-icon-btn, button.ui-switch, button.ui-menu-item):disabled,
+.ui-chip-select:has(> select:disabled) {
+  opacity: 0.55;
+}
+
+:is(button.ui-chip, button.ui-icon-btn, button.ui-switch, button.ui-menu-item, .ui-menu):focus-visible,
+:is(.ui-row, .ui-hover-anchor)[tabindex]:focus-visible,
+.ui-chip-select:has(> select:focus-visible) {
+  outline: 1px solid var(--white);
+  outline-offset: 2px;
+}
+
+.ui-chip,
+button.ui-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-inline-size: 24px;
+  height: var(--control-h);
+  padding: 0 10px;
+  border: 1px solid var(--ui-chip-border, var(--border-soft));
+  border-radius: 999px;
+  background: transparent;
+  font-family: var(--sans);
+  font-weight: 400;
+  white-space: nowrap;
+}
+
+button.ui-chip:hover:not(:disabled) {
+  border-color: var(--ui-chip-border, var(--border-soft));
+}
+
+button.ui-chip[aria-expanded='true'] {
+  --ui-chip-border: var(--white);
+}
+
+.ui-chip-label {
+  color: var(--text-dim);
+  font-size: 13px;
+}
+
+.ui-chip-value {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--white);
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.ui-chip-chevron {
+  display: grid;
+  flex: 0 0 10px;
+  place-items: center;
+  color: var(--text-dim);
+}
+
+.ui-chip-chevron::after {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-right: 1px solid currentColor;
+  border-bottom: 1px solid currentColor;
+  transform: translateY(-2px) rotate(45deg);
+}
+
+.ui-chip-select {
+  position: relative;
+}
+
+.ui-chip-select > select {
+  appearance: none;
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 400;
+}
+
+.ui-chip-select > select:disabled {
+  cursor: not-allowed;
+}
+
+.ui-chip-select:has(> select:enabled):hover {
+  background: var(--surface-2);
+}
+
+button.ui-icon-btn {
+  display: inline-grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: var(--control-h);
+  height: var(--control-h);
+  border-radius: var(--radius-s);
+  color: var(--text-dim);
+}
+
+button.ui-icon-btn:hover:not(:disabled) {
+  color: var(--white);
+}
+
+.ui-icon {
+  display: inline-grid;
+  flex: 0 0 auto;
+  place-items: center;
+  inline-size: 16px;
+  block-size: 16px;
+}
+
+.ui-icon > svg {
+  width: 100%;
+  height: 100%;
+}
+
+.ui-kebab::after {
+  content: '';
+  display: block;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 -5px currentColor, 0 5px currentColor;
+}
+
+button.ui-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space);
+  min-width: var(--control-h);
+  height: var(--control-h);
+  border-radius: var(--radius-s);
+}
+
+.ui-switch-track {
+  position: relative;
+  flex: 0 0 28px;
+  block-size: 16px;
+  border-radius: 999px;
+  background: var(--border-soft);
+}
+
+.ui-switch-track::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--text-faint);
+}
+
+.ui-switch[aria-checked='true'] .ui-switch-track {
+  background: var(--yellow);
+}
+
+.ui-switch[aria-checked='true'] .ui-switch-track::after {
+  left: 14px;
+  background: var(--black);
+}
+
+.ui-menu,
+.ui-hovercard {
+  position: fixed;
+  width: max-content;
+  max-width: calc(100vw - 16px);
+  max-height: calc(100dvh - 16px);
+  margin: 0;
+  overflow: auto;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-m);
+  background: var(--black);
+  color: var(--white);
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 400;
+}
+
+.ui-menu {
+  z-index: 32;
+  min-width: min(144px, calc(100vw - 16px));
+  padding: 4px;
+}
+
+button.ui-menu-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space);
+  width: 100%;
+  height: 32px;
+  padding: 0 var(--space);
+  border-radius: var(--radius-s);
+  text-align: left;
+}
+
+button.ui-menu-item.is-danger {
+  color: var(--red);
+}
+
+.ui-menu-item-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+button.ui-menu-item[role='menuitemcheckbox']::after {
+  content: '';
+  flex: 0 0 6px;
+  margin-left: auto;
+  height: 10px;
+}
+
+button.ui-menu-item[aria-checked='true']::after {
+  border-right: 1px solid currentColor;
+  border-bottom: 1px solid currentColor;
+  transform: translateY(-1px) rotate(45deg);
+}
+
+.ui-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space);
+  min-height: 32px;
+  padding: 0 var(--space);
+  border-radius: var(--radius-s);
+  color: var(--white);
+  font-family: var(--sans);
+  font-size: 14px;
+  font-weight: 400;
+}
+
+.ui-row:has(.ui-row-detail) {
+  min-height: 44px;
+}
+
+.ui-row:hover {
+  background: var(--surface-1);
+}
+
+.ui-row.is-selected {
+  background: var(--surface-2);
+}
+
+.ui-row-main {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.ui-row-label,
+.ui-row-detail {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ui-row-detail {
+  color: var(--text-dim);
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 400;
+}
+
+.ui-row-trailing {
+  display: flex;
+  align-items: center;
+  opacity: 0;
+}
+
+.ui-row:is(:hover, :focus-within, :has([aria-expanded='true'])) .ui-row-trailing,
+.ui-hover-anchor:focus-visible > .ui-row .ui-row-trailing {
+  opacity: 1;
+}
+
+.ui-hovercard {
+  z-index: 31;
+  padding: 12px;
+  color: var(--text-dim);
+  overflow-wrap: anywhere;
+}
+
+.ui-hovercard-title {
+  color: var(--white);
+  font-weight: 500;
+}
