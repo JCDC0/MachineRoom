@@ -7,6 +7,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { gitPath, programPath } from '../server/programPath.js'
 import { saveAgentsConfig } from '../server/agents-config.js'
 import { projectLanesFileFor, writeHiddenLanes } from '../server/active-lanes.js'
+import { claudeProjectSlug } from '../server/claude-sessions.js'
 import { briefProblems, briefWorktreeProblems, CHECK_COMMAND_COUNT_PROBLEM, CHECK_QUOTE_PROBLEM, CHECK_SHELL_PROBLEM, checkCommandLines, checkCommandProblem, commandFor, DEFAULT_MINUTES, filterRunsSince, laneCommandProblem, readinessLine, retryStartProblem, SINCE_PROBLEM, splitCheckCommand, startFailureText, worktreeFor, formatOutcomes, formatStats, formatSummary, laneLockPids, laneLockText, laneStats, laneStopProblem, laneWithOverrides, nextTestStep, parseRunArgs, projectRunGit, runListLine, runRecord, sessionToolLines, summarizeRun, UNATTENDED_NOTE, unattendedPrompt } from '../src/briefs/run.js'
 import { branchFor, briefFileList, parseBriefs } from '../src/briefs/briefs.js'
 import { harnessByKey } from '../src/harnesses/index.js'
@@ -2630,6 +2631,88 @@ function makeRunnerRepo(folder, script, preCommit = '') {
   if (preCommit !== '') writeFileSync(join(repo, '.git', 'hooks', 'pre-commit'), preCommit, { mode: 0o755 })
   return repo
 }
+
+describe('continuing a lane session', () => {
+  const sessionId = '12345678-1234-4234-8234-123456789abc'
+  const fullPrompt = 'Original brief and lane rules.'
+  const interrupt = 'Pick up the unfinished check.'
+
+  it.each([
+    { title: 'resumes a saved Claude session across two continuations', harness: 'claude', hasSession: true, resumes: true },
+    { title: 'starts a new Claude session when the transcript is missing', harness: 'claude', hasSession: false, resumes: false },
+    { title: 'keeps the full prompt on a different harness', harness: 'opencode', hasSession: true, resumes: false },
+    { title: 'starts a fresh Claude session for the next queue task', harness: 'claude', hasSession: true, resumes: false, queue: { branch: 'main', index: 2, size: 2 } },
+  ])('$title', async ({ harness, hasSession, resumes, queue }) => {
+    const folder = makeTempDir('mr-continue-session-')
+    const runs = join(folder, 'runs')
+    const argsFile = join(folder, 'args.json')
+    const descriptor = harnessByKey[harness]
+    const buildCommand = descriptor.command
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {})
+    try {
+      const project = makeRunnerRepo(folder, "require('node:fs').writeFileSync('../args.json', JSON.stringify(process.argv.slice(2)))\n")
+      const command = vi.spyOn(descriptor, 'command').mockImplementation((options) => {
+        const built = buildCommand(options)
+        return { ...built, args: [join(project, 'run'), ...built.args] }
+      })
+      try {
+        vi.stubEnv('MACHINEROOM_RUNS', runs)
+        vi.stubEnv(process.platform === 'win32' ? 'USERPROFILE' : 'HOME', folder)
+        mkdirSync(runs)
+        const sessions = join(folder, '.claude', 'projects', claudeProjectSlug(realpathSync.native(project)))
+        if (hasSession) {
+          mkdirSync(sessions, { recursive: true })
+          writeFileSync(join(sessions, `${sessionId}.jsonl`), '')
+        }
+        const lane = { name: 'Probe', worktree: project, cli: { harness, bin: process.execPath } }
+        const first = { lane: 'probe', project, log: join(runs, 'first.log'), branch: 'main', queueIndex: queue ? 1 : undefined }
+        writeFileSync(join(runs, 'first.meta.json'), JSON.stringify({ lane: 'probe', sessionId }))
+        writeFileSync(join(runs, 'first.interrupt.txt'), interrupt)
+
+        async function continueRun(previous, name) {
+          writeFileSync(join(runs, 'runs.jsonl'), `${JSON.stringify(previous)}\n`)
+          const run = await startLane({
+            options: { lane: 'probe', minutes: 1, continueFrom: basename(previous.log, '.log') },
+            lane, lanes: { probe: lane }, wanted: [], prompt: fullPrompt, project, task: fullPrompt, queue, deferRecord: true,
+            logPath: join(runs, `${name}.log`), usageFile: join(runs, `${name}.usage.json`), name,
+          })
+          expect(run.code).toBe(0)
+          return {
+            args: JSON.parse(readFileSync(argsFile, 'utf8')),
+            meta: JSON.parse(readFileSync(join(runs, `${name}.meta.json`), 'utf8')),
+            record: run.record,
+          }
+        }
+
+        const next = await continueRun(first, 'next')
+        if (resumes) {
+          expect(next.args.slice(0, 2)).toEqual(['-p', interrupt])
+          expect(next.args.slice(-2)).toEqual(['--resume', sessionId])
+          expect(next.args).not.toContain('--session-id')
+          expect(next.meta).toMatchObject({ sessionId, resumed: true })
+
+          const last = await continueRun(next.record, 'last')
+          expect(last.args.slice(0, 2)).toEqual(['-p', 'Continue your brief from where you stopped.'])
+          expect(last.args.slice(-2)).toEqual(['--resume', sessionId])
+          expect(last.args).not.toContain('--session-id')
+          expect(last.meta).toMatchObject({ sessionId, resumed: true })
+        } else {
+          expect(next.args).toContain(`${fullPrompt}\n\n${interrupt}`)
+          expect(next.args).not.toContain('--resume')
+          expect(next.meta).not.toHaveProperty('resumed')
+          expect(next.meta.sessionId).not.toBe(sessionId)
+          if (harness === 'claude') expect(next.args.slice(-2)).toEqual(['--session-id', next.meta.sessionId])
+        }
+      } finally {
+        command.mockRestore()
+      }
+    } finally {
+      log.mockRestore()
+      vi.unstubAllEnvs()
+      rmSync(folder, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+    }
+  })
+})
 
 function runnerScript({ file = '', file2 = '', stage = '', exitCode = 0 } = {}) {
   const lines = ["const { writeFileSync } = require('node:fs')", "const { execFileSync } = require('node:child_process')"]
