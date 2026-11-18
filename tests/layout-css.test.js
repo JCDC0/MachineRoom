@@ -80,3 +80,32 @@ describe('the storage days label', () => {
     expect(label.flex).toBe('none')
   })
 })
+
+describe('small control targets', () => {
+  it('gives every target at least 24 pixels in both directions', () => {
+    const selectors = [
+      '.lens-failures-clear::after',
+      '.hud-action-slot > button.hud-action-badge::after',
+      '.mr-side .mr-side-menu-button::after',
+      '.mr-side .mr-side-switch::after',
+      '.mr-family .mr-family-add::after',
+      '.mr-family .mr-family-chat::after',
+      '.mr-family .mr-family-trash::after',
+      '.mr-family .mr-family-check',
+    ]
+    const blocks = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
+    const shared = blocks.find(([, names]) => selectors.every((selector) => names.split(',').map((name) => name.trim()).includes(selector)))
+    expect(shared).toBeTruthy()
+    const size = declarations(shared[2])
+    expect(pixels(size['min-width'])).toBeGreaterThanOrEqual(24)
+    expect(pixels(size['min-height'])).toBeGreaterThanOrEqual(24)
+    const targets = blocks.find(([, names, body]) => selectors.slice(0, -1).every((selector) => names.split(',').map((name) => name.trim()).includes(selector)) && body.includes("content: ''"))
+    expect(targets).toBeTruthy()
+    expect(declarations(targets[2])).toMatchObject({ position: 'absolute', left: '50%', top: '50%', width: '100%', height: '100%', transform: 'translate(-50%, -50%)' })
+    const anchors = selectors.filter((selector) => selector.endsWith('::after') && !selector.includes('hud-action-badge') && !selector.includes('mr-side-switch')).map((selector) => selector.slice(0, -7))
+    expect(blocks.some(([, names, body]) => anchors.every((selector) => names.split(',').map((name) => name.trim()).includes(selector)) && declarations(body).position === 'relative')).toBe(true)
+    expect(rule('.hud-action-slot > .hud-action-badge').position).toBe('absolute')
+    expect(rule('.mr-side .mr-side-switch').position).toBe('relative')
+    expect(pixels(rule('.mr-family-actions').gap)).toBeGreaterThanOrEqual(6)
+  })
+})

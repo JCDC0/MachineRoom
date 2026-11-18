@@ -9760,7 +9760,7 @@ body:has(#hud-orchestrator-chat) .lens-waiting {
   display: flex;
   flex: 0 0 auto;
   align-items: center;
-  gap: 2px;
+  gap: 6px;
   margin-left: auto;
 }
 
@@ -10748,9 +10748,7 @@ body:has(#hud-orchestrator-chat) .lens-waiting {
 /* U54: lane multi-select, the sub orchestrator form and sub delete. */
 .mr-family .mr-family-check {
   flex: 0 0 auto;
-  width: 12px;
-  height: 12px;
-  margin: 6px 0 0;
+  margin: 0;
   accent-color: var(--yellow);
   cursor: pointer;
 }
@@ -10761,7 +10759,43 @@ body:has(#hud-orchestrator-chat) .lens-waiting {
 
 .mr-family-check-space {
   flex: 0 0 auto;
-  width: 12px;
+  width: 24px;
+}
+
+.lens-failures-clear,
+.mr-side .mr-side-menu-button,
+.mr-family .mr-family-add,
+.mr-family .mr-family-chat,
+.mr-family .mr-family-trash {
+  position: relative;
+}
+
+.lens-failures-clear::after,
+.hud-action-slot > button.hud-action-badge::after,
+.mr-side .mr-side-menu-button::after,
+.mr-side .mr-side-switch::after,
+.mr-family .mr-family-add::after,
+.mr-family .mr-family-chat::after,
+.mr-family .mr-family-trash::after,
+.mr-family .mr-family-check {
+  min-width: 24px;
+  min-height: 24px;
+}
+
+.lens-failures-clear::after,
+.hud-action-slot > button.hud-action-badge::after,
+.mr-side .mr-side-menu-button::after,
+.mr-side .mr-side-switch::after,
+.mr-family .mr-family-add::after,
+.mr-family .mr-family-chat::after,
+.mr-family .mr-family-trash::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 100%;
+  height: 100%;
+  transform: translate(-50%, -50%);
 }
 
 .mr-family-selection {
