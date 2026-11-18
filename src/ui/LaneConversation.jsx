@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useRef, useState } from 'react'
+import { createContext, useContext, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { defaultMode, laneModesFor } from '../control/modes.js'
 import { HARNESSES, harnessByAdapter, harnessByKey } from '../harnesses/index.js'
 import { contextLine } from './agentStrip.js'
@@ -23,6 +23,8 @@ const STATUS_LABELS = {
   fetched: 'Read by the runner',
   interrupted: 'Interrupted the run',
 }
+
+export const LaneSentMessagesContext = createContext(null)
 
 function normalizeHarnessKey(value) {
   const raw = typeof value === 'string' ? value.trim().toLowerCase() : ''
@@ -133,6 +135,8 @@ export default function LaneConversation({
   worktreeChoice = null,
 }) {
   const [runs, setRuns] = useState(givenRuns)
+  const [historyFailed, setHistoryFailed] = useState(false)
+  const [historyRetry, setHistoryRetry] = useState(0)
   const [selected, setSelected] = useState(initialStartedAt)
   const [conversationState, setConversation] = useState({ loading: true, data: null, error: '' })
   const [confirmStop, setConfirmStop] = useState(false)
@@ -143,7 +147,9 @@ export default function LaneConversation({
   const [draft, setDraft] = useState('')
   const [sending, setSending] = useState(false)
   const [sendError, setSendError] = useState('')
-  const [sentMessages, setSentMessages] = useState([])
+  const sharedSentMessages = useContext(LaneSentMessagesContext)
+  const localSentMessages = useState([])
+  const [sentMessages, setSentMessages] = sharedSentMessages ?? localSentMessages
   const [laneConfig, setLaneConfig] = useState({ lane: '', harness: '', mode: '' })
   const [planConfirmOpen, setPlanConfirmOpen] = useState(false)
   const [planDraft, setPlanDraft] = useState('')
@@ -159,7 +165,6 @@ export default function LaneConversation({
   const selectionRef = useRef(null)
   const sentRef = useRef(sentMessages)
   sentRef.current = sentMessages
-  const wasRunningRef = useRef(null)
   const refreshStatusesRef = useRef(null)
   const planModeChosenRef = useRef(false)
   const planStartingRef = useRef(false)
@@ -169,6 +174,9 @@ export default function LaneConversation({
   const conversation = conversationState.lane === lane && conversationState.startedAt === selected
     ? conversationState
     : { loading: true, data: null, error: '' }
+  const historySettled = Boolean(runs) || historyFailed
+  const historyLoading = !historySettled && typeof client?.runs === 'function'
+  const emptyRunLabel = historyFailed ? 'Run history unavailable' : historyLoading ? 'Reading runs' : 'No runs'
   const options = useMemo(() => runOptions(runs, lane, { liveRuns, lanes }), [runs, lane, liveRuns, lanes])
   const currentRun = options.find((run) => run.startedAt === selected) ?? null
   const running = conversation.data !== null && (
@@ -211,17 +219,23 @@ export default function LaneConversation({
 
   useEffect(() => {
     setRuns(givenRuns)
-  }, [givenRuns])
+  }, [client, givenRuns, lane])
 
   useEffect(() => {
+    setHistoryFailed(false)
     if (givenRuns || !client || typeof client.runs !== 'function') return undefined
     let active = true
+    let readSequence = 0
+    let appliedSequence = 0
     async function readRuns(fromNotice = false) {
+      const sequence = ++readSequence
       try {
         const answer = await client.runs({ lane })
-        if (!active) return
+        if (!active || sequence < appliedSequence) return
+        appliedSequence = sequence
         const nextRuns = answer && typeof answer === 'object' ? answer : null
         setRuns(nextRuns)
+        setHistoryFailed(false)
         if (fromNotice && nextRuns) {
           const current = selectionRef.current
           const stillLive =
@@ -233,7 +247,10 @@ export default function LaneConversation({
           if (!stillLive && finished) readRef.current?.(current.startedAt, { force: true })
         }
       } catch {
-        if (active) setRuns(fromNotice ? null : [])
+        if (!active || sequence < appliedSequence) return
+        appliedSequence = sequence
+        wantedRef.current = ''
+        setHistoryFailed(true)
       }
     }
     readRuns(false)
@@ -247,7 +264,7 @@ export default function LaneConversation({
       active = false
       if (typeof unsubscribe === 'function') unsubscribe()
     }
-  }, [client, givenRuns, lane])
+  }, [client, givenRuns, historyRetry, lane])
 
   useEffect(() => {
     if (!requestKey) return
@@ -263,17 +280,17 @@ export default function LaneConversation({
         if (selected !== wanted) setSelected(wanted)
         return
       }
-      if (!runs) return
+      if (!historySettled) return
       wantedRef.current = ''
     }
     if (options.length === 0) {
-      if (runs && selected) setSelected('')
+      if (historySettled && selected) setSelected('')
       return
     }
     if (!selected || !options.some((run) => run.startedAt === selected)) {
       setSelected(options[0].startedAt)
     }
-  }, [options, selected, runs])
+  }, [options, selected, historySettled])
 
   useEffect(() => {
     setDraft('')
@@ -406,16 +423,12 @@ export default function LaneConversation({
   useEffect(() => {
     if (!selected) return undefined
     if (running) {
-      wasRunningRef.current = { lane, startedAt: selected }
       const timer = setInterval(() => {
         refreshStatusesRef.current?.(lane, selected)
       }, STATUS_REFRESH_MS)
       return () => clearInterval(timer)
     }
-    if (loaded && wasRunningRef.current?.lane === lane && wasRunningRef.current?.startedAt === selected) {
-      wasRunningRef.current = null
-      refreshStatusesRef.current?.(lane, selected)
-    }
+    if (loaded) refreshStatusesRef.current?.(lane, selected)
     return undefined
   }, [client, lane, selected, running, loaded])
 
@@ -427,18 +440,16 @@ export default function LaneConversation({
     try {
       const answer = sendToRunning ? await client.sendLaneMessage({ lane, startedAt: selected, text: trimmedDraft, interrupt: Boolean(interrupt) }) : await onRecipientSend(trimmedDraft)
       if (answer?.ok === false) throw new Error(answer.error)
-      if (!mountedRef.current) return
-      setDraft('')
+      if (!mountedRef.current && !sharedSentMessages) return
+      if (mountedRef.current) setDraft('')
       const id = typeof answer?.id === 'string' ? answer.id : ''
       if (id) {
         const entry = { id, lane, startedAt: selected, text: trimmedDraft, status: 'queued', missing: false }
-        const next = [...sentRef.current, entry]
-        sentRef.current = next
-        setSentMessages(next)
+        setSentMessages((current) => [...current, entry])
         if (typeof client.laneMessageStatus === 'function') {
           try {
             const statusAnswer = await client.laneMessageStatus(id)
-            if (mountedRef.current && statusAnswer && typeof statusAnswer.status === 'string') {
+            if ((mountedRef.current || sharedSentMessages) && typeof statusAnswer?.status === 'string') {
               setSentMessages((current) =>
                 current.map((item) => (item.id === id ? { ...item, status: statusAnswer.status } : item))
               )
@@ -541,7 +552,7 @@ export default function LaneConversation({
             }}
             disabled={options.length === 0}
           >
-            {options.length === 0 ? <option value="">No runs</option> : null}
+            {options.length === 0 ? <option value="">{emptyRunLabel}</option> : null}
             {options.map((run) => (
               <option value={run.startedAt} key={run.startedAt}>
                 {`${runClock(run.startedAt)} ${runOutcome(run)}`}
@@ -561,6 +572,15 @@ export default function LaneConversation({
           </button>
         ) : null}
       </div>
+
+      {historyFailed ? (
+        <div className="mr-lane-conv-tools">
+          <p className="mr-orch-error mono" role="alert">Could not read run history.</p>
+          <button type="button" className="brief-run-btn" onClick={() => setHistoryRetry((attempt) => attempt + 1)}>
+            Retry
+          </button>
+        </div>
+      ) : null}
 
       {confirmStop ? (
         <div className="brief-confirm-card" role="region" aria-label={`Confirm stop ${label}`}>
@@ -664,10 +684,10 @@ export default function LaneConversation({
       ) : null}
 
       {conversation.error ? <p className="mr-orch-error mono">{conversation.error}</p> : null}
-      {conversation.loading && (selected || !runs) ? <p className="mr-orch-empty">Reading the conversation.</p> : null}
+      {conversation.loading && (selected || !historySettled) ? <p className="mr-orch-empty">Reading the conversation.</p> : null}
 
       <div className="mr-orch-log mr-lane-conv-log" ref={follow.ref} onScroll={follow.onScroll}>
-        {(!conversation.loading || (runs && !selected)) && !conversation.error && entries.length === 0 ? (
+        {(!conversation.loading || (runs && !selected)) && !conversation.error && entries.length === 0 && (!historyFailed || options.length > 0) ? (
           <p className="mr-orch-empty">{options.length === 0 ? 'No runs yet.' : 'Nothing has been said yet.'}</p>
         ) : null}
         {promptEntry ? (

@@ -11,7 +11,7 @@ import Assistant from './Assistant.jsx'
 import Guide from './Guide.jsx'
 import Launcher from './Launcher.jsx'
 import OrchestratorChat from './OrchestratorChat.jsx'
-import LaneConversation from './LaneConversation.jsx'
+import LaneConversation, { LaneSentMessagesContext } from './LaneConversation.jsx'
 import Settings from './Settings.jsx'
 import SetupCard from './SetupCard.jsx'
 import Sidebar from './Sidebar.jsx'
@@ -149,6 +149,7 @@ export default function Hud({
   const [chatTab, setChatTab] = useState('orchestrator')
   const [chatListOpen, setChatListOpen] = useState(false)
   const [laneChat, setLaneChat] = useState(null)
+  const laneSentMessages = useState([])
   const [orchestratorList, setOrchestratorList] = useState([])
   const [sessionTitle, setSessionTitle] = useState('')
   const [idleOpen, setIdleOpen] = useState(false)
@@ -641,7 +642,7 @@ export default function Hud({
     )
   }
 
-  return (
+  const hud = (
     <div className={`hud${bridgeDown ? ' is-disconnected' : ''}`}>
       <header className={`hud-menu${menuOpen ? ' is-open' : ''}`}>
         {wide ? (
@@ -1283,4 +1284,5 @@ export default function Hud({
       )}
     </div>
   )
+  return <LaneSentMessagesContext.Provider value={laneSentMessages}>{hud}</LaneSentMessagesContext.Provider>
 }

@@ -454,6 +454,7 @@ export function LaneSettingsFields({ client }) {
   const [loaded, setLoaded] = useState(false)
   const [error, setError] = useState('')
   const mountedRef = useRef(true)
+  const readSequenceRef = useRef(0)
   const dirtyRef = useRef(new Set())
 
   useEffect(() => {
@@ -465,9 +466,11 @@ export function LaneSettingsFields({ client }) {
 
   const load = useCallback(async () => {
     if (!live) return
+    const sequence = ++readSequenceRef.current
+    const isCurrent = () => mountedRef.current && readSequenceRef.current === sequence
     try {
       const answer = await client.harnesses()
-      if (!mountedRef.current) return
+      if (!isCurrent()) return
       const first = harnessRowsOf(answer)[0]
       setLaneReplies(first?.laneReplies === 'interrupt' ? 'interrupt' : 'next-turn')
       if (!dirtyRef.current.has('laneCount')) setLaneCountWarning(String(laneCountWarningFrom(answer)))
@@ -476,12 +479,13 @@ export function LaneSettingsFields({ client }) {
       setLoaded(true)
       setError('')
     } catch (failure) {
-      if (mountedRef.current) setError(failure?.message || 'Could not load the lane settings.')
+      if (isCurrent()) setError(failure?.message || 'Could not load the lane settings.')
     }
   }, [client, live])
 
   useEffect(() => {
     load()
+    return () => { readSequenceRef.current += 1 }
   }, [load])
 
   useEffect(() => {

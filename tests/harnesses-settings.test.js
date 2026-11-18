@@ -442,4 +442,30 @@ describe('HarnessesSettings UI', () => {
       expect(saves().every((b) => b.getAttribute('disabled') === null)).toBe(true)
     })
   })
+
+  test('keeps the Retry answer when older lane settings reads settle last', async () => {
+    const pending = []
+    let notice
+    const client = {
+      harnesses: vi.fn()
+        .mockRejectedValueOnce(new Error('Lane settings unavailable.'))
+        .mockImplementation(() => new Promise((resolve, reject) => pending.push({ resolve, reject }))),
+      subscribe: (fn) => { notice = fn; return () => {} },
+    }
+    await withDom(async ({ container, root }) => {
+      await act(async () => root.render(createElement(LaneSettingsFields, { client })))
+      await act(async () => {
+        notice({ topic: 'harnesses' })
+        notice({ topic: 'harnesses' })
+      })
+      await click(root, buttonWithText(container, 'Retry'))
+      await act(async () => pending[2].resolve([{ laneReplies: 'interrupt', worktreeSetup: 'npm ci' }]))
+      const setup = container.querySelector('#harness-worktree-setup')
+      expect(setup.value).toBe('npm ci')
+      await act(async () => pending[0].resolve([{ laneReplies: 'next-turn', worktreeSetup: 'npm install' }]))
+      await act(async () => pending[1].reject(new Error('Old read failed.')))
+      expect(setup.value).toBe('npm ci')
+      expect(container.querySelector('[role="alert"]')).toBeNull()
+    })
+  })
 })
