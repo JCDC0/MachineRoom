@@ -43,16 +43,19 @@ export function backupRanLater(record, lane, records) {
   const to = text(failover.to)
   if (!to) return false
   const failedAt = startTime(record)
+  const briefs = Array.isArray(record.briefs) ? record.briefs.map(text).filter(Boolean) : []
   for (const candidate of records) {
     if (!candidate || typeof candidate !== 'object') continue
     if (text(candidate.lane) !== to) continue
+    if (candidate.mode === 'plan' && record.mode !== 'plan') continue
     const from = candidate.failoverFrom
     if (from && typeof from === 'object' && !Array.isArray(from) && text(from.lane) === lane) {
       const fromAt = startTime(from)
       if (fromAt === null || failedAt === null || fromAt === failedAt) return true
     }
     const candidateAt = startTime(candidate)
-    if (failedAt !== null && candidateAt !== null && candidateAt > failedAt) return true
+    if (failedAt !== null && candidateAt !== null && candidateAt > failedAt &&
+        briefs.length > 0 && Array.isArray(candidate.briefs) && briefs.every((brief) => candidate.briefs.includes(brief))) return true
   }
   return false
 }
@@ -79,26 +82,28 @@ export function succeededLater(record, records) {
   return Boolean(task) && successes.some((candidate) => text(candidate.task) === task)
 }
 
-function newestByLane(records) {
-  const latest = new Map()
+function newestByLaneAndMode(records) {
+  const plans = new Map()
+  const edits = new Map()
   records.forEach((record, index) => {
     if (!record || typeof record !== 'object') return
     const lane = text(record.lane)
     if (!lane) return
     const time = startTime(record)
+    const latest = record.mode === 'plan' ? plans : edits
     const kept = latest.get(lane)
     if (!kept || kept.time === null || (time !== null && time >= kept.time)) {
       latest.set(lane, { lane, record, time, index })
     }
   })
-  return [...latest.values()]
+  return [...plans.values(), ...edits.values()]
 }
 
 export function attentionItems(records) {
   const list = Array.isArray(records) ? records : []
   if (list.length === 0) return []
   const items = []
-  for (const entry of newestByLane(list)) {
+  for (const entry of newestByLaneAndMode(list)) {
     const itemText = attentionText(entry.record, entry.lane)
     if (!itemText) continue
     if (backupRanLater(entry.record, entry.lane, list) || succeededLater(entry.record, list)) continue
@@ -118,5 +123,10 @@ export function attentionItems(records) {
     }
     return right.index - left.index
   })
-  return items.map(({ lane, startedAt, text: line }) => ({ lane, startedAt, text: line }))
+  const seen = new Set()
+  return items.flatMap(({ lane, startedAt, text: line }) => {
+    if (seen.has(lane)) return []
+    seen.add(lane)
+    return [{ lane, startedAt, text: line }]
+  })
 }

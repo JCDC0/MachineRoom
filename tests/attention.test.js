@@ -279,6 +279,21 @@ describe('attentionItems', () => {
     expect(attentionItems([{ ...failure, briefs: [], task: 'Fix it' }, { ...success, briefs: [], task: 'Fix it' }])).toEqual([])
   })
 
+  it('keeps the newest unresolved Plan or edit failure per lane', () => {
+    const editFailure = { lane: 'codex', startedAt: 1, briefs: ['P1'], exitCode: 1 }
+    const planSuccess = { lane: 'codex', startedAt: 2, briefs: ['P1'], mode: 'plan', exitCode: 0 }
+    const planFailure = { ...planSuccess, startedAt: 3, briefs: ['P2'], exitCode: 1 }
+    const editSuccess = { ...editFailure, startedAt: 4, mode: 'auto', exitCode: 0 }
+    const editItem = { lane: 'codex', startedAt: 1, text: 'codex failed on P1' }
+    const planItem = { lane: 'codex', startedAt: 3, text: 'codex failed on P2' }
+
+    expect(attentionItems([editFailure, planSuccess])).toEqual([editItem])
+    expect(attentionItems([editFailure, planSuccess, planFailure])).toEqual([planItem])
+    expect(attentionItems([editFailure, planFailure, { ...planSuccess, startedAt: 4, briefs: ['P2'] }])).toEqual([editItem])
+    expect(attentionItems([editFailure, planFailure, editSuccess])).toEqual([planItem])
+    expect(attentionItems([{ ...editFailure, failover: { to: 'agy' } }, { ...planSuccess, lane: 'agy' }])).toEqual([editItem])
+  })
+
   it('clears a lane item when a newer run ends well or is stopped', () => {
     expect(attentionItems([
       { lane: 'opencode', startedAt: '2026-11-16T10:00:00.000Z', briefs: ['P1'], exitCode: 1, killed: false },
