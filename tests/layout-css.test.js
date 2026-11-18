@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs'
+import { parse } from 'postcss'
 import { describe, expect, it } from 'vitest'
 
 const css = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8')
@@ -39,7 +40,7 @@ function pixels(value) {
   expect(space, 'the 8 pixel space token').not.toBeNull()
   const multiple = /^calc\(var\(--space\)\s*\*\s*(\d+)\)$/.exec(value)
   if (multiple) return Number(multiple[1]) * Number(space[1])
-  const fixed = /^(\d+)px$/.exec(value)
+  const fixed = /^((?:\d*\.)?\d+)px$/.exec(value)
   return fixed ? Number(fixed[1]) : NaN
 }
 
@@ -61,9 +62,17 @@ describe('the transport state word and the spend', () => {
     expect(rule('.transport-agents-list').position).toBe('fixed')
     expect(rule('.transport-agents-list').bottom).toBe('var(--agents-list-bottom)')
     expect(rule('.transport-agents-list')['max-height']).toContain('--agents-list-height')
-    expect(rule('.transport-agents-list')['grid-template-columns']).toBe('repeat(4, max-content)')
-    expect(rule('.transport-agent')['grid-template-columns']).toBe('subgrid')
     expect(rule('.transport-agent')['white-space']).toBe('nowrap')
+  })
+
+  it('aligns agent rows in a grid and highlights them on hover', () => {
+    const list = rule('.transport-agents-list')
+    const row = rule('.transport-agent')
+    expect(list.display).toBe('grid')
+    expect(list['grid-template-columns']).toBe('repeat(4, max-content)')
+    expect(row.display).toBe('grid')
+    expect(row['grid-template-columns']).toBe('subgrid')
+    expect(rule('button:hover:not(:disabled)')['border-color']).toBe('var(--white)')
   })
 
   it('colours every state word', () => {
@@ -95,10 +104,66 @@ describe('the storage days label', () => {
   })
 })
 
+describe('run-end room notice layout', () => {
+  it('keeps the notice on one line and clips the subject', () => {
+    expect(rule('.mr-orch-line.is-run-notice')['min-width']).toBe('0')
+    expect(rule('.mr-orch-run-summary')['white-space']).toBe('nowrap')
+    expect(rule('.mr-orch-run-subject').overflow).toBe('hidden')
+    expect(rule('.mr-orch-run-subject')['text-overflow']).toBe('ellipsis')
+  })
+})
+
 describe('small control targets', () => {
   it('keeps family targets inside their row', () => {
     expect(pixels(rule('.mr-family-under')['min-height'])).toBeGreaterThanOrEqual(24)
     expect(rule('.mr-family-under')['align-items']).toBe('center')
+    expect(pixels(rule('.mr-family-check-space').width)).toBe(pixels(merged('.mr-family .mr-family-check')['min-width']))
+  })
+
+  it('checks every stylesheet rule that gives a button a side under 24 pixels', () => {
+    const exceptions = {
+      '.lens-bar': 'Read-only lens progress track.',
+      '.lens-bar-fill': 'Read-only lens progress fill.',
+      '.mr-guide-dot': 'Read-only guide progress mark.',
+      '.scrubber-tick': 'Existing 4 pixel seek marker for a point on the timeline.',
+      '.mr-board-bar-track': 'Read-only cost meter track.',
+      '.mr-board-bar': 'Read-only cost meter fill.',
+      ".panel-checkbox-field input[type='checkbox']": 'Checkbox inside a clickable label.',
+      '.meter-track': 'Read-only meter track.',
+      '.mr-card-bracket': 'Decorative corner bracket.',
+      '.mr-card-tab': 'Decorative card edge.',
+      '.mr-item': 'Clickable file row in a 3D folder card, rendered as a div.',
+      '.mr-card-more': 'Read-only count of hidden card rows.',
+      '.mr-orch-tab-dot': 'Unread indicator inside a tab.',
+      '.mr-side .mr-side-twist': 'Expand icon inside a sidebar control.',
+      '.mr-side-folder': 'Folder icon inside a sidebar control.',
+      '.mr-side-unread': 'Unread indicator inside a sidebar control.',
+      '.lens-rail-track': 'Vertical slider track.',
+      '.lens-rail-fill': 'Decorative line inside the slider.',
+      '.lens-rail-handle': 'Decorative marker inside the slider.',
+      '.mr-side-switch-knob': 'Decorative knob inside the switch.',
+      '.mr-side-input': 'Sidebar text field.',
+      '.mr-side-select': 'Sidebar select field.',
+      '.mr-autocompact-unit': 'Existing 22 pixel button in the unit toggle.',
+      '.mr-family-vline': 'Decorative family tree connector.',
+      '.mr-family-hline': 'Decorative family tree connector.',
+      '.mr-family-dot': 'Status indicator inside a family tree row.',
+      '.lens-edge-corner': 'Decorative lens corner.',
+      '.mr-model-refresh': 'Existing 22 pixel model-list refresh button.',
+      '.mr-family-agent-check': 'Checkbox inside a clickable family editor label.',
+      '.waiting-close': 'Existing 20 pixel dismiss button on the waiting notice.',
+    }
+    parse(css).walkRules((block) => {
+      if (!block.nodes.some(({ prop, value }) => ['width', 'height'].includes(prop) && pixels(value) < 24)) return
+      for (const selector of block.selectors) {
+        if (selector.includes('::') || Object.hasOwn(exceptions, selector)) continue
+        const anchor = selector === '.hud-action-badge' ? '.hud-action-slot > button.hud-action-badge' : selector
+        const after = merged(`${anchor}::after`)
+        expect(after.content, `hit area for ${selector}`).toBe("''")
+        expect(pixels(after['min-width']), selector).toBeGreaterThanOrEqual(24)
+        expect(pixels(after['min-height']), selector).toBeGreaterThanOrEqual(24)
+      }
+    })
   })
 
   it('gives every target at least 24 pixels in both directions', () => {
