@@ -13,7 +13,7 @@ import SearchSettings, {
   searchChoiceSummary,
 } from '../src/ui/SearchSettings.jsx'
 import Settings from '../src/ui/Settings.jsx'
-import { buttonWithText, click, withDom } from './helpers/uiDom.js'
+import { buttonWithText, click, openTab, settle, withDom } from './helpers/uiDom.js'
 
 describe('the web search settings helpers', () => {
   it('reads a saved choice and falls back to off', () => {
@@ -123,7 +123,7 @@ describe('the mock web search provider', () => {
 })
 
 describe('the web search section', () => {
-  it('mounts in Settings with the page client', () => {
+  it('mounts in Settings with the page client', async () => {
     const client = {
       providers: async () => [],
       endpoints: async () => [],
@@ -131,19 +131,27 @@ describe('the web search section', () => {
       searchProvider: async () => ({ provider: '', url: '', keyName: '' }),
       mcpServers: async () => [],
     }
-    const html = renderToString(
-      createElement(Settings, { client, effects: { alwaysDepth: 2 }, onChange: () => {}, onClose: () => {} })
-    )
-    expect(html).toContain('Web search')
-    expect(html).toContain('DuckDuckGo')
-    expect(html).toContain('Save')
+    await withDom(async ({ container, root }) => {
+      await act(async () => {
+        root.render(createElement(Settings, { client, effects: { alwaysDepth: 2 }, onChange: () => {}, onClose: () => {} }))
+      })
+      await openTab(root, container, 'Web search')
+      await settle()
+      expect(container.textContent).toContain('Web search')
+      expect(container.textContent).toContain('DuckDuckGo')
+      expect(buttonWithText(container, 'Save')).not.toBeNull()
+    })
   })
 
-  it('leaves the section out when the page has no client', () => {
-    const html = renderToString(
-      createElement(Settings, { effects: { alwaysDepth: 2 }, onChange: () => {}, onClose: () => {} })
-    )
-    expect(html).not.toContain('Web search')
+  it('leaves the section out when the page has no client', async () => {
+    await withDom(async ({ container, root }) => {
+      await act(async () => {
+        root.render(createElement(Settings, { effects: { alwaysDepth: 2 }, onChange: () => {}, onClose: () => {} }))
+      })
+      await openTab(root, container, 'Web search')
+      await settle()
+      expect(container.querySelector('#hud-settings-panel').textContent).not.toContain('Web search')
+    })
   })
 
   it('renders nothing itself without a client', () => {

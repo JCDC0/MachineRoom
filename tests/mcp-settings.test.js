@@ -25,7 +25,7 @@ import McpSettings, {
 } from '../src/ui/McpSettings.jsx'
 import Settings from '../src/ui/Settings.jsx'
 import { createMockClient } from '../src/control/mock.js'
-import { buttonWithText, click, settle, withDom } from './helpers/uiDom.js'
+import { buttonWithText, click, settle, withDom, openTab } from './helpers/uiDom.js'
 
 function isDisabled(node) {
   return node.disabled === true || node.getAttribute('disabled') !== null
@@ -508,12 +508,14 @@ describe('the MCP settings panel', () => {
     expect(html).not.toContain('id="mr-mcp-args"')
   })
 
-  it('mounts the MCP section in Settings and renders nothing while closed', () => {
-    const open = renderToString(
-      createElement(Settings, { effects: { alwaysDepth: 2 }, onChange: () => {}, onClose: () => {} })
-    )
-    expect(open).toContain('MCP tools')
-    expect(open).toContain(MCP_UNAVAILABLE)
+  it('mounts the MCP section in Settings and renders nothing while closed', async () => {
+    await withDom(async ({ container, root }) => {
+      await act(async () => {
+        root.render(createElement(Settings, { effects: { alwaysDepth: 2 }, onChange: () => {}, onClose: () => {} }))
+      })
+      await openTab(root, container, 'MCP tools')
+      expect(container.textContent).toContain(MCP_UNAVAILABLE)
+    })
     const closed = renderToString(
       createElement(Settings, { open: false, effects: { alwaysDepth: 2 }, onChange: () => {}, onClose: () => {} })
     )

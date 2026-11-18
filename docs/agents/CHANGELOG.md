@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Settings opens on one section at a time behind a row of tabs that remembers the open one, and the four lane settings sit under Lanes (P559).
 - Sonnet finished Codex's partial work.
 - Reviews lists only lanes with commits ahead, changes or a read error and folds the rest under one line; Team names each lane by its harness and model (P557).
 - The Teams alert sits outside the fold; family action rows are at least 24 px high; CODE.md names the Repository order.

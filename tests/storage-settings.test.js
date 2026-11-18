@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { createMockClient } from '../src/control/mock.js'
 import Settings from '../src/ui/Settings.jsx'
 import StorageSettings, { formatBytes } from '../src/ui/StorageSettings.jsx'
-import { buttonWithText, click, settle, type, withDom } from './helpers/uiDom.js'
+import { buttonWithText, click, settle, type, withDom, openTab } from './helpers/uiDom.js'
 
 async function waitForText(container, text, timeoutMs = 10000) {
   const deadline = Date.now() + timeoutMs
@@ -63,6 +63,8 @@ describe('StorageSettings', () => {
       await act(async () => {
         root.render(createElement(Settings, { open: true, onClose, client: mock }))
       })
+      await settle()
+      await openTab(root, container, 'Storage')
       await settle()
 
       const daysInput = container.querySelector('#mr-storage-days')

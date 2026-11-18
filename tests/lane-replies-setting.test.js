@@ -11,7 +11,7 @@ import { readHarnessSettings, saveHarnessSettings } from '../server/harness-sett
 import { killTree } from '../server/processTree.js'
 import { createRunsApi } from '../server/runs.js'
 import { createMockClient } from '../src/control/mock.js'
-import HarnessesSettings from '../src/ui/HarnessesSettings.jsx'
+import { LaneSettingsFields } from '../src/ui/HarnessesSettings.jsx'
 import { waitFor } from './helpers/bridge.js'
 import { settle, type, withDom } from './helpers/uiDom.js'
 
@@ -348,7 +348,7 @@ describe('the reply choice in Settings', () => {
     const client = fakeClient()
     await withDom(async ({ container, root }) => {
       await act(async () => {
-        root.render(createElement(HarnessesSettings, { client }))
+        root.render(createElement(LaneSettingsFields, { client }))
       })
       await settle()
 

@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { createMockClient } from '../src/control/mock.js'
 import HarnessesSettings from '../src/ui/HarnessesSettings.jsx'
 import Settings from '../src/ui/Settings.jsx'
-import { buttonWithText, click, settle, type, withDom } from './helpers/uiDom.js'
+import { buttonWithText, click, settle, type, withDom, openTab } from './helpers/uiDom.js'
 
 function rowFor(container, key) {
   return container.querySelector(`[data-harness="${key}"]`)
@@ -362,7 +362,7 @@ describe('HarnessesSettings UI', () => {
     })
   })
 
-  test('Settings places Harnesses before Direct API EndpointsPanel', async () => {
+  test('Settings opens on Harnesses and shows Direct API on its own tab', async () => {
     const client = fakeHarnessClient({
       rows: [],
       projectSettings: vi.fn().mockResolvedValue({ checkCommand: '' }),
@@ -378,12 +378,12 @@ describe('HarnessesSettings UI', () => {
       })
       await settle()
 
-      const sections = container.querySelectorAll('.hud-settings-section')
-      const harnessesIdx = sections.findIndex((section) => section.getAttribute('aria-label') === 'Harnesses')
-      const endpointsIdx = sections.findIndex((section) => section.id === 'settings-direct-api')
-      expect(harnessesIdx).toBeGreaterThan(-1)
-      expect(endpointsIdx).toBeGreaterThan(-1)
-      expect(harnessesIdx).toBe(endpointsIdx - 1)
+      expect(container.querySelector('[aria-label="Harnesses"]')).not.toBeNull()
+      expect(container.querySelector('#settings-direct-api')).toBeNull()
+      await openTab(root, container, 'Direct API')
+      await settle()
+      expect(container.querySelector('[aria-label="Harnesses"]')).toBeNull()
+      expect(container.querySelector('#settings-direct-api')).not.toBeNull()
     })
   })
 })

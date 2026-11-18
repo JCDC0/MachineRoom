@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { briefFileList } from '../src/briefs/briefs.js'
 import { overlappingLanes } from '../src/briefs/plan.js'
 import { harnessStatus, readHarnessSettings, saveHarnessSettings, updateHarnessSettings } from '../server/harness-settings.js'
-import HarnessesSettings from '../src/ui/HarnessesSettings.jsx'
+import { LaneSettingsFields } from '../src/ui/HarnessesSettings.jsx'
 import DispatchPanel from '../src/ui/panels/DispatchPanel.jsx'
 import { clearSplitRun, laneCountWarningLine, overlapCardLines, runningLaneFiles } from '../src/ui/panels/runs.js'
 import { buttonWithText, settle, type, withDom } from './helpers/uiDom.js'
@@ -164,7 +164,7 @@ describe('lane count warning setting', () => {
 
     await withDom(async ({ container, root }) => {
       await act(async () => {
-        root.render(createElement(HarnessesSettings, { client }))
+        root.render(createElement(LaneSettingsFields, { client }))
       })
       await settle(20)
 
