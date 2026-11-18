@@ -55,6 +55,16 @@ describe('the replay scrubber', () => {
     expect(tag).toContain('value="5000"')
   })
 
+  it('keeps all markers in one row before the rail has a width', () => {
+    const markers = [100, 101, 102, 103].map((at) => ({ at, tone: 'start' }))
+    const html = renderToString(createElement(Transport, {
+      snapshot: { ...SNAPSHOT, duration: 200 }, speeds: [1], markers,
+    }))
+    expect(html).toContain('data-rows="1"')
+    expect(html.match(/--marker-row:0/g)).toHaveLength(markers.length)
+    expect(html).not.toContain('scrubber-overflow')
+  })
+
   it('stacks close markers in three rows at their time positions and keeps the rest reachable', async () => {
     await withDom(async ({ container, root }) => {
       let resize
@@ -84,6 +94,12 @@ describe('the replay scrubber', () => {
         expect(ticks.map((tick) => tick.style.left)).toEqual(['50%', '50%', '50.1%', '50.2%', '60%'])
         const overflow = rail.querySelector('.scrubber-overflow')
         expect(ticks.slice(2, 4).map((tick) => tick.getAttribute('popoverTarget'))).toEqual([overflow.id, overflow.id])
+        ticks[2].popoverTargetElement = overflow
+        ticks[2].getBoundingClientRect = () => ({ left: 248, top: 700, bottom: 716, width: 4 })
+        ticks[2].click()
+        expect(overflow.getAttribute('data-side')).toBe('above')
+        expect(overflow.style['--marker-x']).toBe('250px')
+        expect(overflow.style['--marker-edge']).toBe('100px')
         for (const target of [...ticks.slice(0, 2), ...overflow.querySelectorAll('button'), ticks[4]]) target.click()
         expect(onSeek.mock.calls.flat()).toEqual(markers.map(({ at }) => at))
 
