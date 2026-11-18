@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Sends carry the selected start time; the bridge answers 409 for a stale run; live context fields survive the merge of running options.
 - A detail counts only with a positive window; a partial or omitted model waits the retry delay per model.
 - Seven findings, R54-1 to R54-7; fixes briefed as P540 to P543.
 - One formatCount for the strip, context, meters and cost board: 12k, 30.2M, 1M.
