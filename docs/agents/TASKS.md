@@ -4544,3 +4544,11 @@ Sweep S1 fixes, P514 to P516. `docs/agents/AUDIT-2026-11-SWEEP-S1.md` (P506, Cod
 5. Tests: the order of the three parts, Teams closed by default and opening on click, the count in the head, and the saved open state. Update the tests that pin the old order.
 6. ROOM.md: the sentence that describes the Agents tab.
 7. Run the tests you changed and `npm run build`, and report the counts.
+
+**P546. The footer agents list sits above its button, and its states read in colour (Codex, Terra).** Seen in the bench room on 2026-11-18 at 1280x800: the list that opens from `17 agents · 2 working` (`.transport-agents-list` in `src/ui/Transport.jsx`) runs from 146 to 746 pixels while its button sits at 726 to 762, so the last row covers the button that closes it. Every word in a row is the same white, so `working` and `failed` look alike, and a failure from weeks ago (OpenCode 6, P103) reads the same as one from today. Known sandbox baseline failures, not yours: process tests, the removed-sub test in `tests/orchestrators.test.js`, `tests/inspector-sandbox.test.jsx > ACP start log line`, the real npm pack test, and any test that fails only because the sandbox denies the home folder. Files: src/ui/Transport.jsx, src/ui/transportLanes.js, src/styles.css, tests/transport-lanes.test.js, tests/transport-orchestrators.test.js, tests/layout-css.test.js, any other test of these files, docs/agents/architecture/ROOM.md. Do not stop to ask about scope: decide, and list every decision and file in your report.
+1. The list's bottom edge stays at least 8 pixels above the top of its button in every window from 1280x800 up, and it scrolls inside when the rows do not fit. Measure from the button, not from a fixed number.
+2. The state word takes the room's colours: working `#e5ff00`, waiting `#e5ff00`, failed `#ff2a2a`, finished or succeeded `#2aff80`, idle dim white. Use classes, not inline colours.
+3. A failed or finished row with an end time shows its age in the last column (`5 min`, `3 h`, `2 d`), the same short form the working rows use for minutes.
+4. Tests: the position rule (a pure helper that takes the button and window sizes), the class for each state, and the age text. Each fails with its change undone.
+5. ROOM.md: the sentence on the footer list.
+6. Run the tests you changed and `npm run build`, and report the counts.
