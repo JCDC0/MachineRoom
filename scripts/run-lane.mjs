@@ -1914,7 +1914,7 @@ function recordRoom(record, toolLines, lanes) {
   }
 }
 
-async function claimBackupTicket(ticket, lane) {
+async function claimBackupTicket(ticket, lane, startedAt) {
   const bridge = typeof process.env.MACHINEROOM_BRIDGE === 'string' ? process.env.MACHINEROOM_BRIDGE.trim().replace(/\/+$/, '') : ''
   const held = typeof ticket === 'string' ? ticket.trim() : ''
   if (bridge === '' || held === '' || typeof fetch !== 'function') return false
@@ -1922,7 +1922,7 @@ async function claimBackupTicket(ticket, lane) {
     const answer = await fetch(`${bridge}/api/orchestrator/failover`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'X-MachineRoom-Lane': held },
-      body: JSON.stringify({ lane }),
+      body: JSON.stringify({ lane, startedAt: new Date(startedAt).toISOString() }),
       signal: AbortSignal.timeout(2000),
     })
     return answer.ok
@@ -2001,7 +2001,7 @@ async function startFailover({ laneKey, target, lanes, options, wanted, prompt, 
         return null
       }
     }
-    await claimBackupTicket(process.env.MACHINEROOM_LANE_TICKET, target)
+    await claimBackupTicket(process.env.MACHINEROOM_LANE_TICKET, target, startedAt)
     return await startLane({
       options: { ...options, lane: target, failedOver: true, continueFrom: '' },
       lane: fallbackLane,

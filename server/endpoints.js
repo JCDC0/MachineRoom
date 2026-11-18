@@ -399,17 +399,23 @@ export function createEndpointsApi(options = {}) {
   }
 
   function refreshMissing(model, endpointName = '') {
+    const time = now()
+    for (const [key, expires] of incomplete) if (expires <= time) incomplete.delete(key)
     const endpoints = readEndpoints(runsDir)
     const endpoint = endpoints.find((entry) => entry.name === endpointName) ?? endpoints.find((entry) => model.startsWith(`${entry.name}/`))
     if (!endpoint) return Promise.resolve(false)
     const id = model.startsWith(`${endpoint.name}/`) ? model.slice(endpoint.name.length + 1) : model
-    if (hasWindow(endpoint.modelDetails, id)) return Promise.resolve(false)
     const modelKey = JSON.stringify([endpoint.name, id])
+    if (hasWindow(endpoint.modelDetails, id)) {
+      incomplete.delete(modelKey)
+      return Promise.resolve(false)
+    }
     if ((incomplete.get(modelKey) ?? 0) > now()) return Promise.resolve(false)
     if ((failed.get(endpoint.name) ?? 0) > now()) return Promise.resolve(false)
     const check = (work) => work.then((success) => {
       const current = readEndpoints(runsDir).find((entry) => entry.name === endpoint.name)
       if (success && !hasWindow(current?.modelDetails ?? [], id)) incomplete.set(modelKey, now() + 600000)
+      else if (hasWindow(current?.modelDetails ?? [], id)) incomplete.delete(modelKey)
       return success
     })
     if (pending.has(endpoint.name)) return check(pending.get(endpoint.name))
