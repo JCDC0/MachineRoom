@@ -1014,7 +1014,7 @@ export default function DispatchPanel({
     )
   }
 
-  const briefGroups = hasBriefs ? groupBriefsByOwner(briefs).map((group) => ({ ...group, briefs: group.briefs.reverse() })) : []
+  const briefGroups = hasBriefs ? groupBriefsByOwner(briefs).map((group) => ({ ...group, briefs: group.briefs.slice().reverse() })) : []
   const projectTasks = splitTasks(projectTask)
   const projectQueue = projectTasks.length > 1
   const projectConfirm = projectRunConfirm({
@@ -1084,7 +1084,7 @@ export default function DispatchPanel({
               className="runs-entry is-recent is-failed mono"
             >
               <div className="runs-entry-head">
-                <span>{item.text} ? {Number.isFinite(Date.parse(item.startedAt)) ? ageText(Math.max(0, Math.floor((Date.now() - Date.parse(item.startedAt)) / 60000))) : 'age unknown'}</span>
+                <span>{item.text} · {Number.isFinite(Date.parse(item.startedAt)) ? ageText(Math.max(0, Math.floor((Date.now() - Date.parse(item.startedAt)) / 60000))) : 'age unknown'}</span>
                 <div className="brief-confirm-actions">
                   <button type="button" className="brief-cancel-btn" onClick={() => window.dispatchEvent(new window.CustomEvent(OPEN_CHAT_EVENT, { detail: { lane: item.lane, startedAt: item.startedAt } }))}>Open</button>
                   <button type="button" className="brief-cancel-btn" onClick={() => {

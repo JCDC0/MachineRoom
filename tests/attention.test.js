@@ -1,4 +1,4 @@
-﻿import { execFileSync } from 'node:child_process'
+import { execFileSync } from 'node:child_process'
 import { createServer } from 'node:http'
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -401,7 +401,7 @@ it('shows age and opens and remembers a dismissed failure', async () => {
       window.addEventListener('machineroom:open-chat', (event) => { detail = event.detail })
       await act(async () => { root.render(createElement(DispatchPanel, { client, initialAgents: [] })) })
       await settle()
-      expect(container.textContent).toContain('codex failed on P1 ? 5 min')
+      expect(container.textContent).toContain('codex failed on P1 · 5 min')
       await act(async () => { buttonWithText(container, 'Open').click() })
       expect(detail).toEqual({ lane: 'codex', startedAt })
       await act(async () => { buttonWithText(container, 'Dismiss').click() })
@@ -421,6 +421,6 @@ it('lists newest briefs first in each owner group', async () => {
     await act(async () => { root.render(createElement(DispatchPanel, { client, initialAgents: [], initialBriefs: briefs })) })
     await settle()
     const options = container.querySelectorAll('option')
-    expect(options.map((option) => option.getAttribute('value'))).toEqual(['', 'P2', 'P1'])
+    expect(Array.from(options).map((option) => option.getAttribute('value'))).toEqual(['', 'P2', 'P1'])
   })
 })
