@@ -1251,8 +1251,8 @@ describe('talking to a lane and seeing agent messages', () => {
       await type(root, container.querySelector('textarea'), 'Change course')
       await click(root, buttonWithText(container, 'Send and interrupt'))
       expect(calls).toEqual([
-        { lane: 'opencode', text: 'Keep going', interrupt: false },
-        { lane: 'opencode', text: 'Change course', interrupt: true },
+        { lane: 'opencode', startedAt, text: 'Keep going', interrupt: false },
+        { lane: 'opencode', startedAt, text: 'Change course', interrupt: true },
       ])
     })
   })

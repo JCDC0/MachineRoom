@@ -335,7 +335,8 @@ describe('mock orchestrators and the ladder', () => {
     await expect(client.laneMessageStatus('missing')).rejects.toThrow('not found')
 
     const run = await client.startRun('opencode', { task: 'Build UI', worktree: true })
-    const queued = await client.sendLaneMessage({ lane: 'opencode', text: 'Wait for turn.', interrupt: false })
+    await expect(client.sendLaneMessage({ lane: 'opencode', startedAt: 'old', text: 'Stale.' })).rejects.toThrow('That run is no longer running.')
+    const queued = await client.sendLaneMessage({ lane: 'opencode', startedAt: run.startedAt, text: 'Wait for turn.', interrupt: false })
     expect(queued).toEqual({ id: expect.any(String) })
     expect(await client.laneMessageStatus(queued.id)).toEqual({
       id: queued.id,

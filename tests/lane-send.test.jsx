@@ -534,6 +534,7 @@ describe('LaneConversation message box and status updates', () => {
             project: 'MachineRoom',
             lanes: LANES,
             initialStartedAt: FINISHED,
+            onRecipientSend: () => {},
           })
         )
       })
@@ -611,7 +612,7 @@ describe('LaneConversation message box and status updates', () => {
         await click(root, buttonWithText(container, 'Send'))
         await settle(10)
 
-        expect(sentCalls).toEqual([{ lane: 'opencode', text: 'Check the header.', interrupt: false }])
+        expect(sentCalls).toEqual([{ lane: 'opencode', startedAt: STARTED, text: 'Check the header.', interrupt: false }])
         expect(input.value).toBe('')
         expect(container.textContent).toContain('Check the header.')
         expect(container.textContent).toContain('Queued')
@@ -700,7 +701,7 @@ describe('LaneConversation message box and status updates', () => {
       await click(root, buttonWithText(container, 'Send and interrupt'))
       await settle(15)
 
-      expect(sentCalls).toEqual([{ lane: 'opencode', text: 'Switch to helper.', interrupt: true }])
+      expect(sentCalls).toEqual([{ lane: 'opencode', startedAt: STARTED, text: 'Switch to helper.', interrupt: true }])
       expect(container.textContent).toContain('Switch to helper.')
       expect(container.textContent).toContain('Interrupted the run')
     })
