@@ -4,6 +4,24 @@ import { availableParallelism } from 'node:os'
 
 export default defineConfig({
   plugins: [react()],
+  build: {
+    chunkSizeWarningLimit: 970,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          const normalized = id.replaceAll('\\', '/')
+          if (normalized.includes('/node_modules/three/')) return 'three'
+          if (
+            normalized.includes('/node_modules/react/') ||
+            normalized.includes('/node_modules/react-dom/') ||
+            normalized.includes('/node_modules/scheduler/')
+          ) {
+            return 'react'
+          }
+        },
+      },
+    },
+  },
   server: {
     port: 5173,
     watch: { ignored: ['**/.worktrees/**'] },
