@@ -58,6 +58,7 @@ src/ui/           React HUD: Hud.jsx (menu, dock, agents, event log, mode switch
   LanesSettings.jsx       Lanes section in Settings to list lanes, show hidden lanes and remove or delete lanes behind a confirm card
   StorageSettings.jsx     Storage section in Settings showing usage by kind, clean merged worktrees, days preview and archive confirm card
   badges.js               reviewBadgeCount, proposalBadgeCount, orchestratorBadgeCount and actionBadges for HUD button counts
+  controls.jsx            Chip and select, IconButton, Switch, Menu, Row and HoverCard for the lower panels (P597)
   failureTray.js          emptyFailureTray, addFailureActivities, failureRows and failureAge for recent failed tool calls and runs
   harnessesSettings.js    harnessListFrom, harnessDisplayName, isNativeHarness, harnessStatus, programDraftsFrom, countSavedItems, directApiSummary and harnessConfirmSpec for HarnessesSettings
   laneConversation.js     runOptions, foldToolCalls, foldPrompt, readDue, runOutcome, liveRunLane, runClock and toolText for LaneConversation
@@ -195,6 +196,7 @@ tests/            vitest; tests/helpers/bridge.js starts a bridge on port 0 over
   control-contract.test.js          src/control/client.js, mock.js, server/control.js: mock and bridge contract parity and write rules
   control-mock-briefs.test.js       src/control/mock.js, src/policy/profile.js: mock brief shapes, tier mapping, prompt building and errors
   control-mock.test.js              src/control/mock.js: contract methods, agent/issue filters and bridge write refusals
+  controls.test.jsx                 src/ui/controls.jsx: control names and roles, menu keys and focus, switch state and hover card timing
   conversation.test.js              src/model/conversation.js: Claude, OpenCode, Codex and AGY log parsing, masking and fallback lines
   copilot-harness.test.js           src/harnesses/copilot.js, src/model/parsers/copilot.js: CLI flags, reasoning override, env and event parsing
   cost-board.test.js                src/engine/board.js, src/model/costs.js: boardLines formatting for reported, zero, unreported and over budget
