@@ -378,12 +378,16 @@ describe('HarnessesSettings UI', () => {
       })
       await settle()
 
-      expect(container.querySelector('[aria-label="Harnesses"]')).not.toBeNull()
-      expect(container.querySelector('#settings-direct-api')).toBeNull()
+      const shown = (node) => {
+        for (let n = node; n; n = n.parentNode) if (n.hidden === true || (n.attributes && 'hidden' in n.attributes)) return false
+        return Boolean(node)
+      }
+      expect(shown(container.querySelector('[aria-label="Harnesses"]'))).toBe(true)
+      expect(shown(container.querySelector('#settings-direct-api'))).toBe(false)
       await openTab(root, container, 'Direct API')
       await settle()
-      expect(container.querySelector('[aria-label="Harnesses"]')).toBeNull()
-      expect(container.querySelector('#settings-direct-api')).not.toBeNull()
+      expect(shown(container.querySelector('[aria-label="Harnesses"]'))).toBe(false)
+      expect(shown(container.querySelector('#settings-direct-api'))).toBe(true)
     })
   })
 })

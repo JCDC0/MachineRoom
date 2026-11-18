@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Sonnet, from a partial branch.
 - DeepSeek native lane.
 - Sonnet audit.
 - DeepSeek native lane.
@@ -9,6 +10,7 @@
 - DeepSeek native lane.
 - DeepSeek native lane.
 - DeepSeek native lane.
+- Needs you dismisses by lane, start time and text, Reviews keeps a lane that is selected or mid-action visible, and Settings tabs keep their drafts (P565, review 57).
 - Sonnet review.
 - The interrupt test waits scale with CI and the cap test's fake CLI writes its call line before any git spawn (P560).
 

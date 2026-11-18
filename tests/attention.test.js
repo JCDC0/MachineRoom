@@ -163,8 +163,8 @@ describe('attentionItems', () => {
     ])
 
     expect(items).toEqual([
-      { lane: 'direct', startedAt: '2026-11-16T10:20:00.000Z', text: 'direct failed on P469' },
-      { lane: 'agy', startedAt: '2026-11-16T10:15:00.000Z', text: 'agy failed on P468' },
+      { lane: 'direct', startedAt: '2026-11-16T10:20:00.000Z', text: 'direct stopped on P469: the same call failed 5 times' },
+      { lane: 'agy', startedAt: '2026-11-16T10:15:00.000Z', text: 'agy could not start P468' },
       { lane: 'claude', startedAt: '2026-11-16T10:10:00.000Z', text: 'claude failed on Fix the parser' },
       { lane: 'codex', startedAt: '2026-11-16T10:05:00.000Z', text: 'codex failed on P466 P467' },
       { lane: 'opencode', startedAt: '2026-11-16T10:00:00.000Z', text: 'opencode failed on P465' },
@@ -395,7 +395,7 @@ describe('DispatchPanel Needs you', () => {
 
 it('shows a repeated failure on a successful newest run and clears it on a later run', () => {
   const run = { lane: 'codex', startedAt: '2026-11-16T10:00:00.000Z', exitCode: 0, repeatedFailure: { tool: 'Read', count: 5 } }
-  expect(attentionItems([run])).toEqual([{ lane: 'codex', startedAt: run.startedAt, text: 'codex failed on unknown work' }])
+  expect(attentionItems([run])).toEqual([{ lane: 'codex', startedAt: run.startedAt, text: 'codex stopped on unknown work: the same call failed 5 times' }])
   expect(attentionItems([run, { lane: 'codex', startedAt: '2026-11-16T10:01:00.000Z', exitCode: 0 }])).toEqual([])
 })
 
@@ -420,6 +420,30 @@ it('shows age and opens and remembers a dismissed failure', async () => {
       await act(async () => { root.render(createElement(DispatchPanel, { client, initialAgents: [] })) })
       await settle()
       expect(container.textContent).not.toContain('Needs you')
+    })
+  } finally { globalThis.localStorage = oldStorage }
+})
+
+it('dismisses a failure with a start time by lane, time and text, and offers no button without one', async () => {
+  const saved = new Map()
+  const oldStorage = globalThis.localStorage
+  globalThis.localStorage = { getItem: (key) => saved.get(key) ?? null, setItem: (key, value) => saved.set(key, value) }
+  const startedAt = '2026-11-16T10:00:00.000Z'
+  let attention = [{ lane: 'codex', startedAt, text: 'codex failed on P1' }, { lane: 'agy', startedAt: null, text: 'agy failed on P2' }]
+  const client = { health: async () => ({ lanes: true }), runs: async () => ({ running: [], recent: [], attention }) }
+  try {
+    await withDom(async ({ container, root }) => {
+      await act(async () => { root.render(createElement(DispatchPanel, { client, initialAgents: [] })) })
+      await settle()
+      expect(container.querySelectorAll('.brief-cancel-btn').filter((b) => b.textContent === 'Dismiss')).toHaveLength(1)
+      await act(async () => { buttonWithText(container, 'Dismiss').click() })
+      expect(container.textContent).not.toContain('codex failed on P1')
+      expect(container.textContent).toContain('agy failed on P2')
+      expect(JSON.parse(saved.get('machineroom.dismissedAttention'))).toEqual([JSON.stringify(['codex', startedAt, 'codex failed on P1'])])
+      attention = [{ lane: 'codex', startedAt, text: 'codex could not start P1' }]
+      await act(async () => { buttonWithText(container, 'Refresh').click() })
+      await settle()
+      expect(container.textContent).toContain('codex could not start P1')
     })
   } finally { globalThis.localStorage = oldStorage }
 })

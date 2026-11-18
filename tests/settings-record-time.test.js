@@ -39,4 +39,18 @@ describe('the record time field', () => {
       expect(changes[0].recordMinutes).toBe(7)
     })
   })
+
+  it('keeps the draft in a hidden tab and saves it on a tab switch', async () => {
+    const changes = []
+    await withDom(async ({ container, root }) => {
+      await act(async () => {
+        root.render(createElement(Settings, { open: true, effects: {}, onClose: () => {}, onSettingsChange: (next) => changes.push(next) }))
+      })
+      await openTab(root, container, 'Replay')
+      await type(root, container.querySelector('[aria-label="Record time in minutes"]'), '9')
+      await openTab(root, container, 'Sound')
+      expect(loadSettings(store()).recordMinutes).toBe(9)
+      expect(container.querySelector('[aria-label="Record time in minutes"]').value).toBe('9')
+    })
+  })
 })
