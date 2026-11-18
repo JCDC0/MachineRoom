@@ -278,6 +278,14 @@ describe('lane tasks', () => {
     expect(laneTaskIssues({ records: [failed, oneLater, bothLater] }).find((issue) => issue.id === id).status).toBe('done')
   })
 
+  it('keeps a failed edit blocked when only a Plan mode run succeeded later', () => {
+    const failed = record({ lane: 'codex', briefs: ['P1'], log: '/tmp/runs/codex-P1-20261024-090000.log', startedAt: iso(30), exitCode: 1 })
+    const plan = record({ lane: 'codex', briefs: ['P1'], log: '/tmp/runs/codex-P1-20261024-080000.log', startedAt: iso(20), exitCode: 0 })
+    plan.mode = 'plan'
+    const id = 'codex-P1-20261024-090000'
+    expect(laneTaskIssues({ records: [failed, plan] }).find((issue) => issue.id === id).status).toBe('blocked')
+  })
+
   it('reads a failed run as done when its failover backup ran later', () => {
     const failed = record({
       lane: 'opencode',

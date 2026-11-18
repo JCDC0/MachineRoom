@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- A Plan mode success no longer clears a failed edit, Open selects the run asked for, lane settings wait for their first read, and the Direct API link fires once (P577, review 57b).
 - Sonnet.
 - GPT-6.2 Sol.
 - Sonnet.

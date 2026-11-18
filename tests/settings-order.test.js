@@ -1,6 +1,7 @@
 import { act, createElement } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import HarnessesSettings from '../src/ui/HarnessesSettings.jsx'
+import Hud from '../src/ui/Hud.jsx'
 import Settings from '../src/ui/Settings.jsx'
 import { buttonWithText, settle, withDom, openTab } from './helpers/uiDom.js'
 
@@ -198,6 +199,45 @@ describe('harness program details', () => {
       expect(buttonWithText(notReady, 'Save')).not.toBeNull()
       expect(buttonWithText(notReady, 'Clear')).not.toBeNull()
       expect(notReady.textContent).toContain('Program not found on PATH.')
+    })
+  })
+
+  it('consumes the Direct API request so the menu reopens the saved tab', async () => {
+    const props = {
+      snapshot: { agents: [], status: 'live', position: 0 },
+      project: 'MachineRoom',
+      client: fakeClient(),
+      mode: 'live',
+      liveRuns: [],
+      log: [],
+      health: { ok: true, orchestrator: true },
+      focused: null,
+      speeds: [1],
+      markers: [],
+    }
+    await withDom(async ({ container, dom, root }) => {
+      dom.window.localStorage.setItem('machineroom.guide', '1')
+      dom.window.innerWidth = 1280
+      globalThis.document.getElementById = () => null
+      await act(async () => {
+        root.render(createElement(Hud, { ...props, settingsRequest: 0 }))
+      })
+      await settle()
+      await act(async () => {
+        dom.window.dispatchEvent(new dom.window.CustomEvent('machineroom:open-settings'))
+      })
+      await settle()
+      expect(container.querySelector('#hud-settings-tab-direct-api').getAttribute('aria-selected')).toBe('true')
+      await act(async () => {
+        buttonWithText(container, 'Close').click()
+      })
+      await settle()
+      expect(container.querySelector('#hud-settings-tab-direct-api')).toBeNull()
+      await act(async () => {
+        root.render(createElement(Hud, { ...props, settingsRequest: 1 }))
+      })
+      await settle()
+      expect(container.querySelector('#hud-settings-tab-harnesses').getAttribute('aria-selected')).toBe('true')
     })
   })
 })

@@ -481,4 +481,26 @@ describe('the lane conversation view', () => {
       expect(calls).toHaveLength(1)
     })
   })
+
+  it('selects the run an open-chat request names while the lane view is open', async () => {
+    const OTHER = '2026-10-24T11:00:00.000Z'
+    const calls = []
+    const client = {
+      ...makeClient({ entries: [{ role: 'prompt', text: 'Go.', at: STARTED }], calls }),
+      runs: async () => ({
+        running: [],
+        recent: [
+          { lane: 'opencode', startedAt: STARTED, exitCode: 0, briefs: [] },
+          { lane: 'opencode', startedAt: OTHER, exitCode: 1, briefs: [] },
+        ],
+      }),
+    }
+    const props = { client, lane: 'opencode', laneName: 'OpenCode', project: 'MachineRoom', lanes: LANES, tick: 0 }
+    await withDom(async ({ root }) => {
+      await mount(root, { ...props, initialStartedAt: STARTED, requestKey: 1 })
+      await mount(root, { ...props, initialStartedAt: OTHER, requestKey: 2 })
+      await settle(10)
+      expect(calls.at(-1)).toEqual({ lane: 'opencode', startedAt: OTHER })
+    })
+  })
 })

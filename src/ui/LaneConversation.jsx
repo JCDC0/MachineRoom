@@ -122,6 +122,7 @@ export default function LaneConversation({
   liveRuns = [],
   runs: givenRuns = null,
   initialStartedAt = '',
+  requestKey = 0,
   inline = false,
   tick = 0,
   onBack = () => {},
@@ -150,6 +151,7 @@ export default function LaneConversation({
   const [planStarting, setPlanStarting] = useState(false)
   const [planStartError, setPlanStartError] = useState('')
   const [planStartStatus, setPlanStartStatus] = useState('')
+  const wantedRef = useRef(initialStartedAt)
   const mountedRef = useRef(true)
   const lastReadRef = useRef(null)
   const readSequenceRef = useRef(0)
@@ -248,6 +250,22 @@ export default function LaneConversation({
   }, [client, givenRuns, lane])
 
   useEffect(() => {
+    if (!requestKey) return
+    wantedRef.current = initialStartedAt
+    if (initialStartedAt) setSelected(initialStartedAt)
+  }, [requestKey])
+
+  useEffect(() => {
+    const wanted = wantedRef.current
+    if (wanted) {
+      if (options.some((run) => run.startedAt === wanted)) {
+        wantedRef.current = ''
+        if (selected !== wanted) setSelected(wanted)
+        return
+      }
+      if (!runs) return
+      wantedRef.current = ''
+    }
     if (options.length === 0) {
       if (runs && selected) setSelected('')
       return

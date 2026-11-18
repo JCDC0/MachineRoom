@@ -1,7 +1,7 @@
 import { act, createElement } from 'react'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { createMockClient } from '../src/control/mock.js'
-import HarnessesSettings from '../src/ui/HarnessesSettings.jsx'
+import HarnessesSettings, { LaneSettingsFields } from '../src/ui/HarnessesSettings.jsx'
 import Settings from '../src/ui/Settings.jsx'
 import { buttonWithText, click, settle, type, withDom, openTab } from './helpers/uiDom.js'
 
@@ -388,6 +388,29 @@ describe('HarnessesSettings UI', () => {
       await settle()
       expect(shown(container.querySelector('[aria-label="Harnesses"]'))).toBe(false)
       expect(shown(container.querySelector('#settings-direct-api'))).toBe(true)
+    })
+  })
+
+  test('lane settings cannot be saved until their first read has succeeded', async () => {
+    let release
+    const client = {
+      harnesses: vi.fn().mockImplementation(() => new Promise((resolve) => { release = () => resolve([{ key: 'claude', laneReplies: 'next-turn' }]) })),
+      harnessSettings: vi.fn().mockResolvedValue([]),
+      subscribe: vi.fn().mockImplementation(() => () => {}),
+    }
+    await withDom(async ({ container, root }) => {
+      await act(async () => {
+        root.render(createElement(LaneSettingsFields, { client }))
+      })
+      await settle()
+      const saves = () => container.querySelectorAll('button').filter((b) => b.textContent.trim() === 'Save')
+      expect(saves().length).toBe(2)
+      expect(saves().every((b) => b.getAttribute('disabled') !== null)).toBe(true)
+      await act(async () => {
+        release()
+      })
+      await settle()
+      expect(saves().every((b) => b.getAttribute('disabled') === null)).toBe(true)
     })
   })
 })
