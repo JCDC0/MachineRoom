@@ -16,6 +16,8 @@ import { laneNeedsNetwork } from '../../model/online.js'
 import { TIERS } from '../../policy/route.js'
 import { PROJECT_CONFIRM_LIMIT, PROJECT_QUEUE_TEXT_LIMIT, cancelSplitRun, clearProjectDraft, clearSplitRun, laneCountWarningFrom, overlapCardLines, planLaneTasks, projectCheckLine, projectDraftKey, projectFormNotice, projectRunBody, projectRunConfirm, projectRunLabel, projectRunLanes, projectSplitLabel, projectSplitWorktreeLine, projectTaskProblem, projectWorktreeLine, queueRecoveryAvailable, queueRecoveryMessage, queueRecoveryPlan, readProjectDraft, recordLine, resultWord, runningLaneFiles, splitRunProgress, splitRunSnapshot, splitTasks, startSplitRun, subscribeSplitRun, timeSinceStart, writeProjectDraft } from './runs.js'
 import { formatTime } from '../inspector.js'
+import { ageText } from '../transportLanes.js'
+import { OPEN_CHAT_EVENT } from '../transportOrchestrators.js'
 
 const FIRST_TASK_TEXT =
   'Read this repository and say what it does, how to run it and how to test it. Change nothing.'
@@ -120,6 +122,12 @@ export default function DispatchPanel({
   const [startingRun, setStartingRun] = useState(false)
   const [runError, setRunError] = useState(null)
 
+  const [dismissedAttention, setDismissedAttention] = useState(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('machineroom.dismissedAttention') || '[]')
+      return Array.isArray(saved) ? saved : []
+    } catch { return [] }
+  })
   const [runsState, setRunsState] = useState({ running: [], recent: [], attention: [] })
   const [runsLoading, setRunsLoading] = useState(() => typeof client?.runs === 'function')
   const [runsError, setRunsError] = useState(null)
@@ -187,7 +195,7 @@ export default function DispatchPanel({
   const canStopRun = typeof client?.stopRun === 'function'
 
   const attentionRows = (Array.isArray(runsState.attention) ? runsState.attention : []).filter(
-    (item) => item && typeof item.text === 'string' && item.text.trim() !== ''
+    (item) => item && typeof item.text === 'string' && item.text.trim() !== '' && !dismissedAttention.includes(JSON.stringify([item.lane, item.startedAt]))
   )
   const selectedBrief = briefs.find((item) => item.id === selectedBriefId)
   const runLane = selectedBrief ? runLaneFor(selectedBrief, runsState.running, agents) : null
@@ -1006,7 +1014,7 @@ export default function DispatchPanel({
     )
   }
 
-  const briefGroups = hasBriefs ? groupBriefsByOwner(briefs) : []
+  const briefGroups = hasBriefs ? groupBriefsByOwner(briefs).map((group) => ({ ...group, briefs: group.briefs.reverse() })) : []
   const projectTasks = splitTasks(projectTask)
   const projectQueue = projectTasks.length > 1
   const projectConfirm = projectRunConfirm({
@@ -1075,7 +1083,17 @@ export default function DispatchPanel({
               key={`attention-${item.lane || 'lane'}-${item.startedAt || index}`}
               className="runs-entry is-recent is-failed mono"
             >
-              {item.text}
+              <div className="runs-entry-head">
+                <span>{item.text} ? {Number.isFinite(Date.parse(item.startedAt)) ? ageText(Math.max(0, Math.floor((Date.now() - Date.parse(item.startedAt)) / 60000))) : 'age unknown'}</span>
+                <div className="brief-confirm-actions">
+                  <button type="button" className="brief-cancel-btn" onClick={() => window.dispatchEvent(new window.CustomEvent(OPEN_CHAT_EVENT, { detail: { lane: item.lane, startedAt: item.startedAt } }))}>Open</button>
+                  <button type="button" className="brief-cancel-btn" onClick={() => {
+                    const next = [...dismissedAttention, JSON.stringify([item.lane, item.startedAt])]
+                    setDismissedAttention(next)
+                    try { localStorage.setItem('machineroom.dismissedAttention', JSON.stringify(next)) } catch {}
+                  }}>Dismiss</button>
+                </div>
+              </div>
             </div>
           ))}
         </div>

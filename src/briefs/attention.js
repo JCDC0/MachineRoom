@@ -59,16 +59,20 @@ function backupRanLater(record, lane, records) {
 
 function attentionText(record, lane) {
   if (record.killed === true) return ''
-  if (text(record.stopReason) === REPEATED_FAILURE) {
-    return `${lane} stopped: the same call failed five times.`
-  }
-  if (typeof record.repeatedFailure?.tool === 'string' && Number.isInteger(record.repeatedFailure.count) && record.repeatedFailure.count >= 5) return `${lane} repeated one failing ${record.repeatedFailure.tool} call ${record.repeatedFailure.count} times.`
-  if (record.exitCode === 0) return ''
-  if (record.startFailed === true) return `${lane} could not start.`
-  const exitCode = typeof record.exitCode === 'number' && Number.isFinite(record.exitCode) ? record.exitCode : null
-  if (exitCode === null || exitCode === 0) return ''
-  const work = workLabel(record)
-  return work ? `${lane} failed on ${work}.` : `${lane} failed.`
+  const repeated = text(record.stopReason) === REPEATED_FAILURE ||
+    (typeof record.repeatedFailure?.tool === 'string' && Number.isInteger(record.repeatedFailure.count) && record.repeatedFailure.count >= 5)
+  if (!repeated && record.startFailed !== true && (typeof record.exitCode !== 'number' || !Number.isFinite(record.exitCode) || record.exitCode === 0)) return ''
+  return `${lane} failed on ${workLabel(record) || 'unknown work'}`
+}
+
+function succeededLater(record, records) {
+  const failedAt = startTime(record)
+  if (failedAt === null) return false
+  const briefs = Array.isArray(record.briefs) ? record.briefs.map(text).filter(Boolean) : []
+  const task = text(record.task)
+  const successes = records.filter((candidate) => candidate && candidate.exitCode === 0 && !candidate.killed && !candidate.startFailed && startTime(candidate) !== null && startTime(candidate) > failedAt && text(candidate.stopReason) !== REPEATED_FAILURE && !(candidate.repeatedFailure?.count >= 5))
+  if (briefs.length) return briefs.every((brief) => successes.some((candidate) => Array.isArray(candidate.briefs) && candidate.briefs.includes(brief)))
+  return Boolean(task) && successes.some((candidate) => text(candidate.task) === task)
 }
 
 function newestByLane(records) {
@@ -93,7 +97,7 @@ export function attentionItems(records) {
   for (const entry of newestByLane(list)) {
     const itemText = attentionText(entry.record, entry.lane)
     if (!itemText) continue
-    if (backupRanLater(entry.record, entry.lane, list)) continue
+    if (backupRanLater(entry.record, entry.lane, list) || succeededLater(entry.record, list)) continue
     items.push({
       lane: entry.lane,
       startedAt: entry.record.startedAt ?? null,
