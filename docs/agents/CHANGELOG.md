@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- DeepSeek native lane.
 - Sonnet audit.
 - DeepSeek native lane.
 - GPT-6.2 Sol.
@@ -9,6 +10,8 @@
 - DeepSeek native lane.
 - DeepSeek native lane.
 - Sonnet review.
+- The interrupt test waits scale with CI and the cap test's fake CLI writes its call line before any git spawn (P560).
+
 - Sonnet.
 - Sonnet did P559 in one run.
 - Reviews reads `1 lane has nothing to review` for one folded lane (P563).
