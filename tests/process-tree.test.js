@@ -1,7 +1,11 @@
 import { spawn } from 'node:child_process'
-import { describe, expect, it } from 'vitest'
-import { KILL_TIMEOUT_MS, WINDOWS_LIST_COMMAND, descendantProcesses, isCreatedAfterLock, isLockHolderStale, killTree, leftoverProcesses, listProcesses, parseProcessList, processListCommand, treeSpawnOptions } from '../server/processTree.js'
+import { EventEmitter } from 'node:events'
+import { PassThrough } from 'node:stream'
+import { describe, expect, it, vi } from 'vitest'
+import { KILL_TIMEOUT_MS, WINDOWS_LIST_COMMAND, descendantProcesses, isCreatedAfterLock, isLockHolderStale, killTree, leftoverProcesses, listProcesses, parseProcessList, processListCommand, sampleProcesses, treeSpawnOptions } from '../server/processTree.js'
 import { makeTempDir } from './helpers/tempRoot.js'
+
+vi.mock('node:child_process', { spy: true })
 
 const PARENT = [
   "const { spawn } = require('node:child_process')",
@@ -204,6 +208,68 @@ describe('listProcesses', () => {
       killTree(child)
     }
   }, 30000)
+})
+
+describe('sampleProcesses', () => {
+  it('uses the default or a valid interval and turns off at zero', () => {
+    const cases = [[undefined, 2000], ['250', 250], ['60000', 60000], ['249', 2000], ['60001', 2000], ['250.5', 2000], ['0x100', 2000], ['0', 0]]
+    vi.useFakeTimers()
+    try {
+      for (const [value, interval] of cases) {
+        vi.stubEnv('MACHINEROOM_SAMPLE_MS', value)
+        const onSample = vi.fn()
+        const stop = sampleProcesses(onSample, 'linux')
+        vi.advanceTimersByTime(interval ? interval - 1 : 60000)
+        expect(onSample).not.toHaveBeenCalled()
+        if (interval) {
+          vi.advanceTimersByTime(1)
+          expect(onSample).toHaveBeenCalledTimes(1)
+        }
+        stop()
+        expect(vi.getTimerCount()).toBe(0)
+      }
+    } finally {
+      vi.useRealTimers()
+      vi.unstubAllEnvs()
+    }
+  })
+
+  it('skips Windows ticks until a full sample has been read and stops pending work', () => {
+    const sampler = Object.assign(new EventEmitter(), {
+      stdin: new PassThrough(),
+      stdout: new PassThrough(),
+      kill: vi.fn(),
+    })
+    const write = vi.spyOn(sampler.stdin, 'write')
+    vi.mocked(spawn).mockImplementationOnce(() => sampler)
+    vi.stubEnv('MACHINEROOM_SAMPLE_MS', '250')
+    vi.useFakeTimers()
+    const onSample = vi.fn()
+    const stop = sampleProcesses(onSample, 'win32')
+    try {
+      expect(spawn).toHaveBeenLastCalledWith('powershell', ['-NoProfile', '-Command', expect.any(String)], {
+        windowsHide: true, stdio: ['pipe', 'pipe', 'ignore'],
+      })
+      sampler.stdout.write('[{"ProcessId":7,"ParentProcessId":2,"CreationDate":1000}]')
+      vi.advanceTimersByTime(750)
+      expect(write).toHaveBeenCalledTimes(1)
+      expect(onSample).not.toHaveBeenCalled()
+      sampler.stdout.write('\r\n')
+      expect(onSample).toHaveBeenCalledExactlyOnceWith([{ pid: 7, ppid: 2, command: '', created: 1000 }])
+      vi.advanceTimersByTime(250)
+      expect(write).toHaveBeenCalledTimes(2)
+      stop()
+      sampler.stdout.write('[]\r\n')
+      vi.advanceTimersByTime(750)
+      expect(write).toHaveBeenCalledTimes(2)
+      expect(onSample).toHaveBeenCalledTimes(1)
+      expect(sampler.kill).toHaveBeenCalledTimes(1)
+    } finally {
+      stop()
+      vi.useRealTimers()
+      vi.unstubAllEnvs()
+    }
+  })
 })
 
 describe('descendantProcesses with a dead root', () => {

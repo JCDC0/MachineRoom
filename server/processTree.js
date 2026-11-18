@@ -4,7 +4,7 @@ import { createInterface } from 'node:readline'
 
 export const KILL_TIMEOUT_MS = 10000
 export const LIST_TIMEOUT_MS = 20000
-const SAMPLE_MS = 100
+const SAMPLE_MS = 2000
 
 export const WINDOWS_LIST_COMMAND = 'Get-CimInstance Win32_Process | Select-Object ProcessId,ParentProcessId,CommandLine,CreationDate | ConvertTo-Json -Compress'
 
@@ -116,23 +116,51 @@ export function listProcesses({ platform = process.platform, run = spawnSync, ti
 }
 
 export function sampleProcesses(onSample, platform = process.platform) {
+  const raw = process.env.MACHINEROOM_SAMPLE_MS?.trim() ?? ''
+  const configured = /^\d+$/.test(raw) ? Number(raw) : NaN
+  if (configured === 0) return () => {}
+  const interval = configured >= 250 && configured <= 60000 ? configured : SAMPLE_MS
   if (platform !== 'win32') {
-    const timer = setInterval(() => onSample(listProcesses({ platform, commands: false })), SAMPLE_MS)
+    const timer = setInterval(() => onSample(listProcesses({ platform, commands: false })), interval)
     return () => clearInterval(timer)
   }
-  const command = `while (Get-Process -Id ${process.pid} -ErrorAction SilentlyContinue) {
+  const command = `$ErrorActionPreference = 'Stop'
+  $parent = Get-Process -Id ${process.pid} -ErrorAction SilentlyContinue
+  if (!$parent) { return }
+  $null = $parent.Handle
+  while (!$parent.HasExited -and [Console]::Read() -ne -1 -and !$parent.HasExited) {
     $rows = @(Get-CimInstance -Query 'SELECT ProcessId, ParentProcessId, CreationDate FROM Win32_Process' -ErrorAction Stop | Select-Object ProcessId,ParentProcessId,CreationDate)
+    if ($parent.HasExited) { break }
     ConvertTo-Json -InputObject $rows -Compress
-    Start-Sleep -Milliseconds ${SAMPLE_MS}
   }`
-  const sampler = spawn('powershell', ['-NoProfile', '-Command', command], { windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'] })
-  sampler.on('error', () => {})
-  const lines = createInterface({ input: sampler.stdout })
-  lines.on('line', (line) => onSample(windowsRows(line)))
-  return () => {
+  const sampler = spawn('powershell', ['-NoProfile', '-Command', command], { windowsHide: true, stdio: ['pipe', 'pipe', 'ignore'] })
+  const lines = createInterface({ input: sampler.stdout, crlfDelay: Infinity })
+  let reading = false
+  let stopped = false
+  const request = () => {
+    if (reading || !sampler.stdin.writable) return
+    reading = true
+    sampler.stdin.write('\n')
+  }
+  const timer = setInterval(request, interval)
+  const stop = () => {
+    if (stopped) return
+    stopped = true
+    clearInterval(timer)
     lines.close()
+    sampler.stdin.destroy()
     sampler.kill()
   }
+  sampler.on('error', stop)
+  sampler.stdin.on('error', stop)
+  sampler.once('close', stop)
+  lines.on('line', (line) => {
+    if (stopped || !reading) return
+    onSample(windowsRows(line))
+    reading = false
+  })
+  request()
+  return stop
 }
 
 function processKey(command, platform) {

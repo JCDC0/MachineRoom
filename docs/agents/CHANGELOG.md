@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- GPT-6.2 Sol.
 - Sonnet review.
 - Sonnet.
 - DeepSeek native lane.

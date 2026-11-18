@@ -172,22 +172,31 @@ describe('a stopped lane stays stopped', () => {
     const mark = join(project, 'late.txt')
     const started = join(project, 'started.txt')
     writeFakeHarness(project, mark, started)
-    const run = runLane(['fake', '--project', project, '--task', 'Do it.'], env)
+    const run = runLane(['fake', '--project', project, '--task', 'Do it.'], {
+      ...env,
+      MACHINEROOM_SAMPLE_MS: '250',
+    })
+    const lockPath = join(runs, 'fake.lock')
     let lock
     let grandchildPid = 0
     const ready = await waitUntil(() => {
-      lock = readLaneLock(join(runs, 'fake.lock'))
+      lock = readLaneLock(lockPath)
       if (!Number.isInteger(lock.child) || lock.child <= 0) return false
       grandchildPid = readStartedPid(started)
       if (grandchildPid <= 0 || !processAlive(grandchildPid)) return false
-      return descendantProcesses(listProcesses(), { rootPid: lock.child, ownPid: process.pid }).some((item) => item.pid === grandchildPid)
+      try {
+        const { recorded } = JSON.parse(readFileSync(`${lockPath}.processes`, 'utf8'))
+        return recorded.some(([pid, created]) => pid === grandchildPid && Number.isFinite(created))
+      } catch {
+        return false
+      }
     })
-    expect(ready, 'the harness and its grandchild were not in the process list').toBe(true)
+    expect(ready, 'the sampler did not record the grandchild').toBe(true)
     expect(lock.pid).toBeGreaterThan(0)
     expect(lock.child).toBeGreaterThan(0)
     expect(lock.folder).toBe(project)
     expect(lock.projectRun).toBe(true)
-    const lockFile = readFileSync(join(runs, 'fake.lock'), 'utf8')
+    const lockFile = readFileSync(lockPath, 'utf8')
     const lockStart = laneLockStartedAt(lockFile)
     expect(lockStart).not.toBe('')
     expect(laneLockLog(lockFile)).toMatch(/^fake-project-\d{8}-\d{6}\.log$/)
@@ -200,7 +209,7 @@ describe('a stopped lane stays stopped', () => {
     expect(stopped.code).toBe(0)
     expect(stopped.stdout).toContain(`stopped: ${lock.child} (the harness)`)
     expect(stopped.stdout).toContain('leftover: stopped')
-    expect(existsSync(join(runs, 'fake.lock'))).toBe(false)
+    expect(existsSync(lockPath)).toBe(false)
     expect(await waitUntil(() => !processAlive(lock.pid), 5000), `the run ${lock.pid} is still alive`).toBe(true)
     expect(await waitUntil(() => !processAlive(grandchildPid), 5000), `the grandchild ${grandchildPid} is still alive`).toBe(true)
     const finished = await run
