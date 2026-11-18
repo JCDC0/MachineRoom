@@ -440,6 +440,35 @@ describe('reported context windows', () => {
     expect(readEndpoints(temp)[0].modelDetails[0].contextLength).toBe(163840)
   })
 
+  it.each([{}, { modelDetails: 'x' }])('keeps the saved details when the answer is %j', async (answer) => {
+    const temp = makeTempDir('mr-test-window-shape-')
+    cleanups.push(() => removeTempDir(temp))
+    const modelDetails = [{ id: 'selected', name: 'selected', contextLength: null }]
+    saveEndpoints(temp, [{ name: 'OpenRouter', provider: 'OpenRouter', baseUrl: 'https://openrouter.ai/api/v1', keyName: 'slot', models: ['selected'], modelDetails }])
+    const fetchImpl = vi.fn(async () => ({ ok: true, json: async () => answer }))
+    const api = createEndpointsApi({ runsFolder: temp, readKey: async () => 'test', fetchImpl })
+    await api.refreshMissing('OpenRouter/selected')
+    expect(fetchImpl).toHaveBeenCalledTimes(1)
+    expect(readEndpoints(temp)[0].modelDetails).toMatchObject([{ id: 'selected', contextLength: null }])
+  })
+
+  it('waits ten minutes after a failed fetch before asking again', async () => {
+    const temp = makeTempDir('mr-test-window-failed-')
+    cleanups.push(() => removeTempDir(temp))
+    saveEndpoints(temp, [{ name: 'OpenRouter', provider: 'OpenRouter', baseUrl: 'https://openrouter.ai/api/v1', keyName: 'slot', models: ['selected'] }])
+    let time = 1000
+    const fetchImpl = vi.fn(async () => { throw new Error('down') })
+    const api = createEndpointsApi({ runsFolder: temp, readKey: async () => 'test', now: () => time, fetchImpl })
+    expect(await api.refreshMissing('OpenRouter/selected')).toBe(false)
+    expect(fetchImpl).toHaveBeenCalledTimes(1)
+    time += 9 * 60000
+    await api.refreshMissing('OpenRouter/selected')
+    expect(fetchImpl).toHaveBeenCalledTimes(1)
+    time += 2 * 60000
+    await api.refreshMissing('OpenRouter/selected')
+    expect(fetchImpl).toHaveBeenCalledTimes(2)
+  })
+
   it('waits before retrying a model omitted from a successful response', async () => {
     const temp = makeTempDir('mr-test-window-omitted-')
     cleanups.push(() => removeTempDir(temp))

@@ -523,3 +523,41 @@ it('reads a Codex rollout into a live lane', async () => {
   const open = await waitFor(() => source.openRuns().find((run) => run.contextWindow === 163840), 10000)
   expect(open.contextTokens).toBe(116800)
 })
+
+it('reads a live Codex rollout at most once every two seconds', async () => {
+  const base = tempDir()
+  const runs = join(base, 'runs')
+  const home = join(base, 'codex')
+  const date = new Date()
+  const day = join(home, 'sessions', String(date.getFullYear()), String(date.getMonth() + 1).padStart(2, '0'), String(date.getDate()).padStart(2, '0'))
+  mkdirSync(runs, { recursive: true })
+  mkdirSync(day, { recursive: true })
+  const previous = process.env.CODEX_HOME
+  process.env.CODEX_HOME = home
+  cleanups.push(() => { if (previous === undefined) delete process.env.CODEX_HOME; else process.env.CODEX_HOME = previous })
+  const rollout = join(day, 'rollout-test-thread-2.jsonl')
+  const usage = (tokens) => JSON.stringify({ type: 'event_msg', payload: { type: 'token_count', info: { model_context_window: 163840, last_token_usage: { total_tokens: tokens } } } }) + '\n'
+  let offset = 0
+  const frames = []
+  const source = createLanesSource({
+    folder: runs,
+    lanes: { codex: { name: 'Codex', cli: { harness: 'codex', model: 'test' } } },
+    pollMs: 20,
+    now: () => Date.now() + offset,
+    onFrame: (frame) => frames.push(frame),
+  })
+  cleanups.push(() => source.stop())
+  source.start()
+  writeFileSync(rollout, usage(1000))
+  writeFileSync(join(runs, 'codex-project-20261117-120000.log'), JSON.stringify({ type: 'thread.started', thread_id: 'thread-2' }) + '\n')
+  const contexts = () => frames.filter((frame) => frame.type === 'heartbeat.run.context').length
+  await waitFor(() => contexts() === 1, 10000)
+  writeFileSync(rollout, usage(2000))
+  offset += 500
+  source.tick()
+  source.tick()
+  expect(contexts()).toBe(1)
+  offset += 2000
+  await waitFor(() => contexts() === 2, 10000)
+  expect(source.openRuns()[0].contextTokens).toBe(2000)
+})

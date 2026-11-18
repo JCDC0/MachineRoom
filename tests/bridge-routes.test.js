@@ -1060,6 +1060,51 @@ describe('run routes', () => {
     expect(res.body.entries.at(-1)).toMatchObject({ role: 'result', text: 'The run ended.' })
   })
 
+  it('reads a run log named by its real path when the runs folder is a link', async (context) => {
+    const tempDirRuns = useRunsTemp()
+    const real = join(tempDirRuns, 'real-runs')
+    mkdirSync(real, { recursive: true })
+    try {
+      symlinkSync(real, join(tempDirRuns, 'machineroom-runs'), 'junction')
+    } catch (error) {
+      context.skip(`this system refuses to make a folder link: ${error.code}`)
+      return
+    }
+    const { url } = await startRunsBridge()
+    const startedAt = '2026-10-24T12:00:00.000Z'
+    const log = join(real, 'opencode-project-20261024-120000.log')
+    writeFileSync(log, opencodeConversationLog())
+    writeConversationRun(join(tempDirRuns, 'machineroom-runs'), { lane: 'opencode', briefs: [], startedAt, task: 'List the files.', log })
+    const res = await getJson(conversationUrl(url, 'opencode', startedAt))
+    expect(res.status).toBe(200)
+    expect(res.body.entries.some((entry) => entry.tool === 'read')).toBe(true)
+  })
+
+  it('keeps the lock log of a failed run when a newer log matches its lane', async () => {
+    const tempDirRuns = useRunsTemp()
+    const script = [
+      "import { mkdirSync, writeFileSync } from 'node:fs'",
+      "import { join } from 'node:path'",
+      "const folder = join(process.env.TEMP, 'machineroom-runs')",
+      'const args = process.argv.slice(2)',
+      "const startedAt = args[args.indexOf('--started-at') + 1]",
+      'const d = new Date(startedAt)',
+      "const pad = (value) => String(value).padStart(2, '0')",
+      "const stamp = `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`",
+      "mkdirSync(folder, { recursive: true })",
+      "writeFileSync(join(folder, 'opencode-run.log'), 'failed')",
+      "writeFileSync(join(folder, `opencode-B6-${stamp}.log`), 'a log that matches the lane')",
+      "writeFileSync(join(folder, 'opencode.lock'), JSON.stringify({ startedAt, log: 'opencode-run.log' }))",
+      'process.exit(1)',
+    ].join('\n')
+    const { url, token } = await startRunsBridge({ script })
+    const res = await tokenPost(`${url}/api/control/runs`, { lane: 'opencode', briefs: ['B6'], confirmed: true }, token)
+    expect(res.status).toBe(202)
+    const file = join(tempDirRuns, 'machineroom-runs', 'runs.jsonl')
+    await waitFor(() => { try { return readFileSync(file, 'utf8').trim() !== '' } catch { return false } }, { what: 'the refused run record' })
+    expect(JSON.parse(readFileSync(file, 'utf8').trim()).log).toBe(join(tempDirRuns, 'machineroom-runs', 'opencode-run.log'))
+  })
+
   it('finds the closest matching lane and briefs log when the record has no log', async () => {
     const tempDirRuns = useRunsTemp()
     const { url } = await startRunsBridge()
