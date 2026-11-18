@@ -333,11 +333,33 @@ export function laneStatesFor({
 }
 
 export const RUN_READ_CHUNK_BYTES = 4 * 1024 * 1024
+const HEAD_SAMPLE_BYTES = 512
 
 const runRecordCaches = new Map()
 
 export function clearRunsCache() {
   runRecordCaches.clear()
+}
+
+export function runRecordCacheStats(file = runsFile()) {
+  const entry = runRecordCaches.get(resolve(file ?? runsFile()))
+  if (!entry) return null
+  return {
+    offset: entry.offset,
+    records: entry.records.length,
+    fullReads: entry.fullReads,
+    incrementalReads: entry.incrementalReads,
+    bytesRead: entry.bytesRead,
+  }
+}
+
+function resetRunCacheEntry(entry) {
+  entry.offset = 0
+  entry.ino = null
+  entry.headSample = null
+  entry.records = Object.freeze([])
+  entry.tail = ''
+  entry.decoder = new StringDecoder('utf8')
 }
 
 export function cachedRunRecords(file = runsFile()) {
@@ -355,18 +377,24 @@ export function cachedRunRecords(file = runsFile()) {
     entry = {
       offset: 0,
       mtimeMs: 0,
+      ino: null,
+      headSample: null,
       records: Object.freeze([]),
       tail: '',
       decoder: new StringDecoder('utf8'),
+      fullReads: 0,
+      incrementalReads: 0,
+      bytesRead: 0,
     }
     runRecordCaches.set(target, entry)
   }
 
-  if (stat.size < entry.offset || stat.mtimeMs < entry.mtimeMs || (stat.size === entry.offset && stat.mtimeMs !== entry.mtimeMs)) {
-    entry.offset = 0
-    entry.records = Object.freeze([])
-    entry.tail = ''
-    entry.decoder = new StringDecoder('utf8')
+  const inoChanged = entry.ino !== null && stat.ino !== entry.ino
+  const sizeMismatch = stat.size < entry.offset || (stat.size === entry.offset && stat.mtimeMs !== entry.mtimeMs)
+  if (sizeMismatch || stat.mtimeMs < entry.mtimeMs || inoChanged) {
+    const hadContent = entry.offset > 0
+    resetRunCacheEntry(entry)
+    if (hadContent && stat.size === 0) entry.fullReads += 1
   } else if (stat.size === entry.offset && stat.mtimeMs === entry.mtimeMs) {
     return entry.records
   }
@@ -380,14 +408,33 @@ export function cachedRunRecords(file = runsFile()) {
 
   const fresh = []
   try {
+    if (entry.offset > 0 && entry.headSample && entry.headSample.length > 0) {
+      const sample = Buffer.allocUnsafe(entry.headSample.length)
+      let sampleRead = 0
+      while (sampleRead < sample.length) {
+        const got = readSync(fd, sample, sampleRead, sample.length - sampleRead, sampleRead)
+        if (got <= 0) break
+        sampleRead += got
+      }
+      if (sampleRead !== entry.headSample.length || Buffer.compare(sample, entry.headSample) !== 0) {
+        resetRunCacheEntry(entry)
+      }
+    }
+
     let remaining = stat.size - entry.offset
     if (remaining > 0) {
+      if (entry.offset === 0) entry.fullReads += 1
+      else entry.incrementalReads += 1
       const buffer = Buffer.alloc(Math.min(remaining, RUN_READ_CHUNK_BYTES))
       while (remaining > 0) {
         const want = Math.min(remaining, buffer.length)
         const got = readSync(fd, buffer, 0, want, entry.offset)
         if (got <= 0) break
+        if (entry.offset === 0) {
+          entry.headSample = Buffer.from(buffer.subarray(0, Math.min(got, HEAD_SAMPLE_BYTES)))
+        }
         entry.offset += got
+        entry.bytesRead += got
         remaining -= got
         const text = entry.decoder.write(buffer.subarray(0, got))
         const parts = (entry.tail + text).split(/\r?\n/)
@@ -407,6 +454,7 @@ export function cachedRunRecords(file = runsFile()) {
       }
     }
     entry.mtimeMs = stat.mtimeMs
+    entry.ino = stat.ino
   } finally {
     if (fresh.length > 0) entry.records = Object.freeze(entry.records.concat(fresh))
     closeSync(fd)
@@ -505,14 +553,21 @@ export function newestRecordPerLane(records) {
     if (!lane) continue
     const kept = latest.get(lane)
     if (!kept) {
-      latest.set(lane, record)
+      latest.set(lane, { record, time: Date.parse(record.startedAt) })
       continue
     }
     const started = Date.parse(record.startedAt)
-    const keptStarted = Date.parse(kept.startedAt)
-    if (!Number.isFinite(keptStarted) || (Number.isFinite(started) && started >= keptStarted)) latest.set(lane, record)
+    if (!Number.isFinite(kept.time) || (Number.isFinite(started) && started >= kept.time)) {
+      latest.set(lane, { record, time: started })
+    }
   }
-  return [...latest.values()]
+  return Array.from(latest.values(), (entry) => entry.record)
+}
+
+function isAppendOnlyExtension(list, prev) {
+  if (prev === null || list.length < prev.length) return false
+  if (prev.length === 0) return true
+  return list[0] === prev[0] && list[prev.length - 1] === prev[prev.length - 1]
 }
 
 export function readAllRunRecords(file = runsFile()) {
@@ -525,8 +580,8 @@ export function readOutcomeRecords(file) {
 
 const RECORD_PATH_KEYS = new Set(['log', 'project', 'worktree', 'folder', 'path', 'cwd'])
 
-export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand, sendJson, readJsonBody, notify = () => {}, orchestrators = () => null, lanesSource = () => null, lanesFile = '', runsFolder = '', activeLanes = null, isLaneActive = null, onMessage = () => {}, platform = process.platform, list = listProcesses, stat = statSync, readFile = readFileSync, summarize = summarizeRun, bridgeUrl = '', refreshModelDetails = () => {} }) {
-  const resolvedRoot = projectRoot ? realPath(projectRoot) : ''
+export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand, sendJson, readJsonBody, notify = () => {}, orchestrators = () => null, lanesSource = () => null, lanesFile = '', runsFolder = '', activeLanes = null, isLaneActive = null, onMessage = () => {}, platform = process.platform, list = listProcesses, stat = statSync, readFile = readFileSync, summarize = summarizeRun, resolvePath = realPath, bridgeUrl = '', refreshModelDetails = () => {} }) {
+  const resolvedRoot = projectRoot ? resolvePath(projectRoot) : ''
   const resolvedBriefs = briefsDir ? resolve(briefsDir) : resolvedRoot ? join(resolvedRoot, 'docs', 'agents') : ''
   const laneFile = lanesFile ? resolve(lanesFile) : join(lanesFolder(), 'lanes.json')
   const lanesDir = dirname(laneFile)
@@ -1495,11 +1550,16 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
 
   const notedFailovers = new Set()
   let failoversSeen = false
+  let lastNotedSource = null
 
   function noteFailovers(records) {
+    const list = Array.isArray(records) ? records : []
+    if (list === lastNotedSource) return
+    const start = isAppendOnlyExtension(list, lastNotedSource) ? lastNotedSource.length : 0
     const quiet = !failoversSeen
     failoversSeen = true
-    for (const record of Array.isArray(records) ? records : []) {
+    for (let index = start; index < list.length; index += 1) {
+      const record = list[index]
       const failover = record?.failover
       if (!failover || typeof failover !== 'object' || Array.isArray(failover)) continue
       const lane = typeof record.lane === 'string' ? record.lane.trim() : ''
@@ -1516,6 +1576,7 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
         notifyLaneHead(lane, note)
       }
     }
+    lastNotedSource = list
   }
 
   async function stopRunningItem(item, targetLane, wantedStart) {
@@ -1842,10 +1903,31 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
     }
   }
 
+  const resolvedPathCache = new Map()
+  const rootMatchCache = new Map()
+  const worktreeResolvedCache = new Map()
+  const worktreeMatchCache = new Map()
+  let thisRepoCache = null
+  let cachedRoomSource = null
+  let cachedRoomThisRepo = null
+  let cachedRoomList = Object.freeze([])
+  let cachedRunsViewSource = null
+  const cachedRunsViewByLane = new Map()
+
   function stopAll() {
     stopped = true
     laneTickets.clear()
     touchedCache.clear()
+    resolvedPathCache.clear()
+    rootMatchCache.clear()
+    worktreeResolvedCache.clear()
+    worktreeMatchCache.clear()
+    cachedRoomSource = null
+    cachedRoomThisRepo = null
+    cachedRoomList = Object.freeze([])
+    cachedRunsViewSource = null
+    cachedRunsViewByLane.clear()
+    lastNotedSource = null
     for (const item of running.values()) {
       if (item.child?.pid) killTree(item.child)
     }
@@ -1857,26 +1939,99 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
     return samePath(await rootCommonDir(), await repoCommonDir())
   }
 
-  async function roomRecords(records) {
-    const thisRepo = await inThisRepository()
-    const resolvedProjects = new Map()
-    const resolvedWorktrees = new Map()
-    function resolveOnce(cache, folder) {
-      if (!cache.has(folder)) cache.set(folder, realPath(folder))
-      return cache.get(folder)
+  async function isThisRepo() {
+    if (thisRepoCache === null) thisRepoCache = await inThisRepository()
+    return thisRepoCache
+  }
+
+  function resolveCached(folder) {
+    if (!resolvedPathCache.has(folder)) resolvedPathCache.set(folder, resolvePath(folder))
+    return resolvedPathCache.get(folder)
+  }
+
+  function matchesRoom(record, thisRepo) {
+    if (!record || typeof record !== 'object') return false
+    const raw = typeof record.project === 'string' ? record.project.trim() : ''
+    if (raw === '') return thisRepo
+    if (thisRepo || !resolvedRoot) return false
+    let matchesRoot = rootMatchCache.get(raw)
+    if (matchesRoot === undefined) {
+      matchesRoot = samePath(resolveCached(raw), resolvedRoot)
+      rootMatchCache.set(raw, matchesRoot)
     }
-    return records.filter((record) => {
-      if (!record || typeof record !== 'object') return false
-      const raw = typeof record.project === 'string' ? record.project.trim() : ''
-      if (raw === '') return thisRepo
-      if (thisRepo || !resolvedRoot) return false
-      const project = resolveOnce(resolvedProjects, raw)
-      if (samePath(project, resolvedRoot)) return true
-      const lane = typeof record.lane === 'string' ? record.lane.trim() : ''
-      if (!lane) return false
-      const worktree = worktreeFor(resolvedRoot, lane)
-      return Boolean(worktree && samePath(project, resolveOnce(resolvedWorktrees, worktree)))
-    })
+    if (matchesRoot) return true
+    const lane = typeof record.lane === 'string' ? record.lane.trim() : ''
+    if (!lane) return false
+    let byLane = worktreeMatchCache.get(raw)
+    if (!byLane) {
+      byLane = new Map()
+      worktreeMatchCache.set(raw, byLane)
+    }
+    let matchesWt = byLane.get(lane)
+    if (matchesWt === undefined) {
+      let wtReal = worktreeResolvedCache.get(lane)
+      if (wtReal === undefined) {
+        const worktree = worktreeFor(resolvedRoot, lane)
+        wtReal = worktree ? resolveCached(worktree) : ''
+        worktreeResolvedCache.set(lane, wtReal)
+      }
+      matchesWt = Boolean(wtReal && samePath(resolveCached(raw), wtReal))
+      byLane.set(lane, matchesWt)
+    }
+    return matchesWt
+  }
+
+  async function roomRecords(records) {
+    const thisRepo = await isThisRepo()
+    const list = Array.isArray(records) ? records : []
+    if (list === cachedRoomSource && thisRepo === cachedRoomThisRepo) {
+      return cachedRoomList
+    }
+    if (thisRepo === cachedRoomThisRepo && isAppendOnlyExtension(list, cachedRoomSource)) {
+      const added = []
+      for (let index = cachedRoomSource.length; index < list.length; index += 1) {
+        if (matchesRoom(list[index], thisRepo)) added.push(list[index])
+      }
+      cachedRoomSource = list
+      if (added.length > 0) cachedRoomList = Object.freeze(cachedRoomList.concat(added))
+      return cachedRoomList
+    }
+    const matched = []
+    for (const record of list) {
+      if (matchesRoom(record, thisRepo)) matched.push(record)
+    }
+    cachedRoomSource = list
+    cachedRoomThisRepo = thisRepo
+    cachedRoomList = Object.freeze(matched)
+    return cachedRoomList
+  }
+
+  function recentForLane(scoped, lane) {
+    if (!lane) return scoped.slice(-RECENT_LIMIT).reverse()
+    return scoped
+      .map((record) => ({ record, time: Date.parse(record.startedAt) }))
+      .sort((a, b) => b.time - a.time)
+      .slice(0, RECENT_LIMIT)
+      .map((entry) => entry.record)
+  }
+
+  function runsViewFor(roomList, lane) {
+    if (roomList !== cachedRunsViewSource) {
+      cachedRunsViewSource = roomList
+      cachedRunsViewByLane.clear()
+    }
+    let view = cachedRunsViewByLane.get(lane)
+    if (!view) {
+      if (cachedRunsViewByLane.size >= 64) cachedRunsViewByLane.clear()
+      const scoped = lane ? roomList.filter((record) => record.lane === lane) : roomList
+      view = {
+        recentRaw: recentForLane(scoped, lane),
+        lastRaw: newestRecordPerLane(scoped),
+        attentionRaw: attentionItems(scoped),
+      }
+      cachedRunsViewByLane.set(lane, view)
+    }
+    return view
   }
 
   function maskRecordCommits(record, key = '') {
@@ -2054,17 +2209,17 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
       const records = readAllRunRecords(recordsPath())
       noteFailovers(records)
       const lane = (url.searchParams.get('lane') ?? '').trim()
-      const scoped = (await roomRecords(records)).filter((record) => !lane || record.lane === lane)
-      const visible = scoped.map(maskRecordCommits)
+      const roomList = await roomRecords(records)
+      const view = runsViewFor(roomList, lane)
       const runningItems = [...running.values()].filter((item) => !lane || item.entry.lane === lane)
       const lanes = runningItems.length > 0 ? readStartLanes({ lanesFile: laneFile, runsFolder: recordsDir() }) : null
       const openRuns = runningItems.length > 0 ? currentOpenRuns() : []
       sendJson(req, res, 200, {
         project: resolvedRoot ? basename(resolvedRoot) : '',
         running: runningItems.map((item) => snapshot(item, { lanes, openRuns })),
-        recent: lane ? [...visible].sort((a, b) => Date.parse(b.startedAt) - Date.parse(a.startedAt)).slice(0, RECENT_LIMIT) : visible.slice(-RECENT_LIMIT).reverse(),
-        last: newestRecordPerLane(visible),
-        attention: attentionItems(scoped).map(maskRecordCommits),
+        recent: view.recentRaw.map(maskRecordCommits),
+        last: view.lastRaw.map(maskRecordCommits),
+        attention: view.attentionRaw.map(maskRecordCommits),
       })
       return true
     }

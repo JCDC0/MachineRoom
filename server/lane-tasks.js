@@ -1,7 +1,6 @@
 import { readFileSync, statSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { succeededLater } from '../src/briefs/attention.js'
 import { parseBriefs } from '../src/briefs/briefs.js'
 import { laneAgents, readLanes } from './lanes-source.js'
 
@@ -12,7 +11,11 @@ const REPO_ROOT = resolve(fileURLToPath(import.meta.url), '..', '..')
 const BRIEF_ID = /^[A-Z]\d+[a-z]?$/
 const RUN_NAME_TAIL = /-\d{8}-\d{6}$/
 const ARCHIVE_PATH = ['docs', 'agents', 'history', 'TASKS-ARCHIVE.md']
-const archiveCache = new Map()
+const REPEATED_FAILURE = 'repeated failure'
+const briefsFileCache = new Map()
+const briefLookupCache = new WeakMap()
+const combinedBriefsCache = new WeakMap()
+const recoveryIndexCache = new WeakMap()
 
 function text(value) {
   return typeof value === 'string' ? value.trim() : ''
@@ -105,19 +108,129 @@ function issueFor({ id, lane, startedAt, updatedAt, project, briefs, task, statu
   }
 }
 
-function statusFor(record, records) {
+function startTimeOf(record) {
+  const value = record?.startedAt
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  const raw = text(value)
+  if (!raw) return null
+  const ms = Date.parse(raw)
+  return Number.isFinite(ms) ? ms : null
+}
+
+function setMaxTime(map, key, time) {
+  const prev = map.get(key)
+  if (prev === undefined || time > prev) map.set(key, time)
+}
+
+function buildRecoveryIndex(records) {
+  const anyBriefMax = new Map()
+  const editBriefMax = new Map()
+  const anyTaskMax = new Map()
+  const editTaskMax = new Map()
+  for (const candidate of records) {
+    if (
+      !candidate ||
+      candidate.exitCode !== 0 ||
+      candidate.killed ||
+      candidate.startFailed ||
+      text(candidate.stopReason) === REPEATED_FAILURE ||
+      candidate.repeatedFailure?.count >= 5
+    ) {
+      continue
+    }
+    const time = startTimeOf(candidate)
+    if (time === null) continue
+    const isPlan = candidate.mode === 'plan'
+    if (Array.isArray(candidate.briefs)) {
+      for (const brief of candidate.briefs) {
+        if (typeof brief !== 'string' || !brief) continue
+        setMaxTime(anyBriefMax, brief, time)
+        if (!isPlan) setMaxTime(editBriefMax, brief, time)
+      }
+    }
+    const task = text(candidate.task)
+    if (task) {
+      setMaxTime(anyTaskMax, task, time)
+      if (!isPlan) setMaxTime(editTaskMax, task, time)
+    }
+  }
+  return { anyBriefMax, editBriefMax, anyTaskMax, editTaskMax }
+}
+
+function getRecoveryIndex(records) {
+  if (Object.isFrozen(records)) {
+    let cached = recoveryIndexCache.get(records)
+    if (!cached) {
+      cached = buildRecoveryIndex(records)
+      recoveryIndexCache.set(records, cached)
+    }
+    return cached
+  }
+  return buildRecoveryIndex(records)
+}
+
+function succeededLaterIndexed(record, index) {
+  const failedAt = startTimeOf(record)
+  if (failedAt === null) return false
+  const briefs = Array.isArray(record.briefs) ? record.briefs.map(text).filter(Boolean) : []
+  const planFailure = record.mode === 'plan'
+  if (briefs.length > 0) {
+    const map = planFailure ? index.anyBriefMax : index.editBriefMax
+    return briefs.every((brief) => {
+      const latest = map.get(brief)
+      return latest !== undefined && latest > failedAt
+    })
+  }
+  const task = text(record.task)
+  if (!task) return false
+  const map = planFailure ? index.anyTaskMax : index.editTaskMax
+  const latest = map.get(task)
+  return latest !== undefined && latest > failedAt
+}
+
+function statusFor(record, getIndex) {
   const failed = record?.killed === true || record?.exitCode !== 0
   if (!failed) return 'done'
-  if (succeededLater(record, records)) return 'done'
-  return 'blocked'
+  return succeededLaterIndexed(record, getIndex()) ? 'done' : 'blocked'
+}
+
+function buildBriefLookup(briefs) {
+  const titles = new Map()
+  const known = new Set()
+  const byLowerId = new Map()
+  for (const brief of Array.isArray(briefs) ? briefs : []) {
+    if (!brief || typeof brief.id !== 'string') continue
+    if (typeof brief.title === 'string') titles.set(brief.id, brief.title)
+    const lower = text(brief.id).toLowerCase()
+    if (!lower) continue
+    known.add(lower)
+    if (!byLowerId.has(lower)) byLowerId.set(lower, [])
+    byLowerId.get(lower).push(brief)
+  }
+  return { titles, known, byLowerId }
+}
+
+function getBriefLookup(briefs) {
+  if (Array.isArray(briefs) && Object.isFrozen(briefs)) {
+    let cached = briefLookupCache.get(briefs)
+    if (!cached) {
+      cached = buildBriefLookup(briefs)
+      briefLookupCache.set(briefs, cached)
+    }
+    return cached
+  }
+  return buildBriefLookup(briefs)
 }
 
 export function laneTaskIssues({ openRuns = [], records = [], recoveryRecords, agents = [], briefs = [] } = {}) {
-  const titles = new Map()
-  for (const brief of Array.isArray(briefs) ? briefs : []) {
-    if (brief && typeof brief.id === 'string' && typeof brief.title === 'string') titles.set(brief.id, brief.title)
-  }
+  const { titles } = getBriefLookup(briefs)
   const list = Array.isArray(records) ? records : []
+  const recoverySource = Array.isArray(recoveryRecords) ? recoveryRecords : list
+  let recoveryIndex = null
+  const readRecoveryIndex = () => {
+    if (recoveryIndex === null) recoveryIndex = getRecoveryIndex(recoverySource)
+    return recoveryIndex
+  }
   const issues = new Map()
   for (const record of list) {
     const id = runNameOf(record)
@@ -136,7 +249,7 @@ export function laneTaskIssues({ openRuns = [], records = [], recoveryRecords, a
         project,
         briefs: record?.briefs,
         task: record?.task,
-        status: statusFor(record, recoveryRecords ?? list),
+        status: statusFor(record, readRecoveryIndex),
         agents,
         titles,
       })
@@ -204,34 +317,64 @@ function wantedBriefIds({ openRuns = [], records = [] } = {}) {
   return [...ids]
 }
 
-export function readArchivedBriefs(folder = REPO_ROOT) {
-  const file = join(folder, ...ARCHIVE_PATH)
+function readCachedBriefs(file) {
   let stamp = ''
   try {
     const stat = statSync(file)
     stamp = `${stat.mtimeMs}:${stat.size}`
   } catch {
-    return []
+    briefsFileCache.delete(file)
+    return Object.freeze([])
   }
-  const cached = archiveCache.get(file)
+  const cached = briefsFileCache.get(file)
   if (cached && cached.stamp === stamp) return cached.briefs
   try {
-    const briefs = parseBriefs(readFileSync(file, 'utf8'))
-    archiveCache.set(file, { stamp, briefs })
+    const briefs = Object.freeze(parseBriefs(readFileSync(file, 'utf8')))
+    briefsFileCache.set(file, { stamp, briefs })
     return briefs
   } catch {
-    return []
+    return Object.freeze([])
   }
+}
+
+export function readArchivedBriefs(folder = REPO_ROOT) {
+  return readCachedBriefs(join(folder, ...ARCHIVE_PATH))
 }
 
 function withArchivedBriefs(briefs, ids, folder) {
   const list = Array.isArray(briefs) ? briefs : []
-  const known = new Set(list.map((brief) => text(brief?.id).toLowerCase()).filter(Boolean))
-  const missing = ids.filter((id) => !known.has(id.toLowerCase()))
+  const { known } = getBriefLookup(list)
+  const missing = []
+  const seenMissing = new Set()
+  for (const id of ids) {
+    const lower = id.toLowerCase()
+    if (known.has(lower) || seenMissing.has(lower)) continue
+    seenMissing.add(lower)
+    missing.push(lower)
+  }
   if (missing.length === 0) return list
-  const wanted = new Set(missing.map((id) => id.toLowerCase()))
-  const archived = readArchivedBriefs(folder).filter((brief) => wanted.has(text(brief?.id).toLowerCase()))
-  return archived.length > 0 ? [...list, ...archived] : list
+  const archiveList = readArchivedBriefs(folder)
+  const cacheKey = missing.slice().sort().join('\u0000')
+  let listCache = Object.isFrozen(list) ? combinedBriefsCache.get(list) : null
+  if (listCache && listCache.archiveList === archiveList && listCache.byKey.has(cacheKey)) {
+    return listCache.byKey.get(cacheKey)
+  }
+  const archiveLookup = getBriefLookup(archiveList)
+  const archived = []
+  for (const lower of missing) {
+    const found = archiveLookup.byLowerId.get(lower)
+    if (found) archived.push(...found)
+  }
+  const combined = archived.length > 0 ? Object.freeze([...list, ...archived]) : list
+  if (Object.isFrozen(list)) {
+    if (!listCache || listCache.archiveList !== archiveList) {
+      listCache = { archiveList, byKey: new Map() }
+      combinedBriefsCache.set(list, listCache)
+    }
+    if (listCache.byKey.size >= 16) listCache.byKey.clear()
+    listCache.byKey.set(cacheKey, combined)
+  }
+  return combined
 }
 
 export function laneTaskState(options = {}) {
@@ -244,15 +387,17 @@ export function laneTaskState(options = {}) {
 
 export function recentLaneRecords(records, limit = LANE_TASK_RECORDS) {
   const size = Number.isInteger(limit) && limit > 0 ? limit : LANE_TASK_RECORDS
-  return records.filter(
-    (record) => record && typeof record === 'object' && !Array.isArray(record) && typeof record.lane === 'string'
-  ).slice(-size).reverse()
+  const list = Array.isArray(records) ? records : []
+  const out = []
+  for (let index = list.length - 1; index >= 0 && out.length < size; index -= 1) {
+    const record = list[index]
+    if (record && typeof record === 'object' && !Array.isArray(record) && typeof record.lane === 'string') {
+      out.push(record)
+    }
+  }
+  return out
 }
 
 export function readLaneBriefs(folder = REPO_ROOT) {
-  try {
-    return parseBriefs(readFileSync(join(folder, 'docs', 'agents', 'TASKS.md'), 'utf8'))
-  } catch {
-    return []
-  }
+  return readCachedBriefs(join(folder, 'docs', 'agents', 'TASKS.md'))
 }
