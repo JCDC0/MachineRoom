@@ -7,6 +7,8 @@ Static files and music tracks resolve their real paths inside their respective r
 ## Live mode
 
 A lane conversation sends only to its selected live run, and the bridge rejects a message whose supplied start time no longer matches that run, including after a backup takes over the ticket.
+
+After the runner saves a lost run, the drawer and outcomes table read it from `runs.jsonl` like any other stopped run. It has no recorded end time.
 When a running snapshot and live entry name the same lane and start time, the run picker keeps the live entry's context fields.
 
 A lane or orchestrator takes its context window from the owner's setting first, then its harness report, then the endpoint model details. Claude's reported model selects its window, or a single reported model is used when there is no match. For current context, the newest assistant usage takes precedence over result usage, which is a fallback when no assistant usage was seen. When none reports a window, the room shows only the token count and percent-based autocompact waits. Codex lane runs read their window and current tokens from the rollout token_count event. Missing endpoint details are fetched in the background when an orchestrator or sub loads, changes model or harness, or starts a turn, and when a lane starts. A failed fetch or a response without a positive whole context window for the selected model waits ten minutes before retrying; expired retry entries and entries with a known window are removed.
