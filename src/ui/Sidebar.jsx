@@ -435,7 +435,7 @@ export function Sidebar({ client = null, live = false, project = '', tasks = nul
     try {
       const count = await forkCount(row)
       if (!Number.isInteger(count) || count < 1) {
-        setActionError('This conversation has no messages to fork.')
+        setActionError('This conversation has no messages to branch.')
         return
       }
       if (!row.current) {
@@ -666,18 +666,6 @@ export function Sidebar({ client = null, live = false, project = '', tasks = nul
           <span className="mr-side-title">{row.title}</span>
         </button>
         {row.current && <span className="mr-side-current mono">Current</span>}
-        <button
-          type="button"
-          className="mr-side-pin"
-          aria-label={`${row.pinned ? 'Unpin' : 'Pin'} ${row.title}`}
-          aria-pressed={row.pinned}
-          disabled={items[0].disabled}
-          onClick={() => runMenuAction(row, items[0])}
-        >
-          <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M16 3 21 8 18 9 15 14 16 17 14 19 10 15 4 21 9 14 5 10 7 8 10 9 15 6Z" />
-          </svg>
-        </button>
         <span className="mr-side-age mono">{sessionAge(row, now)}</span>
         <span className="mr-side-actions">
           <button

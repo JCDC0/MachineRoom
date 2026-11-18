@@ -189,9 +189,8 @@ export function statusText(state) {
 }
 
 export function statusTone(state) {
-  if (state === 'working') return 'working'
-  if (state === 'paused') return 'paused'
-  return 'waiting'
+  if (['working', 'waiting', 'paused', 'failed'].includes(state)) return state
+  return 'idle'
 }
 
 export function statusDetail(state, command) {

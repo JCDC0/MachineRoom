@@ -252,10 +252,10 @@ export function sessionMenuItems(row, { busy = false } = {}) {
     },
     {
       action: 'fork',
-      label: 'Fork',
+      label: 'Branch',
       key: SESSION_MENU_KEYS.fork,
       disabled: busy || noMessages,
-      reason: 'This conversation has no messages to fork.',
+      reason: 'This conversation has no messages to branch.',
     },
     {
       action: 'export',

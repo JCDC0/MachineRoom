@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Tab dots in the room colours; the row pin button is gone (Pin stays in the menu); Fork reads Branch; the stopped-runner notice says to restart.
 - Twenty-one contradicted doc sentences, D4-1 to D4-21; fixed by P553.
 - Eleven findings, UI3-1 to UI3-11; nine briefed as P550 to P552, UI3-3 and UI3-8 held for the owner.
 - Three findings, R55-1 to R55-3; fixes briefed as P549.
