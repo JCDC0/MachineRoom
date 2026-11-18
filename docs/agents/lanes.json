@@ -353,7 +353,8 @@
     ],
     "notes": [
       "Do not start Claude Code headless outside a lane run; it spends the owner's Claude subscription.",
-      "Never use git stash: the stash list is shared by every worktree. To show a test fails without your change, save the diff to a file and apply it in reverse, or make a temporary commit on your branch."
+      "Never use git stash: the stash list is shared by every worktree. To show a test fails without your change, save the diff to a file and apply it in reverse, or make a temporary commit on your branch.",
+      "Run every command in the foreground and wait for it to finish, never in the background: your run ends the moment you end your turn, and the runner stops anything still running. Write your report only when the tests and the build have finished."
     ]
   },
   "claude2": {
@@ -374,7 +375,8 @@
     ],
     "notes": [
       "Do not start Claude Code headless outside a lane run; it spends the owner's Claude subscription.",
-      "Never use git stash: the stash list is shared by every worktree. To show a test fails without your change, save the diff to a file and apply it in reverse, or make a temporary commit on your branch."
+      "Never use git stash: the stash list is shared by every worktree. To show a test fails without your change, save the diff to a file and apply it in reverse, or make a temporary commit on your branch.",
+      "Run every command in the foreground and wait for it to finish, never in the background: your run ends the moment you end your turn, and the runner stops anything still running. Write your report only when the tests and the build have finished."
     ]
   },
   "claude3": {
@@ -395,7 +397,8 @@
     ],
     "notes": [
       "Do not start Claude Code headless outside a lane run; it spends the owner's Claude subscription.",
-      "Never use git stash: the stash list is shared by every worktree. To show a test fails without your change, save the diff to a file and apply it in reverse, or make a temporary commit on your branch."
+      "Never use git stash: the stash list is shared by every worktree. To show a test fails without your change, save the diff to a file and apply it in reverse, or make a temporary commit on your branch.",
+      "Run every command in the foreground and wait for it to finish, never in the background: your run ends the moment you end your turn, and the runner stops anything still running. Write your report only when the tests and the build have finished."
     ]
   },
   "codex": {
