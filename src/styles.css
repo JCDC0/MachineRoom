@@ -9674,6 +9674,7 @@ body:has(#hud-orchestrator-chat) .lens-waiting {
   align-items: center;
   gap: 4px;
   min-width: 0;
+  min-height: 24px;
   padding: 0 2px;
 }
 

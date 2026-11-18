@@ -619,11 +619,6 @@ export function FamilyTeams({ client = null, project = '' }) {
         </>
       ) : null}
       {notice ? <p className="mr-side-note">{notice}</p> : null}
-      {error ? (
-        <p className="mr-side-error mono" role="alert">
-          {error}
-        </p>
-      ) : null}
       {confirm ? (
         <div ref={confirmRef} className="mr-side-confirm" role="dialog" aria-modal="true" aria-label={confirm.label}>
           <section className="mr-side-confirm-card">
@@ -650,6 +645,11 @@ export function FamilyTeams({ client = null, project = '' }) {
         </div>
       ) : null}
       </> : null}
+      {error ? (
+        <p className="mr-side-error mono" role="alert">
+          {error}
+        </p>
+      ) : null}
     </section>
   )
 }

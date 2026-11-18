@@ -82,6 +82,11 @@ describe('the storage days label', () => {
 })
 
 describe('small control targets', () => {
+  it('keeps family targets inside their row', () => {
+    expect(pixels(rule('.mr-family-under')['min-height'])).toBeGreaterThanOrEqual(24)
+    expect(rule('.mr-family-under')['align-items']).toBe('center')
+  })
+
   it('gives every target at least 24 pixels in both directions', () => {
     const selectors = [
       '.lens-failures-clear::after',
