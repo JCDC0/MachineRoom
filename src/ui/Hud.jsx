@@ -1,5 +1,4 @@
 import { Fragment, useCallback, useContext, useEffect, useRef, useState } from 'react'
-import MenuIcon from './MenuIcon.jsx'
 import { name } from './brand.js'
 import Transport, { OrchestratorsContext, openConversation } from './Transport.jsx'
 import { useDialogFocus } from './dialogFocus.js'
@@ -147,7 +146,6 @@ export default function Hud({
   const [chatOpen, setChatOpen] = useState(false)
   const [chatFocus, setChatFocus] = useState(0)
   const [chatTab, setChatTab] = useState('orchestrator')
-  const [chatListOpen, setChatListOpen] = useState(false)
   const [laneChat, setLaneChat] = useState(null)
   const laneSentMessages = useState([])
   const [orchestratorList, setOrchestratorList] = useState([])
@@ -230,10 +228,9 @@ export default function Hud({
         })
       : { control: 0, orchestrator: 0 }
 
-  function chooseConversation(id) {
-    setChatTab(id)
-    setChatListOpen(false)
+  function showChat() {
     if (chatAvailable) setChatOpen(true)
+    document.getElementById('hud-orchestrator-chat')?.scrollIntoView({ block: 'nearest' })
   }
 
   function closeGuide() {
@@ -531,7 +528,6 @@ export default function Hud({
         setSettingsOpen(false)
         setMenuOpen(false)
         setSessionsOpen(false)
-        setChatListOpen(false)
         return
       }
       if (event.defaultPrevented) return
@@ -652,30 +648,11 @@ export default function Hud({
               <button
                 type="button"
                 className="hud-band-switch"
-                aria-expanded={chatListOpen}
-                aria-haspopup="listbox"
-                aria-label={`Orchestrator conversations, showing ${conversationTitle}`}
-                onClick={() => setChatListOpen((open) => !open)}
+                aria-label={`${conversationTitle} conversation, show the chat`}
+                onClick={showChat}
               >
-                <span className="hud-band-v" aria-hidden="true"><MenuIcon /></span>
                 <span className="hud-band-title">{conversationTitle}</span>
               </button>
-              {chatListOpen && (
-                <div className="hud-band-list" role="listbox" aria-label="Orchestrator conversations">
-                  {conversationTabs.map((tab) => (
-                    <button
-                      key={tab.id}
-                      type="button"
-                      role="option"
-                      aria-selected={tab.id === chatTab}
-                      className={`hud-band-choice${tab.id === chatTab ? ' is-current' : ''}`}
-                      onClick={() => chooseConversation(tab.id)}
-                    >
-                      {tab.label}
-                    </button>
-                  ))}
-                </div>
-              )}
             </div>
           </div>
         ) : (

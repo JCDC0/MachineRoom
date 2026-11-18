@@ -966,44 +966,10 @@ summary:focus-visible,
   color: var(--white);
 }
 
-.hud-band-v {
-  flex: 0 0 auto;
-  color: rgb(255 255 255 / 0.45);
-}
-
 .hud-band-title {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.hud-band-list {
-  position: absolute;
-  left: 0;
-  top: calc(100% + 6px);
-  z-index: 20;
-  min-width: 180px;
-  display: flex;
-  flex-direction: column;
-  background: var(--black);
-  border: 1px solid var(--line);
-  border-radius: 2px;
-}
-
-.hud-band-choice {
-  padding: 6px var(--space);
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  text-align: left;
-  font-family: var(--mono);
-  font-size: 11px;
-  text-transform: none;
-}
-
-.hud-band-choice.is-current,
-.hud-band-choice[aria-selected='true'] {
-  color: var(--yellow);
 }
 
 @media (min-width: 900px) {
@@ -6176,6 +6142,15 @@ button.mr-orch-show-all {
   font-size: 11px;
 }
 
+.mr-agent-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 6px;
+  border-radius: 50%;
+  vertical-align: baseline;
+}
+
 .mr-orch-who {
   font-size: 10px;
   letter-spacing: 0.08em;
@@ -9146,11 +9121,6 @@ button.ui-icon-btn.mr-composer-send:hover:not(:disabled) {
   flex: none;
   vertical-align: middle;
   opacity: 0.8;
-}
-
-.hud-band-v {
-  display: inline-flex;
-  align-items: center;
 }
 
 /* U42: the orchestrator and its context ring in the transport row under the lens */

@@ -562,7 +562,10 @@ export default function LaneConversation({
   return (
     <aside className={`mr-orch mr-lane-conv${inline ? ' is-inline' : ''}`} aria-label={`${label} conversation`}>
       <header className="mr-lane-conv-head">
-        <p className="mr-lane-conv-crumb mono" title={breadcrumb}>{breadcrumb}</p>
+        <p className="mr-lane-conv-crumb mono" title={breadcrumb}>
+          <span className="mr-agent-dot" aria-hidden="true" style={{ background: colour }} />
+          {breadcrumb}
+        </p>
         <Chip label="Back" onClick={onBack} />
       </header>
       {isFinishedPlan && (
@@ -695,7 +698,7 @@ export default function LaneConversation({
           if (row.kind === 'tools') {
             if (row.count === 1) {
               return (
-                <p className="ui-chip mr-lane-conv-tool mono" style={{ color: colour }} key={`tool-${index}`}>
+                <p className="ui-chip mr-lane-conv-tool mono" key={`tool-${index}`}>
                   {toolText(row.entries[0])}
                 </p>
               )
@@ -706,13 +709,13 @@ export default function LaneConversation({
                 <Chip
                   label={`${row.count} tool calls`}
                   className="mr-lane-conv-tool-fold"
-                  style={{ color: colour }}
+                 
                   open={open}
                   onClick={() => setOpenTools((current) => ({ ...current, [index]: !open }))}
                 />
                 {open
                   ? row.entries.map((entry, at) => (
-                      <p className="ui-chip mr-lane-conv-tool mono" style={{ color: colour }} key={`tool-${index}-${at}`}>
+                      <p className="ui-chip mr-lane-conv-tool mono" key={`tool-${index}-${at}`}>
                         {toolText(entry)}
                       </p>
                     ))

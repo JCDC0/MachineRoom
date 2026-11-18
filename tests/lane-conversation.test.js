@@ -213,7 +213,10 @@ describe('the lane conversation view', () => {
       expect(container.textContent).toContain('read f0')
       expect(container.textContent).toContain('read f9')
       const line = container.querySelectorAll('.mr-lane-conv-tool')[0]
-      expect(line.style.color).toBe('#ff8c1a')
+      expect(line.style.color).toBeUndefined()
+      const dot = container.querySelector('.mr-agent-dot')
+      expect(dot.getAttribute('aria-hidden')).toBe('true')
+      expect(dot.style.background).toBe('#ff8c1a')
     })
   })
 

@@ -265,6 +265,7 @@ describe('small control targets', () => {
       '.mr-family-hline': 'Decorative family tree connector.',
       '.mr-family-dot': 'Status indicator inside a family tree row.',
       '.mr-orch-dot': 'Status indicator inside a chip or the status line.',
+      '.mr-agent-dot': 'Decorative sender dot inside a name.',
       '.lens-edge-corner': 'Decorative lens corner.',
       '.mr-family-agent-check': 'Checkbox inside a clickable family editor label.',
     }

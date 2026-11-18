@@ -1184,7 +1184,7 @@ describe('talking to a lane and seeing agent messages', () => {
     )
     expect(html).toContain('class="mr-orch-line is-lane"')
     expect(html).toContain('>OpenCode</span>')
-    expect(html).toContain('color:#ff8c1a')
+    expect(html).toContain('background:#ff8c1a')
   })
 
   it('shows an unknown lane key as the sender', () => {
@@ -1215,7 +1215,7 @@ describe('talking to a lane and seeing agent messages', () => {
     )
     expect(html).toContain('class="mr-orch-line is-lane"')
     expect(html).toContain('>OpenCode</span>')
-    expect(html).toContain('color:#ff8c1a')
+    expect(html).toContain('background:#ff8c1a')
     expect(html).toContain('Tests fixed and passing.')
   })
 
@@ -1349,7 +1349,10 @@ describe('talking to a lane and seeing agent messages', () => {
       const agentLine = container.querySelector('.mr-orch-line.is-agent')
       expect(agentLine).not.toBeNull()
       expect(agentLine.className).toContain('mono')
-      expect(agentLine.style.color).toBe('#e5ff00')
+      expect(agentLine.style.color).toBeUndefined()
+      const dot = agentLine.querySelector('.mr-agent-dot')
+      expect(dot.getAttribute('aria-hidden')).toBe('true')
+      expect(dot.style.background).toBe('#e5ff00')
 
       const showAllBtn = buttonWithText(agentLine, 'Show all')
       expect(showAllBtn).not.toBeNull()
