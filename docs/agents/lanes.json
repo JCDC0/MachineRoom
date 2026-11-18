@@ -404,13 +404,13 @@
   "codex": {
     "name": "Codex",
     "harness": "Codex",
-    "model": "GPT-6.1 Terra, high effort",
-    "modelHint": "the owner chose GPT-6.1 Terra at high effort on 2026-11-13",
+    "model": "GPT-6.2 Sol, high effort",
+    "modelHint": "the owner chose GPT-6.2 Sol at high effort on 2026-11-18, superseding GPT-6.1",
     "cli": {
       "harness": "codex",
       "bin": "codex",
       "commits": "runner",
-      "model": "gpt-6.1-terra",
+      "model": "gpt-6.2-sol",
       "effort": "high"
     },
     "worktree": "C:\\GitHub\\MachineRoom\\.worktrees\\codex",
@@ -517,13 +517,13 @@
   "codex2": {
     "name": "Codex 2",
     "harness": "Codex",
-    "model": "GPT-6.1 Terra, high effort",
-    "modelHint": "the owner chose GPT-6.1 Terra at high effort on 2026-11-13",
+    "model": "GPT-6.2 Sol, high effort",
+    "modelHint": "the owner chose GPT-6.2 Sol at high effort on 2026-11-18, superseding GPT-6.1",
     "cli": {
       "harness": "codex",
       "bin": "codex",
       "commits": "runner",
-      "model": "gpt-6.1-terra",
+      "model": "gpt-6.2-sol",
       "effort": "high"
     },
     "worktree": "C:\\GitHub\\MachineRoom\\.worktrees\\codex2",
@@ -542,13 +542,13 @@
   "codex3": {
     "name": "Codex 3",
     "harness": "Codex",
-    "model": "GPT-6.1 Terra, high effort",
-    "modelHint": "the owner chose GPT-6.1 Terra at high effort on 2026-11-13",
+    "model": "GPT-6.2 Sol, high effort",
+    "modelHint": "the owner chose GPT-6.2 Sol at high effort on 2026-11-18, superseding GPT-6.1",
     "cli": {
       "harness": "codex",
       "bin": "codex",
       "commits": "runner",
-      "model": "gpt-6.1-terra",
+      "model": "gpt-6.2-sol",
       "effort": "high"
     },
     "worktree": "C:\\GitHub\\MachineRoom\\.worktrees\\codex3",
