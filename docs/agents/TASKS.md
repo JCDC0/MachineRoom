@@ -4569,3 +4569,24 @@ Sweep S1 fixes, P514 to P516. `docs/agents/AUDIT-2026-11-SWEEP-S1.md` (P506, Cod
 3. R55-3: expired entries leave the retry map before each check, and a model's entry is removed once its window is known.
 4. Tests for each, each failing with its change undone. LIVE.md where a sentence changes.
 5. Run the tests you changed and `npm run build`, and report the counts.
+
+**P550. UI audit 3 fixes: chat tab dots, one word for Branch, one pin control, a runner warning that says what to do (Codex, Terra).** Fixes UI3-1, UI3-6, UI3-10 and UI3-11 in `docs/agents/AUDIT-2026-11-UI-3.md`. Read that file first. Known sandbox baseline failures, not yours: process tests, the removed-sub test in `tests/orchestrators.test.js`, `tests/inspector-sandbox.test.jsx > ACP start log line`, the real npm pack test, and any test that fails only because the sandbox denies the home folder. Files: src/styles.css, src/ui/orchestratorChat.js, src/ui/OrchestratorChat.jsx, src/ui/Sidebar.jsx, src/ui/sidebar.js, src/ui/healthNotice.js, src/ui/Hud.jsx, any test that pins these, docs/agents/architecture/ROOM.md. Do not stop to ask about scope: decide, and list every decision and file in your report.
+1. UI3-1: the chat tab dot takes the room's state colours: working and waiting `#e5ff00`, failed `#ff2a2a`, idle dim white. No green dot for a resting or waiting orchestrator.
+2. UI3-6: a conversation row has no pin button; Pin or Unpin stays in its menu, and the Pinned group still shows.
+3. UI3-10: every shown word for that action is Branch, including the menu item and its empty-conversation message. Function names may stay.
+4. UI3-11: when the runner looks stopped and there are no detail lines, the notice itself says how to restart it in one short sentence and is not a button that opens an empty popup.
+5. Tests for each. Update tests that pin the old text or controls. ROOM.md where a sentence changes.
+6. Run the tests you changed and `npm run build`, and report the counts.
+
+**P551. UI audit 3 fixes: what the owner came for comes first, a dock that fits, one console colour (Codex, Terra).** Fixes UI3-2, UI3-4, UI3-7 and UI3-9 in `docs/agents/AUDIT-2026-11-UI-3.md`. Read that file first. Known sandbox baseline failures, not yours: process tests, the removed-sub test in `tests/orchestrators.test.js`, `tests/inspector-sandbox.test.jsx > ACP start log line`, the real npm pack test, and any test that fails only because the sandbox denies the home folder. Files: src/ui/panels/DispatchPanel.jsx, src/ui/Sidebar.jsx, src/ui/RepositoryPanel.jsx, src/ui/AgentDock.jsx, src/styles.css, any test that pins these, docs/agents/architecture/ROOM.md. Do not stop to ask about scope: decide, and list every decision and file in your report.
+1. UI3-2: Dispatch shows Needs you before the project run form, one copy only.
+2. UI3-4: the Projects tab shows the current and recent projects first and the Repository block after them.
+3. UI3-7: the dock's address button reads `Open address`, with the full address in its title, so Focus, Log and the address never clip at a 280 pixel column.
+4. UI3-9: the command console uses the white activity style, with no cyan text, border, glow or tinted fill. Remove the cyan variable if nothing else uses it.
+5. Tests for each order and text. ROOM.md where a sentence changes.
+6. Run the tests you changed and `npm run build`, and report the counts.
+
+**P552. UI audit 3 fix: one 24 pixel hit area for small controls (Codex, Terra).** Fixes UI3-5 in `docs/agents/AUDIT-2026-11-UI-3.md`. Read that file first. Known sandbox baseline failures, not yours: process tests, the removed-sub test in `tests/orchestrators.test.js`, `tests/inspector-sandbox.test.jsx > ACP start log line`, the real npm pack test, and any test that fails only because the sandbox denies the home folder. Files: src/styles.css, tests/layout-css.test.js, any other test that pins these sizes, docs/agents/architecture/ROOM.md. Do not stop to ask about scope: decide, and list every decision and file in your report.
+1. The controls UI3-5 names (failure tray Clear, the Reviews count, conversation menus, agent switches, Add and Chat, lane selection boxes) get at least a 24 pixel hit area through one shared rule, keeping their icons and visible size where a larger box would crowd the row (a transparent padding or pseudo element is fine).
+2. A CSS test checks each selector reaches 24 pixels.
+3. Run the tests you changed and `npm run build`, and report the counts.
