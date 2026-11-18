@@ -878,9 +878,9 @@ export function Sidebar({ client = null, live = false, project = '', tasks = nul
   function renderAgents() {
     return (
       <section className="mr-side-agents" aria-label="Agents">
+        {connected && canFamily ? <FamilyTree client={client} tasks={tasks} project={project} /> : null}
         {connected && canFamily ? <FamilyTeams client={client} project={project} /> : null}
         {connected && canFamily ? <FamilyTeam client={client} /> : null}
-        {connected && canFamily ? <FamilyTree client={client} tasks={tasks} project={project} /> : null}
         {!connected || !canFamily ? (
           <p className="mr-side-note">Agents appear when the room runs live.</p>
         ) : null}
