@@ -183,7 +183,20 @@ describe('small control targets', () => {
     expect(bare).toMatch(/\.waiting-close \{[^}]*height: 20px/)
   })
 
-  it('grows the seek marker hit area in height only so a neighbour stays reachable', () => {
+  it('keeps the seek marker targets below the full slider row', () => {
+    expect(rule('.scrubber').display).toBe('grid')
+    expect(rule('.scrubber')['grid-template-rows']).toBe('24px auto')
+    expect(rule(".transport input[type='range']").height).toBe('24px')
+    const rail = rule('.scrubber-markers')
+    expect(rail.position).toBe('relative')
+    expect(rail.height).toBe('calc(var(--marker-rows) * 24px)')
+    const tick = rule('.scrubber-tick')
+    expect(tick.top).toBe('calc((var(--marker-row) + 0.5) * 24px)')
+    expect(tick.width).toBe('4px')
+    expect(tick.height).toBe('var(--tick-height, calc(var(--space) * 2))')
+    const hover = rule('.scrubber-tick:hover:not(:disabled)')
+    expect(pixels(hover['--tick-height'])).toBeLessThanOrEqual(24)
+    expect(hover.transform).toBeUndefined()
     const after = merged('.scrubber-tick::after')
     expect(after.content).toBe("''")
     expect(after.position).toBe('absolute')
@@ -193,9 +206,7 @@ describe('small control targets', () => {
     expect(after.width).toBe('100%')
     expect(after.height).toBe('100%')
     expect(after['min-width']).toBeUndefined()
-    expect(pixels(after['min-height'])).toBeGreaterThanOrEqual(24)
-    expect(rule('.scrubber-tick').width).toBe('4px')
-    expect(rule('.scrubber-tick').height).toBe('calc(var(--space) * 2)')
+    expect(pixels(after['min-height'])).toBe(24)
   })
 
   it('gives every target at least 24 pixels in both directions', () => {

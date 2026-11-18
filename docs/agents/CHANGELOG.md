@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- GPT-6.2 Sol.
 - DeepSeek.
 - Sonnet.
 - DeepSeek.

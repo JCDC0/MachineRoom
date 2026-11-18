@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useRef, useState } from 'react'
+import { createContext, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import {
   contextLabel,
   contextShare,
@@ -30,6 +30,73 @@ function scrubberBounds(position, duration) {
   const max = Number.isFinite(duration) ? Math.round(duration) : 0
   const value = Number.isFinite(position) ? Math.min(Math.round(position), max) : 0
   return { max, value }
+}
+
+function markerLayout(markers, duration, width) {
+  const gap = 6
+  const ticks = markers.map((marker, index) => ({
+    ...marker,
+    index,
+    share: Math.min(1, Math.max(0, marker.at / duration)),
+  })).sort((a, b) => a.share - b.share)
+  const rowEnds = []
+  const groups = []
+  for (const tick of ticks) {
+    const x = tick.share * width
+    const freeRow = rowEnds.findIndex((end) => x - end >= gap)
+    const row = freeRow < 0 ? Math.min(rowEnds.length, 2) : freeRow
+    tick.row = row
+    if (row === 2) {
+      if (rowEnds[row] === undefined || x - rowEnds[row] >= gap) groups.push([])
+      tick.group = groups.length - 1
+      groups[tick.group].push(tick)
+    }
+    rowEnds[row] = x
+  }
+  return { ticks, groups, rows: rowEnds.length }
+}
+
+function ScrubberMarkers({ markers, duration, onSeek }) {
+  const rail = useRef(null)
+  const id = useId()
+  const [width, setWidth] = useState(0)
+  useLayoutEffect(() => {
+    const node = rail.current
+    setWidth(node.getBoundingClientRect().width)
+    if (typeof ResizeObserver !== 'function') return undefined
+    const observer = new ResizeObserver(([entry]) => setWidth(entry.contentRect.width))
+    observer.observe(node)
+    return () => observer.disconnect()
+  }, [])
+  const { ticks, groups, rows } = useMemo(() => markerLayout(markers, duration, width), [markers, duration, width])
+
+  return (
+    <div ref={rail} className="scrubber-markers" data-rows={rows} style={{ '--marker-rows': rows }} role="group" aria-label="Run markers">
+      {ticks.map(({ at, tone, index, share, row, group }) => {
+        const shared = groups[group]?.length > 1
+        return (
+          <button
+            key={`${at}-${tone}-${index}`}
+            type="button"
+            className={`scrubber-tick is-${tone}`}
+            style={{ left: `${share * 100}%`, '--marker-row': row }}
+            popoverTarget={shared ? `${id}-${group}` : undefined}
+            onClick={shared ? undefined : () => onSeek(at)}
+            aria-label={shared ? `Choose a run marker near ${clock(at)}` : `Seek to ${tone} at ${clock(at)}`}
+          />
+        )
+      })}
+      {groups.map((group, index) => group.length > 1 && (
+        <div key={index} id={`${id}-${index}`} className="scrubber-overflow" popover="auto" role="group" aria-label="Choose a run marker">
+          {group.map(({ at, tone, index: markerIndex }) => (
+            <button key={markerIndex} type="button" popoverTarget={`${id}-${index}`} popoverTargetAction="hide" onClick={() => onSeek(at)}>
+              {tone} at {clock(at)}.{String(Math.floor(at % 1000)).padStart(3, '0')}
+            </button>
+          ))}
+        </div>
+      ))}
+    </div>
+  )
 }
 
 function reducedMotion() {
@@ -248,21 +315,7 @@ export default function Transport({ snapshot, speeds, markers = [], orchestrator
           aria-label="Replay position"
         />
         {duration > 0 && markers.length > 0 && (
-          <div className="scrubber-markers" role="group" aria-label="Run markers">
-            {markers.map((marker, index) => {
-              const pct = Math.min(100, Math.max(0, (marker.at / duration) * 100))
-              return (
-                <button
-                  key={`${marker.at}-${marker.tone}-${index}`}
-                  type="button"
-                  className={`scrubber-tick is-${marker.tone}`}
-                  style={{ left: `${pct}%` }}
-                  onClick={() => onSeek(marker.at)}
-                  aria-label={`Seek to ${marker.tone} at ${clock(marker.at)}`}
-                />
-              )
-            })}
-          </div>
+          <ScrubberMarkers markers={markers} duration={duration} onSeek={onSeek} />
         )}
       </div>
       <span className="mono">
