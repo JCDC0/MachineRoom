@@ -6,7 +6,7 @@ import { act, createElement } from 'react'
 import { afterEach, describe, expect, it } from 'vitest'
 import { startLane } from '../scripts/run-lane.mjs'
 import { gitPath } from '../server/programPath.js'
-import { attentionItems } from '../src/briefs/attention.js'
+import { attentionItems, backupRanLater, succeededLater } from '../src/briefs/attention.js'
 import { runRecord } from '../src/briefs/run.js'
 import DispatchPanel from '../src/ui/panels/DispatchPanel.jsx'
 import { makeTempDir } from './helpers/tempRoot.js'
@@ -297,6 +297,16 @@ describe('attentionItems', () => {
       { lane: 'opencode', startedAt: '2026-11-16T10:05:00.000Z', text: 'opencode failed on P2' },
     ])
   })
+})
+
+it('exposes the two helpers that say a later run fixed the work', () => {
+  const failure = { lane: 'codex', startedAt: '2026-11-16T10:00:00.000Z', briefs: ['P1'], exitCode: 1 }
+  const success = { lane: 'agy', startedAt: '2026-11-16T10:01:00.000Z', briefs: ['P1'], exitCode: 0 }
+  expect(succeededLater(failure, [failure, success])).toBe(true)
+  expect(succeededLater(failure, [failure])).toBe(false)
+  const failover = { ...failure, failover: { kind: 'quota', to: 'agy' } }
+  expect(backupRanLater(failover, 'codex', [failover, success])).toBe(true)
+  expect(backupRanLater(failure, 'codex', [failure, success])).toBe(false)
 })
 
 describe('DispatchPanel Needs you', () => {
