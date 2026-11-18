@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { harnessByKey } from '../../harnesses/index.js'
 import { visibleText } from '../../model/paths.js'
 import { statusLabel } from './format.js'
 import { subscribeToNotices } from './notices.js'
@@ -95,8 +96,7 @@ export default function AgentBuilder({
                   {agent.role ? <span className="task-priority mono">{visibleText(agent.role)}</span> : null}
                 </div>
                 <div className="task-assignee mono">
-                  {visibleText(agent.adapterType)}
-                  {agent.model ? ` // ${visibleText(agent.model)}` : ''}
+                  {[visibleText(harnessByKey[agent.harness]?.name ?? agent.harness ?? ''), agent.model && visibleText(agent.model)].filter(Boolean).join(' \u00b7 ')}
                 </div>
               </div>
             ))}
