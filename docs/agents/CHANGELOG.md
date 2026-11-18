@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Sonnet.
 - GPT-6.2 Sol.
 - GPT-6.2 Sol.
 - Sonnet review.
