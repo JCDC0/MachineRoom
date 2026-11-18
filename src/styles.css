@@ -1848,13 +1848,18 @@ summary:focus-visible,
   cursor: pointer;
 }
 
+span.hud-health-chip {
+  cursor: default;
+  white-space: normal;
+}
+
 .hud-health.is-red .hud-health-chip {
   background: var(--red);
   color: var(--white);
   border-color: var(--red);
 }
 
-.hud-health.is-red .hud-health-chip:hover {
+.hud-health.is-red button.hud-health-chip:hover {
   background: var(--red);
   border-color: var(--white);
 }
@@ -1864,7 +1869,7 @@ summary:focus-visible,
   border-color: var(--yellow);
 }
 
-.hud-health-chip:hover {
+button.hud-health-chip:hover {
   background: rgb(255 255 255 / 0.08);
 }
 
@@ -6521,14 +6526,12 @@ body:has(#hud-orchestrator-chat) .lens-waiting {
   background: rgb(255 255 255 / 0.4);
 }
 
-.mr-orch-tab-dot.is-working {
+.mr-orch-tab-dot.is-working,
+.mr-orch-tab-dot.is-waiting {
   background: var(--yellow);
 }
 
-.mr-orch-tab-dot.is-waiting {
-  background: var(--green);
-}
-
+.mr-orch-tab-dot.is-failed,
 .mr-orch-tab-dot.is-paused {
   background: var(--red);
 }
@@ -7287,23 +7290,6 @@ body:has(#hud-orchestrator-chat) .lens-waiting {
   flex: 0 0 80px;
   font-size: 9px;
   color: rgb(255 255 255 / 0.55);
-}
-
-.mr-side .mr-side-pin {
-  flex: 0 0 auto;
-  padding: 2px;
-  color: var(--white);
-  opacity: 0;
-}
-
-.mr-side .mr-side-pin[aria-pressed='true'] {
-  color: var(--yellow);
-  opacity: 1;
-}
-
-.mr-side-row:hover .mr-side-pin,
-.mr-side-row:focus-within .mr-side-pin {
-  opacity: 1;
 }
 
 .mr-side-group {

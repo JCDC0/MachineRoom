@@ -248,7 +248,7 @@ export default function OrchestratorChat({
   const loaded = Boolean(loadedIds[selected])
   const state = loaded ? chat.state : current?.state ?? chat.state
   const status = teamSelected ? "Every orchestrator's messages" : state === 'working' ? 'Working' : state === 'paused' ? 'Paused' : 'Waiting for you'
-  const tone = teamSelected ? 'waiting' : statusTone(state)
+  const tone = teamSelected || state === 'idle' ? 'waiting' : statusTone(state)
   const count = charCount(draft)
   const slashQuery = slashOpen ? commandQuery(draft) : null
   const slashItems = slashQuery === null ? [] : filterCommands(commands, slashQuery)
