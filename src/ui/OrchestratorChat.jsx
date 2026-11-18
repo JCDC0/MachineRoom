@@ -1,5 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react'
-import MenuIcon from './MenuIcon.jsx'
+import Composer, { RecipientChip } from './Composer.jsx'
+import { Chip, Menu, Switch } from './controls.jsx'
+import Markdown from './markdown.jsx'
 import { roomNoticeSummary } from './roomNotice.js'
 import LaneConversation from './LaneConversation.jsx'
 import CompactCard from './AgentStrip.jsx'
@@ -23,7 +25,6 @@ import {
   approvalTitle,
   canSend,
   charCount,
-  chatBlocks,
   chatLines,
   clampDraft,
   copyChatText,
@@ -47,6 +48,7 @@ import {
   teamLines,
   visibleChatText,
   workRows,
+  workStepText,
   workText,
 } from './orchestratorChat.js'
 import { OPEN_CHAT_EVENT } from './transportOrchestrators.js'
@@ -57,59 +59,6 @@ import {
   filterCommands,
   parseRoomCommand,
 } from './slashCommands.js'
-
-function InlineSpans({ spans }) {
-  return spans.map((span, index) =>
-    span.kind === 'code' ? (
-      <code key={index} className="mr-orch-code">
-        {span.text}
-      </code>
-    ) : (
-      <span key={index}>{span.text}</span>
-    )
-  )
-}
-
-function ChatBlocks({ text }) {
-  return chatBlocks(text).map((block, index) => {
-    if (block.kind === 'code') {
-      return (
-        <pre key={index} className="mr-orch-block is-code">
-          <code>{block.text}</code>
-        </pre>
-      )
-    }
-    if (block.kind === 'list') {
-      const items = block.items.map((item, itemIndex) => (
-        <li key={itemIndex}>
-          <InlineSpans spans={item.spans} />
-        </li>
-      ))
-      const start = block.ordered && block.start !== 1 ? block.start : undefined
-      return block.ordered ? (
-        <ol key={index} className="mr-orch-block is-list" start={start}>
-          {items}
-        </ol>
-      ) : (
-        <ul key={index} className="mr-orch-block is-list">
-          {items}
-        </ul>
-      )
-    }
-    if (block.kind === 'heading') {
-      return (
-        <p key={index} className="mr-orch-block is-heading">
-          <InlineSpans spans={block.spans} />
-        </p>
-      )
-    }
-    return (
-      <p key={index} className="mr-orch-block is-para">
-        <InlineSpans spans={block.spans} />
-      </p>
-    )
-  })
-}
 
 function initialChatState(initialChat) {
   return normalizeChat(initialChat)
@@ -272,7 +221,7 @@ export default function OrchestratorChat({
       : normalizeModes(current?.modes)
   const shownMode = modeLabel(modeList, mode) || 'not reported'
   const canSetMode =
-    inline && modeList.length >= 2 && typeof client?.setOrchestratorMode === 'function'
+    modeList.length >= 2 && typeof client?.setOrchestratorMode === 'function'
   const frameClass = modeClass(mode)
   const approvals = teamSelected
     ? []
@@ -284,7 +233,7 @@ export default function OrchestratorChat({
   const modelRefresh = useHarnessModels({
     client,
     harness,
-    open: open && inline && !teamSelected,
+    open: open && !teamSelected,
     fallback: staticModels,
     value: modelSaved || model,
   })
@@ -292,8 +241,8 @@ export default function OrchestratorChat({
   const effortChoices = effortMenuLevels(harness, harnessRows.length > 0 ? harnessRows : current?.harnesses)
   const context = contextLine({
     context: { tokens: current?.contextTokens, window: current?.contextWindow },
-  })
-  const canSetEffort = inline && typeof client?.setOrchestratorEffort === 'function'
+  }).replace(/^Context size (?=\d)/, 'Context ')
+  const canSetEffort = typeof client?.setOrchestratorEffort === 'function'
   const project = teamSelected ? chats.orchestrator?.project ?? '' : chat.project
   const projectLabel = projectBaseName(project)
   const availableLanes = runnableLanes(lanesData)
@@ -305,20 +254,6 @@ export default function OrchestratorChat({
         showAgentMessages,
         lanes: lanesData,
       })
-
-  function worktreeChoice() {
-    if (!laneRecipient) return null
-    return (
-      <label className="mr-orch-worktree mono">
-        <input
-          type="checkbox"
-          checked={separateWorktree}
-          onChange={(event) => setSeparateWorktree(event.target.checked)}
-        />
-        <span>Separate worktree</span>
-      </label>
-    )
-  }
 
   function toggleAgentMessages(val) {
     const next = typeof val === 'boolean' ? val : !showAgentMessages
@@ -1079,7 +1014,7 @@ export default function OrchestratorChat({
   }
 
   useEffect(() => {
-    if (!open || !inline || models !== null || typeof client?.models !== 'function') return undefined
+    if (!open || models !== null || typeof client?.models !== 'function') return undefined
     let active = true
     setModelsLoading(true)
     setModelsError('')
@@ -1094,7 +1029,7 @@ export default function OrchestratorChat({
       if (active) setModelsLoading(false)
     })
     return () => { active = false }
-  }, [open, inline, client, models])
+  }, [open, client, models])
 
   async function saveModel(value) {
     if (value === (modelSaved || model) || modelSaving) return
@@ -1350,7 +1285,8 @@ export default function OrchestratorChat({
     return <LaneConversation key={lane.key} client={client} lane={lane.key} laneName={lane.name} project={project} lanes={lanesData}
       liveRuns={liveRuns} tick={tick} inline={inline} recipientOptions={availableLanes} recipients={subs}
       onRecipientChange={(id) => { setToRecipient(id); if (list.some((entry) => entry.id === id)) selectTab(id) }} onBack={() => setToRecipient('orchestrator')}
-      onRecipientSend={(text) => sendToLane(text, lane.key)} worktreeChoice={worktreeChoice()} />
+      onRecipientSend={(text) => sendToLane(text, lane.key)}
+      worktreeChoice={<Switch label="Worktree" checked={separateWorktree} onChange={(checked) => setSeparateWorktree(checked)} />} />
   }
 
   return (
@@ -1423,19 +1359,22 @@ export default function OrchestratorChat({
             </p>
           ) : (
             teamRows.map((line) => (
-              <button
-                type="button"
+              <div
                 key={line.id}
                 className={`mr-orch-team-row is-${line.from}`}
                 title={line.at ? `${line.where} at ${line.at}` : line.where}
-                onClick={() => selectTab(line.chatId)}
+                onClick={(event) => {
+                  if (!event.target.closest?.('a')) selectTab(line.chatId)
+                }}
               >
-                <span className="mr-orch-team-meta mono">
+                <button type="button" className="mr-orch-team-meta mono">
                   <span className="mr-orch-team-where">{line.where}</span>
                   <span className="mr-orch-team-who">{line.who}</span>
-                </span>
-                <span className="mr-orch-team-text">{line.text}</span>
-              </button>
+                </button>
+                <div className="mr-orch-team-text">
+                  {line.from === 'owner' ? line.text : <Markdown text={line.text} />}
+                </div>
+              </div>
             ))
           )}
         </div>
@@ -1460,16 +1399,14 @@ export default function OrchestratorChat({
                       className="mr-orch-line is-agent mono"
                       style={{ color: agentColor(senderKey, lanesData) }}
                     >
-                      <span className="mr-orch-agent-text">{displayed}</span>
+                      <div className="mr-orch-blocks"><Markdown text={displayed} /></div>
                       {isLong ? (
-                        <button
-                          type="button"
-                          className="mr-orch-show-all mono"
-                          style={{ marginLeft: 8, background: 'transparent', border: 'none', color: 'inherit', textDecoration: 'underline', cursor: 'pointer' }}
+                        <Chip
+                          className="mr-orch-show-all"
+                          label={unfolded ? 'Show less' : 'Show all'}
+                          open={unfolded}
                           onClick={() => setOpenAgentAll((prev) => ({ ...prev, [line.id]: !prev[line.id] }))}
-                        >
-                          {unfolded ? 'Show less' : 'Show all'}
-                        </button>
+                        />
                       ) : null}
                       {renderMessageActions(line, index)}
                     </div>
@@ -1488,7 +1425,7 @@ export default function OrchestratorChat({
                         {notice.subject && <span className="mr-orch-run-subject" title={notice.subject}>{notice.subject}</span>}
                         <button type="button" className="mr-orch-line-action" aria-expanded={expanded} onClick={() => setOpenRoomDetails((prev) => ({ ...prev, [line.id]: !prev[line.id] }))}>Details</button>
                       </div>
-                      {expanded && <div className="mr-orch-blocks is-room"><ChatBlocks text={line.text} /></div>}
+                      {expanded && <div className="mr-orch-blocks is-room"><Markdown text={line.text} /></div>}
                       {expanded && renderMessageActions(line, index)}
                     </div>
                   )
@@ -1506,10 +1443,10 @@ export default function OrchestratorChat({
                       <span className="mr-orch-text">{line.text}</span>
                     ) : (
                       <div className={`mr-orch-blocks is-${line.from}`}>
-                        <ChatBlocks text={line.text} />
+                        <Markdown text={line.text} />
                       </div>
                     )}
-                    {line.work ? (
+                    {line.work && (line.work.state !== 'working' || line.work.steps.length > 0) ? (
                       <div className={`mr-orch-work${line.work.state === 'working' ? ' is-working' : ''}`}>
                         <button
                           type="button"
@@ -1518,7 +1455,7 @@ export default function OrchestratorChat({
                           onClick={() => toggleWork(line.id)}
                           disabled={line.work.steps.length === 0}
                         >
-                          {workText(line.work)}
+                          {line.work.state === 'working' ? workStepText(line.work.steps.at(-1)) : workText(line.work)}
                         </button>
                         {openWork[line.id] === true && line.work.steps.length > 0 ? (
                           <ol className="mr-orch-work-steps mono">
@@ -1696,50 +1633,29 @@ export default function OrchestratorChat({
             </div>
           ) : null}
 
-          {inline ? (
-            <form className="mr-orch-form hud-lower-input" onSubmit={handleSubmit}>
-              <textarea
-                id={inputId}
-                ref={inputRef}
-                className="mr-orch-input mono"
-                value={draft}
-                maxLength={ORCH_MAX_CHARS}
-                rows={2}
-                spellCheck="false"
-                placeholder="Ask the orchestrator anything"
-                aria-label="Message to the orchestrator"
-                onChange={onDraftChange}
-                onKeyDown={handleKeyDown}
-              />
-              {renderSlashList()}
-              <div className="hud-lower-tools">
-                <div className="hud-strip-to mono" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                  <label htmlFor={`${inputId}-to-inline`}>To:</label>
-                  <select
-                    id={`${inputId}-to-inline`}
-                    className="mr-orch-to-select mono"
-                    aria-label="To"
-                    value={toRecipient}
-                    onChange={(e) => setToRecipient(e.target.value)}
-                    style={{ background: 'transparent', color: 'inherit', border: '1px solid rgba(255,255,255,0.2)', padding: '2px 4px', fontSize: '0.85em' }}
-                  >
-                    <option value="orchestrator" style={{ background: '#111', color: '#fff' }}>Orchestrator</option>
-                    {subs.map((sub) => (
-                      <option key={sub.id} value={sub.id} style={{ background: '#111', color: '#fff' }}>
-                        {sub.name || sub.id}
-                      </option>
-                    ))}
-                    {availableLanes.map((lane) => (
-                      <option key={lane.key} value={lane.key} style={{ background: '#111', color: '#fff' }}>
-                        {lane.name || lane.key}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                {worktreeChoice()}
+          <Composer
+            input={{
+              id: inputId,
+              ref: inputRef,
+              value: draft,
+              maxLength: ORCH_MAX_CHARS,
+              placeholder: inline ? 'Ask the orchestrator anything' : 'What should be built?',
+              'aria-label': 'Message to the orchestrator',
+              onChange: onDraftChange,
+              onKeyDown: handleKeyDown,
+            }}
+            onSubmit={handleSubmit}
+            sending={sending}
+            sendDisabled={!canSend(draft) || sending || unavailable}
+            status={status}
+            tone={tone}
+            context={context}
+            stop={working ? { onClick: openStopConfirm, disabled: stopping } : null}
+            toolbar={
+              <>
+                <RecipientChip value={toRecipient} onChange={setToRecipient} recipients={subs} lanes={availableLanes} />
                 <ModelPicker
                   key={selected}
-                  label="Model:"
                   inline
                   ariaLabel={`Models for ${current?.name || 'the orchestrator'}`}
                   value={modelSaved || model}
@@ -1753,239 +1669,112 @@ export default function OrchestratorChat({
                   placeholder="Harness default"
                   error={modelError || modelRefresh.error || modelsError}
                 />
-                {effortChoices.length > 0 ? (
+                {effortChoices.length > 0 && (
+                  <Chip label="Effort" value={shownEffort} className="hud-strip-effort" open={effortOpen}
+                    aria-label={`Effort for ${current?.name || 'the orchestrator'}`} title={shownEffort} onClick={openEffort} />
+                )}
+                {canSetMode && (
+                  <Chip label="Mode" value={shownMode} className="hud-strip-mode" open={modeOpen}
+                    aria-label={`Mode for ${current?.name || 'the orchestrator'}`} title={shownMode} onClick={toggleMode} />
+                )}
+                <span className="hud-strip-compact">
+                  <Menu label="Composer options" items={[
+                    { label: 'Compact…', onSelect: toggleCompact },
+                    { label: 'Show agent messages', checked: showAgentMessages, onSelect: () => toggleAgentMessages() },
+                  ]} />
+                </span>
+              </>
+            }
+          >
+            {renderSlashList()}
+            {canSetMode && modeError && <p className="mr-mode-error mono" role="alert">{modeError}</p>}
+            {canSetMode && modeSaved && <p className="mr-mode-note mono" role="status">{modeSaved}</p>}
+            {effortError && <p className="strip-note is-error" role="alert">{effortError}</p>}
+            {count && <span className="mr-orch-count mono">{count}</span>}
+            {modeOpen ? (
+              <div className="strip-pop is-modes" aria-label="Modes">
+                {modeList.map((entry) => (
                   <button
                     type="button"
-                    className="hud-strip-effort"
-                    aria-expanded={effortOpen}
-                    aria-label={`Effort for ${current?.name || 'the orchestrator'}`}
-                    onClick={openEffort}
+                    className={`strip-model-choice mr-mode-choice${entry.id === mode ? ' is-current' : ''}`}
+                    key={entry.id}
+                    onClick={() => pickMode(entry)}
+                    disabled={modeSaving}
                   >
-                    <span>Effort:</span>
-                    <span className="hud-lower-picker-value mono" title={shownEffort}>{shownEffort}</span>
-                    <span className="hud-lower-picker-v" aria-hidden="true">
-                      <MenuIcon />
-                    </span>
+                    <span className="mr-mode-choice-label">{entry.label || entry.id}</span>
+                    {entry.line ? <><span aria-hidden="true"> - </span><span className="mr-mode-choice-line">{entry.line}</span></> : null}
                   </button>
-                ) : null}
-                {canSetMode ? (
-                  <button
-                    type="button"
-                    className="hud-strip-mode"
-                    aria-expanded={modeOpen}
-                    aria-label={`Mode for ${current?.name || 'the orchestrator'}`}
-                    onClick={toggleMode}
-                  >
-                    <span>Mode:</span>
-                    <span className="hud-lower-picker-value mono" title={shownMode}>{shownMode}</span>
-                    <span className="hud-lower-picker-v" aria-hidden="true">
-                      <MenuIcon />
-                    </span>
-                  </button>
-                ) : null}
-                <button
-                  type="button"
-                  className="hud-strip-compact"
-                  aria-expanded={compactOpen}
-                  onClick={toggleCompact}
-                >
-                  Compact
-                </button>
-                <button type="button" className="hud-strip-compact" aria-pressed={showAgentMessages} onClick={() => toggleAgentMessages()}>Agent messages</button>
-                {working ? (
-                  <button
-                    type="button"
-                    className="mr-orch-stop hud-lower-stop"
-                    onClick={openStopConfirm}
-                    disabled={stopping}
-                  >
-                    Stop
-                  </button>
-                ) : null}
-                <button
-                  type="submit"
-                  className="hud-lower-send"
-                  aria-label={sending ? 'Sending' : 'Send'}
-                  disabled={!canSend(draft) || sending || unavailable}
-                >
-                  <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true">
-                    <path
-                      d="M2 8h11M9 4l4 4-4 4"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="1.5"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  </svg>
-                </button>
+                ))}
               </div>
-              <p className={`mr-orch-status is-${tone} mono`} role="status" aria-live="polite"><span className="mr-orch-dot" aria-hidden="true" />{status} {'\u00b7'} {context}</p>
-              {canSetMode && modeError ? (
-                <p className="mr-mode-error mono" role="alert">
-                  {modeError}
-                </p>
-              ) : null}
-              {canSetMode && modeSaved ? (
-                <p className="mr-mode-note mono" role="status">
-                  {modeSaved}
-                </p>
-              ) : null}
-              {effortError ? <p className="strip-note is-error" role="alert">{effortError}</p> : null}
-              <div className="mr-orch-meta">
-                {count ? <span className="mr-orch-count mono">{count}</span> : null}
-              </div>
+            ) : null}
 
-              {modeOpen ? (
-                <div className="strip-pop is-modes" aria-label="Modes">
-                  {modeList.map((entry) => (
+            {modeConfirm ? (
+              <div className="strip-pop is-confirm">
+                <section ref={modeConfirmRef} className="mr-orch-confirm is-stop" aria-label="Set the mode">
+                  <p className="mr-orch-confirm-text">
+                    {`Let ${(current?.name || 'the orchestrator').toUpperCase()} run any command and edit any file without asking?`}
+                  </p>
+                  {modeError ? <p className="strip-note is-error">{modeError}</p> : null}
+                  <div className="mr-orch-confirm-actions">
                     <button
                       type="button"
-                      className={`strip-model-choice mr-mode-choice${entry.id === mode ? ' is-current' : ''}`}
-                      key={entry.id}
-                      onClick={() => pickMode(entry)}
+                      className="mr-orch-confirm-btn is-cancel"
+                      onClick={() => {
+                        setModeConfirm(null)
+                        setModeError('')
+                      }}
                       disabled={modeSaving}
                     >
-                      <span className="mr-mode-choice-label">{entry.label || entry.id}</span>
-                      {entry.line ? <><span aria-hidden="true"> - </span><span className="mr-mode-choice-line">{entry.line}</span></> : null}
+                      Cancel
                     </button>
-                  ))}
-                </div>
-              ) : null}
-
-              {modeConfirm ? (
-                <div className="strip-pop is-confirm">
-                  <section ref={modeConfirmRef} className="mr-orch-confirm is-stop" aria-label="Set the mode">
-                    <p className="mr-orch-confirm-text">
-                      {`Let ${(current?.name || 'the orchestrator').toUpperCase()} run any command and edit any file without asking?`}
-                    </p>
-                    {modeError ? <p className="strip-note is-error">{modeError}</p> : null}
-                    <div className="mr-orch-confirm-actions">
-                      <button
-                        type="button"
-                        className="mr-orch-confirm-btn is-cancel"
-                        onClick={() => {
-                          setModeConfirm(null)
-                          setModeError('')
-                        }}
-                        disabled={modeSaving}
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        type="button"
-                        className="mr-orch-confirm-btn is-stop"
-                        onClick={() => saveMode(modeConfirm)}
-                        disabled={modeSaving}
-                      >
-                        Use Bypass
-                      </button>
-                    </div>
-                  </section>
-                </div>
-              ) : null}
-
-              {effortOpen ? (
-                <div className="strip-pop is-effort" aria-label="Effort">
-                  {effortChoices.length === 0 ? (
-                    <p className="strip-note">No effort levels for this harness.</p>
-                  ) : (
-                    effortChoices.map((level) => (
-                      <button
-                        type="button"
-                        className={`strip-model-choice${level === shownEffort ? ' is-current' : ''}`}
-                        key={level}
-                        onClick={() => saveEffort(level)}
-                        disabled={effortSaving}
-                      >
-                        {level}
-                      </button>
-                    ))
-                  )}
-                  {!canSetEffort && <p className="strip-note">Read only here.</p>}
-                </div>
-              ) : null}
-
-              {compactOpen ? (
-                <div ref={compactRef} className="strip-pop is-compact">
-                  <CompactCard
-                    name={current?.name || 'the orchestrator'}
-                    id={selected}
-                    orchestrator={current}
-                    client={client}
-                    onAutocompact={onAutocompact}
-                    onChange={onOrchestratorChange}
-                    onClose={() => setCompactOpen(false)}
-                  />
-                </div>
-              ) : null}
-            </form>
-          ) : (
-            <form className="mr-orch-form" onSubmit={handleSubmit}>
-              <div className="mr-orch-to-row mono" style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-                <label htmlFor={`${inputId}-to-floating`}>To: </label>
-                <select
-                  id={`${inputId}-to-floating`}
-                  className="mr-orch-to-select mono"
-                  aria-label="To"
-                  value={toRecipient}
-                  onChange={(e) => setToRecipient(e.target.value)}
-                  style={{ background: 'transparent', color: 'inherit', border: '1px solid rgba(255,255,255,0.2)', padding: '2px 4px', fontSize: '0.85em' }}
-                >
-                  <option value="orchestrator" style={{ background: '#111', color: '#fff' }}>Orchestrator</option>
-                  {subs.map((sub) => (
-                    <option key={sub.id} value={sub.id} style={{ background: '#111', color: '#fff' }}>
-                      {sub.name || sub.id}
-                    </option>
-                  ))}
-                  {availableLanes.map((lane) => (
-                    <option key={lane.key} value={lane.key} style={{ background: '#111', color: '#fff' }}>
-                      {lane.name || lane.key}
-                    </option>
-                  ))}
-                </select>
+                    <button
+                      type="button"
+                      className="mr-orch-confirm-btn is-stop"
+                      onClick={() => saveMode(modeConfirm)}
+                      disabled={modeSaving}
+                    >
+                      Use Bypass
+                    </button>
+                  </div>
+                </section>
               </div>
-              <label className="mr-orch-label mono" htmlFor={inputId}>
-                Message
-              </label>
-              <textarea
-                id={inputId}
-                ref={inputRef}
-                className="mr-orch-input mono"
-                value={draft}
-                maxLength={ORCH_MAX_CHARS}
-                rows={3}
-                spellCheck="false"
-                placeholder="What should be built?"
-                aria-label="Message to the orchestrator"
-                onChange={onDraftChange}
-                onKeyDown={handleKeyDown}
-              />
-              {renderSlashList()}
-              <div className="mr-orch-meta">
-                <span className="mr-orch-hint mono">Enter sends. Shift+Enter adds a line.</span>
-                {count ? <span className="mr-orch-count mono">{count}</span> : null}
+            ) : null}
+
+            {effortOpen ? (
+              <div className="strip-pop is-effort" aria-label="Effort">
+                {effortChoices.length === 0 ? (
+                  <p className="strip-note">No effort levels for this harness.</p>
+                ) : (
+                  effortChoices.map((level) => (
+                    <button
+                      type="button"
+                      className={`strip-model-choice${level === shownEffort ? ' is-current' : ''}`}
+                      key={level}
+                      onClick={() => saveEffort(level)}
+                      disabled={effortSaving}
+                    >
+                      {level}
+                    </button>
+                  ))
+                )}
+                {!canSetEffort && <p className="strip-note">Read only here.</p>}
               </div>
-              <div className="mr-orch-actions">
-                {worktreeChoice()}
-                <button type="button" className="hud-strip-compact" aria-pressed={showAgentMessages} onClick={() => toggleAgentMessages()}>Agent messages</button>
-                <button type="submit" className="mr-orch-send" disabled={!canSend(draft) || sending || unavailable}>
-                  {sending ? 'Sending' : 'Send'}
-                </button>
-                {working ? (
-                  <button
-                    type="button"
-                    className="mr-orch-stop"
-                    onClick={openStopConfirm}
-                    disabled={stopping}
-                  >
-                    Stop
-                  </button>
-                ) : null}
+            ) : null}
+
+            {compactOpen ? (
+              <div ref={compactRef} className="strip-pop is-compact">
+                <CompactCard
+                  name={current?.name || 'the orchestrator'}
+                  id={selected}
+                  orchestrator={current}
+                  client={client}
+                  onAutocompact={onAutocompact}
+                  onChange={onOrchestratorChange}
+                  onClose={() => setCompactOpen(false)}
+                />
               </div>
-              <p className={`mr-orch-status is-${tone} mono`} role="status" aria-live="polite"><span className="mr-orch-dot" aria-hidden="true" />{status} {'\u00b7'} {context}</p>
-            </form>
-          )}
+            ) : null}
+          </Composer>
         </>
       )}
 

@@ -76,7 +76,7 @@ describe('LaneConversation manual Plan handoff', () => {
       expect(buttonWithText(container, 'Edit from this plan')).not.toBeNull()
       expect(container.querySelector('.brief-confirm-card')).toBeNull()
 
-      const runPicker = container.querySelector('.mr-lane-conv-select')
+      const runPicker = container.querySelector('select[aria-label="Run"]')
       for (const startedAt of [runningPlan, failedPlan, stoppedPlan, finishedAuto, finishedPlain]) {
         await act(async () => {
           selectValue(runPicker, startedAt)

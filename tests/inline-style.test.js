@@ -186,7 +186,7 @@ describe('the sub scope box', () => {
   })
 })
 
-describe('the chat worktree box', () => {
+describe('the chat worktree switch', () => {
   const LANES = [{ key: 'opencode', name: 'OpenCode', cli: { bin: 'opencode' } }]
 
   function chatClient() {
@@ -199,7 +199,7 @@ describe('the chat worktree box', () => {
     }
   }
 
-  it('renders the worktree label with no inline style', async () => {
+  it('renders the worktree switch with no inline style', async () => {
     await withDom(async ({ container, root }) => {
       await act(async () => {
         root.render(
@@ -217,21 +217,14 @@ describe('the chat worktree box', () => {
         toSelect.value = 'opencode'
         toSelect.dispatchEvent({ type: 'change', bubbles: true })
       })
-      const label = container
-        .querySelectorAll('label')
-        .find((item) => item.textContent.includes('Separate worktree'))
-      expect(label).not.toBeUndefined()
-      expect(classesOf(label)).toContain('mr-orch-worktree')
-      expect(label.hasAttribute('style')).toBe(false)
-      expect(styleKeys(label)).toEqual([])
+      const worktree = container.querySelector('button[role="switch"][aria-label="Worktree"]')
+      expect(classesOf(worktree)).toContain('ui-switch')
+      expect(worktree.hasAttribute('style')).toBe(false)
+      expect(styleKeys(worktree)).toEqual([])
     })
   })
 
-  it('keeps the mr-orch-worktree rule in the stylesheet', () => {
-    expect(declarations('.mr-orch-worktree')).toEqual([
-      'display: inline-flex',
-      'align-items: center',
-      'gap: 4px',
-    ])
+  it('keeps the worktree switch layout in the shared stylesheet', () => {
+    expect(declarations('button.ui-switch')).toContain('display: inline-flex')
   })
 })

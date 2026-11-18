@@ -2,6 +2,9 @@ import { createContext, useContext, useEffect, useId, useMemo, useRef, useState 
 import { defaultMode, laneModesFor } from '../control/modes.js'
 import { HARNESSES, harnessByAdapter, harnessByKey } from '../harnesses/index.js'
 import { contextLine } from './agentStrip.js'
+import Composer, { RecipientChip } from './Composer.jsx'
+import { Chip, Menu } from './controls.jsx'
+import Markdown from './markdown.jsx'
 import { agentColor } from './orchestratorChat.js'
 import { useLogFollow } from './logScroll.js'
 import { runStartLine } from './panels/runs.js'
@@ -23,6 +26,7 @@ const STATUS_LABELS = {
   fetched: 'Read by the runner',
   interrupted: 'Interrupted the run',
 }
+const RUN_TONES = { running: 'working', finished: 'finished', failed: 'paused', stopped: 'paused' }
 
 export const LaneSentMessagesContext = createContext(null)
 
@@ -103,9 +107,26 @@ function statusLabel(status) {
   return STATUS_LABELS[status] ?? 'Queued'
 }
 
-function timeText(startedAt) {
-  const clock = runClock(startedAt)
-  return clock ? `run ${clock}` : 'run unknown'
+function RunChip({ options, selected, runState, tone, emptyLabel, onChange }) {
+  return (
+    <span className="ui-chip ui-chip-select">
+      <span className="ui-chip-label" aria-hidden="true">Run</span>
+      <span className={`ui-chip-value is-${tone}`} aria-hidden="true">
+        {selected && <span className="mr-orch-dot" />}
+        {selected ? runClock(selected) : emptyLabel}
+      </span>
+      <span className="ui-chip-chevron" aria-hidden="true" />
+      <select aria-label="Run" value={selected} disabled={options.length === 0}
+        onChange={(event) => onChange(event.target.value)}>
+        {options.length === 0 && <option value="">{emptyLabel}</option>}
+        {options.map((run) => (
+          <option value={run.startedAt} key={run.startedAt}>
+            {`${runClock(run.startedAt)} ${run.startedAt === selected ? runState : runOutcome(run)}`}
+          </option>
+        ))}
+      </select>
+    </span>
+  )
 }
 
 function taskText(run) {
@@ -186,14 +207,24 @@ export default function LaneConversation({
   const selectedRunning = currentRun?.running === true ? conversation.data === null || running : running && !hasLiveRun
   const recipientRunning = onRecipientSend && selectedRunning
   const outcome = runOutcome(currentRun, conversation.data)
+  const runState = selectedRunning ? 'running' : outcome
+  const tone = RUN_TONES[runState] || 'idle'
+  const status = selectedRunning ? 'Working' : outcome ? outcome[0].toUpperCase() + outcome.slice(1) : 'Idle'
+  const context = [
+    selected && `Run ${runClock(selected)}`,
+    typeof currentRun?.contextTokens === 'number' && contextLine({
+      context: { tokens: currentRun.contextTokens, window: currentRun.contextWindow },
+    }).replace(/^Context size (?=\d)/, 'Context '),
+  ].filter(Boolean).join(' · ')
   const colour = agentColor(lane, lanes)
   const entries = Array.isArray(conversation.data?.entries) ? conversation.data.entries : []
   const promptEntry = entries.find((entry) => entry.role === 'prompt') ?? null
   const prompt = foldPrompt(promptEntry?.text ?? '')
-  const rows = foldToolCalls(entries.filter((entry) => entry.role !== 'prompt'))
-  const follow = useLogFollow(running, entries.length)
+  const rows = foldToolCalls(entries.filter((entry) => entry.role !== 'prompt'
+    && !(outcome && entry.role === 'result' && GENERIC_RESULT_TEXTS.has(entry.text))))
   const label = (laneName && laneName !== lane ? laneName : '') || lanes.find((entry) => entry?.key === lane)?.name || 'Lane'
   const projectLabel = String(project || 'PROJECT').toUpperCase()
+  const breadcrumb = `${projectLabel} / ${String(label).toUpperCase()}`
   const loaded = conversation.data !== null
   const isFinishedPlan = isFinishedPlanRun(currentRun, conversation.data)
   const activeLaneConfig = laneConfig.lane === lane ? laneConfig : null
@@ -208,7 +239,9 @@ export default function LaneConversation({
   const editModes = useMemo(() => editModesFor(planHarness), [planHarness])
   const trimmedDraft = draft.trim()
   const canSend = trimmedDraft.length > 0 && trimmedDraft.length <= MAX_MESSAGE_CHARS
+  const canCompose = selectedRunning || (onRecipientSend && !hasLiveRun && !running)
   const visibleSent = sentMessages.filter((item) => item.lane === lane && item.startedAt === selected)
+  const follow = useLogFollow(running, entries.length + visibleSent.length)
 
   useEffect(() => {
     mountedRef.current = true
@@ -527,51 +560,15 @@ export default function LaneConversation({
 
   return (
     <aside className={`mr-orch mr-lane-conv${inline ? ' is-inline' : ''}`} aria-label={`${label} conversation`}>
-      <header className="mr-orch-head mr-lane-conv-head">
-        <p className="mr-lane-conv-crumb mono">{`${projectLabel} / ${String(label).toUpperCase()} / ${timeText(selected)}`}</p>
-        {running ? (
-          <button type="button" className="mr-lane-conv-stop mono" onClick={() => setConfirmStop(true)}>
-            Stop
-          </button>
-        ) : null}
-        <button type="button" className="mr-orch-close" onClick={onBack}>
-          Back
-        </button>
+      <header className="mr-lane-conv-head">
+        <p className="mr-lane-conv-crumb mono" title={breadcrumb}>{breadcrumb}</p>
+        <Chip label="Back" onClick={onBack} />
       </header>
-      {recipientOptions ? <label className="mono">To: <select aria-label="To" value={lane} onChange={(event) => onRecipientChange(event.target.value)}><option value="orchestrator">Orchestrator</option>{recipients.map((item) => <option key={item.id} value={item.id}>{item.name || item.id}</option>)}{recipientOptions.map((item) => <option key={item.key} value={item.key}>{item.name || item.key}</option>)}</select></label> : null}
-      <div className="mr-lane-conv-tools">
-        <label className="mr-lane-conv-picker">
-          <span className="mono">Run</span>
-          <select
-            className="mr-lane-conv-select mono"
-            aria-label="Run"
-            value={selected}
-            onChange={(event) => {
-              wantedRef.current = ''
-              setSelected(event.target.value)
-            }}
-            disabled={options.length === 0}
-          >
-            {options.length === 0 ? <option value="">{emptyRunLabel}</option> : null}
-            {options.map((run) => (
-              <option value={run.startedAt} key={run.startedAt}>
-                {`${runClock(run.startedAt)} ${runOutcome(run)}`}
-              </option>
-            ))}
-          </select>
-        </label>
-        {!running && outcome ? <span className="mr-lane-conv-outcome mono">{outcome}</span> : null}
-        {isFinishedPlan ? (
-          <button
-            type="button"
-            className="brief-run-btn"
-            disabled={planConfirmOpen}
-            onClick={openPlanHandoff}
-          >
-            Edit from this plan
-          </button>
-        ) : null}
-      </div>
+      {isFinishedPlan && (
+        <div className="mr-lane-conv-tools">
+          <Chip label="Edit from this plan" disabled={planConfirmOpen} onClick={openPlanHandoff} />
+        </div>
+      )}
 
       {historyFailed ? (
         <div className="mr-lane-conv-tools">
@@ -631,26 +628,13 @@ export default function LaneConversation({
             value={planDraft}
             onChange={(event) => setPlanDraft(event.target.value)}
           />
-          {editModes.length > 0 ? (
-            <label className="mr-lane-conv-picker">
-              <span className="mono">Mode</span>
-              <select
-                className="mr-lane-conv-select mono"
-                aria-label="Mode"
-                value={planMode}
-                onChange={(event) => {
-                  planModeChosenRef.current = true
-                  setPlanMode(event.target.value)
-                }}
-              >
-                {editModes.map((entry) => (
-                  <option key={entry.id} value={entry.id}>
-                    {entry.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-          ) : null}
+          {editModes.length > 0 && (
+            <Chip label="Mode" value={planMode} options={editModes.map(({ id, label }) => ({ value: id, label }))}
+              onChange={(nextMode) => {
+                planModeChosenRef.current = true
+                setPlanMode(nextMode)
+              }} />
+          )}
           <div className="brief-confirm-actions">
             <button
               type="button"
@@ -710,7 +694,7 @@ export default function LaneConversation({
           if (row.kind === 'tools') {
             if (row.count === 1) {
               return (
-                <p className="mr-lane-conv-tool mono" style={{ color: colour }} key={`tool-${index}`}>
+                <p className="ui-chip mr-lane-conv-tool mono" style={{ color: colour }} key={`tool-${index}`}>
                   {toolText(row.entries[0])}
                 </p>
               )
@@ -718,18 +702,16 @@ export default function LaneConversation({
             const open = openTools[index] === true
             return (
               <div className="mr-lane-conv-tool-group" key={`tools-${index}`}>
-                <button
-                  type="button"
-                  className="mr-lane-conv-tool-fold mono"
+                <Chip
+                  label={`${row.count} tool calls`}
+                  className="mr-lane-conv-tool-fold"
                   style={{ color: colour }}
-                  aria-expanded={open}
+                  open={open}
                   onClick={() => setOpenTools((current) => ({ ...current, [index]: !open }))}
-                >
-                  {`${row.count} tool calls`}
-                </button>
+                />
                 {open
                   ? row.entries.map((entry, at) => (
-                      <p className="mr-lane-conv-tool mono" style={{ color: colour }} key={`tool-${index}-${at}`}>
+                      <p className="ui-chip mr-lane-conv-tool mono" style={{ color: colour }} key={`tool-${index}-${at}`}>
                         {toolText(entry)}
                       </p>
                     ))
@@ -738,18 +720,11 @@ export default function LaneConversation({
             )
           }
           const entry = row.entry
-          if (entry.role === 'agent') {
+          if (entry.role === 'agent' || entry.role === 'result') {
             return (
-              <div className="mr-orch-line is-orchestrator" key={`entry-${index}`}>
-                <p className="mr-orch-text">{entry.text}</p>
+              <div className="mr-orch-line is-orchestrator mr-orch-blocks" key={`entry-${index}`}>
+                <Markdown text={entry.text} />
               </div>
-            )
-          }
-          if (entry.role === 'result') {
-            return (
-              <p className="mr-lane-conv-result mono" key={`entry-${index}`}>
-                {entry.text}
-              </p>
             )
           }
           return (
@@ -758,68 +733,56 @@ export default function LaneConversation({
             </p>
           )
         })}
+        {visibleSent.length > 0 && (
+          <div className="mr-lane-conv-sent" role="region" aria-label="Sent messages">
+            {visibleSent.map((item) => (
+              <div className="mr-orch-line is-owner" key={item.id}>
+                <p className="mr-orch-text">{item.text}</p>
+                <p className="mr-lane-conv-line mono">{statusLabel(item.status)}</p>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
-      {selectedRunning || (onRecipientSend && !hasLiveRun && !running) ? (
-        <form
-          className={inline ? 'mr-orch-form hud-lower-input' : 'mr-orch-form'}
-          onSubmit={(event) => {
-            event.preventDefault()
-            sendMessage(false)
-          }}
-        >
-          <label className="mr-orch-label mono" htmlFor={inputId}>
-            Message
-          </label>
-          <textarea
-            id={inputId}
-            className="mr-orch-input mono"
-            value={draft}
-            maxLength={MAX_MESSAGE_CHARS}
-            rows={2}
-            spellCheck="false"
-            placeholder={onRecipientSend ? (recipientRunning ? `Message ${label}` : `Start ${label} with a message`) : 'Message this running lane'}
-            aria-label={`Message ${label}`}
-            onChange={(event) => setDraft(event.target.value)}
-          />
-          <div className="mr-orch-actions">
-            {!recipientRunning && worktreeChoice}
-            <button
-              type="button"
-              className="mr-orch-send"
-              disabled={!canSend || sending}
-              onClick={() => sendMessage(false)}
-            >
-              Send
-            </button>
-            {(!onRecipientSend || recipientRunning) ? <button
-              type="button"
-              className="mr-orch-stop"
-              disabled={!canSend || sending}
-              onClick={() => sendMessage(true)}
-            >
-              Send and interrupt
-            </button> : null}
-          </div>
-          {sendError ? (
-            <p className="mr-orch-error mono" role="alert">
-              {sendError}
-            </p>
-          ) : null}
-        </form>
-      ) : null}
-
-      {recipientOptions ? <p className={`mr-orch-status is-${running ? 'working' : 'waiting'} mono`} role="status" aria-live="polite"><span className="mr-orch-dot" aria-hidden="true" />{running ? 'Working' : outcome || 'Idle'}{typeof currentRun?.contextTokens === 'number' ? ` \u00b7 ${contextLine({ context: { tokens: currentRun.contextTokens, window: currentRun.contextWindow } })}` : ''}</p> : null}
-      {visibleSent.length > 0 ? (
-        <div className="mr-lane-conv-tool-group" role="region" aria-label="Sent messages">
-          {visibleSent.map((item) => (
-            <div className="mr-orch-line is-owner" key={item.id}>
-              <p className="mr-orch-text">{item.text}</p>
-              <p className="mr-lane-conv-line mono">{statusLabel(item.status)}</p>
-            </div>
-          ))}
-        </div>
-      ) : null}
+      <Composer
+        input={canCompose ? {
+          id: inputId,
+          value: draft,
+          maxLength: MAX_MESSAGE_CHARS,
+          placeholder: onRecipientSend ? (recipientRunning ? `Message ${label}` : `Start ${label} with a message`) : 'Message this running lane',
+          'aria-label': `Message ${label}`,
+          onChange: (event) => setDraft(event.target.value),
+        } : null}
+        onSubmit={(event) => {
+          event.preventDefault()
+          sendMessage(false)
+        }}
+        sending={sending}
+        sendDisabled={!canSend || sending}
+        status={status}
+        tone={tone}
+        context={context}
+        stop={running ? { onClick: () => setConfirmStop(true), disabled: stopping } : null}
+        toolbar={
+          <>
+            {recipientOptions && <RecipientChip value={lane} onChange={onRecipientChange} recipients={recipients} lanes={recipientOptions} />}
+            <RunChip options={options} selected={selected} runState={runState} tone={tone} emptyLabel={emptyRunLabel}
+              onChange={(startedAt) => {
+                wantedRef.current = ''
+                setSelected(startedAt)
+              }} />
+            {canCompose && !recipientRunning && worktreeChoice}
+            {selectedRunning && (
+              <Menu label="Lane message options" items={[
+                { label: 'Send and interrupt', disabled: !canSend || sending, onSelect: () => sendMessage(true) },
+              ]} />
+            )}
+          </>
+        }
+      >
+        {sendError && <p className="mr-orch-error mono" role="alert">{sendError}</p>}
+      </Composer>
     </aside>
   )
 }

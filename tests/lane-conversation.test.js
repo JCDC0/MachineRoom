@@ -182,7 +182,7 @@ describe('the lane conversation view', () => {
     const client = { ...makeClient({ entries: [] }), runs: async () => ({ running: [], recent: [] }) }
     await withDom(async ({ container, root }) => {
       await mount(root, { client, lane: 'opencode', laneName: 'OpenCode', lanes: LANES, initialStartedAt: STARTED })
-      const picker = container.querySelector('.mr-lane-conv-select')
+      const picker = container.querySelector('.mr-composer-toolbar').querySelector('select[aria-label="Run"]')
       expect(picker.hasAttribute('disabled')).toBe(true)
       expect(picker.querySelectorAll('option').map((node) => node.textContent)).toEqual(['No runs'])
       expect(container.textContent).toContain('No runs yet.')
@@ -221,7 +221,7 @@ describe('the lane conversation view', () => {
     const client = makeClient({
       entries: [
         { role: 'prompt', text: 'one\ntwo\nthree\nfour\nfive', at: STARTED },
-        { role: 'agent', text: 'Working on it.', at: STARTED },
+        { role: 'agent', text: '## Working on it\n\n- **Reading**', at: STARTED },
       ],
     })
 
@@ -236,6 +236,8 @@ describe('the lane conversation view', () => {
       })
 
       expect(container.textContent).toContain('one')
+      expect(container.querySelector('h2').textContent).toBe('Working on it')
+      expect(container.querySelector('strong').textContent).toBe('Reading')
       expect(container.textContent).not.toContain('four')
       await click(root, buttonWithText(container, 'Show all'))
       expect(container.textContent).toContain('four')
@@ -266,7 +268,8 @@ describe('the lane conversation view', () => {
         initialStartedAt: STARTED,
       })
 
-      expect(container.textContent).toContain('MACHINEROOM / OPENCODE / run 12:00:00')
+      expect(container.querySelector('.mr-lane-conv-crumb').getAttribute('title')).toContain('MACHINEROOM / OPENCODE')
+      expect(container.querySelector('.mr-composer').querySelector('select[aria-label="Run"]').options.find((option) => option.selected)?.getAttribute('value')).toBe(STARTED)
       const stop = buttonWithText(container, 'Stop')
       expect(stop).not.toBeNull()
       await click(root, stop)
@@ -399,8 +402,8 @@ describe('the lane conversation view', () => {
       })
 
       expect(buttonWithText(container, 'Stop')).toBeNull()
-      expect(container.textContent).toContain('finished')
-      expect(container.textContent).toContain('The run ended.')
+      expect(container.querySelector('.mr-composer').querySelector('[role="status"]').textContent).toBe('Finished · Run 12:00:00')
+      expect(container.querySelector('.mr-lane-conv-log').textContent).not.toContain('The run ended.')
     })
   })
 
@@ -444,7 +447,8 @@ describe('the lane conversation view', () => {
       })
       await settle(20)
       expect(container.querySelector('.mr-lane-conv')).not.toBeNull()
-      expect(container.textContent).toContain('MACHINEROOM / OPENCODE / run 12:00:00')
+      expect(container.querySelector('.mr-lane-conv-crumb').getAttribute('title')).toContain('MACHINEROOM / OPENCODE')
+      expect(container.querySelector('.mr-composer').querySelector('select[aria-label="Run"]').options.find((option) => option.selected)?.getAttribute('value')).toBe(STARTED)
       expect(calls).toEqual([{ lane: 'opencode', startedAt: STARTED }])
     })
   })
@@ -519,7 +523,7 @@ describe('the lane conversation view', () => {
         const sent = () => container.querySelector('[aria-label="Sent messages"]')
         await open('opencode')
         await type(root, container.querySelector('textarea'), text)
-        await click(root, buttonWithText(container, 'Send'))
+        await act(async () => container.querySelector('.mr-composer-box').dispatchEvent({ type: 'submit', bubbles: true, cancelable: true }))
         await open('codex')
         await act(async () => finishSend({ id: 'msg-1' }))
         expect(sent()).toBeNull()

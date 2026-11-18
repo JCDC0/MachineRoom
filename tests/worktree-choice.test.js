@@ -203,7 +203,7 @@ describe('startSplitRun carries the worktree choice', () => {
   })
 })
 
-describe('the chat worktree box', () => {
+describe('the chat worktree switch', () => {
   const LANES = [{ key: 'opencode', name: 'OpenCode', cli: { bin: 'opencode' } }]
 
   function chatClient() {
@@ -221,7 +221,7 @@ describe('the chat worktree box', () => {
     }
   }
 
-  it('sends worktree false to a lane when the box is off', async () => {
+  it('sends worktree false to a lane when the switch is off', async () => {
     const client = chatClient()
     await withDom(async ({ container, root }) => {
       await act(async () => {
@@ -240,15 +240,10 @@ describe('the chat worktree box', () => {
         toSelect.value = 'opencode'
         toSelect.dispatchEvent({ type: 'change', bubbles: true })
       })
-      const label = container
-        .querySelectorAll('label')
-        .find((item) => item.textContent.includes('Separate worktree'))
-      expect(label).not.toBeUndefined()
-      const checkbox = label.querySelector('input')
-      await act(async () => {
-        checkbox.checked = false
-        checkbox.click()
-      })
+      const worktree = container.querySelector('button[role="switch"][aria-label="Worktree"]')
+      expect(worktree.getAttribute('aria-checked')).toBe('true')
+      await act(async () => worktree.click())
+      expect(worktree.getAttribute('aria-checked')).toBe('false')
       await type(root, container.querySelector('.mr-orch-input'), 'Fix tests')
       await act(async () => {
         container.querySelector('.mr-orch-form').dispatchEvent({
@@ -261,7 +256,7 @@ describe('the chat worktree box', () => {
     })
   })
 
-  it('sends worktree true to a lane when the box stays on', async () => {
+  it('sends worktree true to a lane when the switch stays on', async () => {
     const client = chatClient()
     await withDom(async ({ container, root }) => {
       await act(async () => {

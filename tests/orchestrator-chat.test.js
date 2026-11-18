@@ -346,13 +346,13 @@ describe('the permission modes', () => {
         initialChat: chat,
       })
     )
-    expect(one).not.toContain('class="hud-strip-mode"')
+    expect(one).not.toContain('class="ui-chip hud-strip-mode"')
 
     const full = { state: 'idle', mode: 'plan', modes: MODES, messages: [] }
     const readOnly = renderToString(
       createElement(OrchestratorChat, { open: true, inline: true, client: fakeClient(full), initialChat: full })
     )
-    expect(readOnly).not.toContain('class="hud-strip-mode"')
+    expect(readOnly).not.toContain('class="ui-chip hud-strip-mode"')
 
     const ready = renderToString(
       createElement(OrchestratorChat, {
@@ -362,8 +362,8 @@ describe('the permission modes', () => {
         initialChat: full,
       })
     )
-    expect(ready).toContain('class="hud-strip-mode"')
-    expect(ready).toContain('Mode:')
+    expect(ready).toContain('class="ui-chip hud-strip-mode"')
+    expect(ready).toContain('>Mode</span>')
     expect(ready).toContain('Plan')
   })
 
@@ -1233,7 +1233,7 @@ describe('talking to a lane and seeing agent messages', () => {
       await act(async () => {})
       expect(container.textContent).toContain('2026-11-17T10:00:00Z')
       expect(container.querySelector('textarea').getAttribute('placeholder')).toBe('Start OpenCode with a message')
-      expect(buttonWithText(container, 'Send and interrupt')).toBeNull()
+      expect(container.querySelector('button[aria-label="Lane message options"]')).toBeNull()
       await type(root, container.querySelector('textarea'), 'Build it')
       await act(async () => { container.querySelector('form').dispatchEvent({ type: 'submit', bubbles: true, cancelable: true }) })
       expect(calls).toEqual([{ text: 'Build it', options: { id: 'opencode', worktree: true } }])
@@ -1256,9 +1256,10 @@ describe('talking to a lane and seeing agent messages', () => {
       await act(async () => {})
       expect(container.querySelector('textarea').getAttribute('placeholder')).toBe('Message OpenCode')
       await type(root, container.querySelector('textarea'), 'Keep going')
-      await click(root, buttonWithText(container, 'Send'))
+      await act(async () => container.querySelector('.mr-composer-box').dispatchEvent({ type: 'submit', bubbles: true, cancelable: true }))
       await type(root, container.querySelector('textarea'), 'Change course')
-      await click(root, buttonWithText(container, 'Send and interrupt'))
+      await click(root, container.querySelector('button[aria-label="Lane message options"]'))
+      await click(root, document.querySelector('[role="menuitem"]'))
       expect(calls).toEqual([
         { lane: 'opencode', startedAt, text: 'Keep going', interrupt: false },
         { lane: 'opencode', startedAt, text: 'Change course', interrupt: true },
@@ -1352,10 +1353,10 @@ describe('talking to a lane and seeing agent messages', () => {
 
       const showAllBtn = buttonWithText(agentLine, 'Show all')
       expect(showAllBtn).not.toBeNull()
-      expect(agentLine.querySelector('.mr-orch-agent-text').textContent).not.toContain('line 5')
+      expect(agentLine.querySelector('.mr-orch-blocks').textContent).not.toContain('line 5')
 
       await click(root, showAllBtn)
-      expect(agentLine.querySelector('.mr-orch-agent-text').textContent).toContain('line 5')
+      expect(agentLine.querySelector('.mr-orch-blocks').textContent).toContain('line 5')
       expect(buttonWithText(agentLine, 'Show less')).not.toBeNull()
     })
   })
@@ -1392,15 +1393,19 @@ describe('talking to a lane and seeing agent messages', () => {
         await act(async () => {})
 
         expect(container.querySelectorAll('.mr-orch-line.is-agent')).toHaveLength(1)
-        const toggle = buttonWithText(container, 'Agent messages')
-        expect(toggle).not.toBeNull()
-        expect(toggle.getAttribute('aria-pressed')).toBe('true')
+        const menu = container.querySelector('button[aria-label="Composer options"]')
+        await click(root, menu)
+        const toggle = () => document.querySelector('[role="menuitemcheckbox"]')
+        expect(toggle().textContent).toBe('Show agent messages')
+        expect(toggle().getAttribute('aria-checked')).toBe('true')
 
-        await click(root, toggle)
+        await click(root, toggle())
         expect(container.querySelectorAll('.mr-orch-line.is-agent')).toHaveLength(0)
         expect(storageValue).toBe('false')
 
-        await click(root, toggle)
+        await click(root, menu)
+        expect(toggle().getAttribute('aria-checked')).toBe('false')
+        await click(root, toggle())
         expect(container.querySelectorAll('.mr-orch-line.is-agent')).toHaveLength(1)
         expect(storageValue).toBe('true')
       })
@@ -1626,12 +1631,33 @@ describe('chatBlocks', () => {
 })
 
 describe('OrchestratorChat panel', () => {
+  it('renders Markdown for replies and agent messages while keeping HTML and unsafe links inert', () => {
+    const chat = {
+      state: 'idle',
+      messages: [
+        { id: 'm1', from: 'owner', text: '**Continue**' },
+        { id: 'm2', from: 'orchestrator', text: '## Plan\n\n- **Check** [docs](https://example.com/docs)' },
+        { id: 'm3', from: 'agent', text: 'Use [this](javascript:alert(1)) <script>alert(1)</script>.' },
+      ],
+    }
+    const html = renderToString(
+      createElement(OrchestratorChat, { client: fakeClient(chat), initialChat: chat })
+    )
+    expect(html).toContain('<span class="mr-orch-text">**Continue**</span>')
+    expect(html).toContain('<h2 class="mr-orch-block is-heading">Plan</h2>')
+    expect(html).toContain('<strong>Check</strong>')
+    expect(html).toContain('href="https://example.com/docs"')
+    expect(html.replaceAll('<!-- -->', '')).toContain('Use this &lt;script&gt;')
+    expect(html).not.toContain('<script>')
+    expect(html).not.toContain('javascript:')
+  })
+
   it('renders the conversation, the status line and the send box', () => {
     const chat = {
       state: 'working',
       model: 'opus',
       messages: [
-        { id: 'm1', from: 'owner', text: 'Build the settings page.' },
+        { id: 'm1', from: 'owner', text: 'Build the settings page.', work: { state: 'working', steps: [] } },
         { id: 'm2', from: 'orchestrator', text: 'What name?\nLine two' },
         { id: 'm3', from: 'room', text: 'Run x ended: succeeded.' },
       ],
@@ -1647,9 +1673,10 @@ describe('OrchestratorChat panel', () => {
     expect(html).toContain('What name?\nLine two')
     expect(html).toContain('>Working')
     expect(html).toContain('maxLength="8000"')
-    expect(html).toContain('Enter sends. Shift+Enter adds a line.')
-    expect(html).toContain('>Send</button>')
-    expect(html).toContain('>Stop</button>')
+    expect((html.match(/class="mr-orch-status/g) ?? [])).toHaveLength(1)
+    expect(html).not.toContain('class="mr-orch-work')
+    expect(html).toContain('aria-label="Send"')
+    expect(html).toContain('>Stop</span></button>')
     expect(html).not.toContain('>Team</span>')
   })
 
@@ -1685,20 +1712,19 @@ describe('OrchestratorChat panel', () => {
     expect(html).toContain('class="mr-orch is-inline"')
     expect(html).not.toContain('id="hud-orchestrator-chat"')
     expect(html).toContain('Ask the orchestrator anything')
-    expect(html).toContain('class="mr-orch-form hud-lower-input"')
-    expect(html).toContain('class="mr-picker-trigger mono"')
-    expect(html).toContain('title="Refresh models"')
-    expect(html).toContain('class="mr-model-refresh"')
-    expect(html).toContain('class="hud-strip-effort"')
+    expect(html).toContain('class="mr-orch-form mr-composer-box"')
+    expect(html).toContain('class="ui-chip mr-picker-trigger hud-strip-model"')
+    expect(html).not.toContain('title="Refresh models"')
+    expect(html).toContain('class="ui-chip hud-strip-effort"')
     expect(html).toContain('class="hud-strip-compact"')
-    expect(html).toContain('Model:')
+    expect(html).toContain('>Model</span>')
     expect(html).toContain('opus')
-    expect(html).toContain('Effort:')
+    expect(html).toContain('>Effort</span>')
     expect(html).toContain('high')
-    expect(html).toContain('Context size 96k / 200k')
+    expect(html).toContain('Context 96k / 200k')
     expect(html).toContain('class="mr-orch-line is-owner"')
     expect(html).toContain('class="mr-orch-block is-heading"')
-    expect(html).toContain('>Stop</button>')
+    expect(html).toContain('>Stop</span></button>')
     expect(html).toContain('aria-label="Send"')
   })
 
@@ -1747,8 +1773,8 @@ describe('OrchestratorChat panel', () => {
         ],
       })
     )
-    expect(html).toContain('<span class="hud-lower-picker-value mono" title="high">high</span>')
-    expect(html).toContain('<span class="hud-lower-picker-value mono" title="Plan">Plan</span>')
+    expect(html).toContain('title="high" class="ui-chip hud-strip-effort"')
+    expect(html).toContain('title="Plan" class="ui-chip hud-strip-mode"')
   })
 
   it('forgets a sub that left the list and reads it again when it comes back', async () => {
@@ -2023,7 +2049,8 @@ describe('OrchestratorChat panel', () => {
       })
       expect(container.querySelector('.strip-pop.is-effort')).toBeNull()
 
-      await click(root, container.querySelector('.hud-strip-compact'))
+      await click(root, container.querySelector('button[aria-label="Composer options"]'))
+      await click(root, dom.body.querySelector('[role="menuitem"]'))
       expect(container.querySelector('.strip-pop.is-compact')).not.toBeNull()
       const compactEscape = { type: 'keydown', key: 'Escape', bubbles: true, cancelable: true }
       await act(async () => {
@@ -2204,9 +2231,9 @@ describe('OrchestratorChat panel', () => {
     expect(html).toContain('>Team</span>')
     expect(html.indexOf('>Team<')).toBeGreaterThan(html.indexOf('>Bridge<'))
     expect(html).toContain('Every orchestrator')
-    expect(html).toContain('<button type="button" class="mr-orch-team-row is-owner"')
-    expect(html).toContain('<button type="button" class="mr-orch-team-row is-room"')
-    expect(html).toContain('<button type="button" class="mr-orch-team-row is-sub"')
+    expect(html).toContain('<div class="mr-orch-team-row is-owner"')
+    expect(html).toContain('<div class="mr-orch-team-row is-room"')
+    expect(html).toContain('<div class="mr-orch-team-row is-sub"')
     expect(html).toContain('>main</span>')
     expect(html).toContain('>owner</span>')
     expect(html).toContain('>room</span>')
@@ -2271,7 +2298,7 @@ describe('Hud and Waiting with an orchestrator', () => {
       expect(html).toContain('class="hud-lower-crumb mono"')
       expect(html).toContain('class="mr-orch is-inline"')
       expect(html).toContain('Ask the orchestrator anything')
-      expect(html).toContain('class="mr-picker-trigger mono"')
+      expect(html).toContain('class="ui-chip mr-picker-trigger hud-strip-model"')
       expect(html).toContain('class="hud-strip-compact"')
       expect(html).not.toContain('id="hud-orchestrator-chat"')
       expect(html).not.toContain('class="hud-dock"')
