@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Three findings, R56-1 to R56-3; fixed by P555.
 - Small controls get a 24 px hit area through one shared rule; the lane checkbox is 24 px.
 - Needs you leads Dispatch; projects lead the Projects tab; the dock reads Open address; the console is white.
 - D4-1 to D4-21 fixed in LIVE, ROOM, CODE and ACTIVITIES; the repeated chat block removed.
