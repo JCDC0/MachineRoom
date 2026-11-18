@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Review 61 of P602 and P603: ten findings, the four cache ones fixed by P605 (P604).
 - The run and task routes notice a git init, a moved or recreated folder and a restored run log, and their path caches expire and stay bounded (P605).
 - The control routes stay fast on a large run log (P602).
 - Review 60 fixes: a lane switch keeps sent messages, Retry and a failed read say so (P595).
