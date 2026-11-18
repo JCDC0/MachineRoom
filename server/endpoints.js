@@ -370,9 +370,15 @@ export function createEndpointsApi(options = {}) {
   const fetchImpl = options.fetchImpl ?? fetch
   const timeoutMs = options.timeoutMs ?? MODELS_TIMEOUT_MS
   const readKey = options.readKey ?? readEndpointKey
+  const now = options.now ?? Date.now
 
   const pending = new Map()
   const failed = new Map()
+  const incomplete = new Map()
+
+  function hasWindow(details, id) {
+    return details.some((detail) => detail.id === id && Number.isInteger(detail.contextLength) && detail.contextLength > 0)
+  }
 
   function saveFetched(endpoint, fetched, preserveModels = false) {
     const current = readEndpoints(runsDir)
@@ -397,9 +403,16 @@ export function createEndpointsApi(options = {}) {
     const endpoint = endpoints.find((entry) => entry.name === endpointName) ?? endpoints.find((entry) => model.startsWith(`${entry.name}/`))
     if (!endpoint) return Promise.resolve(false)
     const id = model.startsWith(`${endpoint.name}/`) ? model.slice(endpoint.name.length + 1) : model
-    if (endpoint.modelDetails.some((detail) => detail.id === id)) return Promise.resolve(false)
-    if (pending.has(endpoint.name)) return pending.get(endpoint.name)
-    if ((failed.get(endpoint.name) ?? 0) > Date.now()) return Promise.resolve(false)
+    if (hasWindow(endpoint.modelDetails, id)) return Promise.resolve(false)
+    const modelKey = JSON.stringify([endpoint.name, id])
+    if ((incomplete.get(modelKey) ?? 0) > now()) return Promise.resolve(false)
+    if ((failed.get(endpoint.name) ?? 0) > now()) return Promise.resolve(false)
+    const check = (work) => work.then((success) => {
+      const current = readEndpoints(runsDir).find((entry) => entry.name === endpoint.name)
+      if (success && !hasWindow(current?.modelDetails ?? [], id)) incomplete.set(modelKey, now() + 600000)
+      return success
+    })
+    if (pending.has(endpoint.name)) return check(pending.get(endpoint.name))
     const work = (async () => {
       try {
         const key = endpoint.keyName ? await readKey(runsDir, endpoint.keyName) : ''
@@ -409,14 +422,14 @@ export function createEndpointsApi(options = {}) {
         if (typeof notify === 'function') { notify({ topic: 'endpoints' }); notify({ topic: 'family' }) }
         return true
       } catch {
-        failed.set(endpoint.name, Date.now() + 600000)
+        failed.set(endpoint.name, now() + 600000)
         return false
       } finally {
         pending.delete(endpoint.name)
       }
     })()
     pending.set(endpoint.name, work)
-    return work
+    return check(work)
   }
 
   async function handle(req, res, url) {
