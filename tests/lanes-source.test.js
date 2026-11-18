@@ -101,6 +101,15 @@ describe('lane agents', () => {
     await waitFor(() => source.openRuns()[0]?.contextTokens === 123, { what: 'new assistant usage' })
   })
 
+  it('reads a Claude result as context before any assistant line', async () => {
+    const runs = tempDir()
+    const lanes = { claude: { name: 'Claude', cli: { harness: 'claude' } } }
+    const { source } = startSource({ runs, lanes })
+    writeFileSync(join(runs, 'claude-P1-20261112-220000.log'), `${JSON.stringify({ type: 'result', usage: { input_tokens: 500 } })}
+`)
+    await waitFor(() => source.openRuns()[0]?.contextTokens === 500, { what: 'result before assistant' })
+  })
+
   it('keeps result iteration usage ahead of later totals when no assistant usage exists', async () => {
     const runs = tempDir()
     const lanes = { claude: { name: 'Claude', cli: { harness: 'claude' } } }
