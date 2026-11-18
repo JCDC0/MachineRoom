@@ -13,7 +13,9 @@ import { childEnvironment } from '../src/briefs/run.js'
 import { callMcpTool, listAllMcpTools, mcpResultText, mcpRunsDir } from './mcp-bridge.mjs'
 
 const DEFAULT_URL = 'https://openrouter.ai/api/v1'
-const FETCH_TIMEOUT_MS = 120000
+const FETCH_TIMEOUT_MS = 300000
+const FETCH_TIMEOUT_MIN_MS = 10000
+const FETCH_TIMEOUT_MAX_MS = 1800000
 const SHELL_TIMEOUT_MS = 120000
 const SHELL_TIMEOUT_MAX_S = 600
 const SHELL_HEAD_LIMIT = 2000
@@ -1140,18 +1142,25 @@ function retryDelayMs(attempt, response) {
   return Math.min(delay, RETRY_MAX_MS)
 }
 
+export function requestTimeoutMs(env = process.env) {
+  const text = env.MR_AGENT_REQUEST_TIMEOUT_MS
+  const value = Number(text)
+  const valid = typeof text === 'string' && /^\d+$/.test(text.trim()) && value >= FETCH_TIMEOUT_MIN_MS && value <= FETCH_TIMEOUT_MAX_MS
+  return valid ? value : FETCH_TIMEOUT_MS
+}
+
 function sleep(ms) {
   return new Promise((done) => setTimeout(done, ms))
 }
 
-async function post(url, key, payload, { onDamaged, costLimit, signal } = {}) {
+export async function post(url, key, payload, { onDamaged, costLimit, signal } = {}) {
   const headers = { 'content-type': 'application/json' }
   if (key) headers.authorization = `Bearer ${key}`
-  const timeout = AbortSignal.timeout(FETCH_TIMEOUT_MS)
-  const requestSignal = signal ? AbortSignal.any([timeout, signal]) : timeout
   let damagedRetries = 0
   for (let attempt = 0; attempt <= RETRY_LIMIT; attempt += 1) {
     let response
+    const timeout = AbortSignal.timeout(requestTimeoutMs())
+    const requestSignal = signal ? AbortSignal.any([timeout, signal]) : timeout
     try {
       response = await fetch(`${url}/chat/completions`, {
         method: 'POST',
