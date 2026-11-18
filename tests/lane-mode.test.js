@@ -53,7 +53,7 @@ describe('a lane mode leaves the command line alone', () => {
   it('builds the Codex command with no mode', () => {
     expect(commandFor({ lane: lanes.codex, prompt, env, title })).toEqual({
       file: 'codex',
-      args: ['exec', '--json', '--model', 'gpt-6.1-terra', '--sandbox', 'workspace-write', '--skip-git-repo-check', '-c', 'model_reasoning_effort=high', prompt],
+      args: ['exec', '--json', '--model', 'gpt-6.2-sol', '--sandbox', 'workspace-write', '--skip-git-repo-check', '-c', 'model_reasoning_effort=high', prompt],
       cwd: lanes.codex.worktree,
     })
   })
@@ -88,7 +88,7 @@ describe('a lane mode reaches the harness', () => {
 
   it('gives a Codex lane in plan mode a read-only sandbox', () => {
     expect(commandArgs(lanes.codex, { ...lanes.codex.cli, mode: 'plan' })).toEqual([
-      'exec', '--json', '--model', 'gpt-6.1-terra', '--sandbox', 'read-only', '--skip-git-repo-check', '-c', 'model_reasoning_effort=high', prompt,
+      'exec', '--json', '--model', 'gpt-6.2-sol', '--sandbox', 'read-only', '--skip-git-repo-check', '-c', 'model_reasoning_effort=high', prompt,
     ])
   })
 
