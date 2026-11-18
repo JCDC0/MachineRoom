@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Sonnet review.
 - Sonnet.
 - Sonnet did P559 in one run.
 - Reviews reads `1 lane has nothing to review` for one folded lane (P563).
