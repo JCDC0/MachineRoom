@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { Chip } from './controls.jsx'
 import ModelRefresh from './ModelRefresh.jsx'
 import { modelName, normalizeModelChoices } from './modelRefresh.js'
 import { readStorage, writeStorage } from '../storage.js'
@@ -384,9 +385,13 @@ export default function ModelPicker({
 
   return (
     <div className={`mr-picker mr-model-field${inline ? ' is-inline' : ''}`} onKeyDown={onRootKey}>
-      {label ? <span className="mr-side-field-label mono">{label}</span> : null}
+      {!inline && label ? <span className="mr-side-field-label mono">{label}</span> : null}
       <div className="mr-model-row">
-        <button
+        {inline ? (
+          <Chip id={id} ref={triggerRef} className="mr-picker-trigger hud-strip-model" label={label} value={triggerText}
+            aria-label={ariaLabel} aria-haspopup="listbox" open={open} title={triggerText} disabled={disabled}
+            onClick={() => (open ? close() : setOpen(true))} />
+        ) : <button
           type="button"
           id={id}
           ref={triggerRef}
@@ -404,8 +409,8 @@ export default function ModelPicker({
               <path d="M1 1l4 4 4-4" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
             </svg>
           </span>
-        </button>
-        <ModelRefresh onRefresh={onRefresh} loading={loading} disabled={disabled || !canRefresh} />
+        </button>}
+        {!inline && <ModelRefresh onRefresh={onRefresh} loading={loading} disabled={disabled || !canRefresh} />}
       </div>
       {open ? (
         <div className={`mr-picker-pop${inline ? ' is-upward' : ''}`} role="dialog" aria-label={ariaLabel}>
@@ -433,6 +438,7 @@ export default function ModelPicker({
                 </option>
               ))}
             </select>
+            {inline && <ModelRefresh onRefresh={onRefresh} loading={loading} disabled={disabled || !canRefresh} />}
           </div>
           <div className="mr-picker-list" role="listbox" aria-label={ariaLabel}>
             {defaultRow ? (

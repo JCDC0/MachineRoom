@@ -26,13 +26,20 @@ describe('chat picker placement and saves', () => {
     })
   })
 
-  it('places the label inline and opens upward only when requested', async () => {
+  it('uses a shared chip and moves Refresh inside the upward picker in chat', async () => {
+    const fullName = 'Claude Opus with an extended context window'
     await withDom(async ({ container, root }) => {
       for (const inline of [undefined, true]) {
-        await act(async () => root.render(createElement(ModelPicker, { inline, choices: ['opus'], value: 'opus' })))
+        await act(async () => root.render(createElement(ModelPicker, {
+          inline, choices: [{ id: 'opus', label: fullName }], value: 'opus',
+        })))
         expect(Boolean(container.querySelector('.mr-picker.is-inline'))).toBe(Boolean(inline))
+        expect(Boolean(container.querySelector('.mr-picker-trigger.ui-chip'))).toBe(Boolean(inline))
+        expect(container.querySelector('.mr-picker-trigger').getAttribute('title')).toBe(fullName)
+        expect(Boolean(container.querySelector('[aria-label="Refresh models"]'))).toBe(!inline)
         await click(root, container.querySelector('.mr-picker-trigger'))
         expect(Boolean(container.querySelector('.mr-picker-pop.is-upward'))).toBe(Boolean(inline))
+        expect(Boolean(container.querySelector('.mr-picker-pop').querySelector('[aria-label="Refresh models"]'))).toBe(Boolean(inline))
         await click(root, container.querySelector('.mr-picker-trigger'))
       }
     })

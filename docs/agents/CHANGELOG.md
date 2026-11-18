@@ -7,6 +7,7 @@
 - GPT-6.2 Sol.
 - GPT-6.2 Sol.
 - GPT-6.2 Sol.
+- GPT-6.2 Sol.
 - Sonnet.
 - GPT-6.2 Sol.
 - GPT-6.2 Sol.

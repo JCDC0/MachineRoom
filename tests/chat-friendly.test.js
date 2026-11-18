@@ -106,7 +106,7 @@ describe('friendly chat forms', () => {
         ],
       })
     )
-    expect(html).not.toContain('class="hud-strip-effort"')
+    expect(html).not.toContain('class="ui-chip hud-strip-effort"')
     expect(html).not.toContain('Effort:')
   })
 })

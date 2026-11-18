@@ -12,10 +12,11 @@ import { chatFileFor } from '../server/orchestrator.js'
 import { gitPath } from '../server/programPath.js'
 import { clearRunsCache } from '../server/runs.js'
 import LaneConversation from '../src/ui/LaneConversation.jsx'
+import { runClock } from '../src/ui/laneConversation.js'
 import { getJson, waitFor } from './helpers/bridge.js'
 import { makeTempDir, removeTempDir } from './helpers/tempRoot.js'
 import { slowMs } from './helpers/timeout.js'
-import { buttonWithText, click, settle, type, withDom } from './helpers/uiDom.js'
+import { click, settle, type, withDom } from './helpers/uiDom.js'
 
 const REPO_ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)))
 const GIT_IDENTITY = {
@@ -520,7 +521,9 @@ describe('LaneConversation message box and status updates', () => {
         startedAt,
         harness: 'opencode',
         running: startedAt === STARTED,
-        entries: [{ role: 'agent', text: 'Working.', at: startedAt }],
+        entries: startedAt === STARTED
+          ? [{ role: 'agent', text: 'Working.', at: startedAt }]
+          : [{ role: 'result', text: '| Command | Result |\n| --- | --- |\n| `npm run build` | **Passed** |', at: startedAt }],
       }),
       sendLaneMessage: async () => ({ id: 'msg-1' }),
       laneMessageStatus: async () => ({ id: 'msg-1', status: 'queued', at: STARTED }),
@@ -544,19 +547,25 @@ describe('LaneConversation message box and status updates', () => {
       await settle(15)
 
       expect(container.querySelector('textarea')).toBeNull()
-      expect(buttonWithText(container, 'Send')).toBeNull()
-      expect(buttonWithText(container, 'Send and interrupt')).toBeNull()
+      expect(container.querySelector('button[aria-label="Send"]')).toBeNull()
+      expect(container.querySelector('button[aria-label="Lane message options"]')).toBeNull()
+      expect(container.querySelector('table').querySelector('td').textContent).toBe('npm run build')
+      const hint = container.querySelector('.mr-composer-box').querySelector('.mr-composer-hint')
+      expect(hint?.textContent.trim()).toBe(
+        `OpenCode is working on run ${runClock(STARTED)}. Pick that run to message it.`
+      )
 
       await act(async () => {
-        const picker = container.querySelector('.mr-lane-conv-select')
+        const picker = container.querySelector('select[aria-label="Run"]')
         picker.value = STARTED
         picker.dispatchEvent({ type: 'change', bubbles: true })
       })
       await settle(15)
 
       expect(container.querySelector('textarea')).not.toBeNull()
-      expect(buttonWithText(container, 'Send')).not.toBeNull()
-      expect(buttonWithText(container, 'Send and interrupt')).not.toBeNull()
+      expect(container.querySelector('button[aria-label="Send"]')).not.toBeNull()
+      expect(container.querySelector('button[aria-label="Lane message options"]')).not.toBeNull()
+      expect(container.querySelector('.mr-composer-hint')).toBeNull()
     })
   })
 
@@ -612,7 +621,7 @@ describe('LaneConversation message box and status updates', () => {
 
         const input = container.querySelector('textarea')
         await type(root, input, 'Check the header.')
-        await click(root, buttonWithText(container, 'Send'))
+        await act(async () => container.querySelector('.mr-composer-box').dispatchEvent({ type: 'submit', bubbles: true, cancelable: true }))
         await settle(10)
 
         expect(sentCalls).toEqual([{ lane: 'opencode', startedAt: STARTED, text: 'Check the header.', interrupt: false }])
@@ -650,7 +659,7 @@ describe('LaneConversation message box and status updates', () => {
         expect(statusCalls).toHaveLength(4)
         expect(container.textContent).toContain('Interrupted the run')
         expect(container.textContent).toContain('Check the header.')
-        expect(buttonWithText(container, 'Send')).toBeNull()
+        expect(container.querySelector('button[aria-label="Send"]')).toBeNull()
 
         await act(async () => {
           vi.advanceTimersByTime(5000)
@@ -701,7 +710,8 @@ describe('LaneConversation message box and status updates', () => {
       await settle(15)
 
       await type(root, container.querySelector('textarea'), 'Switch to helper.')
-      await click(root, buttonWithText(container, 'Send and interrupt'))
+      await click(root, container.querySelector('button[aria-label="Lane message options"]'))
+      await click(root, document.querySelector('[role="menuitem"]'))
       await settle(15)
 
       expect(sentCalls).toEqual([{ lane: 'opencode', startedAt: STARTED, text: 'Switch to helper.', interrupt: true }])
@@ -747,7 +757,7 @@ describe('LaneConversation message box and status updates', () => {
 
       const input = container.querySelector('textarea')
       await type(root, input, 'Hold on.')
-      await click(root, buttonWithText(container, 'Send'))
+      await act(async () => container.querySelector('.mr-composer-box').dispatchEvent({ type: 'submit', bubbles: true, cancelable: true }))
       await settle(15)
 
       expect(input.value).toBe('Hold on.')
