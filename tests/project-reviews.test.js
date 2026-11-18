@@ -885,7 +885,7 @@ describe('review routes on another project', () => {
       )
       await settle(0)
       expect(container.querySelector('.review-merged-banner')?.textContent).toBe(
-        `Merged as ${laneHead.slice(0, 7)}.`
+        `opencode: Merged as ${laneHead.slice(0, 7)}.`
       )
       expect(git(project, ['rev-parse', 'refs/heads/trunk']).trim()).toBe(laneHead)
     })

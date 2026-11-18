@@ -1,7 +1,7 @@
 import { writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { refuseRunningLane } from '../scripts/run-lane.mjs'
+import { refuseRunningLane, stopLane } from '../scripts/run-lane.mjs'
 import { laneStopProblem } from '../src/briefs/run.js'
 import { makeTempDir, removeTempDir } from './helpers/tempRoot.js'
 
@@ -186,6 +186,24 @@ describe('refuseRunningLane leftover recheck', () => {
     )
     expect(probe.calls()).toBe(2)
     expect(probe.waits).toEqual([500])
+  })
+
+  it('lets stop find the same leftover after a start refusal without a lock', async () => {
+    const runs = tempRuns()
+    const worktree = join(runs, 'project', '.worktrees', 'opencode')
+    const row = { pid: 4141, ppid: 1, created: 2000, command: `node.exe ${join(worktree, 'worker.js')}` }
+    const list = () => [row]
+    vi.stubEnv('MACHINEROOM_RUNS', runs)
+    await expect(refuseRunningLane('opencode', worktree, runs, { list, wait: () => {} })).rejects.toThrow('leftover process 4141')
+    const kill = vi.fn(() => true)
+    const print = vi.spyOn(console, 'log').mockImplementation(() => {})
+    try {
+      expect(stopLane('opencode', { list, kill })).toBe(0)
+      expect(kill).toHaveBeenCalledExactlyOnceWith({ pid: 4141 })
+      expect(print).toHaveBeenCalledWith('Stopped 1 leftover process for the opencode lane.')
+    } finally {
+      print.mockRestore()
+    }
   })
 })
 

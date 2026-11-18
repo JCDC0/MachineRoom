@@ -1,7 +1,10 @@
 import { spawn, spawnSync } from 'node:child_process'
+import { readdirSync, readFileSync } from 'node:fs'
+import { createInterface } from 'node:readline'
 
 export const KILL_TIMEOUT_MS = 10000
 export const LIST_TIMEOUT_MS = 20000
+const SAMPLE_MS = 100
 
 export const WINDOWS_LIST_COMMAND = 'Get-CimInstance Win32_Process | Select-Object ProcessId,ParentProcessId,CommandLine,CreationDate | ConvertTo-Json -Compress'
 
@@ -13,7 +16,7 @@ export function processListCommand(platform = process.platform) {
   if (platform === 'win32') {
     return { file: 'powershell', args: ['-NoProfile', '-Command', WINDOWS_LIST_COMMAND] }
   }
-  return { file: 'ps', args: ['-eo', 'pid,ppid,args'] }
+  return { file: 'ps', args: ['-eo', platform === 'linux' ? 'pid,ppid,args' : 'pid,ppid,lstart,args'] }
 }
 
 function parseCreationDate(value) {
@@ -57,12 +60,13 @@ function windowsRows(text) {
   return rows
 }
 
-function psRows(text) {
+function psRows(text, platform) {
   const rows = []
   for (const line of String(text ?? '').split(/\r?\n/)) {
     const match = /^\s*(\d+)\s+(\d+)\s+(.*)$/.exec(line)
     if (!match) continue
-    const row = processRow(Number(match[1]), Number(match[2]), match[3])
+    const dated = platform !== 'linux' && /^(\S+\s+\S+\s+\d+\s+\d{2}:\d{2}:\d{2}\s+\d{4})(?:\s+(.*))?$/.exec(match[3])
+    const row = processRow(Number(match[1]), Number(match[2]), dated ? dated[2] : match[3], dated ? parseCreationDate(`${dated[1]} UTC`) : null)
     if (row) rows.push(row)
   }
   return rows
@@ -72,19 +76,63 @@ export function parseProcessList(text, { platform = process.platform } = {}) {
   const raw = String(text ?? '').trim()
   if (raw === '') return []
   if (platform === 'win32' || raw.startsWith('[') || raw.startsWith('{')) return windowsRows(raw)
-  return psRows(raw)
+  return psRows(raw, platform)
 }
 
-export function listProcesses({ platform = process.platform, run = spawnSync, timeout = LIST_TIMEOUT_MS } = {}) {
-  const command = processListCommand(platform)
+function linuxProcess(pid) {
+  try {
+    const stat = readFileSync(`/proc/${pid}/stat`, 'utf8')
+    const fields = stat.slice(stat.lastIndexOf(')') + 2).split(' ')
+    return processRow(pid, Number(fields[1]), '', Number(fields[19]))
+  } catch {}
+  return null
+}
+
+export function listProcesses({ platform = process.platform, run = spawnSync, timeout = LIST_TIMEOUT_MS, commands = true } = {}) {
+  if (!commands && platform === 'linux') {
+    try {
+      return readdirSync('/proc').filter((name) => /^\d+$/.test(name)).map((name) => linuxProcess(Number(name))).filter(Boolean)
+    } catch {
+      return []
+    }
+  }
+  const command = commands || platform === 'win32' ? processListCommand(platform) : { file: 'ps', args: ['-eo', 'pid,ppid,lstart'] }
   const result = run(command.file, command.args, {
     encoding: 'utf8',
     windowsHide: true,
     timeout,
     maxBuffer: 32 * 1024 * 1024,
+    ...(platform !== 'win32' ? { env: { ...process.env, LC_ALL: 'C', TZ: 'UTC' } } : {}),
   })
   if (result?.error || result?.status !== 0) return []
-  return parseProcessList(String(result.stdout ?? ''), { platform })
+  const rows = parseProcessList(String(result.stdout ?? ''), { platform })
+  if (platform === 'linux') {
+    for (const row of rows) {
+      const current = linuxProcess(row.pid)
+      if (current?.ppid === row.ppid && Number.isFinite(current.created)) row.created = current.created
+    }
+  }
+  return rows
+}
+
+export function sampleProcesses(onSample, platform = process.platform) {
+  if (platform !== 'win32') {
+    const timer = setInterval(() => onSample(listProcesses({ platform, commands: false })), SAMPLE_MS)
+    return () => clearInterval(timer)
+  }
+  const command = `while (Get-Process -Id ${process.pid} -ErrorAction SilentlyContinue) {
+    $rows = @(Get-CimInstance -Query 'SELECT ProcessId, ParentProcessId, CreationDate FROM Win32_Process' -ErrorAction Stop | Select-Object ProcessId,ParentProcessId,CreationDate)
+    ConvertTo-Json -InputObject $rows -Compress
+    Start-Sleep -Milliseconds ${SAMPLE_MS}
+  }`
+  const sampler = spawn('powershell', ['-NoProfile', '-Command', command], { windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'] })
+  sampler.on('error', () => {})
+  const lines = createInterface({ input: sampler.stdout })
+  lines.on('line', (line) => onSample(windowsRows(line)))
+  return () => {
+    lines.close()
+    sampler.kill()
+  }
 }
 
 function processKey(command, platform) {
@@ -145,7 +193,7 @@ export function descendantProcesses(processes, { rootPid = 0, ownPid = 0, exclud
   return found.sort((left, right) => left.pid - right.pid)
 }
 
-export function leftoverProcesses(processes, { childPid = 0, worktree = '', ownPid = 0, excludePids = [], platform = process.platform } = {}) {
+export function leftoverProcesses(processes, { childPid = 0, childCreated, recorded = new Map(), worktree = '', worktrees = [], ownPid = 0, excludePids = [], platform = process.platform } = {}) {
   const list = (Array.isArray(processes) ? processes : [])
     .filter((item) => Number.isInteger(item?.pid) && item.pid > 0 && Number.isInteger(item?.ppid))
   const byPid = new Map(list.map((item) => [item.pid, item]))
@@ -154,13 +202,20 @@ export function leftoverProcesses(processes, { childPid = 0, worktree = '', ownP
   for (const pid of Array.isArray(excludePids) ? excludePids : []) {
     if (Number.isInteger(pid) && pid > 0) excluded.add(pid)
   }
-  const folder = folderKey(worktree, platform)
+  const folders = [worktree, ...worktrees].map((folder) => folderKey(folder, platform)).filter(Boolean)
+  const roots = new Set()
+  if (child && (!byPid.has(child) || childCreated === undefined || byPid.get(child).created === childCreated)) roots.add(child)
+  for (const [pid, created] of recorded) {
+    if (Number.isFinite(created) && byPid.get(pid)?.created === created) roots.add(pid)
+  }
   const found = []
   for (const item of list) {
     if (item.pid === child) continue
     if (excluded.has(item.pid)) continue
-    const related = child > 0 && parentChain(byPid, item.pid).has(child)
-    const named = namesFolder(processKey(item.command, platform), folder)
+    const chain = roots.size > 0 ? parentChain(byPid, item.pid) : []
+    const related = [...chain].some((pid) => roots.has(pid))
+    if (!related && recorded.has(item.pid)) continue
+    const named = folders.some((folder) => namesFolder(processKey(item.command, platform), folder))
     if (related || named) found.push(item)
   }
   return found.sort((left, right) => left.pid - right.pid)

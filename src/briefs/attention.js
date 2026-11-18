@@ -36,7 +36,7 @@ function workLabel(record) {
   return firstTaskLine(record?.task)
 }
 
-function backupRanLater(record, lane, records) {
+export function backupRanLater(record, lane, records) {
   const failover = record?.failover
   if (!failover || typeof failover !== 'object' || Array.isArray(failover)) return false
   if (failover.refused === true) return false
@@ -62,10 +62,13 @@ function attentionText(record, lane) {
   const repeated = text(record.stopReason) === REPEATED_FAILURE ||
     (typeof record.repeatedFailure?.tool === 'string' && Number.isInteger(record.repeatedFailure.count) && record.repeatedFailure.count >= 5)
   if (!repeated && record.startFailed !== true && (typeof record.exitCode !== 'number' || !Number.isFinite(record.exitCode) || record.exitCode === 0)) return ''
-  return `${lane} failed on ${workLabel(record) || 'unknown work'}`
+  const work = workLabel(record) || 'unknown work'
+  if (record.startFailed === true) return `${lane} could not start ${work}`
+  if (repeated) return `${lane} stopped on ${work}: the same call failed 5 times`
+  return `${lane} failed on ${work}`
 }
 
-function succeededLater(record, records) {
+export function succeededLater(record, records) {
   const failedAt = startTime(record)
   if (failedAt === null) return false
   const briefs = Array.isArray(record.briefs) ? record.briefs.map(text).filter(Boolean) : []

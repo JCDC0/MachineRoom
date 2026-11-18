@@ -9,13 +9,13 @@ import { fileURLToPath } from 'node:url'
 import { branchFor, briefFileList, buildPrompt, nextVersion, parseBriefs, parseRules } from '../src/briefs/briefs.js'
 import { commitAuthorFor, formatQueueSummary, parseQueue, parseQueueArgs, runQueue } from '../src/briefs/queue.js'
 import { maskKeys } from '../src/briefs/audit.js'
-import { briefProblems, briefWorktreeProblems, checkCommandLines, checkCommandProblem, childEnvironment, commandFor, createLaneLog, DEFAULT_MINUTES, fallbackProblem, failoverKind, filterRunsSince, formatOutcomes, formatStats, formatSummary, interruptSenderFrom, laneCommandProblem, laneLockStartedAt, laneLockText, laneModeProblem, laneStats, laneStopProblem, laneWithOverrides, limitedFor, maskProfilePaths, maskedQueueTasks, ORCHESTRATOR_LANE_PROBLEM, parseRunArgs, projectProblems, projectRunGit, readinessLine, retryStartProblem, runListLine, runRecord, sessionToolLines, splitCheckCommand, startFailureText, summarizeRun, unattendedPrompt, worktreeFor, WORKTREES_FOLDER } from '../src/briefs/run.js'
+import { briefProblems, briefWorktreeProblems, checkCommandLines, checkCommandProblem, childEnvironment, commandFor, continueFromProblem, createLaneLog, DEFAULT_MINUTES, fallbackProblem, failoverKind, filterRunsSince, formatOutcomes, formatStats, formatSummary, interruptSenderFrom, laneCommandProblem, laneLockLog, laneLockStartedAt, laneLockText, laneModeProblem, laneStats, laneStopProblem, laneWithOverrides, limitedFor, maskProfilePaths, maskedQueueTasks, ORCHESTRATOR_LANE_PROBLEM, parseRunArgs, projectProblems, projectRunGit, readinessLine, retryStartProblem, runListLine, runRecord, sessionToolLines, splitCheckCommand, startFailureText, summarizeRun, unattendedPrompt, worktreeFor, WORKTREES_FOLDER } from '../src/briefs/run.js'
 import { outcomeTable } from '../server/outcomes.js'
 import { claudeProjectSlug } from '../server/claude-sessions.js'
 import { codexThreadId, findCodexRollout, quotaForRun, readCodexQuota } from '../server/codex-rollout.js'
 export { codexThreadId, quotaForRun, readCodexQuota } from '../server/codex-rollout.js'
 import { readMainSubjectsSync } from '../server/runs.js'
-import { isLockHolderStale, killTree, descendantProcesses, leftoverProcesses, listProcesses } from '../server/processTree.js'
+import { isLockHolderStale, killTree, descendantProcesses, leftoverProcesses, listProcesses, sampleProcesses } from '../server/processTree.js'
 import { codexProgramFor } from '../server/agents-config.js'
 import { HARNESS_OFF_PROBLEM, readHarnessSettings, worktreeCopiesProblem, worktreeSetupOf } from '../server/harness-settings.js'
 import { codexHarness } from '../src/harnesses/codex.js'
@@ -80,6 +80,7 @@ export function appendRunRecord(record, { env = process.env, print = console.log
       }
     }
     try {
+      if (record?.stopReason === 'lost' && findRunRecordByName(readRecords(targetFile), runNameOfRecord(record))) return true
       const line = typeof record === 'string' ? record : JSON.stringify(record)
       let prefix = ''
       if (existsSync(targetFile)) {
@@ -177,23 +178,37 @@ function stopProcess(pid, { kill = killTree, alive = processAlive } = {}) {
   return !alive(pid)
 }
 
-export function stopLeftovers({ worktree, childPid = 0, label = 'leftover', excludePids = [], list = listProcesses, kill = killTree, alive = processAlive, processes = null, current = null, snapshotOnly = false } = {}) {
-  const folder = String(worktree ?? '').trim()
-  if (!folder && !(childPid > 0)) return { found: 0, stopped: 0, failed: 0 }
-  const snapshot = Array.isArray(processes) ? processes : null
-  if (snapshotOnly && (snapshot === null || snapshot.length === 0)) {
-    console.log(`${label}: no process snapshot, so nothing was stopped by worktree`)
-    return { found: 0, stopped: 0, failed: 0 }
+function killProcess({ pid }) {
+  try {
+    return process.kill(pid, 'SIGKILL')
+  } catch {
+    return false
   }
-  const found = leftoverProcesses(snapshot ?? list(), { childPid, worktree: folder, ownPid: process.pid, excludePids })
+}
+
+export function stopLeftovers({ worktree, worktrees = [], childPid = 0, childCreated, recorded = new Map(), label = 'leftover', excludePids = [], platform = process.platform, list = listProcesses, kill = killProcess, alive = processAlive, processes = null, current = null, snapshotOnly = false } = {}) {
+  if (!worktree && !worktrees.some(Boolean) && !(childPid > 0) && recorded.size === 0) return { found: 0, stopped: 0, failed: 0 }
+  const snapshot = processes ?? (snapshotOnly ? [] : list())
+  if (snapshot.length === 0) {
+    if (snapshotOnly) console.log(`${label}: no process snapshot, so nothing was stopped by worktree`)
+    const failed = [...recorded.keys()].filter((pid) => alive(pid)).length
+    if (failed > 0) console.log(`${label}: could not verify ${failed} recorded ${failed === 1 ? 'process' : 'processes'}`)
+    return { found: 0, stopped: 0, failed }
+  }
+  const found = leftoverProcesses(snapshot, { childPid, childCreated, recorded, worktree, worktrees, ownPid: process.pid, excludePids, platform })
   if (found.length === 0) return { found: 0, stopped: 0, failed: 0 }
   const currentByPid = snapshotOnly ? new Map((Array.isArray(current) ? current : list()).map((row) => [row.pid, row])) : null
   let stopped = 0
   let failed = 0
   for (const item of found) {
-    if (currentByPid && currentByPid.size > 0) {
+    if (currentByPid) {
       const now = currentByPid.get(item.pid)
       if (!now) {
+        if (alive(item.pid)) {
+          console.log(`${label}: could not verify ${item.pid}`)
+          failed += 1
+          continue
+        }
         console.log(`${label}: ${item.pid} had already ended`)
         continue
       }
@@ -213,6 +228,40 @@ export function stopLeftovers({ worktree, childPid = 0, label = 'leftover', excl
   return { found: found.length, stopped, failed }
 }
 
+function laneProcessState(path, lock = lockText(path)) {
+  try {
+    const saved = JSON.parse(readFileSync(`${path}.processes`, 'utf8'))
+    if (!lock || saved.log === laneLockLog(lock)) {
+      const recorded = new Map(saved.recorded.filter(([pid, created]) => Number.isInteger(pid) && pid > 0 && Number.isFinite(created)))
+      return { worktree: typeof saved.worktree === 'string' ? saved.worktree : '', recorded }
+    }
+  } catch {}
+  return { worktree: '', recorded: new Map() }
+}
+
+function saveLaneProcessState(path, log, worktree, recorded, lock = lockText(path)) {
+  if (!path || laneLockLog(lock) !== log) return
+  const target = `${path}.processes`
+  const pending = `${target}.${process.pid}.tmp`
+  try {
+    writeFileSync(pending, JSON.stringify({ log, worktree, recorded: [...recorded] }))
+    if (lockText(path) === lock) renameSync(pending, target)
+  } catch {} finally {
+    try {
+      rmSync(pending, { force: true })
+    } catch {}
+  }
+}
+
+function configuredLaneWorktree(laneKey, folder) {
+  const lanes = readAllLanes({ lanesJson: Object.fromEntries(lanesInFile()), runsFolder: folder })
+  if (laneKey === 'orchestrator' || !Object.hasOwn(lanes, laneKey)) return ''
+  const lane = lanes[laneKey]
+  const worktree = lane?.worktree || (lane?.custom === true ? worktreeFor(mainCheckout(), laneKey) : '')
+  if (!worktree || briefWorktreeProblems({ worktree: realPath(worktree), laneKey, ...folderCheckFor(lanes) }).length > 0) return ''
+  return worktree
+}
+
 function harnessDescendants(childPid, { excludePids = [], processes = null } = {}) {
   if (!Number.isInteger(childPid) || childPid <= 0) return []
   return descendantProcesses(processes ?? listProcesses(), { rootPid: childPid, ownPid: process.pid, excludePids })
@@ -220,7 +269,7 @@ function harnessDescendants(childPid, { excludePids = [], processes = null } = {
 }
 
 function descendantState(item, currentByPid) {
-  if (currentByPid.size === 0) return 'kill'
+  if (currentByPid.size === 0) return 'unknown'
   const current = currentByPid.get(item.pid)
   if (!current) return 'gone'
   if (typeof item.created === 'number' && Number.isFinite(item.created) && current.created !== item.created) {
@@ -246,14 +295,19 @@ function stopDescendants(descendants, options = 'leftover') {
   let killed = false
   for (const item of items) {
     const state = descendantState(item, currentByPid)
+    if (state === 'unknown') {
+      if (alive(item.pid)) {
+        console.log(`${label}: could not verify ${item.pid}`)
+        failed += 1
+      }
+      continue
+    }
     if (state === 'gone') {
       console.log(`${label}: stopped ${item.pid}`)
-      stopped += 1
       continue
     }
     if (state === 'reused') {
       console.log(`stale: ${item.pid} was not this run`)
-      stopped += 1
       continue
     }
     killed = true
@@ -278,30 +332,22 @@ export async function refuseRunningLane(
   } = {},
 ) {
   const lock = join(folder, `${laneKey}.lock`)
+  const before = lockText(lock)
   const holder = readLaneLock(lock)
-  if (isHolderAlive(holder.child, lock, { list })) throw new Error(laneStopProblem({ lane: laneKey, pid: holder.child }))
-  const folders = []
-  for (const value of [worktree, holder.folder]) {
-    const name = String(value ?? '').trim()
-    if (name !== '' && !folders.includes(name)) folders.push(name)
-  }
-  if (folders.length === 0) return
-  const findLeftovers = (snapshot) => {
-    const found = []
-    const seenPids = new Set()
-    for (const name of folders) {
-      for (const item of leftoverProcesses(snapshot, { worktree: name, ownPid: process.pid })) {
-        if (seenPids.has(item.pid)) continue
-        seenPids.add(item.pid)
-        found.push(item)
-      }
-    }
-    return found
-  }
+  const saved = laneProcessState(lock, before)
+  const childCreated = saved.recorded.get(holder.child)
+  const liveChild = childCreated === undefined
+    ? isHolderAlive(holder.child, lock, { list })
+    : list().some((row) => row.pid === holder.child && row.created === childCreated)
+  if (liveChild) throw new Error(laneStopProblem({ lane: laneKey, pid: holder.child }))
+  const worktrees = [worktree, holder.projectRun ? '' : holder.folder, saved.worktree]
+  if (!worktrees.some(Boolean) && saved.recorded.size === 0) return
+  const findLeftovers = (snapshot) => leftoverProcesses(snapshot, { worktrees, recorded: saved.recorded, ownPid: process.pid })
   if (findLeftovers(list()).length === 0) return
   await wait(500)
   const leftover = findLeftovers(list())[0]
   if (!leftover) return
+  if (!before && worktree && !saved.worktree) saveLaneProcessState(lock, '', worktree, saved.recorded, before)
   const program = (() => {
     const text = String(leftover.command ?? '').trim()
     if (text === '') return ''
@@ -371,10 +417,11 @@ export function stopLane(laneKey, { platform = process.platform, list = listProc
   const folder = runsFolder()
   const path = join(folder, `${laneKey}.lock`)
   const before = lockText(path)
-  if (before.trim() === '') {
+  if (!before && startedAt) {
     console.log(`Nothing was running for the ${laneKey} lane.`)
     return 0
   }
+  const saved = laneProcessState(path, before)
   let lockMtime = null
   try {
     lockMtime = stat(path).mtimeMs
@@ -382,16 +429,21 @@ export function stopLane(laneKey, { platform = process.platform, list = listProc
     lockMtime = null
   }
   const holder = readLaneLock(path)
-  const worktree = holder.folder
-  const processes = list()
+  const worktree = holder.projectRun ? '' : holder.folder || configuredLaneWorktree(laneKey, folder)
+  const processes = before || worktree || saved.worktree || saved.recorded.size > 0 ? list() : []
   const byPid = new Map((Array.isArray(processes) ? processes : []).map((item) => [item.pid, item]))
   const rootPid = Number.isInteger(holder.child) && holder.child > 0 ? holder.child : holder.pid
-  const isStranger = (pid) => isLockHolderStale(pid, lockMtime, { platform, processes: byPid })
+  const isStranger = (pid) => (saved.recorded.has(pid) && byPid.has(pid) && saved.recorded.get(pid) !== byPid.get(pid).created)
+    || isLockHolderStale(pid, lockMtime, { platform, processes: byPid })
   const descendants = isStranger(rootPid) ? [] : harnessDescendants(rootPid, { excludePids: [holder.pid ?? 0], processes })
   const differentRun = differentRunText(laneKey, path, startedAt)
   if (differentRun !== '') {
     console.log(differentRun)
     return 1
+  }
+  if (lockText(path) !== before) {
+    console.log(`kept the ${laneKey} lock: a newer run took it while the stop ran`)
+    return 0
   }
   let stopped = 0
   let failed = 0
@@ -401,7 +453,7 @@ export function stopLane(laneKey, { platform = process.platform, list = listProc
     if (!Number.isInteger(pid) || pid <= 0 || pid === process.pid) continue
     if (isStranger(pid)) {
       console.log(`stale: ${pid} was not this run`)
-    } else if (platform !== 'win32' || processes.length === 0 || byPid.has(pid)) {
+    } else if (byPid.has(pid) || (!saved.recorded.has(pid) && (platform !== 'win32' || processes.length === 0))) {
       listStale = true
       if (stopProcess(pid, { kill, alive })) {
         console.log(`stopped: ${pid} (${name})`)
@@ -431,17 +483,29 @@ export function stopLane(laneKey, { platform = process.platform, list = listProc
     console.log(`kept the ${laneKey} lock: a newer run took it while the stop ran`)
     return 0
   }
-  const byName = holder.projectRun !== true
+  const current = before ? descendantsResult.processes : processes.length > 0 ? list() : processes
+  if (!before && lockText(path) !== before) {
+    console.log(`kept the ${laneKey} lock: a newer run took it while the stop ran`)
+    return 0
+  }
+  const reused = before ? [] : current.filter((row) => {
+    const previous = byPid.get(row.pid)
+    return Number.isFinite(previous?.created) && previous.created !== row.created
+  }).map((row) => row.pid)
   const leftovers = stopLeftovers({
-    worktree: byName ? worktree : '',
-    excludePids: [holder.pid ?? 0],
+    worktrees: [worktree, saved.worktree],
+    recorded: saved.recorded,
+    excludePids: [holder.pid ?? 0, holder.child ?? 0, ...descendants.map((item) => item.pid), ...reused],
+    platform,
     list,
-    kill,
+    kill: kill === killTree ? killProcess : kill,
     alive,
-    processes,
-    current: descendantsResult.processes,
+    processes: before ? processes : current,
+    current,
     snapshotOnly: true,
   })
+  const leftoverCount = descendantsResult.stopped + leftovers.stopped
+  if (leftoverCount > 0) console.log(`Stopped ${leftoverCount} leftover ${leftoverCount === 1 ? 'process' : 'processes'} for the ${laneKey} lane.`)
   stopped += leftovers.stopped
   failed += leftovers.failed
   if (stopped === 0 && leftovers.found === 0 && descendants.length === 0 && failed === 0) {
@@ -455,6 +519,7 @@ export function stopLane(laneKey, { platform = process.platform, list = listProc
     console.log(`kept the ${laneKey} lock: ${failed} ${failed === 1 ? 'process' : 'processes'} could not be stopped, so the lane stays busy`)
     return 1
   }
+  rmSync(`${path}.processes`, { force: true })
   rmSync(path, { force: true })
   return 0
 }
@@ -1401,11 +1466,76 @@ function runNameOfRecord(record) {
 function findRunRecordByName(records, name) {
   const target = typeof name === 'string' ? name.trim() : ''
   if (!target) return null
-  for (let index = records.length - 1; index >= 0; index -= 1) {
-    const record = records[index]
-    if (runNameOfRecord(record) === target) return { index, record }
+  return records.findLast((record) => runNameOfRecord(record) === target) ?? null
+}
+
+function lostRunRecord(file, name, required = false) {
+  const problem = continueFromProblem(name)
+  if (problem) {
+    if (required) throw new Error(problem)
+    return null
   }
-  return null
+  const folder = dirname(file)
+  const log = join(folder, `${name}.log`)
+  const sidecar = join(folder, `${name}.meta.json`)
+  const metaStat = lstatSync(sidecar, { throwIfNoEntry: false })
+  if (!metaStat?.isFile() || !lstatSync(log, { throwIfNoEntry: false })?.isFile()) return null
+  const meta = readUsage(sidecar)
+  const lane = meta?.lane
+  if (typeof lane !== 'string' || !/^[A-Za-z0-9_-]+$/.test(lane)) return null
+  const legacyName = name.startsWith(`${lane}-`) ? name.slice(lane.length + 1) : ''
+  const legacyBriefs = /^([A-Z]\d+[a-z]?(?:-[A-Z]\d+[a-z]?)*)-\d{8}-\d{6}(?:-\d+)?(?:-retry)?$/.exec(legacyName)
+  const legacyProject = meta.project && /^(?:project-\d{8}-\d{6}|queue-\d{8}-\d{6}-\d{3}-\d+)(?:-\d+)?(?:-retry)?$/.test(legacyName)
+  const briefs = meta.briefs ?? (legacyBriefs ? legacyBriefs[1].split('-') : legacyProject ? [] : null)
+  if (!Array.isArray(briefs) || !briefs.every((id) => typeof id === 'string' && /^[A-Z]\d+[a-z]?$/.test(id))) return null
+
+  const lock = join(folder, `${lane}.lock`)
+  const holder = readLaneLock(lock)
+  if (isHolderAlive(holder.pid, lock) || isHolderAlive(holder.child, lock) || (!holder.pid && existsSync(lock))) {
+    if (required) throw new Error(`The ${lane} lane still holds its run lock. Wait for it to stop before continuing ${name}.`)
+    return null
+  }
+
+  const record = runRecord({
+    lane, briefs, log, startedAt: meta.startedAt ?? metaStat.mtimeMs,
+    branch: meta.branch, base: meta.base, project: meta.project,
+    model: meta.model, reasoning: meta.reasoning, mode: meta.mode,
+    continues: meta.continues, failoverFrom: meta.failoverFrom,
+    queue: meta.queue ? { branch: meta.queue, index: meta.index } : null,
+    killed: true, stopReason: 'lost',
+  })
+  if (typeof meta.branch === 'string') record.branch = meta.branch
+  return record
+}
+
+function continuationRecord(name, file = runsFile()) {
+  const existing = findRunRecordByName(readRecords(file), name)
+  if (existing) return existing
+  const lost = lostRunRecord(file, name, true)
+  if (!lost) throw new Error(`There is no run named ${name}.`)
+  if (!appendRunRecord(lost, { file })) throw new Error(`The lost run ${name} could not be saved.`)
+  return findRunRecordByName(readRecords(file), name)
+}
+
+function recoverLostRuns(file = runsFile()) {
+  const records = readRecords(file)
+  const recorded = new Set(records.map(runNameOfRecord))
+  let entries
+  try {
+    entries = readdirSync(dirname(file))
+  } catch (error) {
+    if (error?.code === 'ENOENT') return records
+    throw error
+  }
+  let saved = false
+  for (const entry of entries) {
+    if (!entry.endsWith('.meta.json')) continue
+    const name = entry.slice(0, -'.meta.json'.length)
+    if (recorded.has(name)) continue
+    const lost = lostRunRecord(file, name)
+    if (lost && appendRunRecord(lost, { file })) saved = true
+  }
+  return saved ? readRecords(file) : records
 }
 
 function claudeResumeId(folder, name, worktree) {
@@ -1451,7 +1581,7 @@ function readOutcomes() {
 }
 
 function listRuns() {
-  const records = readRecords()
+  const records = recoverLostRuns()
   if (records.length === 0) {
     console.log(`No runs recorded yet. The runs folder is ${printedRunsFolder(runsFolder())}.`)
     console.log('Start one with npm run run-lane -- <lane> <brief>. See --help for every form.')
@@ -1462,7 +1592,7 @@ function listRuns() {
 }
 
 function statsRuns(options) {
-  formatStats(laneStats(readRecords(), { since: options.since })).forEach((line) => console.log(line))
+  formatStats(laneStats(recoverLostRuns(), { since: options.since })).forEach((line) => console.log(line))
   return 0
 }
 
@@ -1501,18 +1631,17 @@ async function runQueueProject({ options, lane, lanes }) {
     if (problem !== '') throw new Error(problem)
   }
   const continueFrom = typeof options.continueFrom === 'string' ? options.continueFrom.trim() : ''
-  const prevRun = continueFrom ? findRunRecordByName(readRecords(), continueFrom) : null
-  if (continueFrom && !prevRun) throw new Error(`There is no run named ${continueFrom}.`)
+  const prevRun = continueFrom ? continuationRecord(continueFrom) : null
   const project = projectFolder(options.project)
   if (!gitCheckout(project)) throw new Error(`The project folder ${printedRunsFolder(project)} is not a git folder. A queue needs one.`)
-  let previousProject = continueFrom && typeof prevRun.record.project === 'string' ? realPath(prevRun.record.project) : ''
+  let previousProject = typeof prevRun?.project === 'string' ? realPath(prevRun.project) : ''
   if (continueFrom && options.worktree && previousProject === project) {
     try {
       const meta = JSON.parse(readFileSync(join(runsFolder(), `${continueFrom}.meta.json`), 'utf8'))
       if (typeof meta?.project === 'string' && meta.project.trim()) previousProject = realPath(meta.project)
     } catch {}
   }
-  const continuedBranch = prevRun?.record.failoverFrom ? prevRun.record.checkpoint?.branch || prevRun.record.branch : prevRun?.record.branch
+  const continuedBranch = prevRun?.failoverFrom ? prevRun.checkpoint?.branch || prevRun.branch : prevRun?.branch
   const continuedWorktree = options.worktree && previousProject && realPath(dirname(previousProject)) === realPath(join(project, '.worktrees')) ? previousProject : ''
   if (continueFrom && (options.worktree ? !continuedWorktree : previousProject !== project)) throw new Error('The interrupted run has a different project worktree.')
   if (continuedWorktree && !existsSync(continuedWorktree)) throw new Error('The interrupted run worktree no longer exists.')
@@ -1541,7 +1670,7 @@ async function runQueueProject({ options, lane, lanes }) {
     const plan = options.worktree
       ? (continueFrom ? { path: continuedWorktree, made: false } : worktreePlan(project, options.lane))
       : { path: project, made: false }
-    const dryBranch = continueFrom ? (continuedBranch || prevRun.record.queue || branch) : branch
+    const dryBranch = continueFrom ? (continuedBranch || prevRun.queue || branch) : branch
     const test = checkDisplay(testCommandFor(project, options.test))
     console.log(`lane: ${options.lane}`)
     console.log(`project: ${printedRunsFolder(project)}`)
@@ -1586,16 +1715,16 @@ async function runQueueProject({ options, lane, lanes }) {
     const currentWtBranch = gitRead(target.path, ['branch', '--show-current']) || ''
     if (continueFrom && continuedBranch && currentWtBranch !== continuedBranch) throw new Error('The interrupted run worktree is on a different branch.')
     const activeBranch = continueFrom
-      ? (currentWtBranch || prevRun.record.queue || prevRun.record.branch || branch)
+      ? (currentWtBranch || prevRun.queue || prevRun.branch || branch)
       : branch
     const startBranch = options.worktree
       ? (currentWtBranch || gitRead(project, ['branch', '--show-current']) || '')
       : currentWtBranch
     const startHead = gitRead(target.path, ['rev-parse', 'HEAD']) || ''
     let test = typeof options.test === 'string' && options.test.trim() !== '' ? options.test : ''
-    const base = (continueFrom && prevRun.record.base) || gitRead(target.path, ['rev-parse', 'HEAD']) || startHead
-    const startIndex = continueFrom && options.queue && Number.isInteger(prevRun.record.queueIndex) && prevRun.record.queueIndex >= 1
-      ? prevRun.record.queueIndex
+    const base = prevRun?.base || gitRead(target.path, ['rev-parse', 'HEAD']) || startHead
+    const startIndex = options.queue && Number.isInteger(prevRun?.queueIndex) && prevRun.queueIndex >= 1
+      ? prevRun.queueIndex
       : 1
     let pending = null
     let testsFailed = false
@@ -1820,6 +1949,7 @@ async function main() {
 
     mkdirSync(folder, { recursive: true })
     await refuseRunningLane(options.lane, '', folder)
+    if (options.continueFrom) continuationRecord(options.continueFrom)
     const projectLock = takeProjectLock(folder, project)
     const startedAt = laneStartTime(options)
     let lock
@@ -1909,6 +2039,7 @@ async function main() {
 
   mkdirSync(folder, { recursive: true })
   await refuseRunningLane(options.lane, lane.worktree, folder)
+  if (options.continueFrom) continuationRecord(options.continueFrom)
   const startedAt = laneStartTime(options)
   const lock = takeRunLock(folder, options.lane, { worktree: lane.worktree }, startedAt, basename(logPath))
   try {
@@ -2089,22 +2220,31 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
   let interruptedBy = ''
   let resumedSessionId = ''
   if (continueFrom !== '') {
-    const prevRecordsFile = join(runsDir, 'runs.jsonl')
-    const prev = findRunRecordByName(readRecords(prevRecordsFile), continueFrom)
-    if (!prev) throw new Error(`There is no run named ${continueFrom}.`)
-    if (prev.record.lane !== options.lane) throw new Error('The interrupted run has a different lane.')
-    if (Boolean(prev.record.project) !== Boolean(project)) throw new Error('The interrupted run has a different project kind.')
-    if (JSON.stringify(prev.record.briefs ?? []) !== JSON.stringify(project ? [] : wanted.map((brief) => brief.id))) throw new Error('The interrupted run has different brief ids.')
-    if (!project && gitRead(lane.worktree, ['branch', '--show-current']) !== String(prev.record.branch ?? '').trim()) throw new Error('The interrupted run worktree is on a different branch.')
-    if (typeof prev.record.base === 'string' && prev.record.base.trim() !== '') continuedBase = prev.record.base.trim()
-    if (typeof prev.record.branch === 'string' && prev.record.branch.trim() !== '') continuedBranch = prev.record.branch.trim()
+    const record = continuationRecord(continueFrom, join(runsDir, 'runs.jsonl'))
+    if (record.lane !== options.lane) throw new Error('The interrupted run has a different lane.')
+    if (Boolean(record.project) !== Boolean(project)) throw new Error('The interrupted run has a different project kind.')
+    if (JSON.stringify(record.briefs ?? []) !== JSON.stringify(project ? [] : wanted.map((brief) => brief.id))) throw new Error('The interrupted run has different brief ids.')
+    continuedBase = typeof record.base === 'string' ? record.base.trim() : ''
+    continuedBranch = typeof record.branch === 'string' ? record.branch.trim() : ''
+    const lost = record.stopReason === 'lost'
+    if (lost && project && realPath(record.project) !== realPath(project)) throw new Error('The interrupted run has a different project worktree.')
+    if (!project || (lost && continuedBranch)) {
+      const worktree = project || lane.worktree
+      const currentBranch = gitRead(worktree, ['branch', '--show-current'])
+      const onBriefBranch = lost && !project && continuedBranch === '' && typeof wanted[0]?.title === 'string'
+        && currentBranch === `${branchFor(wanted[0])}${branchSuffix}`
+        && /^[a-f0-9]{40,64}$/i.test(continuedBase)
+        && gitRead(worktree, ['merge-base', '--is-ancestor', continuedBase, 'HEAD']) !== null
+      if (currentBranch !== continuedBranch && !onBriefBranch) throw new Error('The interrupted run worktree is on a different branch.')
+      continuedBranch = currentBranch
+    }
     const interrupt = interruptFileText(runsDir, continueFrom)
     interruptText = interrupt.text
     interruptedBy = interrupt.sender
     if (options?.retried !== true && interruptText !== '') {
       fullPrompt = `${prompt}\n\n${interruptText}`
     }
-    if (lane.cli.harness === 'claude' && (!queue || queue.index === (prev.record.queueIndex ?? 1))) {
+    if (lane.cli.harness === 'claude' && (!queue || queue.index === (record.queueIndex ?? 1))) {
       resumedSessionId = claudeResumeId(runsDir, continueFrom, project || lane.worktree)
     }
   }
@@ -2144,7 +2284,15 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
     })
     if (resumedSessionId) command.args.push('--resume', resumedSessionId)
     const startedBy = options.startedBy ? null : sessionStartedBy(process.env)
-    const meta = { lane: options.lane, sessionId, ...(runBase ? { base: runBase } : {}) }
+    const startedAt = Number.isFinite(Number(givenStartedAt)) && Number(givenStartedAt) > 0 ? Number(givenStartedAt) : Date.now()
+    const meta = {
+      lane: options.lane, sessionId, briefs: project ? [] : wanted.map((brief) => brief.id),
+      startedAt: new Date(startedAt).toISOString(), branch: checkpoint?.branch ?? '',
+      model: lane.cli.model, reasoning: lane.reasoning, mode: lane.cli.mode,
+      ...(runBase ? { base: runBase } : {}),
+      ...(continueFrom ? { continues: continueFrom } : {}),
+      ...(failoverFrom ? { failoverFrom } : {}),
+    }
     if (resumedSessionId) meta.resumed = true
     if (project) meta.project = project
     if (queue) {
@@ -2165,7 +2313,6 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
       } catch {}
     }
     log.on('error', onLogError)
-    const startedAt = Number.isFinite(Number(givenStartedAt)) && Number(givenStartedAt) > 0 ? Number(givenStartedAt) : Date.now()
     const projectStart = project
       ? {
           branch: typeof projectBranch === 'string' ? projectBranch : gitRead(project, ['branch', '--show-current']) ?? '',
@@ -2215,6 +2362,31 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
     const lockStart = queue && lockPath ? laneLockStartedAt(lockText(lockPath)) || startedAt : startedAt
     if (lockPath) writeLaneChild(lockPath, child.pid)
     if (lockPath) writeLockStart(lockPath, lockStart, basename(logPath))
+    const sweepWorktree = project ? (options.worktree ? project : '') : lane.worktree
+    const recorded = new Map()
+    let childCreated
+    const remember = (processes) => {
+      const root = processes.find((row) => row.pid === child.pid)
+      let changed = false
+      if (childCreated === undefined && root?.ppid === process.pid && Number.isFinite(root.created)) {
+        childCreated = root.created
+        recorded.set(root.pid, root.created)
+        changed = true
+      }
+      const descendants = leftoverProcesses(processes, {
+        childPid: childCreated === undefined ? 0 : child.pid,
+        childCreated,
+        recorded,
+        ownPid: process.pid,
+      })
+      for (const { pid, created } of descendants) {
+        if (!Number.isFinite(created) || recorded.get(pid) === created) continue
+        recorded.set(pid, created)
+        changed = true
+      }
+      if (changed) saveLaneProcessState(lockPath, basename(logPath), sweepWorktree, recorded)
+    }
+    const stopSampling = child.pid ? sampleProcesses(remember) : () => {}
     if (spawnSpec.input && child.stdin) {
       child.stdin.on('error', () => {})
       child.stdin.end(effectivePrompt)
@@ -2232,6 +2404,31 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
     let extraStopped = 0
     let settled = false
     let finish
+
+    const sweep = (stopHarness = false) => {
+      const processes = child.pid || sweepWorktree ? listProcesses() : []
+      remember(processes)
+      if (stopHarness) {
+        let stoppedHarness = false
+        if (processes.length > 0) {
+          try {
+            stoppedHarness = child.kill('SIGKILL')
+          } catch {}
+        }
+        if (!stoppedHarness) killTree(child)
+      }
+      const root = processes.find((row) => row.pid === child.pid)
+      const result = stopLeftovers({
+        worktree: sweepWorktree,
+        childPid: child.pid ?? 0,
+        childCreated: childCreated ?? (root && root.ppid !== process.pid ? null : undefined),
+        recorded,
+        processes,
+        snapshotOnly: stopHarness,
+      })
+      extraStopped += result.stopped
+      return result
+    }
 
     const armCloseTimer = () => {
       if (settled) return
@@ -2263,20 +2460,7 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
       if (settled) return
       leftoversCleaned = true
       if (stopNote === '') stopNote = 'leftovers were stopped'
-      let stopped = 0
-      const folder = project ? (options.worktree ? project : '') : lane.worktree
-      const processes = child.pid || folder ? listProcesses() : []
-      const descendants = harnessDescendants(child.pid, { processes })
-      let killedParent = false
-      if (child.pid && (child.exitCode === null && child.signalCode === null)) {
-        killedParent = true
-        killTree(child)
-      }
-      const descendantsResult = stopDescendants(descendants, { processes: killedParent ? null : processes })
-      stopped += descendantsResult.stopped
-      // The worktree's name finds a harness child whose parent chain is already gone, such as an orphaned server.
-      stopped += stopLeftovers({ worktree: folder, childPid: child.pid ?? 0, processes: descendantsResult.processes }).stopped
-      extraStopped += stopped
+      sweep(child.exitCode === null && child.signalCode === null)
       try {
         child.stdout?.destroy()
       } catch {}
@@ -2303,12 +2487,10 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
     let killed = false
     let stopNote = ''
     const stopChild = (note) => {
-      if (!child.pid || child.exitCode !== null || child.signalCode !== null) return
+      if (!child.pid || settled) return
       killed = true
       if (stopNote === '') stopNote = note
-      const descendants = harnessDescendants(child.pid)
-      killTree(child)
-      stopDescendants(descendants)
+      sweep(child.exitCode === null && child.signalCode === null)
     }
     const onInt = () => stopChild('stopped by SIGINT')
     const onTerm = () => stopChild('stopped by SIGTERM')
@@ -2351,6 +2533,7 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
       })
     })
     clearTimeout(timer)
+    stopSampling()
     if (closeTimer !== null) {
       clearTimeout(closeTimer)
       closeTimer = null
@@ -2359,8 +2542,12 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
     process.removeListener('SIGTERM', onTerm)
     process.removeListener('SIGHUP', onHup)
     process.removeListener('exit', onExit)
-    const stoppedLeftovers = stopLeftovers({ worktree: project ? (options.worktree ? project : '') : lane.worktree, childPid: child.pid ?? 0 }).stopped
-    const totalStoppedLeftovers = stoppedLeftovers + extraStopped
+    const finalSweep = sweep()
+    if (lockPath && laneLockLog(lockText(lockPath)) === basename(logPath)) {
+      if (finalSweep.failed > 0) saveLaneProcessState(lockPath, basename(logPath), sweepWorktree, recorded)
+      else rmSync(`${lockPath}.processes`, { force: true })
+    }
+    const totalStoppedLeftovers = extraStopped
     let commit = { ok: true, committed: false, leftOut: [], error: '' }
     if (!project && !killed && result.code === 0 && lane.cli?.commits === 'runner' && wanted.length > 0) {
       try {

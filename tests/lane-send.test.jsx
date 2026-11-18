@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url'
 import { act, createElement } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createBridge } from '../server/index.js'
+import { createOrchestrators } from '../server/orchestrators.js'
 import { activeLanesFileFor, writeActiveLanes } from '../server/active-lanes.js'
 import { saveHarnessSettings } from '../server/harness-settings.js'
 import { chatFileFor } from '../server/orchestrator.js'
@@ -13,6 +14,7 @@ import { clearRunsCache } from '../server/runs.js'
 import LaneConversation from '../src/ui/LaneConversation.jsx'
 import { getJson, waitFor } from './helpers/bridge.js'
 import { makeTempDir, removeTempDir } from './helpers/tempRoot.js'
+import { slowMs } from './helpers/timeout.js'
 import { buttonWithText, click, settle, type, withDom } from './helpers/uiDom.js'
 
 const REPO_ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)))
@@ -187,7 +189,8 @@ async function makeBridgeRig({
   return { base, runs, project, url, bridge }
 }
 
-describe('page sends to a running lane', { timeout: 60000 }, () => {
+describe('page sends to a running lane', { timeout: slowMs(120000) }, () => {
+  const CLI_WAIT_MS = slowMs(30000)
   it('lets the page send to lane:KEY, sets owner as sender, returns an id and answers 409 when idle', async () => {
     const tmp = tempDir('mr-lane-send-owner-')
     const callsFile = join(tmp, 'calls.jsonl')
@@ -212,7 +215,7 @@ describe('page sends to a running lane', { timeout: 60000 }, () => {
     })
     expect(started.status).toBe(202)
     await waitFor(() => readLines(callsFile).find((line) => line.callNumber === 1), {
-      timeoutMs: 15000,
+      timeoutMs: CLI_WAIT_MS,
       what: 'first CLI invocation',
     })
 
@@ -228,7 +231,7 @@ describe('page sends to a running lane', { timeout: 60000 }, () => {
     expect(queuedOrFetched.body.id).toBe(sent.body.id)
 
     const seen = await waitFor(() => readLines(callsFile).find((line) => Array.isArray(line.seenInInbox)), {
-      timeoutMs: 15000,
+      timeoutMs: CLI_WAIT_MS,
       what: 'lane to read owner message',
     })
     expect(seen.seenInInbox).toEqual([
@@ -242,7 +245,7 @@ describe('page sends to a running lane', { timeout: 60000 }, () => {
 
     await waitFor(
       async () => (await getJson(`${rig.url}/api/control/runs`)).body.running.length === 0,
-      { timeoutMs: 15000, what: 'run to end' }
+      { timeoutMs: CLI_WAIT_MS, what: 'run to end' }
     )
     const after = await pageGet(rig.url, `/api/orchestrator/messages/status?id=${sent.body.id}`)
     expect(after.status).toBe(200)
@@ -266,7 +269,7 @@ describe('page sends to a running lane', { timeout: 60000 }, () => {
     })
     expect(started.status).toBe(202)
     await waitFor(() => readLines(callsFile).find((line) => line.callNumber === 1), {
-      timeoutMs: 15000,
+      timeoutMs: CLI_WAIT_MS,
       what: 'first CLI invocation',
     })
 
@@ -278,12 +281,12 @@ describe('page sends to a running lane', { timeout: 60000 }, () => {
     expect(sent.status).toBe(202)
 
     await waitFor(() => readLines(callsFile).find((line) => Array.isArray(line.seenInInbox)), {
-      timeoutMs: 15000,
+      timeoutMs: CLI_WAIT_MS,
       what: 'lane to fetch queued message',
     })
     await waitFor(
       async () => (await getJson(`${rig.url}/api/control/runs`)).body.running.length === 0,
-      { timeoutMs: 15000, what: 'single run to end' }
+      { timeoutMs: CLI_WAIT_MS, what: 'single run to end' }
     )
 
     const invocations = readLines(callsFile).filter((line) => line.callNumber && !line.seenInInbox)
@@ -309,7 +312,7 @@ describe('page sends to a running lane', { timeout: 60000 }, () => {
     })
     expect(started.status).toBe(202)
     await waitFor(() => readLines(callsFile).find((line) => line.callNumber === 1), {
-      timeoutMs: 15000,
+      timeoutMs: CLI_WAIT_MS,
       what: 'first CLI invocation',
     })
 
@@ -321,14 +324,14 @@ describe('page sends to a running lane', { timeout: 60000 }, () => {
     expect(sent.status).toBe(202)
 
     const second = await waitFor(() => readLines(callsFile).find((line) => line.callNumber === 2), {
-      timeoutMs: 20000,
+      timeoutMs: CLI_WAIT_MS,
       what: 'continuation CLI invocation',
     })
     expect(second.prompt).toContain('owner: Switch to helper.')
 
     await waitFor(
       async () => (await getJson(`${rig.url}/api/control/runs`)).body.running.length === 0,
-      { timeoutMs: 15000, what: 'continuation run to end' }
+      { timeoutMs: CLI_WAIT_MS, what: 'continuation run to end' }
     )
     const status = await pageGet(rig.url, `/api/orchestrator/messages/status?id=${sent.body.id}`)
     expect(status.body.status).toBe('interrupted')
@@ -387,7 +390,7 @@ describe('page sends to a running lane', { timeout: 60000 }, () => {
       confirmed: true,
     })
     expect(started.status).toBe(202)
-    const call = await waitFor(() => readLines(callsFile)[0], { timeoutMs: 15000, what: 'native runner' })
+    const call = await waitFor(() => readLines(callsFile)[0], { timeoutMs: CLI_WAIT_MS, what: 'native runner' })
 
     const sent = await pagePost(url, '/api/orchestrator/messages', {
       to: 'lane:native',
@@ -409,7 +412,7 @@ describe('page sends to a running lane', { timeout: 60000 }, () => {
     writeFileSync(releaseFile, 'go\n')
     await waitFor(
       async () => (await getJson(`${url}/api/control/runs`)).body.running.length === 0,
-      { timeoutMs: 15000, what: 'native runner to finish' }
+      { timeoutMs: CLI_WAIT_MS, what: 'native runner to finish' }
     )
     const statusAfter = await pageGet(url, `/api/orchestrator/messages/status?id=${sent.body.id}`)
     expect(statusAfter.body.status).toBe('fetched')
@@ -440,7 +443,7 @@ describe('page sends to a running lane', { timeout: 60000 }, () => {
     expect(startOne.status).toBe(202)
     const callOne = await waitFor(
       () => readLines(callsFile).find((line) => String(line.prompt ?? '').includes('Target one.')),
-      { timeoutMs: 15000, what: 'opencode invocation' }
+      { timeoutMs: CLI_WAIT_MS, what: 'opencode invocation' }
     )
 
     const startTwo = await pagePost(rig.url, '/api/control/runs', {
@@ -452,7 +455,7 @@ describe('page sends to a running lane', { timeout: 60000 }, () => {
     expect(startTwo.status).toBe(202)
     const callTwo = await waitFor(
       () => readLines(callsFile).find((line) => String(line.prompt ?? '').includes('Target two.')),
-      { timeoutMs: 15000, what: 'opencode2 invocation' }
+      { timeoutMs: CLI_WAIT_MS, what: 'opencode2 invocation' }
     )
 
     const laneSent = await lanePost(rig.url, '/api/orchestrator/messages', callTwo.ticket, {
@@ -486,7 +489,7 @@ describe('page sends to a running lane', { timeout: 60000 }, () => {
     writeFileSync(releaseFile, 'go\n')
     await waitFor(
       async () => (await getJson(`${rig.url}/api/control/runs`)).body.running.length === 0,
-      { timeoutMs: 15000, what: 'both runs to end' }
+      { timeoutMs: CLI_WAIT_MS, what: 'both runs to end' }
     )
 
     expect(readLines(callsFile).filter((line) => line.callNumber)).toHaveLength(2)
@@ -752,5 +755,42 @@ describe('LaneConversation message box and status updates', () => {
         'The lane opencode has no run that can read a message now.'
       )
     })
+  })
+})
+
+describe('a page message to a lane with an ended run and a newer live run', () => {
+  const OLD = '2026-11-16T09:00:00.000Z'
+  const LIVE = '2026-11-16T10:00:00.000Z'
+
+  it('refuses the ended run, reaches the live run and stores the clock time', async () => {
+    const base = tempDir('mr-lane-send-live-')
+    const runs = join(base, 'runs')
+    const project = join(base, 'project')
+    mkdirSync(runs, { recursive: true })
+    mkdirSync(project, { recursive: true })
+    const held = { lane: 'opencode', startedAt: LIVE, inbox: [] }
+    const at = Date.parse('2026-11-16T10:30:00.000Z')
+    const registry = createOrchestrators({
+      projectRoot: project,
+      runsFolder: runs,
+      lanes: { opencode: { name: 'OpenCode', harness: 'OpenCode', cli: { harness: 'opencode', bin: 'opencode', model: 'fake/model' } } },
+      spawn: () => { throw new Error('no spawn') },
+      promptFile: join(base, 'prompt.md'),
+      bridgeUrl: () => 'http://127.0.0.1:5999',
+      onNotice: () => {},
+      harnessAvailable: () => true,
+      laneTickets: () => [held],
+      now: () => at,
+    })
+    cleanups.push(() => registry.close())
+
+    const stale = await registry.message({ to: 'lane:opencode', text: 'For the old run.', startedAt: OLD }, true)
+    expect(stale).toEqual({ status: 409, body: { error: 'That run is no longer running.' } })
+    expect(held.inbox).toHaveLength(0)
+
+    const sent = await registry.message({ to: 'lane:opencode', text: 'For the live run.', startedAt: LIVE }, true)
+    expect(sent.status).toBe(202)
+    expect(held.inbox).toHaveLength(1)
+    expect(held.inbox[0]).toMatchObject({ id: sent.body.id, from: 'owner', text: 'For the live run.', at: new Date(at).toISOString() })
   })
 })

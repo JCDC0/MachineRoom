@@ -83,6 +83,12 @@ async function mountSettings(root, client = fakeClient()) {
   await settle()
 }
 
+function shown(node) {
+  if (!node) return false
+  for (let n = node; n; n = n.parentNode) if (n.hidden === true || (n.attributes && 'hidden' in n.attributes)) return false
+  return true
+}
+
 describe('Settings tabs', () => {
   it('lists one tab per section in a tablist and opens on Harnesses', async () => {
     await withDom(async ({ container, root }) => {
@@ -98,10 +104,10 @@ describe('Settings tabs', () => {
     await withDom(async ({ container, root }) => {
       await mountSettings(root)
       await openTab(root, container, 'Replay')
-      expect(container.querySelector('[aria-label="Record time in minutes"]')).not.toBeNull()
-      expect(container.querySelector('[aria-label="Harnesses"]')).toBeNull()
-      expect(container.querySelector('#settings-direct-api')).toBeNull()
-      expect(container.querySelector('[aria-label="Beeps"]')).toBeNull()
+      expect(shown(container.querySelector('[aria-label="Record time in minutes"]'))).toBe(true)
+      expect(shown(container.querySelector('[aria-label="Harnesses"]'))).toBe(false)
+      expect(shown(container.querySelector('#settings-direct-api'))).toBe(false)
+      expect(shown(container.querySelector('[aria-label="Beeps"]'))).toBe(false)
       expect(selectedTab(container)).toEqual(['Replay'])
     })
   })
@@ -149,12 +155,12 @@ describe('Settings tabs', () => {
     await withDom(async ({ container, root }) => {
       await mountSettings(root)
       for (const id of ['#harness-lane-replies', '#harness-lane-count-warning', '#harness-worktree-setup', '#harness-worktree-copies']) {
-        expect(container.querySelector(id)).toBeNull()
+        expect(shown(container.querySelector(id))).toBe(false)
       }
       await openTab(root, container, 'Lanes')
       await settle()
       for (const id of ['#harness-lane-replies', '#harness-lane-count-warning', '#harness-worktree-setup', '#harness-worktree-copies']) {
-        expect(container.querySelector(id)).not.toBeNull()
+        expect(shown(container.querySelector(id))).toBe(true)
       }
     })
   })

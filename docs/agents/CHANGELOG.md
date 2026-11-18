@@ -2,7 +2,20 @@
 
 ## Unreleased
 
+- GPT-6.2 Sol.
+- Sonnet.
+- Sonnet, from a partial branch.
+- DeepSeek native lane.
+- Sonnet audit.
+- DeepSeek native lane.
+- GPT-6.2 Sol.
+- DeepSeek native lane.
+- DeepSeek native lane.
+- DeepSeek native lane.
+- Needs you dismisses by lane, start time and text, Reviews keeps a lane that is selected or mid-action visible, and Settings tabs keep their drafts (P565, review 57).
 - Sonnet review.
+- The interrupt test waits scale with CI and the cap test's fake CLI writes its call line before any git spawn (P560).
+
 - Sonnet.
 - Sonnet did P559 in one run.
 - Reviews reads `1 lane has nothing to review` for one folded lane (P563).

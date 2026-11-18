@@ -740,7 +740,7 @@ describe('run routes', () => {
 
     const first = await fetch(`${url}/api/control/runs`).then((response) => response.json())
     expect(first.attention).toEqual([
-      { lane: 'direct', startedAt: '2026-11-16T10:10:00.000Z', text: 'direct failed on P467' },
+      { lane: 'direct', startedAt: '2026-11-16T10:10:00.000Z', text: 'direct stopped on P467: the same call failed 5 times' },
       { lane: 'opencode', startedAt: '2026-11-16T10:00:00.000Z', text: 'opencode failed on P465' },
     ])
 

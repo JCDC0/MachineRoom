@@ -54,6 +54,7 @@ export default function Settings({ open = true, effects, onChange, onSettingsCha
   const [tab, setTab] = useState(savedTab)
 
   function openTab(key) {
+    if (key !== tab && tab === 'replay') commitRecordMinutes()
     setTab(key)
     writeStorage(SETTINGS_TAB_KEY, key)
   }
@@ -164,16 +165,16 @@ export default function Settings({ open = true, effects, onChange, onSettingsCha
       </div>
 
       <div className="hud-settings-body" role="tabpanel" id="hud-settings-panel" aria-labelledby={`hud-settings-tab-${tab}`}>
-        {tab === 'harnesses' && <HarnessesSettings client={client} />}
-        {tab === 'direct-api' && <EndpointsPanel client={client} />}
-        {tab === 'keys' && <KeysSettings client={client} />}
-        {tab === 'lanes' && (
+        <div hidden={tab !== 'harnesses'}><HarnessesSettings client={client} /></div>
+        <div hidden={tab !== 'direct-api'}><EndpointsPanel client={client} /></div>
+        <div hidden={tab !== 'keys'}><KeysSettings client={client} /></div>
+        <div hidden={tab !== 'lanes'}>
           <>
             <LaneSettingsFields client={client} />
             <LanesSettings client={client} project={project} />
           </>
-        )}
-        {tab === 'effects' && (
+        </div>
+        <div hidden={tab !== 'effects'}>
           <>
           <div className="hud-settings-section">
             <div className="hud-settings-row">
@@ -275,8 +276,8 @@ export default function Settings({ open = true, effects, onChange, onSettingsCha
             </div>
           </div>
           </>
-        )}
-        {tab === 'replay' && (
+        </div>
+        <div hidden={tab !== 'replay'}>
           <>
           <div className="hud-settings-section">
             <h3 className="hud-settings-section-title">Replay</h3>
@@ -307,8 +308,8 @@ export default function Settings({ open = true, effects, onChange, onSettingsCha
             <p className="hud-settings-hint">Replay keeps this many minutes, starting at the first conversation.</p>
           </div>
           </>
-        )}
-        {tab === 'sound' && (
+        </div>
+        <div hidden={tab !== 'sound'}>
           <>
           <div className="hud-settings-section">
             <h3 className="hud-settings-section-title">Sound</h3>
@@ -378,11 +379,11 @@ export default function Settings({ open = true, effects, onChange, onSettingsCha
             </div>
           </div>
           </>
-        )}
-        {tab === 'subagents' && <AgentDepthSettings client={client} />}
-        {tab === 'mcp' && <McpSettings client={client} />}
-        {tab === 'search' && <SearchSettings client={client} />}
-        {tab === 'storage' && <StorageSettings client={client} />}
+        </div>
+        <div hidden={tab !== 'subagents'}><AgentDepthSettings client={client} /></div>
+        <div hidden={tab !== 'mcp'}><McpSettings client={client} /></div>
+        <div hidden={tab !== 'search'}><SearchSettings client={client} /></div>
+        <div hidden={tab !== 'storage'}><StorageSettings client={client} /></div>
       </div>
     </section>
   )

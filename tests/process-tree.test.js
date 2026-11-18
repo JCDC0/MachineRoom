@@ -127,6 +127,23 @@ describe('leftoverProcesses', () => {
     ]
     expect(leftoverProcesses(list, { childPid: 2, platform: 'win32' }).map((item) => item.pid)).toEqual([3, 5])
   })
+
+  it('follows a sampled worker after its parent exits and skips a reused pid', () => {
+    const initial = [
+      { pid: 2, ppid: 1, created: 2000 },
+      { pid: 3, ppid: 2, created: 3000 },
+      { pid: 4, ppid: 3, created: 4000 },
+      { pid: 5, ppid: 3, created: 5000 },
+    ]
+    const recorded = new Map(leftoverProcesses(initial, { childPid: 2 }).map(({ pid, created }) => [pid, created]))
+    const current = [
+      { ...initial[2], ppid: 1, command: 'bash /tmp/worker.sh' },
+      { ...initial[3], ppid: 1, created: 6000, command: 'node /lane/worker.js' },
+      { pid: 6, ppid: 4, created: 7000 },
+      { pid: 7, ppid: 5, created: 8000 },
+    ]
+    expect(leftoverProcesses(current, { recorded, worktree: '/lane' }).map((item) => item.pid)).toEqual([4, 6])
+  })
 })
 
 describe('descendantProcesses', () => {

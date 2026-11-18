@@ -209,6 +209,97 @@ describe('lane tasks', () => {
     expect(project).toMatchObject({ identifier: 'project', title: longTask.slice(0, 80), status: 'done', assigneeAgentId: 'agent-agy' })
   })
 
+  it('reads a failed or stopped run as done once a later run fixed its work', () => {
+    const statusOf = (records) =>
+      Object.fromEntries(laneTaskIssues({ records }).map((issue) => [issue.id, issue.status]))
+    const failed = record({
+      lane: 'opencode',
+      briefs: ['L1'],
+      log: '/tmp/runs/opencode-L1-20261024-090000.log',
+      startedAt: iso(30),
+      exitCode: 1,
+    })
+    const stopped = record({
+      lane: 'opencode',
+      briefs: ['L1'],
+      log: '/tmp/runs/opencode-L1-20261024-080000.log',
+      startedAt: iso(40),
+      exitCode: 1,
+      killed: true,
+    })
+    const fixedLater = record({
+      lane: 'agy',
+      briefs: ['L1'],
+      log: '/tmp/runs/agy-L1-20261024-070000.log',
+      startedAt: iso(20),
+      exitCode: 0,
+    })
+
+    expect(statusOf([failed, fixedLater])).toEqual({
+      'opencode-L1-20261024-090000': 'done',
+      'agy-L1-20261024-070000': 'done',
+    })
+    expect(statusOf([stopped, fixedLater])).toEqual({
+      'opencode-L1-20261024-080000': 'done',
+      'agy-L1-20261024-070000': 'done',
+    })
+    expect(statusOf([failed])).toEqual({ 'opencode-L1-20261024-090000': 'blocked' })
+    expect(statusOf([failed, record({ ...fixedLater, startedAt: iso(60), log: '/tmp/runs/agy-L1-20261024-100000.log' })])).toEqual({
+      'opencode-L1-20261024-090000': 'blocked',
+      'agy-L1-20261024-100000': 'done',
+    })
+  })
+
+  it('keeps a run with two briefs blocked while only one of them succeeded later', () => {
+    const failed = record({
+      lane: 'opencode',
+      briefs: ['L1', 'S6g'],
+      log: '/tmp/runs/opencode-L1+S6g-20261024-090000.log',
+      startedAt: iso(30),
+      exitCode: 1,
+    })
+    const oneLater = record({
+      lane: 'agy',
+      briefs: ['L1'],
+      log: '/tmp/runs/agy-L1-20261024-080000.log',
+      startedAt: iso(20),
+      exitCode: 0,
+    })
+    const bothLater = record({
+      lane: 'agy',
+      briefs: ['L1', 'S6g'],
+      log: '/tmp/runs/agy-L1+S6g-20261024-070000.log',
+      startedAt: iso(10),
+      exitCode: 0,
+    })
+    const id = 'opencode-L1+S6g-20261024-090000'
+
+    expect(laneTaskIssues({ records: [failed, oneLater] }).find((issue) => issue.id === id).status).toBe('blocked')
+    expect(laneTaskIssues({ records: [failed, oneLater, bothLater] }).find((issue) => issue.id === id).status).toBe('done')
+  })
+
+  it('reads a failed run as done when its failover backup ran later', () => {
+    const failed = record({
+      lane: 'opencode',
+      briefs: ['L1'],
+      log: '/tmp/runs/opencode-L1-20261024-090000.log',
+      startedAt: iso(30),
+      exitCode: 1,
+    })
+    failed.failover = { kind: 'quota', to: 'agy' }
+    const backup = record({
+      lane: 'agy',
+      briefs: ['L1'],
+      log: '/tmp/runs/agy-L1-20261024-080000.log',
+      startedAt: iso(20),
+      exitCode: 0,
+    })
+    backup.failoverFrom = { lane: 'opencode', startedAt: failed.startedAt }
+
+    const issues = laneTaskIssues({ records: [failed, backup] })
+    expect(issues.find((issue) => issue.id === 'opencode-L1-20261024-090000').status).toBe('done')
+  })
+
   it('takes a title from the archive when the brief has left TASKS.md', () => {
     const dir = tempDir()
     const agents = join(dir, 'docs', 'agents')
