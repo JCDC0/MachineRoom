@@ -424,6 +424,38 @@ describe('reported context windows', () => {
     expect(notices).toContainEqual({ topic: 'endpoints' })
   })
 
+  it.each([null, 0, 1.5])('retries a partial detail with context length %s after the delay', async (contextLength) => {
+    const temp = makeTempDir('mr-test-window-partial-')
+    cleanups.push(() => removeTempDir(temp))
+    saveEndpoints(temp, [{ name: 'OpenRouter', provider: 'OpenRouter', baseUrl: 'https://openrouter.ai/api/v1', keyName: 'slot', models: ['selected'], modelDetails: [{ id: 'selected', contextLength }] }])
+    let time = 1000
+    const fetchImpl = vi.fn(async () => ({ ok: true, json: async () => ({ data: [{ id: 'selected', context_length: fetchImpl.mock.calls.length === 1 ? contextLength : 163840 }] }) }))
+    const api = createEndpointsApi({ runsFolder: temp, readKey: async () => 'test', now: () => time, fetchImpl })
+    await api.refreshMissing('OpenRouter/selected')
+    await api.refreshMissing('OpenRouter/selected')
+    expect(fetchImpl).toHaveBeenCalledTimes(1)
+    time += 600000
+    await api.refreshMissing('OpenRouter/selected')
+    expect(fetchImpl).toHaveBeenCalledTimes(2)
+    expect(readEndpoints(temp)[0].modelDetails[0].contextLength).toBe(163840)
+  })
+
+  it('waits before retrying a model omitted from a successful response', async () => {
+    const temp = makeTempDir('mr-test-window-omitted-')
+    cleanups.push(() => removeTempDir(temp))
+    saveEndpoints(temp, [{ name: 'OpenRouter', provider: 'OpenRouter', baseUrl: 'https://openrouter.ai/api/v1', keyName: 'slot', models: ['selected'] }])
+    let time = 1000
+    const fetchImpl = vi.fn(async () => ({ ok: true, json: async () => ({ data: [{ id: fetchImpl.mock.calls.length === 1 ? 'other' : 'selected', context_length: 163840 }] }) }))
+    const api = createEndpointsApi({ runsFolder: temp, readKey: async () => 'test', now: () => time, fetchImpl })
+    await api.refreshMissing('OpenRouter/selected')
+    await api.refreshMissing('OpenRouter/selected')
+    expect(fetchImpl).toHaveBeenCalledTimes(1)
+    time += 600000
+    await api.refreshMissing('OpenRouter/selected')
+    expect(fetchImpl).toHaveBeenCalledTimes(2)
+    expect(readEndpoints(temp)[0].modelDetails[0].contextLength).toBe(163840)
+  })
+
   it('keeps the saved model list and existing details when refreshing', async () => {
     const temp = makeTempDir('mr-test-window-models-')
     cleanups.push(() => removeTempDir(temp))

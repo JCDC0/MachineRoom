@@ -864,8 +864,9 @@ export function createOrchestrators({
     return Array.isArray(tickets) && tickets.length > 0 ? tickets[tickets.length - 1] : null
   }
 
-  function receiveLaneMessage(lane, from, text, at, sender, interrupt) {
+  function receiveLaneMessage(lane, from, text, at, sender, interrupt, startedAt) {
     const held = lastLaneTicket(lane) ?? backupHeld(lane)
+    if (startedAt !== undefined && held?.startedAt !== startedAt) return 'stale'
     if (!held || !Array.isArray(held.inbox)) return false
     const entry = { id: randomUUID(), from, text, at: new Date(at).toISOString(), status: 'queued', sender }
     held.inbox.push(entry)
@@ -995,7 +996,8 @@ export function createOrchestrators({
         if (sentCount >= LANE_MESSAGE_LIMIT) return { status: 429, body: { error: LANE_LIMIT_PROBLEM } }
         const sender = `lane:${senderLane}`
         const identity = createHash('sha256').update(`lane:${ticketValue}`).digest('hex')
-        const delivered = receiveLaneMessage(laneTarget, sender, text, clock(), identity)
+        const delivered = receiveLaneMessage(laneTarget, sender, text, clock(), identity, undefined, body.startedAt)
+        if (delivered === 'stale') return { status: 409, body: { error: 'That run is no longer running.' } }
         if (!delivered) {
           return { status: 409, body: { error: laneNoRunProblem(laneTarget) } }
         }
@@ -1061,7 +1063,8 @@ export function createOrchestrators({
       }
       const sender = page ? 'owner' : actor === ORCHESTRATOR_KEY ? ORCHESTRATOR_KEY : `sub:${actor}`
       const identity = page ? 'owner' : createHash('sha256').update(`orchestrator:${tokenValue}`).digest('hex')
-      const delivered = receiveLaneMessage(laneTarget, sender, text, at, identity, interrupt)
+      const delivered = receiveLaneMessage(laneTarget, sender, text, at, identity, interrupt, body.startedAt)
+      if (delivered === 'stale') return { status: 409, body: { error: 'That run is no longer running.' } }
       if (!delivered) {
         return { status: 409, body: { error: laneNoRunProblem(laneTarget) } }
       }

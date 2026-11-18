@@ -32,7 +32,7 @@ export function runOptions(runs, lane, { liveRuns = [], lanes = [] } = {}) {
     if (!startedAt) return
     const kept = found.get(startedAt)
     if (kept) {
-      if (running && kept.running !== true) found.set(startedAt, { ...kept, ...run, running: true })
+      if (running) found.set(startedAt, { ...kept, ...run, lane: wanted, startedAt, time, running: true })
       return
     }
     found.set(startedAt, { ...run, lane: wanted, startedAt, time, running })

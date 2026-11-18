@@ -1394,7 +1394,7 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
 
     sendToOrchestrator: (text, { confirmed } = {}) => call('sendToOrchestrator', () => sendMessage(undefined, text, confirmed)),
 
-    sendLaneMessage: ({ lane = '', text = '', interrupt } = {}) =>
+    sendLaneMessage: ({ lane = '', text = '', interrupt, startedAt } = {}) =>
       call('sendLaneMessage', () => {
         const target = typeof lane === 'string' ? lane.trim() : ''
         const value = typeof text === 'string' ? text.trim() : ''
@@ -1402,6 +1402,7 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
           throw new Error('Write a message from 1 to 8000 characters.')
         }
         const entry = runsState.running.find((item) => item.lane === target)
+        if (startedAt !== undefined && entry?.startedAt !== startedAt) throw new Error('That run is no longer running.')
         if (!entry) throw new Error(`The lane ${target} has no run that can read a message now.`)
         const meta = runningMeta.get(entry)
         if (meta && !Array.isArray(meta.inbox)) meta.inbox = []
