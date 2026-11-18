@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
   LANE_PILL_LIMIT,
+  agentListPosition,
+  ageText,
   inspectLane,
   isLaneAgent,
   laneAgents,
@@ -121,7 +123,7 @@ describe('the lane pill list', () => {
         task: 'U120',
         state: 'failed',
         tone: 'failed',
-        minutes: 90,
+        minutes: null,
         startedAt: Date.parse('2026-11-03T10:30:00.000Z'),
         step: null,
       },
@@ -225,6 +227,25 @@ describe('the lane pill list', () => {
     })
     expect(pills[0].minutes).toBeNull()
     expect(lanePillTitle(pills[0])).toBe('OpenCode · U120 · working')
+  })
+})
+
+describe('the footer list position and age', () => {
+  it('positions the list from the button and limits its height above the menu', () => {
+    expect(agentListPosition({ top: 726, left: 500, width: 200 }, 800, 52)).toEqual({ bottom: 82, left: 600, height: 658 })
+    expect(agentListPosition({ top: 1000, left: 300, width: 100 }, 1200, 60)).toEqual({ bottom: 208, left: 350, height: 924 })
+  })
+
+  it('uses end times for failed and finished rows and formats their ages', () => {
+    const records = { last: [
+      record('opencode', '2026-11-01T00:00:00Z', 1, { finishedAt: NOW - 5 * 60000 }),
+      record('opencode2', '2026-11-01T00:00:00Z', 0, { finishedAt: NOW - 3 * 3600000 }),
+      record('agy', '2026-11-01T00:00:00Z', 1, { finishedAt: NOW - 2 * 86400000 }),
+    ] }
+    const { pills } = lanePills({ agents: AGENTS, records, now: NOW, includeIdle: true })
+    expect(pills.map((pill) => [pill.state, ageText(pill.minutes)])).toEqual([['failed', '2 d'], ['failed', '5 min'], ['finished', '3 h']])
+    expect(ageText(null)).toBe('')
+    expect(lanePillTitle(pills[1])).toContain('5 min')
   })
 })
 

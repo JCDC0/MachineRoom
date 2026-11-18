@@ -138,6 +138,17 @@ function pillLabel(agent, labels, key) {
   return text(found) || text(agent?.name) || key
 }
 
+export function agentListPosition(button, windowHeight, menuBottom = 0) {
+  return { bottom: windowHeight - button.top + 8, left: button.left + button.width / 2, height: Math.max(0, button.top - menuBottom - 16) }
+}
+
+export function ageText(minutes) {
+  if (minutes === null || minutes === undefined) return ''
+  if (minutes < 60) return `${minutes} min`
+  if (minutes < 1440) return `${Math.floor(minutes / 60)} h`
+  return `${Math.floor(minutes / 1440)} d`
+}
+
 export function lanePills({
   agents = [],
   liveRuns = [],
@@ -192,7 +203,10 @@ export function lanePills({
     }
     const last = lastRecordFor(records?.last ?? records?.recent, key, byAgentId)
     if (!last || !runFailed(last.record)) {
-      if (includeIdle) idle.push({ key, label, task: '', state: 'idle', tone: 'idle', minutes: null, step: null })
+      if (includeIdle) {
+        const finished = last && finiteOrNull(last.record.exitCode) === 0
+        idle.push({ key, label, task: finished ? recordTask(last.record) : '', state: finished ? 'finished' : 'idle', tone: finished ? 'finished' : 'idle', minutes: finished ? minutesSince(timeOf(last.record.finishedAt), now) : null, step: null })
+      }
       continue
     }
     failed.push({
@@ -201,7 +215,7 @@ export function lanePills({
       task: recordTask(last.record),
       state: 'failed',
       tone: 'failed',
-      minutes: minutesSince(last.started, now),
+      minutes: minutesSince(timeOf(last.record.finishedAt), now),
       startedAt: last.started,
       step: null,
     })
@@ -234,7 +248,7 @@ export function lanePillTitle(pill) {
   const parts = [text(pill.label) || text(pill.key)]
   if (text(pill.task)) parts.push(text(pill.task))
   parts.push(text(pill.state) || 'idle')
-  if (pill.minutes !== null && pill.minutes !== undefined) parts.push(`${pill.minutes} min`)
+  if (pill.minutes !== null && pill.minutes !== undefined) parts.push(pill.state === 'failed' || pill.state === 'finished' ? ageText(pill.minutes) : `${pill.minutes} min`)
   if (text(pill.step)) parts.push(`task ${text(pill.step)}`)
   return parts.filter(Boolean).join(' · ')
 }
