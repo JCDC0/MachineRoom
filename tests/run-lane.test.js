@@ -1,4 +1,5 @@
 import { spawn, spawnSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { copyFileSync, existsSync, mkdirSync, readFileSync, realpathSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
 import { basename, delimiter, dirname, join, resolve } from 'node:path'
 import { Writable } from 'node:stream'
@@ -2642,7 +2643,8 @@ describe('continuing a lane session', () => {
     { title: 'starts a new Claude session when the transcript is missing', harness: 'claude', hasSession: false, resumes: false },
     { title: 'keeps the full prompt on a different harness', harness: 'opencode', hasSession: true, resumes: false },
     { title: 'starts a fresh Claude session for the next queue task', harness: 'claude', hasSession: true, resumes: false, queue: { branch: 'main', index: 2, size: 2 } },
-  ])('$title', async ({ harness, hasSession, resumes, queue }) => {
+    { title: 'starts a fresh Claude session when the brief text changes', harness: 'claude', hasSession: true, resumes: false, briefChanged: true },
+  ].map((scenario) => [scenario.title, scenario]))('%s', async (_title, { harness, hasSession, resumes, queue, briefChanged }) => {
     const folder = makeTempDir('mr-continue-session-')
     const runs = join(folder, 'runs')
     const argsFile = join(folder, 'args.json')
@@ -2665,15 +2667,19 @@ describe('continuing a lane session', () => {
           writeFileSync(join(sessions, `${sessionId}.jsonl`), '')
         }
         const lane = { name: 'Probe', worktree: project, cli: { harness, bin: process.execPath } }
-        const first = { lane: 'probe', project, log: join(runs, 'first.log'), branch: 'main', queueIndex: queue ? 1 : undefined }
-        writeFileSync(join(runs, 'first.meta.json'), JSON.stringify({ lane: 'probe', sessionId }))
+        const wanted = briefChanged ? [{ id: 'P1', title: 'Test brief', text: 'Updated brief text.' }] : []
+        const oldText = briefChanged ? [[wanted[0].title, 'Original brief text.']] : fullPrompt
+        const briefHash = createHash('sha256').update(JSON.stringify(oldText)).digest('hex')
+        const prompt = briefChanged ? wanted[0].text : fullPrompt
+        const first = { lane: 'probe', project: briefChanged ? undefined : project, briefs: wanted.map(({ id }) => id), log: join(runs, 'first.log'), branch: 'main', queueIndex: queue ? 1 : undefined }
+        writeFileSync(join(runs, 'first.meta.json'), JSON.stringify({ lane: 'probe', sessionId, briefHash }))
         writeFileSync(join(runs, 'first.interrupt.txt'), interrupt)
 
         async function continueRun(previous, name) {
           writeFileSync(join(runs, 'runs.jsonl'), `${JSON.stringify(previous)}\n`)
           const run = await startLane({
             options: { lane: 'probe', minutes: 1, continueFrom: basename(previous.log, '.log') },
-            lane, lanes: { probe: lane }, wanted: [], prompt: fullPrompt, project, task: fullPrompt, queue, deferRecord: true,
+            lane, lanes: { probe: lane }, wanted, prompt, project: first.project, task: fullPrompt, queue, deferRecord: true,
             logPath: join(runs, `${name}.log`), usageFile: join(runs, `${name}.usage.json`), name,
           })
           expect(run.code).toBe(0)
@@ -2697,7 +2703,7 @@ describe('continuing a lane session', () => {
           expect(last.args).not.toContain('--session-id')
           expect(last.meta).toMatchObject({ sessionId, resumed: true })
         } else {
-          expect(next.args).toContain(`${fullPrompt}\n\n${interrupt}`)
+          expect(next.args).toContain(`${prompt}\n\n${interrupt}`)
           expect(next.args).not.toContain('--resume')
           expect(next.meta).not.toHaveProperty('resumed')
           expect(next.meta.sessionId).not.toBe(sessionId)

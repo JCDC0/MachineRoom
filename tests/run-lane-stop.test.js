@@ -282,7 +282,7 @@ describe('a stopped lane stays stopped', () => {
     expect(leftoverReady, 'the leftover process was not in the process list').toBe(true)
     const result = await runLane(['fake', '--project', project, '--task', 'Do it.'], env)
     expect(result.code).toBe(1)
-    expect(result.stderr).toContain(`The fake lane still has leftover process ${leftover.pid} (${maskProfilePaths(process.execPath)}); stop it with npm run run-lane -- --stop fake.`)
+    expect(result.stderr).toContain(`The fake lane still has leftover process ${leftover.pid} (${maskProfilePaths(process.execPath)}); check and close it before starting the lane.`)
     expect(result.stdout).not.toContain('exit code:')
   }, 30000)
 
@@ -439,15 +439,18 @@ describe('stopLane creation time rules', () => {
     }
   }
 
-  it('stops a recorded orphan and its new child after the lock is gone', () => {
+  it('stops a recorded tree and leaves an unrecorded process naming the worktree alive without a lock', async () => {
     const { runs, env } = setup('mr-stop-orphan-')
     const state = join(runs, 'fake.lock.processes')
     writeFileSync(state, JSON.stringify({ log: 'prior.log', worktree: 'C:/lane', recorded: [[300, 9600], [301, 9605]] }))
+    const owner = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 60000)', 'C:/lane'], { stdio: 'ignore', windowsHide: true })
+    await new Promise((done, reject) => { owner.once('spawn', done); owner.once('error', reject) })
     const processes = [
       { pid: 300, ppid: 1, created: 9600, command: 'bash /tmp/worker.sh' },
       { pid: 301, ppid: 1, created: 9705, command: 'node C:/lane/worker.js' },
       { pid: 302, ppid: 300, created: 9800 },
       { pid: 303, ppid: 301, created: 9805 },
+      { pid: owner.pid, ppid: process.pid, created: 9900, command: 'node C:/lane' },
     ]
     const killed = []
     const lines = []
@@ -459,15 +462,18 @@ describe('stopLane creation time rules', () => {
         list: () => processes,
         kill: ({ pid }) => {
           killed.push(pid)
+          if (pid === owner.pid) return owner.kill()
           return true
         },
       }))
       expect(code).toBe(0)
       expect(killed).toEqual([300, 302])
-      expect(lines).toContain('Stopped 2 leftover processes for the fake lane.')
+      expect(processAlive(owner.pid)).toBe(true)
+      expect(lines).toContain('Stopped 2 leftover processes for the fake lane. Matched no names.')
       expect(existsSync(state)).toBe(false)
     } finally {
       console.log = log
+      owner.kill()
     }
   })
 
@@ -1148,6 +1154,29 @@ describe('stopLeftovers counts only what it stopped', () => {
       console.log = log
     }
   }
+
+  it('limits the sweep by name to known creation times after the run began', () => {
+    const command = 'node C:/lane/worker.js'
+    const killed = []
+    const { result } = captureLines(() => stopLeftovers({
+      worktree: 'C:/lane',
+      namedAfter: 2000,
+      recorded: new Map([[402, 1000]]),
+      processes: [
+        { pid: 400, ppid: 1, created: 1999, command },
+        { pid: 401, ppid: 1, created: 2000, command },
+        { pid: 402, ppid: 1, created: 1000 },
+        { pid: 403, ppid: 1, created: 2001, command },
+        { pid: 404, ppid: 1, command },
+      ],
+      kill: ({ pid }) => {
+        killed.push(pid)
+        return true
+      },
+    }))
+    expect(killed).toEqual([402, 403])
+    expect(result.stopped).toBe(2)
+  })
 
   it('prints a gone leftover as already ended and does not count it stopped', () => {
     const killed = []

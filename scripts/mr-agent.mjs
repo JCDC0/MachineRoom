@@ -34,6 +34,7 @@ const DAMAGED_RETRY_LIMIT = 1
 const RETRY_BASE_MS = 2000
 const RETRY_MAX_MS = 60000
 const RETRY_STATUS = new Set([429, 500, 502, 503, 529])
+const POST_TIMEOUT_MS = 15 * 60 * 1000
 const NUDGE = 'Continue with the task. Use tools, or say you are done.'
 const LOOP_WARNING = 'This call has failed the same way three times. Try something else or stop and report.'
 const LOOP_WARN_AT = 3
@@ -1149,52 +1150,71 @@ export function requestTimeoutMs(env = process.env) {
   return valid ? value : FETCH_TIMEOUT_MS
 }
 
-function sleep(ms) {
-  return new Promise((done) => setTimeout(done, ms))
+function sleep(ms, signal) {
+  signal.throwIfAborted()
+  return new Promise((done, reject) => {
+    const abort = () => {
+      clearTimeout(timer)
+      reject(signal.reason)
+    }
+    const timer = setTimeout(() => {
+      signal.removeEventListener('abort', abort)
+      done()
+    }, ms)
+    signal.addEventListener('abort', abort, { once: true })
+  })
 }
 
 export async function post(url, key, payload, { onDamaged, costLimit, signal } = {}) {
   const headers = { 'content-type': 'application/json' }
   if (key) headers.authorization = `Bearer ${key}`
+  const deadline = AbortSignal.timeout(POST_TIMEOUT_MS)
+  const overall = signal ? AbortSignal.any([deadline, signal]) : deadline
+  const timedOut = () => new Error('The API request failed: it reached its 15 minute limit.')
+  const retry = async (attempt, response) => {
+    try {
+      await sleep(retryDelayMs(attempt, response), overall)
+    } catch (error) {
+      if (signal?.aborted) throw signal.reason
+      if (deadline.aborted) throw timedOut()
+      throw error
+    }
+  }
   let damagedRetries = 0
   for (let attempt = 0; attempt <= RETRY_LIMIT; attempt += 1) {
     let response
-    const timeout = AbortSignal.timeout(requestTimeoutMs())
-    const requestSignal = signal ? AbortSignal.any([timeout, signal]) : timeout
+    let body
+    const requestSignal = AbortSignal.any([AbortSignal.timeout(requestTimeoutMs()), overall])
     try {
+      requestSignal.throwIfAborted()
       response = await fetch(`${url}/chat/completions`, {
         method: 'POST',
         headers,
         body: JSON.stringify(payload),
         signal: requestSignal,
       })
+      body = await response.text()
+      requestSignal.throwIfAborted()
     } catch (error) {
-      if (signal?.aborted) throw error
+      if (signal?.aborted) throw signal.reason
       if (costLimit !== null && costLimit !== undefined) {
         const failure = new Error('The cost limit is set but the provider did not report a cost; stopped.')
         failure.isCostLimit = true
         throw failure
       }
+      if (deadline.aborted) throw timedOut()
       const failure = new Error(`The API request failed: ${sanitize(error?.message ?? String(error), key)}`)
       if (attempt === RETRY_LIMIT) throw failure
-      await sleep(retryDelayMs(attempt, null))
+      await retry(attempt, null)
       continue
     }
     if (!response.ok) {
-      let detail = ''
-      try {
-        detail = await response.text()
-      } catch {}
-      detail = sanitize(detail.slice(0, 500), key)
+      const detail = sanitize(body.slice(0, 500), key)
       const failure = new Error(`The API answered ${response.status}${detail ? `: ${detail}` : ''}.`)
       if (!RETRY_STATUS.has(response.status) || attempt === RETRY_LIMIT) throw failure
-      await sleep(retryDelayMs(attempt, response))
+      await retry(attempt, response)
       continue
     }
-    let body = ''
-    try {
-      body = await response.text()
-    } catch {}
     let data = null
     try {
       data = JSON.parse(body)
@@ -1212,7 +1232,7 @@ export async function post(url, key, payload, { onDamaged, costLimit, signal } =
     const failure = new Error(`The API answer was not JSON (${response.status}): ${text}.`)
     if (damagedRetries >= DAMAGED_RETRY_LIMIT || attempt === RETRY_LIMIT) throw failure
     damagedRetries += 1
-    await sleep(retryDelayMs(attempt, response))
+    await retry(attempt, response)
     continue
   }
   throw new Error('The API request failed.')

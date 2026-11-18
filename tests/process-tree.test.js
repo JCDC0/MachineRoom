@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
 import { EventEmitter } from 'node:events'
 import { PassThrough } from 'node:stream'
 import { describe, expect, it, vi } from 'vitest'
@@ -211,6 +211,38 @@ describe('listProcesses', () => {
 })
 
 describe('sampleProcesses', () => {
+  it.runIf(process.platform === 'win32')('keeps the Windows sampler running after a query error', () => {
+    const sampler = Object.assign(new EventEmitter(), {
+      stdin: new PassThrough(),
+      stdout: new PassThrough(),
+      kill: vi.fn(),
+    })
+    vi.mocked(spawn).mockImplementationOnce(() => sampler)
+    vi.stubEnv('MACHINEROOM_SAMPLE_MS', '250')
+    const stop = sampleProcesses(() => {}, 'win32')
+    try {
+      const [file, args] = vi.mocked(spawn).mock.lastCall
+      const query = `$queries = 0
+        function Get-CimInstance {
+          $script:queries++
+          if ($script:queries -eq 1) { throw 'transient failure' }
+          [pscustomobject]@{ ProcessId = 7; ParentProcessId = 2; CreationDate = 1000 }
+        }
+      `
+      const result = spawnSync(file, [...args.slice(0, -1), query + args.at(-1)], {
+        input: '\n\n', encoding: 'utf8', windowsHide: true, timeout: 5000,
+      })
+      expect(result.status, result.error?.message ?? result.stderr).toBe(0)
+      expect(result.stdout.trim().split(/\r?\n/).map(JSON.parse)).toEqual([
+        [],
+        [{ ProcessId: 7, ParentProcessId: 2, CreationDate: 1000 }],
+      ])
+    } finally {
+      stop()
+      vi.unstubAllEnvs()
+    }
+  })
+
   it('uses the default or a valid interval and turns off at zero', () => {
     const cases = [[undefined, 2000], ['250', 250], ['60000', 60000], ['249', 2000], ['60001', 2000], ['250.5', 2000], ['0x100', 2000], ['0', 0]]
     vi.useFakeTimers()

@@ -1856,20 +1856,21 @@ describe('each native request has its own timeout', () => {
     await vi.advanceTimersByTimeAsync(400000)
     expect(await result).toEqual(answer)
     expect(calls).toBe(2)
-    expect(timeouts).toEqual([300000, 300000])
+    expect(timeouts).toEqual([900000, 300000, 300000])
   })
 
-  it('fails after the last retry when every attempt times out', async () => {
-    let calls = 0
-    setup((url, init) => {
-      calls += 1
-      return hangUntilAborted(init)
-    })
-    const result = post('http://x', null, {})
-    const caught = result.catch((error) => error)
-    await vi.advanceTimersByTimeAsync(300000 * 6)
-    expect((await caught).message).toContain('The API request failed')
-    expect(calls).toBe(5)
+  it('treats timed-out bodies as failed requests and caps the whole post at 15 minutes', async () => {
+    setup(async (url, init) => ({ ok: true, status: 200, text: () => hangUntilAborted(init) }))
+    const onDamaged = vi.fn()
+    const finished = vi.fn()
+    const result = post('http://x', null, {}, { onDamaged }).catch(finished)
+    await vi.advanceTimersByTimeAsync(899999)
+    expect(finished).not.toHaveBeenCalled()
+    expect(fetch).toHaveBeenCalledTimes(3)
+    await vi.advanceTimersByTimeAsync(1)
+    expect(finished).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ message: 'The API request failed: it reached its 15 minute limit.' }))
+    expect(onDamaged).not.toHaveBeenCalled()
+    await result
   })
 
   it('stops at once with no retry when the caller aborts', async () => {

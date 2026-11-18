@@ -2,7 +2,7 @@
 import { spawn, spawnSync } from 'node:child_process'
 import { createHash, randomUUID } from 'node:crypto'
 import { appendFileSync, closeSync, constants, copyFileSync, createWriteStream, existsSync, fstatSync, linkSync, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, realpathSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
-import { homedir, tmpdir } from 'node:os'
+import { homedir, tmpdir, uptime } from 'node:os'
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import { finished } from 'node:stream'
 import { fileURLToPath } from 'node:url'
@@ -63,7 +63,7 @@ function errorCode(error) {
 
 let recordFailed = false
 
-export function appendRunRecord(record, { env = process.env, print = console.log, file, write = appendFileSync } = {}) {
+export function appendRunRecord(record, { env = process.env, print = console.log, file, write = appendFileSync, bestEffort = false } = {}) {
   const targetFile = file || runsFile(env)
   const folder = dirname(targetFile)
   try {
@@ -72,11 +72,16 @@ export function appendRunRecord(record, { env = process.env, print = console.log
       print(`The runs folder was gone; made it again at ${printedRunsFolder(folder, env)}.`)
     }
     let lock
-    const deadline = Date.now() + 10000
-    while (!lock) {
-      try { lock = takeLaneLock(folder, '.runs-append') } catch (error) {
-        if (Date.now() >= deadline) throw error
-        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 20)
+    if (bestEffort) {
+      lock = join(folder, '.runs-append.lock')
+      writeFileSync(lock, laneLockText({ pid: process.pid }), { flag: 'wx' })
+    } else {
+      const deadline = Date.now() + 10000
+      while (!lock) {
+        try { lock = takeLaneLock(folder, '.runs-append') } catch (error) {
+          if (Date.now() >= deadline) throw error
+          Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 20)
+        }
       }
     }
     try {
@@ -95,6 +100,7 @@ export function appendRunRecord(record, { env = process.env, print = console.log
     } finally { releaseLaneLock(lock) }
     return true
   } catch (error) {
+    if (bestEffort) return false
     recordFailed = true
     process.exitCode = 1
     print(`The run record was not saved at ${printedRunsFolder(targetFile, env)} (${errorCode(error)}); the run still ended.`)
@@ -186,7 +192,7 @@ function killProcess({ pid }) {
   }
 }
 
-export function stopLeftovers({ worktree, worktrees = [], childPid = 0, childCreated, recorded = new Map(), label = 'leftover', excludePids = [], platform = process.platform, list = listProcesses, kill = killProcess, alive = processAlive, processes = null, current = null, snapshotOnly = false } = {}) {
+export function stopLeftovers({ worktree, worktrees = [], namedAfter = null, childPid = 0, childCreated, recorded = new Map(), label = 'leftover', excludePids = [], platform = process.platform, list = listProcesses, kill = killProcess, alive = processAlive, processes = null, current = null, snapshotOnly = false } = {}) {
   if (!worktree && !worktrees.some(Boolean) && !(childPid > 0) && recorded.size === 0) return { found: 0, stopped: 0, failed: 0 }
   const snapshot = processes ?? (snapshotOnly ? [] : list())
   if (snapshot.length === 0) {
@@ -195,7 +201,7 @@ export function stopLeftovers({ worktree, worktrees = [], childPid = 0, childCre
     if (failed > 0) console.log(`${label}: could not verify ${failed} recorded ${failed === 1 ? 'process' : 'processes'}`)
     return { found: 0, stopped: 0, failed }
   }
-  const found = leftoverProcesses(snapshot, { childPid, childCreated, recorded, worktree, worktrees, ownPid: process.pid, excludePids, platform })
+  const found = leftoverProcesses(snapshot, { childPid, childCreated, recorded, worktree, worktrees, namedAfter, ownPid: process.pid, excludePids, platform })
   if (found.length === 0) return { found: 0, stopped: 0, failed: 0 }
   const currentByPid = snapshotOnly ? new Map((Array.isArray(current) ? current : list()).map((row) => [row.pid, row])) : null
   let stopped = 0
@@ -345,9 +351,10 @@ export async function refuseRunningLane(
   const findLeftovers = (snapshot) => leftoverProcesses(snapshot, { worktrees, recorded: saved.recorded, ownPid: process.pid })
   if (findLeftovers(list()).length === 0) return
   await wait(500)
-  const leftover = findLeftovers(list())[0]
+  const current = list()
+  const leftover = findLeftovers(current)[0]
   if (!leftover) return
-  if (!before && worktree && !saved.worktree) saveLaneProcessState(lock, '', worktree, saved.recorded, before)
+  const stoppable = leftoverProcesses(current, { recorded: saved.recorded, ownPid: process.pid }).some((row) => row.pid === leftover.pid)
   const program = (() => {
     const text = String(leftover.command ?? '').trim()
     if (text === '') return ''
@@ -358,7 +365,7 @@ export async function refuseRunningLane(
     const match = /^\S+/.exec(text)
     return match ? match[0] : ''
   })()
-  throw new Error(laneStopProblem({ lane: laneKey, pid: leftover.pid, leftover: true, program }))
+  throw new Error(laneStopProblem({ lane: laneKey, pid: leftover.pid, leftover: true, program, stoppable }))
 }
 
 function stopArgument(argv) {
@@ -418,6 +425,7 @@ export function stopLane(laneKey, { platform = process.platform, list = listProc
   const path = join(folder, `${laneKey}.lock`)
   const before = lockText(path)
   if (!before && startedAt) {
+    console.log(`Stopped 0 leftover processes for the ${laneKey} lane. Matched no names.`)
     console.log(`Nothing was running for the ${laneKey} lane.`)
     return 0
   }
@@ -429,8 +437,8 @@ export function stopLane(laneKey, { platform = process.platform, list = listProc
     lockMtime = null
   }
   const holder = readLaneLock(path)
-  const worktree = holder.projectRun ? '' : holder.folder || configuredLaneWorktree(laneKey, folder)
-  const processes = before || worktree || saved.worktree || saved.recorded.size > 0 ? list() : []
+  const worktree = !before || holder.projectRun ? '' : holder.folder || configuredLaneWorktree(laneKey, folder)
+  const processes = before || saved.recorded.size > 0 ? list() : []
   const byPid = new Map((Array.isArray(processes) ? processes : []).map((item) => [item.pid, item]))
   const rootPid = Number.isInteger(holder.child) && holder.child > 0 ? holder.child : holder.pid
   const isStranger = (pid) => (saved.recorded.has(pid) && byPid.has(pid) && saved.recorded.get(pid) !== byPid.get(pid).created)
@@ -488,24 +496,21 @@ export function stopLane(laneKey, { platform = process.platform, list = listProc
     console.log(`kept the ${laneKey} lock: a newer run took it while the stop ran`)
     return 0
   }
-  const reused = before ? [] : current.filter((row) => {
-    const previous = byPid.get(row.pid)
-    return Number.isFinite(previous?.created) && previous.created !== row.created
-  }).map((row) => row.pid)
   const leftovers = stopLeftovers({
-    worktrees: [worktree, saved.worktree],
+    worktrees: before ? [worktree, saved.worktree] : [],
     recorded: saved.recorded,
-    excludePids: [holder.pid ?? 0, holder.child ?? 0, ...descendants.map((item) => item.pid), ...reused],
+    excludePids: [holder.pid ?? 0, holder.child ?? 0, ...descendants.map((item) => item.pid)],
     platform,
     list,
     kill: kill === killTree ? killProcess : kill,
     alive,
-    processes: before ? processes : current,
+    processes,
     current,
     snapshotOnly: true,
   })
   const leftoverCount = descendantsResult.stopped + leftovers.stopped
-  if (leftoverCount > 0) console.log(`Stopped ${leftoverCount} leftover ${leftoverCount === 1 ? 'process' : 'processes'} for the ${laneKey} lane.`)
+  if (!before) console.log(`Stopped ${leftoverCount} leftover ${leftoverCount === 1 ? 'process' : 'processes'} for the ${laneKey} lane. Matched no names.`)
+  else if (leftoverCount > 0) console.log(`Stopped ${leftoverCount} leftover ${leftoverCount === 1 ? 'process' : 'processes'} for the ${laneKey} lane.`)
   stopped += leftovers.stopped
   failed += leftovers.failed
   if (stopped === 0 && leftovers.found === 0 && descendants.length === 0 && failed === 0) {
@@ -516,7 +521,8 @@ export function stopLane(laneKey, { platform = process.platform, list = listProc
     return 0
   }
   if (failed > 0) {
-    console.log(`kept the ${laneKey} lock: ${failed} ${failed === 1 ? 'process' : 'processes'} could not be stopped, so the lane stays busy`)
+    const kept = before ? 'lock' : 'recorded process data'
+    console.log(`kept the ${laneKey} ${kept}: ${failed} ${failed === 1 ? 'process' : 'processes'} could not be stopped, so the lane stays busy`)
     return 1
   }
   rmSync(`${path}.processes`, { force: true })
@@ -1527,20 +1533,29 @@ function recoverLostRuns(file = runsFile()) {
     if (error?.code === 'ENOENT') return records
     throw error
   }
-  let saved = false
+  const recovered = []
+  let unsaved = false
   for (const entry of entries) {
     if (!entry.endsWith('.meta.json')) continue
     const name = entry.slice(0, -'.meta.json'.length)
     if (recorded.has(name)) continue
     const lost = lostRunRecord(file, name)
-    if (lost && appendRunRecord(lost, { file })) saved = true
+    if (!lost) continue
+    if (!unsaved && !appendRunRecord(lost, { file, bestEffort: true })) unsaved = true
+    recovered.push(lost)
   }
-  return saved ? readRecords(file) : records
+  if (recovered.length === 0) return records
+  const latest = readRecords(file)
+  const names = new Set(latest.map(runNameOfRecord))
+  const inMemory = recovered.filter((record) => !names.has(runNameOfRecord(record)))
+  if (inMemory.length > 0) console.log('The recovered runs were not all saved.')
+  return latest.concat(inMemory)
 }
 
-function claudeResumeId(folder, name, worktree) {
+function claudeResumeId(folder, name, worktree, briefHash) {
   try {
     const meta = JSON.parse(readFileSync(join(folder, `${name}.meta.json`), 'utf8'))
+    if (meta?.briefHash !== briefHash) return ''
     const id = meta?.sessionId
     if (typeof id !== 'string' || !/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(id)) return ''
     const home = (process.platform === 'win32' ? process.env.USERPROFILE : process.env.HOME) || homedir()
@@ -2213,6 +2228,7 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
   }
   const runsDir = options?.runs || (logPath ? dirname(logPath) : runsFolder())
   const continueFrom = typeof options?.continueFrom === 'string' ? options.continueFrom.trim() : ''
+  const briefHash = createHash('sha256').update(JSON.stringify(project ? task : wanted.map(({ title, text }) => [title, text]))).digest('hex')
   let fullPrompt = prompt
   let continuedBase = ''
   let continuedBranch = ''
@@ -2245,7 +2261,7 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
       fullPrompt = `${prompt}\n\n${interruptText}`
     }
     if (lane.cli.harness === 'claude' && (!queue || queue.index === (record.queueIndex ?? 1))) {
-      resumedSessionId = claudeResumeId(runsDir, continueFrom, project || lane.worktree)
+      resumedSessionId = claudeResumeId(runsDir, continueFrom, project || lane.worktree, briefHash)
     }
   }
   let start = null
@@ -2286,7 +2302,7 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
     const startedBy = options.startedBy ? null : sessionStartedBy(process.env)
     const startedAt = Number.isFinite(Number(givenStartedAt)) && Number(givenStartedAt) > 0 ? Number(givenStartedAt) : Date.now()
     const meta = {
-      lane: options.lane, sessionId, briefs: project ? [] : wanted.map((brief) => brief.id),
+      lane: options.lane, sessionId, briefHash, briefs: project ? [] : wanted.map((brief) => brief.id),
       startedAt: new Date(startedAt).toISOString(), branch: checkpoint?.branch ?? '',
       model: lane.cli.model, reasoning: lane.reasoning, mode: lane.cli.mode,
       ...(runBase ? { base: runBase } : {}),
@@ -2357,6 +2373,7 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
     })
     const setupLine = typeof worktreeSetup === 'string' ? worktreeSetup.trim() : ''
     if (setupLine !== '') laneLog.push('stdout', `${setupLine}\n`)
+    const namedAfter = process.platform === 'linux' ? Math.ceil(uptime() * 100) : Date.now()
     const child = spawn(spawnSpec.file, spawnSpec.args, { cwd: command.cwd, env: childEnv, stdio: spawnSpec.input ? ['pipe', 'pipe', 'pipe'] : ['ignore', 'pipe', 'pipe'], windowsHide: true })
     if (typeof onStart === 'function') onStart()
     const lockStart = queue && lockPath ? laneLockStartedAt(lockText(lockPath)) || startedAt : startedAt
@@ -2420,6 +2437,7 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
       const root = processes.find((row) => row.pid === child.pid)
       const result = stopLeftovers({
         worktree: sweepWorktree,
+        namedAfter,
         childPid: child.pid ?? 0,
         childCreated: childCreated ?? (root && root.ppid !== process.pid ? null : undefined),
         recorded,
