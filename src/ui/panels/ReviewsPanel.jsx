@@ -296,6 +296,7 @@ export default function ReviewsPanel({
   initialReviews = null,
   initialDiff = null,
 }) {
+  const [emptyOpen, setEmptyOpen] = useState(false)
   const [reviews, setReviews] = useState(() => (Array.isArray(initialReviews) ? initialReviews : []))
   const [loading, setLoading] = useState(() => initialReviews == null)
   const [loadError, setLoadError] = useState(null)
@@ -659,6 +660,8 @@ export default function ReviewsPanel({
     setMergeConflictFiles([])
   }
 
+  const needsReview = reviews.filter((review) => review.error || review.ahead > 0 || review.dirty)
+  const emptyReviews = reviews.filter((review) => !review.error && !(review.ahead > 0) && !review.dirty)
   const lines = diff?.patch ? patchLines(diff.patch) : []
   const base = reviews.find((review) => typeof review?.base === 'string' && review.base)?.base ?? ''
 
@@ -689,11 +692,21 @@ export default function ReviewsPanel({
             Retry
           </button>
         </div>
-      ) : reviews.length === 0 ? (
-        <div className="panel-state is-dim mono">No lanes to review.</div>
       ) : (
         <div className="reviews-list">
-          {reviews.map((review) => {
+          {!emptyOpen && emptyReviews.filter((review) => mergeSuccessByLane[review.lane]).map((review) => (
+            <div key={review.lane} className="review-merged-banner mono" role="status">
+              <div>{mergeSuccessByLane[review.lane].text}</div>
+              {mergeSuccessByLane[review.lane].playLine && <div className="review-play-line">{mergeSuccessByLane[review.lane].playLine}</div>}
+            </div>
+          ))}
+          {needsReview.length === 0 && <div className="panel-state is-dim mono">Nothing to review.</div>}
+          {emptyReviews.length > 0 && (
+            <button type="button" className="review-expand-btn" aria-expanded={emptyOpen} onClick={() => setEmptyOpen(!emptyOpen)}>
+              {`${emptyReviews.length} lanes have nothing to review`}
+            </button>
+          )}
+          {[...needsReview, ...(emptyOpen ? emptyReviews : [])].map((review) => {
             const row = reviewRow(review)
             const isSelected = selectedLane === row.lane
             const isConfirmOpen = confirmTarget?.lane === row.lane

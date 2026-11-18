@@ -550,11 +550,11 @@ function seed(at) {
   const iso = (minutesAgo) => new Date(at - minutesAgo * 60000).toISOString()
   return {
     agents: [
-      { id: 'agent-claude', key: 'claude', name: 'Claude Code', adapterType: 'claude_local', role: null, status: 'idle', model: 'claude-sonnet-5-5', budgetMonthlyCents: 0, spentMonthlyCents: 0 },
-      { id: 'agent-opencode', key: 'opencode', name: 'OpenCode', adapterType: 'opencode_local', role: null, status: 'running', model: 'opencode-go/deepseek-v4.1-flash', budgetMonthlyCents: 0, spentMonthlyCents: 0 },
-      { id: 'agent-opencode2', key: 'opencode2', name: 'OpenCode 2', adapterType: 'opencode_local', role: null, status: 'idle', model: 'opencode-go/deepseek-v4.1-flash', budgetMonthlyCents: 0, spentMonthlyCents: 0 },
-      { id: 'agent-opencode3', key: 'opencode3', name: 'OpenCode 3', adapterType: 'opencode_local', role: null, status: 'idle', model: 'opencode-go/deepseek-v4.1-flash', budgetMonthlyCents: 0, spentMonthlyCents: 0 },
-      { id: 'agent-opencode4', key: 'opencode4', name: 'OpenCode 4', adapterType: 'opencode_local', role: null, status: 'idle', model: 'opencode-go/deepseek-v4.1-flash', budgetMonthlyCents: 0, spentMonthlyCents: 0 },
+      { id: 'agent-claude', key: 'claude', name: 'Claude Code', harness: 'claude', adapterType: 'claude_local', role: null, status: 'idle', model: 'claude-sonnet-5-5', budgetMonthlyCents: 0, spentMonthlyCents: 0 },
+      { id: 'agent-opencode', key: 'opencode', name: 'OpenCode', harness: 'opencode', adapterType: 'opencode_local', role: null, status: 'running', model: 'opencode-go/deepseek-v4.1-flash', budgetMonthlyCents: 0, spentMonthlyCents: 0 },
+      { id: 'agent-opencode2', key: 'opencode2', name: 'OpenCode 2', harness: 'opencode', adapterType: 'opencode_local', role: null, status: 'idle', model: 'opencode-go/deepseek-v4.1-flash', budgetMonthlyCents: 0, spentMonthlyCents: 0 },
+      { id: 'agent-opencode3', key: 'opencode3', name: 'OpenCode 3', harness: 'opencode', adapterType: 'opencode_local', role: null, status: 'idle', model: 'opencode-go/deepseek-v4.1-flash', budgetMonthlyCents: 0, spentMonthlyCents: 0 },
+      { id: 'agent-opencode4', key: 'opencode4', name: 'OpenCode 4', harness: 'opencode', adapterType: 'opencode_local', role: null, status: 'idle', model: 'opencode-go/deepseek-v4.1-flash', budgetMonthlyCents: 0, spentMonthlyCents: 0 },
     ],
     lanes: [
       { key: 'claude', name: 'Claude Code', harness: 'claude', model: 'claude-sonnet-5-5', custom: false, effort: null, active: true, working: false },

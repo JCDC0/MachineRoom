@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Sonnet finished Codex's partial work.
+- Reviews lists only lanes with commits ahead, changes or a read error and folds the rest under one line; Team names each lane by its harness and model (P557).
 - The Teams alert sits outside the fold; family action rows are at least 24 px high; CODE.md names the Repository order.
 - Three findings, R56-1 to R56-3; fixed by P555.
 - Small controls get a 24 px hit area through one shared rule; the lane checkbox is 24 px.
