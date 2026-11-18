@@ -12,6 +12,7 @@ import { chatFileFor } from '../server/orchestrator.js'
 import { gitPath } from '../server/programPath.js'
 import { clearRunsCache } from '../server/runs.js'
 import LaneConversation from '../src/ui/LaneConversation.jsx'
+import { runClock } from '../src/ui/laneConversation.js'
 import { getJson, waitFor } from './helpers/bridge.js'
 import { makeTempDir, removeTempDir } from './helpers/tempRoot.js'
 import { slowMs } from './helpers/timeout.js'
@@ -520,7 +521,9 @@ describe('LaneConversation message box and status updates', () => {
         startedAt,
         harness: 'opencode',
         running: startedAt === STARTED,
-        entries: [{ role: 'agent', text: 'Working.', at: startedAt }],
+        entries: startedAt === STARTED
+          ? [{ role: 'agent', text: 'Working.', at: startedAt }]
+          : [{ role: 'result', text: '| Command | Result |\n| --- | --- |\n| `npm run build` | **Passed** |', at: startedAt }],
       }),
       sendLaneMessage: async () => ({ id: 'msg-1' }),
       laneMessageStatus: async () => ({ id: 'msg-1', status: 'queued', at: STARTED }),
@@ -546,6 +549,11 @@ describe('LaneConversation message box and status updates', () => {
       expect(container.querySelector('textarea')).toBeNull()
       expect(container.querySelector('button[aria-label="Send"]')).toBeNull()
       expect(container.querySelector('button[aria-label="Lane message options"]')).toBeNull()
+      expect(container.querySelector('table').querySelector('td').textContent).toBe('npm run build')
+      const hint = container.querySelector('.mr-composer-box').querySelector('.mr-composer-hint')
+      expect(hint?.textContent.trim()).toBe(
+        `OpenCode is working on run ${runClock(STARTED)}. Pick that run to message it.`
+      )
 
       await act(async () => {
         const picker = container.querySelector('select[aria-label="Run"]')
@@ -557,6 +565,7 @@ describe('LaneConversation message box and status updates', () => {
       expect(container.querySelector('textarea')).not.toBeNull()
       expect(container.querySelector('button[aria-label="Send"]')).not.toBeNull()
       expect(container.querySelector('button[aria-label="Lane message options"]')).not.toBeNull()
+      expect(container.querySelector('.mr-composer-hint')).toBeNull()
     })
   })
 

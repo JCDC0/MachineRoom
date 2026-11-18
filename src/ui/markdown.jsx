@@ -7,6 +7,7 @@ const INLINE = new RegExp([INLINE_CODE, INLINE_LINK, EMPHASIS].map((pattern) => 
 const FENCE = /^ {0,3}(`{3,}|~{3,})[ \t]*[^`]*$/
 const HEADING = /^ {0,3}(#{1,6})[ \t]+(.+?)[ \t]*#*[ \t]*$/
 const LIST = /^ {0,3}(?:[-*+]|(\d+)[.)])[ \t]+(.+)$/
+const TABLE_DIVIDER = /^\|?[ \t]*:?-+:?[ \t]*(?:\|[ \t]*:?-+:?[ \t]*)*\|?$/
 
 function inline(text, depth = 0) {
   if (depth >= 4) return text
@@ -33,6 +34,33 @@ function inline(text, depth = 0) {
   return parts
 }
 
+function tableCells(line, requireSeparator = false) {
+  const cells = ['']
+  for (const [part] of line.trim().matchAll(/\\.|[^\\|]+|[\\|]/g)) {
+    if (part === '|') cells.push('')
+    else cells[cells.length - 1] += part === '\\|' ? '|' : part
+  }
+  if (cells.length === 1) {
+    if (requireSeparator) return null
+  } else {
+    if (!cells[0]) cells.shift()
+    if (!cells.at(-1)) cells.pop()
+  }
+  return cells.map((cell) => cell.trim())
+}
+
+function tableHeader(line, next) {
+  if (!line.includes('|') || !next || !TABLE_DIVIDER.test(next.trim())) return null
+  const headers = tableCells(line, true)
+  const dividers = tableCells(next)
+  if (headers?.length !== dividers.length) return null
+  const align = dividers.map((divider) => {
+    if (divider.endsWith(':')) return divider.startsWith(':') ? 'center' : 'right'
+    return undefined
+  })
+  return { headers, align }
+}
+
 export default function Markdown({ text }) {
   const lines = visibleChatText(text ?? '').replace(/\r\n?/g, '\n').split('\n')
   const blocks = []
@@ -44,6 +72,7 @@ export default function Markdown({ text }) {
     const fence = FENCE.exec(line)
     const heading = HEADING.exec(line)
     const item = LIST.exec(line)
+    const table = tableHeader(line, lines[index])
     if (fence) {
       const marker = fence[1]
       const end = new RegExp('^ {0,3}' + marker[0] + '{' + marker.length + ',}[ \t]*$')
@@ -74,10 +103,35 @@ export default function Markdown({ text }) {
           {items.map((entry, at) => <li key={at}>{inline(entry)}</li>)}
         </Tag>
       )
+    } else if (table) {
+      const { headers, align } = table
+      const rows = []
+      index += 1
+      while (index < lines.length && lines[index].trim() && !FENCE.test(lines[index])
+        && !HEADING.test(lines[index]) && !LIST.test(lines[index])) rows.push(tableCells(lines[index++]))
+      blocks.push(
+        <div key={key} className="mr-orch-block is-table" tabIndex={0}>
+          <table>
+            <thead>
+              <tr>{headers.map((cell, at) => <th key={at} scope="col" data-align={align[at]}>{inline(cell)}</th>)}</tr>
+            </thead>
+            {rows.length > 0 && (
+              <tbody>
+                {rows.map((row, at) => (
+                  <tr key={at}>
+                    {headers.map((_, column) => <td key={column} data-align={align[column]}>{inline(row[column] ?? '')}</td>)}
+                  </tr>
+                ))}
+              </tbody>
+            )}
+          </table>
+        </div>
+      )
     } else {
       const paragraph = [line]
       while (index < lines.length && lines[index].trim() && !FENCE.test(lines[index])
-        && !HEADING.test(lines[index]) && !LIST.test(lines[index])) paragraph.push(lines[index++])
+        && !HEADING.test(lines[index]) && !LIST.test(lines[index])
+        && !tableHeader(lines[index], lines[index + 1])) paragraph.push(lines[index++])
       blocks.push(<p key={key} className="mr-orch-block is-para">{inline(paragraph.join('\n'))}</p>)
     }
   }

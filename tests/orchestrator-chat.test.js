@@ -1652,6 +1652,34 @@ describe('OrchestratorChat panel', () => {
     expect(html).not.toContain('javascript:')
   })
 
+  it('renders report tables with inline Markdown and leaves invalid separators as text', () => {
+    const chat = {
+      state: 'idle',
+      messages: [{
+        id: 'report',
+        from: 'orchestrator',
+        text: [
+          'Checks',
+          'Command | Result',
+          '--- | ---:',
+          '| `a \\| b` | **Passed** [logs](https://example.com/logs) |',
+          '| `npm run build` |',
+          '',
+          '| Two | columns |',
+          '| --- |',
+        ].join('\n'),
+      }],
+    }
+    const html = renderToString(createElement(OrchestratorChat, { client: fakeClient(chat), initialChat: chat }))
+    expect(html).toContain('<div class="mr-orch-block is-table" tabindex="0"><table><thead>')
+    expect(html).toContain('<th scope="col">Command</th><th scope="col" data-align="right">Result</th>')
+    expect(html).toContain('<td><code class="mr-orch-code">a | b</code></td>')
+    expect(html).toContain('<td data-align="right"><strong>Passed</strong>')
+    expect(html).toContain('href="https://example.com/logs"')
+    expect(html).toContain('<td data-align="right"></td>')
+    expect(html).toContain('| Two | columns |\n| --- |')
+  })
+
   it('renders the conversation, the status line and the send box', () => {
     const chat = {
       state: 'working',

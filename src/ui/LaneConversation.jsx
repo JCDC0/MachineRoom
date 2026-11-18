@@ -203,7 +203,8 @@ export default function LaneConversation({
   const running = conversation.data !== null && (
     typeof conversation.data?.running === 'boolean' ? conversation.data.running : currentRun?.running === true
   )
-  const hasLiveRun = options.some((run) => run.running)
+  const otherLiveRun = options.find((run) => run.running && run.startedAt !== selected)
+  const hasLiveRun = Boolean(currentRun?.running || otherLiveRun)
   const selectedRunning = currentRun?.running === true ? conversation.data === null || running : running && !hasLiveRun
   const recipientRunning = onRecipientSend && selectedRunning
   const outcome = runOutcome(currentRun, conversation.data)
@@ -781,6 +782,11 @@ export default function LaneConversation({
           </>
         }
       >
+        {!canCompose && otherLiveRun && (
+          <p className="mr-composer-hint">
+            {`${label} is working on run ${runClock(otherLiveRun.startedAt)}. Pick that run to message it.`}
+          </p>
+        )}
         {sendError && <p className="mr-orch-error mono" role="alert">{sendError}</p>}
       </Composer>
     </aside>

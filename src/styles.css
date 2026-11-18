@@ -6141,6 +6141,33 @@ button.mr-orch-show-all {
   line-height: 1.45;
 }
 
+.mr-orch-block.is-table {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.mr-orch-block.is-table table {
+  width: max-content;
+  min-width: 100%;
+  border-collapse: collapse;
+  font: 400 12px / 1.45 var(--mono);
+  white-space: normal;
+}
+
+.mr-orch-block.is-table :is(th, td) {
+  padding: 8px;
+  border-bottom: 1px solid var(--border-soft);
+  text-align: left;
+}
+
+.mr-orch-block.is-table th {
+  font-weight: 500;
+}
+
+.mr-orch-block.is-table [data-align='center'] { text-align: center; }
+.mr-orch-block.is-table [data-align='right'] { text-align: right; }
+.mr-orch-block.is-table .mr-orch-code { font-size: inherit; }
+
 .mr-orch-code {
   padding: 0 3px;
   border: 1px solid rgb(255 255 255 / 0.16);
@@ -6347,8 +6374,10 @@ button.mr-orch-team-meta:focus-visible {
 .mr-orch-input {
   width: 100%;
   min-height: 40px;
+  max-height: 120px;
   padding: 4px;
-  resize: vertical;
+  resize: none;
+  field-sizing: content;
   border: 0;
   background: transparent;
   color: var(--white);
@@ -6356,6 +6385,7 @@ button.mr-orch-team-meta:focus-visible {
 }
 
 .mr-orch-input:focus-visible,
+.mr-orch-block.is-table:focus-visible,
 .mr-orch-block a:focus-visible,
 .mr-lane-conv-more:focus-visible,
 .mr-composer :is(button, input, select):focus-visible {
@@ -6381,13 +6411,14 @@ button.mr-orch-team-meta:focus-visible {
   margin-inline-start: auto;
 }
 
-.mr-composer-controls .ui-chip,
-.mr-composer-controls .ui-chip-value {
+.mr-composer-controls .ui-chip {
   min-width: 0;
   max-width: 100%;
 }
 
 .mr-composer-controls .ui-chip-value {
+  max-width: 220px;
+  min-width: 0;
   display: block;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -6396,6 +6427,12 @@ button.mr-orch-team-meta:focus-visible {
 .mr-composer-controls .ui-chip-value .mr-orch-dot {
   display: inline-block;
   margin-inline-end: 6px;
+}
+
+.mr-composer-hint {
+  margin: 0;
+  color: var(--text-dim);
+  font: 400 13px / 1.45 var(--sans);
 }
 
 button.mr-orch-stop {
@@ -11249,15 +11286,7 @@ button.ui-icon-btn.mr-composer-send:hover:not(:disabled) {
 
 .mr-picker.is-inline {
   position: static;
-  min-width: 0;
-}
-
-.mr-picker.is-inline .mr-model-row {
-  min-width: 0;
-}
-
-.mr-picker.is-inline .ui-chip {
-  max-width: min(176px, 100%);
+  max-width: 100%;
 }
 
 .mr-picker.is-inline .mr-picker-pop.is-upward {

@@ -56,7 +56,7 @@ src/ui/           React HUD: Hud.jsx (menu, dock, agents, event log, mode switch
   HarnessesSettings.jsx   Harnesses section in Settings showing Ready, Not ready or Off state, version and program path, Offer in forms switch, Program field with Save and Clear, and confirm cards before saving a program or turning a harness off, and `LaneSettingsFields`, the four lane settings the Lanes tab shows
   LaneConversation.jsx    lane transcript and run chip, folded brief and tool calls, live polling, messages and Stop
   Composer.jsx            shared chat and lane form, recipient chip, toolbar, Send and status line
-  markdown.jsx            shared React renderer for message headings, lists, emphasis, code and safe links
+  markdown.jsx            shared React renderer for message headings, lists, emphasis, code, safe links and scrollable tables
   LanesSettings.jsx       Lanes section in Settings to list lanes, show hidden lanes and remove or delete lanes behind a confirm card
   StorageSettings.jsx     Storage section in Settings showing usage by kind, clean merged worktrees, days preview and archive confirm card
   badges.js               reviewBadgeCount, proposalBadgeCount, orchestratorBadgeCount and actionBadges for HUD button counts
