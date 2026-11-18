@@ -357,6 +357,7 @@ export function chatLines(chat, limit = ORCH_MAX_LINES, options = {}) {
       text: label ? `${label}\n\n${text}` : text,
       at: message.at ?? null,
       ...(work ? { work } : {}),
+      ...(typeof message.firstCommit === 'string' && message.firstCommit ? { firstCommit: message.firstCommit } : {}),
     })
   }
   const cap = Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : ORCH_MAX_LINES

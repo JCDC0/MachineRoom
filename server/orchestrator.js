@@ -1188,6 +1188,7 @@ export function createOrchestrator({
       text: maskText(item.text),
       at: typeof item.at === 'string' && item.at ? item.at : iso(now()),
       ...(work ? { work } : {}),
+      ...(typeof item.firstCommit === 'string' && item.firstCommit ? { firstCommit: maskText(item.firstCommit) } : {}),
     }
     if (from === 'agent') {
       const agent = restoredAgent(item.agent)
@@ -1548,8 +1549,8 @@ export function createOrchestrator({
     notify()
   }
 
-  function addMessage(from, text, queueFirst = false) {
-    const message = { id: randomUUID(), from, text: maskText(text), at: iso(now()) }
+  function addMessage(from, text, queueFirst = false, extra = {}) {
+    const message = { id: randomUUID(), from, text: maskText(text), at: iso(now()), ...extra }
     messages.push(message)
     while (messages.length > ORCHESTRATOR_CHAT_LIMIT) messages.shift()
     if (queueFirst) pending.unshift(message)
@@ -2987,7 +2988,8 @@ ${modelSummary}` : modelSummary
       if (!laneReply) laneReply = text
       addMessage(laneKey, laneReply)
     }
-    const message = addMessage('room', text)
+    const firstCommit = typeof record?.commits?.[0] === 'string' ? maskText(record.commits[0]) : ''
+    const message = addMessage('room', text, false, firstCommit ? { firstCommit } : {})
     if (recordedStarter) pending.push(message)
     if (runId) {
       completedRuns.set(runId, { status, messageId: message.id })

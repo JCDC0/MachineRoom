@@ -11,6 +11,9 @@ describe('run-end room notices', () => {
   it('summarizes the first commit', () => {
     expect(roomNoticeSummary(success)).toEqual({ lane: 'codex2', briefs: 'P536, P537', status: 'succeeded', subject: 'Fix the rail' })
   })
+  it('reads the first commit from firstCommit when the notice carries it', () => {
+    expect(roomNoticeSummary(success, 'a2d359be 0.1.402: Fix the picker; keep drafts').subject).toBe('Fix the picker; keep drafts')
+  })
   it('summarizes a failure without commits', () => {
     expect(roomNoticeSummary(failed)).toEqual({ lane: 'codex2', briefs: 'P536', status: 'failed', subject: null })
   })

@@ -1715,6 +1715,17 @@ describe('OrchestratorChat panel', () => {
     )
   })
 
+  it('keeps the semicolons of a run subject carried in firstCommit', () => {
+    const text =
+      'Run x on lane codex2 ended: succeeded.\n' +
+      'lane codex2 | briefs P1 | exit 0 | branch feat/test | commits a2d359be 0.1.402: Fix the picker; keep drafts; b1234567 0.1.403: Next | cost not reported'
+    const chat = { state: 'idle', messages: [{ id: 'r1', from: 'room', text, firstCommit: 'a2d359be 0.1.402: Fix the picker; keep drafts' }] }
+    const html = renderToString(
+      createElement(OrchestratorChat, { open: true, client: fakeClient(chat), initialChat: chat })
+    )
+    expect(html).toContain('title="Fix the picker; keep drafts">Fix the picker; keep drafts</span>')
+  })
+
   it('gives the cut model in the header its full text in the title', () => {
     const chat = { state: 'idle', model: 'opus', messages: [] }
     const html = renderToString(
