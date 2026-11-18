@@ -125,7 +125,6 @@ describe('small control targets', () => {
       '.lens-bar': 'Read-only lens progress track.',
       '.lens-bar-fill': 'Read-only lens progress fill.',
       '.mr-guide-dot': 'Read-only guide progress mark.',
-      '.scrubber-tick': 'Existing 4 pixel seek marker for a point on the timeline.',
       '.mr-board-bar-track': 'Read-only cost meter track.',
       '.mr-board-bar': 'Read-only cost meter fill.',
       ".panel-checkbox-field input[type='checkbox']": 'Checkbox inside a clickable label.',
@@ -144,15 +143,13 @@ describe('small control targets', () => {
       '.mr-side-switch-knob': 'Decorative knob inside the switch.',
       '.mr-side-input': 'Sidebar text field.',
       '.mr-side-select': 'Sidebar select field.',
-      '.mr-autocompact-unit': 'Existing 22 pixel button in the unit toggle.',
       '.mr-family-vline': 'Decorative family tree connector.',
       '.mr-family-hline': 'Decorative family tree connector.',
       '.mr-family-dot': 'Status indicator inside a family tree row.',
       '.lens-edge-corner': 'Decorative lens corner.',
-      '.mr-model-refresh': 'Existing 22 pixel model-list refresh button.',
       '.mr-family-agent-check': 'Checkbox inside a clickable family editor label.',
-      '.waiting-close': 'Existing 20 pixel dismiss button on the waiting notice.',
     }
+    const growsInHeightOnly = new Set(['.scrubber-tick'])
     parse(css).walkRules((block) => {
       if (!block.nodes.some(({ prop, value }) => ['width', 'height'].includes(prop) && pixels(value) < 24)) return
       for (const selector of block.selectors) {
@@ -160,10 +157,45 @@ describe('small control targets', () => {
         const anchor = selector === '.hud-action-badge' ? '.hud-action-slot > button.hud-action-badge' : selector
         const after = merged(`${anchor}::after`)
         expect(after.content, `hit area for ${selector}`).toBe("''")
-        expect(pixels(after['min-width']), selector).toBeGreaterThanOrEqual(24)
+        if (!growsInHeightOnly.has(selector)) expect(pixels(after['min-width']), selector).toBeGreaterThanOrEqual(24)
         expect(pixels(after['min-height']), selector).toBeGreaterThanOrEqual(24)
       }
     })
+  })
+
+  it('gives the four remaining small buttons the shared 24 pixel hit area', () => {
+    for (const selector of ['.mr-autocompact-unit', '.mr-model-refresh', '.waiting-close']) {
+      const after = merged(`${selector}::after`)
+      expect(after.content, selector).toBe("''")
+      expect(after.position, selector).toBe('absolute')
+      expect(after.left, selector).toBe('50%')
+      expect(after.top, selector).toBe('50%')
+      expect(after.transform, selector).toBe('translate(-50%, -50%)')
+      expect(pixels(after['min-width']), selector).toBeGreaterThanOrEqual(24)
+      expect(pixels(after['min-height']), selector).toBeGreaterThanOrEqual(24)
+      expect(merged(selector).position, selector).toBe('relative')
+    }
+    const bare = css.replace(/\/\*[\s\S]*?\*\//g, '')
+    expect(bare).toMatch(/\.mr-autocompact-unit \{[^}]*height: 22px/)
+    expect(bare).toMatch(/\.mr-model-refresh \{[^}]*width: 22px/)
+    expect(bare).toMatch(/\.mr-model-refresh \{[^}]*height: 22px/)
+    expect(bare).toMatch(/\.waiting-close \{[^}]*min-width: 20px/)
+    expect(bare).toMatch(/\.waiting-close \{[^}]*height: 20px/)
+  })
+
+  it('grows the seek marker hit area in height only so a neighbour stays reachable', () => {
+    const after = merged('.scrubber-tick::after')
+    expect(after.content).toBe("''")
+    expect(after.position).toBe('absolute')
+    expect(after.left).toBe('50%')
+    expect(after.top).toBe('50%')
+    expect(after.transform).toBe('translate(-50%, -50%)')
+    expect(after.width).toBe('100%')
+    expect(after.height).toBe('100%')
+    expect(after['min-width']).toBeUndefined()
+    expect(pixels(after['min-height'])).toBeGreaterThanOrEqual(24)
+    expect(rule('.scrubber-tick').width).toBe('4px')
+    expect(rule('.scrubber-tick').height).toBe('calc(var(--space) * 2)')
   })
 
   it('gives every target at least 24 pixels in both directions', () => {
