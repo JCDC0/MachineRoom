@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Sonnet.
 - Sonnet, from a partial branch.
 - DeepSeek native lane.
 - Sonnet audit.

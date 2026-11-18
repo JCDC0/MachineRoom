@@ -178,6 +178,17 @@ describe('the lane conversation view', () => {
     })
   })
 
+  it('draws a disabled picker that says No runs for a lane with no runs', async () => {
+    const client = { ...makeClient({ entries: [] }), runs: async () => ({ running: [], recent: [] }) }
+    await withDom(async ({ container, root }) => {
+      await mount(root, { client, lane: 'opencode', laneName: 'OpenCode', lanes: LANES, initialStartedAt: STARTED })
+      const picker = container.querySelector('.mr-lane-conv-select')
+      expect(picker.hasAttribute('disabled')).toBe(true)
+      expect(picker.querySelectorAll('option').map((node) => node.textContent)).toEqual(['No runs'])
+      expect(container.textContent).toContain('No runs yet.')
+    })
+  })
+
   it('folds ten tool calls into one line and opens them on a click', async () => {
     const calls = []
     const client = makeClient({

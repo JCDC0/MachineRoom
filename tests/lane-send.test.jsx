@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url'
 import { act, createElement } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createBridge } from '../server/index.js'
+import { createOrchestrators } from '../server/orchestrators.js'
 import { activeLanesFileFor, writeActiveLanes } from '../server/active-lanes.js'
 import { saveHarnessSettings } from '../server/harness-settings.js'
 import { chatFileFor } from '../server/orchestrator.js'
@@ -754,5 +755,42 @@ describe('LaneConversation message box and status updates', () => {
         'The lane opencode has no run that can read a message now.'
       )
     })
+  })
+})
+
+describe('a page message to a lane with an ended run and a newer live run', () => {
+  const OLD = '2026-11-16T09:00:00.000Z'
+  const LIVE = '2026-11-16T10:00:00.000Z'
+
+  it('refuses the ended run, reaches the live run and stores the clock time', async () => {
+    const base = tempDir('mr-lane-send-live-')
+    const runs = join(base, 'runs')
+    const project = join(base, 'project')
+    mkdirSync(runs, { recursive: true })
+    mkdirSync(project, { recursive: true })
+    const held = { lane: 'opencode', startedAt: LIVE, inbox: [] }
+    const at = Date.parse('2026-11-16T10:30:00.000Z')
+    const registry = createOrchestrators({
+      projectRoot: project,
+      runsFolder: runs,
+      lanes: { opencode: { name: 'OpenCode', harness: 'OpenCode', cli: { harness: 'opencode', bin: 'opencode', model: 'fake/model' } } },
+      spawn: () => { throw new Error('no spawn') },
+      promptFile: join(base, 'prompt.md'),
+      bridgeUrl: () => 'http://127.0.0.1:5999',
+      onNotice: () => {},
+      harnessAvailable: () => true,
+      laneTickets: () => [held],
+      now: () => at,
+    })
+    cleanups.push(() => registry.close())
+
+    const stale = await registry.message({ to: 'lane:opencode', text: 'For the old run.', startedAt: OLD }, true)
+    expect(stale).toEqual({ status: 409, body: { error: 'That run is no longer running.' } })
+    expect(held.inbox).toHaveLength(0)
+
+    const sent = await registry.message({ to: 'lane:opencode', text: 'For the live run.', startedAt: LIVE }, true)
+    expect(sent.status).toBe(202)
+    expect(held.inbox).toHaveLength(1)
+    expect(held.inbox[0]).toMatchObject({ id: sent.body.id, from: 'owner', text: 'For the live run.', at: new Date(at).toISOString() })
   })
 })
