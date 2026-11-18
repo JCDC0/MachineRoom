@@ -1299,7 +1299,7 @@ export function runRecord({ lane, briefs, model, reasoning, mode, startedAt, fin
     model: model ? String(model) : null,
     reasoning: reasoning ? String(reasoning) : null,
     startedAt: isoTime(startedAt),
-    finishedAt: isoTime(finishedAt ?? new Date()),
+    finishedAt: stopReason === 'lost' ? null : isoTime(finishedAt ?? new Date()),
     minutes: Number.isFinite(minutes) ? minutes : null,
     exitCode: Number.isInteger(exitCode) ? exitCode : null,
     killed: killed === true,
@@ -1373,7 +1373,7 @@ export function runListLine(record) {
   const briefs = record.briefs?.length ? record.briefs.join(' ') : 'none'
   const minutes = Number.isFinite(record.minutes) ? `${record.minutes} min` : 'minutes unknown'
   const exit = Number.isInteger(record.exitCode) ? `exit ${record.exitCode}` : 'exit none'
-  const killed = record.killed ? ' (killed)' : ''
+  const stopped = record.stopReason === 'lost' ? ' (lost)' : record.killed ? ' (killed)' : ''
   const cost = typeof record.costUsd === 'number' ? `${record.costUsd.toFixed(4)} USD` : 'not reported'
   const branch = record.branch || 'no branch'
   const peakTokens = record.peakTokens ?? record.peak
@@ -1390,7 +1390,7 @@ export function runListLine(record) {
   const taken = typeof from?.lane === 'string' && from.lane.trim() !== ''
     ? ` | taken over from ${from.lane.trim()}`
     : ''
-  return `${when} | ${record.lane} | ${model}${record.mode !== undefined ? ` | ${record.mode}` : ''} | ${briefs} | ${minutes} | ${exit}${killed} | ${cost} | ${branch}${peak}${moved}${taken}`
+  return `${when} | ${record.lane} | ${model}${record.mode !== undefined ? ` | ${record.mode}` : ''} | ${briefs} | ${minutes} | ${exit}${stopped} | ${cost} | ${branch}${peak}${moved}${taken}`
 }
 
 const CRASH_STATUSES = [3221226505, -1073740791]
