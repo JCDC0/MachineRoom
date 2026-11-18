@@ -1,6 +1,7 @@
 import { readFileSync, statSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { backupRanLater, succeededLater } from '../src/briefs/attention.js'
 import { parseBriefs } from '../src/briefs/briefs.js'
 import { readAllRunRecords } from './runs.js'
 
@@ -96,13 +97,21 @@ function issueFor({ id, lane, startedAt, updatedAt, project, briefs, task, statu
   }
 }
 
+function statusFor(record, lane, records) {
+  const failed = record?.killed === true || record?.exitCode !== 0
+  if (!failed) return 'done'
+  if (backupRanLater(record, lane, records) || succeededLater(record, records)) return 'done'
+  return 'blocked'
+}
+
 export function laneTaskIssues({ openRuns = [], records = [], agents = [], briefs = [] } = {}) {
   const titles = new Map()
   for (const brief of Array.isArray(briefs) ? briefs : []) {
     if (brief && typeof brief.id === 'string' && typeof brief.title === 'string') titles.set(brief.id, brief.title)
   }
+  const list = Array.isArray(records) ? records : []
   const issues = new Map()
-  for (const record of Array.isArray(records) ? records : []) {
+  for (const record of list) {
     const id = runNameOf(record)
     if (!id || issues.has(id)) continue
     const lane = text(record?.lane)
@@ -119,7 +128,7 @@ export function laneTaskIssues({ openRuns = [], records = [], agents = [], brief
         project,
         briefs: record?.briefs,
         task: record?.task,
-        status: record?.killed === true || record?.exitCode !== 0 ? 'blocked' : 'done',
+        status: statusFor(record, lane, list),
         agents,
         titles,
       })

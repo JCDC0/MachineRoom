@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- DeepSeek native lane.
 - GPT-6.2 Sol.
 - DeepSeek native lane.
 - DeepSeek native lane.

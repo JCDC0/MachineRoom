@@ -36,7 +36,7 @@ function workLabel(record) {
   return firstTaskLine(record?.task)
 }
 
-function backupRanLater(record, lane, records) {
+export function backupRanLater(record, lane, records) {
   const failover = record?.failover
   if (!failover || typeof failover !== 'object' || Array.isArray(failover)) return false
   if (failover.refused === true) return false
@@ -65,7 +65,7 @@ function attentionText(record, lane) {
   return `${lane} failed on ${workLabel(record) || 'unknown work'}`
 }
 
-function succeededLater(record, records) {
+export function succeededLater(record, records) {
   const failedAt = startTime(record)
   if (failedAt === null) return false
   const briefs = Array.isArray(record.briefs) ? record.briefs.map(text).filter(Boolean) : []
