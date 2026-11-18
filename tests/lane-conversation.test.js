@@ -13,7 +13,7 @@ import {
   runOptions,
   runOutcome,
 } from '../src/ui/laneConversation.js'
-import { buttonWithText, click, settle, withDom } from './helpers/uiDom.js'
+import { buttonWithText, click, settle, type, withDom } from './helpers/uiDom.js'
 
 const LANES = [{ key: 'opencode', name: 'OpenCode', color: '#ff8c1a' }]
 const STARTED = '2026-10-24T12:00:00.000Z'
@@ -484,6 +484,54 @@ describe('the lane conversation view', () => {
         await open({ lane: failed.lane, startedAt: failed.startedAt })
         await act(async () => finishHistory())
         expect(calls.at(-1), `HUD width ${width}`).toEqual({ lane: failed.lane, startedAt: failed.startedAt })
+      })
+    }
+  })
+
+  it('keeps sent messages and their pending status across lane switches in either HUD layout', async () => {
+    const text = 'Check the header.'
+    for (const width of [900, 899]) {
+      let finishSend
+      let finishStatus
+      const lanes = [...LANES, { key: 'codex', name: 'Codex' }]
+      const liveRuns = [{ lane: 'opencode', startedAt: STARTED }]
+      const client = {
+        ...makeClient({ running: true }),
+        sendLaneMessage: () => new Promise((resolve) => { finishSend = resolve }),
+        laneMessageStatus: () => new Promise((resolve) => { finishStatus = resolve }),
+      }
+      await withDom(async ({ container, dom, root }) => {
+        dom.window.innerWidth = width
+        dom.window.localStorage.setItem('machineroom.guide', '1')
+        await act(async () => {
+          root.render(createElement(Hud, {
+            snapshot: { agents: lanes, status: 'live', position: 0 },
+            project: 'MachineRoom',
+            client,
+            mode: 'live',
+            liveRuns,
+            speeds: [1],
+          }))
+        })
+        const open = (lane) => act(async () => {
+          dom.window.dispatchEvent(new dom.window.CustomEvent('machineroom:open-chat', { detail: { lane } }))
+        })
+        const sent = () => container.querySelector('[aria-label="Sent messages"]')
+        await open('opencode')
+        await type(root, container.querySelector('textarea'), text)
+        await click(root, buttonWithText(container, 'Send'))
+        await open('codex')
+        await act(async () => finishSend({ id: 'msg-1' }))
+        expect(sent()).toBeNull()
+        await open('opencode')
+        expect(sent()?.textContent ?? '').toContain(text)
+        expect(sent()?.textContent ?? '').toContain('Queued')
+        await open('codex')
+        await act(async () => finishStatus({ status: 'fetched' }))
+        expect(sent()).toBeNull()
+        await open('opencode')
+        expect(sent()?.textContent ?? '').toContain(text)
+        expect(sent()?.textContent ?? '').toContain('Read by the runner')
       })
     }
   })

@@ -1,7 +1,7 @@
 import { act, createElement } from 'react'
 import { describe, expect, it } from 'vitest'
 import LaneConversation from '../src/ui/LaneConversation.jsx'
-import { buttonWithText, settle, withDom } from './helpers/uiDom.js'
+import { buttonWithText, click, settle, withDom } from './helpers/uiDom.js'
 
 describe('Lane conversation read order', () => {
   it('drops a pending Open after a failed history read or a manual run choice', async () => {
@@ -68,6 +68,35 @@ describe('Lane conversation read order', () => {
       await act(async () => pending[1].resolve({ running: true, entries: [] }))
       expect(container.textContent).toContain('Final report')
       expect(buttonWithText(container, 'Stop')).toBeNull()
+    })
+  })
+
+  it('reports a failed history read and retries without reopening the pending run', async () => {
+    const lane = 'codex'
+    const requested = '2026-11-17T11:00:00.000Z'
+    const newest = '2026-11-17T12:00:00.000Z'
+    const calls = []
+    let reads = 0
+    const client = {
+      runs: async () => {
+        if (++reads === 1) throw new Error('History unavailable.')
+        return { recent: [newest, requested].map((startedAt) => ({ lane, startedAt })) }
+      },
+      runConversation: async ({ startedAt }) => {
+        calls.push(startedAt)
+        return { entries: [] }
+      },
+    }
+    await withDom(async ({ container, root }) => {
+      await act(async () => root.render(createElement(LaneConversation, { client, lane, initialStartedAt: requested })))
+      expect(container.querySelector('[role="alert"]')?.textContent ?? '').toContain('Could not read run history.')
+      expect(container.querySelector('[aria-label="Run"]').textContent).not.toContain('No runs')
+      expect(container.textContent).not.toContain('No runs yet.')
+      await click(root, buttonWithText(container, 'Retry'))
+      expect(reads).toBe(2)
+      expect(buttonWithText(container, 'Retry')).toBeNull()
+      expect(container.querySelector('[role="alert"]')).toBeNull()
+      expect(calls).toEqual([requested, newest])
     })
   })
 })
