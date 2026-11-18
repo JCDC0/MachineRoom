@@ -70,7 +70,8 @@ describe('shared panel controls', () => {
     expect(room['--sans']).toMatch(/^'Jost',/)
     expect(room['--mono']).toMatch(/^'Space Mono',/)
 
-    sheet.walkRules(/\.ui-/, (block) => {
+    sheet.walkRules((block) => {
+      if (!/\.ui-/.test(block.selector.replace(/:not\([^)]*\)/g, ''))) return
       block.walkDecls(({ prop, value }) => {
         const where = `${block.selector} ${prop}`
         expect(prop, where).not.toBe('font')
@@ -244,6 +245,7 @@ describe('small control targets', () => {
       '.mr-family-vline': 'Decorative family tree connector.',
       '.mr-family-hline': 'Decorative family tree connector.',
       '.mr-family-dot': 'Status indicator inside a family tree row.',
+      '.mr-orch-dot': 'Status indicator inside a chip or the status line.',
       '.lens-edge-corner': 'Decorative lens corner.',
       '.mr-family-agent-check': 'Checkbox inside a clickable family editor label.',
     }

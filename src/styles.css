@@ -5698,7 +5698,7 @@ button.mr-lane-conv-tool-fold {
 }
 
 .mr-lane-conv-tool-fold .ui-chip-label {
-  color: inherit;
+  color: currentColor;
 }
 
 .mr-orch:not(.is-inline).is-mode-plan {
