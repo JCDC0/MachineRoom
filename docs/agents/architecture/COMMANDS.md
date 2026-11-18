@@ -2,6 +2,8 @@
 
 Lane continuations require the saved lane, brief ids, project kind and branch to match. Run records are appended under a lock, with torn tails kept on a separate line. Lane logs and Hermes exports mask child credentials and native key assignments. Stale port locks are claimed under a takeover guard before removal.
 
+`run-lane --continue-from RUN` resumes a Claude Code session with `--resume SESSION_ID` when the previous run's session file is in the Claude project folder for the worktree. The new run keeps that session ID and saves `resumed: true` in its metadata. It sends only the interrupt text, or `Continue your brief from where you stopped.` when there is no interrupt text. If the session file is missing, Claude starts a new session with the full prompt. A queue resumes only its interrupted task.
+
 Every command, with its flags and what it prints.
 
 ## Commands
