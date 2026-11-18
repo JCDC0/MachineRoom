@@ -449,6 +449,45 @@ describe('the lane conversation view', () => {
     })
   })
 
+  it('opens the requested history when switching lanes in either HUD layout', async () => {
+    const failed = { lane: 'codex', startedAt: '2026-10-24T11:00:00.000Z', exitCode: 1 }
+    const liveRuns = [{ lane: 'codex', startedAt: STARTED }]
+    for (const width of [900, 899]) {
+      const calls = []
+      let finishHistory
+      const client = {
+        ...makeClient({ calls }),
+        runs: ({ lane } = {}) => lane === 'codex'
+          ? new Promise((resolve) => { finishHistory = () => resolve({ recent: [failed] }) })
+          : Promise.resolve({ recent: [{ lane: 'opencode', startedAt: STARTED }] }),
+      }
+      await withDom(async ({ dom, root }) => {
+        dom.window.innerWidth = width
+        dom.window.localStorage.setItem('machineroom.guide', '1')
+        await act(async () => {
+          root.render(createElement(Hud, {
+            snapshot: { agents: LANES, status: 'live', position: 0 },
+            project: 'MachineRoom',
+            client,
+            mode: 'live',
+            liveRuns,
+            log: [],
+            speeds: [1],
+            markers: [],
+          }))
+        })
+        const open = (detail) => act(async () => {
+          dom.window.dispatchEvent(new dom.window.CustomEvent('machineroom:open-chat', { detail }))
+        })
+        await open({ lane: 'opencode' })
+        expect(calls.at(-1)).toEqual({ lane: 'opencode', startedAt: STARTED })
+        await open({ lane: failed.lane, startedAt: failed.startedAt })
+        await act(async () => finishHistory())
+        expect(calls.at(-1), `HUD width ${width}`).toEqual({ lane: failed.lane, startedAt: failed.startedAt })
+      })
+    }
+  })
+
   it('reads a live conversation at most once in two seconds', async () => {
     const calls = []
     const client = makeClient({

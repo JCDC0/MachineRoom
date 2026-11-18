@@ -202,7 +202,7 @@ describe('harness program details', () => {
     })
   })
 
-  it('consumes the Direct API request so the menu reopens the saved tab', async () => {
+  it('consumes the Direct API request so resizing and the menu use the saved tab', async () => {
     const props = {
       snapshot: { agents: [], status: 'live', position: 0 },
       project: 'MachineRoom',
@@ -227,7 +227,21 @@ describe('harness program details', () => {
         dom.window.dispatchEvent(new dom.window.CustomEvent('machineroom:open-settings'))
       })
       await settle()
-      expect(container.querySelector('#hud-settings-tab-direct-api').getAttribute('aria-selected')).toBe('true')
+      const settingsTab = () => selectedTab(container.querySelector('#hud-settings'))
+      expect(settingsTab()).toEqual(['Direct API'])
+      await openTab(root, container, 'Lanes')
+      for (const width of [899, 900]) {
+        await act(async () => {
+          dom.window.innerWidth = width
+          dom.window.dispatchEvent({ type: 'resize' })
+        })
+        expect(settingsTab()).toEqual(['Lanes'])
+      }
+      await act(async () => {
+        dom.window.dispatchEvent(new dom.window.CustomEvent('machineroom:open-settings'))
+      })
+      expect(settingsTab()).toEqual(['Direct API'])
+      await openTab(root, container, 'Harnesses')
       await act(async () => {
         buttonWithText(container, 'Close').click()
       })

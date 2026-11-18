@@ -41,7 +41,7 @@ function savedTab() {
   return SETTINGS_TABS.some((tab) => tab.key === key) ? key : SETTINGS_TABS[0].key
 }
 
-export default function Settings({ open = true, effects, onChange, onSettingsChange, onClose, client = null, project = '', focusDirectApi = 0 }) {
+export default function Settings({ open = true, effects, onChange, onSettingsChange, onClose, client = null, project = '', focusDirectApi = false, onDirectApiFocused }) {
   const current = effectSettings(effects)
   const [soundState, setSoundState] = useState(() => loadSoundSettings(store()))
   const [recordDraft, setRecordDraft] = useState(() => String(loadSettings(store()).recordMinutes))
@@ -50,7 +50,6 @@ export default function Settings({ open = true, effects, onChange, onSettingsCha
   const onSettingsChangeRef = useRef(onSettingsChange)
   currentRef.current = current
   onSettingsChangeRef.current = onSettingsChange
-  const seenDirectApi = useRef(0)
   const [tab, setTab] = useState(savedTab)
 
   function openTab(key) {
@@ -73,12 +72,11 @@ export default function Settings({ open = true, effects, onChange, onSettingsCha
   const scrollPending = useRef(false)
 
   useEffect(() => {
-    const nonce = Number(focusDirectApi) || 0
-    if (!open || nonce === 0 || seenDirectApi.current === nonce) return
-    seenDirectApi.current = nonce
+    if (!open || !focusDirectApi) return
     scrollPending.current = true
     setTab('direct-api')
-  }, [open, focusDirectApi])
+    onDirectApiFocused?.()
+  }, [open, focusDirectApi, onDirectApiFocused])
 
   useEffect(() => {
     if (!open || tab !== 'direct-api' || !scrollPending.current) return

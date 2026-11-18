@@ -233,7 +233,7 @@ export default function LaneConversation({
           if (!stillLive && finished) readRef.current?.(current.startedAt, { force: true })
         }
       } catch {
-        if (active) setRuns(null)
+        if (active) setRuns(fromNotice ? null : [])
       }
     }
     readRuns(false)
@@ -535,7 +535,10 @@ export default function LaneConversation({
             className="mr-lane-conv-select mono"
             aria-label="Run"
             value={selected}
-            onChange={(event) => setSelected(event.target.value)}
+            onChange={(event) => {
+              wantedRef.current = ''
+              setSelected(event.target.value)
+            }}
             disabled={options.length === 0}
           >
             {options.length === 0 ? <option value="">No runs</option> : null}

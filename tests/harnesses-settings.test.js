@@ -391,6 +391,35 @@ describe('HarnessesSettings UI', () => {
     })
   })
 
+  test('retries the first lane settings read and keeps a typed draft', async () => {
+    const client = {
+      harnesses: vi.fn()
+        .mockRejectedValueOnce(new Error('Lane settings unavailable.'))
+        .mockResolvedValue([{ worktreeSetup: 'npm ci', laneReplies: 'interrupt' }]),
+      harnessSettings: vi.fn().mockResolvedValue({}),
+    }
+    await withDom(async ({ container, root }) => {
+      await act(async () => root.render(createElement(LaneSettingsFields, { client })))
+      const setup = container.querySelector('#harness-worktree-setup')
+      const replies = container.querySelector('#harness-lane-replies')
+      const saves = container.querySelectorAll('button').filter((button) => button.textContent.trim() === 'Save')
+      expect(container.querySelector('[role="alert"]').textContent).toContain('Lane settings unavailable.')
+      expect(saves).toHaveLength(2)
+      expect(saves.every((button) => button.hasAttribute('disabled'))).toBe(true)
+      expect(replies.hasAttribute('disabled')).toBe(true)
+      await type(root, setup, 'npm install')
+      const retry = buttonWithText(container, 'Retry')
+      expect(retry).not.toBeNull()
+      await click(root, retry)
+      expect(client.harnesses).toHaveBeenCalledTimes(2)
+      expect(container.querySelector('[role="alert"]')).toBeNull()
+      expect(buttonWithText(container, 'Retry')).toBeNull()
+      expect(saves.every((button) => !button.hasAttribute('disabled'))).toBe(true)
+      expect(replies.hasAttribute('disabled')).toBe(false)
+      expect(setup.value).toBe('npm install')
+    })
+  })
+
   test('lane settings cannot be saved until their first read has succeeded', async () => {
     let release
     const client = {
