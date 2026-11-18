@@ -280,4 +280,43 @@ describe('shared controls', () => {
       expect(card.hasAttribute('hidden')).toBe(true)
     })
   })
+
+  it('closes the tooltip when dismissKey changes and reopens only on a fresh hover or focus', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    try {
+      await withDom(async ({ container, root, dom }) => {
+        await act(async () => root.render(
+          <HoverCard title="Coder" dismissKey={0}><Row label="Coder" /></HoverCard>,
+        ))
+        const anchor = container.querySelector('.ui-hover-anchor')
+        const card = dom.body.querySelector('.ui-hovercard')
+        anchor.focus()
+        await dispatch(anchor, 'focusin')
+        expect(card.hasAttribute('hidden')).toBe(false)
+
+        await act(async () => root.render(
+          <HoverCard title="Coder" dismissKey={1}><Row label="Coder" /></HoverCard>,
+        ))
+        expect(card.hasAttribute('hidden')).toBe(true)
+
+        await dispatch(anchor, 'pointerout')
+        await act(async () => { vi.advanceTimersByTime(100) })
+        expect(card.hasAttribute('hidden')).toBe(true)
+
+        await dispatch(anchor, 'pointerover')
+        await act(async () => { vi.advanceTimersByTime(500) })
+        expect(card.hasAttribute('hidden')).toBe(false)
+
+        await act(async () => root.render(
+          <HoverCard title="Coder" dismissKey={2}><Row label="Coder" /></HoverCard>,
+        ))
+        expect(card.hasAttribute('hidden')).toBe(true)
+
+        await dispatch(anchor, 'focusin')
+        expect(card.hasAttribute('hidden')).toBe(false)
+      })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
 })

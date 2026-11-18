@@ -710,6 +710,7 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
   const [liveTaskMap, setLiveTaskMap] = useState(null)
   const [sessionRows, setSessionRows] = useState([])
   const [lastRuns, setLastRuns] = useState(null)
+  const [cardDismiss, setCardDismiss] = useState({})
   const headerRef = useRef(null)
 
   useDialogFocus(Boolean(confirm), { containerRef: confirmRef })
@@ -2464,13 +2465,14 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
         <div className="mr-family-selection" role="group" aria-label="Selected code agents">
           <span className="mr-family-selection-count mono" role="status">{`${selectedLanes.length} selected`}</span>
           <Chip
+            className="is-primary"
             label="Make sub"
             aria-label="Make sub orchestrator"
             disabled={busy || selectedLanes.length === 0}
             onClick={() => openGroupForm(selectedLanes)}
           />
-          <Chip label="Clear" disabled={busy || selectedLanes.length === 0} onClick={clearSelection} />
-          <Chip label="Done" disabled={busy} onClick={endSelection} />
+          <Chip className="is-quiet" label="Clear" disabled={busy || selectedLanes.length === 0} onClick={clearSelection} />
+          <Chip className="is-done" label="Done" disabled={busy} onClick={endSelection} />
         </div>
         {groupOpen ? renderSubForm() : null}
       </>
@@ -2512,7 +2514,7 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
     const mode = node.mode || defaultMode(node.harness)
     const effortMode = `Effort ${node.effort || 'default'}${mode ? ` · Mode ${mode}` : ''}`
     const items = [{
-      label: lane ? 'Add sub orchestrator…' : 'Add a lane under this…',
+      label: lane ? 'Make sub from this lane…' : 'Add a lane under this…',
       disabled: busy,
       onSelect: () => toggleChild(node),
     }]
@@ -2535,7 +2537,7 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
     }
     return (
       <div className="mr-family-node" key={node.id} data-kind={node.kind} data-depth={node.depth}>
-        <HoverCard title={node.label} details={[
+        <HoverCard title={node.label} dismissKey={cardDismiss[node.id] ?? 0} details={[
           detail,
           !session && effortMode,
           `Status ${state}${task ? ` · ${task}` : ''}`,
@@ -2578,7 +2580,7 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
               </span>
             }
             detail={detail}
-            trailing={!session && (
+            trailing={session ? <span className="mr-family-actions" aria-hidden="true" /> : (
               <span className="mr-family-actions">
                 <IconButton
                   className="mr-family-chat"
@@ -2586,6 +2588,7 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
                   icon={chatIcon}
                   onClick={(event) => {
                     event.stopPropagation()
+                    setCardDismiss((current) => ({ ...current, [node.id]: (current[node.id] ?? 0) + 1 }))
                     if (lane) openLaneChat(node.id)
                     else openChat(node.id)
                   }}

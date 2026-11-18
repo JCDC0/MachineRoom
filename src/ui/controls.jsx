@@ -211,14 +211,23 @@ export function Row({ label, detail, leading, trailing, selected, className = ''
   )
 }
 
-export function HoverCard({ title, details = [], children }) {
+export function HoverCard({ title, details = [], dismissKey = 0, children }) {
   const [visible, setVisible] = useState(false)
   const id = useId()
   const anchor = useRef(null)
   const card = useRef(null)
   const timer = useRef(null)
   const hovered = useRef(false)
+  const lastDismiss = useRef(dismissKey)
   usePopupPosition(visible, anchor, card, true)
+
+  useEffect(() => {
+    if (dismissKey === lastDismiss.current) return
+    lastDismiss.current = dismissKey
+    hovered.current = false
+    clearTimeout(timer.current)
+    setVisible(false)
+  }, [dismissKey])
 
   function enter() {
     hovered.current = true

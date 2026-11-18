@@ -214,6 +214,25 @@ describe('small control targets', () => {
     expect(rule('.mr-family-selection-count')['white-space']).toBe('nowrap')
   })
 
+  it('keeps row actions steady, reserves the Agents scrollbar gutter, aligns section titles and uses row surface for the selection bar', () => {
+    const trailing = merged('.mr-family-row .ui-row-trailing')
+    expect(trailing.flex).toBe('0 0 calc(var(--control-h) * 2 + var(--space))')
+    expect(trailing.width).toBeUndefined()
+    expect(trailing['margin-left']).toBeUndefined()
+    expect(rule('.mr-side-body:has(> .mr-side-agents)')['scrollbar-gutter']).toBe('stable')
+
+    const heads = sharedBlock(['button.mr-family-heading', '.mr-side .mr-family-heading', '.mr-team > .mr-side-head'])
+    expect(heads).toBeTruthy()
+    expect(declarations(heads[2]).padding).toBe('0 var(--space)')
+
+    const selection = rule('.mr-family-selection')
+    expect(selection.background).toBe('var(--surface-1)')
+    expect(selection.border).toBe('0')
+    expect(selection['border-radius']).toBe('var(--radius-s)')
+    expect(rule('.mr-family-selection button.ui-chip.is-primary:not(:disabled)')['--ui-chip-border']).toBe('var(--yellow)')
+    expect(rule('.mr-family-selection button.ui-chip.is-quiet')['--ui-chip-border']).toBe('transparent')
+  })
+
   it('hides hover cards while Agents menus are open and keeps sidebar read errors off Agents', () => {
     expect(rule("body:has(.mr-family [aria-haspopup='menu'][aria-expanded='true']) > .ui-hovercard").visibility).toBe('hidden')
     expect(rule('.mr-side:has(> .mr-side-body > .mr-side-agents) > .mr-side-error:not([role])').display).toBe('none')
