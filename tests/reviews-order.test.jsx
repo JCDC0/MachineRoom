@@ -34,7 +34,7 @@ describe('Reviews visibility', () => {
       expect(container.textContent).toContain('dirty-lane')
       expect(container.textContent).toContain('Read failed')
       expect(container.textContent).not.toContain('clean-lane')
-      const toggle = buttonWithText(container, '1 lanes have nothing to review')
+      const toggle = buttonWithText(container, '1 lane has nothing to review')
       expect(toggle.getAttribute('aria-expanded')).toBe('false')
       await click(root, toggle)
       expect(toggle.getAttribute('aria-expanded')).toBe('true')
@@ -45,7 +45,15 @@ describe('Reviews visibility', () => {
     await withDom(async ({ container, root }) => {
       await act(async () => root.render(createElement(ReviewsPanel, { client: {}, initialReviews: [reviews[2]] })))
       expect(container.textContent).toContain('Nothing to review.')
-      expect(container.textContent).toContain('1 lanes have nothing to review')
+      expect(container.textContent).toContain('1 lane has nothing to review')
+    })
+  })
+
+  it('says lanes have when two or more are folded', async () => {
+    const reviews = [{ lane: 'a', ahead: 0 }, { lane: 'b', ahead: 0 }]
+    await withDom(async ({ container, root }) => {
+      await act(async () => root.render(createElement(ReviewsPanel, { client: {}, initialReviews: reviews })))
+      expect(container.textContent).toContain('2 lanes have nothing to review')
     })
   })
 })

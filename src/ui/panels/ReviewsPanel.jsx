@@ -703,7 +703,7 @@ export default function ReviewsPanel({
           {needsReview.length === 0 && <div className="panel-state is-dim mono">Nothing to review.</div>}
           {emptyReviews.length > 0 && (
             <button type="button" className="review-expand-btn" aria-expanded={emptyOpen} onClick={() => setEmptyOpen(!emptyOpen)}>
-              {`${emptyReviews.length} lanes have nothing to review`}
+              {`${emptyReviews.length} ${emptyReviews.length === 1 ? 'lane has' : 'lanes have'} nothing to review`}
             </button>
           )}
           {[...needsReview, ...(emptyOpen ? emptyReviews : [])].map((review) => {

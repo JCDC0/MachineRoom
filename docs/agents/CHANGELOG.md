@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Reviews reads `1 lane has nothing to review` for one folded lane (P563).
 - Sonnet finished Codex's partial P556.
 - Sonnet finished Codex's partial work.
 - Reviews lists only lanes with commits ahead, changes or a read error and folds the rest under one line; Team names each lane by its harness and model (P557).
