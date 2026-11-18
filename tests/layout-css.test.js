@@ -80,3 +80,21 @@ describe('the storage days label', () => {
     expect(label.flex).toBe('none')
   })
 })
+
+
+describe('the command console', () => {
+  it('uses white activity styling without a cyan glow or fill', () => {
+    const consoleRule = rule('.mr-term-console')
+    const label = rule('.mr-term-console-label')
+    expect(consoleRule.color).toBe('var(--white)')
+    expect(consoleRule.border).toBe('1px solid var(--white)')
+    expect(consoleRule['box-shadow']).toBeUndefined()
+    expect(label.color).toBe('var(--white)')
+    expect(label.background).toBeUndefined()
+    expect(label['border-bottom']).toBe('1px solid rgb(255 255 255 / 0.35)')
+    expect(rule('.mr-term-console-link').color).toBe('var(--white)')
+    expect(rule('.mr-term-console-line.is-dim').color).toBe('rgb(255 255 255 / 0.62)')
+    expect(css).not.toMatch(/--cyan|56 232 255|#38e8ff/i)
+    expect(css).not.toMatch(/\.mr-term-console\.is-address\s*\{/)
+  })
+})
