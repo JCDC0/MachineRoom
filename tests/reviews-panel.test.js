@@ -808,4 +808,15 @@ describe('ReviewsPanel Ask to prepare', () => {
     )
     expect(ready).toContain('Ask to prepare')
   })
+
+  it('keeps a lane that merged while selected in the list instead of folding it', () => {
+    const merged = { lane: 'hermes', branch: 'feat/p5', head: 'a'.repeat(40), base: 'main', ahead: 0, dirty: false, files: 0, added: 0, deleted: 0 }
+    const html = renderToString(createElement(ReviewsPanel, {
+      client: { reviews: async () => [merged], subscribe: () => () => {} },
+      initialReviews: [merged],
+      initialDiff: { lane: 'hermes', patch: '', files: [] },
+    }))
+    expect(html).toContain('review-card')
+    expect(html).not.toContain('nothing to review')
+  })
 })

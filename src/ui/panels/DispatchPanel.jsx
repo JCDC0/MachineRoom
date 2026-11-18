@@ -194,9 +194,11 @@ export default function DispatchPanel({
   const hasOrchestrator = typeof client?.sendOrchestrator === 'function'
   const canStopRun = typeof client?.stopRun === 'function'
 
-  const attentionRows = (Array.isArray(runsState.attention) ? runsState.attention : []).filter(
-    (item) => item && typeof item.text === 'string' && item.text.trim() !== '' && !dismissedAttention.includes(JSON.stringify([item.lane, item.startedAt]))
+  const attentionKey = (item) => JSON.stringify([item.lane, item.startedAt, item.text])
+  const attentionAll = (Array.isArray(runsState.attention) ? runsState.attention : []).filter(
+    (item) => item && typeof item.text === 'string' && item.text.trim() !== ''
   )
+  const attentionRows = attentionAll.filter((item) => !dismissedAttention.includes(attentionKey(item)))
   const selectedBrief = briefs.find((item) => item.id === selectedBriefId)
   const runLane = selectedBrief ? runLaneFor(selectedBrief, runsState.running, agents) : null
   const canRunBrief = typeof client?.startRun === 'function' && Boolean(runLane)
@@ -1087,11 +1089,14 @@ export default function DispatchPanel({
                 <span>{item.text} · {Number.isFinite(Date.parse(item.startedAt)) ? ageText(Math.max(0, Math.floor((Date.now() - Date.parse(item.startedAt)) / 60000))) : 'age unknown'}</span>
                 <div className="brief-confirm-actions">
                   <button type="button" className="brief-cancel-btn" onClick={() => window.dispatchEvent(new window.CustomEvent(OPEN_CHAT_EVENT, { detail: { lane: item.lane, startedAt: item.startedAt } }))}>Open</button>
-                  <button type="button" className="brief-cancel-btn" onClick={() => {
-                    const next = [...dismissedAttention, JSON.stringify([item.lane, item.startedAt])]
-                    setDismissedAttention(next)
-                    try { localStorage.setItem('machineroom.dismissedAttention', JSON.stringify(next)) } catch {}
-                  }}>Dismiss</button>
+                  {item.startedAt && (
+                    <button type="button" className="brief-cancel-btn" onClick={() => {
+                      const live = new Set(attentionAll.map(attentionKey))
+                      const next = [...dismissedAttention, attentionKey(item)].filter((key) => live.has(key)).slice(-50)
+                      setDismissedAttention(next)
+                      try { localStorage.setItem('machineroom.dismissedAttention', JSON.stringify(next)) } catch {}
+                    }}>Dismiss</button>
+                  )}
                 </div>
               </div>
             </div>
