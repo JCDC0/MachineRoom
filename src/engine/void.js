@@ -4,7 +4,7 @@ import { GIT_ROOT_GAP, GIT_START } from './gitTree.js'
 import { INTERNET_HOME, INTERNET_RADIUS } from './internet.js'
 
 export const LATTICE_STEP = 2000
-export const LATTICE_CELLS = 4
+export const LATTICE_CELLS = 2
 export const LATTICE_FLOOR_STEP = 1
 const TICK = 50
 export const DUST = 1800
