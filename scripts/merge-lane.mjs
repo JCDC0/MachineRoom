@@ -151,14 +151,14 @@ export function branchBroughtUnreleasedLine(root, branch, git = defaultGitRunner
   const diff = diffRes.stdout ?? ''
   if (!diff) return false
   const headRes = git(root, ['show', `${branch}:docs/agents/CHANGELOG.md`])
-  return addedUnreleasedLines(headRes.stdout, diff).length > 0
+  return addedUnreleasedBullets(headRes.stdout, diff).length > 0
 }
 
-function addedUnreleasedLines(text, diff) {
+function addedUnreleasedBullets(text, diff) {
   const range = unreleasedRange(text)
   if (!range) return []
   const added = parseDiff(diff)[0]?.added ?? []
-  return added.filter((item) => item.text.trim() !== '' && item.line >= range.from && item.line <= range.to)
+  return added.filter((item) => item.line >= range.from && item.line <= range.to && /^ {0,3}[-+*][ \t]+\S/.test(item.text))
 }
 
 function npmCliPath(env, execPath) {
@@ -519,17 +519,20 @@ export function finishMerge({
   } catch {
     return { ok: false, error: 'docs/agents/CHANGELOG.md could not be read.' }
   }
-  let skippedChangelogLine = false
-  if (idsList.length > 0) {
+  const lineText = line.trim()
+  const range = unreleasedRange(clText)
+  const unreleased = range ? clText.split(/\r?\n/).slice(range.from - 1, range.to) : []
+  let skippedChangelogLine = unreleased.includes(`- ${lineText}`)
+  if (!skippedChangelogLine && idsList.length > 0) {
     const clPath = relative(root, clFile).split(sep).join('/')
     const diff = git(root, ['--literal-pathspecs', 'diff', '--no-ext-diff', '--no-textconv', '-U0', 'HEAD', '--', clPath])
     if (!diff.ok) return { ok: false, error: 'Could not check the merged changelog.' }
-    skippedChangelogLine = addedUnreleasedLines(clText, diff.stdout).some(
+    skippedChangelogLine = addedUnreleasedBullets(clText, diff.stdout).some(
       (item) => (item.text.match(/\w+/g) ?? []).some((id) => idsList.includes(id)),
     )
   }
   if (!skippedChangelogLine) {
-    const updatedCl = insertUnreleasedLine(clText, line.trim())
+    const updatedCl = insertUnreleasedLine(clText, lineText)
     writeFileSync(clFile, updatedCl)
   }
 
@@ -621,7 +624,7 @@ export async function main(argv, { root = process.cwd(), ...overrides } = {}) {
       return 1
     }
     if (result.skippedChangelogLine) {
-      console.log('Skipped --line because the merge already adds an Unreleased line for a brief.')
+      console.log('Skipped --line because the merged changelog already has the Unreleased entry.')
     }
     if (result.isClean) {
       console.log('The checkout is clean.')
