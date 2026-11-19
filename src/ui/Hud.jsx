@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useContext, useEffect, useRef, useState } from 'react'
+import { Fragment, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { Switch } from './controls.jsx'
 import { name } from './brand.js'
 import Transport, { OrchestratorsContext, openConversation } from './Transport.jsx'
@@ -28,7 +28,7 @@ import {
   replayFoot,
 } from './lowerHalf.js'
 import { latestOnly } from './panels/notices.js'
-import { errorText, orchestratorOn, runnableLanes } from './orchestratorChat.js'
+import { TEAM_TAB, chatAgentColors, errorText, orchestratorOn, runnableLanes, useChatLanes } from './orchestratorChat.js'
 import {
   areAllTerminalsOpen,
   isTerminalOpen,
@@ -44,6 +44,7 @@ const STATUS_TEXT = {
   error: 'failed',
   done: 'finished',
 }
+const EMPTY = []
 
 export const SHORTCUTS = [
   ['Space', 'Play or pause replay'],
@@ -176,9 +177,10 @@ export default function Hud({
   const [chatOpen, setChatOpen] = useState(false)
   const [chatFocus, setChatFocus] = useState(0)
   const [chatTab, setChatTab] = useState('orchestrator')
+  const [chatLane, setChatLane] = useState('')
   const [laneChat, setLaneChat] = useState(null)
   const laneSentMessages = useState([])
-  const [lanesData, setLanesData] = useState([])
+  const lanesData = useChatLanes(client) ?? EMPTY
   const [separateWorktree, setSeparateWorktree] = useState(true)
   const [orchestratorList, setOrchestratorList] = useState([])
   const [sessionTitle, setSessionTitle] = useState('')
@@ -210,6 +212,7 @@ export default function Hud({
   const replay = replayFoot({ connected: liveAvailable })
   const wide = wideLayout(viewportWidth)
   const floatingChat = !wide || mode === 'replay'
+  const inlineConversation = wide && (Boolean(laneChat) || mode !== 'replay')
   const settingsCountRef = useRef(Number(settingsRequest) || 0)
   const lastControlNonceRef = useRef(controlTarget?.nonce ?? null)
   const reviewTargetCountRef = useRef(0)
@@ -231,7 +234,7 @@ export default function Hud({
   const grouped = ladderGroups(list.rows, ladder)
   const nav = grouped ?? list
   const workingAgent = list.rows.find((row) => row.agent?.status === 'working')?.agent ?? null
-  const availableLanes = runnableLanes(lanesData).filter((entry) => entry.active !== false)
+  const availableLanes = runnableLanes(lanesData)
   const subs = orchestratorList.filter((entry) => entry && entry.id !== 'orchestrator')
   const laneChatAgent = laneChat
     ? (snapshot?.agents ?? []).find((agent) => agent.key === laneChat.lane) ?? null
@@ -248,6 +251,8 @@ export default function Hud({
       laneChat.lane
     : ''
   const hudLanes = mergeHudLanes(snapshot?.agents, lanesData)
+  const roster = snapshot?.agents ?? EMPTY
+  const chatColors = useMemo(() => chatAgentColors(roster), [roster])
   const canStartLane = Boolean(
     laneChat &&
       mode === 'live' &&
@@ -263,15 +268,11 @@ export default function Hud({
   focusRef.current = onFocus
   const context = { agents, paths: assistantPaths }
   const projectLabel = lensProject(project)
-  const conversationTabs = [
-    { id: 'orchestrator', label: 'Main' },
-    ...orchestratorList
-      .filter((entry) => entry && entry.id !== 'orchestrator')
-      .map((entry) => ({ id: entry.id, label: entry.name || entry.id })),
-  ]
-  const conversation =
-    conversationTabs.find((tab) => tab.id === chatTab) ?? conversationTabs[0]
-  const conversationTitle = conversation?.label ?? 'Main'
+  const toLane = availableLanes.find((entry) => entry.key === chatLane)
+  const chatSub = subs.find((entry) => entry.id === chatTab)
+  const conversationTitle = laneChatName ||
+    (toLane && (toLane.name || toLane.key)) ||
+    (chatTab === TEAM_TAB && subs.length > 0 ? 'Team' : chatSub?.name || chatSub?.id || 'Main')
   const badges =
     mode === 'live' && client
       ? actionBadges({
@@ -281,14 +282,11 @@ export default function Hud({
         })
       : { control: 0, orchestrator: 0 }
 
-  function showChat() {
-    if (floatingChat) {
-      if (chatAvailable) setChatOpen(true)
-      return
-    }
+  const showChat = useCallback(() => {
     setChatFocus((value) => value + 1)
-    openConversation()
-  }
+    if (inlineConversation) openConversation()
+    else if (chatAvailable) setChatOpen(true)
+  }, [inlineConversation, chatAvailable])
 
   function closeGuide() {
     markGuideSeen()
@@ -385,6 +383,7 @@ export default function Hud({
       const detail = event && event.detail ? event.detail : {}
       const lane = typeof detail.lane === 'string' ? detail.lane.trim() : ''
       if (lane) {
+        setChatLane('')
         setLaneChat({
           lane,
           startedAt: typeof detail.startedAt === 'string' ? detail.startedAt : '',
@@ -397,6 +396,7 @@ export default function Hud({
       const id = detail.id
       if (typeof id !== 'string' || !id) return
       setLaneChat(null)
+      setChatLane('')
       setChatTab(id)
       setChatOpen(true)
       setSessionsOpen(false)
@@ -406,7 +406,7 @@ export default function Hud({
   }, [])
 
   useEffect(() => {
-    if (!wide || mode === 'replay' || !client || typeof client.orchestratorSessions !== 'function') {
+    if (!wide || mode === 'replay' || chatTab === TEAM_TAB || !client || typeof client.orchestratorSessions !== 'function') {
       setSessionTitle('')
       return undefined
     }
@@ -472,41 +472,6 @@ export default function Hud({
   }, [chatAvailable, client, sharedOrchestrators, wide, orchestratorNonce])
 
   useEffect(() => {
-    if (mode !== 'live' || !client || typeof client.lanes !== 'function') {
-      setLanesData([])
-      return undefined
-    }
-    let active = true
-    let sequence = 0
-    async function readLanes() {
-      const current = ++sequence
-      try {
-        const answer = await client.lanes()
-        if (!active || current !== sequence) return
-        const items = Array.isArray(answer)
-          ? answer
-          : Array.isArray(answer?.lanes)
-            ? answer.lanes
-            : []
-        setLanesData(items)
-      } catch {
-        if (active && current === sequence) setLanesData([])
-      }
-    }
-    readLanes()
-    const unsubscribe =
-      typeof client.subscribe === 'function'
-        ? client.subscribe((notice) => {
-            if (notice?.topic === 'agents' || notice?.topic === 'family') readLanes()
-          })
-        : null
-    return () => {
-      active = false
-      if (typeof unsubscribe === 'function') unsubscribe()
-    }
-  }, [client, mode])
-
-  useEffect(() => {
     if (!client || mode !== 'live' || typeof client.reviews !== 'function') {
       readReviewsRef.current = null
       setReviewList([])
@@ -551,9 +516,11 @@ export default function Hud({
   }, [controlOpen])
 
   useEffect(() => {
-    if (chatTab === 'orchestrator') return
-    if (orchestratorList.length === 0) return
-    if (!orchestratorList.some((entry) => entry.id === chatTab)) setChatTab('orchestrator')
+    if (chatTab === 'orchestrator' || orchestratorList.length === 0) return
+    const available = chatTab === TEAM_TAB
+      ? orchestratorList.some((entry) => entry.id !== 'orchestrator')
+      : orchestratorList.some((entry) => entry.id === chatTab)
+    if (!available) setChatTab('orchestrator')
   }, [chatTab, orchestratorList])
 
   async function changeAutocompact(id, on, percent) {
@@ -630,12 +597,7 @@ export default function Hud({
         toggleLog()
       } else if (chatAvailable && event.key === '/') {
         event.preventDefault()
-        if (floatingChat) {
-          setChatOpen(true)
-        } else {
-          setChatFocus((value) => value + 1)
-          openConversation()
-        }
+        showChat()
       } else if (client && (event.key === 'c' || event.key === 'C')) {
         event.preventDefault()
         setControlOpen((open) => {
@@ -650,7 +612,7 @@ export default function Hud({
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [client, chatAvailable, floatingChat, wide, logOpen])
+  }, [client, chatAvailable, showChat, wide, logOpen])
 
   function renderAgentRow(row, indent = 0) {
     const { agent, depth, number, group, visible } = row
@@ -763,6 +725,8 @@ export default function Hud({
         laneName={laneChatName}
         project={projectLabel}
         lanes={hudLanes}
+        agentColors={chatColors}
+        focusRequest={chatFocus}
         liveRuns={liveRuns ?? []}
         initialStartedAt={laneChat.startedAt}
         requestKey={laneChat.nonce}
@@ -912,10 +876,7 @@ export default function Hud({
               onClick={() => {
                 if (floatingChat) {
                   setChatOpen((open) => !open)
-                } else {
-                  setChatFocus((value) => value + 1)
-                  openConversation()
-                }
+                } else showChat()
               }}
             >
               <span>Orchestrator</span>
@@ -1207,11 +1168,15 @@ export default function Hud({
                 open
                 inline
                 focusRequest={chatFocus}
+                lanes={lanesData}
+                agentColors={chatColors}
                 liveRuns={liveRuns ?? []}
                 tick={log.length}
                 orchestrators={orchestratorList}
                 selected={chatTab}
                 onSelect={setChatTab}
+                selectedLane={chatLane}
+                onSelectLane={setChatLane}
                 onAutocompact={changeAutocompact}
                 onOrchestratorChange={() => setOrchestratorNonce((value) => value + 1)}
               />
@@ -1370,11 +1335,16 @@ export default function Hud({
         <OrchestratorChat
           client={client}
           open={chatOpen}
+          focusRequest={chatFocus}
+          lanes={lanesData}
+          agentColors={chatColors}
           liveRuns={liveRuns ?? []}
           tick={log.length}
           orchestrators={orchestratorList}
           selected={chatTab}
           onSelect={setChatTab}
+          selectedLane={chatLane}
+          onSelectLane={setChatLane}
           onClose={() => setChatOpen(false)}
         />
         </PanelBoundary>

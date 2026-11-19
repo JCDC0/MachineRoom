@@ -6,7 +6,7 @@ import Composer, { RecipientChip } from './Composer.jsx'
 import { Chip, Menu } from './controls.jsx'
 import Markdown from './markdown.jsx'
 import { useLogFollow } from './logScroll.js'
-import { agentColor } from './orchestratorChat.js'
+import { agentColor, chatAgentColors } from './orchestratorChat.js'
 import { runStartLine } from './panels/runs.js'
 import {
   foldPrompt,
@@ -172,11 +172,13 @@ export default function LaneConversation({
   laneName = '',
   project = '',
   lanes = [],
+  agentColors = null,
   liveRuns = [],
   runs: givenRuns = null,
   initialStartedAt = '',
   requestKey = 0,
   inline = false,
+  focusRequest = 0,
   tick = 0,
   onBack = () => {},
   recipientOptions = null,
@@ -220,6 +222,8 @@ export default function LaneConversation({
   const planModeChosenRef = useRef(false)
   const planStartingRef = useRef(false)
   const startedRunRef = useRef(null)
+  const inputRef = useRef(null)
+  const focusAtRef = useRef(0)
   const inputId = useId()
   const planTaskId = useId()
   selectionRef.current = { lane, startedAt: selected }
@@ -231,7 +235,7 @@ export default function LaneConversation({
   const emptyRunLabel = historyFailed ? 'Run history unavailable' : historyLoading ? 'Reading runs' : 'No runs'
   const options = useMemo(() => runOptions(runs, lane, { liveRuns, lanes }), [runs, lane, liveRuns, lanes])
   const currentRun = options.find((run) => run.startedAt === selected) ?? null
-  const colour = agentColor(lane, lanes)
+  const colour = agentColor(lane, agentColors ?? chatAgentColors(lanes))
   const running = conversation.data !== null && (
     typeof conversation.data?.running === 'boolean' ? conversation.data.running : currentRun?.running === true
   )
@@ -278,6 +282,12 @@ export default function LaneConversation({
   const canSend = trimmedDraft.length > 0 && trimmedDraft.length <= MAX_MESSAGE_CHARS
   const visibleSent = sentMessages.filter((item) => item.lane === lane && item.startedAt === selected)
   const follow = useLogFollow(running, entries.length + visibleSent.length)
+
+  useEffect(() => {
+    if (focusRequest === focusAtRef.current) return
+    focusAtRef.current = focusRequest
+    inputRef.current?.focus({ preventScroll: true })
+  }, [focusRequest])
 
   useEffect(() => {
     mountedRef.current = true
@@ -610,8 +620,9 @@ export default function LaneConversation({
     <aside className={`mr-orch mr-lane-conv${inline ? ' is-inline' : ''}`} aria-label={`${label} conversation`}>
       <header className="mr-lane-conv-head">
         <p className="mr-lane-conv-crumb mono" title={breadcrumb}>
+          {projectLabel} /{' '}
           <span className="mr-agent-dot" aria-hidden="true" style={{ background: colour }} />
-          {breadcrumb}
+          {String(label).toUpperCase()}
         </p>
         <Chip label="Back" onClick={onBack} />
       </header>
@@ -802,6 +813,7 @@ export default function LaneConversation({
 
       <Composer
         input={canCompose ? {
+          ref: inputRef,
           id: inputId,
           value: draft,
           maxLength: MAX_MESSAGE_CHARS,

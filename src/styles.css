@@ -5945,6 +5945,18 @@ button.mr-orch-show-all {
   min-width: 0;
 }
 
+.mr-orch-line.is-agent > .mr-orch-blocks {
+  display: block;
+}
+
+.mr-orch-line.is-agent > .mr-orch-blocks > .mr-orch-block:first-of-type {
+  display: inline;
+}
+
+.mr-orch-line.is-agent > .mr-orch-blocks > .mr-orch-block + .mr-orch-block {
+  margin-top: 6px;
+}
+
 .mr-orch-work {
   display: flex;
   flex-direction: column;
@@ -6153,6 +6165,11 @@ button.mr-orch-show-all {
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: rgb(255 255 255 / 0.45);
+}
+
+.mr-orch-line.is-lane > .mr-orch-who,
+.mr-orch-run-summary > span:first-child {
+  color: var(--white);
 }
 
 .mr-orch-team-row {
