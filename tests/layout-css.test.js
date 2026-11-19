@@ -310,6 +310,14 @@ describe('small control targets', () => {
     const rail = rule('.scrubber-markers')
     expect(rail.position).toBe('relative')
     expect(rail.height).toBe('calc(var(--marker-rows) * 24px)')
+    const wide = parse(css).nodes.find((node) => node.type === 'atrule' && node.params === '(min-width: 900px)' && node.toString().includes('data-rows'))
+    expect(wide, 'the 900 pixel media query with the marker row heights').toBeDefined()
+    const stageHeights = {}
+    wide.walkRules((found) => {
+      const row = /^\.stage:has\(\.scrubber-markers\[data-rows='(\d)'\]\)$/.exec(found.selector)
+      if (row) found.walkDecls('--transport-h', (decl) => { stageHeights[row[1]] = decl.value })
+    })
+    expect(stageHeights).toEqual({ 2: '80px', 3: '104px' })
     const tick = rule('.scrubber-tick')
     expect(tick.top).toBe('calc((var(--marker-row) + 0.5) * 24px)')
     expect(tick.width).toBe('4px')

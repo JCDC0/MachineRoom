@@ -615,6 +615,49 @@ describe('the lane conversation view', () => {
     }
   })
 
+  it('keeps both sent messages when a second lane finishes sending before the first', async () => {
+    const finish = {}
+    const lanes = [...LANES, { key: 'codex', name: 'Codex' }]
+    const client = {
+      ...makeClient({ running: true }),
+      sendLaneMessage: ({ lane }) => new Promise((resolve) => { finish[lane] = resolve }),
+      laneMessageStatus: () => new Promise(() => {}),
+    }
+    await withDom(async ({ container, dom, root }) => {
+      dom.window.innerWidth = 900
+      dom.window.localStorage.setItem('machineroom.guide', '1')
+      await act(async () => {
+        root.render(createElement(Hud, {
+          snapshot: { agents: lanes, status: 'live', position: 0 },
+          project: 'MachineRoom',
+          client,
+          mode: 'live',
+          liveRuns: [{ lane: 'opencode', startedAt: STARTED }, { lane: 'codex', startedAt: STARTED }],
+          speeds: [1],
+        }))
+      })
+      const open = (lane) => act(async () => {
+        dom.window.dispatchEvent(new dom.window.CustomEvent('machineroom:open-chat', { detail: { lane } }))
+      })
+      const send = async (text) => {
+        await type(root, container.querySelector('textarea'), text)
+        await act(async () => container.querySelector('.mr-composer-box').dispatchEvent({ type: 'submit', bubbles: true, cancelable: true }))
+      }
+      const sentText = () => container.querySelector('[aria-label="Sent messages"]')?.textContent ?? ''
+      await open('opencode')
+      await send('First note.')
+      await open('codex')
+      await send('Second note.')
+      await act(async () => finish.codex({ id: 'msg-codex' }))
+      await act(async () => finish.opencode({ id: 'msg-opencode' }))
+      expect(sentText()).toContain('Second note.')
+      expect(sentText()).not.toContain('First note.')
+      await open('opencode')
+      expect(sentText()).toContain('First note.')
+      expect(sentText()).not.toContain('Second note.')
+    })
+  })
+
   it('reads a live conversation at most once in two seconds', async () => {
     const calls = []
     const client = makeClient({

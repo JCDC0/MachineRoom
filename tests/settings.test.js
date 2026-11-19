@@ -298,7 +298,12 @@ describe('the content files setting', () => {
 
   it('renders the Content files slider below Folder depth', async () => {
     await settingsPanel('Screen effects', (container) => {
+      const depth = container.querySelector('[aria-label="Folder depth"]')
+      expect(depth).not.toBeNull()
+      expect(depth.getAttribute('min')).toBe('1')
+      expect(depth.getAttribute('max')).toBe('3')
       const text = container.textContent
+      expect(text.indexOf('Folder depth')).toBeGreaterThan(-1)
       expect(text.indexOf('Content files')).toBeGreaterThan(text.indexOf('Folder depth'))
       const input = container.querySelector('[aria-label="Content files"]')
       expect(input.getAttribute('min')).toBe(String(FILE_LIMIT_MIN))

@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { act, createElement } from 'react'
 import { describe, expect, it } from 'vitest'
 import ModelPicker from '../src/ui/ModelPicker.jsx'
@@ -84,4 +85,34 @@ describe('chat picker placement and saves', () => {
       })
     }
   }
+})
+
+describe('the composer toolbar styles', () => {
+  const css = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8')
+  const bodies = (selector) => [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
+    .filter(([, names]) => names.split(',').map((name) => name.trim()).includes(selector))
+    .map(([, , body]) => body)
+    .join(';')
+
+  it('wraps the toolbar rows and lets chips shrink and clip long values', () => {
+    for (const selector of ['.mr-composer-toolbar', '.mr-composer-controls', '.mr-composer-actions']) {
+      const body = bodies(selector)
+      expect(body, selector).toMatch(/display:\s*flex/)
+      expect(body, selector).toMatch(/flex-wrap:\s*wrap/)
+      expect(body, selector).toMatch(/min-width:\s*0/)
+    }
+    expect(bodies('.mr-composer-controls .ui-chip')).toMatch(/max-width:\s*100%/)
+    const value = bodies('.mr-composer-controls .ui-chip-value')
+    expect(value).toMatch(/max-width:\s*220px/)
+    expect(value).toMatch(/overflow:\s*hidden/)
+    expect(value).toMatch(/text-overflow:\s*ellipsis/)
+  })
+
+  it('draws a visible keyboard focus outline on the composer controls and the chat input', () => {
+    const block = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)].find(([, names]) => names.includes('.mr-orch-input:focus-visible'))
+    expect(block, 'the focus rule').toBeDefined()
+    expect(block[1]).toContain('.mr-composer :is(button, input, select):focus-visible')
+    expect(block[2]).toMatch(/outline:\s*1px solid var\(--white\)/)
+    expect(block[2]).toMatch(/outline-offset:\s*2px/)
+  })
 })
