@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- merge-lane skips its changelog line when the merge already adds an Unreleased line for the same brief (P613).
 - The model list names Gemini 4 Neon Low, Medium, High and XHigh for AGY (P611).
 - A lane conversation's run times read in the owner's local time, with a short date when the run did not start today (P612).
 - The chat keeps an even rhythm, the composer reads clearly, and a lane opened from its row gets the same composer and Worktree switch as one chosen in To (P606).

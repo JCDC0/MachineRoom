@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { spawnSync } from 'node:child_process'
 import { existsSync, readFileSync, statSync, writeFileSync } from 'node:fs'
-import { dirname, join, resolve } from 'node:path'
+import { dirname, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { newestRunFor, parseDiff, unreleasedRange } from '../src/briefs/review.js'
 import { readAllRunRecords, runsFile } from '../server/runs.js'
@@ -151,12 +151,14 @@ export function branchBroughtUnreleasedLine(root, branch, git = defaultGitRunner
   const diff = diffRes.stdout ?? ''
   if (!diff) return false
   const headRes = git(root, ['show', `${branch}:docs/agents/CHANGELOG.md`])
-  const headText = headRes.stdout ?? ''
-  const range = unreleasedRange(headText)
-  if (!range) return false
-  const files = parseDiff(diff)
-  const added = files[0]?.added ?? []
-  return added.some((item) => item.text.trim() !== '' && item.line >= range.from && item.line <= range.to)
+  return addedUnreleasedLines(headRes.stdout, diff).length > 0
+}
+
+function addedUnreleasedLines(text, diff) {
+  const range = unreleasedRange(text)
+  if (!range) return []
+  const added = parseDiff(diff)[0]?.added ?? []
+  return added.filter((item) => item.text.trim() !== '' && item.line >= range.from && item.line <= range.to)
 }
 
 function npmCliPath(env, execPath) {
@@ -504,6 +506,12 @@ export function finishMerge({
     return { ok: false, error: 'The note must be one line of 200 characters or less.' }
   }
 
+  let idsList = Array.isArray(ids) ? ids : String(ids).split(',').map((s) => s.trim()).filter(Boolean)
+  if (idsList.length === 0) {
+    const record = newestRunFor(readAllRunRecords(runsPath ?? runsFile()), branch)
+    idsList = Array.isArray(record?.briefs) ? record.briefs.map(String) : []
+  }
+
   const clFile = changelogPath ?? join(root, 'docs', 'agents', 'CHANGELOG.md')
   let clText = ''
   try {
@@ -511,8 +519,19 @@ export function finishMerge({
   } catch {
     return { ok: false, error: 'docs/agents/CHANGELOG.md could not be read.' }
   }
-  const updatedCl = insertUnreleasedLine(clText, line.trim())
-  writeFileSync(clFile, updatedCl)
+  let skippedChangelogLine = false
+  if (idsList.length > 0) {
+    const clPath = relative(root, clFile).split(sep).join('/')
+    const diff = git(root, ['--literal-pathspecs', 'diff', '--no-ext-diff', '--no-textconv', '-U0', 'HEAD', '--', clPath])
+    if (!diff.ok) return { ok: false, error: 'Could not check the merged changelog.' }
+    skippedChangelogLine = addedUnreleasedLines(clText, diff.stdout).some(
+      (item) => (item.text.match(/\w+/g) ?? []).some((id) => idsList.includes(id)),
+    )
+  }
+  if (!skippedChangelogLine) {
+    const updatedCl = insertUnreleasedLine(clText, line.trim())
+    writeFileSync(clFile, updatedCl)
+  }
 
   git(root, ['add', '-u'])
   const docsAgents = join(root, 'docs', 'agents')
@@ -522,11 +541,6 @@ export function finishMerge({
 
   const pkgFile = packageJsonPath ?? join(root, 'package.json')
   const version = JSON.parse(readFileSync(pkgFile, 'utf8')).version
-  let idsList = Array.isArray(ids) ? ids : String(ids).split(',').map((s) => s.trim()).filter(Boolean)
-  if (idsList.length === 0) {
-    const record = newestRunFor(readAllRunRecords(runsPath ?? runsFile()), branch)
-    idsList = Array.isArray(record?.briefs) ? record.briefs.map(String) : []
-  }
   const idsText = idsList.join(', ')
   const commitSubject = idsText ? `${version}: Merge ${idsText}, ${subject.trim()}` : `${version}: Merge ${subject.trim()}`
   const commitMessage = trailer && trailer.trim() ? `${commitSubject}\n\n${trailer.trim()}\n` : `${commitSubject}\n`
@@ -556,6 +570,7 @@ export function finishMerge({
     branch,
     commitSubject,
     isClean,
+    skippedChangelogLine,
   }
 }
 
@@ -604,6 +619,9 @@ export async function main(argv, { root = process.cwd(), ...overrides } = {}) {
     if (!result.ok) {
       console.error(result.error)
       return 1
+    }
+    if (result.skippedChangelogLine) {
+      console.log('Skipped --line because the merge already adds an Unreleased line for a brief.')
     }
     if (result.isClean) {
       console.log('The checkout is clean.')
