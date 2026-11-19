@@ -82,10 +82,14 @@ export function foldPrompt(text, maxLines = PROMPT_LINES, maxChars = PROMPT_CHAR
   return { text: value, folded: false }
 }
 
-export function runClock(startedAt) {
+export function runClock(startedAt, now = new Date()) {
   const value = typeof startedAt === 'string' ? startedAt : ''
-  const match = /T(\d\d:\d\d:\d\d)/.exec(value)
-  return match ? match[1] : value
+  const date = new Date(value)
+  if (!value.trim() || Number.isNaN(date.getTime())) return value
+  const two = (number) => String(number).padStart(2, '0')
+  const clock = `${two(date.getHours())}:${two(date.getMinutes())}:${two(date.getSeconds())}`
+  if (date.toDateString() === now.toDateString()) return clock
+  return `${two(date.getMonth() + 1)}-${two(date.getDate())} ${clock}`
 }
 
 export function runOutcome(run, conversation = null) {

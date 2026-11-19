@@ -11,6 +11,7 @@ import {
   foldToolCalls,
   readDue,
   runOptions,
+  runClock,
   runOutcome,
 } from '../src/ui/laneConversation.js'
 import { buttonWithText, click, settle, type, withDom } from './helpers/uiDom.js'
@@ -115,6 +116,30 @@ describe('lane conversation helpers', () => {
     expect(runOutcome({ exitCode: 0 })).toBe('finished')
     expect(runOutcome({ exitCode: 1 })).toBe('failed')
     expect(runOutcome({ killed: true })).toBe('stopped')
+  })
+})
+
+describe('runClock', () => {
+  const two = (number) => String(number).padStart(2, '0')
+  const clockOf = (date) => `${two(date.getHours())}:${two(date.getMinutes())}:${two(date.getSeconds())}`
+
+  it('shows the local clock for a run from today', () => {
+    const started = new Date(2026, 10, 19, 0, 6, 25)
+    const now = new Date(2026, 10, 19, 9, 0, 0)
+    expect(runClock(started.toISOString(), now)).toBe(clockOf(started))
+    expect(runClock(started.toISOString(), now)).toBe('00:06:25')
+  })
+
+  it('prefixes a short local date for a run from another day', () => {
+    const started = new Date(2026, 10, 18, 23, 59, 1)
+    const now = new Date(2026, 10, 19, 9, 0, 0)
+    expect(runClock(started.toISOString(), now)).toBe(`11-18 ${clockOf(started)}`)
+  })
+
+  it('keeps a timestamp that does not parse as it is', () => {
+    expect(runClock('not a time')).toBe('not a time')
+    expect(runClock('')).toBe('')
+    expect(runClock(undefined)).toBe('')
   })
 })
 
@@ -452,7 +477,7 @@ describe('the lane conversation view', () => {
       })
 
       expect(buttonWithText(container, 'Stop')).toBeNull()
-      expect(container.querySelector('.mr-composer').querySelector('[role="status"]').textContent).toBe('Finished · Run 12:00:00')
+      expect(container.querySelector('.mr-composer').querySelector('[role="status"]').textContent).toBe(`Finished · Run ${runClock(STARTED)}`)
       expect(container.querySelector('.mr-lane-conv-log').textContent).not.toContain('The run ended.')
     })
   })

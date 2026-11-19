@@ -5,6 +5,7 @@ import FamilyTeam from '../src/ui/FamilyTeam.jsx'
 import Sidebar from '../src/ui/Sidebar.jsx'
 import { FamilyTeams, FamilyTree } from '../src/ui/FamilyTree.jsx'
 import { DIRECT_KEY_PROBLEM } from '../src/ui/family.js'
+import { runClock } from '../src/ui/laneConversation.js'
 import { buttonWithText, classesOf, click, settle, type, withDom } from './helpers/uiDom.js'
 
 const NODES = [
@@ -377,7 +378,7 @@ describe('FamilyTree rows', () => {
       expect(card.querySelector('.ui-hovercard-title').textContent).toBe('OpenCode')
       expect(card.textContent).toContain('Effort max · Mode build')
       expect(card.textContent).toContain('Status working · JC-19')
-      expect(card.textContent).toContain('Last run 11:20:16 · finished')
+      expect(card.textContent).toContain(`Last run ${runClock('2026-11-18T11:20:16Z')} · finished`)
       expect(card.textContent).not.toContain('10:00:00')
       const idle = await cardFor(rowByLabel(container, 'Claude'))
       expect(idle.textContent).toContain('Status idle')
