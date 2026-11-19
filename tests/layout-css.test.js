@@ -251,6 +251,13 @@ describe('small control targets', () => {
     expect(merged('.mr-orch-jump')).toEqual({})
   })
 
+  it('keeps vertical padding on the inline jump row so the focus ring stays whole', () => {
+    const inlineJumpRow = rule('.mr-orch.is-inline .mr-orch-jump-row')
+    expect(inlineJumpRow['overflow-y']).toBe('hidden')
+    expect(inlineJumpRow['scrollbar-gutter']).toBe('stable')
+    expect(pixels(inlineJumpRow['padding-block'])).toBeGreaterThanOrEqual(3)
+  })
+
   it('hides hover cards while Agents menus are open and keeps sidebar read errors off Agents', () => {
     expect(rule("body:has(.mr-family [aria-haspopup='menu'][aria-expanded='true']) > .ui-hovercard").visibility).toBe('hidden')
     expect(rule('.mr-side:has(> .mr-side-body > .mr-side-agents) > .mr-side-error:not([role])').display).toBe('none')

@@ -190,7 +190,7 @@ export function conversationFromLog(harness, text, prompt = '') {
     for (const activity of activities) {
       if (activity?.type === 'tool.end') {
         const call = started.get(activity.id)
-        if (call && activity.ok === false) call.ok = false
+        if (call) call.ok = activity.ok !== false
         continue
       }
       if (activity?.type !== 'tool.start') continue
