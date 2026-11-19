@@ -77,7 +77,7 @@ describe('lattice', () => {
   }
 
   it('keeps one layer above the hub and one below', () => {
-    expect(LATTICE_CELLS).toBe(4)
+    expect(LATTICE_CELLS).toBe(2)
     expect(latticeLevels(-900)).toEqual({ floor: -900, ceiling: high })
     const levels = [...new Set(yValues(latticeLines()))].sort((a, b) => a - b)
     expect(levels).toEqual(layers)
