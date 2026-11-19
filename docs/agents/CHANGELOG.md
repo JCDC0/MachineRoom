@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The Agents list is a family tree with a chosen top: the owner can put the Claude Code or OpenCode session above the Orchestrator, and a sub can sit under another sub (P634).
 - `server/seats.js` holds the agent seat model: seats per park ring, grants per orchestrator, and one check for every seat rule; no route uses it yet (P636).
 - The floor lattice spans two 2000 unit blocks each way instead of four, at the owner's word (P633).
 - The candidate tests take an injected port check, so a test that is not about the port no longer fails when another test takes its free port (P632).

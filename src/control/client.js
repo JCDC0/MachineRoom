@@ -776,6 +776,9 @@ export function createClient({
     setAgentLabel: ({ id, label, confirmed = true } = {}) =>
       request('POST', '/api/family/label', { id, label, confirmed }),
 
+    setFamilyTop: ({ top, confirmed = true } = {}) =>
+      request('POST', '/api/family/top', { top, confirmed }),
+
     keys: async () => {
       const data = await request('GET', '/api/keys')
       return Array.isArray(data) ? data : data?.keys ?? []

@@ -32,10 +32,10 @@ import {
   labelProblem,
   laneCountLine,
   laneParentLabel,
+  familyBoxes,
   moreLanesLabel,
   removeLaneText,
   rowText,
-  splitMoreLanes,
   stateWord,
   subsLosingLanes,
   teamRows,
@@ -63,19 +63,6 @@ const SCOPE_NOTE =
 
 function lastRunText(last) {
   return last ? `Last run ${runClock(last.startedAt)} · ${last.outcome}` : ''
-}
-
-function TreeIndent({ depth }) {
-  return (
-    <span className="mr-family-indent" style={{ width: `${depth * 16}px` }} aria-hidden="true">
-      {Array.from({ length: depth }, (_, level) => (
-        <span className="mr-family-vline" key={level} style={{ left: `${level * 16 + 7}px` }} />
-      ))}
-      {depth > 0 && (
-        <span className="mr-family-hline" style={{ left: `${(depth - 1) * 16 + 7}px` }} />
-      )}
-    </span>
-  )
 }
 
 const chatIcon = (
@@ -692,7 +679,7 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
   const [readError, setReadError] = useState(null)
   const [actionError, setActionError] = useState('')
   const [open, setOpen] = useState(true)
-  const [moreOpen, setMoreOpen] = useState(false)
+  const [moreOpen, setMoreOpen] = useState({})
   const [editing, setEditing] = useState(null)
   const [nodeDraft, setNodeDraft] = useState(null)
   const [orchestrator, setOrchestrator] = useState(null)
@@ -926,17 +913,10 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
     [activeSubHarnesses, harnesses, models]
   )
   const taskMap = tasks instanceof Map ? tasks : liveTaskMap
-  const laneRows = useMemo(() => splitMoreLanes(tree.rows), [tree])
-  const mainRows = useMemo(() => {
-    if (sessionRows.length === 0) return laneRows.main
-    const index = laneRows.main.findIndex((row) => row.kind === 'orchestrator')
-    const at = index === -1 ? 0 : index + 1
-    return [
-      ...laneRows.main.slice(0, at),
-      ...sessionRows.map((row) => ({ ...row, depth: 1 })),
-      ...laneRows.main.slice(at),
-    ]
-  }, [laneRows.main, sessionRows])
+  const boxes = useMemo(() => {
+    const fromTree = new Set(tree.rows.map((row) => row.id))
+    return familyBoxes(tree.rows, sessionRows.filter((row) => !fromTree.has(row.id)))
+  }, [tree, sessionRows])
   const countLine = family ? laneCountLine(tree.nodes) : ''
   const mainAgent = tree.nodes.find((node) => node.kind === 'orchestrator')
   const hasLanes = tree.nodes.some((node) => node.kind === 'lane')
@@ -1383,6 +1363,23 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
       run: async () => {
         await client.hideLane({ key: node.id, confirmed: true })
         if (editing === node.id) closeEditor()
+        await refresh()
+      },
+    })
+  }
+
+  function askTop(node) {
+    if (typeof client?.setFamilyTop !== 'function') {
+      setActionError('This bridge cannot set the top agent.')
+      return
+    }
+    const key = node.kind === 'session' ? node.id.replace(/^session:/, '') : 'orchestrator'
+    ask({
+      text: `Put ${node.label} at the top of the Agents list?`,
+      label: 'Put at the top',
+      busyText: 'Setting the top...',
+      run: async () => {
+        await client.setFamilyTop({ top: key, confirmed: true })
         await refresh()
       },
     })
@@ -2498,22 +2495,38 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
     )
   }
 
-  function renderMoreLanes() {
-    if (laneRows.more.length === 0) return null
+  function renderMoreLanes(box) {
+    if (box.more.length === 0) return null
+    const open = moreOpen[box.node.id] === true
     return (
       <div className="mr-family-more">
         <button
           type="button"
           className="mr-family-more-head"
-          aria-expanded={moreOpen}
-          onClick={() => setMoreOpen((value) => !value)}
+          aria-expanded={open}
+          onClick={() => setMoreOpen((value) => ({ ...value, [box.node.id]: !open }))}
         >
           <span className="mono">
-            {moreOpen ? 'Hide' : 'Show'} {moreLanesLabel(laneRows.more.length)}
+            {open ? 'Hide' : 'Show'} {moreLanesLabel(box.more.length)}
           </span>
           <span className="ui-chip-chevron" aria-hidden="true" />
         </button>
-        {moreOpen ? laneRows.more.map(renderRow) : null}
+        {open ? box.more.map(renderRow) : null}
+      </div>
+    )
+  }
+
+  function renderBox(box) {
+    return (
+      <div className="mr-family-group" key={box.node.id}>
+        <div className="mr-family-head">{renderRow(box.node)}</div>
+        {box.subs.length > 0 ? <div className="mr-family-kids">{box.subs.map((kid) => <div className="mr-family-kid" key={kid.node.id}>{renderBox(kid)}</div>)}</div> : null}
+        {box.lanes.length + box.more.length > 0 ? (
+          <div className="mr-family-lanes">
+            {box.lanes.map(renderRow)}
+            {renderMoreLanes(box)}
+          </div>
+        ) : null}
       </div>
     )
   }
@@ -2537,6 +2550,10 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
       disabled: busy,
       onSelect: () => toggleChild(node),
     }]
+    if (session) items.length = 0
+    if ((session || node.kind === 'orchestrator') && (session ? node.id.slice(8) : 'orchestrator') !== (family?.top ?? 'orchestrator')) {
+      items.push({ label: 'Put at the top', disabled: busy, onSelect: () => askTop(node) })
+    }
     if (lane) {
       items.push({
         label: node.active ? 'Turn off' : 'Turn on',
@@ -2568,7 +2585,6 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
             onClick={selectable && !busy ? () => toggleSelected(node, !selected) : undefined}
             leading={
               <>
-                {node.depth > 0 && <TreeIndent depth={node.depth} />}
                 {selectable && (
                   <Switch
                     label={`Select ${node.label}`}
@@ -2599,7 +2615,11 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
               </span>
             }
             detail={detail}
-            trailing={session ? <span className="mr-family-actions" aria-hidden="true" /> : (
+            trailing={session && items.length === 0 ? <span className="mr-family-actions" aria-hidden="true" /> : session ? (
+              <span className="mr-family-actions">
+                <Menu label={`Actions for ${node.label}`} items={items} disabled={busy} />
+              </span>
+            ) : (
               <span className="mr-family-actions">
                 <IconButton
                   className="mr-family-chat"
@@ -2686,8 +2706,7 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
               {renderRequests()}
               {renderSelection()}
               {tree.rows.length === 0 ? <p className="mr-side-note">No agents are listed.</p> : null}
-              {mainRows.map(renderRow)}
-              {renderMoreLanes()}
+              <div className="mr-family-tree">{boxes.map(renderBox)}</div>
             </>
           ) : readError ? null : <p className="mr-side-note">Loading agents...</p>}
         </div>
