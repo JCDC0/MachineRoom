@@ -1,9 +1,19 @@
+import { readFileSync } from 'node:fs'
 import { act, createElement } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import HarnessesSettings from '../src/ui/HarnessesSettings.jsx'
 import Hud from '../src/ui/Hud.jsx'
 import Settings from '../src/ui/Settings.jsx'
-import { buttonWithText, settle, withDom, openTab } from './helpers/uiDom.js'
+import { buttonWithText, settle, type, withDom, openTab } from './helpers/uiDom.js'
+
+const css = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8')
+
+function cssBlocks(selector) {
+  return [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
+    .filter(([, names]) => names.split(',').map((name) => name.trim()).includes(selector))
+    .map(([, , body]) => body)
+    .join(';')
+}
 
 function harnessRows() {
   return [
@@ -165,6 +175,45 @@ describe('Settings tabs', () => {
       }
     })
   })
+
+  it('saves the four lane settings through the Lanes tab', async () => {
+    const client = fakeClient()
+    client.harnesses.mockResolvedValue({ harnesses: harnessRows(), laneCountWarning: 2 })
+    await withDom(async ({ container, root }) => {
+      await mountSettings(root, client)
+      await openTab(root, container, 'Lanes')
+      await settle(20)
+      await type(root, container.querySelector('#harness-lane-replies'), 'interrupt')
+      expect(client.harnessSettings).toHaveBeenLastCalledWith({ laneReplies: 'interrupt', confirmed: true })
+      await type(root, container.querySelector('#harness-lane-count-warning'), '4')
+      const saves = () => container.querySelector('[aria-label="Lane settings"]').querySelectorAll('button').filter((button) => button.textContent.trim() === 'Save')
+      await act(async () => {
+        saves()[0].click()
+      })
+      await settle()
+      expect(client.harnessSettings).toHaveBeenLastCalledWith({ laneCountWarning: 4, confirmed: true })
+      await type(root, container.querySelector('#harness-worktree-setup'), ' npm ci ')
+      await type(root, container.querySelector('#harness-worktree-copies'), '.env\n\n config/a.json ')
+      await act(async () => {
+        saves()[1].click()
+      })
+      await settle()
+      expect(client.harnessSettings).toHaveBeenLastCalledWith({ worktreeSetup: 'npm ci', worktreeCopies: ['.env', 'config/a.json'], confirmed: true })
+    })
+  })
+
+  it('styles the tab row to wrap with a gap and marks hover and the open tab yellow', () => {
+    const row = cssBlocks('.hud-settings-tabs')
+    expect(row).toMatch(/display:\s*flex/)
+    expect(row).toMatch(/flex-wrap:\s*wrap/)
+    expect(row).toMatch(/gap:\s*4px/)
+    expect(cssBlocks('.hud-settings-tab')).toMatch(/border:\s*1px solid rgb\(255 255 255 \/ 0\.12\)/)
+    for (const selector of ['.hud-settings-tab:hover', '.hud-settings-tab.is-on']) {
+      const body = cssBlocks(selector)
+      expect(body, selector).toMatch(/color:\s*var\(--yellow\)/)
+      expect(body, selector).toMatch(/border-color:\s*var\(--yellow\)/)
+    }
+  })
 })
 
 describe('harness program details', () => {
@@ -252,6 +301,52 @@ describe('harness program details', () => {
       })
       await settle()
       expect(container.querySelector('#hud-settings-tab-harnesses').getAttribute('aria-selected')).toBe('true')
+    })
+  })
+
+  it('gives each Direct API link click one focus request across a close and reopen', async () => {
+    const props = {
+      snapshot: { agents: [], status: 'live', position: 0 },
+      project: 'MachineRoom',
+      client: fakeClient(),
+      mode: 'live',
+      liveRuns: [],
+      log: [],
+      health: { ok: true, orchestrator: true },
+      focused: null,
+      speeds: [1],
+      markers: [],
+    }
+    await withDom(async ({ container, dom, root }) => {
+      dom.window.localStorage.setItem('machineroom.guide', '1')
+      dom.window.innerWidth = 1280
+      globalThis.document.getElementById = () => null
+      await act(async () => {
+        root.render(createElement(Hud, { ...props, settingsRequest: 0 }))
+      })
+      await settle()
+      const settingsTab = () => selectedTab(container.querySelector('#hud-settings'))
+      const openFromLink = async () => {
+        await act(async () => {
+          dom.window.dispatchEvent(new dom.window.CustomEvent('machineroom:open-settings'))
+        })
+        await settle()
+      }
+      for (let round = 0; round < 2; round += 1) {
+        await openFromLink()
+        expect(settingsTab()).toEqual(['Direct API'])
+        await openTab(root, container, 'Lanes')
+        await act(async () => {
+          buttonWithText(container, 'Close').click()
+        })
+        await settle()
+        expect(container.querySelector('#hud-settings')).toBeNull()
+      }
+      await act(async () => {
+        root.render(createElement(Hud, { ...props, settingsRequest: 1 }))
+      })
+      await settle()
+      expect(settingsTab()).toEqual(['Lanes'])
     })
   })
 })

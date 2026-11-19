@@ -112,4 +112,41 @@ describe('the replay scrubber', () => {
       }
     })
   })
+
+  it('moves an open chooser when the page scrolls or resizes and leaves a closed one alone', async () => {
+    await withDom(async ({ container, root }) => {
+      vi.stubGlobal('ResizeObserver', class {
+        constructor(callback) { this.callback = callback }
+        observe() { this.callback([{ contentRect: { width: 500 } }]) }
+        disconnect() {}
+      })
+      const markers = [500000, 500000, 501000, 502000, 600000].map((at) => ({ at, tone: 'start' }))
+      try {
+        await act(async () => root.render(createElement(Transport, {
+          snapshot: { ...SNAPSHOT, duration: 1000000 }, speeds: [1], markers,
+        })))
+        const overflow = container.querySelector('.scrubber-overflow')
+        const button = container.querySelectorAll('.scrubber-tick').find((tick) => tick.getAttribute('popoverTarget') === overflow.id)
+        let rect = { left: 248, top: 700, bottom: 716, width: 4 }
+        let open = true
+        button.popoverTargetElement = overflow
+        button.getBoundingClientRect = () => rect
+        overflow.matches = (selector) => selector === ':popover-open' && open
+        button.click()
+        expect(overflow.style['--marker-x']).toBe('250px')
+        rect = { left: 398, top: 650, bottom: 666, width: 4 }
+        for (const type of ['scroll', 'resize']) {
+          rect = { ...rect, left: rect.left + 50 }
+          window.dispatchEvent({ type })
+          expect(overflow.style['--marker-x'], type).toBe(`${rect.left + 2}px`)
+        }
+        open = false
+        rect = { left: 10, top: 700, bottom: 716, width: 4 }
+        window.dispatchEvent({ type: 'scroll' })
+        expect(overflow.style['--marker-x']).not.toBe('12px')
+      } finally {
+        vi.unstubAllGlobals()
+      }
+    })
+  })
 })
