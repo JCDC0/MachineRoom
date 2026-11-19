@@ -198,7 +198,9 @@ describe('stage idle class', () => {
     expect(html).toContain('class="stage"')
     expect(html).not.toContain('class="stage is-idle"')
     expect(html).not.toContain('is-scrolled')
-    expect(html).toContain('--lens-h-user:min(calc(100vh - var(--menu-h) - var(--transport-h)), max(240px, 100.0vh))')
+    expect(html).not.toContain('--lens-h-user')
+    expect(html).not.toContain('aria-label="Lens height"')
+    expect(html).toContain('aria-label="Zoom"')
   })
 })
 

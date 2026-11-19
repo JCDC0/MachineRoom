@@ -42,7 +42,7 @@ import { displayName } from './ui/agentList.js'
 import { addFailureActivities, emptyFailureTray, failureAge, failureRows, FAILURE_TRAY_LIMIT } from './ui/failureTray.js'
 import Waiting from './ui/Waiting.jsx'
 import LensRail from './ui/LensRail.jsx'
-import { LENS_SHARE_DEFAULT, clampLensShare, heightRailShare, lensHeightValue, lensShareAfterWheel, lensShareFromRail, multiplierText } from './ui/lensResize.js'
+import { multiplierText } from './ui/lensResize.js'
 
 const SPEEDS = [1, 2, 4, 8]
 const NONE = []
@@ -638,15 +638,8 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
   const [chromaMap, setChromaMap] = useState('')
   const [lensSize, setLensSize] = useState({ width: 0, height: 0 })
   const layersRef = useRef(null)
-  const [lensShare, setLensShare] = useState(() => loadSettings(store()).lensSplit ?? LENS_SHARE_DEFAULT)
   const compassRef = useRef(null)
   const [zoom, setZoom] = useState({ share: 0, multiplier: 1 })
-
-  function changeLensShare(next, save = true) {
-    const share = clampLensShare(next)
-    setLensShare(share)
-    if (save) saveSettings(store(), { lensSplit: share })
-  }
 
   useEffect(() => {
     sound.setSettings(loadSoundSettings(store()))
@@ -1534,7 +1527,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
 
   return (
     <LiveBadgeContext.Provider value={live?.simulated ? 'demo' : 'live'}>
-      <div className={stageClassName({ disconnected: bridgeDown, idle })} style={{ '--lens-bow': `${LENS_BOW}px`, '--lens-h-user': lensHeightValue(lensShare) }}>
+      <div className={stageClassName({ disconnected: bridgeDown, idle })} style={{ '--lens-bow': `${LENS_BOW}px` }}>
         {clipLens && (
           <svg
             className="lens-clip-defs"
@@ -1622,17 +1615,6 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
               </div>
             )}
           </div>
-          <LensRail
-            side="right"
-            inner
-            label="Height"
-            share={heightRailShare(lensShare)}
-            multiplier={multiplierText(lensShare / LENS_SHARE_DEFAULT)}
-            ariaLabel="Lens height"
-            valueText={`${Math.round(lensShare * 100)} percent of the window`}
-            onShare={(share, done) => changeLensShare(lensShareFromRail(share), done)}
-            onWheel={(deltaY) => changeLensShare(lensShareAfterWheel(lensShare, deltaY))}
-          />
           <LensRail
             side="right"
             label="Zoom"
