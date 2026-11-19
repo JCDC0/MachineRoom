@@ -129,6 +129,13 @@ function toolToneClass(entries, active = false) {
 }
 
 function RunChip({ options, selected, runState, tone, emptyLabel, onChange }) {
+  const [, refresh] = useState(0)
+  useEffect(() => {
+    const next = new Date()
+    next.setHours(24, 0, 1, 0)
+    const timer = setTimeout(() => refresh((count) => count + 1), next - Date.now())
+    return () => clearTimeout(timer)
+  })
   return (
     <span className="ui-chip ui-chip-select">
       <span className="ui-chip-label" aria-hidden="true">Run</span>
@@ -138,6 +145,8 @@ function RunChip({ options, selected, runState, tone, emptyLabel, onChange }) {
       </span>
       <span className="ui-chip-chevron" aria-hidden="true" />
       <select aria-label="Run" value={selected} disabled={options.length === 0}
+        onFocus={() => refresh((count) => count + 1)}
+        onMouseDown={() => refresh((count) => count + 1)}
         onChange={(event) => onChange(event.target.value)}>
         {options.length === 0 && <option value="">{emptyLabel}</option>}
         {options.map((run) => (
@@ -210,6 +219,7 @@ export default function LaneConversation({
   const refreshStatusesRef = useRef(null)
   const planModeChosenRef = useRef(false)
   const planStartingRef = useRef(false)
+  const startedRunRef = useRef(null)
   const inputId = useId()
   const planTaskId = useId()
   selectionRef.current = { lane, startedAt: selected }
@@ -353,7 +363,17 @@ export default function LaneConversation({
 
   useEffect(() => {
     setDraft('')
+    startedRunRef.current = null
   }, [lane])
+
+  useEffect(() => {
+    const pending = startedRunRef.current
+    if (!pending) return
+    const fresh = options.find((run) => run.running && !pending.has(run.startedAt))
+    if (!fresh) return
+    startedRunRef.current = null
+    setSelected(fresh.startedAt)
+  }, [options])
 
   useEffect(() => {
     if (!lane || !client || typeof client.lanes !== 'function') {
@@ -497,6 +517,7 @@ export default function LaneConversation({
     setSending(true)
     setSendError('')
     try {
+      if (!sendToRunning) startedRunRef.current = new Set(options.map((run) => run.startedAt))
       const answer = sendToRunning ? await client.sendLaneMessage({ lane, startedAt: selected, text: trimmedDraft, interrupt: Boolean(interrupt) }) : await onRecipientSend(trimmedDraft)
       if (answer?.ok === false) throw new Error(answer.error)
       if (!mountedRef.current && !sharedSentMessages) return
@@ -517,6 +538,7 @@ export default function LaneConversation({
         }
       }
     } catch (failure) {
+      startedRunRef.current = null
       if (!mountedRef.current) return
       setSendError(failure?.message || 'Could not send the message.')
     } finally {
@@ -803,6 +825,7 @@ export default function LaneConversation({
             <RunChip options={options} selected={selected} runState={runState} tone={tone} emptyLabel={emptyRunLabel}
               onChange={(startedAt) => {
                 wantedRef.current = ''
+                startedRunRef.current = null
                 setSelected(startedAt)
               }} />
             {canCompose && !selectedRunning && onRecipientSend && worktreeChoice}

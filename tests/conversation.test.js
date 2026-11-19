@@ -213,4 +213,15 @@ describe('a conversation read from a lane log', () => {
     expect(kept.at(-1).text).toBe('line 2100')
     expect(conversationFromLog('hermes', 'x'.repeat(4500))[0].text).toHaveLength(4000)
   })
+
+  it('marks a tool call failed when its result is an error', () => {
+    const log = lines(
+      { type: 'assistant', message: { content: [{ type: 'tool_use', id: 'a', name: 'Bash', input: { command: 'npm test' } }, { type: 'tool_use', id: 'b', name: 'Bash', input: { command: 'ls' } }] } },
+      { type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'a', is_error: true, content: 'boom' }, { type: 'tool_result', tool_use_id: 'b', content: 'ok' }] } }
+    )
+    const tools = conversationFromLog('claude', log).filter((item) => item.role === 'tool')
+    expect(tools).toHaveLength(2)
+    expect(tools[0].ok).toBe(false)
+    expect(tools[1].ok).toBeUndefined()
+  })
 })

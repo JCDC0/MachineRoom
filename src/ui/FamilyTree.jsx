@@ -61,6 +61,10 @@ import { AGENT_NAME_MAX, cleanText, laneChoice, laneSummary, projectName } from 
 const SCOPE_NOTE =
   "A restricted sub's lanes cannot merge files outside its scope without the orchestrator above."
 
+function lastRunText(last) {
+  return last ? `Last run ${runClock(last.startedAt)} · ${last.outcome}` : ''
+}
+
 function TreeIndent({ depth }) {
   return (
     <span className="mr-family-indent" style={{ width: `${depth * 16}px` }} aria-hidden="true">
@@ -878,7 +882,7 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
         const at = Date.parse(run?.startedAt)
         if (!run?.lane || !Number.isFinite(at)) continue
         if (at > (latest.get(run.lane)?.at ?? -Infinity)) {
-          latest.set(run.lane, { at, text: `Last run ${runClock(run.startedAt)} · ${cleanText(runOutcome(run), 60)}` })
+          latest.set(run.lane, { at, startedAt: run.startedAt, outcome: cleanText(runOutcome(run), 60) })
         }
       }
     }
@@ -2541,7 +2545,7 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
           detail,
           !session && effortMode,
           `Status ${state}${task ? ` · ${task}` : ''}`,
-          session ? node.step : lastRunByLane.get(node.id)?.text,
+          session ? node.step : lastRunText(lastRunByLane.get(node.id)),
         ].filter(Boolean)}>
           <Row
             className={`mr-family-row${state === 'off' ? ' is-off' : ''}${selectable ? ' is-selectable' : ''}`}
