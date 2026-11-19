@@ -291,13 +291,14 @@ export async function runCandidate({
   error = console.error,
   onChild = null,
   stdio = 'inherit',
+  portCheck = portIsFree,
 } = {}) {
   const options = parseCandidateArgs(argv)
   if (options.help) {
     log(USAGE)
     return 0
   }
-  if (!(await portIsFree(options.port))) throw new Error(portProblem(options.port))
+  if (!(await portCheck(options.port))) throw new Error(portProblem(options.port))
   const lanes = readLanes()
   const plan = candidatePlan({ lanes, lane: options.lane, port: options.port })
   const state = await worktreeState(plan.worktree, env)
@@ -310,7 +311,7 @@ export async function runCandidate({
     for (const line of built.lines) error(line)
     return 1
   }
-  if (!(await portIsFree(options.port))) throw new Error(portProblem(options.port))
+  if (!(await portCheck(options.port))) throw new Error(portProblem(options.port))
   const child = startCandidate({ plan, options, env: childEnv, stdio })
   if (onChild) onChild(child)
   log(candidateLine(plan, state))
