@@ -312,11 +312,11 @@
   "agy3": {
     "name": "agy3",
     "harness": "agy",
-    "model": "Gemini 4 Hydrogen (High)",
+    "model": "Gemini 4 Neon (High)",
     "cli": {
       "harness": "agy",
       "bin": "%LOCALAPPDATA%\\agy\\bin\\agy.exe",
-      "model": "gemini-4-hydrogen-high"
+      "model": "gemini-4-neon-high"
     },
     "worktree": "C:\\GitHub\\MachineRoom\\.worktrees\\agy3",
     "role": "You own backend work: server/**, scripts/**, src/control/**, src/assistant/**, src/decider/**, src/briefs/**, src/harnesses/** and src/model/**, and from 0.1.402 the UI briefs the owner moves from Codex (src/ui/**, src/styles.css).",
