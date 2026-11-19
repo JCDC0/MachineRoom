@@ -5949,7 +5949,7 @@ button.mr-orch-show-all {
   display: block;
 }
 
-.mr-orch-line.is-agent > .mr-orch-blocks > .mr-orch-block:first-of-type {
+.mr-orch-line.is-agent > .mr-orch-blocks > .mr-agent-dot + .mr-orch-block {
   display: inline;
 }
 

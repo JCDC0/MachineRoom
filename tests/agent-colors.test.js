@@ -206,4 +206,26 @@ describe('chatAgentColors', () => {
     expect(chatColor('lane:codex', chatAgentColors(roster))).toBe(offLane)
     expect(offLane).toBe(paletteColorByKey('codex'))
   })
+
+  it('gives a spawned subagent its parent colour and a hierarchy lane its own', async () => {
+    const { chatAgentColors, agentColor: chatColor } = await import('../src/ui/orchestratorChat.js')
+    const { cssColor } = await import('../src/engine/sprites.js')
+    const roster = [
+      { key: 'orchestrator', name: 'Orchestrator', role: 'orchestrator', depth: 0 },
+      { key: 'claude', name: 'Claude', parent: 'orchestrator', depth: 0 },
+      { key: 'sub-frontend', name: 'Frontend', parent: 'orchestrator', depth: 0, subOrchestrator: true },
+      { key: 'claude~1', name: 'Claude child', parent: 'claude', depth: 1 },
+      { key: 'claude~2', name: 'Claude grandchild', parent: 'claude~1', depth: 2 },
+      { key: 'opencode', name: 'OpenCode', parent: 'sub-frontend', depth: 0 },
+    ]
+    const map = chatAgentColors(roster)
+    const roots = roster.filter((agent) => !(agent.parent && agent.depth > 0))
+    const roomColors = agentColors(roots).map(cssColor)
+    roots.forEach((agent, index) => expect(map.get(agent.key)).toBe(roomColors[index]))
+    expect(map.get('claude~1')).toBe(map.get('claude'))
+    expect(map.get('claude~2')).toBe(map.get('claude'))
+    expect(map.get('opencode')).toBe(roomColors[3])
+    expect(map.get('opencode')).not.toBe(map.get('claude~1'))
+    expect(chatColor('claude~1', map)).toBe(chatColor('lane:claude', map))
+  })
 })

@@ -875,7 +875,8 @@ export default function Hud({
               }
               onClick={() => {
                 if (floatingChat) {
-                  setChatOpen((open) => !open)
+                  if (chatOpen) setChatOpen(false)
+                  else showChat()
                 } else showChat()
               }}
             >

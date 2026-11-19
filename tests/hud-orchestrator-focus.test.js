@@ -225,6 +225,41 @@ describe('the ORCHESTRATOR control at 900 pixels and wider', () => {
     })
   })
 
+  it('focuses the floating lane composer from the Orchestrator button at 800 pixels wide', async () => {
+    await withDom(async ({ container, dom, root }) => {
+      dom.window.localStorage.setItem('machineroom.guide', '1')
+      dom.window.innerWidth = 800
+      await mount(root, {
+        ...makeClient(),
+        lanes: async () => ({ lanes: LANES, chosen: true }),
+        sendOrchestrator: async () => {},
+      })
+
+      const button = orchestratorButton(container)
+      expect(button).not.toBeNull()
+      button.focus()
+      await click(root, button)
+      await settle(25)
+      expect(container.querySelector('#hud-orchestrator-chat')).not.toBeNull()
+      const input = container.querySelector('.mr-orch-input')
+      expect(dom.document.activeElement).toBe(input)
+
+      await chooseRecipient(container, 'opencode')
+      const laneInput = container.querySelector('[aria-label="Message OpenCode"]')
+      expect(laneInput).not.toBeNull()
+
+      button.focus()
+      await click(root, button)
+      expect(container.querySelector('#hud-orchestrator-chat')).toBeNull()
+      await settle(25)
+      button.focus()
+      expect(dom.document.activeElement).toBe(button)
+      await click(root, button)
+      await settle(25)
+      expect(dom.document.activeElement).toBe(container.querySelector('[aria-label="Message OpenCode"]'))
+    })
+  })
+
   it('scrolls to the chat and focuses its input from the / key', async () => {
     await withDom(async ({ container, dom, root }) => {
       dom.window.localStorage.setItem('machineroom.guide', '1')
@@ -379,9 +414,10 @@ describe('chat recipients and colours', () => {
       const crumb = container.querySelector('.mr-lane-conv-crumb')
       expect(crumb.querySelector('.mr-agent-dot').style.background).toBe(colors[1])
       await openLane(dom, 'claude-child')
-      expect(container.querySelector('.mr-lane-conv-crumb').querySelector('.mr-agent-dot').style.background).toBe(colors[4])
+      expect(container.querySelector('.mr-lane-conv-crumb').querySelector('.mr-agent-dot').style.background).toBe(colors[1])
       const css = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8')
-      expect(css).toMatch(/\.mr-orch-line\.is-agent[^{}]*\.mr-orch-block:first-of-type\s*\{\s*display:\s*inline/)
+      expect(css).toMatch(/\.mr-orch-line\.is-agent[^{}]*\.mr-agent-dot \+ \.mr-orch-block\s*\{\s*display:\s*inline/)
+      expect(css).not.toMatch(/\.mr-orch-block:first-of-type/)
       expect(css).toMatch(/\.mr-orch-line\.is-lane > \.mr-orch-who[^{}]*\{\s*color:\s*var\(--white\)/)
     })
   })

@@ -254,6 +254,11 @@ export function HoverCard({ title, details = [], dismissKey = 0, children }) {
     return () => view.removeEventListener('keydown', dismiss)
   }, [visible])
 
+  function detailRows() {
+    const list = typeof details === 'function' ? details() : details
+    return (Array.isArray(list) ? list : []).slice(0, 5).map((detail, index) => <div key={index}>{detail}</div>)
+  }
+
   return (
     <>
       <div ref={anchor} tabIndex={0} className="ui-hover-anchor" aria-describedby={id}
@@ -274,7 +279,7 @@ export function HoverCard({ title, details = [], dismissKey = 0, children }) {
         <div ref={card} className="ui-hovercard" id={id} role="tooltip" hidden={!visible}
           onPointerEnter={enter} onPointerLeave={leave}>
           <div className="ui-hovercard-title">{title}</div>
-          {details.slice(0, 5).map((detail, index) => <div key={index}>{detail}</div>)}
+          {detailRows()}
         </div>,
         document.body,
       )}

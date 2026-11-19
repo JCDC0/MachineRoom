@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { act, createElement } from 'react'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import FamilyTeam from '../src/ui/FamilyTeam.jsx'
 import Sidebar from '../src/ui/Sidebar.jsx'
 import { FamilyTeams, FamilyTree } from '../src/ui/FamilyTree.jsx'
@@ -386,6 +386,30 @@ describe('FamilyTree rows', () => {
       expect(idle.textContent).toContain('Status idle')
       expect(idle.textContent).not.toContain('JC-20')
     })
+  })
+
+  it('keeps an open hover card fresh across local midnight', async () => {
+    const { client } = makeClient()
+    const startedAt = new Date(2026, 10, 18, 23, 55, 0).toISOString()
+    client.runs = async () => ({ last: [{ lane: 'opencode', startedAt, exitCode: 0 }], recent: [] })
+    vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] })
+    vi.setSystemTime(new Date(2026, 10, 18, 23, 58, 0))
+    try {
+      await withDom(async ({ container, root }) => {
+        await mount(root, client)
+        const card = await cardFor(rowByLabel(container, 'OpenCode'))
+        expect(card.textContent).toContain('Last run 23:55:00 · finished')
+        expect(card.textContent).not.toContain('11-18')
+        vi.setSystemTime(new Date(2026, 10, 19, 0, 1, 0))
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(4 * 60 * 1000)
+        })
+        expect(card.textContent).toContain(`Last run ${runClock(startedAt)} · finished`)
+        expect(card.textContent).toContain('11-18 23:55:00')
+      })
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('reads lane tasks from the bridge when no task map is passed', async () => {
