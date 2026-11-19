@@ -10,6 +10,9 @@ export default defineConfig({
       output: {
         manualChunks(id) {
           const normalized = id.replaceAll('\\', '/')
+          if (normalized.includes('/src/control/mock.js')) {
+            return 'mock'
+          }
           if (normalized.includes('/node_modules/three/')) return 'three'
           if (
             normalized.includes('/node_modules/react/') ||
