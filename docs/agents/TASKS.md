@@ -4914,4 +4914,89 @@ Sweep S1 fixes, P514 to P516. `docs/agents/AUDIT-2026-11-SWEEP-S1.md` (P506, Cod
 
 **P630. The lower panels lose their last native selects and legacy controls (AGY, Hydrogen).** Fixes D6-19 and D6-25 of `docs/agents/AUDIT-2026-11-DOCS-6.md` (read both there) against `docs/agents/DESIGN-PANELS.md`. D6-19: in the sidebar, the Agents list and its forms, Teams and Build a team, Sort by and Sort models, replace each native `<select>` in browser styling and each 22 or 24 pixel legacy input, button and picker trigger with the shared controls in `src/ui/controls.jsx` (a Chip or Menu for a choice, 28 pixel height, at least a 24 pixel hit area, the `1px solid var(--white)` focus ring); the chat's hover message actions get the same hit area and focus ring. Keep every label, value and keyboard path working, and keep form fields that take typed text as inputs at the shared height. D6-25: a paused orchestrator that reads `waiting` gets the white dot, not red, since red means failure. Change any test under tests/ that pins the old markup, keep its intent, and name each in your report. Known sandbox baseline failures, not yours: process tests and any test that fails only because the sandbox denies the home folder. Files: src/ui/FamilyTree.jsx, src/ui/FamilyTeam.jsx, src/ui/Sidebar.jsx, src/ui/ModelPicker.jsx, src/ui/OrchestratorChat.jsx, src/ui/controls.jsx, src/styles.css, tests/, docs/agents/architecture/ROOM.md. Do not stop to ask about scope: decide, and list every decision and file in your report. Run the changed test files and the test files that import the changed sources by name, and `npm run build`, in the foreground, and report the counts.
 
+**P630a. Replace native selects and legacy buttons in Agents forms with shared Chip controls, and fix the paused orchestrator dot (agy-4, Hydrogen High, written by the Neon sub).** Fixes the Agents, Teams, Build a team and shared control parts of D6-19 and all of D6-25 from docs/agents/AUDIT-2026-11-DOCS-6.md against docs/agents/DESIGN-PANELS.md (read all three first, plus docs/agents/HOUSE-RULES.md). Another lane owns src/styles.css, src/ui/Sidebar.jsx, src/ui/ModelPicker.jsx and src/ui/OrchestratorChat.jsx in parallel. Work only in your own worktree and branch. Never touch src/styles.css, src/ui/Sidebar.jsx, src/ui/ModelPicker.jsx, src/ui/OrchestratorChat.jsx, src/Stage.jsx, src/App.jsx or docs/agents/CHANGELOG.md.
+
+What to change:
+1. src/ui/controls.jsx:
+   - In Chip (options select variant): place aria-label={label} before {...props} on the inner <select> so callers can override aria-label while passing a short or empty label; render .ui-chip-label only when label is truthy.
+   - In Chip (button variant): place type="button" before {...props} on the inner <button> so form submit buttons can pass type="submit"; render .ui-chip-label only when label is truthy.
+   - Keep all existing Chip behaviour, props and keyboard paths intact.
+2. src/ui/FamilyTree.jsx:
+   - D6-25: in renderRow, when state is 'paused' and status reads 'waiting', set dot to 'idle' (const dot = status === 'waiting' ? 'idle' : state) so a paused orchestrator row gets the white dot, not red. Keep the HoverCard status text as today.
+   - D6-19: replace every native <select className="mr-side-select mono"> in FamilyTeams (Saved team, Copy from), renderEditor (lane Mode, lane Effort, Backup lane, orchestrator/sub Harness, sub Mode, orchestrator/sub Effort), renderChildForm (Mode, Effort) and renderSubForm (Harness, Mode, Effort) with <Chip className="mr-side-chip-select" label="" aria-label={...} value={...} options={...} onChange={...} /> from ./controls.jsx. Keep every existing aria-label, option list (including disabled placeholder options), value and onChange behaviour working.
+   - Replace the legacy form action buttons (.mr-side-primary, .mr-side-action) and child-form harness toggle buttons (.mr-side-harness) with <Chip> using type="submit" where the button submits a form and preserving their class hooks (mr-side-primary, mr-side-action, is-danger, mr-side-harness, is-on), aria-pressed and disabled states. Keep typed text inputs and Scope textareas as <input> and <textarea> with their existing classes.
+3. src/ui/FamilyTeam.jsx:
+   - D6-19: replace the three native <select className="mr-side-select mono"> elements (Orchestrators, Coders each, Harness) with <Chip className="mr-side-chip-select" label="" aria-label={...} value={...} options={...} onChange={...} /> from ./controls.jsx, keeping numeric conversion for Orchestrators and Coders each and all existing aria-label strings.
+   - Replace the Save and Cancel form buttons with <Chip> (type="submit" for Save), keeping mr-side-primary and mr-side-action class hooks.
+4. docs/agents/architecture/ROOM.md:
+   - Update the sentence in the Agents description (line 42) that says a paused orchestrator shows waiting with a red dot so it says white dot. Keep plain words and no em dashes.
+5. Tests:
+   - Add tests in tests/controls.test.jsx for Chip aria-label override, empty label omission and type="submit".
+   - Add tests in tests/family-tree-ui.test.js checking that a paused orchestrator row renders the white dot (is-idle, not is-paused) while reading waiting, and that Agents/Teams/Build a team selects render via .ui-chip-select with no .mr-side-select elements remaining.
+   - Update any test in your file list that pinned the old markup while keeping its intent, and name each changed test in your report.
+
+Files you may touch:
+- src/ui/controls.jsx
+- src/ui/FamilyTree.jsx
+- src/ui/FamilyTeam.jsx
+- docs/agents/architecture/ROOM.md
+- tests/controls.test.jsx, tests/family-tree-ui.test.js, tests/family-ladder-ui.test.js, tests/family-friendly.test.js, tests/family-checklist.test.js, tests/form-defaults.test.js, tests/lane-mode-picker.test.js, tests/sub-mode-picker.test.js, tests/sub-scope-form.test.js, tests/team-picker.test.js, tests/ready-harnesses.test.js, tests/harness-default-pick.test.js
+
+Rules:
+- Plain words, short sentences, no em dashes, no single-line explanatory comments, no emoji, never print a key or user path.
+- Fonts Jost and Space Mono at weights 400 and 500 only, never bold.
+
+Verification (run in foreground, do not run full npm test):
+- Run every test file you changed and the tests that import your changed sources:
+  npx vitest run tests/controls.test.jsx tests/family-tree-ui.test.js tests/family-ladder-ui.test.js tests/family-friendly.test.js tests/family-checklist.test.js tests/form-defaults.test.js tests/lane-mode-picker.test.js tests/sub-mode-picker.test.js tests/sub-scope-form.test.js tests/team-picker.test.js tests/ready-harnesses.test.js tests/harness-default-pick.test.js
+- Run npm run build and confirm it passes.
+
+Commit on your branch, then report: files changed, exact commands run with pass/fail and test counts, any test updated for markup, and anything you could not verify.
+
+Do not edit docs/agents/CHANGELOG.md; the orchestrator writes it at merge. Your sub orchestrator Neon reviews your branch when you end. Files: src/ui/controls.jsx, src/ui/FamilyTree.jsx, src/ui/FamilyTeam.jsx, docs/agents/architecture/ROOM.md, tests/.
+
+**P630b. Replace Sidebar and ModelPicker native selects and legacy controls with shared Chip styling, and update lower-panel CSS (agy-5, Hydrogen High, written by the Neon sub).** Fixes the Sidebar, ModelPicker, chat hover action and CSS parts of D6-19 and the CSS half of D6-25 from docs/agents/AUDIT-2026-11-DOCS-6.md against docs/agents/DESIGN-PANELS.md (read all three first, plus docs/agents/HOUSE-RULES.md). Another lane owns src/ui/controls.jsx, src/ui/FamilyTree.jsx, src/ui/FamilyTeam.jsx and docs/agents/architecture/ROOM.md in parallel. Work only in your own worktree and branch. Never touch src/ui/controls.jsx, src/ui/FamilyTree.jsx, src/ui/FamilyTeam.jsx, docs/agents/architecture/ROOM.md, src/Stage.jsx, src/App.jsx or docs/agents/CHANGELOG.md.
+
+What to change:
+1. src/ui/Sidebar.jsx:
+   - Replace the Sort by <select className="mr-side-select mono"> (near line 756) with <Chip className="mr-side-sort-chip" label="Sort by" value={sort} options={SESSION_SORTS.map((choice) => ({ value: choice.key, label: choice.label }))} onChange={chooseSort} /> from ./controls.jsx.
+   - Remove the redundant wrapping <label className="mono">Sort by ...</label> so the label is not duplicated while the inner <select> keeps aria-label="Sort by", its value and machineroom.sessionSort persistence.
+2. src/ui/ModelPicker.jsx:
+   - Replace the non-inline trigger <button className="mr-picker-trigger mono"> (near lines 394-412) with <Chip id={id} ref={triggerRef} className="mr-picker-trigger" label="" value={triggerText} aria-label={ariaLabel} aria-haspopup="listbox" open={open} title={triggerText} disabled={disabled} onClick={() => (open ? close() : setOpen(true))} />, matching the inline trigger's Chip usage while keeping its existing aria-label, ref, id, open state and keyboard Escape/focus behaviour.
+   - Replace the Sort models <select className="mr-picker-sort mono"> (near lines 429-440) with <Chip className="mr-picker-sort" label="Sort models" value={sort} options={MODEL_SORTS.map((entry) => ({ value: entry.id, label: entry.label }))} onChange={chooseSort} />, keeping aria-label="Sort models" and all sort options working.
+   - Keep the search <input className="mr-picker-search"> as an input, styled to 28px and white focus ring in src/styles.css.
+3. src/ui/OrchestratorChat.jsx:
+   - Inspect renderMessageActions and the run-notice Details button (.mr-orch-line-action). Keep existing labels, roles and behaviour; change markup here only if needed for accessible 24px+ hit areas and focus styling.
+4. src/styles.css:
+   - Shared Chip helpers: add .ui-chip-label:empty { display: none; } so empty labels take no space; style .ui-chip.mr-side-chip-select and .mr-model-row > .ui-chip.mr-picker-trigger for full-width 28px form controls (width: 100% or flex: 1 1 auto, justify-content: space-between, min-width: 0, ellipsis truncation on .ui-chip-value).
+   - ModelPicker: remove legacy .mr-picker-trigger:not(.ui-chip) rules and the yellow :focus-visible outline: none override on .mr-picker-trigger; style .mr-picker-sort.ui-chip-select at 28px (visually hiding its .ui-chip-label if needed to fit the picker head cleanly, removing legacy 24px #1b1b1b native select styling); update .mr-picker-search to height: var(--control-h) (28px), border-color: var(--border-soft), border-radius: var(--radius-s), black/transparent fill and :focus-visible { outline: 1px solid var(--white); outline-offset: 2px; }.
+   - Sidebar and Agents forms: update .mr-side-input and .mr-side-search to height: var(--control-h) (28px; .mr-side-scope textarea keeps height: auto; min-height: 40px), border: 1px solid var(--border-soft), border-radius: var(--radius-s), no #1b1b1b fill, and white focus ring (1px solid var(--white), offset 2px) instead of yellow focus border with outline: none; remove legacy 22px #1b1b1b .mr-side-select rules; update .mr-side-primary, .mr-side-action, .mr-side-harness and .mr-side-confirm-btn (including when used on button.ui-chip) to min-height: var(--control-h) (28px), min-width: 24px and 1px solid var(--white) :focus-visible ring (offset 2px).
+   - Chat hover actions: update .mr-orch-line-action to at least 24px height and width (min-height: 24px; min-width: 24px; inline-flex alignment) and change :focus-visible from outline: 2px solid var(--yellow) to outline: 1px solid var(--white); outline-offset: 2px.
+   - D6-25 CSS guard: remove the red background on .mr-family-dot.is-paused (or set it to var(--white)) so paused orchestrator rows never paint red.
+   - Keep fonts Jost and Space Mono at weights 400 and 500 only (never bold), and only the five room colours plus black/white/grey tokens from :root.
+5. Tests:
+   - Update and extend tests/sidebar.test.js and tests/model-picker.test.js to assert Sort by, Sort models and non-inline ModelPicker triggers render with .ui-chip / .ui-chip-select and no legacy .mr-side-select or non-chip .mr-picker-trigger.
+   - Extend tests/layout-css.test.js to assert .mr-orch-line-action has >= 24px hit area and 1px solid var(--white) focus-visible outline (no yellow focus outline), .mr-side-input and .mr-picker-search use var(--control-h) (28px) and white focus ring, and .mr-family-dot.is-paused does not paint var(--red).
+   - Update any test in your file list that pinned the old markup while keeping its intent, and name each changed test in your report.
+
+Files you may touch:
+- src/styles.css
+- src/ui/Sidebar.jsx
+- src/ui/ModelPicker.jsx
+- src/ui/OrchestratorChat.jsx
+- tests/sidebar.test.js, tests/sidebar-menu-ui.test.js, tests/sidebar-preview-ui.test.js, tests/sidebar-pins.test.jsx, tests/model-picker.test.js, tests/model-picker-unlisted.test.js, tests/orchestrator-chat.test.js, tests/chat-pickers.test.js, tests/chat-picker-layout.test.js, tests/layout-css.test.js, tests/hud-style.test.js
+
+Rules:
+- Plain words, short sentences, no em dashes, no single-line explanatory comments, no emoji, never print a key or user path.
+- Fonts Jost and Space Mono at weights 400 and 500 only, never bold.
+
+Verification (run in foreground, do not run full npm test):
+- Run every test file you changed and the tests that import your changed sources:
+  npx vitest run tests/sidebar.test.js tests/sidebar-menu-ui.test.js tests/sidebar-preview-ui.test.js tests/sidebar-pins.test.jsx tests/model-picker.test.js tests/model-picker-unlisted.test.js tests/orchestrator-chat.test.js tests/chat-pickers.test.js tests/chat-picker-layout.test.js tests/layout-css.test.js tests/hud-style.test.js
+- Run npm run build and confirm it passes.
+
+Commit on your branch, then report: files changed, exact commands run with pass/fail and test counts, any test updated for markup, and anything you could not verify.
+
+Do not edit docs/agents/CHANGELOG.md; the orchestrator writes it at merge. Your sub orchestrator Neon reviews your branch when you end. Files: src/styles.css, src/ui/Sidebar.jsx, src/ui/ModelPicker.jsx, src/ui/OrchestratorChat.jsx, tests/.
+
 **P631. Docs audit 6 fixes: the docs say what the code does (MachineRoom, native).** Fixes every finding of `docs/agents/AUDIT-2026-11-DOCS-6.md` except D6-19 and D6-25 (another lane changes the code for those), and adds the behaviours its section on merges since P582 lists. For each, change the doc to the corrected sentence the audit gives, checked against the code at today's `main`: the main bundle was split by P627, so take D6-8's numbers from a fresh `npm run build`, and say the chunks now fit under the 970 kB warning. For D6-10 add one line per missing file in the code map, grouping the test files by their area if one line each would be over a hundred lines. Change no code. Files: docs/agents/ARCHITECTURE.md, docs/agents/architecture/, docs/agents/PLAN.md, docs/agents/DESIGN-PANELS.md, README.md. Do not stop to ask about scope: decide, and list every decision and file in your report. Run `npm run build` in the foreground and report the chunk sizes you wrote.
