@@ -914,8 +914,7 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
   )
   const taskMap = tasks instanceof Map ? tasks : liveTaskMap
   const boxes = useMemo(() => {
-    const fromTree = new Set(tree.rows.map((row) => row.id))
-    return familyBoxes(tree.rows, sessionRows.filter((row) => !fromTree.has(row.id)))
+    return familyBoxes(tree.rows, sessionRows)
   }, [tree, sessionRows])
   const countLine = family ? laneCountLine(tree.nodes) : ''
   const mainAgent = tree.nodes.find((node) => node.kind === 'orchestrator')
@@ -2518,7 +2517,7 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
 
   function renderBox(box) {
     return (
-      <div className="mr-family-group" key={box.node.id}>
+      <div className="mr-family-box" key={box.node.id}>
         <div className="mr-family-head">{renderRow(box.node)}</div>
         {box.subs.length > 0 ? <div className="mr-family-kids">{box.subs.map((kid) => <div className="mr-family-kid" key={kid.node.id}>{renderBox(kid)}</div>)}</div> : null}
         {box.lanes.length + box.more.length > 0 ? (
