@@ -1,7 +1,7 @@
 import { spawnSync } from 'node:child_process'
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
-import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import {
   abortMerge,
   branchBroughtUnreleasedLine,
@@ -156,6 +156,7 @@ describe('parseMergeArgs', () => {
   it('returns error on missing required args or flags', () => {
     expect(parseMergeArgs([])).toEqual({ error: USAGE })
     expect(parseMergeArgs(['hermes', '--finish', '--subject', 'S'])).toEqual({ error: USAGE })
+    expect(parseMergeArgs(['hermes', '--finish', '--subject', 'S', '--grade', 'A', '--fixes', '0'])).toEqual({ error: USAGE })
     expect(parseMergeArgs(['hermes', '--extra'])).toEqual({ error: USAGE })
   })
 })
@@ -555,6 +556,62 @@ describe('--finish command', () => {
     expect(outcomeRecord.grade).toBe('A-')
     expect(outcomeRecord.fixes).toBe(0)
     expect(outcomeRecord.version).toBe('0.1.401')
+  })
+
+  it('reports skipping --line when the merge adds an Unreleased entry for one of its briefs', async () => {
+    const { mainDir, laneDir, runsDir } = setupFixture()
+    const path = 'docs/agents/CHANGELOG.md'
+    const laneChangelog = insertUnreleasedLine(CHANGELOG_CRLF, 'The lane logged its change (T1).')
+    write(laneDir, path, laneChangelog)
+    commitAll(laneDir, '0.1.401: Log the change')
+
+    const runsPath = join(runsDir, 'runs.jsonl')
+    writeFileSync(runsPath, `${JSON.stringify({ branch: 'feat/hermes-task', briefs: ['T2', 'T1'] })}\n`)
+    expect(prepareMerge({ root: mainDir, lane: 'hermes', runsDir }).ok).toBe(true)
+
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {})
+    try {
+      const code = await main(
+        ['hermes', '--finish', '--subject', 'Log the change', '--line', 'The merge logged its change (T1).', '--grade', 'A', '--fixes', '0'],
+        { root: mainDir, runsPath, outcomesPath: join(runsDir, 'outcomes.jsonl') },
+      )
+      expect(code).toBe(0)
+      expect(log).toHaveBeenCalledWith('Skipped --line because the merge already adds an Unreleased line for a brief.')
+    } finally {
+      log.mockRestore()
+    }
+    expect(readFileSync(join(mainDir, path), 'utf8')).toBe(laneChangelog)
+    expect(gitCmd(mainDir, ['log', '-1', '--pretty=%s'])).toBe('0.1.401: Merge T2, T1, Log the change')
+  })
+
+  it('uses --line when the merge adds no matching Unreleased entry', () => {
+    const { mainDir, laneDir, runsDir } = setupFixture()
+    const path = 'docs/agents/CHANGELOG.md'
+    const before = insertUnreleasedLine(CHANGELOG_CRLF, 'An earlier entry named T1.')
+    write(mainDir, path, before)
+    commitAll(mainDir, '0.1.401: Log an earlier change')
+    gitCmd(laneDir, ['merge', '--ff-only', 'refs/heads/main'])
+    const laneChangelog = insertUnreleasedLine(before, 'The lane logged T10.').replace('- First.', '- The old release logged T1.')
+    write(laneDir, path, laneChangelog)
+    commitAll(laneDir, '0.1.401: Log other changes')
+
+    const runsPath = join(runsDir, 'runs.jsonl')
+    writeFileSync(runsPath, `${JSON.stringify({ branch: 'feat/hermes-task', briefs: ['T10'] })}\n`)
+    expect(prepareMerge({ root: mainDir, lane: 'hermes', runsDir }).ok).toBe(true)
+
+    const line = 'The merge logged its change (T1).'
+    expect(finishMerge({
+      root: mainDir,
+      lane: 'hermes',
+      subject: 'Log the change',
+      line,
+      grade: 'A',
+      fixes: '0',
+      ids: ['T1'],
+      runsPath,
+      outcomesPath: join(runsDir, 'outcomes.jsonl'),
+    })).toMatchObject({ ok: true, skippedChangelogLine: false, commitSubject: '0.1.401: Merge T1, Log the change' })
+    expect(readFileSync(join(mainDir, path), 'utf8')).toBe(insertUnreleasedLine(laneChangelog, line))
   })
 })
 
