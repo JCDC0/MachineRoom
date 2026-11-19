@@ -1,6 +1,6 @@
 # Agent seats: agents that make their own agents
 
-Status: plan, 2026-11-20. Not built. Builds on P634 (the Agents family tree with a chosen top) and P635 (one park ring per level of the agent tree).
+Status: plan, 2026-11-20, approved by the owner as written (seats per ring, the harness's own subagents take no seat, an AGY orchestrator uses a grant only in Bypass). Briefs P636 to P640. Not built. Builds on P634 (the Agents family tree with a chosen top) and P635 (one park ring per level of the agent tree).
 
 ## The owner's ask
 
