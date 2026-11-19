@@ -576,7 +576,7 @@ describe('--finish command', () => {
         { root: mainDir, runsPath, outcomesPath: join(runsDir, 'outcomes.jsonl') },
       )
       expect(code).toBe(0)
-      expect(log).toHaveBeenCalledWith('Skipped --line because the merge already adds an Unreleased line for a brief.')
+      expect(log).toHaveBeenCalledWith('Skipped --line because the merged changelog already has the Unreleased entry.')
     } finally {
       log.mockRestore()
     }
@@ -587,11 +587,12 @@ describe('--finish command', () => {
   it('uses --line when the merge adds no matching Unreleased entry', () => {
     const { mainDir, laneDir, runsDir } = setupFixture()
     const path = 'docs/agents/CHANGELOG.md'
+    const line = 'The merge logged its change (T1).'
     const before = insertUnreleasedLine(CHANGELOG_CRLF, 'An earlier entry named T1.')
     write(mainDir, path, before)
     commitAll(mainDir, '0.1.401: Log an earlier change')
     gitCmd(laneDir, ['merge', '--ff-only', 'refs/heads/main'])
-    const laneChangelog = insertUnreleasedLine(before, 'The lane logged T10.').replace('- First.', '- The old release logged T1.')
+    const laneChangelog = insertUnreleasedLine(before, 'The lane logged T10.').replace('- First.', `- ${line}`)
     write(laneDir, path, laneChangelog)
     commitAll(laneDir, '0.1.401: Log other changes')
 
@@ -599,7 +600,6 @@ describe('--finish command', () => {
     writeFileSync(runsPath, `${JSON.stringify({ branch: 'feat/hermes-task', briefs: ['T10'] })}\n`)
     expect(prepareMerge({ root: mainDir, lane: 'hermes', runsDir }).ok).toBe(true)
 
-    const line = 'The merge logged its change (T1).'
     expect(finishMerge({
       root: mainDir,
       lane: 'hermes',
@@ -612,6 +612,58 @@ describe('--finish command', () => {
       outcomesPath: join(runsDir, 'outcomes.jsonl'),
     })).toMatchObject({ ok: true, skippedChangelogLine: false, commitSubject: '0.1.401: Merge T1, Log the change' })
     expect(readFileSync(join(mainDir, path), 'utf8')).toBe(insertUnreleasedLine(laneChangelog, line))
+  })
+
+  it('uses --line when a new Unreleased heading names the brief', () => {
+    const { mainDir, laneDir, runsDir } = setupFixture()
+    const path = 'docs/agents/CHANGELOG.md'
+    const laneChangelog = CHANGELOG_CRLF.replace('- Older line.', `- Older line.${CRLF}${CRLF}### Follow-ups to T1${CRLF}`)
+    write(laneDir, path, laneChangelog)
+    commitAll(laneDir, '0.1.401: Add a follow-up heading')
+    expect(prepareMerge({ root: mainDir, lane: 'hermes', runsDir }).ok).toBe(true)
+    const broughtEntry = branchBroughtUnreleasedLine(mainDir, 'feat/hermes-task')
+
+    const line = 'The merge logged its change (T1).'
+    expect(finishMerge({
+      root: mainDir,
+      lane: 'hermes',
+      subject: 'Log the change',
+      line,
+      grade: 'A',
+      fixes: '0',
+      ids: ['T1'],
+      runsDir,
+      outcomesPath: join(runsDir, 'outcomes.jsonl'),
+    })).toMatchObject({ ok: true, skippedChangelogLine: false })
+    expect(readFileSync(join(mainDir, path), 'utf8')).toBe(insertUnreleasedLine(laneChangelog, line))
+    expect(broughtEntry).toBe(false)
+  })
+
+  it('keeps one exact --line bullet when both sides already added it', () => {
+    const { mainDir, laneDir, runsDir } = setupFixture()
+    const path = 'docs/agents/CHANGELOG.md'
+    const line = 'Both sides logged the change (T1).'
+    const changelog = insertUnreleasedLine(CHANGELOG_CRLF, line)
+    write(mainDir, path, changelog)
+    commitAll(mainDir, '0.1.401: Log the change on main')
+    write(laneDir, path, changelog)
+    write(laneDir, 'src/item.js', 'export const item = true\n')
+    commitAll(laneDir, '0.1.401: Log the change on the lane')
+    expect(prepareMerge({ root: mainDir, lane: 'hermes', runsDir }).ok).toBe(true)
+    expect(gitCmd(mainDir, ['diff', 'HEAD', '--', path])).toBe('')
+
+    expect(finishMerge({
+      root: mainDir,
+      lane: 'hermes',
+      subject: 'Log the change',
+      line,
+      grade: 'A',
+      fixes: '0',
+      ids: ['T1'],
+      runsDir,
+      outcomesPath: join(runsDir, 'outcomes.jsonl'),
+    })).toMatchObject({ ok: true, skippedChangelogLine: true })
+    expect(readFileSync(join(mainDir, path), 'utf8')).toBe(changelog)
   })
 })
 
