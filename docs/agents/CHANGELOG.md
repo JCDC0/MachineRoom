@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Docs audit 6 lists 29 findings: stale doc sentences, files the code map misses, and lower-panel controls that still break the design spec (P625).
 - The mock control client builds into its own chunk, so the main bundle drops from 973 kB to 808 kB under the 970 kB warning (P627).
 - Review 63 reads P620 to P624, closes most of review 62 and finds 8 smaller issues (P626).
 - A chat dot for an agent the room does not draw takes a stable colour from the room palette (P624).
