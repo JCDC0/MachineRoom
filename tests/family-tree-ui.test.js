@@ -337,6 +337,8 @@ describe('FamilyTree rows', () => {
     expect(css).toContain('grid-template-columns: clamp(280px, 22vw, 340px) minmax(0, 1fr) 280px')
     expect(css).toContain('.mr-family-row:is(:hover, :focus-within,')
     expect(css).toMatch(/\.mr-family-row\.is-off \.mr-family-label \{\s*opacity: 0\.55;/)
+    expect(css).toMatch(/\.mr-family-top\s*\{[^}]*padding-right:\s*calc\(var\(--control-h\) \* 2 \+ var\(--space\) \* 2\);/)
+    expect(css).toMatch(/\.mr-family-row \.ui-row-trailing\s*\{[^}]*position:\s*absolute;[^}]*top:\s*0;/)
   })
 
   it('shows each orchestrator state word beside its dot', async () => {

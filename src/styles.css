@@ -6007,29 +6007,10 @@ button.mr-orch-show-all {
   overflow-wrap: anywhere;
 }
 
-.mr-orch-jump {
-  align-self: flex-end;
-  padding: 2px 8px;
-  border: 1px solid rgb(255 255 255 / 0.4);
-  border-radius: 2px;
-  background: #000;
-  color: var(--yellow);
-  font-family: var(--mono);
-  font-size: 10px;
-  font-weight: 400;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.mr-orch-jump:hover:not(:disabled) {
-  border-color: var(--yellow);
-  background: #000;
-  color: var(--yellow);
-}
-
-.mr-orch-jump:focus-visible {
-  outline: 2px solid var(--yellow);
-  outline-offset: 2px;
+.mr-orch-jump-row {
+  display: flex;
+  flex: 0 0 auto;
+  justify-content: flex-end;
 }
 
 .mr-orch-line-actions {
@@ -8409,6 +8390,13 @@ button.ui-icon-btn.mr-composer-send:hover:not(:disabled) {
     font-size: 11px;
   }
 
+  .mr-orch.is-inline .mr-orch-jump-row {
+    width: 100%;
+    max-width: 760px;
+    margin: 0 auto;
+    padding-inline: 24px;
+  }
+
   .mr-orch.is-inline .mr-orch-confirm {
     flex: 0 0 auto;
     margin: 0 auto;
@@ -9471,8 +9459,16 @@ button.ui-icon-btn.mr-composer-send:hover:not(:disabled) {
   pointer-events: none;
 }
 
+.mr-family-row {
+  position: relative;
+}
+
 .mr-family-row .ui-row-trailing {
-  flex: 0 0 calc(var(--control-h) * 2 + var(--space));
+  position: absolute;
+  top: 0;
+  right: var(--space);
+  width: calc(var(--control-h) * 2 + var(--space));
+  height: var(--control-h);
   justify-content: flex-end;
 }
 
@@ -9701,6 +9697,8 @@ button.mr-family-heading,
   display: flex;
   align-items: center;
   gap: var(--space);
+  min-height: var(--control-h);
+  padding-right: calc(var(--control-h) * 2 + var(--space) * 2);
 }
 
 .mr-family-row .ui-row-label {
@@ -9709,6 +9707,7 @@ button.mr-family-heading,
 
 .mr-family-row .ui-row-detail {
   padding-left: 16px;
+  line-height: 16px;
 }
 
 .mr-family-label {

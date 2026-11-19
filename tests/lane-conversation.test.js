@@ -477,8 +477,57 @@ describe('the lane conversation view', () => {
       })
 
       expect(buttonWithText(container, 'Stop')).toBeNull()
-      expect(container.querySelector('.mr-composer').querySelector('[role="status"]').textContent).toBe(`Finished · Run ${runClock(STARTED)}`)
+      expect(container.querySelector('.mr-composer').querySelector('.ui-chip-value').textContent).toBe(runClock(STARTED))
+      expect(container.querySelector('.mr-composer').querySelector('[role="status"]').textContent).toBe('Finished')
       expect(container.querySelector('.mr-lane-conv-log').textContent).not.toContain('The run ended.')
+    })
+  })
+
+  it('keeps reported context on the history status line without repeating the run time', async () => {
+    const client = makeClient({
+      entries: [{ role: 'result', text: 'Done.', at: STARTED }],
+      running: false,
+      run: { contextTokens: 96000, contextWindow: 200000 },
+    })
+
+    await withDom(async ({ container, root }) => {
+      await mount(root, {
+        client,
+        lane: 'opencode',
+        laneName: 'OpenCode',
+        project: 'MachineRoom',
+        lanes: LANES,
+        initialStartedAt: STARTED,
+      })
+
+      expect(container.querySelector('.mr-composer-history')).not.toBeNull()
+      expect(container.querySelector('.mr-composer').querySelector('.ui-chip-value').textContent).toBe(runClock(STARTED))
+      expect(container.querySelector('.mr-composer').querySelector('[role="status"]').textContent).toBe(
+        'Finished · Context 96k / 200k'
+      )
+    })
+  })
+
+  it('keeps the run time in the status line when composing', async () => {
+    const client = makeClient({
+      entries: [{ role: 'agent', text: 'Working.', at: STARTED }],
+      running: true,
+    })
+
+    await withDom(async ({ container, root }) => {
+      await mount(root, {
+        client,
+        lane: 'opencode',
+        laneName: 'OpenCode',
+        project: 'MachineRoom',
+        lanes: LANES,
+        initialStartedAt: STARTED,
+      })
+
+      expect(container.querySelector('.mr-composer-box')).not.toBeNull()
+      expect(container.querySelector('.mr-composer').querySelector('[role="status"]').textContent).toBe(
+        `Working · Run ${runClock(STARTED)}`
+      )
     })
   })
 
@@ -824,6 +873,9 @@ describe('the lane conversation view', () => {
         await settle(15)
 
         expect(container.querySelector('.mr-composer-box')).not.toBeNull()
+        expect(container.querySelector('.mr-composer').querySelector('[role="status"]').textContent).toBe(
+          `Finished · Run ${runClock(STARTED)}`
+        )
         expect(container.querySelector('select[aria-label="To"]')).not.toBeNull()
         const worktree = container.querySelector('button[role="switch"][aria-label="Worktree"]')
         expect(worktree).not.toBeNull()
@@ -854,6 +906,7 @@ describe('the lane conversation view', () => {
         expect(container.querySelector('.mr-lane-conv-crumb').textContent).toBe('/MACHINEROOM / OFF LANE')
         expect(container.querySelector('.mr-composer-box')).toBeNull()
         expect(container.querySelector('.mr-composer-history')).not.toBeNull()
+        expect(container.querySelector('.mr-composer').querySelector('[role="status"]').textContent).toBe('Idle')
         expect(container.querySelector('textarea')).toBeNull()
         expect(container.querySelector('button[role="switch"][aria-label="Worktree"]')).toBeNull()
         expect(container.querySelector('select[aria-label="To"]')).toBeNull()

@@ -229,12 +229,13 @@ export default function LaneConversation({
   const hasLiveRun = Boolean(currentRun?.running || otherLiveRun)
   const selectedRunning = currentRun?.running === true ? conversation.data === null || running : running && !hasLiveRun
   const recipientRunning = onRecipientSend && selectedRunning
+  const canCompose = selectedRunning || (onRecipientSend && !hasLiveRun && !running)
   const outcome = runOutcome(currentRun, conversation.data)
   const runState = selectedRunning ? 'running' : outcome
   const tone = RUN_TONES[runState] || 'idle'
   const status = selectedRunning ? 'Working' : outcome ? outcome[0].toUpperCase() + outcome.slice(1) : 'Idle'
   const context = [
-    selected && `Run ${runClock(selected)}`,
+    canCompose && selected && `Run ${runClock(selected)}`,
     typeof currentRun?.contextTokens === 'number' && contextLine({
       context: { tokens: currentRun.contextTokens, window: currentRun.contextWindow },
     }).replace(/^Context size (?=\d)/, 'Context '),
@@ -265,7 +266,6 @@ export default function LaneConversation({
   const editModes = useMemo(() => editModesFor(planHarness), [planHarness])
   const trimmedDraft = draft.trim()
   const canSend = trimmedDraft.length > 0 && trimmedDraft.length <= MAX_MESSAGE_CHARS
-  const canCompose = selectedRunning || (onRecipientSend && !hasLiveRun && !running)
   const visibleSent = sentMessages.filter((item) => item.lane === lane && item.startedAt === selected)
   const follow = useLogFollow(running, entries.length + visibleSent.length)
 
