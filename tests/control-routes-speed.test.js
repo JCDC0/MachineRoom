@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import { appendFileSync, mkdirSync, realpathSync, renameSync, rmSync, statSync, symlinkSync, unlinkSync, utimesSync, writeFileSync } from 'node:fs'
+import { appendFileSync, mkdirSync, realpathSync, renameSync, rmSync, statSync, symlinkSync, truncateSync, unlinkSync, utimesSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -254,6 +254,116 @@ describe('control routes caching and speed on large run logs', () => {
       'SameSize replacement AA',
     ])
     expect(runRecordCacheStats(file).fullReads).toBe(5)
+  })
+
+  it('resets when file identity changes on a larger replacement whose head and boundary samples match', async () => {
+    const base = tempDir()
+    const runsDir = join(base, 'runs')
+    const proj1 = join(base, 'proj1')
+    mkdirSync(runsDir, { recursive: true })
+    mkdirSync(proj1, { recursive: true })
+
+    const file = join(runsDir, 'runs.jsonl')
+    const headRecord = buildRecord({ lane: 'codex', project: proj1, index: 0, task: `Shared head ${'H'.repeat(540)}` })
+    const headLine = `${JSON.stringify(headRecord)}\n`
+    const middleA = buildRecord({ lane: 'claude', project: proj1, index: 1, task: 'Middle alpha' })
+    const middleLineA = `${JSON.stringify(middleA)}\n`
+    const middleB = buildRecord({ lane: 'claude', project: proj1, index: 1, task: 'Middle bravo' })
+    const middleLineB = `${JSON.stringify(middleB)}\n`
+    const boundaryRecord = buildRecord({ lane: 'agy', project: proj1, index: 2, task: `Boundary ${'T'.repeat(540)}` })
+    const boundaryLine = `${JSON.stringify(boundaryRecord)}\n`
+    const extraRecord = buildRecord({ lane: 'opencode', project: proj1, index: 3, task: 'Appended extra record' })
+    const extraLine = `${JSON.stringify(extraRecord)}\n`
+
+    expect(Buffer.byteLength(headLine)).toBeGreaterThan(512)
+    expect(Buffer.byteLength(boundaryLine)).toBeGreaterThan(512)
+    expect(Buffer.byteLength(middleLineB)).toBe(Buffer.byteLength(middleLineA))
+
+    writeFileSync(file, headLine + middleLineA + boundaryLine)
+
+    const bridge = createBridge({
+      projectRoot: proj1,
+      runsFolder: runsDir,
+      lanesSource: null,
+      port: 0,
+      env: {},
+    })
+    cleanups.push(() => bridge.stop())
+    const { url } = await bridge.start()
+
+    const firstIssues = await getJson(url, '/api/control/issues')
+    expect(firstIssues.body.map((issue) => issue.title)).toEqual([
+      boundaryRecord.task.slice(0, 80),
+      'Middle alpha',
+      headRecord.task.slice(0, 80),
+    ])
+    expect(runRecordCacheStats(file).fullReads).toBe(1)
+    expect(runRecordCacheStats(file).incrementalReads).toBe(0)
+
+    const tmpFile = join(runsDir, 'runs.jsonl.tmp')
+    writeFileSync(tmpFile, headLine + middleLineB + boundaryLine + extraLine)
+    const future = new Date(Math.max(Date.now(), statSync(file).mtimeMs) + 2000)
+    utimesSync(tmpFile, future, future)
+    renameSync(tmpFile, file)
+
+    const afterReplaceIssues = await getJson(url, '/api/control/issues')
+    expect(afterReplaceIssues.body.map((issue) => issue.title)).toEqual([
+      'Appended extra record',
+      boundaryRecord.task.slice(0, 80),
+      'Middle bravo',
+      headRecord.task.slice(0, 80),
+    ])
+    const afterReplaceRuns = await getJson(url, '/api/control/runs')
+    expect(afterReplaceRuns.body.recent.map((entry) => entry.task)).toEqual([
+      'Appended extra record',
+      boundaryRecord.task,
+      'Middle bravo',
+      headRecord.task,
+    ])
+    expect(runRecordCacheStats(file).fullReads).toBe(2)
+    expect(runRecordCacheStats(file).incrementalReads).toBe(0)
+  })
+
+  it('counts a full read when runs.jsonl is truncated to zero', async () => {
+    const base = tempDir()
+    const runsDir = join(base, 'runs')
+    const proj1 = join(base, 'proj1')
+    mkdirSync(runsDir, { recursive: true })
+    mkdirSync(proj1, { recursive: true })
+
+    const file = join(runsDir, 'runs.jsonl')
+    writeFileSync(
+      file,
+      [
+        buildRecord({ lane: 'codex', project: proj1, index: 1, task: 'Initial record one' }),
+        buildRecord({ lane: 'claude', project: proj1, index: 2, task: 'Initial record two' }),
+      ]
+        .map((entry) => JSON.stringify(entry))
+        .join('\n') + '\n'
+    )
+
+    const bridge = createBridge({
+      projectRoot: proj1,
+      runsFolder: runsDir,
+      lanesSource: null,
+      port: 0,
+      env: {},
+    })
+    cleanups.push(() => bridge.stop())
+    const { url } = await bridge.start()
+
+    expect((await getJson(url, '/api/control/issues')).body).toHaveLength(2)
+    expect(runRecordCacheStats(file).fullReads).toBe(1)
+
+    truncateSync(file, 0)
+
+    const afterZeroIssues = await getJson(url, '/api/control/issues')
+    expect(afterZeroIssues.body).toEqual([])
+    expect(runRecordCacheStats(file)).toMatchObject({ offset: 0, records: 0, fullReads: 2 })
+
+    const afterZeroRuns = await getJson(url, '/api/control/runs')
+    expect(afterZeroRuns.body.recent).toEqual([])
+    expect(runRecordCacheStats(file).fullReads).toBe(2)
   })
 
   it('detects a copy-over restore that preserves the first 512 bytes by checking the tail sample at the old offset', async () => {
