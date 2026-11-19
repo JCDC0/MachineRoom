@@ -319,4 +319,22 @@ describe('shared controls', () => {
       vi.useRealTimers()
     }
   })
+
+  it('calls a details function again each time it is shown', async () => {
+    await withDom(async ({ container, dom, root }) => {
+      let shown = 'First run'
+      const details = vi.fn(() => [shown])
+      await act(async () => root.render(<HoverCard title="Coder" details={details}><Row label="Coder" /></HoverCard>))
+      const anchor = container.querySelector('.ui-hover-anchor')
+      const card = dom.body.querySelector('.ui-hovercard')
+      anchor.focus()
+      await dispatch(anchor, 'focusin')
+      expect(card.children[1].textContent).toBe('First run')
+      shown = 'Second run'
+      await dispatch(dom.window, 'keydown', { key: 'Escape' })
+      expect(card.hasAttribute('hidden')).toBe(true)
+      await dispatch(anchor, 'focusin')
+      expect(card.children[1].textContent).toBe('Second run')
+    })
+  })
 })

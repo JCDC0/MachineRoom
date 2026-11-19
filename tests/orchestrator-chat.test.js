@@ -1370,6 +1370,42 @@ describe('talking to a lane and seeing agent messages', () => {
     })
   })
 
+  it('puts one markdown block directly after the agent dot so later blocks keep their layout', async () => {
+    const chat = {
+      state: 'idle',
+      messages: [
+        {
+          id: 'agent-1',
+          from: 'agent',
+          agent: { from: 'orchestrator', to: 'opencode', kind: 'order' },
+          text: 'Build the page.\n\n- one\n- two\n\n```sh\nnpm test\n```',
+        },
+      ],
+    }
+
+    await withDom(async ({ container, root }) => {
+      await act(async () => {
+        root.render(createElement(OrchestratorChat, { client: fakeClient(chat), inline: true, initialChat: chat }))
+      })
+      await act(async () => {})
+
+      const line = container.querySelector('.mr-orch-line.is-agent')
+      const showAll = buttonWithText(line, 'Show all')
+      if (showAll) await click(root, showAll)
+      const blocks = line.querySelector('.mr-orch-blocks')
+      const children = Array.from(blocks.children)
+      expect(children[0].className).toBe('mr-agent-dot')
+      expect(children[1].className).toBe('mr-orch-block is-para')
+      expect(children.slice(2).map((block) => block.className)).toEqual([
+        'mr-orch-block is-list',
+        'mr-orch-block is-code',
+      ])
+      const css = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8')
+      expect(css).toMatch(/\.mr-agent-dot \+ \.mr-orch-block\s*\{\s*display:\s*inline/)
+      expect(css).not.toMatch(/\.mr-orch-block:first-of-type/)
+    })
+  })
+
   it('toggles agent messages and persists choice in localStorage', async () => {
     const chat = {
       state: 'idle',

@@ -715,9 +715,24 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
   const [sessionRows, setSessionRows] = useState([])
   const [lastRuns, setLastRuns] = useState(null)
   const [cardDismiss, setCardDismiss] = useState({})
+  const [, setDayTick] = useState(0)
   const headerRef = useRef(null)
 
   useDialogFocus(Boolean(confirm), { containerRef: confirmRef })
+
+  useEffect(() => {
+    let timer = null
+    function schedule() {
+      const next = new Date()
+      next.setHours(24, 0, 1, 0)
+      timer = setTimeout(() => {
+        setDayTick((count) => count + 1)
+        schedule()
+      }, Math.max(0, next.getTime() - Date.now()))
+    }
+    schedule()
+    return () => clearTimeout(timer)
+  }, [])
 
   useEffect(() => {
     if (!canFamily) return undefined
@@ -2541,7 +2556,7 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
     }
     return (
       <div className="mr-family-node" key={node.id} data-kind={node.kind} data-depth={node.depth}>
-        <HoverCard title={node.label} dismissKey={cardDismiss[node.id] ?? 0} details={[
+        <HoverCard title={node.label} dismissKey={cardDismiss[node.id] ?? 0} details={() => [
           detail,
           !session && effortMode,
           `Status ${state}${task ? ` · ${task}` : ''}`,

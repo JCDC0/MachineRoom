@@ -253,10 +253,31 @@ function sourceTags(source, names) {
   return { from: 'orchestrator', who: 'orchestrator' }
 }
 
+function spawnedSubagent(agent) {
+  return Boolean(agent?.parent) && Number(agent?.depth) > 0
+}
+
 export function chatAgentColors(roster) {
   const agents = Array.isArray(roster) ? roster : Array.isArray(roster?.lanes) ? roster.lanes : []
-  const colors = agentColors(agents)
-  return new Map(agents.flatMap((agent, index) => (agent?.key ? [[agent.key, cssColor(colors[index])]] : [])))
+  const roots = agents.filter((agent) => !spawnedSubagent(agent))
+  const colors = agentColors(roots)
+  const own = new Map(roots.flatMap((agent, index) => (agent?.key ? [[agent.key, cssColor(colors[index])]] : [])))
+  const spawned = new Map(
+    agents.filter((agent) => agent?.key && spawnedSubagent(agent)).map((agent) => [agent.key, agent.parent])
+  )
+  function colorOf(key, seen = new Set()) {
+    if (own.has(key)) return own.get(key)
+    const parent = spawned.get(key)
+    if (!parent || seen.has(key)) return null
+    seen.add(key)
+    return colorOf(parent, seen)
+  }
+  const entries = agents.flatMap((agent) => {
+    if (!agent?.key) return []
+    const color = colorOf(agent.key)
+    return color ? [[agent.key, color]] : []
+  })
+  return new Map(entries)
 }
 
 export function paletteColorByKey(key) {
