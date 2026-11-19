@@ -28,10 +28,13 @@ Every file in this folder, and what it is for:
 - `AUDIT-2026-11-CORE.md`: history. The November 2026 audit of the pure logic and the tests, with the orchestrator's corrections.
 - `AUDIT-2026-11-CONTRACT.md`: history. The November 2026 hunt of the page and the bridge against each other, with a table of every write route and its guard.
 - `AUDIT-2026-11-DESIGN.md`: history. The November 2026 design review of how the room shows its work, with features and a full design.
+- `AUDIT-2026-11-DESIGN-2.md`: history. The P600 review of the lower panel design against the owner's brief, with findings ranked by owner impact.
+- `AUDIT-2026-11-DESIGN-3.md`: history. The P614 review of the chat bubbles, the lane view and the Agents list against the design brief, reading the code and six captures.
 - `AUDIT-2026-11-DOCS-2.md`: history. The P252 audit of `ROOM.md`, `LIVE.md` and `COMMANDS.md` against the code since `1bb54a0f`, with 17 contradicted claims fixed by P264 and P265.
 - `AUDIT-2026-11-DOCS-3.md`: history. Audit of architecture doc claims against `HEAD`, recording sentences fixed in P297.
 - `AUDIT-2026-11-DOCS-4.md`: history. The P548 audit of `LIVE.md`, `ROOM.md`, `CODE.md` and `ACTIVITIES.md` against the code, with 21 findings fixed by P553.
 - `AUDIT-2026-11-DOCS-5.md`: history. The P582 audit of `ARCHITECTURE.md` and the seven detail files, with 11 findings fixed by P584 to P587.
+- `AUDIT-2026-11-DOCS-6.md`: history. The 2026-11-19 audit of the architecture files, the plan, the design spec and README at `8cc3e892`, with 29 findings and the fixes in P631.
 - `AUDIT-2026-11-DOCS-P70-P76.md`: history. The documentation audit for the P70 to P76 merges, read sentence by sentence against the code.
 - `AUDIT-2026-11-ENGINE.md`: history. The November 2026 audit of the engine.
 - `AUDIT-2026-11-LOGS.md`: history. The November 2026 hunt that ran 464 real run logs through the parsers.
@@ -112,6 +115,10 @@ Every file in this folder, and what it is for:
 - `AUDIT-2026-11-REVIEW-57B.md`: history. The P575 blind review by GPT-6.2 Sol of the same Sonnet batch, with seven findings; P565 fixed two and P577 the rest.
 - `AUDIT-2026-11-REVIEW-58.md`: history. The P579 review by Claude Sonnet of the runner batch P561, P562, P566 and P574, with seven findings fixed by P580.
 - `AUDIT-2026-11-REVIEW-59.md`: history. The P583 review by GPT-6.2 Sol of the UI batch P567 to P570, P576 and P577, with eleven findings fixed by P588 to P592.
+- `AUDIT-2026-11-REVIEW-60.md`: history. The P593 review of the review 59 fix batch P588 to P592, read from the code only.
+- `AUDIT-2026-11-REVIEW-61.md`: history. The P604 review of the control route caches and the build split P602 and P603, read from the code and the merge diffs, with its fixes in P605.
+- `AUDIT-2026-11-REVIEW-62.md`: history. The P619 review of eight merges at `f8854bba`, with eleven findings fixed by P620 to P624.
+- `AUDIT-2026-11-REVIEW-63.md`: history. The P626 review of P620 to P624, which closes most of review 62 and finds 8 smaller issues.
 - `AUDIT-2026-11-RUNNER.md`: history. The November 2026 hunt of the runner, worktrees, reviews and merges.
 - `AUDIT-2026-11-SUMMARY.md`: plan. The five November 2026 audits ranked and checked, with the features, the design changes that need the owner and the proposed briefs.
 - `AUDIT-2026-11-SWEEP-S1.md`: history. The P506 sweep of the bridge, with six findings fixed by P514 to P516.
@@ -120,6 +127,7 @@ Every file in this folder, and what it is for:
 - `AUDIT-2026-11-TESTS.md`: history. The P255 audit of tests changed since `1bb54a0f`, listing four tests that could pass with their change undone, fixed by P266.
 - `AUDIT-2026-11-TESTS-2.md`: history. Second test audit of 37 commits from `12c25524..HEAD`, checking undo proofs and recording fixes in `tests/tree-read.test.js`.
 - `AUDIT-2026-11-TESTS-3.md`: history. The P558 test audit of the P526 to P555 merges, undoing one hunk at a time, with 13 findings fixed by P571 to P573.
+- `AUDIT-2026-11-TESTS-4.md`: history. The P607 test audit of the P556 to P609 merges from `acea70f0`, undoing one hunk at a time, with its fixes in P615 to P617.
 - `AUDIT-2026-11-TREE-COST.md`: history. The measurement of what the deleted-file list costs on every tree read, since P51.
 - `AUDIT-2026-11-TRIAL-PLAN.md`: history. Code review of the ulolTris trial plan against `1a0d6f81`, checking each claim and listing current guarantees.
 - `AUDIT-2026-11-UI.md`: history. The November 2026 audit of the page.
