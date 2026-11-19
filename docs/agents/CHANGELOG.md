@@ -2,7 +2,6 @@
 
 ## Unreleased
 
-- A lane's run picker, hint and Last run line show local time, with a short date for a run from another day (P612).
 - A lane conversation's run times read in the owner's local time, with a short date when the run did not start today (P612).
 - The chat keeps an even rhythm, the composer reads clearly, and a lane opened from its row gets the same composer and Worktree switch as one chosen in To (P606).
 - The menu band shows the open conversation's name as plain text that scrolls the chat into view, and chat and lane names are white with a round dot in the agent's colour (P609).
