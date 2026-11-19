@@ -367,7 +367,7 @@ describe('chat recipients and colours', () => {
           { id: 'agent-1', from: 'agent', agent: { from: 'sub:frontend' }, text: 'Frontend to Claude, order: Build it.' },
         ] }),
       })
-      const colors = agentColors(SNAPSHOT.agents.filter((agent) => !agent.parent)).map(cssColor)
+      const colors = agentColors(SNAPSHOT.agents).map(cssColor)
       const sender = container.querySelector('.mr-orch-line.is-lane').querySelector('.mr-orch-who')
       expect(sender.textContent).toBe('Claude')
       expect(sender.firstChild.style.background).toBe(colors[1])
@@ -379,7 +379,7 @@ describe('chat recipients and colours', () => {
       const crumb = container.querySelector('.mr-lane-conv-crumb')
       expect(crumb.querySelector('.mr-agent-dot').style.background).toBe(colors[1])
       await openLane(dom, 'claude-child')
-      expect(container.querySelector('.mr-lane-conv-crumb').querySelector('.mr-agent-dot').style.background).toBe(colors[1])
+      expect(container.querySelector('.mr-lane-conv-crumb').querySelector('.mr-agent-dot').style.background).toBe(colors[4])
       const css = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8')
       expect(css).toMatch(/\.mr-orch-line\.is-agent[^{}]*\.mr-orch-block:first-of-type\s*\{\s*display:\s*inline/)
       expect(css).toMatch(/\.mr-orch-line\.is-lane > \.mr-orch-who[^{}]*\{\s*color:\s*var\(--white\)/)

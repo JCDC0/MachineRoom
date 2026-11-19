@@ -255,13 +255,8 @@ function sourceTags(source, names) {
 
 export function chatAgentColors(roster) {
   const agents = Array.isArray(roster) ? roster : Array.isArray(roster?.lanes) ? roster.lanes : []
-  const roots = agents.filter((agent) => agent?.key && !agent.parent)
-  const colors = agentColors(roots)
-  const byKey = new Map(roots.map((agent, index) => [agent.key, cssColor(colors[index])]))
-  for (const agent of agents) {
-    if (agent?.parent && byKey.has(agent.parent)) byKey.set(agent.key, byKey.get(agent.parent))
-  }
-  return byKey
+  const colors = agentColors(agents)
+  return new Map(agents.flatMap((agent, index) => (agent?.key ? [[agent.key, cssColor(colors[index])]] : [])))
 }
 
 export function agentColor(key, colors) {

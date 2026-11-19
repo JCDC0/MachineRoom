@@ -174,3 +174,20 @@ describe('the agent colour on a working shape', () => {
     terminals.dispose()
   })
 })
+
+describe('chatAgentColors', () => {
+  it('gives every roster agent the colour the room gives it', async () => {
+    const { chatAgentColors, agentColor: chatColor } = await import('../src/ui/orchestratorChat.js')
+    const { cssColor } = await import('../src/engine/sprites.js')
+    const roster = [
+      { key: 'orchestrator', role: 'orchestrator' },
+      { key: 'sub-one', role: 'orchestrator', parent: 'orchestrator' },
+      { key: 'codex', parent: 'sub-one' },
+      { key: 'claude', parent: 'orchestrator' },
+    ]
+    const map = chatAgentColors(roster)
+    agentColors(roster).forEach((color, index) => expect(map.get(roster[index].key)).toBe(cssColor(color)))
+    expect(chatColor('lane:claude', map)).toBe(map.get('claude'))
+    expect(chatColor('sub:one', map)).toBe(map.get('sub-one'))
+  })
+})
