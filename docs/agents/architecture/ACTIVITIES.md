@@ -30,10 +30,14 @@ A touch is `{path, mode, kind}`. `kind` is `file` or `dir`. `mode` is `read`, `w
 | Hermes | `hermes_local` | Plain lines such as `┊ 📖 read  strings.js  1.2s`; shown after the call finishes; reads show only the file name |
 | OpenCode | `opencode_local` | JSON lines `tool_use` with `part.tool` and `part.state.input` |
 | agy | `process` | JSON lines `step_update`; `ACTIVE` starts a tool, `DONE` ends it |
+| Codex | `codex_local` | JSON lines `item.started` and `item.completed`; `command_execution` runs a shell command, `file_change` touches a file and `web_search` reaches the web |
+| GitHub Copilot | `copilot_local` | JSON tool events (`tool.execution_start`, `tool_call`, `tool_use` and their completion events) with the tool name and arguments, and a plain-text fallback for shell, read, write, edit and web lines |
+| ACP | `acp_local` | JSON lines whose `session/update` carries a `tool_call` or `tool_call_update`, with the call's kind and input |
+| MachineRoom | `machineroom_local` | Claude Code's stream-json lines, read by the same parser, from `scripts/mr-agent.mjs` |
 
 A shell command touches files only when its text names a known file or folder. See `commands.js` and its tests.
 
-A web search or fetch becomes tool `web` with no touches, and its label holds the query or URL: Claude Code's `WebSearch` and `WebFetch`, OpenCode's `websearch` and `webfetch`, agy's `search_web` and `read_url_content`, and Hermes's `search` and `fetch` lines (`fetch` is its `web_extract`, which prints only the domain).
+A web search or fetch becomes tool `web` with no touches, and its label holds the query or URL: Claude Code's `WebSearch` and `WebFetch`, OpenCode's `websearch` and `webfetch`, agy's `search_web` and `read_url_content`, Hermes's `search` and `fetch` lines (`fetch` is its `web_extract`, which prints only the domain), Codex's `web_search`, GitHub Copilot's web tool and plain-text web lines, and MachineRoom's `web_search` and `web_fetch` (while ACP `fetch` maps to `other`).
 
 ## DOM contract for terminals and cards
 

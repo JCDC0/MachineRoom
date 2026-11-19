@@ -39,7 +39,7 @@ npm run serve -- doctor
 ```
 
 - `npm install` installs the packages and prints the summary (`added N packages` or `up to date`), plus npm funding and audit notes.
-- `npm run build` writes the built viewer, prints the asset list, `built in` with the time, and an expected Vite chunk-size warning (`Some chunks are larger than 500 kB`).
+- `npm run build` writes the built viewer, prints the asset list, `built in` with the time, and a Vite chunk-size warning when any chunk exceeds 970 kB (`Some chunks are larger than 970 kB`). Every chunk fits under that limit today, so no warning is printed.
 - `npm run serve -- doctor` checks the folder, project files, git, built viewer, runs folder and lane programs, then prints a Dispatch tip and `All checks passed.` If the folder is not a git repository, it prints `All checks passed, 1 warning.` and still exits 0.
 
 Link the command once:
@@ -101,11 +101,11 @@ The control drawer open on Dispatch.
 
 ## Lanes
 
-A new room starts with the orchestrator and no custom lane. While the session source is on (the default for `up`), the room also lists `Claude Code session` and `OpenCode session`. Make a lane in the Agents tab: open the family tree, press Add child on the orchestrator, and fill in the label, harness, model and effort. Each lane runs in its own harness on the owner's account.
+A new room starts with the orchestrator and no custom lane. While the session source is on (the default for `up`), the room also lists `Claude Code session` and `OpenCode session`. Make a lane in the Agents tab: press `+` (`Add a lane`) in the `Agents` header, or `Add a lane under this…` in an orchestrator row's menu, and fill in the label, harness, model, mode (if offered) and effort. Each lane runs in its own harness on the owner's account.
 
-Open a lane's conversation from the chat button on its row in Agents or Open conversation in its Inspector. It loads the lane's newest run with a picker for its last 10 runs, updates while the run is live, and shows Stop while it runs.
+Open a lane's conversation from the chat button on its row in Agents or Open conversation in its Inspector. It loads the lane's newest run with a picker for its last 20 runs, updates while the run is live, and shows Stop while it runs.
 
-Settings only shows or removes lanes. Remove from project hides a lane in that project. Delete everywhere removes a lane you made across all projects.
+Settings's Lanes tab holds four runner settings (reply handling, running-lane warning count, worktree setup command and files to copy) above the list to hide, show or delete lanes. Remove from project hides a lane in that project. Delete everywhere removes a lane you made across all projects.
 
 `MACHINEROOM_LANES_DIR` points a room at another lane list, which is how MachineRoom's own development runs its lanes. In PowerShell, set `$env:MACHINEROOM_LANES_DIR = "docs/agents"` (or `MACHINEROOM_LANES_DIR=docs/agents` in bash).
 

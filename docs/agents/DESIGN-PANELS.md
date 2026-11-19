@@ -35,33 +35,33 @@ One small module, `src/ui/controls.jsx`, and one block in `src/styles.css`, used
 
 - User bubble: `width: fit-content`, `max-width: 72%`, padding `8px 12px`, `--radius-m`, `--surface-2`, no border, right aligned, no minimum width or height, line height 1.45. A one-word `Continue` is a small bubble.
 - Agent and orchestrator text: left aligned, full width, no bubble. 16px between messages.
-- Markdown in agent, orchestrator and lane messages is rendered by one shared renderer: headings, lists, bold, inline code, code blocks and links. It builds React elements and never injects HTML.
+- Markdown in agent, orchestrator and lane messages is rendered by one shared renderer: headings, lists, bold, italics, tables, inline code, code blocks and links. It builds React elements and never injects HTML.
 
 ## The composer (P598)
 
 One composer component serves the orchestrator chat and a lane's conversation.
 
 - A box: `--radius-m`, `1px solid var(--border-soft)`, padding 12px. The text area first, with its placeholder and no label.
-- One toolbar row under it. Left: `To` (a select chip), `Model`, `Effort` when the harness has it, `Mode` when it can be set, then a kebab with `Compact…` and `Show agent messages` (a check item). In a lane's conversation the left side is `To`, the `Run` chip (below) and the `Worktree` switch (today's `Separate worktree`). Right: `Stop` (a red text chip, only while working) and Send (a 32px round icon button, the arrow there today).
-- One status line under the box, Space Mono 11, muted: a dot in the status colour, then the status, then the context, such as `● Waiting for you · Context 116.8k / 1M` or, in a lane that can take a message, `● Finished · Run 11:20:16`. In history mode the run time shows on the `Run` chip only (P618).
+- One toolbar row under it. Left: `To` (a select chip), `Model`, `Effort` when the harness has it, `Mode` when it can be set, then a kebab with `Compact…` and `Show agent messages` (a check item). In a lane's conversation the left side shows `To` (Orchestrator, subs and runnable lanes, when `recipientOptions` is passed), `Run`, `Worktree` (only when composable on a non-running selection), and `Lane message options` (`Send and interrupt`, only while the selected run is running). Right: `Stop` (a red text chip, only while working) and Send (a 32px round icon button, the arrow there today).
+- One status line under the box, Space Mono 11, muted: a dot in the status colour (`--yellow` working, `--green` waiting or finished, `--red` paused, failed or stopped), then the status, then `Run HH:MM:SS` in a composable lane plus `· Context ...` whenever context tokens are reported; in history mode the run time shows on the `Run` chip only (P618).
 
 ## A lane's conversation (P598)
 
-- One header row, 40px: the breadcrumb on the left (Space Mono 11, muted, cut with an ellipsis and a title), `Back` on the right as a text chip.
+- One header row, 40px: the breadcrumb on the left (`project /` plus an 8px colour dot and uppercase lane name), `Back` on the right as a text chip, and an optional `.mr-lane-conv-tools` bar below it for `Edit from this plan` or history `Retry`.
 - The `Run` chip lives in the composer toolbar: `Run 11:20:16` with a small dot in the run's status colour. Its list shows each run's time and status.
 - Gone: the `To` select above the transcript, the `Run` label outside the panel, the full width run select, the loose `FINISHED`, the `MESSAGE` label and the boxed `SEND`.
 - The brief card at the top and the tool call chips stay, in the chip style.
 
 ## The Agents list (P599)
 
-- Section header: `AGENTS` in Space Mono 11 muted, the count on the right (`1 of 18 working`). On hover or focus the header shows a `+` icon button (`Add a lane`) and a kebab (`Add sub orchestrator…`, `Select lanes`, `Build a team…`). `TEAMS` and `BUILD A TEAM` use the same header.
-- An agent row is a two line `.ui-row`: an 8px status dot (yellow working, white idle, `--text-faint` off) and the name in Jost 14; on the right one muted word (`working`, `waiting`, `idle` or `off`). The second line, Space Mono 11 muted: `harness · model`, cut with an ellipsis and a title.
+- Section header: `AGENTS` in Space Mono 11 muted, the count on the right (`1 of 18 working`). On hover or focus the header shows a `+` icon button (`Add a lane`) and a kebab (`Add sub orchestrator…`, `Select lanes`, `Build a team…`). `TEAMS` uses a collapsible `.mr-family-heading` with a count badge and chevron instead of those actions, and `BUILD A TEAM` uses `.mr-side-head.is-button` with a `+`/`-` twist.
+- An agent row is a two line `.ui-row`: an 8px status dot (yellow working, red paused, white idle/waiting, `--text-faint` off) and the name in Jost 14; on the right one muted word (`working`, `waiting`, `idle` or `off`). The second line, Space Mono 11 muted: `harness · model`, cut with an ellipsis and a title.
 - The `LANE` and `ORCHESTRATOR` pills go.
-- Trailing actions, shown on hover or focus: a chat icon button (`Open conversation`) and a kebab with `Add a lane under this…`, `Turn off` or `Turn on`, and `Delete…` in red. Delete keeps today's confirm card. The always visible switch, trash and plus go.
+- Trailing actions on non-session rows, shown on hover or focus: a chat icon button (`Open conversation with <name>` for lanes, `Open chat with <name>` for orchestrators) and a kebab starting with `Make sub from this lane…` (lanes) or `Add a lane under this…` (orchestrators), plus `Turn off` or `Turn on` (lanes only) and red `Delete…` (lanes and subs only). Delete keeps today's confirm card. The always visible switch, trash and plus go.
 - A lane that is off: its name at 55 percent, the word `off` on the right.
-- Selecting: `Select lanes` in the header kebab turns on select mode. Each lane row then shows a slide switch on its left (slide to select), a click on the row toggles it, and a bar above the list says `4 selected` with the chips `Make sub orchestrator`, `Clear` and `Done`. Escape or `Done` ends select mode. No square checkboxes.
-- The tree: 16px indent per level, a 1px `--border-soft` guide line. The fold row reads `Show 17 more lanes` with a chevron, in the row style.
-- Hover card on a row: name, harness and model, effort and mode, status, and the last run's time and outcome.
+- Selecting: `Select lanes` in the header kebab turns on select mode. Each lane row then shows a slide switch on its left (slide to select), a click on the row toggles it, and a bar above the list says `4 selected` with the chips `Make sub` (`aria-label="Make sub orchestrator"`), `Clear` and `Done`. Escape or `Done` ends select mode. No square checkboxes.
+- The tree: 16px indent per level, a 1px `--border-soft` guide line. The fold button uses `.mr-family-more-head` with `.ui-chip-chevron`, reading `Show N more lanes` when closed and `Hide N more lanes` when open.
+- Hover card on a row: name, harness and model, effort and mode (omitted on session rows), `Status STATE` with optional ` · TASK` (using raw `paused` rather than `waiting`), and the last run's time and outcome (or the current step on a session row).
 
 ## Checking it
 
