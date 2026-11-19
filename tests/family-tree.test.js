@@ -564,4 +564,26 @@ describe('familyBoxes', () => {
     expect(a.subs.map((box) => box.node.id)).toEqual(['b'])
     expect(a.lanes.map((row) => row.id)).toEqual(['l1'])
   })
+  it('shows the top session working from the session rows', async () => {
+    const { familyBoxes } = await import('../src/ui/family.js')
+    const rows = [
+      { id: 'session:claude-session', kind: 'session', parent: '', working: false },
+      { id: 'orchestrator', kind: 'orchestrator', parent: 'session:claude-session' },
+    ]
+    const [root] = familyBoxes(rows, [{ id: 'session:claude-session', kind: 'session', working: true }])
+    expect(root.node.working).toBe(true)
+    expect(root.subs.map((box) => box.node.id)).toEqual(['orchestrator'])
+  })
+
+  it('puts two sibling subs from the mock side by side in ladder order', async () => {
+    const { createMockClient } = await import('../src/control/mock.js')
+    const { familyBoxes, familyTree } = await import('../src/ui/family.js')
+    const client = createMockClient({ latencyMs: 0 })
+    const sub = (id, lanes) => ({ id, name: id, harness: 'opencode', model: 'opencode-go/deepseek-v4.1-flash', lanes, scope: ['src/**'], restricted: false, setBy: 'owner' })
+    await client.setLadder({ subs: [sub('backend', ['opencode4']), sub('frontend', ['opencode2'])] })
+    const [root, ...rest] = familyBoxes(familyTree(await client.family()).rows)
+    expect(rest).toEqual([])
+    expect(root.subs.map((box) => box.node.id)).toEqual(['backend', 'frontend'])
+    expect(root.subs.map((box) => box.lanes.map((row) => row.id))).toEqual([['opencode4'], ['opencode2']])
+  })
 })

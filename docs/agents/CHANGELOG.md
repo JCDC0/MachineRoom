@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The Agents family tree reads as a family tree: each orchestrator is a bordered box, its lanes hang indented under it, sibling subs sit side by side with visible connectors, and the top session shows when it works (P642).
 - The Agents list is a family tree with a chosen top: the owner can put the Claude Code or OpenCode session above the Orchestrator, and a sub can sit under another sub (P634).
 - `server/seats.js` holds the agent seat model: seats per park ring, grants per orchestrator, and one check for every seat rule; no route uses it yet (P636).
 - The floor lattice spans two 2000 unit blocks each way instead of four, at the owner's word (P633).

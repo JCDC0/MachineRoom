@@ -175,7 +175,9 @@ export function familyBoxes(rows, extraSessions = []) {
   const main = list.find((row) => row.kind === 'orchestrator')
   const extras = []
   for (const row of Array.isArray(extraSessions) ? extraSessions : []) {
-    if (!boxes.has(row.id)) extras.push(box({ ...row, parent: main?.id ?? '' }))
+    const own = boxes.get(row.id)
+    if (!own) extras.push(box({ ...row, parent: main?.id ?? '' }))
+    else if (own.node.kind === 'session' && row.working === true) own.node = { ...own.node, working: true }
   }
   const roots = []
   for (const row of list) {
