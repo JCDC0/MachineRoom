@@ -10,10 +10,11 @@ import {
   DANCE_SETTLE_MS,
   HUB_RADIUS,
   HUB_Y,
-  PARK_LIFT,
   HUB_RING_GROW,
   HUB_RING_MS,
   HUB_RING_POOL,
+  RING_FLOOR_GAP,
+  RING_FLOOR_Y,
   RING_MAX_OPACITY,
   SECTOR_ARC_OPACITY,
   SECTOR_GLOW_MS,
@@ -23,14 +24,18 @@ import {
   SECTOR_LABEL_SPREAD,
   SUB_RING_DROP,
   SUB_RING_OPACITY,
-  SUB_RING_RADIUS,
-  SUB_RING_Y,
   SWAY_LIFT,
   SWAY_RATE,
   SWAY_SCALE,
   createHub,
   danceEnvelope,
+  ringArcs,
+  ringDrop,
+  ringLayout,
+  ringLevels,
   ringPulse,
+  ringRadius,
+  ringY,
   startDanceEnvelope,
   sectorGlow,
   sectorIdForKey,
@@ -39,10 +44,9 @@ import {
   sectorLabelRadius,
   sectorLaneAngles,
   sectorSlotAngles,
-  subRingPlace,
   workingKeys,
 } from '../src/engine/hub.js'
-import { sectorArcs } from '../src/model/hierarchy.js'
+import { latticeLevels } from '../src/engine/void.js'
 
 const context2d = {
   font: '',
@@ -149,7 +153,7 @@ describe('where a sector parks its lanes', () => {
 
   it('maps each lane of a ladder through the pure placement', () => {
     const keys = ['opencode', 'claude', 'hermes']
-    const arcs = sectorArcs(THREE_LANES, keys)
+    const arcs = ringArcs(THREE_LANES, keys)
     const angles = sectorSlotAngles(THREE_LANES, keys)
     const expected = sectorLaneAngles(arcs[0])
     keys.forEach((key, index) => {
@@ -159,7 +163,7 @@ describe('where a sector parks its lanes', () => {
 
   it('leaves an empty sub sector out of the slots and does not move the other lanes', () => {
     const keys = ['opencode', 'claude', 'hermes']
-    const arcs = sectorArcs(LADDER, keys)
+    const arcs = ringArcs(LADDER, keys)
     const angles = sectorSlotAngles(LADDER, keys)
     expect(angles.size).toBe(3)
     expect([...angles.keys()]).toEqual(keys)
@@ -171,44 +175,86 @@ describe('where a sector parks its lanes', () => {
   })
 })
 
-describe('the lower park ring', () => {
-  it('sits at 0.6 of the hub radius and 260 units below it', () => {
-    expect(SUB_RING_RADIUS).toBeCloseTo(HUB_RADIUS * 0.6)
-    expect(SUB_RING_Y).toBe(HUB_Y - SUB_RING_DROP)
+describe('the park ring of each level', () => {
+  it('keeps the drop at 260 for one level and shrinks it above the floor for more', () => {
     expect(SUB_RING_DROP).toBe(260)
+    expect(RING_FLOOR_Y).toBe(latticeLevels().floor)
+    expect(ringDrop(1)).toBe(260)
+    expect(ringDrop(2)).toBe(130)
+    expect(ringDrop(4)).toBe(65)
+    expect(ringY(0, 3)).toBe(HUB_Y)
+    for (let count = 1; count <= 4; count += 1) {
+      expect(ringY(count, count)).toBeGreaterThanOrEqual(RING_FLOOR_Y + RING_FLOOR_GAP)
+    }
+    expect(ringDrop(2, -1000)).toBe(260)
+    expect(ringDrop(3, HUB_Y)).toBe(0)
   })
 
-  it('puts a lane on the lower ring at the angle it is given', () => {
-    const point = subRingPlace(Math.PI / 2)
-    expect(Math.hypot(point.x, point.z)).toBeCloseTo(SUB_RING_RADIUS)
-    expect(point.x).toBeCloseTo(0)
-    expect(point.z).toBeCloseTo(SUB_RING_RADIUS)
-    expect(point.y).toBe(SUB_RING_Y + PARK_LIFT)
+  it('gives a sub the level of its parent plus one and caps the level', () => {
+    const subs = [
+      { id: 'a', lanes: [] },
+      { id: 'b', parent: 'a', lanes: [] },
+      { id: 'c', parent: 'b', lanes: [] },
+      { id: 'd', parent: 'c', lanes: [] },
+      { id: 'e', parent: 'd', lanes: [] },
+      { id: 'x', parent: 'y', lanes: [] },
+      { id: 'y', parent: 'x', lanes: [] },
+    ]
+    const levels = ringLevels({ subs })
+    expect([...levels.values()]).toEqual([1, 2, 3, 4, 4, 2, 2])
+    expect(ringLevels({ subs }, 2).get('e')).toBe(2)
+    expect(ringLevels({ subs: [{ id: 'q', parent: 'orchestrator' }] }).get('q')).toBe(1)
   })
 
-  it('fills the vector it is given and falls back to zero', () => {
-    const out = new THREE.Vector3()
-    expect(subRingPlace(0, out)).toBe(out)
-    expect(out.x).toBeCloseTo(SUB_RING_RADIUS)
-    expect(out.z).toBeCloseTo(0)
-    const fallback = subRingPlace(Number.NaN)
-    expect(fallback.x).toBeCloseTo(SUB_RING_RADIUS)
-    expect(fallback.z).toBeCloseTo(0)
+  it('widens a ring only when its slots need it', () => {
+    expect(ringRadius(0, 99)).toBe(HUB_RADIUS)
+    expect(ringRadius(1, 3)).toBe(HUB_RADIUS)
+    expect(ringRadius(1, 40)).toBeGreaterThan(HUB_RADIUS)
   })
 
-  it('draws a faint lower ring only with a ladder', () => {
+  it('spreads the subs of one level at equal angles and keeps their lanes in their own arc', () => {
+    const ladder = {
+      subs: [
+        { id: 'a', name: 'A', lanes: ['l1'] },
+        { id: 'b', name: 'B', lanes: ['l2', 'l3'] },
+        { id: 'c', name: 'C', parent: 'a', lanes: ['l4'] },
+      ],
+    }
+    const arcs = ringArcs(ladder, ['l1', 'l2', 'l3', 'l4', 'l5'])
+    const byId = Object.fromEntries(arcs.map((arc) => [arc.id, arc]))
+    expect(byId.a.level).toBe(1)
+    expect(byId.b.level).toBe(1)
+    expect(byId.c.level).toBe(2)
+    expect(byId.orchestrator.level).toBe(0)
+    expect(byId.orchestrator.lanes).toEqual(['l5'])
+    const mid = (arc) => (arc.start + arc.end) / 2
+    expect(mid(byId.b) - mid(byId.a)).toBeCloseTo(Math.PI)
+    expect(byId.c.end - byId.c.start).toBeGreaterThan(Math.PI * 1.9)
+    const layout = ringLayout(ladder, ['l1', 'l2', 'l3', 'l4', 'l5'])
+    expect(layout.count).toBe(2)
+    expect(layout.rings.map((ring) => ring.y)).toEqual([HUB_Y, HUB_Y - 130, HUB_Y - 260])
+    expect(layout.ringOfKey('l4')).toBe(layout.rings[2])
+    expect(layout.ringOfKey('l5')).toBe(layout.rings[0])
+    expect(layout.ringOfKey('nobody')).toBe(layout.rings[0])
+    expect(ringLayout(ladder, ['l1', 'l2', 'l3', 'l4', 'l5']).arcs).toEqual(layout.arcs)
+  })
+
+  it('draws one faint ring per level the ladder uses', () => {
     const hub = createHub(new THREE.Scene(), ROSTER, LADDER)
-    const lower = hub.group.getObjectByName('sub-ring')
-    expect(lower.visible).toBe(true)
-    expect(lower.position.y).toBe(-SUB_RING_DROP)
-    expect(lower.material.opacity).toBe(SUB_RING_OPACITY)
-    expect(lower.material.opacity).toBeLessThan(SECTOR_ARC_OPACITY.main)
+    const rings = hub.group.getObjectByName('level-rings').children
+    expect(rings).toHaveLength(1)
+    expect(rings[0].name).toBe('sub-ring')
+    expect(rings[0].position.y).toBe(-SUB_RING_DROP)
+    expect(rings[0].material.opacity).toBe(SUB_RING_OPACITY)
+    expect(rings[0].material.opacity).toBeLessThan(SECTOR_ARC_OPACITY.main)
+    hub.setLadder({ subs: [...LADDER.subs, { id: 'deep', name: 'Deep', parent: 'frontend', lanes: [] }] })
+    expect(hub.group.getObjectByName('level-rings').children.map((ring) => ring.position.y)).toEqual([-130, -260])
     hub.setLadder(null)
-    expect(lower.visible).toBe(false)
+    expect(hub.group.getObjectByName('level-rings').children).toHaveLength(0)
     hub.dispose()
   })
 
-  it('puts a sub lane slot tick on the lower ring, not the main one', () => {
+  it('puts a sub lane slot tick on its ring, not the main one', () => {
     const hub = createHub(new THREE.Scene(), ROSTER, LADDER)
     const ticks = hub.group.getObjectByName('ticks').children[0].geometry.getAttribute('position')
     let lowerTicks = 0
@@ -220,9 +266,9 @@ describe('the lower park ring', () => {
     hub.dispose()
   })
 
-  it('hides the lower ring while no lane sits on it', () => {
+  it('draws the subs with no lane too', () => {
     const hub = createHub(new THREE.Scene(), ROSTER, { subs: [{ id: 'empty', name: 'Empty', lanes: [] }] })
-    expect(hub.group.getObjectByName('sub-ring').visible).toBe(false)
+    expect(hub.group.getObjectByName('level-rings').children).toHaveLength(1)
     hub.dispose()
   })
 })

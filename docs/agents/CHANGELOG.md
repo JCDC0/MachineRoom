@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The hub stacks one park ring per level of the agent tree, from the owner's drawing: each sub level gets its own ring beneath, the subs on its edge and their lanes in their arcs, spaced to stay above the git tree start (P635).
 - The lens height setting is gone with its rail, helpers and saved value: the lens always fills the first screen, which also ends the canvas resize lag a smaller lens caused (P641).
 - The Agents family tree reads as a family tree: each orchestrator is a bordered box, its lanes hang indented under it, sibling subs sit side by side with visible connectors, and the top session shows when it works (P642).
 - The Agents list is a family tree with a chosen top: the owner can put the Claude Code or OpenCode session above the Orchestrator, and a sub can sit under another sub (P634).

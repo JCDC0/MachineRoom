@@ -2,11 +2,11 @@ import * as THREE from 'three'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
   ORCHESTRATOR_NAME_LIFT,
-  SUB_ORCHESTRATOR_LIFT,
   createAgents,
   orchestratorNameLift,
 } from '../src/engine/agents.js'
 import { viewBasis } from '../src/engine/camera.js'
+import { SUB_STAND_LIFT } from '../src/engine/hub.js'
 import { createTerminals } from '../src/engine/terminals.js'
 import { apply, createState } from '../src/model/state.js'
 
@@ -119,7 +119,7 @@ describe('orchestratorNameLift', () => {
   })
 
   it('raises the name above the sub lift', () => {
-    expect(ORCHESTRATOR_NAME_LIFT).toBeGreaterThan(SUB_ORCHESTRATOR_LIFT)
+    expect(ORCHESTRATOR_NAME_LIFT).toBeGreaterThan(SUB_STAND_LIFT)
   })
 })
 

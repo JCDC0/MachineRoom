@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import { ownerOf, sectorArcs } from '../model/hierarchy.js'
+import { SECTOR_GAP, ownerOf } from '../model/hierarchy.js'
 import { minTextScale } from './camera.js'
 import { isOrchestrator, isSubOrchestrator } from './shapes.js'
 import { WHITE, easeInOut, lineMaterial, still, textSprite } from './sprites.js'
@@ -7,11 +7,13 @@ import { WHITE, easeInOut, lineMaterial, still, textSprite } from './sprites.js'
 export const HUB_RADIUS = 300
 export const HUB_Y = 200
 export const PARK_LIFT = 90
-export const SUB_RING_SCALE = 0.6
-export const SUB_RING_RADIUS = HUB_RADIUS * SUB_RING_SCALE
 export const SUB_RING_DROP = 260
-export const SUB_RING_Y = HUB_Y - SUB_RING_DROP
 export const SUB_RING_OPACITY = 0.16
+export const RING_LEVEL_MAX = 4
+export const RING_FLOOR_Y = -120
+export const RING_FLOOR_GAP = 60
+export const RING_SLOT_SPACING = 100
+export const SUB_STAND_LIFT = PARK_LIFT + 60
 export const ORCHESTRATOR_LIFT = 360
 export const READER_RADIUS = HUB_RADIUS * 1.4
 export const HUB_CENTER = new THREE.Vector3(0, HUB_Y, 0)
@@ -105,12 +107,6 @@ export function readerPoint(index, count, out = new THREE.Vector3(), angle = slo
   return out.set(Math.cos(angle) * READER_RADIUS, HUB_Y + PARK_LIFT, Math.sin(angle) * READER_RADIUS)
 }
 
-export function subRingPlace(angle, out = new THREE.Vector3()) {
-  const raw = Number(angle)
-  const theta = Number.isFinite(raw) ? raw : 0
-  return out.set(Math.cos(theta) * SUB_RING_RADIUS, SUB_RING_Y + PARK_LIFT, Math.sin(theta) * SUB_RING_RADIUS)
-}
-
 export function hasSubs(ladder) {
   return Boolean(ladder && Array.isArray(ladder.subs) && ladder.subs.length > 0)
 }
@@ -179,6 +175,81 @@ export function sectorLaneAngles(arc) {
   return lanes.map((_, index) => start + ((index + 0.5) / lanes.length) * span)
 }
 
+export function ringLevels(ladder, max = RING_LEVEL_MAX) {
+  const subs = Array.isArray(ladder?.subs) ? ladder.subs : []
+  const cap = Math.min(RING_LEVEL_MAX, Math.max(1, Math.floor(Number(max)) || RING_LEVEL_MAX))
+  const parentOf = new Map(subs.map((sub) => [sub.id, sub.parent]))
+  const levels = new Map()
+  for (const sub of subs) {
+    const seen = new Set([sub.id])
+    let level = 1
+    let id = parentOf.get(sub.id)
+    while (parentOf.has(id) && !seen.has(id) && level < cap) {
+      seen.add(id)
+      level += 1
+      id = parentOf.get(id)
+    }
+    levels.set(sub.id, level)
+  }
+  return levels
+}
+
+export function ringDrop(count, floor = RING_FLOOR_Y) {
+  if (!(count > 0)) return SUB_RING_DROP
+  return Math.max(0, Math.min(SUB_RING_DROP, (HUB_Y - (floor + RING_FLOOR_GAP)) / count))
+}
+
+export function ringY(level, count, floor = RING_FLOOR_Y) {
+  return HUB_Y - Math.max(0, level) * ringDrop(count, floor)
+}
+
+export function ringRadius(level, slots) {
+  if (!(level > 0)) return HUB_RADIUS
+  return Math.max(HUB_RADIUS, (Math.max(0, Number(slots) || 0) * RING_SLOT_SPACING) / (Math.PI * 2))
+}
+
+export function ringArcs(ladder, roster, max = RING_LEVEL_MAX) {
+  const keys = laneKeys(roster)
+  const subs = hasSubs(ladder) ? ladder.subs : []
+  const levels = ringLevels(ladder, max)
+  const turn = Math.PI * 2
+  const assigned = new Set()
+  const perLevel = new Map()
+  const arcs = subs.map((sub) => {
+    const lanes = keys.filter((key) => !assigned.has(key) && Array.isArray(sub.lanes) && sub.lanes.includes(key))
+    for (const lane of lanes) assigned.add(lane)
+    const level = levels.get(sub.id)
+    perLevel.set(level, (perLevel.get(level) ?? 0) + 1)
+    return { id: sub.id, name: typeof sub.name === 'string' && sub.name ? sub.name : sub.id, lanes, level }
+  })
+  const seen = new Map()
+  for (const arc of arcs) {
+    const index = seen.get(arc.level) ?? 0
+    seen.set(arc.level, index + 1)
+    const span = turn / perLevel.get(arc.level)
+    const inset = Math.min(SECTOR_GAP, span / 2)
+    arc.start = index * span + inset
+    arc.end = (index + 1) * span - inset
+  }
+  if (subs.length > 0) {
+    arcs.push({ id: 'orchestrator', name: 'Orchestrator', lanes: keys.filter((key) => !assigned.has(key)), level: 0, start: SECTOR_GAP, end: turn - SECTOR_GAP })
+  }
+  return arcs
+}
+
+export function ringLayout(ladder, roster, max = RING_LEVEL_MAX, floor = RING_FLOOR_Y) {
+  const arcs = ringArcs(ladder, roster, max)
+  const count = arcs.reduce((most, arc) => Math.max(most, arc.level), 0)
+  const slots = Array.from({ length: count + 1 }, () => 0)
+  const byKey = new Map()
+  for (const arc of arcs) {
+    slots[arc.level] += arc.lanes.length + (arc.level > 0 ? 1 : 0)
+    for (const key of arc.lanes) byKey.set(key, arc)
+  }
+  const rings = slots.map((total, level) => ({ level, y: ringY(level, count, floor), radius: ringRadius(level, total) }))
+  return { arcs, rings, count, ringOf: (arc) => rings[arc.level], ringOfKey: (key) => rings[byKey.get(key)?.level ?? 0] }
+}
+
 export function sectorSlotAngles(ladder, roster) {
   const keys = laneKeys(roster)
   const angles = new Map()
@@ -186,7 +257,7 @@ export function sectorSlotAngles(ladder, roster) {
     keys.forEach((key, index) => angles.set(key, slotAngle(index, keys.length)))
     return angles
   }
-  for (const arc of sectorArcs(ladder, keys)) {
+  for (const arc of ringArcs(ladder, keys)) {
     const laneAngles = sectorLaneAngles(arc)
     arc.lanes.forEach((key, index) => angles.set(key, laneAngles[index]))
   }
@@ -329,11 +400,12 @@ function clearGroup(group) {
   }
 }
 
-function onSubRing(ladder, key) {
-  return hasSubs(ladder) && typeof key === 'string' && ownerOf(ladder, key) !== 'orchestrator'
+function placeOnRing(layout, key) {
+  const ring = layout ? layout.ringOfKey(key) : null
+  return ring ? { radius: ring.radius, y: ring.y - HUB_Y } : { radius: HUB_RADIUS, y: 0 }
 }
 
-function buildTicks(angles, keys = [], ladder = null) {
+function buildTicks(angles, keys = [], layout = null) {
   const values = []
   for (let i = 0; i < TICKS; i++) {
     const a = (i / TICKS) * Math.PI * 2
@@ -341,49 +413,57 @@ function buildTicks(angles, keys = [], ladder = null) {
     values.push(Math.cos(a) * HUB_RADIUS, 0, Math.sin(a) * HUB_RADIUS, Math.cos(a) * (HUB_RADIUS + long), 0, Math.sin(a) * (HUB_RADIUS + long))
   }
   angles.forEach((a, index) => {
-    const lower = onSubRing(ladder, keys[index])
-    const radius = lower ? SUB_RING_RADIUS : HUB_RADIUS
-    const y = lower ? -SUB_RING_DROP : 0
+    const { radius, y } = placeOnRing(layout, keys[index])
     const inner = radius * (1 - 70 / HUB_RADIUS)
     values.push(Math.cos(a) * inner, y, Math.sin(a) * inner, Math.cos(a) * (radius * 1.14), y, Math.sin(a) * (radius * 1.14))
   })
   return new THREE.LineSegments(segments(values), lineMaterial(WHITE, 0.2))
 }
 
-function buildSlots(angles, keys = [], ladder = null) {
+function buildSlots(angles, keys = [], layout = null) {
   return angles.map((a, index) => {
-    const key = keys[index]
-    const lower = onSubRing(ladder, key)
-    const radius = lower ? SUB_RING_RADIUS : HUB_RADIUS
+    const { radius, y } = placeOnRing(layout, keys[index])
     const marker = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(ringPoints(SLOT_RADIUS, 40)), lineMaterial(WHITE, 0.3))
     marker.name = 'slot'
-    marker.position.set(Math.cos(a) * radius, lower ? -SUB_RING_DROP : 0, Math.sin(a) * radius)
+    marker.position.set(Math.cos(a) * radius, y, Math.sin(a) * radius)
     return marker
   })
 }
 
 function ladderKeyOf(ladder, parkedKeys) {
-  return sectorArcs(ladder, parkedKeys)
-    .map((arc) => `${arc.id}|${arc.name}|${arc.lanes.join(',')}|${arc.start}|${arc.end}`)
+  return ringArcs(ladder, parkedKeys)
+    .map((arc) => `${arc.id}|${arc.name}|${arc.level}|${arc.lanes.join(',')}|${arc.start}|${arc.end}`)
     .join(';')
 }
 
-function buildSectors(ladder, parkedKeys, group) {
+function buildLevelRings(layout, group) {
+  for (const ring of layout ? layout.rings : []) {
+    if (ring.level === 0) continue
+    const line = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(ringPoints(ring.radius, 128)), lineMaterial(WHITE, SUB_RING_OPACITY))
+    line.name = 'sub-ring'
+    line.position.y = ring.y - HUB_Y
+    group.add(line)
+  }
+}
+
+function buildSectors(layout, group) {
   const lines = []
   const labels = []
   const groups = []
-  if (!ladder) return { lines, labels, groups }
-  const arcs = sectorArcs(ladder, parkedKeys)
+  if (!layout) return { lines, labels, groups }
+  const arcs = layout.arcs
   for (const arc of arcs) {
     const span = arc.end - arc.start
     if (!(span > SECTOR_EPSILON)) continue
+    const ring = layout.ringOf(arc)
     const draw = arcDrawSpan(arc.start, arc.end)
     const main = arc.id === 'orchestrator'
     const tone = sectorArcTone(main)
     const sector = new THREE.Group()
     sector.name = `sector:${arc.id}`
     sector.userData.id = arc.id
-    sectorArcRadii().forEach((radius, index) => {
+    sector.position.y = ring.y - HUB_Y
+    sectorArcRadii(ring.radius).forEach((radius, index) => {
       const points = []
       for (let i = 0; i <= ARC_STEPS; i++) {
         const angle = draw.start + ((draw.end - draw.start) * i) / ARC_STEPS
@@ -397,7 +477,7 @@ function buildSectors(ladder, parkedKeys, group) {
       lines.push(line)
     })
     const label = textSprite(String(arc.name).toUpperCase(), { scale: SECTOR_LABEL_BASE, color: SECTOR_LABEL_COLOR })
-    label.position.copy(sectorLabelPoint(sectorLabelAngle(arc), HUB_RADIUS, arcs.length))
+    label.position.copy(sectorLabelPoint(sectorLabelAngle(arc), ring.radius, arcs.length))
     label.userData.base = { x: label.scale.x, y: label.scale.y }
     label.userData.factor = 1
     sector.add(label)
@@ -419,10 +499,8 @@ export function createHub(scene, agentsOrCount, ladder = null) {
   main.name = 'ring'
   main.userData.baseOpacity = RING_OPACITY
   const inner = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(ringPoints(HUB_RADIUS * 0.86, 160)), lineMaterial(WHITE, 0.1))
-  const subRing = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(ringPoints(SUB_RING_RADIUS, 128)), lineMaterial(WHITE, SUB_RING_OPACITY))
-  subRing.name = 'sub-ring'
-  subRing.position.y = -SUB_RING_DROP
-  subRing.visible = false
+  const levelRings = new THREE.Group()
+  levelRings.name = 'level-rings'
 
   const dashValues = []
   for (let i = 0; i < DASHES; i++) {
@@ -449,6 +527,7 @@ export function createHub(scene, agentsOrCount, ladder = null) {
   let buildCount = 0
   let slotAngles = []
   let slots = []
+  let layout = hasSubs(ladder) ? ringLayout(ladder, parkedKeys) : null
   let sectorLines = []
   let sectorLabels = []
   let sectorGroups = []
@@ -474,10 +553,10 @@ export function createHub(scene, agentsOrCount, ladder = null) {
   const sectorGroup = new THREE.Group()
   sectorGroup.name = 'sectors'
   slotAngles = anglesFor(currentLadder)
-  slots = buildSlots(slotAngles, parkedKeys, currentLadder)
+  slots = buildSlots(slotAngles, parkedKeys, layout)
   for (const marker of slots) group.add(marker)
-  tickGroup.add(buildTicks(slotAngles, parkedKeys, currentLadder))
-  group.add(main, inner, subRing, dashes, tickGroup, centre, centreRing, sectorGroup, ...beatRings.map((slot) => slot.line))
+  tickGroup.add(buildTicks(slotAngles, parkedKeys, layout))
+  group.add(main, inner, levelRings, dashes, tickGroup, centre, centreRing, sectorGroup, ...beatRings.map((slot) => slot.line))
   scene.add(group)
 
   function clearSlots() {
@@ -490,20 +569,22 @@ export function createHub(scene, agentsOrCount, ladder = null) {
 
   function rebuild() {
     buildCount += 1
+    layout = currentLadder ? ringLayout(currentLadder, parkedKeys) : null
     slotAngles = anglesFor(currentLadder)
     clearGroup(tickGroup)
-    tickGroup.add(buildTicks(slotAngles, parkedKeys, currentLadder))
+    tickGroup.add(buildTicks(slotAngles, parkedKeys, layout))
     clearSlots()
-    slots = buildSlots(slotAngles, parkedKeys, currentLadder)
+    slots = buildSlots(slotAngles, parkedKeys, layout)
     for (const marker of slots) group.add(marker)
     clearGroup(sectorGroup)
-    const built = buildSectors(currentLadder, parkedKeys, sectorGroup)
+    clearGroup(levelRings)
+    buildLevelRings(layout, levelRings)
+    const built = buildSectors(layout, sectorGroup)
     sectorLines = built.lines
     sectorLabels = built.labels
     sectorGroups = built.groups
     sectorLevels = new Map(sectorGroups.map((sector) => [sector.userData.id, 0]))
     main.visible = !currentLadder
-    subRing.visible = parkedKeys.some((key) => onSubRing(currentLadder, key))
     ringLines = currentLadder ? sectorLines : [main]
     for (const line of ringLines) {
       writeColor(line.material, WHITE)

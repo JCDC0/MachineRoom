@@ -3,11 +3,11 @@ import { Line2 } from 'three/addons/lines/Line2.js'
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js'
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js'
 import { CSS3DObject } from 'three/addons/renderers/CSS3DRenderer.js'
-import { ownerOf, sectorArcs } from '../model/hierarchy.js'
+import { ownerOf } from '../model/hierarchy.js'
 import { laneStarterTop } from '../model/laneStarter.js'
 import { dirname } from '../model/paths.js'
 import { CHILD_LIFE_MS } from '../model/state.js'
-import { AGENT_RING_BASE, AGENT_RING_GROW, AGENT_RING_MAX_OPACITY, AGENT_RING_MS, AGENT_RING_OPACITY_FLOOR, AGENT_RING_POOL, HUB_RADIUS, HUB_Y, ORCHESTRATOR_HOME, ORCHESTRATOR_LIFT, PARK_LIFT, SWAY_LIFT, SWAY_RATE, SWAY_SCALE, danceEnvelope, hasSubs, isSessionReader, parkedKeysFor, readerAngles, readerPoint, ringPulse, sectorSlotAngles, slotAngle, startDanceEnvelope, subRingPlace, writeColor, writeOpacity } from './hub.js'
+import { AGENT_RING_BASE, AGENT_RING_GROW, AGENT_RING_MAX_OPACITY, AGENT_RING_MS, AGENT_RING_OPACITY_FLOOR, AGENT_RING_POOL, HUB_RADIUS, HUB_Y, ORCHESTRATOR_HOME, ORCHESTRATOR_LIFT, PARK_LIFT, SWAY_LIFT, SWAY_RATE, SWAY_SCALE, danceEnvelope, hasSubs, isSessionReader, parkedKeysFor, readerAngles, readerPoint, ringLayout, ringPulse, sectorSlotAngles, slotAngle, startDanceEnvelope, SUB_STAND_LIFT, writeColor, writeOpacity } from './hub.js'
 import { INTERNET_RADIUS } from './internet.js'
 import { ORCHESTRATOR_PULSE_SCALE, ORCHESTRATOR_SHAPE, PREFERRED, PULSE_BANDS, PULSE_SCALE, SUB_PULSE_SCALE, bandForPoint, isOrchestrator, isSubOrchestrator, nextSpareShape, shapeGeometry, shapesFor, vertexOffset } from './shapes.js'
 import { GREEN, RED, TUNNEL_GREY, WEB, WHITE, agentColor, agentColors, cssColor, easeRate, lineMaterial, paintAgentColor, still, textSprite } from './sprites.js'
@@ -53,8 +53,6 @@ export const CHILD_ORBIT_SCALE = 1.6
 export const CHILD_ORBIT_SECONDS = 40
 export const CHILD_ORBIT_TILT = Math.PI / 18
 export const SUB_ORCHESTRATOR_SCALE = 0.7
-export const SUB_ORCHESTRATOR_LIFT = ORCHESTRATOR_LIFT * 0.5
-export const SUB_ORCHESTRATOR_RADIUS = HUB_RADIUS * 2.4
 export const ORCHESTRATOR_NAME_LIFT = (ORCHESTRATOR_LIFT * 2) / 3
 export const ORCHESTRATOR_LINK_OPACITY = 0.1
 export const SUB_ORCHESTRATOR_LINK_OPACITY = 0.3
@@ -166,17 +164,6 @@ export function fullCalloutKeys(busy, focus = null, hover = null, scratch = null
 export function orchestratorNameLift(subCount) {
   const count = Number.isFinite(Number(subCount)) ? Math.max(0, Math.floor(Number(subCount))) : 0
   return count > 0 ? ORCHESTRATOR_NAME_LIFT : 0
-}
-
-export function subOrchestratorPlace(arc, out = null) {
-  const start = Number(arc?.start)
-  const end = Number(arc?.end)
-  const mid = Number.isFinite(start) && Number.isFinite(end) ? (start + end) / 2 : 0
-  const point = out ?? { x: 0, y: 0, z: 0 }
-  point.x = Math.cos(mid) * SUB_ORCHESTRATOR_RADIUS
-  point.y = HUB_Y + SUB_ORCHESTRATOR_LIFT
-  point.z = Math.sin(mid) * SUB_ORCHESTRATOR_RADIUS
-  return point
 }
 
 export function agentPresence(agent, everRan = false) {
@@ -737,6 +724,7 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
   let swayTarget = 0
   let swayLevel = 0
   let sectorList = []
+  let layout = null
   let slotAngles = sectorSlotAngles(null, parkedKeys)
   let topKey = 'orchestrator'
   const chainCache = { links: null, mask: null, parents: null, back: [] }
@@ -828,18 +816,19 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
 
   function subHome(agent) {
     const id = subIdOf(agent)
-    const arc = sectorList.find((entry) => entry.id === id) ?? { start: 0, end: 0 }
-    const place = subOrchestratorPlace(arc)
-    return new THREE.Vector3(place.x, place.y, place.z)
+    const arc = sectorList.find((entry) => entry.id === id)
+    if (!arc) return new THREE.Vector3(0, HUB_Y + SUB_STAND_LIFT, 0)
+    const ring = layout.ringOf(arc)
+    const mid = (arc.start + arc.end) / 2
+    return new THREE.Vector3(Math.cos(mid) * ring.radius, ring.y + SUB_STAND_LIFT, Math.sin(mid) * ring.radius)
   }
 
   function laneHome(key, index) {
     const angle = slotAngles.get(key) ?? slotAngle(index, Math.max(1, parkedKeys.length))
-    if (currentLadder && ownerOf(currentLadder, key) !== 'orchestrator') {
-      const place = subRingPlace(angle)
-      return new THREE.Vector3(place.x, place.y, place.z)
-    }
-    return new THREE.Vector3(Math.cos(angle) * HUB_RADIUS, HUB_Y + PARK_LIFT, Math.sin(angle) * HUB_RADIUS)
+    const ring = layout ? layout.ringOfKey(key) : null
+    const radius = ring ? ring.radius : HUB_RADIUS
+    const y = ring ? ring.y : HUB_Y
+    return new THREE.Vector3(Math.cos(angle) * radius, y + PARK_LIFT, Math.sin(angle) * radius)
   }
 
   function orbitSlot(view, out = null) {
@@ -867,7 +856,8 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
   }
 
   function layoutHomes(ladder) {
-    sectorList = hasSubs(ladder) ? sectorArcs(ladder, parkedKeys) : []
+    layout = hasSubs(ladder) ? ringLayout(ladder, parkedKeys) : null
+    sectorList = layout ? layout.arcs : []
     slotAngles = sectorSlotAngles(ladder, parkedKeys)
   }
 
@@ -1187,7 +1177,8 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
       }
       if (view.orchestrator) {
         view.index = -1
-        if (topView) readerPoint(topReader, readers.length, view.home, angles[topReader])
+        if (topView && readers.length === 1) view.home.set(ORCHESTRATOR_HOME.x, HUB_Y + PARK_LIFT, ORCHESTRATOR_HOME.z)
+        else if (topView) readerPoint(topReader, readers.length, view.home, angles[topReader])
         else view.home.copy(ORCHESTRATOR_HOME)
       } else if (view === topView) {
         view.index = -1
