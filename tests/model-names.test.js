@@ -1,5 +1,6 @@
 import { act, createElement } from 'react'
 import { describe, expect, it } from 'vitest'
+import { modelAllowed } from '../server/harness-models.js'
 import { MODELS } from '../server/model-list.js'
 import OrchestratorChat from '../src/ui/OrchestratorChat.jsx'
 import { childDetail, familyMeta } from '../src/ui/family.js'
@@ -56,6 +57,22 @@ describe('a model name', () => {
     expect(free.label).toBe('DeepSeek v4.1 Flash (free)')
     expect(openrouter.label).toBe('DeepSeek v4.1 Flash')
     expect(go.label).toBe('DeepSeek v4.1 Flash')
+  })
+
+  it('resolves the four Gemini 4 Neon ids to their labels with Hydrogen tiers and omits the orchestrator entry', () => {
+    const expected = [
+      { id: 'gemini-4-neon-low', label: 'Gemini 4 Neon (Low)', tier: 'small' },
+      { id: 'gemini-4-neon-medium', label: 'Gemini 4 Neon (Medium)', tier: 'small' },
+      { id: 'gemini-4-neon-high', label: 'Gemini 4 Neon (High)', tier: 'medium' },
+      { id: 'gemini-4-neon-xhigh', label: 'Gemini 4 Neon (XHigh)', tier: 'large' },
+    ]
+    for (const item of expected) {
+      expect(modelName(item.id, MODELS)).toBe(item.label)
+      const row = MODELS.find((entry) => entry.id === item.id && entry.harness === 'agy')
+      expect(row).toEqual({ ...item, harness: 'agy', free: false })
+      expect(modelAllowed('agy', item.id)).toBe(true)
+    }
+    expect(MODELS.some((entry) => entry.id === 'gemini-pro-orchestrator-neon')).toBe(false)
   })
 
   it('uses the last segment when no choice carries the id', () => {

@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The model list names Gemini 4 Neon Low, Medium, High and XHigh for AGY (P611).
 - A lane conversation's run times read in the owner's local time, with a short date when the run did not start today (P612).
 - The chat keeps an even rhythm, the composer reads clearly, and a lane opened from its row gets the same composer and Worktree switch as one chosen in To (P606).
 - The menu band shows the open conversation's name as plain text that scrolls the chat into view, and chat and lane names are white with a round dot in the agent's colour (P609).
