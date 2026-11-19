@@ -128,23 +128,157 @@ describe('Lane conversation read order', () => {
     })
   })
 
-  it('recomputes run dates when the picker opens after midnight', async () => {
+  it('selects a fast-finishing start and disarms auto-selection afterwards', async () => {
+    const lane = 'codex'
+    const old = { lane, startedAt: '2026-11-17T11:00:00.000Z', exitCode: 0 }
+    const fast = { lane, startedAt: '2026-11-17T12:00:00.000Z', exitCode: 1 }
+    const later = { lane, startedAt: '2026-11-17T13:00:00.000Z' }
+    let history = { recent: [old] }
+    let notice
+    const client = {
+      runs: async () => history,
+      subscribe: (fn) => { notice = fn; return () => {} },
+      runConversation: async () => ({ entries: [] }),
+    }
+    await withDom(async ({ container, root }) => {
+      await act(async () => root.render(createElement(LaneConversation, {
+        client, lane, onRecipientSend: async () => ({ ok: true }),
+      })))
+      await settle(5)
+      await type(root, container.querySelector('textarea'), 'go')
+      await act(async () => container.querySelector('.mr-composer-box').dispatchEvent({ type: 'submit', bubbles: true, cancelable: true }))
+      await settle(5)
+      history = { running: [], recent: [fast, old] }
+      await act(async () => notice({ topic: 'runs' }))
+      await settle(5)
+      expect(container.querySelector('.ui-chip-value').textContent).toBe(runClock(fast.startedAt))
+
+      history = { running: [later], recent: [fast, old] }
+      await act(async () => notice({ topic: 'runs' }))
+      await settle(5)
+      expect(container.querySelector('.ui-chip-value').textContent).toBe(runClock(fast.startedAt))
+    })
+  })
+
+  it('disarms auto-selection when a start settles with no new run', async () => {
+    const lane = 'codex'
+    const old = { lane, startedAt: '2026-11-17T11:00:00.000Z', exitCode: 0 }
+    const unrelated = { lane, startedAt: '2026-11-17T13:00:00.000Z' }
+    let history = { recent: [old] }
+    let notice
+    const client = {
+      runs: async () => history,
+      subscribe: (fn) => { notice = fn; return () => {} },
+      runConversation: async () => ({ entries: [] }),
+    }
+    await withDom(async ({ container, root }) => {
+      await act(async () => root.render(createElement(LaneConversation, {
+        client, lane, onRecipientSend: async () => ({ ok: true }),
+      })))
+      await settle(5)
+      await type(root, container.querySelector('textarea'), 'go')
+      await act(async () => container.querySelector('.mr-composer-box').dispatchEvent({ type: 'submit', bubbles: true, cancelable: true }))
+      await settle(5)
+      await act(async () => notice({ topic: 'runs' }))
+      await settle(5)
+      expect(container.querySelector('.ui-chip-value').textContent).toBe(runClock(old.startedAt))
+
+      history = { running: [unrelated], recent: [old] }
+      await act(async () => notice({ topic: 'runs' }))
+      await settle(5)
+      expect(container.querySelector('.ui-chip-value').textContent).toBe(runClock(old.startedAt))
+    })
+  })
+
+  it('prefers an unseen running run over an unseen finished run after an accepted start', async () => {
+    const lane = 'codex'
+    const old = { lane, startedAt: '2026-11-17T11:00:00.000Z', exitCode: 0 }
+    const live = { lane, startedAt: '2026-11-17T12:00:00.000Z' }
+    const finished = { lane, startedAt: '2026-11-17T12:30:00.000Z', exitCode: 0 }
+    let history = { recent: [old] }
+    let notice
+    const client = {
+      runs: async () => history,
+      subscribe: (fn) => { notice = fn; return () => {} },
+      runConversation: async () => ({ entries: [] }),
+    }
+    await withDom(async ({ container, root }) => {
+      await act(async () => root.render(createElement(LaneConversation, {
+        client, lane, onRecipientSend: async () => ({ ok: true }),
+      })))
+      await settle(5)
+      await type(root, container.querySelector('textarea'), 'go')
+      await act(async () => container.querySelector('.mr-composer-box').dispatchEvent({ type: 'submit', bubbles: true, cancelable: true }))
+      await settle(5)
+      history = { running: [live], recent: [finished, old] }
+      await act(async () => notice({ topic: 'runs' }))
+      await settle(5)
+      expect(container.querySelector('.ui-chip-value').textContent).toBe(runClock(live.startedAt))
+    })
+  })
+
+  it('recomputes run dates in the chip, status line and other-run hint across midnight once per day', async () => {
     const lane = 'codex'
     const startedAt = new Date(2026, 10, 18, 23, 55, 0).toISOString()
-    const client = { runs: async () => ({ recent: [{ lane, startedAt, exitCode: 0 }] }), runConversation: async () => ({ entries: [] }) }
-    vi.useFakeTimers({ toFake: ['Date'] })
+    const liveAt = new Date(2026, 10, 18, 23, 56, 0).toISOString()
+    vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] })
     vi.setSystemTime(new Date(2026, 10, 18, 23, 58, 0))
+    const timeoutSpy = vi.spyOn(globalThis, 'setTimeout')
     try {
+      const composeClient = {
+        runs: async () => ({ recent: [{ lane, startedAt, exitCode: 0 }] }),
+        runConversation: async () => ({ entries: [] }),
+      }
       await withDom(async ({ container, root }) => {
-        await act(async () => root.render(createElement(LaneConversation, { client, lane })))
+        await act(async () => root.render(createElement(LaneConversation, {
+          client: composeClient, lane, onRecipientSend: async () => ({ ok: true }),
+        })))
+        const status = () => container.querySelector('[role="status"]').textContent
+        const chip = () => container.querySelector('.ui-chip-value').textContent
         const option = () => container.querySelector('[aria-label="Run"] option').textContent
+        expect(chip()).toBe('23:55:00')
         expect(option()).toContain('23:55:00')
         expect(option()).not.toContain('11-18')
+        expect(status()).toContain('Run 23:55:00')
+        expect(status()).not.toContain('11-18')
+
+        const timersBeforeTyping = timeoutSpy.mock.calls.length
+        await type(root, container.querySelector('textarea'), 'a')
+        await type(root, container.querySelector('textarea'), 'ab')
+        await type(root, container.querySelector('textarea'), 'abc')
+        expect(timeoutSpy.mock.calls.length).toBe(timersBeforeTyping)
+
+        await act(async () => {
+          vi.advanceTimersByTime(121000)
+        })
+        expect(chip()).toBe('11-18 23:55:00')
+        expect(option()).toContain('11-18 23:55:00')
+        expect(status()).toContain('Run 11-18 23:55:00')
+        expect(timeoutSpy.mock.calls.length).toBe(timersBeforeTyping + 1)
+      })
+
+      vi.setSystemTime(new Date(2026, 10, 18, 23, 58, 0))
+      const otherRunClient = {
+        runs: async () => ({
+          running: [{ lane, startedAt: liveAt, running: true }],
+          recent: [{ lane, startedAt, exitCode: 0 }],
+        }),
+        runConversation: async ({ startedAt: at }) => ({ running: at === liveAt, entries: [] }),
+      }
+      await withDom(async ({ container, root }) => {
+        await act(async () => root.render(createElement(LaneConversation, {
+          client: otherRunClient, lane, laneName: 'Codex', initialStartedAt: startedAt,
+        })))
+        const hint = () => container.querySelector('.mr-composer-hint').textContent
+        expect(hint()).toContain('run 23:56:00')
+        expect(hint()).not.toContain('11-18')
         vi.setSystemTime(new Date(2026, 10, 19, 0, 1, 0))
         await act(async () => container.querySelector('[aria-label="Run"]').dispatchEvent({ type: 'mousedown', bubbles: true, cancelable: true }))
-        expect(option()).toContain('11-18 23:55:00')
+        expect(container.querySelector('.ui-chip-value').textContent).toBe('11-18 23:55:00')
+        expect(hint()).toContain('run 11-18 23:56:00')
       })
     } finally {
+      timeoutSpy.mockRestore()
       vi.useRealTimers()
     }
   })

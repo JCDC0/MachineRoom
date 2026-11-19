@@ -214,14 +214,32 @@ describe('a conversation read from a lane log', () => {
     expect(conversationFromLog('hermes', 'x'.repeat(4500))[0].text).toHaveLength(4000)
   })
 
-  it('marks a tool call failed when its result is an error', () => {
+  it('records tool end ok for failed and succeeded calls and leaves unfinished calls unset', () => {
     const log = lines(
-      { type: 'assistant', message: { content: [{ type: 'tool_use', id: 'a', name: 'Bash', input: { command: 'npm test' } }, { type: 'tool_use', id: 'b', name: 'Bash', input: { command: 'ls' } }] } },
-      { type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'a', is_error: true, content: 'boom' }, { type: 'tool_result', tool_use_id: 'b', content: 'ok' }] } }
+      {
+        type: 'assistant',
+        message: {
+          content: [
+            { type: 'tool_use', id: 'a', name: 'Bash', input: { command: 'npm test' } },
+            { type: 'tool_use', id: 'b', name: 'Bash', input: { command: 'ls' } },
+            { type: 'tool_use', id: 'c', name: 'Read', input: { file_path: 'src/app.js' } },
+          ],
+        },
+      },
+      {
+        type: 'user',
+        message: {
+          content: [
+            { type: 'tool_result', tool_use_id: 'a', is_error: true, content: 'boom' },
+            { type: 'tool_result', tool_use_id: 'b', content: 'ok' },
+          ],
+        },
+      }
     )
     const tools = conversationFromLog('claude', log).filter((item) => item.role === 'tool')
-    expect(tools).toHaveLength(2)
+    expect(tools).toHaveLength(3)
     expect(tools[0].ok).toBe(false)
-    expect(tools[1].ok).toBeUndefined()
+    expect(tools[1].ok).toBe(true)
+    expect(tools[2].ok).toBeUndefined()
   })
 })

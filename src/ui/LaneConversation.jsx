@@ -19,6 +19,7 @@ import {
 } from './laneConversation.js'
 
 const STATUS_REFRESH_MS = 5000
+const START_SELECT_TIMEOUT_MS = 10000
 const MAX_MESSAGE_CHARS = 8000
 const GENERIC_RESULT_TEXTS = new Set(['The run ended.', 'The run failed.'])
 const STATUS_LABELS = {
@@ -114,8 +115,15 @@ function toolFailed(entry) {
   return status === 'failed' || status === 'error'
 }
 
-function toolRunning(entry) {
+function toolFinished(entry) {
   if (!entry || typeof entry !== 'object') return false
+  if (entry.ok === true || entry.ok === false || entry.running === false) return true
+  const status = typeof entry.status === 'string' ? entry.status.trim().toLowerCase() : ''
+  return status === 'done' || status === 'completed' || status === 'finished' || status === 'ok'
+}
+
+function toolRunning(entry) {
+  if (!entry || typeof entry !== 'object' || toolFinished(entry)) return false
   if (entry.running === true) return true
   const status = typeof entry.status === 'string' ? entry.status.trim().toLowerCase() : ''
   return status === 'running' || status === 'working'
@@ -124,34 +132,28 @@ function toolRunning(entry) {
 function toolToneClass(entries, active = false) {
   const list = Array.isArray(entries) ? entries : [entries]
   if (list.some(toolFailed)) return 'is-failed'
-  if (active || list.some(toolRunning)) return 'is-working'
+  if (list.some(toolRunning)) return 'is-working'
+  if (active && list.length > 0 && !toolFinished(list.at(-1))) return 'is-working'
   return ''
 }
 
-function RunChip({ options, selected, runState, tone, emptyLabel, onChange }) {
-  const [, refresh] = useState(0)
-  useEffect(() => {
-    const next = new Date()
-    next.setHours(24, 0, 1, 0)
-    const timer = setTimeout(() => refresh((count) => count + 1), next - Date.now())
-    return () => clearTimeout(timer)
-  })
+function RunChip({ options, selected, runState, tone, emptyLabel, now, onOpen, onChange }) {
   return (
     <span className="ui-chip ui-chip-select">
       <span className="ui-chip-label" aria-hidden="true">Run</span>
       <span className={`ui-chip-value is-${tone}`} aria-hidden="true">
         {selected && <span className="mr-orch-dot" />}
-        {selected ? runClock(selected) : emptyLabel}
+        {selected ? runClock(selected, now) : emptyLabel}
       </span>
       <span className="ui-chip-chevron" aria-hidden="true" />
       <select aria-label="Run" value={selected} disabled={options.length === 0}
-        onFocus={() => refresh((count) => count + 1)}
-        onMouseDown={() => refresh((count) => count + 1)}
+        onFocus={onOpen}
+        onMouseDown={onOpen}
         onChange={(event) => onChange(event.target.value)}>
         {options.length === 0 && <option value="">{emptyLabel}</option>}
         {options.map((run) => (
           <option value={run.startedAt} key={run.startedAt}>
-            {`${runClock(run.startedAt)} ${run.startedAt === selected ? runState : runOutcome(run)}`}
+            {`${runClock(run.startedAt, now)} ${run.startedAt === selected ? runState : runOutcome(run)}`}
           </option>
         ))}
       </select>
@@ -210,6 +212,12 @@ export default function LaneConversation({
   const [planStarting, setPlanStarting] = useState(false)
   const [planStartError, setPlanStartError] = useState('')
   const [planStartStatus, setPlanStartStatus] = useState('')
+  const [dayTick, setDayTick] = useState(0)
+  const [runsNoticeCount, setRunsNoticeCount] = useState(0)
+  const dayRef = useRef(new Date().toDateString())
+  const runsNoticeCountRef = useRef(runsNoticeCount)
+  runsNoticeCountRef.current = runsNoticeCount
+  const givenRunsRef = useRef(givenRuns)
   const wantedRef = useRef(initialStartedAt)
   const mountedRef = useRef(true)
   const lastReadRef = useRef(null)
@@ -222,11 +230,26 @@ export default function LaneConversation({
   const planModeChosenRef = useRef(false)
   const planStartingRef = useRef(false)
   const startedRunRef = useRef(null)
+  const startedRunTimerRef = useRef(null)
   const inputRef = useRef(null)
   const focusAtRef = useRef(0)
   const inputId = useId()
   const planTaskId = useId()
   selectionRef.current = { lane, startedAt: selected }
+  const now = new Date()
+  function refreshDay() {
+    const today = new Date().toDateString()
+    if (today === dayRef.current) return
+    dayRef.current = today
+    setDayTick((count) => count + 1)
+  }
+  function clearStartedRun() {
+    if (startedRunTimerRef.current) {
+      clearTimeout(startedRunTimerRef.current)
+      startedRunTimerRef.current = null
+    }
+    startedRunRef.current = null
+  }
   const conversation = conversationState.lane === lane && conversationState.startedAt === selected
     ? conversationState
     : { loading: true, data: null, error: '' }
@@ -249,7 +272,7 @@ export default function LaneConversation({
   const tone = RUN_TONES[runState] || 'idle'
   const status = selectedRunning ? 'Working' : outcome ? outcome[0].toUpperCase() + outcome.slice(1) : 'Idle'
   const context = [
-    canCompose && selected && `Run ${runClock(selected)}`,
+    canCompose && selected && `Run ${runClock(selected, now)}`,
     typeof currentRun?.contextTokens === 'number' && contextLine({
       context: { tokens: currentRun.contextTokens, window: currentRun.contextWindow },
     }).replace(/^Context size (?=\d)/, 'Context '),
@@ -290,14 +313,29 @@ export default function LaneConversation({
   }, [focusRequest])
 
   useEffect(() => {
+    const next = new Date()
+    next.setHours(24, 0, 1, 0)
+    const timer = setTimeout(() => {
+      dayRef.current = new Date().toDateString()
+      setDayTick((count) => count + 1)
+    }, Math.max(1000, next - Date.now()))
+    return () => clearTimeout(timer)
+  }, [dayTick])
+
+  useEffect(() => {
     mountedRef.current = true
     return () => {
       mountedRef.current = false
+      clearStartedRun()
     }
   }, [])
 
   useEffect(() => {
     setRuns(givenRuns)
+    if (givenRuns !== givenRunsRef.current) {
+      givenRunsRef.current = givenRuns
+      if (givenRuns !== null) setRunsNoticeCount((count) => count + 1)
+    }
   }, [client, givenRuns, lane])
 
   useEffect(() => {
@@ -315,6 +353,7 @@ export default function LaneConversation({
         const nextRuns = answer && typeof answer === 'object' ? answer : null
         setRuns(nextRuns)
         setHistoryFailed(false)
+        if (fromNotice) setRunsNoticeCount((count) => count + 1)
         if (fromNotice && nextRuns) {
           const current = selectionRef.current
           const stillLive =
@@ -373,17 +412,24 @@ export default function LaneConversation({
 
   useEffect(() => {
     setDraft('')
-    startedRunRef.current = null
+    clearStartedRun()
   }, [lane])
 
   useEffect(() => {
     const pending = startedRunRef.current
     if (!pending) return
-    const fresh = options.find((run) => run.running && !pending.has(run.startedAt))
-    if (!fresh) return
-    startedRunRef.current = null
-    setSelected(fresh.startedAt)
-  }, [options])
+    const fresh =
+      options.find((run) => run.running && !pending.seen.has(run.startedAt)) ??
+      options.find((run) => !pending.seen.has(run.startedAt) && run.time > pending.afterTime)
+    if (fresh) {
+      clearStartedRun()
+      setSelected(fresh.startedAt)
+      return
+    }
+    if (pending.settled && runsNoticeCount > pending.settledAtNotice) {
+      clearStartedRun()
+    }
+  }, [options, runsNoticeCount])
 
   useEffect(() => {
     if (!lane || !client || typeof client.lanes !== 'function') {
@@ -526,10 +572,28 @@ export default function LaneConversation({
     if (!canSend || sending || (!sendToRunning && hasLiveRun) || (sendToRunning ? !client || typeof client.sendLaneMessage !== 'function' : !onRecipientSend)) return
     setSending(true)
     setSendError('')
+    const startPending = !sendToRunning
+      ? {
+          seen: new Set(options.map((run) => run.startedAt)),
+          afterTime: options.reduce((max, run) => Math.max(max, run.time), -Infinity),
+          settled: false,
+          settledAtNotice: runsNoticeCountRef.current,
+        }
+      : null
     try {
-      if (!sendToRunning) startedRunRef.current = new Set(options.map((run) => run.startedAt))
+      if (startPending) {
+        clearStartedRun()
+        startedRunRef.current = startPending
+      }
       const answer = sendToRunning ? await client.sendLaneMessage({ lane, startedAt: selected, text: trimmedDraft, interrupt: Boolean(interrupt) }) : await onRecipientSend(trimmedDraft)
       if (answer?.ok === false) throw new Error(answer.error)
+      if (mountedRef.current && startPending && startedRunRef.current === startPending) {
+        startPending.settled = true
+        startPending.settledAtNotice = runsNoticeCountRef.current
+        startedRunTimerRef.current = setTimeout(() => {
+          if (startedRunRef.current === startPending) clearStartedRun()
+        }, START_SELECT_TIMEOUT_MS)
+      }
       if (!mountedRef.current && !sharedSentMessages) return
       if (mountedRef.current) setDraft('')
       const id = typeof answer?.id === 'string' ? answer.id : ''
@@ -548,7 +612,7 @@ export default function LaneConversation({
         }
       }
     } catch (failure) {
-      startedRunRef.current = null
+      if (startPending && startedRunRef.current === startPending) clearStartedRun()
       if (!mountedRef.current) return
       setSendError(failure?.message || 'Could not send the message.')
     } finally {
@@ -835,9 +899,10 @@ export default function LaneConversation({
           <>
             {recipientOptions && <RecipientChip value={lane} onChange={onRecipientChange} recipients={recipients} lanes={recipientOptions} />}
             <RunChip options={options} selected={selected} runState={runState} tone={tone} emptyLabel={emptyRunLabel}
+              now={now} onOpen={refreshDay}
               onChange={(startedAt) => {
                 wantedRef.current = ''
-                startedRunRef.current = null
+                clearStartedRun()
                 setSelected(startedAt)
               }} />
             {canCompose && !selectedRunning && onRecipientSend && worktreeChoice}
@@ -851,7 +916,7 @@ export default function LaneConversation({
       >
         {!canCompose && otherLiveRun && (
           <p className="mr-composer-hint">
-            {`${label} is working on run ${runClock(otherLiveRun.startedAt)}. Pick that run to message it.`}
+            {`${label} is working on run ${runClock(otherLiveRun.startedAt, now)}. Pick that run to message it.`}
           </p>
         )}
         {sendError && <p className="mr-orch-error mono" role="alert">{sendError}</p>}

@@ -4,6 +4,7 @@ import { createOrchestrators } from '../server/orchestrators.js'
 import { makeTempDir, removeTempDir } from './helpers/tempRoot.js'
 import Hud from '../src/ui/Hud.jsx'
 import { createClient } from '../src/control/client.js'
+import { conversationFromLog } from '../src/model/conversation.js'
 import LaneConversation from '../src/ui/LaneConversation.jsx'
 import {
   LANE_READ_GAP_MS,
@@ -284,6 +285,57 @@ describe('the lane conversation view', () => {
       const chips = container.querySelectorAll('.mr-lane-conv-tool')
       expect(chips[0].className).not.toContain('is-working')
       expect(chips[1].className).toContain('is-working')
+    })
+  })
+
+  it('never shows a finished tool call as active while a live run thinks', async () => {
+    const finishedLog = [
+      { type: 'assistant', message: { content: [{ type: 'tool_use', id: 't1', name: 'Bash', input: { command: 'ls' } }] } },
+      { type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 't1', content: 'ok' }] } },
+    ].map((item) => JSON.stringify(item)).join('\n')
+    const finishedSingleClient = makeClient({
+      running: true,
+      entries: conversationFromLog('claude', finishedLog),
+    })
+    await withDom(async ({ container, root }) => {
+      await mount(root, { client: finishedSingleClient, lane: 'opencode', laneName: 'OpenCode', lanes: LANES, initialStartedAt: STARTED })
+      const chip = container.querySelector('.mr-lane-conv-tool')
+      expect(chip.className).not.toContain('is-working')
+      expect(chip.className).not.toContain('is-failed')
+    })
+
+    const finishedGroupLog = [
+      {
+        type: 'assistant',
+        message: {
+          content: [
+            { type: 'tool_use', id: 't1', name: 'Read', input: { file_path: 'src/a.js' } },
+            { type: 'tool_use', id: 't2', name: 'Bash', input: { command: 'ls' } },
+          ],
+        },
+      },
+      {
+        type: 'user',
+        message: {
+          content: [
+            { type: 'tool_result', tool_use_id: 't1', content: 'a' },
+            { type: 'tool_result', tool_use_id: 't2', content: 'ok' },
+          ],
+        },
+      },
+    ].map((item) => JSON.stringify(item)).join('\n')
+    const finishedGroupClient = makeClient({
+      running: true,
+      entries: conversationFromLog('claude', finishedGroupLog),
+    })
+    await withDom(async ({ container, root }) => {
+      await mount(root, { client: finishedGroupClient, lane: 'opencode', laneName: 'OpenCode', lanes: LANES, initialStartedAt: STARTED })
+      const folded = buttonWithText(container, '2 tool calls')
+      expect(folded.className).not.toContain('is-working')
+      await click(root, folded)
+      const chips = container.querySelectorAll('.mr-lane-conv-tool')
+      expect(chips[0].className).not.toContain('is-working')
+      expect(chips[1].className).not.toContain('is-working')
     })
   })
 
