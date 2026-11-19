@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- `server/seats.js` holds the agent seat model: seats per park ring, grants per orchestrator, and one check for every seat rule; no route uses it yet (P636).
 - The floor lattice spans two 2000 unit blocks each way instead of four, at the owner's word (P633).
 - The candidate tests take an injected port check, so a test that is not about the port no longer fails when another test takes its free port (P632).
 - Hover cards read their details when they open and across midnight, a spawned subagent takes its parent's chat colour, only the block after an agent dot is inline, and the Orchestrator button focuses the visible composer (P629).
