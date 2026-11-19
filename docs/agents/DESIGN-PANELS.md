@@ -43,7 +43,7 @@ One composer component serves the orchestrator chat and a lane's conversation.
 
 - A box: `--radius-m`, `1px solid var(--border-soft)`, padding 12px. The text area first, with its placeholder and no label.
 - One toolbar row under it. Left: `To` (a select chip), `Model`, `Effort` when the harness has it, `Mode` when it can be set, then a kebab with `Compact…` and `Show agent messages` (a check item). In a lane's conversation the left side is `To`, the `Run` chip (below) and the `Worktree` switch (today's `Separate worktree`). Right: `Stop` (a red text chip, only while working) and Send (a 32px round icon button, the arrow there today).
-- One status line under the box, Space Mono 11, muted: a dot in the status colour, then the status, then the context, such as `● Waiting for you · Context 116.8k / 1M` or `● Finished · Run 11:20:16`.
+- One status line under the box, Space Mono 11, muted: a dot in the status colour, then the status, then the context, such as `● Waiting for you · Context 116.8k / 1M` or, in a lane that can take a message, `● Finished · Run 11:20:16`. In history mode the run time shows on the `Run` chip only (P618).
 
 ## A lane's conversation (P598)
 
