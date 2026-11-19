@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Chat dots take each roster agent's room colour again, built from the whole roster the way the room builds it (P623).
 - A sub chosen from a lane view keeps the message, both chat views share one live lane list, the band names the open view, chat dots use the room colours inline, and each band click focuses the visible composer (P620).
 - merge-lane counts only a changelog bullet as the lane's entry and keeps an exact line once (P622).
 - Review 62 fixes: a new lane run is selected after a start, a failed tool call shows red, run times refresh at midnight and when the picker opens, and the Jump chip shares the log's gutter (P621).
