@@ -1,13 +1,10 @@
 import * as THREE from 'three'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
-  SUB_ORCHESTRATOR_LIFT,
-  SUB_ORCHESTRATOR_RADIUS,
   SUB_ORCHESTRATOR_SCALE,
   agentPresence,
   createAgents,
   showsNameLabel,
-  subOrchestratorPlace,
 } from '../src/engine/agents.js'
 import { FOV, OVERVIEW, viewBasis } from '../src/engine/camera.js'
 import {
@@ -16,6 +13,8 @@ import {
   ORCHESTRATOR_HOME,
   ORCHESTRATOR_LIFT,
   PARK_LIFT,
+  RING_FLOOR_GAP,
+  RING_FLOOR_Y,
   RING_OPACITY,
   SECTOR_ARC_HALF_WIDTH,
   SECTOR_ARC_OPACITY,
@@ -27,11 +26,12 @@ import {
   SECTOR_LABEL_OPACITY,
   SECTOR_LABEL_OUT,
   SECTOR_LABEL_SPREAD,
-  SUB_RING_DROP,
-  SUB_RING_RADIUS,
-  SUB_RING_Y,
+  SUB_STAND_LIFT,
   arcDrawSpan,
   createHub,
+  ringArcs,
+  ringDrop,
+  ringLayout,
   sectorArcRadii,
   sectorArcTone,
   sectorLabelPoint,
@@ -41,7 +41,6 @@ import {
   slotAngle,
 } from '../src/engine/hub.js'
 import { isOrchestrator, isSubOrchestrator, shapesFor } from '../src/engine/shapes.js'
-import { sectorArcs } from '../src/model/hierarchy.js'
 
 const context2d = {
   font: '',
@@ -135,7 +134,7 @@ describe('sector slot angles', () => {
   it('puts each lane in the middle of its own sector when the sector holds one lane', () => {
     const keys = ['opencode', 'claude', 'hermes']
     const angles = sectorSlotAngles(LADDER, keys)
-    const arcs = sectorArcs(LADDER, keys)
+    const arcs = ringArcs(LADDER, keys)
     expect(angles.get('opencode')).toBeCloseTo((arcs[0].start + arcs[0].end) / 2)
     expect(angles.get('claude')).toBeCloseTo((arcs[1].start + arcs[1].end) / 2)
     expect(angles.get('hermes')).toBeCloseTo((arcs[2].start + arcs[2].end) / 2)
@@ -144,7 +143,7 @@ describe('sector slot angles', () => {
   it('spreads two lanes inside one sector in roster order', () => {
     const ladder = { subs: [{ id: 'frontend', name: 'Frontend', lanes: ['opencode', 'claude'] }] }
     const keys = ['claude', 'opencode', 'hermes']
-    const arcs = sectorArcs(ladder, keys)
+    const arcs = ringArcs(ladder, keys)
     const angles = sectorSlotAngles(ladder, keys)
     const arc = arcs[0]
     expect(arc.lanes).toEqual(['claude', 'opencode'])
@@ -246,7 +245,8 @@ describe('the place of a sector name', () => {
   })
 
   it('keeps two sector names from overlapping at four sectors', () => {
-    const arcs = sectorArcs(FOUR_LADDER, FOUR_KEYS)
+    const layout = ringLayout(FOUR_LADDER, FOUR_KEYS)
+    const arcs = layout.arcs
     expect(arcs).toHaveLength(4)
     const camera = new THREE.PerspectiveCamera(FOV, 1280 / 464, 1, 60000)
     const basis = viewBasis(OVERVIEW.yaw, OVERVIEW.pitch)
@@ -258,8 +258,9 @@ describe('the place of a sector name', () => {
     camera.lookAt(OVERVIEW.x, OVERVIEW.y, OVERVIEW.z)
     camera.updateMatrixWorld()
     const boxes = arcs.map((arc) => {
-      const point = sectorLabelPoint((arc.start + arc.end) / 2, HUB_RADIUS, arcs.length)
-      const world = new THREE.Vector3(point.x, HUB_Y + point.y, point.z)
+      const ring = layout.ringOf(arc)
+      const point = sectorLabelPoint((arc.start + arc.end) / 2, ring.radius, arcs.length)
+      const world = new THREE.Vector3(point.x, ring.y + point.y, point.z)
       const distance = camera.position.distanceTo(world)
       const projected = world.clone().project(camera)
       const factor = (sectorLabelScale(distance, FOCAL) * FOCAL) / distance
@@ -279,43 +280,47 @@ describe('the place of a sector name', () => {
 })
 
 describe('the place of a sub orchestrator', () => {
-  it('floats above the middle of its arc at 0.7 of the main orchestrator', () => {
-    const arc = { start: 0, end: Math.PI }
-    const place = subOrchestratorPlace(arc)
-    expect(place.x).toBeCloseTo(0)
-    expect(place.z).toBeCloseTo(SUB_ORCHESTRATOR_RADIUS)
-    expect(place.y).toBeCloseTo(HUB_Y + SUB_ORCHESTRATOR_LIFT)
-    expect(SUB_ORCHESTRATOR_SCALE).toBe(0.7)
-    expect(SUB_ORCHESTRATOR_LIFT).toBeLessThan(ORCHESTRATOR_LIFT)
-    expect(SUB_ORCHESTRATOR_RADIUS).toBeGreaterThan(HUB_RADIUS * 2)
-  })
-
-  it('fills the vector it is given and leaves the arc alone', () => {
-    const arc = { start: Math.PI / 2, end: Math.PI / 2 }
-    const before = { ...arc }
-    const out = new THREE.Vector3()
-    expect(subOrchestratorPlace(arc, out)).toBe(out)
-    expect(out.x).toBeCloseTo(0)
-    expect(out.z).toBeCloseTo(SUB_ORCHESTRATOR_RADIUS)
-    expect(arc).toEqual(before)
-  })
-
-  it('keeps the demo subs clear of the main orchestrator on screen', () => {
+  it('stands on the edge of its ring at the middle of its arc, above its lanes', () => {
     const keys = ['opencode', 'claude', 'hermes']
-    const basis = viewBasis(0.42, 0.3)
-    const chipBox = { width: 384, height: 240 }
-    for (const arc of sectorArcs(LADDER, keys)) {
+    const layout = ringLayout(LADDER, keys)
+    const agents = createAgents(new THREE.Scene(), [...ROSTER, { key: 'sub-backend', name: 'Backend', subOrchestrator: true }], new THREE.Scene())
+    agents.setLadder(LADDER)
+    for (const arc of layout.arcs) {
       if (arc.id === 'orchestrator') continue
-      const place = subOrchestratorPlace(arc)
-      const delta = {
-        x: place.x - ORCHESTRATOR_HOME.x,
-        y: place.y - ORCHESTRATOR_HOME.y,
-        z: place.z - ORCHESTRATOR_HOME.z,
-      }
-      const right = Math.abs(delta.x * basis.right.x + delta.y * basis.right.y + delta.z * basis.right.z)
-      const up = Math.abs(delta.x * basis.up.x + delta.y * basis.up.y + delta.z * basis.up.z)
-      expect(up > chipBox.height || right > chipBox.width).toBe(true)
+      const ring = layout.ringOf(arc)
+      const home = agents.views.get(`sub-${arc.id}`).home
+      const mid = (arc.start + arc.end) / 2
+      expect(home.x).toBeCloseTo(Math.cos(mid) * ring.radius)
+      expect(home.z).toBeCloseTo(Math.sin(mid) * ring.radius)
+      expect(home.y).toBeCloseTo(ring.y + SUB_STAND_LIFT)
     }
+    expect(SUB_ORCHESTRATOR_SCALE).toBe(0.7)
+    expect(SUB_STAND_LIFT).toBeGreaterThan(PARK_LIFT)
+    agents.dispose()
+  })
+
+  it('stacks a sub of a sub on the next ring down and keeps every agent above the floor', () => {
+    const ladder = {
+      subs: [
+        { id: 'frontend', name: 'Frontend', lanes: ['opencode'] },
+        { id: 'deep', name: 'Deep', parent: 'frontend', lanes: ['claude'] },
+        { id: 'deeper', name: 'Deeper', parent: 'deep', lanes: ['hermes'] },
+      ],
+    }
+    const roster = [
+      ...ROSTER.filter((agent) => !agent.key.startsWith('sub-')),
+      ...ladder.subs.map((sub) => ({ key: `sub-${sub.id}`, name: sub.name, subOrchestrator: true })),
+    ]
+    const agents = createAgents(new THREE.Scene(), roster, new THREE.Scene())
+    agents.setLadder(ladder)
+    const high = agents.views.get('sub-frontend').home.y
+    const mid = agents.views.get('sub-deep').home.y
+    const low = agents.views.get('sub-deeper').home.y
+    expect(high).toBeGreaterThan(mid)
+    expect(mid).toBeGreaterThan(low)
+    for (const view of agents.views.values()) expect(view.home.y).toBeGreaterThanOrEqual(RING_FLOOR_Y + RING_FLOOR_GAP)
+    expect(agents.views.get('hermes').home.y).toBeCloseTo(HUB_Y - 3 * ringDrop(3) + PARK_LIFT)
+    agents.dispose()
   })
 })
 
@@ -384,7 +389,7 @@ describe('the hub with a ladder', () => {
     expect(slots()).toHaveLength(3)
 
     hub.setLadder(LADDER)
-    const arcs = sectorArcs(LADDER, ['opencode', 'claude', 'hermes'])
+    const arcs = ringArcs(LADDER, ['opencode', 'claude', 'hermes'])
     const sectorsOf = () => sectors.children
     expect(ring.visible).toBe(false)
     expect(sectorsOf()).toHaveLength(arcs.length)
@@ -421,11 +426,10 @@ describe('the hub with a ladder', () => {
     slots().forEach((marker, index) => {
       const key = keys[index]
       const angle = angles.get(key)
-      const lower = LADDER.subs.some((sub) => sub.lanes.includes(key))
-      const radius = lower ? SUB_RING_RADIUS : HUB_RADIUS
-      expect(marker.position.x).toBeCloseTo(Math.cos(angle) * radius)
-      expect(marker.position.z).toBeCloseTo(Math.sin(angle) * radius)
-      expect(marker.position.y).toBe(lower ? -SUB_RING_DROP : 0)
+      const ring = ringLayout(LADDER, keys).ringOfKey(key)
+      expect(marker.position.x).toBeCloseTo(Math.cos(angle) * ring.radius)
+      expect(marker.position.z).toBeCloseTo(Math.sin(angle) * ring.radius)
+      expect(marker.position.y).toBe(ring.y - HUB_Y)
     })
 
     hub.setLadder({ subs: [] })
@@ -449,16 +453,17 @@ describe('the agents with a ladder', () => {
     const keys = ['opencode', 'claude', 'hermes']
     const angles = sectorSlotAngles(LADDER, keys)
     const opencode = agents.views.get('opencode')
-    expect(opencode.home.y).toBeCloseTo(SUB_RING_Y + PARK_LIFT)
-    expect(opencode.home.x).toBeCloseTo(Math.cos(angles.get('opencode')) * SUB_RING_RADIUS)
-    expect(opencode.home.z).toBeCloseTo(Math.sin(angles.get('opencode')) * SUB_RING_RADIUS)
+    const ring = ringLayout(LADDER, keys).ringOfKey('opencode')
+    expect(opencode.home.y).toBeCloseTo(ring.y + PARK_LIFT)
+    expect(opencode.home.x).toBeCloseTo(Math.cos(angles.get('opencode')) * ring.radius)
+    expect(opencode.home.z).toBeCloseTo(Math.sin(angles.get('opencode')) * ring.radius)
 
     const sub = agents.views.get('sub-frontend')
-    const arcs = sectorArcs(LADDER, keys)
-    const place = subOrchestratorPlace(arcs[0])
-    expect(sub.home.x).toBeCloseTo(place.x)
-    expect(sub.home.y).toBeCloseTo(place.y)
-    expect(sub.home.z).toBeCloseTo(place.z)
+    const arcs = ringArcs(LADDER, keys)
+    const mid = (arcs[0].start + arcs[0].end) / 2
+    expect(sub.home.x).toBeCloseTo(Math.cos(mid) * ring.radius)
+    expect(sub.home.y).toBeCloseTo(ring.y + SUB_STAND_LIFT)
+    expect(sub.home.z).toBeCloseTo(Math.sin(mid) * ring.radius)
     expect(sub.scale).toBe(SUB_ORCHESTRATOR_SCALE)
     expect(sub.shapeName).toBe('armillary')
     expect(sub.orchestrator).toBe(false)
@@ -484,7 +489,7 @@ describe('the agents with a ladder', () => {
     expect(agy.home.z).toBeCloseTo(Math.sin(angles.get('agy')) * HUB_RADIUS)
     const sub = agents.views.get('sub-frontend')
     const opencode = agents.views.get('opencode')
-    expect(Math.hypot(sub.home.x, sub.home.z)).toBeGreaterThan(Math.hypot(opencode.home.x, opencode.home.z))
+    expect(Math.hypot(sub.home.x, sub.home.z)).toBeCloseTo(Math.hypot(opencode.home.x, opencode.home.z))
     expect(sub.home.y).toBeGreaterThan(opencode.home.y)
     agents.dispose()
   })
