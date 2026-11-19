@@ -118,7 +118,7 @@ function endText(harness, json) {
 function knownEvent(harness, json) {
   const type = json?.type
   if (harness === 'claude') {
-    return ['system', 'assistant', 'user', 'result', 'rate_limit_event', 'stream_event', 'acpx.tool_call'].includes(type)
+    return ['system', 'assistant', 'user', 'result', 'rate_limit_event', 'stream_event', 'tool_progress', 'tool_use_summary', 'auth_status', 'keep_alive', 'control_request', 'control_response', 'prompt_suggestion', 'acpx.tool_call'].includes(type)
   }
   if (harness === 'opencode') return ['step_start', 'step_finish', 'text', 'tool_use', 'error'].includes(type)
   if (harness === 'codex') {

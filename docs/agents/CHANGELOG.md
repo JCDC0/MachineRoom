@@ -4,6 +4,7 @@
 
 - The chat keeps an even rhythm, the composer reads clearly, and a lane opened from its row gets the same composer and Worktree switch as one chosen in To (P606).
 - The menu band shows the open conversation's name as plain text that scrolls the chat into view, and chat and lane names are white with a round dot in the agent's colour (P609).
+- The band name scrolls to the chat and focuses its input in the wide layout, and a lane's conversation drops Claude `tool_progress`, `tool_use_summary`, `keep_alive`, `auth_status`, `prompt_suggestion` and control lines instead of printing them as JSON (P610).
 - Agents rows keep one action width, the hover card closes when a chat opens, a lane's menu says Make sub from this lane, and the select bar sits on the row surface (P607).
 - Review 61 of P602 and P603: ten findings, the four cache ones fixed by P605 (P604).
 - The run and task routes notice a git init, a moved or recreated folder and a restored run log, and their path caches expire and stay bounded (P605).

@@ -59,6 +59,14 @@ describe('a conversation read from a lane log', () => {
     expect(entries.at(-1)).toMatchObject({ role: 'result', text: 'Done.' })
   })
 
+  it('adds no entry for a Claude heartbeat or control line', () => {
+    const heartbeat = { type: 'tool_progress', tool_use_id: 't1', tool_name: 'Bash', parent_tool_use_id: null, elapsed_time_seconds: 3, session_id: 's1', uuid: 'u1' }
+    const log = lines({ type: 'system', subtype: 'init' }, heartbeat, { type: 'keep_alive' }, { type: 'tool_use_summary', summary: 'x' }, { type: 'result', result: 'Done.', is_error: false })
+    const entries = conversationFromLog('claude', log)
+    expect(entries.map((entry) => entry.role)).toEqual(['result'])
+    expect(JSON.stringify(entries)).not.toContain('tool_progress')
+  })
+
   it('reads MachineRoom stream-json like Claude and keeps unknown harness lines raw', () => {
     const prompt = 'Read the file and run the tests.'
     const entries = conversationFromLog('machineroom', claudeLog, prompt)

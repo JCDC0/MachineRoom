@@ -104,6 +104,29 @@ describe('the ORCHESTRATOR control at 900 pixels and wider', () => {
     })
   })
 
+  it('scrolls to the chat and focuses its input from the band name', async () => {
+    await withDom(async ({ container, dom, root }) => {
+      dom.window.localStorage.setItem('machineroom.guide', '1')
+      dom.window.innerWidth = 1200
+      await mount(root, makeClient())
+
+      const main = container.querySelector('.hud-lower-main')
+      const input = container.querySelector('.mr-orch-input')
+      const name = container.querySelector('.hud-band-switch')
+      expect(name).not.toBeNull()
+      let scrolled = 0
+      main.scrollIntoView = () => {
+        scrolled += 1
+      }
+
+      await click(root, name)
+      await settle()
+
+      expect(scrolled).toBe(1)
+      expect(dom.document.activeElement).toBe(input)
+    })
+  })
+
   it('scrolls to the chat and focuses its input from the / key', async () => {
     await withDom(async ({ container, dom, root }) => {
       dom.window.localStorage.setItem('machineroom.guide', '1')
