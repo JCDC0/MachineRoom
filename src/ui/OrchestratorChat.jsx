@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from 'react'
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import Composer, { RecipientChip } from './Composer.jsx'
 import { Chip, Menu, Switch } from './controls.jsx'
 import Markdown from './markdown.jsx'
@@ -25,6 +25,7 @@ import {
   approvalTitle,
   canSend,
   charCount,
+  chatAgentColors,
   chatLines,
   clampDraft,
   copyChatText,
@@ -46,6 +47,7 @@ import {
   startModeText,
   statusTone,
   teamLines,
+  useChatLanes,
   visibleChatText,
   workRows,
   workStepText,
@@ -59,6 +61,8 @@ import {
   filterCommands,
   parseRoomCommand,
 } from './slashCommands.js'
+
+const EMPTY = []
 
 function initialChatState(initialChat) {
   return normalizeChat(initialChat)
@@ -88,24 +92,32 @@ export default function OrchestratorChat({
   inline = false,
   focusRequest = 0,
   orchestrators = null,
-  lanes: initialLanes = null,
+  lanes = null,
+  agentColors: givenColors = null,
   onAutocompact = () => ({ ok: true }),
   onOrchestratorChange = () => {},
   selected: selectedTab = undefined,
   onSelect = null,
+  selectedLane,
+  onSelectLane,
   initialChat = null,
   initialDraft = '',
   initialConfirm = null,
   initialOrchestrators = null,
   initialSelected = 'orchestrator',
-  initialRecipient = 'orchestrator',
+  initialRecipient = '',
   liveRuns = [],
   tick = 0,
 }) {
   const [chats, setChats] = useState(() => ({ orchestrator: initialChatState(initialChat) }))
-  const [list, setList] = useState(() => initialList(initialOrchestrators))
-  const [lanesData, setLanesData] = useState(() => initialLanes ?? [])
-  const [toRecipient, setToRecipient] = useState(() => initialRecipient)
+  const [list, setList] = useState(() => initialList(orchestrators ?? initialOrchestrators))
+  const ownLanes = useChatLanes(lanes === null && open ? client : null)
+  const suppliedLanes = lanes ?? ownLanes
+  const lanesData = suppliedLanes ?? EMPTY
+  const colors = useMemo(() => givenColors ?? chatAgentColors(lanesData), [givenColors, lanesData])
+  const [ownLane, setOwnLane] = useState(initialRecipient === 'orchestrator' ? '' : initialRecipient)
+  const laneChoice = selectedLane ?? ownLane
+  const setLaneChoice = onSelectLane ?? setOwnLane
   const [separateWorktree, setSeparateWorktree] = useState(true)
   const [openAgentAll, setOpenAgentAll] = useState({})
   const [openRoomDetails, setOpenRoomDetails] = useState({})
@@ -119,7 +131,6 @@ export default function OrchestratorChat({
   const [ownSelected, setOwnSelected] = useState(() =>
     typeof initialSelected === 'string' && initialSelected ? initialSelected : 'orchestrator'
   )
-  const [teamOpen, setTeamOpen] = useState(false)
   const controlled = typeof selectedTab === 'string' && selectedTab !== ''
   const selected = controlled ? selectedTab : ownSelected
   const selectionRef = useRef({ id: selected, version: 0 })
@@ -178,7 +189,7 @@ export default function OrchestratorChat({
   const readCommandsRef = useRef(null)
   const chatTicketsRef = useRef({})
   const teamTicketRef = useRef(0)
-  const focusAtRef = useRef(Number(focusRequest) || 0)
+  const focusAtRef = useRef(0)
   const confirmRef = useRef(null)
   const modeConfirmRef = useRef(null)
   const prevSelectedRef = useRef(selected)
@@ -191,7 +202,7 @@ export default function OrchestratorChat({
   useDialogFocus(compactOpen, { containerRef: compactRef })
 
   const subs = list.filter((entry) => entry.id !== 'orchestrator')
-  const teamSelected = teamOpen || selected === TEAM_TAB
+  const teamSelected = selected === TEAM_TAB
   const current = list.find((entry) => entry.id === selected) ?? null
   const chat = chats[selected] ?? normalizeChat(null)
   const loaded = Boolean(loadedIds[selected])
@@ -245,8 +256,9 @@ export default function OrchestratorChat({
   const canSetEffort = typeof client?.setOrchestratorEffort === 'function'
   const project = teamSelected ? chats.orchestrator?.project ?? '' : chat.project
   const projectLabel = projectBaseName(project)
-  const availableLanes = runnableLanes(lanesData).filter((lane) => lane.active !== false)
-  const laneRecipient = availableLanes.some((lane) => lane.key === toRecipient)
+  const availableLanes = runnableLanes(lanesData)
+  const laneRecipient = availableLanes.find((lane) => lane.key === laneChoice)
+  const toRecipient = selected
   const lines = teamSelected
     ? []
     : chatLines(chat, ORCH_MAX_LINES, {
@@ -341,24 +353,8 @@ export default function OrchestratorChat({
   }, [orchestrators])
 
   useEffect(() => {
-    if (!open || !client || typeof client.lanes !== 'function') return undefined
-    let stopped = false
-    client
-      .lanes()
-      .then((answer) => {
-        if (stopped) return
-        const items = Array.isArray(answer)
-          ? answer
-          : Array.isArray(answer?.lanes)
-            ? answer.lanes
-            : []
-        if (items.length > 0) setLanesData(items)
-      })
-      .catch(() => {})
-    return () => {
-      stopped = true
-    }
-  }, [open, client])
+    if (suppliedLanes !== null && laneChoice && !laneRecipient) setLaneChoice('')
+  }, [suppliedLanes, laneChoice, laneRecipient, setLaneChoice])
 
   useEffect(() => {
     if (!open || typeof client?.harnesses !== 'function') return undefined
@@ -385,7 +381,7 @@ export default function OrchestratorChat({
   }, [list])
 
   useEffect(() => {
-    if (!open) return undefined
+    if (!open || teamSelected) return undefined
     if (typeof client?.orchestratorCommands !== 'function') {
       setCommands([])
       setCommandError('Commands are not available here.')
@@ -413,7 +409,7 @@ export default function OrchestratorChat({
       stopped = true
       readCommandsRef.current = null
     }
-  }, [open, client, selected, harness])
+  }, [open, client, selected, harness, teamSelected])
 
   useEffect(() => {
     if (!open || selected === TEAM_TAB) return undefined
@@ -475,8 +471,7 @@ export default function OrchestratorChat({
     }
     setUnavailable(false)
     let stopped = false
-    const allIds = ['orchestrator', ...teamKey.split('\n').filter(Boolean)]
-    const ids = selected === TEAM_TAB ? allIds : allIds.filter((id) => id !== selected)
+    const ids = ['orchestrator', ...teamKey.split('\n').filter(Boolean)]
 
     async function readTeam() {
       const ticket = teamTicketRef.current + 1
@@ -533,7 +528,7 @@ export default function OrchestratorChat({
       clearInterval(timer)
       unsubscribe?.()
     }
-  }, [open, client, selected, teamKey, teamSelected])
+  }, [open, client, teamKey, teamSelected])
 
   useEffect(() => {
     if (!open || inline) return undefined
@@ -542,15 +537,14 @@ export default function OrchestratorChat({
   }, [open, inline])
 
   useEffect(() => {
-    if (!inline) return
+    if (!open) return
     const next = Number(focusRequest) || 0
     if (next === focusAtRef.current) return
     focusAtRef.current = next
-    inputRef.current?.focus()
-  }, [inline, focusRequest])
+    if (!laneRecipient) inputRef.current?.focus({ preventScroll: true })
+  }, [open, focusRequest, laneRecipient])
 
   useEffect(() => {
-    setTeamOpen(false)
     setAtBottom(true)
   }, [selected])
 
@@ -673,14 +667,11 @@ export default function OrchestratorChat({
     function onOpenChat(event) {
       const id = event && event.detail ? event.detail.id : ''
       if (typeof id !== 'string' || !id) return
-      changeSelected(id)
-      closeConfirm()
-      setError(null)
-      setReadError(null)
+      selectTab(id)
     }
     window.addEventListener(OPEN_CHAT_EVENT, onOpenChat)
     return () => window.removeEventListener(OPEN_CHAT_EVENT, onOpenChat)
-  }, [controlled, onSelect])
+  }, [selected, onSelect, setLaneChoice])
 
   useEffect(() => {
     if (list.length === 0) return
@@ -740,8 +731,7 @@ export default function OrchestratorChat({
     setSending(true)
     setError(null)
     setConfirm(null)
-    const laneSend = availableLanes.some((lane) => lane.key === id)
-    const result = laneSend ? await sendToLane(text, id) : await sendChatMessage(client, text, id)
+    const result = await sendChatMessage(client, text, id)
     setSending(false)
     if (!result.ok) {
       setError(result.error)
@@ -1203,22 +1193,17 @@ export default function OrchestratorChat({
   }
 
   function selectTab(id) {
-    if (id === TEAM_TAB) {
-      setTeamOpen(true)
-      closeConfirm()
-      setError(null)
-      setReadError(null)
-      setTeamFailed([])
-      return
-    }
-    setTeamOpen(false)
+    setLaneChoice('')
     setTeamFailed([])
-    if (id === selected) return
-    setToRecipient(id)
-    changeSelected(id)
+    if (id !== selected) changeSelected(id)
     closeConfirm()
     setError(null)
     setReadError(null)
+  }
+
+  function changeRecipient(id) {
+    if (availableLanes.some((lane) => lane.key === id)) setLaneChoice(id)
+    else selectTab(id)
   }
 
   function renderMessageActions(line, index) {
@@ -1281,10 +1266,11 @@ export default function OrchestratorChat({
 
   if (!open) return null
   if (laneRecipient) {
-    const lane = availableLanes.find((entry) => entry.key === toRecipient)
+    const lane = laneRecipient
     return <LaneConversation key={lane.key} client={client} lane={lane.key} laneName={lane.name || lane.key} project={project} lanes={lanesData}
+      agentColors={colors} focusRequest={focusRequest}
       liveRuns={liveRuns} tick={tick} inline={inline} recipientOptions={availableLanes} recipients={subs}
-      onRecipientChange={(id) => { setToRecipient(id); if (list.some((entry) => entry.id === id)) selectTab(id) }} onBack={() => setToRecipient('orchestrator')}
+      onRecipientChange={changeRecipient} onBack={() => setLaneChoice('')}
       onRecipientSend={(text) => sendToLane(text, lane.key)}
       worktreeChoice={<Switch label="Worktree" checked={separateWorktree} onChange={(checked) => setSeparateWorktree(checked)} />} />
   }
@@ -1395,8 +1381,10 @@ export default function OrchestratorChat({
                   const senderKey = line.agent?.from || (line.text.startsWith('Orchestrator') ? 'orchestrator' : line.text.split(' to ')[0].trim())
                   return (
                     <div key={line.id} className="mr-orch-line is-agent mono">
-                      <span className="mr-agent-dot" aria-hidden="true" style={{ background: agentColor(senderKey, lanesData) }} />
-                      <div className="mr-orch-blocks"><Markdown text={displayed} /></div>
+                      <div className="mr-orch-blocks">
+                        <span className="mr-agent-dot" aria-hidden="true" style={{ background: agentColor(senderKey, colors) }} />
+                        <Markdown text={displayed} />
+                      </div>
                       {isLong ? (
                         <Chip
                           className="mr-orch-show-all"
@@ -1417,7 +1405,7 @@ export default function OrchestratorChat({
                     <div key={line.id} className="mr-orch-line is-room is-run-notice">
                       <div className="mr-orch-run-summary mono">
                         <span>
-                          <span className="mr-agent-dot" aria-hidden="true" style={{ background: agentColor(notice.lane, lanesData) }} />
+                          <span className="mr-agent-dot" aria-hidden="true" style={{ background: agentColor(notice.lane, colors) }} />
                           {notice.lane}
                         </span>
                         {notice.briefs && <span>{notice.briefs}</span>}
@@ -1436,7 +1424,7 @@ export default function OrchestratorChat({
                     {line.fromMain ? <span className="mr-orch-who mono">from main</span> : null}
                     {line.from === 'lane' ? (
                       <span className="mr-orch-who mono">
-                        <span className="mr-agent-dot" aria-hidden="true" style={{ background: agentColor(line.lane, lanesData) }} />
+                        <span className="mr-agent-dot" aria-hidden="true" style={{ background: agentColor(line.lane, colors) }} />
                         {line.laneName || line.lane}
                       </span>
                     ) : null}
@@ -1654,7 +1642,7 @@ export default function OrchestratorChat({
             stop={working ? { onClick: openStopConfirm, disabled: stopping } : null}
             toolbar={
               <>
-                <RecipientChip value={toRecipient} onChange={setToRecipient} recipients={subs} lanes={availableLanes} />
+                <RecipientChip value={toRecipient} onChange={changeRecipient} recipients={subs} lanes={availableLanes} />
                 <ModelPicker
                   key={selected}
                   inline

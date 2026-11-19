@@ -1079,6 +1079,7 @@ describe('talking to a lane and seeing agent messages', () => {
       { key: 'coder', name: 'Coder', cli: { bin: 'coder' } },
       { key: 'retired-lane', name: 'Retired', retired: true, cli: { bin: 'ret' } },
       { key: 'hidden-lane', name: 'Hidden', hidden: true, cli: { bin: 'hid' } },
+      { key: 'off-lane', name: 'Off', active: false, cli: { bin: 'off' } },
       { key: 'doc', name: 'Docs', harness: 'opencode' },
       { key: 'viewer', name: 'Viewer' },
     ]
@@ -1184,7 +1185,7 @@ describe('talking to a lane and seeing agent messages', () => {
         open: true,
         client: fakeClient(chat),
         initialChat: chat,
-        lanes: { lanes: [{ key: 'opencode', name: 'OpenCode', color: '#ff8c1a' }] },
+        lanes: { lanes: [{ key: 'opencode', name: 'OpenCode' }] },
       })
     )
     expect(html).toContain('class="mr-orch-line is-lane"')
@@ -1202,7 +1203,7 @@ describe('talking to a lane and seeing agent messages', () => {
   })
 
   it('displays lane reply under lane name and colour', async () => {
-    const lanes = [{ key: 'opencode', name: 'OpenCode', color: '#ff8c1a', cli: { bin: 'opencode' } }]
+    const lanes = [{ key: 'opencode', name: 'OpenCode', cli: { bin: 'opencode' } }]
     const chat = {
       state: 'idle',
       messages: [

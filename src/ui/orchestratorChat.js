@@ -1,5 +1,6 @@
-import { createContext } from 'react'
+import { createContext, useEffect, useState } from 'react'
 import { MODES } from '../control/modes.js'
+import { WHITE, YELLOW, agentColors, cssColor } from '../engine/sprites.js'
 import { harnessByKey } from '../harnesses/index.js'
 import { effortLevels, harnessKey } from './agentStrip.js'
 import { DIRECT_HARNESS, DIRECT_LABEL } from './family.js'
@@ -252,22 +253,54 @@ function sourceTags(source, names) {
   return { from: 'orchestrator', who: 'orchestrator' }
 }
 
-export const AGENT_PALETTE = ['#ff8c1a', '#ff3ddb', '#8f6bff', '#3ff0d8', '#ff6f91', '#c08a5a', '#d9b3ff']
-export const ORCHESTRATOR_COLOR = '#e5ff00'
+export function chatAgentColors(roster) {
+  const agents = Array.isArray(roster) ? roster : Array.isArray(roster?.lanes) ? roster.lanes : []
+  const roots = agents.filter((agent) => agent?.key && !agent.parent)
+  const colors = agentColors(roots)
+  const byKey = new Map(roots.map((agent, index) => [agent.key, cssColor(colors[index])]))
+  for (const agent of agents) {
+    if (agent?.parent && byKey.has(agent.parent)) byKey.set(agent.key, byKey.get(agent.parent))
+  }
+  return byKey
+}
 
-export function agentColor(key, lanes = {}) {
-  if (!key) return '#ffffff'
-  if (key === 'orchestrator' || (typeof key === 'string' && key.startsWith('sub-'))) {
-    return ORCHESTRATOR_COLOR
-  }
-  const laneObj = laneEntry(lanes, key)
-  if (laneObj?.color) return laneObj.color
-  let hash = 0
-  const str = String(key)
-  for (let i = 0; i < str.length; i += 1) {
-    hash = (hash * 31 + str.charCodeAt(i)) >>> 0
-  }
-  return AGENT_PALETTE[hash % AGENT_PALETTE.length]
+export function agentColor(key, colors) {
+  const id = String(key ?? '').replace(/^lane:/, '').replace(/^sub:/, 'sub-')
+  return colors.get(id) ?? colors.get(`sub-${id}`) ?? cssColor(id === 'orchestrator' ? YELLOW : WHITE)
+}
+
+export function useChatLanes(client) {
+  const [lanes, setLanes] = useState(null)
+
+  useEffect(() => {
+    setLanes(null)
+    if (typeof client?.lanes !== 'function') return undefined
+    let active = true
+    let sequence = 0
+
+    async function readLanes() {
+      const current = ++sequence
+      try {
+        const answer = await client.lanes()
+        if (active && current === sequence) {
+          setLanes(Array.isArray(answer) ? answer : Array.isArray(answer?.lanes) ? answer.lanes : [])
+        }
+      } catch {
+        if (active && current === sequence) setLanes([])
+      }
+    }
+
+    readLanes()
+    const unsubscribe = client.subscribe?.((notice) => {
+      if (notice?.topic === 'agents' || notice?.topic === 'family') readLanes()
+    })
+    return () => {
+      active = false
+      unsubscribe?.()
+    }
+  }, [client])
+
+  return lanes
 }
 
 export function formatAgentLine({ from, to, kind, text = '', lanes = {}, names = new Map() } = {}) {
@@ -304,7 +337,7 @@ export function runnableLanes(lanes) {
     if (!lane || typeof lane !== 'object') return false
     const key = typeof lane.key === 'string' ? lane.key.trim() : ''
     if (!key || key === 'orchestrator') return false
-    if (lane.retired === true || lane.hidden === true) return false
+    if (lane.retired === true || lane.hidden === true || lane.active === false) return false
     return Boolean(lane.cli || lane.harness || lane.adapterType)
   })
 }
