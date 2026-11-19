@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The mock control client builds into its own chunk, so the main bundle drops from 973 kB to 808 kB under the 970 kB warning (P627).
 - Review 63 reads P620 to P624, closes most of review 62 and finds 8 smaller issues (P626).
 - A chat dot for an agent the room does not draw takes a stable colour from the room palette (P624).
 - Chat dots take each roster agent's room colour again, built from the whole roster the way the room builds it (P623).
