@@ -1475,9 +1475,9 @@ export default function OrchestratorChat({
           </div>
 
           {!atBottom ? (
-            <button type="button" className="mr-orch-jump mono" onClick={jumpToNewest}>
-              Jump to newest
-            </button>
+            <div className="mr-orch-jump-row">
+              <Chip className="mr-orch-jump" label="Jump to newest" onClick={jumpToNewest} />
+            </div>
           ) : null}
 
           {confirm === 'start' ? (

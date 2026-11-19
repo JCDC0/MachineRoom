@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Jump to newest is a shared chip on the conversation column, a finished run shows its time once, and the model line gets the room the hidden actions left (P618).
 - Test audit 4's bridge cache and run-end notice rows get tests that fail when their fix is undone (P616).
 - Design review 3 finds D2-1 to D2-11 fixed, every surface ready to ship, and three low findings (P614).
 - Test audit 4's Settings, transport, lane chat and composer rows get tests that fail when their fix is undone (P617).

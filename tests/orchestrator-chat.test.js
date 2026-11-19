@@ -984,6 +984,11 @@ describe('message actions', () => {
           log.dispatchEvent({ type: 'scroll', bubbles: false })
         })
         expect(buttonWithText(container, 'Jump to newest')).not.toBeNull()
+        const jump = buttonWithText(container, 'Jump to newest')
+        expect(jump.className).toContain('ui-chip')
+        expect(jump.className).toContain('mr-orch-jump')
+        expect(jump.querySelector('.ui-chip-label')?.textContent).toBe('Jump to newest')
+        expect(jump.parentNode?.className).toBe('mr-orch-jump-row')
 
         chat = {
           state: 'working',
@@ -2421,5 +2426,16 @@ describe('design review 2 panel layout and exclusions', () => {
     expect(css).toMatch(/\.mr-orch\.is-inline\s+\.mr-lane-conv-head\s*\{[^}]*width:\s*100%;[^}]*padding-inline:\s*24px;/)
     expect(css).toMatch(/\.mr-orch\.is-inline\s+\.mr-composer\s*\{[^}]*width:\s*100%;[^}]*padding-inline:\s*11px;/)
     expect(css).toMatch(/\.mr-orch\.is-inline\s+\.mr-composer:has\(>\s*\.mr-composer-history\)\s*\{\s*padding-inline:\s*24px;\s*\}/)
+  })
+})
+
+describe('design review 3 fixes', () => {
+  it('styles Jump to newest as a shared chip aligned with the inline conversation column', () => {
+    const css = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8')
+    expect(css).not.toMatch(/\.mr-orch-jump\s*\{/)
+    expect(css).toMatch(/\.mr-orch-jump-row\s*\{[^}]*display:\s*flex;[^}]*justify-content:\s*flex-end;/)
+    expect(css).toMatch(
+      /\.mr-orch\.is-inline\s+\.mr-orch-jump-row\s*\{[^}]*width:\s*100%;[^}]*max-width:\s*760px;[^}]*margin:\s*0 auto;[^}]*padding-inline:\s*24px;/
+    )
   })
 })

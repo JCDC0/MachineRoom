@@ -214,11 +214,24 @@ describe('small control targets', () => {
     expect(rule('.mr-family-selection-count')['white-space']).toBe('nowrap')
   })
 
-  it('keeps row actions steady, reserves the Agents scrollbar gutter, aligns section titles and uses row surface for the selection bar', () => {
+  it('keeps row actions steady while giving the model line full width, reserves the Agents scrollbar gutter, aligns section titles and uses row surface for the selection bar', () => {
+    expect(rule('.mr-family-row').position).toBe('relative')
     const trailing = merged('.mr-family-row .ui-row-trailing')
-    expect(trailing.flex).toBe('0 0 calc(var(--control-h) * 2 + var(--space))')
-    expect(trailing.width).toBeUndefined()
+    expect(trailing.position).toBe('absolute')
+    expect(trailing.top).toBe('0')
+    expect(trailing.right).toBe('var(--space)')
+    expect(trailing.width).toBe('calc(var(--control-h) * 2 + var(--space))')
+    expect(trailing.height).toBe('var(--control-h)')
+    expect(trailing.opacity).toBe('0')
     expect(trailing['margin-left']).toBeUndefined()
+    const top = rule('.mr-family-top')
+    expect(top['min-height']).toBe('var(--control-h)')
+    expect(top['padding-right']).toBe('calc(var(--control-h) * 2 + var(--space) * 2)')
+    const detail = rule('.mr-family-row .ui-row-detail')
+    expect(detail['padding-right']).toBeUndefined()
+    expect(detail['line-height']).toBe('16px')
+    const hover = rule('.mr-family-row:is(:hover, :focus-within, :has([aria-haspopup=\'menu\'][aria-expanded=\'true\'])) .ui-row-trailing,\n.ui-hover-anchor:focus-visible > .mr-family-row .ui-row-trailing')
+    expect(hover).toEqual({ opacity: '1', 'pointer-events': 'auto' })
     expect(rule('.mr-side-body:has(> .mr-side-agents)')['scrollbar-gutter']).toBe('stable')
 
     const heads = sharedBlock(['button.mr-family-heading', '.mr-side .mr-family-heading', '.mr-team > .mr-side-head'])
@@ -231,6 +244,11 @@ describe('small control targets', () => {
     expect(selection['border-radius']).toBe('var(--radius-s)')
     expect(rule('.mr-family-selection button.ui-chip.is-primary:not(:disabled)')['--ui-chip-border']).toBe('var(--yellow)')
     expect(rule('.mr-family-selection button.ui-chip.is-quiet')['--ui-chip-border']).toBe('transparent')
+
+    const jumpRow = rule('.mr-orch-jump-row')
+    expect(jumpRow.display).toBe('flex')
+    expect(jumpRow['justify-content']).toBe('flex-end')
+    expect(merged('.mr-orch-jump')).toEqual({})
   })
 
   it('hides hover cards while Agents menus are open and keeps sidebar read errors off Agents', () => {
