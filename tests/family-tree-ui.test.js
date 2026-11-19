@@ -1057,7 +1057,7 @@ describe('FamilyTree session rows', () => {
       expect(row).not.toBe(null)
       expect(row.getAttribute('data-kind')).toBe('session')
       expect(row.querySelector('.ui-row-trailing')).not.toBeNull()
-      expect(row.querySelector('.ui-row-trailing').querySelector('button')).toBeNull()
+      expect(row.querySelector('.ui-row-trailing').querySelector('button')).not.toBeNull()
       expect(row.textContent).toContain('working')
       expect((await cardFor(row)).textContent).toContain('started opencode')
       const orchestrator = rowByLabel(container, 'Orchestrator')

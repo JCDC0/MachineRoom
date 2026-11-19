@@ -1030,3 +1030,57 @@ describe('the add child form takes the default effort', () => {
     ).toBe('This harness has no effort levels.')
   })
 })
+
+describe('the chosen top and nested subs', () => {
+  const ladder = {
+    subs: [
+      { id: 'a', name: 'A', harness: 'opencode', model: 'm', lanes: ['opencode'] },
+      { id: 'b', name: 'B', harness: 'opencode', model: 'm', lanes: [], parent: 'a' },
+      { id: 'c', name: 'C', harness: 'opencode', model: 'm', lanes: [], parent: 'missing' },
+      { id: 'x', name: 'X', harness: 'opencode', model: 'm', lanes: [], parent: 'y' },
+      { id: 'y', name: 'Y', harness: 'opencode', model: 'm', lanes: [], parent: 'x' },
+    ],
+  }
+  const orchestrators = { getLadder: () => ladder }
+
+  it('hangs a sub on the sub its ladder entry names, and any other on the orchestrator', () => {
+    const nodes = buildFamilyNodes({
+      projectRoot: tempDir('mr-top-'),
+      runsFolder: tempDir('mr-top-runs-'),
+      lanesConfig: SAMPLE_LANES,
+      orchestrators,
+    })
+    const parent = (id) => nodes.find((n) => n.id === id).parent
+    expect(parent('b')).toBe('a')
+    expect(parent('c')).toBe('orchestrator')
+    expect([parent('x'), parent('y')].sort()).toEqual(['orchestrator', 'orchestrator'])
+    expect(nodes.find((n) => n.id === 'a').children).toContain('b')
+    expect(nodes.find((n) => n.id === 'orchestrator').children).toEqual(expect.arrayContaining(['a', 'c']))
+    expect(nodes.find((n) => n.id === 'orchestrator').children).not.toContain('b')
+  })
+
+  it('saves the top from a confirmed page request and makes a session the root', async () => {
+    const { url } = await startBridge()
+    const body = { top: 'claude-session', confirmed: true }
+    expect((await request(`${url}/api/family/top`, { method: 'POST', origin: '', body })).status).toBe(403)
+    expect((await request(`${url}/api/family/top`, { method: 'POST', body: { top: 'nope', confirmed: true } })).status).toBe(400)
+    expect((await request(`${url}/api/family/top`, { method: 'POST', body: { top: 'claude-session' } })).status).toBe(400)
+    expect((await request(`${url}/api/family/top`, { method: 'POST', body })).body).toEqual({ ok: true, top: 'claude-session' })
+    const family = (await request(`${url}/api/family`, { origin: '' })).body
+    expect(family.top).toBe('claude-session')
+    expect(family.nodes[0]).toMatchObject({ id: 'session:claude-session', kind: 'session', parent: null })
+    expect(family.nodes.find((n) => n.id === 'orchestrator').parent).toBe('session:claude-session')
+    await request(`${url}/api/family/top`, { method: 'POST', body: { top: 'orchestrator', confirmed: true } })
+    const back = (await request(`${url}/api/family`, { origin: '' })).body
+    expect(back.top).toBe('orchestrator')
+    expect(back.nodes.some((n) => n.kind === 'session')).toBe(false)
+  })
+
+  it('the mock client keeps the top too', async () => {
+    const client = createMockClient()
+    await client.setFamilyTop({ top: 'opencode-session' })
+    const family = await client.family()
+    expect(family.top).toBe('opencode-session')
+    expect(family.nodes[0].kind).toBe('session')
+  })
+})

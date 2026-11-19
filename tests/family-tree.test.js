@@ -545,3 +545,23 @@ describe('the saved teams and the lane cards', () => {
     )
   })
 })
+
+describe('familyBoxes', () => {
+  it('nests subs under their parent and puts lanes in their orchestrator box', async () => {
+    const { familyBoxes } = await import('../src/ui/family.js')
+    const rows = [
+      { id: 'orchestrator', kind: 'orchestrator', parent: '' },
+      { id: 'a', kind: 'sub', parent: 'orchestrator' },
+      { id: 'b', kind: 'sub', parent: 'a' },
+      { id: 'l1', kind: 'lane', parent: 'a', active: true },
+      { id: 'l2', kind: 'lane', parent: 'orchestrator', active: false },
+    ]
+    const [root, ...rest] = familyBoxes(rows, [{ id: 'session:claude-session', kind: 'session' }])
+    expect(rest).toEqual([])
+    expect(root.subs.map((box) => box.node.id)).toEqual(['session:claude-session', 'a'])
+    expect(root.more.map((row) => row.id)).toEqual(['l2'])
+    const a = root.subs[1]
+    expect(a.subs.map((box) => box.node.id)).toEqual(['b'])
+    expect(a.lanes.map((row) => row.id)).toEqual(['l1'])
+  })
+})

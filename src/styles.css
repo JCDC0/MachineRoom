@@ -9680,6 +9680,86 @@ button.mr-family-heading,
   color: var(--red);
 }
 
+.mr-family-tree {
+  display: flex;
+  align-items: flex-start;
+  padding-bottom: var(--space);
+  overflow-x: auto;
+}
+
+.mr-family-group {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  align-items: center;
+}
+
+.mr-family-head,
+.mr-family-lanes {
+  display: flex;
+  flex-direction: column;
+  width: 240px;
+}
+
+.mr-family-lanes {
+  order: 1;
+}
+
+.mr-family-kids {
+  order: 2;
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: calc(2 * var(--space));
+  padding-top: calc(2 * var(--space));
+}
+
+.mr-family-kids::before,
+.mr-family-kid::before,
+.mr-family-kid::after {
+  content: '';
+  position: absolute;
+  background: var(--border-soft);
+}
+
+.mr-family-kids::before {
+  top: 0;
+  left: 50%;
+  width: 1px;
+  height: var(--space);
+}
+
+.mr-family-kid {
+  position: relative;
+  padding-top: var(--space);
+}
+
+.mr-family-kid::before {
+  top: 0;
+  left: calc(-1 * var(--space));
+  right: calc(-1 * var(--space));
+  height: 1px;
+}
+
+.mr-family-kid:first-child::before {
+  left: 50%;
+}
+
+.mr-family-kid:last-child::before {
+  right: 50%;
+}
+
+.mr-family-kid:only-child::before {
+  display: none;
+}
+
+.mr-family-kid::after {
+  top: 0;
+  left: 50%;
+  width: 1px;
+  height: var(--space);
+}
+
 .mr-family-node {
   display: flex;
   flex-direction: column;

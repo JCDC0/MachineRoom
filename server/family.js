@@ -22,6 +22,9 @@ import { ORCHESTRATOR_KEY } from './orchestrator.js'
 import { NO_TOKEN_PROBLEM, sameHarnessProblem } from './orchestrators.js'
 
 export const ORIGIN_LABEL_PROBLEM = 'A request to set an agent label needs a page Origin.'
+export const ORIGIN_TOP_PROBLEM = 'A request to set the top agent needs a page Origin.'
+export const CONFIRM_TOP_PROBLEM = 'Confirm putting the agent at the top first.'
+export const TOP_KEY_PROBLEM = 'The top must be orchestrator, claude-session or opencode-session.'
 export const ORIGIN_KEY_PROBLEM = 'A request to set a key needs a page Origin.'
 export const ORIGIN_DELETE_KEY_PROBLEM = 'A request to delete a key needs a page Origin.'
 export const ORIGIN_APPROVE_PROBLEM = 'A request to approve a proposal needs a page Origin.'
@@ -74,6 +77,24 @@ export function saveLabels(file, labels, { rename = renameSync } = {}) {
     try {
       unlinkSync(temporary)
     } catch {}
+  }
+}
+
+export const SESSION_TOPS = {
+  'claude-session': { label: 'Claude Code session', harness: 'claude' },
+  'opencode-session': { label: 'OpenCode session', harness: 'opencode' },
+}
+
+export function topFileFor(projectRoot, runsFolder) {
+  return join(runsFolder, `top-${projectHash(projectRoot)}.json`)
+}
+
+export function readTop(file) {
+  try {
+    const top = JSON.parse(readFileSync(file, 'utf8'))?.top
+    return typeof top === 'string' && Object.hasOwn(SESSION_TOPS, top) ? top : ORCHESTRATOR_KEY
+  } catch {
+    return ORCHESTRATOR_KEY
   }
 }
 
@@ -248,6 +269,8 @@ export function buildFamilyNodes({
     isHiddenLane = () => false
   }
 
+  const subIds = new Set((ladder?.subs ?? []).map((sub) => sub.id))
+  const parentOf = new Map((ladder?.subs ?? []).map((sub) => [sub.id, sub.parent]))
   for (const sub of ladder?.subs ?? []) {
     const subInst = orchestrators?.find?.(sub.id) ?? null
     const subAnswer = subInst?.answer?.() ?? null
@@ -274,12 +297,20 @@ export function buildFamilyNodes({
       custom: Boolean(labels[sub.id]),
     }
     subNodes.push(subNode)
-    mainNode.children.push(sub.id)
     for (const laneKey of sub.lanes ?? []) {
       if (!isHiddenLane(laneKey)) {
         subByLane.set(laneKey, subNode)
       }
     }
+  }
+
+  const nodeOf = new Map(subNodes.map((node) => [node.id, node]))
+  for (const node of subNodes) {
+    const wanted = parentOf.get(node.id)
+    const host = wanted !== node.id && subIds.has(wanted) ? nodeOf.get(wanted) : null
+    const loops = host && parentChain(host, nodeOf, parentOf).includes(node.id)
+    if (host && !loops) node.parent = host.id
+    ;(host && !loops ? host : mainNode).children.push(node.id)
   }
 
   const allLanes = readAllLanes({ folder: projectRoot, runsFolder, lanesJson: orchLanes })
@@ -328,7 +359,35 @@ export function buildFamilyNodes({
     })
   }
 
-  return [mainNode, ...subNodes, ...laneNodes]
+  const top = readTop(topFileFor(projectRoot, runsFolder))
+  if (top === ORCHESTRATOR_KEY) return [mainNode, ...subNodes, ...laneNodes]
+  const session = SESSION_TOPS[top]
+  mainNode.parent = `session:${top}`
+  const sessionNode = {
+    id: mainNode.parent,
+    kind: 'session',
+    label: session.label,
+    harness: session.harness,
+    model: '',
+    effort: null,
+    mode: null,
+    parent: null,
+    children: [ORCHESTRATOR_KEY],
+    active: true,
+    working: false,
+    custom: false,
+  }
+  return [sessionNode, mainNode, ...subNodes, ...laneNodes]
+}
+
+function parentChain(node, nodeOf, parentOf) {
+  const chain = []
+  let id = node.id
+  while (id && !chain.includes(id)) {
+    chain.push(id)
+    id = nodeOf.has(parentOf.get(id)) ? parentOf.get(id) : ''
+  }
+  return chain
 }
 
 export function createFamilyApi(options = {}) {
@@ -364,7 +423,33 @@ export function createFamilyApi(options = {}) {
       })
       const keys = Object.keys(readKeys(runsDir)).sort().map((name) => ({ name }))
       const proposals = readProposals(runsDir)
-      sendJson(req, res, 200, { nodes, keys, proposals })
+      sendJson(req, res, 200, { nodes, keys, proposals, top: readTop(topFileFor(projectRoot, runsDir)) })
+      return true
+    }
+
+    if (path === '/api/family/top') {
+      if (method !== 'POST') {
+        sendJson(req, res, 405, { error: 'Method not allowed.' })
+        return true
+      }
+      if (!page) {
+        sendJson(req, res, 403, { error: ORIGIN_TOP_PROBLEM })
+        return true
+      }
+      const body = await readJsonBody(req, res)
+      if (body === null) return true
+      const top = typeof body.top === 'string' ? body.top : ''
+      if (top !== ORCHESTRATOR_KEY && !Object.hasOwn(SESSION_TOPS, top)) {
+        sendJson(req, res, 400, { error: TOP_KEY_PROBLEM })
+        return true
+      }
+      if (body.confirmed !== true) {
+        sendJson(req, res, 400, { error: CONFIRM_TOP_PROBLEM })
+        return true
+      }
+      saveLabels(topFileFor(projectRoot, runsDir), { top })
+      if (typeof notify === 'function') notify({ topic: 'family' })
+      sendJson(req, res, 200, { ok: true, top })
       return true
     }
 

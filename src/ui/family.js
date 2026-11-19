@@ -10,8 +10,8 @@ export const NO_READY_HARNESS = 'No harness is ready. Add one in Settings, under
 export const LANES_JSON_SAVE_PROBLEM = 'A lane from lanes.json cannot be updated.'
 export const MAX_SUBS = 5
 
-const KINDS = new Set(['orchestrator', 'sub', 'lane'])
-const DEFAULT_LABEL = { orchestrator: 'Orchestrator', sub: 'Sub orchestrator', lane: 'Code agent' }
+const KINDS = new Set(['orchestrator', 'sub', 'lane', 'session'])
+const DEFAULT_LABEL = { session: 'Session', orchestrator: 'Orchestrator', sub: 'Sub orchestrator', lane: 'Code agent' }
 
 export function labelProblem(value) {
   const text = cleanText(value)
@@ -97,6 +97,7 @@ export function familyTree(answer) {
     nodes,
     rows,
     root: ordered[0] ?? null,
+    top: source.top === 'claude-session' || source.top === 'opencode-session' ? source.top : 'orchestrator',
     byId,
     keys: keyNames(source.keys),
     proposals: proposalRows(source.proposals),
@@ -164,6 +165,33 @@ export function splitMoreLanes(rows) {
     else main.push(row)
   }
   return { main, more }
+}
+
+export function familyBoxes(rows, extraSessions = []) {
+  const list = Array.isArray(rows) ? rows : []
+  const boxes = new Map()
+  const box = (node) => ({ node, subs: [], lanes: [], more: [] })
+  for (const row of list) if (row.kind !== 'lane') boxes.set(row.id, box(row))
+  const main = list.find((row) => row.kind === 'orchestrator')
+  const extras = []
+  for (const row of Array.isArray(extraSessions) ? extraSessions : []) {
+    if (!boxes.has(row.id)) extras.push(box({ ...row, parent: main?.id ?? '' }))
+  }
+  const roots = []
+  for (const row of list) {
+    if (row.kind !== 'lane') continue
+    const host = boxes.get(row.parent) ?? boxes.get(main?.id)
+    if (!host) continue
+    ;(row.active === false ? host.more : host.lanes).push(row)
+  }
+  for (const entry of boxes.values()) {
+    const host = boxes.get(entry.node.parent)
+    if (host && host !== entry) host.subs.push(entry)
+    else roots.push(entry)
+  }
+  boxes.get(main?.id)?.subs.unshift(...extras)
+  if (!boxes.has(main?.id)) roots.push(...extras)
+  return roots
 }
 
 export function moreLanesLabel(count) {

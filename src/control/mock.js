@@ -907,6 +907,7 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
   }
   const subChats = new Map()
   const familyLabels = new Map()
+  let familyTop = 'orchestrator'
   const keySlots = new Map()
   const proposals = []
 
@@ -3024,8 +3025,23 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
             custom: Boolean(lane.custom),
           }
         })
+        const sessionNode = familyTop === 'orchestrator' ? null : {
+          id: `session:${familyTop}`,
+          kind: 'session',
+          label: familyTop === 'claude-session' ? 'Claude Code session' : 'OpenCode session',
+          harness: familyTop === 'claude-session' ? 'claude' : 'opencode',
+          model: '',
+          effort: null,
+          parent: null,
+          children: ['orchestrator'],
+          active: true,
+          working: false,
+          custom: false,
+        }
+        if (sessionNode) mainNode.parent = sessionNode.id
         return {
-          nodes: [mainNode, ...subNodes, ...laneNodes],
+          top: familyTop,
+          nodes: [...(sessionNode ? [sessionNode] : []), mainNode, ...subNodes, ...laneNodes],
           keys: [...keySlots.keys()].sort().map((name) => ({ name })),
           proposals: clone(proposals),
         }
@@ -3043,6 +3059,18 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
         familyLabels.set(id, label.trim())
         emit({ topic: 'family' })
         return { ok: true, id, label: label.trim() }
+      }),
+
+    setFamilyTop: (options = {}) =>
+      call('setFamilyTop', () => {
+        const { top, confirmed = true } = options
+        if (confirmed !== true) throw new Error('Confirm putting the agent at the top first.')
+        if (!['orchestrator', 'claude-session', 'opencode-session'].includes(top)) {
+          throw new Error('The top must be orchestrator, claude-session or opencode-session.')
+        }
+        familyTop = top
+        emit({ topic: 'family' })
+        return { ok: true, top }
       }),
 
     keys: () => call('keys', () => [...keySlots.keys()].sort().map((name) => ({ name }))),
