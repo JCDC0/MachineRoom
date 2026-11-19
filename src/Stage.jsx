@@ -957,6 +957,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
         setFamilyNodes(Array.isArray(answer?.nodes) ? answer.nodes : NONE)
         setFamilyProposals(Array.isArray(answer?.proposals) ? answer.proposals : NONE)
         roomRef.current?.setLabels(next)
+        roomRef.current?.setChosenTop?.(typeof answer?.top === 'string' ? answer.top : 'orchestrator')
       } catch {
         if (!active || !isLatest()) return
         apply(null)
