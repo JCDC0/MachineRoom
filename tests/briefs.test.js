@@ -290,7 +290,7 @@ describe('lanes', () => {
     expect(lanes.opencode.forbidden).not.toContain('src/ui/**')
     expect(lanes.opencode.forbidden).not.toContain('src/Stage.jsx')
     for (const key of ['agy', 'agy2', 'agy3']) {
-      expect(lanes[key].forbidden, key).toContain('src/styles.css')
+      expect(lanes[key].forbidden, key).not.toContain('src/styles.css')
       expect(lanes[key].forbidden, key).toContain('src/engine/**')
       expect(lanes[key].forbidden, key).toContain('src/Stage.jsx')
     }
@@ -311,7 +311,7 @@ describe('buildPrompt', () => {
     expect(prompt).toContain('Commit with the prefix 0.1.36 and one plain sentence. Do not push.')
     expect(prompt).toContain('Never push.')
     expect(prompt).not.toContain('Do not touch these paths')
-    expect(make(['U4'], 'agy')).toContain('Do not touch these paths: src/styles.css')
+    expect(make(['U4'], 'agy')).toContain('Do not touch these paths: src/engine/**')
     expect(prompt).toContain('Test anything that starts a process')
     expect(prompt).toMatch(/Report: Give the report in your reply/)
     expect(prompt).not.toContain('undefined')
