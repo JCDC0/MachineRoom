@@ -1949,6 +1949,51 @@ describe('waking the orchestrator', () => {
     expect(rig.calls()).toHaveLength(3)
   })
 
+  it('carries a masked firstCommit with semicolons on the room notice it publishes', async () => {
+    const rig = makeRig()
+    rig.send('Hello')
+    await waitIdle(rig, 1)
+
+    const secret = 'sk-or-v1-' + 'q'.repeat(24)
+    const setting = 'OPENROUTER_API_KEY='
+    const profile = process.platform === 'win32' ? (process.env.USERPROFILE || homedir()) : (process.env.HOME || homedir())
+    const profilePath = join(profile, 'project', 'trace.log')
+    const expectedHome = process.platform === 'win32' ? '%USERPROFILE%' : '~'
+    const log = join(rig.runs, 'opencode7-P592-20261118-120000.log')
+    writeFileSync(log, 'a log\n')
+    appendFileSync(
+      join(rig.runs, 'runs.jsonl'),
+      `${JSON.stringify({
+        lane: 'opencode7',
+        briefs: ['P592'],
+        model: 'm',
+        startedAt: '2026-11-18T12:00:00.000Z',
+        minutes: 1,
+        exitCode: 0,
+        killed: false,
+        startedBy: 'orchestrator',
+        log,
+        branch: 'feat/p592',
+        commits: [`a2d359be 0.1.402: Fix ${profilePath}; keep ${setting}${secret}`, 'b1234567 0.1.403: Next'],
+      })}\n`
+    )
+    rig.orchestrator.onFrame(frame('run-opencode7-P592-20261118-120000', 'succeeded'))
+    await waitFor(() => rig.calls().length === 2)
+    await waitIdle(rig, 2)
+
+    const notice = rig.answer().messages.find((message) => message.from === 'room' && message.text.includes('opencode7-P592-20261118-120000'))
+    expect(notice).toBeDefined()
+    expect(notice.firstCommit).toBeDefined()
+    expect(notice.firstCommit).toContain('; keep ')
+    expect(notice.firstCommit).toContain('[key]')
+    expect(notice.firstCommit).toContain(expectedHome)
+    expect(notice.firstCommit).not.toContain(secret)
+    expect(notice.firstCommit).not.toContain(profile)
+    const saved = readFileSync(chatFileFor(rig.projectRoot, rig.runs), 'utf8')
+    expect(saved).not.toContain(secret)
+    expect(saved).not.toContain(profile)
+  })
+
   it('keeps a run end that arrives while paused and runs it after the next owner message', async () => {
     const rig = makeRig()
     rig.send('Start')
@@ -2690,6 +2735,47 @@ describe('the orchestrator chat file', () => {
     expect(restored.answer().messages[0].text).not.toContain(secret)
     expect(restored.masked.total).toBe(1)
     expect(readFileSync(file, 'utf8')).not.toContain(secret)
+  })
+
+  it('retains and masks firstCommit on a saved room notice across reload', () => {
+    const rig = makeRig()
+    rig.orchestrator.close()
+    const secret = 'sk-or-v1-' + 'q'.repeat(24)
+    const setting = 'OPENROUTER_API_KEY='
+    const profile = process.platform === 'win32' ? (process.env.USERPROFILE || homedir()) : (process.env.HOME || homedir())
+    const profilePath = join(profile, 'project', 'trace.log')
+    const expectedHome = process.platform === 'win32' ? '%USERPROFILE%' : '~'
+    const file = chatFileFor(rig.projectRoot, rig.runs)
+    writeFileSync(
+      file,
+      `${JSON.stringify({
+        project: rig.projectRoot,
+        sessionId: null,
+        state: 'idle',
+        messages: [
+          {
+            id: 'm1',
+            from: 'room',
+            text: 'Run opencode-P592-20261118-012152 on lane opencode ended: succeeded.',
+            at: '2026-11-18T01:22:00.000Z',
+            firstCommit: `a2d359be 0.1.402: Fix ${profilePath}; keep ${setting}${secret}`,
+          },
+        ],
+        pending: [],
+      })}\n`
+    )
+    const restored = restoreRig(rig)
+    const notice = restored.answer().messages[0]
+    expect(notice.firstCommit).toBeDefined()
+    expect(notice.firstCommit).toContain('; keep ')
+    expect(notice.firstCommit).toContain('[key]')
+    expect(notice.firstCommit).toContain(expectedHome)
+    expect(notice.firstCommit).not.toContain(secret)
+    expect(notice.firstCommit).not.toContain(profile)
+    expect(restored.masked.total).toBe(1)
+    const saved = readFileSync(file, 'utf8')
+    expect(saved).not.toContain(secret)
+    expect(saved).not.toContain(profile)
   })
 
   it('masks a profile path and a key in a renamed current or saved title', async () => {

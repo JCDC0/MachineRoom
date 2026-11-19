@@ -352,6 +352,62 @@ describe('lane tasks', () => {
     expect(changed.find((brief) => brief.id === 'A1').title).toBe('The changed archived brief')
   })
 
+  it('reuses the combined current and archived brief lookup until the archive changes', () => {
+    const dir = tempDir()
+    const agents = join(dir, 'docs', 'agents')
+    const archive = join(agents, 'history', 'TASKS-ARCHIVE.md')
+    mkdirSync(join(agents, 'history'), { recursive: true })
+    writeFileSync(join(agents, 'TASKS.md'), '## Open\n\n**N1. The new brief.** Text here.\n')
+    writeFileSync(archive, '# Archive.\n\n## Done\n\n**A1. The archived brief.** Text here.\n')
+
+    let titleReads = 0
+    const briefs = Object.freeze(
+      readLaneBriefs(dir).map((brief) => {
+        const value = brief.title
+        return {
+          ...brief,
+          get title() {
+            titleReads += 1
+            return value
+          },
+        }
+      })
+    )
+    const records = [
+      record({ lane: 'opencode', briefs: ['A1'], log: '/tmp/runs/opencode-A1-20261024-100000.log', startedAt: iso(10) }),
+      record({ lane: 'opencode', briefs: ['N1'], log: '/tmp/runs/opencode-N1-20261024-090000.log', startedAt: iso(20) }),
+    ]
+
+    const first = laneTaskState({ records, briefs, folder: dir })
+    expect(first.issues.map((issue) => [issue.identifier, issue.title])).toEqual([
+      ['A1', 'The archived brief'],
+      ['N1', 'The new brief'],
+    ])
+    const readsAfterFirst = titleReads
+
+    const second = laneTaskState({ records: [...records], briefs, folder: dir })
+    expect(second.issues.map((issue) => [issue.identifier, issue.title])).toEqual([
+      ['A1', 'The archived brief'],
+      ['N1', 'The new brief'],
+    ])
+    expect(titleReads).toBe(readsAfterFirst)
+
+    writeFileSync(archive, '# Archive.\n\n## Done\n\n**A1. The updated archived brief.** Text here.\n')
+    const third = laneTaskState({ records: [...records], briefs, folder: dir })
+    expect(third.issues.map((issue) => [issue.identifier, issue.title])).toEqual([
+      ['A1', 'The updated archived brief'],
+      ['N1', 'The new brief'],
+    ])
+    const readsAfterUpdate = titleReads
+
+    const fourth = laneTaskState({ records: [...records], briefs, folder: dir })
+    expect(fourth.issues.map((issue) => [issue.identifier, issue.title])).toEqual([
+      ['A1', 'The updated archived brief'],
+      ['N1', 'The new brief'],
+    ])
+    expect(titleReads).toBe(readsAfterUpdate)
+  })
+
   it('reuses cached TASKS.md briefs until the file changes', () => {
     const dir = tempDir()
     const agents = join(dir, 'docs', 'agents')
