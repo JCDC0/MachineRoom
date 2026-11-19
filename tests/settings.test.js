@@ -176,14 +176,16 @@ describe('settings', () => {
     expect(loadSettings(storage).speed).toBe(2)
   })
 
-  it('keeps a lens split, sidebar tab and record time while saving other keys', () => {
-    const storage = makeStorage()
-    saveSettings(storage, { lensSplit: 0.6, sidebarTab: 'agents', recordMinutes: 45 })
+  it('keeps the sidebar tab and record time while saving other keys, and drops a saved lens split', () => {
+    const storage = makeStorage({ [SETTINGS_KEY]: JSON.stringify({ lensSplit: 0.6, speed: 2 }) })
+    expect(loadSettings(storage).lensSplit).toBeUndefined()
+    saveSettings(storage, { sidebarTab: 'agents', recordMinutes: 45 })
     saveEffectSettings(storage, { vignette: { on: true, strength: 0.4 } })
     const saved = loadSettings(storage)
-    expect(saved.lensSplit).toBe(0.6)
+    expect(saved.lensSplit).toBeUndefined()
     expect(saved.sidebarTab).toBe('agents')
     expect(saved.recordMinutes).toBe(45)
+    expect(JSON.parse(storage.getItem(SETTINGS_KEY))).not.toHaveProperty('lensSplit')
   })
 })
 
