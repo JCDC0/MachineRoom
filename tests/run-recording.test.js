@@ -1,11 +1,11 @@
 import { spawnSync } from 'node:child_process'
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
-import { basename, dirname, join } from 'node:path'
+import { basename, dirname, isAbsolute, join, relative } from 'node:path'
 import { afterAll, afterEach, describe, expect, it } from 'vitest'
 import { agentsFile, framesFromRun, recordingIndex, treeFile } from '../src/briefs/recording.js'
 import { prepare } from '../src/model/source.js'
 import { writeRecording } from '../scripts/recording-files.mjs'
-import { makeTempDir } from './helpers/tempRoot.js'
+import { makeTempDir, TEMP_ROOT } from './helpers/tempRoot.js'
 
 const lanes = JSON.parse(readFileSync(new URL('../docs/agents/lanes.json', import.meta.url), 'utf8'))
 const scenarioTree = JSON.parse(readFileSync(new URL('../public/fixtures/scenario-a-tree.json', import.meta.url), 'utf8'))
@@ -332,6 +332,16 @@ describe('writeRecording', () => {
     expect(agents.agents[0]).toMatchObject({ key: 'hermes', parser: 'hermes' })
     const tree = JSON.parse(readFileSync(written.treePath, 'utf8'))
     expect([...tree.files].sort()).toEqual(['docs/agents/CHANGELOG.md', 'src/briefs/run.js'])
+  })
+
+  it('starts every test with the recordings and runs folders under the test temp root', () => {
+    const under = (folder) => {
+      const path = relative(TEMP_ROOT, folder ?? '')
+      return path !== '' && !path.startsWith('..') && !isAbsolute(path)
+    }
+    expect(under(process.env.MACHINEROOM_RECORDINGS)).toBe(true)
+    expect(under(process.env.MACHINEROOM_RUNS)).toBe(true)
+    expect(process.env.MACHINEROOM_SAMPLE_MS).toBe('0')
   })
 
   it('writes into MACHINEROOM_RECORDINGS when it is set and keeps the index there', () => {

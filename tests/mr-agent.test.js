@@ -337,6 +337,7 @@ describe('mr-agent', () => {
     const final = jsonLines(result.stdout).at(-1)
     expect(final.is_error).toBe(true)
     expect(final.result).toContain('401')
+    expect(final.result).toContain('is not allowed')
     expect(final.result).not.toContain('test-key')
   })
 
@@ -555,6 +556,7 @@ describe('mr-agent', () => {
     const final = jsonLines(result.stdout).at(-1)
     expect(final.is_error).toBe(true)
     expect(final.result).toContain('502')
+    expect(final.result).toContain('bad gateway')
     expect(final.damagedAnswers).toBeUndefined()
   })
 
@@ -1886,6 +1888,20 @@ describe('each native request has its own timeout', () => {
     await vi.advanceTimersByTimeAsync(1000)
     expect((await caught).message).toBe('caller stop')
     expect(calls).toBe(1)
+  })
+
+  it('stops at once and clears the wait when the caller aborts during a retry wait', async () => {
+    setup(() => Promise.resolve(new Response('busy', { status: 502, headers: { 'retry-after': '60' } })))
+    const controller = new AbortController()
+    const caught = post('http://x', null, {}, { signal: controller.signal }).catch((error) => error)
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(fetch).toHaveBeenCalledTimes(1)
+    const waiting = vi.getTimerCount()
+    controller.abort(new Error('caller stop'))
+    expect((await caught).message).toBe('caller stop')
+    expect(vi.getTimerCount()).toBe(waiting - 1)
+    await vi.advanceTimersByTimeAsync(120000)
+    expect(fetch).toHaveBeenCalledTimes(1)
   })
 
   it('reads the timeout from MR_AGENT_REQUEST_TIMEOUT_MS and ignores a bad value', () => {

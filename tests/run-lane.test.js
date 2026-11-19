@@ -2644,7 +2644,8 @@ describe('continuing a lane session', () => {
     { title: 'keeps the full prompt on a different harness', harness: 'opencode', hasSession: true, resumes: false },
     { title: 'starts a fresh Claude session for the next queue task', harness: 'claude', hasSession: true, resumes: false, queue: { branch: 'main', index: 2, size: 2 } },
     { title: 'starts a fresh Claude session when the brief text changes', harness: 'claude', hasSession: true, resumes: false, briefChanged: true },
-  ].map((scenario) => [scenario.title, scenario]))('%s', async (_title, { harness, hasSession, resumes, queue, briefChanged }) => {
+    { title: 'keeps the original prompt when no interrupt note was saved', harness: 'claude', hasSession: false, resumes: false, noInterrupt: true },
+  ].map((scenario) => [scenario.title, scenario]))('%s', async (_title, { harness, hasSession, resumes, queue, briefChanged, noInterrupt }) => {
     const folder = makeTempDir('mr-continue-session-')
     const runs = join(folder, 'runs')
     const argsFile = join(folder, 'args.json')
@@ -2673,7 +2674,7 @@ describe('continuing a lane session', () => {
         const prompt = briefChanged ? wanted[0].text : fullPrompt
         const first = { lane: 'probe', project: briefChanged ? undefined : project, briefs: wanted.map(({ id }) => id), log: join(runs, 'first.log'), branch: 'main', queueIndex: queue ? 1 : undefined }
         writeFileSync(join(runs, 'first.meta.json'), JSON.stringify({ lane: 'probe', sessionId, briefHash }))
-        writeFileSync(join(runs, 'first.interrupt.txt'), interrupt)
+        if (!noInterrupt) writeFileSync(join(runs, 'first.interrupt.txt'), interrupt)
 
         async function continueRun(previous, name) {
           writeFileSync(join(runs, 'runs.jsonl'), `${JSON.stringify(previous)}\n`)
@@ -2703,7 +2704,7 @@ describe('continuing a lane session', () => {
           expect(last.args).not.toContain('--session-id')
           expect(last.meta).toMatchObject({ sessionId, resumed: true })
         } else {
-          expect(next.args).toContain(`${prompt}\n\n${interrupt}`)
+          expect(next.args).toContain(noInterrupt ? prompt : `${prompt}\n\n${interrupt}`)
           expect(next.args).not.toContain('--resume')
           expect(next.meta).not.toHaveProperty('resumed')
           expect(next.meta.sessionId).not.toBe(sessionId)
@@ -2712,6 +2713,46 @@ describe('continuing a lane session', () => {
       } finally {
         command.mockRestore()
       }
+    } finally {
+      log.mockRestore()
+      vi.unstubAllEnvs()
+      rmSync(folder, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+    }
+  })
+})
+
+describe('retrying a continued run', () => {
+  it('sends the retry the full prompt with the interrupt note once', async () => {
+    const folder = makeTempDir('mr-continue-retry-')
+    const runs = join(folder, 'runs')
+    const argsFile = join(folder, 'args.jsonl')
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {})
+    try {
+      const repo = makeRunnerRepo(folder, [
+        "const { appendFileSync, readFileSync } = require('node:fs')",
+        `appendFileSync(${JSON.stringify(argsFile)}, JSON.stringify(process.argv.slice(2)) + '\\n')`,
+        `if (readFileSync(${JSON.stringify(argsFile)}, 'utf8').trim().split('\\n').length === 1) {`,
+        "  console.log('Standalone server exited before reporting readiness')",
+        '  process.exit(1)',
+        '}',
+        'console.log(\'{"type":"step_finish","part":{"cost":0,"tokens":{"input":1,"output":1}}}\')',
+        '',
+      ].join('\n'))
+      vi.stubEnv('MACHINEROOM_RUNS', runs)
+      mkdirSync(runs)
+      writeFileSync(join(runs, 'runs.jsonl'), `${JSON.stringify({ lane: 'probe', briefs: [], log: join(runs, 'first.log'), branch: 'main' })}\n`)
+      writeFileSync(join(runs, 'first.interrupt.txt'), 'Pick up the unfinished check.')
+      const lane = { name: 'Probe', worktree: repo, cli: { harness: 'opencode', bin: process.execPath, model: 'probe/fake' } }
+      await startLane({
+        options: { lane: 'probe', minutes: 1, continueFrom: 'first' },
+        lane, lanes: { probe: lane }, wanted: [], prompt: 'Original brief.', deferRecord: true,
+        logPath: join(runs, 'next.log'), usageFile: join(runs, 'next.usage.json'), name: 'next',
+      })
+      const calls = readFileSync(argsFile, 'utf8').trim().split('\n').map((line) => JSON.parse(line))
+      const full = 'Original brief.\n\nPick up the unfinished check.'
+      expect(calls).toHaveLength(2)
+      expect(calls[0]).toContain(full)
+      expect(calls[1]).toContain(full)
     } finally {
       log.mockRestore()
       vi.unstubAllEnvs()

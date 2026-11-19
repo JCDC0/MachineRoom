@@ -5,6 +5,7 @@
 - Test audit 4's bridge cache and run-end notice rows get tests that fail when their fix is undone (P616).
 - Design review 3 finds D2-1 to D2-11 fixed, every surface ready to ship, and three low findings (P614).
 - Test audit 4's Settings, transport, lane chat and composer rows get tests that fail when their fix is undone (P617).
+- Test audit 4 fixes for the runner and process tests: a continued run, its retry and its sidecar lookup, the live sampler and the final sweep, the Linux process snapshot, the retry wait abort, the error body and the isolated test folders (P615).
 - Test audit 4 lists 33 fix hunks whose tests stay green when the hunk is undone (P608).
 - merge-lane skips its changelog line when the merge already adds an Unreleased line for the same brief (P613).
 - The model list names Gemini 4 Neon Low, Medium, High and XHigh for AGY (P611).

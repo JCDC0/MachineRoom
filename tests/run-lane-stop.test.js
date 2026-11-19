@@ -2,12 +2,14 @@ import { spawn } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { afterEach, describe, expect, it } from 'vitest'
-import { descendantProcesses, killTree, leftoverProcesses, listProcesses } from '../server/processTree.js'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { descendantProcesses, killTree, leftoverProcesses, listProcesses, sampleProcesses } from '../server/processTree.js'
 import { readLaneLock, releaseLaneLock, takeLaneLock, processAlive } from '../scripts/lane-lock.mjs'
 import { isResultLine, startLane, stopLane, stopLeftovers } from '../scripts/run-lane.mjs'
 import { laneLockLog, laneLockStartedAt, laneLockText, maskProfilePaths } from '../src/briefs/run.js'
 import { makeTempDir } from './helpers/tempRoot.js'
+
+vi.mock('../server/processTree.js', { spy: true })
 
 const RUN_LANE_SCRIPT = fileURLToPath(new URL('../scripts/run-lane.mjs', import.meta.url))
 const DEAD_PID = 2147483647
@@ -252,6 +254,75 @@ describe('a stopped lane stays stopped', () => {
       expect(record.lane).toBe('fake')
       expect(record.killed).toBe(true)
       expect(record.startedAt).toBe(laneLockStartedAt(readFileSync(lock, 'utf8')))
+    } finally {
+      releaseLaneLock(lock)
+      if (previous === undefined) delete process.env.MACHINEROOM_RUNS
+      else process.env.MACHINEROOM_RUNS = previous
+    }
+  }, 40000)
+
+  it.runIf(process.platform === 'win32')('stops a detached grandchild when the harness exits on its own', async () => {
+    const { project, runs, env } = setup('mr-run-final-')
+    const mark = join(project, 'late.txt')
+    const started = join(project, 'started.txt')
+    const late = join(project, 'late.cjs')
+    writeFileSync(late, [
+      "const { writeFileSync } = require('node:fs')",
+      `writeFileSync(${JSON.stringify(started)}, String(process.pid))`,
+      `setTimeout(() => { try { writeFileSync(${JSON.stringify(mark)}, 'late') } catch {} }, ${HARNESS_LATE_WRITE_MS})`,
+      '',
+    ].join('\n'))
+    writeFileSync(join(project, 'run'), [
+      "const { spawn } = require('node:child_process')",
+      "const { existsSync } = require('node:fs')",
+      `spawn(process.execPath, [${JSON.stringify(late)}, ${JSON.stringify(project)}], { detached: true, stdio: 'ignore', windowsHide: true }).unref()`,
+      `const wait = setInterval(() => { if (!existsSync(${JSON.stringify(started)})) return; clearInterval(wait); console.log('{"type":"step_finish","part":{"cost":0}}'); process.exit(0) }, 50)`,
+      '',
+    ].join('\n'))
+    const run = await runLane(['fake', '--project', project, '--task', 'Do it.'], { ...env, MACHINEROOM_SAMPLE_MS: '0' })
+    const grandchildPid = readStartedPid(started)
+    cleanups.push(() => {
+      try {
+        process.kill(grandchildPid)
+      } catch {}
+    })
+    expect(run.code).toBe(0)
+    expect(grandchildPid).toBeGreaterThan(0)
+    expect(await waitUntil(() => !processAlive(grandchildPid), 5000), `the grandchild ${grandchildPid} is still alive`).toBe(true)
+    expect(existsSync(join(runs, 'fake.lock'))).toBe(false)
+    expect(existsSync(mark)).toBe(false)
+  }, 40000)
+
+  it('starts the sampler with the child, saves what it reads and stops it when the run ends', async () => {
+    const { project, runs, lane } = setup('mr-run-sampler-')
+    writeFileSync(join(project, 'run'), "setTimeout(() => { console.log('{\"type\":\"step_finish\",\"part\":{\"cost\":0}}') }, 2500)\n")
+    const stop = vi.fn()
+    let sample = null
+    vi.mocked(sampleProcesses).mockImplementationOnce((onSample) => {
+      sample = onSample
+      return stop
+    })
+    const previous = process.env.MACHINEROOM_RUNS
+    process.env.MACHINEROOM_RUNS = runs
+    const lock = takeLaneLock(runs, 'fake', { worktree: project })
+    try {
+      const running = startLane({
+        options: { lane: 'fake', minutes: 1 },
+        lane, lanes: { fake: lane }, wanted: [], prompt: 'Do it.',
+        logPath: join(runs, 'fake-sampler.log'), usageFile: join(runs, 'fake-sampler.usage.json'), name: 'fake-sampler',
+        project, task: 'Do it.', lockPath: lock,
+      })
+      expect(await waitUntil(() => sample !== null && Number.isInteger(readLaneLock(lock).child), 10000), 'the sampler was not started with a child').toBe(true)
+      expect(stop).not.toHaveBeenCalled()
+      const childPid = readLaneLock(lock).child
+      sample([
+        { pid: childPid, ppid: process.pid, command: '', created: 1234 },
+        { pid: 424242, ppid: childPid, command: '', created: 5678 },
+      ])
+      const saved = JSON.parse(readFileSync(`${lock}.processes`, 'utf8'))
+      expect(saved.recorded).toEqual([[childPid, 1234], [424242, 5678]])
+      await running
+      expect(stop).toHaveBeenCalledTimes(1)
     } finally {
       releaseLaneLock(lock)
       if (previous === undefined) delete process.env.MACHINEROOM_RUNS
