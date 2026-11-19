@@ -190,4 +190,20 @@ describe('chatAgentColors', () => {
     expect(chatColor('lane:claude', map)).toBe(map.get('claude'))
     expect(chatColor('sub:one', map)).toBe(map.get('sub-one'))
   })
+
+  it('gives a lane that is not in the roster a stable palette colour', async () => {
+    const { chatAgentColors, agentColor: chatColor, paletteColorByKey } = await import('../src/ui/orchestratorChat.js')
+    const { cssColor } = await import('../src/engine/sprites.js')
+    const roster = [
+      { key: 'orchestrator', role: 'orchestrator' },
+      { key: 'claude', parent: 'orchestrator' },
+    ]
+    const map = chatAgentColors(roster)
+    const offLane = chatColor('lane:codex', map)
+    expect(AGENT_COLORS.map(cssColor)).toContain(offLane)
+    expect(offLane).not.toBe(cssColor(0xffffff))
+    expect(chatColor('codex', map)).toBe(offLane)
+    expect(chatColor('lane:codex', chatAgentColors(roster))).toBe(offLane)
+    expect(offLane).toBe(paletteColorByKey('codex'))
+  })
 })

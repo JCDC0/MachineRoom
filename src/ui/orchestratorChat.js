@@ -1,6 +1,6 @@
 import { createContext, useEffect, useState } from 'react'
 import { MODES } from '../control/modes.js'
-import { WHITE, YELLOW, agentColors, cssColor } from '../engine/sprites.js'
+import { AGENT_COLORS, WHITE, YELLOW, agentColors, cssColor } from '../engine/sprites.js'
 import { harnessByKey } from '../harnesses/index.js'
 import { effortLevels, harnessKey } from './agentStrip.js'
 import { DIRECT_HARNESS, DIRECT_LABEL } from './family.js'
@@ -259,9 +259,22 @@ export function chatAgentColors(roster) {
   return new Map(agents.flatMap((agent, index) => (agent?.key ? [[agent.key, cssColor(colors[index])]] : [])))
 }
 
+export function paletteColorByKey(key) {
+  const text = String(key ?? '')
+  let hash = 0
+  for (let index = 0; index < text.length; index += 1) {
+    hash = (hash * 31 + text.charCodeAt(index)) >>> 0
+  }
+  return cssColor(AGENT_COLORS[hash % AGENT_COLORS.length])
+}
+
 export function agentColor(key, colors) {
-  const id = String(key ?? '').replace(/^lane:/, '').replace(/^sub:/, 'sub-')
-  return colors.get(id) ?? colors.get(`sub-${id}`) ?? cssColor(id === 'orchestrator' ? YELLOW : WHITE)
+  if (!key) return cssColor(WHITE)
+  const id = String(key).replace(/^lane:/, '').replace(/^sub:/, 'sub-')
+  const known = colors?.get?.(id) ?? colors?.get?.(`sub-${id}`)
+  if (known) return known
+  if (id === 'orchestrator' || id.startsWith('sub-')) return cssColor(YELLOW)
+  return paletteColorByKey(id)
 }
 
 export function useChatLanes(client) {
