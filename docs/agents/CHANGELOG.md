@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The candidate tests take an injected port check, so a test that is not about the port no longer fails when another test takes its free port (P632).
 - Hover cards read their details when they open and across midnight, a spawned subagent takes its parent's chat colour, only the block after an agent dot is inline, and the Orchestrator button focuses the visible composer (P629).
 - A lane view keeps its times current across midnight with one daily timer, selects a run that finished fast after a start, never shows a finished tool as active, and keeps the jump chip's focus ring whole (P628).
 - The architecture files, the plan, the design spec and README match the code again: docs audit 6 fixed, apart from D6-19 and D6-25 in P630 (P631).

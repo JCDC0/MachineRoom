@@ -1,17 +1,18 @@
 import { execFileSync } from 'node:child_process'
-import { cpSync, existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { cpSync, existsSync, mkdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
-import { DEFAULT_PORT, buildCommand, candidatePlan, laneEnv, parseCandidateArgs, readLanes, runCandidate } from '../scripts/candidate.mjs'
-import { killTree } from '../server/processTree.js'
+import { DEFAULT_PORT, buildCommand, candidatePlan, laneEnv, parseCandidateArgs, portIsFree, readLanes, runCandidate } from '../scripts/candidate.mjs'
 import { saveAgentsConfig } from '../server/agents-config.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 
 const NO_GIT_CONFIG = join(tmpdir(), 'machineroom-candidate-no-git-config')
 const REPO_ROOT = fileURLToPath(new URL('..', import.meta.url))
+const SPARE_PORT = 6412
+const answersFree = () => true
 const cleanups = []
 let repoTemplate = ''
 let templateRoot = ''
@@ -101,28 +102,6 @@ function writeLanes(base, worktree) {
 
 function buildEnv(command) {
   return { ...process.env, MACHINEROOM_BUILD_COMMAND: JSON.stringify(command) }
-}
-
-function freePort() {
-  return new Promise((settle, fail) => {
-    const server = createServer()
-    server.once('error', fail)
-    server.listen(0, '127.0.0.1', () => {
-      const { port } = server.address()
-      server.close(() => settle(port))
-    })
-  })
-}
-
-async function onFreePort(run, attempts = 3) {
-  for (let attempt = 1; ; attempt += 1) {
-    const port = await freePort()
-    try {
-      return await run(port)
-    } catch (error) {
-      if (attempt >= attempts || error?.message !== `Port ${port} is in use. Pass --port.`) throw error
-    }
-  }
 }
 
 function waitForText(child, marker, timeoutMs = 15000) {
@@ -263,14 +242,14 @@ describe('runCandidate', () => {
     writeLanes(base, worktree)
     writeFileSync(join(worktree, 'notes.txt'), 'changed\n')
     const marker = join(base, 'built.txt')
-    const port = await freePort()
     const command = [process.execPath, '-e', `require('node:fs').writeFileSync(${JSON.stringify(marker)}, 'built')`]
     await expect(runCandidate({
-      argv: ['lane', '--port', String(port)],
+      argv: ['lane', '--port', String(SPARE_PORT)],
       cwd: base,
       env: buildEnv(command),
       log: () => {},
       error: () => {},
+      portCheck: answersFree,
     })).rejects.toThrow('The lane has uncommitted changes. Commit them first.')
     expect(existsSync(marker)).toBe(false)
   })
@@ -299,49 +278,38 @@ describe('runCandidate', () => {
   it('checks the port again after the build and refuses one it lost meanwhile', async () => {
     const { base, worktree } = makeLaneRepo()
     writeLanes(base, worktree)
-    const port = await freePort()
-    const holder = join(base, 'holder.mjs')
-    const starter = join(base, 'start-holder.mjs')
-    const pidFile = join(base, 'holder.pid')
-    writeFileSync(holder, [
-      "import { createServer } from 'node:net'",
-      'const server = createServer()',
-      `server.listen(${port}, '127.0.0.1', () => process.stdout.write('held\\n'))`,
-      'setInterval(() => {}, 1000)',
-    ].join('\n'))
-    writeFileSync(starter, [
-      "import { spawn } from 'node:child_process'",
-      "import { writeFileSync } from 'node:fs'",
-      "import { connect } from 'node:net'",
-      `const child = spawn(process.execPath, [${JSON.stringify(holder)}], { detached: true, stdio: 'ignore', windowsHide: true })`,
-      `writeFileSync(${JSON.stringify(pidFile)}, String(child.pid))`,
-      'child.unref()',
-      'const deadline = Date.now() + 10000',
-      'const poll = () => {',
-      `  const socket = connect(${port}, '127.0.0.1')`,
-      "  socket.once('connect', () => { socket.destroy(); process.exit(0) })",
-      "  socket.once('error', () => { socket.destroy(); if (Date.now() > deadline) process.exit(1); setTimeout(poll, 50) })",
-      '}',
-      'poll()',
-    ].join('\n'))
+    const server = createServer()
+    await new Promise((settle, fail) => {
+      server.once('error', fail)
+      server.listen(0, '127.0.0.1', settle)
+    })
+    const { port } = server.address()
+    let checks = 0
+    const portCheck = async (value) => {
+      checks += 1
+      if (checks === 1) return true
+      return portIsFree(value)
+    }
     const logged = []
     let child = null
     try {
       await expect(runCandidate({
         argv: ['lane', '--port', String(port)],
         cwd: base,
-        env: buildEnv([process.execPath, starter]),
+        env: buildEnv([process.execPath, '-e', 'process.exit(0)']),
         log: (line) => logged.push(line),
         error: () => {},
+        portCheck,
         onChild: (started) => {
           child = started
         },
       })).rejects.toThrow(`Port ${port} is in use. Pass --port.`)
+      expect(checks).toBe(2)
       expect(child).toBeNull()
       expect(logged).toEqual([])
     } finally {
       if (child && child.exitCode === null && child.signalCode === null) child.kill()
-      if (existsSync(pidFile)) killTree({ pid: Number(readFileSync(pidFile, 'utf8')) })
+      await new Promise((settle) => server.close(settle))
     }
   })
 
@@ -369,15 +337,15 @@ describe('runCandidate', () => {
   it('builds the lane without the keys in the owner shell', async () => {
     const { base, worktree } = makeLaneRepo()
     writeLanes(base, worktree)
-    const port = await freePort()
     const script = "console.log('key ' + (process.env.OPENROUTER_API_KEY ?? 'none') + ' token ' + (process.env.GITHUB_TOKEN ?? 'none')); process.exit(1)"
     const errors = []
     const code = await runCandidate({
-      argv: ['lane', '--port', String(port)],
+      argv: ['lane', '--port', String(SPARE_PORT)],
       cwd: base,
       env: { ...buildEnv([process.execPath, '-e', script]), OPENROUTER_API_KEY: 'sk-or-v1-fake', GITHUB_TOKEN: 'ghp-fake' },
       log: () => {},
       error: (line) => errors.push(line),
+      portCheck: answersFree,
     })
     expect(code).toBe(1)
     expect(errors).toContain('key none token none')
@@ -388,13 +356,14 @@ describe('runCandidate', () => {
     writeLanes(base, worktree)
     const script = "for (let i = 1; i <= 25; i += 1) console.log('build line ' + i); process.exit(1)"
     const errors = []
-    const code = await onFreePort((port) => runCandidate({
-      argv: ['lane', '--port', String(port)],
+    const code = await runCandidate({
+      argv: ['lane', '--port', String(SPARE_PORT)],
       cwd: base,
       env: buildEnv([process.execPath, '-e', script]),
       log: () => {},
       error: (line) => errors.push(line),
-    }))
+      portCheck: answersFree,
+    })
     expect(code).toBe(1)
     const text = errors.join('\n')
     expect(text).toContain('The build failed.')
@@ -416,7 +385,7 @@ describe('runCandidate', () => {
     git(worktree, ['commit', '-m', 'fake room'])
     writeLanes(base, worktree)
     const sha = git(worktree, ['rev-parse', 'HEAD']).trim().slice(0, 7)
-    const port = await freePort()
+    const port = SPARE_PORT
     const logged = []
     const errors = []
     let child = null
@@ -437,6 +406,7 @@ describe('runCandidate', () => {
       log: (line) => logged.push(line),
       error: (line) => errors.push(line),
       stdio: 'pipe',
+      portCheck: answersFree,
       onChild: (started) => {
         child = started
         waitForText(started, 'machine-room: open').then(resolveReady, rejectReady)
