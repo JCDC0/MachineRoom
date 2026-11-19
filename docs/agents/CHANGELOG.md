@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Test audit 4 fixes for the runner and process tests: a continued run, its retry and its sidecar lookup, the live sampler and the final sweep, the Linux process snapshot, the retry wait abort, the error body and the isolated test folders (P615).
 - Test audit 4 lists 33 fix hunks whose tests stay green when the hunk is undone (P608).
 - merge-lane skips its changelog line when the merge already adds an Unreleased line for the same brief (P613).
 - The model list names Gemini 4 Neon Low, Medium, High and XHigh for AGY (P611).

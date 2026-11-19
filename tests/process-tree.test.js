@@ -208,6 +208,21 @@ describe('listProcesses', () => {
       killTree(child)
     }
   }, 30000)
+
+  it.runIf(process.platform === 'linux')('reads the short Linux snapshot with a creation time for a known child', async () => {
+    const child = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 60000)'], { stdio: 'ignore' })
+    try {
+      let row
+      await waitUntil(() => {
+        row = listProcesses({ commands: false }).find((item) => item.pid === child.pid)
+        return row !== undefined
+      })
+      expect(row).toMatchObject({ pid: child.pid, ppid: process.pid, command: '' })
+      expect(Number.isFinite(row.created)).toBe(true)
+    } finally {
+      killTree(child)
+    }
+  }, 30000)
 })
 
 describe('sampleProcesses', () => {
