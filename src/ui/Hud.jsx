@@ -282,8 +282,12 @@ export default function Hud({
       : { control: 0, orchestrator: 0 }
 
   function showChat() {
-    if (chatAvailable) setChatOpen(true)
-    document.getElementById('hud-orchestrator-chat')?.scrollIntoView({ block: 'nearest' })
+    if (floatingChat) {
+      if (chatAvailable) setChatOpen(true)
+      return
+    }
+    setChatFocus((value) => value + 1)
+    openConversation()
   }
 
   function closeGuide() {
