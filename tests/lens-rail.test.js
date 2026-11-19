@@ -6,7 +6,7 @@ import { withDom } from './helpers/uiDom.js'
 
 const LENS_RECT = { left: 100, right: 900, top: 0, bottom: 600, width: 800, height: 600 }
 
-async function renderRail(root, side = 'right', onWheel = () => {}, inner = false) {
+async function renderRail(root, side = 'right', onWheel = () => {}) {
   await act(async () => {
     root.render(
       createElement(
@@ -14,12 +14,11 @@ async function renderRail(root, side = 'right', onWheel = () => {}, inner = fals
         { className: 'lens' },
         createElement(LensRail, {
           side,
-          inner,
-          label: side === 'left' ? 'Height' : 'Zoom',
+          label: 'Zoom',
           share: 0.5,
           multiplier: '1.0x',
-          ariaLabel: side === 'left' ? 'Lens height' : 'Zoom',
-          valueText: '50 percent of the window',
+          ariaLabel: 'Zoom',
+          valueText: '1.0x of the overview',
           onShare() {},
           onWheel,
         })
@@ -70,17 +69,19 @@ describe('LensRail fade', () => {
     })
   })
 
-  it('places the inner rail beside the outer rail and shows it near the right edge', async () => {
+  it('keeps the right rail on its own edge and never shows the hidden left rail', async () => {
     await withDom(async ({ container, root }) => {
-      await renderRail(root, 'right', () => {}, true)
+      await renderRail(root, 'right')
       const lens = container.querySelector('.lens')
       const rail = container.querySelector('.lens-rail')
       lens.getBoundingClientRect = () => LENS_RECT
-      expect(rail.className).toContain('is-right is-inner')
+      expect(rail.className).toContain('is-right')
+      expect(rail.className).not.toContain('is-inner')
       await act(async () => lens.dispatchEvent({ type: 'pointermove', bubbles: true, clientX: 850 }))
       expect(rail.className).toContain('is-shown')
       const css = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8')
-      expect(css).toMatch(/\.lens-rail\.is-right\.is-inner\s*\{\s*right:\s*54px/)
+      expect(css).toMatch(/\.lens-rail\.is-right\s*\{\s*right:\s*6px/)
+      expect(css).not.toContain('.lens-rail.is-right.is-inner')
       expect(css).not.toMatch(/\.lens-rail\.is-left\s*\{\s*display:\s*flex/)
     })
   })

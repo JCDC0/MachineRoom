@@ -22,7 +22,7 @@ function lensAround(node) {
   return null
 }
 
-export default function LensRail({ side, inner = false, label, share, multiplier, ariaLabel, valueText, onShare, onWheel }) {
+export default function LensRail({ side, label, share, multiplier, ariaLabel, valueText, onShare, onWheel }) {
   const dragRef = useRef(null)
   const railRef = useRef(null)
   const wheelRef = useRef(onWheel)
@@ -111,7 +111,7 @@ export default function LensRail({ side, inner = false, label, share, multiplier
 
   return (
     <div
-      className={`lens-rail is-${side}${inner ? ' is-inner' : ''}${shown ? ' is-shown' : ''}`}
+      className={`lens-rail is-${side}${shown ? ' is-shown' : ''}`}
       onPointerDown={down}
       onPointerMove={move}
       onPointerUp={up}

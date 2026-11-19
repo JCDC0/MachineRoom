@@ -1,6 +1,5 @@
 import { readStorage, store, writeStorage } from '../storage.js'
 import { RECORD_MINUTES_DEFAULT, clampRecordMinutes } from '../model/recordLimits.js'
-import { clampLensShare } from './lensResize.js'
 import { SIDEBAR_TAB_DEFAULT, normalizeSidebarTab } from './sidebar.js'
 
 export const SETTINGS_KEY = 'machineroom.settings'
@@ -136,10 +135,6 @@ function normalizeSettings(raw) {
     sidebarTab: normalizeSidebarTab(raw.sidebarTab),
     recordMinutes: clampRecordMinutes(raw.recordMinutes),
     sound: soundSettings(raw.sound),
-  }
-
-  if (raw.lensSplit !== undefined && Number.isFinite(Number(raw.lensSplit))) {
-    out.lensSplit = clampLensShare(raw.lensSplit)
   }
 
   const depth = raw.alwaysDepth ?? raw.effects?.alwaysDepth

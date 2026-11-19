@@ -369,7 +369,8 @@ describe('HUD concept style structure', () => {
     expect(css).toContain('.hud-lower-right .mr-inspector')
     expect(css).not.toContain('.hud-overview')
     expect(css).not.toContain('.hud-drawer')
-    expect(css).toContain('--lens-h: var(--lens-h-user, min(calc(100vh - var(--menu-h) - var(--transport-h)), max(240px, 100vh)))')
+    expect(css).toContain('--lens-h: calc(100vh - var(--menu-h) - var(--transport-h))')
+    expect(css).not.toContain('--lens-h-user')
     expect(css).toContain('.hud-dock[hidden]')
   })
 

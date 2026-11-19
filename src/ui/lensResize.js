@@ -1,19 +1,3 @@
-export const LENS_SHARE_MIN = 0.3
-export const LENS_SHARE_MAX = 1
-export const LENS_SHARE_DEFAULT = 1
-
-export function clampLensShare(value) {
-  const num = Number(value)
-  if (!Number.isFinite(num)) return LENS_SHARE_DEFAULT
-  return Math.min(LENS_SHARE_MAX, Math.max(LENS_SHARE_MIN, num))
-}
-
-export function lensHeightValue(share) {
-  const clamped = clampLensShare(share)
-  const wanted = `max(240px, ${(clamped * 100).toFixed(1)}vh)`
-  return `min(calc(100vh - var(--menu-h) - var(--transport-h)), ${wanted})`
-}
-
 export const RAIL_STEP = 0.05
 
 export function railShareFromPointer(clientY, rect) {
@@ -29,19 +13,6 @@ export function railStep(share, key) {
   if (key === 'End') return 1
   if (!Object.hasOwn(by, key)) return null
   return Math.min(1, Math.max(0, now + by[key]))
-}
-
-export function heightRailShare(lensShare) {
-  return (clampLensShare(lensShare) - LENS_SHARE_MIN) / (LENS_SHARE_MAX - LENS_SHARE_MIN)
-}
-
-export function lensShareFromRail(share) {
-  const s = Math.min(1, Math.max(0, Number(share) || 0))
-  return Math.min(LENS_SHARE_MAX, LENS_SHARE_MIN + s * (LENS_SHARE_MAX - LENS_SHARE_MIN))
-}
-
-export function lensShareAfterWheel(lensShare, deltaY) {
-  return clampLensShare(clampLensShare(lensShare) - (Number(deltaY) || 0) * 0.0003)
 }
 
 export function multiplierText(value) {

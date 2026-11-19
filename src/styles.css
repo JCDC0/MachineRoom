@@ -8155,7 +8155,7 @@ button.ui-icon-btn.mr-composer-send:hover:not(:disabled) {
     inset: auto;
     min-height: 100vh;
     overflow: visible;
-    --lens-h: var(--lens-h-user, min(calc(100vh - var(--menu-h) - var(--transport-h)), max(240px, 100vh)));
+    --lens-h: calc(100vh - var(--menu-h) - var(--transport-h));
   }
 
   .transport {
@@ -8525,10 +8525,6 @@ button.ui-icon-btn.mr-composer-send:hover:not(:disabled) {
 
 .lens-rail.is-right {
   right: 6px;
-}
-
-.lens-rail.is-right.is-inner {
-  right: 54px;
 }
 
 .lens-rail-label,
