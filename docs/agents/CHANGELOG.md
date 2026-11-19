@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Review 62 fixes: a new lane run is selected after a start, a failed tool call shows red, run times refresh at midnight and when the picker opens, and the Jump chip shares the log's gutter (P621).
 - Review 62 reads P606 to P618 and finds 11 issues, the worst a sub chosen from a lane view that sends to Main (P619).
 - Jump to newest is a shared chip on the conversation column, a finished run shows its time once, and the model line gets the room the hidden actions left (P618).
 - Test audit 4's bridge cache and run-end notice rows get tests that fail when their fix is undone (P616).

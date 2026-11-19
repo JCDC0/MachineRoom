@@ -149,6 +149,7 @@ export function conversationFromLog(harness, text, prompt = '') {
   const parser = createParser({ parser: reader }, { rootName: '', files: [], dirs: [] })
   let ended = null
   let agyPending = null
+  const started = new Map()
 
   function flushAgy() {
     if (!agyPending) return
@@ -187,9 +188,16 @@ export function conversationFromLog(harness, text, prompt = '') {
 
     const activities = parser.push(`${line}\n`, at === null ? 0 : Date.parse(at))
     for (const activity of activities) {
+      if (activity?.type === 'tool.end') {
+        const call = started.get(activity.id)
+        if (call && activity.ok === false) call.ok = false
+        continue
+      }
       if (activity?.type !== 'tool.start') continue
       const label = clean(activity.label).replace(/\s+/g, ' ').trim()
-      entries.push(entry('tool', label, typeof activity.tool === 'string' ? activity.tool : 'other', at))
+      const call = entry('tool', label, typeof activity.tool === 'string' ? activity.tool : 'other', at)
+      if (activity.id !== undefined) started.set(activity.id, call)
+      entries.push(call)
     }
 
     const endedText = endText(reader, json)

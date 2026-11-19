@@ -8383,6 +8383,7 @@ button.ui-icon-btn.mr-composer-send:hover:not(:disabled) {
     gap: 16px;
     border: 0;
     overflow-y: auto;
+    scrollbar-gutter: stable;
   }
 
   .mr-orch.is-inline .mr-orch-line.is-room {
@@ -8395,6 +8396,8 @@ button.ui-icon-btn.mr-composer-send:hover:not(:disabled) {
     max-width: 760px;
     margin: 0 auto;
     padding-inline: 24px;
+    overflow-y: hidden;
+    scrollbar-gutter: stable;
   }
 
   .mr-orch.is-inline .mr-orch-confirm {
