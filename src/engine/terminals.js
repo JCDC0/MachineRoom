@@ -163,6 +163,7 @@ export function createTerminals(cssScene, roster, { onPick = null } = {}) {
 
     const object = new CSS3DObject(element)
     object.scale.setScalar(SCALE)
+    object.visible = false
     cssScene.add(object)
 
     const consoleElement = document.createElement('div')
@@ -244,7 +245,7 @@ export function createTerminals(cssScene, roster, { onPick = null } = {}) {
     const term = terminals.get(key)
     if (!term || term.visible === visible) return
     term.visible = visible
-    term.object.visible = visible
+    term.object.visible = visible && term.open
     if (!visible) {
       term.open = false
       term.consoleObject.visible = false
@@ -388,6 +389,7 @@ export function createTerminals(cssScene, roster, { onPick = null } = {}) {
       }
       const className = `mr-term is-${entry.status}${term.open ? ' is-open' : ''}${focusKey && focusKey !== term.key ? ' is-muted' : ''}`
       if (term.element.className !== className) term.element.className = className
+      term.object.visible = term.visible && term.open
       const title = chipTitle(term.name, entry.status, term.open)
       if (term.title.textContent !== title) term.title.textContent = title
       const aria = chipAriaLabel(term.name, entry.status)

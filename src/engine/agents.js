@@ -194,6 +194,18 @@ export function nameLabel(name) {
   return label.length > 32 ? `${label.slice(0, 31)}~` : label
 }
 
+export function doingText(entry) {
+  if (!entry) return ''
+  const { status, label } = entry
+  if ((status === 'working' || status === 'queued') && typeof label === 'string' && label) {
+    const text = label.toLowerCase()
+    return text.length > 40 ? `${text.slice(0, 39)}~` : text
+  }
+  if (status === 'done') return 'finished'
+  if (status === 'error') return 'failed'
+  return typeof status === 'string' ? status : ''
+}
+
 function labelFor(key, labels) {
   if (!labels) return null
   let value
@@ -952,10 +964,12 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
     })
     const label = textSprite(nameLabel(agent.name), { scale: 1.5, color: 'rgba(255,255,255,.7)' })
     label.position.set(0, -150, 0)
+    const doing = textSprite('', { scale: 0.9, color: 'rgba(255,255,255,.5)' })
+    doing.position.set(0, -190, 0)
     const picker = new THREE.Mesh(new THREE.SphereGeometry(170, 8, 8), new THREE.MeshBasicMaterial({ visible: false }))
     picker.userData.key = agent.key
     const spinner = createSpinner(shellRadius * SPINNER_RADIUS_SCALE)
-    group.add(shape, ...rings, ...beatRings.map((slot) => slot.line), label, picker, spinner.group)
+    group.add(shape, ...rings, ...beatRings.map((slot) => slot.line), label, doing, picker, spinner.group)
     group.position.copy(home)
     group.scale.setScalar(scale)
 
@@ -1007,6 +1021,7 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
       beatRings,
       beatNext: 0,
       label,
+      doing,
       picker,
       callout,
       calloutLine,
@@ -1564,7 +1579,11 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
       const opacity = status === 'done' ? (fresh ? 1 : 0.6) : style.opacity
       writeColor(view.shape.material, drawing ? view.color : style.color)
       writeOpacity(view.shape.material, drawing ? 1 : opacity * fade * opacityFactor)
-      writeOpacity(view.label.material, drawing ? 0 : fade * opacityFactor)
+      const labelOpacity = drawing ? 0 : fade * opacityFactor
+      writeOpacity(view.label.material, labelOpacity)
+      view.doing.userData.setText(doingText(entry))
+      writeOpacity(view.doing.material, labelOpacity)
+      view.doing.visible = view.label.visible
       const ringColor = status === 'working' || status === 'queued' ? view.color : style.color
       for (let index = 0; index < view.rings.length; index += 1) {
         const ring = view.rings[index]
@@ -1670,7 +1689,7 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
       setEnds(view.link, view.group.position, chipNear)
       writeColor(view.link.material, style.color)
       writeOpacity(view.link.material, (working ? 0.6 : status === 'idle' ? 0.18 : 0.4) * fade * opacityFactor)
-      view.link.visible = !presence.dim && !drawing
+      view.link.visible = !presence.dim && !drawing && Boolean(terminals.isOpen?.(view.key))
       if (view.parentLink) {
         const parentView = views.get(view.parentKey)
         if (parentView) {

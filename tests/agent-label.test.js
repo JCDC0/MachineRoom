@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { nameLabel } from '../src/engine/agents.js'
+import { doingText, nameLabel } from '../src/engine/agents.js'
 
 describe('agent name label', () => {
   it('answers a short name in capitals', () => {
@@ -22,5 +22,17 @@ describe('agent name label', () => {
 
   it('answers empty text for a name that is not text', () => {
     expect(nameLabel(null)).toBe('')
+  })
+})
+
+describe('doingText', () => {
+  it('says what an agent is doing, or its state', () => {
+    expect(doingText({ status: 'working', label: 'Read src/App.jsx' })).toBe('read src/app.jsx')
+    expect(doingText({ status: 'working', label: 'x'.repeat(60) })).toBe(`${'x'.repeat(39)}~`)
+    expect(doingText({ status: 'idle' })).toBe('idle')
+    expect(doingText({ status: 'done', label: 'done' })).toBe('finished')
+    expect(doingText({ status: 'error' })).toBe('failed')
+    expect(doingText({})).toBe('')
+    expect(doingText(null)).toBe('')
   })
 })
