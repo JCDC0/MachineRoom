@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest'
+import { PerspectiveCamera, Scene, Vector3 } from 'three'
+import { describe, expect, it, vi } from 'vitest'
 import {
   CHIP_SIDE_DEAD_BAND,
   CHIP_W,
@@ -10,9 +11,47 @@ import {
   chipSideFromScreen,
   chipTitle,
   consoleRows,
+  createTerminals,
 } from '../src/engine/terminals.js'
+import { createState } from '../src/model/state.js'
 
 const line = (text, tone = 'normal') => ({ text, tone })
+
+it('shows the chip only while the terminal is open and visible', () => {
+  vi.stubGlobal('document', {
+    createElement: () => ({
+      dataset: {},
+      style: {},
+      ownerDocument: { defaultView: { Element: class {} } },
+      append() {},
+      remove() {},
+      setAttribute() {},
+    }),
+  })
+  try {
+    const roster = [{ key: 'a', name: 'Alpha' }]
+    const terminals = createTerminals(new Scene(), roster)
+    const { object } = terminals.terminals.get('a')
+    const state = createState({ files: [], dirs: [], created: [] }, roster)
+    const camera = new PerspectiveCamera()
+    const anchor = new Vector3()
+    const update = () => terminals.update(state, 0, camera, null, () => anchor, 0.016)
+
+    expect(object.visible).toBe(false)
+    update()
+    expect(object.visible).toBe(false)
+    terminals.setOpen('a', true)
+    update()
+    expect(object.visible).toBe(true)
+    terminals.setVisible('a', false)
+    expect(object.visible).toBe(false)
+    terminals.setVisible('a', true)
+    expect(object.visible).toBe(false)
+    terminals.dispose()
+  } finally {
+    vi.unstubAllGlobals()
+  }
+})
 
 describe('chipTitle', () => {
   it('leaves a closed chip to its state', () => {
