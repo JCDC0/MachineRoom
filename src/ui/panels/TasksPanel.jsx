@@ -22,15 +22,18 @@ export function taskCountSummary(issues) {
   const list = Array.isArray(issues) ? issues : []
   let running = 0
   let failed = 0
+  let open = 0
   let done = 0
   for (const issue of list) {
     if (issue?.status === 'in_progress') running += 1
     else if (issue?.status === 'blocked') failed += 1
     else if (issue?.status === 'done' || issue?.status === 'cancelled') done += 1
+    else open += 1
   }
   const parts = []
   if (running > 0) parts.push(`${running} running`)
   if (failed > 0) parts.push(`${failed} failed`)
+  if (open > 0) parts.push(`${open} open`)
   if (done > 0) parts.push(`${done} done`)
   return parts.length > 0 ? parts.join(' · ') : 'No tasks'
 }
