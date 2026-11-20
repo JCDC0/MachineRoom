@@ -1,7 +1,9 @@
-import { createElement } from 'react'
+import { act, createElement } from 'react'
 import { renderToString } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 import MetersPanel from '../src/ui/panels/MetersPanel.jsx'
+import TasksPanel, { taskCountSummary } from '../src/ui/panels/TasksPanel.jsx'
+import { click, withDom } from './helpers/uiDom.js'
 import {
   clampPercent,
   formatCents,
@@ -62,7 +64,7 @@ describe('format helpers for panels', () => {
   it('maps issue and agent statuses to plain words', () => {
     expect(statusLabel('in_progress')).toBe('in progress')
     expect(statusLabel('in_review')).toBe('in review')
-    expect(statusLabel('blocked')).toBe('blocked')
+    expect(statusLabel('blocked')).toBe('failed')
     expect(statusLabel('todo')).toBe('to do')
     expect(statusLabel('backlog')).toBe('backlog')
     expect(statusLabel('done')).toBe('done')
@@ -127,5 +129,67 @@ describe('meter numbers from the lane records', () => {
     expect(html).not.toContain('NaN')
     expect(html).not.toContain('-30')
     expect(html).not.toContain('object Object')
+  })
+})
+
+describe('tasks count and folded done list', () => {
+  it('counts running, failed and done tasks and leaves out zero parts', () => {
+    expect(taskCountSummary([])).toBe('No tasks')
+    expect(
+      taskCountSummary([
+        { status: 'in_progress' },
+        { status: 'in_progress' },
+        { status: 'blocked' },
+        { status: 'done' },
+        { status: 'cancelled' },
+      ])
+    ).toBe('2 running · 1 failed · 2 done')
+    expect(taskCountSummary([{ status: 'in_progress' }, { status: 'done' }])).toBe('1 running · 1 done')
+    expect(taskCountSummary([{ status: 'done' }])).toBe('1 done')
+    expect(taskCountSummary([{ status: 'blocked' }])).toBe('1 failed')
+  })
+
+  it('starts finished tasks folded behind an N done button and opens them on click', async () => {
+    const client = {
+      issues: async () => [],
+      agents: async () => [],
+      liveRuns: async () => [],
+      comments: async () => [],
+      subscribe: () => () => {},
+    }
+    const issues = [
+      { id: 'i1', identifier: 'P1', title: 'Active task', status: 'in_progress', priority: 'high', assigneeAgentId: null },
+      { id: 'i2', identifier: 'P2', title: 'Failed task', status: 'blocked', priority: 'medium', assigneeAgentId: null },
+      { id: 'i3', identifier: 'P3', title: 'Finished task', status: 'done', priority: 'low', assigneeAgentId: null },
+      { id: 'i4', identifier: 'P4', title: 'Cancelled task', status: 'cancelled', priority: 'low', assigneeAgentId: null },
+    ]
+    await withDom(async ({ container, root }) => {
+      await act(async () => {
+        root.render(
+          createElement(TasksPanel, {
+            client,
+            initialIssues: issues,
+            initialAgents: [],
+            initialLiveRuns: [],
+          })
+        )
+      })
+      expect(container.querySelector('.panel-count').textContent).toBe('1 running · 1 failed · 2 done')
+      expect(container.textContent).toContain('Active task')
+      expect(container.textContent).toContain('Failed task')
+      expect(container.textContent).toContain('failed')
+      expect(container.textContent).not.toContain('Finished task')
+      expect(container.textContent).not.toContain('Cancelled task')
+
+      const toggle = container.querySelector('.tasks-finished-summary')
+      expect(toggle.tagName).toBe('BUTTON')
+      expect(toggle.textContent).toBe('2 done')
+      expect(toggle.getAttribute('aria-expanded')).toBe('false')
+
+      await click(root, toggle)
+      expect(toggle.getAttribute('aria-expanded')).toBe('true')
+      expect(container.textContent).toContain('Finished task')
+      expect(container.textContent).toContain('Cancelled task')
+    })
   })
 })

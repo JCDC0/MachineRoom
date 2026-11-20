@@ -150,7 +150,7 @@ describe('the room lanes across reviews, Auto and the doctor', () => {
 
     const report = runDoctor({ projectRoot: REPO_ROOT, runsFolder: runs, dist: makeDist() })
     expect(report.lines.some((line) => line.includes('The Made Lane One lane'))).toBe(true)
-    expect(NEXT_STEP).toBe('Press C in the room for Dispatch.')
+    expect(NEXT_STEP).toBe('Press C in the room for Work, then Start.')
   })
 
   it('names the lane file it read in the merge-lane and review-lane errors', async () => {

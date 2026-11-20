@@ -676,7 +676,7 @@ export default function ReviewsPanel({
   return (
     <div className="reviews-panel">
       <div className="panel-toolbar">
-        <span className="panel-count mono">Reviews</span>
+        <span className="panel-count mono">Merge</span>
         <button
           type="button"
           onClick={() => loadReviews({ isInitial: false })}

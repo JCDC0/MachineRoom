@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The Control drawer has plain names: the menu button says Work, and its tabs are Start, Tasks, Cost, Team and Merge. Tasks counts running, failed and done instead of every task, folds the done tasks, and says failed for a blocked task. The startup line says Press C for Work, then Start (P648).
 - A failed lane task whose brief was later merged into main by hand (`Merge PNNN` in a main commit subject) shows as done instead of blocked (P649).
 - Every packet makes a sound: file touches, folder lists and agent messages, from the nearest drawn card or the agent, about four times louder, and quietly to one side when off screen (P647).
 - The menu row says Chat instead of Orchestrator, Settings picks its section from one dropdown, Help names Chat and Control, and the Control button says what it holds on hover (P646).

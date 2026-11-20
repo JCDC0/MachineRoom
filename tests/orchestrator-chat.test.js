@@ -2340,7 +2340,7 @@ describe('Hud and Waiting with an orchestrator', () => {
     expect(html).toContain('>Chat</span>')
     expect(html).toContain('aria-pressed="false"')
     expect(html).toContain('Open the chat')
-    expect(html).toContain('Toggle Control: dispatch, tasks, costs, team and reviews')
+    expect(html).toContain('Toggle Work: start, tasks, cost, team and merge')
     expect(html).toContain('Toggle the event log')
     expect(html).toContain('Toggle this help')
     expect(html).not.toContain('Open assistant terminal')

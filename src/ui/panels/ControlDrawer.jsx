@@ -24,11 +24,11 @@ export default function ControlDrawer({
     typeof client?.comments === 'function'
   const hasMetersTab = typeof client?.costs === 'function'
   const tabs = useMemo(() => {
-    const next = [{ id: 'dispatch', label: 'Dispatch' }]
+    const next = [{ id: 'dispatch', label: 'Start' }]
     if (hasTasksTab) next.push({ id: 'tasks', label: 'Tasks' })
-    if (hasMetersTab) next.push({ id: 'meters', label: 'Meters' })
+    if (hasMetersTab) next.push({ id: 'meters', label: 'Cost' })
     if (hasTeamTab) next.push({ id: 'agents', label: 'Team' })
-    if (hasReviewsTab) next.push({ id: 'reviews', label: 'Reviews' })
+    if (hasReviewsTab) next.push({ id: 'reviews', label: 'Merge' })
     return next
   }, [hasTasksTab, hasMetersTab, hasTeamTab, hasReviewsTab])
 
@@ -125,14 +125,14 @@ export default function ControlDrawer({
       id="hud-control-drawer"
       ref={drawerRef}
       className="control-drawer"
-      aria-label="Control panels"
+      aria-label="Work panels"
     >
       <header className="control-drawer-header hud-header-strip">
-        <h2 className="control-drawer-title">Control</h2>
+        <h2 className="control-drawer-title">Work</h2>
         <button
           type="button"
           className="control-close-btn"
-          aria-label="Close control drawer"
+          aria-label="Close work drawer"
           onClick={onClose}
         >
           Close
@@ -142,7 +142,7 @@ export default function ControlDrawer({
       <div
         className="control-tabs"
         role="tablist"
-        aria-label="Control panel sections"
+        aria-label="Work panel sections"
       >
         {tabs.map((tab, index) => {
           const isSelected = activeTab === tab.id

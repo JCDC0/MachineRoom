@@ -13,7 +13,7 @@ const REPO_ROOT = resolve(fileURLToPath(import.meta.url), '..', '..')
 const VARIABLE = /%([A-Za-z_][A-Za-z0-9_]*)%/g
 
 export const ALL_CHECKS_PASSED = 'All checks passed.'
-export const NEXT_STEP = 'Press C in the room for Dispatch.'
+export const NEXT_STEP = 'Press C in the room for Work, then Start.'
 export const READY_MEANS = 'Ready means the program was found. It does not prove sign-in, a model or the sandbox.'
 export const NO_AGENT_GUIDE = 'The project has no agent guide (AGENTS.md, CLAUDE.md or GEMINI.md).'
 const AGENT_GUIDES = ['AGENTS.md', 'CLAUDE.md', 'GEMINI.md']
