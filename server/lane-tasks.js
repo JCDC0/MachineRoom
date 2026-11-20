@@ -188,10 +188,24 @@ function succeededLaterIndexed(record, index) {
   return latest !== undefined && latest > failedAt
 }
 
-function statusFor(record, getIndex) {
+function statusFor(record, getIndex, mergedBriefs) {
   const failed = record?.killed === true || record?.exitCode !== 0
   if (!failed) return 'done'
+  if (
+    Array.isArray(record?.briefs) &&
+    record.briefs.length > 0 &&
+    record.briefs.every((brief) => mergedBriefs.has(text(brief).toLowerCase()))
+  ) return 'done'
   return succeededLaterIndexed(record, getIndex()) ? 'done' : 'blocked'
+}
+
+export function mergedBriefIds(subjects) {
+  const ids = new Set()
+  for (const subject of subjects) {
+    const match = /^\d+\.\d+\.\d+: Merge (P\d+[a-z]?)\b/i.exec(subject)
+    if (match) ids.add(match[1].toLowerCase())
+  }
+  return ids
 }
 
 function buildBriefLookup(briefs) {
@@ -222,7 +236,7 @@ function getBriefLookup(briefs) {
   return buildBriefLookup(briefs)
 }
 
-export function laneTaskIssues({ openRuns = [], records = [], recoveryRecords, agents = [], briefs = [] } = {}) {
+export function laneTaskIssues({ openRuns = [], records = [], recoveryRecords, agents = [], briefs = [], mergedBriefs = new Set() } = {}) {
   const { titles } = getBriefLookup(briefs)
   const list = Array.isArray(records) ? records : []
   const recoverySource = Array.isArray(recoveryRecords) ? recoveryRecords : list
@@ -249,7 +263,7 @@ export function laneTaskIssues({ openRuns = [], records = [], recoveryRecords, a
         project,
         briefs: record?.briefs,
         task: record?.task,
-        status: statusFor(record, readRecoveryIndex),
+        status: statusFor(record, readRecoveryIndex, mergedBriefs),
         agents,
         titles,
       })

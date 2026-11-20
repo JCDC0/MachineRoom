@@ -10,6 +10,7 @@ import {
   laneLiveRuns,
   laneTaskIssues,
   laneTaskState,
+  mergedBriefIds,
   readArchivedBriefs,
   readLaneBriefs,
   recentLaneRecords,
@@ -250,6 +251,23 @@ describe('lane tasks', () => {
       'opencode-L1-20261024-090000': 'blocked',
       'agy-L1-20261024-100000': 'done',
     })
+  })
+
+  it('reads brief ids from versioned merge subjects', () => {
+    expect(mergedBriefIds([
+      '0.1.401: Merge P644, The room puts the chosen top above the hub',
+      '0.1.402: mErGe p645A, Update the room',
+      '0.1.402: Fix P646, Update the room',
+    ])).toEqual(new Set(['p644', 'p645a']))
+  })
+
+  it('marks failed runs done when all of their briefs merged', () => {
+    const failed = record({ lane: 'codex', briefs: ['P644'], log: '/tmp/runs/codex-P644-20261024-090000.log', exitCode: 1 })
+    const mergedBriefs = new Set(['p644'])
+
+    expect(laneTaskIssues({ records: [failed], mergedBriefs })[0].status).toBe('done')
+    expect(laneTaskIssues({ records: [{ ...failed, briefs: ['P644', 'P645a'] }], mergedBriefs })[0].status).toBe('blocked')
+    expect(laneTaskIssues({ records: [{ ...failed, briefs: [] }], mergedBriefs })[0].status).toBe('blocked')
   })
 
   it('keeps a run with two briefs blocked while only one of them succeeded later', () => {

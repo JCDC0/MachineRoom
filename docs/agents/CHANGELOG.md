@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- A failed lane task whose brief was later merged into main by hand (`Merge PNNN` in a main commit subject) shows as done instead of blocked (P649).
 - Every packet makes a sound: file touches, folder lists and agent messages, from the nearest drawn card or the agent, about four times louder, and quietly to one side when off screen (P647).
 - The menu row says Chat instead of Orchestrator, Settings picks its section from one dropdown, Help names Chat and Control, and the Control button says what it holds on hover (P646).
 - Each agent shows a small status line under its name, its command while it works and else idle, finished or failed; the floating status chip and its line stay hidden until the chip opens (P645).

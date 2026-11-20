@@ -14,7 +14,7 @@ import { profileFromBrief, profileFromTask } from '../src/policy/profile.js'
 import { readPolicy, routeLane, tierFor, TIERS } from '../src/policy/route.js'
 import { conversationFromLog } from '../src/model/conversation.js'
 import { readLaneCosts } from './lane-costs.js'
-import { laneAgentList, laneTaskState, readLaneBriefs, recentLaneRecords } from './lane-tasks.js'
+import { laneAgentList, laneTaskState, mergedBriefIds, readLaneBriefs, recentLaneRecords } from './lane-tasks.js'
 import { defaultMode, legacyMode } from '../src/control/modes.js'
 import { modelUnavailableProblem } from './model-list.js'
 import { modelAllowed } from './harness-models.js'
@@ -2280,12 +2280,14 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
     if (method === 'GET' && path === '/api/control/issues') {
       const status = url.searchParams.get('status')
       const records = await roomRecords(readAllRunRecords(recordsPath()))
+      const subjects = (await readMainSubjects()).map(({ subject }) => subject)
       const { issues } = laneTaskState({
         openRuns: currentOpenRuns(),
         agents: laneAgentList(lanesSource),
         records: recentLaneRecords(records),
         recoveryRecords: records,
         briefs: readLaneBriefs(),
+        mergedBriefs: mergedBriefIds(subjects),
       })
       const visible = status ? issues.filter((issue) => issue.status === status) : issues
       sendJson(req, res, 200, visible.map(maskRecordCommits))
