@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Every row in the Agents tree shows its whole name on up to two lines, with the status word on the meta line, as the head rows already did, so lane names no longer cut to `MachineRo…` (P655).
 - The agents button under the lens counts a working session reader (the Claude Code or OpenCode session at the top) and lists it first, so the session and its lanes add up (P656).
 - The Agents tree lists the fleet's built-in AGY lanes as fixed rows: always on, with Delete but no on or off switch and no Make sub, since an orchestrator cannot start them (P654).
 - With a session as the chosen top and the built-in orchestrator idle, the Agents tree leaves the orchestrator out and hangs its subs and lanes under the session, as the room does (P652).

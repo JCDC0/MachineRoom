@@ -405,7 +405,7 @@ describe('form defaults and row model names', () => {
         'waiting · claude · Claude Opus 5.5'
       )
       expect(rowByLabel(container, 'Helper').querySelector('.ui-row-detail').textContent).toBe(
-        'claude · claude-opus-5-5'
+        'idle · claude · claude-opus-5-5'
       )
     })
 
@@ -416,10 +416,10 @@ describe('form defaults and row model names', () => {
         'waiting · claude · Claude Opus 5.5'
       )
       expect(rowByLabel(container, 'Coder').querySelector('.ui-row-detail').textContent).toBe(
-        'opencode · DeepSeek V4.1 Flash'
+        'idle · opencode · DeepSeek V4.1 Flash'
       )
       expect(rowByLabel(container, 'Helper').querySelector('.ui-row-detail').textContent).toBe(
-        'claude · claude-opus-5-5'
+        'idle · claude · claude-opus-5-5'
       )
     })
   })

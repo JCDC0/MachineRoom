@@ -637,8 +637,8 @@ describe('familyBoxes', () => {
 
       const lane = container.querySelector('.mr-family-lanes').querySelector('.mr-family-node')
       const laneTop = lane.querySelector('.mr-family-top')
-      expect(laneTop.querySelector('.mr-family-state').textContent).toBe('working')
-      expect(lane.querySelector('.ui-row-detail').textContent).toBe('opencode · Qwen')
+      expect(laneTop.querySelector('.mr-family-state')).toBeNull()
+      expect(lane.querySelector('.ui-row-detail').textContent).toBe('working · opencode · Qwen')
     })
   })
 })
