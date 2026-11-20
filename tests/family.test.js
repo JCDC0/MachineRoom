@@ -15,6 +15,7 @@ import {
   ORIGIN_LABEL_PROBLEM,
   buildFamilyNodes,
   createFamilyApi,
+  familySeatsFor,
   keyFromFile,
   labelsFileFor,
   readKey,
@@ -29,6 +30,7 @@ import { projectLanesFileFor } from '../server/active-lanes.js'
 import { createBridge } from '../server/index.js'
 import { saveEndpoints } from '../server/endpoints.js'
 import { NO_TOKEN_PROBLEM } from '../server/orchestrators.js'
+import { seatCheck } from '../server/seats.js'
 import { createClient } from '../src/control/client.js'
 import { createMockClient } from '../src/control/mock.js'
 import { childFormProblem } from '../src/ui/family.js'
@@ -251,6 +253,7 @@ describe('buildFamilyNodes pure helper', () => {
       runsFolder: runs,
       lanesConfig: lanes,
       isWorking: () => false,
+      hideIdleMain: true,
     })
     expect(sessionNodes.find((n) => n.id === 'agy3').parent).toBe('session:claude-session')
     expect(sessionNodes[0].children).toContain('agy3')
@@ -1138,16 +1141,39 @@ describe('the chosen top and nested subs', () => {
     expect(back.nodes[0].id).toBe('orchestrator')
   })
 
-  it('leaves out an idle orchestrator under a session top and hangs its children on the session', () => {
+  it('keeps an idle orchestrator by default and leaves it out only with hideIdleMain', () => {
     const root = tempDir('mr-top-hide-')
     const runs = tempDir('mr-top-hide-runs-')
     writeFileSync(topFileFor(root, runs), JSON.stringify({ top: 'claude-session' }))
+
+    const keptNodes = buildFamilyNodes({
+      projectRoot: root,
+      runsFolder: runs,
+      lanesConfig: SAMPLE_LANES,
+      isWorking: () => false,
+    })
+    expect(keptNodes[0]).toMatchObject({
+      id: 'session:claude-session',
+      kind: 'session',
+      parent: null,
+      children: ['orchestrator'],
+    })
+    expect(keptNodes.find((n) => n.id === 'orchestrator')).toMatchObject({
+      id: 'orchestrator',
+      parent: 'session:claude-session',
+      working: false,
+      children: ['opencode', 'opencode2', 'claude'],
+    })
+    for (const laneId of ['opencode', 'opencode2', 'claude']) {
+      expect(keptNodes.find((n) => n.id === laneId).parent).toBe('orchestrator')
+    }
 
     const plainNodes = buildFamilyNodes({
       projectRoot: root,
       runsFolder: runs,
       lanesConfig: SAMPLE_LANES,
       isWorking: () => false,
+      hideIdleMain: true,
     })
     expect(plainNodes.some((n) => n.id === 'orchestrator')).toBe(false)
     expect(plainNodes[0]).toMatchObject({
@@ -1166,6 +1192,7 @@ describe('the chosen top and nested subs', () => {
       lanesConfig: SAMPLE_LANES,
       orchestrators,
       isWorking: () => false,
+      hideIdleMain: true,
     })
     expect(withSubs.some((n) => n.id === 'orchestrator')).toBe(false)
     expect(withSubs[0].children).toEqual(expect.arrayContaining(['a', 'c', 'x', 'y', 'opencode2', 'claude']))
@@ -1185,6 +1212,7 @@ describe('the chosen top and nested subs', () => {
       runsFolder: runs,
       lanesConfig: SAMPLE_LANES,
       isWorking: (key) => key === 'orchestrator',
+      hideIdleMain: true,
     })
     expect(workingNodes[0]).toMatchObject({
       id: 'session:claude-session',
@@ -1208,6 +1236,7 @@ describe('the chosen top and nested subs', () => {
       runsFolder: runs,
       lanesConfig: SAMPLE_LANES,
       isWorking: () => false,
+      hideIdleMain: true,
     })
     expect(orchTopNodes.some((n) => n.kind === 'session')).toBe(false)
     expect(orchTopNodes[0]).toMatchObject({
@@ -1219,6 +1248,92 @@ describe('the chosen top and nested subs', () => {
     for (const laneId of ['opencode', 'opencode2', 'claude']) {
       expect(orchTopNodes.find((n) => n.id === laneId).parent).toBe('orchestrator')
     }
+  })
+
+  it('familySeatsFor keeps the idle orchestrator, drops manual AGY nodes and lets owner createLane pass', () => {
+    const root = tempDir('mr-seats-top-')
+    const runs = tempDir('mr-seats-top-runs-')
+    writeFileSync(topFileFor(root, runs), JSON.stringify({ top: 'claude-session' }))
+    const lanes = {
+      ...SAMPLE_LANES,
+      agy2: { name: 'AGY 2', cli: { harness: 'agy', model: 'gemini-4-neon-high' } },
+      agy3: { name: 'AGY 3', cli: { harness: 'agy', model: 'gemini-4-neon-high' } },
+    }
+
+    const context = familySeatsFor(null, {
+      projectRoot: root,
+      runsFolder: runs,
+      lanesConfig: lanes,
+      isWorking: () => false,
+    })
+
+    expect(context.tree.some((n) => n.id === 'orchestrator')).toBe(true)
+    expect(context.tree.some((n) => n.manual === true)).toBe(false)
+    expect(context.tree.some((n) => n.id === 'agy2' || n.id === 'agy3')).toBe(false)
+
+    const result = seatCheck({
+      seats: { rings: [1, 2], grants: {} },
+      tree: context.tree,
+      depth: context.depth,
+      actor: { owner: true },
+      action: 'createLane',
+    })
+    expect(result).toEqual({ ok: true, on: true })
+  })
+
+  it('notifies both family and agents when POST /api/family/top changes the top', async () => {
+    const root = tempDir('mr-top-notify-')
+    const runs = tempDir('mr-top-notify-runs-')
+    const notices = []
+    const response = {}
+    const api = createFamilyApi({
+      projectRoot: root,
+      runsFolder: runs,
+      lanes: () => SAMPLE_LANES,
+      notify: (event) => notices.push(event),
+      sendJson: (req, res, status, body) => {
+        response.status = status
+        response.body = body
+      },
+      readJsonBody: async () => ({ top: 'claude-session', confirmed: true }),
+    })
+
+    const handled = await api.handle(
+      { method: 'POST', headers: { origin: 'http://localhost:5173' } },
+      {},
+      new URL('http://127.0.0.1/api/family/top')
+    )
+    expect(handled).toBe(true)
+    expect(response).toEqual({ status: 200, body: { ok: true, top: 'claude-session' } })
+    expect(notices).toEqual([{ topic: 'family' }, { topic: 'agents' }])
+  })
+
+  it('keeps orchestrator in GET /api/agents under a session top while an orchestrator lane run is open', async () => {
+    const { url, projectRoot, runsFolder } = await startBridge()
+    await request(`${url}/api/family/top`, {
+      method: 'POST',
+      body: { top: 'claude-session', confirmed: true },
+    })
+
+    const before = await request(`${url}/api/agents`, { origin: '' })
+    expect(before.body.some((agent) => agent.key === 'orchestrator')).toBe(false)
+
+    writeFileSync(
+      join(runsFolder, 'orchestrator-P661-20261121-010000.meta.json'),
+      JSON.stringify({ project: projectRoot })
+    )
+    writeFileSync(join(runsFolder, 'orchestrator-P661-20261121-010000.log'), '{"type":"system","subtype":"init"}\n')
+    let found = false
+    const deadline = Date.now() + 2000
+    while (!found && Date.now() < deadline) {
+      const agents = await request(`${url}/api/agents`, { origin: '' })
+      if (agents.body.some((agent) => agent.key === 'orchestrator')) {
+        found = true
+        break
+      }
+      await new Promise((resolve) => setTimeout(resolve, 25))
+    }
+    expect(found).toBe(true)
   })
 
   it('the mock client keeps the top too', async () => {

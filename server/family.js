@@ -54,7 +54,7 @@ export function familySeatsFor(sendJson, options, ladder) {
   const { projectRoot, runsFolder } = options
   return {
     seats: readSeats(seatsFileFor(projectRoot, runsFolder)),
-    tree: buildFamilyNodes({ ...options, ladder }),
+    tree: buildFamilyNodes({ ...options, ladder }).filter((node) => node.manual !== true),
     depth: readAgentDepth(runsFolder).limit,
     orchestrators: options.orchestrators,
   }
@@ -245,6 +245,7 @@ export function buildFamilyNodes({
   orchestrators,
   isWorking,
   ladder = orchestrators?.getLadder?.() ?? { subs: [] },
+  hideIdleMain = false,
 } = {}) {
   const labelsFile = labelsFileFor(projectRoot, runsFolder)
   const labels = readLabels(labelsFile)
@@ -424,7 +425,7 @@ export function buildFamilyNodes({
   }
 
   const top = readTop(topFileFor(projectRoot, runsFolder))
-  const mainHidden = top !== ORCHESTRATOR_KEY && !mainWorking
+  const mainHidden = hideIdleMain && top !== ORCHESTRATOR_KEY && !mainWorking
   if (top === ORCHESTRATOR_KEY) return [mainNode, ...subNodes, ...laneNodes]
   const session = SESSION_TOPS[top]
   const sessionId = `session:${top}`
@@ -501,6 +502,7 @@ export function createFamilyApi(options = {}) {
         activeLanes,
         orchestrators: orchs,
         isWorking,
+        hideIdleMain: true,
       })
       const keys = Object.keys(readKeys(runsDir)).sort().map((name) => ({ name }))
       const proposals = readProposals(runsDir)
@@ -529,7 +531,10 @@ export function createFamilyApi(options = {}) {
         return true
       }
       saveLabels(topFileFor(projectRoot, runsDir), { top })
-      if (typeof notify === 'function') notify({ topic: 'family' })
+      if (typeof notify === 'function') {
+        notify({ topic: 'family' })
+        notify({ topic: 'agents' })
+      }
       sendJson(req, res, 200, { ok: true, top })
       return true
     }

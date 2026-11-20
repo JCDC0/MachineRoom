@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Seat checks always see the orchestrator and never count the fleet AGY lanes, so the owner can add a lane under a session top; the room re-reads its roster when the top changes, keeps the orchestrator while its lane run is open, and an OpenCode session top shows working in the tree (P661, R65-2, R65-4, R65-6, R65-7).
 - A lane that starts after the page opens works in the room: the page hands each new roster to the pipeline, the live player and the logger, so its frames are no longer dropped (P660, R65-1).
 - The Agents header in the sidebar counts every agent in the tree, the session at the top, the orchestrator and subs included, so it reads `3 of 7 working` while the session and two lanes work (P657).
 - Every row in the Agents tree shows its whole name on up to two lines, with the status word on the meta line, as the head rows already did, so lane names no longer cut to `MachineRo…` (P655).
