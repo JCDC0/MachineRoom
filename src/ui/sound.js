@@ -20,6 +20,8 @@ const TONES = {
   write: { frequency: 440, type: 'triangle', duration: 0.08 },
   created: { frequency: 880, type: 'sine', duration: 0.09 },
   deleted: { frequency: 220, type: 'sine', duration: 0.11 },
+  list: { frequency: 520, type: 'sine', duration: 0.06 },
+  message: { frequency: 990, type: 'triangle', duration: 0.1 },
 }
 
 export function panForScreen(x, width) {
@@ -45,9 +47,10 @@ export function spatialSound(place = {}) {
   }
   const onScreen = x >= 0 && x <= width && y >= 0 && y <= height
   const tooFar = distance > overviewDistance * 2
-  if (!onScreen || tooFar) return { audible: false, pan: 0, gain: 0 }
-  const gain = Math.min(1, Math.max(0, 1 - distance / (overviewDistance * 2)))
-  return { audible: gain > 0, pan: panForScreen(x, width), gain }
+  if (tooFar) return { audible: false, pan: 0, gain: 0 }
+  if (!onScreen) return { audible: true, pan: x < width / 2 ? -1 : 1, gain: 0.35 }
+  const gain = Math.max(0.35, 1 - distance / (overviewDistance * 2))
+  return { audible: true, pan: panForScreen(x, width), gain }
 }
 
 export const BEAT_WINDOW = 22
@@ -383,7 +386,8 @@ export function createRateLimit({ limit = SOUND_LIMIT, windowMs = SOUND_WINDOW_M
 }
 
 export function activitySounds(activity, missing, state = null) {
-  if (!activity || activity.type !== 'tool.start' || !Array.isArray(activity.touches)) return []
+  if (activity?.type === 'agent.message') return [{ agent: activity.to, kind: 'message' }]
+  if (activity?.type !== 'tool.start' || !Array.isArray(activity.touches)) return []
   const absent = missing instanceof Set ? missing : new Set()
   const exists = (path) => {
     const file = state?.files?.get?.(path)
@@ -392,7 +396,12 @@ export function activitySounds(activity, missing, state = null) {
   const removes = isDeleteCommand(activity.label)
   const sounds = []
   for (const touch of activity.touches) {
-    if (!touch || touch.kind !== 'file' || typeof touch.path !== 'string') continue
+    if (typeof touch?.path !== 'string') continue
+    if (touch.kind === 'dir') {
+      sounds.push({ path: touch.path, kind: 'list' })
+      continue
+    }
+    if (touch.kind !== 'file') continue
     const wasGone = absent.has(touch.path)
     let kind = touch.mode === 'read' ? 'read' : 'write'
     if (touch.mode !== 'read' && removes) {
@@ -560,7 +569,7 @@ export const sound = {
     oscillator.type = tone.type
     oscillator.frequency.value = tone.frequency
     const now = context.currentTime
-    const peak = Math.max(0.0001, 0.08 * engine.settings.volume * spatial.gain)
+    const peak = Math.max(0.0001, 0.3 * engine.settings.volume * spatial.gain)
     gain.gain.setValueAtTime(0.0001, now)
     gain.gain.exponentialRampToValueAtTime(peak, now + 0.012)
     gain.gain.exponentialRampToValueAtTime(0.0001, now + tone.duration)

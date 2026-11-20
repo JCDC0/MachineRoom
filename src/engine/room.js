@@ -719,31 +719,39 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     return dir ? dir.path : null
   }
 
-  const soundPoint = new THREE.Vector3()
   const soundProjection = new THREE.Vector3()
 
-  function soundAt(path) {
-    const state = getState()
-    const isFile = state.files.has(path)
-    const dir = isFile ? dirname(path) : (path ?? '')
+  function soundFrom(point) {
     const overviewDistance = fitted?.dist ?? OVERVIEW.dist
-    const card = cards.cardSphere(dir)
-    if (!card) return { x: -1, y: -1, width, height, distance: overviewDistance * 2, overviewDistance }
-    soundPoint.copy(cards.center(dir))
-    const distance = camera.position.distanceTo(soundPoint)
-    soundProjection.copy(soundPoint).project(camera)
-    if (![soundProjection.x, soundProjection.y, soundProjection.z].every(Number.isFinite)) {
-      return { x: -1, y: -1, width, height, distance, overviewDistance }
+    if (point) {
+      const { x, y, z } = soundProjection.copy(point).project(camera)
+      if (Number.isFinite(x) && Number.isFinite(y) && z >= -1 && z <= 1) {
+        return {
+          x: ((x + 1) / 2) * width,
+          y: ((1 - y) / 2) * height,
+          width,
+          height,
+          distance: camera.position.distanceTo(point),
+          overviewDistance,
+        }
+      }
     }
-    const behind = soundProjection.z < -1 || soundProjection.z > 1
-    return {
-      x: behind ? -1 : ((soundProjection.x + 1) / 2) * width,
-      y: behind ? -1 : ((1 - soundProjection.y) / 2) * height,
-      width,
-      height,
-      distance,
-      overviewDistance,
-    }
+    return { x: -1, y: -1, width, height, distance: Infinity, overviewDistance }
+  }
+
+  function soundAt(path) {
+    const dir = getState().files.has(path) ? dirname(path) : path
+    const target = nearestDrawnPath(dir, {
+      has(path) {
+        const card = cards.cards.get(path)
+        return Boolean(card?.view && !card.leaving)
+      },
+    })
+    return soundFrom(cards.cards.get(target)?.base)
+  }
+
+  function soundAtAgent(key) {
+    return soundFrom(anchorOf(key))
   }
 
   function followCardPath(path, style) {
@@ -1211,6 +1219,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
   return {
     onActivity,
     soundAt,
+    soundAtAgent,
     setBeat: (strength) => {
       agentSet.beat(strength)
       cards.beat(strength)
