@@ -1070,11 +1070,97 @@ describe('the chosen top and nested subs', () => {
     const family = (await request(`${url}/api/family`, { origin: '' })).body
     expect(family.top).toBe('claude-session')
     expect(family.nodes[0]).toMatchObject({ id: 'session:claude-session', kind: 'session', parent: null })
-    expect(family.nodes.find((n) => n.id === 'orchestrator').parent).toBe('session:claude-session')
+    expect(family.nodes.some((n) => n.id === 'orchestrator')).toBe(false)
+    expect(family.nodes.find((n) => n.id === 'opencode').parent).toBe('session:claude-session')
+    expect(family.nodes[0].children).toEqual(expect.arrayContaining(['opencode', 'opencode2', 'claude']))
     await request(`${url}/api/family/top`, { method: 'POST', body: { top: 'orchestrator', confirmed: true } })
     const back = (await request(`${url}/api/family`, { origin: '' })).body
     expect(back.top).toBe('orchestrator')
     expect(back.nodes.some((n) => n.kind === 'session')).toBe(false)
+    expect(back.nodes[0].id).toBe('orchestrator')
+  })
+
+  it('leaves out an idle orchestrator under a session top and hangs its children on the session', () => {
+    const root = tempDir('mr-top-hide-')
+    const runs = tempDir('mr-top-hide-runs-')
+    writeFileSync(topFileFor(root, runs), JSON.stringify({ top: 'claude-session' }))
+
+    const plainNodes = buildFamilyNodes({
+      projectRoot: root,
+      runsFolder: runs,
+      lanesConfig: SAMPLE_LANES,
+      isWorking: () => false,
+    })
+    expect(plainNodes.some((n) => n.id === 'orchestrator')).toBe(false)
+    expect(plainNodes[0]).toMatchObject({
+      id: 'session:claude-session',
+      kind: 'session',
+      parent: null,
+      children: ['opencode', 'opencode2', 'claude'],
+    })
+    for (const laneId of ['opencode', 'opencode2', 'claude']) {
+      expect(plainNodes.find((n) => n.id === laneId).parent).toBe('session:claude-session')
+    }
+
+    const withSubs = buildFamilyNodes({
+      projectRoot: root,
+      runsFolder: runs,
+      lanesConfig: SAMPLE_LANES,
+      orchestrators,
+      isWorking: () => false,
+    })
+    expect(withSubs.some((n) => n.id === 'orchestrator')).toBe(false)
+    expect(withSubs[0].children).toEqual(expect.arrayContaining(['a', 'c', 'x', 'y', 'opencode2', 'claude']))
+    expect(withSubs.find((n) => n.id === 'a').parent).toBe('session:claude-session')
+    expect(withSubs.find((n) => n.id === 'b').parent).toBe('a')
+    expect(withSubs.find((n) => n.id === 'opencode').parent).toBe('a')
+    expect(withSubs.find((n) => n.id === 'claude').parent).toBe('session:claude-session')
+  })
+
+  it('keeps the orchestrator under a session top while it is working, and when it is the top', () => {
+    const root = tempDir('mr-top-keep-')
+    const runs = tempDir('mr-top-keep-runs-')
+    writeFileSync(topFileFor(root, runs), JSON.stringify({ top: 'claude-session' }))
+
+    const workingNodes = buildFamilyNodes({
+      projectRoot: root,
+      runsFolder: runs,
+      lanesConfig: SAMPLE_LANES,
+      isWorking: (key) => key === 'orchestrator',
+    })
+    expect(workingNodes[0]).toMatchObject({
+      id: 'session:claude-session',
+      kind: 'session',
+      parent: null,
+      children: ['orchestrator'],
+    })
+    expect(workingNodes.find((n) => n.id === 'orchestrator')).toMatchObject({
+      id: 'orchestrator',
+      parent: 'session:claude-session',
+      working: true,
+      children: ['opencode', 'opencode2', 'claude'],
+    })
+    for (const laneId of ['opencode', 'opencode2', 'claude']) {
+      expect(workingNodes.find((n) => n.id === laneId).parent).toBe('orchestrator')
+    }
+
+    writeFileSync(topFileFor(root, runs), JSON.stringify({ top: 'orchestrator' }))
+    const orchTopNodes = buildFamilyNodes({
+      projectRoot: root,
+      runsFolder: runs,
+      lanesConfig: SAMPLE_LANES,
+      isWorking: () => false,
+    })
+    expect(orchTopNodes.some((n) => n.kind === 'session')).toBe(false)
+    expect(orchTopNodes[0]).toMatchObject({
+      id: 'orchestrator',
+      kind: 'orchestrator',
+      parent: null,
+      children: ['opencode', 'opencode2', 'claude'],
+    })
+    for (const laneId of ['opencode', 'opencode2', 'claude']) {
+      expect(orchTopNodes.find((n) => n.id === laneId).parent).toBe('orchestrator')
+    }
   })
 
   it('the mock client keeps the top too', async () => {
