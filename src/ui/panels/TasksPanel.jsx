@@ -18,6 +18,23 @@ export function openRank(status) {
   return Object.hasOwn(OPEN_ORDER, status) ? OPEN_ORDER[status] : 99
 }
 
+export function taskCountSummary(issues) {
+  const list = Array.isArray(issues) ? issues : []
+  let running = 0
+  let failed = 0
+  let done = 0
+  for (const issue of list) {
+    if (issue?.status === 'in_progress') running += 1
+    else if (issue?.status === 'blocked') failed += 1
+    else if (issue?.status === 'done' || issue?.status === 'cancelled') done += 1
+  }
+  const parts = []
+  if (running > 0) parts.push(`${running} running`)
+  if (failed > 0) parts.push(`${failed} failed`)
+  if (done > 0) parts.push(`${done} done`)
+  return parts.length > 0 ? parts.join(' · ') : 'No tasks'
+}
+
 export function liveRunMark(issueId, runs, agents = []) {
   const mine = (Array.isArray(runs) ? runs : []).filter((run) => run?.issueId === issueId && (run.status === 'running' || run.status === 'queued'))
   const run = mine.find((item) => item.status === 'running') ?? mine[0]
@@ -34,6 +51,7 @@ export default function TasksPanel({ client, controlTarget = null, initialIssues
   const [loadError, setLoadError] = useState(null)
   const [refreshError, setRefreshError] = useState(null)
   const [selectedIssueId, setSelectedIssueId] = useState(null)
+  const [finishedOpen, setFinishedOpen] = useState(false)
   const [notice, setNotice] = useState(null)
   const lastHandledNonceRef = useRef(null)
   const targetReqRef = useRef(0)
@@ -230,7 +248,7 @@ export default function TasksPanel({ client, controlTarget = null, initialIssues
       )}
 
       <div className="panel-toolbar">
-        <span className="panel-count mono">{issues.length} tasks</span>
+        <span className="panel-count mono">{taskCountSummary(issues)}</span>
         <button type="button" onClick={() => loadData({ isInitial: false })}>Refresh</button>
       </div>
 
@@ -249,14 +267,21 @@ export default function TasksPanel({ client, controlTarget = null, initialIssues
           )}
 
           {finishedIssues.length > 0 && (
-            <details className="tasks-finished">
-              <summary className="tasks-finished-summary">
-                Finished ({finishedIssues.length})
-              </summary>
-              <div className="tasks-group" aria-label="Finished tasks">
-                {finishedIssues.map(renderRow)}
-              </div>
-            </details>
+            <div className="tasks-finished">
+              <button
+                type="button"
+                className="tasks-finished-summary"
+                aria-expanded={finishedOpen}
+                onClick={() => setFinishedOpen((open) => !open)}
+              >
+                {`${finishedIssues.length} done`}
+              </button>
+              {finishedOpen && (
+                <div className="tasks-group" aria-label="Finished tasks">
+                  {finishedIssues.map(renderRow)}
+                </div>
+              )}
+            </div>
           )}
         </div>
       )}

@@ -47,7 +47,7 @@ export function timeAgo(iso, now) {
 const STATUS_LABELS = {
   in_progress: 'in progress',
   in_review: 'in review',
-  blocked: 'blocked',
+  blocked: 'failed',
   todo: 'to do',
   backlog: 'backlog',
   done: 'done',
