@@ -274,7 +274,13 @@ export default function Transport({ snapshot, speeds, markers = [], orchestrator
             includeIdle: false,
           })
         : { pills: [], more: 0 }
-    const working = chips.filter((chip) => chip.tone === 'working').length + lanes.pills.filter((lane) => lane.state === 'working').length
+    const sessions = (Array.isArray(snapshot.agents) ? snapshot.agents : []).filter(
+      (agent) => String(agent?.key ?? '').endsWith('-session') && agent.status === 'working'
+    )
+    const working =
+      sessions.length +
+      chips.filter((chip) => chip.tone === 'working').length +
+      lanes.pills.filter((lane) => lane.state === 'working').length
     const waiting = chips.filter((chip) => chip.waiting).length + (hasWaitingApproval(main) ? 1 : 0)
     const spend = spendText(costs)
     return (
@@ -298,6 +304,11 @@ export default function Transport({ snapshot, speeds, markers = [], orchestrator
           </button>
           {listOpen ? (
             <div className="transport-agents-list" role="group" aria-label="Agents">
+              {sessions.map((agent) => (
+                <div key={agent.key} className="transport-agent mono">
+                  <span>{agent.name || agent.key}</span><span className="transport-agent-state is-working">working</span><span>{String(agent.label ?? '').slice(0, 40)}</span><span></span>
+                </div>
+              ))}
               {chips.map((chip) => (
                 <button key={chip.id} type="button" className="transport-agent mono" onClick={() => { setListOpen(false); openOrchestratorChat(chip.id) }}>
                   <span>{chip.name}</span><span className={`transport-agent-state is-${chip.waiting ? 'waiting' : chip.tone}`}>{chip.waiting ? 'waiting for you' : chip.tone}</span><span></span><span></span>

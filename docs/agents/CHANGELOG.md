@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The agents button under the lens counts a working session reader (the Claude Code or OpenCode session at the top) and lists it first, so the session and its lanes add up (P656).
 - The Agents tree lists the fleet's built-in AGY lanes as fixed rows: always on, with Delete but no on or off switch and no Make sub, since an orchestrator cannot start them (P654).
 - With a session as the chosen top and the built-in orchestrator idle, the Agents tree leaves the orchestrator out and hangs its subs and lanes under the session, as the room does (P652).
 - The agents button under the lens reads Agents · N working, or Agents · none working, and its list leaves out idle lanes instead of counting every lane in the config (P653).
