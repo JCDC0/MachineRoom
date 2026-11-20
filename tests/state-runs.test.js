@@ -5,6 +5,8 @@ import { addAgents, apply, createState } from '../src/model/state.js'
 const tree = makeTree({ root: 'demo', files: ['src/a.js'] })
 const agents = [{ key: 'opencode', name: 'OpenCode' }]
 
+const queued = (runId, time) => ({ type: 'run.queued', agent: 'opencode', runId, time, order: time })
+
 const start = (runId, time) => ({ type: 'run.start', agent: 'opencode', runId, time, order: time })
 
 const tool = (runId, time, path) => ({
@@ -103,6 +105,27 @@ describe('two runs of one agent', () => {
       text: 'failed read src/a.js: permission denied',
       tone: 'error',
     })
+  })
+
+  it('clears the last label on run.queued and run.start', () => {
+    const state = createState(tree, agents)
+    apply(state, start('r1', 1))
+    apply(state, tool('r1', 2, 'src/a.js'))
+    apply(state, runEnd('r1', true, 3))
+    expect(state.agents.get('opencode')).toMatchObject({ status: 'done', label: 'done' })
+
+    apply(state, queued('r2', 4))
+    expect(state.agents.get('opencode')).toMatchObject({ status: 'queued', label: '' })
+
+    apply(state, start('r2', 5))
+    expect(state.agents.get('opencode')).toMatchObject({ status: 'working', label: '' })
+
+    apply(state, tool('r2', 6, 'src/a.js'))
+    apply(state, runEnd('r2', false, 7))
+    expect(state.agents.get('opencode')).toMatchObject({ status: 'error', label: 'read src/a.js' })
+
+    apply(state, start('r3', 8))
+    expect(state.agents.get('opencode')).toMatchObject({ status: 'working', label: '' })
   })
 })
 
