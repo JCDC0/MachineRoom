@@ -7,7 +7,7 @@ import { BLOOM_STRENGTH_DEFAULT, createBloomLayer } from './bloom.js'
 import { ANCHOR_DIST, FOV, OVERVIEW, createCameraRig, distanceForRatio, fitView, followTarget, projectPoint } from './camera.js'
 import { createCards } from './cards.js'
 import { boardVisible, createCostBoard } from './board.js'
-import { HUB_CENTER, HUB_RADIUS, RING_LEVEL_MAX, createHub, workingKeys } from './hub.js'
+import { HUB_CENTER, HUB_RADIUS, RING_LEVEL_MAX, createHub, ringDepth, workingKeys } from './hub.js'
 import { GIT_FOCUS_DIST, createGitTree } from './gitTree.js'
 import { INTERNET_RADIUS, createInternet } from './internet.js'
 import { createLabels } from './labels.js'
@@ -1056,6 +1056,13 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     beforeFrame(times.elapsed)
 
     const state = getState()
+    if (Number.isFinite(state.depthLimit)) {
+      const next = ringDepth(state.depthLimit, RING_LEVEL_MAX)
+      if (next !== roomDepth) {
+        roomDepth = agentSet.setDepth(next)
+        hub.setDepth(roomDepth)
+      }
+    }
     const mask = masks.of(state)
     const working = workingKeys(state, lastWorking)
     if (working !== lastWorking) {
