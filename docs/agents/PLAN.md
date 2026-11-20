@@ -1,5 +1,19 @@
 # Plan
 
+## Next, as of 2026-11-20 16:30 (written before a restart)
+
+Merged since the last push (27b080ef), not pushed: P637 seats S2, P644 the chosen top in 3D, P645 the status line under each agent, P646 the menu row (Chat, the Settings dropdown, Help, the Control hint), and the briefs P643b, P645, P646 and P647. Before the push: the full suite, `npm run -s history-audit -- --from origin/main` in its own call, the owner's yes, then CI.
+
+1. P647, a sound for every packet (codex). Merge it, then wire `soundAtAgent` into `src/Stage.jsx` by hand: in `onActivity`, an item with `agent` calls `roomRef.current?.soundAtAgent(item.agent)` instead of `soundAt(item.path)`. Check by ear and with an oscillator count on the bench.
+2. The native reruns after the OpenRouter budget resets (00:00 UTC, 08:00 Manila; the workspace budget is $1 a day, so about one native run a day): P643b, P638, P639, then P640.
+3. Control, in the owner's words (2026-11-20): the tab names are too hard. Meters should read Cost or Spend; Dispatch and Reviews are the worst. Tasks says `28 tasks` when about 12 work, and P644 shows Blocked after it merged by hand. The plan to write as a brief once the owner picks the names:
+   - Names to offer: Control to Work; Dispatch to Start (its `Needs you` list of failed runs moves to the top of Tasks); Meters to Cost; Team stays; Reviews to Merge.
+   - Tasks counts what runs: the header says `N running · N failed · N done`, the list opens on running and failed, and done tasks fold.
+   - A task whose branch or brief merged into main is done: `statusFor` in `server/lane-tasks.js` also checks the main subjects (`readMainSubjects` in `server/runs.js`, as the outcomes route does) for `Merge PNNN`.
+   - The Dispatch lane picker lists only the lanes on in `lanes.json`, not the retired OpenCode, agy, agy2, Claude and Codex 2 and 3 lanes.
+4. Agent seats: P640 (the docs) after P638 and P639.
+5. Keep the fleet order: no Claude lanes; codex the only Codex lane; agy3 the only AGY lane (no `src/engine`); native2 to native4 with `--reasoning xhigh`, briefs with exact files and lines.
+
 ## Where we are
 
 The fixes and features left over from the November 2026 audits are listed under Later work in `AUDIT-2026-11-SUMMARY.md`.
