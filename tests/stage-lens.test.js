@@ -113,7 +113,7 @@ describe('Stage lens labels', () => {
       expect(waiting).toBeGreaterThan(line)
       expect(line).toBeLessThan(menu)
       expect(html).toContain(
-        'This folder is empty. Open another project in Projects, or start a lane in Dispatch with C.'
+        'This folder is empty. Open another project in Projects, or start a lane in Work, then Start, with C.'
       )
     } finally {
       liveStatus.status = 'connecting'

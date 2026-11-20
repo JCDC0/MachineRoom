@@ -88,8 +88,8 @@ export default function Waiting({ agents = [], status = 'connecting', orchestrat
   const detail =
     status === 'live' && hasOrchestrator
       ? wide
-        ? 'Nothing is running yet. Press / or click ORCHESTRATOR at the top, and the chat sits in the lower half, under the transport.'
-        : 'Nothing is running yet. Press / or click ORCHESTRATOR at the top, and the chat opens at the bottom right.'
+        ? 'Nothing is running yet. Press / or click Chat at the top, and the chat sits in the lower half, under the transport.'
+        : 'Nothing is running yet. Press / or click Chat at the top, and the chat opens at the bottom right.'
       : copy.detail
   const roster = Array.isArray(agents) ? agents : []
   const readers = roster.filter(isSessionReader)

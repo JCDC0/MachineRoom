@@ -7,7 +7,7 @@ import { subscribeToNotices } from './notices.js'
 
 export const CostsModeContext = createContext('live')
 
-export const METERS_UNAVAILABLE = 'Meters need a newer bridge.'
+export const METERS_UNAVAILABLE = 'Cost needs a newer bridge.'
 
 function tokenCount(value) {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null

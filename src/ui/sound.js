@@ -386,7 +386,10 @@ export function createRateLimit({ limit = SOUND_LIMIT, windowMs = SOUND_WINDOW_M
 }
 
 export function activitySounds(activity, missing, state = null) {
-  if (activity?.type === 'agent.message') return [{ agent: activity.to, kind: 'message' }]
+  if (activity?.type === 'agent.message') {
+    if (typeof activity.to !== 'string' || activity.to.trim() === '') return []
+    return [{ agent: activity.to, kind: 'message' }]
+  }
   if (activity?.type !== 'tool.start' || !Array.isArray(activity.touches)) return []
   const absent = missing instanceof Set ? missing : new Set()
   const exists = (path) => {

@@ -74,7 +74,7 @@ export function prepareMergeMessage(review) {
   const destination =
     typeof review.base === 'string' && review.base.trim() ? review.base.trim() : 'main'
   return [
-    'Prepare a lane for merge. The owner confirmed this in Reviews.',
+    'Prepare a lane for merge. The owner confirmed this in Merge.',
     '',
     `Lane: ${lane}`,
     `Branch: ${branch}`,

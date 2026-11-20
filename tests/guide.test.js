@@ -102,11 +102,11 @@ describe('guide steps', () => {
 
     expect(GUIDE_STEPS[3].text).toContain('chat sits at the bottom right')
     expect(GUIDE_STEPS[3].text).toContain('runs with --lanes')
-    expect(GUIDE_STEPS[3].text).toContain('click ORCHESTRATOR')
+    expect(GUIDE_STEPS[3].text).toContain('click Chat')
     expect(GUIDE_STEPS[3].text).not.toContain('Attach')
     expect(GUIDE_STEPS[3].text).toContain('tabs switch between them')
 
-    expect(GUIDE_STEPS[4].text).toContain('C opens the control drawer')
+    expect(GUIDE_STEPS[4].text).toContain('C opens Work')
     expect(GUIDE_STEPS[4].text).toContain('L the event log')
     expect(GUIDE_STEPS[4].text).toContain('/ opens the chat with --lanes or the assistant in a replay')
     expect(GUIDE_STEPS[4].text).toContain('? lists every key')
@@ -405,7 +405,7 @@ describe('tour steps, selector lookup and card placement', () => {
       'The conversation',
       'Overview',
       'The transport',
-      'Control and orchestrator',
+      'Work and orchestrator',
     ])
     expect(LIVE_TOUR_STEPS).toHaveLength(6)
     expect(LIVE_TOUR_STEPS.map((step) => step.label)).toEqual([
@@ -428,7 +428,7 @@ describe('tour steps, selector lookup and card placement', () => {
     expect(TOUR_STEPS[1].text).toContain('This terminal chip')
     expect(TOUR_STEPS[2].text).toContain('This tunnel runs grey')
     expect(TOUR_STEPS[2].text).toContain("a star in the agent's colour")
-    expect(TOUR_STEPS[7].text).toContain('This action row')
+    expect(TOUR_STEPS[7].text).toContain('This action row opens Work for tasks, runs and reviews')
     expect(LIVE_TOUR_STEPS[1].text).toContain('This terminal chip')
     expect(LIVE_TOUR_STEPS[2].text).toContain('This model picker')
     expect(LIVE_TOUR_STEPS[5].text).toContain('This New conversation button')

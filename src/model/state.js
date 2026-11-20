@@ -234,11 +234,13 @@ export function apply(state, activity) {
       break
     case 'run.queued':
       agent.status = 'queued'
+      agent.label = ''
       if (activity.session) rememberSession(agent, activity.session)
       say(agent, 'queued', 'dim')
       break
     case 'run.start':
       agent.status = 'working'
+      agent.label = ''
       agent.runId = activity.runId
       agent.runs += 1
       agent.startedAt = activity.time

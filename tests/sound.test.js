@@ -162,6 +162,15 @@ describe('the sound of an activity', () => {
     ])
   })
 
+  it('stays silent for a message with no recipient', () => {
+    expect(activitySounds({ type: 'agent.message', agent: 'claude', to: '' })).toEqual([])
+    expect(activitySounds({ type: 'agent.message', agent: 'claude', to: undefined })).toEqual([])
+    expect(activitySounds({ type: 'agent.message', agent: 'claude', to: '   ' })).toEqual([])
+    expect(activitySounds({ type: 'agent.message', agent: 'claude', to: 'agy2' })).toEqual([
+      { agent: 'agy2', kind: 'message' },
+    ])
+  })
+
   it('holds only the created paths and asks the room state for the rest', () => {
     const files = new Map()
     for (let index = 0; index < 2000; index += 1) files.set(`src/file${index}.js`, { exists: true })

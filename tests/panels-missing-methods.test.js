@@ -39,6 +39,7 @@ describe('panels with a client that lacks a method', () => {
   it('shows the meters sentence for a bare client', async () => {
     await withDom(async ({ container, root }) => {
       await mount(container, root, createElement(MetersPanel, { client: {} }))
+      expect(METERS_UNAVAILABLE).toBe('Cost needs a newer bridge.')
       expect(container.textContent).toContain(METERS_UNAVAILABLE)
       expect(container.textContent).not.toContain('is not a function')
     })

@@ -27,7 +27,7 @@ describe('Waiting close button', () => {
         })
       )
       expect(html).toContain(
-        'Nothing is running yet. Press / or click ORCHESTRATOR at the top, and the chat sits in the lower half, under the transport.'
+        'Nothing is running yet. Press / or click Chat at the top, and the chat sits in the lower half, under the transport.'
       )
       expect(html).not.toContain('bottom right')
     } finally {
@@ -46,7 +46,9 @@ describe('Waiting close button', () => {
           agents: [{ key: 'orchestrator', name: 'Orchestrator', status: 'idle' }],
         })
       )
-      expect(html).toContain('the chat opens at the bottom right.')
+      expect(html).toContain(
+        'Nothing is running yet. Press / or click Chat at the top, and the chat opens at the bottom right.'
+      )
     } finally {
       if (savedWindow === undefined) delete globalThis.window
       else globalThis.window = savedWindow
