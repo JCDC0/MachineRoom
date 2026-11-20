@@ -9711,6 +9711,16 @@ button.mr-family-heading,
   border: 1px solid var(--family-line);
 }
 
+.mr-family-head .mr-family-label {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
 .mr-family-lanes {
   order: 1;
   width: 224px;
