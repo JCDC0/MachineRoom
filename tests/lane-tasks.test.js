@@ -270,6 +270,37 @@ describe('lane tasks', () => {
     expect(laneTaskIssues({ records: [{ ...failed, briefs: [] }], mergedBriefs })[0].status).toBe('blocked')
   })
 
+  it('skips a failed record while all of its briefs are running again', () => {
+    const failed = record({
+      lane: 'codex',
+      briefs: ['P650'],
+      log: '/tmp/runs/codex-P650-20261120-163000.log',
+      startedAt: iso(30),
+      exitCode: 1,
+    })
+    const openRun = { name: 'agy3-P650-20261120-164900', lane: 'agy3', startedAt: iso(1) }
+
+    const running = laneTaskIssues({ openRuns: [openRun], records: [failed] })
+    expect(running).toHaveLength(1)
+    expect(running[0]).toMatchObject({ id: openRun.name, identifier: 'P650', status: 'in_progress' })
+
+    const alone = laneTaskIssues({ records: [failed] })
+    expect(alone).toHaveLength(1)
+    expect(alone[0]).toMatchObject({ id: 'codex-P650-20261120-163000', identifier: 'P650', status: 'blocked' })
+
+    const pair = record({
+      lane: 'codex',
+      briefs: ['P650', 'P651'],
+      log: '/tmp/runs/codex-P650-P651-20261120-163000.log',
+      startedAt: iso(30),
+      exitCode: 1,
+    })
+    const partial = laneTaskIssues({ openRuns: [openRun], records: [pair] })
+    expect(partial).toHaveLength(2)
+    expect(partial.find((issue) => issue.id === 'codex-P650-P651-20261120-163000')?.status).toBe('blocked')
+    expect(partial.find((issue) => issue.id === openRun.name)?.status).toBe('in_progress')
+  })
+
   it('keeps a run with two briefs blocked while only one of them succeeded later', () => {
     const failed = record({
       lane: 'opencode',
