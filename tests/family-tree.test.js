@@ -8,6 +8,7 @@ import {
   DIRECT_KEY_PROBLEM,
   MAX_SUBS,
   affectedSubText,
+  agentCountLine,
   childConfirmText,
   childDetail,
   childDraft,
@@ -25,7 +26,6 @@ import {
   hideLaneText,
   keyNames,
   labelProblem,
-  laneCountLine,
   moreLanesLabel,
   proposalRows,
   removeLaneText,
@@ -468,17 +468,36 @@ describe('the requests', () => {
 })
 
 describe('the project lane count', () => {
-  it('counts working lanes among the lanes this project shows', () => {
+  it('counts working agents among the agents this project shows', () => {
     expect(
-      laneCountLine([
+      agentCountLine([
         { id: 'orchestrator', kind: 'orchestrator', active: true },
         { id: 'a', kind: 'lane', active: true, working: true },
         { id: 'b', kind: 'lane', active: false },
         { id: 'c', kind: 'lane', active: true },
       ])
-    ).toBe('1 of 3 working')
-    expect(laneCountLine([])).toBe('0 of 0 working')
-    expect(laneCountLine(null)).toBe('0 of 0 working')
+    ).toBe('1 of 4 working')
+    expect(agentCountLine([])).toBe('0 of 0 working')
+    expect(agentCountLine(null)).toBe('0 of 0 working')
+  })
+
+  it('counts a working session with an idle orchestrator and two idle lanes', () => {
+    expect(
+      agentCountLine([
+        { id: 'session:claude-session', kind: 'session', active: true, working: true },
+        { id: 'orchestrator', kind: 'orchestrator', active: true, working: false },
+        { id: 'a', kind: 'lane', active: true, working: false },
+        { id: 'b', kind: 'lane', active: true, working: false },
+      ])
+    ).toBe('1 of 4 working')
+    expect(
+      agentCountLine([
+        { id: 'frontend', kind: 'sub', active: true, working: true },
+        { id: 'off', kind: 'lane', active: false, working: true },
+        { id: 'other', kind: 'unknown', active: true, working: true },
+        null,
+      ])
+    ).toBe('1 of 2 working')
   })
 
   it('splits the inactive lanes off the tree and labels the row', () => {

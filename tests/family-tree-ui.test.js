@@ -245,7 +245,7 @@ describe('FamilyTree rows', () => {
       const body = container.querySelector('.mr-family-body')
       expect(body.querySelector('.mr-side-note').textContent).toBe('Could not read the lanes.')
       expect(container.querySelector('.mr-side-error')).toBeNull()
-      expect(container.querySelector('.mr-side-count').textContent).toBe('1 of 3 working')
+      expect(container.querySelector('.mr-side-count').textContent).toBe('1 of 5 working')
       client.lanes = readLanes
       await act(async () => notify())
       expect(body.querySelector('.mr-side-note')).toBeNull()
@@ -271,7 +271,7 @@ describe('FamilyTree rows', () => {
       ])
       expect(tree.map((row) => Number(row.getAttribute('data-depth')))).toEqual([0, 1, 1, 1])
       expect(container.querySelectorAll('.mr-family-kind')).toHaveLength(0)
-      expect(container.querySelector('.mr-side-count').textContent).toBe('1 of 3 working')
+      expect(container.querySelector('.mr-side-count').textContent).toBe('1 of 5 working')
       expect(container.querySelectorAll('[role="switch"], input[type="checkbox"]')).toHaveLength(0)
       expect(container.textContent).not.toContain('agy')
 
