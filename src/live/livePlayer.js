@@ -1,5 +1,5 @@
 import { ancestors } from '../model/paths.js'
-import { apply, createState } from '../model/state.js'
+import { addAgents, apply, createState } from '../model/state.js'
 
 export function createLivePlayer({ tree, agents, onActivity = () => {} }) {
   const state = createState(tree, agents)
@@ -131,6 +131,9 @@ export function createLivePlayer({ tree, agents, onActivity = () => {} }) {
       state.now = elapsed()
       flushRemovals()
       notify()
+    },
+    addAgents(list) {
+      addAgents(state, list)
     },
     addFiles(paths) {
       addFiles(paths)
