@@ -1625,7 +1625,7 @@ export function createBridge(options = {}) {
   function rememberParsers() {
     const next = new Map()
     if (lanesSource) {
-      for (const agent of lanesSource.agents) {
+      for (const agent of lanesSource.allAgents ?? lanesSource.agents) {
         if (agent.id !== '') next.set(String(agent.id), agent.parser)
       }
     }
