@@ -2,7 +2,21 @@ import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'n
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { readSeats, seatCheck, seatsFileFor, writeSeats } from '../server/seats.js'
+import {
+  GRANT_USAGE,
+  REVOKE_USAGE,
+  formatAgentsReply,
+  formatGrantNotice,
+  formatRevokeNotice,
+  formatSeatsReply,
+  parseSeatCommand,
+  readSeats,
+  seatCheck,
+  seatSummary,
+  seatsFileFor,
+  setGrant,
+  writeSeats,
+} from '../server/seats.js'
 
 const node = (id, kind, parent, extra = {}) => ({ id, kind, parent, active: true, harness: 'claude', ...extra })
 const tree = [
@@ -138,5 +152,112 @@ describe('seatCheck', () => {
     expect(check({ actor: as('orchestrator'), action: 'deleteAgent', target: 'subA-l' }).status).toBe(403)
     expect(check({ actor: as('orchestrator'), action: 'deleteAgent', target: 'l2' })).toEqual({ ok: true })
     expect(check({ actor: owner, action: 'deleteAgent', target: 'subA-l' })).toEqual({ ok: true })
+  })
+})
+
+describe('seat slash command helpers', () => {
+  it('parses /seats, /grant, /revoke and /agents and flags bad arguments', () => {
+    expect(parseSeatCommand('/seats')).toEqual({ kind: 'seats' })
+    expect(parseSeatCommand('  /SEATS  ')).toEqual({ kind: 'seats' })
+    expect(parseSeatCommand('/agents')).toEqual({ kind: 'agents' })
+    expect(parseSeatCommand('/revoke')).toEqual({ kind: 'revoke' })
+    expect(parseSeatCommand('/revoke extra')).toEqual({ kind: 'revoke', error: REVOKE_USAGE })
+    expect(parseSeatCommand('/grant 3')).toEqual({ kind: 'grant', lanes: 3, subs: 0 })
+    expect(parseSeatCommand('/grant 3 1')).toEqual({ kind: 'grant', lanes: 3, subs: 1 })
+    expect(parseSeatCommand('  /GRANT   0   0 ')).toEqual({ kind: 'grant', lanes: 0, subs: 0 })
+    expect(parseSeatCommand('/grant')).toEqual({ kind: 'grant', error: GRANT_USAGE })
+    expect(parseSeatCommand('/grant -1 2')).toEqual({ kind: 'grant', error: GRANT_USAGE })
+    expect(parseSeatCommand('/grant 1.5')).toEqual({ kind: 'grant', error: GRANT_USAGE })
+    expect(parseSeatCommand('/grant 1 2 3')).toEqual({ kind: 'grant', error: GRANT_USAGE })
+    expect(parseSeatCommand('/grant two')).toEqual({ kind: 'grant', error: GRANT_USAGE })
+    expect(parseSeatCommand('/grant-more')).toBeNull()
+    expect(parseSeatCommand('please /grant 3 1')).toBeNull()
+  })
+
+  it('writes grants atomically while keeping rings and other grants', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'seats-grant-'))
+    try {
+      const file = seatsFileFor(dir, dir)
+      writeSeats(file, seats)
+      setGrant(file, 'subA', { lanes: 3, subs: 0 })
+      expect(readSeats(file)).toEqual({
+        rings: [3, 4],
+        grants: { orchestrator: { lanes: 2, subs: 2 }, subA: { lanes: 3, subs: 0 } },
+      })
+      setGrant(file, 'subA', { lanes: 0, subs: 0 })
+      expect(readSeats(file).grants.subA).toEqual({ lanes: 0, subs: 0 })
+      expect(() => setGrant(file, '', { lanes: 1, subs: 0 })).toThrow()
+      expect(() => setGrant(file, 'subA', { lanes: -1, subs: 0 })).toThrow()
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('summarizes rings, clamps subs on the last ring and formats replies and notices', () => {
+    const labelled = tree.map((entry) => ({ ...entry, label: entry.id === 'orchestrator' ? 'Orchestrator' : entry.id }))
+    const mainInfo = seatSummary({ seats, tree: labelled, id: 'orchestrator', depth: 2 })
+    expect(mainInfo).toMatchObject({
+      ring: 0,
+      nextRing: 1,
+      grant: { lanes: 2, subs: 2 },
+      used: { lanes: 1, totalLanes: 2, subs: 2 },
+      rings: [
+        { ring: 0, taken: 1, limit: 3, free: 2 },
+        { ring: 1, taken: 4, limit: 4, free: 0 },
+      ],
+    })
+    const subLast = seatSummary({ seats, tree: labelled, id: 'subA', depth: 2 })
+    expect(subLast.nextRing).toBeNull()
+    expect(subLast.grant).toEqual({ lanes: 1, subs: 0 })
+
+    const seatsText = formatSeatsReply({ seats, tree: labelled, id: 'orchestrator', depth: 2 })
+    expect(seatsText).toContain('2 lanes turned on, 2 subs')
+    expect(seatsText).toContain('Using: 1 of 2 lanes on (2 total), 2 of 2 subs.')
+    expect(seatsText).toContain('Ring 0 (lanes): 2 free (1 of 3 taken).')
+    expect(seatsText).toContain('Ring 1 (subs): 0 free (4 of 4 taken).')
+
+    const agyTree = [node('orchestrator', 'orchestrator', null, { label: 'Neon', harness: 'agy', mode: 'auto' })]
+    expect(formatSeatsReply({ seats: { rings: [], grants: {} }, tree: agyTree, id: 'orchestrator', depth: 2 })).toContain(
+      'AGY needs Bypass mode'
+    )
+
+    const agentsText = formatAgentsReply({ tree: labelled, id: 'orchestrator' })
+    expect(agentsText).toContain('l1 (lane): on, 1 seat on ring 0, made by owner.')
+    expect(agentsText).toContain('l2 (lane): off, 0 seats (ring 0), made by Orchestrator.')
+    expect(agentsText).toContain('subA (sub): on, 1 seat on ring 1, made by owner.')
+    expect(agentsText).toContain('subA-l (lane): on, 1 seat on ring 1, made by subA.')
+    expect(formatAgentsReply({ tree: [labelled[0]], id: 'orchestrator' })).toBe('No agents under Orchestrator.')
+
+    const grantNotice = formatGrantNotice({
+      seats: { rings: [3, 4], grants: { orchestrator: { lanes: 3, subs: 1 } } },
+      tree: labelled,
+      id: 'orchestrator',
+      depth: 2,
+      lanes: 3,
+      subs: 1,
+    })
+    expect(grantNotice).toContain('up to 3 lanes turned on (ring 0) and 1 sub (ring 1)')
+    expect(grantNotice).toContain('POST /api/lanes/create')
+    expect(grantNotice).toContain('POST /api/lanes/active')
+    expect(grantNotice).toContain('POST /api/orchestrator/ladder')
+    expect(grantNotice).toContain('X-MachineRoom-Orchestrator')
+    expect(grantNotice).toContain('own harness (claude)')
+
+    const clampedNotice = formatGrantNotice({
+      seats: { rings: [3, 4], grants: { subA: { lanes: 2, subs: 0 } } },
+      tree: labelled,
+      id: 'subA',
+      depth: 2,
+      lanes: 2,
+      subs: 0,
+      requestedSubs: 1,
+    })
+    expect(clampedNotice).toContain('last allowed ring at depth 2')
+    expect(clampedNotice).not.toContain('POST /api/orchestrator/ladder')
+
+    const revokeNotice = formatRevokeNotice({ seats, tree: labelled, id: 'orchestrator', depth: 2 })
+    expect(revokeNotice).toContain('0 lanes and 0 subs')
+    expect(revokeNotice).toContain('Agents already made stay as they are.')
+    expect(revokeNotice).toContain('POST /api/family/proposals')
   })
 })

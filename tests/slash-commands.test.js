@@ -4,6 +4,7 @@ import { PassThrough } from 'node:stream'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
+  ROOM_COMMANDS,
   SLASH_COMMAND_LIMIT,
   createOrchestrator,
   commandDescription,
@@ -11,7 +12,10 @@ import {
   scanSlashCommands,
 } from '../server/orchestrator.js'
 import { createOrchestrators } from '../server/orchestrators.js'
+import { readSeats, seatsFileFor, writeSeats } from '../server/seats.js'
 import {
+  GRANT_USAGE,
+  REVOKE_USAGE,
   commandKeyAction,
   commandPickText,
   commandQuery,
@@ -208,11 +212,25 @@ describe('the room command parse', () => {
     expect(parseRoomCommand('/help me')).toEqual({ kind: 'help' })
   })
 
+  it('reads seats, grant, revoke and agents', () => {
+    expect(parseRoomCommand('/seats')).toEqual({ kind: 'seats' })
+    expect(parseRoomCommand('/agents')).toEqual({ kind: 'agents' })
+    expect(parseRoomCommand('/revoke')).toEqual({ kind: 'revoke' })
+    expect(parseRoomCommand('/revoke all')).toEqual({ kind: 'revoke', error: REVOKE_USAGE })
+    expect(parseRoomCommand('/grant 3')).toEqual({ kind: 'grant', lanes: 3, subs: 0 })
+    expect(parseRoomCommand('/grant 3 1')).toEqual({ kind: 'grant', lanes: 3, subs: 1 })
+    expect(parseRoomCommand(' /GRANT  0  2 ')).toEqual({ kind: 'grant', lanes: 0, subs: 2 })
+    expect(parseRoomCommand('/grant')).toEqual({ kind: 'grant', error: GRANT_USAGE })
+    expect(parseRoomCommand('/grant -1')).toEqual({ kind: 'grant', error: GRANT_USAGE })
+    expect(parseRoomCommand('/grant 1 2 3')).toEqual({ kind: 'grant', error: GRANT_USAGE })
+  })
+
   it('leaves every other draft alone', () => {
     expect(parseRoomCommand('/hello')).toBeNull()
     expect(parseRoomCommand('hello')).toBeNull()
     expect(parseRoomCommand('/')).toBeNull()
     expect(parseRoomCommand('/compact-all')).toBeNull()
+    expect(parseRoomCommand('/grant-all')).toBeNull()
     expect(parseRoomCommand(null)).toBeNull()
   })
 })
@@ -222,7 +240,18 @@ describe('the command scan', () => {
     const { project, home } = fakeHarness()
     const found = scanSlashCommands({ harness: 'claude', projectRoot: project, home })
     const names = found.map((entry) => entry.name)
-    expect(names).toEqual(['compact', 'clear', 'help', 'new', 'stop', 'hello', 'home', 'pair', 'style', 'team:review'])
+    expect(names).toEqual(['compact', 'clear', 'help', 'new', 'stop', 'seats', 'grant', 'revoke', 'agents', 'hello', 'home', 'pair', 'style', 'team:review'])
+    expect(ROOM_COMMANDS.map((entry) => entry.name)).toEqual([
+      'compact',
+      'clear',
+      'help',
+      'new',
+      'stop',
+      'seats',
+      'grant',
+      'revoke',
+      'agents',
+    ])
     expect(found.find((entry) => entry.name === 'hello')).toMatchObject({
       description: 'Say hello and stop.',
       source: 'command',
@@ -249,7 +278,7 @@ describe('the command scan', () => {
     const { project, home } = fakeOpencodeHarness()
     const found = scanSlashCommands({ harness: 'opencode', projectRoot: project, home })
     const names = found.map((entry) => entry.name)
-    expect(names).toEqual(['compact', 'clear', 'help', 'new', 'stop', 'compat', 'extra', 'go', 'notes', 'user'])
+    expect(names).toEqual(['compact', 'clear', 'help', 'new', 'stop', 'seats', 'grant', 'revoke', 'agents', 'compat', 'extra', 'go', 'notes', 'user'])
     expect(found.find((entry) => entry.name === 'go').source).toBe('command')
     expect(found.find((entry) => entry.name === 'notes').source).toBe('skill')
     expect(names).not.toContain('hello')
@@ -446,5 +475,207 @@ describe('the commands route', () => {
     })
     cleanups.push(() => instance.close())
     expect(instance.commands().some((entry) => entry.name === 'hello')).toBe(true)
+  })
+})
+
+describe('the seat slash commands on the server', () => {
+  function fakeSpawn(captured) {
+    return (file, args) => {
+      captured.push({ file, args })
+      const child = new EventEmitter()
+      child.pid = 0
+      child.kill = () => {}
+      child.stdout = new PassThrough()
+      child.stderr = new PassThrough()
+      setImmediate(() => {
+        child.stdout.write(`${JSON.stringify({ type: 'result', subtype: 'success', result: 'ok' })}\n`)
+        child.stdout.end()
+        child.stderr.end()
+        child.emit('close', 0)
+      })
+      return child
+    }
+  }
+
+  function rig(extraLanes = {}) {
+    const base = temp('mr-seat-cmd-')
+    const project = join(base, 'project')
+    const runs = join(base, 'runs')
+    mkdirSync(project, { recursive: true })
+    mkdirSync(runs, { recursive: true })
+    const captured = []
+    const notices = []
+    const sent = []
+    const lanes = {
+      orchestrator: { name: 'Orchestrator', cli: { harness: 'claude', bin: 'claude', model: 'opus' } },
+      worker: { name: 'Worker', cli: { harness: 'claude', bin: 'claude', model: 'sonnet' }, createdBy: 'orchestrator' },
+      ...extraLanes,
+    }
+    const registry = createOrchestrators({
+      projectRoot: project,
+      runsFolder: runs,
+      lanes,
+      spawn: fakeSpawn(captured),
+      onNotice: (notice) => notices.push(notice),
+      now: () => Date.parse('2026-11-20T10:00:00.000Z'),
+      sendJson: (req, res, status, body) => sent.push({ status, body }),
+      readJsonBody: async () => null,
+      harnessAvailable: () => true,
+    })
+    cleanups.push(() => registry.close())
+    return { project, runs, registry, captured, notices, sent }
+  }
+
+  it('answers /seats and /agents in chat only without starting a turn or queuing a notice', async () => {
+    const { project, runs, registry, captured } = rig()
+    writeSeats(seatsFileFor(project, runs), { rings: [3, 4], grants: { orchestrator: { lanes: 2, subs: 1 } } })
+
+    const seatsOut = await registry.message({ text: '/seats', confirmed: true }, true)
+    expect(seatsOut.status).toBe(200)
+    expect(seatsOut.body.command).toBe('seats')
+    expect(seatsOut.body.reply).toContain('2 lanes turned on, 1 sub')
+    expect(seatsOut.body.reply).toContain('Ring 0 (lanes): 3 free (0 of 3 taken).')
+    expect(captured).toHaveLength(0)
+
+    const agentsOut = await registry.message({ text: '/agents', confirmed: true }, true)
+    expect(agentsOut.status).toBe(200)
+    expect(agentsOut.body.command).toBe('agents')
+    expect(agentsOut.body.reply).toContain('Worker (lane): off, 0 seats (ring 0), made by Orchestrator.')
+    expect(captured).toHaveLength(0)
+
+    const chatMessages = registry.main.answer().messages
+    expect(chatMessages.map((m) => m.from)).toEqual(['room', 'room'])
+
+    await registry.message({ text: 'Hello now', confirmed: true }, true)
+    expect(captured).toHaveLength(1)
+    const promptIndex = captured[0].args.indexOf('-p')
+    expect(captured[0].args[promptIndex + 1]).toBe('Hello now')
+    expect(captured[0].args[promptIndex + 1]).not.toContain('/seats')
+    expect(captured[0].args[promptIndex + 1]).not.toContain('/agents')
+  })
+
+  it('writes grants through seats.js, posts one room notice and delivers it on the next turn', async () => {
+    const { project, runs, registry, captured, notices } = rig()
+    const file = seatsFileFor(project, runs)
+    writeSeats(file, { rings: [3, 4], grants: {} })
+
+    expect((await registry.message({ text: '/grant 3 1', confirmed: false }, true)).status).toBe(400)
+    expect((await registry.message({ text: '/grant bad', confirmed: true }, true)).status).toBe(400)
+    expect(readSeats(file).grants).toEqual({})
+    expect(captured).toHaveLength(0)
+
+    const granted = await registry.message({ text: '/grant 3 1', confirmed: true }, true)
+    expect(granted.status).toBe(200)
+    expect(granted.body.grant).toEqual({ lanes: 3, subs: 1 })
+    expect(readSeats(file).grants.orchestrator).toEqual({ lanes: 3, subs: 1 })
+    expect(captured).toHaveLength(0)
+    expect(notices.some((entry) => entry.topic === 'family')).toBe(true)
+    const chatAfterGrant = registry.main.answer().messages
+    expect(chatAfterGrant).toHaveLength(1)
+    expect(chatAfterGrant[0].from).toBe('room')
+    expect(chatAfterGrant[0].text).toContain('POST /api/lanes/create')
+    expect(chatAfterGrant[0].text).toContain('POST /api/lanes/active')
+    expect(chatAfterGrant[0].text).toContain('POST /api/orchestrator/ladder')
+
+    await registry.message({ text: 'Start the work', confirmed: true }, true)
+    expect(captured).toHaveLength(1)
+    const promptIndex = captured[0].args.indexOf('-p')
+    const sentPrompt = captured[0].args[promptIndex + 1]
+    expect(sentPrompt).toContain('Room: The owner updated your seat grant: up to 3 lanes turned on (ring 0) and 1 sub (ring 1).')
+    expect(sentPrompt).toContain('Owner: Start the work')
+    expect(sentPrompt).not.toContain('/grant 3 1')
+    const sysIndex = captured[0].args.indexOf('--append-system-prompt')
+    expect(captured[0].args[sysIndex + 1]).toContain('Seat grant: 3 lanes and 1 sub.')
+  })
+
+  it('clamps subs to 0 on the last ring and revokes back to 0 and 0', async () => {
+    const { project, runs, registry, captured } = rig()
+    const file = seatsFileFor(project, runs)
+    writeSeats(file, { rings: [3, 4], grants: {} })
+    const ladderOut = registry.ladderChange(
+      {
+        confirmed: true,
+        by: 'owner',
+        ladder: {
+          subs: [{ id: 'ui', name: 'UI', harness: 'claude', model: 'sonnet', lanes: [], scope: ['src/ui/**'], restricted: true, setBy: 'owner' }],
+        },
+      },
+      true
+    )
+    expect(ladderOut.status).toBe(200)
+
+    const granted = await registry.message({ id: 'ui', text: '/grant 2 1', confirmed: true }, true)
+    expect(granted.status).toBe(200)
+    expect(granted.body.grant).toEqual({ lanes: 2, subs: 0 })
+    expect(readSeats(file).grants.ui).toEqual({ lanes: 2, subs: 0 })
+    expect(granted.body.notice).toContain('last allowed ring')
+    expect(granted.body.notice).toContain('restricted to your scope')
+    expect(captured).toHaveLength(0)
+
+    const revoked = await registry.message({ id: 'ui', text: '/revoke', confirmed: true }, true)
+    expect(revoked.status).toBe(200)
+    expect(revoked.body.grant).toEqual({ lanes: 0, subs: 0 })
+    expect(readSeats(file).grants.ui).toEqual({ lanes: 0, subs: 0 })
+    expect(revoked.body.notice).toContain('0 lanes and 0 subs')
+    expect(revoked.body.notice).toContain('Agents already made stay as they are.')
+    expect(revoked.body.notice).toContain('POST /api/family/proposals')
+    expect(captured).toHaveLength(0)
+  })
+
+  it('treats an orchestrator message starting with a seat command as plain text', async () => {
+    const { project, runs, registry } = rig()
+    const file = seatsFileFor(project, runs)
+    writeSeats(file, { rings: [3, 4], grants: {} })
+    const ladderOut = registry.ladderChange(
+      {
+        confirmed: true,
+        by: 'owner',
+        ladder: {
+          subs: [{ id: 'ui', name: 'UI', harness: 'claude', model: 'sonnet', lanes: [], scope: ['src/ui/**'], restricted: false, setBy: 'owner' }],
+        },
+      },
+      true
+    )
+    expect(ladderOut.status).toBe(200)
+
+    const subToken = registry.token('ui')
+    const mainToken = registry.token('orchestrator')
+    const fromSub = await registry.message({ to: 'orchestrator', text: '/grant 5 2', confirmed: true }, false, subToken)
+    expect(fromSub.status).toBe(202)
+    expect(readSeats(file).grants).toEqual({})
+    expect(registry.main.answer().messages.some((m) => m.from === 'sub:ui' && m.text === '/grant 5 2')).toBe(true)
+
+    const fromMain = await registry.message({ to: 'ui', text: '/revoke', confirmed: true }, false, mainToken)
+    expect(fromMain.status).toBe(202)
+    expect(readSeats(file).grants).toEqual({})
+    expect(registry.find('ui').answer().messages.some((m) => m.from === 'orchestrator' && m.text === '/revoke')).toBe(true)
+
+    const seatsFromMain = await registry.message({ to: 'ui', text: '/seats', confirmed: true }, false, mainToken)
+    expect(seatsFromMain.status).toBe(202)
+    expect(registry.find('ui').answer().messages.some((m) => m.from === 'orchestrator' && m.text === '/seats')).toBe(true)
+    expect(registry.find('ui').answer().messages.some((m) => m.from === 'room')).toBe(false)
+  })
+
+  it('returns seat summary on GET /api/orchestrator and GET /api/orchestrators', async () => {
+    const { project, runs, registry, sent } = rig()
+    writeSeats(seatsFileFor(project, runs), { rings: [4, 2], grants: { orchestrator: { lanes: 2, subs: 1 } } })
+    const entries = registry.list()
+    expect(entries[0].seats).toMatchObject({
+      ring: 0,
+      nextRing: 1,
+      grant: { lanes: 2, subs: 1 },
+      rings: [
+        { ring: 0, taken: 0, limit: 4, free: 4 },
+        { ring: 1, taken: 0, limit: 2, free: 2 },
+      ],
+    })
+    const handled = await registry.handle({ method: 'GET', headers: {} }, {}, new URL('http://127.0.0.1/api/orchestrator'))
+    expect(handled).toBe(true)
+    expect(sent[0].status).toBe(200)
+    expect(sent[0].body.seats).toMatchObject({
+      ring: 0,
+      nextRing: 1,
+      grant: { lanes: 2, subs: 1 },
+    })
   })
 })

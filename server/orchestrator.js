@@ -28,6 +28,17 @@ import { harnessByKey } from '../src/harnesses/index.js'
 import { claudeContextWindow } from '../src/harnesses/claude.js'
 import { agentDepthLine } from '../src/model/hierarchy.js'
 import { readAgentDepth } from './agent-depth.js'
+import {
+  formatAgentsReply,
+  formatGrantNotice,
+  formatRevokeNotice,
+  formatSeatsReply,
+  parseSeatCommand,
+  readSeats,
+  seatSummary,
+  seatsFileFor,
+  setGrant,
+} from './seats.js'
 import { HARNESS_EFFORTS, codexProgramFor, harnessUnavailableProblem, isHarnessAvailable, modelUnavailableProblem } from './agents-config.js'
 import { readEndpoints } from './endpoints.js'
 import { modelAllowed } from './harness-models.js'
@@ -178,6 +189,10 @@ export const ROOM_COMMANDS = [
   { name: 'help', description: 'Show the list of commands.', source: 'room' },
   { name: 'new', description: 'Start a new conversation.', source: 'room' },
   { name: 'stop', description: 'Stop the turn that is running.', source: 'room' },
+  { name: 'seats', description: "Show this orchestrator's seat grant, use and free ring seats.", source: 'room' },
+  { name: 'grant', description: 'Allow this orchestrator to make agents: /grant LANES [SUBS].', source: 'room' },
+  { name: 'revoke', description: "Set this orchestrator's seat grant back to 0 lanes and 0 subs.", source: 'room' },
+  { name: 'agents', description: 'List the agents under this orchestrator and their seats.', source: 'room' },
 ]
 
 export function commandDescription(text) {
@@ -995,6 +1010,7 @@ export function createOrchestrator({
   appendRecord = (file, line) => appendFileSync(file, line),
   readTaskState = null,
   readSeatLine = () => 'Seat grant: 0 lanes and 0 subs. Free seats: no seats set.',
+  onSeatCommand = null,
   refreshModelDetails = () => Promise.resolve(false),
 } = {}) {
   const token = typeof tokenOption === 'string' && tokenOption ? tokenOption : randomBytes(24).toString('base64url')
@@ -1190,6 +1206,7 @@ export function createOrchestrator({
       at: typeof item.at === 'string' && item.at ? item.at : iso(now()),
       ...(work ? { work } : {}),
       ...(typeof item.firstCommit === 'string' && item.firstCommit ? { firstCommit: maskText(item.firstCommit) } : {}),
+      ...(item.chatOnly === true ? { chatOnly: true } : {}),
     }
     if (from === 'agent') {
       const agent = restoredAgent(item.agent)
@@ -1565,6 +1582,26 @@ export function createOrchestrator({
     const value = typeof text === 'string' ? text.trim() : ''
     if (!value) return null
     return addMessage('room', value, true)
+  }
+
+  function addRoomReply(text) {
+    if (stopped) return null
+    const value = typeof text === 'string' ? text.trim() : ''
+    if (!value) return null
+    return addMessage('room', value, false, { chatOnly: true })
+  }
+
+  function queueNotice(text) {
+    if (stopped) return null
+    const value = typeof text === 'string' ? text.trim() : ''
+    if (!value) return null
+    const message = { id: randomUUID(), from: 'room', text: maskText(value), at: iso(now()) }
+    messages.push(message)
+    while (messages.length > ORCHESTRATOR_CHAT_LIMIT) messages.shift()
+    pending.push(message)
+    persist()
+    notify()
+    return message
   }
 
   const directLaneTasks = new Set()
@@ -2074,7 +2111,10 @@ ${current}`
         bin: binFor(harness),
       }
       const firstNewIndex = turnMessages.length > 0 ? messages.findIndex((m) => m.id === turnMessages[0].id) : messages.length
-      const prior = messages.slice(0, firstNewIndex === -1 ? messages.length : firstNewIndex).slice(-20)
+      const prior = messages
+        .slice(0, firstNewIndex === -1 ? messages.length : firstNewIndex)
+        .filter((m) => m.chatOnly !== true)
+        .slice(-20)
       const history = prior.map(blockFor).join('\n\n')
       const promptParts = [instruction]
       if (summary) promptParts.push(summary)
@@ -2329,12 +2369,67 @@ ${modelSummary}` : modelSummary
     }
   }
 
+  function runFallbackSeatCommand(command) {
+    const file = seatsFileFor(root, folder)
+    const depth = readAgentDepth(folder).limit
+    const selfNode = {
+      id: key,
+      kind: key === ORCHESTRATOR_KEY ? 'orchestrator' : 'sub',
+      label: name || (key === ORCHESTRATOR_KEY ? 'Orchestrator' : key),
+      harness,
+      mode: mode ?? legacyMode(harness),
+      parent: parent || null,
+      active: true,
+    }
+    const tree = [selfNode]
+    if (command.kind === 'seats') {
+      const reply = formatSeatsReply({ seats: readSeats(file), tree, id: key, depth })
+      const message = addRoomReply(reply)
+      return { status: 200, body: { ok: true, command: 'seats', reply, id: message?.id ?? null } }
+    }
+    if (command.kind === 'agents') {
+      const reply = formatAgentsReply({ tree, id: key })
+      const message = addRoomReply(reply)
+      return { status: 200, body: { ok: true, command: 'agents', reply, id: message?.id ?? null } }
+    }
+    const summaryBefore = seatSummary({ seats: readSeats(file), tree, id: key, depth })
+    const requestedSubs = command.kind === 'grant' ? command.subs : 0
+    const lanesCount = command.kind === 'grant' ? command.lanes : 0
+    const subsCount = command.kind === 'grant' && summaryBefore.nextRing !== null ? command.subs : 0
+    let saved
+    try {
+      saved = setGrant(file, key, { lanes: lanesCount, subs: subsCount })
+    } catch {
+      return { status: 500, body: { error: 'The bridge could not save the seat grant.' } }
+    }
+    const notice = command.kind === 'revoke'
+      ? formatRevokeNotice({ seats: saved, tree, id: key, depth })
+      : formatGrantNotice({ seats: saved, tree, id: key, depth, lanes: lanesCount, subs: subsCount, requestedSubs })
+    const message = queueNotice(notice)
+    return {
+      status: 200,
+      body: {
+        ok: true,
+        command: command.kind,
+        grant: { lanes: lanesCount, subs: subsCount },
+        seats: seatSummary({ seats: saved, tree, id: key, depth }),
+        notice,
+        id: message?.id ?? null,
+      },
+    }
+  }
+
   function send(body) {
     if (body?.confirmed !== true) return { status: 400, body: { error: CONFIRM_MESSAGE_PROBLEM } }
     if (!root) return { status: 409, body: { error: NO_PROJECT_PROBLEM } }
     const text = typeof body.text === 'string' ? body.text.trim() : ''
     if (text.length < 1 || text.length > ORCHESTRATOR_MESSAGE_LIMIT) {
       return { status: 400, body: { error: MESSAGE_PROBLEM } }
+    }
+    const seatCommand = parseSeatCommand(text)
+    if (seatCommand) {
+      if (seatCommand.error) return { status: 400, body: { error: seatCommand.error } }
+      return typeof onSeatCommand === 'function' ? onSeatCommand(seatCommand) : runFallbackSeatCommand(seatCommand)
     }
     if (state === 'paused') setState('idle')
     const message = addMessage('owner', text)
@@ -2622,7 +2717,7 @@ ${modelSummary}` : modelSummary
     if (archiveCurrentSession() === ARCHIVE_FULL) {
       return { status: 409, body: { error: SESSIONS_FULL_PROBLEM } }
     }
-    branchTranscript = harness === 'claude' || harness === 'opencode' ? quotedTranscript(kept) : ''
+    branchTranscript = harness === 'claude' || harness === 'opencode' ? quotedTranscript(kept.filter((m) => m.chatOnly !== true)) : ''
     currentConversationId = randomUUID()
     currentSessionId = null
     currentTitle = title
@@ -3081,6 +3176,8 @@ ${modelSummary}` : modelSummary
     token,
     addMessage,
     addNote,
+    addRoomReply,
+    queueNotice,
     recordAgentMessage,
     markDirectLaneTask,
     addLaneReply: (lane, replyText) => addMessage(lane, replyText),

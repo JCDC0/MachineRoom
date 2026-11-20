@@ -2,10 +2,12 @@ import { visibleChatText } from './orchestratorChat.js'
 
 export const SLASH_COMMAND_LIMIT = 200
 export const SLASH_DESCRIPTION_LIMIT = 160
+export const GRANT_USAGE = 'Use /grant LANES [SUBS] with whole numbers from 0, for example /grant 3 1.'
+export const REVOKE_USAGE = 'Use /revoke with no arguments.'
 
 const NAME = /^[A-Za-z0-9][A-Za-z0-9:._-]*$/
 const SOURCES = new Set(['room', 'command', 'skill'])
-const ROOM = new Set(['compact', 'new', 'clear', 'stop', 'help'])
+const ROOM = new Set(['compact', 'new', 'clear', 'stop', 'help', 'seats', 'grant', 'revoke', 'agents'])
 
 export function commandQuery(text) {
   if (typeof text !== 'string' || !text.startsWith('/')) return null
@@ -79,6 +81,23 @@ export function parseRoomCommand(text) {
   if (name === 'compact') return { kind: 'compact', keep: rest }
   if (name === 'new' || name === 'clear') return { kind: 'new' }
   if (name === 'stop') return { kind: 'stop' }
+  if (name === 'seats') return { kind: 'seats' }
+  if (name === 'agents') return { kind: 'agents' }
+  if (name === 'revoke') {
+    return rest ? { kind: 'revoke', error: REVOKE_USAGE } : { kind: 'revoke' }
+  }
+  if (name === 'grant') {
+    const parts = rest ? rest.split(/\s+/) : []
+    if (parts.length < 1 || parts.length > 2 || !parts.every((part) => /^\d+$/.test(part))) {
+      return { kind: 'grant', error: GRANT_USAGE }
+    }
+    const lanes = Number(parts[0])
+    const subs = parts.length === 2 ? Number(parts[1]) : 0
+    if (!Number.isSafeInteger(lanes) || !Number.isSafeInteger(subs)) {
+      return { kind: 'grant', error: GRANT_USAGE }
+    }
+    return { kind: 'grant', lanes, subs }
+  }
   return { kind: 'help' }
 }
 

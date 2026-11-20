@@ -171,9 +171,91 @@ export function approvalInputText(input) {
   }
 }
 
+function wholeCount(value) {
+  return Number.isInteger(value) && value >= 0
+}
+
+function pluralCount(n, word) {
+  return `${n} ${word}${n === 1 ? '' : 's'}`
+}
+
+export function normalizeSeatSummary(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const ring = wholeCount(value.ring) ? value.ring : 0
+  const nextRing = wholeCount(value.nextRing) ? value.nextRing : null
+  const depth = wholeCount(value.depth) && value.depth >= 1 ? value.depth : ring + (nextRing === null ? 1 : 2)
+  const grant = {
+    lanes: wholeCount(value.grant?.lanes) ? value.grant.lanes : 0,
+    subs: wholeCount(value.grant?.subs) ? value.grant.subs : 0,
+  }
+  const used = {
+    lanes: wholeCount(value.used?.lanes) ? value.used.lanes : 0,
+    totalLanes: wholeCount(value.used?.totalLanes) ? value.used.totalLanes : 0,
+    subs: wholeCount(value.used?.subs) ? value.used.subs : 0,
+  }
+  const rings = Array.isArray(value.rings)
+    ? value.rings
+        .filter((entry) => entry && typeof entry === 'object' && wholeCount(entry.ring))
+        .map((entry) => ({
+          ring: entry.ring,
+          taken: wholeCount(entry.taken) ? entry.taken : 0,
+          limit: wholeCount(entry.limit) ? entry.limit : null,
+          free: wholeCount(entry.free) ? entry.free : null,
+        }))
+    : []
+  return {
+    ring,
+    nextRing,
+    depth,
+    grant,
+    used,
+    rings,
+    harness: typeof value.harness === 'string' ? visibleChatText(value.harness.trim()) : '',
+    mode: typeof value.mode === 'string' ? visibleChatText(value.mode.trim()) : '',
+    name: typeof value.name === 'string' ? cleanLabel(value.name) : '',
+  }
+}
+
+function ringConfirmLabel(detail, fallbackRing) {
+  if (!detail) return `ring ${fallbackRing}`
+  if (detail.limit === null) return `ring ${detail.ring} (no seats set)`
+  return `ring ${detail.ring} (${detail.free} of ${detail.limit} seats free)`
+}
+
+export function seatConfirmText(command, seatInfo, { id = 'orchestrator', name = '' } = {}) {
+  const info = normalizeSeatSummary(seatInfo)
+  const who = cleanLabel(name) || info?.name || (id === 'orchestrator' ? 'Orchestrator' : cleanLabel(id) || 'Orchestrator')
+  const ring = info ? info.ring : id === 'orchestrator' ? 0 : 1
+  const nextRing = info ? info.nextRing : ring + 1
+  const ownRing = info?.rings.find((entry) => entry.ring === ring) ?? null
+  const subRing = nextRing !== null ? info?.rings.find((entry) => entry.ring === nextRing) ?? null : null
+  const ownText = ringConfirmLabel(ownRing, ring)
+  const subText = nextRing !== null ? ringConfirmLabel(subRing, nextRing) : ''
+  if (command?.kind === 'revoke') {
+    const current = info
+      ? `from ${pluralCount(info.grant.lanes, 'lane')} and ${pluralCount(info.grant.subs, 'sub')} to 0 lanes and 0 subs`
+      : 'to 0 lanes and 0 subs'
+    const ringLine = subText ? `${ownText} and ${subText}` : ownText
+    return `Revoke ${who}'s seat grant (${current} on ${ringLine})? Agents already made stay as they are. This posts a room notice to ${who}.`
+  }
+  const lanes = wholeCount(command?.lanes) ? command.lanes : 0
+  const requestedSubs = wholeCount(command?.subs) ? command.subs : 0
+  const subs = nextRing !== null ? requestedSubs : 0
+  const subPart = nextRing !== null
+    ? ` and ${pluralCount(subs, 'sub')} on ${subText}`
+    : requestedSubs > 0
+      ? ` and 0 subs (ring ${ring} is the last allowed ring at depth ${info.depth})`
+      : ' and 0 subs'
+  const agyNote = info?.harness === 'agy' && info.mode && info.mode !== 'bypass'
+    ? ' AGY needs Bypass mode to use a seat grant.'
+    : ''
+  return `Grant ${who} up to ${pluralCount(lanes, 'lane')} turned on on ${ownText}${subPart}? This posts a room notice to ${who}.${agyNote}`
+}
+
 export function normalizeChat(payload) {
   const source = payload && typeof payload === 'object' && !Array.isArray(payload) ? payload : {}
   const state = source.state === 'working' || source.state === 'paused' ? source.state : 'idle'
+  const seats = normalizeSeatSummary(source.seats)
   return {
     state,
     model: typeof source.model === 'string' ? visibleChatText(source.model.trim()) : '',
@@ -182,6 +264,7 @@ export function normalizeChat(payload) {
     mode: MODE_IDS.has(source.mode) ? source.mode : '',
     modes: normalizeModes(source.modes),
     approvals: normalizeApprovals(source.approvals),
+    ...(seats ? { seats } : {}),
   }
 }
 

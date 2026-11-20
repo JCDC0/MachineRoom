@@ -32,7 +32,20 @@ import { readAllLanes } from './agents-config.js'
 import { activeEligibleLaneKeys, eligibleLanes, projectLanesFileFor, readHiddenLanes } from './active-lanes.js'
 import { createRecordsCache, runsFolder as sharedRunsFolder } from './lanes-source.js'
 import { familySeatsFor } from './family.js'
-import { isUnder, levelOf, overRingProblem, seatCheck, seatLine } from './seats.js'
+import {
+  formatAgentsReply,
+  formatGrantNotice,
+  formatRevokeNotice,
+  formatSeatsReply,
+  isUnder,
+  levelOf,
+  overRingProblem,
+  seatCheck,
+  seatLine,
+  seatSummary,
+  seatsFileFor,
+  setGrant,
+} from './seats.js'
 
 function pathKey(path) {
   try {
@@ -327,6 +340,56 @@ export function createOrchestrators({
     }, ladder)
   }
 
+  function seatSummaryFor(id) {
+    return seatSummary({ ...seatContext(), id })
+  }
+
+  function runSeatCommand(id, command) {
+    const instance = instances.get(id)
+    if (!instance) return { status: 404, body: { error: NO_ORCHESTRATOR_PROBLEM } }
+    if (command?.error) return { status: 400, body: { error: command.error } }
+    if (command.kind === 'seats') {
+      const reply = formatSeatsReply({ ...seatContext(), id })
+      const msg = instance.addRoomReply(reply)
+      return { status: 200, body: { ok: true, command: 'seats', reply, id: msg?.id ?? null } }
+    }
+    if (command.kind === 'agents') {
+      const reply = formatAgentsReply({ ...seatContext(), id })
+      const msg = instance.addRoomReply(reply)
+      return { status: 200, body: { ok: true, command: 'agents', reply, id: msg?.id ?? null } }
+    }
+    const before = seatContext()
+    const summaryBefore = seatSummary({ ...before, id })
+    const requestedSubs = command.kind === 'grant' ? command.subs : 0
+    const lanesCount = command.kind === 'grant' ? command.lanes : 0
+    const subsCount = command.kind === 'grant' && summaryBefore.nextRing !== null ? command.subs : 0
+    let savedSeats
+    try {
+      savedSeats = setGrant(seatsFileFor(root, folder), id, { lanes: lanesCount, subs: subsCount })
+    } catch {
+      return { status: 500, body: { error: 'The bridge could not save the seat grant.' } }
+    }
+    const after = { ...before, seats: savedSeats }
+    const notice = command.kind === 'revoke'
+      ? formatRevokeNotice({ ...after, id })
+      : formatGrantNotice({ ...after, id, lanes: lanesCount, subs: subsCount, requestedSubs })
+    const msg = instance.queueNotice(notice)
+    try {
+      onNotice?.({ topic: 'family' })
+    } catch {}
+    return {
+      status: 200,
+      body: {
+        ok: true,
+        command: command.kind,
+        grant: { lanes: lanesCount, subs: subsCount },
+        seats: seatSummary({ ...after, id }),
+        notice,
+        id: msg?.id ?? null,
+      },
+    }
+  }
+
   const main = createOrchestrator({
     id: ORCHESTRATOR_KEY,
     name: mainName,
@@ -346,6 +409,7 @@ export function createOrchestrators({
     approvalTimeoutMs,
     readTaskState: stateReader,
     readSeatLine: () => seatLine({ ...seatContext(), id: ORCHESTRATOR_KEY }),
+    onSeatCommand: (command) => runSeatCommand(ORCHESTRATOR_KEY, command),
     refreshModelDetails,
   })
   instances.set(ORCHESTRATOR_KEY, main)
@@ -482,6 +546,7 @@ export function createOrchestrators({
       approvalTimeoutMs,
       readTaskState: stateReader,
       readSeatLine: () => seatLine({ ...seatContext(), id: config.id }),
+      onSeatCommand: (command) => runSeatCommand(config.id, command),
       refreshModelDetails,
       onMessage: (message) => announce(message?.from, agentKey(message?.to), message?.kind, message?.text),
       extraInstructions: () => {
@@ -589,6 +654,7 @@ export function createOrchestrators({
     const { ladder } = readSaved()
     const claimed = new Set(ladder.subs.flatMap((sub) => sub.lanes))
     const answer = main.answer()
+    const seatsCtx = seatContext(ladder)
     const activeHarnesses = availableHarnesses(lanes, process.env, process.platform, readEndpoints(folder), folder)
     const entries = [
       {
@@ -609,6 +675,7 @@ export function createOrchestrators({
         mode: answer.mode,
         modes: answer.modes,
         approvals: answer.approvals,
+        seats: seatSummary({ ...seatsCtx, id: ORCHESTRATOR_KEY }),
         lanes: currentLaneKeys().filter((lane) => !claimed.has(lane)),
         scope: [],
         restricted: false,
@@ -638,6 +705,7 @@ export function createOrchestrators({
         mode: state?.mode ?? legacyMode(harness),
         modes: modesFor(harness),
         approvals: state?.approvals ?? [],
+        seats: seatSummary({ ...seatsCtx, id: sub.id }),
         lanes: sub.lanes.filter((lane) => !isLaneHidden(lane)),
         scope: [...sub.scope],
         restricted: sub.restricted,
@@ -1407,7 +1475,8 @@ export function createOrchestrators({
         sendJson(req, res, 404, { error: NO_ORCHESTRATOR_PROBLEM })
         return true
       }
-      sendJson(req, res, 200, instance.answer())
+      const payload = instance.answer()
+      sendJson(req, res, 200, { ...payload, seats: seatSummaryFor(payload.id) })
       return true
     }
     if (path === '/api/orchestrator/commands') {
