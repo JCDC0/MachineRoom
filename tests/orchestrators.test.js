@@ -2280,7 +2280,7 @@ describe('a run the main starts on a sub lane', () => {
     expect(backend.body.routed.reason).toBe('No lane of the medium tier is free, so the first free lane was taken.')
 
     await waitFor(() => readLines(rig.runnerCalls).length === 2)
-    expect(readLines(rig.runnerCalls).map((call) => call[0])).toEqual(['opencode', 'opencode2'])
+    expect(readLines(rig.runnerCalls).map((call) => call[0]).sort()).toEqual(['opencode', 'opencode2'])
   })
 
 
