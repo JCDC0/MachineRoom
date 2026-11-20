@@ -388,11 +388,19 @@ export function buildFamilyNodes({
   }
 
   const top = readTop(topFileFor(projectRoot, runsFolder))
+  const mainHidden = top !== ORCHESTRATOR_KEY && !mainWorking
   if (top === ORCHESTRATOR_KEY) return [mainNode, ...subNodes, ...laneNodes]
   const session = SESSION_TOPS[top]
-  mainNode.parent = `session:${top}`
+  const sessionId = `session:${top}`
+  if (mainHidden) {
+    for (const node of [...subNodes, ...laneNodes]) {
+      if (node.parent === ORCHESTRATOR_KEY) node.parent = sessionId
+    }
+  } else {
+    mainNode.parent = sessionId
+  }
   const sessionNode = {
-    id: mainNode.parent,
+    id: sessionId,
     kind: 'session',
     label: session.label,
     harness: session.harness,
@@ -400,12 +408,12 @@ export function buildFamilyNodes({
     effort: null,
     mode: null,
     parent: null,
-    children: [ORCHESTRATOR_KEY],
+    children: mainHidden ? mainNode.children : [ORCHESTRATOR_KEY],
     active: true,
     working: typeof isWorking === 'function' ? Boolean(isWorking(top)) : false,
     custom: false,
   }
-  return [sessionNode, mainNode, ...subNodes, ...laneNodes]
+  return mainHidden ? [sessionNode, ...subNodes, ...laneNodes] : [sessionNode, mainNode, ...subNodes, ...laneNodes]
 }
 
 function parentChain(node, nodeOf, parentOf) {
