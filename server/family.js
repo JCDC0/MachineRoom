@@ -245,6 +245,7 @@ export function buildFamilyNodes({
   orchestrators,
   isWorking,
   ladder = orchestrators?.getLadder?.() ?? { subs: [] },
+  hideIdleMain = false,
 } = {}) {
   const labelsFile = labelsFileFor(projectRoot, runsFolder)
   const labels = readLabels(labelsFile)
@@ -424,7 +425,7 @@ export function buildFamilyNodes({
   }
 
   const top = readTop(topFileFor(projectRoot, runsFolder))
-  const mainHidden = top !== ORCHESTRATOR_KEY && !mainWorking
+  const mainHidden = hideIdleMain && top !== ORCHESTRATOR_KEY && !mainWorking
   if (top === ORCHESTRATOR_KEY) return [mainNode, ...subNodes, ...laneNodes]
   const session = SESSION_TOPS[top]
   const sessionId = `session:${top}`
@@ -501,6 +502,7 @@ export function createFamilyApi(options = {}) {
         activeLanes,
         orchestrators: orchs,
         isWorking,
+        hideIdleMain: true,
       })
       const keys = Object.keys(readKeys(runsDir)).sort().map((name) => ({ name }))
       const proposals = readProposals(runsDir)
