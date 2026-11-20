@@ -6,6 +6,9 @@ import { projectHash } from './active-lanes.js'
 import { AGENT_DEPTH_DEFAULT } from './agent-depth.js'
 
 export const SEAT_ACTIONS = ['createLane', 'turnOn', 'turnOff', 'addSub', 'deleteAgent']
+export const SEAT_COMMANDS = ['seats', 'grant', 'revoke', 'agents']
+export const GRANT_USAGE = 'Use /grant LANES [SUBS] with whole numbers from 0, for example /grant 3 1.'
+export const REVOKE_USAGE = 'Use /revoke with no arguments.'
 const MAIN_ID = 'orchestrator'
 
 export function seatsFileFor(projectRoot, runsFolder) {
@@ -127,6 +130,158 @@ export function seatLine({ seats, tree, id, depth }) {
   const next = level + 1
   const hasNext = next < depth
   return `Seat grant: ${plural(grant.lanes, 'lane')} and ${plural(hasNext ? grant.subs : 0, 'sub')}. Free seats: ring ${level}, ${free(level)}${hasNext ? `; ring ${next}, ${free(next)}` : ''}.`
+}
+
+export function parseSeatCommand(text) {
+  const value = typeof text === 'string' ? text.trim() : ''
+  const match = /^\/([A-Za-z]+)(?:[ \t]+([\s\S]*))?$/.exec(value)
+  if (!match) return null
+  const name = match[1].toLowerCase()
+  if (!SEAT_COMMANDS.includes(name)) return null
+  const rest = (match[2] ?? '').trim()
+  if (name === 'seats') return { kind: 'seats' }
+  if (name === 'agents') return { kind: 'agents' }
+  if (name === 'revoke') {
+    return rest ? { kind: 'revoke', error: REVOKE_USAGE } : { kind: 'revoke' }
+  }
+  const parts = rest ? rest.split(/\s+/) : []
+  if (parts.length < 1 || parts.length > 2) return { kind: 'grant', error: GRANT_USAGE }
+  if (!parts.every((part) => /^\d+$/.test(part))) return { kind: 'grant', error: GRANT_USAGE }
+  const lanes = Number(parts[0])
+  const subs = parts.length === 2 ? Number(parts[1]) : 0
+  if (!Number.isSafeInteger(lanes) || !Number.isSafeInteger(subs)) return { kind: 'grant', error: GRANT_USAGE }
+  return { kind: 'grant', lanes, subs }
+}
+
+export function setGrant(file, id, { lanes, subs }, io = {}) {
+  if (typeof id !== 'string' || !id.trim()) throw new Error('An orchestrator id is required.')
+  if (!count(lanes) || !count(subs)) throw new Error('Each grant needs lanes and subs as whole numbers from 0.')
+  const current = readSeats(file)
+  const grants = { ...current.grants, [id]: { lanes, subs } }
+  return writeSeats(file, { rings: current.rings, grants }, io)
+}
+
+export function seatSummary({ seats, tree, id, depth = AGENT_DEPTH_DEFAULT }) {
+  const nodes = tree ?? []
+  const node = nodeOf(nodes, id)
+  const ring = node ? levelOf(nodes, node) : 0
+  const nextRing = ring + 1 < depth ? ring + 1 : null
+  const raw = grantFor(seats, id)
+  const grant = { lanes: raw.lanes, subs: nextRing !== null ? raw.subs : 0 }
+  const usedLanes = nodes.filter((n) => n.kind === 'lane' && n.parent === id && n.active).length
+  const totalLanes = nodes.filter((n) => n.kind === 'lane' && n.parent === id).length
+  const usedSubs = nodes.filter((n) => n.kind === 'sub' && n.parent === id).length
+  const ringDetail = (level) => {
+    const taken = ringUse(nodes, level)
+    const limit = count(seats?.rings?.[level]) ? seats.rings[level] : null
+    const free = limit === null ? null : Math.max(0, limit - taken)
+    return { ring: level, taken, limit, free }
+  }
+  const rings = nextRing !== null ? [ringDetail(ring), ringDetail(nextRing)] : [ringDetail(ring)]
+  return {
+    id,
+    name: node?.label || (id === MAIN_ID ? 'Orchestrator' : id),
+    harness: node?.harness || '',
+    mode: node?.mode || '',
+    restricted: Boolean(node?.restricted),
+    ring,
+    nextRing,
+    depth,
+    grant,
+    used: { lanes: usedLanes, totalLanes, subs: usedSubs },
+    rings,
+  }
+}
+
+function ringStatusText(detail) {
+  if (detail.limit === null) return `no seats set (${detail.taken} taken)`
+  return `${detail.free} free (${detail.taken} of ${detail.limit} taken)`
+}
+
+export function formatSeatsReply({ seats, tree, id, depth = AGENT_DEPTH_DEFAULT }) {
+  const info = seatSummary({ seats, tree, id, depth })
+  const lastNote = info.nextRing === null ? ` (ring ${info.ring} is the last allowed ring at depth ${info.depth})` : ''
+  const lines = [
+    `Seat grant for ${info.name}: ${plural(info.grant.lanes, 'lane')} turned on, ${plural(info.grant.subs, 'sub')}${lastNote}.`,
+    `Using: ${info.used.lanes} of ${plural(info.grant.lanes, 'lane')} on (${info.used.totalLanes} total), ${info.used.subs} of ${plural(info.grant.subs, 'sub')}.`,
+    `Ring ${info.rings[0].ring} (lanes): ${ringStatusText(info.rings[0])}.`,
+  ]
+  if (info.rings[1]) {
+    lines.push(`Ring ${info.rings[1].ring} (subs): ${ringStatusText(info.rings[1])}.`)
+  }
+  if (info.harness === 'agy' && info.mode && info.mode !== 'bypass') {
+    lines.push('Note: AGY needs Bypass mode to use a seat grant.')
+  }
+  return lines.join('\n')
+}
+
+export function formatAgentsReply({ tree, id }) {
+  const nodes = tree ?? []
+  const host = nodeOf(nodes, id)
+  const hostName = host?.label || (id === MAIN_ID ? 'Orchestrator' : id)
+  const children = nodes.filter((node) => (node.kind === 'lane' || node.kind === 'sub') && isUnder(nodes, node, id))
+  if (children.length === 0) return `No agents under ${hostName}.`
+  const lines = [`Agents under ${hostName}:`]
+  for (const child of children) {
+    const level = levelOf(nodes, child)
+    const status = child.active ? 'on' : 'off'
+    const seat = child.active ? `1 seat on ring ${level}` : `0 seats (ring ${level})`
+    const maker = child.createdBy ? (nodeOf(nodes, child.createdBy)?.label || child.createdBy) : 'owner'
+    lines.push(`- ${child.label || child.id} (${child.kind}): ${status}, ${seat}, made by ${maker}.`)
+  }
+  return lines.join('\n')
+}
+
+export function formatRevokeNotice({ seats, tree, id, depth = AGENT_DEPTH_DEFAULT, requestedSubs = 0 }) {
+  const info = seatSummary({ seats, tree, id, depth })
+  const depthNote = requestedSubs > 0 && info.nextRing === null
+    ? ` Ring ${info.ring} is the last allowed ring at depth ${info.depth}, so your sub grant is 0.`
+    : ''
+  return [
+    `The owner revoked your seat grant (now 0 lanes and 0 subs).${depthNote}`,
+    'Agents already made stay as they are. You may make no more and may only propose a lane with POST /api/family/proposals.',
+  ].join('\n')
+}
+
+export function formatGrantNotice({ seats, tree, id, depth = AGENT_DEPTH_DEFAULT, lanes, subs, requestedSubs = subs }) {
+  const info = seatSummary({ seats, tree, id, depth })
+  const effectiveSubs = info.nextRing !== null ? subs : 0
+  if (lanes === 0 && effectiveSubs === 0) {
+    return formatRevokeNotice({ seats, tree, id, depth, requestedSubs })
+  }
+  const depthNote = requestedSubs > 0 && info.nextRing === null
+    ? ` Ring ${info.ring} is the last allowed ring at depth ${info.depth}, so your sub grant is 0.`
+    : ''
+  const subRingText = info.nextRing !== null ? ` (ring ${info.nextRing})` : ''
+  const abilities = []
+  if (lanes > 0) abilities.push('create lanes under yourself and turn your lanes on or off')
+  if (effectiveSubs > 0) abilities.push(`add subs under yourself on ring ${info.nextRing}`)
+  const canDo = `You may now ${abilities.join(', and ')}.`
+  const cannotDo = lanes === 0
+    ? ' You may not create lanes; propose a lane with POST /api/family/proposals.'
+    : effectiveSubs === 0
+      ? ' You may not add subs.'
+      : ''
+  const routes = []
+  if (lanes > 0) {
+    routes.push('- POST /api/lanes/create to create a lane under yourself (turns on only if a seat is free).')
+    routes.push('- POST /api/lanes/active to turn lanes under you on or off.')
+  }
+  if (effectiveSubs > 0) {
+    routes.push(`- POST /api/orchestrator/ladder to add a sub under yourself on ring ${info.nextRing}.`)
+  }
+  const ringNotes = []
+  if (lanes > 0 && info.rings[0]) ringNotes.push(`ring ${info.rings[0].ring}: ${ringStatusText(info.rings[0])}`)
+  if (effectiveSubs > 0 && info.rings[1]) ringNotes.push(`ring ${info.rings[1].ring}: ${ringStatusText(info.rings[1])}`)
+  const harnessRule = info.harness ? `Use only your own harness (${info.harness}) with a listed model.` : 'Use only your own harness with a listed model.'
+  const scopeRule = info.restricted ? ' Any sub you add stays restricted to your scope or narrower.' : ''
+  return [
+    `The owner updated your seat grant: up to ${plural(lanes, 'lane')} turned on (ring ${info.ring}) and ${plural(effectiveSubs, 'sub')}${subRingText}.${depthNote}`,
+    `${canDo}${cannotDo}`,
+    'Routes (send your X-MachineRoom-Orchestrator header and confirmed: true):',
+    ...routes,
+    `Limits: stay within your grant (${plural(lanes, 'lane')} on, ${plural(effectiveSubs, 'sub')}) and free seats (${ringNotes.join('; ')}). ${harnessRule} Change only agents under you, and delete only agents you made.${scopeRule}`,
+  ].join('\n')
 }
 
 export function overRingProblem(body, ring) {

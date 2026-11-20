@@ -196,4 +196,109 @@ describe('the room commands', () => {
       expect(container.querySelector('.mr-orch-error')).toBeNull()
     })
   })
+
+  it('sends /seats and /agents directly without opening a confirm card even on an unstarted chat', async () => {
+    const emptyChat = { state: 'idle', messages: [] }
+    await withDom(async ({ container, root }) => {
+      const { client, calls } = makeClient()
+      client.orchestrator = async () => emptyChat
+      await mount(root, client, { initialChat: emptyChat, initialDraft: '/seats' })
+      await submit(container)
+      expect(calls.send).toEqual([{ text: '/seats', options: {} }])
+      expect(container.querySelector('.mr-orch-confirm')).toBeNull()
+      expect(inputOf(container).value).toBe('')
+    })
+
+    await withDom(async ({ container, root }) => {
+      const { client, calls } = makeClient()
+      client.orchestrator = async () => emptyChat
+      await mount(root, client, { initialChat: emptyChat, initialDraft: '/agents' })
+      await submit(container)
+      expect(calls.send).toEqual([{ text: '/agents', options: {} }])
+      expect(container.querySelector('.mr-orch-confirm')).toBeNull()
+    })
+  })
+
+  it('confirms /grant with numbers and rings before sending, and cancels cleanly', async () => {
+    const seatChat = {
+      ...STARTED,
+      seats: {
+        ring: 0,
+        nextRing: 1,
+        depth: 2,
+        grant: { lanes: 0, subs: 0 },
+        used: { lanes: 0, totalLanes: 1, subs: 0 },
+        rings: [
+          { ring: 0, taken: 1, limit: 3, free: 2 },
+          { ring: 1, taken: 1, limit: 4, free: 3 },
+        ],
+      },
+    }
+    await withDom(async ({ container, root }) => {
+      const { client, calls } = makeClient()
+      client.orchestrator = async () => seatChat
+      await mount(root, client, { initialChat: seatChat, initialDraft: '/grant 3 1' })
+      await submit(container)
+      expect(calls.send).toHaveLength(0)
+      expect(container.textContent).toContain('3 lanes turned on on ring 0 (2 of 3 seats free)')
+      expect(container.textContent).toContain('1 sub on ring 1 (3 of 4 seats free)')
+
+      const cancel = Array.from(container.querySelectorAll('.mr-orch-confirm-btn')).find(
+        (button) => button.textContent.trim() === 'Cancel'
+      )
+      await click(root, cancel)
+      await settle()
+      expect(container.querySelector('.mr-orch-confirm')).toBeNull()
+      expect(calls.send).toHaveLength(0)
+
+      await submit(container)
+      const grant = Array.from(container.querySelectorAll('.mr-orch-confirm-btn')).find(
+        (button) => button.textContent.trim() === 'Grant'
+      )
+      await click(root, grant)
+      await settle()
+      expect(calls.send).toEqual([{ text: '/grant 3 1', options: {} }])
+      expect(container.querySelector('.mr-orch-confirm')).toBeNull()
+      expect(inputOf(container).value).toBe('')
+    })
+  })
+
+  it('confirms /revoke with numbers and rings and rejects bad /grant input without sending', async () => {
+    const seatChat = {
+      ...STARTED,
+      seats: {
+        ring: 1,
+        nextRing: null,
+        depth: 2,
+        grant: { lanes: 2, subs: 0 },
+        used: { lanes: 1, totalLanes: 1, subs: 0 },
+        rings: [{ ring: 1, taken: 2, limit: 4, free: 2 }],
+      },
+    }
+    await withDom(async ({ container, root }) => {
+      const { client, calls } = makeClient()
+      client.orchestrator = async () => seatChat
+      await mount(root, client, { initialChat: seatChat, initialDraft: '/revoke' })
+      await submit(container)
+      expect(calls.send).toHaveLength(0)
+      expect(container.textContent).toContain('from 2 lanes and 0 subs to 0 lanes and 0 subs')
+      expect(container.textContent).toContain('ring 1 (2 of 4 seats free)')
+      expect(container.textContent).toContain('Agents already made stay as they are.')
+
+      const revoke = Array.from(container.querySelectorAll('.mr-orch-confirm-btn')).find(
+        (button) => button.textContent.trim() === 'Revoke'
+      )
+      await click(root, revoke)
+      await settle()
+      expect(calls.send).toEqual([{ text: '/revoke', options: {} }])
+    })
+
+    await withDom(async ({ container, root }) => {
+      const { client, calls } = makeClient()
+      await mount(root, client, { initialDraft: '/grant nope' })
+      await submit(container)
+      expect(calls.send).toHaveLength(0)
+      expect(container.querySelector('.mr-orch-error')?.textContent).toContain('/grant LANES [SUBS]')
+    })
+  })
 })

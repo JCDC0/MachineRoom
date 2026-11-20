@@ -33,6 +33,7 @@ import {
   projectBaseName,
   retryTarget,
   runnableLanes,
+  seatConfirmText,
   sendChatMessage,
   startConfirmText,
   statusDetail,
@@ -241,6 +242,28 @@ describe('orchestratorChat helpers', () => {
     expect(chat.model).toBe('opus')
     expect(chat.project).toBe('C:\\Users\\<name>\\work\\app')
     expect(chat.messages).toHaveLength(1)
+  })
+
+  it('normalizes seats on a chat payload and builds seat confirm text', () => {
+    const seats = {
+      ring: 1,
+      nextRing: null,
+      depth: 2,
+      harness: 'agy',
+      mode: 'auto',
+      grant: { lanes: 2, subs: 0 },
+      used: { lanes: 1, totalLanes: 2, subs: 0 },
+      rings: [{ ring: 1, taken: 2, limit: 4, free: 2 }],
+    }
+    const chat = normalizeChat({ state: 'idle', seats })
+    expect(chat.seats).toMatchObject({ ring: 1, nextRing: null, depth: 2, grant: { lanes: 2, subs: 0 } })
+    const grantLine = seatConfirmText({ kind: 'grant', lanes: 3, subs: 1 }, chat.seats, { id: 'neon', name: 'Neon' })
+    expect(grantLine).toContain('3 lanes turned on on ring 1 (2 of 4 seats free)')
+    expect(grantLine).toContain('0 subs (ring 1 is the last allowed ring at depth 2)')
+    expect(grantLine).toContain('AGY needs Bypass mode')
+    const revokeLine = seatConfirmText({ kind: 'revoke' }, chat.seats, { id: 'neon', name: 'Neon' })
+    expect(revokeLine).toContain('from 2 lanes and 0 subs to 0 lanes and 0 subs on ring 1 (2 of 4 seats free)')
+    expect(revokeLine).toContain('Agents already made stay as they are.')
   })
 
   it('finds an orchestrator in the agent list by key, name or role', () => {

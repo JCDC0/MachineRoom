@@ -42,6 +42,7 @@ import {
   projectBaseName,
   retryTarget,
   runnableLanes,
+  seatConfirmText,
   sendChatMessage,
   startConfirmText,
   startModeText,
@@ -176,6 +177,7 @@ export default function OrchestratorChat({
   const [compactOpen, setCompactOpen] = useState(false)
   const [compactKeep, setCompactKeep] = useState('')
   const [compacting, setCompacting] = useState(false)
+  const [seatConfirm, setSeatConfirm] = useState(null)
   const [commands, setCommands] = useState([])
   const [commandError, setCommandError] = useState('')
   const [slashOpen, setSlashOpen] = useState(() => clampDraft(initialDraft).startsWith('/'))
@@ -240,6 +242,7 @@ export default function OrchestratorChat({
       ? chat.approvals
       : normalizeApprovals(current?.approvals)
   const canAnswerApprovals = typeof client?.answerApproval === 'function'
+  const seatInfo = teamSelected ? null : chat.seats ?? current?.seats ?? null
   const staticModels = modelChoices(models, harness)
   const modelRefresh = useHarnessModels({
     client,
@@ -643,7 +646,7 @@ export default function OrchestratorChat({
         return
       }
       if (confirm) {
-        if (confirm === 'stop' && stopping) return
+        if ((confirm === 'stop' && stopping) || (confirm === 'seat' && sending)) return
         closeConfirm()
         return
       }
@@ -793,7 +796,7 @@ export default function OrchestratorChat({
     if (sending || unavailable) return
     const command = parseRoomCommand(text)
     if (command) {
-      runRoomCommand(command)
+      runRoomCommand(command, text)
       return
     }
     if (!canSend(text)) return
@@ -843,7 +846,40 @@ export default function OrchestratorChat({
     }
   }
 
-  function runRoomCommand(command) {
+  async function sendSeatCommand(text) {
+    if (!client) {
+      setError('The orchestrator is not connected.')
+      return
+    }
+    const version = selectionRef.current.version
+    setSending(true)
+    setError(null)
+    const result = await sendChatMessage(client, text, selected)
+    if (selectionRef.current.version !== version) {
+      setSending(false)
+      return
+    }
+    setSending(false)
+    if (!result.ok) {
+      setError(result.error)
+      return
+    }
+    setConfirm(null)
+    setSeatConfirm(null)
+    setSlashOpen(false)
+    setDraft((currentDraft) => (currentDraft.trim() === text ? '' : currentDraft))
+    jumpToNewest()
+    await readChatRef.current?.()
+    await readListRef.current?.()
+    onOrchestratorChange()
+  }
+
+  function runRoomCommand(command, rawText = '') {
+    if (command.error) {
+      setError(command.error)
+      setSlashOpen(false)
+      return
+    }
     if (command.kind === 'help') {
       setDraft('/')
       setSlashIndex(0)
@@ -863,9 +899,28 @@ export default function OrchestratorChat({
       openStopConfirm()
       return
     }
+    if (command.kind === 'seats' || command.kind === 'agents') {
+      setSlashOpen(false)
+      setConfirm(null)
+      setSeatConfirm(null)
+      sendSeatCommand(rawText || `/${command.kind}`)
+      return
+    }
+    if (command.kind === 'grant' || command.kind === 'revoke') {
+      setError(null)
+      setSlashOpen(false)
+      setSeatConfirm({ ...command, text: rawText || `/${command.kind}` })
+      setConfirm('seat')
+      return
+    }
     setDraft('')
     setSlashOpen(false)
     startConversation()
+  }
+
+  function seatCommandConfirmed() {
+    if (!seatConfirm || sending) return
+    sendSeatCommand(seatConfirm.text)
   }
 
   async function compactConfirmed() {
@@ -904,6 +959,7 @@ export default function OrchestratorChat({
   function closeConfirm() {
     setConfirm(null)
     setStopResult(null)
+    setSeatConfirm(null)
   }
 
   async function confirmStop(tree = false) {
@@ -1574,6 +1630,36 @@ export default function OrchestratorChat({
                     setCompactKeep('')
                   }}
                   disabled={compacting}
+                >
+                  Cancel
+                </button>
+              </div>
+            </section>
+          ) : null}
+
+          {confirm === 'seat' && seatConfirm ? (
+            <section
+              ref={confirmRef}
+              className={`mr-orch-confirm${seatConfirm.kind === 'revoke' ? ' is-stop' : ''}`}
+              aria-label={seatConfirm.kind === 'grant' ? 'Grant agent seats' : 'Revoke agent seats'}
+            >
+              <p className="mr-orch-confirm-text">
+                {seatConfirmText(seatConfirm, seatInfo, { id: selected, name: current?.name })}
+              </p>
+              <div className="mr-orch-confirm-actions">
+                <button
+                  type="button"
+                  className={`mr-orch-confirm-btn ${seatConfirm.kind === 'revoke' ? 'is-stop' : 'is-start'}`}
+                  onClick={seatCommandConfirmed}
+                  disabled={sending}
+                >
+                  {seatConfirm.kind === 'revoke' ? 'Revoke' : 'Grant'}
+                </button>
+                <button
+                  type="button"
+                  className="mr-orch-confirm-btn is-cancel"
+                  onClick={closeConfirm}
+                  disabled={sending}
                 >
                   Cancel
                 </button>
