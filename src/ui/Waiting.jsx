@@ -46,7 +46,7 @@ const STATUS_COPY = {
   live: {
     badge: 'Connected',
     title: 'Waiting for the first run',
-    detail: 'The room is waiting for the first run. Start one from Dispatch (C) or with npm run run-lane.',
+    detail: 'The room is waiting for the first run. Start one from Work, then Start (C), or with npm run run-lane.',
     tone: 'live',
   },
   reconnecting: {

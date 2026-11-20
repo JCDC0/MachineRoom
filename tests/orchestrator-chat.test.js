@@ -2424,7 +2424,7 @@ describe('Hud and Waiting with an orchestrator', () => {
         agents: [{ key: 'opencode', name: 'OpenCode', status: 'idle' }],
       })
     )
-    expect(html).toContain('The room is waiting for the first run. Start one from Dispatch (C) or with npm run run-lane.')
+    expect(html).toContain('The room is waiting for the first run. Start one from Work, then Start (C), or with npm run run-lane.')
     expect(html).not.toContain('Paperclip')
   })
 })

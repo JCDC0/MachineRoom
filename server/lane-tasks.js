@@ -5,7 +5,7 @@ import { parseBriefs } from '../src/briefs/briefs.js'
 import { laneAgents, readLanes } from './lanes-source.js'
 
 export const LANE_TASK_RECORDS = 30
-export const LANE_TASK_REFUSAL = 'Lane runs start from Dispatch, not from a task.'
+export const LANE_TASK_REFUSAL = 'Lane runs start from Work, then Start, not from a task.'
 
 const REPO_ROOT = resolve(fileURLToPath(import.meta.url), '..', '..')
 const BRIEF_ID = /^[A-Z]\d+[a-z]?$/

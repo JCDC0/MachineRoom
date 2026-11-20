@@ -2,7 +2,7 @@
 
 ## Next, as of 2026-11-20 16:30 (written before a restart)
 
-Merged since the last push (27b080ef), not pushed: P637 seats S2, P644 the chosen top in 3D, P645 the status line under each agent, P646 the menu row (Chat, the Settings dropdown, Help, the Control hint), and the briefs P643b, P645, P646 and P647. Before the push: the full suite, `npm run -s history-audit -- --from origin/main` in its own call, the owner's yes, then CI.
+Pushed c6513481 on 2026-11-20 (P637, P644 to P651).
 
 1. P647 is merged (0.1.402, 588adfae) with `soundAtAgent` wired in `src/Stage.jsx`; the bench gave 5 beeps for one command that read three files and listed a folder. Merged and unpushed since 27b080ef: P637, P644, P645, P646, P647.
 2. The native reruns after the OpenRouter budget resets (00:00 UTC, 08:00 Manila; the workspace budget is $1 a day, so about one native run a day): P643b, P638, P639, then P640.

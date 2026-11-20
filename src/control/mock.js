@@ -9,7 +9,7 @@ import { chooseRoute, routeLane } from '../policy/route.js'
 import { profileFromBrief } from '../policy/profile.js'
 
 export const AGENT_REFUSAL = 'Agents come from docs/agents/lanes.json.'
-export const LANE_TASK_REFUSAL = 'Lane runs start from Dispatch, not from a task.'
+export const LANE_TASK_REFUSAL = 'Lane runs start from Work, then Start, not from a task.'
 
 function laneHasHarness(lanes, harness) {
   return Object.values(lanes ?? {}).some((lane) => lane?.cli?.harness === harness)
