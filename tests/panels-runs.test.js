@@ -640,6 +640,26 @@ describe('projectRunLanes', () => {
     ]
     expect(projectRunLanes(agents, [])).toEqual([{ key: 'claude-2', name: 'Coder', running: false }])
   })
+
+  it('filters by activeKeys when given a Set and keeps running lanes', () => {
+    const agents = [
+      { key: 'opencode', name: 'OpenCode', adapterType: 'opencode_local', role: null },
+      { key: 'hermes', name: 'Hermes', adapterType: 'hermes_local', role: null },
+      { key: 'claude-2', name: 'Coder', adapterType: 'claude_local', role: null },
+    ]
+    expect(projectRunLanes(agents, [], null)).toEqual([
+      { key: 'opencode', name: 'OpenCode', running: false },
+      { key: 'hermes', name: 'Hermes', running: false },
+      { key: 'claude-2', name: 'Coder', running: false },
+    ])
+    expect(projectRunLanes(agents, [], new Set(['opencode']))).toEqual([
+      { key: 'opencode', name: 'OpenCode', running: false },
+    ])
+    expect(projectRunLanes(agents, [{ lane: 'hermes' }], new Set(['opencode']))).toEqual([
+      { key: 'opencode', name: 'OpenCode', running: false },
+      { key: 'hermes', name: 'Hermes', running: true },
+    ])
+  })
 })
 
 describe('projectRunConfirm with a task list', () => {

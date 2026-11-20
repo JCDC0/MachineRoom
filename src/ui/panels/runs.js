@@ -424,7 +424,7 @@ function isSubOrchestratorAgent(agent) {
   return typeof agent.key === 'string' && agent.key.trim().startsWith('sub-')
 }
 
-export function projectRunLanes(agents, running) {
+export function projectRunLanes(agents, running, activeKeys = null) {
   const list = Array.isArray(agents) ? agents : []
   const active = new Set(
     (Array.isArray(running) ? running : [])
@@ -432,6 +432,7 @@ export function projectRunLanes(agents, running) {
       .filter((lane) => typeof lane === 'string' && lane.trim() !== '')
       .map((lane) => lane.trim())
   )
+  const filter = activeKeys instanceof Set ? activeKeys : null
   const seen = new Set()
   const lanes = []
   for (const agent of list) {
@@ -443,8 +444,10 @@ export function projectRunLanes(agents, running) {
     if (!key || seen.has(key)) continue
     if (key === 'orchestrator') continue
     seen.add(key)
+    const isRunning = active.has(key)
+    if (filter && !filter.has(key) && !isRunning) continue
     const name = typeof agent.name === 'string' && agent.name.trim() ? agent.name.trim() : key
-    lanes.push({ key, name, running: active.has(key) })
+    lanes.push({ key, name, running: isRunning })
   }
   return lanes
 }
