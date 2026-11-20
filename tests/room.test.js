@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
+import { RING_LEVEL_MAX } from '../src/engine/hub.js'
 import { makeTree } from '../src/model/paths.js'
 import { createState } from '../src/model/state.js'
 
@@ -261,6 +262,39 @@ describe('the room and its git tree', () => {
       expect(fakeGit.states).toEqual([git])
       fakeGit.changed = false
       expect(room.setGitState(git)).toBe(false)
+    } finally {
+      room.dispose()
+    }
+  })
+})
+
+describe('the room takes the chosen top and the depth', () => {
+  function tick(times = 1) {
+    for (let index = 0; index < times; index += 1) roomFrame?.(1000 + index * 16)
+  }
+
+  it('keeps the room running when it is handed the chosen top', async () => {
+    const { room } = await makeRoom(['src/a.js'], ['orchestrator', 'claude', 'claude-session'])
+    try {
+      expect(room.setChosenTop('claude-session')).toBe('claude-session')
+      tick()
+      expect(room.setChosenTop('orchestrator')).toBe('orchestrator')
+      tick()
+      expect(room.setChosenTop('not-a-view')).toBe('orchestrator')
+      tick()
+    } finally {
+      room.dispose()
+    }
+  })
+
+  it('answers the drawn park ring cap and keeps it between 1 and 4', async () => {
+    const { room } = await makeRoom()
+    try {
+      expect(room.setDepth(2)).toBe(2)
+      expect(room.setDepth(9)).toBe(RING_LEVEL_MAX)
+      expect(room.setDepth(0)).toBe(1)
+      expect(room.setDepth(undefined)).toBe(RING_LEVEL_MAX)
+      tick()
     } finally {
       room.dispose()
     }

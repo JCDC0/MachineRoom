@@ -4,10 +4,10 @@ import { LineGeometry } from 'three/addons/lines/LineGeometry.js'
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js'
 import { CSS3DObject } from 'three/addons/renderers/CSS3DRenderer.js'
 import { ownerOf } from '../model/hierarchy.js'
-import { laneStarterTop } from '../model/laneStarter.js'
+import { isSessionTopKey, laneStarterTop, topKeyFor } from '../model/laneStarter.js'
 import { dirname } from '../model/paths.js'
 import { CHILD_LIFE_MS } from '../model/state.js'
-import { AGENT_RING_BASE, AGENT_RING_GROW, AGENT_RING_MAX_OPACITY, AGENT_RING_MS, AGENT_RING_OPACITY_FLOOR, AGENT_RING_POOL, HUB_RADIUS, HUB_Y, ORCHESTRATOR_HOME, ORCHESTRATOR_LIFT, PARK_LIFT, SWAY_LIFT, SWAY_RATE, SWAY_SCALE, danceEnvelope, hasSubs, isSessionReader, parkedKeysFor, readerAngles, readerPoint, ringLayout, ringPulse, sectorSlotAngles, slotAngle, startDanceEnvelope, SUB_STAND_LIFT, writeColor, writeOpacity } from './hub.js'
+import { AGENT_RING_BASE, AGENT_RING_GROW, AGENT_RING_MAX_OPACITY, AGENT_RING_MS, AGENT_RING_OPACITY_FLOOR, AGENT_RING_POOL, HUB_RADIUS, HUB_Y, ORCHESTRATOR_HOME, ORCHESTRATOR_LIFT, PARK_LIFT, RING_LEVEL_MAX, SWAY_LIFT, SWAY_RATE, SWAY_SCALE, danceEnvelope, hasSubs, isSessionReader, parkedKeysFor, readerAngles, readerPoint, ringDepth, ringLayout, ringPulse, sectorSlotAngles, slotAngle, startDanceEnvelope, SUB_STAND_LIFT, topRingPoint, topRingSeats, writeColor, writeOpacity } from './hub.js'
 import { INTERNET_RADIUS } from './internet.js'
 import { ORCHESTRATOR_PULSE_SCALE, ORCHESTRATOR_SHAPE, PREFERRED, PULSE_BANDS, PULSE_SCALE, SUB_PULSE_SCALE, bandForPoint, isOrchestrator, isSubOrchestrator, nextSpareShape, shapeGeometry, shapesFor, vertexOffset } from './shapes.js'
 import { GREEN, RED, TUNNEL_GREY, WEB, WHITE, agentColor, agentColors, cssColor, easeRate, lineMaterial, paintAgentColor, still, textSprite } from './sprites.js'
@@ -727,6 +727,9 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
   let layout = null
   let slotAngles = sectorSlotAngles(null, parkedKeys)
   let topKey = 'orchestrator'
+  let chosenTop = ''
+  let lastLaneTop = 'orchestrator'
+  let depth = RING_LEVEL_MAX
   const chainCache = { links: null, mask: null, parents: null, back: [] }
   let pulseSource = null
   const busyList = []
@@ -856,9 +859,9 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
   }
 
   function layoutHomes(ladder) {
-    layout = hasSubs(ladder) ? ringLayout(ladder, parkedKeys) : null
+    layout = hasSubs(ladder) ? ringLayout(ladder, parkedKeys, depth) : null
     sectorList = layout ? layout.arcs : []
-    slotAngles = sectorSlotAngles(ladder, parkedKeys)
+    slotAngles = sectorSlotAngles(ladder, parkedKeys, depth)
   }
 
   let online = true
@@ -1158,14 +1161,54 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
     synced = true
   }
 
+  function topReaders() {
+    return [...views.values()].filter((view) => view.sessionReader && !view.parentKey)
+  }
+
+  function viewKeySet() {
+    return new Set(views.keys())
+  }
+
+  function setChosenTop(key) {
+    const next = typeof key === 'string' ? key : ''
+    if (next === chosenTop) return chosenTop
+    chosenTop = next
+    refreshTop()
+    return chosenTop
+  }
+
+  function refreshTop() {
+    const nextTop = topKeyFor({ chosenTop, laneTop: lastLaneTop, viewKeys: viewKeySet() })
+    if (nextTop === topKey) return false
+    topKey = nextTop
+    placeViews()
+    return true
+  }
+
+  function setDepth(value) {
+    const next = ringDepth(value, RING_LEVEL_MAX)
+    if (next === depth) return depth
+    depth = next
+    layoutHomes(currentLadder)
+    placeViews()
+    return depth
+  }
+
+  function seatPoint(key, seats, out) {
+    const seat = seats.seats.get(key)
+    if (seat === 'under') return out.set(ORCHESTRATOR_HOME.x, HUB_Y + PARK_LIFT, ORCHESTRATOR_HOME.z)
+    if (seat === 'orbit') return topRingPoint(slotAngle(seats.order.indexOf(key), seats.order.length), out)
+    return out.copy(ORCHESTRATOR_HOME)
+  }
+
   function placeViews() {
-    const readers = [...views.values()].filter((view) => view.sessionReader && !view.parentKey)
     const topView = topKey === 'orchestrator' ? null : views.get(topKey) ?? null
-    const topReader = topView ? Math.max(0, readers.indexOf(topView)) : 0
+    const readers = topReaders().filter((view) => view !== topView)
     const mainAngles = parkedKeys.flatMap((key, index) =>
       currentLadder && ownerOf(currentLadder, key) !== 'orchestrator'
         ? [] : [slotAngles.get(key) ?? slotAngle(index, parkedKeys.length)])
     const angles = readerAngles(mainAngles, readers.length)
+    const seats = topRingSeats({ topKey: topView ? topKey : 'orchestrator', extraKeys: readers.map((view) => view.key) })
     for (const view of views.values()) {
       if (view.parentKey) continue
       const agent = agentByKey.get(view.key) ?? { key: view.key, name: view.name }
@@ -1175,14 +1218,9 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
       } else {
         view.label.visible = true
       }
-      if (view.orchestrator) {
+      if (view.orchestrator || view === topView) {
         view.index = -1
-        if (topView && readers.length === 1) view.home.set(ORCHESTRATOR_HOME.x, HUB_Y + PARK_LIFT, ORCHESTRATOR_HOME.z)
-        else if (topView) readerPoint(topReader, readers.length, view.home, angles[topReader])
-        else view.home.copy(ORCHESTRATOR_HOME)
-      } else if (view === topView) {
-        view.index = -1
-        view.home.copy(ORCHESTRATOR_HOME)
+        seatPoint(view.key, seats, view.home)
       } else if (view.subOrchestrator) {
         view.index = -1
         view.home.copy(subHome(agent))
@@ -1190,7 +1228,9 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
         view.index = -1
         const readerIndex = readers.indexOf(view)
         view.readerIndex = readerIndex
-        readerPoint(readerIndex, readers.length, view.home, angles[readerIndex])
+        const seat = seats.seats.get(view.key)
+        if (seat === 'orbit') seatPoint(view.key, seats, view.home)
+        else readerPoint(readerIndex, readers.length, view.home, angles[readerIndex])
       } else {
         view.index = parkedKeys.indexOf(view.key)
         view.home.copy(laneHome(view.key, view.index))
@@ -1256,6 +1296,7 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
     }
     layoutHomes(currentLadder)
     placeViews()
+    refreshTop()
     for (const view of added) {
       view.group.position.copy(view.home)
       view.touch.copy(view.home)
@@ -1383,7 +1424,10 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
   }
 
   function update(state, delta, now, world, terminals, callout = null) {
-    const nextTop = laneStarterTop({ agents: state.agents, at: state.latest }) || 'orchestrator'
+    lastLaneTop = laneStarterTop({ agents: state.agents, at: state.latest }) || 'orchestrator'
+    const nextTop = isSessionTopKey(chosenTop)
+      ? topKeyFor({ chosenTop, laneTop: lastLaneTop, viewKeys: viewKeySet() })
+      : lastLaneTop
     if (nextTop !== topKey) {
       topKey = nextTop
       placeViews()
@@ -1774,5 +1818,5 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
     pickables.length = 0
   }
 
-  return { views, pickables, update, snap, aimAt, setTasks, setLadder, setLabels, setRoster, setBands, setViewport, dispose, beat, setSway, webStart, webEnd, webActive, setOnline, topKey: () => topKey }
+  return { views, pickables, update, snap, aimAt, setTasks, setLadder, setLabels, setChosenTop, setDepth, setRoster, setBands, setViewport, dispose, beat, setSway, webStart, webEnd, webActive, setOnline, topKey: () => topKey, chosenTop: () => chosenTop, depth: () => depth }
 }

@@ -2,13 +2,12 @@ import * as THREE from 'three'
 import { CSS3DRenderer } from 'three/addons/renderers/CSS3DRenderer.js'
 import { basename, dirname } from '../model/paths.js'
 import { isOnlineCall } from '../model/online.js'
-import { laneStarterTop } from '../model/laneStarter.js'
 import { CALLOUT_CROWD_LIMIT, createAgents, litChain, starOriginKey, tunnelRoute, webTunnelEnd } from './agents.js'
 import { BLOOM_STRENGTH_DEFAULT, createBloomLayer } from './bloom.js'
 import { ANCHOR_DIST, FOV, OVERVIEW, createCameraRig, distanceForRatio, fitView, followTarget, projectPoint } from './camera.js'
 import { createCards } from './cards.js'
 import { boardVisible, createCostBoard } from './board.js'
-import { HUB_CENTER, HUB_RADIUS, ORCHESTRATOR_HOME, createHub, workingKeys } from './hub.js'
+import { HUB_CENTER, HUB_RADIUS, RING_LEVEL_MAX, createHub, ringDepth, workingKeys } from './hub.js'
 import { GIT_FOCUS_DIST, createGitTree } from './gitTree.js'
 import { INTERNET_RADIUS, createInternet } from './internet.js'
 import { createLabels } from './labels.js'
@@ -384,6 +383,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
   let ladder = null
   let inspected = null
   let lastWorking = []
+  let roomDepth = RING_LEVEL_MAX
 
   function agentAt(event) {
     const rect = gl.getBoundingClientRect()
@@ -900,13 +900,12 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     const pair = agentStar(activity, ladder)
     if (!pair) return
     const state = getState()
-    const topKey = laneStarterTop({ agents: state.agents, at: state.latest }) || 'orchestrator'
+    const topKey = agentSet.topKey()
     const fromKey = starOriginKey(pair.from, topKey)
     const from = agentSet.views.get(fromKey)
     const to = agentSet.views.get(pair.to)
     if (!from || !to) return
-    const start = fromKey === 'orchestrator' ? from.group.position : ORCHESTRATOR_HOME
-    launchStarPath(start, to.group.position, from.color, fromKey, null, pair.to)
+    launchStarPath(from.group.position, to.group.position, from.color, fromKey, null, pair.to)
   }
 
   function launchWebStar(view, activity) {
@@ -1057,6 +1056,13 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     beforeFrame(times.elapsed)
 
     const state = getState()
+    if (Number.isFinite(state.depthLimit)) {
+      const next = ringDepth(state.depthLimit, RING_LEVEL_MAX)
+      if (next !== roomDepth) {
+        roomDepth = agentSet.setDepth(next)
+        hub.setDepth(roomDepth)
+      }
+    }
     const mask = masks.of(state)
     const working = workingKeys(state, lastWorking)
     if (working !== lastWorking) {
@@ -1302,6 +1308,15 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     setLabels(labels) {
       terminals.setLabels(labels)
       agentSet.setLabels(labels)
+    },
+    setChosenTop(key) {
+      agentSet.setChosenTop(key)
+      return agentSet.topKey()
+    },
+    setDepth(value) {
+      roomDepth = agentSet.setDepth(value)
+      hub.setDepth(roomDepth)
+      return roomDepth
     },
     setRoster(next) {
       const list = (Array.isArray(next) ? next : []).map(roomAgent)

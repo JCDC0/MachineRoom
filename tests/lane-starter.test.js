@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { LANE_START_TOP_MS, cleanStartedBy, laneStarterTop, sessionKeyFor } from '../src/model/laneStarter.js'
+import { LANE_START_TOP_MS, cleanStartedBy, isSessionTopKey, laneStarterTop, sessionKeyFor, topKeyFor } from '../src/model/laneStarter.js'
 
 const HOUR = 60 * 60 * 1000
 
@@ -91,5 +91,33 @@ describe('laneStarter', () => {
     agents.set('opencode2', agent({ status: 'working', startedAt: 1000, startedBy: { harness: 'opencode', session: 's2' } }))
     agents.set('opencode-session', agent({ sessions: new Set(['s2']) }))
     expect(laneStarterTop({ agents, at: 6000 })).toBe('opencode-session')
+  })
+})
+
+describe('the chosen top', () => {
+  it('reads a session key only', () => {
+    expect(isSessionTopKey('claude-session')).toBe(true)
+    expect(isSessionTopKey('opencode-session')).toBe(true)
+    expect(isSessionTopKey('orchestrator')).toBe(false)
+    expect(isSessionTopKey('claude')).toBe(false)
+    expect(isSessionTopKey('')).toBe(false)
+    expect(isSessionTopKey(null)).toBe(false)
+  })
+
+  it('keeps the chosen session at the top over the lane starter', () => {
+    expect(topKeyFor({ chosenTop: 'claude-session', laneTop: 'orchestrator', viewKeys: ['claude-session'] })).toBe('claude-session')
+    expect(topKeyFor({ chosenTop: 'claude-session', laneTop: 'opencode-session', viewKeys: new Set(['claude-session']) })).toBe('claude-session')
+  })
+
+  it('keeps the old rule when the chosen session has no view', () => {
+    expect(topKeyFor({ chosenTop: 'claude-session', laneTop: 'orchestrator', viewKeys: [] })).toBe('orchestrator')
+    expect(topKeyFor({ chosenTop: 'claude-session', laneTop: 'opencode-session', viewKeys: ['opencode-session'] })).toBe('opencode-session')
+  })
+
+  it('keeps the old rule for the Orchestrator and an unknown key', () => {
+    expect(topKeyFor({ chosenTop: 'orchestrator', laneTop: 'orchestrator', viewKeys: ['orchestrator'] })).toBe('orchestrator')
+    expect(topKeyFor({ chosenTop: 'orchestrator', laneTop: 'claude-session', viewKeys: ['claude-session'] })).toBe('claude-session')
+    expect(topKeyFor({ chosenTop: 'nope', laneTop: '', viewKeys: ['nope'] })).toBe('orchestrator')
+    expect(topKeyFor({})).toBe('orchestrator')
   })
 })

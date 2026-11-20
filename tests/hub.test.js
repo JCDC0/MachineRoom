@@ -13,8 +13,10 @@ import {
   HUB_RING_GROW,
   HUB_RING_MS,
   HUB_RING_POOL,
+  PARK_LIFT,
   RING_FLOOR_GAP,
   RING_FLOOR_Y,
+  RING_LEVEL_MAX,
   RING_MAX_OPACITY,
   SECTOR_ARC_OPACITY,
   SECTOR_GLOW_MS,
@@ -30,6 +32,7 @@ import {
   createHub,
   danceEnvelope,
   ringArcs,
+  ringDepth,
   ringDrop,
   ringLayout,
   ringLevels,
@@ -44,6 +47,9 @@ import {
   sectorLabelRadius,
   sectorLaneAngles,
   sectorSlotAngles,
+  slotAngle,
+  topRingPoint,
+  topRingSeats,
   workingKeys,
 } from '../src/engine/hub.js'
 import { latticeLevels } from '../src/engine/void.js'
@@ -175,6 +181,45 @@ describe('where a sector parks its lanes', () => {
   })
 })
 
+describe('the top ring of the hub', () => {
+  it('puts an Orchestrator alone at the centre', () => {
+    const seats = topRingSeats({})
+    expect(seats.mode).toBe('centre')
+    expect(seats.seats.get('orchestrator')).toBe('centre')
+    expect(topRingSeats({ topKey: 'orchestrator' }).mode).toBe('centre')
+  })
+
+  it('stacks the chosen top above the Orchestrator when there are two', () => {
+    const seats = topRingSeats({ topKey: 'claude-session' })
+    expect(seats.mode).toBe('stack')
+    expect(seats.order).toEqual(['claude-session', 'orchestrator'])
+    expect(seats.seats.get('claude-session')).toBe('top')
+    expect(seats.seats.get('orchestrator')).toBe('under')
+  })
+
+  it('orbits more than two top agents at equal angles', () => {
+    const seats = topRingSeats({ topKey: 'claude-session', extraKeys: ['opencode-session'] })
+    expect(seats.mode).toBe('orbit')
+    expect(seats.order).toEqual(['claude-session', 'orchestrator', 'opencode-session'])
+    for (const key of seats.order) expect(seats.seats.get(key)).toBe('orbit')
+  })
+
+  it('keeps the Orchestrator at the centre when no session is chosen', () => {
+    const seats = topRingSeats({ topKey: 'orchestrator', extraKeys: ['claude-session'] })
+    expect(seats.mode).toBe('centre')
+    expect(seats.seats.get('orchestrator')).toBe('centre')
+    expect(seats.seats.get('claude-session')).toBe('reader')
+    expect(seats.order).toEqual(['orchestrator', 'claude-session'])
+  })
+
+  it('puts an orbiting top agent on the ring at the hub height plus the park lift', () => {
+    const point = topRingPoint(slotAngle(0, 2))
+    expect(Math.hypot(point.x, point.z)).toBeCloseTo(HUB_RADIUS)
+    expect(point.y).toBeCloseTo(HUB_Y + PARK_LIFT)
+    expect(topRingPoint(Number.NaN).y).toBeCloseTo(HUB_Y + PARK_LIFT)
+  })
+})
+
 describe('the park ring of each level', () => {
   it('keeps the drop at 260 for one level and shrinks it above the floor for more', () => {
     expect(SUB_RING_DROP).toBe(260)
@@ -210,6 +255,66 @@ describe('the park ring of each level', () => {
     expect(ringRadius(0, 99)).toBe(HUB_RADIUS)
     expect(ringRadius(1, 3)).toBe(HUB_RADIUS)
     expect(ringRadius(1, 40)).toBeGreaterThan(HUB_RADIUS)
+  })
+
+  it('reads the subagent depth as a cap from 1 to 4 and keeps 4 when it cannot', () => {
+    expect(RING_LEVEL_MAX).toBe(4)
+    expect(ringDepth(1)).toBe(1)
+    expect(ringDepth(2)).toBe(2)
+    expect(ringDepth(4)).toBe(4)
+    expect(ringDepth(9)).toBe(RING_LEVEL_MAX)
+    expect(ringDepth(0)).toBe(1)
+    expect(ringDepth(2.7)).toBe(2)
+    expect(ringDepth({ limit: 3 })).toBe(3)
+    expect(ringDepth({ depth: 2 })).toBe(2)
+    expect(ringDepth(undefined)).toBe(RING_LEVEL_MAX)
+    expect(ringDepth(null)).toBe(RING_LEVEL_MAX)
+    expect(ringDepth('two')).toBe(RING_LEVEL_MAX)
+  })
+
+  it('draws only the ring levels the depth allows', () => {
+    const ladder = {
+      subs: [
+        { id: 'a', name: 'A', lanes: ['l1'] },
+        { id: 'b', parent: 'a', name: 'B', lanes: ['l2'] },
+        { id: 'c', parent: 'b', name: 'C', lanes: ['l3'] },
+        { id: 'd', parent: 'c', name: 'D', lanes: ['l4'] },
+      ],
+    }
+    const keys = ['l1', 'l2', 'l3', 'l4']
+    expect(ringLayout(ladder, keys).count).toBe(4)
+    expect(ringLayout(ladder, keys, 4).count).toBe(4)
+    expect(ringLayout(ladder, keys, 2).count).toBe(2)
+    expect(ringLayout(ladder, keys, 1).count).toBe(1)
+    expect(ringLayout(ladder, keys, 2).ringOfKey('l4').level).toBe(2)
+  })
+
+  it('keeps the 4 levels until the room is told otherwise', () => {
+    const hub = createHub(new THREE.Scene(), ROSTER, LADDER)
+    expect(hub.depth()).toBe(RING_LEVEL_MAX)
+    expect(hub.setDepth(2)).toBe(2)
+    expect(hub.depth()).toBe(2)
+    expect(hub.setDepth(9)).toBe(RING_LEVEL_MAX)
+    expect(hub.setDepth(undefined)).toBe(RING_LEVEL_MAX)
+    hub.dispose()
+  })
+
+  it('draws fewer level rings after setDepth lowers the cap', () => {
+    const ladder = {
+      subs: [
+        { id: 'a', name: 'A', lanes: ['opencode'] },
+        { id: 'b', parent: 'a', name: 'B', lanes: ['claude'] },
+        { id: 'c', parent: 'b', name: 'C', lanes: ['hermes'] },
+      ],
+    }
+    const hub = createHub(new THREE.Scene(), ROSTER, ladder)
+    const rings = () => hub.group.getObjectByName('level-rings').children
+    expect(rings()).toHaveLength(3)
+    hub.setDepth(1)
+    expect(rings()).toHaveLength(1)
+    hub.setDepth(4)
+    expect(rings()).toHaveLength(3)
+    hub.dispose()
   })
 
   it('spreads the subs of one level at equal angles and keeps their lanes in their own arc', () => {
