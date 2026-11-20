@@ -14,7 +14,7 @@ export function createLogger(agents) {
   const names = new Map(agents.map((agent) => [agent.key, agent.name]))
   const labels = new Map()
 
-  return function entryFor(activity) {
+  const entryFor = function entryFor(activity) {
     const agent = names.get(activity.agent) ?? activity.agent
     const call = `${activity.runId}:${activity.id}`
     switch (activity.type) {
@@ -48,6 +48,17 @@ export function createLogger(agents) {
         return null
     }
   }
+
+  entryFor.addAgents = (list) => {
+    if (!Array.isArray(list)) return
+    for (const agent of list) {
+      if (!agent || typeof agent !== 'object') continue
+      if (typeof agent.key !== 'string' || agent.key === '') continue
+      if (!names.has(agent.key)) names.set(agent.key, agent.name)
+    }
+  }
+
+  return entryFor
 }
 
 export function buildTimeline(activities, stamps, agents) {
