@@ -703,6 +703,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
   const latestTasksRef = useRef(null)
   const latestLadderRef = useRef(null)
   const latestLabelsRef = useRef(null)
+  const latestTopRef = useRef('orchestrator')
   const latestGitRef = useRef(null)
   const knownSoundRef = useRef(null)
   if (knownSoundRef.current === null) knownSoundRef.current = new Set(data.tree?.created ?? [])
@@ -859,6 +860,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
     if (latestLabelsRef.current) {
       room.setLabels(latestLabelsRef.current)
     }
+    room.setChosenTop?.(latestTopRef.current)
     if (latestGitRef.current) {
       room.setGitState(latestGitRef.current)
     }
@@ -934,9 +936,11 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
   }, [client, demoLadder, live])
 
   useEffect(() => {
-    function apply(next) {
+    function apply(next, top = 'orchestrator') {
       latestLabelsRef.current = next
+      latestTopRef.current = top
       setLabels(next)
+      roomRef.current?.setChosenTop?.(top)
     }
     if (!live || !client || typeof client.family !== 'function') {
       apply(null)
@@ -954,11 +958,10 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
         const answer = await client.family()
         if (!active || !isLatest()) return
         const next = labelsFromFamily(answer)
-        apply(next)
+        apply(next, typeof answer?.top === 'string' ? answer.top : 'orchestrator')
         setFamilyNodes(Array.isArray(answer?.nodes) ? answer.nodes : NONE)
         setFamilyProposals(Array.isArray(answer?.proposals) ? answer.proposals : NONE)
         roomRef.current?.setLabels(next)
-        roomRef.current?.setChosenTop?.(typeof answer?.top === 'string' ? answer.top : 'orchestrator')
       } catch {
         if (!active || !isLatest()) return
         apply(null)
