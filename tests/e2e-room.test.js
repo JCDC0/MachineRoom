@@ -620,7 +620,7 @@ describe('the camera hold on a live room', () => {
     first.room.reset(next)
 
     expect(first.room.holding()).toBe(null)
-    expect(first.room.soundAt('src').x).toBe(-1)
+    expect(first.room.soundAt('src')).toEqual(first.room.soundAt(''))
     expect(first.room.soundAt('').overviewDistance).toBeGreaterThan(heldFit)
     first.room.park()
     const parked = first.room.soundAt('').overviewDistance

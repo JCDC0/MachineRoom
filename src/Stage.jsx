@@ -605,7 +605,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
         roomRef.current?.onActivity(activity, state)
         const sounds = activitySounds(activity, knownSoundRef.current, state)
         for (const item of sounds) {
-          sound.beep(item.kind, roomRef.current?.soundAt(item.path))
+          sound.beep(item.kind, item.agent ? roomRef.current?.soundAtAgent?.(item.agent) : roomRef.current?.soundAt(item.path))
         }
       },
     }

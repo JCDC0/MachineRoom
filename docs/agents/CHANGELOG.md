@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Every packet makes a sound: file touches, folder lists and agent messages, from the nearest drawn card or the agent, about four times louder, and quietly to one side when off screen (P647).
 - The menu row says Chat instead of Orchestrator, Settings picks its section from one dropdown, Help names Chat and Control, and the Control button says what it holds on hover (P646).
 - Each agent shows a small status line under its name, its command while it works and else idle, finished or failed; the floating status chip and its line stay hidden until the chip opens (P645).
 - Seats are enforced: an orchestrator with a grant creates lanes under itself, turns its own lanes on and off, and adds subs under itself on its own harness, within its grant and the free seats of its rings; each turn tells it its grant (P637).

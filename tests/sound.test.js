@@ -41,13 +41,19 @@ describe('spatial beeps', () => {
     expect(near.pan).toBe(0)
     expect(near.gain).toBeCloseTo(0.9, 6)
     expect(far.audible).toBe(true)
-    expect(far.gain).toBeLessThan(near.gain)
+    expect(far.gain).toBe(0.35)
     expect(spatialSound({ x: 50, y: 50, width: 100, height: 100, distance: 2100, overviewDistance: 1000 }).audible).toBe(false)
   })
 
-  it('drops a card off screen or with a broken place', () => {
-    expect(spatialSound({ x: -1, y: 50, width: 100, height: 100, distance: 10, overviewDistance: 1000 }).audible).toBe(false)
-    expect(spatialSound({ x: 50, y: 110, width: 100, height: 100, distance: 10, overviewDistance: 1000 }).audible).toBe(false)
+  it('pans an off-screen place to the side at the minimum gain', () => {
+    const place = { y: 50, width: 100, height: 100, distance: 10, overviewDistance: 1000 }
+    expect(spatialSound({ ...place, x: -1 })).toEqual({ audible: true, pan: -1, gain: 0.35 })
+    expect(spatialSound({ ...place, x: 101 })).toEqual({ audible: true, pan: 1, gain: 0.35 })
+    expect(spatialSound({ ...place, x: 25, y: 110 })).toEqual({ audible: true, pan: -1, gain: 0.35 })
+    expect(spatialSound({ ...place, x: -1, distance: 2100 }).audible).toBe(false)
+  })
+
+  it('drops a broken place', () => {
     expect(spatialSound({}).audible).toBe(false)
     expect(spatialSound({ x: 50, y: 50, width: 100, height: 100, distance: 10, overviewDistance: 0 }).audible).toBe(false)
   })
@@ -117,7 +123,7 @@ describe('the sound rate limit', () => {
   })
 })
 
-describe('the sound of a file touch', () => {
+describe('the sound of an activity', () => {
   it('names a read, a write, a created file and a deleted file', () => {
     const missing = new Set(['src/old.js'])
     const state = { files: new Map([['src/a.js', { exists: true }]]) }
@@ -142,7 +148,18 @@ describe('the sound of a file touch', () => {
       { path: 'src/a.js', kind: 'deleted' },
     ])
     expect(missing.has('src/a.js')).toBe(true)
-    expect(activitySounds({ type: 'tool.start', touches: [{ kind: 'dir', path: 'src', mode: 'list' }] }, missing, state)).toEqual([])
+  })
+
+  it('makes a list sound for a directory touch', () => {
+    expect(activitySounds({ type: 'tool.start', touches: [{ kind: 'dir', path: 'src', mode: 'list' }] })).toEqual([
+      { path: 'src', kind: 'list' },
+    ])
+  })
+
+  it('makes a message sound for the recipient', () => {
+    expect(activitySounds({ type: 'agent.message', agent: 'claude', to: 'codex' })).toEqual([
+      { agent: 'codex', kind: 'message' },
+    ])
   })
 
   it('holds only the created paths and asks the room state for the rest', () => {
