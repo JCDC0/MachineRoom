@@ -307,11 +307,12 @@ describe('FamilyTree rows', () => {
     })
   })
 
-  it('gives a manual lane row Delete without Make sub or Turn on/off in its menu', async () => {
+  it('keeps a manual lane row out of Delete, lane selection, the sub checklist and backup choices', async () => {
     const { client } = makeClient()
+    client.laneBackups = async () => ({})
     const nodes = [
       { ...NODES[0], children: [...NODES[0].children, 'agy3'] },
-      ...NODES.slice(1),
+      ...NODES.slice(1).map((node) => (node.id === 'opencode' ? { ...node, custom: true } : node)),
       {
         id: 'agy3',
         kind: 'lane',
@@ -331,14 +332,102 @@ describe('FamilyTree rows', () => {
       await mount(root, client)
       const manualRow = rowByLabel(container, 'agy3')
       expect(manualRow).not.toBeNull()
-      const trigger = manualRow.querySelector('[aria-haspopup="menu"]')
+      expect(manualRow.querySelector('[aria-haspopup="menu"]')).toBeNull()
+      expect(manualRow.querySelector('.mr-family-chat')).not.toBeNull()
+
+      await click(root, manualRow.querySelector('.mr-family-open'))
+      expect(buttonWithText(container.querySelector('.mr-family-editor'), 'Remove')).toBeNull()
+      await click(root, manualRow.querySelector('.mr-family-open'))
+
+      await chooseAction(root, container.querySelector('.mr-family-header'), 'Select lanes')
+      expect(laneSwitch(container, 'OpenCode')).not.toBeNull()
+      expect(laneSwitch(container, 'agy3')).toBeNull()
+      expect(classesOf(manualRow.querySelector('.mr-family-row'))).not.toContain('is-selectable')
+      await click(root, manualRow.querySelector('.mr-family-row'))
+      expect(container.querySelector('.mr-family-selection-count').textContent).toBe('0 selected')
+      await click(root, buttonWithText(container, 'Done'))
+
+      await click(root, rowByLabel(container, 'Frontend').querySelector('.mr-family-open'))
+      const checklist = container.querySelector('[aria-label="Agents under Frontend"]')
+      const checklistLabels = checklist.querySelectorAll('.mr-family-agent-label').map((el) => el.textContent)
+      expect(checklistLabels).toContain('OpenCode')
+      expect(checklistLabels).not.toContain('agy3')
+
+      await click(root, rowByLabel(container, 'OpenCode').querySelector('.mr-family-open'))
+      const backup = container.querySelector('select[aria-label="Backup lane for OpenCode"]')
+      const backupLabels = [...backup.querySelectorAll('option')].map((option) => option.textContent)
+      expect(backupLabels).toEqual(['None', 'Claude'])
+    })
+  })
+
+  it('keeps header + enabled and offers Put Orchestrator at the top when no orchestrator node is in the tree', async () => {
+    const { client, calls } = makeClient()
+    const topCalls = []
+    client.setFamilyTop = async (payload) => {
+      topCalls.push(payload)
+      return { ok: true, top: payload.top }
+    }
+    client.family = async () => ({
+      top: 'claude-session',
+      nodes: [
+        {
+          id: 'session:claude-session',
+          kind: 'session',
+          label: 'Claude Code',
+          harness: 'claude',
+          model: 'opus',
+          parent: null,
+          children: ['opencode'],
+          active: true,
+          working: true,
+        },
+        {
+          id: 'opencode',
+          kind: 'lane',
+          label: 'OpenCode',
+          harness: 'opencode',
+          model: 'opencode-go/deepseek-v4.1-flash',
+          effort: 'max',
+          parent: 'session:claude-session',
+          active: true,
+          working: false,
+        },
+      ],
+      keys: [],
+      proposals: [],
+    })
+    await withDom(async ({ container, root }) => {
+      await mount(root, client)
+      expect(rowByLabel(container, 'Orchestrator')).toBeNull()
+
+      const add = container.querySelector('.mr-family-add')
+      expect(add.hasAttribute('disabled')).toBe(false)
+      await click(root, add)
+      const form = container.querySelector('.mr-family-child')
+      expect(form).not.toBeNull()
+      expect(form.getAttribute('aria-label')).toBe('Add child to Orchestrator')
+      await type(root, form.querySelector('input[aria-label="New agent label"]'), 'Writer')
+      await act(async () => {
+        form.dispatchEvent({ type: 'submit', bubbles: true, cancelable: true })
+      })
+      const createCard = container.querySelector('.mr-side-confirm-card')
+      expect(createCard.textContent).toContain('Create "Writer" under Orchestrator?')
+      await click(root, buttonWithText(createCard, 'Create'))
+      expect(calls.createLane).toHaveLength(1)
+      expect(calls.createLane[0]).toMatchObject({ name: 'Writer', harness: 'opencode', confirmed: true })
+
+      const sessionRow = rowByLabel(container, 'Claude Code')
+      const trigger = sessionRow.querySelector('[aria-haspopup="menu"]')
+      expect(trigger).not.toBeNull()
       await click(root, trigger)
       const menu = trigger.ownerDocument.body.querySelector('[role="menu"]')
       const labels = [...menu.querySelectorAll('button')].map((button) => button.textContent.trim())
-      expect(labels).toEqual(['Delete…'])
-      expect(labels).not.toContain('Make sub from this lane…')
-      expect(labels).not.toContain('Turn on')
-      expect(labels).not.toContain('Turn off')
+      expect(labels).toEqual(['Put Orchestrator at the top'])
+      await click(root, buttonWithText(menu, 'Put Orchestrator at the top'))
+      const topCard = container.querySelector('.mr-side-confirm-card')
+      expect(topCard.textContent).toContain('Put Orchestrator at the top of the Agents list?')
+      await click(root, buttonWithText(topCard, 'Put at the top'))
+      expect(topCalls).toEqual([{ top: 'orchestrator', confirmed: true }])
     })
   })
 
@@ -358,6 +447,7 @@ describe('FamilyTree rows', () => {
       const lane = rowByLabel(container, 'OpenCode')
       const detail = lane.querySelector('.ui-row-detail')
       expect(detail.textContent).toBe('working · opencode · DeepSeek V4.1 Flash')
+      expect(detail.getAttribute('title')).toBe(detail.textContent)
       expect(lane.querySelector('.mr-family-state').textContent).toBe('working')
       const trailing = lane.querySelector('.ui-row-trailing')
       expect(trailing.querySelector('.mr-family-chat').getAttribute('title')).toBe('Open conversation with OpenCode')

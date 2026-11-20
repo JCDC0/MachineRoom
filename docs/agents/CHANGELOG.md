@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Fleet AGY rows in the Agents tree offer no Delete, Remove, selection or sub checklist, which the bridge would refuse; the header plus adds a lane and the session top offers Put Orchestrator at the top while the idle orchestrator is hidden; the row meta line keeps its tooltip (P662, R65-2, R65-3).
 - Seat checks always see the orchestrator and never count the fleet AGY lanes, so the owner can add a lane under a session top; the room re-reads its roster when the top changes, keeps the orchestrator while its lane run is open, and an OpenCode session top shows working in the tree (P661, R65-2, R65-4, R65-6, R65-7).
 - A lane that starts after the page opens works in the room: the page hands each new roster to the pipeline, the live player and the logger, so its frames are no longer dropped (P660, R65-1).
 - The Agents header in the sidebar counts every agent in the tree, the session at the top, the orchestrator and subs included, so it reads `3 of 7 working` while the session and two lanes work (P657).
