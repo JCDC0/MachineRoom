@@ -105,9 +105,8 @@ describe('the transport agent list', () => {
       await act(async () => root.render(createElement(OrchestratorsContext.Provider, { value: subs }, createElement(LanePillsContext.Provider, { value: feed }, createElement(Transport, { snapshot: LIVE, speeds: [1], orchestrator: MAIN })))))
       await act(async () => container.querySelector('.transport-agents-toggle').click())
       const rows = [...container.querySelectorAll('.transport-agent')]
-      expect(rows.map((row) => row.querySelector('.transport-agent-state').className)).toEqual(['transport-agent-state is-waiting', 'transport-agent-state is-working', 'transport-agent-state is-failed', 'transport-agent-state is-finished', 'transport-agent-state is-idle'])
+      expect(rows.map((row) => row.querySelector('.transport-agent-state').className)).toEqual(['transport-agent-state is-waiting', 'transport-agent-state is-working', 'transport-agent-state is-failed'])
       expect(rows[2].querySelectorAll('span')[3].textContent).toBe('5 min')
-      expect(rows[3].querySelectorAll('span')[3].textContent).toBe('3 h')
     })
   })
 
@@ -115,8 +114,7 @@ describe('the transport agent list', () => {
     const list = [MAIN, ...Array.from({ length: 6 }, (_, i) => sub(String(i), `Sub ${i}`, 'working'))]
     list[1].approvals = [{}]
     const html = renderTransport(list)
-    expect(html).toContain('6<!-- --> agents')
-    expect(html).toContain('6 working')
+    expect(html).toContain('Agents · 6 working')
     expect(html).toContain('1<!-- --> waiting')
     expect(html).not.toContain('transport-chip')
     expect(html).not.toContain('transport-orchestrator-state')
@@ -131,7 +129,7 @@ describe('the transport agent list', () => {
       const feed = { agents: [{ id: 'a', key: 'lane', name: 'A long lane name', adapterType: 'opencode_local', role: null }], liveRuns: [{ agentId: 'a', status: 'running', issueId: 'issue', startedAt: 1000 }], issues: [{ id: 'issue', identifier: 'A-very-long-task-identifier' }], now: 721000 }
       await act(async () => root.render(createElement(OrchestratorsContext.Provider, { value: subs }, createElement(LanePillsContext.Provider, { value: feed }, createElement(Transport, { snapshot: { ...LIVE, status: 'live' }, speeds: [1], orchestrator: MAIN })))))
       const toggle = container.querySelector('.transport-agents-toggle')
-      expect(toggle.textContent).toContain('2 agents · 2 working')
+      expect(toggle.textContent).toContain('Agents · 2 working')
       const wrapper = container.querySelector('.transport-agents')
       toggle.getBoundingClientRect = () => ({ top: 700, left: 100, width: 200 })
       window.innerHeight = 800
@@ -162,6 +160,20 @@ describe('the transport agent list', () => {
       await act(async () => toggle.click())
       await act(async () => dom.document.dispatchEvent({ type: 'pointerdown' }))
       expect(container.querySelector('.transport-agents-list')).toBeNull()
+    })
+  })
+
+  it('leaves idle lanes out of the live list and says none working when nothing works', async () => {
+    await withDom(async ({ container, root }) => {
+      const agents = [{ id: 'idle', key: 'idle', name: 'Idle lane', adapterType: 'opencode_local', role: null }]
+      const feed = { agents, liveRuns: [], issues: [], records: { running: [], recent: [] }, now: 200000000 }
+      const subs = [MAIN]
+      await act(async () => root.render(createElement(OrchestratorsContext.Provider, { value: subs }, createElement(LanePillsContext.Provider, { value: feed }, createElement(Transport, { snapshot: LIVE, speeds: [1], orchestrator: MAIN })))))
+      const toggle = container.querySelector('.transport-agents-toggle')
+      expect(toggle.textContent).toBe('Agents · none working')
+      await act(async () => toggle.click())
+      expect(container.querySelectorAll('.transport-agent')).toHaveLength(0)
+      expect(container.textContent).not.toContain('Idle lane')
     })
   })
 })
