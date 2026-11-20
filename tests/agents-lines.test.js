@@ -7,7 +7,7 @@ import {
   lineParentKey,
   starOriginKey,
 } from '../src/engine/agents.js'
-import { HUB_Y, ORCHESTRATOR_HOME, PARK_LIFT } from '../src/engine/hub.js'
+import { HUB_RADIUS, HUB_Y, ORCHESTRATOR_HOME, PARK_LIFT, RING_LEVEL_MAX, SUB_STAND_LIFT, ringDrop } from '../src/engine/hub.js'
 import { apply, createState } from '../src/model/state.js'
 
 const LADDER = {
@@ -187,6 +187,101 @@ describe('the lane line with a ladder', () => {
     expect(agents.views.size).toBe(count)
     expect(agents.views.get('opencode')).toBe(lane)
     expectAt(lineEnds(lane.orchestratorLink).start, main.group.position)
+    agents.dispose()
+  })
+})
+
+describe('the chosen top', () => {
+  const ROSTER_WITH_SESSION = [...ROSTER, { key: 'claude-session', name: 'Claude Code session', parser: 'claude' }]
+
+  it('puts the chosen session above the hub with no lane run of its own', () => {
+    const { agents, terminals, state, world } = harness(ROSTER_WITH_SESSION)
+    expect(agents.topKey()).toBe('orchestrator')
+    agents.setChosenTop('claude-session')
+    agents.update(state, 0.016, 0, world, terminals)
+    agents.snap(state, world)
+    const session = agents.views.get('claude-session')
+    const main = agents.views.get('orchestrator')
+    expect(agents.topKey()).toBe('claude-session')
+    expectAt(session.group.position, ORCHESTRATOR_HOME)
+    expectAt(main.group.position, new THREE.Vector3(ORCHESTRATOR_HOME.x, HUB_Y + PARK_LIFT, ORCHESTRATOR_HOME.z))
+    expect(lineEnds(agents.views.get('opencode').orchestratorLink).start).toEqual(
+      expect.objectContaining({ x: expect.closeTo(session.group.position.x, 2) })
+    )
+    agents.dispose()
+  })
+
+  it('keeps the old rule when the chosen key has no view', () => {
+    const { agents, terminals, state, world } = harness(ROSTER)
+    agents.setChosenTop('claude-session')
+    agents.update(state, 0.016, 0, world, terminals)
+    agents.snap(state, world)
+    expect(agents.topKey()).toBe('orchestrator')
+    expectAt(agents.views.get('orchestrator').group.position, ORCHESTRATOR_HOME)
+    agents.dispose()
+  })
+
+  it('keeps the session at the top when a lane run ends and the Orchestrator turns', () => {
+    const { agents, terminals, state, world } = harness(ROSTER_WITH_SESSION)
+    agents.setChosenTop('claude-session')
+    apply(state, { type: 'run.start', agent: 'orchestrator', runId: 'orchestrator:1', time: 2000 })
+    agents.update(state, 0.016, 0, world, terminals)
+    expect(agents.topKey()).toBe('claude-session')
+    agents.dispose()
+  })
+
+  it('gives up the position for the Orchestrator when the chosen top is set back to it', () => {
+    const { agents, terminals, state, world } = harness(ROSTER_WITH_SESSION)
+    agents.setChosenTop('claude-session')
+    agents.update(state, 0.016, 0, world, terminals)
+    agents.snap(state, world)
+    agents.setChosenTop('orchestrator')
+    agents.update(state, 0.016, 0, world, terminals)
+    agents.snap(state, world)
+    expect(agents.topKey()).toBe('orchestrator')
+    expectAt(agents.views.get('orchestrator').group.position, ORCHESTRATOR_HOME)
+    agents.dispose()
+  })
+
+  it('orbits more than two top agents and keeps the Orchestrator on the ring', () => {
+    const roster = [...ROSTER_WITH_SESSION, { key: 'opencode-session', name: 'OpenCode session', parser: 'opencode' }]
+    const { agents, terminals, state, world } = harness(roster)
+    agents.setChosenTop('claude-session')
+    agents.update(state, 0.016, 0, world, terminals)
+    agents.snap(state, world)
+    const session = agents.views.get('claude-session')
+    const main = agents.views.get('orchestrator')
+    const other = agents.views.get('opencode-session')
+    expect(agents.topKey()).toBe('claude-session')
+    expect(Math.hypot(main.group.position.x, main.group.position.z)).toBeCloseTo(HUB_RADIUS)
+    expect(Math.hypot(other.group.position.x, other.group.position.z)).toBeCloseTo(HUB_RADIUS)
+    expect(session.group.position.y).toBeCloseTo(HUB_Y + PARK_LIFT)
+    agents.dispose()
+  })
+})
+
+describe('the drawn park rings', () => {
+  const ladder = {
+    subs: [
+      { id: 'frontend', name: 'Frontend', lanes: ['opencode'] },
+      { id: 'deep', name: 'Deep', parent: 'frontend', lanes: ['claude'] },
+      { id: 'deeper', name: 'Deeper', parent: 'deep', lanes: ['hermes'] },
+    ],
+  }
+
+  it('draws four levels until setDepth caps them lower', () => {
+    const roster = [...ROSTER, { key: 'sub-deep', name: 'Deep', subOrchestrator: true }, { key: 'sub-deeper', name: 'Deeper', subOrchestrator: true }]
+    const agents = createAgents(new THREE.Scene(), roster, new THREE.Scene())
+    expect(agents.depth()).toBe(RING_LEVEL_MAX)
+    agents.setLadder(ladder)
+    const deep = agents.views.get('sub-deeper')
+    expect(deep.home.y).toBeCloseTo(HUB_Y - 3 * ringDrop(3) + SUB_STAND_LIFT)
+    expect(agents.setDepth(1)).toBe(1)
+    expect(agents.depth()).toBe(1)
+    expect(deep.home.y).toBeCloseTo(HUB_Y - ringDrop(1) + SUB_STAND_LIFT)
+    expect(agents.setDepth(4)).toBe(4)
+    expect(agents.depth()).toBe(4)
+    expect(deep.home.y).toBeCloseTo(HUB_Y - 3 * ringDrop(3) + SUB_STAND_LIFT)
     agents.dispose()
   })
 })

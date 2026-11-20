@@ -1,6 +1,7 @@
 export const LANE_START_TOP_MS = 10 * 60 * 1000
 
 const SESSION_KEYS = { claude: 'claude-session', opencode: 'opencode-session' }
+const SESSION_SUFFIX = '-session'
 
 export function cleanStartedBy(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null
@@ -19,6 +20,16 @@ function sessionSawStart(session, startedBy) {
   const seen = session?.sessions
   if (!(seen instanceof Set) || seen.size === 0) return true
   return seen.has(startedBy.session)
+}
+
+export function isSessionTopKey(key) {
+  return typeof key === 'string' && key.length > SESSION_SUFFIX.length && key.endsWith(SESSION_SUFFIX)
+}
+
+export function topKeyFor({ chosenTop = '', laneTop = '', viewKeys = null } = {}) {
+  const drawn = viewKeys instanceof Set ? viewKeys.has(chosenTop) : Array.isArray(viewKeys) && viewKeys.includes(chosenTop)
+  if (drawn && isSessionTopKey(chosenTop)) return chosenTop
+  return typeof laneTop === 'string' && laneTop !== '' ? laneTop : 'orchestrator'
 }
 
 export function laneStarterTop({ agents, at, orchestratorKey = 'orchestrator', windowMs = LANE_START_TOP_MS } = {}) {

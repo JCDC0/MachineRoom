@@ -175,6 +175,42 @@ export function sectorLaneAngles(arc) {
   return lanes.map((_, index) => start + ((index + 0.5) / lanes.length) * span)
 }
 
+export function ringDepth(value, fallback = RING_LEVEL_MAX) {
+  const raw = value !== null && typeof value === 'object' ? value.depth ?? value.limit : value
+  if (raw === undefined || raw === null || raw === '') return fallback
+  const number = Number(raw)
+  if (!Number.isFinite(number)) return fallback
+  return Math.min(RING_LEVEL_MAX, Math.max(1, Math.floor(number)))
+}
+
+export function topRingSeats({ topKey = 'orchestrator', extraKeys = [] } = {}) {
+  const top = typeof topKey === 'string' && topKey !== 'orchestrator' ? topKey : ''
+  const extras = []
+  for (const key of Array.isArray(extraKeys) ? extraKeys : []) {
+    if (typeof key !== 'string' || key === '' || key === 'orchestrator' || key === top) continue
+    if (!extras.includes(key)) extras.push(key)
+  }
+  const seats = new Map()
+  if (top === '') {
+    seats.set('orchestrator', 'centre')
+    for (const key of extras) seats.set(key, 'reader')
+    return { mode: 'centre', top: '', order: ['orchestrator', ...extras], seats }
+  }
+  const order = [top, 'orchestrator', ...extras]
+  if (order.length === 2) {
+    seats.set(top, 'top')
+    seats.set('orchestrator', 'under')
+    return { mode: 'stack', top, order, seats }
+  }
+  for (const key of order) seats.set(key, 'orbit')
+  return { mode: 'orbit', top, order, seats }
+}
+
+export function topRingPoint(angle, out = new THREE.Vector3()) {
+  const theta = Number.isFinite(Number(angle)) ? Number(angle) : 0
+  return out.set(Math.cos(theta) * HUB_RADIUS, HUB_Y + PARK_LIFT, Math.sin(theta) * HUB_RADIUS)
+}
+
 export function ringLevels(ladder, max = RING_LEVEL_MAX) {
   const subs = Array.isArray(ladder?.subs) ? ladder.subs : []
   const cap = Math.min(RING_LEVEL_MAX, Math.max(1, Math.floor(Number(max)) || RING_LEVEL_MAX))
@@ -250,14 +286,14 @@ export function ringLayout(ladder, roster, max = RING_LEVEL_MAX, floor = RING_FL
   return { arcs, rings, count, ringOf: (arc) => rings[arc.level], ringOfKey: (key) => rings[byKey.get(key)?.level ?? 0] }
 }
 
-export function sectorSlotAngles(ladder, roster) {
+export function sectorSlotAngles(ladder, roster, max = RING_LEVEL_MAX) {
   const keys = laneKeys(roster)
   const angles = new Map()
   if (!hasSubs(ladder)) {
     keys.forEach((key, index) => angles.set(key, slotAngle(index, keys.length)))
     return angles
   }
-  for (const arc of ringArcs(ladder, keys)) {
+  for (const arc of ringArcs(ladder, keys, max)) {
     const laneAngles = sectorLaneAngles(arc)
     arc.lanes.forEach((key, index) => angles.set(key, laneAngles[index]))
   }
@@ -430,8 +466,8 @@ function buildSlots(angles, keys = [], layout = null) {
   })
 }
 
-function ladderKeyOf(ladder, parkedKeys) {
-  return ringArcs(ladder, parkedKeys)
+function ladderKeyOf(ladder, parkedKeys, max = RING_LEVEL_MAX) {
+  return ringArcs(ladder, parkedKeys, max)
     .map((arc) => `${arc.id}|${arc.name}|${arc.level}|${arc.lanes.join(',')}|${arc.start}|${arc.end}`)
     .join(';')
 }
@@ -523,11 +559,12 @@ export function createHub(scene, agentsOrCount, ladder = null) {
   let beatNext = 0
 
   let currentLadder = hasSubs(ladder) ? ladder : null
-  let ladderKeyValue = ladderKeyOf(currentLadder, parkedKeys)
+  let depth = RING_LEVEL_MAX
+  let ladderKeyValue = ladderKeyOf(currentLadder, parkedKeys, depth)
   let buildCount = 0
   let slotAngles = []
   let slots = []
-  let layout = hasSubs(ladder) ? ringLayout(ladder, parkedKeys) : null
+  let layout = hasSubs(ladder) ? ringLayout(ladder, parkedKeys, depth) : null
   let sectorLines = []
   let sectorLabels = []
   let sectorGroups = []
@@ -542,7 +579,7 @@ export function createHub(scene, agentsOrCount, ladder = null) {
 
   function anglesFor(ladderValue) {
     if (parkedKeys.length > 0) {
-      const angles = sectorSlotAngles(ladderValue, parkedKeys)
+      const angles = sectorSlotAngles(ladderValue, parkedKeys, depth)
       return parkedKeys.map((key) => angles.get(key) ?? 0)
     }
     return Array.from({ length: count }, (_, index) => slotAngle(index, count))
@@ -569,7 +606,7 @@ export function createHub(scene, agentsOrCount, ladder = null) {
 
   function rebuild() {
     buildCount += 1
-    layout = currentLadder ? ringLayout(currentLadder, parkedKeys) : null
+    layout = currentLadder ? ringLayout(currentLadder, parkedKeys, depth) : null
     slotAngles = anglesFor(currentLadder)
     clearGroup(tickGroup)
     tickGroup.add(buildTicks(slotAngles, parkedKeys, layout))
@@ -594,15 +631,23 @@ export function createHub(scene, agentsOrCount, ladder = null) {
     danceFrom = 0
     danceTo = 0
     danceAt = 0
-    ladderKeyValue = ladderKeyOf(currentLadder, parkedKeys)
+    ladderKeyValue = ladderKeyOf(currentLadder, parkedKeys, depth)
   }
 
   function setLadder(next) {
     const ladder = hasSubs(next) ? next : null
-    if (ladderKeyOf(ladder, parkedKeys) === ladderKeyValue) return false
+    if (ladderKeyOf(ladder, parkedKeys, depth) === ladderKeyValue) return false
     currentLadder = ladder
     rebuild()
     return true
+  }
+
+  function setDepth(value) {
+    const next = ringDepth(value, RING_LEVEL_MAX)
+    if (next === depth) return depth
+    depth = next
+    if (currentLadder) rebuild()
+    return depth
   }
 
   function setRoster(next) {
@@ -706,5 +751,5 @@ export function createHub(scene, agentsOrCount, ladder = null) {
 
   if (currentLadder) rebuild()
 
-  return { group, pulse, beat, setSlot, setLadder, setRoster, setWorking, parkedKeys: () => [...parkedKeys], update, builds: () => buildCount, dispose }
+  return { group, pulse, beat, setSlot, setLadder, setDepth, setRoster, setWorking, parkedKeys: () => [...parkedKeys], update, builds: () => buildCount, depth: () => depth, dispose }
 }
