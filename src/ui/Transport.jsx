@@ -293,7 +293,7 @@ export default function Transport({ snapshot, speeds, markers = [], orchestrator
         </div>
         <div className="transport-agents" ref={listRef}>
           <button type="button" className="transport-agents-toggle transport-orchestrator mono" aria-expanded={listOpen} onClick={() => setListOpen(!listOpen)}>
-            {chips.length + lanes.pills.length} agents{working > 0 ? ` · ${working} working` : null}
+            {working > 0 ? `Agents · ${working} working` : 'Agents · none working'}
             {waiting > 0 ? <span className="transport-agents-waiting"> · {waiting} waiting</span> : null}
           </button>
           {listOpen ? (
