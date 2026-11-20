@@ -79,12 +79,22 @@ const TAB_LABELS = [
   'Storage',
 ]
 
+function sectionSelect(container) {
+  return container.querySelector('#hud-settings-section')
+}
+
 function tabLabels(container) {
-  return container.querySelectorAll('[role="tab"]').map((tab) => tab.textContent.trim())
+  return (sectionSelect(container)?.querySelectorAll('option') ?? []).map((option) => option.textContent.trim())
 }
 
 function selectedTab(container) {
-  return container.querySelectorAll('[role="tab"]').filter((tab) => tab.getAttribute('aria-selected') === 'true').map((tab) => tab.textContent.trim())
+  const select = sectionSelect(container)
+  if (!select) return []
+  const option = select.querySelectorAll('option').find((item) => {
+    const value = item.value !== undefined ? String(item.value) : (item.getAttribute('value') ?? '')
+    return value === select.value
+  })
+  return option ? [option.textContent.trim()] : []
 }
 
 async function mountSettings(root, client = fakeClient()) {
@@ -100,14 +110,20 @@ function shown(node) {
   return true
 }
 
-describe('Settings tabs', () => {
-  it('lists one tab per section in a tablist and opens on Harnesses', async () => {
+describe('Settings sections dropdown', () => {
+  it('lists one option per section in the select and opens on Harnesses', async () => {
     await withDom(async ({ container, root }) => {
       await mountSettings(root)
-      expect(container.querySelector('[role="tablist"]')).not.toBeNull()
+      expect(container.querySelector('[role="tablist"]')).toBeNull()
+      const select = sectionSelect(container)
+      expect(select).not.toBeNull()
+      expect(select.tagName).toBe('SELECT')
       expect(tabLabels(container)).toEqual(TAB_LABELS)
       expect(selectedTab(container)).toEqual(['Harnesses'])
-      expect(container.querySelector('[aria-label="Harnesses"]')).not.toBeNull()
+      const panel = container.querySelector('#hud-settings-panel')
+      expect(panel.getAttribute('role')).toBeNull()
+      expect(panel.getAttribute('aria-labelledby')).toBeNull()
+      expect(panel.getAttribute('aria-label')).toBe('Harnesses')
     })
   })
 
@@ -120,24 +136,20 @@ describe('Settings tabs', () => {
       expect(shown(container.querySelector('#settings-direct-api'))).toBe(false)
       expect(shown(container.querySelector('[aria-label="Beeps"]'))).toBe(false)
       expect(selectedTab(container)).toEqual(['Replay'])
+      expect(container.querySelector('#hud-settings-panel').getAttribute('aria-label')).toBe('Replay')
     })
   })
 
-  it('moves between tabs with the arrow keys and wraps', async () => {
+  it('switches sections when the dropdown value changes', async () => {
     await withDom(async ({ container, root }) => {
       await mountSettings(root)
-      const press = async (key) => {
-        const current = container.querySelectorAll('[role="tab"]').find((tab) => tab.getAttribute('aria-selected') === 'true')
-        await act(async () => {
-          current.dispatchEvent({ type: 'keydown', key, bubbles: true, cancelable: true })
-        })
-      }
-      await press('ArrowRight')
+      await openTab(root, container, 'Direct API')
       expect(selectedTab(container)).toEqual(['Direct API'])
-      await press('ArrowLeft')
-      await press('ArrowLeft')
+      expect(container.querySelector('#hud-settings-panel').getAttribute('aria-label')).toBe('Direct API')
+      await openTab(root, container, 'Storage')
       expect(selectedTab(container)).toEqual(['Storage'])
-      await press('Home')
+      expect(container.querySelector('#hud-settings-panel').getAttribute('aria-label')).toBe('Storage')
+      await openTab(root, container, 'Harnesses')
       expect(selectedTab(container)).toEqual(['Harnesses'])
     })
   })
@@ -202,17 +214,22 @@ describe('Settings tabs', () => {
     })
   })
 
-  it('styles the tab row to wrap with a gap and marks hover and the open tab yellow', () => {
-    const row = cssBlocks('.hud-settings-tabs')
+  it('styles the section dropdown row and select with yellow focus', () => {
+    expect(cssBlocks('.hud-settings-tabs')).toBe('')
+    expect(cssBlocks('.hud-settings-tab')).toBe('')
+    const row = cssBlocks('label.hud-settings-section')
     expect(row).toMatch(/display:\s*flex/)
-    expect(row).toMatch(/flex-wrap:\s*wrap/)
-    expect(row).toMatch(/gap:\s*4px/)
-    expect(cssBlocks('.hud-settings-tab')).toMatch(/border:\s*1px solid rgb\(255 255 255 \/ 0\.12\)/)
-    for (const selector of ['.hud-settings-tab:hover', '.hud-settings-tab.is-on']) {
-      const body = cssBlocks(selector)
-      expect(body, selector).toMatch(/color:\s*var\(--yellow\)/)
-      expect(body, selector).toMatch(/border-color:\s*var\(--yellow\)/)
-    }
+    expect(row).toMatch(/flex-direction:\s*row/)
+    expect(row).toMatch(/gap:\s*var\(--space\)/)
+    expect(row).toMatch(/color:\s*var\(--text-dim\)/)
+    const select = cssBlocks('.hud-settings-select')
+    expect(select).toMatch(/background:\s*var\(--black\)/)
+    expect(select).toMatch(/border:\s*1px solid rgb\(255 255 255 \/ 0\.35\)/)
+    expect(select).toMatch(/color:\s*var\(--white\)/)
+    expect(select).toMatch(/font-family:\s*var\(--mono\)/)
+    expect(select).toMatch(/font-size:\s*12px/)
+    expect(select).toMatch(/padding:\s*4px 8px/)
+    expect(cssBlocks('.hud-settings-select:focus')).toMatch(/border-color:\s*var\(--yellow\)/)
   })
 })
 
@@ -295,12 +312,12 @@ describe('harness program details', () => {
         buttonWithText(container, 'Close').click()
       })
       await settle()
-      expect(container.querySelector('#hud-settings-tab-direct-api')).toBeNull()
+      expect(container.querySelector('#hud-settings-section')).toBeNull()
       await act(async () => {
         root.render(createElement(Hud, { ...props, settingsRequest: 1 }))
       })
       await settle()
-      expect(container.querySelector('#hud-settings-tab-harnesses').getAttribute('aria-selected')).toBe('true')
+      expect(settingsTab()).toEqual(['Harnesses'])
     })
   })
 
