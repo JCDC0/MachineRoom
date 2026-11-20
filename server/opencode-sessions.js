@@ -542,6 +542,7 @@ export function createOpencodeSessionsReader(options = {}) {
     problem: () => lastError,
     note: () => fallbackNote,
     sessions: () => sessions,
+    open: () => open,
     forgotten: () => forgotten,
   }
 }
