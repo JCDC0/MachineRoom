@@ -324,7 +324,13 @@ export function seatCheck({ seats, tree, actor, action, target, parent, harness,
     if (action === 'deleteAgent') {
       return node.createdBy === me.id ? { ok: true } : refuse(403, 'Only the owner or the agent that made it can delete it.')
     }
-    if (action === 'turnOff' || node.active) return { ok: true }
+    if (action === 'turnOff') {
+      const myGrant = grantFor(seats, me.id)
+      if (node.kind === 'lane' && !(myGrant.lanes > 0)) return refuse(403, 'You have no grant to change lanes.')
+      if (node.kind === 'sub' && !(myGrant.subs > 0)) return refuse(403, 'You have no grant to change subs.')
+      return { ok: true }
+    }
+    if (node.active) return { ok: true }
     if (node.kind === 'lane') {
       const grant = grantFor(seats, node.parent)
       if (node.parent !== me.id && !grantFor(seats, me.id).lanes) return refuse(409, 'Your grant allows 0 lanes turned on; 0 are on.')
