@@ -232,6 +232,23 @@ describe('incremental pipeline', () => {
     expect(pipeline.push({ type: 'heartbeat.run.queued', createdAt: '2026-01-01T00:00:00Z', payload: { agentId: 'nobody' } })).toEqual([])
   })
 
+  it('adds late-started agents so their frames produce activities', () => {
+    const claudeSession = { id: 'session-claude', key: 'claude-session', name: 'Claude Code session', parser: 'claude' }
+    const pipeline = createPipeline({ agents: [claudeSession], tree: recording.tree })
+    const frame = {
+      type: 'heartbeat.run.status',
+      createdAt: '2026-11-20T00:00:00Z',
+      payload: { agentId: 'agent-agy2', runId: 'r-late', status: 'running' },
+    }
+    expect(pipeline.push(frame)).toEqual([])
+    pipeline.addAgents(null)
+    pipeline.addAgents([null, {}, { id: '' }, { id: 'agent-agy2', key: 'agy2', name: 'agy2', parser: 'agy' }])
+    pipeline.addAgents([{ id: 'agent-agy2', key: 'other', name: 'other', parser: 'claude' }])
+    const activities = pipeline.push(frame)
+    expect(activities).toHaveLength(1)
+    expect(activities[0]).toMatchObject({ type: 'run.start', agent: 'agy2', runId: 'r-late' })
+  })
+
   it('lets commands touch a file it has just learned', () => {
     const tree = makeTree({ root: 'agent-sandbox', files: [], created: [] })
     const pipeline = createPipeline({ agents: recording.agents, tree })
@@ -504,6 +521,17 @@ describe('live player', () => {
     ])
     player.replaceFiles(['a.js'])
     expect(player.state.files.has('dist/app.js')).toBe(true)
+  })
+
+  it('adds late-started agents and applies their activities', () => {
+    const claudeSession = { id: 'session-claude', key: 'claude-session', name: 'Claude Code session', parser: 'claude' }
+    const player = createLivePlayer({ tree: empty, agents: [claudeSession] })
+    player.push([{ type: 'run.start', agent: 'agy2', runId: 'r1', time: 1 }])
+    expect(player.state.agents.has('agy2')).toBe(false)
+    player.addAgents([{ id: 'agent-agy2', key: 'agy2', name: 'AGY 2', harness: 'agy', model: 'gemini-4-neon-high' }])
+    player.push([{ type: 'run.start', agent: 'agy2', runId: 'r1', time: 2 }])
+    expect(player.state.agents.get('agy2')).toMatchObject({ key: 'agy2', name: 'AGY 2', status: 'working', runs: 1 })
+    expect(player.snapshot().agents.map((agent) => agent.key)).toEqual(['claude-session', 'agy2'])
   })
 
   it('ignores seek and pause', () => {
