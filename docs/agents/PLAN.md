@@ -1,15 +1,22 @@
 # Plan
 
-## Next, as of 2026-11-21 00:30
+## Next, as of 2026-11-21 02:30
 
-CI for 564ba458 is green on both runners. Merged since and not pushed: P654 (AGY lanes in the Agents tree), P655 (whole lane names in the Agents tree) and P656 (the working session counted in the bottom agents button).
+Before the owner's restart on 2026-11-21 near 03:00: reviews 64 (`AUDIT-2026-11-REVIEW-64.md`, 9a3039b6 to c6513481) and 65 (`AUDIT-2026-11-REVIEW-65.md`, c6513481 to 8a9b8cb9) are merged, and their fixes so far: P660 and a Stage change (R65-1, a lane that starts after the page opens works in the room; checked by eye on the bench), P661 (R65-2 server, R65-4, R65-6, R65-7 parts 1 and 3), P662 (R65-2 page, R65-3, the tooltip of R65-10), P663 (R64-1, R64-3, R64-8), P664 (R64-9, R64-11, R64-4 model half), a Stage change for R64-6 and the LIVE.md half of R65-9. P657 counts every agent in the Agents header.
 
-1. Push P654 to P656: the history audit in its own call, the owner's yes, then CI.
-2. The Agents header in the sidebar says `0 of 6 working` while the session at the top works: it counts lanes only. Count the working session there too, as P656 did for the bottom button, for a Neon lane.
-3. The Chat button still opens the built-in room orchestrator, which the bench hides as idle; on the bench the orchestrator is the Claude Code session, which the owner talks to in the Claude app. Decide with the owner what Chat opens there.
-4. P639, agent seats S4 (the seats in the Agents tree and on the rings). It touches `src/engine`, so a native lane after 08:00 Manila or codex after 2026-11-24 13:03. Then P640, the seats docs.
-5. Known weakness: any request with an `Origin` header counts as the owner (`seatActor` and the owner routes); the seat grants rest on it. Matters only if the bridge is reached from outside this machine.
-6. The fleet: me on top; agy2 and agy3 (Gemini 4 Neon High, no `src/engine`); codex (GPT-6.2 Sol High) out of usage until 2026-11-24 13:03; native2 to native4 (DeepSeek Flash `--reasoning xhigh`) on a $1 a day OpenRouter budget, with briefs that name exact files and lines.
+Open findings, in order:
+1. Engine, for codex (back 2026-11-24 13:03) or a native lane (after 08:00 Manila), with exact lines: R64-2 (orbiting top agents land on parked lanes), R64-7 (a sub on its own middle lane; rings ignore the lattice floor), R64-5 (depth off by one between `hub.js` and `seats.js`, `state.depthLimit` never fed, the owner ladder save skips the depth cap), R64-4 engine half (`doingText` while thinking).
+2. R65-5: the bottom agents button leaves out a working built-in orchestrator and queued lanes, keeps old failed lanes past the linger, lists idle subs, and hides in a sessions-only room.
+3. R65-8: `/grant` and `/revoke` notices sit in `pending`, block New, Open and Branch, and start a turn after a bridge restart.
+4. R65-9 parts 1 and 2: the Revoke card puts the red button first; the grant notice names a delete no orchestrator route allows.
+5. R65-7 part 2: no `agents` notice when a lane's five-minute linger ends (the 60 second poll covers it).
+6. R64-10: `GET /api/control/issues` runs `git log` on every poll and misses combined merges and non-P brief ids.
+7. R64-12 and R65-10: the tests that pass with their change undone.
+8. The main chunk passed its 970 kB guard after P660 to P662; the guard is 990 kB now. Split the engine into its own chunk in `vite.config.js`, checking for a circular chunk import, and bring the guard back down.
+9. P639 (agent seats S4, touches `src/engine`) and P640 (seats docs).
+10. Decide with the owner what Chat opens on the bench, where the orchestrator is the Claude Code session.
+11. Known weakness: any request with an `Origin` header counts as the owner; matters only off this machine.
+12. The fleet: me on top; agy2 and agy3 (Gemini 4 Neon High, no `src/engine`); codex (GPT-6.2 Sol High) out of usage until 2026-11-24 13:03; native2 to native4 (DeepSeek Flash `--reasoning xhigh`) on a $1 a day OpenRouter budget that resets at 08:00 Manila, with briefs that name exact files and lines. Start AGY lanes a few seconds apart.
 
 ## Where we are
 
