@@ -151,10 +151,12 @@ export function laneParentLabel(nodes, lane) {
   return cleanText(parent?.label, AGENT_NAME_MAX) || 'Orchestrator'
 }
 
-export function laneCountLine(nodes) {
-  const lanes = (Array.isArray(nodes) ? nodes : []).filter((node) => node && node.kind === 'lane')
-  const working = lanes.filter((node) => node.active !== false && node.working === true).length
-  return `${working} of ${lanes.length} working`
+export function agentCountLine(nodes) {
+  const agents = (Array.isArray(nodes) ? nodes : []).filter(
+    (node) => node && typeof node === 'object' && KINDS.has(node.kind)
+  )
+  const working = agents.filter((node) => node.active !== false && node.working === true).length
+  return `${working} of ${agents.length} working`
 }
 
 export function splitMoreLanes(rows) {
