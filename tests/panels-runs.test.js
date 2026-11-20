@@ -640,6 +640,26 @@ describe('projectRunLanes', () => {
     ]
     expect(projectRunLanes(agents, [])).toEqual([{ key: 'claude-2', name: 'Coder', running: false }])
   })
+
+  it('filters by activeKeys when given a Set and keeps running lanes', () => {
+    const agents = [
+      { key: 'opencode', name: 'OpenCode', adapterType: 'opencode_local', role: null },
+      { key: 'hermes', name: 'Hermes', adapterType: 'hermes_local', role: null },
+      { key: 'claude-2', name: 'Coder', adapterType: 'claude_local', role: null },
+    ]
+    expect(projectRunLanes(agents, [], null)).toEqual([
+      { key: 'opencode', name: 'OpenCode', running: false },
+      { key: 'hermes', name: 'Hermes', running: false },
+      { key: 'claude-2', name: 'Coder', running: false },
+    ])
+    expect(projectRunLanes(agents, [], new Set(['opencode']))).toEqual([
+      { key: 'opencode', name: 'OpenCode', running: false },
+    ])
+    expect(projectRunLanes(agents, [{ lane: 'hermes' }], new Set(['opencode']))).toEqual([
+      { key: 'opencode', name: 'OpenCode', running: false },
+      { key: 'hermes', name: 'Hermes', running: true },
+    ])
+  })
 })
 
 describe('projectRunConfirm with a task list', () => {
@@ -1150,5 +1170,78 @@ describe('Dispatch draft per project', () => {
       expect(container.querySelector('#project-run-check').value).toBe('node saved-check.mjs')
     })
     clearProjectDraft(project)
+  })
+})
+
+describe('Dispatch Start lane picker active filter', () => {
+  const pickerAgents = [
+    { key: 'opencode', name: 'OpenCode', adapterType: 'opencode_local', role: null },
+    { key: 'hermes', name: 'Hermes', adapterType: 'hermes_local', role: null },
+    { key: 'claude-2', name: 'Coder', adapterType: 'claude_local', role: null },
+  ]
+
+  function optionValues(container) {
+    const select = container.querySelector('#project-run-lane')
+    return select ? select.options.map((opt) => opt.value).filter((value) => value !== '' && value !== 'auto') : []
+  }
+
+  it('lists only active lanes and running lanes when lanes choice is set', async () => {
+    let lanesCalls = 0
+    const client = {
+      health: async () => ({ lanes: true }),
+      runs: async () => ({ running: [{ lane: 'hermes' }], recent: [], project: 'demo' }),
+      lanes: async () => {
+        lanesCalls += 1
+        return {
+          chosen: true,
+          lanes: [
+            { key: 'opencode', active: true },
+            { key: 'hermes', active: false },
+            { key: 'claude-2', active: false },
+          ],
+        }
+      },
+    }
+    await withDom(async ({ container, root }) => {
+      await act(async () => {
+        root.render(createElement(DispatchPanel, { client, initialAgents: pickerAgents }))
+      })
+      await settle()
+      expect(lanesCalls).toBe(1)
+      expect(optionValues(container)).toEqual(['opencode', 'hermes'])
+    })
+  })
+
+  it('keeps all lanes when chosen is false or client.lanes fails', async () => {
+    const unchosenClient = {
+      health: async () => ({ lanes: true }),
+      runs: async () => ({ running: [], recent: [], project: 'demo' }),
+      lanes: async () => ({
+        chosen: false,
+        lanes: [{ key: 'opencode', active: false }],
+      }),
+    }
+    await withDom(async ({ container, root }) => {
+      await act(async () => {
+        root.render(createElement(DispatchPanel, { client: unchosenClient, initialAgents: pickerAgents }))
+      })
+      await settle()
+      expect(optionValues(container)).toEqual(['opencode', 'hermes', 'claude-2'])
+    })
+
+    const failingClient = {
+      health: async () => ({ lanes: true }),
+      runs: async () => ({ running: [], recent: [], project: 'demo' }),
+      lanes: async () => {
+        throw new Error('Bridge error')
+      },
+    }
+    await withDom(async ({ container, root }) => {
+      await act(async () => {
+        root.render(createElement(DispatchPanel, { client: failingClient, initialAgents: pickerAgents }))
+      })
+      await settle()
+      expect(optionValues(container)).toEqual(['opencode', 'hermes', 'claude-2'])
+    })
   })
 })

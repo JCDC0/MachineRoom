@@ -137,6 +137,7 @@ export default function DispatchPanel({
   const [projectName, setProjectName] = useState('')
   const [lanesMode, setLanesMode] = useState(false)
   const [lanesKnown, setLanesKnown] = useState(false)
+  const [activeKeys, setActiveKeys] = useState(null)
   const [projectLane, setProjectLane] = useState(() => (typeof client?.routeLane === 'function' ? 'auto' : ''))
   const [projectModel, setProjectModel] = useState('')
   const [projectMode, setProjectMode] = useState('')
@@ -202,7 +203,7 @@ export default function DispatchPanel({
   const selectedBrief = briefs.find((item) => item.id === selectedBriefId)
   const runLane = selectedBrief ? runLaneFor(selectedBrief, runsState.running, agents) : null
   const canRunBrief = typeof client?.startRun === 'function' && Boolean(runLane)
-  const projectLanes = projectRunLanes(agents, runsState.running)
+  const projectLanes = projectRunLanes(agents, runsState.running, activeKeys)
   const projectFormLine = lanesKnown && !loading ? projectFormNotice({ lanesMode, lanes: projectLanes }) : ''
   const noRecordedRuns =
     lanesKnown &&
@@ -253,6 +254,26 @@ export default function DispatchPanel({
     if (showFirstTaskCard && firstTaskAppliedRef.current && effectiveLane === firstTaskLane?.key) return
     setProjectMode(initialProjectMode(laneAgentFor(effectiveLane), projectPlanByDefault))
   }, [projectPlanByDefault])
+
+  useEffect(() => {
+    let alive = true
+    setActiveKeys(null)
+    if (typeof client?.lanes !== 'function') return undefined
+    Promise.resolve()
+      .then(() => client.lanes?.())
+      .then((answer) => {
+        if (!alive) return
+        if (answer?.chosen === true && Array.isArray(answer.lanes)) {
+          setActiveKeys(new Set(answer.lanes.filter((lane) => lane?.active === true).map((lane) => lane.key)))
+        } else {
+          setActiveKeys(null)
+        }
+      })
+      .catch(() => {})
+    return () => {
+      alive = false
+    }
+  }, [client])
 
   useEffect(() => {
     if (typeof client?.laneBackups !== 'function') return undefined
