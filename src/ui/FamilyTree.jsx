@@ -13,6 +13,7 @@ import {
   MAX_SUBS,
   NO_READY_HARNESS,
   affectedSubText,
+  agentCountLine,
   childConfirmText,
   childDetail,
   childDraft,
@@ -30,7 +31,6 @@ import {
   harnessReady,
   hideLaneText,
   labelProblem,
-  laneCountLine,
   laneParentLabel,
   familyBoxes,
   moreLanesLabel,
@@ -927,7 +927,7 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
   const boxes = useMemo(() => {
     return familyBoxes(tree.rows, sessionRows)
   }, [tree, sessionRows])
-  const countLine = family ? laneCountLine(tree.nodes) : ''
+  const countLine = family ? agentCountLine(tree.nodes) : ''
   const mainAgent = tree.nodes.find((node) => node.kind === 'orchestrator')
   const hasLanes = tree.nodes.some((node) => node.kind === 'lane')
   const editingNode = editing ? tree.nodes.find((node) => node.id === editing) ?? null : null
