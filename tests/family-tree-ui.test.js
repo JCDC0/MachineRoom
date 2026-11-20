@@ -307,6 +307,41 @@ describe('FamilyTree rows', () => {
     })
   })
 
+  it('gives a manual lane row Delete without Make sub or Turn on/off in its menu', async () => {
+    const { client } = makeClient()
+    const nodes = [
+      { ...NODES[0], children: [...NODES[0].children, 'agy3'] },
+      ...NODES.slice(1),
+      {
+        id: 'agy3',
+        kind: 'lane',
+        label: 'agy3',
+        harness: 'agy',
+        model: 'gemini-4-neon-high',
+        effort: null,
+        parent: 'orchestrator',
+        active: true,
+        working: false,
+        custom: false,
+        manual: true,
+      },
+    ]
+    client.family = async () => ({ ...FAMILY, nodes })
+    await withDom(async ({ container, root }) => {
+      await mount(root, client)
+      const manualRow = rowByLabel(container, 'agy3')
+      expect(manualRow).not.toBeNull()
+      const trigger = manualRow.querySelector('[aria-haspopup="menu"]')
+      await click(root, trigger)
+      const menu = trigger.ownerDocument.body.querySelector('[role="menu"]')
+      const labels = [...menu.querySelectorAll('button')].map((button) => button.textContent.trim())
+      expect(labels).toEqual(['Delete…'])
+      expect(labels).not.toContain('Make sub from this lane…')
+      expect(labels).not.toContain('Turn on')
+      expect(labels).not.toContain('Turn off')
+    })
+  })
+
   it('puts the name and status over harness and model, with shared trailing actions', async () => {
     const { client } = makeClient()
     await withDom(async ({ container, root }) => {

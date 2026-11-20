@@ -357,6 +357,7 @@ export function buildFamilyNodes({
   }
 
   const laneNodes = []
+  const laneIds = new Set()
   for (const lane of eligible) {
     if (isHiddenLane(lane.key)) continue
     const active = Boolean(activeChecker(lane.key))
@@ -370,6 +371,7 @@ export function buildFamilyNodes({
     const working = typeof isWorking === 'function' ? Boolean(isWorking(lane.key)) : false
     const savedLabel = typeof labels[lane.key] === 'string' ? labels[lane.key].trim() : ''
     const laneName = typeof lane.name === 'string' ? lane.name.trim() : ''
+    laneIds.add(lane.key)
     laneNodes.push({
       id: lane.key,
       kind: 'lane',
@@ -384,6 +386,40 @@ export function buildFamilyNodes({
       working,
       custom: lane.custom === true,
       ...(allLanes[lane.key].createdBy ? { createdBy: allLanes[lane.key].createdBy } : {}),
+    })
+  }
+
+  for (const [key, entry] of Object.entries(allLanes ?? {})) {
+    if (key === ORCHESTRATOR_KEY) continue
+    if (entry?.cli?.harness !== 'agy') continue
+    if (entry.custom === true || entry.retired === true) continue
+    if (isHiddenLane(key) || laneIds.has(key)) continue
+    const parentSub = subByLane.get(key)
+    const parentId = parentSub ? parentSub.id : ORCHESTRATOR_KEY
+    if (parentSub) {
+      parentSub.children.push(key)
+    } else {
+      mainNode.children.push(key)
+    }
+    const working = typeof isWorking === 'function' ? Boolean(isWorking(key)) : false
+    const savedLabel = typeof labels[key] === 'string' ? labels[key].trim() : ''
+    const entryName = typeof entry.name === 'string' ? entry.name.trim() : ''
+    laneIds.add(key)
+    laneNodes.push({
+      id: key,
+      kind: 'lane',
+      label: savedLabel || entryName || key,
+      harness: 'agy',
+      model: entry.cli.model ?? '',
+      effort: null,
+      mode: typeof entry.cli.mode === 'string' && entry.cli.mode.trim() ? entry.cli.mode.trim() : null,
+      parent: parentId,
+      children: [],
+      active: true,
+      working,
+      custom: false,
+      manual: true,
+      ...(entry.createdBy ? { createdBy: entry.createdBy } : {}),
     })
   }
 

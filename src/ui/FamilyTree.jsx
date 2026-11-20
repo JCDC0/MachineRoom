@@ -877,6 +877,17 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
   }, [selecting, confirm, busy])
 
   const tree = useMemo(() => familyTree(family), [family])
+  const manualIds = useMemo(() => {
+    const ids = new Set()
+    const seen = new Set()
+    for (const raw of Array.isArray(family?.nodes) ? family.nodes : []) {
+      const id = cleanText(raw?.id, 80)
+      if (!id || seen.has(id)) continue
+      seen.add(id)
+      if (raw.manual === true) ids.add(id)
+    }
+    return ids
+  }, [family])
   const lastRunByLane = useMemo(() => {
     const latest = new Map()
     for (const list of [lastRuns?.last, lastRuns?.recent]) {
@@ -2534,6 +2545,7 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
     const lane = node.kind === 'lane'
     const sub = node.kind === 'sub'
     const session = node.kind === 'session'
+    const manual = lane && (node.manual === true || manualIds.has(node.id))
     const selectable = lane && selecting
     const selected = selectable && selectedLanes.includes(node.id)
     const orchestratorState = orchestratorStates.get(node.id) ?? ''
@@ -2544,16 +2556,18 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
     const detail = familyModel(node, { harnesses, models })
     const mode = node.mode || defaultMode(node.harness)
     const effortMode = `Effort ${node.effort || 'default'}${mode ? ` · Mode ${mode}` : ''}`
-    const items = [{
-      label: lane ? 'Make sub from this lane…' : 'Add a lane under this…',
-      disabled: busy,
-      onSelect: () => toggleChild(node),
-    }]
-    if (session) items.length = 0
+    const items = []
+    if (!session && !manual) {
+      items.push({
+        label: lane ? 'Make sub from this lane…' : 'Add a lane under this…',
+        disabled: busy,
+        onSelect: () => toggleChild(node),
+      })
+    }
     if ((session || node.kind === 'orchestrator') && (session ? node.id.slice(8) : 'orchestrator') !== (family?.top ?? 'orchestrator')) {
       items.push({ label: 'Put at the top', disabled: busy, onSelect: () => askTop(node) })
     }
-    if (lane) {
+    if (lane && !manual) {
       items.push({
         label: node.active ? 'Turn off' : 'Turn on',
         disabled: busy || typeof client?.setActiveLanes !== 'function',

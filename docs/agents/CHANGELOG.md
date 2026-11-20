@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The Agents tree lists the fleet's built-in AGY lanes as fixed rows: always on, with Delete but no on or off switch and no Make sub, since an orchestrator cannot start them (P654).
 - With a session as the chosen top and the built-in orchestrator idle, the Agents tree leaves the orchestrator out and hangs its subs and lanes under the session, as the room does (P652).
 - The agents button under the lens reads Agents · N working, or Agents · none working, and its list leaves out idle lanes instead of counting every lane in the config (P653).
 - Agent seats S3: the owner types /seats, /agents, /grant LANES [SUBS] and /revoke in an orchestrator chat; /grant and /revoke ask on a confirm card, write the grant atomically and post one notice the orchestrator reads on its next turn, and only the owner's page reaches them, since a message from an orchestrator stays plain text (P638).
