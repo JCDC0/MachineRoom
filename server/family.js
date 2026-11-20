@@ -20,6 +20,8 @@ import { HARNESS_OFF_PROBLEM, readHarnessSettings } from './harness-settings.js'
 import { MODELS } from './models.js'
 import { ORCHESTRATOR_KEY } from './orchestrator.js'
 import { NO_TOKEN_PROBLEM, sameHarnessProblem } from './orchestrators.js'
+import { readAgentDepth } from './agent-depth.js'
+import { readSeats, seatsFileFor } from './seats.js'
 
 export const ORIGIN_LABEL_PROBLEM = 'A request to set an agent label needs a page Origin.'
 export const ORIGIN_TOP_PROBLEM = 'A request to set the top agent needs a page Origin.'
@@ -44,6 +46,28 @@ export const PROPOSAL_NOT_FOUND_PROBLEM = 'The proposal was not found.'
 
 const KEY_NAME_PATTERN = /^[A-Za-z0-9 _-]{1,40}$/
 const MAX_PROPOSALS = 20
+const seatContextByBridge = new WeakMap()
+
+export function familySeatsFor(sendJson, options, ladder) {
+  const bridge = seatContextByBridge.get(sendJson)
+  if (bridge) options = { ...bridge, orchestrators: bridge.getOrchestrators() }
+  const { projectRoot, runsFolder } = options
+  return {
+    seats: readSeats(seatsFileFor(projectRoot, runsFolder)),
+    tree: buildFamilyNodes({ ...options, ladder }),
+    depth: readAgentDepth(runsFolder).limit,
+    orchestrators: options.orchestrators,
+  }
+}
+
+export function seatActor(req, sendJson) {
+  if (req.headers.origin) return { owner: true }
+  const header = req.headers['x-machineroom-orchestrator']
+  const token = Array.isArray(header) ? header[0] : header
+  const orchestrators = seatContextByBridge.get(sendJson)?.getOrchestrators()
+  const id = orchestrators?.idForToken?.(typeof token === 'string' ? token.trim() : '')
+  return id ? { id } : null
+}
 
 export function labelsFileFor(projectRoot, runsFolder) {
   const hash = projectHash(projectRoot)
@@ -220,6 +244,7 @@ export function buildFamilyNodes({
   activeLanes,
   orchestrators,
   isWorking,
+  ladder = orchestrators?.getLadder?.() ?? { subs: [] },
 } = {}) {
   const labelsFile = labelsFileFor(projectRoot, runsFolder)
   const labels = readLabels(labelsFile)
@@ -249,7 +274,6 @@ export function buildFamilyNodes({
     custom: false,
   }
 
-  const ladder = orchestrators?.getLadder?.() ?? { subs: [] }
   const subNodes = []
   const subByLane = new Map()
 
@@ -295,6 +319,9 @@ export function buildFamilyNodes({
       active: true,
       working: Boolean(subWorking),
       custom: Boolean(labels[sub.id]),
+      scope: sub.scope,
+      restricted: sub.restricted,
+      ...(sub.createdBy ? { createdBy: sub.createdBy } : {}),
     }
     subNodes.push(subNode)
     for (const laneKey of sub.lanes ?? []) {
@@ -356,6 +383,7 @@ export function buildFamilyNodes({
       active,
       working,
       custom: lane.custom === true,
+      ...(allLanes[lane.key].createdBy ? { createdBy: allLanes[lane.key].createdBy } : {}),
     })
   }
 
@@ -401,6 +429,15 @@ export function createFamilyApi(options = {}) {
   const getOrchestrators = typeof options.orchestrators === 'function' ? options.orchestrators : () => options.orchestrators ?? null
   const getBaseLanes = typeof options.lanes === 'function' ? options.lanes : () => options.lanes ?? {}
   const env = options.env ?? process.env
+  if (typeof sendJson === 'function') {
+    seatContextByBridge.set(sendJson, {
+      projectRoot,
+      runsFolder: runsDir,
+      lanesConfig: getBaseLanes,
+      activeLanes,
+      getOrchestrators,
+    })
+  }
 
   async function handle(req, res, url) {
     const path = url.pathname

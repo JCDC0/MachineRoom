@@ -14,7 +14,6 @@ import {
   createOrchestrators,
   LANE_ENDED_PROBLEM,
   LANE_LIMIT_PROBLEM,
-  MAIN_LADDER_PROBLEM,
   MAIN_MESSAGE_PROBLEM,
   NO_ORCHESTRATOR_PROBLEM,
   NO_TOKEN_PROBLEM,
@@ -37,6 +36,7 @@ import { parseRunArgs, runRecord } from '../src/briefs/run.js'
 import { getJson, postJson, readFrames } from './helpers/bridge.js'
 import { makeTempDir, removeTempDir } from './helpers/tempRoot.js'
 import { isHarnessAvailable } from '../server/agents-config.js'
+import { seatsFileFor, writeSeats } from '../server/seats.js'
 const assumeInstalled = (key, options) => key === 'claude' || key === 'opencode' || isHarnessAvailable(key, options)
 
 const REPO_ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)))
@@ -253,6 +253,22 @@ function makeRig(files, extra = {}) {
   cleanups.push(() => registry.close())
   return { ...files, registry }
 }
+
+it('includes fresh seat counts on each OpenCode turn', async () => {
+  const rig = makeRig(makeBase({ ladder: { subs: [{ ...FRONTEND, harness: 'opencode', model: '' }] } }))
+  const file = seatsFileFor(rig.projectRoot, rig.runs)
+  writeSeats(file, { rings: [4, 3], grants: { frontend: { lanes: 2, subs: 1 } } })
+  const frontend = rig.registry.find('frontend')
+  frontend.send({ text: 'First question', confirmed: true })
+  await waitIdle(rig.registry, 'frontend', 1)
+  expect(rig.calls()[0].args.at(-1)).toContain('Seat grant: 2 lanes and 0 subs. Free seats: ring 1, 1.')
+  writeSeats(file, { rings: [4, 2], grants: { frontend: { lanes: 1, subs: 0 } } })
+  frontend.send({ text: 'Next question', confirmed: true })
+  await waitIdle(rig.registry, 'frontend', 2)
+  const resumed = rig.calls()[1].args
+  expect(resumed).toContain('--session')
+  expect(resumed.at(-1)).toBe('Next question\n\nSeat grant: 1 lane and 0 subs. Free seats: ring 1, 0.')
+})
 
 function bridgeOptions(files, extra = {}) {
   return {
@@ -1999,12 +2015,12 @@ describe('starting lanes from a sub orchestrator', () => {
     expect(readLines(runnerCalls)).toHaveLength(0)
 
     const subLadder = await tokenPost(`${rig.url}/api/orchestrator/ladder`, {
-      ladder: { subs: [FRONTEND] },
+      ladder: { subs: [FRONTEND, { ...FRONTEND, id: 'nested', lanes: [] }] },
       by: 'orchestrator',
       confirmed: true,
     }, subToken)
-    expect(subLadder.status).toBe(403)
-    expect(subLadder.body).toEqual({ error: MAIN_LADDER_PROBLEM })
+    expect(subLadder.status).toBe(409)
+    expect(subLadder.body).toEqual({ error: 'Ring 2 is past the subagent depth of 2.' })
 
     const noTokenLadder = await postJson(`${rig.url}/api/orchestrator/ladder`, {
       ladder: { subs: [FRONTEND] },

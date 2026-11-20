@@ -13,6 +13,8 @@ import { harnessUnavailableProblem, modelUnavailableProblem } from './model-list
 import { machineroomModels, modelAllowed, readHarnessModelsCache } from './harness-models.js'
 import { probeHarness } from './harness-probe.js'
 import { fallbackProblem } from '../src/briefs/run.js'
+import { familySeatsFor, seatActor } from './family.js'
+import { overRingProblem, seatCheck } from './seats.js'
 
 export const MAX_AGENTS = 30
 export const HARNESS_KEYS = ['claude', 'opencode', 'agy', 'acp', 'machineroom', 'codex', 'copilot', 'hermes']
@@ -416,6 +418,7 @@ export function buildMadeLane(agent, lanesJson = {}) {
     notes: template?.notes ? [...template.notes] : [],
     ...(typeof agent.fallback === 'string' && agent.fallback.trim() ? { fallback: agent.fallback.trim() } : {}),
     createdAt: agent.createdAt,
+    ...(agent.createdBy ? { createdBy: agent.createdBy } : {}),
   }
 }
 
@@ -473,6 +476,8 @@ export function createAgentLane(body, {
   env = process.env,
   activeLanes = null,
   notify = null,
+  actor = { owner: true },
+  seatContext = null,
 } = {}) {
   if (body?.confirmed !== true) {
     return { ok: false, status: 400, error: CONFIRM_CREATE_PROBLEM }
@@ -532,7 +537,13 @@ export function createAgentLane(body, {
     return { ok: false, status: 400, error: MAX_AGENTS_PROBLEM }
   }
 
-  const key = nextFreeKey(harness, baseLanes, agents, allocated)
+  const seat = seatContext ? seatCheck({ ...seatContext, actor, action: 'createLane', harness }) : { on: true }
+  if (seat.ok === false) return { ok: false, status: 409, error: seat.reason }
+  const overRing = overRingProblem(body, seat.overRing)
+  if (overRing) return { ok: false, status: 409, ...overRing }
+
+  const subKeys = seatContext?.tree.filter((node) => node.kind === 'sub').map((node) => ({ key: node.id })) ?? []
+  const key = nextFreeKey(harness, baseLanes, [...agents, ...subKeys], allocated)
   const nextAllocated = { ...allocated }
   const madeParts = keyParts(key)
   if (madeParts) raiseAllocated(nextAllocated, madeParts.harness, madeParts.number)
@@ -545,22 +556,28 @@ export function createAgentLane(body, {
     ...(mode ? { mode } : {}),
     ...(settings.programs[harness] ? { bin: settings.programs[harness] } : {}),
     ...(endpoint ? { endpoint: endpoint.name } : {}),
+    ...(actor.id ? { createdBy: actor.id, parent: actor.id } : {}),
     createdAt: new Date().toISOString(),
   }
 
   agents.push(newAgent)
-  saveAgentsConfig(runs, { agents, removed, allocated: nextAllocated })
-
   const active = typeof activeLanes === 'function' ? activeLanes() : activeLanes
-  if (active && typeof active.addActiveLane === 'function') {
-    active.addActiveLane(key)
+  saveAgentsConfig(runs, { agents, removed, allocated: nextAllocated })
+  try {
+    if (seat.on) active?.addActiveLane?.(key)
+    if (actor.id) seatContext.orchestrators.placeCreatedLane(actor.id, key)
+  } catch (error) {
+    if (seat.on) active?.removeActiveLane?.(key)
+    saveAgentsConfig(runs, { agents: agents.slice(0, -1), removed, allocated })
+    throw error
   }
 
   if (typeof notify === 'function') {
     notify({ topic: 'agents' })
   }
 
-  return { ok: true, status: 200, agent: newAgent }
+  const agent = actor.id ? { ...newAgent, active: seat.on, ...(seat.reason ? { reason: seat.reason } : {}) } : newAgent
+  return { ok: true, status: 200, agent }
 }
 
 export function createAgentsConfigApi(options = {}) {
@@ -650,22 +667,32 @@ export function createAgentsConfigApi(options = {}) {
         sendJson(req, res, 405, { error: 'Method not allowed.' })
         return true
       }
-      if (!page) {
+      const seatOptions = { projectRoot, runsFolder: runsDir, lanesConfig: getBaseLanes, activeLanes }
+      const actor = seatActor(req, sendJson)
+      if (!actor) {
         sendJson(req, res, 403, { error: ORIGIN_CREATE_PROBLEM })
         return true
       }
       const body = await readJsonBody(req, res)
       if (body === null) return true
 
-      const result = createAgentLane(body, {
-        runsFolder: runsDir,
-        lanes: getBaseLanes,
-        env,
-        activeLanes,
-        notify,
-      })
+      let result
+      try {
+        result = createAgentLane(body, {
+          runsFolder: runsDir,
+          lanes: getBaseLanes,
+          env,
+          activeLanes,
+          notify,
+          actor,
+          seatContext: familySeatsFor(sendJson, seatOptions),
+        })
+      } catch {
+        sendJson(req, res, 500, { error: 'The bridge could not save the new lane.' })
+        return true
+      }
       if (!result.ok) {
-        sendJson(req, res, result.status, { error: result.error })
+        sendJson(req, res, result.status, { error: result.error, ...(result.overRing !== undefined ? { overRing: result.overRing } : {}) })
         return true
       }
 

@@ -2,6 +2,8 @@ import { createHash } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { readAllLanes, readLanes } from './lanes-source.js'
+import { familySeatsFor, seatActor } from './family.js'
+import { isUnder, overRingProblem, seatCheck } from './seats.js'
 
 export const OWNER_ACTIVE_LANES_PROBLEM = 'A request with no Origin cannot set the active lanes.'
 export const CONFIRM_ACTIVE_LANES_PROBLEM = 'Confirm the active lanes first.'
@@ -340,7 +342,8 @@ export function createActiveLanesApi(options = {}) {
         sendJson(req, res, 405, { error: METHOD_NOT_ALLOWED_PROBLEM })
         return true
       }
-      if (!page) {
+      const actor = seatActor(req, sendJson)
+      if (!actor) {
         sendJson(req, res, 403, { error: OWNER_ACTIVE_LANES_PROBLEM })
         return true
       }
@@ -378,9 +381,46 @@ export function createActiveLanesApi(options = {}) {
         seen.add(key)
       }
 
+      const context = familySeatsFor(sendJson, { projectRoot, runsFolder, lanesConfig: getLanesConfig })
+      const { tree } = context
+      const laneNodes = tree.filter((node) => node.kind === 'lane')
+      const canSet = (node) => actor.owner || isUnder(tree, node, actor.id)
+      const changes = laneNodes.filter(canSet)
+      if (!actor.owner) {
+        for (const key of body.lanes) {
+          if (changes.some((node) => node.id === key)) continue
+          const seat = seatCheck({ ...context, actor, action: 'turnOn', target: key })
+          sendJson(req, res, 409, { error: seat.reason })
+          return true
+        }
+      }
+      for (const node of changes) {
+        if (seen.has(node.id) || !node.active) continue
+        const seat = seatCheck({ ...context, actor, action: 'turnOff', target: node.id })
+        if (!seat.ok) {
+          sendJson(req, res, 409, { error: seat.reason })
+          return true
+        }
+        node.active = false
+      }
+      for (const node of changes) {
+        if (!seen.has(node.id) || node.active) continue
+        const seat = seatCheck({ ...context, actor, action: 'turnOn', target: node.id })
+        const problem = seat.ok ? overRingProblem(body, seat.overRing) : { error: seat.reason }
+        if (problem) {
+          sendJson(req, res, 409, problem)
+          return true
+        }
+        node.active = true
+      }
+
       const file = choiceFile()
+      const lanes = actor.owner ? body.lanes : [
+        ...[...(activeKeySet() ?? [])].filter((key) => !changes.some((node) => node.id === key)),
+        ...body.lanes,
+      ]
       try {
-        writeActiveLanes(file, body.lanes)
+        writeActiveLanes(file, lanes)
       } catch {
         sendJson(req, res, 500, { error: 'The bridge could not save the active lanes.' })
         return true
@@ -390,7 +430,7 @@ export function createActiveLanesApi(options = {}) {
         notify({ topic: 'agents' })
       }
 
-      sendJson(req, res, 200, { ok: true, lanes: body.lanes })
+      sendJson(req, res, 200, { ok: true, lanes })
       return true
     }
 
