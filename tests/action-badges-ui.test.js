@@ -50,7 +50,7 @@ async function mount(root, client, props = {}) {
 }
 
 describe('action badges', () => {
-  it('shows the review count and opens Control on Reviews from the count', async () => {
+  it('shows the review count and opens Work on Merge from the count', async () => {
     const client = makeClient()
     await withDom(async ({ container, dom, root }) => {
       dom.window.localStorage.setItem('machineroom.guide', '1')
@@ -69,7 +69,7 @@ describe('action badges', () => {
     })
   })
 
-  it('makes the Control count a button of its own, outside the Control button', async () => {
+  it('makes the Work count a button of its own, outside the Work button', async () => {
     const client = makeClient()
     await withDom(async ({ container, dom, root }) => {
       dom.window.localStorage.setItem('machineroom.guide', '1')
@@ -78,14 +78,16 @@ describe('action badges', () => {
       const control = container.querySelector('.hud-action.is-control')
       const badge = container.querySelector('.hud-action-slot').querySelector('.hud-action-badge')
       expect(control.tagName).toBe('BUTTON')
+      expect(control.textContent).toContain('Work')
       expect(control.getAttribute('title')).toBe(
-        'Control: dispatch work to lanes, the task queue, costs, the team and branch reviews'
+        'Work: start runs, follow tasks, see cost, the team and merge finished branches'
       )
-      expect(control.getAttribute('aria-label')).toBe('Control, 1 lane branch with commits ahead')
+      expect(control.getAttribute('aria-label')).toBe('Work, 1 lane branch with commits ahead')
       expect(badge.tagName).toBe('BUTTON')
       expect(badge.getAttribute('type')).toBe('button')
       expect(control.contains(badge)).toBe(false)
-      expect(badge.getAttribute('aria-label')).toContain('Open Reviews')
+      expect(badge.getAttribute('title')).toContain('Open Merge')
+      expect(badge.getAttribute('aria-label')).toContain('Open Merge')
     })
   })
 
@@ -127,9 +129,9 @@ describe('action badges', () => {
       expect(container.querySelector('.hud-action-slot').querySelector('.hud-action-badge')).toBeNull()
       const control = container.querySelector('.hud-action.is-control')
       expect(control.getAttribute('title')).toBe(
-        'Control: dispatch work to lanes, the task queue, costs, the team and branch reviews'
+        'Work: start runs, follow tasks, see cost, the team and merge finished branches'
       )
-      expect(control.getAttribute('aria-label')).toBe('Control: dispatch, tasks, costs, team and reviews')
+      expect(control.getAttribute('aria-label')).toBe('Work: start, tasks, cost, team and merge')
     })
   })
 

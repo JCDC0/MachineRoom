@@ -245,7 +245,7 @@ describe('ReviewsPanel and ControlDrawer', () => {
     })
   })
 
-  it('renders the Reviews tab and heading with renderToString and the mock client', () => {
+  it('renders the Merge tab, Work header and heading with renderToString and the mock client', () => {
     const client = createMockClient({ latencyMs: 0 })
     const drawerHtml = renderToString(
       createElement(ControlDrawer, {
@@ -254,9 +254,16 @@ describe('ReviewsPanel and ControlDrawer', () => {
         activeTab: 'reviews',
       })
     )
+    expect(drawerHtml).toContain('aria-label="Work panels"')
+    expect(drawerHtml).toContain('<h2 class="control-drawer-title">Work</h2>')
+    expect(drawerHtml).toContain('aria-label="Close work drawer"')
     expect(drawerHtml).toContain('id="tab-reviews"')
-    expect(drawerHtml).toContain('<span>Reviews</span>')
-    expect(drawerHtml).toContain('<span class="panel-count mono">Reviews</span>')
+    expect(drawerHtml).toContain('<span>Start</span>')
+    expect(drawerHtml).toContain('<span>Tasks</span>')
+    expect(drawerHtml).toContain('<span>Cost</span>')
+    expect(drawerHtml).toContain('<span>Team</span>')
+    expect(drawerHtml).toContain('<span>Merge</span>')
+    expect(drawerHtml).toContain('<span class="panel-count mono">Merge</span>')
   })
 
   it('renders the confirm card with the short head from the diff', async () => {
@@ -401,7 +408,7 @@ describe('ReviewsPanel and ControlDrawer', () => {
       })
     )
 
-    expect(html).toContain('<span class="panel-count mono">Reviews</span>')
+    expect(html).toContain('<span class="panel-count mono">Merge</span>')
     expect(html).toContain('feat/p5-recover-cut-tool-lines')
     expect(html).toContain('2 commits ahead')
     expect(html).toContain('uncommitted changes')
