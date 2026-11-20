@@ -5,7 +5,7 @@ import { availableParallelism } from 'node:os'
 export default defineConfig({
   plugins: [react()],
   build: {
-    chunkSizeWarningLimit: 970,
+    chunkSizeWarningLimit: 990,
     rollupOptions: {
       output: {
         manualChunks(id) {

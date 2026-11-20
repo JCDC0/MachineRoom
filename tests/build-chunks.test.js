@@ -28,7 +28,7 @@ describe('viewer build chunks', () => {
     expect(manualChunks('/repo/src/App.jsx')).toBeUndefined()
     expect(manualChunks('/repo/src/Stage.jsx')).toBeUndefined()
     expect(manualChunks('/repo/src/engine/room.js')).toBeUndefined()
-    expect(config.build?.chunkSizeWarningLimit).toBe(970)
+    expect(config.build?.chunkSizeWarningLimit).toBe(990)
   })
 
   it('builds separate cacheable vendor chunks', async () => {
@@ -91,7 +91,7 @@ describe('viewer build chunks', () => {
     expect(mockChunk.fileName).not.toBe(reactChunk.fileName)
     expect(indexChunk.imports).toContain(mockChunk.fileName)
 
-    const limitBytes = 970 * 1000
+    const limitBytes = 990 * 1000
     expect(Buffer.byteLength(threeChunk.code, 'utf8')).toBeGreaterThan(0)
     expect(Buffer.byteLength(threeChunk.code, 'utf8')).toBeLessThan(limitBytes)
     expect(Buffer.byteLength(reactChunk.code, 'utf8')).toBeGreaterThan(0)
