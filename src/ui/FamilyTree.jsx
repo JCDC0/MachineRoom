@@ -2529,7 +2529,7 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
   function renderBox(box) {
     return (
       <div className="mr-family-box" key={box.node.id}>
-        <div className="mr-family-head">{renderRow(box.node, true)}</div>
+        <div className="mr-family-head">{renderRow(box.node)}</div>
         {box.subs.length > 0 ? <div className="mr-family-kids">{box.subs.map((kid) => <div className="mr-family-kid" key={kid.node.id}>{renderBox(kid)}</div>)}</div> : null}
         {box.lanes.length + box.more.length > 0 ? (
           <div className="mr-family-lanes">
@@ -2541,7 +2541,7 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
     )
   }
 
-  function renderRow(node, head = false) {
+  function renderRow(node) {
     const lane = node.kind === 'lane'
     const sub = node.kind === 'sub'
     const session = node.kind === 'session'
@@ -2624,10 +2624,9 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
                     {node.label}
                   </button>
                 )}
-                {!head && <span className="mr-family-state mono">{status}</span>}
               </span>
             }
-            detail={head && status ? (
+            detail={status ? (
               <>
                 <span className="mr-family-state mono">{status}</span>
                 {detail ? ` · ${detail}` : ''}
