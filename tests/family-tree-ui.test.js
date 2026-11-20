@@ -315,10 +315,9 @@ describe('FamilyTree rows', () => {
       expect(main.querySelector('.mr-family-top').children.map((child) => String(child.className))).toEqual([
         'mr-family-dot is-idle',
         'mr-family-label mr-family-open',
-        'mr-family-state mono',
       ])
       expect(main.querySelector('.mr-family-state').textContent).toBe('waiting')
-      expect(main.querySelector('.ui-row-detail').textContent).toBe('claude · opus')
+      expect(main.querySelector('.ui-row-detail').textContent).toBe('waiting · claude · opus')
       expect(container.querySelector('.mr-family-header').querySelector('.mr-family-add').getAttribute('aria-label')).toBe('Add a lane')
 
       const lane = rowByLabel(container, 'OpenCode')

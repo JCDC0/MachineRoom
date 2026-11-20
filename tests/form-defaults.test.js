@@ -402,7 +402,7 @@ describe('form defaults and row model names', () => {
     await withDom(async ({ container, root }) => {
       await mountTree(root, modelsClient)
       expect(rowByLabel(container, 'Orchestrator').querySelector('.ui-row-detail').textContent).toBe(
-        'claude · Claude Opus 5.5'
+        'waiting · claude · Claude Opus 5.5'
       )
       expect(rowByLabel(container, 'Helper').querySelector('.ui-row-detail').textContent).toBe(
         'claude · claude-opus-5-5'
@@ -413,7 +413,7 @@ describe('form defaults and row model names', () => {
     await withDom(async ({ container, root }) => {
       await mountTree(root, harnessesClient)
       expect(rowByLabel(container, 'Orchestrator').querySelector('.ui-row-detail').textContent).toBe(
-        'claude · Claude Opus 5.5'
+        'waiting · claude · Claude Opus 5.5'
       )
       expect(rowByLabel(container, 'Coder').querySelector('.ui-row-detail').textContent).toBe(
         'opencode · DeepSeek V4.1 Flash'
