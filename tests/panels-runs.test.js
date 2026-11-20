@@ -1212,13 +1212,13 @@ describe('Dispatch Start lane picker active filter', () => {
     })
   })
 
-  it('keeps all lanes when chosen is false or client.lanes fails', async () => {
+  it('offers no lane and shows the Agents notice when chosen is false, and keeps all lanes when client.lanes fails', async () => {
     const unchosenClient = {
       health: async () => ({ lanes: true }),
       runs: async () => ({ running: [], recent: [], project: 'demo' }),
       lanes: async () => ({
         chosen: false,
-        lanes: [{ key: 'opencode', active: false }],
+        lanes: [{ key: 'opencode', active: true }],
       }),
     }
     await withDom(async ({ container, root }) => {
@@ -1226,7 +1226,8 @@ describe('Dispatch Start lane picker active filter', () => {
         root.render(createElement(DispatchPanel, { client: unchosenClient, initialAgents: pickerAgents }))
       })
       await settle()
-      expect(optionValues(container)).toEqual(['opencode', 'hermes', 'claude-2'])
+      expect(optionValues(container)).toEqual([])
+      expect(container.textContent).toContain('Pick the lanes for this project in Agents first.')
     })
 
     const failingClient = {
@@ -1242,6 +1243,95 @@ describe('Dispatch Start lane picker active filter', () => {
       })
       await settle()
       expect(optionValues(container)).toEqual(['opencode', 'hermes', 'claude-2'])
+    })
+  })
+
+  it('does not offer a hidden lane even when active is true', async () => {
+    const client = {
+      health: async () => ({ lanes: true }),
+      runs: async () => ({ running: [], recent: [], project: 'demo' }),
+      lanes: async () => ({
+        chosen: true,
+        lanes: [
+          { key: 'opencode', active: true, hidden: false },
+          { key: 'hermes', active: true, hidden: true },
+          { key: 'claude-2', active: false },
+        ],
+      }),
+    }
+    await withDom(async ({ container, root }) => {
+      await act(async () => {
+        root.render(createElement(DispatchPanel, { client, initialAgents: pickerAgents }))
+      })
+      await settle()
+      expect(optionValues(container)).toEqual(['opencode'])
+    })
+  })
+
+  it('reloads lanes on agents and family notices and clears the chosen lane when turned off', async () => {
+    const listeners = new Set()
+    let state = {
+      chosen: true,
+      lanes: [
+        { key: 'opencode', active: true },
+        { key: 'claude-2', active: true },
+      ],
+    }
+    let lanesCalls = 0
+    const client = {
+      health: async () => ({ lanes: true }),
+      runs: async () => ({ running: [], recent: [], project: 'demo' }),
+      lanes: async () => {
+        lanesCalls += 1
+        return state
+      },
+      subscribe: (listener) => {
+        listeners.add(listener)
+        return () => listeners.delete(listener)
+      },
+    }
+    const emit = (topic) => {
+      for (const listener of [...listeners]) listener({ topic })
+    }
+    await withDom(async ({ container, root }) => {
+      await act(async () => {
+        root.render(createElement(DispatchPanel, { client, initialAgents: pickerAgents }))
+      })
+      await settle()
+      expect(lanesCalls).toBe(1)
+      const select = container.querySelector('#project-run-lane')
+      await type(root, select, 'opencode')
+      expect(select.value).toBe('opencode')
+
+      state = {
+        chosen: true,
+        lanes: [
+          { key: 'opencode', active: false },
+          { key: 'claude-2', active: true },
+        ],
+      }
+      await act(async () => {
+        emit('agents')
+      })
+      await settle(150)
+      expect(lanesCalls).toBe(2)
+      expect(optionValues(container)).toEqual(['claude-2'])
+      expect(container.querySelector('#project-run-lane').value).toBe('')
+
+      state = {
+        chosen: true,
+        lanes: [
+          { key: 'opencode', active: false },
+          { key: 'claude-2', active: false },
+        ],
+      }
+      await act(async () => {
+        emit('family')
+      })
+      await settle(150)
+      expect(lanesCalls).toBe(3)
+      expect(optionValues(container)).toEqual([])
+      expect(container.textContent).toContain('Pick the lanes for this project in Agents first.')
     })
   })
 })
