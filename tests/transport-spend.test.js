@@ -113,17 +113,16 @@ describe('the transport with lanes and spend', () => {
     )
   }
 
-  it('shows one pill per lane and the spend just left of the ring', () => {
+  it('shows the working count and the spend just left of the ring', () => {
     const html = renderTransport()
-    expect(html).toContain('2<!-- --> agents')
-    expect(html).toContain('1 working')
+    expect(html).toContain('Agents · 1 working')
     expect(html).toContain('transport-spend')
     expect(html).toContain('$1.25 today · $3.50 mo')
     expect(html).toContain('title="Show the cost board"')
     expect(html).toContain('aria-label="$1.25 today · $3.50 mo. Show the cost board"')
   })
 
-  it('shows no spend without a cost and no pill without a live or failed lane', () => {
+  it('shows no spend without a cost and none working without a live or failed lane', () => {
     const html = renderToString(
       createElement(
         OrchestratorsContext.Provider,
@@ -139,7 +138,7 @@ describe('the transport with lanes and spend', () => {
         )
       )
     )
-    expect(html).toContain('0<!-- --> agents')
+    expect(html).toContain('Agents · none working')
     expect(html).not.toContain('transport-spend')
   })
 })
