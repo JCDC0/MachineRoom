@@ -54,7 +54,7 @@ export function familySeatsFor(sendJson, options, ladder) {
   const { projectRoot, runsFolder } = options
   return {
     seats: readSeats(seatsFileFor(projectRoot, runsFolder)),
-    tree: buildFamilyNodes({ ...options, ladder }),
+    tree: buildFamilyNodes({ ...options, ladder }).filter((node) => node.manual !== true),
     depth: readAgentDepth(runsFolder).limit,
     orchestrators: options.orchestrators,
   }
