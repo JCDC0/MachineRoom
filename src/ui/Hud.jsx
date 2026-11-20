@@ -54,10 +54,10 @@ export const SHORTCUTS = [
   ['T', 'Show or hide the log of the selected agent, or of every agent'],
   ['Left and Right arrows', 'Seek backward or forward 5 seconds'],
   ['[ and ]', 'Decrease or increase replay speed'],
-  ['/', 'Open assistant terminal'],
-  ['L', 'Toggle event log'],
-  ['C', 'Toggle control drawer'],
-  ['?', 'Toggle keyboard help'],
+  ['/', 'Open the chat'],
+  ['L', 'Toggle the event log'],
+  ['C', 'Toggle Control: dispatch, tasks, costs, team and reviews'],
+  ['?', 'Toggle this help'],
 ]
 
 function namedLabel(value, key) {
@@ -224,10 +224,7 @@ export default function Hud({
   const logFollow = useLogFollow(logOpen, visibleLog.length)
   const lowerFollow = useLogFollow(wide && mode === 'replay', visibleLog.length)
   useDialogFocus(helpOpen, { containerRef: helpRef, openerSelector: 'hud-help-dialog' })
-  const visibleShortcuts = (client ? SHORTCUTS : SHORTCUTS.filter(([k]) => k !== 'C')).map(
-    ([keys, description]) =>
-      chatAvailable && keys === '/' ? [keys, 'Talk to the orchestrator'] : [keys, description]
-  )
+  const visibleShortcuts = client ? SHORTCUTS : SHORTCUTS.filter(([k]) => k !== 'C')
 
   const agents = (snapshot?.agents ?? []).map(({ key, name }) => ({ key, name }))
   const list = agentList(snapshot?.agents ?? [], idleOpen)
@@ -826,13 +823,14 @@ export default function Hud({
               <button
                 type="button"
                 className={badges.control > 0 ? 'hud-action is-control has-badge' : 'hud-action is-control'}
+                title="Control: dispatch work to lanes, the task queue, costs, the team and branch reviews"
                 aria-pressed={controlOpen}
                 aria-expanded={controlOpen}
                 aria-controls="hud-control-drawer"
                 aria-label={
                   badges.control > 0
                     ? `Control, ${badges.control} lane ${badges.control === 1 ? 'branch' : 'branches'} with commits ahead`
-                    : undefined
+                    : 'Control: dispatch, tasks, costs, team and reviews'
                 }
                 onClick={() => {
                   setControlOpen((open) => {
@@ -870,7 +868,7 @@ export default function Hud({
               aria-controls={floatingChat ? 'hud-orchestrator-chat' : undefined}
               aria-label={
                 badges.orchestrator > 0
-                  ? `Orchestrator, ${badges.orchestrator} ${badges.orchestrator === 1 ? 'item needs' : 'items need'} the owner`
+                  ? `Chat, ${badges.orchestrator} ${badges.orchestrator === 1 ? 'item needs' : 'items need'} the owner`
                   : undefined
               }
               onClick={() => {
@@ -880,7 +878,7 @@ export default function Hud({
                 } else showChat()
               }}
             >
-              <span>Orchestrator</span>
+              <span>Chat</span>
               <span className="agent-key mono">/</span>
               {badges.orchestrator > 0 && (
                 <span

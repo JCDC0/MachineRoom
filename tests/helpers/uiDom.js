@@ -282,6 +282,51 @@ export function createTestDom() {
       node.selectionStart = 0
       node.selectionEnd = 0
     }
+    if (String(tag).toLowerCase() === 'option') {
+      let selected = false
+      Object.defineProperty(node, 'value', {
+        get: () => (Object.hasOwn(node.attributes, 'value') ? node.attributes.value : node.textContent),
+        set: (next) => {
+          node.setAttribute('value', next)
+        },
+        configurable: true,
+      })
+      Object.defineProperty(node, 'selected', {
+        get: () => selected,
+        set: (next) => {
+          selected = Boolean(next)
+          if (selected) {
+            let parent = node.parentNode
+            while (parent && parent.localName !== 'select') parent = parent.parentNode
+            if (parent && !parent.multiple) {
+              for (const opt of parent.options) {
+                if (opt !== node && opt.selected) opt.selected = false
+              }
+            }
+          }
+        },
+        configurable: true,
+      })
+    }
+    if (String(tag).toLowerCase() === 'select') {
+      let fallback = ''
+      Object.defineProperty(node, 'value', {
+        get: () => {
+          const list = node.options
+          const chosen = list.find((opt) => opt.selected) ?? list[0]
+          if (!chosen) return fallback
+          return chosen.value !== undefined ? String(chosen.value) : (chosen.getAttribute('value') ?? chosen.textContent)
+        },
+        set: (next) => {
+          fallback = String(next)
+          for (const opt of node.options) {
+            const optVal = opt.value !== undefined ? String(opt.value) : (opt.getAttribute('value') ?? opt.textContent)
+            opt.selected = optVal === fallback
+          }
+        },
+        configurable: true,
+      })
+    }
     if (String(tag).toLowerCase() === 'textarea') {
       let value = ''
       Object.defineProperty(node, 'value', {
@@ -505,6 +550,17 @@ export function classesOf(node) {
 }
 
 export async function openTab(root, scope, label) {
+  const select = scope.querySelector('#hud-settings-section')
+  if (select) {
+    const option = select.querySelectorAll('option').find((item) => item.textContent.trim() === label)
+    if (!option) throw new Error(`No settings tab named ${label}`)
+    const value = option.value !== undefined ? String(option.value) : (option.getAttribute('value') ?? '')
+    await act(async () => {
+      select.value = value
+      select.dispatchEvent({ type: 'change', bubbles: true, cancelable: true })
+    })
+    return
+  }
   const tab = scope.querySelectorAll('[role="tab"]').find((item) => item.textContent.trim() === label)
   if (!tab) throw new Error(`No settings tab named ${label}`)
   await click(root, tab)

@@ -58,17 +58,6 @@ export default function Settings({ open = true, effects, onChange, onSettingsCha
     writeStorage(SETTINGS_TAB_KEY, key)
   }
 
-  function onTabKeyDown(event) {
-    const step = event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : 0
-    const edge = event.key === 'Home' ? 0 : event.key === 'End' ? SETTINGS_TABS.length - 1 : null
-    if (!step && edge === null) return
-    event.preventDefault()
-    const index = SETTINGS_TABS.findIndex((item) => item.key === tab)
-    const next = edge ?? (index + step + SETTINGS_TABS.length) % SETTINGS_TABS.length
-    openTab(SETTINGS_TABS[next].key)
-    event.currentTarget.querySelector(`#hud-settings-tab-${SETTINGS_TABS[next].key}`)?.focus()
-  }
-
   const scrollPending = useRef(false)
 
   useEffect(() => {
@@ -126,6 +115,8 @@ export default function Settings({ open = true, effects, onChange, onSettingsCha
 
   if (!open) return null
 
+  const currentTab = SETTINGS_TABS.find((item) => item.key === tab) ?? SETTINGS_TABS[0]
+
   return (
     <section
       id="hud-settings"
@@ -144,25 +135,23 @@ export default function Settings({ open = true, effects, onChange, onSettingsCha
         </button>
       </header>
 
-      <div role="tablist" aria-label="Settings sections" className="hud-settings-tabs" onKeyDown={onTabKeyDown}>
-        {SETTINGS_TABS.map((item) => (
-          <button
-            key={item.key}
-            type="button"
-            role="tab"
-            id={`hud-settings-tab-${item.key}`}
-            aria-selected={tab === item.key}
-            aria-controls="hud-settings-panel"
-            tabIndex={tab === item.key ? 0 : -1}
-            className={`hud-settings-tab ${tab === item.key ? 'is-on' : ''}`}
-            onClick={() => openTab(item.key)}
-          >
-            {item.label}
-          </button>
-        ))}
-      </div>
+      <label className="hud-settings-section">
+        <span>Section</span>
+        <select
+          id="hud-settings-section"
+          className="hud-settings-select mono"
+          value={tab}
+          onChange={(event) => openTab(event.target.value)}
+        >
+          {SETTINGS_TABS.map((item) => (
+            <option key={item.key} value={item.key}>
+              {item.label}
+            </option>
+          ))}
+        </select>
+      </label>
 
-      <div className="hud-settings-body" role="tabpanel" id="hud-settings-panel" aria-labelledby={`hud-settings-tab-${tab}`}>
+      <div className="hud-settings-body" id="hud-settings-panel" aria-label={currentTab.label}>
         <div hidden={tab !== 'harnesses'}><HarnessesSettings client={client} /></div>
         <div hidden={tab !== 'direct-api'}><EndpointsPanel client={client} /></div>
         <div hidden={tab !== 'keys'}><KeysSettings client={client} /></div>

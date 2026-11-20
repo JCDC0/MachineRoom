@@ -78,6 +78,10 @@ describe('action badges', () => {
       const control = container.querySelector('.hud-action.is-control')
       const badge = container.querySelector('.hud-action-slot').querySelector('.hud-action-badge')
       expect(control.tagName).toBe('BUTTON')
+      expect(control.getAttribute('title')).toBe(
+        'Control: dispatch work to lanes, the task queue, costs, the team and branch reviews'
+      )
+      expect(control.getAttribute('aria-label')).toBe('Control, 1 lane branch with commits ahead')
       expect(badge.tagName).toBe('BUTTON')
       expect(badge.getAttribute('type')).toBe('button')
       expect(control.contains(badge)).toBe(false)
@@ -95,6 +99,7 @@ describe('action badges', () => {
       const badge = orchestrator.querySelector('.hud-action-badge')
       expect(badge).not.toBeNull()
       expect(badge.textContent).toBe('2')
+      expect(orchestrator.getAttribute('aria-label')).toBe('Chat, 2 items need the owner')
     })
   })
 
@@ -120,6 +125,11 @@ describe('action badges', () => {
       })
       await settle(20)
       expect(container.querySelector('.hud-action-slot').querySelector('.hud-action-badge')).toBeNull()
+      const control = container.querySelector('.hud-action.is-control')
+      expect(control.getAttribute('title')).toBe(
+        'Control: dispatch work to lanes, the task queue, costs, the team and branch reviews'
+      )
+      expect(control.getAttribute('aria-label')).toBe('Control: dispatch, tasks, costs, team and reviews')
     })
   })
 

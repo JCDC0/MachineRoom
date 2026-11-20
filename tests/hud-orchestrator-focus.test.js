@@ -61,7 +61,7 @@ function orchestratorButton(container) {
   return (
     container
       .querySelectorAll('.hud-action')
-      .find((button) => button.textContent.includes('Orchestrator')) ?? null
+      .find((button) => button.textContent.includes('Chat')) ?? null
   )
 }
 

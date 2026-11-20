@@ -2315,28 +2315,31 @@ button.hud-health-chip:hover {
   border-color: var(--black);
 }
 
-.hud-settings-tabs {
+label.hud-settings-section {
   display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
+  flex-direction: row;
+  align-items: center;
+  gap: var(--space);
   padding: var(--space) calc(var(--space) * 2) 0;
-}
-
-.hud-settings-tab {
-  padding: 2px var(--space);
-  font-family: var(--mono);
-  font-size: 11px;
-  font-weight: 400;
+  color: var(--text-dim);
+  font-size: 12px;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  background: transparent;
-  color: rgb(255 255 255 / 0.55);
-  border: 1px solid rgb(255 255 255 / 0.12);
 }
 
-.hud-settings-tab:hover,
-.hud-settings-tab.is-on {
-  color: var(--yellow);
+.hud-settings-select {
+  flex: 1 1 auto;
+  min-width: 0;
+  background: var(--black);
+  border: 1px solid rgb(255 255 255 / 0.35);
+  color: var(--white);
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 400;
+  padding: 4px 8px;
+}
+
+.hud-settings-select:focus {
   border-color: var(--yellow);
 }
 
