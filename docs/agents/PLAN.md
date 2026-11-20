@@ -1,18 +1,16 @@
 # Plan
 
-## Next, as of 2026-11-20 16:30 (written before a restart)
+## Next, as of 2026-11-20 19:15
 
-Pushed c6513481 on 2026-11-20 (P637, P644 to P651).
+Pushed c6513481. Merged since and not pushed: the room shows the session on top and only the lanes at work (c2b04557), P643b, P638, P652, P653 and two test fixes. The room data was reset to a clean slate on the owner's word: keys, endpoints and harness settings kept, every old project, chat, run log and retired lane removed.
 
-1. P647 is merged (0.1.402, 588adfae) with `soundAtAgent` wired in `src/Stage.jsx`; the bench gave 5 beeps for one command that read three files and listed a folder. Merged and unpushed since 27b080ef: P637, P644, P645, P646, P647.
-2. The native reruns after the OpenRouter budget resets (00:00 UTC, 08:00 Manila; the workspace budget is $1 a day, so about one native run a day): P643b, P638, P639, then P640.
-3. Control (owner approved the names 2026-11-20 16:40; P648 renames and splits the Tasks count (agy3) and P649 marks merged tasks done (codex) are briefed but not started: both runs were stopped before they wrote anything, for the restart; the retired lanes in the Start picker are a bench setting, so turn them off in Settings, Lanes on the bench instead of code). The tab names were too hard. Meters should read Cost or Spend; Dispatch and Reviews are the worst. Tasks says `28 tasks` when about 12 work, and P644 shows Blocked after it merged by hand. The plan to write as a brief once the owner picks the names:
-   - Names to offer: Control to Work; Dispatch to Start (its `Needs you` list of failed runs moves to the top of Tasks); Meters to Cost; Team stays; Reviews to Merge.
-   - Tasks counts what runs: the header says `N running · N failed · N done`, the list opens on running and failed, and done tasks fold.
-   - A task whose branch or brief merged into main is done: `statusFor` in `server/lane-tasks.js` also checks the main subjects (`readMainSubjects` in `server/runs.js`, as the outcomes route does) for `Merge PNNN`.
-   - The Dispatch lane picker lists only the lanes on in `lanes.json`, not the retired OpenCode, agy, agy2, Claude and Codex 2 and 3 lanes.
-4. Agent seats: P640 (the docs) after P638 and P639.
-5. Keep the fleet order: no Claude lanes; codex the only Codex lane; agy3 the only AGY lane (no `src/engine`); native2 to native4 with `--reasoning xhigh`, briefs with exact files and lines.
+1. Push: the full suite, `npm run -s history-audit -- --from origin/main` in its own call, the owner's yes, then CI.
+2. P639, agent seats S4 (the owner sees the seats in the Agents tree and on the rings). It touches `src/engine`, so it runs on a native lane after the OpenRouter budget resets at 08:00 Manila, or on codex after 2026-11-24 13:03. Then P640, the seats docs.
+3. The Agents tree leaves out the built-in AGY lanes (`eligibleLanes` in `server/active-lanes.js` skips harness `agy` unless `custom`), so agy2 and agy3 work in the room but never appear in the tree. Brief a fix so the tree lists the fleet's AGY lanes.
+4. The Chat button still opens the built-in room orchestrator, which the bench hides as idle; on the bench the orchestrator is the Claude Code session. Decide with the owner what Chat should open there.
+5. The bottom `Agents · N working` count leaves out the session at the top; count it when its conversation is open.
+6. Known weakness: any request with an `Origin` header counts as the owner (`seatActor` and the owner routes). The seat commands and grants rest on it.
+7. The fleet: me on top; agy2 and agy3 (Gemini 4 Neon High, no `src/engine`); codex (GPT-6.2 Sol High) out of usage until 2026-11-24 13:03; native2 to native4 (DeepSeek Flash `--reasoning xhigh`) on a $1 a day OpenRouter budget, with briefs that name exact files and lines.
 
 ## Where we are
 
