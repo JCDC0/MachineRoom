@@ -1,15 +1,15 @@
 # Plan
 
-## Next, as of 2026-11-20 19:15
+## Next, as of 2026-11-20 21:00
 
-Pushed c6513481. Merged since and not pushed: the room shows the session on top and only the lanes at work (c2b04557), P643b, P638, P652, P653 and two test fixes. The room data was reset to a clean slate on the owner's word: keys, endpoints and harness settings kept, every old project, chat, run log and retired lane removed.
+Pushed 564ba458 (Ubuntu green; the Windows runner hung past its cap and was rerun). Merged since and not pushed: P654, the Agents tree lists the fleet's AGY lanes. The room data is a clean slate: keys, endpoints and harness settings kept.
 
-1. Push: the full suite, `npm run -s history-audit -- --from origin/main` in its own call, the owner's yes, then CI.
-2. P639, agent seats S4 (the owner sees the seats in the Agents tree and on the rings). It touches `src/engine`, so it runs on a native lane after the OpenRouter budget resets at 08:00 Manila, or on codex after 2026-11-24 13:03. Then P640, the seats docs.
-3. The Agents tree leaves out the built-in AGY lanes (`eligibleLanes` in `server/active-lanes.js` skips harness `agy` unless `custom`), so agy2 and agy3 work in the room but never appear in the tree. Brief a fix so the tree lists the fleet's AGY lanes.
-4. The Chat button still opens the built-in room orchestrator, which the bench hides as idle; on the bench the orchestrator is the Claude Code session. Decide with the owner what Chat should open there.
-5. The bottom `Agents · N working` count leaves out the session at the top; count it when its conversation is open.
-6. Known weakness: any request with an `Origin` header counts as the owner (`seatActor` and the owner routes). The seat commands and grants rest on it.
+1. Push P654 once CI for 564ba458 is green: the history audit in its own call, the owner's yes, then CI.
+2. Lane rows in the Agents tree cut long names (`MachineRo…` for the native lanes); P643b gave two-line names to the head rows only. Brief the same wrap for lane rows (`src/ui/FamilyTree.jsx`, `src/styles.css`), for a Neon lane.
+3. The bottom `Agents · N working` count leaves out the session at the top; count it while its conversation is open (`src/ui/Transport.jsx`), for a Neon lane.
+4. The Chat button still opens the built-in room orchestrator, which the bench hides as idle; on the bench the orchestrator is the Claude Code session, which the owner talks to in the Claude app. Decide with the owner what Chat opens there.
+5. P639, agent seats S4 (the seats in the Agents tree and on the rings). It touches `src/engine`, so a native lane after 08:00 Manila or codex after 2026-11-24 13:03. Then P640, the seats docs.
+6. Known weakness: any request with an `Origin` header counts as the owner (`seatActor` and the owner routes); the seat grants rest on it. Matters only if the bridge is reached from outside this machine.
 7. The fleet: me on top; agy2 and agy3 (Gemini 4 Neon High, no `src/engine`); codex (GPT-6.2 Sol High) out of usage until 2026-11-24 13:03; native2 to native4 (DeepSeek Flash `--reasoning xhigh`) on a $1 a day OpenRouter budget, with briefs that name exact files and lines.
 
 ## Where we are
