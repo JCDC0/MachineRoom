@@ -25,6 +25,7 @@ import {
   topFileFor,
 } from '../server/family.js'
 import { readAgentsConfig } from '../server/agents-config.js'
+import { projectLanesFileFor } from '../server/active-lanes.js'
 import { createBridge } from '../server/index.js'
 import { saveEndpoints } from '../server/endpoints.js'
 import { NO_TOKEN_PROBLEM } from '../server/orchestrators.js'
@@ -196,6 +197,63 @@ describe('buildFamilyNodes pure helper', () => {
     const opencode = nodes.find((n) => n.id === 'opencode')
     expect(main.label).toBe('Boss')
     expect(opencode.label).toBe('Frontend Engineer')
+  })
+
+  it('adds built-in AGY lanes as active manual rows and skips retired, hidden and duplicate custom ones', () => {
+    const root = tempDir('mr-agy-')
+    const runs = tempDir('mr-agy-runs-')
+    writeFileSync(projectLanesFileFor(root, runs), JSON.stringify({ hidden: ['agyHidden'] }))
+    const lanes = {
+      ...SAMPLE_LANES,
+      agy3: { cli: { harness: 'agy', model: 'gemini-4-neon-high' } },
+      agyRetired: { name: 'Retired AGY', retired: true, cli: { harness: 'agy', model: 'gemini-4-neon-high' } },
+      agyHidden: { name: 'Hidden AGY', cli: { harness: 'agy', model: 'gemini-4-neon-high' } },
+      agyCustom: { name: 'Custom AGY', custom: true, cli: { harness: 'agy', model: 'gemini-4-neon-high' } },
+    }
+
+    const nodes = buildFamilyNodes({
+      projectRoot: root,
+      runsFolder: runs,
+      lanesConfig: lanes,
+      isWorking: (key) => key === 'agy3',
+    })
+
+    const opencode = nodes.find((n) => n.id === 'opencode')
+    const agy3 = nodes.find((n) => n.id === 'agy3')
+    expect(agy3).toMatchObject({
+      id: 'agy3',
+      kind: 'lane',
+      label: 'agy3',
+      harness: 'agy',
+      model: 'gemini-4-neon-high',
+      effort: null,
+      mode: null,
+      parent: opencode.parent,
+      active: true,
+      working: true,
+      custom: false,
+      manual: true,
+    })
+    const parent = nodes.find((n) => n.id === opencode.parent)
+    expect(parent.children).toContain('agy3')
+
+    expect(nodes.some((n) => n.id === 'agyRetired')).toBe(false)
+    expect(nodes.some((n) => n.id === 'agyHidden')).toBe(false)
+
+    const customRows = nodes.filter((n) => n.id === 'agyCustom')
+    expect(customRows).toHaveLength(1)
+    expect(customRows[0]).toMatchObject({ id: 'agyCustom', custom: true, active: false })
+    expect(customRows[0].manual).toBeUndefined()
+
+    writeFileSync(topFileFor(root, runs), JSON.stringify({ top: 'claude-session' }))
+    const sessionNodes = buildFamilyNodes({
+      projectRoot: root,
+      runsFolder: runs,
+      lanesConfig: lanes,
+      isWorking: () => false,
+    })
+    expect(sessionNodes.find((n) => n.id === 'agy3').parent).toBe('session:claude-session')
+    expect(sessionNodes[0].children).toContain('agy3')
   })
 })
 
