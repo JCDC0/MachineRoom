@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- A lane that starts after the page opens works in the room: the page hands each new roster to the pipeline, the live player and the logger, so its frames are no longer dropped (P660, R65-1).
 - The Agents header in the sidebar counts every agent in the tree, the session at the top, the orchestrator and subs included, so it reads `3 of 7 working` while the session and two lanes work (P657).
 - Every row in the Agents tree shows its whole name on up to two lines, with the status word on the meta line, as the head rows already did, so lane names no longer cut to `MachineRo…` (P655).
 - The agents button under the lens counts a working session reader (the Claude Code or OpenCode session at the top) and lists it first, so the session and its lanes add up (P656).

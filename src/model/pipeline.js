@@ -196,7 +196,16 @@ export function createPipeline({ agents, tree }) {
     dirSetFor(ctx.dirs)
   }
 
-  return { push, flush, reset, learn, warm, context: ctx, remembered: () => ({ keys: seen.size, runs: lastRunTime.size, parsers: parsers.size }) }
+  function addAgents(list) {
+    if (!Array.isArray(list)) return
+    for (const agent of list) {
+      if (!agent || typeof agent !== 'object') continue
+      if (agent.id === undefined || agent.id === null || agent.id === '') continue
+      if (!byId.has(agent.id)) byId.set(agent.id, agent)
+    }
+  }
+
+  return { push, flush, reset, learn, warm, addAgents, context: ctx, remembered: () => ({ keys: seen.size, runs: lastRunTime.size, parsers: parsers.size }) }
 }
 
 export function buildActivities(frames, { agents, tree }) {

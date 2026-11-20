@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { makeTree } from '../src/model/paths.js'
-import { apply, createState } from '../src/model/state.js'
+import { addAgents, apply, createState } from '../src/model/state.js'
 
 const tree = makeTree({ root: 'demo', files: ['src/a.js'] })
 const agents = [{ key: 'opencode', name: 'OpenCode' }]
@@ -103,5 +103,40 @@ describe('two runs of one agent', () => {
       text: 'failed read src/a.js: permission denied',
       tone: 'error',
     })
+  })
+})
+
+describe('addAgents', () => {
+  it('adds a new key once and leaves an existing entry as it is', () => {
+    const state = createState(tree, agents)
+    apply(state, start('r1', 1))
+    const existing = state.agents.get('opencode')
+
+    addAgents(state, null)
+    addAgents(state, [
+      null,
+      {},
+      { key: '', name: 'Empty' },
+      { id: 'agent-opencode-new', key: 'opencode', name: 'Renamed' },
+      { id: 'agent-agy2', key: 'agy2', name: 'AGY 2', harness: 'agy', model: 'gemini-4-neon-high' },
+      { id: 'agent-agy2-dup', key: 'agy2', name: 'Duplicate' },
+    ])
+
+    expect(state.agents.get('opencode')).toBe(existing)
+    expect(state.agents.get('opencode')).toMatchObject({ name: 'OpenCode', status: 'working', runs: 1 })
+    const added = state.agents.get('agy2')
+    expect(added).toMatchObject({
+      key: 'agy2',
+      name: 'AGY 2',
+      id: 'agent-agy2',
+      harness: 'agy',
+      model: 'gemini-4-neon-high',
+      status: 'idle',
+      parent: null,
+      depth: 0,
+    })
+    addAgents(state, [{ id: 'agent-agy2-again', key: 'agy2', name: 'Changed' }])
+    expect(state.agents.get('agy2')).toBe(added)
+    expect(state.agents.get('agy2').name).toBe('AGY 2')
   })
 })

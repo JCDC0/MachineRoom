@@ -92,6 +92,17 @@ export function createState(tree, agents) {
   }
 }
 
+export function addAgents(state, list) {
+  if (!state?.agents || !Array.isArray(list)) return
+  for (const agent of list) {
+    if (!agent || typeof agent !== 'object') continue
+    if (typeof agent.key !== 'string' || agent.key === '') continue
+    if (!state.agents.has(agent.key)) {
+      state.agents.set(agent.key, makeAgent(agent.key, agent.name, null, 0, null, agent))
+    }
+  }
+}
+
 function say(agent, text, tone = 'normal') {
   agent.lines.push({ text, tone })
   if (agent.lines.length > LINE_LIMIT) agent.lines.shift()

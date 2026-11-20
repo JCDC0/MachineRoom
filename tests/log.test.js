@@ -83,6 +83,17 @@ describe('createLogger', () => {
       bounded({ agent: 'lane', runId: 'run', type: 'tool.end', id: String(LABEL_LIMIT), ok: false })
     ).toMatchObject({ text: `failed call ${LABEL_LIMIT}` })
   })
+
+  it('names a late-started agent by its key first and by its name after addAgents', () => {
+    const logger = createLogger([])
+    const activity = { agent: 'agy2', runId: 'r1', type: 'run.start' }
+    expect(logger(activity)).toEqual({ agent: 'agy2', text: 'run r1 started', tone: 'dim' })
+    logger.addAgents(null)
+    logger.addAgents([null, {}, { key: '', name: 'Empty' }, { key: 'agy2', name: 'AGY 2' }])
+    expect(logger(activity)).toEqual({ agent: 'AGY 2', text: 'run r1 started', tone: 'dim' })
+    logger.addAgents([{ key: 'agy2', name: 'Other' }])
+    expect(logger(activity)).toEqual({ agent: 'AGY 2', text: 'run r1 started', tone: 'dim' })
+  })
 })
 
 describe('buildTimeline', () => {
