@@ -531,7 +531,10 @@ export function createFamilyApi(options = {}) {
         return true
       }
       saveLabels(topFileFor(projectRoot, runsDir), { top })
-      if (typeof notify === 'function') notify({ topic: 'family' })
+      if (typeof notify === 'function') {
+        notify({ topic: 'family' })
+        notify({ topic: 'agents' })
+      }
       sendJson(req, res, 200, { ok: true, top })
       return true
     }
