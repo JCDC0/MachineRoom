@@ -239,16 +239,32 @@ function getBriefLookup(briefs) {
 export function laneTaskIssues({ openRuns = [], records = [], recoveryRecords, agents = [], briefs = [], mergedBriefs = new Set() } = {}) {
   const { titles } = getBriefLookup(briefs)
   const list = Array.isArray(records) ? records : []
+  const runs = Array.isArray(openRuns) ? openRuns : []
   const recoverySource = Array.isArray(recoveryRecords) ? recoveryRecords : list
   let recoveryIndex = null
   const readRecoveryIndex = () => {
     if (recoveryIndex === null) recoveryIndex = getRecoveryIndex(recoverySource)
     return recoveryIndex
   }
+  const runningBriefs = new Set()
+  for (const run of runs) {
+    for (const brief of runIdentity(text(run?.name), text(run?.lane)).ids) {
+      runningBriefs.add(brief.toLowerCase())
+    }
+  }
   const issues = new Map()
   for (const record of list) {
     const id = runNameOf(record)
     if (!id || issues.has(id)) continue
+    const status = statusFor(record, readRecoveryIndex, mergedBriefs)
+    const recordBriefs = Array.isArray(record?.briefs) ? record.briefs.map(text).filter(Boolean) : []
+    if (
+      status === 'blocked' &&
+      recordBriefs.length > 0 &&
+      recordBriefs.every((brief) => runningBriefs.has(brief.toLowerCase()))
+    ) {
+      continue
+    }
     const lane = text(record?.lane)
     const minutes = Number.isFinite(record?.minutes) ? record.minutes : 0
     const updatedAt = minutes > 0 ? timeValue(record?.startedAt) + minutes * 60000 : record?.startedAt
@@ -263,13 +279,13 @@ export function laneTaskIssues({ openRuns = [], records = [], recoveryRecords, a
         project,
         briefs: record?.briefs,
         task: record?.task,
-        status: statusFor(record, readRecoveryIndex, mergedBriefs),
+        status,
         agents,
         titles,
       })
     )
   }
-  for (const run of Array.isArray(openRuns) ? openRuns : []) {
+  for (const run of runs) {
     const id = text(run?.name)
     if (!id) continue
     const lane = text(run?.lane)

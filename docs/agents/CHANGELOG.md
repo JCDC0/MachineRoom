@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- A failed task whose briefs are all running again on another lane drops out of Tasks, so the open run stands for it and the failed count stays true (P651).
 - The Start lane picker lists only the lanes that are on for the project, plus any lane running now (P650).
 - The Control drawer has plain names: the menu button says Work, and its tabs are Start, Tasks, Cost, Team and Merge. Tasks counts running, failed and done instead of every task, folds the done tasks, and says failed for a blocked task. The startup line says Press C for Work, then Start (P648).
 - A failed lane task whose brief was later merged into main by hand (`Merge PNNN` in a main commit subject) shows as done instead of blocked (P649).
