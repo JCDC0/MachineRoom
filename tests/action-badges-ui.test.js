@@ -95,6 +95,7 @@ describe('action badges', () => {
       const badge = orchestrator.querySelector('.hud-action-badge')
       expect(badge).not.toBeNull()
       expect(badge.textContent).toBe('2')
+      expect(orchestrator.getAttribute('aria-label')).toBe('Chat, 2 items need the owner')
     })
   })
 

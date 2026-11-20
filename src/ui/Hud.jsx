@@ -870,7 +870,7 @@ export default function Hud({
               aria-controls={floatingChat ? 'hud-orchestrator-chat' : undefined}
               aria-label={
                 badges.orchestrator > 0
-                  ? `Orchestrator, ${badges.orchestrator} ${badges.orchestrator === 1 ? 'item needs' : 'items need'} the owner`
+                  ? `Chat, ${badges.orchestrator} ${badges.orchestrator === 1 ? 'item needs' : 'items need'} the owner`
                   : undefined
               }
               onClick={() => {
@@ -880,7 +880,7 @@ export default function Hud({
                 } else showChat()
               }}
             >
-              <span>Orchestrator</span>
+              <span>Chat</span>
               <span className="agent-key mono">/</span>
               {badges.orchestrator > 0 && (
                 <span

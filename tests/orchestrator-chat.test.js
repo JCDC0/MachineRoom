@@ -2337,7 +2337,7 @@ describe('Hud and Waiting with an orchestrator', () => {
     )
     expect(html).toContain('hud-action')
     expect(html).toContain('aria-controls="hud-orchestrator-chat"')
-    expect(html).toContain('>Orchestrator</span>')
+    expect(html).toContain('>Chat</span>')
     expect(html).toContain('aria-pressed="false"')
     expect(html).toContain('Talk to the orchestrator')
     expect(html).not.toContain('Open assistant terminal')
