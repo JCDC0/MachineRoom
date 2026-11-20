@@ -56,7 +56,7 @@ export const SHORTCUTS = [
   ['[ and ]', 'Decrease or increase replay speed'],
   ['/', 'Open the chat'],
   ['L', 'Toggle the event log'],
-  ['C', 'Toggle Control: dispatch, tasks, costs, team and reviews'],
+  ['C', 'Toggle Work: start, tasks, cost, team and merge'],
   ['?', 'Toggle this help'],
 ]
 
@@ -823,14 +823,14 @@ export default function Hud({
               <button
                 type="button"
                 className={badges.control > 0 ? 'hud-action is-control has-badge' : 'hud-action is-control'}
-                title="Control: dispatch work to lanes, the task queue, costs, the team and branch reviews"
+                title="Work: start runs, follow tasks, see cost, the team and merge finished branches"
                 aria-pressed={controlOpen}
                 aria-expanded={controlOpen}
                 aria-controls="hud-control-drawer"
                 aria-label={
                   badges.control > 0
-                    ? `Control, ${badges.control} lane ${badges.control === 1 ? 'branch' : 'branches'} with commits ahead`
-                    : 'Control: dispatch, tasks, costs, team and reviews'
+                    ? `Work, ${badges.control} lane ${badges.control === 1 ? 'branch' : 'branches'} with commits ahead`
+                    : 'Work: start, tasks, cost, team and merge'
                 }
                 onClick={() => {
                   setControlOpen((open) => {
@@ -840,15 +840,15 @@ export default function Hud({
                   })
                 }}
               >
-                <span>Control</span>
+                <span>Work</span>
                 <span className="agent-key mono">C</span>
               </button>
               {badges.control > 0 && (
                 <button
                   type="button"
                   className="hud-action-badge mono"
-                  title={`${badges.control} lane ${badges.control === 1 ? 'branch has' : 'branches have'} commits ahead. Open Reviews`}
-                  aria-label={`Open Reviews, ${badges.control} lane ${badges.control === 1 ? 'branch has' : 'branches have'} commits ahead`}
+                  title={`${badges.control} lane ${badges.control === 1 ? 'branch has' : 'branches have'} commits ahead. Open Merge`}
+                  aria-label={`Open Merge, ${badges.control} lane ${badges.control === 1 ? 'branch has' : 'branches have'} commits ahead`}
                   onClick={(event) => {
                     event.stopPropagation()
                     openControlReviews()
