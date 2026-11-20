@@ -281,7 +281,7 @@ describe('the live lane source', () => {
     expect(endFrame(frames).payload).toMatchObject({ status: 'succeeded', error: null })
 
     const agents = await fetch(`${url}/api/agents`).then((response) => response.json())
-    expect(agents.map((agent) => agent.key)).toEqual(['orchestrator'])
+    expect(agents.map((agent) => agent.key)).toEqual(['orchestrator', 'opencode'])
 
     const tree = makeTree({ root: basename(projectRoot), files: [] })
     const activities = buildActivities(frames, { agents: laneAgents(lanes), tree })
@@ -767,7 +767,7 @@ describe('the V5 audit fixes in the lane source', () => {
     })
 
     const agents = await fetch(`${url}/api/agents`).then((response) => response.json())
-    expect(agents.some((agent) => agent.key === 'opencode')).toBe(true)
+    expect(agents.some((agent) => agent.key === 'opencode')).toBe(false)
 
     writeFileSync(join(runs, 'opencode-S6a-20261024-134000.log'), `${toolLine(`${worktree}\\src\\a.js`)}\n`)
     const frames = await readFrames(url, (list) => list.some((frame) => frame.type === 'heartbeat.run.log'))

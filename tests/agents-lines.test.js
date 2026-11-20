@@ -246,6 +246,7 @@ describe('the chosen top', () => {
   it('orbits more than two top agents and keeps the Orchestrator on the ring', () => {
     const roster = [...ROSTER_WITH_SESSION, { key: 'opencode-session', name: 'OpenCode session', parser: 'opencode' }]
     const { agents, terminals, state, world } = harness(roster)
+    apply(state, { time: 0, type: 'run.start', agent: 'opencode-session', runId: 'o1' })
     agents.setChosenTop('claude-session')
     agents.update(state, 0.016, 0, world, terminals)
     agents.snap(state, world)
@@ -256,6 +257,19 @@ describe('the chosen top', () => {
     expect(Math.hypot(main.group.position.x, main.group.position.z)).toBeCloseTo(HUB_RADIUS)
     expect(Math.hypot(other.group.position.x, other.group.position.z)).toBeCloseTo(HUB_RADIUS)
     expect(session.group.position.y).toBeCloseTo(HUB_Y + PARK_LIFT)
+    agents.dispose()
+  })
+
+  it('stands a chosen top alone above the hub when no Orchestrator is drawn and the other reader has not run', () => {
+    const roster = [{ key: 'claude-session', name: 'Claude session', parser: 'claude' }, { key: 'opencode-session', name: 'OpenCode session', parser: 'opencode' }, { key: 'agy2', name: 'agy2', parser: 'agy' }]
+    const { agents, terminals, state, world } = harness(roster)
+    apply(state, { time: 0, type: 'run.start', agent: 'claude-session', runId: 's1' })
+    agents.setChosenTop('claude-session')
+    agents.update(state, 0.016, 0, world, terminals)
+    agents.snap(state, world)
+    expect(agents.topKey()).toBe('claude-session')
+    expect(agents.views.get('claude-session').group.position.toArray()).toEqual(ORCHESTRATOR_HOME.toArray())
+    expect(agents.views.get('agy2').group.position.y).toBeCloseTo(HUB_Y + PARK_LIFT)
     agents.dispose()
   })
 })

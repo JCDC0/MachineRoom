@@ -204,6 +204,21 @@ describe('the top ring of the hub', () => {
     for (const key of seats.order) expect(seats.seats.get(key)).toBe('orbit')
   })
 
+  it('puts a chosen top alone at the centre when no Orchestrator is drawn', () => {
+    const seats = topRingSeats({ topKey: 'claude-session', withOrchestrator: false })
+    expect(seats.mode).toBe('centre')
+    expect(seats.order).toEqual(['claude-session'])
+    expect(seats.seats.get('claude-session')).toBe('centre')
+  })
+
+  it('stacks the chosen top above a second session when no Orchestrator is drawn', () => {
+    const seats = topRingSeats({ topKey: 'claude-session', extraKeys: ['opencode-session'], withOrchestrator: false })
+    expect(seats.mode).toBe('stack')
+    expect(seats.order).toEqual(['claude-session', 'opencode-session'])
+    expect(seats.seats.get('claude-session')).toBe('top')
+    expect(seats.seats.get('opencode-session')).toBe('under')
+  })
+
   it('keeps the Orchestrator at the centre when no session is chosen', () => {
     const seats = topRingSeats({ topKey: 'orchestrator', extraKeys: ['claude-session'] })
     expect(seats.mode).toBe('centre')

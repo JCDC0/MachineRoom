@@ -2,7 +2,6 @@
   "orchestrator": {
     "name": "Orchestrator",
     "harness": "Claude Code",
-    "retired": true,
     "cli": {
       "harness": "claude",
       "bin": "claude",

@@ -20,6 +20,7 @@ import {
   projectLanesFileFor,
   readActiveLanesChoice,
   readHiddenLanes,
+  roomLaneAgents,
   writeActiveLanes,
   writeHiddenLanes,
 } from '../server/active-lanes.js'
@@ -340,7 +341,7 @@ describe('active lanes route', () => {
 })
 
 describe('agents list filtering and run refusal', () => {
-  it('filters /api/agents to only active lanes after choice while keeping orchestrator', async () => {
+  it('lists no idle lanes in /api/agents before or after a choice, only the orchestrator', async () => {
     const { url } = await startTestBridge()
 
     const before = await getJson(`${url}/api/agents`)
@@ -357,10 +358,7 @@ describe('agents list filtering and run refusal', () => {
     const after = await getJson(`${url}/api/agents`)
     expect(after.status).toBe(200)
     const afterKeys = after.body.map((agent) => agent.key)
-    expect(afterKeys).toContain('orchestrator')
-    expect(afterKeys).toContain('opencode')
-    expect(afterKeys).not.toContain('opencode2')
-    expect(afterKeys).not.toContain('claude')
+    expect(afterKeys).toEqual(['orchestrator'])
   })
 
   it('refuses POST /api/control/runs on a project with no choice with 400', async () => {
@@ -772,5 +770,20 @@ describe('client and mock integration', () => {
     expect(mockShow.ok).toBe(true)
     const mockLanesAfterShow = await mock.lanes()
     expect(mockLanesAfterShow.lanes.find((l) => l.key === 'opencode2').hidden).toBe(false)
+  })
+})
+
+describe('roomLaneAgents', () => {
+  const agents = ['orchestrator', 'sub-a', 'codex', 'agy2', 'agy3', 'opencode'].map((key) => ({ key }))
+  const keys = (list) => list.map((agent) => agent.key)
+
+  it('keeps the leaders and only the lanes at work or just finished', () => {
+    expect(keys(roomLaneAgents(agents))).toEqual(['orchestrator', 'sub-a'])
+    expect(keys(roomLaneAgents(agents, { running: new Set(['agy2']), recent: new Set(['agy3']) }))).toEqual(['orchestrator', 'sub-a', 'agy2', 'agy3'])
+  })
+
+  it('leaves out a hidden lane even while it runs', () => {
+    const isHidden = (key) => key === 'opencode'
+    expect(keys(roomLaneAgents(agents, { isHidden, running: new Set(['opencode', 'codex']) }))).toEqual(['orchestrator', 'sub-a', 'codex'])
   })
 })

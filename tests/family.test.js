@@ -844,7 +844,7 @@ describe('turned-off lanes in the family tree', () => {
 
     const agents = await request(`${url}/api/agents`, { origin: '' })
     expect(agents.body.map((agent) => agent.key)).not.toContain('opencode')
-    expect(agents.body.map((agent) => agent.key)).toContain('opencode2')
+    expect(agents.body.map((agent) => agent.key)).not.toContain('opencode2')
   })
 
   it('keeps the tree when the owner turns off the last active lane, and the mock does the same', async () => {

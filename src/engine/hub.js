@@ -183,7 +183,7 @@ export function ringDepth(value, fallback = RING_LEVEL_MAX) {
   return Math.min(RING_LEVEL_MAX, Math.max(1, Math.floor(number)))
 }
 
-export function topRingSeats({ topKey = 'orchestrator', extraKeys = [] } = {}) {
+export function topRingSeats({ topKey = 'orchestrator', extraKeys = [], withOrchestrator = true } = {}) {
   const top = typeof topKey === 'string' && topKey !== 'orchestrator' ? topKey : ''
   const extras = []
   for (const key of Array.isArray(extraKeys) ? extraKeys : []) {
@@ -196,10 +196,14 @@ export function topRingSeats({ topKey = 'orchestrator', extraKeys = [] } = {}) {
     for (const key of extras) seats.set(key, 'reader')
     return { mode: 'centre', top: '', order: ['orchestrator', ...extras], seats }
   }
-  const order = [top, 'orchestrator', ...extras]
+  const order = [top, ...(withOrchestrator ? ['orchestrator'] : []), ...extras]
+  if (order.length === 1) {
+    seats.set(top, 'centre')
+    return { mode: 'centre', top, order, seats }
+  }
   if (order.length === 2) {
     seats.set(top, 'top')
-    seats.set('orchestrator', 'under')
+    seats.set(order[1], 'under')
     return { mode: 'stack', top, order, seats }
   }
   for (const key of order) seats.set(key, 'orbit')

@@ -2,7 +2,9 @@
 
 ## Unreleased
 
-- The bench drops its separate orchestrator agent (retired in `docs/agents/lanes.json`), agy2 runs on Gemini 4 Neon High beside agy3, and the waiting card and the task refusal name Work, then Start instead of Dispatch.
+- The chosen top session stands alone above the hub when no orchestrator is drawn, and the lanes keep the park ring below it; the room leaves out the idle built-in orchestrator while a session is the chosen top (`topRingSeats` with `withOrchestrator`, `entryRan`, `hideOrchestrator`).
+- The room shows only the lanes at work: a lane appears when its run starts and leaves 5 minutes after it ends, whatever lanes are on, so idle lanes no longer crowd the hub (`roomLaneAgents`, `recentLanes`).
+- agy2 runs on Gemini 4 Neon High beside agy3, and the waiting card and the task refusal name Work, then Start instead of Dispatch.
 - A failed task whose briefs are all running again on another lane drops out of Tasks, so the open run stands for it and the failed count stays true (P651).
 - The Start lane picker lists only the lanes that are on for the project, plus any lane running now (P650).
 - The Control drawer has plain names: the menu button says Work, and its tabs are Start, Tasks, Cost, Team and Merge. Tasks counts running, failed and done instead of every task, folds the done tasks, and says failed for a blocked task. The startup line says Press C for Work, then Start (P648).

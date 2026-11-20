@@ -124,6 +124,17 @@ export function writeActiveLanes(file, lanes, { rename = renameSync } = {}) {
   }
 }
 
+export const ROOM_LANE_LINGER_MS = 5 * 60 * 1000
+
+export function roomLaneAgents(agents, { isHidden = () => false, running = new Set(), recent = new Set(), hideOrchestrator = false } = {}) {
+  return (Array.isArray(agents) ? agents : []).filter((agent) => {
+    if (agent.key === 'orchestrator') return !hideOrchestrator
+    if (String(agent.key ?? '').startsWith('sub-')) return true
+    if (isHidden(agent.key)) return false
+    return running.has(agent.key) || recent.has(agent.key)
+  })
+}
+
 export function eligibleLanes(lanesConfig = {}) {
   const list = []
   for (const [key, entry] of Object.entries(lanesConfig ?? {})) {

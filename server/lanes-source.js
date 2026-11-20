@@ -396,6 +396,7 @@ export function createLanesSource(options = {}) {
   const listRunningProcesses = typeof options.list === 'function' ? options.list : listProcesses
   const statLock = typeof options.stat === 'function' ? options.stat : statSync
   const active = new Map()
+  const ended = new Map()
   const quiet = new Map()
   const seen = new Set()
   const lagging = new Map()
@@ -771,6 +772,7 @@ export function createLanesSource(options = {}) {
     flushRun(run)
     active.delete(run.key)
     const at = now()
+    ended.set(run.agent.key, at)
     if (status === 'failed' && run.readLines === 0 && run.plainLines.length > 0) {
       run.seq += 1
       emit({
@@ -988,7 +990,11 @@ export function createLanesSource(options = {}) {
     get agents() {
       return agentsNow()
     },
+    get allAgents() {
+      return allAgents()
+    },
     openRuns,
+    recentLanes: (windowMs, at = now()) => new Set([...ended].filter(([, endedAt]) => at - endedAt <= windowMs).map(([key]) => key)),
     start,
     stop,
     tick,

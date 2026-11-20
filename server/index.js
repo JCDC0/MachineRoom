@@ -8,13 +8,13 @@ import { promisify } from 'node:util'
 import { gzip as gzipCallback } from 'node:zlib'
 import { createSplitMasker } from '../src/briefs/audit.js'
 import { createUnreadableCounter } from '../src/model/parsers/unreadable.js'
-import { createActiveLanesApi } from './active-lanes.js'
+import { ROOM_LANE_LINGER_MS, createActiveLanesApi, roomLaneAgents } from './active-lanes.js'
 import { createAgentsConfigApi, moveRemovedLanesToProject } from './agents-config.js'
 import { createAssistantApi } from './assistant.js'
 import { createBriefsApi } from './briefs.js'
 import { changeEvents, createControlApi } from './control.js'
 import { createDecideApi } from './decide.js'
-import { createFamilyApi } from './family.js'
+import { createFamilyApi, readTop, topFileFor } from './family.js'
 import { createAgentDepthApi } from './agent-depth.js'
 import { createEndpointsApi, createModelPinsApi } from './endpoints.js'
 import { createFilesApi } from './files.js'
@@ -1842,18 +1842,14 @@ export function createBridge(options = {}) {
     if (req.method === 'GET' && url.pathname === '/api/agents') {
       rememberLaneParsers()
       rememberSessionsParsers()
-      const allLaneAgents = lanesSource ? [...lanesSource.agents] : []
-      const visibleLaneAgents = allLaneAgents.filter(
-        (agent) =>
-          agent.key === 'orchestrator' ||
-          String(agent.key ?? '').startsWith('sub-') ||
-          !activeLanes.isLaneHidden(agent.key)
-      )
-      const laneAgents = activeLanes.isChosen()
-        ? visibleLaneAgents.filter(
-            (agent) => agent.key === 'orchestrator' || String(agent.key ?? '').startsWith('sub-') || activeLanes.isLaneActive(agent.key)
-          )
-        : visibleLaneAgents
+      const laneAgents = roomLaneAgents(lanesSource ? [...(lanesSource.allAgents ?? lanesSource.agents)] : [], {
+        isHidden: (key) => activeLanes.isLaneHidden(key),
+        running: new Set((lanesSource?.openRuns?.() ?? []).map((run) => run.lane)),
+        recent: lanesSource?.recentLanes?.(ROOM_LANE_LINGER_MS) ?? new Set(),
+        hideOrchestrator:
+          readTop(topFileFor(projectRoot, bridgeRunsFolder)) !== 'orchestrator' &&
+          orchestrators?.find?.('orchestrator')?.answer?.()?.state !== 'working',
+      })
       const sessionAgents = sessionsSource ? [...sessionsSource.agents] : []
       sendJson(req, res, 200, [...laneAgents, ...sessionAgents])
       return

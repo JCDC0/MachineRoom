@@ -188,6 +188,10 @@ export function childEndIsFresh(entry, state) {
   return endedAt > 0 && (state?.latest ?? 0) - endedAt <= CHILD_LIFE_MS
 }
 
+export function entryRan(entry) {
+  return Boolean(entry) && (entry.status !== 'idle' || (entry.runs ?? 0) > 0 || (entry.lines?.length ?? 0) > 0)
+}
+
 export function nameLabel(name) {
   if (typeof name !== 'string') return ''
   const label = name.toUpperCase()
@@ -740,6 +744,8 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
   let slotAngles = sectorSlotAngles(null, parkedKeys)
   let topKey = 'orchestrator'
   let chosenTop = ''
+  let ranReaders = new Set()
+  let ranSignature = ''
   let lastLaneTop = 'orchestrator'
   let depth = RING_LEVEL_MAX
   const chainCache = { links: null, mask: null, parents: null, back: [] }
@@ -1223,7 +1229,7 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
       currentLadder && ownerOf(currentLadder, key) !== 'orchestrator'
         ? [] : [slotAngles.get(key) ?? slotAngle(index, parkedKeys.length)])
     const angles = readerAngles(mainAngles, readers.length)
-    const seats = topRingSeats({ topKey: topView ? topKey : 'orchestrator', extraKeys: readers.map((view) => view.key) })
+    const seats = topRingSeats({ topKey: topView ? topKey : 'orchestrator', extraKeys: readers.filter((view) => ranReaders.has(view.key)).map((view) => view.key), withOrchestrator: views.has('orchestrator') })
     for (const view of views.values()) {
       if (view.parentKey) continue
       const agent = agentByKey.get(view.key) ?? { key: view.key, name: view.name }
@@ -1244,7 +1250,7 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
         const readerIndex = readers.indexOf(view)
         view.readerIndex = readerIndex
         const seat = seats.seats.get(view.key)
-        if (seat === 'orbit') seatPoint(view.key, seats, view.home)
+        if (seat === 'orbit' || seat === 'under') seatPoint(view.key, seats, view.home)
         else readerPoint(readerIndex, readers.length, view.home, angles[readerIndex])
       } else {
         view.index = parkedKeys.indexOf(view.key)
@@ -1443,8 +1449,15 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
     const nextTop = isSessionTopKey(chosenTop)
       ? topKeyFor({ chosenTop, laneTop: lastLaneTop, viewKeys: viewKeySet() })
       : lastLaneTop
-    if (nextTop !== topKey) {
+    const ranNow = []
+    for (const view of views.values()) {
+      if (view.sessionReader && !view.parentKey && entryRan(state.agents.get(view.key))) ranNow.push(view.key)
+    }
+    const signature = ranNow.join('|')
+    if (nextTop !== topKey || signature !== ranSignature) {
       topKey = nextTop
+      ranSignature = signature
+      ranReaders = new Set(ranNow)
       placeViews()
     }
     if (world.back && world.right) {
@@ -1492,7 +1505,7 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
       const status = view.style
       const style = STYLE[status] ?? STYLE.idle
       const fade = view.parentKey ? (view.fadeStart > 0 ? childFade(now - view.fadeStart, isStill) : 1) : 1
-      const ran = Boolean(entry) && (entry.status !== 'idle' || (entry.runs ?? 0) > 0 || (entry.lines?.length ?? 0) > 0)
+      const ran = entryRan(entry)
       if (view.sessionReader && !ran && view.key !== topKey) {
         view.group.visible = false
         for (const slot of view.beatRings) slot.line.visible = false

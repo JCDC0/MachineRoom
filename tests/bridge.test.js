@@ -6,6 +6,7 @@ import { gunzipSync } from 'node:zlib'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { FOLDER_SHAPE, createBridge, isAllowedHost, packTree, trimHistory } from '../server/index.js'
 import { DEFAULT_ASSISTANT_MODEL } from '../server/assistant.js'
+import { laneAgents } from '../server/lanes-source.js'
 import { getJson, postJson, readFrames, startLaneBridge, waitFor, waitForBridge } from './helpers/bridge.js'
 import { withoutRepoEnv } from './helpers/gitEnv.js'
 import { makeTempDir } from './helpers/tempRoot.js'
@@ -303,11 +304,16 @@ describe('health and agents', () => {
     expect(health.body.problems).toContain('The OpenCode session source stopped: no such table: session_v2')
   })
 
-  it('lists the lane agents only, in lane file order', async () => {
+  it('lists no idle lane in /api/agents, and maps the lanes in lane file order', async () => {
     const { url } = await laneBridge()
     const answer = await getJson(`${url}/api/agents`, { headers: { Origin: 'http://localhost:5173' } })
     expect(answer.status).toBe(200)
-    expect(answer.body).toEqual([
+    expect(answer.body).toEqual([])
+    expect(laneAgents({
+      claude: { name: 'Claude Code', cli: { harness: 'claude', model: 'sonnet' } },
+      hermes: { name: 'Hermes', cli: { harness: 'hermes', model: 'deepseek/deepseek-v4.1-flash-1017' } },
+      opencode: { name: 'OpenCode', cli: { harness: 'opencode', model: 'opencode-go/deepseek-v4.1-flash' } },
+    })).toEqual([
       { id: 'agent-claude', key: 'claude', name: 'Claude Code', adapterType: 'claude_local', parser: 'claude', role: null, harness: 'claude', model: 'sonnet' },
       { id: 'agent-hermes', key: 'hermes', name: 'Hermes', adapterType: 'hermes_local', parser: 'hermes', role: null, harness: 'hermes', model: 'deepseek/deepseek-v4.1-flash-1017' },
       { id: 'agent-opencode', key: 'opencode', name: 'OpenCode', adapterType: 'opencode_local', parser: 'opencode', role: null, harness: 'opencode', model: 'opencode-go/deepseek-v4.1-flash' },
@@ -321,16 +327,15 @@ describe('health and agents', () => {
     expect(answer.body).toEqual([])
   })
 
-  it('maps lane agents to viewer keys and parsers', async () => {
-    const { url } = await laneBridge({
-      lanes: {
+  it('maps lane agents to viewer keys and parsers', () => {
+    const answer = {
+      body: laneAgents({
         agy: { name: 'agy', cli: { harness: 'agy', model: 'gemini-3.8-flash-high' } },
         claude: { name: 'Claude Code', cli: { harness: 'claude', model: 'sonnet' } },
         hermes: { name: 'Hermes', cli: { harness: 'hermes', model: 'deepseek/deepseek-v4.1-flash-1017' } },
         opencode: { name: 'OpenCode Go', cli: { harness: 'opencode', model: 'opencode-go/deepseek-v4.1-flash' } },
-      },
-    })
-    const answer = await getJson(`${url}/api/agents`)
+      }),
+    }
 
     expect(answer.body).toEqual([
       { id: 'agent-agy', key: 'agy', name: 'agy', adapterType: 'process', parser: 'agy', role: null, harness: 'agy', model: 'gemini-3.8-flash-high' },
@@ -340,14 +345,13 @@ describe('health and agents', () => {
     ])
   })
 
-  it('keeps two claude_local agents apart in list order and carries each role', async () => {
-    const { url } = await laneBridge({
-      lanes: {
+  it('keeps two claude_local agents apart in list order and carries each role', () => {
+    const answer = {
+      body: laneAgents({
         'twin-a': { name: 'Twin', cli: { harness: 'claude', model: 'sonnet' } },
         'twin-b': { name: 'Twin', cli: { harness: 'claude', model: 'sonnet' } },
-      },
-    })
-    const answer = await getJson(`${url}/api/agents`)
+      }),
+    }
 
     expect(answer.body).toEqual([
       { id: 'agent-twin-a', key: 'twin-a', name: 'Twin', adapterType: 'claude_local', parser: 'claude', role: null, harness: 'claude', model: 'sonnet' },
