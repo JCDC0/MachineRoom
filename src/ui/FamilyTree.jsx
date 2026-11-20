@@ -930,6 +930,8 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
   }, [tree, sessionRows])
   const countLine = family ? agentCountLine(tree.nodes) : ''
   const mainAgent = tree.nodes.find((node) => node.kind === 'orchestrator')
+  const orchestratorTarget = mainAgent ?? { id: 'orchestrator', kind: 'orchestrator', label: 'Orchestrator', depth: 0 }
+  const canCreateLane = typeof client?.createLane === 'function'
   const hasLanes = tree.nodes.some((node) => node.kind === 'lane' && !isManualLane(node))
   const editingNode = editing ? tree.nodes.find((node) => node.id === editing) ?? null : null
 
@@ -1059,11 +1061,11 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
       setEditing(null)
       setNodeDraft(null)
     }
-    if (childFor && !tree.nodes.some((node) => node.id === childFor)) {
+    if (childFor && childFor !== orchestratorTarget.id && !tree.nodes.some((node) => node.id === childFor)) {
       setChildFor(null)
       setDraft(null)
     }
-  }, [editing, childFor, tree])
+  }, [editing, childFor, tree, orchestratorTarget.id])
 
   useEffect(() => {
     if (!childFor || childPicked) return
@@ -2569,8 +2571,12 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
         onSelect: () => toggleChild(node),
       })
     }
-    if ((session || node.kind === 'orchestrator') && (session ? node.id.slice(8) : 'orchestrator') !== (family?.top ?? 'orchestrator')) {
+    const topKey = family?.top ?? (tree.root?.kind === 'session' ? tree.root.id.slice(8) : 'orchestrator')
+    if ((session || node.kind === 'orchestrator') && (session ? node.id.slice(8) : 'orchestrator') !== topKey) {
       items.push({ label: 'Put at the top', disabled: busy, onSelect: () => askTop(node) })
+    }
+    if (!mainAgent && session && node.id.slice(8) === topKey) {
+      items.push({ label: 'Put Orchestrator at the top', disabled: busy, onSelect: () => askTop(orchestratorTarget) })
     }
     if (lane && !manual) {
       items.push({
@@ -2691,10 +2697,10 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
           <span className="ui-chip-chevron" aria-hidden="true" />
         </button>
         <span className="mr-family-header-actions">
-          <IconButton className="mr-family-add" label="Add a lane" icon="+" disabled={busy || !mainAgent}
+          <IconButton className="mr-family-add" label="Add a lane" icon="+" disabled={busy || (!mainAgent && !canCreateLane)}
             onClick={() => {
               setOpen(true)
-              toggleChild(mainAgent)
+              toggleChild(orchestratorTarget)
             }}
           />
           <Menu label="Agents actions" disabled={busy} items={[
@@ -2727,6 +2733,7 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
             <>
               {renderRequests()}
               {renderSelection()}
+              {!mainAgent && childFor === orchestratorTarget.id ? renderChildForm(orchestratorTarget, 0) : null}
               {tree.rows.length === 0 ? <p className="mr-side-note">No agents are listed.</p> : null}
               <div className="mr-family-tree">{boxes.map(renderBox)}</div>
             </>
