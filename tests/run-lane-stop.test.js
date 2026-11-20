@@ -1257,6 +1257,7 @@ describe('stopLeftovers counts only what it stopped', () => {
         processes: [{ pid: 400, ppid: 1, created: 9700, command: 'node C:\\fake\\worktree\\worker.js' }],
         current: [{ pid: 999, ppid: 1, created: 5000 }],
         snapshotOnly: true,
+        alive: () => false,
         kill: ({ pid }) => {
           killed.push(pid)
           return true
