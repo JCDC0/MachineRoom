@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The Agents tree puts a family box status word on the meta line so the name gets the full width and wraps to two lines, and the top session reads working while its conversation is open (`sessionWorking` in `server/sessions-source.js`, P643b).
 - The chosen top session stands alone above the hub when no orchestrator is drawn, and the lanes keep the park ring below it; the room leaves out the idle built-in orchestrator while a session is the chosen top (`topRingSeats` with `withOrchestrator`, `entryRan`, `hideOrchestrator`).
 - The room shows only the lanes at work: a lane appears when its run starts and leaves 5 minutes after it ends, whatever lanes are on, so idle lanes no longer crowd the hub (`roomLaneAgents`, `recentLanes`).
 - agy2 runs on Gemini 4 Neon High beside agy3, and the waiting card and the task refusal name Work, then Start instead of Dispatch.

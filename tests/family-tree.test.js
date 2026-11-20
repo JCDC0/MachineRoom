@@ -1,5 +1,8 @@
+import { act, createElement } from 'react'
 import { describe, expect, it } from 'vitest'
+import { FamilyTree } from '../src/ui/FamilyTree.jsx'
 import { AGENT_NAME_MAX } from '../src/ui/sidebar.js'
+import { withDom } from './helpers/uiDom.js'
 import {
   DIRECT_HARNESS,
   DIRECT_KEY_PROBLEM,
@@ -585,5 +588,57 @@ describe('familyBoxes', () => {
     expect(rest).toEqual([])
     expect(root.subs.map((box) => box.node.id)).toEqual(['backend', 'frontend'])
     expect(root.subs.map((box) => box.lanes.map((row) => row.id))).toEqual([['opencode4'], ['opencode2']])
+  })
+
+  it('puts the status word in the meta line of a head row instead of beside the label', async () => {
+    const client = {
+      family: async () => ({
+        nodes: [
+          {
+            id: 'orchestrator',
+            kind: 'orchestrator',
+            label: 'Orchestrator',
+            harness: DIRECT_HARNESS,
+            model: 'openrouter/flash',
+            parent: null,
+            children: ['opencode'],
+            active: true,
+            working: false,
+          },
+          {
+            id: 'opencode',
+            kind: 'lane',
+            label: 'OpenCode',
+            harness: 'opencode',
+            model: 'qwen',
+            parent: 'orchestrator',
+            active: true,
+            working: true,
+          },
+        ],
+        keys: [],
+        proposals: [],
+      }),
+      lanes: async () => ({ lanes: [{ key: 'opencode', name: 'OpenCode', harness: 'opencode', active: true }], chosen: true }),
+      harnesses: async () => HARNESSES,
+      models: async () => ({ models: [] }),
+      orchestrators: async () => [{ id: 'orchestrator', state: 'idle' }],
+    }
+    await withDom(async ({ container, root }) => {
+      await act(async () => {
+        root.render(createElement(FamilyTree, { client }))
+      })
+      await act(async () => {})
+      const head = container.querySelector('.mr-family-head')
+      const headTop = head.querySelector('.mr-family-top')
+      expect(headTop.querySelector('.mr-family-label').textContent).toBe('Orchestrator')
+      expect(headTop.querySelector('.mr-family-state')).toBeNull()
+      expect(head.querySelector('.ui-row-detail').textContent).toBe('waiting · Direct API · flash')
+
+      const lane = container.querySelector('.mr-family-lanes').querySelector('.mr-family-node')
+      const laneTop = lane.querySelector('.mr-family-top')
+      expect(laneTop.querySelector('.mr-family-state').textContent).toBe('working')
+      expect(lane.querySelector('.ui-row-detail').textContent).toBe('opencode · Qwen')
+    })
   })
 })

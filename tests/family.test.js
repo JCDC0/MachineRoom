@@ -22,6 +22,7 @@ import {
   readLabels,
   readProposals,
   saveProposals,
+  topFileFor,
 } from '../server/family.js'
 import { readAgentsConfig } from '../server/agents-config.js'
 import { createBridge } from '../server/index.js'
@@ -1082,5 +1083,59 @@ describe('the chosen top and nested subs', () => {
     const family = await client.family()
     expect(family.top).toBe('opencode-session')
     expect(family.nodes[0].kind).toBe('session')
+  })
+
+  it('sets the top session node working state from isWorking and from the sessions source', async () => {
+    const root = tempDir('mr-top-work-')
+    const runs = tempDir('mr-top-work-runs-')
+    writeFileSync(topFileFor(root, runs), JSON.stringify({ top: 'claude-session' }))
+
+    const workingNodes = buildFamilyNodes({
+      projectRoot: root,
+      runsFolder: runs,
+      lanesConfig: SAMPLE_LANES,
+      isWorking: (key) => key === 'claude-session',
+    })
+    expect(workingNodes[0]).toMatchObject({ id: 'session:claude-session', kind: 'session', working: true })
+
+    const idleNodes = buildFamilyNodes({
+      projectRoot: root,
+      runsFolder: runs,
+      lanesConfig: SAMPLE_LANES,
+      isWorking: () => false,
+    })
+    expect(idleNodes[0]).toMatchObject({ id: 'session:claude-session', kind: 'session', working: false })
+
+    const sessions = new Map([['s1', { run: { runId: 'r1', open: true } }]])
+    const proj = tempDir('mr-top-bridge-')
+    const runsDir = tempDir('mr-top-bridge-runs-')
+    mkdirSync(join(proj, 'docs', 'agents'), { recursive: true })
+    const lanesFile = join(proj, 'docs', 'agents', 'lanes.json')
+    writeFileSync(lanesFile, JSON.stringify(SAMPLE_LANES, null, 2))
+    writeFileSync(topFileFor(proj, runsDir), JSON.stringify({ top: 'claude-session' }))
+    const bridge = createBridge({
+      port: 0,
+      projectRoot: proj,
+      runsFolder: runsDir,
+      lanesFile,
+      sessionsSource: {
+        readers: [() => ({
+          agent: { id: 'agent-claude-session', key: 'claude-session', name: 'Claude Code session' },
+          tick: () => {},
+          stop: () => {},
+          sessions: () => sessions,
+        })],
+      },
+      env: {},
+    })
+    const { url } = await bridge.start()
+    cleanups.push(() => bridge.stop())
+
+    const busy = (await request(`${url}/api/family`, { origin: '' })).body
+    expect(busy.nodes[0]).toMatchObject({ id: 'session:claude-session', working: true })
+
+    sessions.set('s1', { run: null })
+    const quiet = (await request(`${url}/api/family`, { origin: '' })).body
+    expect(quiet.nodes[0]).toMatchObject({ id: 'session:claude-session', working: false })
   })
 })

@@ -402,7 +402,7 @@ export function buildFamilyNodes({
     parent: null,
     children: [ORCHESTRATOR_KEY],
     active: true,
-    working: false,
+    working: typeof isWorking === 'function' ? Boolean(isWorking(top)) : false,
     custom: false,
   }
   return [sessionNode, mainNode, ...subNodes, ...laneNodes]

@@ -72,5 +72,42 @@ export function createSessionsSource(options = {}) {
     return list
   }
 
-  return { agents, readers, start, stop, tick, problems }
+  function readerHasKey(reader, key) {
+    if (!reader || typeof key !== 'string' || !key) return false
+    if (reader.agent?.key === key) return true
+    return Array.isArray(reader.agents) && reader.agents.some((agent) => agent?.key === key)
+  }
+
+  function sessionActive(session) {
+    if (!session || session.run == null) return false
+    if (typeof session.run === 'object' && session.run.open === false) return false
+    return true
+  }
+
+  function readerWorking(reader) {
+    if (typeof reader.open === 'function') {
+      const open = reader.open()
+      if (open instanceof Map && open.size > 0) return true
+    }
+    if (typeof reader.sessions !== 'function') return false
+    const map = reader.sessions()
+    if (!map || typeof map.values !== 'function') return false
+    for (const session of map.values()) {
+      if (sessionActive(session)) return true
+    }
+    return false
+  }
+
+  function sessionWorking(key) {
+    if (typeof key !== 'string' || !key) return false
+    for (const reader of readers) {
+      if (!readerHasKey(reader, key)) continue
+      try {
+        if (readerWorking(reader)) return true
+      } catch {}
+    }
+    return false
+  }
+
+  return { agents, readers, start, stop, tick, problems, sessionWorking }
 }

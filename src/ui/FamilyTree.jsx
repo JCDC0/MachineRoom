@@ -2510,7 +2510,7 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
           </span>
           <span className="ui-chip-chevron" aria-hidden="true" />
         </button>
-        {open ? box.more.map(renderRow) : null}
+        {open ? box.more.map((row) => renderRow(row)) : null}
       </div>
     )
   }
@@ -2518,11 +2518,11 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
   function renderBox(box) {
     return (
       <div className="mr-family-box" key={box.node.id}>
-        <div className="mr-family-head">{renderRow(box.node)}</div>
+        <div className="mr-family-head">{renderRow(box.node, true)}</div>
         {box.subs.length > 0 ? <div className="mr-family-kids">{box.subs.map((kid) => <div className="mr-family-kid" key={kid.node.id}>{renderBox(kid)}</div>)}</div> : null}
         {box.lanes.length + box.more.length > 0 ? (
           <div className="mr-family-lanes">
-            {box.lanes.map(renderRow)}
+            {box.lanes.map((row) => renderRow(row))}
             {renderMoreLanes(box)}
           </div>
         ) : null}
@@ -2530,7 +2530,7 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
     )
   }
 
-  function renderRow(node) {
+  function renderRow(node, head = false) {
     const lane = node.kind === 'lane'
     const sub = node.kind === 'sub'
     const session = node.kind === 'session'
@@ -2610,10 +2610,15 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
                     {node.label}
                   </button>
                 )}
-                <span className="mr-family-state mono">{status}</span>
+                {!head && <span className="mr-family-state mono">{status}</span>}
               </span>
             }
-            detail={detail}
+            detail={head && status ? (
+              <>
+                <span className="mr-family-state mono">{status}</span>
+                {detail ? ` · ${detail}` : ''}
+              </>
+            ) : detail}
             trailing={session && items.length === 0 ? <span className="mr-family-actions" aria-hidden="true" /> : session ? (
               <span className="mr-family-actions">
                 <Menu label={`Actions for ${node.label}`} items={items} disabled={busy} />

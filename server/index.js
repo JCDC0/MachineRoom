@@ -882,7 +882,8 @@ export function createBridge(options = {}) {
     isWorking: (key) => {
       const fromSource = lanesSource ? lanesSource.openRuns().some((r) => r.lane === key) : false
       const fromRuns = runs && typeof runs.isRunning === 'function' ? runs.isRunning(key) : false
-      return fromSource || fromRuns
+      const fromSessions = Boolean(sessionsSource?.sessionWorking?.(key))
+      return fromSource || fromRuns || fromSessions
     },
     notify: (event) => {
       for (const client of clients) writeSseChange(client, event)
