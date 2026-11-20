@@ -53,6 +53,7 @@ describe('reviews helpers', () => {
       head,
       base: 'trunk',
     })
+    expect(text).toContain('The owner confirmed this in Merge.')
     expect(text).toContain('Lane: opencode')
     expect(text).toContain('Branch: feat/p215-ask-the-orchestrator')
     expect(text).toContain(`Head: ${head}`)

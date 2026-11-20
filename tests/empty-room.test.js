@@ -6,7 +6,7 @@ const room = { live: true, status: 'live', files: 0, agents: [] }
 describe('the empty room line', () => {
   it('says why a live room with no files and no run is empty', () => {
     expect(emptyRoomLine(room)).toBe(
-      'This folder is empty. Open another project in Projects, or start a lane in Dispatch with C.'
+      'This folder is empty. Open another project in Projects, or start a lane in Work, then Start, with C.'
     )
     expect(emptyRoomLine({ ...room, agents: [{ key: 'orchestrator', runs: 0 }] })).toBe(EMPTY_ROOM_TEXT)
     expect(emptyRoomLine({ ...room, agents: [{ key: 'orchestrator' }] })).toBe(EMPTY_ROOM_TEXT)

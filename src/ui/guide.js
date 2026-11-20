@@ -20,11 +20,11 @@ export const GUIDE_STEPS = [
   },
   {
     label: 'The chat',
-    text: 'The orchestrator chat sits at the bottom right when the room runs with --lanes: press / or click ORCHESTRATOR, and its tabs switch between them.',
+    text: 'The orchestrator chat sits at the bottom right when the room runs with --lanes: press / or click Chat, and its tabs switch between them.',
   },
   {
     label: 'The keys',
-    text: 'C opens the control drawer, L the event log, T an agent log, F follow mode, 0 the overview, / opens the chat with --lanes or the assistant in a replay, and ? lists every key.',
+    text: 'C opens Work, L the event log, T an agent log, F follow mode, 0 the overview, / opens the chat with --lanes or the assistant in a replay, and ? lists every key.',
   },
 ]
 
@@ -65,9 +65,9 @@ export const TOUR_STEPS = [
     text: 'This transport plays or pauses the replay, seeks along the timeline and sets its speed.',
   },
   {
-    label: 'Control and orchestrator',
+    label: 'Work and orchestrator',
     selector: '.hud-actions',
-    text: 'This action row opens Control for tasks, runs and reviews, and the orchestrator chat when the room runs with --lanes.',
+    text: 'This action row opens Work for tasks, runs and reviews, and the orchestrator chat when the room runs with --lanes.',
   },
 ]
 
