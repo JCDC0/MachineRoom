@@ -994,6 +994,7 @@ export function createOrchestrator({
   gitTimeoutMs = GIT_OPERATION_TIMEOUT_MS,
   appendRecord = (file, line) => appendFileSync(file, line),
   readTaskState = null,
+  readSeatLine = () => 'Seat grant: 0 lanes and 0 subs. Free seats: no seats set.',
   refreshModelDetails = () => Promise.resolve(false),
 } = {}) {
   const token = typeof tokenOption === 'string' && tokenOption ? tokenOption : randomBytes(24).toString('base64url')
@@ -2019,7 +2020,8 @@ ${current}`
     const extra = typeof extraText === 'string' ? extraText.replaceAll('{{BRIDGE}}', bridgeAddress ?? '') : extraText
     const joined = extra ? `${baseInstruction}\n\n${extra}` : baseInstruction
     const depthLine = agentDepthLine(readAgentDepth(folder).limit)
-    const instruction = `${joined.replace(SPAWN_DEPTH_LINE, '').replace(/\n{3,}/g, '\n\n').trimEnd()}\n\n${depthLine}`
+    const seats = readSeatLine()
+    const instruction = `${joined.replace(SPAWN_DEPTH_LINE, '').replace(/\n{3,}/g, '\n\n').trimEnd()}\n\n${depthLine}\n${seats}`
     let program = binFor(harness)
     let args
     if (harness === 'opencode') {
@@ -2030,7 +2032,7 @@ ${current}`
       args.push('--title', logName)
       if (!first) args.push('--session', sessionId)
       const restarted = `The room restarted, so your bridge token is new. Send the header X-MachineRoom-Orchestrator: ${token} on every bridge request from now on.`
-      const body = first ? `${instruction}\n\n${message}` : tokenSent ? message : `${restarted}\n\n${message}`
+      const body = first ? `${instruction}\n\n${message}` : `${tokenSent ? '' : `${restarted}\n\n`}${message}\n\n${seats}`
       tokenSent = true
       args.push(carried ? `${carried}\n\n${body}` : body)
     } else if (harness === 'claude') {
@@ -2874,9 +2876,15 @@ ${modelSummary}` : modelSummary
   }
 
   function setLadder(value) {
+    const previous = ladder
     ladder = value && typeof value === 'object' && !Array.isArray(value) ? value : null
     persist()
+    if (persistError) {
+      ladder = previous
+      return false
+    }
     notify()
+    return true
   }
 
   function getSiblings() {

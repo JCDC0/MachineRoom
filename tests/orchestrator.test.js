@@ -541,7 +541,7 @@ describe('one orchestrator turn', () => {
     expect(rig.orchestrator.token).toHaveLength(32)
     expect(rig.answer().token).toBeUndefined()
     expect(valueAfter(calls[0].args, '--append-system-prompt')).toBe(
-      `project=${rig.projectRoot}\nmachineroom=${REPO_ROOT}\nruns=${rig.runs}\nbridge=http://127.0.0.1:5999\nSend the header X-MachineRoom-Orchestrator: ${rig.orchestrator.token} on every bridge request.\n\nSpawn subagents at most 2 levels deep. A subagent at depth 2 spawns none.`
+      `project=${rig.projectRoot}\nmachineroom=${REPO_ROOT}\nruns=${rig.runs}\nbridge=http://127.0.0.1:5999\nSend the header X-MachineRoom-Orchestrator: ${rig.orchestrator.token} on every bridge request.\n\nSpawn subagents at most 2 levels deep. A subagent at depth 2 spawns none.\nSeat grant: 0 lanes and 0 subs. Free seats: no seats set.`
     )
     const reply = rig.answer().messages.at(-1)
     expect(reply.from).toBe('orchestrator')
@@ -703,7 +703,7 @@ describe('one orchestrator turn', () => {
     await waitIdle(rig, 2)
     const second = rig.calls()[1].args
     expect(valueAfter(second, '--session')).toBe('ses_fake_first')
-    expect(second.at(-1)).toBe('And then run the tests.')
+    expect(second.at(-1)).toBe('And then run the tests.\n\nSeat grant: 0 lanes and 0 subs. Free seats: no seats set.')
     expect(second.at(-1)).not.toContain('project=')
     expect(recordsOf(rig).at(-1)).toMatchObject({ costUsd: 0.25 })
   })
@@ -768,7 +768,7 @@ describe('one orchestrator turn', () => {
     expect(instruction).toContain('Never push')
     expect(instruction).toContain(`Send the header X-MachineRoom-Orchestrator: ${rig.orchestrator.token}`)
     expect(instruction).toContain('Spawn subagents at most 2 levels deep. A subagent at depth 2 spawns none.')
-    expect(instruction.split(/\.\s+/)).toHaveLength(6)
+    expect(instruction.split('\n').at(-1)).toBe('Seat grant: 0 lanes and 0 subs. Free seats: no seats set.')
   })
 
   it('fills the bridge address in the instruction lines a sub adds', async () => {
@@ -1331,7 +1331,7 @@ describe('autocompact', () => {
     expect(valueAfter(calls[1].args, '--session')).toBe('ses_fake_first')
     expect(calls[2].args).toContain('--session')
     expect(valueAfter(calls[2].args, '--session')).toBe('ses_fake_first')
-    expect(calls[2].args.at(-1)).toBe(compactPrompt())
+    expect(calls[2].args.at(-1)).toBe(`${compactPrompt()}\n\nSeat grant: 0 lanes and 0 subs. Free seats: no seats set.`)
     expect(rig.answer().messages.some((message) => message.from === 'room' && message.text.startsWith(COMPACTED_MESSAGE))).toBe(true)
     const saved = stateFile(rig)
     expect(saved.sessionId).toBeNull()

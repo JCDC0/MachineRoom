@@ -5,6 +5,7 @@ import { afterEach, expect, it } from 'vitest'
 import { createBridge } from '../server/index.js'
 import { activeLanesFileFor, writeActiveLanes } from '../server/active-lanes.js'
 import { chatFileFor } from '../server/orchestrator.js'
+import { seatsFileFor, writeSeats } from '../server/seats.js'
 import { getJson, waitFor } from './helpers/bridge.js'
 import { makeTempDir, removeTempDir } from './helpers/tempRoot.js'
 
@@ -144,10 +145,11 @@ it('keeps a new Claude sub when a removed Codex sub had the same id', async () =
   ]
   writeFileSync(chatFileFor(rig.base, rig.runs, 'backend'), `${JSON.stringify(saved, null, 2)}\n`)
 
+  writeSeats(seatsFileFor(rig.base, rig.runs), { rings: [2, 1], grants: { orchestrator: { lanes: 0, subs: 1 } } })
   const token = rig.bridge.orchestrators().token('orchestrator')
   const added = await tokenPost(
     `${rig.url}/api/orchestrator/ladder`,
-    { ladder: { subs: [sub()] }, by: 'orchestrator', confirmed: true },
+    { ladder: { subs: [sub({ lanes: [] })] }, by: 'orchestrator', confirmed: true },
     token
   )
   expect(added.status).toBe(200)

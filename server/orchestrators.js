@@ -31,6 +31,8 @@ import { gitEnv, gitPath } from './programPath.js'
 import { readAllLanes } from './agents-config.js'
 import { activeEligibleLaneKeys, eligibleLanes, projectLanesFileFor, readHiddenLanes } from './active-lanes.js'
 import { createRecordsCache, runsFolder as sharedRunsFolder } from './lanes-source.js'
+import { familySeatsFor } from './family.js'
+import { isUnder, levelOf, overRingProblem, seatCheck, seatLine } from './seats.js'
 
 function pathKey(path) {
   try {
@@ -68,7 +70,6 @@ export const LANE_INBOX_LIMIT = 20
 export function laneNoRunProblem(key) {
   return `The lane ${key} has no run that can read a message now.`
 }
-export const MAIN_LADDER_PROBLEM = 'A ladder change needs the main orchestrator\'s token.'
 export const MAIN_MESSAGE_PROBLEM = 'A message to a sub needs the main orchestrator\'s token.'
 export const OWNER_COMPACT_PROBLEM = 'A request with no Origin cannot compact an orchestrator.'
 export const OWNER_AUTOCOMPACT_PROBLEM = 'A request with no Origin cannot set autocompact.'
@@ -316,6 +317,15 @@ export function createOrchestrators({
       folders: [...(sub.scope ?? []), ...(sub.lanes ?? []).filter((lane) => !isLaneHidden(lane))],
     }))
   const stateReader = typeof readTaskState === 'function' ? async () => ({ ...(await readTaskState()), scopes: scopesNow() }) : null
+  function seatContext(ladder) {
+    return familySeatsFor(sendJson, {
+      projectRoot: root,
+      runsFolder: folder,
+      lanesConfig: lanes,
+      activeLanes,
+      orchestrators: { find, getLadder: () => readSaved().ladder },
+    }, ladder)
+  }
 
   const main = createOrchestrator({
     id: ORCHESTRATOR_KEY,
@@ -335,6 +345,7 @@ export function createOrchestrators({
     recordsCache: sharedCache,
     approvalTimeoutMs,
     readTaskState: stateReader,
+    readSeatLine: () => seatLine({ ...seatContext(), id: ORCHESTRATOR_KEY }),
     refreshModelDetails,
   })
   instances.set(ORCHESTRATOR_KEY, main)
@@ -343,29 +354,19 @@ export function createOrchestrators({
     const raw = main.getLadder()
     if (!raw) return { ladder: { subs: [] }, problems: [] }
     const read = readLadder(raw, { lanes: eligibleLaneKeys() })
-    const efforts = new Map()
-    const modes = new Map()
-    for (const sub of Array.isArray(raw.subs) ? raw.subs : []) {
-      if (!sub || typeof sub !== 'object' || typeof sub.id !== 'string') continue
-      if (sub.effort === null) efforts.set(sub.id, null)
-      else if (typeof sub.effort === 'string' && sub.effort.trim()) efforts.set(sub.id, sub.effort.trim())
-      if (typeof sub.mode === 'string' && sub.mode.trim()) modes.set(sub.id, sub.mode.trim())
-    }
-    if (efforts.size === 0 && modes.size === 0) {
-      return { ...read, ladder: { ...read.ladder, subs: read.ladder.subs.map(withAliasModel) } }
-    }
+    const saved = new Map((Array.isArray(raw.subs) ? raw.subs : []).map((sub) => [sub?.id, sub]))
     return {
       ...read,
       ladder: {
         ...read.ladder,
         subs: read.ladder.subs.map((sub) => {
-          const withModel = withAliasModel(sub)
-          const effort = efforts.get(sub.id)
-          const mode = modes.get(sub.id)
+          const { effort, mode, parent, createdBy } = saved.get(sub.id)
           return {
-            ...withModel,
-            ...(efforts.has(sub.id) ? { effort } : {}),
-            ...(mode ? { mode } : {}),
+            ...withAliasModel(sub),
+            ...(effort === null || (typeof effort === 'string' && effort.trim()) ? { effort: effort?.trim() ?? null } : {}),
+            ...(typeof mode === 'string' && mode.trim() ? { mode: mode.trim() } : {}),
+            ...(typeof parent === 'string' && parent ? { parent } : {}),
+            ...(typeof createdBy === 'string' && createdBy ? { createdBy } : {}),
           }
         }),
       },
@@ -414,6 +415,7 @@ export function createOrchestrators({
       scope: [...sub.scope],
       restricted: sub.restricted,
       setBy: sub.setBy,
+      parent: sub.parent ?? ORCHESTRATOR_KEY,
       siblings,
     }
   }
@@ -431,6 +433,7 @@ export function createOrchestrators({
       [...config.scope],
       config.restricted,
       config.setBy,
+      config.parent,
     ]
     return JSON.stringify(shape(left)) === JSON.stringify(shape(right))
   }
@@ -463,7 +466,7 @@ export function createOrchestrators({
       harness: config.harness,
       model: config.model,
       bin: config.bin,
-      parent: ORCHESTRATOR_KEY,
+      parent: config.parent,
       projectRoot: root,
       runsFolder: folder,
       lanes,
@@ -478,6 +481,7 @@ export function createOrchestrators({
       recordsCache: sharedCache,
       approvalTimeoutMs,
       readTaskState: stateReader,
+      readSeatLine: () => seatLine({ ...seatContext(), id: config.id }),
       refreshModelDetails,
       onMessage: (message) => announce(message?.from, agentKey(message?.to), message?.kind, message?.text),
       extraInstructions: () => {
@@ -496,7 +500,7 @@ export function createOrchestrators({
               }))
             : [],
         }
-        return subPrompt(cleanSub, ORCHESTRATOR_KEY, cleanLadder)
+        return subPrompt(cleanSub, config.parent, cleanLadder)
       },
       home,
       siblings: config.siblings,
@@ -638,6 +642,8 @@ export function createOrchestrators({
         scope: [...sub.scope],
         restricted: sub.restricted,
         setBy: sub.setBy,
+        ...(sub.parent ? { parent: sub.parent } : {}),
+        ...(sub.createdBy ? { createdBy: sub.createdBy } : {}),
         harnesses: activeHarnesses,
       })
     }
@@ -708,6 +714,15 @@ export function createOrchestrators({
       if (instance.token && instance.token === value) return id
     }
     return null
+  }
+
+  function placeCreatedLane(id, key) {
+    if (id === ORCHESTRATOR_KEY) return
+    const { ladder } = readSaved()
+    const sub = ladder.subs.find((entry) => entry.id === id)
+    sub.lanes.push(key)
+    if (!main.setLadder(ladder)) throw new Error('The bridge could not save the lane parent.')
+    configs.get(id).lanes = sub.lanes
   }
 
   const sentMessages = new Map()
@@ -1159,7 +1174,6 @@ export function createOrchestrators({
     if (!page) {
       actor = idForToken(tokenValue)
       if (!actor) return { status: 403, body: { error: NO_TOKEN_PROBLEM } }
-      if (actor !== ORCHESTRATOR_KEY) return { status: 403, body: { error: MAIN_LADDER_PROBLEM } }
     }
     if (body.confirmed !== true) return { status: 400, body: { error: CONFIRM_LADDER_PROBLEM } }
     const by =
@@ -1171,10 +1185,14 @@ export function createOrchestrators({
     if (by !== 'owner' && by !== 'orchestrator') return { status: 400, body: { error: LADDER_BY_PROBLEM } }
     if (by === 'owner' && !page) return { status: 403, body: { error: OWNER_LADDER_PROBLEM } }
     if (by === 'orchestrator' && page) return { status: 403, body: { error: PAGE_LADDER_PROBLEM } }
+    const current = readSaved().ladder
+    const previousById = new Map(current.subs.map((sub) => [sub.id, sub]))
     let ladderInput = body.ladder
+    if (actor && Array.isArray(ladderInput?.subs) && ladderInput.subs.some((sub) => sub?.id && !previousById.has(sub.id))) {
+      const submitted = new Set(ladderInput.subs.map((sub) => sub?.id))
+      ladderInput = { subs: [...current.subs.filter((sub) => !submitted.has(sub.id)), ...ladderInput.subs] }
+    }
     if (body.keepHidden !== false && ladderInput && typeof ladderInput === 'object' && Array.isArray(ladderInput.subs)) {
-      const savedLadder = readSaved().ladder
-      const savedSubs = new Map((savedLadder?.subs ?? []).map((sub) => [sub.id, sub]))
       const claimedByNew = new Map()
       for (const sub of ladderInput.subs) {
         if (!sub || typeof sub !== 'object') continue
@@ -1188,7 +1206,7 @@ export function createOrchestrators({
       }
       const subs = ladderInput.subs.map((sub) => {
         if (!sub || typeof sub !== 'object' || typeof sub.id !== 'string') return sub
-        const saved = savedSubs.get(sub.id)
+        const saved = previousById.get(sub.id)
         if (!saved || !Array.isArray(saved.lanes)) return sub
         const lanes = Array.isArray(sub.lanes) ? [...sub.lanes] : []
         for (const lane of saved.lanes) {
@@ -1208,6 +1226,43 @@ export function createOrchestrators({
     if (next.problems.length > 0) {
       return { status: 400, body: { error: next.problems.join(' '), problems: next.problems } }
     }
+    if (actor) {
+      const context = seatContext()
+      const ownHarness = context.tree.find((node) => node.id === actor)?.harness
+      for (const sub of next.ladder.subs) {
+        const previous = previousById.get(sub.id)
+        if (!previous) {
+          if (sub.lanes.length) return { status: 409, body: { error: 'A new sub cannot take existing lanes.' } }
+          const seat = seatCheck({ ...context, actor: { id: actor }, action: 'addSub', harness: harnessFor(sub), scope: sub.scope })
+          if (!seat.ok) return { status: 409, body: { error: seat.reason } }
+          context.tree.push({ id: sub.id, kind: 'sub', parent: actor, active: true })
+          continue
+        }
+        const harness = harnessFor(sub)
+        if (harness !== harnessFor(previous) && ownHarness && harness !== ownHarness) {
+          return { status: 400, body: { error: sameHarnessProblem(ownHarness) } }
+        }
+        if (!canChange(current, sub, by)) {
+          const error = `Sub "${sub.id}" was set by the owner, so only the owner can change its scope or its restriction.`
+          return { status: 403, body: { error, problems: [error] } }
+        }
+        const normalized = withAliasModel(sub)
+        const unchanged = ['harness', 'model', 'lanes', 'scope', 'restricted', 'setBy'].every(
+          (key) => JSON.stringify(normalized[key]) === JSON.stringify(previous[key])
+        )
+        const node = context.tree.find((item) => item.id === sub.id)
+        if (!unchanged || (sub.name !== previous.name && (!node || !isUnder(context.tree, node, actor)))) {
+          return { status: 409, body: { error: 'You can only add subs or rename subs under you.' } }
+        }
+      }
+      const removed = current.subs.find((sub) => !next.ladder.subs.some((entry) => entry.id === sub.id))
+      if (removed) {
+        const error = removed.setBy === 'owner'
+          ? `Sub "${removed.id}" was set by the owner, so only the owner can remove it.`
+          : `Only the owner can remove sub "${removed.id}" from the ladder.`
+        return { status: 403, body: { error, problems: [error] } }
+      }
+    }
     if (next.ladder.subs.length > 0) {
       const known = new Set([...HARNESSES.map((h) => h.key), ...MODELS.map((m) => m.harness)])
       const allLanes = readAllLanes({
@@ -1218,15 +1273,9 @@ export function createOrchestrators({
       const endpoints = readEndpoints(folder)
       const unavailable = []
       const modelProblems = []
-      const savedSubs = readSaved().ladder.subs
-      const actorInstance = actor ? instances.get(actor) : null
-      const ownHarness = actorInstance ? actorInstance.answer().harness : ''
       for (const sub of next.ladder.subs) {
         const harness = harnessFor(sub)
-        const previous = savedSubs.find (item => item.id === sub.id)
-        if ((!previous || harnessFor(previous) !== harness) && ownHarness && harness !== ownHarness) {
-          return { status: 400, body: { error: sameHarnessProblem(ownHarness) } }
-        }
+        const previous = previousById.get(sub.id)
         if (readHarnessSettings(folder).off.includes(harness) && (!previous || harnessFor(previous) !== harness)) return { status: 400, body: { error: HARNESS_OFF_PROBLEM } }
         if (!known.has(harness) || !harnessAvailable(harness, { lanes: allLanes, endpoints, runsFolder: folder })) {
           const problem = harnessUnavailableProblem(harness)
@@ -1245,9 +1294,11 @@ export function createOrchestrators({
       }
     }
     const namedEfforts = new Map()
+    const namedParents = new Map()
     for (const sub of Array.isArray(ladderInput?.subs) ? ladderInput.subs : []) {
       if (!sub || typeof sub !== 'object' || typeof sub.id !== 'string') continue
       if (Object.hasOwn(sub, 'effort')) namedEfforts.set(sub.id, sub.effort)
+      if (typeof sub.parent === 'string') namedParents.set(sub.id, sub.parent)
     }
     const savedEfforts = new Map()
     const savedModes = new Map()
@@ -1264,22 +1315,33 @@ export function createOrchestrators({
     const savedSubs = next.ladder.subs.map((sub) => {
       const harness = harnessFor(sub)
       const levels = HARNESS_EFFORTS[harness]?.length ? HARNESS_EFFORTS[harness] : HARNESS_EFFORTS.opencode
-      let nextSub = sub
-      if (namedEfforts.has(sub.id)) {
+      const previous = previousById.get(sub.id)
+      const createdBy = previous?.createdBy ?? (!previous ? actor : null)
+      const parent = actor ? previous?.parent ?? (!previous ? actor : null) : namedParents.get(sub.id) ?? previous?.parent
+      const restricted = !previous && actor && previousById.get(actor)?.restricted ? true : sub.restricted
+      let nextSub = {
+        ...sub,
+        ...(parent ? { parent } : {}),
+        ...(createdBy ? { createdBy } : {}),
+        restricted,
+        setBy: actor ? previous?.setBy ?? 'orchestrator' : sub.setBy,
+      }
+      if (namedEfforts.has(sub.id) && (!actor || !previous)) {
         const named = namedEfforts.get(sub.id)
         if (named === null) {
-          nextSub = { ...sub, effort: null }
+          nextSub = { ...nextSub, effort: null }
         } else {
           const value = typeof named === 'string' ? named.trim() : ''
           if (!value || !levels.includes(value)) {
             if (!effortProblems.includes(EFFORT_PROBLEM)) effortProblems.push(EFFORT_PROBLEM)
           } else {
-            nextSub = { ...sub, effort: value }
+            nextSub = { ...nextSub, effort: value }
           }
         }
       } else {
         const kept = savedEfforts.get(sub.id)
-        if (kept && levels.includes(kept)) nextSub = { ...sub, effort: kept }
+        if (kept && levels.includes(kept)) nextSub = { ...nextSub, effort: kept }
+        else if (actor && previous?.effort === null) nextSub = { ...nextSub, effort: null }
       }
       const previousHarness = savedHarnesses.get(sub.id)
       const keptMode =
@@ -1293,23 +1355,29 @@ export function createOrchestrators({
       return { status: 400, body: { error: effortProblems.join(' '), problems: effortProblems } }
     }
     const ladder = { ...next.ladder, subs: savedSubs }
-    if (by === 'orchestrator') {
-      const current = readSaved().ladder
-      const problems = []
-      for (const sub of next.ladder.subs) {
-        if (!canChange(current, sub, by)) {
-          problems.push(`Sub "${sub.id}" was set by the owner, so only the owner can change its scope or its restriction.`)
-        }
+    if (!actor) {
+      const before = seatContext(current)
+      const after = seatContext(ladder)
+      const beforeById = new Map(before.tree.map((node) => [node.id, node]))
+      const afterById = new Map(after.tree.map((node) => [node.id, node]))
+      for (const sub of ladder.subs) {
+        if (sub.parent) sub.parent = afterById.get(sub.id).parent
       }
-      for (const old of current.subs) {
-        if (old.setBy === 'owner' && !next.ladder.subs.some((sub) => sub.id === old.id)) {
-          problems.push(`Sub "${old.id}" was set by the owner, so only the owner can remove it.`)
-        }
+      const moved = after.tree.filter((node) => {
+        if (!node.active || (node.kind !== 'lane' && node.kind !== 'sub')) return false
+        const old = beforeById.get(node.id)
+        return !old || levelOf(before.tree, old) !== levelOf(after.tree, node)
+      })
+      for (const node of moved) node.active = false
+      for (const node of moved) {
+        const seat = seatCheck({ ...after, actor: { owner: true }, action: 'turnOn', target: node.id })
+        const problem = overRingProblem(body, seat.overRing)
+        if (problem) return { status: 409, body: problem }
+        node.active = true
       }
-      if (problems.length > 0) return { status: 403, body: { error: problems.join(' '), problems } }
     }
     if (effortOnlyOnWorkingSub(ladder)) return { status: 409, body: { error: COMPACT_RUNNING_PROBLEM } }
-    main.setLadder(ladder)
+    if (!main.setLadder(ladder)) return { status: 500, body: { error: 'The bridge could not save the ladder.' } }
     sync()
     onNotice?.({ topic: 'agents' })
     onNotice?.({ topic: 'family' })
@@ -1761,6 +1829,7 @@ export function createOrchestrators({
     find,
     token,
     idForToken,
+    placeCreatedLane,
     onFrame,
     close,
     ladderChange,

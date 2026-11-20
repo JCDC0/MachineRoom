@@ -105,12 +105,28 @@ describe('seatCheck', () => {
   })
 
   it('passes a restricted scope down', () => {
-    const restricted = tree.map((n) => (n.id === 'subA' ? { ...n, restricted: true, scope: 'src/ui' } : n))
+    const restricted = tree.map((n) => (n.id === 'subA' ? { ...n, restricted: true, scope: ['src/ui/**', 'tests/*/unit-*.js'] } : n))
     const roomy = { rings: [3, 4, 2], grants: { subA: { lanes: 5, subs: 1 } } }
     const run = (scope) => seatCheck({ seats: roomy, tree: restricted, actor: as('subA'), action: 'addSub', harness: 'claude', depth: 3, scope })
-    expect(run('src/ui/panels').ok).toBe(true)
-    expect(run('src').ok).toBe(false)
+    expect(run(['src/ui/panels', 'tests/ui/unit-*.js']).ok).toBe(true)
+    expect(run(['src/ui/panels', 'tests/**/unit-*.js']).ok).toBe(false)
+    expect(run(['src']).ok).toBe(false)
+    expect(run(['tests/ui/unit-one.js']).ok).toBe(false)
+    expect(run(['tests/ui/unit-one.j*']).ok).toBe(false)
+    expect(run([]).ok).toBe(false)
     expect(run(undefined).ok).toBe(false)
+  })
+
+  it('lets a restricted sub create a lane without a scope', () => {
+    const restricted = tree.map((n) => (n.id === 'subA' ? { ...n, restricted: true, scope: ['src/ui/**'] } : n))
+    const roomy = { rings: [3, 5], grants: { subA: { lanes: 2, subs: 0 } } }
+    expect(check({ seats: roomy, tree: restricted, actor: as('subA'), action: 'createLane' })).toEqual({ ok: true, on: true })
+  })
+
+  it('leaves the session top out of ring zero', () => {
+    const topped = [node('session-top', 'session', null), { ...tree[0], parent: 'session-top' }, ...tree.slice(1)]
+    const roomy = { ...seats, rings: [2, 4] }
+    expect(check({ seats: roomy, tree: topped, actor: as('orchestrator'), action: 'turnOn', target: 'l2' })).toEqual({ ok: true })
   })
 
   it('limits turn off and delete to the own branch and the maker', () => {
