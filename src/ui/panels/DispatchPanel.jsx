@@ -204,7 +204,12 @@ export default function DispatchPanel({
   const runLane = selectedBrief ? runLaneFor(selectedBrief, runsState.running, agents) : null
   const canRunBrief = typeof client?.startRun === 'function' && Boolean(runLane)
   const projectLanes = projectRunLanes(agents, runsState.running, activeKeys)
-  const projectFormLine = lanesKnown && !loading ? projectFormNotice({ lanesMode, lanes: projectLanes }) : ''
+  const projectFormLine = lanesKnown && !loading ? projectFormNotice({ lanesMode, lanes: projectLanes, activeKeys }) : ''
+  const projectLaneMissing =
+    !loading &&
+    Boolean(projectLane) &&
+    projectLane !== 'auto' &&
+    !projectLanes.some((lane) => lane.key === projectLane)
   const noRecordedRuns =
     lanesKnown &&
     !loading &&
@@ -256,22 +261,43 @@ export default function DispatchPanel({
   }, [projectPlanByDefault])
 
   useEffect(() => {
+    if (!projectLaneMissing) return
+    setProjectLane('')
+    setProjectModel('')
+    dismissProjectConfirm()
+  }, [projectLaneMissing])
+
+  useEffect(() => {
     let alive = true
+    let reqId = 0
     setActiveKeys(null)
     if (typeof client?.lanes !== 'function') return undefined
-    Promise.resolve()
-      .then(() => client.lanes?.())
-      .then((answer) => {
-        if (!alive) return
-        if (answer?.chosen === true && Array.isArray(answer.lanes)) {
-          setActiveKeys(new Set(answer.lanes.filter((lane) => lane?.active === true).map((lane) => lane.key)))
-        } else {
-          setActiveKeys(null)
-        }
-      })
-      .catch(() => {})
+    function loadLanes() {
+      const current = ++reqId
+      Promise.resolve()
+        .then(() => client.lanes?.())
+        .then((answer) => {
+          if (!alive || reqId !== current) return
+          if (answer?.chosen === true && Array.isArray(answer.lanes)) {
+            setActiveKeys(
+              new Set(
+                answer.lanes
+                  .filter((lane) => lane?.active === true && lane?.hidden !== true)
+                  .map((lane) => lane.key)
+              )
+            )
+          } else {
+            setActiveKeys(new Set())
+          }
+        })
+        .catch(() => {})
+    }
+    loadLanes()
+    const unsubscribe = subscribeToNotices(client, ['agents', 'family'], loadLanes)
     return () => {
       alive = false
+      reqId += 1
+      unsubscribe()
     }
   }, [client])
 

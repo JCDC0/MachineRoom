@@ -456,10 +456,14 @@ export const NO_LANES_FORM_LINE =
   'Runs start from a room opened with --lanes: npm run serve -- up --lanes.'
 export const NO_CODE_LANE_FORM_LINE =
   'No code lane is set up. Add one in Agents, Build a team.'
+export const PICK_LANES_FORM_LINE =
+  'Pick the lanes for this project in Agents first.'
 
-export function projectFormNotice({ lanesMode = false, lanes = [] } = {}) {
+export function projectFormNotice({ lanesMode = false, lanes = [], activeKeys = null } = {}) {
   if (!lanesMode) return NO_LANES_FORM_LINE
-  if (!Array.isArray(lanes) || lanes.length === 0) return NO_CODE_LANE_FORM_LINE
+  if (!Array.isArray(lanes) || lanes.length === 0) {
+    return activeKeys instanceof Set ? PICK_LANES_FORM_LINE : NO_CODE_LANE_FORM_LINE
+  }
   return ''
 }
 

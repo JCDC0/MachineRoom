@@ -153,6 +153,43 @@ describe('seatCheck', () => {
     expect(check({ actor: as('orchestrator'), action: 'deleteAgent', target: 'l2' })).toEqual({ ok: true })
     expect(check({ actor: owner, action: 'deleteAgent', target: 'subA-l' })).toEqual({ ok: true })
   })
+
+  it('requires a lane or sub grant for an orchestrator to turn agents off', () => {
+    const empty = { rings: [3, 4], grants: {} }
+    expect(seatCheck({ seats: empty, tree, actor: as('orchestrator'), action: 'turnOff', target: 'l1' })).toEqual({
+      ok: false,
+      status: 403,
+      reason: 'You have no grant to change lanes.',
+    })
+    expect(seatCheck({ seats: empty, tree, actor: as('subA'), action: 'turnOff', target: 'subA-l' })).toEqual({
+      ok: false,
+      status: 403,
+      reason: 'You have no grant to change lanes.',
+    })
+    expect(seatCheck({ seats: empty, tree, actor: as('orchestrator'), action: 'turnOff', target: 'subA' })).toEqual({
+      ok: false,
+      status: 403,
+      reason: 'You have no grant to change subs.',
+    })
+    expect(seatCheck({ seats: empty, tree, actor: owner, action: 'turnOff', target: 'l1' })).toEqual({ ok: true })
+    expect(seatCheck({ seats: empty, tree, actor: owner, action: 'turnOff', target: 'subA' })).toEqual({ ok: true })
+
+    const laneOnly = { rings: [3, 4], grants: { orchestrator: { lanes: 1, subs: 0 } } }
+    expect(seatCheck({ seats: laneOnly, tree, actor: as('orchestrator'), action: 'turnOff', target: 'l1' })).toEqual({ ok: true })
+    expect(seatCheck({ seats: laneOnly, tree, actor: as('orchestrator'), action: 'turnOff', target: 'subA' })).toEqual({
+      ok: false,
+      status: 403,
+      reason: 'You have no grant to change subs.',
+    })
+
+    const subOnly = { rings: [3, 4], grants: { orchestrator: { lanes: 0, subs: 1 } } }
+    expect(seatCheck({ seats: subOnly, tree, actor: as('orchestrator'), action: 'turnOff', target: 'subA' })).toEqual({ ok: true })
+    expect(seatCheck({ seats: subOnly, tree, actor: as('orchestrator'), action: 'turnOff', target: 'l1' })).toEqual({
+      ok: false,
+      status: 403,
+      reason: 'You have no grant to change lanes.',
+    })
+  })
 })
 
 describe('seat slash command helpers', () => {

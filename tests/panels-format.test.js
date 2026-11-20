@@ -147,6 +147,19 @@ describe('tasks count and folded done list', () => {
     expect(taskCountSummary([{ status: 'in_progress' }, { status: 'done' }])).toBe('1 running · 1 done')
     expect(taskCountSummary([{ status: 'done' }])).toBe('1 done')
     expect(taskCountSummary([{ status: 'blocked' }])).toBe('1 failed')
+    expect(taskCountSummary([{ status: 'todo' }, { status: 'in_review' }])).toBe('2 open')
+    expect(
+      taskCountSummary([{ status: 'in_progress' }, { status: 'todo' }, { status: 'todo' }])
+    ).toBe('1 running · 2 open')
+    expect(
+      taskCountSummary([
+        { status: 'in_progress' },
+        { status: 'blocked' },
+        { status: 'backlog' },
+        { status: 'custom_status' },
+        { status: 'done' },
+      ])
+    ).toBe('1 running · 1 failed · 2 open · 1 done')
   })
 
   it('starts finished tasks folded behind an N done button and opens them on click', async () => {
