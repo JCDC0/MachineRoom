@@ -355,6 +355,7 @@ describe('FamilyTree rows', () => {
       const lane = rowByLabel(container, 'OpenCode')
       const detail = lane.querySelector('.ui-row-detail')
       expect(detail.textContent).toBe('working · opencode · DeepSeek V4.1 Flash')
+      expect(detail.getAttribute('title')).toBe(detail.textContent)
       expect(lane.querySelector('.mr-family-state').textContent).toBe('working')
       const trailing = lane.querySelector('.ui-row-trailing')
       expect(trailing.querySelector('.mr-family-chat').getAttribute('title')).toBe('Open conversation with OpenCode')

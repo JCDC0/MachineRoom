@@ -198,13 +198,14 @@ export function Menu({ label, items, open, onOpenChange, disabled }) {
   )
 }
 
-export function Row({ label, detail, leading, trailing, selected, className = '', ...props }) {
+export function Row({ label, detail, detailTitle, leading, trailing, selected, className = '', ...props }) {
+  const title = detailTitle ?? (typeof detail === 'string' ? detail : undefined)
   return (
     <div {...props} className={`ui-row${selected ? ' is-selected' : ''} ${className}`.trimEnd()}>
       {leading}
       <div className="ui-row-main">
         <div className="ui-row-label">{label}</div>
-        {detail != null && <div className="ui-row-detail" title={typeof detail === 'string' ? detail : undefined}>{detail}</div>}
+        {detail != null && <div className="ui-row-detail" title={title}>{detail}</div>}
       </div>
       {trailing && <div className="ui-row-trailing">{trailing}</div>}
     </div>

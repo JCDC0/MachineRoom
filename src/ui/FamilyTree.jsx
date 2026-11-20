@@ -2561,6 +2561,7 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
     const status = state === 'paused' ? 'waiting' : state
     const dot = state === 'waiting' ? 'idle' : state
     const detail = familyModel(node, { harnesses, models })
+    const detailTitle = status ? (detail ? `${status} · ${detail}` : status) : detail
     const mode = node.mode || defaultMode(node.harness)
     const effortMode = `Effort ${node.effort || 'default'}${mode ? ` · Mode ${mode}` : ''}`
     const items = []
@@ -2643,6 +2644,7 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
                 {detail ? ` · ${detail}` : ''}
               </>
             ) : detail}
+            detailTitle={detailTitle}
             trailing={session && items.length === 0 ? <span className="mr-family-actions" aria-hidden="true" /> : session ? (
               <span className="mr-family-actions">
                 <Menu label={`Actions for ${node.label}`} items={items} disabled={busy} />
