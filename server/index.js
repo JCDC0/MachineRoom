@@ -1843,13 +1843,15 @@ export function createBridge(options = {}) {
     if (req.method === 'GET' && url.pathname === '/api/agents') {
       rememberLaneParsers()
       rememberSessionsParsers()
+      const running = new Set((lanesSource?.openRuns?.() ?? []).map((run) => run.lane))
       const laneAgents = roomLaneAgents(lanesSource ? [...(lanesSource.allAgents ?? lanesSource.agents)] : [], {
         isHidden: (key) => activeLanes.isLaneHidden(key),
-        running: new Set((lanesSource?.openRuns?.() ?? []).map((run) => run.lane)),
+        running,
         recent: lanesSource?.recentLanes?.(ROOM_LANE_LINGER_MS) ?? new Set(),
         hideOrchestrator:
           readTop(topFileFor(projectRoot, bridgeRunsFolder)) !== 'orchestrator' &&
-          orchestrators?.find?.('orchestrator')?.answer?.()?.state !== 'working',
+          orchestrators?.find?.('orchestrator')?.answer?.()?.state !== 'working' &&
+          !running.has('orchestrator'),
       })
       const sessionAgents = sessionsSource ? [...sessionsSource.agents] : []
       sendJson(req, res, 200, [...laneAgents, ...sessionAgents])
