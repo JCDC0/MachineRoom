@@ -307,7 +307,7 @@ describe('FamilyTree rows', () => {
     })
   })
 
-  it('gives a manual lane row Delete without Make sub or Turn on/off in its menu', async () => {
+  it('gives a manual lane row no row menu and no Remove in its editor', async () => {
     const { client } = makeClient()
     const nodes = [
       { ...NODES[0], children: [...NODES[0].children, 'agy3'] },
@@ -331,14 +331,11 @@ describe('FamilyTree rows', () => {
       await mount(root, client)
       const manualRow = rowByLabel(container, 'agy3')
       expect(manualRow).not.toBeNull()
-      const trigger = manualRow.querySelector('[aria-haspopup="menu"]')
-      await click(root, trigger)
-      const menu = trigger.ownerDocument.body.querySelector('[role="menu"]')
-      const labels = [...menu.querySelectorAll('button')].map((button) => button.textContent.trim())
-      expect(labels).toEqual(['Delete…'])
-      expect(labels).not.toContain('Make sub from this lane…')
-      expect(labels).not.toContain('Turn on')
-      expect(labels).not.toContain('Turn off')
+      expect(manualRow.querySelector('[aria-haspopup="menu"]')).toBeNull()
+      expect(manualRow.querySelector('.mr-family-chat')).not.toBeNull()
+      await click(root, manualRow.querySelector('.mr-family-open'))
+      const editor = container.querySelector('.mr-family-editor')
+      expect(buttonWithText(editor, 'Remove')).toBeNull()
     })
   })
 

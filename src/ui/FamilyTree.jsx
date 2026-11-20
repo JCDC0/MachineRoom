@@ -888,6 +888,7 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
     }
     return ids
   }, [family])
+  const isManualLane = (node) => node?.kind === 'lane' && (node.manual === true || manualIds.has(node.id))
   const lastRunByLane = useMemo(() => {
     const latest = new Map()
     for (const list of [lastRuns?.last, lastRuns?.recent]) {
@@ -929,7 +930,7 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
   }, [tree, sessionRows])
   const countLine = family ? agentCountLine(tree.nodes) : ''
   const mainAgent = tree.nodes.find((node) => node.kind === 'orchestrator')
-  const hasLanes = tree.nodes.some((node) => node.kind === 'lane')
+  const hasLanes = tree.nodes.some((node) => node.kind === 'lane' && !isManualLane(node))
   const editingNode = editing ? tree.nodes.find((node) => node.id === editing) ?? null : null
 
   const editorHarness = useMemo(() => {
@@ -965,9 +966,9 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
   const backupChoices = useMemo(() => {
     if (!editingNode || editingNode.kind !== 'lane') return []
     return tree.nodes
-      .filter((row) => row.kind === 'lane' && row.id !== editingNode.id && row.active === true)
+      .filter((row) => row.kind === 'lane' && !isManualLane(row) && row.id !== editingNode.id && row.active === true)
       .map((row) => ({ id: row.id, label: row.label || row.id }))
-  }, [editingNode, tree])
+  }, [editingNode, tree, manualIds])
 
   const childHarness = useMemo(() => {
     if (!childFor) return null
@@ -1038,12 +1039,14 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
   }, [subHarness?.key, subModels.choices, subDraft])
 
   useEffect(() => {
-    const lanesInTree = new Set(tree.nodes.filter((node) => node.kind === 'lane').map((node) => node.id))
+    const lanesInTree = new Set(
+      tree.nodes.filter((node) => node.kind === 'lane' && !isManualLane(node)).map((node) => node.id)
+    )
     setSelectedLanes((current) => {
       const next = current.filter((id) => lanesInTree.has(id))
       return next.length === current.length ? current : next
     })
-  }, [tree])
+  }, [tree, manualIds])
 
   useEffect(() => {
     if (!groupOpen || selectedLanes.length > 0) return
@@ -1147,7 +1150,7 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
       fallback: typeof backups?.[node.id] === 'string' ? backups[node.id] : '',
       lanes:
         node.kind === 'sub'
-          ? tree.nodes.filter((row) => row.kind === 'lane' && row.parent === node.id).map((row) => row.id)
+          ? tree.nodes.filter((row) => row.kind === 'lane' && !isManualLane(row) && row.parent === node.id).map((row) => row.id)
           : [],
       scope: node.kind === 'sub' ? scopeText(currentSub?.scope) : '**',
       restricted: node.kind === 'sub' ? currentSub?.restricted === true : false,
@@ -1359,7 +1362,7 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
   }
 
   function askHide(node) {
-    if (node.kind !== 'lane') return
+    if (node.kind !== 'lane' || isManualLane(node)) return
     if (typeof client?.hideLane !== 'function') {
       setActionError('This bridge cannot hide an agent.')
       return
@@ -1442,7 +1445,7 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
   }
 
   function toggleSelected(node, on) {
-    if (!node || node.kind !== 'lane') return
+    if (!node || node.kind !== 'lane' || isManualLane(node)) return
     setSubProblem('')
     setSelectedLanes((current) => {
       if (on) return current.includes(node.id) ? current : [...current, node.id]
@@ -1900,7 +1903,7 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
     if (!nodeDraft) return null
     const lane = node.kind === 'lane'
     const sub = node.kind === 'sub'
-    const laneNodes = tree.nodes.filter((row) => row.kind === 'lane')
+    const laneNodes = tree.nodes.filter((row) => row.kind === 'lane' && !isManualLane(row))
     const options = lane ? [] : nodeHarnessOptions(node)
     const harness = lane
       ? editorHarness
@@ -1950,16 +1953,18 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
                 <p className="mr-family-note mono">{`Effort ${nodeDraft.effort || 'default'}`}</p>
                 <p className="mr-family-note mono">{`Backup lane ${fallbackLabel}`}</p>
                 <p className="mr-side-note is-dim">Edit this agent in lanes.json.</p>
-                <div className="mr-side-form-actions">
-                  <button
-                    type="button"
-                    className="mr-side-action"
-                    disabled={busy || typeof client?.hideLane !== 'function'}
-                    onClick={() => askHide(node)}
-                  >
-                    Remove
-                  </button>
-                </div>
+                {!isManualLane(node) ? (
+                  <div className="mr-side-form-actions">
+                    <button
+                      type="button"
+                      className="mr-side-action"
+                      disabled={busy || typeof client?.hideLane !== 'function'}
+                      onClick={() => askHide(node)}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ) : null}
               </>
             ) : (
               <>
@@ -2545,8 +2550,8 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
     const lane = node.kind === 'lane'
     const sub = node.kind === 'sub'
     const session = node.kind === 'session'
-    const manual = lane && (node.manual === true || manualIds.has(node.id))
-    const selectable = lane && selecting
+    const manual = isManualLane(node)
+    const selectable = lane && !manual && selecting
     const selected = selectable && selectedLanes.includes(node.id)
     const orchestratorState = orchestratorStates.get(node.id) ?? ''
     const task = lane ? rowText(node, '', taskFor(taskMap, node.id)) : ''
@@ -2574,7 +2579,7 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
         onSelect: () => toggleLane(node, !node.active),
       })
     }
-    if (lane || sub) {
+    if ((lane && !manual) || sub) {
       items.push({
         label: 'Delete…',
         danger: true,
@@ -2649,7 +2654,7 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
                     else openChat(node.id)
                   }}
                 />
-                <Menu label={`Actions for ${node.label}`} items={items} disabled={busy} />
+                {items.length > 0 ? <Menu label={`Actions for ${node.label}`} items={items} disabled={busy} /> : null}
               </span>
             )}
           />
