@@ -274,7 +274,13 @@ export default function Transport({ snapshot, speeds, markers = [], orchestrator
             includeIdle: false,
           })
         : { pills: [], more: 0 }
-    const working = chips.filter((chip) => chip.tone === 'working').length + lanes.pills.filter((lane) => lane.state === 'working').length
+    const sessions = (Array.isArray(snapshot.agents) ? snapshot.agents : []).filter(
+      (agent) => String(agent?.key ?? '').endsWith('-session') && agent.status === 'working'
+    )
+    const working =
+      sessions.length +
+      chips.filter((chip) => chip.tone === 'working').length +
+      lanes.pills.filter((lane) => lane.state === 'working').length
     const waiting = chips.filter((chip) => chip.waiting).length + (hasWaitingApproval(main) ? 1 : 0)
     const spend = spendText(costs)
     return (
