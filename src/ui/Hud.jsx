@@ -826,13 +826,14 @@ export default function Hud({
               <button
                 type="button"
                 className={badges.control > 0 ? 'hud-action is-control has-badge' : 'hud-action is-control'}
+                title="Control: dispatch work to lanes, the task queue, costs, the team and branch reviews"
                 aria-pressed={controlOpen}
                 aria-expanded={controlOpen}
                 aria-controls="hud-control-drawer"
                 aria-label={
                   badges.control > 0
                     ? `Control, ${badges.control} lane ${badges.control === 1 ? 'branch' : 'branches'} with commits ahead`
-                    : undefined
+                    : 'Control: dispatch, tasks, costs, team and reviews'
                 }
                 onClick={() => {
                   setControlOpen((open) => {
