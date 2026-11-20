@@ -571,6 +571,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
   const cssRef = useRef(null)
   const roomRef = useRef(null)
   const liveRosterRef = useRef(null)
+  const learnRosterRef = useRef(null)
   const [liveRoster, setLiveRoster] = useState(null)
   const live = data.live ?? null
   const costMode = costModeFor(mode, Boolean(live?.simulated))
@@ -1083,6 +1084,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
         if (!active || !isLatest()) return
         if (!diffRoster(liveRosterRef.current, next).changed) return
         liveRosterRef.current = next
+        learnRosterRef.current?.(next)
         roomRef.current?.setRoster(next)
         setLiveRoster(next)
       } catch {}
@@ -1251,6 +1253,13 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
     if (!live) return undefined
     const pipeline = createPipeline({ agents, tree: data.tree })
     const entryFor = createLogger(agents)
+    const learnRoster = (next) => {
+      pipeline.addAgents?.(next)
+      entryFor.addAgents?.(next)
+      player.addAgents?.(next)
+    }
+    learnRoster(liveRosterRef.current ?? [])
+    learnRosterRef.current = learnRoster
     const noteNewFiles = (paths) => {
       for (const path of paths) {
         if (!player.state.files.has(path)) knownSoundRef.current?.add(path)
@@ -1299,6 +1308,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
     return () => {
       stopWarm()
       link.close()
+      if (learnRosterRef.current === learnRoster) learnRosterRef.current = null
     }
   }, [agents, data, live, notices, player])
 
