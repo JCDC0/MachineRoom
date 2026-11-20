@@ -2339,7 +2339,10 @@ describe('Hud and Waiting with an orchestrator', () => {
     expect(html).toContain('aria-controls="hud-orchestrator-chat"')
     expect(html).toContain('>Chat</span>')
     expect(html).toContain('aria-pressed="false"')
-    expect(html).toContain('Talk to the orchestrator')
+    expect(html).toContain('Open the chat')
+    expect(html).toContain('Toggle Control: dispatch, tasks, costs, team and reviews')
+    expect(html).toContain('Toggle the event log')
+    expect(html).toContain('Toggle this help')
     expect(html).not.toContain('Open assistant terminal')
   })
 
@@ -2396,7 +2399,7 @@ describe('Hud and Waiting with an orchestrator', () => {
     )
     expect(html).toContain('class="mr-assistant"')
     expect(html).not.toContain('aria-controls="hud-orchestrator-chat"')
-    expect(html).toContain('Open assistant terminal')
+    expect(html).toContain('Open the chat')
   })
 
   it('hides the assistant terminal while the orchestrator chat is on', () => {

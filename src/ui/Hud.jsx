@@ -54,10 +54,10 @@ export const SHORTCUTS = [
   ['T', 'Show or hide the log of the selected agent, or of every agent'],
   ['Left and Right arrows', 'Seek backward or forward 5 seconds'],
   ['[ and ]', 'Decrease or increase replay speed'],
-  ['/', 'Open assistant terminal'],
-  ['L', 'Toggle event log'],
-  ['C', 'Toggle control drawer'],
-  ['?', 'Toggle keyboard help'],
+  ['/', 'Open the chat'],
+  ['L', 'Toggle the event log'],
+  ['C', 'Toggle Control: dispatch, tasks, costs, team and reviews'],
+  ['?', 'Toggle this help'],
 ]
 
 function namedLabel(value, key) {
@@ -224,10 +224,7 @@ export default function Hud({
   const logFollow = useLogFollow(logOpen, visibleLog.length)
   const lowerFollow = useLogFollow(wide && mode === 'replay', visibleLog.length)
   useDialogFocus(helpOpen, { containerRef: helpRef, openerSelector: 'hud-help-dialog' })
-  const visibleShortcuts = (client ? SHORTCUTS : SHORTCUTS.filter(([k]) => k !== 'C')).map(
-    ([keys, description]) =>
-      chatAvailable && keys === '/' ? [keys, 'Talk to the orchestrator'] : [keys, description]
-  )
+  const visibleShortcuts = client ? SHORTCUTS : SHORTCUTS.filter(([k]) => k !== 'C')
 
   const agents = (snapshot?.agents ?? []).map(({ key, name }) => ({ key, name }))
   const list = agentList(snapshot?.agents ?? [], idleOpen)
