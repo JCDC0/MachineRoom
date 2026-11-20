@@ -271,7 +271,7 @@ export default function Transport({ snapshot, speeds, markers = [], orchestrator
             labels: laneFeed.labels,
             now: laneFeed.now ?? Date.now(),
             limit: Number.MAX_SAFE_INTEGER,
-            includeIdle: true,
+            includeIdle: false,
           })
         : { pills: [], more: 0 }
     const working = chips.filter((chip) => chip.tone === 'working').length + lanes.pills.filter((lane) => lane.state === 'working').length
