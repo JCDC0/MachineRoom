@@ -241,7 +241,24 @@ export default function Transport({ snapshot, speeds, markers = [], orchestrator
   )
 
   if (snapshot.live) {
-    if (!main) {
+    const lanes =
+      laneFeed && typeof laneFeed === 'object'
+        ? lanePills({
+            agents: laneFeed.agents,
+            liveRuns: laneFeed.liveRuns,
+            issues: laneFeed.issues,
+            records: laneFeed.records,
+            labels: laneFeed.labels,
+            now: laneFeed.now ?? Date.now(),
+            limit: Number.MAX_SAFE_INTEGER,
+            includeIdle: false,
+            lingerMs: ROOM_LINGER_MS,
+          })
+        : { pills: [], more: 0 }
+    const sessions = (Array.isArray(snapshot.agents) ? snapshot.agents : []).filter(
+      (agent) => String(agent?.key ?? '').endsWith('-session') && agent.status === 'working'
+    )
+    if (!main && sessions.length === 0 && lanes.pills.length === 0) {
       return (
         <div className="transport is-live">
           <div className="transport-live-head">
@@ -262,23 +279,6 @@ export default function Transport({ snapshot, speeds, markers = [], orchestrator
     }
     const { chips } = orchestratorChips(orchestrators, Number.MAX_SAFE_INTEGER)
     const visibleChips = chips.filter((chip) => chip.tone === 'working' || chip.waiting)
-    const lanes =
-      laneFeed && typeof laneFeed === 'object'
-        ? lanePills({
-            agents: laneFeed.agents,
-            liveRuns: laneFeed.liveRuns,
-            issues: laneFeed.issues,
-            records: laneFeed.records,
-            labels: laneFeed.labels,
-            now: laneFeed.now ?? Date.now(),
-            limit: Number.MAX_SAFE_INTEGER,
-            includeIdle: false,
-            lingerMs: ROOM_LINGER_MS,
-          })
-        : { pills: [], more: 0 }
-    const sessions = (Array.isArray(snapshot.agents) ? snapshot.agents : []).filter(
-      (agent) => String(agent?.key ?? '').endsWith('-session') && agent.status === 'working'
-    )
     const mainWorking = main?.state === 'working'
     const mainWaiting = hasWaitingApproval(main)
     const working =
@@ -345,7 +345,7 @@ export default function Transport({ snapshot, speeds, markers = [], orchestrator
               {spend}
             </button>
           ) : null}
-          <ContextRing orchestrator={main} onClick={openConversation} />
+          {main ? <ContextRing orchestrator={main} onClick={openConversation} /> : null}
           <span className="mono">{clock(position)} since opening</span>
         </div>
       </div>
