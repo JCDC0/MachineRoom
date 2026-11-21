@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import {
   CONFIRM_KEY_PROBLEM,
   CONFIRM_LABEL_PROBLEM,
+  CONFIRM_TOP_PROBLEM,
   KEY_NAME_PROBLEM,
   KEY_VALUE_PROBLEM,
   LABEL_LENGTH_PROBLEM,
@@ -13,6 +14,8 @@ import {
   ORIGIN_DELETE_KEY_PROBLEM,
   ORIGIN_KEY_PROBLEM,
   ORIGIN_LABEL_PROBLEM,
+  ORIGIN_TOP_PROBLEM,
+  SEATS_SHAPE_PROBLEM,
   buildFamilyNodes,
   createFamilyApi,
   familySeatsFor,
@@ -30,7 +33,7 @@ import { projectLanesFileFor } from '../server/active-lanes.js'
 import { createBridge } from '../server/index.js'
 import { saveEndpoints } from '../server/endpoints.js'
 import { NO_TOKEN_PROBLEM } from '../server/orchestrators.js'
-import { seatCheck } from '../server/seats.js'
+import { readSeats, seatCheck, seatsFileFor } from '../server/seats.js'
 import { createClient } from '../src/control/client.js'
 import { createMockClient } from '../src/control/mock.js'
 import { childFormProblem } from '../src/ui/family.js'
@@ -308,6 +311,68 @@ describe('GET /api/family and POST /api/family/label', () => {
     const family = await request(`${url}/api/family`, { origin: '' })
     const opencode = family.body.nodes.find((n) => n.id === 'opencode')
     expect(opencode.label).toBe('Backend Agent')
+  })
+})
+
+describe('ring seats in GET /api/family and POST /api/family/seats', () => {
+  it('answers one seats row per ring up to the subagent depth', async () => {
+    const { url } = await startBridge()
+    const res = await request(`${url}/api/family`, { origin: '' })
+    expect(res.status).toBe(200)
+    expect(res.body.seats.map((row) => row.ring)).toEqual([0, 1])
+    expect(res.body.seats.every((row) => row.limit === null)).toBe(true)
+    expect(res.body.seats.every((row) => Number.isInteger(row.taken) && row.taken >= 0)).toBe(true)
+  })
+
+  it('saves the ring seats from a confirmed page request and answers the new rows', async () => {
+    const { url, projectRoot, runsFolder } = await startBridge()
+    const ok = await request(`${url}/api/family/seats`, {
+      method: 'POST',
+      body: { rings: [2, null], confirmed: true },
+    })
+    expect(ok.status).toBe(200)
+    expect(ok.body.ok).toBe(true)
+    expect(ok.body.seats.map((row) => [row.ring, row.limit])).toEqual([[0, 2], [1, null]])
+    expect(readSeats(seatsFileFor(projectRoot, runsFolder)).rings).toEqual([2, null])
+
+    const rest = await request(`${url}/api/family`, { origin: '' })
+    expect(rest.body.seats.map((row) => row.limit)).toEqual([2, null])
+  })
+
+  it('refuses a lane ticket and a page request without a confirm', async () => {
+    const { url } = await startBridge()
+    const ticket = await request(`${url}/api/family/seats`, {
+      method: 'POST',
+      origin: '',
+      token: 'a-lane-ticket',
+      body: { rings: [1], confirmed: true },
+    })
+    expect(ticket.status).toBe(403)
+    expect(ticket.body.error).toBe(ORIGIN_TOP_PROBLEM)
+
+    const unconfirmed = await request(`${url}/api/family/seats`, {
+      method: 'POST',
+      body: { rings: [1] },
+    })
+    expect(unconfirmed.status).toBe(400)
+    expect(unconfirmed.body.error).toBe(CONFIRM_TOP_PROBLEM)
+  })
+
+  it('refuses rings that are not whole numbers from 0, or longer than the depth', async () => {
+    const { url, projectRoot, runsFolder } = await startBridge()
+    const bad = await request(`${url}/api/family/seats`, {
+      method: 'POST',
+      body: { rings: [2, -1], confirmed: true },
+    })
+    expect(bad.status).toBe(400)
+    expect(bad.body.error).toBe(SEATS_SHAPE_PROBLEM)
+    const long = await request(`${url}/api/family/seats`, {
+      method: 'POST',
+      body: { rings: [1, 1, 1], confirmed: true },
+    })
+    expect(long.status).toBe(400)
+    expect(long.body.error).toBe(SEATS_SHAPE_PROBLEM)
+    expect(readSeats(seatsFileFor(projectRoot, runsFolder)).rings).toEqual([])
   })
 })
 
