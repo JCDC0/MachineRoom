@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The bottom agents button agrees with the room: a working built-in orchestrator and queued lanes count, a finished or failed lane stays listed only for the five minutes the room keeps it, idle subs leave the list, and a room with no orchestrator still shows the button (P665, R65-5).
 - Orbiting top agents stand on the reader ring between the lanes instead of on a parked lane, and the status line under an agent says queued or thinking instead of an old command (P667, R64-2, R64-4).
 - An orchestrator needs a grant to turn a lane or sub off; Start offers only the active, shown lanes of the project, reads them again on a change and says to pick lanes in Agents when there are none; the Tasks count adds an open part so it sums to the list (P663, R64-1, R64-3, R64-8).
 - The owner's copy uses today's names (Chat, Work, Start, Cost, Merge), an agent message with no recipient plays no sound, and a new run clears the last command from the status line (P664, R64-9, R64-11, R64-4).

@@ -6,7 +6,7 @@ import {
   contextTone,
 } from './contextRing.js'
 import { OPEN_CHAT_EVENT, hasWaitingApproval, orchestratorChips } from './transportOrchestrators.js'
-import { agentListPosition, ageText, inspectLane, lanePillTitle, lanePills } from './transportLanes.js'
+import { ROOM_LINGER_MS, agentListPosition, ageText, inspectLane, lanePillTitle, lanePills } from './transportLanes.js'
 import { showCostBoard, spendText } from './transportSpend.js'
 
 export const LiveBadgeContext = createContext('live')
@@ -241,7 +241,24 @@ export default function Transport({ snapshot, speeds, markers = [], orchestrator
   )
 
   if (snapshot.live) {
-    if (!main) {
+    const lanes =
+      laneFeed && typeof laneFeed === 'object'
+        ? lanePills({
+            agents: laneFeed.agents,
+            liveRuns: laneFeed.liveRuns,
+            issues: laneFeed.issues,
+            records: laneFeed.records,
+            labels: laneFeed.labels,
+            now: laneFeed.now ?? Date.now(),
+            limit: Number.MAX_SAFE_INTEGER,
+            includeIdle: false,
+            lingerMs: ROOM_LINGER_MS,
+          })
+        : { pills: [], more: 0 }
+    const sessions = (Array.isArray(snapshot.agents) ? snapshot.agents : []).filter(
+      (agent) => String(agent?.key ?? '').endsWith('-session') && agent.status === 'working'
+    )
+    if (!main && sessions.length === 0 && lanes.pills.length === 0) {
       return (
         <div className="transport is-live">
           <div className="transport-live-head">
@@ -261,27 +278,15 @@ export default function Transport({ snapshot, speeds, markers = [], orchestrator
       )
     }
     const { chips } = orchestratorChips(orchestrators, Number.MAX_SAFE_INTEGER)
-    const lanes =
-      laneFeed && typeof laneFeed === 'object'
-        ? lanePills({
-            agents: laneFeed.agents,
-            liveRuns: laneFeed.liveRuns,
-            issues: laneFeed.issues,
-            records: laneFeed.records,
-            labels: laneFeed.labels,
-            now: laneFeed.now ?? Date.now(),
-            limit: Number.MAX_SAFE_INTEGER,
-            includeIdle: false,
-          })
-        : { pills: [], more: 0 }
-    const sessions = (Array.isArray(snapshot.agents) ? snapshot.agents : []).filter(
-      (agent) => String(agent?.key ?? '').endsWith('-session') && agent.status === 'working'
-    )
+    const visibleChips = chips.filter((chip) => chip.tone === 'working' || chip.waiting)
+    const mainWorking = main?.state === 'working'
+    const mainWaiting = hasWaitingApproval(main)
     const working =
       sessions.length +
+      (mainWorking ? 1 : 0) +
       chips.filter((chip) => chip.tone === 'working').length +
-      lanes.pills.filter((lane) => lane.state === 'working').length
-    const waiting = chips.filter((chip) => chip.waiting).length + (hasWaitingApproval(main) ? 1 : 0)
+      lanes.pills.filter((lane) => lane.tone === 'working').length
+    const waiting = chips.filter((chip) => chip.waiting).length + (mainWaiting ? 1 : 0)
     const spend = spendText(costs)
     return (
       <div className="transport is-live has-orchestrator">
@@ -309,7 +314,12 @@ export default function Transport({ snapshot, speeds, markers = [], orchestrator
                   <span>{agent.name || agent.key}</span><span className="transport-agent-state is-working">working</span><span>{String(agent.label ?? '').slice(0, 40)}</span><span></span>
                 </div>
               ))}
-              {chips.map((chip) => (
+              {mainWorking || mainWaiting ? (
+                <button key="orchestrator" type="button" className="transport-agent mono" onClick={() => { setListOpen(false); openOrchestratorChat('orchestrator') }}>
+                  <span>Orchestrator</span><span className={`transport-agent-state is-${mainWaiting ? 'waiting' : 'working'}`}>{mainWaiting ? 'waiting for you' : 'working'}</span><span></span><span></span>
+                </button>
+              ) : null}
+              {visibleChips.map((chip) => (
                 <button key={chip.id} type="button" className="transport-agent mono" onClick={() => { setListOpen(false); openOrchestratorChat(chip.id) }}>
                   <span>{chip.name}</span><span className={`transport-agent-state is-${chip.waiting ? 'waiting' : chip.tone}`}>{chip.waiting ? 'waiting for you' : chip.tone}</span><span></span><span></span>
                 </button>
@@ -335,7 +345,7 @@ export default function Transport({ snapshot, speeds, markers = [], orchestrator
               {spend}
             </button>
           ) : null}
-          <ContextRing orchestrator={main} onClick={openConversation} />
+          {main ? <ContextRing orchestrator={main} onClick={openConversation} /> : null}
           <span className="mono">{clock(position)} since opening</span>
         </div>
       </div>
