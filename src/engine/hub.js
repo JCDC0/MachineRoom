@@ -33,9 +33,9 @@ export const SECTOR_LABEL_INSET = 0.1
 export const SECTOR_LABEL_OPACITY = 0.45
 export const SECTOR_LABEL_COLOR = `rgba(255,255,255,${SECTOR_LABEL_OPACITY})`
 export const SECTOR_GLOW_MS = 1000
-export const SEAT_LABEL_SCALE = 0.9
+export const SEAT_LABEL_SCALE = 1.5
 export const SEAT_LABEL_COLOR = 'rgba(255,255,255,1)'
-export const SEAT_LABEL_OPACITY = 0.6
+export const SEAT_LABEL_OPACITY = 0.8
 export const SEAT_LABEL_OUT = 40
 
 export function writeColor(material, hex) {
@@ -176,6 +176,22 @@ export function seatLabelAngle(angles) {
     }
   }
   return (bestStart + bestWidth / 2) % turn
+}
+
+export function seatRingPoint(ring, layout = null) {
+  if (!Number.isInteger(ring) || ring < 0) return null
+  const entry = layout?.rings?.[ring]
+  if (ring > 0 && !entry) return null
+  const radius = entry ? entry.radius : HUB_RADIUS
+  const y = entry ? entry.y - HUB_Y : 0
+  const angles = Array.isArray(layout?.arcs)
+    ? layout.arcs
+      .filter((arc) => arc && arc.level === ring && arc.end - arc.start > SECTOR_EPSILON)
+      .map((arc) => sectorLabelAngle(arc))
+    : []
+  const angle = seatLabelAngle(angles)
+  const distance = radius + SEAT_LABEL_OUT
+  return { x: Math.cos(angle) * distance, y, z: Math.sin(angle) * distance }
 }
 
 export function sectorArcTone(main) {
@@ -657,14 +673,6 @@ export function createHub(scene, agentsOrCount, ladder = null) {
   group.add(main, inner, levelRings, dashes, tickGroup, centre, centreRing, sectorGroup, seatGroup, ...beatRings.map((slot) => slot.line))
   scene.add(group)
 
-  function seatRingPoint(ring) {
-    if (ring === 0) return { x: HUB_RADIUS + SEAT_LABEL_OUT, y: 0 }
-    if (!layout) return null
-    const entry = layout.rings[ring]
-    if (!entry) return null
-    return { x: entry.radius + SEAT_LABEL_OUT, y: entry.y - HUB_Y }
-  }
-
   function seatLimit(limit) {
     if (typeof limit !== 'number' || !Number.isInteger(limit) || limit < 0) return null
     return limit
@@ -682,7 +690,7 @@ export function createHub(scene, agentsOrCount, ladder = null) {
       const ring = Number(row?.ring)
       const limit = seatLimit(row?.limit)
       if (!Number.isInteger(ring) || ring < 0 || limit === null) continue
-      const point = seatRingPoint(ring)
+      const point = seatRingPoint(ring, layout)
       if (!point) continue
       keep.add(ring)
       let sprite = seatLabels.get(ring)
@@ -695,7 +703,7 @@ export function createHub(scene, agentsOrCount, ladder = null) {
       }
       const taken = seatTaken(row?.taken)
       sprite.userData.setText(`${taken} / ${limit}`)
-      sprite.position.set(point.x, point.y, 0)
+      sprite.position.set(point.x, point.y, point.z)
       const full = taken >= limit
       writeColor(sprite.material, full ? YELLOW : WHITE)
       writeOpacity(sprite.material, full ? 1 : SEAT_LABEL_OPACITY)
