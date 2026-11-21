@@ -1,22 +1,17 @@
 # Plan
 
-## Next, as of 2026-11-21 02:30
+## Next, as of 2026-11-21 19:00
 
-Before the owner's restart on 2026-11-21 near 03:00: reviews 64 (`AUDIT-2026-11-REVIEW-64.md`, 9a3039b6 to c6513481) and 65 (`AUDIT-2026-11-REVIEW-65.md`, c6513481 to 8a9b8cb9) are merged, and their fixes so far: P660 and a Stage change (R65-1, a lane that starts after the page opens works in the room; checked by eye on the bench), P661 (R65-2 server, R65-4, R65-6, R65-7 parts 1 and 3), P662 (R65-2 page, R65-3, the tooltip of R65-10), P663 (R64-1, R64-3, R64-8), P664 (R64-9, R64-11, R64-4 model half), a Stage change for R64-6 and the LIVE.md half of R65-9. P657 counts every agent in the Agents header.
+Pushed `caaa15ff`. Since the restart, merged and pushed: P665 to P672, P639a to P639d (seats in the Agents tree and on the rings), P640 (seat docs), the engine build chunk (P671), the AGY updater fix (`server/quiet-agy.js`: the terminal pop-ups were AGY's background updater), and test fixes.
 
-Open findings, in order:
-1. Engine, for codex (back 2026-11-24 13:03) or a native lane (after 08:00 Manila), with exact lines: R64-2 (orbiting top agents land on parked lanes), R64-7 (a sub on its own middle lane; rings ignore the lattice floor), R64-5 (depth off by one between `hub.js` and `seats.js`, `state.depthLimit` never fed, the owner ladder save skips the depth cap), R64-4 engine half (`doingText` while thinking).
-2. R65-5: the bottom agents button leaves out a working built-in orchestrator and queued lanes, keeps old failed lanes past the linger, lists idle subs, and hides in a sessions-only room.
-3. R65-8: `/grant` and `/revoke` notices sit in `pending`, block New, Open and Branch, and start a turn after a bridge restart.
-4. R65-9 parts 1 and 2: the Revoke card puts the red button first; the grant notice names a delete no orchestrator route allows.
-5. R65-7 part 2: no `agents` notice when a lane's five-minute linger ends (the 60 second poll covers it).
-6. R64-10: `GET /api/control/issues` runs `git log` on every poll and misses combined merges and non-P brief ids.
-7. R64-12 and R65-10: the tests that pass with their change undone.
-8. The main chunk passed its 970 kB guard after P660 to P662; the guard is 990 kB now. Split the engine into its own chunk in `vite.config.js`, checking for a circular chunk import, and bring the guard back down.
-9. P639 (agent seats S4, touches `src/engine`) and P640 (seats docs).
-10. Decide with the owner what Chat opens on the bench, where the orchestrator is the Claude Code session.
-11. Known weakness: any request with an `Origin` header counts as the owner; matters only off this machine.
-12. The fleet: me on top; agy2 and agy3 (Gemini 4 Neon High, no `src/engine`); codex (GPT-6.2 Sol High) out of usage until 2026-11-24 13:03; native2 to native4 (DeepSeek Flash `--reasoning xhigh`) on a $1 a day OpenRouter budget that resets at 08:00 Manila, with briefs that name exact files and lines. Start AGY lanes a few seconds apart.
+The team, set by the owner on 2026-11-21: the Claude Code session at the top orchestrates; under it the sub `neon` (AGY, Gemini 4 Neon High, Bypass) leads `agy-4` "Hydrogen" (AGY, Gemini 4 Hydrogen High, an owner-made lane that runs `tasks` queues) and `native2` (DeepSeek V4.1 Flash, `--reasoning xhigh`, $1 a day OpenRouter budget that resets at 08:00 Manila). agy2, agy3, codex, native3 and native4 are off. Neon starts its lanes through the bridge and reports in its conversation; Claude reads it there, merges and pushes.
+
+1. Review 66 (P673) of `ec864944` onward: running on `agy-4` under Neon (native3 ran out of budget before writing it). Neon proposes the fix briefs; Claude writes them in TASKS.md.
+2. R64-7: a sub stands over its own middle lane when its sector has an odd number of lanes, and the park rings ignore the lattice floor. A design choice for the owner (sub inside or outside the ring, or a gap at the middle of the arc); check by eye.
+3. The `X / Y` ring labels (P639b) were not seen by eye yet at overview distance; check them closer.
+4. Decide with the owner what Chat opens on the bench, where the orchestrator is the Claude Code session.
+5. Known weakness: any request with an `Origin` header counts as the owner; matters only off this machine.
+6. The Team tab lines of seat S4 (an orchestrator's create, turn on and turn off with the seat it took) are not built.
 
 ## Where we are
 
