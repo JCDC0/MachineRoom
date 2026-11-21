@@ -2,26 +2,30 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { availableParallelism } from 'node:os'
 
+export const CHUNK_GROUPS = [
+  { name: 'react', test: /node_modules[\\/](react|react-dom|scheduler)[\\/]/, priority: 60 },
+  { name: 'three', test: /node_modules[\\/]three[\\/]/, priority: 50 },
+  { name: 'engine', test: /src[\\/](engine|model)[\\/]/, priority: 40 },
+  { name: 'mock', test: /src[\\/]control[\\/]mock\.js/, priority: 30 },
+]
+
+export function chunkGroupFor(id) {
+  const normalized = String(id).replaceAll('\\', '/')
+  let best
+  for (const group of CHUNK_GROUPS) {
+    if (!group.test.test(normalized)) continue
+    if (best === undefined || group.priority > best.priority) best = group
+  }
+  return best?.name
+}
+
 export default defineConfig({
   plugins: [react()],
   build: {
-    chunkSizeWarningLimit: 990,
+    chunkSizeWarningLimit: 970,
     rollupOptions: {
       output: {
-        manualChunks(id) {
-          const normalized = id.replaceAll('\\', '/')
-          if (normalized.includes('/src/control/mock.js')) {
-            return 'mock'
-          }
-          if (normalized.includes('/node_modules/three/')) return 'three'
-          if (
-            normalized.includes('/node_modules/react/') ||
-            normalized.includes('/node_modules/react-dom/') ||
-            normalized.includes('/node_modules/scheduler/')
-          ) {
-            return 'react'
-          }
-        },
+        codeSplitting: { groups: CHUNK_GROUPS },
       },
     },
   },

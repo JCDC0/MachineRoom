@@ -1,3 +1,7 @@
+import { formatCount } from '../model/format.js'
+
+export { formatCount }
+
 export const WIDE_LAYOUT_MIN = 900
 export const AUTOCOMPACT_MIN = 50
 export const AUTOCOMPACT_MAX = 95
@@ -20,14 +24,6 @@ function isObject(value) {
 export function wideLayout(width) {
   const value = Number(width)
   return Number.isFinite(value) && value >= WIDE_LAYOUT_MIN
-}
-
-export function formatCount(value) {
-  const count = typeof value === 'number' && Number.isFinite(value) ? value : null
-  if (count === null || count < 0) return '?'
-  if (count < 1000) return String(Math.floor(count))
-  const millions = count >= 999950
-  return `${(count / (millions ? 1000000 : 1000)).toFixed(1).replace(/\.0$/, '')}${millions ? 'M' : 'k'}`
 }
 
 export function contextLine(context) {

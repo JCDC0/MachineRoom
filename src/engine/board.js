@@ -1,4 +1,4 @@
-import { formatCount } from '../ui/agentStrip.js'
+import { formatCount } from '../model/format.js'
 import { visibleText } from '../model/paths.js'
 
 export const BOARD_MIN_WIDTH = 900
