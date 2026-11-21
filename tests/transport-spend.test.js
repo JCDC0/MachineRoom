@@ -15,7 +15,7 @@ import {
 } from '../src/ui/transportSpend.js'
 
 const LIVE = { live: true, position: 65000, duration: 0, playing: true, speed: 1 }
-const MAIN = { id: 'orchestrator', name: 'Orchestrator', state: 'working' }
+const MAIN = { id: 'orchestrator', name: 'Orchestrator', state: 'idle' }
 const NOW = Date.parse('2026-11-03T12:00:00.000Z')
 
 function board(rows) {
@@ -80,7 +80,7 @@ describe('the transport with lanes and spend', () => {
     return renderToString(
       createElement(
         OrchestratorsContext.Provider,
-        { value: [{ id: 'orchestrator', state: 'working' }] },
+        { value: [{ id: 'orchestrator', state: 'idle' }] },
         createElement(
           LanePillsContext.Provider,
           {

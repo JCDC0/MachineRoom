@@ -14,17 +14,18 @@ import { withDom } from './helpers/uiDom.js'
 
 const LIVE = { live: true, position: 65000, duration: 0, playing: true, speed: 1 }
 const MAIN = { id: 'orchestrator', name: 'Orchestrator', state: 'working' }
+const IDLE_MAIN = { id: 'orchestrator', name: 'Orchestrator', state: 'idle' }
 
 function sub(id, name, state = 'idle') {
   return { id, name, state }
 }
 
-function renderTransport(orchestrators) {
+function renderTransport(orchestrators, orchestrator = IDLE_MAIN) {
   return renderToString(
     createElement(
       OrchestratorsContext.Provider,
       { value: orchestrators },
-      createElement(Transport, { snapshot: LIVE, speeds: [1], orchestrator: MAIN })
+      createElement(Transport, { snapshot: LIVE, speeds: [1], orchestrator })
     )
   )
 }
@@ -101,8 +102,8 @@ describe('the transport agent list', () => {
     await withDom(async ({ container, root }) => {
       const agents = ['working', 'failed', 'finished', 'idle'].map((key) => ({ id: key, key, name: key, adapterType: 'opencode_local', role: null }))
       const feed = { agents, now: 200000000, liveRuns: [{ agentId: 'working', status: 'running', startedAt: 199700000 }], records: { last: [{ lane: 'failed', startedAt: 1000, finishedAt: 199700000, exitCode: 1 }, { lane: 'finished', startedAt: 1000, finishedAt: 189200000, exitCode: 0 }] } }
-      const subs = [MAIN, { ...sub('waiting', 'Waiting', 'working'), approvals: [{}] }]
-      await act(async () => root.render(createElement(OrchestratorsContext.Provider, { value: subs }, createElement(LanePillsContext.Provider, { value: feed }, createElement(Transport, { snapshot: LIVE, speeds: [1], orchestrator: MAIN })))))
+      const subs = [IDLE_MAIN, { ...sub('waiting', 'Waiting', 'working'), approvals: [{}] }]
+      await act(async () => root.render(createElement(OrchestratorsContext.Provider, { value: subs }, createElement(LanePillsContext.Provider, { value: feed }, createElement(Transport, { snapshot: LIVE, speeds: [1], orchestrator: IDLE_MAIN })))))
       await act(async () => container.querySelector('.transport-agents-toggle').click())
       const rows = [...container.querySelectorAll('.transport-agent')]
       expect(rows.map((row) => row.querySelector('.transport-agent-state').className)).toEqual(['transport-agent-state is-waiting', 'transport-agent-state is-working', 'transport-agent-state is-failed'])
@@ -125,9 +126,9 @@ describe('the transport agent list', () => {
       const events = []
       window.addEventListener('machineroom:open-chat', (event) => events.push(event.detail))
       window.addEventListener('machineroom:inspect', (event) => events.push(event.detail))
-      const subs = [MAIN, sub('sub-one', 'A long sub name', 'working')]
+      const subs = [IDLE_MAIN, sub('sub-one', 'A long sub name', 'working')]
       const feed = { agents: [{ id: 'a', key: 'lane', name: 'A long lane name', adapterType: 'opencode_local', role: null }], liveRuns: [{ agentId: 'a', status: 'running', issueId: 'issue', startedAt: 1000 }], issues: [{ id: 'issue', identifier: 'A-very-long-task-identifier' }], now: 721000 }
-      await act(async () => root.render(createElement(OrchestratorsContext.Provider, { value: subs }, createElement(LanePillsContext.Provider, { value: feed }, createElement(Transport, { snapshot: { ...LIVE, status: 'live' }, speeds: [1], orchestrator: MAIN })))))
+      await act(async () => root.render(createElement(OrchestratorsContext.Provider, { value: subs }, createElement(LanePillsContext.Provider, { value: feed }, createElement(Transport, { snapshot: { ...LIVE, status: 'live' }, speeds: [1], orchestrator: IDLE_MAIN })))))
       const toggle = container.querySelector('.transport-agents-toggle')
       expect(toggle.textContent).toContain('Agents · 2 working')
       const wrapper = container.querySelector('.transport-agents')
@@ -171,7 +172,7 @@ describe('the transport agent list', () => {
         status: 'live',
         agents: [{ key: 'claude-session', name: 'Claude Code', status: 'working', label }],
       }
-      const subs = [MAIN, sub('sub-one', 'Sub One', 'idle')]
+      const subs = [IDLE_MAIN, sub('sub-one', 'Sub One', 'idle')]
       const feed = {
         agents: [{ id: 'a', key: 'lane', name: 'Lane', adapterType: 'opencode_local', role: null }],
         liveRuns: [{ agentId: 'a', status: 'running', startedAt: 1000 }],
@@ -185,7 +186,7 @@ describe('the transport agent list', () => {
             createElement(
               LanePillsContext.Provider,
               { value: feed },
-              createElement(Transport, { snapshot, speeds: [1], orchestrator: MAIN })
+              createElement(Transport, { snapshot, speeds: [1], orchestrator: IDLE_MAIN })
             )
           )
         )
@@ -219,11 +220,11 @@ describe('the transport agent list', () => {
         root.render(
           createElement(
             OrchestratorsContext.Provider,
-            { value: [MAIN] },
+            { value: [IDLE_MAIN] },
             createElement(
               LanePillsContext.Provider,
               { value: feed },
-              createElement(Transport, { snapshot, speeds: [1], orchestrator: MAIN })
+              createElement(Transport, { snapshot, speeds: [1], orchestrator: IDLE_MAIN })
             )
           )
         )
@@ -239,8 +240,8 @@ describe('the transport agent list', () => {
     await withDom(async ({ container, root }) => {
       const agents = [{ id: 'idle', key: 'idle', name: 'Idle lane', adapterType: 'opencode_local', role: null }]
       const feed = { agents, liveRuns: [], issues: [], records: { running: [], recent: [] }, now: 200000000 }
-      const subs = [MAIN]
-      await act(async () => root.render(createElement(OrchestratorsContext.Provider, { value: subs }, createElement(LanePillsContext.Provider, { value: feed }, createElement(Transport, { snapshot: LIVE, speeds: [1], orchestrator: MAIN })))))
+      const subs = [IDLE_MAIN]
+      await act(async () => root.render(createElement(OrchestratorsContext.Provider, { value: subs }, createElement(LanePillsContext.Provider, { value: feed }, createElement(Transport, { snapshot: LIVE, speeds: [1], orchestrator: IDLE_MAIN })))))
       const toggle = container.querySelector('.transport-agents-toggle')
       expect(toggle.textContent).toBe('Agents · none working')
       await act(async () => toggle.click())
