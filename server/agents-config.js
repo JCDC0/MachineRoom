@@ -14,7 +14,7 @@ import { machineroomModels, modelAllowed, readHarnessModelsCache } from './harne
 import { probeHarness } from './harness-probe.js'
 import { fallbackProblem } from '../src/briefs/run.js'
 import { familySeatsFor, seatActor } from './family.js'
-import { overRingProblem, seatCheck } from './seats.js'
+import { formatSeatAction, levelOf, overRingProblem, ringSummary, seatCheck } from './seats.js'
 
 export const MAX_AGENTS = 30
 export const HARNESS_KEYS = ['claude', 'opencode', 'agy', 'acp', 'machineroom', 'codex', 'copilot', 'hermes']
@@ -590,6 +590,7 @@ export function createAgentsConfigApi(options = {}) {
   const activeLanes = options.activeLanes
   const getBaseLanes = typeof options.lanes === 'function' ? options.lanes : () => options.lanes ?? readLanes()
   const env = options.env ?? process.env
+  const onSeatAction = typeof options.onSeatAction === 'function' ? options.onSeatAction : null
 
   async function rowsFor(lanes) {
     const laneReplies = readHarnessSettings(runsDir).laneReplies
@@ -694,6 +695,24 @@ export function createAgentsConfigApi(options = {}) {
       if (!result.ok) {
         sendJson(req, res, result.status, { error: result.error, ...(result.overRing !== undefined ? { overRing: result.overRing } : {}) })
         return true
+      }
+
+      if (actor.id && onSeatAction) {
+        const after = familySeatsFor(sendJson, seatOptions)
+        const node = after.tree.find((item) => item.id === result.agent.key)
+        const actorNode = after.tree.find((item) => item.id === actor.id)
+        const ring = node ? levelOf(after.tree, node) : actorNode ? levelOf(after.tree, actorNode) : 0
+        const summary = ringSummary({ ...after, depth: Math.max(after.depth, ring + 1) }).find((row) => row.ring === ring)
+        try {
+          onSeatAction(actor.id, formatSeatAction({
+            action: 'createLane',
+            key: result.agent.key,
+            name: result.agent.name,
+            ring,
+            taken: summary?.taken ?? 0,
+            limit: summary?.limit ?? null,
+          }))
+        } catch {}
       }
 
       sendJson(req, res, 200, result.agent)

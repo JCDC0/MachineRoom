@@ -28,6 +28,7 @@ import {
 } from '../server/agents-config.js'
 import { createBridge } from '../server/index.js'
 import { activeLanesFileFor, projectLanesFileFor, readActiveLanesChoice, readHiddenLanes, writeActiveLanes } from '../server/active-lanes.js'
+import { seatsFileFor, writeSeats } from '../server/seats.js'
 import { modelAllowed } from '../server/harness-models.js'
 import { gitPath } from '../server/programPath.js'
 import { createClient } from '../src/control/client.js'
@@ -1281,5 +1282,91 @@ describe('mock client integration', () => {
 
     const del = await mock.deleteLane({ key: 'claude-2', confirmed: true })
     expect(del.ok).toBe(true)
+  })
+})
+
+describe('seat action lines on POST /api/lanes/create', () => {
+  it('adds one chat-only line to the acting orchestrator conversation, and none for owner or refusals', async () => {
+    const { bridge, url, projectRoot, runsFolder } = await startBridgeRig({ active: false })
+    writeActiveLanes(activeLanesFileFor(projectRoot, runsFolder), ['claude'])
+    const sub = {
+      id: 'sub-claude',
+      name: 'Sub Claude',
+      harness: 'claude',
+      model: 'sonnet',
+      lanes: [],
+      scope: ['server/**'],
+      restricted: false,
+      setBy: 'owner',
+    }
+    const ladderRes = await getJson(`${url}/api/orchestrator/ladder`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', origin: url },
+      body: JSON.stringify({ confirmed: true, by: 'owner', ladder: { subs: [sub] } }),
+    })
+    expect(ladderRes.status).toBe(200)
+
+    writeSeats(seatsFileFor(projectRoot, runsFolder), {
+      rings: [4, 3],
+      grants: {
+        orchestrator: { lanes: 2, subs: 0 },
+        'sub-claude': { lanes: 2, subs: 0 },
+      },
+    })
+
+    const mainToken = bridge.orchestrators().token('orchestrator')
+    const subToken = bridge.orchestrators().token('sub-claude')
+
+    const mainCreate = await getJson(`${url}/api/lanes/create`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-machineroom-orchestrator': mainToken },
+      body: JSON.stringify({ name: 'Main Helper', harness: 'claude', model: 'claude-haiku-5-5', confirmed: true }),
+    })
+    expect(mainCreate.status).toBe(200)
+    expect(mainCreate.body.key).toBe('claude-2')
+
+    const mainMessages = bridge.orchestrators().find('orchestrator').answer().messages
+    expect(mainMessages).toHaveLength(1)
+    expect(mainMessages[0]).toMatchObject({
+      from: 'room',
+      chatOnly: true,
+      text: 'Made lane Main Helper (claude-2) on ring 0: 2 of 4 seats taken.',
+    })
+    expect(bridge.orchestrators().find('sub-claude').answer().messages).toEqual([])
+
+    const subCreate = await getJson(`${url}/api/lanes/create`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-machineroom-orchestrator': subToken },
+      body: JSON.stringify({ name: 'Sub Helper', harness: 'claude', model: 'claude-haiku-5-5', confirmed: true }),
+    })
+    expect(subCreate.status).toBe(200)
+    expect(subCreate.body.key).toBe('claude-3')
+
+    const subMessages = bridge.orchestrators().find('sub-claude').answer().messages
+    expect(subMessages).toHaveLength(1)
+    expect(subMessages[0]).toMatchObject({
+      from: 'room',
+      chatOnly: true,
+      text: 'Made lane Sub Helper (claude-3) on ring 1: 2 of 3 seats taken.',
+    })
+    expect(bridge.orchestrators().find('orchestrator').answer().messages).toHaveLength(1)
+
+    const ownerCreate = await getJson(`${url}/api/lanes/create`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', origin: url },
+      body: JSON.stringify({ name: 'Owner Helper', harness: 'claude', model: 'claude-haiku-5-5', confirmed: true }),
+    })
+    expect(ownerCreate.status).toBe(200)
+    expect(bridge.orchestrators().find('orchestrator').answer().messages).toHaveLength(1)
+    expect(bridge.orchestrators().find('sub-claude').answer().messages).toHaveLength(1)
+
+    const refusedCreate = await getJson(`${url}/api/lanes/create`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-machineroom-orchestrator': mainToken },
+      body: JSON.stringify({ name: 'Wrong Harness', harness: 'opencode', model: 'opencode-go/deepseek-v4.1-flash', confirmed: true }),
+    })
+    expect(refusedCreate.status).toBe(409)
+    expect(bridge.orchestrators().find('orchestrator').answer().messages).toHaveLength(1)
+    expect(bridge.orchestrators().find('sub-claude').answer().messages).toHaveLength(1)
   })
 })

@@ -36,6 +36,7 @@ import { parseRunArgs, runRecord } from '../src/briefs/run.js'
 import { getJson, postJson, readFrames } from './helpers/bridge.js'
 import { makeTempDir, removeTempDir } from './helpers/tempRoot.js'
 import { isHarnessAvailable } from '../server/agents-config.js'
+import { saveAgentDepth } from '../server/agent-depth.js'
 import { seatsFileFor, writeSeats } from '../server/seats.js'
 const assumeInstalled = (key, options) => key === 'claude' || key === 'opencode' || isHarnessAvailable(key, options)
 
@@ -2796,5 +2797,92 @@ describe('a lane message mid-run', () => {
     expect(fifth.status).toBe(429)
     expect(fifth.body).toEqual({ error: LANE_LIMIT_PROBLEM })
     writeFileSync(release, 'go\n')
+  })
+})
+
+describe('seat action lines on POST /api/orchestrator/ladder', () => {
+  it('adds one chat-only line to the acting orchestrator conversation on addSub, and none for owner or refusals', async () => {
+    const files = makeBase()
+    saveAgentDepth(files.runs, { limit: 3, unlocked: true })
+    const rig = await makeBridge(files)
+    writeSeats(seatsFileFor(rig.projectRoot, rig.runs), {
+      rings: [4, 2, 1],
+      grants: {
+        orchestrator: { lanes: 0, subs: 2 },
+        backend: { lanes: 0, subs: 1 },
+      },
+    })
+
+    const mainToken = rig.bridge.orchestrators().token('orchestrator')
+    const mainAdd = await getJson(`${rig.url}/api/orchestrator/ladder`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-machineroom-orchestrator': mainToken },
+      body: JSON.stringify({
+        confirmed: true,
+        ladder: {
+          subs: [{ id: 'backend', name: 'Backend', harness: 'claude', model: 'sonnet', lanes: [], scope: ['server/**'], restricted: false }],
+        },
+      }),
+    })
+    expect(mainAdd.status).toBe(200)
+
+    const mainMessages = rig.bridge.orchestrators().find('orchestrator').answer().messages
+    expect(mainMessages).toHaveLength(1)
+    expect(mainMessages[0]).toMatchObject({
+      from: 'room',
+      chatOnly: true,
+      text: 'Added sub Backend (backend) on ring 1: 1 of 2 seats taken.',
+    })
+    expect(rig.calls()).toHaveLength(0)
+
+    const subToken = rig.bridge.orchestrators().token('backend')
+    const subAdd = await getJson(`${rig.url}/api/orchestrator/ladder`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-machineroom-orchestrator': subToken },
+      body: JSON.stringify({
+        confirmed: true,
+        ladder: {
+          subs: [{ id: 'leaf', name: 'Leaf', harness: 'claude', model: 'sonnet', lanes: [], scope: ['server/**'], restricted: false }],
+        },
+      }),
+    })
+    expect(subAdd.status).toBe(200)
+
+    const subMessages = rig.bridge.orchestrators().find('backend').answer().messages
+    expect(subMessages).toHaveLength(1)
+    expect(subMessages[0]).toMatchObject({
+      from: 'room',
+      chatOnly: true,
+      text: 'Added sub Leaf (leaf) on ring 2: 1 of 1 seats taken.',
+    })
+    expect(rig.bridge.orchestrators().find('orchestrator').answer().messages).toHaveLength(1)
+
+    const refused = await getJson(`${rig.url}/api/orchestrator/ladder`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-machineroom-orchestrator': subToken },
+      body: JSON.stringify({
+        confirmed: true,
+        ladder: {
+          subs: [{ id: 'extra', name: 'Extra', harness: 'claude', model: 'sonnet', lanes: [], scope: ['server/**'], restricted: false }],
+        },
+      }),
+    })
+    expect(refused.status).toBe(409)
+    expect(rig.bridge.orchestrators().find('backend').answer().messages).toHaveLength(1)
+
+    const ownerAdd = await pagePost(`${rig.url}/api/orchestrator/ladder`, {
+      confirmed: true,
+      by: 'owner',
+      ladder: {
+        subs: [
+          { id: 'backend', name: 'Backend', harness: 'claude', model: 'sonnet', lanes: [], scope: ['server/**'], restricted: false, setBy: 'owner' },
+          { id: 'leaf', name: 'Leaf', harness: 'claude', model: 'sonnet', parent: 'backend', lanes: [], scope: ['server/**'], restricted: false, setBy: 'owner' },
+          { id: 'owner-sub', name: 'Owner Sub', harness: 'claude', model: 'sonnet', lanes: [], scope: ['server/**'], restricted: false, setBy: 'owner' },
+        ],
+      },
+    })
+    expect(ownerAdd.status).toBe(200)
+    expect(rig.bridge.orchestrators().find('orchestrator').answer().messages).toHaveLength(1)
+    expect(rig.bridge.orchestrators().find('backend').answer().messages).toHaveLength(1)
   })
 })
