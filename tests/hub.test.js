@@ -18,6 +18,7 @@ import {
   RING_FLOOR_Y,
   RING_LEVEL_MAX,
   RING_MAX_OPACITY,
+  SEAT_LABEL_DROP,
   SEAT_LABEL_OPACITY,
   SEAT_LABEL_OUT,
   SEAT_LABEL_SCALE,
@@ -794,12 +795,30 @@ describe('the seats on the park rings', () => {
     expect(Math.hypot(top.position.x, top.position.z)).toBeCloseTo(HUB_RADIUS + SEAT_LABEL_OUT)
     expect(top.position.x).toBeCloseTo(Math.cos(angle) * (HUB_RADIUS + SEAT_LABEL_OUT))
     expect(top.position.z).toBeCloseTo(Math.sin(angle) * (HUB_RADIUS + SEAT_LABEL_OUT))
-    expect(top.position.y).toBe(0)
+    expect(top.position.y).toBe(-SEAT_LABEL_DROP)
     const lower = labelFor(hub, 1)
     expect(Math.hypot(lower.position.x, lower.position.z)).toBeCloseTo(layout.rings[1].radius + SEAT_LABEL_OUT)
     expect(lower.position.x).toBeCloseTo(Math.cos(angle) * (layout.rings[1].radius + SEAT_LABEL_OUT))
     expect(lower.position.z).toBeCloseTo(Math.sin(angle) * (layout.rings[1].radius + SEAT_LABEL_OUT))
-    expect(lower.position.y).toBe(layout.rings[1].y - HUB_Y)
+    expect(lower.position.y).toBe(layout.rings[1].y - HUB_Y - SEAT_LABEL_DROP)
+    hub.dispose()
+  })
+
+  it('places each seat label 70 below its ring height for ring 0 and ring 1', () => {
+    expect(SEAT_LABEL_DROP).toBe(70)
+    const layout = ringLayout(LADDER, ['opencode', 'claude', 'hermes'])
+    expect(seatRingPoint(0).y).toBe(-70)
+    expect(seatRingPoint(0, layout).y).toBe(layout.rings[0].y - HUB_Y - 70)
+    expect(seatRingPoint(1, layout).y).toBe(layout.rings[1].y - HUB_Y - 70)
+
+    const hub = createHub(new THREE.Scene(), ROSTER, LADDER)
+    const hubLayout = ringLayout(LADDER, hub.parkedKeys())
+    hub.setSeatCounts([
+      { ring: 0, taken: 0, limit: 2 },
+      { ring: 1, taken: 3, limit: 3 },
+    ])
+    expect(labelFor(hub, 0).position.y).toBe(-70)
+    expect(labelFor(hub, 1).position.y).toBe(hubLayout.rings[1].y - HUB_Y - 70)
     hub.dispose()
   })
 
