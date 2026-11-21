@@ -220,14 +220,6 @@ function labelFor(key, labels) {
   return typeof value === 'string' && value ? value : null
 }
 
-export function showsNameLabel(agent, sector) {
-  if (!isSubOrchestrator(agent)) return true
-  const name = typeof agent?.name === 'string' ? agent.name.trim() : ''
-  const sectorName = typeof sector?.name === 'string' ? sector.name.trim() : ''
-  if (!name || !sectorName) return true
-  return name.toLowerCase() !== sectorName.toLowerCase()
-}
-
 export function shapeForNewAgent(agent, used = []) {
   const taken = new Set(Array.isArray(used) ? used : [])
   if (isOrchestrator(agent) || isSubOrchestrator(agent)) return ORCHESTRATOR_SHAPE
@@ -1239,12 +1231,7 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
     for (const view of views.values()) {
       if (view.parentKey) continue
       const agent = agentByKey.get(view.key) ?? { key: view.key, name: view.name }
-      if (view.subOrchestrator) {
-        const sector = sectorList.find((entry) => entry.id === subIdOf(agent))
-        view.label.visible = showsNameLabel(agent, sector)
-      } else {
-        view.label.visible = true
-      }
+      view.label.visible = true
       if (view.orchestrator || view === topView) {
         view.index = -1
         seatPoint(view.key, seats, view.home, orbitAngles)

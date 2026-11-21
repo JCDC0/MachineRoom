@@ -459,7 +459,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     const path = card.dataset.path ?? ''
     if (event.target?.closest?.('.mr-card-head')) {
       endFollow()
-      if (heldPath !== path) cards.setSelected(null)
+      cards.setSelected(path)
       setInspected({ kind: 'folder', id: path })
       onInspect({ kind: 'folder', id: path })
       return

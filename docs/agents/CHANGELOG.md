@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- One click on a folder card's head now selects it, so the whole card lights yellow, the same as a double click; the camera stays still on one click. Every sub shows its name and status under its shape again (it hid when its name matched its sector's). P680 step 2, which lit every pinned card whole, was left out at the merge: pinned also means kept open or lifted, so several cards would stay yellow at once; a kept-open card keeps its yellow tab (P680; run by the Neon team).
 - A sub orchestrator takes its own place on its arc (the place the ring size already counted), so it never stands inside its middle lane; the owner saw Neon drawn inside Hydrogen. A sub with an even number of lanes stays in the middle (P679, R64-7; run by the Neon team).
 - A run the runner refuses before it writes a log now wakes the orchestrator that started it with one room message, `Run on lane LANE was refused before it started: NOTE`; before, Neon waited 40 minutes on a refused P679 (P681; run by the Neon team).
 - An orchestrator turn on a harness that takes its prompt on the command line keeps the prompt under 20,000 characters: it drops the oldest history first, then the summary, and never cuts the instruction or the new message; when those alone are too long it stops without starting. A turn that fails to start names why (too long, program not found, or the error code). This was why Neon's turns stopped from 20:05 on 2026-11-21 (P677; run by the Neon team).
