@@ -25,6 +25,7 @@ const FAKE_RUNNER = [
   'const stopIndex = rest.indexOf("--stop")',
   'if (stopIndex !== -1) {',
   '  const lane = rest[stopIndex + 1]',
+  '  if (state.stopEnvFile) writeFileSync(state.stopEnvFile, JSON.stringify({ bridgePid: process.env.MACHINEROOM_BRIDGE_PID ?? "" }))',
   '  const pidFile = join(state.pidDir, lane + ".pid")',
   '  if (existsSync(pidFile)) {',
   '    const pid = Number(readFileSync(pidFile, "utf8").trim())',
@@ -92,6 +93,7 @@ function makeRig({ list, spawnSurvivor = false } = {}) {
   const survivorScript = join(base, 'survivor.mjs')
   const survivorPidFile = join(base, 'survivor.pid')
   const envFile = join(base, 'runner-env.json')
+  const stopEnvFile = join(base, 'stop-env.json')
   writeFileSync(runner, FAKE_RUNNER)
   writeFileSync(survivorScript, SURVIVOR_SCRIPT)
   writeFileSync(
@@ -104,6 +106,7 @@ function makeRig({ list, spawnSurvivor = false } = {}) {
       survivorScript,
       survivorPidFile,
       envFile,
+      stopEnvFile,
     })
   )
 
@@ -140,6 +143,7 @@ function makeRig({ list, spawnSurvivor = false } = {}) {
     project,
     pidDir,
     envFile,
+    stopEnvFile,
     survivorPidFile,
     async startInside() {
       const handled = await api.handle(
@@ -233,6 +237,8 @@ describe('stopSectorLanes with an unreadable process list', () => {
     const spared = await rig.api.stopSectorLanes({ targetLanes: new Set(['inside1']) })
     expect(spared.stoppedLanes).toEqual(['inside1'])
     expect(spared.stillRunning).toEqual([])
+    const stopEnv = JSON.parse(readFileSync(rig.stopEnvFile, 'utf8'))
+    expect(stopEnv.bridgePid).toBe(String(process.pid))
 
     includeOrphan = true
     await rig.startInside()
