@@ -55,6 +55,11 @@ describe('childEnvironment', () => {
     })
   })
 
+  it('keeps the AGY updater switch, so a lane or orchestrator agy opens no console window', () => {
+    const child = childEnvironment({ PATH: '/usr/bin', AGY_CLI_DISABLE_AUTO_UPDATE: '1' }, '/work', { harness: 'agy' })
+    expect(child.AGY_CLI_DISABLE_AUTO_UPDATE).toBe('1')
+  })
+
   it('keeps PATH and USERPROFILE for a lane', () => {
     const child = childEnvironment({ PATH: '/usr/bin', USERPROFILE: 'C:\\Users\\user' }, '/work')
     expect(child.PATH).toBe('/usr/bin')
