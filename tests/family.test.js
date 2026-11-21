@@ -1045,8 +1045,10 @@ describe('Control client and mock family methods', () => {
     const mock = createMockClient({ latencyMs: 0 })
 
     const before = await mock.family()
-    expect(before.seats.map((row) => row.ring)).toEqual([0, 1])
-    expect(before.seats.every((row) => row.limit === null)).toBe(true)
+    expect(before.seats).toEqual([
+      { ring: 0, taken: 3, limit: null },
+      { ring: 1, taken: 3, limit: null },
+    ])
 
     const saved = await mock.setRingSeats({ rings: [2, null] })
     expect(saved.ok).toBe(true)
