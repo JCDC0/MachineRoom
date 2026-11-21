@@ -1442,7 +1442,7 @@ describe('the lane source carries the session that started a run', () => {
     const main = join(base, 'external-project')
     mkdirSync(runs, { recursive: true })
     mkdirSync(main, { recursive: true })
-    const lanes = lanesFor({ opencode: join(base, 'MachineRoom-opencode') })
+    const lanes = lanesFor({ opencode: join(base, 'MachineRoom-opencode'), claude: join(base, 'MachineRoom-claude') })
     let current = Date.now()
     const frames = []
     const source = createLanesSource({
@@ -1478,23 +1478,32 @@ describe('the lane source carries the session that started a run', () => {
 
     const expiredLog = join(runs, 'opencode-P688-20261122-010200.log')
     const expiredMeta = join(runs, 'opencode-P688-20261122-010200.meta.json')
+    const twinLog = join(runs, 'claude-P688-20261122-010201.log')
+    const twinMeta = join(runs, 'claude-P688-20261122-010201.meta.json')
     writeFileSync(expiredLog, `${toolLine('src/b.js')}\n`)
+    writeFileSync(twinLog, `${toolLine('src/c.js')}\n`)
     utimesSync(expiredLog, new Date(current), new Date(current))
+    utimesSync(twinLog, new Date(current), new Date(current))
     utimesSync(runs, new Date(current), new Date(current))
 
     current += 2000
     source.tick()
     expect(source.openRuns()).toEqual([])
 
-    current += 9000
+    writeFileSync(twinMeta, JSON.stringify({ project: main }))
+    current += 7000
     source.tick()
-    expect(source.openRuns()).toEqual([])
+    expect(source.openRuns().map((run) => run.name)).toEqual(['claude-P688-20261122-010201'])
+
+    current += 2000
+    source.tick()
+    expect(source.openRuns().map((run) => run.name)).toEqual(['claude-P688-20261122-010201'])
 
     writeFileSync(expiredMeta, JSON.stringify({ project: main }))
     current += 2000
     source.tick()
-    expect(source.openRuns()).toEqual([])
-    expect(frames).toEqual([])
+    expect(source.openRuns().map((run) => run.name)).toEqual(['claude-P688-20261122-010201'])
+    expect(frames.some((frame) => frame.payload?.runId === 'run-opencode-P688-20261122-010200')).toBe(false)
   })
 
   it('skips a log that keeps growing with no meta 10 seconds after it was first seen', () => {
