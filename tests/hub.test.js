@@ -47,6 +47,7 @@ import {
   sectorLabelRadius,
   sectorLaneAngles,
   sectorSlotAngles,
+  sectorSubAngle,
   slotAngle,
   topRingPoint,
   topRingSeats,
@@ -139,27 +140,56 @@ function arcCentre(group) {
 }
 
 describe('where a sector parks its lanes', () => {
-  it('puts one lane at the middle of the arc, under its sub', () => {
-    const angles = sectorLaneAngles({ start: 0.2, end: 1.2, lanes: ['opencode'] })
-    expect(angles).toHaveLength(1)
-    expect(angles[0]).toBeCloseTo(0.7)
+  it('keeps level 0 lanes evenly spaced inside the arc', () => {
+    const one = sectorLaneAngles({ start: 0.2, end: 1.2, lanes: ['opencode'], level: 0 })
+    expect(one).toHaveLength(1)
+    expect(one[0]).toBeCloseTo(0.7)
+
+    const arc = { start: 0, end: 3, lanes: ['opencode', 'claude', 'hermes'], level: 0 }
+    const three = sectorLaneAngles(arc)
+    expect(three).toHaveLength(3)
+    expect(three[0] - arc.start).toBeCloseTo(0.5)
+    expect(three[1] - three[0]).toBeCloseTo(1)
+    expect(three[2] - three[1]).toBeCloseTo(1)
+    expect(arc.end - three[2]).toBeCloseTo(0.5)
+    expect(three[1]).toBeCloseTo((arc.start + arc.end) / 2)
   })
 
-  it('spreads three lanes evenly inside the arc with the same gap at each end', () => {
-    const arc = { start: 0, end: 3, lanes: ['opencode', 'claude', 'hermes'] }
-    const angles = sectorLaneAngles(arc)
-    expect(angles).toHaveLength(3)
-    expect(angles[0] - arc.start).toBeCloseTo(0.5)
-    expect(angles[1] - angles[0]).toBeCloseTo(1)
-    expect(angles[2] - angles[1]).toBeCloseTo(1)
-    expect(arc.end - angles[2]).toBeCloseTo(0.5)
-    expect(angles[1]).toBeCloseTo((arc.start + arc.end) / 2)
+  it('gives a sub arc lanes + 1 even places with the sub at floor(lanes / 2) and middle on even counts', () => {
+    const oneArc = { start: 0.2, end: 1.2, lanes: ['opencode'], level: 1 }
+    expect(sectorSubAngle(oneArc)).toBeCloseTo(0.45)
+    expect(sectorLaneAngles(oneArc)).toHaveLength(1)
+    expect(sectorLaneAngles(oneArc)[0]).toBeCloseTo(0.95)
+
+    const twoArc = { start: 0, end: 3, lanes: ['opencode', 'claude'], level: 1 }
+    expect(sectorSubAngle(twoArc)).toBeCloseTo(1.5)
+    expect(sectorLaneAngles(twoArc)[0]).toBeCloseTo(0.5)
+    expect(sectorLaneAngles(twoArc)[1]).toBeCloseTo(2.5)
+
+    for (const count of [1, 2, 3, 5]) {
+      const lanes = Array.from({ length: count }, (_, index) => `lane-${index}`)
+      const arc = { start: 0.3, end: 2.7, lanes, level: 1 }
+      const span = arc.end - arc.start
+      const subAngle = sectorSubAngle(arc)
+      const laneAngles = sectorLaneAngles(arc)
+      expect(laneAngles).toHaveLength(count)
+      expect(subAngle).toBeGreaterThan(arc.start)
+      expect(subAngle).toBeLessThan(arc.end)
+      for (let i = 0; i < laneAngles.length; i++) {
+        expect(laneAngles[i]).toBeGreaterThan(arc.start)
+        expect(laneAngles[i]).toBeLessThan(arc.end)
+        expect(Math.abs(laneAngles[i] - subAngle)).toBeGreaterThanOrEqual(span / (count + 1) - 1e-9)
+        if (i > 0) expect(laneAngles[i]).toBeGreaterThan(laneAngles[i - 1])
+      }
+    }
   })
 
   it('parks nothing in an empty sector', () => {
-    expect(sectorLaneAngles({ start: 0, end: 1, lanes: [] })).toEqual([])
-    expect(sectorLaneAngles({ start: 1, end: 1, lanes: ['opencode'] })).toEqual([])
+    expect(sectorLaneAngles({ start: 0, end: 1, lanes: [], level: 1 })).toEqual([])
+    expect(sectorLaneAngles({ start: 1, end: 1, lanes: ['opencode'], level: 1 })).toEqual([])
     expect(sectorLaneAngles(null)).toEqual([])
+    expect(sectorSubAngle({ start: 0, end: 1, lanes: [], level: 1 })).toBeCloseTo(0.5)
+    expect(sectorSubAngle(null)).toBe(0)
   })
 
   it('maps each lane of a ladder through the pure placement', () => {
@@ -180,9 +210,9 @@ describe('where a sector parks its lanes', () => {
     expect([...angles.keys()]).toEqual(keys)
     const frontend = arcs.find((arc) => arc.id === 'frontend')
     const backend = arcs.find((arc) => arc.id === 'backend')
-    expect(angles.get('opencode')).toBeCloseTo((frontend.start + frontend.end) / 2)
-    expect(angles.get('claude')).toBeCloseTo(backend.start + (backend.end - backend.start) / 4)
-    expect(angles.get('hermes')).toBeCloseTo(backend.start + ((backend.end - backend.start) * 3) / 4)
+    expect(angles.get('opencode')).toBeCloseTo(frontend.start + ((frontend.end - frontend.start) * 3) / 4)
+    expect(angles.get('claude')).toBeCloseTo(backend.start + (backend.end - backend.start) / 6)
+    expect(angles.get('hermes')).toBeCloseTo(backend.start + ((backend.end - backend.start) * 5) / 6)
   })
 })
 

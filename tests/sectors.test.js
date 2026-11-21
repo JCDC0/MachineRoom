@@ -131,12 +131,12 @@ describe('sector slot angles', () => {
     }
   })
 
-  it('puts each lane in the middle of its own sector when the sector holds one lane', () => {
+  it('parks a single lane beside its sub on a sub sector and in the middle on level 0', () => {
     const keys = ['opencode', 'claude', 'hermes']
     const angles = sectorSlotAngles(LADDER, keys)
     const arcs = ringArcs(LADDER, keys)
-    expect(angles.get('opencode')).toBeCloseTo((arcs[0].start + arcs[0].end) / 2)
-    expect(angles.get('claude')).toBeCloseTo((arcs[1].start + arcs[1].end) / 2)
+    expect(angles.get('opencode')).toBeCloseTo(arcs[0].start + ((arcs[0].end - arcs[0].start) * 3) / 4)
+    expect(angles.get('claude')).toBeCloseTo(arcs[1].start + ((arcs[1].end - arcs[1].start) * 3) / 4)
     expect(angles.get('hermes')).toBeCloseTo((arcs[2].start + arcs[2].end) / 2)
   })
 
