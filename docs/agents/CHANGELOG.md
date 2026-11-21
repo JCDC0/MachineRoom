@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- A new lane past a full ring also asks before it is made, and the full-ring confirm keeps its own card open (P639d).
 - Every agy that MachineRoom starts runs with AGY_CLI_DISABLE_AUTO_UPDATE=1, unless the owner set it: AGY's background updater ran agy --version in a visible console window, which was the terminal pop-up the owner saw (caught by a window watcher at 17:43 on 2026-11-21).
 - The Agents tree shows each ring's seats (Ring N · X of Y seats, yellow when full) with a Seats field and Save, saved through POST /api/family/seats; agents an orchestrator made say made by NAME; Turn on past a full ring asks before it goes on (P639a, P639c).
 - The room's engine and model build into their own chunk, which imports nothing from the main chunk, so the main chunk dropped from 821 to 644 kB and the size guard is 970 kB again (P671).

@@ -1066,6 +1066,35 @@ describe('the control client lane route', () => {
     await expect(mock.routeLane({ brief: 'B6', task: 'Fix it.' })).rejects.toThrow('Send a brief or a task, not both.')
     await expect(mock.routeLane({ brief: 'ZZ9' })).rejects.toThrow('Choose a brief from the list.')
   })
+
+  it('keeps the full ring on the error and sends it back when the owner asks again', async () => {
+    const refusals = []
+    const refusing = createClient({
+      baseUrl: 'http://127.0.0.1:9',
+      fetchImpl: async (url, options = {}) => {
+        refusals.push({ url, method: options.method, body: options.body })
+        return {
+          ok: false,
+          status: 409,
+          json: async () => ({ error: 'Confirm going past the seats on ring 2.', overRing: 2 }),
+        }
+      },
+    })
+    const failure = await refusing.createLane({ name: 'Writer', harness: 'claude', confirmed: true })
+      .catch((error) => error)
+    expect(failure.message).toBe('Confirm going past the seats on ring 2.')
+    expect(failure.overRing).toBe(2)
+
+    const { calls, client } = recorder()
+    await client.createLane({ name: 'Writer', harness: 'claude', overRing: 2, confirmed: true })
+    expect(calls).toEqual([
+      {
+        url: 'http://127.0.0.1:9/api/lanes/create',
+        method: 'POST',
+        body: JSON.stringify({ name: 'Writer', harness: 'claude', confirmed: true, overRing: 2 }),
+      },
+    ])
+  })
 })
 
 describe('the control client MCP routes', () => {

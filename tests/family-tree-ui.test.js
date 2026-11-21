@@ -1237,6 +1237,114 @@ describe('FamilyTree seats', () => {
   })
 })
 
+describe('FamilyTree made by and full rings', () => {
+  function ringError(message, ring) {
+    const error = new Error(message)
+    error.overRing = ring
+    return error
+  }
+
+  it('says made by the label of the node that made a lane, else the id', async () => {
+    const { client } = makeClient()
+    client.family = async () => ({
+      ...FAMILY,
+      nodes: FAMILY.nodes.map((node) => {
+        if (node.id === 'opencode') return { ...node, createdBy: 'orchestrator' }
+        if (node.id === 'claude') return { ...node, createdBy: 'ghost' }
+        return node
+      }),
+    })
+    await withDom(async ({ container, root }) => {
+      await mount(root, client)
+      expect(rowByLabel(container, 'OpenCode').querySelector('.ui-row-detail').textContent).toContain(
+        'made by Orchestrator'
+      )
+      expect(rowByLabel(container, 'Claude').querySelector('.ui-row-detail').textContent).toContain('made by ghost')
+      expect(rowByLabel(container, 'Frontend').querySelector('.ui-row-detail').textContent).not.toContain('made by')
+    })
+  })
+
+  it('asks before turning a lane on past a full ring and sends the ring', async () => {
+    const { client, calls } = makeClient()
+    let refused = false
+    client.setActiveLanes = async (payload) => {
+      calls.setActiveLanes.push(payload)
+      if (!refused) {
+        refused = true
+        throw ringError('Confirm going past the seats on ring 1.', 1)
+      }
+      return { ok: true }
+    }
+    await withDom(async ({ container, root }) => {
+      await mount(root, client)
+      await click(root, container.querySelector('.mr-family-more-head'))
+      await chooseAction(root, rowByLabel(container, 'OpenCode 2'), 'Turn on')
+      const card = container.querySelector('.mr-side-confirm-card')
+      expect(card.textContent).toContain('Ring 1 is full. Turn it on anyway?')
+      expect(calls.setActiveLanes).toHaveLength(1)
+      await click(root, buttonWithText(card, 'Anyway'))
+      expect(calls.setActiveLanes).toHaveLength(2)
+      expect(calls.setActiveLanes[1]).toEqual({
+        lanes: ['opencode', 'opencode2', 'claude'],
+        overRing: 1,
+        confirmed: true,
+      })
+      expect(container.querySelector('.mr-side-confirm-card')).toBeNull()
+    })
+  })
+
+  it('asks before making a new lane past a full ring and sends the ring', async () => {
+    const { client, calls } = makeClient()
+    const added = []
+    let refused = false
+    client.createLane = async (payload) => {
+      calls.createLane.push(payload)
+      if (!refused) {
+        refused = true
+        throw ringError('Confirm going past the seats on ring 0.', 0)
+      }
+      const id = `lane-${added.length + 2}`
+      added.push({
+        id,
+        kind: 'lane',
+        label: payload.name,
+        harness: payload.harness,
+        model: payload.model,
+        effort: payload.effort,
+        parent: 'orchestrator',
+        active: true,
+        working: false,
+        custom: true,
+      })
+      return { key: id }
+    }
+    const before = client.family
+    client.family = async () => {
+      const answer = await before()
+      return { ...answer, nodes: [...answer.nodes.filter((node) => !added.some((row) => row.id === node.id)), ...added] }
+    }
+    await withDom(async ({ container, root }) => {
+      await mount(root, client)
+      await click(root, container.querySelector('.mr-family-add'))
+      const form = container.querySelector('.mr-family-child')
+      await type(root, form.querySelector('input[aria-label="New agent label"]'), 'Writer')
+      await act(async () => {
+        form.dispatchEvent({ type: 'submit', bubbles: true, cancelable: true })
+      })
+      await click(root, buttonWithText(container.querySelector('.mr-side-confirm-card'), 'Create'))
+      const card = container.querySelector('.mr-side-confirm-card')
+      expect(card.textContent).toContain('Ring 0 is full. Make it anyway?')
+      expect(calls.createLane).toHaveLength(1)
+      expect(calls.createLane[0]).not.toHaveProperty('overRing')
+      await click(root, buttonWithText(card, 'Anyway'))
+      expect(calls.createLane).toHaveLength(2)
+      expect(calls.createLane[1]).toMatchObject({ name: 'Writer', overRing: 0, confirmed: true })
+      expect(rowByLabel(container, 'Writer')).not.toBeNull()
+      expect(container.querySelector('.mr-side-confirm-card')).toBeNull()
+    })
+  })
+})
+
 describe('FamilyTree session rows', () => {
   it('lists the session that started a lane under the orchestrator', async () => {
     const { client } = makeClient()
