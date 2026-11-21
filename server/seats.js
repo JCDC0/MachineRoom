@@ -161,6 +161,27 @@ export function setGrant(file, id, { lanes, subs }, io = {}) {
   return writeSeats(file, { rings: current.rings, grants }, io)
 }
 
+export function setRings(file, rings, io = {}) {
+  const current = readSeats(file)
+  return writeSeats(file, { rings, grants: current.grants }, io)
+}
+
+export function ringSummary({ seats, tree, depth = AGENT_DEPTH_DEFAULT } = {}) {
+  const nodes = tree ?? []
+  const rings = seats?.rings ?? []
+  const last = Math.max(0, depth - 1)
+  const rows = []
+  for (let ring = 0; ring <= last; ring += 1) {
+    const raw = rings[ring]
+    rows.push({
+      ring,
+      taken: ringUse(nodes, ring),
+      limit: count(raw) ? raw : null,
+    })
+  }
+  return rows
+}
+
 export function seatSummary({ seats, tree, id, depth = AGENT_DEPTH_DEFAULT }) {
   const nodes = tree ?? []
   const node = nodeOf(nodes, id)
