@@ -123,6 +123,17 @@ describe('leftoverProcesses', () => {
     expect(leftoverProcesses(tree, { worktree: '/work/lane', spareAncestor: 10, platform: 'linux' }).map((item) => item.pid)).toEqual([12])
   })
 
+  it('does not spare a live child whose parent chain to spareAncestor passes through run-lane.mjs', () => {
+    const tree = [
+      { pid: 100, ppid: 1, command: 'node bridge' },
+      { pid: 200, ppid: 100, command: 'node scripts/run-lane.mjs agy-4' },
+      { pid: 201, ppid: 200, command: 'agy.exe --print "see C:\\work\\lane"' },
+      { pid: 301, ppid: 100, command: 'agy.exe --print "see C:\\work\\lane"' },
+    ]
+    const found = leftoverProcesses(tree, { worktree: 'C:\\work\\lane', spareAncestor: 100, platform: 'win32' })
+    expect(found.map((item) => item.pid)).toEqual([201])
+  })
+
   it('compares the folder without case on Windows and with case elsewhere', () => {
     expect(leftoverProcesses(rows, { worktree: 'c:/WORK/lane', platform: 'win32' }).map((item) => item.pid)).toEqual([4])
     expect(leftoverProcesses(rows, { worktree: 'c:/WORK/lane', platform: 'linux' }).map((item) => item.pid)).toEqual([])

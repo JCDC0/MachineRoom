@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Review 68 fixes: a ring seat label keeps clear of the agents on its ring as well as the sector names; the leftover check no longer spares a live lane child whose parent chain passes through run-lane; the stop path's bridge pid is tested. The refused-run test's fake runner writes its meta before its log, as run-lane does, which was the cause of its CI failures (P686, R68-1 to R68-3; run by the Neon team).
 - The ring seat labels stand in the widest gap between that ring's sector names, so they no longer sit on a name, and are larger (scale 1.5, opacity 0.8 when not full) so they read at overview distance (P684; run by the Neon team).
 - Review 67 fixes: the leftover check ignores a spared ancestor of 1 or less (a POSIX orphan under pid 1 is caught), the bridge passes its pid to the runner (MACHINEROOM_BRIDGE_PID) and spares its own live turns in its check; the connection probe runs agy with the updater switch; a prompt too long to fit replies and starts the next queued turn (P683, R67-2 to R67-4; run by the Neon team).
 - One click on a folder card's head no longer lifts it: the card head's own click listener is gone, so only a double click lifts or drops a card, and a double click on a fresh folder now lifts it instead of lifting and dropping it in one go (P682, R67-1; run by the Neon team).

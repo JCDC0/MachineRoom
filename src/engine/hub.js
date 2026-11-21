@@ -178,17 +178,26 @@ export function seatLabelAngle(angles) {
   return (bestStart + bestWidth / 2) % turn
 }
 
-export function seatRingPoint(ring, layout = null) {
+export function seatRingPoint(ring, layout = null, parkedCount = 0) {
   if (!Number.isInteger(ring) || ring < 0) return null
   const entry = layout?.rings?.[ring]
   if (ring > 0 && !entry) return null
   const radius = entry ? entry.radius : HUB_RADIUS
   const y = entry ? entry.y - HUB_Y : 0
-  const angles = Array.isArray(layout?.arcs)
-    ? layout.arcs
-      .filter((arc) => arc && arc.level === ring && arc.end - arc.start > SECTOR_EPSILON)
-      .map((arc) => sectorLabelAngle(arc))
-    : []
+  const count = Array.isArray(parkedCount) ? parkedCount.length : Math.max(0, Math.floor(Number(parkedCount) || 0))
+  const angles = []
+  if (Array.isArray(layout?.arcs)) {
+    for (const arc of layout.arcs) {
+      if (!arc || arc.level !== ring || !(arc.end - arc.start > SECTOR_EPSILON)) continue
+      angles.push(sectorLabelAngle(arc))
+      if (arc.level > 0) angles.push(sectorSubAngle(arc))
+      angles.push(...sectorLaneAngles(arc))
+    }
+  } else if (ring === 0) {
+    for (let index = 0; index < count; index += 1) {
+      angles.push(slotAngle(index, count))
+    }
+  }
   const angle = seatLabelAngle(angles)
   const distance = radius + SEAT_LABEL_OUT
   return { x: Math.cos(angle) * distance, y, z: Math.sin(angle) * distance }
@@ -690,7 +699,7 @@ export function createHub(scene, agentsOrCount, ladder = null) {
       const ring = Number(row?.ring)
       const limit = seatLimit(row?.limit)
       if (!Number.isInteger(ring) || ring < 0 || limit === null) continue
-      const point = seatRingPoint(ring, layout)
+      const point = seatRingPoint(ring, layout, parkedKeys.length)
       if (!point) continue
       keep.add(ring)
       let sprite = seatLabels.get(ring)
