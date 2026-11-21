@@ -42,7 +42,6 @@ import {
   ringPulse,
   ringRadius,
   ringY,
-  seatLabelAngle,
   seatRingPoint,
   startDanceEnvelope,
   sectorGlow,
@@ -58,6 +57,7 @@ import {
   topRingSeats,
   workingKeys,
 } from '../src/engine/hub.js'
+import { OVERVIEW } from '../src/engine/camera.js'
 import { latticeLevels } from '../src/engine/void.js'
 import { YELLOW } from '../src/engine/sprites.js'
 
@@ -480,37 +480,6 @@ describe('where a sector name sits', () => {
   })
 })
 
-describe('where a ring seat label sits', () => {
-  it('returns 0 when a ring has no sector names', () => {
-    expect(seatLabelAngle([])).toBe(0)
-    expect(seatLabelAngle(null)).toBe(0)
-    expect(seatLabelAngle([Number.NaN, null, ''])).toBe(0)
-  })
-
-  it('puts the label opposite a single sector name', () => {
-    expect(seatLabelAngle([0])).toBeCloseTo(Math.PI)
-    expect(seatLabelAngle([Math.PI / 2])).toBeCloseTo(Math.PI * 1.5)
-    expect(seatLabelAngle([Math.PI * 1.5])).toBeCloseTo(Math.PI * 0.5)
-  })
-
-  it('picks the middle of the widest gap for two angles in any order', () => {
-    expect(seatLabelAngle([0, Math.PI])).toBeCloseTo(Math.PI / 2)
-    expect(seatLabelAngle([Math.PI / 2, 0])).toBeCloseTo(Math.PI * 1.25)
-  })
-
-  it('picks the middle of the widest gap for three unequal angles', () => {
-    expect(seatLabelAngle([1, 0, 0.4])).toBeCloseTo(Math.PI + 0.5)
-    expect(seatLabelAngle([5.5, 0.5, 1.5])).toBeCloseTo(3.5)
-  })
-
-  it('wraps angles below 0 and past 2 pi', () => {
-    expect(seatLabelAngle([-Math.PI / 2])).toBeCloseTo(Math.PI / 2)
-    expect(seatLabelAngle([Math.PI * 2.5])).toBeCloseTo(Math.PI * 1.5)
-    expect(seatLabelAngle([-Math.PI / 2, Math.PI * 2.5])).toBeCloseTo(Math.PI)
-    expect(seatLabelAngle([-0.2, Math.PI * 2 + 0.2, Math.PI * 2 + 1])).toBeCloseTo((1 + Math.PI * 2 - 0.2) / 2)
-  })
-})
-
 describe('which sector an agent belongs to', () => {
   it('names the sub sector for its key and for each of its lanes', () => {
     expect(sectorIdForKey('sub-frontend', LADDER)).toBe('frontend')
@@ -821,20 +790,15 @@ describe('the seats on the park rings', () => {
     expect(drawnLabels).toContain('2 / 4')
     expect(drawnLabels).toContain('1 / 3')
     const top = labelFor(hub, 0)
-    const topAngle = seatLabelAngle(layout.arcs.filter((arc) => arc.level === 0).map((arc) => sectorLabelAngle(arc)))
+    const angle = -OVERVIEW.yaw
     expect(Math.hypot(top.position.x, top.position.z)).toBeCloseTo(HUB_RADIUS + SEAT_LABEL_OUT)
-    expect(top.position.x).toBeCloseTo(Math.cos(topAngle) * (HUB_RADIUS + SEAT_LABEL_OUT))
-    expect(top.position.z).toBeCloseTo(Math.sin(topAngle) * (HUB_RADIUS + SEAT_LABEL_OUT))
+    expect(top.position.x).toBeCloseTo(Math.cos(angle) * (HUB_RADIUS + SEAT_LABEL_OUT))
+    expect(top.position.z).toBeCloseTo(Math.sin(angle) * (HUB_RADIUS + SEAT_LABEL_OUT))
     expect(top.position.y).toBe(0)
     const lower = labelFor(hub, 1)
-    const lowerAngle = seatLabelAngle(
-      layout.arcs
-        .filter((arc) => arc.level === 1)
-        .flatMap((arc) => [sectorLabelAngle(arc), sectorSubAngle(arc), ...sectorLaneAngles(arc)]),
-    )
     expect(Math.hypot(lower.position.x, lower.position.z)).toBeCloseTo(layout.rings[1].radius + SEAT_LABEL_OUT)
-    expect(lower.position.x).toBeCloseTo(Math.cos(lowerAngle) * (layout.rings[1].radius + SEAT_LABEL_OUT))
-    expect(lower.position.z).toBeCloseTo(Math.sin(lowerAngle) * (layout.rings[1].radius + SEAT_LABEL_OUT))
+    expect(lower.position.x).toBeCloseTo(Math.cos(angle) * (layout.rings[1].radius + SEAT_LABEL_OUT))
+    expect(lower.position.z).toBeCloseTo(Math.sin(angle) * (layout.rings[1].radius + SEAT_LABEL_OUT))
     expect(lower.position.y).toBe(layout.rings[1].y - HUB_Y)
     hub.dispose()
   })
@@ -857,51 +821,76 @@ describe('the seats on the park rings', () => {
     hub.dispose()
   })
 
-  it('puts a ring with one sector name at angle 0 and no ring agents at pi', () => {
-    const layout = {
-      rings: [{ level: 0, radius: HUB_RADIUS, y: HUB_Y }],
-      arcs: [{ id: 'only', name: 'Only', level: 0, start: -0.2, end: 1.8 }],
+  it('keeps each ring seat label at the same point for 1, 2, 3 and 4 lanes and with and without a sub', () => {
+    const expectedRing0 = seatRingPoint(0)
+    const ring0Points = []
+    for (const laneCount of [1, 2, 3, 4]) {
+      const lanes = Array.from({ length: laneCount }, (_, index) => ({ key: `l${index + 1}`, name: `Lane ${index + 1}` }))
+      const hub = createHub(new THREE.Scene(), [{ key: 'orchestrator', name: 'Orchestrator' }, ...lanes])
+      hub.setSeatCounts([{ ring: 0, taken: laneCount, limit: 4 }])
+      const label = labelFor(hub, 0)
+      ring0Points.push({ x: label.position.x, y: label.position.y, z: label.position.z })
+      hub.dispose()
     }
-    expect(sectorLabelAngle(layout.arcs[0])).toBeCloseTo(0)
-    const point = seatRingPoint(0, layout)
-    expect(point.x).toBeCloseTo(-(HUB_RADIUS + SEAT_LABEL_OUT))
-    expect(point.y).toBe(0)
-    expect(point.z).toBeCloseTo(0)
-  })
-
-  it('keeps ring 0 seat label off lane 3 when 4 lanes have no subs', () => {
-    const fourLanes = [
+    const subRoster = [
       { key: 'orchestrator', name: 'Orchestrator' },
+      { key: 'sub-frontend', name: 'Frontend', subOrchestrator: true },
       { key: 'l1', name: 'Lane 1' },
       { key: 'l2', name: 'Lane 2' },
       { key: 'l3', name: 'Lane 3' },
       { key: 'l4', name: 'Lane 4' },
     ]
-    const hub = createHub(new THREE.Scene(), fourLanes)
-    hub.setSeatCounts([{ ring: 0, taken: 4, limit: 4 }])
-    const ring0 = labelFor(hub, 0)
-    const labelAngle = Math.atan2(ring0.position.z, ring0.position.x)
-    const lane3Angle = slotAngle(3, 4)
-    const turn = Math.PI * 2
-    const diff = Math.abs(((labelAngle - lane3Angle + Math.PI * 3) % turn) - Math.PI)
-    expect(diff).toBeGreaterThanOrEqual(0.3)
-    expect(ring0.position.x).not.toBeCloseTo(HUB_RADIUS + SEAT_LABEL_OUT)
-    expect(seatRingPoint(0, null, 4)).toEqual({ x: ring0.position.x, y: ring0.position.y, z: ring0.position.z })
-    hub.dispose()
+    const subLadder = { subs: [{ id: 'frontend', name: 'Frontend', lanes: ['l1', 'l2'] }] }
+    const hubWithSub = createHub(new THREE.Scene(), subRoster, subLadder)
+    hubWithSub.setSeatCounts([
+      { ring: 0, taken: 2, limit: 4 },
+      { ring: 1, taken: 2, limit: 4 },
+    ])
+    const ring0WithSub = labelFor(hubWithSub, 0)
+    ring0Points.push({ x: ring0WithSub.position.x, y: ring0WithSub.position.y, z: ring0WithSub.position.z })
+    hubWithSub.dispose()
+    for (const point of ring0Points) {
+      expect(point.x).toBeCloseTo(expectedRing0.x)
+      expect(point.y).toBe(expectedRing0.y)
+      expect(point.z).toBeCloseTo(expectedRing0.z)
+    }
+
+    const ring1Points = []
+    for (const laneCount of [1, 2, 3, 4]) {
+      const keys = Array.from({ length: laneCount }, (_, index) => `l${index + 1}`)
+      const roster = [
+        { key: 'orchestrator', name: 'Orchestrator' },
+        { key: 'sub-frontend', name: 'Frontend', subOrchestrator: true },
+        ...keys.map((key, index) => ({ key, name: `Lane ${index + 1}` })),
+      ]
+      const ladder = { subs: [{ id: 'frontend', name: 'Frontend', lanes: keys }] }
+      const hub = createHub(new THREE.Scene(), roster, ladder)
+      hub.setSeatCounts([{ ring: 1, taken: laneCount, limit: 4 }])
+      const label = labelFor(hub, 1)
+      ring1Points.push({ x: label.position.x, y: label.position.y, z: label.position.z })
+      hub.dispose()
+    }
+    const expectedRing1 = seatRingPoint(1, ringLayout(THREE_LANES, ['opencode', 'claude', 'hermes']))
+    for (const point of ring1Points) {
+      expect(point.x).toBeCloseTo(expectedRing1.x)
+      expect(point.y).toBe(expectedRing1.y)
+      expect(point.z).toBeCloseTo(expectedRing1.z)
+    }
   })
 
-  it('keeps ring 1 seat label at least 0.3 radians from every lane, the sub and the sector name with 1 sub and 3 lanes', () => {
-    const hub = createHub(new THREE.Scene(), ROSTER, THREE_LANES)
-    hub.setSeatCounts([{ ring: 1, taken: 1, limit: 2 }])
+  it('places ring 0 and ring 1 seat labels at different heights and at least 150 units outside their rings', () => {
+    expect(SEAT_LABEL_OUT).toBeGreaterThanOrEqual(150)
+    const hub = createHub(new THREE.Scene(), ROSTER, LADDER)
+    const layout = ringLayout(LADDER, hub.parkedKeys())
+    hub.setSeatCounts([
+      { ring: 0, taken: 1, limit: 4 },
+      { ring: 1, taken: 2, limit: 4 },
+    ])
+    const ring0 = labelFor(hub, 0)
     const ring1 = labelFor(hub, 1)
-    const labelAngle = Math.atan2(ring1.position.z, ring1.position.x)
-    const layout = ringLayout(THREE_LANES, hub.parkedKeys())
-    const arc = layout.arcs.find((entry) => entry.level === 1)
-    const turn = Math.PI * 2
-    const distance = (a, b) => Math.abs(((a - b + Math.PI * 3) % turn) - Math.PI)
-    for (const occupied of [sectorLabelAngle(arc), sectorSubAngle(arc), ...sectorLaneAngles(arc)]) {
-      expect(distance(labelAngle, occupied)).toBeGreaterThanOrEqual(0.3)
-    }
+    expect(ring0.position.y).not.toBe(ring1.position.y)
+    expect(Math.hypot(ring0.position.x, ring0.position.z) - HUB_RADIUS).toBeGreaterThanOrEqual(150)
+    expect(Math.hypot(ring1.position.x, ring1.position.z) - layout.rings[1].radius).toBeGreaterThanOrEqual(150)
     hub.dispose()
   })
 
@@ -922,8 +911,9 @@ describe('the seats on the park rings', () => {
       { ring: 1, taken: 0, limit: 2 },
     ])
     expect(seatLabels(hub)).toHaveLength(1)
-    expect(labelFor(hub, 0).position.x).toBe(HUB_RADIUS + SEAT_LABEL_OUT)
-    expect(labelFor(hub, 0).position.z).toBe(0)
+    const expected = seatRingPoint(0)
+    expect(labelFor(hub, 0).position.x).toBeCloseTo(expected.x)
+    expect(labelFor(hub, 0).position.z).toBeCloseTo(expected.z)
     expect(labelFor(hub, 1)).toBeUndefined()
     hub.dispose()
   })
@@ -944,7 +934,7 @@ describe('the seats on the park rings', () => {
     const beforeTop = labelFor(hub, 0).position.clone()
     hub.setLadder(null)
     expect(seatLabels(hub)).toHaveLength(1)
-    const unladdered = seatRingPoint(0, null, hub.parkedKeys().length)
+    const unladdered = seatRingPoint(0)
     expect(labelFor(hub, 0).position.x).toBeCloseTo(unladdered.x)
     expect(labelFor(hub, 0).position.z).toBeCloseTo(unladdered.z)
     hub.setLadder(THREE_LANES)
@@ -955,7 +945,8 @@ describe('the seats on the park rings', () => {
     expect(labelFor(hub, 0).position.x).toBeCloseTo(beforeTop.x)
     expect(labelFor(hub, 0).position.z).toBeCloseTo(beforeTop.z)
     const multiAngle = Math.atan2(labelFor(hub, 1).position.z, labelFor(hub, 1).position.x)
-    expect(multiAngle).not.toBeCloseTo(singleAngle)
+    expect(singleAngle).toBeCloseTo(-OVERVIEW.yaw)
+    expect(multiAngle).toBeCloseTo(-OVERVIEW.yaw)
     hub.dispose()
   })
 })

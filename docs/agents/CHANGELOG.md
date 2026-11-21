@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Review 69 fixes: the leftover check counts a process as a runner only when node runs run-lane.mjs as its script, so an orchestrator turn whose prompt names run-lane.mjs is still spared; each ring's seat label stands at one fixed spot, the ring's right edge as seen from the overview camera, 160 units out, so it no longer jumps when lanes come or go; a log written a moment before its meta is adopted once the meta appears (P688, R69-1 to R69-3; run by the Neon team).
 - Review 68 fixes: a ring seat label keeps clear of the agents on its ring as well as the sector names; the leftover check no longer spares a live lane child whose parent chain passes through run-lane; the stop path's bridge pid is tested. The refused-run test's fake runner writes its meta before its log, as run-lane does, which was the cause of its CI failures (P686, R68-1 to R68-3; run by the Neon team).
 - The ring seat labels stand in the widest gap between that ring's sector names, so they no longer sit on a name, and are larger (scale 1.5, opacity 0.8 when not full) so they read at overview distance (P684; run by the Neon team).
 - Review 67 fixes: the leftover check ignores a spared ancestor of 1 or less (a POSIX orphan under pid 1 is caught), the bridge passes its pid to the runner (MACHINEROOM_BRIDGE_PID) and spares its own live turns in its check; the connection probe runs agy with the updater switch; a prompt too long to fit replies and starts the next queued turn (P683, R67-2 to R67-4; run by the Neon team).

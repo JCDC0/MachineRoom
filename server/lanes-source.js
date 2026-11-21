@@ -25,6 +25,7 @@ const DEFAULT_PRIME_MS = 60 * 1000
 const DEFAULT_SCAN_MS = 2000
 const DEFAULT_FULL_LIST_MS = 60 * 1000
 const DEFAULT_LAGGING_DROP_MS = 60 * 60 * 1000
+const META_GRACE_MS = 10 * 1000
 const READ_CHUNK = 64 * 1024
 const MAX_PARTIAL = 8 * 1024 * 1024
 const QUIET_KEPT = 50
@@ -402,6 +403,7 @@ export function createLanesSource(options = {}) {
   const lingerTimers = new Set()
   const quiet = new Map()
   const seen = new Set()
+  const waitingMeta = new Map()
   const lagging = new Map()
   const dropped = new Map()
   const pendingChecks = new Set()
@@ -539,6 +541,7 @@ export function createLanesSource(options = {}) {
     if (seen.has(key)) return
     const agent = agentFor(name, getAgentMap())
     if (!agent) {
+      waitingMeta.delete(key)
       seen.add(key)
       return
     }
@@ -546,13 +549,29 @@ export function createLanesSource(options = {}) {
     const metaProject = meta?.project ?? ''
     const ownProject = metaProject !== '' && pathKey(metaProject) === pathKey(roomRoot)
     if (metaProject !== '' && !ownProject && !inRoomRepo(metaProject)) {
+      waitingMeta.delete(key)
       seen.add(key)
       return
     }
     if (metaProject === '' && !worktreeRunsShown) {
+      if (meta === null) {
+        let mtimeMs = NaN
+        try {
+          mtimeMs = statFile(path).mtimeMs
+        } catch {
+          waitingMeta.delete(key)
+          return
+        }
+        if (Number.isFinite(mtimeMs) && now() - mtimeMs <= META_GRACE_MS) {
+          waitingMeta.set(key, { name, path })
+          return
+        }
+      }
+      waitingMeta.delete(key)
       seen.add(key)
       return
     }
+    waitingMeta.delete(key)
     seen.add(key)
     beginRun(name.slice(0, -4), path, agent, Boolean(ownProject), metaProject, meta?.startedBy ?? null)
   }
@@ -560,7 +579,16 @@ export function createLanesSource(options = {}) {
   function scan() {
     const current = now()
     const stamp = runsFolderStamp()
-    if (hasListed && !listWanted && stamp !== null && stamp === lastFolderStamp && current - lastListAt < fullListMs) return
+    if (hasListed && !listWanted && stamp !== null && stamp === lastFolderStamp && current - lastListAt < fullListMs) {
+      if (waitingMeta.size > 0) {
+        let agentMap = null
+        const getAgentMap = () => (agentMap ??= new Map(allAgents().map((agent) => [agent.key, agent])))
+        for (const info of [...waitingMeta.values()]) {
+          adoptLog(info.name, info.path, getAgentMap)
+        }
+      }
+      return
+    }
     let entries
     try {
       entries = listFolder(folder)
@@ -932,6 +960,11 @@ export function createLanesSource(options = {}) {
           pendingChecks.add(key)
           if (eventType === 'rename' && file.endsWith('.log') && !seen.has(key) && !lagging.has(key) && !dropped.has(key)) {
             listWanted = true
+          } else if (file.endsWith('.meta.json')) {
+            const logKey = pathKey(join(folder, file.replace(/\.meta\.json$/i, '.log')))
+            if (!seen.has(logKey) && !lagging.has(logKey) && !dropped.has(logKey)) {
+              listWanted = true
+            }
           }
         } else if (eventType === 'rename') {
           listWanted = true
@@ -961,6 +994,7 @@ export function createLanesSource(options = {}) {
     lagging.clear()
     dropped.clear()
     seen.clear()
+    waitingMeta.clear()
     sameRepo.clear()
     pendingChecks.clear()
     lastFolderStamp = null
