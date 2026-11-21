@@ -827,7 +827,11 @@ describe('the seats on the park rings', () => {
     expect(top.position.z).toBeCloseTo(Math.sin(topAngle) * (HUB_RADIUS + SEAT_LABEL_OUT))
     expect(top.position.y).toBe(0)
     const lower = labelFor(hub, 1)
-    const lowerAngle = seatLabelAngle(layout.arcs.filter((arc) => arc.level === 1).map((arc) => sectorLabelAngle(arc)))
+    const lowerAngle = seatLabelAngle(
+      layout.arcs
+        .filter((arc) => arc.level === 1)
+        .flatMap((arc) => [sectorLabelAngle(arc), sectorSubAngle(arc), ...sectorLaneAngles(arc)]),
+    )
     expect(Math.hypot(lower.position.x, lower.position.z)).toBeCloseTo(layout.rings[1].radius + SEAT_LABEL_OUT)
     expect(lower.position.x).toBeCloseTo(Math.cos(lowerAngle) * (layout.rings[1].radius + SEAT_LABEL_OUT))
     expect(lower.position.z).toBeCloseTo(Math.sin(lowerAngle) * (layout.rings[1].radius + SEAT_LABEL_OUT))
@@ -853,27 +857,51 @@ describe('the seats on the park rings', () => {
     hub.dispose()
   })
 
-  it('puts a ring with one sector name at angle 0 at pi', () => {
+  it('puts a ring with one sector name at angle 0 and no ring agents at pi', () => {
     const layout = {
-      rings: [
-        { level: 0, radius: HUB_RADIUS, y: HUB_Y },
-        { level: 1, radius: HUB_RADIUS, y: HUB_Y - SUB_RING_DROP },
-      ],
-      arcs: [{ id: 'only', name: 'Only', level: 1, start: -0.2, end: 1.8 }],
+      rings: [{ level: 0, radius: HUB_RADIUS, y: HUB_Y }],
+      arcs: [{ id: 'only', name: 'Only', level: 0, start: -0.2, end: 1.8 }],
     }
     expect(sectorLabelAngle(layout.arcs[0])).toBeCloseTo(0)
-    const point = seatRingPoint(1, layout)
+    const point = seatRingPoint(0, layout)
     expect(point.x).toBeCloseTo(-(HUB_RADIUS + SEAT_LABEL_OUT))
-    expect(point.y).toBe(-SUB_RING_DROP)
+    expect(point.y).toBe(0)
     expect(point.z).toBeCloseTo(0)
+  })
 
+  it('keeps ring 0 seat label off lane 3 when 4 lanes have no subs', () => {
+    const fourLanes = [
+      { key: 'orchestrator', name: 'Orchestrator' },
+      { key: 'l1', name: 'Lane 1' },
+      { key: 'l2', name: 'Lane 2' },
+      { key: 'l3', name: 'Lane 3' },
+      { key: 'l4', name: 'Lane 4' },
+    ]
+    const hub = createHub(new THREE.Scene(), fourLanes)
+    hub.setSeatCounts([{ ring: 0, taken: 4, limit: 4 }])
+    const ring0 = labelFor(hub, 0)
+    const labelAngle = Math.atan2(ring0.position.z, ring0.position.x)
+    const lane3Angle = slotAngle(3, 4)
+    const turn = Math.PI * 2
+    const diff = Math.abs(((labelAngle - lane3Angle + Math.PI * 3) % turn) - Math.PI)
+    expect(diff).toBeGreaterThanOrEqual(0.3)
+    expect(ring0.position.x).not.toBeCloseTo(HUB_RADIUS + SEAT_LABEL_OUT)
+    expect(seatRingPoint(0, null, 4)).toEqual({ x: ring0.position.x, y: ring0.position.y, z: ring0.position.z })
+    hub.dispose()
+  })
+
+  it('keeps ring 1 seat label at least 0.3 radians from every lane, the sub and the sector name with 1 sub and 3 lanes', () => {
     const hub = createHub(new THREE.Scene(), ROSTER, THREE_LANES)
     hub.setSeatCounts([{ ring: 1, taken: 1, limit: 2 }])
     const ring1 = labelFor(hub, 1)
-    const sector1 = hub.group.getObjectByName('sector:frontend').children.find((child) => child.isSprite)
     const labelAngle = Math.atan2(ring1.position.z, ring1.position.x)
-    const sectorAngle = Math.atan2(sector1.position.z, sector1.position.x)
-    expect((labelAngle - sectorAngle + Math.PI * 2) % (Math.PI * 2)).toBeCloseTo(Math.PI)
+    const layout = ringLayout(THREE_LANES, hub.parkedKeys())
+    const arc = layout.arcs.find((entry) => entry.level === 1)
+    const turn = Math.PI * 2
+    const distance = (a, b) => Math.abs(((a - b + Math.PI * 3) % turn) - Math.PI)
+    for (const occupied of [sectorLabelAngle(arc), sectorSubAngle(arc), ...sectorLaneAngles(arc)]) {
+      expect(distance(labelAngle, occupied)).toBeGreaterThanOrEqual(0.3)
+    }
     hub.dispose()
   })
 
@@ -916,8 +944,9 @@ describe('the seats on the park rings', () => {
     const beforeTop = labelFor(hub, 0).position.clone()
     hub.setLadder(null)
     expect(seatLabels(hub)).toHaveLength(1)
-    expect(labelFor(hub, 0).position.x).toBe(HUB_RADIUS + SEAT_LABEL_OUT)
-    expect(labelFor(hub, 0).position.z).toBe(0)
+    const unladdered = seatRingPoint(0, null, hub.parkedKeys().length)
+    expect(labelFor(hub, 0).position.x).toBeCloseTo(unladdered.x)
+    expect(labelFor(hub, 0).position.z).toBeCloseTo(unladdered.z)
     hub.setLadder(THREE_LANES)
     expect(seatLabels(hub)).toHaveLength(2)
     const singleAngle = Math.atan2(labelFor(hub, 1).position.z, labelFor(hub, 1).position.x)
