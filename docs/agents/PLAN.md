@@ -1,17 +1,17 @@
 # Plan
 
-## Next, as of 2026-11-21 19:00
+## Next, as of 2026-11-21 21:05
 
-Pushed `caaa15ff`. Since the restart, merged and pushed: P665 to P672, P639a to P639d (seats in the Agents tree and on the rings), P640 (seat docs), the engine build chunk (P671), the AGY updater fix (`server/quiet-agy.js`: the terminal pop-ups were AGY's background updater), and test fixes.
+Pushed `a9257c2e`. Since the restart, merged and pushed: P665 to P675 (review 66 and its fixes, run by the Neon team), P639a to P639d (seats in the Agents tree and on the rings), P640 (seat docs), the engine build chunk (P671), the AGY updater fix (`server/quiet-agy.js`, then every lane child, the model list and the test setup: the terminal pop-ups were AGY's background updater), the leftover check that spares a live sibling, and test fixes.
 
 The team, set by the owner on 2026-11-21: the Claude Code session at the top orchestrates; under it the sub `neon` (AGY, Gemini 4 Neon High, Bypass) leads `agy-4` "Hydrogen" (AGY, Gemini 4 Hydrogen High, an owner-made lane that runs `tasks` queues) and `native2` (DeepSeek V4.1 Flash, `--reasoning xhigh`, $1 a day OpenRouter budget that resets at 08:00 Manila). agy2, agy3, codex, native3 and native4 are off. Neon starts its lanes through the bridge and reports in its conversation; Claude reads it there, merges and pushes.
 
-1. Review 66 (P673) of `ec864944` onward: running on `agy-4` under Neon (native3 ran out of budget before writing it). Neon proposes the fix briefs; Claude writes them in TASKS.md.
+1. P676, the Team tab lines of seat S4 (an orchestrator's create, turn on, turn off and new sub with the seat it took or freed): on `agy-4` under Neon.
 2. R64-7: a sub stands over its own middle lane when its sector has an odd number of lanes, and the park rings ignore the lattice floor. A design choice for the owner (sub inside or outside the ring, or a gap at the middle of the arc); check by eye.
 3. The `X / Y` ring labels (P639b) were not seen by eye yet at overview distance; check them closer.
 4. Decide with the owner what Chat opens on the bench, where the orchestrator is the Claude Code session.
 5. Known weakness: any request with an `Origin` header counts as the owner; matters only off this machine.
-6. The Team tab lines of seat S4 (an orchestrator's create, turn on and turn off with the seat it took) are not built.
+6. After P676, a review of `9e467b80` onward (P675, P676 and the AGY switch commits).
 
 ## Where we are
 
