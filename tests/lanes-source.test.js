@@ -1496,6 +1496,63 @@ describe('the lane source carries the session that started a run', () => {
     expect(source.openRuns()).toEqual([])
     expect(frames).toEqual([])
   })
+
+  it('skips a log that keeps growing with no meta 10 seconds after it was first seen', () => {
+    const base = tempDir('mr-lanes-meta-growing-')
+    const runs = join(base, 'runs')
+    const main = join(base, 'external-project')
+    mkdirSync(runs, { recursive: true })
+    mkdirSync(main, { recursive: true })
+    const lanes = lanesFor({ opencode: join(base, 'MachineRoom-opencode') })
+    let current = Date.now()
+    const frames = []
+    const source = createLanesSource({
+      folder: runs,
+      projectRoot: main,
+      repoRoot: join(base, 'room-repo'),
+      lanes,
+      quietMs: 60000,
+      pollMs: 20,
+      scanMs: 2000,
+      now: () => current,
+      watchFolder: () => ({ on() {}, close() {} }),
+      onFrame: (frame) => frames.push(frame),
+    })
+    cleanups.push(() => source.stop())
+    source.start()
+
+    const logPath = join(runs, 'opencode-P691-20261122-010300.log')
+    const metaPath = join(runs, 'opencode-P691-20261122-010300.meta.json')
+    writeFileSync(logPath, `${toolLine('src/a.js')}\n`)
+    utimesSync(logPath, new Date(current), new Date(current))
+    utimesSync(runs, new Date(current), new Date(current))
+
+    current += 2000
+    source.tick()
+    expect(source.openRuns()).toEqual([])
+
+    for (const stepMs of [3000, 4000]) {
+      current += stepMs
+      appendFileSync(logPath, `${toolLine('src/b.js')}\n`)
+      utimesSync(logPath, new Date(current), new Date(current))
+      utimesSync(runs, new Date(current), new Date(current))
+      source.tick()
+      expect(source.openRuns()).toEqual([])
+    }
+
+    current += 2000
+    appendFileSync(logPath, `${toolLine('src/c.js')}\n`)
+    utimesSync(logPath, new Date(current), new Date(current))
+    utimesSync(runs, new Date(current), new Date(current))
+    source.tick()
+    expect(source.openRuns()).toEqual([])
+
+    writeFileSync(metaPath, JSON.stringify({ project: main }))
+    current += 2000
+    source.tick()
+    expect(source.openRuns()).toEqual([])
+    expect(frames).toEqual([])
+  })
 })
 
 describe('lane lock stale checks in the lane source', () => {
