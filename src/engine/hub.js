@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 import { SECTOR_GAP, ownerOf } from '../model/hierarchy.js'
-import { minTextScale } from './camera.js'
+import { OVERVIEW, minTextScale } from './camera.js'
 import { isOrchestrator, isSubOrchestrator } from './shapes.js'
 import { WHITE, YELLOW, easeInOut, lineMaterial, still, textSprite } from './sprites.js'
 
@@ -36,7 +36,7 @@ export const SECTOR_GLOW_MS = 1000
 export const SEAT_LABEL_SCALE = 1.5
 export const SEAT_LABEL_COLOR = 'rgba(255,255,255,1)'
 export const SEAT_LABEL_OPACITY = 0.8
-export const SEAT_LABEL_OUT = 40
+export const SEAT_LABEL_OUT = 160
 
 export function writeColor(material, hex) {
   if (!material || !material.color) return false
@@ -152,53 +152,13 @@ export function sectorLabelAngle(arc) {
   return start + (end - start) * SECTOR_LABEL_INSET
 }
 
-export function seatLabelAngle(angles) {
-  const turn = Math.PI * 2
-  const normalized = []
-  for (const raw of Array.isArray(angles) ? angles : []) {
-    if (raw === null || raw === '' || typeof raw === 'boolean') continue
-    const value = Number(raw)
-    if (!Number.isFinite(value)) continue
-    normalized.push(((value % turn) + turn) % turn)
-  }
-  const unique = [...new Set(normalized)].sort((a, b) => a - b)
-  if (unique.length === 0) return 0
-  if (unique.length === 1) return (unique[0] + Math.PI) % turn
-  let bestStart = 0
-  let bestWidth = -1
-  for (let index = 0; index < unique.length; index += 1) {
-    const start = unique[index]
-    const end = index + 1 < unique.length ? unique[index + 1] : unique[0] + turn
-    const width = end - start
-    if (width > bestWidth) {
-      bestWidth = width
-      bestStart = start
-    }
-  }
-  return (bestStart + bestWidth / 2) % turn
-}
-
-export function seatRingPoint(ring, layout = null, parkedCount = 0) {
+export function seatRingPoint(ring, layout = null) {
   if (!Number.isInteger(ring) || ring < 0) return null
   const entry = layout?.rings?.[ring]
   if (ring > 0 && !entry) return null
   const radius = entry ? entry.radius : HUB_RADIUS
   const y = entry ? entry.y - HUB_Y : 0
-  const count = Array.isArray(parkedCount) ? parkedCount.length : Math.max(0, Math.floor(Number(parkedCount) || 0))
-  const angles = []
-  if (Array.isArray(layout?.arcs)) {
-    for (const arc of layout.arcs) {
-      if (!arc || arc.level !== ring || !(arc.end - arc.start > SECTOR_EPSILON)) continue
-      angles.push(sectorLabelAngle(arc))
-      if (arc.level > 0) angles.push(sectorSubAngle(arc))
-      angles.push(...sectorLaneAngles(arc))
-    }
-  } else if (ring === 0) {
-    for (let index = 0; index < count; index += 1) {
-      angles.push(slotAngle(index, count))
-    }
-  }
-  const angle = seatLabelAngle(angles)
+  const angle = -OVERVIEW.yaw
   const distance = radius + SEAT_LABEL_OUT
   return { x: Math.cos(angle) * distance, y, z: Math.sin(angle) * distance }
 }
@@ -699,7 +659,7 @@ export function createHub(scene, agentsOrCount, ladder = null) {
       const ring = Number(row?.ring)
       const limit = seatLimit(row?.limit)
       if (!Number.isInteger(ring) || ring < 0 || limit === null) continue
-      const point = seatRingPoint(ring, layout, parkedKeys.length)
+      const point = seatRingPoint(ring, layout)
       if (!point) continue
       keep.add(ring)
       let sprite = seatLabels.get(ring)
