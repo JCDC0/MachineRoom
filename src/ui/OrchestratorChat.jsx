@@ -1647,22 +1647,45 @@ export default function OrchestratorChat({
                 {seatConfirmText(seatConfirm, seatInfo, { id: selected, name: current?.name })}
               </p>
               <div className="mr-orch-confirm-actions">
-                <button
-                  type="button"
-                  className={`mr-orch-confirm-btn ${seatConfirm.kind === 'revoke' ? 'is-stop' : 'is-start'}`}
-                  onClick={seatCommandConfirmed}
-                  disabled={sending}
-                >
-                  {seatConfirm.kind === 'revoke' ? 'Revoke' : 'Grant'}
-                </button>
-                <button
-                  type="button"
-                  className="mr-orch-confirm-btn is-cancel"
-                  onClick={closeConfirm}
-                  disabled={sending}
-                >
-                  Cancel
-                </button>
+                {seatConfirm.kind === 'revoke' ? (
+                  <>
+                    <button
+                      type="button"
+                      className="mr-orch-confirm-btn is-cancel"
+                      onClick={closeConfirm}
+                      disabled={sending}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      className="mr-orch-confirm-btn is-stop"
+                      onClick={seatCommandConfirmed}
+                      disabled={sending}
+                    >
+                      Revoke
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      className="mr-orch-confirm-btn is-start"
+                      onClick={seatCommandConfirmed}
+                      disabled={sending}
+                    >
+                      Grant
+                    </button>
+                    <button
+                      type="button"
+                      className="mr-orch-confirm-btn is-cancel"
+                      onClick={closeConfirm}
+                      disabled={sending}
+                    >
+                      Cancel
+                    </button>
+                  </>
+                )}
               </div>
             </section>
           ) : null}
