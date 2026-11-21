@@ -1009,11 +1009,38 @@ describe('the inspected row and the inspector', () => {
       expect(held.className).toContain('is-selected')
       expect(room.holding()).toBe('lib/a')
 
-      fireCss('click', { target: cardTarget(cardElement('docs'), 'head') })
+      const docs = cardElement('docs')
+      fireCss('click', { target: cardTarget(docs, 'head') })
       tickRoom(1)
       expect(held.className).not.toContain('is-selected')
-      expect(liveCards().some((card) => card.className.includes('is-selected'))).toBe(false)
+      expect(docs.className).toContain('is-selected')
+      expect(liveCards().filter((card) => card.className.includes('is-selected'))).toHaveLength(1)
       expect(room.holding()).toBe('lib/a')
+    } finally {
+      room.dispose()
+    }
+  })
+
+  it('selects a folder on one head click without lifting or holding', async () => {
+    const inspected = []
+    const { room } = await makeRoom(['src/a.js', 'src/kid/deep/b.js', 'docs/c.md'], ['claude'], {
+      onInspect: (detail) => inspected.push(detail),
+    })
+    try {
+      tickRoom(1)
+      const card = cardElement('src/kid')
+      expect(card).toBeTruthy()
+      expect(cardElement('src/kid/deep')).toBeUndefined()
+
+      fireCss('click', { target: cardTarget(card, 'head') })
+      tickRoom(1)
+
+      expect(card.className).toContain('is-selected')
+      expect(card.className).not.toContain('is-pinned')
+      expect(cardElement('src/kid/deep')).toBeUndefined()
+      expect(room.holding()).toBe(null)
+      expect(room.free()).toBe(true)
+      expect(inspected).toEqual([{ kind: 'folder', id: 'src/kid' }])
     } finally {
       room.dispose()
     }
