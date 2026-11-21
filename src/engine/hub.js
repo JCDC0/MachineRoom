@@ -37,6 +37,7 @@ export const SEAT_LABEL_SCALE = 1.5
 export const SEAT_LABEL_COLOR = 'rgba(255,255,255,1)'
 export const SEAT_LABEL_OPACITY = 0.8
 export const SEAT_LABEL_OUT = 160
+export const SEAT_LABEL_DROP = 70
 
 export function writeColor(material, hex) {
   if (!material || !material.color) return false
@@ -157,7 +158,7 @@ export function seatRingPoint(ring, layout = null) {
   const entry = layout?.rings?.[ring]
   if (ring > 0 && !entry) return null
   const radius = entry ? entry.radius : HUB_RADIUS
-  const y = entry ? entry.y - HUB_Y : 0
+  const y = (entry ? entry.y - HUB_Y : 0) - SEAT_LABEL_DROP
   const angle = -OVERVIEW.yaw
   const distance = radius + SEAT_LABEL_OUT
   return { x: Math.cos(angle) * distance, y, z: Math.sin(angle) * distance }
