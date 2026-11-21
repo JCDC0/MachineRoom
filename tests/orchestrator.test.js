@@ -4873,6 +4873,62 @@ describe('the lane source and the orchestrator turn', () => {
       expect(rig.answer().messages.at(-1).text).toBe(PROMPT_TOO_LONG_REPLY)
       expect(rig.answer().messages.at(-1).text).toBe('The orchestrator stopped: the prompt is too long for the command line.')
     })
+
+    it('names spawn errors ENAMETOOLONG, ENOENT and other codes in the stop text', async () => {
+      const cases = [
+        {
+          code: 'ENAMETOOLONG',
+          mode: 'throw',
+          expected: 'The orchestrator stopped: the prompt is too long for the command line.',
+        },
+        {
+          code: 'ENOENT',
+          mode: 'emit',
+          expected: 'The orchestrator stopped: the program was not found.',
+        },
+        {
+          code: 'EACCES',
+          mode: 'emit',
+          expected: 'The orchestrator stopped: it could not start (EACCES).',
+        },
+      ]
+      for (const item of cases) {
+        const base = makeTempDir('mr-spawn-err-')
+        const runs = join(base, 'runs')
+        const projectRoot = join(base, 'project')
+        mkdirSync(runs, { recursive: true })
+        mkdirSync(projectRoot, { recursive: true })
+        const promptFile = join(base, 'orchestrator-agent.md')
+        writeFileSync(promptFile, PROMPT)
+        const spawnErr = Object.assign(new Error(`spawn ${item.code}`), { code: item.code })
+        const spawnFake = () => {
+          if (item.mode === 'throw') throw spawnErr
+          const child = emitterChild()
+          setImmediate(() => child.emit('error', spawnErr))
+          return child
+        }
+        const orch = createOrchestrator({
+          projectRoot,
+          runsFolder: runs,
+          lanes: { orchestrator: { name: 'Orchestrator', harness: 'Fake', cli: { harness: 'fake', bin: 'fake', model: 'fake-model' } } },
+          harness: 'fake',
+          model: 'fake-model',
+          harnesses: { fake: silentHarness },
+          spawn: spawnFake,
+          promptFile,
+          bridgeUrl: () => 'http://127.0.0.1:5999',
+        })
+        cleanups.push(async () => {
+          orch.close()
+          await sleep(20)
+          rmSync(base, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+        })
+
+        orch.send({ text: 'Run task', confirmed: true })
+        await waitFor(() => orch.answer().state === 'idle' && orch.answer().messages.length === 2, 5000, `${item.code} stop`)
+        expect(orch.answer().messages.at(-1).text).toBe(item.expected)
+      }
+    })
   })
 })
 

@@ -514,9 +514,17 @@ function lastStderrLine(text) {
   return ''
 }
 
-function stoppedTurnText({ code, report, killed, failureMessage, stderrMessage }) {
+function spawnErrorText(error) {
+  const errCode = error?.code != null && String(error.code).trim() ? String(error.code).trim() : ''
+  if (errCode === 'ENAMETOOLONG') return PROMPT_TOO_LONG_REPLY
+  if (errCode === 'ENOENT') return 'The orchestrator stopped: the program was not found.'
+  return `The orchestrator stopped: it could not start (${errCode || 'unknown'}).`
+}
+
+function stoppedTurnText({ code, report, killed, failureMessage, stderrMessage, error }) {
   const reason = (!killed && report) || failureMessage || stderrMessage
   if (reason) return `The orchestrator stopped: ${reason}`
+  if (error) return spawnErrorText(error)
   return Number.isInteger(code) ? `The orchestrator stopped: exit ${code}.` : STOPPED_REPLY
 }
 
@@ -2310,7 +2318,7 @@ ${current}`
     const failed = turn.killed || Boolean(error) || !Number.isInteger(code) || code !== 0
     const noReport = !failed && typeof report === 'string' && report.trim() === NO_REPORT
     const text = failed
-      ? stoppedTurnText({ code, report, killed: turn.killed, failureMessage, stderrMessage })
+      ? stoppedTurnText({ code, report, killed: turn.killed, failureMessage, stderrMessage, error })
       : noReport
         ? NO_NEW_REPORT
         : report || EMPTY_REPLY
