@@ -1825,12 +1825,26 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
     })
   }
 
-  async function createUnder(parent, payload, overRing) {
-    let created
+  async function placeUnder(parent, key, overRing) {
+    const ladderOptions = overRing === undefined ? undefined : { overRing }
     try {
-      created = await client.createLane(
-        overRing === undefined ? { ...payload, confirmed: true } : { ...payload, overRing, confirmed: true }
-      )
+      if (parent.kind === 'sub') {
+        const ladder = await readLadder()
+        const sub = ladder.subs.find((entry) => entry.id === parent.id)
+        if (!sub) throw new Error('This sub orchestrator is not in the ladder.')
+        const nextLanes = sub.lanes.includes(key) ? sub.lanes : [...sub.lanes, key]
+        await client.setLadder(changeSub(ladder, { ...sub, lanes: nextLanes }), ladderOptions)
+      } else if (parent.kind === 'lane') {
+        const ladder = await readLadder()
+        const plan = convertPlan(ladder, parent, key, lanesOf(lanes))
+        if (plan.problem) throw new Error(plan.problem)
+        await client.setLadder(plan.ladder, ladderOptions)
+        const fresh = await client.lanes()
+        await client.setActiveLanes({
+          lanes: laneChoice(fresh?.lanes ?? [], { remove: [parent.id] }),
+          confirmed: true,
+        })
+      }
     } catch (error) {
       if (overRing === undefined && error && Number.isInteger(error.overRing) && error.overRing >= 0) {
         const ring = error.overRing
@@ -1839,35 +1853,49 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
           label: 'Anyway',
           tone: 'primary',
           busyText: 'Trying again...',
-          run: () => createUnder(parent, payload, ring),
+          run: () => placeUnder(parent, key, ring),
         })
         return
       }
-      throw error
-    }
-    const key = cleanText(created?.key, 80)
-    if (!key) throw new Error('The bridge did not name the new agent.')
-    try {
-      if (parent.kind === 'sub') {
-        const ladder = await readLadder()
-        const sub = ladder.subs.find((entry) => entry.id === parent.id)
-        if (!sub) throw new Error('This sub orchestrator is not in the ladder.')
-        await client.setLadder(changeSub(ladder, { ...sub, lanes: [...sub.lanes, key] }))
-      } else if (parent.kind === 'lane') {
-        const ladder = await readLadder()
-        const plan = convertPlan(ladder, parent, key, lanesOf(lanes))
-        if (plan.problem) throw new Error(plan.problem)
-        await client.setLadder(plan.ladder)
-        const fresh = await client.lanes()
-        await client.setActiveLanes({
-          lanes: laneChoice(fresh?.lanes ?? [], { remove: [parent.id] }),
-          confirmed: true,
-        })
-      }
-    } catch (error) {
       closeChild()
       await refresh().catch(() => {})
       throw new Error(`The agent was created. ${messageOf(error)}`)
+    }
+    closeChild()
+    await refresh()
+  }
+
+  async function createUnder(parent, payload, overRing) {
+    const needsLadder = parent.kind === 'sub' || parent.kind === 'lane'
+    let created
+    try {
+      created = await client.createLane(
+        overRing === undefined ? { ...payload, confirmed: true } : { ...payload, overRing, confirmed: true }
+      )
+    } catch (error) {
+      if (overRing === undefined && error && Number.isInteger(error.overRing) && error.overRing >= 0) {
+        const ring = error.overRing
+        if (needsLadder) {
+          created = await client.createLane({ ...payload, overRing: ring, confirmed: true })
+        } else {
+          setConfirm({
+            text: `Ring ${ring} is full. Make it anyway?`,
+            label: 'Anyway',
+            tone: 'primary',
+            busyText: 'Trying again...',
+            run: () => createUnder(parent, payload, ring),
+          })
+          return
+        }
+      } else {
+        throw error
+      }
+    }
+    const key = cleanText(created?.key, 80)
+    if (!key) throw new Error('The bridge did not name the new agent.')
+    if (needsLadder) {
+      await placeUnder(parent, key)
+      return
     }
     closeChild()
     await refresh()

@@ -932,14 +932,20 @@ describe('the control client orchestrator routes', () => {
     ])
   })
 
-  it('writes the whole ladder as the owner', async () => {
+  it('writes the whole ladder as the owner and passes overRing when given', async () => {
     const { calls, client } = recorder({ ladder: { subs: [] } })
     await client.setLadder({ subs: [] })
+    await client.setLadder({ subs: [] }, { overRing: 1 })
     expect(calls).toEqual([
       {
         url: 'http://127.0.0.1:9/api/orchestrator/ladder',
         method: 'POST',
         body: JSON.stringify({ ladder: { subs: [] }, by: 'owner', confirmed: true }),
+      },
+      {
+        url: 'http://127.0.0.1:9/api/orchestrator/ladder',
+        method: 'POST',
+        body: JSON.stringify({ ladder: { subs: [] }, by: 'owner', confirmed: true, overRing: 1 }),
       },
     ])
   })
