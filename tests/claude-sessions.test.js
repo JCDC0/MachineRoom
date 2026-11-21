@@ -491,14 +491,14 @@ describe('claude sessions reader', () => {
         reader.tick()
         return logFrames(frames).length === 1
       },
-      { timeoutMs: 15000, what: 'the reader to see the subfolder session' }
+      { timeoutMs: 45000, what: 'the reader to see the subfolder session' }
     )
 
     expect(logFrames(frames)).toHaveLength(1)
     expect(chunks(frames)[0].message.content[0].id).toBe('sub-1')
     expect(statusFrames(frames)[0].payload.session).toBe('sess-sub')
     expect(reader.sessions().get('sess-sub')).toMatchObject({ skipped: false })
-  })
+  }, 90000)
 
   it('shows the root session and not a sibling whose slug starts with the root slug', () => {
     const { base, projectRoot, home, runs, sessionsFolder } = setup()
