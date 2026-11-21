@@ -2886,3 +2886,136 @@ describe('seat action lines on POST /api/orchestrator/ladder', () => {
     expect(rig.bridge.orchestrators().find('backend').answer().messages).toHaveLength(1)
   })
 })
+
+describe('refused run wake', () => {
+  const REFUSAL_RUNNER = [
+    "import { appendFileSync, readFileSync, writeFileSync } from 'node:fs'",
+    "import { join } from 'node:path'",
+    'const args = process.argv.slice(2)',
+    "const cfg = JSON.parse(readFileSync(args[0], 'utf8'))",
+    "const lane = args[1]",
+    "const startedAtIndex = args.indexOf('--started-at')",
+    "const startedAt = startedAtIndex !== -1 ? args[startedAtIndex + 1] : new Date().toISOString()",
+    "const runsDir = process.env.MACHINEROOM_RUNS",
+    "const mode = cfg.mode",
+    "if (mode === 'refuse-with-note' || mode === 'refuse-no-note') {",
+    "  const record = { lane, briefs: [], model: 'm', startedAt, minutes: 0, exitCode: 1, killed: false, log: null, ...(mode === 'refuse-with-note' ? { note: cfg.note } : {}) }",
+    "  appendFileSync(join(runsDir, 'runs.jsonl'), JSON.stringify(record) + '\\n')",
+    '  process.exit(1)',
+    '}',
+    "if (mode === 'exit-zero') {",
+    '  process.exit(0)',
+    '}',
+    "if (mode === 'fail-with-log') {",
+    "  const log = join(runsDir, `${lane}-project-20261121-120000.log`)",
+    "  writeFileSync(log, 'failed\\n')",
+    "  writeFileSync(log.replace(/\\.log$/, '.meta.json'), JSON.stringify({ project: cfg.project, lane, startedBy: cfg.startedBy || '' }))",
+    "  const record = { lane, briefs: [], model: 'm', startedAt, minutes: 0, exitCode: 1, killed: false, log, ...(cfg.startedBy ? { startedBy: cfg.startedBy } : {}), note: 'logged failure' }",
+    "  appendFileSync(join(runsDir, 'runs.jsonl'), JSON.stringify(record) + '\\n')",
+    '  process.exit(1)',
+    '}',
+  ].join('\n')
+
+  async function refusalRig(config) {
+    const files = makeBase({ ladder: { subs: [FRONTEND] } })
+    files.behaviour.mode = 'no_report'
+    const runner = join(files.base, 'refusal-runner.mjs')
+    writeFileSync(runner, REFUSAL_RUNNER)
+    const configPath = join(files.base, 'runner-config.json')
+    writeFileSync(configPath, JSON.stringify({ ...config, project: files.projectRoot }))
+    const rig = await makeBridge(files, {
+      runsFolder: files.runs,
+      runnerCommand: { file: process.execPath, args: [runner, configPath] },
+    })
+    return { ...rig, configPath }
+  }
+
+  it('wakes only the sub that started a refused run and not the main orchestrator', async () => {
+    const note = 'Brief P679 lists src/engine/hub.js, which lanes.json forbids for opencode.'
+    const rig = await refusalRig({ mode: 'refuse-with-note', note })
+    const registry = rig.bridge.orchestrators()
+    const subToken = registry.token('frontend')
+
+    const res = await tokenPost(`${rig.url}/api/control/runs`, {
+      lane: 'opencode',
+      task: 'Run task.',
+      confirmed: true,
+    }, subToken)
+    expect(res.status).toBe(202)
+    expect(res.body).toMatchObject({ lane: 'opencode', briefs: [], lastLines: [] })
+    expect(typeof res.body.startedAt).toBe('string')
+
+    await waitFor(
+      () => messagesOf(registry, 'frontend').some((m) => m.from === 'room' && m.text.includes('was refused before it started')),
+      15000,
+      'frontend to receive the refusal message'
+    )
+    await waitIdle(registry, 'frontend', 1)
+
+    const subRooms = messagesOf(registry, 'frontend').filter((m) => m.from === 'room')
+    expect(subRooms).toHaveLength(1)
+    expect(subRooms[0].text).toBe(`Run on lane opencode was refused before it started: ${note}`)
+    expect(messagesOf(registry, 'orchestrator').filter((m) => m.from === 'room')).toHaveLength(0)
+    expect(rig.calls()).toHaveLength(1)
+  })
+
+  it('wakes the main orchestrator when startedBy is empty', async () => {
+    const note = 'The lane could not start.'
+    const rig = await refusalRig({ mode: 'refuse-with-note', note })
+    const registry = rig.bridge.orchestrators()
+
+    const res = await pagePost(`${rig.url}/api/control/runs`, {
+      lane: 'claude',
+      task: 'Run task.',
+      confirmed: true,
+    })
+    expect(res.status).toBe(202)
+    expect(res.body).toMatchObject({ lane: 'claude', briefs: [], lastLines: [] })
+
+    await waitFor(
+      () => messagesOf(registry, 'orchestrator').some((m) => m.from === 'room' && m.text.includes('was refused before it started')),
+      15000,
+      'main orchestrator to receive the refusal message'
+    )
+    await waitIdle(registry, 'orchestrator', 1)
+
+    const mainRooms = messagesOf(registry, 'orchestrator').filter((m) => m.from === 'room')
+    expect(mainRooms).toHaveLength(1)
+    expect(mainRooms[0].text).toBe(`Run on lane claude was refused before it started: ${note}`)
+    expect(messagesOf(registry, 'frontend').filter((m) => m.from === 'room')).toHaveLength(0)
+  })
+
+  it('adds no refusal message when the runner exits 0 or writes a log', async () => {
+    const rig = await refusalRig({ mode: 'exit-zero' })
+    const registry = rig.bridge.orchestrators()
+    const subToken = registry.token('frontend')
+
+    const okStart = await tokenPost(`${rig.url}/api/control/runs`, {
+      lane: 'opencode',
+      task: 'Run task.',
+      confirmed: true,
+    }, subToken)
+    expect(okStart.status).toBe(202)
+    await waitFor(async () => (await getJson(`${rig.url}/api/control/runs`)).body.running.length === 0, 15000, 'exit-0 run to finish')
+    await sleep(150)
+    expect(messagesOf(registry, 'frontend').filter((m) => m.from === 'room')).toHaveLength(0)
+    expect(messagesOf(registry, 'orchestrator').filter((m) => m.from === 'room')).toHaveLength(0)
+
+    writeFileSync(rig.configPath, JSON.stringify({ mode: 'fail-with-log', startedBy: 'frontend', project: rig.projectRoot }))
+    const logStart = await tokenPost(`${rig.url}/api/control/runs`, {
+      lane: 'opencode',
+      task: 'Run task.',
+      confirmed: true,
+    }, subToken)
+    expect(logStart.status).toBe(202)
+    await waitFor(
+      () => messagesOf(registry, 'frontend').some((m) => m.from === 'room' && m.text.includes('ended: failed.')),
+      15000,
+      'normal failed run-end message'
+    )
+    await waitIdle(registry, 'frontend', 1)
+    const subRooms = messagesOf(registry, 'frontend').filter((m) => m.from === 'room')
+    expect(subRooms).toHaveLength(1)
+    expect(subRooms.some((m) => m.text.includes('was refused before it started'))).toBe(false)
+  })
+})

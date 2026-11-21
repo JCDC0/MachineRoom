@@ -1659,6 +1659,45 @@ describe('waking the orchestrator', () => {
     expect(roomMessage.text).toContain('started by removed sub deleted-team')
   })
 
+  it('masks, caps at 600 characters, and defaults to no reason given on refused runs', async () => {
+    const rig = makeRig()
+    const secret = `sk-ant-${'a'.repeat(24)}`
+    const longNote = `key ${secret} home ${homedir()} ${'x'.repeat(700)}`
+    rig.orchestrator.onFrame({
+      type: 'heartbeat.run.status',
+      payload: {
+        runId: 'refused-opencode7-1',
+        agentId: 'agent-opencode7',
+        status: 'failed',
+        refused: true,
+        record: { lane: 'opencode7', startedBy: '', note: longNote },
+      },
+    })
+    await waitFor(() => rig.calls().length === 1, 15000, 'the refused run turn')
+    await waitIdle(rig, 1)
+    const first = rig.answer().messages.find((m) => m.from === 'room')
+    expect(first).toBeDefined()
+    expect(first.text).not.toContain(secret)
+    const prefix = 'Run on lane opencode7 was refused before it started: '
+    expect(first.text.startsWith(prefix)).toBe(true)
+    expect(first.text.slice(prefix.length).length).toBe(600)
+
+    rig.orchestrator.onFrame({
+      type: 'heartbeat.run.status',
+      payload: {
+        runId: 'refused-opencode7-2',
+        agentId: 'agent-opencode7',
+        status: 'failed',
+        refused: true,
+        record: { lane: 'opencode7', startedBy: '' },
+      },
+    })
+    await waitFor(() => rig.calls().length === 2, 15000, 'the second refused run turn')
+    await waitIdle(rig, 2)
+    const second = rig.answer().messages.filter((m) => m.from === 'room')[1]
+    expect(second.text).toBe(`${prefix}no reason given`)
+  })
+
   it('waits a room turn while a merge is in progress and starts it when the merge ends', async () => {
     const rig = makeRig({ mergeWaitMs: 40 })
     gitInit(rig.projectRoot)
