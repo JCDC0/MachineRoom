@@ -250,7 +250,7 @@ describe('the park ring of each level', () => {
     expect(ringDrop(3, HUB_Y)).toBe(0)
   })
 
-  it('gives a sub the level of its parent plus one and caps the level', () => {
+  it('gives a sub the level of its parent plus one and stops at the depth less one', () => {
     const subs = [
       { id: 'a', lanes: [] },
       { id: 'b', parent: 'a', lanes: [] },
@@ -261,9 +261,20 @@ describe('the park ring of each level', () => {
       { id: 'y', parent: 'x', lanes: [] },
     ]
     const levels = ringLevels({ subs })
-    expect([...levels.values()]).toEqual([1, 2, 3, 4, 4, 2, 2])
-    expect(ringLevels({ subs }, 2).get('e')).toBe(2)
-    expect(ringLevels({ subs: [{ id: 'q', parent: 'orchestrator' }] }).get('q')).toBe(1)
+    expect([...levels.values()]).toEqual([1, 2, 3, 3, 3, 2, 2])
+    expect(ringLevels({ subs }, 4)).toEqual(levels)
+    expect(ringLevels({ subs }, 3).get('d')).toBe(2)
+    expect(ringLevels({ subs }, 2).get('e')).toBe(1)
+    expect(ringLevels({ subs: [{ id: 'q', parent: 'orchestrator' }] }, 1).get('q')).toBe(1)
+  })
+
+  it('puts a sub of a sub on ring 1 at depth 2, as the seats allow', () => {
+    const ladder = { subs: [{ id: 'a', lanes: ['l1'] }, { id: 'b', parent: 'a', lanes: ['l2'] }] }
+    const keys = ['l1', 'l2']
+    expect(ringLevels(ladder, 2).get('b')).toBe(1)
+    const layout = ringLayout(ladder, keys, 2)
+    expect(layout.count).toBe(1)
+    expect(layout.ringOfKey('l2').level).toBe(1)
   })
 
   it('widens a ring only when its slots need it', () => {
@@ -297,11 +308,13 @@ describe('the park ring of each level', () => {
       ],
     }
     const keys = ['l1', 'l2', 'l3', 'l4']
-    expect(ringLayout(ladder, keys).count).toBe(4)
-    expect(ringLayout(ladder, keys, 4).count).toBe(4)
-    expect(ringLayout(ladder, keys, 2).count).toBe(2)
+    expect(ringLayout(ladder, keys).count).toBe(3)
+    expect(ringLayout(ladder, keys, 4).count).toBe(3)
+    expect(ringLayout(ladder, keys, 3).count).toBe(2)
+    expect(ringLayout(ladder, keys, 2).count).toBe(1)
     expect(ringLayout(ladder, keys, 1).count).toBe(1)
-    expect(ringLayout(ladder, keys, 2).ringOfKey('l4').level).toBe(2)
+    expect(ringLayout(ladder, keys, 4).ringOfKey('l4').level).toBe(3)
+    expect(ringLayout(ladder, keys, 1).ringOfKey('l4').level).toBe(1)
   })
 
   it('keeps the 4 levels until the room is told otherwise', () => {

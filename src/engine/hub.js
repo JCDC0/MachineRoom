@@ -217,7 +217,8 @@ export function topRingPoint(angle, out = new THREE.Vector3()) {
 
 export function ringLevels(ladder, max = RING_LEVEL_MAX) {
   const subs = Array.isArray(ladder?.subs) ? ladder.subs : []
-  const cap = Math.min(RING_LEVEL_MAX, Math.max(1, Math.floor(Number(max)) || RING_LEVEL_MAX))
+  const depth = Math.min(RING_LEVEL_MAX, Math.max(1, Math.floor(Number(max)) || RING_LEVEL_MAX))
+  const cap = Math.max(1, depth - 1)
   const parentOf = new Map(subs.map((sub) => [sub.id, sub.parent]))
   const levels = new Map()
   for (const sub of subs) {
