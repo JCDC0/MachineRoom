@@ -1,13 +1,15 @@
 # Plan
 
-## Next, as of 2026-11-21 23:40
+## Next, as of 2026-11-22 02:20
 
-Pushed `6f15782c`. Since the restart, merged and pushed: P665 to P677, P679 to P681 (run by the Neon team), P639a to P639d and P640 (seats), the engine build chunk (P671), the leftover check that spares a live sibling, and the AGY updater switch. The switch is `AGY_CLI_DISABLE_AUTO_UPDATE=true`: agy reads only `true`, and with `1` the updater kept opening a console window until `7294dbb9` (caught by a window watcher at 23:09).
+Pushed `0794311b`; CI green on both runners for the last three pushes. Since 23:40, merged and pushed: P682 to P684, P686, P688 and P689 (the fixes of reviews 67 to 69 and the ring seat labels), reviews 67 to 70 (P678, P685, P687, P690), and a test rig fix (`fd495a7f`: the refused-run test wrote its log before its meta, which the lanes source skips).
 
-The team, set by the owner on 2026-11-21: the Claude Code session at the top orchestrates; under it the sub `neon` (AGY, Gemini 4 Neon High, Bypass) leads `agy-4` "Hydrogen" (AGY, Gemini 4 Hydrogen High, an owner-made lane that runs `tasks` queues) and `native2` (DeepSeek V4.1 Flash, `--reasoning xhigh`, $1 a day OpenRouter budget that resets at 08:00 Manila). From 22:45 the owner allowed Hydrogen on `src/engine`. Neon starts its lanes through the bridge and reports in its conversation; Claude reads it there, merges and pushes. A lane's worktree must be merged before its next run starts.
+The team is unchanged: this session orchestrates; the sub `neon` (AGY, Gemini 4 Neon High, Bypass) leads `agy-4` "Hydrogen" (may touch `src/engine` since 2026-11-21 22:45) and `native2` (off until its OpenRouter budget resets at 08:00 Manila). A lane's worktree must be merged before its next run starts.
 
-1. P678, review 67 of `cd5506e2` to `6f15782c`: running on `agy-4` under Neon. Brief its fixes after.
-2. The ring seat labels (P639b) are right by eye, but too small at overview distance, and ring 1's label sits on the hub's ORCHESTRATOR name. The lattice floor half of R64-7 stays open.
+Findings per review: 64 had 12, 65 had 10, 66 had 8, 67 had 4, 68 had 3, 69 had 3, 70 had 4. Since review 69 they are mostly edge cases (node flags no runner uses, five-deep rings, a log that keeps growing with no meta).
+
+1. P691, the review 70 fixes: running on `agy-4` under Neon. Then review 71.
+2. The stop rule: two reviews in a row with no High and no Medium a real user hits, plus the live room by eye at desktop size. Ask the owner whether edge-case Mediums count.
 3. Decide with the owner what Chat opens on the bench, where the orchestrator is the Claude Code session.
 4. Known and accepted: a local process can send any `Origin` header and count as the owner; a foreign Origin from a browser gets 403 and the Host check blocks DNS rebinding.
 
