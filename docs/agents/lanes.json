@@ -273,9 +273,8 @@
       "model": "gemini-4-hydrogen-xhigh"
     },
     "worktree": "C:\\GitHub\\MachineRoom\\.worktrees\\agy",
-    "role": "You own backend work: server/**, scripts/**, src/control/**, src/assistant/**, src/decider/**, src/briefs/**, src/harnesses/** and src/model/**, and from 0.1.402 the UI briefs the owner moves from Codex (src/ui/**, src/styles.css).",
+    "role": "You own backend work: server/**, scripts/**, src/control/**, src/assistant/**, src/decider/**, src/briefs/**, src/harnesses/** and src/model/**, and from 0.1.402 the UI briefs the owner moves from Codex (src/ui/**, src/styles.css), and from 2026-11-21 the src/engine/** briefs the orchestrator names (the owner allowed Hydrogen on the engine).",
     "forbidden": [
-      "src/engine/**",
       "src/Stage.jsx",
       "src/App.jsx"
     ],

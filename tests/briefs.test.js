@@ -291,7 +291,8 @@ describe('lanes', () => {
     expect(lanes.opencode.forbidden).not.toContain('src/Stage.jsx')
     for (const key of ['agy', 'agy2', 'agy3']) {
       expect(lanes[key].forbidden, key).not.toContain('src/styles.css')
-      expect(lanes[key].forbidden, key).toContain('src/engine/**')
+      if (key === 'agy') expect(lanes[key].forbidden, key).not.toContain('src/engine/**')
+      else expect(lanes[key].forbidden, key).toContain('src/engine/**')
       expect(lanes[key].forbidden, key).toContain('src/Stage.jsx')
     }
     for (const key of ['hermes', 'claude']) expect(lanes[key].forbidden).toContain('src/Stage.jsx')
@@ -311,7 +312,7 @@ describe('buildPrompt', () => {
     expect(prompt).toContain('Commit with the prefix 0.1.36 and one plain sentence. Do not push.')
     expect(prompt).toContain('Never push.')
     expect(prompt).not.toContain('Do not touch these paths')
-    expect(make(['U4'], 'agy')).toContain('Do not touch these paths: src/engine/**')
+    expect(make(['U4'], 'agy2')).toContain('Do not touch these paths: src/engine/**')
     expect(prompt).toContain('Test anything that starts a process')
     expect(prompt).toMatch(/Report: Give the report in your reply/)
     expect(prompt).not.toContain('undefined')

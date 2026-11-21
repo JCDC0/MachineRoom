@@ -77,7 +77,9 @@ describe('pathAllowed', () => {
   it('reads each lane of the real lanes.json', () => {
     expect(pathAllowed('src/Stage.jsx', lanes.claude.forbidden)).toBe(false)
     expect(pathAllowed('server/index.js', lanes.opencode.forbidden)).toBe(true)
-    expect(pathAllowed('src/engine/room.js', lanes.agy.forbidden)).toBe(false)
+    expect(pathAllowed('src/engine/room.js', lanes.agy2.forbidden)).toBe(false)
+    expect(pathAllowed('src/engine/room.js', lanes.agy.forbidden)).toBe(true)
+    expect(pathAllowed('src/Stage.jsx', lanes.agy.forbidden)).toBe(false)
     expect(pathAllowed('server/plans.js', lanes.agy.forbidden)).toBe(true)
     expect(pathAllowed('src/Stage.jsx', lanes.opencode.forbidden)).toBe(true)
   })
