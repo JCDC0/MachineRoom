@@ -9908,6 +9908,35 @@ button.mr-family-heading,
   color: rgb(255 255 255 / 0.32);
 }
 
+.mr-family-seats {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 2px 0 6px;
+}
+
+.mr-family-seat-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space);
+  padding: 0 4px;
+}
+
+.mr-family-seat-line {
+  font-size: 9px;
+  color: rgb(255 255 255 / 0.6);
+}
+
+.mr-family-seat-line.is-full {
+  color: #e5ff00;
+}
+
+.mr-family-seat-input {
+  width: 56px;
+  text-align: right;
+}
+
 .mr-family-request {
   display: flex;
   flex-direction: column;

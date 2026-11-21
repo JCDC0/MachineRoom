@@ -72,6 +72,7 @@ export function createClient({
         if (Array.isArray(json?.files)) error.files = json.files.filter((file) => typeof file === 'string')
         if (Array.isArray(json?.problems)) error.problems = json.problems.filter((item) => typeof item === 'string')
         if (json?.outside === true) error.outside = true
+        if (Number.isInteger(json?.overRing) && json.overRing >= 0) error.overRing = json.overRing
         throw error
       }
       return json
@@ -556,8 +557,11 @@ export function createClient({
 
     saveModelPins: ({ pins } = {}) => request('PUT', '/api/model-pins', { pins }),
 
-    createLane: ({ name, harness, model, effort, confirmed = true } = {}) =>
-      request('POST', '/api/lanes/create', { name, harness, model, effort, confirmed }),
+    createLane: ({ name, harness, model, effort, overRing, confirmed = true } = {}) => {
+      const body = { name, harness, model, effort, confirmed }
+      if (overRing !== undefined) body.overRing = overRing
+      return request('POST', '/api/lanes/create', body)
+    },
 
     updateLane: ({ key, name, model, effort, fallback, confirmed = true } = {}) => {
       const body = { confirmed }
@@ -687,7 +691,11 @@ export function createClient({
         lanes = optionsOrLanes.lanes
         if (optionsOrLanes.confirmed !== undefined) confirmed = optionsOrLanes.confirmed
       }
-      return request('POST', '/api/lanes/active', { lanes, confirmed })
+      const body = { lanes, confirmed }
+      if (optionsOrLanes && typeof optionsOrLanes === 'object' && !Array.isArray(optionsOrLanes) && optionsOrLanes.overRing !== undefined) {
+        body.overRing = optionsOrLanes.overRing
+      }
+      return request('POST', '/api/lanes/active', body)
     },
 
     reviews: async () => {
@@ -778,6 +786,9 @@ export function createClient({
 
     setFamilyTop: ({ top, confirmed = true } = {}) =>
       request('POST', '/api/family/top', { top, confirmed }),
+
+    setRingSeats: ({ rings, confirmed = true } = {}) =>
+      request('POST', '/api/family/seats', { rings, confirmed }),
 
     keys: async () => {
       const data = await request('GET', '/api/keys')

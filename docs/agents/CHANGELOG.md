@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The Agents tree shows each ring's seats (Ring N · X of Y seats, yellow when full) with a Seats field and Save, saved through POST /api/family/seats; agents an orchestrator made say made by NAME; Turn on past a full ring asks before it goes on (P639a, P639c).
 - The room's engine and model build into their own chunk, which imports nothing from the main chunk, so the main chunk dropped from 821 to 644 kB and the size guard is 970 kB again (P671).
 - The room re-reads its roster when a lane's five-minute linger ends, Tasks reads main at most every 30 seconds, and a merge subject that names several briefs marks each one done (P669, R65-7, R64-10).
 - The room draws sub rings only down to the subagent depth less one, as the seats allow, and the owner's ladder save refuses a sub past the depth (P668, R64-5).

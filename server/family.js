@@ -21,10 +21,11 @@ import { MODELS } from './models.js'
 import { ORCHESTRATOR_KEY } from './orchestrator.js'
 import { NO_TOKEN_PROBLEM, sameHarnessProblem } from './orchestrators.js'
 import { readAgentDepth } from './agent-depth.js'
-import { readSeats, seatsFileFor } from './seats.js'
+import { readSeats, ringSummary, seatsFileFor, setRings } from './seats.js'
 
 export const ORIGIN_LABEL_PROBLEM = 'A request to set an agent label needs a page Origin.'
 export const ORIGIN_TOP_PROBLEM = 'A request to set the top agent needs a page Origin.'
+export const SEATS_SHAPE_PROBLEM = 'Seats must be whole numbers from 0, or empty for no limit.'
 export const CONFIRM_TOP_PROBLEM = 'Confirm putting the agent at the top first.'
 export const TOP_KEY_PROBLEM = 'The top must be orchestrator, claude-session or opencode-session.'
 export const ORIGIN_KEY_PROBLEM = 'A request to set a key needs a page Origin.'
@@ -506,7 +507,55 @@ export function createFamilyApi(options = {}) {
       })
       const keys = Object.keys(readKeys(runsDir)).sort().map((name) => ({ name }))
       const proposals = readProposals(runsDir)
-      sendJson(req, res, 200, { nodes, keys, proposals, top: readTop(topFileFor(projectRoot, runsDir)) })
+      const seats = ringSummary(familySeatsFor(sendJson, {
+        projectRoot,
+        runsFolder: runsDir,
+        lanesConfig: getBaseLanes,
+        activeLanes,
+        isWorking,
+      }))
+      sendJson(req, res, 200, { nodes, keys, proposals, top: readTop(topFileFor(projectRoot, runsDir)), seats })
+      return true
+    }
+
+    if (path === '/api/family/seats') {
+      if (method !== 'POST') {
+        sendJson(req, res, 405, { error: 'Method not allowed.' })
+        return true
+      }
+      if (!page) {
+        sendJson(req, res, 403, { error: ORIGIN_TOP_PROBLEM })
+        return true
+      }
+      const body = await readJsonBody(req, res)
+      if (body === null) return true
+      if (body.confirmed !== true) {
+        sendJson(req, res, 400, { error: CONFIRM_TOP_PROBLEM })
+        return true
+      }
+      const rings = body.rings
+      const depth = readAgentDepth(runsDir).limit
+      const shapeOk =
+        Array.isArray(rings) &&
+        rings.length <= depth &&
+        rings.every((row) => row === null || (Number.isInteger(row) && row >= 0))
+      if (!shapeOk) {
+        sendJson(req, res, 400, { error: SEATS_SHAPE_PROBLEM })
+        return true
+      }
+      setRings(seatsFileFor(projectRoot, runsDir), rings)
+      if (typeof notify === 'function') {
+        notify({ topic: 'family' })
+        notify({ topic: 'agents' })
+      }
+      const seats = ringSummary(familySeatsFor(sendJson, {
+        projectRoot,
+        runsFolder: runsDir,
+        lanesConfig: getBaseLanes,
+        activeLanes,
+        isWorking,
+      }))
+      sendJson(req, res, 200, { ok: true, seats })
       return true
     }
 

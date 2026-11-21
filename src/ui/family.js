@@ -30,6 +30,49 @@ function childRows(value) {
   return ids
 }
 
+function seatRows(value) {
+  const list = Array.isArray(value) ? value : []
+  const rows = []
+  for (const item of list) {
+    if (!item || typeof item !== 'object') continue
+    const ring = Number(item.ring)
+    const taken = Number(item.taken)
+    if (!Number.isInteger(ring) || ring < 0 || !Number.isInteger(taken) || taken < 0) continue
+    if (rows.some((row) => row.ring === ring)) continue
+    const limit = Number.isInteger(item.limit) && item.limit >= 0 ? item.limit : null
+    rows.push({ ring, taken, limit, full: limit !== null && taken >= limit })
+  }
+  rows.sort((a, b) => a.ring - b.ring)
+  return rows
+}
+
+export const SEATS_SHAPE_PROBLEM = 'Seats must be whole numbers from 0, or empty for no limit.'
+
+export function seatLine(row) {
+  const head = `Ring ${row.ring} · ${row.taken}`
+  return row.limit === null ? `${head} seats, no limit` : `${head} of ${row.limit} seats`
+}
+
+export function seatDraftValue(row) {
+  return row.limit === null ? '' : String(row.limit)
+}
+
+export function seatRings(rows, draft) {
+  const list = Array.isArray(rows) ? rows : []
+  const values = {}
+  for (const row of list) {
+    const raw = draft && Object.hasOwn(draft, row.ring) ? draft[row.ring] : seatDraftValue(row)
+    const text = typeof raw === 'string' ? raw.trim() : String(raw ?? '').trim()
+    if (!text) {
+      values[row.ring] = null
+      continue
+    }
+    if (!/^\d+$/.test(text) || !Number.isSafeInteger(Number(text))) return { rings: [], problem: SEATS_SHAPE_PROBLEM }
+    values[row.ring] = Number(text)
+  }
+  return { rings: list.map((row) => values[row.ring]), problem: '' }
+}
+
 function treeNode(raw) {
   if (!raw || typeof raw !== 'object') return null
   const id = cleanText(raw.id, 80)
@@ -45,6 +88,7 @@ function treeNode(raw) {
     mode: cleanText(raw.mode, 40),
     parent: cleanText(raw.parent, 80),
     requested: childRows(raw.children),
+    createdBy: cleanText(raw.createdBy, 80),
     active: raw.active !== false,
     working: raw.working === true,
     custom: raw.custom === true,
@@ -101,6 +145,7 @@ export function familyTree(answer) {
     byId,
     keys: keyNames(source.keys),
     proposals: proposalRows(source.proposals),
+    seats: seatRows(source.seats),
   }
 }
 
