@@ -201,7 +201,9 @@ export function nameLabel(name) {
 export function doingText(entry) {
   if (!entry) return ''
   const { status, label } = entry
-  if ((status === 'working' || status === 'queued') && typeof label === 'string' && label) {
+  if (status === 'queued') return 'queued'
+  if (status === 'working' && entry.calls && typeof entry.calls.size === 'number' && entry.calls.size === 0) return 'thinking'
+  if (status === 'working' && typeof label === 'string' && label) {
     const text = label.toLowerCase()
     return text.length > 40 ? `${text.slice(0, 39)}~` : text
   }

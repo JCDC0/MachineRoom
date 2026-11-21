@@ -35,4 +35,23 @@ describe('doingText', () => {
     expect(doingText({})).toBe('')
     expect(doingText(null)).toBe('')
   })
+
+  it('says queued for a queued entry with an old label', () => {
+    expect(doingText({ status: 'queued', label: 'done', calls: new Map() })).toBe('queued')
+    expect(doingText({ status: 'queued', label: 'Edit src/a.js' })).toBe('queued')
+  })
+
+  it('says thinking for a working entry with no open call', () => {
+    expect(doingText({ status: 'working', label: 'edit src/a.js', calls: new Map() })).toBe('thinking')
+    expect(doingText({ status: 'working', calls: new Map() })).toBe('thinking')
+  })
+
+  it('shows the label for a working entry with an open call', () => {
+    const calls = new Map([['c1', []]])
+    expect(doingText({ status: 'working', label: 'Edit src/a.js', calls })).toBe('edit src/a.js')
+  })
+
+  it('shows the label for a working entry with no calls at all', () => {
+    expect(doingText({ status: 'working', label: 'Edit src/a.js' })).toBe('edit src/a.js')
+  })
 })
