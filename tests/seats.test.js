@@ -11,10 +11,12 @@ import {
   formatSeatsReply,
   parseSeatCommand,
   readSeats,
+  ringSummary,
   seatCheck,
   seatSummary,
   seatsFileFor,
   setGrant,
+  setRings,
   writeSeats,
 } from '../server/seats.js'
 
@@ -311,5 +313,42 @@ describe('seat slash command helpers', () => {
     expect(revokeNotice).toContain('0 lanes and 0 subs')
     expect(revokeNotice).toContain('Agents already made stay as they are.')
     expect(revokeNotice).toContain('POST /api/family/proposals')
+  })
+})
+
+describe('ringSummary and setRings', () => {
+  it('summarizes each ring up to depth with null for unset or invalid limits', () => {
+    expect(ringSummary({ seats, tree, depth: 2 })).toEqual([
+      { ring: 0, taken: 1, limit: 3 },
+      { ring: 1, taken: 4, limit: 4 },
+    ])
+    expect(ringSummary({ seats: { rings: [0, null, 'bad'], grants: {} }, tree, depth: 3 })).toEqual([
+      { ring: 0, taken: 1, limit: 0 },
+      { ring: 1, taken: 4, limit: null },
+      { ring: 2, taken: 0, limit: null },
+    ])
+    expect(ringSummary({ seats: { rings: [], grants: {} }, tree, depth: 1 })).toEqual([
+      { ring: 0, taken: 1, limit: null },
+    ])
+    expect(ringSummary({ seats: { rings: [2], grants: {} }, tree, depth: 0 })).toEqual([
+      { ring: 0, taken: 1, limit: 2 },
+    ])
+  })
+
+  it('replaces rings atomically while keeping grants and rejecting bad shapes', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'seats-rings-'))
+    try {
+      const file = seatsFileFor(dir, dir)
+      writeSeats(file, seats)
+      const saved = setRings(file, [2, null])
+      expect(saved).toEqual({ rings: [2, null], grants: seats.grants })
+      expect(readSeats(file)).toEqual({ rings: [2, null], grants: seats.grants })
+      expect(readdirSync(dir).filter((name) => name.endsWith('.tmp'))).toEqual([])
+      expect(() => setRings(file, [-1])).toThrow()
+      expect(() => setRings(file, 'bad')).toThrow()
+      expect(readSeats(file)).toEqual({ rings: [2, null], grants: seats.grants })
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
   })
 })
