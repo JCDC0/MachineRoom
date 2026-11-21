@@ -36,6 +36,9 @@ import {
   moreLanesLabel,
   removeLaneText,
   rowText,
+  seatDraftValue,
+  seatLine,
+  seatRings,
   stateWord,
   subsLosingLanes,
   teamRows,
@@ -691,6 +694,8 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
   const [confirm, setConfirm] = useState(null)
   const [busy, setBusy] = useState(false)
   const confirmRef = useRef(null)
+  const [seatDraft, setSeatDraft] = useState({})
+  const [seatProblem, setSeatProblem] = useState('')
 
   const [selecting, setSelecting] = useState(false)
   const [selectedLanes, setSelectedLanes] = useState([])
@@ -1830,6 +1835,68 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
     })
   }
 
+  function askSeatSave() {
+    if (busy || typeof client?.setRingSeats !== 'function') return
+    const built = seatRings(tree.seats, seatDraft)
+    if (built.problem) {
+      setSeatProblem(built.problem)
+      return
+    }
+    setSeatProblem('')
+    ask({
+      text: 'Save the seats for every ring?',
+      label: 'Save',
+      tone: 'primary',
+      busyText: 'Saving the seats...',
+      run: async () => {
+        try {
+          await client.setRingSeats({ rings: built.rings, confirmed: true })
+        } catch (error) {
+          setSeatProblem(messageOf(error))
+          throw error
+        }
+        setSeatDraft({})
+        await refresh()
+      },
+    })
+  }
+
+  function renderSeats() {
+    if (!Array.isArray(tree.seats) || tree.seats.length === 0) return null
+    const canSave = typeof client?.setRingSeats === 'function'
+    return (
+      <section className="mr-family-seats" aria-label="Seats">
+        <p className="mr-family-group mono">Seats</p>
+        {tree.seats.map((row) => (
+          <div className="mr-family-seat-row" key={row.ring}>
+            <span className={`mr-family-seat-line mono${row.full ? ' is-full' : ''}`}>{seatLine(row)}</span>
+            <label className="mr-side-field is-inline">
+              <span className="mr-side-field-label mono">Seats</span>
+              <input
+                className="mr-side-input mono mr-family-seat-input"
+                inputMode="numeric"
+                value={Object.hasOwn(seatDraft, row.ring) ? seatDraft[row.ring] : seatDraftValue(row)}
+                aria-label={`Seats on ring ${row.ring}`}
+                disabled={busy || !canSave}
+                onChange={(event) => setSeatDraft((current) => ({ ...current, [row.ring]: event.target.value }))}
+              />
+            </label>
+          </div>
+        ))}
+        <div className="mr-side-form-actions">
+          <button type="button" className="mr-side-action" disabled={busy || !canSave} onClick={askSeatSave}>
+            Save seats
+          </button>
+        </div>
+        {seatProblem ? (
+          <p className="mr-family-note is-error" role="alert">
+            {seatProblem}
+          </p>
+        ) : null}
+      </section>
+    )
+  }
+
   function renderRequests() {
     if (tree.proposals.length === 0) return null
     return (
@@ -2733,6 +2800,7 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
           ) : null}
           {family ? (
             <>
+              {renderSeats()}
               {renderRequests()}
               {renderSelection()}
               {!mainAgent && childFor === orchestratorTarget.id ? renderChildForm(orchestratorTarget, 0) : null}

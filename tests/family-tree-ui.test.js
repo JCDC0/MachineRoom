@@ -1157,6 +1157,86 @@ describe('FamilyTeam', () => {
   })
 })
 
+describe('FamilyTree seats', () => {
+  function seatsClient(rows, calls = []) {
+    const { client } = makeClient()
+    client.family = async () => ({ ...FAMILY, nodes: FAMILY.nodes.map((n) => ({ ...n })), seats: rows })
+    client.setRingSeats = async (payload) => {
+      calls.push(payload)
+      return { ok: true, seats: rows }
+    }
+    return { client, calls }
+  }
+
+  it('shows one line per ring with the count, yellow when the ring is full', async () => {
+    const { client } = seatsClient([
+      { ring: 0, taken: 1, limit: 3 },
+      { ring: 1, taken: 4, limit: 4 },
+    ])
+    await withDom(async ({ container, root }) => {
+      await mount(root, client)
+      const group = container.querySelector('.mr-family-seats')
+      expect(group).not.toBeNull()
+      expect(group.querySelector('.mr-family-group').textContent).toBe('Seats')
+      const lines = Array.from(group.querySelectorAll('.mr-family-seat-line'))
+      expect(lines.map((line) => line.textContent)).toEqual(['Ring 0 · 1 of 3 seats', 'Ring 1 · 4 of 4 seats'])
+      expect(classesOf(lines[0])).toEqual(['mr-family-seat-line', 'mono'])
+      expect(classesOf(lines[1])).toContain('is-full')
+    })
+  })
+
+  it('says no limit for a ring with no seats and leaves its field empty', async () => {
+    const { client } = seatsClient([{ ring: 0, taken: 2, limit: null }])
+    await withDom(async ({ container, root }) => {
+      await mount(root, client)
+      const group = container.querySelector('.mr-family-seats')
+      expect(group.querySelector('.mr-family-seat-line').textContent).toBe('Ring 0 · 2 seats, no limit')
+      expect(classesOf(group.querySelector('.mr-family-seat-line'))).not.toContain('is-full')
+      expect(group.querySelector('.mr-family-seat-input').value).toBe('')
+    })
+  })
+
+  it('leaves the group out when the bridge sends no seats', async () => {
+    const { client } = makeClient()
+    await withDom(async ({ container, root }) => {
+      await mount(root, client)
+      expect(container.querySelector('.mr-family-seats')).toBeNull()
+    })
+  })
+
+  it('asks before saving the seats and sends every ring', async () => {
+    const calls = []
+    const { client } = seatsClient([{ ring: 0, taken: 1, limit: 3 }, { ring: 1, taken: 4, limit: 4 }], calls)
+    await withDom(async ({ container, root }) => {
+      await mount(root, client)
+      const group = container.querySelector('.mr-family-seats')
+      const inputs = group.querySelectorAll('.mr-family-seat-input')
+      await type(root, inputs[0], '2')
+      await type(root, inputs[1], '')
+      await click(root, buttonWithText(group, 'Save seats'))
+      const dialog = container.querySelector('.mr-side-confirm')
+      expect(dialog.textContent).toContain('Save the seats for every ring?')
+      await click(root, buttonWithText(dialog, 'Save'))
+      expect(calls).toEqual([{ rings: [2, null], confirmed: true }])
+    })
+  })
+
+  it('shows a refusal under the group', async () => {
+    const { client } = seatsClient([{ ring: 0, taken: 1, limit: 3 }])
+    client.setRingSeats = async () => {
+      throw new Error('Seats must be whole numbers from 0, or empty for no limit.')
+    }
+    await withDom(async ({ container, root }) => {
+      await mount(root, client)
+      const group = container.querySelector('.mr-family-seats')
+      await click(root, buttonWithText(group, 'Save seats'))
+      await click(root, buttonWithText(container.querySelector('.mr-side-confirm'), 'Save'))
+      const note = group.querySelector('.mr-family-note.is-error')
+      expect(note.textContent).toBe('Seats must be whole numbers from 0, or empty for no limit.')
+    })
+  })
+})
+
 describe('FamilyTree session rows', () => {
   it('lists the session that started a lane under the orchestrator', async () => {
     const { client } = makeClient()
