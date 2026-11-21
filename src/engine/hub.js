@@ -158,7 +158,11 @@ export function seatRingPoint(ring, layout = null) {
   const entry = layout?.rings?.[ring]
   if (ring > 0 && !entry) return null
   const radius = entry ? entry.radius : HUB_RADIUS
-  const y = (entry ? entry.y - HUB_Y : 0) - SEAT_LABEL_DROP
+  const y0 = entry ? entry.y : HUB_Y
+  const below = layout?.rings?.[ring + 1]
+  const gap = below ? Math.max(0, y0 - below.y) : RING_FLOOR_GAP
+  const drop = Math.min(SEAT_LABEL_DROP, gap * 0.4)
+  const y = (y0 - HUB_Y) - drop
   const angle = -OVERVIEW.yaw
   const distance = radius + SEAT_LABEL_OUT
   return { x: Math.cos(angle) * distance, y, z: Math.sin(angle) * distance }

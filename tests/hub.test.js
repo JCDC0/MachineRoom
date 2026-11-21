@@ -800,16 +800,17 @@ describe('the seats on the park rings', () => {
     expect(Math.hypot(lower.position.x, lower.position.z)).toBeCloseTo(layout.rings[1].radius + SEAT_LABEL_OUT)
     expect(lower.position.x).toBeCloseTo(Math.cos(angle) * (layout.rings[1].radius + SEAT_LABEL_OUT))
     expect(lower.position.z).toBeCloseTo(Math.sin(angle) * (layout.rings[1].radius + SEAT_LABEL_OUT))
-    expect(lower.position.y).toBe(layout.rings[1].y - HUB_Y - SEAT_LABEL_DROP)
+    expect(lower.position.y).toBe(layout.rings[1].y - HUB_Y - Math.min(SEAT_LABEL_DROP, RING_FLOOR_GAP * 0.4))
     hub.dispose()
   })
 
-  it('places each seat label 70 below its ring height for ring 0 and ring 1', () => {
+  it('drops each seat label by the smaller of 70 and 40 percent of the gap below it', () => {
     expect(SEAT_LABEL_DROP).toBe(70)
     const layout = ringLayout(LADDER, ['opencode', 'claude', 'hermes'])
-    expect(seatRingPoint(0).y).toBe(-70)
+    const lowestDrop = Math.min(SEAT_LABEL_DROP, RING_FLOOR_GAP * 0.4)
+    expect(seatRingPoint(0).y).toBe(-lowestDrop)
     expect(seatRingPoint(0, layout).y).toBe(layout.rings[0].y - HUB_Y - 70)
-    expect(seatRingPoint(1, layout).y).toBe(layout.rings[1].y - HUB_Y - 70)
+    expect(seatRingPoint(1, layout).y).toBe(layout.rings[1].y - HUB_Y - lowestDrop)
 
     const hub = createHub(new THREE.Scene(), ROSTER, LADDER)
     const hubLayout = ringLayout(LADDER, hub.parkedKeys())
@@ -818,8 +819,30 @@ describe('the seats on the park rings', () => {
       { ring: 1, taken: 3, limit: 3 },
     ])
     expect(labelFor(hub, 0).position.y).toBe(-70)
-    expect(labelFor(hub, 1).position.y).toBe(hubLayout.rings[1].y - HUB_Y - 70)
+    expect(labelFor(hub, 1).position.y).toBe(hubLayout.rings[1].y - HUB_Y - lowestDrop)
     hub.dispose()
+  })
+
+  it('keeps every ring seat label below its own ring and at least 60 percent of the gap from the ring below for 2, 3 and 5 rings', () => {
+    const twoRings = ringLayout(THREE_LANES, ['opencode', 'claude', 'hermes'])
+    const threeRings = ringLayout(
+      { subs: [{ id: 'a', lanes: ['l1'] }, { id: 'b', parent: 'a', lanes: ['l2'] }] },
+      ['l1', 'l2', 'l3'],
+    )
+    const fiveRings = {
+      rings: Array.from({ length: 5 }, (_, level) => ({ level, y: ringY(level, 4), radius: HUB_RADIUS })),
+    }
+    for (const [expectedCount, layout] of [[2, twoRings], [3, threeRings], [5, fiveRings]]) {
+      expect(layout.rings).toHaveLength(expectedCount)
+      for (let ring = 0; ring < layout.rings.length; ring += 1) {
+        const point = seatRingPoint(ring, layout)
+        const ownY = layout.rings[ring].y - HUB_Y
+        const belowY = ring + 1 < layout.rings.length ? layout.rings[ring + 1].y - HUB_Y : ownY - RING_FLOOR_GAP
+        const gap = ownY - belowY
+        expect(point.y).toBeLessThan(ownY)
+        expect(point.y - belowY).toBeGreaterThanOrEqual(gap * 0.6 - 1e-9)
+      }
+    }
   })
 
   it('turns a full ring yellow and leaves the other white', () => {
@@ -866,13 +889,16 @@ describe('the seats on the park rings', () => {
       { ring: 1, taken: 2, limit: 4 },
     ])
     const ring0WithSub = labelFor(hubWithSub, 0)
-    ring0Points.push({ x: ring0WithSub.position.x, y: ring0WithSub.position.y, z: ring0WithSub.position.z })
+    const expectedRing0WithSub = seatRingPoint(0, ringLayout(subLadder, ['l1', 'l2', 'l3', 'l4']))
     hubWithSub.dispose()
     for (const point of ring0Points) {
       expect(point.x).toBeCloseTo(expectedRing0.x)
       expect(point.y).toBe(expectedRing0.y)
       expect(point.z).toBeCloseTo(expectedRing0.z)
     }
+    expect(ring0WithSub.position.x).toBeCloseTo(expectedRing0WithSub.x)
+    expect(ring0WithSub.position.y).toBe(expectedRing0WithSub.y)
+    expect(ring0WithSub.position.z).toBeCloseTo(expectedRing0WithSub.z)
 
     const ring1Points = []
     for (const laneCount of [1, 2, 3, 4]) {
