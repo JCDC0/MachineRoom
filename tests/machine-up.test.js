@@ -120,12 +120,14 @@ function waitForText(run, marker, timeoutMs = 20000) {
 
 function waitForExit(child, timeoutMs = 10000) {
   return new Promise((resolveExit, rejectExit) => {
-    if (child.exitCode !== null || child.signalCode !== null) {
+    const drained = (stream) => !stream || stream.closed
+    if ((child.exitCode !== null || child.signalCode !== null) && drained(child.stdout) && drained(child.stderr)) {
       resolveExit({ code: child.exitCode, signal: child.signalCode })
       return
     }
     const timer = setTimeout(() => rejectExit(new Error('the bin process did not exit')), timeoutMs)
-    child.once('exit', (code, signal) => {
+    // close, not exit: exit can fire before the last stdout chunk is read.
+    child.once('close', (code, signal) => {
       clearTimeout(timer)
       resolveExit({ code, signal })
     })
