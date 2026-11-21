@@ -4,7 +4,6 @@ import {
   SUB_ORCHESTRATOR_SCALE,
   agentPresence,
   createAgents,
-  showsNameLabel,
 } from '../src/engine/agents.js'
 import { FOV, OVERVIEW, viewBasis } from '../src/engine/camera.js'
 import {
@@ -340,32 +339,37 @@ describe('the place of a sub orchestrator', () => {
   })
 })
 
-describe('a sector names a sub once', () => {
-  const sub = { key: 'sub-frontend', name: 'Frontend', subOrchestrator: true }
-
-  it('drops the shape label when it matches the sector name, ignoring case', () => {
-    expect(showsNameLabel(sub, { id: 'frontend', name: 'Frontend' })).toBe(false)
-    expect(showsNameLabel(sub, { id: 'frontend', name: 'FRONTEND' })).toBe(false)
-    expect(showsNameLabel({ ...sub, name: ' frontend ' }, { id: 'frontend', name: 'Frontend' })).toBe(false)
-  })
-
-  it('keeps the shape label when the names differ, the sector is missing or the agent is not a sub', () => {
-    expect(showsNameLabel({ ...sub, name: 'Platform' }, { id: 'frontend', name: 'Frontend' })).toBe(true)
-    expect(showsNameLabel(sub, null)).toBe(true)
-    expect(showsNameLabel(sub, { id: 'frontend' })).toBe(true)
-    expect(showsNameLabel({ key: 'opencode', name: 'Frontend' }, { id: 'frontend', name: 'Frontend' })).toBe(true)
-    expect(showsNameLabel({ ...sub, name: '' }, { id: 'frontend', name: 'Frontend' })).toBe(true)
-  })
-
-  it('hides the sub shape label on the demo ladder and shows it again with no ladder', () => {
+describe('sub orchestrator name and status labels', () => {
+  it('shows the sub name label and status line even when its name matches its sector', () => {
     const agents = createAgents(new THREE.Scene(), ROSTER, new THREE.Scene())
     agents.setLadder(LADDER)
-    expect(agents.views.get('sub-frontend').label.visible).toBe(false)
+    const sub = agents.views.get('sub-frontend')
+    expect(sub.label.visible).toBe(true)
+    expect(sub.doing.visible).toBe(true)
     expect(agents.views.get('opencode').label.visible).toBe(true)
     expect(agents.views.get('orchestrator').label.visible).toBe(true)
 
+    const world = { right: new THREE.Vector3(1, 0, 0), back: new THREE.Vector3(0, 0, 1) }
+    const terminals = {
+      ensure() {},
+      setVisible() {},
+      setFade() {},
+      remove() {},
+      edgePoint(key, side, out) {
+        out.set(0, 0, 0)
+      },
+    }
+    const state = {
+      agents: new Map([['sub-frontend', { status: 'working', label: 'planning', calls: new Map() }]]),
+      latest: 0,
+    }
+    agents.update(state, 0.016, 1000, world, terminals)
+    expect(sub.label.visible).toBe(true)
+    expect(sub.doing.visible).toBe(true)
+
     agents.setLadder(null)
-    expect(agents.views.get('sub-frontend').label.visible).toBe(true)
+    expect(sub.label.visible).toBe(true)
+    expect(sub.doing.visible).toBe(true)
     agents.dispose()
   })
 })
