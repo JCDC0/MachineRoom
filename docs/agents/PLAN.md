@@ -8,7 +8,7 @@ The team, set by the owner on 2026-11-21: the Claude Code session at the top orc
 
 1. P676, the Team tab lines of seat S4 (an orchestrator's create, turn on, turn off and new sub with the seat it took or freed): on `agy-4` under Neon. Then P677: an orchestrator prompt over the Windows command-line limit failed to spawn with a bare stop text (Neon was stuck from 20:05 until its conversation was archived at 21:10).
 2. R64-7: a sub stands over its own middle lane when its sector has an odd number of lanes, and the park rings ignore the lattice floor. A design choice for the owner (sub inside or outside the ring, or a gap at the middle of the arc); check by eye.
-3. The `X / Y` ring labels (P639b) were not seen by eye yet at overview distance; check them closer.
+3. The `X / Y` ring labels (P639b) were seen by eye on the bench at 21:31 with limits 2 and 3: ring 0 read `0 / 2` in faint white and ring 1 `3 / 3` in yellow at full opacity, both right. Two small faults for a native lane (src/engine): at overview distance both are too small to read, and ring 1's label sits on the hub's ORCHESTRATOR name.
 4. Decide with the owner what Chat opens on the bench, where the orchestrator is the Claude Code session.
 5. Known weakness: any request with an `Origin` header counts as the owner; matters only off this machine.
 6. After P676, a review of `9e467b80` onward (P675, P676 and the AGY switch commits).
