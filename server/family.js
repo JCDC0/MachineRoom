@@ -25,8 +25,10 @@ import { readSeats, ringSummary, seatsFileFor, setRings } from './seats.js'
 
 export const ORIGIN_LABEL_PROBLEM = 'A request to set an agent label needs a page Origin.'
 export const ORIGIN_TOP_PROBLEM = 'A request to set the top agent needs a page Origin.'
+export const ORIGIN_SEATS_PROBLEM = 'A request to set the seats needs a page Origin.'
 export const SEATS_SHAPE_PROBLEM = 'Seats must be whole numbers from 0, or empty for no limit.'
 export const CONFIRM_TOP_PROBLEM = 'Confirm putting the agent at the top first.'
+export const CONFIRM_SEATS_PROBLEM = 'Confirm the seats first.'
 export const TOP_KEY_PROBLEM = 'The top must be orchestrator, claude-session or opencode-session.'
 export const ORIGIN_KEY_PROBLEM = 'A request to set a key needs a page Origin.'
 export const ORIGIN_DELETE_KEY_PROBLEM = 'A request to delete a key needs a page Origin.'
@@ -524,13 +526,13 @@ export function createFamilyApi(options = {}) {
         return true
       }
       if (!page) {
-        sendJson(req, res, 403, { error: ORIGIN_TOP_PROBLEM })
+        sendJson(req, res, 403, { error: ORIGIN_SEATS_PROBLEM })
         return true
       }
       const body = await readJsonBody(req, res)
       if (body === null) return true
       if (body.confirmed !== true) {
-        sendJson(req, res, 400, { error: CONFIRM_TOP_PROBLEM })
+        sendJson(req, res, 400, { error: CONFIRM_SEATS_PROBLEM })
         return true
       }
       const rings = body.rings

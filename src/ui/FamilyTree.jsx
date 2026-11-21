@@ -1147,7 +1147,10 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
             label: 'Anyway',
             tone: 'primary',
             busyText: 'Trying again...',
-            run: () => run(ring),
+            run: async () => {
+              await run(ring)
+              await refresh()
+            },
           })
           return
         }
@@ -1919,7 +1922,8 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
           await client.setRingSeats({ rings: built.rings, confirmed: true })
         } catch (error) {
           setSeatProblem(messageOf(error))
-          throw error
+          await refresh().catch(() => {})
+          return
         }
         setSeatDraft({})
         await refresh()
@@ -2694,9 +2698,11 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
     const status = state === 'paused' ? 'waiting' : state
     const dot = state === 'waiting' ? 'idle' : state
     const detail = familyModel(node, { harnesses, models })
+    const mainEntry = subEntry(orchestrators, 'orchestrator')
+    const orchestratorLabel = mainAgent?.label || mainEntry?.label || mainEntry?.name || 'Orchestrator'
     const madeBy =
       (lane || sub) && node.createdBy
-        ? `made by ${tree.nodes.find((row) => row.id === node.createdBy)?.label || node.createdBy}`
+        ? `made by ${tree.nodes.find((row) => row.id === node.createdBy)?.label || (node.createdBy === 'orchestrator' ? orchestratorLabel : node.createdBy)}`
         : ''
     const detailWithBy = madeBy ? `${detail} · ${madeBy}` : detail
     const detailTitle = status ? (detailWithBy ? `${status} · ${detailWithBy}` : status) : detailWithBy

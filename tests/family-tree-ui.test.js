@@ -1221,7 +1221,7 @@ describe('FamilyTree seats', () => {
     })
   })
 
-  it('shows a refusal under the group', async () => {
+  it('shows a refusal under the group once, without a second banner error', async () => {
     const { client } = seatsClient([{ ring: 0, taken: 1, limit: 3 }])
     client.setRingSeats = async () => {
       throw new Error('Seats must be whole numbers from 0, or empty for no limit.')
@@ -1233,6 +1233,9 @@ describe('FamilyTree seats', () => {
       await click(root, buttonWithText(container.querySelector('.mr-side-confirm'), 'Save'))
       const note = group.querySelector('.mr-family-note.is-error')
       expect(note.textContent).toBe('Seats must be whole numbers from 0, or empty for no limit.')
+      expect(container.querySelector('.mr-side-error')).toBeNull()
+      expect(container.querySelectorAll('[role="alert"]')).toHaveLength(1)
+      expect(container.querySelector('.mr-side-confirm')).toBeNull()
     })
   })
 })
@@ -1264,6 +1267,51 @@ describe('FamilyTree made by and full rings', () => {
     })
   })
 
+  it('shows made by Orchestrator or its saved label when the orchestrator node is hidden', async () => {
+    const { client } = makeClient()
+    client.orchestrators = async () => [{ id: 'orchestrator', name: 'Lead' }]
+    client.family = async () => ({
+      top: 'claude-session',
+      nodes: [
+        {
+          id: 'session:claude-session',
+          kind: 'session',
+          label: 'Claude Code',
+          harness: 'claude',
+          model: 'opus',
+          parent: null,
+          children: ['opencode'],
+          active: true,
+          working: true,
+        },
+        {
+          id: 'opencode',
+          kind: 'lane',
+          label: 'OpenCode',
+          harness: 'opencode',
+          model: 'opencode-go/deepseek-v4.1-flash',
+          effort: 'max',
+          parent: 'session:claude-session',
+          createdBy: 'orchestrator',
+          active: true,
+          working: false,
+        },
+      ],
+      keys: [],
+      proposals: [],
+    })
+    await withDom(async ({ container, root }) => {
+      await mount(root, client)
+      expect(rowByLabel(container, 'OpenCode').querySelector('.ui-row-detail').textContent).toContain('made by Lead')
+    })
+
+    client.orchestrators = async () => []
+    await withDom(async ({ container, root }) => {
+      await mount(root, client)
+      expect(rowByLabel(container, 'OpenCode').querySelector('.ui-row-detail').textContent).toContain('made by Orchestrator')
+    })
+  })
+
   it('asks before turning a lane on past a full ring and sends the ring', async () => {
     const { client, calls } = makeClient()
     let refused = false
@@ -1290,6 +1338,37 @@ describe('FamilyTree made by and full rings', () => {
         confirmed: true,
       })
       expect(container.querySelector('.mr-side-confirm-card')).toBeNull()
+    })
+  })
+
+  it('refreshes the tree after an overRing retry succeeds', async () => {
+    const { client, calls } = makeClient()
+    let activeNow = false
+    let familyCalls = 0
+    client.family = async () => {
+      familyCalls += 1
+      return {
+        ...FAMILY,
+        nodes: FAMILY.nodes.map((node) => (node.id === 'opencode2' ? { ...node, active: activeNow } : node)),
+      }
+    }
+    client.setActiveLanes = async (payload) => {
+      calls.setActiveLanes.push(payload)
+      if (payload.overRing === undefined) {
+        throw ringError('Confirm going past the seats on ring 1.', 1)
+      }
+      activeNow = true
+      return { ok: true }
+    }
+    await withDom(async ({ container, root }) => {
+      await mount(root, client)
+      const callsBefore = familyCalls
+      await click(root, container.querySelector('.mr-family-more-head'))
+      await chooseAction(root, rowByLabel(container, 'OpenCode 2'), 'Turn on')
+      expect(familyCalls).toBe(callsBefore)
+      await click(root, buttonWithText(container.querySelector('.mr-side-confirm-card'), 'Anyway'))
+      expect(familyCalls).toBe(callsBefore + 1)
+      expect(classesOf(rowByLabel(container, 'OpenCode 2').querySelector('.mr-family-row'))).not.toContain('is-off')
     })
   })
 

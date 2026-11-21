@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import {
   CONFIRM_KEY_PROBLEM,
   CONFIRM_LABEL_PROBLEM,
+  CONFIRM_SEATS_PROBLEM,
   CONFIRM_TOP_PROBLEM,
   KEY_NAME_PROBLEM,
   KEY_VALUE_PROBLEM,
@@ -14,6 +15,7 @@ import {
   ORIGIN_DELETE_KEY_PROBLEM,
   ORIGIN_KEY_PROBLEM,
   ORIGIN_LABEL_PROBLEM,
+  ORIGIN_SEATS_PROBLEM,
   ORIGIN_TOP_PROBLEM,
   SEATS_SHAPE_PROBLEM,
   buildFamilyNodes,
@@ -348,14 +350,16 @@ describe('ring seats in GET /api/family and POST /api/family/seats', () => {
       body: { rings: [1], confirmed: true },
     })
     expect(ticket.status).toBe(403)
-    expect(ticket.body.error).toBe(ORIGIN_TOP_PROBLEM)
+    expect(ticket.body.error).toBe(ORIGIN_SEATS_PROBLEM)
+    expect(ticket.body.error).toBe('A request to set the seats needs a page Origin.')
 
     const unconfirmed = await request(`${url}/api/family/seats`, {
       method: 'POST',
       body: { rings: [1] },
     })
     expect(unconfirmed.status).toBe(400)
-    expect(unconfirmed.body.error).toBe(CONFIRM_TOP_PROBLEM)
+    expect(unconfirmed.body.error).toBe(CONFIRM_SEATS_PROBLEM)
+    expect(unconfirmed.body.error).toBe('Confirm the seats first.')
   })
 
   it('refuses rings that are not whole numbers from 0, or longer than the depth', async () => {
