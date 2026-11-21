@@ -4,6 +4,7 @@ import { makeTree } from '../src/model/paths.js'
 import { createState } from '../src/model/state.js'
 
 const fakeGit = vi.hoisted(() => ({ states: [], changed: true }))
+const fakeHub = vi.hoisted(() => ({ depths: [] }))
 
 vi.mock('../src/engine/gitTree.js', async (importOriginal) => {
   const actual = await importOriginal()
@@ -18,6 +19,23 @@ vi.mock('../src/engine/gitTree.js', async (importOriginal) => {
         return fakeGit.changed
       }
       return tree
+    },
+  }
+})
+
+vi.mock('../src/engine/hub.js', async (importOriginal) => {
+  const actual = await importOriginal()
+  return {
+    ...actual,
+    createHub: (...args) => {
+      const hub = actual.createHub(...args)
+      const setDepth = hub.setDepth
+      hub.setDepth = (value) => {
+        const next = setDepth(value)
+        fakeHub.depths.push(next)
+        return next
+      }
+      return hub
     },
   }
 })
@@ -295,6 +313,21 @@ describe('the room takes the chosen top and the depth', () => {
       expect(room.setDepth(0)).toBe(1)
       expect(room.setDepth(undefined)).toBe(RING_LEVEL_MAX)
       tick()
+    } finally {
+      room.dispose()
+    }
+  })
+
+  it('reads the depth limit from the state and caps the drawn rings', async () => {
+    const { room, state } = await makeRoom()
+    try {
+      fakeHub.depths.length = 0
+      state.depthLimit = 2
+      tick()
+      expect(fakeHub.depths.at(-1)).toBe(2)
+      state.depthLimit = 1
+      tick()
+      expect(fakeHub.depths.at(-1)).toBe(1)
     } finally {
       room.dispose()
     }

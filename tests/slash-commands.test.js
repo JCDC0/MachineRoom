@@ -554,6 +554,105 @@ describe('the seat slash commands on the server', () => {
     expect(captured[0].args[promptIndex + 1]).not.toContain('/agents')
   })
 
+  describe('the room replies and the prompt history', () => {
+    function replySpawn(captured, harness) {
+      return (file, args) => {
+        captured.push({ file, args })
+        const child = new EventEmitter()
+        child.pid = 0
+        child.kill = () => {}
+        child.stdout = new PassThrough()
+        child.stderr = new PassThrough()
+        setImmediate(() => {
+          const line =
+            harness === 'codex'
+              ? { type: 'item.completed', item: { type: 'agent_message', text: 'ok' } }
+              : { type: 'result', subtype: 'success', result: 'ok' }
+          child.stdout.write(`${JSON.stringify(line)}\n`)
+          child.stdout.end()
+          child.stderr.end()
+          child.emit('close', 0)
+        })
+        return child
+      }
+    }
+
+    async function waitFor(check, label) {
+      for (let tries = 0; tries < 400; tries += 1) {
+        if (check()) return
+        await new Promise((resolve) => setTimeout(resolve, 10))
+      }
+      throw new Error(`Timed out waiting for ${label}`)
+    }
+
+    function chatRig(harness) {
+      const base = temp(`mr-chat-only-${harness}-`)
+      const project = join(base, 'project')
+      const runs = join(base, 'runs')
+      mkdirSync(project, { recursive: true })
+      mkdirSync(runs, { recursive: true })
+      const captured = []
+      const instance = createOrchestrator({
+        harness,
+        model: harness === 'codex' ? 'gpt-5-codex' : 'opus',
+        projectRoot: project,
+        runsFolder: runs,
+        spawn: replySpawn(captured, harness),
+        now: () => Date.parse('2026-11-20T10:00:00.000Z'),
+      })
+      cleanups.push(() => instance.close())
+      return { instance, captured }
+    }
+
+    it('leaves the room reply out of the history a fresh harness builds', async () => {
+      const { instance, captured } = chatRig('codex')
+
+      const seats = instance.send({ text: '/seats', confirmed: true })
+      expect(seats.status).toBe(200)
+      expect(seats.body.reply).toContain('Seat grant for Orchestrator:')
+      expect(captured).toHaveLength(0)
+
+      instance.send({ text: 'Hello now', confirmed: true })
+      await waitFor(() => captured.length === 1, 'the first turn to start')
+      const firstPrompt = captured[0].args.at(-1)
+      expect(firstPrompt).not.toContain(seats.body.reply)
+      expect(firstPrompt).not.toContain('turned on')
+      await waitFor(() => instance.answer().state === 'idle' && instance.answer().messages.length === 3, 'the first turn to end')
+
+      instance.send({ text: 'Second now', confirmed: true })
+      await waitFor(() => captured.length === 2, 'the second turn to start')
+      const secondPrompt = captured[1].args.at(-1)
+      expect(secondPrompt).toContain('Owner: Hello now')
+      expect(secondPrompt).toContain('Orchestrator: ok')
+      expect(secondPrompt).not.toContain('turned on')
+    })
+
+    it('leaves the room reply out of a branch transcript on a resuming harness', async () => {
+      const { instance, captured } = chatRig('claude')
+
+      const seats = instance.send({ text: '/seats', confirmed: true })
+      expect(seats.status).toBe(200)
+      expect(captured).toHaveLength(0)
+
+      instance.send({ text: 'First task', confirmed: true })
+      await waitFor(() => captured.length === 1 && instance.answer().state === 'idle' && instance.answer().messages.length === 3, 'the turn to end')
+
+      const messages = instance.answer().messages
+      expect(messages[0]).toMatchObject({ from: 'room', chatOnly: true })
+      const branched = instance.branchSession({ confirmed: true, index: messages.length })
+      expect(branched.status).toBe(200)
+
+      instance.send({ text: 'Carry on', confirmed: true })
+      await waitFor(() => captured.length === 2, 'the branch turn to start')
+      const prompt = captured[1].args[captured[1].args.indexOf('-p') + 1]
+      expect(prompt).toContain('Earlier messages in this conversation, quoted:')
+      expect(prompt).toContain('> Owner: First task')
+      expect(prompt).toContain('> Orchestrator: ok')
+      expect(prompt).not.toContain(seats.body.reply)
+      expect(prompt).not.toContain('turned on')
+    })
+  })
+
   it('writes grants through seats.js, posts one room notice and delivers it on the next turn', async () => {
     const { project, runs, registry, captured, notices } = rig()
     const file = seatsFileFor(project, runs)
