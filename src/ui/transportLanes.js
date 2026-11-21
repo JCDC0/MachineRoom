@@ -5,6 +5,7 @@ import { INSPECT_EVENT } from './inspector.js'
 
 export const LANE_PILL_LIMIT = 6
 export const LANE_TASK_LIMIT = 16
+export const ROOM_LINGER_MS = 5 * 60 * 1000
 
 const ACTIVE_STATUS = new Set(['queued', 'running'])
 const QUEUE_STEP = /\btask\s+(\d+)\s+of\s+(\d+)\b/i
@@ -158,10 +159,16 @@ export function lanePills({
   now = Date.now(),
   limit = LANE_PILL_LIMIT,
   includeIdle = false,
+  lingerMs = null,
 } = {}) {
   const roster = Array.isArray(agents) ? agents : []
   const lanes = laneAgents(roster)
   const size = Number.isInteger(limit) && limit >= 0 ? limit : LANE_PILL_LIMIT
+  const linger =
+    !includeIdle && typeof lingerMs === 'number' && Number.isFinite(lingerMs) && lingerMs > 0
+      ? lingerMs
+      : null
+  const current = finiteOrNull(now)
   const byAgentId = new Map()
   for (const agent of roster) {
     const id = text(agent?.id)
@@ -203,10 +210,19 @@ export function lanePills({
     }
     const last = lastRecordFor(records?.last ?? records?.recent, key, byAgentId)
     if (!last || !runFailed(last.record)) {
-      if (includeIdle) {
-        const finished = last && finiteOrNull(last.record.exitCode) === 0
-        idle.push({ key, label, task: finished ? recordTask(last.record) : '', state: finished ? 'finished' : 'idle', tone: finished ? 'finished' : 'idle', minutes: finished ? minutesSince(timeOf(last.record.finishedAt), now) : null, step: null })
+      const finished = Boolean(last && finiteOrNull(last.record.exitCode) === 0)
+      const finishedAt = finished ? timeOf(last.record.finishedAt) : null
+      const keepFinished = Boolean(
+        finished && linger !== null && finishedAt !== null && current !== null && current - finishedAt <= linger
+      )
+      if (includeIdle || keepFinished) {
+        idle.push({ key, label, task: finished ? recordTask(last.record) : '', state: finished ? 'finished' : 'idle', tone: finished ? 'finished' : 'idle', minutes: finished ? minutesSince(finishedAt, now) : null, step: null })
       }
+      continue
+    }
+    const failedAt = timeOf(last.record.finishedAt)
+    const failedRef = failedAt ?? last.started
+    if (linger !== null && failedRef !== null && current !== null && current - failedRef > linger) {
       continue
     }
     failed.push({
@@ -215,7 +231,7 @@ export function lanePills({
       task: recordTask(last.record),
       state: 'failed',
       tone: 'failed',
-      minutes: minutesSince(timeOf(last.record.finishedAt), now),
+      minutes: minutesSince(failedAt, now),
       startedAt: last.started,
       step: null,
     })

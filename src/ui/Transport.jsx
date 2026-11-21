@@ -6,7 +6,7 @@ import {
   contextTone,
 } from './contextRing.js'
 import { OPEN_CHAT_EVENT, hasWaitingApproval, orchestratorChips } from './transportOrchestrators.js'
-import { agentListPosition, ageText, inspectLane, lanePillTitle, lanePills } from './transportLanes.js'
+import { ROOM_LINGER_MS, agentListPosition, ageText, inspectLane, lanePillTitle, lanePills } from './transportLanes.js'
 import { showCostBoard, spendText } from './transportSpend.js'
 
 export const LiveBadgeContext = createContext('live')
@@ -272,6 +272,7 @@ export default function Transport({ snapshot, speeds, markers = [], orchestrator
             now: laneFeed.now ?? Date.now(),
             limit: Number.MAX_SAFE_INTEGER,
             includeIdle: false,
+            lingerMs: ROOM_LINGER_MS,
           })
         : { pills: [], more: 0 }
     const sessions = (Array.isArray(snapshot.agents) ? snapshot.agents : []).filter(
@@ -280,7 +281,7 @@ export default function Transport({ snapshot, speeds, markers = [], orchestrator
     const working =
       sessions.length +
       chips.filter((chip) => chip.tone === 'working').length +
-      lanes.pills.filter((lane) => lane.state === 'working').length
+      lanes.pills.filter((lane) => lane.tone === 'working').length
     const waiting = chips.filter((chip) => chip.waiting).length + (hasWaitingApproval(main) ? 1 : 0)
     const spend = spendText(costs)
     return (
