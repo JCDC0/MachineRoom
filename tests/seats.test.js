@@ -279,6 +279,8 @@ describe('seat slash command helpers', () => {
     expect(grantNotice).toContain('POST /api/orchestrator/ladder')
     expect(grantNotice).toContain('X-MachineRoom-Orchestrator')
     expect(grantNotice).toContain('own harness (claude)')
+    expect(grantNotice).toContain('Change only agents under you.')
+    expect(grantNotice).not.toContain('delete only agents you made')
 
     const clampedNotice = formatGrantNotice({
       seats: { rings: [3, 4], grants: { subA: { lanes: 2, subs: 0 } } },

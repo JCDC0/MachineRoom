@@ -1207,6 +1207,7 @@ export function createOrchestrator({
       ...(work ? { work } : {}),
       ...(typeof item.firstCommit === 'string' && item.firstCommit ? { firstCommit: maskText(item.firstCommit) } : {}),
       ...(item.chatOnly === true ? { chatOnly: true } : {}),
+      ...(item.passive === true ? { passive: true } : {}),
     }
     if (from === 'agent') {
       const agent = restoredAgent(item.agent)
@@ -1581,7 +1582,7 @@ export function createOrchestrator({
     if (stopped) return null
     const value = typeof text === 'string' ? text.trim() : ''
     if (!value) return null
-    return addMessage('room', value, true)
+    return addMessage('room', value, true, { passive: true })
   }
 
   function addRoomReply(text) {
@@ -1595,7 +1596,7 @@ export function createOrchestrator({
     if (stopped) return null
     const value = typeof text === 'string' ? text.trim() : ''
     if (!value) return null
-    const message = { id: randomUUID(), from: 'room', text: maskText(value), at: iso(now()) }
+    const message = { id: randomUUID(), from: 'room', text: maskText(value), at: iso(now()), passive: true }
     messages.push(message)
     while (messages.length > ORCHESTRATOR_CHAT_LIMIT) messages.shift()
     pending.push(message)
@@ -1749,9 +1750,13 @@ export function createOrchestrator({
     return check
   }
 
+  function hasActivePending() {
+    return pending.some((message) => message.passive !== true)
+  }
+
   function finishMaybeStartTurn(inProgress) {
     if (stopped || running || state === 'paused') return
-    if (pending.length === 0) return
+    if (!hasActivePending()) return
     if (inProgress) {
       scheduleRoomTurn(mergeWaitMs)
       return
@@ -1769,8 +1774,8 @@ export function createOrchestrator({
       startTurn()
       return
     }
-    if (pending.length === 0) return
-    const ordered = pending.some((message) => message.from === 'owner' || (key !== ORCHESTRATOR_KEY && message.from === ORCHESTRATOR_KEY))
+    if (!hasActivePending()) return
+    const ordered = pending.some((message) => message.passive !== true && (message.from === 'owner' || (key !== ORCHESTRATOR_KEY && message.from === ORCHESTRATOR_KEY)))
     if (ordered) {
       startTurn()
       return
@@ -2704,7 +2709,7 @@ ${modelSummary}` : modelSummary
   function branchSession(body) {
     if (body?.confirmed !== true) return { status: 400, body: { error: CONFIRM_SESSION_PROBLEM } }
     if (running && !running.done) return { status: 409, body: { error: COMPACT_RUNNING_PROBLEM } }
-    if (pending.length > 0) return { status: 409, body: { error: SESSION_PENDING_PROBLEM } }
+    if (hasActivePending()) return { status: 409, body: { error: SESSION_PENDING_PROBLEM } }
     const index = body?.index
     if (!Number.isInteger(index) || index < 1 || index > messages.length) {
       return { status: 400, body: { error: BRANCH_INDEX_PROBLEM } }
@@ -2735,7 +2740,7 @@ ${modelSummary}` : modelSummary
   function newSession(body) {
     if (body?.confirmed !== true) return { status: 400, body: { error: CONFIRM_SESSION_PROBLEM } }
     if (running && !running.done) return { status: 409, body: { error: COMPACT_RUNNING_PROBLEM } }
-    if (pending.length > 0) return { status: 409, body: { error: SESSION_PENDING_PROBLEM } }
+    if (hasActivePending()) return { status: 409, body: { error: SESSION_PENDING_PROBLEM } }
     if (archiveCurrentSession() === ARCHIVE_FULL) {
       return { status: 409, body: { error: SESSIONS_FULL_PROBLEM } }
     }
@@ -2756,7 +2761,7 @@ ${modelSummary}` : modelSummary
   function openSession(sid, body) {
     if (body?.confirmed !== true) return { status: 400, body: { error: CONFIRM_SESSION_PROBLEM } }
     if (running && !running.done) return { status: 409, body: { error: COMPACT_RUNNING_PROBLEM } }
-    if (pending.length > 0) return { status: 409, body: { error: SESSION_PENDING_PROBLEM } }
+    if (hasActivePending()) return { status: 409, body: { error: SESSION_PENDING_PROBLEM } }
     const target = sessions.find((s) => s.id === sid)
     if (!target) return { status: 404, body: { error: NO_SESSION_ID_PROBLEM } }
     if (archiveCurrentSession() === ARCHIVE_FULL) {

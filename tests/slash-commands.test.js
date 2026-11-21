@@ -678,4 +678,78 @@ describe('the seat slash commands on the server', () => {
       grant: { lanes: 2, subs: 1 },
     })
   })
+
+  it('lets newSession, openSession and branchSession run when only a passive notice waits', async () => {
+    const { project, runs, registry, captured } = rig()
+    writeSeats(seatsFileFor(project, runs), { rings: [3, 4], grants: {} })
+
+    const granted = await registry.message({ text: '/grant 2 0', confirmed: true }, true)
+    expect(granted.status).toBe(200)
+    expect(captured).toHaveLength(0)
+
+    const fresh = registry.main.newSession({ confirmed: true })
+    expect(fresh.status).toBe(200)
+    expect(captured).toHaveLength(0)
+
+    const archived = registry.main.listSessions()
+    expect(archived).toHaveLength(1)
+
+    const revoked = await registry.message({ text: '/revoke', confirmed: true }, true)
+    expect(revoked.status).toBe(200)
+    expect(captured).toHaveLength(0)
+
+    const opened = registry.main.openSession(archived[0].id, { confirmed: true })
+    expect(opened.status).toBe(200)
+    expect(captured).toHaveLength(0)
+
+    registry.main.addNote('The owner stopped worker.')
+    const branched = registry.main.branchSession({ confirmed: true, index: 1 })
+    expect(branched.status).toBe(200)
+    expect(captured).toHaveLength(0)
+  })
+
+  it('keeps a restored passive notice quiet until the next owner message', async () => {
+    const { project, runs, registry, captured } = rig()
+    writeSeats(seatsFileFor(project, runs), { rings: [3, 4], grants: {} })
+
+    await registry.message({ text: 'First task', confirmed: true }, true)
+    for (let i = 0; i < 40 && registry.main.answer().state === 'working'; i += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 10))
+    }
+    expect(captured).toHaveLength(1)
+    expect(registry.main.answer().state).toBe('idle')
+
+    const granted = await registry.message({ text: '/grant 2 0', confirmed: true }, true)
+    expect(granted.status).toBe(200)
+    expect(captured).toHaveLength(1)
+
+    registry.close()
+
+    const restartedCaptured = []
+    const restored = createOrchestrators({
+      projectRoot: project,
+      runsFolder: runs,
+      lanes: {
+        orchestrator: { name: 'Orchestrator', cli: { harness: 'claude', bin: 'claude', model: 'opus' } },
+        worker: { name: 'Worker', cli: { harness: 'claude', bin: 'claude', model: 'sonnet' }, createdBy: 'orchestrator' },
+      },
+      spawn: fakeSpawn(restartedCaptured),
+      now: () => Date.parse('2026-11-20T10:05:00.000Z'),
+      sendJson: () => {},
+      readJsonBody: async () => null,
+      harnessAvailable: () => true,
+    })
+    cleanups.push(() => restored.close())
+
+    await new Promise((resolve) => setTimeout(resolve, 40))
+    expect(restartedCaptured).toHaveLength(0)
+    expect(restored.main.answer().state).toBe('idle')
+
+    await restored.message({ text: 'Continue after restart', confirmed: true }, true)
+    expect(restartedCaptured).toHaveLength(1)
+    const promptIndex = restartedCaptured[0].args.indexOf('-p')
+    const sentPrompt = restartedCaptured[0].args[promptIndex + 1]
+    expect(sentPrompt).toContain('Room: The owner updated your seat grant: up to 2 lanes turned on (ring 0) and 0 subs (ring 1).')
+    expect(sentPrompt).toContain('Owner: Continue after restart')
+  })
 })

@@ -280,7 +280,7 @@ export function formatGrantNotice({ seats, tree, id, depth = AGENT_DEPTH_DEFAULT
     `${canDo}${cannotDo}`,
     'Routes (send your X-MachineRoom-Orchestrator header and confirmed: true):',
     ...routes,
-    `Limits: stay within your grant (${plural(lanes, 'lane')} on, ${plural(effectiveSubs, 'sub')}) and free seats (${ringNotes.join('; ')}). ${harnessRule} Change only agents under you, and delete only agents you made.${scopeRule}`,
+    `Limits: stay within your grant (${plural(lanes, 'lane')} on, ${plural(effectiveSubs, 'sub')}) and free seats (${ringNotes.join('; ')}). ${harnessRule} Change only agents under you.${scopeRule}`,
   ].join('\n')
 }
 
