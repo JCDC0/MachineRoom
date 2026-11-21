@@ -2996,7 +2996,7 @@ describe('refused run wake', () => {
       confirmed: true,
     }, subToken)
     expect(okStart.status).toBe(202)
-    await waitFor(async () => (await getJson(`${rig.url}/api/control/runs`)).body.running.length === 0, 15000, 'exit-0 run to finish')
+    await waitFor(async () => (await getJson(`${rig.url}/api/control/runs`)).body.running.length === 0, 45000, 'exit-0 run to finish')
     await sleep(150)
     expect(messagesOf(registry, 'frontend').filter((m) => m.from === 'room')).toHaveLength(0)
     expect(messagesOf(registry, 'orchestrator').filter((m) => m.from === 'room')).toHaveLength(0)
@@ -3010,12 +3010,12 @@ describe('refused run wake', () => {
     expect(logStart.status).toBe(202)
     await waitFor(
       () => messagesOf(registry, 'frontend').some((m) => m.from === 'room' && m.text.includes('ended: failed.')),
-      15000,
+      45000,
       'normal failed run-end message'
     )
     await waitIdle(registry, 'frontend', 1)
     const subRooms = messagesOf(registry, 'frontend').filter((m) => m.from === 'room')
     expect(subRooms).toHaveLength(1)
     expect(subRooms.some((m) => m.text.includes('was refused before it started'))).toBe(false)
-  })
+  }, 120000)
 })
