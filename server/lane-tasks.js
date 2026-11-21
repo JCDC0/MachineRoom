@@ -202,8 +202,12 @@ function statusFor(record, getIndex, mergedBriefs) {
 export function mergedBriefIds(subjects) {
   const ids = new Set()
   for (const subject of subjects) {
-    const match = /^\d+\.\d+\.\d+: Merge (P\d+[a-z]?)\b/i.exec(subject)
-    if (match) ids.add(match[1].toLowerCase())
+    if (typeof subject !== 'string') continue
+    const match = /^(?:\d+\.\d+\.\d+:\s+)?Merge ([^,]*)/i.exec(subject)
+    if (!match) continue
+    for (const token of match[1].split(/[^A-Za-z0-9]+/)) {
+      if (/^[A-Z]\d+[a-z]?$/i.test(token)) ids.add(token.toLowerCase())
+    }
   }
   return ids
 }

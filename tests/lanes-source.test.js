@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process'
 import { appendFileSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs'
 import { basename, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createBridge } from '../server/index.js'
 import { activeLanesFileFor, ROOM_LANE_LINGER_MS, writeActiveLanes } from '../server/active-lanes.js'
 import { createLanesSource, createRecordsCache, laneAgents, mainCheckoutOf, readAllLanes, readLanes, runsFolder, subOrchestratorAgent } from '../server/lanes-source.js'
@@ -1548,5 +1548,77 @@ describe('sub orchestrator agent for any harness', () => {
       model: 'gpt-5-codex',
       subOrchestrator: true,
     })
+  })
+})
+
+describe('linger expiry notice', () => {
+  it('notifies agents once after lingerMs + 1000 when a run finishes', () => {
+    vi.useFakeTimers()
+    cleanups.push(() => vi.useRealTimers())
+    const base = tempDir('mr-lanes-linger-')
+    const runs = join(base, 'runs')
+    mkdirSync(runs, { recursive: true })
+    const worktree = join(base, 'MachineRoom-opencode3')
+    const lanes = lanesFor({ opencode: worktree })
+    const logPath = join(runs, 'opencode-P669-20261121-120000.log')
+    writeFileSync(logPath, `${toolLine(`${worktree}\\src\\a.js`)}\n`)
+    writeFileSync(join(runs, 'runs.jsonl'), `${JSON.stringify({ lane: 'opencode', log: logPath, exitCode: 0, killed: false })}\n`)
+
+    const notices = []
+    const source = createLanesSource({
+      folder: runs,
+      lanes,
+      quietMs: 60000,
+      pollMs: 60000,
+      scanMs: 60000,
+      lingerMs: 5000,
+      watchFolder: () => ({ on() {}, close() {} }),
+      onNotice: (event) => notices.push(event),
+    })
+    cleanups.push(() => source.stop())
+    source.start()
+    source.tick()
+
+    expect(notices).toEqual([])
+    vi.advanceTimersByTime(5999)
+    expect(notices).toEqual([])
+    vi.advanceTimersByTime(1)
+    expect(notices).toEqual([{ topic: 'agents' }])
+    vi.advanceTimersByTime(10000)
+    expect(notices).toEqual([{ topic: 'agents' }])
+  })
+
+  it('clears the linger timer when stopped before it fires', () => {
+    vi.useFakeTimers()
+    cleanups.push(() => vi.useRealTimers())
+    const base = tempDir('mr-lanes-linger-stop-')
+    const runs = join(base, 'runs')
+    mkdirSync(runs, { recursive: true })
+    const worktree = join(base, 'MachineRoom-opencode3')
+    const lanes = lanesFor({ opencode: worktree })
+    const logPath = join(runs, 'opencode-P669-20261121-120100.log')
+    writeFileSync(logPath, `${toolLine(`${worktree}\\src\\a.js`)}\n`)
+    writeFileSync(join(runs, 'runs.jsonl'), `${JSON.stringify({ lane: 'opencode', log: logPath, exitCode: 0, killed: false })}\n`)
+
+    const notices = []
+    const source = createLanesSource({
+      folder: runs,
+      lanes,
+      quietMs: 60000,
+      pollMs: 60000,
+      scanMs: 60000,
+      lingerMs: 5000,
+      watchFolder: () => ({ on() {}, close() {} }),
+      onNotice: (event) => notices.push(event),
+    })
+    cleanups.push(() => source.stop())
+    source.start()
+    source.tick()
+
+    vi.advanceTimersByTime(5500)
+    expect(notices).toEqual([])
+    source.stop()
+    vi.advanceTimersByTime(5000)
+    expect(notices).toEqual([])
   })
 })

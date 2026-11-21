@@ -2,7 +2,7 @@ import { appendFileSync, readFileSync, rmSync, utimesSync, writeFileSync } from 
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { cachedRunRecords as cachedRunRecordsLaneCosts } from '../server/lane-costs.js'
-import { RUN_READ_CHUNK_BYTES, clearRunsCache, readAllRunRecords } from '../server/runs.js'
+import { RUN_READ_CHUNK_BYTES, clearRunsCache, readAllRunRecords, readMainSubjects } from '../server/runs.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 
 const cleanups = []
@@ -173,5 +173,52 @@ describe('shared runs.jsonl cache', () => {
     const afterGrow = readAllRunRecords(file)
     expect(afterGrow.length).toBe(oneRead.length + 1)
     expect(afterGrow.at(-1)).toEqual(tail)
+  })
+})
+
+describe('main subjects cache', () => {
+  it('runs one git log for calls within 30 seconds and reads again after that', async () => {
+    let time = 1000
+    let calls = 0
+    const run = async () => {
+      calls += 1
+      return `abcdef${calls} 2026-11-21T00:00:00Z 0.1.402: Merge P648 and P649, plain names\n`
+    }
+
+    const firstPromise = readMainSubjects({ now: () => time, run })
+    time = 15000
+    const secondPromise = readMainSubjects({ now: () => time, run })
+    expect(secondPromise).toBe(firstPromise)
+
+    const [first, second] = await Promise.all([firstPromise, secondPromise])
+    expect(calls).toBe(1)
+    expect(first).toEqual([{ hash: 'abcdef1', committedAt: '2026-11-21T00:00:00Z', subject: '0.1.402: Merge P648 and P649, plain names' }])
+    expect(second).toEqual(first)
+
+    time = 30999
+    expect(await readMainSubjects({ now: () => time, run })).toEqual(first)
+    expect(calls).toBe(1)
+
+    time = 31000
+    const third = await readMainSubjects({ now: () => time, run })
+    expect(calls).toBe(2)
+    expect(third[0].hash).toBe('abcdef2')
+  })
+
+  it('does not keep an empty answer when git fails', async () => {
+    let time = 1000
+    let calls = 0
+    const run = async () => {
+      calls += 1
+      return calls === 1 ? null : 'abcdef2 2026-11-21T00:00:00Z 0.1.402: Merge U167, the menu\n'
+    }
+
+    expect(await readMainSubjects({ now: () => time, run })).toEqual([])
+    expect(calls).toBe(1)
+
+    time = 2000
+    const next = await readMainSubjects({ now: () => time, run })
+    expect(calls).toBe(2)
+    expect(next).toEqual([{ hash: 'abcdef2', committedAt: '2026-11-21T00:00:00Z', subject: '0.1.402: Merge U167, the menu' }])
   })
 })

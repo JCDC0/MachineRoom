@@ -61,6 +61,7 @@ const NO_PROJECT = 'The bridge has no project folder.'
 const REPO_ROOT = resolve(fileURLToPath(import.meta.url), '..', '..')
 const GIT_TIMEOUT_MS = 10 * 1000
 const GIT_MAX_BUFFER = 8 * 1024 * 1024
+const MAIN_SUBJECTS_TTL_MS = 30 * 1000
 const RUNS_BODY_LIMIT = 256 * 1024
 
 function oneLineTask(value, limit = 120) {
@@ -142,8 +143,28 @@ export async function isGitCheckout(folder) {
   return inside !== null && inside.trim() === 'true'
 }
 
-export function readMainSubjects() {
-  return git(REPO_ROOT, ['log', '--format=%H %cI %s', 'refs/heads/main']).then((text) => (text === null ? [] : mergeCommitsFromLog(text)))
+let mainSubjectsCache = null
+
+export function readMainSubjects({ now = Date.now, run = git } = {}) {
+  const startedAt = now()
+  if (mainSubjectsCache && startedAt >= mainSubjectsCache.startedAt && startedAt - mainSubjectsCache.startedAt < MAIN_SUBJECTS_TTL_MS) {
+    return mainSubjectsCache.promise
+  }
+  const entry = { startedAt, promise: null }
+  entry.promise = Promise.resolve(run(REPO_ROOT, ['log', '--format=%H %cI %s', 'refs/heads/main']))
+    .then((text) => {
+      if (text === null) {
+        if (mainSubjectsCache === entry) mainSubjectsCache = null
+        return []
+      }
+      return mergeCommitsFromLog(text)
+    })
+    .catch(() => {
+      if (mainSubjectsCache === entry) mainSubjectsCache = null
+      return []
+    })
+  mainSubjectsCache = entry
+  return entry.promise
 }
 
 export function readMainSubjectsSync() {
@@ -339,6 +360,7 @@ const runRecordCaches = new Map()
 
 export function clearRunsCache() {
   runRecordCaches.clear()
+  mainSubjectsCache = null
 }
 
 export function runRecordCacheStats(file = runsFile()) {
