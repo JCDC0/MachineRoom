@@ -6,6 +6,7 @@ import {
   OPEN_CHAT_EVENT,
   TRANSPORT_CHIP_LIMIT,
   chipTone,
+  hasWaitingApproval,
   orchestratorAnswerList,
   orchestratorChips,
 } from '../src/ui/transportOrchestrators.js'
@@ -247,6 +248,223 @@ describe('the transport agent list', () => {
       await act(async () => toggle.click())
       expect(container.querySelectorAll('.transport-agent')).toHaveLength(0)
       expect(container.textContent).not.toContain('Idle lane')
+    })
+  })
+
+  it('returns false from hasWaitingApproval for null or empty approvals', () => {
+    expect(hasWaitingApproval(null)).toBe(false)
+    expect(hasWaitingApproval(undefined)).toBe(false)
+    expect(hasWaitingApproval({ id: 'orchestrator', approvals: [] })).toBe(false)
+    expect(hasWaitingApproval({ id: 'orchestrator', approvals: [{ approvalId: 'a1' }] })).toBe(true)
+  })
+
+  it('counts a queued lane as working in the transport button', async () => {
+    await withDom(async ({ container, root }) => {
+      const agents = [{ id: 'a', key: 'agy', name: 'agy', adapterType: 'opencode_local', role: null }]
+      const feed = {
+        agents,
+        liveRuns: [{ agentId: 'a', status: 'queued', issueId: 'P665', startedAt: 1000 }],
+        issues: [{ id: 'P665', identifier: 'P665' }],
+        now: 61000,
+      }
+      await act(async () =>
+        root.render(
+          createElement(
+            OrchestratorsContext.Provider,
+            { value: [IDLE_MAIN] },
+            createElement(
+              LanePillsContext.Provider,
+              { value: feed },
+              createElement(Transport, { snapshot: LIVE, speeds: [1], orchestrator: IDLE_MAIN })
+            )
+          )
+        )
+      )
+      const toggle = container.querySelector('.transport-agents-toggle')
+      expect(toggle.textContent).toBe('Agents · 1 working')
+      await act(async () => toggle.click())
+      const rows = [...container.querySelectorAll('.transport-agent')]
+      expect(rows).toHaveLength(1)
+      expect(rows[0].querySelector('.transport-agent-state').textContent).toBe('queued')
+    })
+  })
+
+  it('lingers recent finished lanes and drops stale failed lanes in the live transport', async () => {
+    await withDom(async ({ container, root }) => {
+      const now = 20 * 86400000
+      const agents = [
+        { id: 'old', key: 'old', name: 'Old lane', adapterType: 'opencode_local', role: null },
+        { id: 'ok', key: 'ok', name: 'Ok lane', adapterType: 'opencode_local', role: null },
+      ]
+      const feed = {
+        agents,
+        now,
+        liveRuns: [],
+        records: {
+          last: [
+            { lane: 'old', startedAt: now - 10 * 86400000 - 60000, finishedAt: now - 10 * 86400000, exitCode: 1 },
+            { lane: 'ok', startedAt: now - 120000, finishedAt: now - 60000, exitCode: 0, briefs: ['P665'] },
+          ],
+        },
+      }
+      await act(async () =>
+        root.render(
+          createElement(
+            OrchestratorsContext.Provider,
+            { value: [IDLE_MAIN] },
+            createElement(
+              LanePillsContext.Provider,
+              { value: feed },
+              createElement(Transport, { snapshot: LIVE, speeds: [1], orchestrator: IDLE_MAIN })
+            )
+          )
+        )
+      )
+      const toggle = container.querySelector('.transport-agents-toggle')
+      expect(toggle.textContent).toBe('Agents · none working')
+      await act(async () => toggle.click())
+      const rows = [...container.querySelectorAll('.transport-agent')]
+      expect(rows).toHaveLength(1)
+      expect(rows[0].textContent).toContain('Ok lane')
+      expect(rows[0].querySelector('.transport-agent-state').className).toBe('transport-agent-state is-finished')
+      expect(rows[0].querySelector('.transport-agent-state').textContent).toBe('finished')
+      expect(rows[0].querySelectorAll('span')[3].textContent).toBe('1 min')
+    })
+  })
+
+  it('counts a working main orchestrator, lists Orchestrator after sessions, and shows waiting for you on approvals', async () => {
+    await withDom(async ({ container, root, window }) => {
+      const events = []
+      window.addEventListener(OPEN_CHAT_EVENT, (event) => events.push(event.detail))
+      const snapshot = {
+        ...LIVE,
+        status: 'live',
+        agents: [{ key: 'claude-session', name: 'Claude Code', status: 'working', label: 'read file' }],
+      }
+      const subs = [MAIN, sub('sub-one', 'Sub One', 'working')]
+      const feed = {
+        agents: [{ id: 'a', key: 'lane', name: 'Lane', adapterType: 'opencode_local', role: null }],
+        liveRuns: [{ agentId: 'a', status: 'running', startedAt: 1000 }],
+        now: 61000,
+      }
+      await act(async () =>
+        root.render(
+          createElement(
+            OrchestratorsContext.Provider,
+            { value: subs },
+            createElement(
+              LanePillsContext.Provider,
+              { value: feed },
+              createElement(Transport, { snapshot, speeds: [1], orchestrator: MAIN })
+            )
+          )
+        )
+      )
+      const toggle = container.querySelector('.transport-agents-toggle')
+      expect(toggle.textContent).toBe('Agents · 4 working')
+      await act(async () => toggle.click())
+      const rows = [...container.querySelectorAll('.transport-agent')]
+      expect(rows.map((row) => row.querySelectorAll('span')[0].textContent)).toEqual([
+        'Claude Code',
+        'Orchestrator',
+        'Sub One',
+        'Lane',
+      ])
+      expect(rows[1].tagName.toUpperCase()).toBe('BUTTON')
+      expect(rows[1].querySelector('.transport-agent-state').className).toBe('transport-agent-state is-working')
+      expect(rows[1].querySelector('.transport-agent-state').textContent).toBe('working')
+      await act(async () => rows[1].click())
+      expect(events).toEqual([{ id: 'orchestrator' }])
+
+      const waitingMain = { ...IDLE_MAIN, approvals: [{ approvalId: 'a1' }] }
+      await act(async () =>
+        root.render(
+          createElement(
+            OrchestratorsContext.Provider,
+            { value: [waitingMain] },
+            createElement(
+              LanePillsContext.Provider,
+              { value: { agents: [], liveRuns: [], issues: [], records: null } },
+              createElement(Transport, { snapshot: LIVE, speeds: [1], orchestrator: waitingMain })
+            )
+          )
+        )
+      )
+      expect(container.querySelector('.transport-agents-toggle').textContent).toBe('Agents · none working · 1 waiting')
+      await act(async () => container.querySelector('.transport-agents-toggle').click())
+      const waitingRows = [...container.querySelectorAll('.transport-agent')]
+      expect(waitingRows).toHaveLength(1)
+      expect(waitingRows[0].querySelectorAll('span')[0].textContent).toBe('Orchestrator')
+      expect(waitingRows[0].querySelector('.transport-agent-state').className).toBe('transport-agent-state is-waiting')
+      expect(waitingRows[0].querySelector('.transport-agent-state').textContent).toBe('waiting for you')
+    })
+  })
+
+  it('leaves idle sub orchestrators out of the open list while keeping working and waiting subs', async () => {
+    await withDom(async ({ container, root }) => {
+      const subs = [
+        IDLE_MAIN,
+        sub('idle-sub', 'Idle Sub', 'idle'),
+        sub('work-sub', 'Work Sub', 'working'),
+        { ...sub('wait-sub', 'Wait Sub', 'idle'), approvals: [{ approvalId: 'a1' }] },
+      ]
+      await act(async () =>
+        root.render(
+          createElement(
+            OrchestratorsContext.Provider,
+            { value: subs },
+            createElement(Transport, { snapshot: LIVE, speeds: [1], orchestrator: IDLE_MAIN })
+          )
+        )
+      )
+      const toggle = container.querySelector('.transport-agents-toggle')
+      expect(toggle.textContent).toBe('Agents · 1 working · 1 waiting')
+      await act(async () => toggle.click())
+      const rows = [...container.querySelectorAll('.transport-agent')]
+      expect(rows.map((row) => row.querySelectorAll('span')[0].textContent)).toEqual(['Work Sub', 'Wait Sub'])
+      expect(container.textContent).not.toContain('Idle Sub')
+    })
+  })
+
+  it('draws the Agents button without a main orchestrator when a session or lane is active', async () => {
+    await withDom(async ({ container, root }) => {
+      const sessionSnapshot = {
+        ...LIVE,
+        status: 'live',
+        agents: [{ key: 'claude-session', name: 'Claude Code', status: 'working', label: 'edit Transport.jsx' }],
+      }
+      await act(async () =>
+        root.render(createElement(Transport, { snapshot: sessionSnapshot, speeds: [1], orchestrator: null }))
+      )
+      const toggle = container.querySelector('.transport-agents-toggle')
+      expect(toggle).not.toBeNull()
+      expect(toggle.textContent).toBe('Agents · 1 working')
+      expect(container.querySelector('.transport-context')).toBeNull()
+      await act(async () => toggle.click())
+      const rows = [...container.querySelectorAll('.transport-agent')]
+      expect(rows).toHaveLength(1)
+      expect(rows[0].querySelectorAll('span')[0].textContent).toBe('Claude Code')
+
+      const feed = {
+        agents: [{ id: 'a', key: 'agy', name: 'agy', adapterType: 'opencode_local', role: null }],
+        liveRuns: [{ agentId: 'a', status: 'running', startedAt: 1000 }],
+        now: 61000,
+      }
+      await act(async () =>
+        root.render(
+          createElement(
+            LanePillsContext.Provider,
+            { value: feed },
+            createElement(Transport, { snapshot: { ...LIVE, status: 'live' }, speeds: [1], orchestrator: null })
+          )
+        )
+      )
+      expect(container.querySelector('.transport-agents-toggle').textContent).toBe('Agents · 1 working')
+
+      await act(async () =>
+        root.render(createElement(Transport, { snapshot: { ...LIVE, status: 'live' }, speeds: [1], orchestrator: null }))
+      )
+      expect(container.querySelector('.transport-agents-toggle')).toBeNull()
     })
   })
 })

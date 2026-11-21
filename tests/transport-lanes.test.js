@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   LANE_PILL_LIMIT,
+  ROOM_LINGER_MS,
   agentListPosition,
   ageText,
   inspectLane,
@@ -215,6 +216,60 @@ describe('the lane pill list', () => {
       ['opencode2', 'working'],
       ['opencode', 'failed'],
       ['agy', 'failed'],
+    ])
+  })
+
+  it('drops old failed lanes and keeps recent finished lanes when lingerMs is set', () => {
+    expect(ROOM_LINGER_MS).toBe(5 * 60 * 1000)
+    const agents = [
+      lane('old-fail', 'Old Fail'),
+      lane('recent-fail', 'Recent Fail'),
+      lane('recent-ok', 'Recent Ok'),
+      lane('old-ok', 'Old Ok'),
+    ]
+    const records = {
+      last: [
+        record('old-fail', NOW - 10 * 86400000 - 60000, 1, { finishedAt: NOW - 10 * 86400000 }),
+        record('recent-fail', NOW - 3 * 60000, 1, { finishedAt: NOW - 2 * 60000 }),
+        record('recent-ok', NOW - 2 * 60000, 0, { finishedAt: NOW - 60000 }),
+        record('old-ok', NOW - 7 * 60000, 0, { finishedAt: NOW - 6 * 60000 }),
+      ],
+    }
+    const { pills } = lanePills({ agents, records, now: NOW, includeIdle: false, lingerMs: ROOM_LINGER_MS })
+    expect(pills).toEqual([
+      {
+        key: 'recent-fail',
+        label: 'Recent Fail',
+        task: 'U120',
+        state: 'failed',
+        tone: 'failed',
+        minutes: 2,
+        startedAt: NOW - 3 * 60000,
+        step: null,
+      },
+      {
+        key: 'recent-ok',
+        label: 'Recent Ok',
+        task: 'U120',
+        state: 'finished',
+        tone: 'finished',
+        minutes: 1,
+        step: null,
+      },
+    ])
+  })
+
+  it('ignores lingerMs when includeIdle is true', () => {
+    const records = {
+      last: [
+        record('opencode', NOW - 10 * 86400000 - 60000, 1, { finishedAt: NOW - 10 * 86400000 }),
+      ],
+    }
+    const { pills } = lanePills({ agents: AGENTS, records, now: NOW, includeIdle: true, lingerMs: ROOM_LINGER_MS })
+    expect(pills.map((pill) => [pill.key, pill.state])).toEqual([
+      ['opencode', 'failed'],
+      ['opencode2', 'idle'],
+      ['agy', 'idle'],
     ])
   })
 
