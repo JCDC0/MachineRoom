@@ -53,6 +53,9 @@ import {
   workingKeys,
 } from '../src/engine/hub.js'
 import { latticeLevels } from '../src/engine/void.js'
+import { YELLOW } from '../src/engine/sprites.js'
+
+const drawnLabels = []
 
 const context2d = {
   font: '',
@@ -66,7 +69,9 @@ const context2d = {
   clearRect: () => {},
   fillRect: () => {},
   strokeRect: () => {},
-  fillText: () => {},
+  fillText: (text) => {
+    drawnLabels.push(String(text))
+  },
 }
 
 function element(tag) {
@@ -726,5 +731,92 @@ describe('the hub arc of a working sector', () => {
     } finally {
       globalThis.window = savedWindow
     }
+  })
+})
+
+describe('the seats on the park rings', () => {
+  function seatLabels(hub) {
+    return hub.group.getObjectByName('seat-labels').children
+  }
+
+  function labelFor(hub, ring) {
+    return seatLabels(hub).find((sprite) => sprite.userData.ring === ring)
+  }
+
+  it('writes one label per ring with a limit', () => {
+    const hub = createHub(new THREE.Scene(), ROSTER, LADDER)
+    const layout = ringLayout(LADDER, hub.parkedKeys())
+    drawnLabels.length = 0
+    hub.setSeatCounts([
+      { ring: 0, taken: 2, limit: 4 },
+      { ring: 1, taken: 1, limit: 3 },
+    ])
+    expect(seatLabels(hub)).toHaveLength(2)
+    expect(drawnLabels).toContain('2 / 4')
+    expect(drawnLabels).toContain('1 / 3')
+    const top = labelFor(hub, 0)
+    expect(top.position.x).toBe(HUB_RADIUS + 40)
+    expect(top.position.y).toBe(0)
+    const lower = labelFor(hub, 1)
+    expect(lower.position.x).toBe(layout.rings[1].radius + 40)
+    expect(lower.position.y).toBe(layout.rings[1].y - HUB_Y)
+    hub.dispose()
+  })
+
+  it('turns a full ring yellow and leaves the other white', () => {
+    const hub = createHub(new THREE.Scene(), ROSTER, LADDER)
+    hub.setSeatCounts([
+      { ring: 0, taken: 4, limit: 4 },
+      { ring: 1, taken: 1, limit: 4 },
+    ])
+    const full = labelFor(hub, 0)
+    const room = labelFor(hub, 1)
+    expect(full.material.color.getHex()).toBe(YELLOW)
+    expect(room.material.color.getHex()).toBe(0xffffff)
+    expect(room.material.opacity).toBe(0.6)
+    hub.dispose()
+  })
+
+  it('leaves a ring with no limit alone', () => {
+    const hub = createHub(new THREE.Scene(), ROSTER, LADDER)
+    drawnLabels.length = 0
+    hub.setSeatCounts([{ ring: 0, taken: 1, limit: null }])
+    expect(seatLabels(hub)).toHaveLength(0)
+    expect(drawnLabels.some((text) => text.includes('/'))).toBe(false)
+    hub.dispose()
+  })
+
+  it('draws no label for a ring the layout does not have', () => {
+    const hub = createHub(new THREE.Scene(), 3)
+    expect(hub.parkedKeys()).toEqual([])
+    hub.setSeatCounts([
+      { ring: 0, taken: 1, limit: 2 },
+      { ring: 1, taken: 0, limit: 2 },
+    ])
+    expect(seatLabels(hub)).toHaveLength(1)
+    expect(labelFor(hub, 0).position.x).toBe(HUB_RADIUS + 40)
+    expect(labelFor(hub, 1)).toBeUndefined()
+    hub.dispose()
+  })
+
+  it('drops every label when the rows are not a list', () => {
+    const hub = createHub(new THREE.Scene(), ROSTER, LADDER)
+    hub.setSeatCounts([{ ring: 0, taken: 1, limit: 2 }])
+    expect(seatLabels(hub)).toHaveLength(1)
+    hub.setSeatCounts(null)
+    expect(seatLabels(hub)).toHaveLength(0)
+    hub.dispose()
+  })
+
+  it('moves the labels to the new rings and keeps the last rows', () => {
+    const hub = createHub(new THREE.Scene(), ROSTER, LADDER)
+    hub.setSeatCounts([{ ring: 0, taken: 1, limit: 2 }, { ring: 1, taken: 1, limit: 2 }])
+    expect(seatLabels(hub)).toHaveLength(2)
+    hub.setLadder(null)
+    expect(seatLabels(hub)).toHaveLength(1)
+    expect(labelFor(hub, 0)).toBeDefined()
+    hub.setLadder(LADDER)
+    expect(seatLabels(hub)).toHaveLength(2)
+    hub.dispose()
   })
 })

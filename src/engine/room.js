@@ -1327,6 +1327,9 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
       hub.setDepth(roomDepth)
       return roomDepth
     },
+    setSeatCounts(rows) {
+      hub.setSeatCounts(rows)
+    },
     setRoster(next) {
       const list = (Array.isArray(next) ? next : []).map(roomAgent)
       hub.setRoster(list)
