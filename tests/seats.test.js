@@ -8,6 +8,7 @@ import {
   formatAgentsReply,
   formatGrantNotice,
   formatRevokeNotice,
+  formatSeatAction,
   formatSeatsReply,
   parseSeatCommand,
   readSeats,
@@ -350,5 +351,34 @@ describe('ringSummary and setRings', () => {
     } finally {
       rmSync(dir, { recursive: true, force: true })
     }
+  })
+})
+
+describe('formatSeatAction', () => {
+  it('formats create, turn on, turn off and add sub lines', () => {
+    expect(formatSeatAction({ action: 'createLane', key: 'claude-2', name: 'Coder', ring: 0, taken: 1, limit: 4 })).toBe(
+      'Made lane Coder (claude-2) on ring 0: 1 of 4 seats taken.'
+    )
+    expect(formatSeatAction({ action: 'turnOn', key: 'claude-2', name: 'Coder', ring: 0, taken: 2, limit: 4 })).toBe(
+      'Turned on Coder (claude-2) on ring 0: 2 of 4 seats taken.'
+    )
+    expect(formatSeatAction({ action: 'turnOff', key: 'claude-2', name: 'Coder', ring: 0, taken: 1, limit: 4 })).toBe(
+      'Turned off Coder (claude-2): ring 0 has 1 of 4 seats taken.'
+    )
+    expect(formatSeatAction({ action: 'addSub', key: 'backend', name: 'Backend', ring: 1, taken: 1, limit: 3 })).toBe(
+      'Added sub Backend (backend) on ring 1: 1 of 3 seats taken.'
+    )
+  })
+
+  it('omits the brackets when the name equals the key and handles no limit', () => {
+    expect(formatSeatAction({ action: 'createLane', key: 'claude-2', name: 'claude-2', ring: 0, taken: 1, limit: 4 })).toBe(
+      'Made lane claude-2 on ring 0: 1 of 4 seats taken.'
+    )
+    expect(formatSeatAction({ action: 'turnOff', key: 'claude-2', name: 'Coder', ring: 0, taken: 1, limit: null })).toBe(
+      'Turned off Coder (claude-2): ring 0 has 1 seats taken, no limit.'
+    )
+    expect(formatSeatAction({ action: 'turnOn', key: 'claude-2', name: 'claude-2', ring: 1, taken: 0, limit: 0 })).toBe(
+      'Turned on claude-2 on ring 1: 0 of 0 seats taken.'
+    )
   })
 })

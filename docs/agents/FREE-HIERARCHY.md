@@ -40,7 +40,7 @@ The owner wants a free hierarchy of coding agents in one project:
    - With a grant, an orchestrator creates a lane under itself (`POST /api/lanes/create`), turns its own lanes on and off (`POST /api/lanes/active`) and adds a sub under itself on the next ring (`POST /api/orchestrator/ladder`), all with its own token, within its grant and the free seats. A lane it makes carries `createdBy` and its parent, shows `made by NAME` in `Agents`, and turns on only when a seat is free (`P637`).
    - The rules that stay: its own harness and a listed model, `Scope` and `Restricted` passed down to a sub, the subagent depth, and only agents under it. Only the owner deletes an agent; no route lets an orchestrator delete one yet.
    - Every turn's instruction ends with `Seat grant: N lanes and M subs. Free seats: ring 0, X; ring 1, Y.`, so an agent that missed a notice still reads its limit (see `architecture/LIVE.md` for every refusal).
-   - Still open: the `Team` tab does not show an orchestrator's create, turn on or turn off with the seat it took (`P639`'s plan lists it, and it is not built).
+   - Each create, turn on, turn off and new sub an orchestrator makes leaves one chat-only room line in that actor's conversation with the ring and seat counts after the change, which the `Team` tab shows.
 
 ## What Does Not Work Yet
 - A touch outside the project is shown, not stopped (`P346`). The modes are the guard: Codex's sandbox, Claude's print-mode permissions and OpenCode's `external_directory: deny` keep the file tools inside the project, and the native harness refuses a path outside its folder. AGY has no folder guard, and a shell command in any harness can still write outside; the Inspector's `Outside the project` list shows them (`P440`).

@@ -29,6 +29,7 @@ import { createClient } from '../src/control/client.js'
 import { MOCK_LANE_KEYS, createMockClient } from '../src/control/mock.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 import { isHarnessAvailable } from '../server/agents-config.js'
+import { seatsFileFor, writeSeats } from '../server/seats.js'
 const assumeInstalled = (key, options) => key === 'claude' || key === 'opencode' || isHarnessAvailable(key, options)
 
 const cleanups = []
@@ -801,5 +802,108 @@ describe('roomLaneAgents', () => {
       recent: new Set(['agy3']),
     })
     expect(keys(kept)).toEqual(['sub-a', 'agy3'])
+  })
+})
+
+describe('seat action lines on POST /api/lanes/active', () => {
+  it('adds one chat-only line per lane turned on or off for the acting orchestrator, and none for owner or refusals', async () => {
+    const { bridge, url, projectRoot, runsFolder } = await startTestBridge()
+    writeActiveLanes(activeLanesFileFor(projectRoot, runsFolder), ['opencode'])
+    const subRes = await getJson(`${url}/api/orchestrator/ladder`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', origin: url },
+      body: JSON.stringify({
+        confirmed: true,
+        by: 'owner',
+        ladder: {
+          subs: [
+            {
+              id: 'backend',
+              name: 'Backend',
+              harness: 'claude',
+              model: 'sonnet',
+              lanes: ['claude'],
+              scope: ['server/**'],
+              restricted: false,
+              setBy: 'owner',
+            },
+          ],
+        },
+      }),
+    })
+    expect(subRes.status).toBe(200)
+
+    writeSeats(seatsFileFor(projectRoot, runsFolder), {
+      rings: [3, 3],
+      grants: {
+        orchestrator: { lanes: 2, subs: 0 },
+        backend: { lanes: 1, subs: 0 },
+      },
+    })
+
+    const mainToken = bridge.orchestrators().token('orchestrator')
+    const subToken = bridge.orchestrators().token('backend')
+
+    const mainOn = await getJson(`${url}/api/lanes/active`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-machineroom-orchestrator': mainToken },
+      body: JSON.stringify({ confirmed: true, lanes: ['opencode', 'opencode2'] }),
+    })
+    expect(mainOn.status).toBe(200)
+
+    const mainAfterOn = bridge.orchestrators().find('orchestrator').answer().messages
+    expect(mainAfterOn).toHaveLength(1)
+    expect(mainAfterOn[0]).toMatchObject({
+      from: 'room',
+      chatOnly: true,
+      text: 'Turned on OpenCode 2 (opencode2) on ring 0: 2 of 3 seats taken.',
+    })
+
+    const mainOff = await getJson(`${url}/api/lanes/active`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-machineroom-orchestrator': mainToken },
+      body: JSON.stringify({ confirmed: true, lanes: ['opencode'] }),
+    })
+    expect(mainOff.status).toBe(200)
+
+    const mainAfterOff = bridge.orchestrators().find('orchestrator').answer().messages
+    expect(mainAfterOff).toHaveLength(2)
+    expect(mainAfterOff[1]).toMatchObject({
+      from: 'room',
+      chatOnly: true,
+      text: 'Turned off OpenCode 2 (opencode2): ring 0 has 1 of 3 seats taken.',
+    })
+    expect(bridge.orchestrators().find('backend').answer().messages).toEqual([])
+
+    const subOn = await getJson(`${url}/api/lanes/active`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-machineroom-orchestrator': subToken },
+      body: JSON.stringify({ confirmed: true, lanes: ['claude'] }),
+    })
+    expect(subOn.status).toBe(200)
+    const subMessages = bridge.orchestrators().find('backend').answer().messages
+    expect(subMessages).toHaveLength(1)
+    expect(subMessages[0]).toMatchObject({
+      from: 'room',
+      chatOnly: true,
+      text: 'Turned on Claude Code (claude) on ring 1: 2 of 3 seats taken.',
+    })
+
+    const ownerChange = await getJson(`${url}/api/lanes/active`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', origin: url },
+      body: JSON.stringify({ confirmed: true, lanes: ['opencode', 'opencode2', 'claude'] }),
+    })
+    expect(ownerChange.status).toBe(200)
+    expect(bridge.orchestrators().find('orchestrator').answer().messages).toHaveLength(2)
+    expect(bridge.orchestrators().find('backend').answer().messages).toHaveLength(1)
+
+    const refused = await getJson(`${url}/api/lanes/active`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-machineroom-orchestrator': subToken },
+      body: JSON.stringify({ confirmed: true, lanes: ['opencode'] }),
+    })
+    expect(refused.status).toBe(409)
+    expect(bridge.orchestrators().find('backend').answer().messages).toHaveLength(1)
   })
 })

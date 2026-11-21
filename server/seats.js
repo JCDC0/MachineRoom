@@ -219,6 +219,20 @@ function ringStatusText(detail) {
   return `${detail.free} free (${detail.taken} of ${detail.limit} taken)`
 }
 
+export function formatSeatAction({ action, key, name, ring, taken, limit } = {}) {
+  const cleanKey = typeof key === 'string' ? key.trim() : String(key ?? '').trim()
+  const cleanName = typeof name === 'string' ? name.trim() : String(name ?? '').trim()
+  const subject = !cleanName || cleanName === cleanKey ? cleanKey : cleanKey ? `${cleanName} (${cleanKey})` : cleanName
+  const ringNumber = count(ring) ? ring : 0
+  const takenNumber = count(taken) ? taken : 0
+  const counts = count(limit) ? `${takenNumber} of ${limit} seats taken` : `${takenNumber} seats taken, no limit`
+  if (action === 'createLane') return `Made lane ${subject} on ring ${ringNumber}: ${counts}.`
+  if (action === 'turnOn') return `Turned on ${subject} on ring ${ringNumber}: ${counts}.`
+  if (action === 'turnOff') return `Turned off ${subject}: ring ${ringNumber} has ${counts}.`
+  if (action === 'addSub') return `Added sub ${subject} on ring ${ringNumber}: ${counts}.`
+  return ''
+}
+
 export function formatSeatsReply({ seats, tree, id, depth = AGENT_DEPTH_DEFAULT }) {
   const info = seatSummary({ seats, tree, id, depth })
   const lastNote = info.nextRing === null ? ` (ring ${info.ring} is the last allowed ring at depth ${info.depth})` : ''

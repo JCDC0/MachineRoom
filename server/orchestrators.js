@@ -36,10 +36,12 @@ import {
   formatAgentsReply,
   formatGrantNotice,
   formatRevokeNotice,
+  formatSeatAction,
   formatSeatsReply,
   isUnder,
   levelOf,
   overRingProblem,
+  ringSummary,
   seatCheck,
   seatLine,
   seatSummary,
@@ -263,6 +265,7 @@ export function createOrchestrators({
   interruptLane,
   readTaskState = null,
   refreshModelDetails,
+  onSeatAction = null,
 } = {}) {
   const root = projectRoot ? resolve(projectRoot) : ''
   const folder = resolve(runsFolder)
@@ -1450,6 +1453,27 @@ export function createOrchestrators({
     sync()
     onNotice?.({ topic: 'agents' })
     onNotice?.({ topic: 'family' })
+    if (actor && typeof onSeatAction === 'function') {
+      const added = ladder.subs.filter((sub) => !previousById.has(sub.id))
+      if (added.length > 0) {
+        const after = seatContext(ladder)
+        for (const sub of added) {
+          const node = after.tree.find((item) => item.id === sub.id)
+          const ring = node ? levelOf(after.tree, node) : 1
+          const summary = ringSummary({ ...after, depth: Math.max(after.depth, ring + 1) }).find((row) => row.ring === ring)
+          try {
+            onSeatAction(actor, formatSeatAction({
+              action: 'addSub',
+              key: sub.id,
+              name: node?.label || sub.name || sub.id,
+              ring,
+              taken: summary?.taken ?? 0,
+              limit: summary?.limit ?? null,
+            }))
+          } catch {}
+        }
+      }
+    }
     return { status: 200, body: { ladder } }
   }
 

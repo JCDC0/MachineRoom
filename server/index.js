@@ -755,6 +755,9 @@ export function createBridge(options = {}) {
     : null
 
   const clients = new Set()
+  const recordSeatAction = (actorId, line) => {
+    orchestrators?.find?.(actorId)?.addRoomReply?.(line)
+  }
   activeLanes = createActiveLanesApi({
     projectRoot,
     runsFolder: resolve(options.runsFolder ?? options.orchestratorFolder ?? lanesSourceObject.folder ?? runsFolder()),
@@ -768,6 +771,7 @@ export function createBridge(options = {}) {
     notify: (event) => {
       for (const client of clients) writeSseChange(client, event)
     },
+    onSeatAction: recordSeatAction,
     sendJson,
     readJsonBody,
   })
@@ -784,6 +788,7 @@ export function createBridge(options = {}) {
     notify: (event) => {
       for (const client of clients) writeSseChange(client, event)
     },
+    onSeatAction: recordSeatAction,
     sendJson,
     readJsonBody,
     env,
@@ -815,6 +820,7 @@ export function createBridge(options = {}) {
       onNotice: (event) => {
         for (const client of clients) writeSseChange(client, event)
       },
+      onSeatAction: recordSeatAction,
       onMasked: (count) => {
         maskedTotal += count
       },

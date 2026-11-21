@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileS
 import { dirname, join, resolve } from 'node:path'
 import { readAllLanes, readLanes } from './lanes-source.js'
 import { familySeatsFor, seatActor } from './family.js'
-import { isUnder, overRingProblem, seatCheck } from './seats.js'
+import { formatSeatAction, isUnder, levelOf, overRingProblem, ringSummary, seatCheck } from './seats.js'
 
 export const OWNER_ACTIVE_LANES_PROBLEM = 'A request with no Origin cannot set the active lanes.'
 export const CONFIRM_ACTIVE_LANES_PROBLEM = 'Confirm the active lanes first.'
@@ -235,6 +235,7 @@ export function createActiveLanesApi(options = {}) {
   const readJsonBody = options.readJsonBody
   const notify = options.notify
   const isWorking = options.isWorking
+  const onSeatAction = typeof options.onSeatAction === 'function' ? options.onSeatAction : null
 
   function getLanesConfig() {
     let base = null
@@ -405,6 +406,8 @@ export function createActiveLanesApi(options = {}) {
           return true
         }
       }
+      const turnedOff = []
+      const turnedOn = []
       for (const node of changes) {
         if (seen.has(node.id) || !node.active) continue
         const seat = seatCheck({ ...context, actor, action: 'turnOff', target: node.id })
@@ -413,6 +416,7 @@ export function createActiveLanesApi(options = {}) {
           return true
         }
         node.active = false
+        turnedOff.push(node)
       }
       for (const node of changes) {
         if (!seen.has(node.id) || node.active) continue
@@ -423,6 +427,7 @@ export function createActiveLanesApi(options = {}) {
           return true
         }
         node.active = true
+        turnedOn.push(node)
       }
 
       const file = choiceFile()
@@ -439,6 +444,29 @@ export function createActiveLanesApi(options = {}) {
 
       if (typeof notify === 'function') {
         notify({ topic: 'agents' })
+      }
+
+      if (actor.id && onSeatAction && (turnedOff.length > 0 || turnedOn.length > 0)) {
+        const after = familySeatsFor(sendJson, { projectRoot, runsFolder, lanesConfig: getLanesConfig })
+        const rings = ringSummary({ ...after, depth: Math.max(after.depth, 1) })
+        const emitSeatAction = (action, node) => {
+          const afterNode = after.tree.find((item) => item.id === node.id) ?? node
+          const ring = levelOf(after.tree, afterNode)
+          const rows = ring < rings.length ? rings : ringSummary({ ...after, depth: ring + 1 })
+          const summary = rows.find((row) => row.ring === ring)
+          try {
+            onSeatAction(actor.id, formatSeatAction({
+              action,
+              key: afterNode.id,
+              name: afterNode.label,
+              ring,
+              taken: summary?.taken ?? 0,
+              limit: summary?.limit ?? null,
+            }))
+          } catch {}
+        }
+        for (const node of turnedOff) emitSeatAction('turnOff', node)
+        for (const node of turnedOn) emitSeatAction('turnOn', node)
       }
 
       sendJson(req, res, 200, { ok: true, lanes })

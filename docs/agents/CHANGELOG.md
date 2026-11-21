@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- An orchestrator that makes a lane, turns a lane on or off, or adds a sub with its own grant leaves one chat-only room line in its own conversation with the ring and seats after the change, so the Team tab shows it; the owner's calls and refused calls leave none (P676, seat S4; run by the Neon team).
 - The mock counts a top-level sub and its lanes on ring 1, as the bridge does; the issues route reads no main subjects or briefs when it serves another project; the build test checks again that the vendor chunks import nothing, and the client test checks that setActiveLanes sends overRing (P675, R66-2, R66-7, R66-8; run by the Neon team).
 - The owner's ladder save refuses a sub past the subagent depth; a new lane under a sub asks about the sub's full ring, not ring 0, and can go past it; made by names the Orchestrator when it is hidden; the seats route has its own refusal texts (P674, R66-1, R66-4, R66-6; run by the Neon team).
 - A new lane past a full ring also asks before it is made, and the full-ring confirm keeps its own card open (P639d).
