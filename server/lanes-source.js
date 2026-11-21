@@ -388,6 +388,8 @@ export function createLanesSource(options = {}) {
   const laggingPollMs = Number(options.laggingPollMs ?? 10000)
   const now = options.now ?? Date.now
   const onFrame = options.onFrame ?? (() => {})
+  const lingerMs = Number(options.lingerMs)
+  const onNotice = typeof options.onNotice === 'function' ? options.onNotice : null
   const listFolder = typeof options.listFolder === 'function' ? options.listFolder : (dir) => readdirSync(dir, { withFileTypes: true })
   const watchFolder = typeof options.watchFolder === 'function' ? options.watchFolder : watch
   const statFile = typeof options.statFile === 'function' ? options.statFile : statSync
@@ -397,6 +399,7 @@ export function createLanesSource(options = {}) {
   const statLock = typeof options.stat === 'function' ? options.stat : statSync
   const active = new Map()
   const ended = new Map()
+  const lingerTimers = new Set()
   const quiet = new Map()
   const seen = new Set()
   const lagging = new Map()
@@ -773,6 +776,17 @@ export function createLanesSource(options = {}) {
     active.delete(run.key)
     const at = now()
     ended.set(run.agent.key, at)
+    if (onNotice && Number.isFinite(lingerMs) && lingerMs > 0) {
+      const lingerTimer = setTimeout(() => {
+        lingerTimers.delete(lingerTimer)
+        if (stopped) return
+        try {
+          onNotice({ topic: 'agents' })
+        } catch {}
+      }, lingerMs + 1000)
+      if (typeof lingerTimer?.unref === 'function') lingerTimer.unref()
+      lingerTimers.add(lingerTimer)
+    }
     if (status === 'failed' && run.readLines === 0 && run.plainLines.length > 0) {
       run.seq += 1
       emit({
@@ -953,6 +967,8 @@ export function createLanesSource(options = {}) {
     lastListAt = 0
     hasListed = false
     listWanted = false
+    for (const lingerTimer of lingerTimers) clearTimeout(lingerTimer)
+    lingerTimers.clear()
     if (scanTimer) {
       clearInterval(scanTimer)
       scanTimer = null

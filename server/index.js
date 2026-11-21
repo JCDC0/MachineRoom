@@ -732,9 +732,13 @@ export function createBridge(options = {}) {
         ...lanesSourceObject,
         projectRoot,
         subOrchestrators: () => (orchestrators ? orchestrators.subs() : []),
+        lingerMs: ROOM_LANE_LINGER_MS,
         onFrame: (frame) => {
           if (orchestrators) orchestrators.onFrame(frame)
           accept(frame)
+        },
+        onNotice: (event) => {
+          for (const client of clients) writeSseChange(client, event)
         },
       })
     : null
