@@ -7,7 +7,7 @@ import { ownerOf } from '../model/hierarchy.js'
 import { isSessionTopKey, laneStarterTop, topKeyFor } from '../model/laneStarter.js'
 import { dirname } from '../model/paths.js'
 import { CHILD_LIFE_MS } from '../model/state.js'
-import { AGENT_RING_BASE, AGENT_RING_GROW, AGENT_RING_MAX_OPACITY, AGENT_RING_MS, AGENT_RING_OPACITY_FLOOR, AGENT_RING_POOL, HUB_RADIUS, HUB_Y, ORCHESTRATOR_HOME, ORCHESTRATOR_LIFT, PARK_LIFT, RING_LEVEL_MAX, SWAY_LIFT, SWAY_RATE, SWAY_SCALE, danceEnvelope, hasSubs, isSessionReader, parkedKeysFor, readerAngles, readerPoint, ringDepth, ringLayout, ringPulse, sectorSlotAngles, slotAngle, startDanceEnvelope, SUB_STAND_LIFT, topRingSeats, writeColor, writeOpacity } from './hub.js'
+import { AGENT_RING_BASE, AGENT_RING_GROW, AGENT_RING_MAX_OPACITY, AGENT_RING_MS, AGENT_RING_OPACITY_FLOOR, AGENT_RING_POOL, HUB_RADIUS, HUB_Y, ORCHESTRATOR_HOME, ORCHESTRATOR_LIFT, PARK_LIFT, RING_LEVEL_MAX, SWAY_LIFT, SWAY_RATE, SWAY_SCALE, danceEnvelope, hasSubs, isSessionReader, parkedKeysFor, readerAngles, readerPoint, ringDepth, ringLayout, ringPulse, sectorSlotAngles, sectorSubAngle, slotAngle, startDanceEnvelope, SUB_STAND_LIFT, topRingSeats, writeColor, writeOpacity } from './hub.js'
 import { INTERNET_RADIUS } from './internet.js'
 import { ORCHESTRATOR_PULSE_SCALE, ORCHESTRATOR_SHAPE, PREFERRED, PULSE_BANDS, PULSE_SCALE, SUB_PULSE_SCALE, bandForPoint, isOrchestrator, isSubOrchestrator, nextSpareShape, shapeGeometry, shapesFor, vertexOffset } from './shapes.js'
 import { GREEN, RED, TUNNEL_GREY, WEB, WHITE, agentColor, agentColors, cssColor, easeRate, lineMaterial, paintAgentColor, still, textSprite } from './sprites.js'
@@ -842,8 +842,8 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
     const arc = sectorList.find((entry) => entry.id === id)
     if (!arc) return new THREE.Vector3(0, HUB_Y + SUB_STAND_LIFT, 0)
     const ring = layout.ringOf(arc)
-    const mid = (arc.start + arc.end) / 2
-    return new THREE.Vector3(Math.cos(mid) * ring.radius, ring.y + SUB_STAND_LIFT, Math.sin(mid) * ring.radius)
+    const angle = sectorSubAngle(arc)
+    return new THREE.Vector3(Math.cos(angle) * ring.radius, ring.y + SUB_STAND_LIFT, Math.sin(angle) * ring.radius)
   }
 
   function laneHome(key, index) {
