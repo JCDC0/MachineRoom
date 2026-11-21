@@ -977,7 +977,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
 
     updateLabels()
     const timer = setInterval(updateLabels, 60000)
-    const unsubscribe = subscribeToNotices(client, ['family'], updateLabels)
+    const unsubscribe = subscribeToNotices(client, ['family', 'agents'], updateLabels)
 
     return () => {
       active = false
