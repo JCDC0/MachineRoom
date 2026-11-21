@@ -2302,13 +2302,14 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
     if (method === 'GET' && path === '/api/control/issues') {
       const status = url.searchParams.get('status')
       const records = await roomRecords(readAllRunRecords(recordsPath()))
-      const subjects = (await readMainSubjects()).map(({ subject }) => subject)
+      const thisRepo = await isThisRepo()
+      const subjects = thisRepo ? (await readMainSubjects()).map(({ subject }) => subject) : []
       const { issues } = laneTaskState({
         openRuns: currentOpenRuns(),
         agents: laneAgentList(lanesSource),
         records: recentLaneRecords(records),
         recoveryRecords: records,
-        briefs: readLaneBriefs(),
+        briefs: thisRepo ? readLaneBriefs() : [],
         mergedBriefs: mergedBriefIds(subjects),
       })
       const visible = status ? issues.filter((issue) => issue.status === status) : issues

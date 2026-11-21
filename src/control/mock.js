@@ -917,9 +917,9 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
     const subs = ladder.subs ?? []
     const parentOf = new Map(subs.map((sub) => [sub.id, sub.parent]))
     const levelOfSub = (id) => {
-      let level = 0
+      let level = 1
       let current = parentOf.get(id)
-      for (let hops = 0; current && hops < 32; hops += 1) {
+      for (let hops = 0; current && current !== 'orchestrator' && parentOf.has(current) && hops < 32; hops += 1) {
         level += 1
         current = parentOf.get(current)
       }
@@ -933,7 +933,7 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
     for (const lane of state.lanes) {
       if (lane.hidden || !lane.active) continue
       const host = subOfLane.get(lane.key)
-      places.push(host ? levelOfSub(host) + 1 : 0)
+      places.push(host ? levelOfSub(host) : 0)
     }
     const rows = []
     for (let ring = 0; ring <= 1; ring += 1) {

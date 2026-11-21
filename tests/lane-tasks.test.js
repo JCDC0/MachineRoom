@@ -695,6 +695,25 @@ describe('the lane routes', () => {
     expect(existsSync(runs)).toBe(false)
     expect(await getJson(url, '/api/control/issues')).toEqual({ status: 200, body: [] })
   })
+
+  it('skips main subjects and lane briefs when serving another project folder', async () => {
+    const { url, runs, base } = await startLaneBridge({ lanes: false })
+    const name = 'opencode-P674-20261121-100000'
+    writeFileSync(
+      join(runs, 'runs.jsonl'),
+      `${JSON.stringify(record({ lane: 'opencode', briefs: ['P674'], log: join(runs, `${name}.log`), startedAt: iso(30), exitCode: 1, project: base }))}\n`
+    )
+
+    const issues = await getJson(url, '/api/control/issues')
+    expect(issues.status).toBe(200)
+    expect(issues.body).toHaveLength(1)
+    expect(issues.body[0]).toMatchObject({
+      id: name,
+      identifier: 'project',
+      title: 'project',
+      status: 'blocked',
+    })
+  })
 })
 
 it('carries live lane context into the control response', () => {

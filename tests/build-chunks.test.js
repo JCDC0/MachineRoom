@@ -79,6 +79,8 @@ describe('viewer build chunks', () => {
     expect(engineChunk).toBeDefined()
     expect(byName.has('index')).toBe(true)
     expect(threeChunk.fileName).not.toBe(reactChunk.fileName)
+    expect(threeChunk.imports).toEqual([])
+    expect(reactChunk.imports).toEqual([])
     expect(threeChunk.dynamicImports).toEqual([])
     expect(reactChunk.dynamicImports).toEqual([])
 

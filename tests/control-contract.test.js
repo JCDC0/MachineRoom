@@ -1101,6 +1101,18 @@ describe('the control client lane route', () => {
       },
     ])
   })
+
+  it('sends overRing when setActiveLanes passes it', async () => {
+    const { calls, client } = recorder()
+    await client.setActiveLanes({ lanes: ['opencode', 'opencode2'], overRing: 1, confirmed: true })
+    expect(calls).toEqual([
+      {
+        url: 'http://127.0.0.1:9/api/lanes/active',
+        method: 'POST',
+        body: JSON.stringify({ lanes: ['opencode', 'opencode2'], confirmed: true, overRing: 1 }),
+      },
+    ])
+  })
 })
 
 describe('the control client MCP routes', () => {
