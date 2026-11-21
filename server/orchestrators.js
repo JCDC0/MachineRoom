@@ -1439,6 +1439,7 @@ export function createOrchestrators({
       for (const node of moved) node.active = false
       for (const node of moved) {
         const seat = seatCheck({ ...after, actor: { owner: true }, action: 'turnOn', target: node.id })
+        if (!seat.ok) return { status: seat.status ?? 409, body: { error: seat.reason } }
         const problem = overRingProblem(body, seat.overRing)
         if (problem) return { status: 409, body: problem }
         node.active = true

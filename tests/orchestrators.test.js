@@ -1456,6 +1456,26 @@ describe('the orchestrator registry', () => {
     expect((await getJson(`${rig.url}/api/orchestrators`)).body).toHaveLength(1)
   })
 
+  it('refuses an owner ladder that puts a sub past the subagent depth and saves nothing', () => {
+    const rig = makeRig(makeBase())
+    const out = rig.registry.ladderChange(
+      {
+        by: 'owner',
+        confirmed: true,
+        ladder: {
+          subs: [
+            { id: 'a', name: 'A', harness: 'claude', model: 'opus', scope: ['**'], lanes: [] },
+            { id: 'b', name: 'B', parent: 'a', harness: 'claude', model: 'opus', scope: ['**'], lanes: [] },
+          ],
+        },
+      },
+      true
+    )
+    expect(out).toEqual({ status: 409, body: { error: 'Ring 2 is past the subagent depth of 2.' } })
+    expect(rig.registry.getLadder()).toEqual({ subs: [] })
+    expect(rig.chat('orchestrator')?.ladder ?? { subs: [] }).toEqual({ subs: [] })
+  })
+
   it('keeps a hidden lane across a ladder save from the filtered list and restores it when unhidden', () => {
     const files = makeBase({ ladder: { subs: [{ ...FRONTEND, lanes: ['opencode', 'opencode2'] }] } })
     const hiddenFile = projectLanesFileFor(files.projectRoot, files.runs)
