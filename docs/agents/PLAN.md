@@ -1,6 +1,6 @@
 # Plan
 
-## Next, as of 2026-11-22 02:20
+## Next, as of 2026-11-22 02:40
 
 Pushed `0794311b`; CI green on both runners for the last three pushes. Since 23:40, merged and pushed: P682 to P684, P686, P688 and P689 (the fixes of reviews 67 to 69 and the ring seat labels), reviews 67 to 70 (P678, P685, P687, P690), and a test rig fix (`fd495a7f`: the refused-run test wrote its log before its meta, which the lanes source skips).
 
@@ -8,7 +8,7 @@ The team is unchanged: this session orchestrates; the sub `neon` (AGY, Gemini 4 
 
 Findings per review: 64 had 12, 65 had 10, 66 had 8, 67 had 4, 68 had 3, 69 had 3, 70 had 4. Since review 69 they are mostly edge cases (node flags no runner uses, five-deep rings, a log that keeps growing with no meta).
 
-1. P691, the review 70 fixes: running on `agy-4` under Neon. Then review 71.
+1. P691, the review 70 fixes, is merged on main (`b7a6127e`) but NOT pushed: the shutdown at 02:40 on 2026-11-22 stopped its full suite. Next session: run the full suite, the history audit and push, read CI, restart the bench (it still runs code from before P686), then start P692, review 71, on `agy-4` under Neon.
 2. The stop rule: two reviews in a row with no High and no Medium a real user hits, plus the live room by eye at desktop size. Ask the owner whether edge-case Mediums count.
 3. Decide with the owner what Chat opens on the bench, where the orchestrator is the Claude Code session.
 4. Known and accepted: a local process can send any `Origin` header and count as the owner; a foreign Origin from a browser gets 403 and the Host check blocks DNS rebinding.
