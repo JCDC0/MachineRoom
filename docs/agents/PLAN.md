@@ -1,17 +1,15 @@
 # Plan
 
-## Next, as of 2026-11-21 21:05
+## Next, as of 2026-11-21 23:40
 
-Pushed `a9257c2e`. Since the restart, merged and pushed: P665 to P675 (review 66 and its fixes, run by the Neon team), P639a to P639d (seats in the Agents tree and on the rings), P640 (seat docs), the engine build chunk (P671), the AGY updater fix (`server/quiet-agy.js`, then every lane child, the model list and the test setup: the terminal pop-ups were AGY's background updater), the leftover check that spares a live sibling, and test fixes.
+Pushed `6f15782c`. Since the restart, merged and pushed: P665 to P677, P679 to P681 (run by the Neon team), P639a to P639d and P640 (seats), the engine build chunk (P671), the leftover check that spares a live sibling, and the AGY updater switch. The switch is `AGY_CLI_DISABLE_AUTO_UPDATE=true`: agy reads only `true`, and with `1` the updater kept opening a console window until `7294dbb9` (caught by a window watcher at 23:09).
 
-The team, set by the owner on 2026-11-21: the Claude Code session at the top orchestrates; under it the sub `neon` (AGY, Gemini 4 Neon High, Bypass) leads `agy-4` "Hydrogen" (AGY, Gemini 4 Hydrogen High, an owner-made lane that runs `tasks` queues) and `native2` (DeepSeek V4.1 Flash, `--reasoning xhigh`, $1 a day OpenRouter budget that resets at 08:00 Manila). agy2, agy3, codex, native3 and native4 are off. Neon starts its lanes through the bridge and reports in its conversation; Claude reads it there, merges and pushes.
+The team, set by the owner on 2026-11-21: the Claude Code session at the top orchestrates; under it the sub `neon` (AGY, Gemini 4 Neon High, Bypass) leads `agy-4` "Hydrogen" (AGY, Gemini 4 Hydrogen High, an owner-made lane that runs `tasks` queues) and `native2` (DeepSeek V4.1 Flash, `--reasoning xhigh`, $1 a day OpenRouter budget that resets at 08:00 Manila). From 22:45 the owner allowed Hydrogen on `src/engine`. Neon starts its lanes through the bridge and reports in its conversation; Claude reads it there, merges and pushes. A lane's worktree must be merged before its next run starts.
 
-1. P676, the Team tab lines of seat S4 (an orchestrator's create, turn on, turn off and new sub with the seat it took or freed): on `agy-4` under Neon. Then P677: an orchestrator prompt over the Windows command-line limit failed to spawn with a bare stop text (Neon was stuck from 20:05 until its conversation was archived at 21:10).
-2. R64-7: the owner saw Neon's green shape inside its one lane Hydrogen on 2026-11-21 and called it a bug. P679 gives a sub its own place on its arc (the place `ringLayout` already counts); P680 makes one click on a folder card light the whole card, as a double click does. Then P678, review 67. The lattice floor half of R64-7 stays open.
-3. The `X / Y` ring labels (P639b) were seen by eye on the bench at 21:31 with limits 2 and 3: ring 0 read `0 / 2` in faint white and ring 1 `3 / 3` in yellow at full opacity, both right. Two small faults for a native lane (src/engine): at overview distance both are too small to read, and ring 1's label sits on the hub's ORCHESTRATOR name.
-4. Decide with the owner what Chat opens on the bench, where the orchestrator is the Claude Code session.
-5. Known weakness: any request with an `Origin` header counts as the owner; matters only off this machine.
-6. After P676, a review of `9e467b80` onward (P675, P676 and the AGY switch commits).
+1. P678, review 67 of `cd5506e2` to `6f15782c`: running on `agy-4` under Neon. Brief its fixes after.
+2. The ring seat labels (P639b) are right by eye, but too small at overview distance, and ring 1's label sits on the hub's ORCHESTRATOR name. The lattice floor half of R64-7 stays open.
+3. Decide with the owner what Chat opens on the bench, where the orchestrator is the Claude Code session.
+4. Known and accepted: a local process can send any `Origin` header and count as the owner; a foreign Origin from a browser gets 403 and the Host check blocks DNS rebinding.
 
 ## Where we are
 
