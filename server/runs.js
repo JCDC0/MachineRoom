@@ -948,7 +948,7 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
       if (byPidAfter.has(pid) && !pidMatchesProcess(pid, created, byPidAfter)) continue
       if (descendantProcesses(processesAfter, { rootPid: pid, ownPid: process.pid }).length > 0) return true
     }
-    if (tracked.worktree && leftoverProcesses(processesAfter, { worktree: tracked.worktree, ownPid: process.pid, platform }).length > 0) {
+    if (tracked.worktree && leftoverProcesses(processesAfter, { worktree: tracked.worktree, ownPid: process.pid, spareAncestor: process.pid, platform }).length > 0) {
       return true
     }
     return laneLockAlive(recordsDir(), tracked.lane, { platform, list: () => processesAfter, stat })
@@ -1543,6 +1543,7 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
         MACHINEROOM_LANE_TICKET: ticket,
         MACHINEROOM_LANE_REPLIES: readHarnessSettings(recordsDir()).laneReplies,
         MACHINEROOM_BRIDGE: bridgeAddress(),
+        MACHINEROOM_BRIDGE_PID: String(process.pid),
         ...(lanesFile ? { MACHINEROOM_LANES_FILE: laneFile } : {}),
       },
       ...treeSpawnOptions(),
@@ -1641,6 +1642,7 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
           env: {
             ...process.env,
             MACHINEROOM_RUNS: recordsDir(),
+            MACHINEROOM_BRIDGE_PID: String(process.pid),
             ...(lanesFile ? { MACHINEROOM_LANES_FILE: laneFile } : {}),
           },
         })

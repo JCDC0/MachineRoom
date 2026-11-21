@@ -193,6 +193,15 @@ function killProcess({ pid }) {
   }
 }
 
+function spareAncestorPid(env = process.env, fallback = process.ppid) {
+  const raw = typeof env?.MACHINEROOM_BRIDGE_PID === 'string' ? env.MACHINEROOM_BRIDGE_PID.trim() : ''
+  if (/^\d+$/.test(raw)) {
+    const pid = Number(raw)
+    if (Number.isSafeInteger(pid) && pid > 1) return pid
+  }
+  return fallback
+}
+
 export function stopLeftovers({ worktree, worktrees = [], namedAfter = null, childPid = 0, childCreated, recorded = new Map(), label = 'leftover', excludePids = [], platform = process.platform, list = listProcesses, kill = killProcess, alive = processAlive, processes = null, current = null, snapshotOnly = false } = {}) {
   if (!worktree && !worktrees.some(Boolean) && !(childPid > 0) && recorded.size === 0) return { found: 0, stopped: 0, failed: 0 }
   const snapshot = processes ?? (snapshotOnly ? [] : list())
@@ -202,7 +211,7 @@ export function stopLeftovers({ worktree, worktrees = [], namedAfter = null, chi
     if (failed > 0) console.log(`${label}: could not verify ${failed} recorded ${failed === 1 ? 'process' : 'processes'}`)
     return { found: 0, stopped: 0, failed }
   }
-  const found = leftoverProcesses(snapshot, { childPid, childCreated, recorded, worktree, worktrees, namedAfter, ownPid: process.pid, excludePids, spareAncestor: process.ppid, platform })
+  const found = leftoverProcesses(snapshot, { childPid, childCreated, recorded, worktree, worktrees, namedAfter, ownPid: process.pid, excludePids, spareAncestor: spareAncestorPid(), platform })
   if (found.length === 0) return { found: 0, stopped: 0, failed: 0 }
   const currentByPid = snapshotOnly ? new Map((Array.isArray(current) ? current : list()).map((row) => [row.pid, row])) : null
   let stopped = 0
@@ -349,7 +358,7 @@ export async function refuseRunningLane(
   if (liveChild) throw new Error(laneStopProblem({ lane: laneKey, pid: holder.child }))
   const worktrees = [worktree, holder.projectRun ? '' : holder.folder, saved.worktree]
   if (!worktrees.some(Boolean) && saved.recorded.size === 0) return
-  const findLeftovers = (snapshot) => leftoverProcesses(snapshot, { worktrees, recorded: saved.recorded, ownPid: process.pid, spareAncestor: process.ppid })
+  const findLeftovers = (snapshot) => leftoverProcesses(snapshot, { worktrees, recorded: saved.recorded, ownPid: process.pid, spareAncestor: spareAncestorPid() })
   if (findLeftovers(list()).length === 0) return
   await wait(500)
   const current = list()

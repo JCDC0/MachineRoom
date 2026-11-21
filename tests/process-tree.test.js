@@ -111,6 +111,18 @@ describe('leftoverProcesses', () => {
     expect(withRun).toEqual([13, 15])
   })
 
+  it('ignores spareAncestor of 1 or less so a POSIX orphan under pid 1 is still caught', () => {
+    const tree = [
+      { pid: 1, ppid: 0, command: 'init' },
+      { pid: 12, ppid: 1, command: 'agy --print "old run in /work/lane"' },
+      { pid: 13, ppid: 10, command: 'agy --print "live sibling in /work/lane"' },
+    ]
+    expect(leftoverProcesses(tree, { worktree: '/work/lane', spareAncestor: 1, platform: 'linux' }).map((item) => item.pid)).toEqual([12, 13])
+    expect(leftoverProcesses(tree, { worktree: '/work/lane', spareAncestor: 0, platform: 'linux' }).map((item) => item.pid)).toEqual([12, 13])
+    expect(leftoverProcesses(tree, { worktree: '/work/lane', spareAncestor: -1, platform: 'linux' }).map((item) => item.pid)).toEqual([12, 13])
+    expect(leftoverProcesses(tree, { worktree: '/work/lane', spareAncestor: 10, platform: 'linux' }).map((item) => item.pid)).toEqual([12])
+  })
+
   it('compares the folder without case on Windows and with case elsewhere', () => {
     expect(leftoverProcesses(rows, { worktree: 'c:/WORK/lane', platform: 'win32' }).map((item) => item.pid)).toEqual([4])
     expect(leftoverProcesses(rows, { worktree: 'c:/WORK/lane', platform: 'linux' }).map((item) => item.pid)).toEqual([])

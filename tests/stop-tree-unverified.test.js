@@ -38,6 +38,7 @@ const FAKE_RUNNER = [
   '}',
   'const lane = rest[0]',
   'const pidFile = join(state.pidDir, lane + ".pid")',
+  'if (state.envFile) writeFileSync(state.envFile, JSON.stringify({ bridgePid: process.env.MACHINEROOM_BRIDGE_PID ?? "" }))',
   'writeFileSync(pidFile, String(process.pid))',
   'if (state.spawnSurvivor && state.survivorScript) {',
   '  const child = spawn(process.execPath, [state.survivorScript, state.survivorPidFile], { detached: true, stdio: "ignore", windowsHide: true })',
@@ -90,6 +91,7 @@ function makeRig({ list, spawnSurvivor = false } = {}) {
   const runRelease = join(base, 'run-release')
   const survivorScript = join(base, 'survivor.mjs')
   const survivorPidFile = join(base, 'survivor.pid')
+  const envFile = join(base, 'runner-env.json')
   writeFileSync(runner, FAKE_RUNNER)
   writeFileSync(survivorScript, SURVIVOR_SCRIPT)
   writeFileSync(
@@ -101,6 +103,7 @@ function makeRig({ list, spawnSurvivor = false } = {}) {
       spawnSurvivor,
       survivorScript,
       survivorPidFile,
+      envFile,
     })
   )
 
@@ -133,7 +136,10 @@ function makeRig({ list, spawnSurvivor = false } = {}) {
 
   return {
     api,
+    runs,
+    project,
     pidDir,
+    envFile,
     survivorPidFile,
     async startInside() {
       const handled = await api.handle(
@@ -202,5 +208,37 @@ describe('stopSectorLanes with an unreadable process list', () => {
     const result = await rig.api.stopSectorLanes({ targetLanes: new Set(['inside1']) })
     expect(result.stoppedLanes).toEqual(['inside1'])
     expect(result.stillRunning).toEqual([])
+  })
+
+  it('passes MACHINEROOM_BRIDGE_PID to the runner and spares a live sibling turn during stopSectorLanes', async () => {
+    let siblingPid = 900001
+    let includeOrphan = false
+    const rig = makeRig({
+      list: () => {
+        const rows = [
+          { pid: process.pid, ppid: 0, command: 'node bridge' },
+          { pid: siblingPid, ppid: process.pid, command: `agy.exe --print ${join(rig.project, 'prompt.md')}` },
+        ]
+        if (includeOrphan) {
+          rows.push({ pid: 900002, ppid: 999999, command: `agy.exe --print ${join(rig.project, 'orphan.md')}` })
+        }
+        return rows
+      },
+    })
+    await rig.startInside()
+    writeFileSync(join(rig.runs, 'inside1.lock'), JSON.stringify({ folder: rig.project, projectRun: false }))
+    const runnerEnv = JSON.parse(readFileSync(rig.envFile, 'utf8'))
+    expect(runnerEnv.bridgePid).toBe(String(process.pid))
+
+    const spared = await rig.api.stopSectorLanes({ targetLanes: new Set(['inside1']) })
+    expect(spared.stoppedLanes).toEqual(['inside1'])
+    expect(spared.stillRunning).toEqual([])
+
+    includeOrphan = true
+    await rig.startInside()
+    writeFileSync(join(rig.runs, 'inside1.lock'), JSON.stringify({ folder: rig.project, projectRun: false }))
+    const caught = await rig.api.stopSectorLanes({ targetLanes: new Set(['inside1']) })
+    expect(caught.stoppedLanes).toEqual([])
+    expect(caught.stillRunning).toEqual(['inside1'])
   })
 })
