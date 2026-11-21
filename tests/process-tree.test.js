@@ -2,7 +2,7 @@ import { spawn, spawnSync } from 'node:child_process'
 import { EventEmitter } from 'node:events'
 import { PassThrough } from 'node:stream'
 import { describe, expect, it, vi } from 'vitest'
-import { KILL_TIMEOUT_MS, WINDOWS_LIST_COMMAND, descendantProcesses, isCreatedAfterLock, isLockHolderStale, killTree, leftoverProcesses, listProcesses, parseProcessList, processListCommand, sampleProcesses, treeSpawnOptions } from '../server/processTree.js'
+import { KILL_TIMEOUT_MS, WINDOWS_LIST_COMMAND, descendantProcesses, isCreatedAfterLock, isLockHolderStale, isRunnerCommand, killTree, leftoverProcesses, listProcesses, parseProcessList, processListCommand, sampleProcesses, treeSpawnOptions } from '../server/processTree.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 
 vi.mock('node:child_process', { spy: true })
@@ -132,6 +132,37 @@ describe('leftoverProcesses', () => {
     ]
     const found = leftoverProcesses(tree, { worktree: 'C:\\work\\lane', spareAncestor: 100, platform: 'win32' })
     expect(found.map((item) => item.pid)).toEqual([201])
+  })
+
+  it('spares a child of an orchestrator turn whose prompt mentions scripts/run-lane.mjs', () => {
+    const tree = [
+      { pid: 100, ppid: 1, command: 'node bridge' },
+      { pid: 300, ppid: 100, command: 'claude.exe -p "check scripts/run-lane.mjs"' },
+      { pid: 301, ppid: 300, command: 'node C:\\work\\lane\\check.js' },
+      { pid: 302, ppid: 100, command: 'node /usr/bin/claude -p "check scripts/run-lane.mjs"' },
+      { pid: 303, ppid: 302, command: 'node C:\\work\\lane\\other.js' },
+    ]
+    const found = leftoverProcesses(tree, { worktree: 'C:\\work\\lane', spareAncestor: 100, platform: 'win32' })
+    expect(found).toEqual([])
+  })
+
+  it('matches only node or node.exe running run-lane.mjs as its script', () => {
+    expect(isRunnerCommand('"C:\\Program Files\\nodejs\\node.exe" scripts/run-lane.mjs agy-4 --brief P688', 'win32')).toBe(true)
+    expect(isRunnerCommand('"C:\\Program Files\\nodejs\\node.exe" --no-warnings scripts\\run-lane.mjs agy-4', 'win32')).toBe(true)
+    expect(isRunnerCommand('node /x/scripts/run-lane.mjs agy-4', 'linux')).toBe(true)
+    expect(isRunnerCommand('claude -p "read scripts/run-lane.mjs"', 'win32')).toBe(false)
+    expect(isRunnerCommand('node /usr/bin/claude -p "read scripts/run-lane.mjs"', 'linux')).toBe(false)
+    expect(isRunnerCommand('node scripts/not-run-lane.mjs', 'linux')).toBe(false)
+
+    const tree = [
+      { pid: 100, ppid: 1, command: 'node bridge' },
+      { pid: 200, ppid: 100, command: '"C:\\Program Files\\nodejs\\node.exe" scripts/run-lane.mjs agy-4 --brief P688' },
+      { pid: 201, ppid: 200, command: 'agy.exe --print "see C:\\work\\lane"' },
+      { pid: 400, ppid: 100, command: 'node /x/scripts/run-lane.mjs agy-4' },
+      { pid: 401, ppid: 400, command: 'agy --print "see /posix/lane"' },
+    ]
+    expect(leftoverProcesses(tree, { worktree: 'C:\\work\\lane', spareAncestor: 100, platform: 'win32' }).map((item) => item.pid)).toEqual([201])
+    expect(leftoverProcesses(tree, { worktree: '/posix/lane', spareAncestor: 100, platform: 'linux' }).map((item) => item.pid)).toEqual([401])
   })
 
   it('compares the folder without case on Windows and with case elsewhere', () => {

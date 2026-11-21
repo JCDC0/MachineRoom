@@ -225,8 +225,53 @@ export function descendantProcesses(processes, { rootPid = 0, ownPid = 0, exclud
   return found.sort((left, right) => left.pid - right.pid)
 }
 
-function isRunnerCommand(command, platform) {
-  return /(?:^|[\s"'/])run-lane\.mjs(?:$|[\s"'])/.test(processKey(command, platform))
+function commandTokens(command) {
+  const text = String(command ?? '')
+  const tokens = []
+  let current = ''
+  let quote = ''
+  let hasToken = false
+  for (let index = 0; index < text.length; index += 1) {
+    const ch = text[index]
+    if (quote) {
+      if (ch === quote) quote = ''
+      else current += ch
+      continue
+    }
+    if (ch === '"' || ch === "'") {
+      quote = ch
+      hasToken = true
+      continue
+    }
+    if (/\s/.test(ch)) {
+      if (hasToken) {
+        tokens.push(current)
+        current = ''
+        hasToken = false
+      }
+      continue
+    }
+    current += ch
+    hasToken = true
+  }
+  if (hasToken) tokens.push(current)
+  return tokens
+}
+
+function commandBase(token, platform) {
+  const normalized = processKey(token, platform).replace(/\/+$/, '')
+  const slash = normalized.lastIndexOf('/')
+  return slash === -1 ? normalized : normalized.slice(slash + 1)
+}
+
+export function isRunnerCommand(command, platform = process.platform) {
+  const tokens = commandTokens(command)
+  if (tokens.length < 2) return false
+  const program = commandBase(tokens[0], platform)
+  if (program !== 'node' && program !== 'node.exe') return false
+  const script = tokens.slice(1).find((arg) => !arg.startsWith('-'))
+  if (!script) return false
+  return commandBase(script, platform) === 'run-lane.mjs'
 }
 
 function isSparedSibling(byPid, pid, spare, platform) {
