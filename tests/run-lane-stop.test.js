@@ -344,12 +344,14 @@ describe('a stopped lane stays stopped', () => {
     writeFileSync(join(runs, 'fake.lock'), laneLockText({ pid: DEAD_PID, folder: project }))
     const began = join(project, 'leftover-started.txt')
     const leftoverScript = `require('node:fs').writeFileSync(${JSON.stringify(began)}, String(process.pid)); setTimeout(() => {}, 60000)`
-    const leftover = spawn(process.execPath, ['-e', leftoverScript, project], {
-      stdio: 'ignore',
-      windowsHide: true,
-    })
-    cleanups.push(() => killTree(leftover))
-    const leftoverReady = await waitUntil(() => existsSync(began) && leftoverProcesses(listProcesses(), { worktree: project, ownPid: process.pid }).some((item) => item.pid === leftover.pid))
+    // An orphan, as a real leftover is: its parent exits, so it is not a live sibling of the runner.
+    const parentScript = `const c = require('node:child_process').spawn(process.execPath, ['-e', ${JSON.stringify(leftoverScript)}, ${JSON.stringify(project)}], { detached: true, stdio: 'ignore', windowsHide: true }); c.unref()`
+    const parent = spawn(process.execPath, ['-e', parentScript], { stdio: 'ignore', windowsHide: true })
+    await new Promise((done) => parent.on('close', done))
+    await waitUntil(() => existsSync(began))
+    const leftover = { pid: Number(readFileSync(began, 'utf8')) }
+    cleanups.push(() => { try { process.kill(leftover.pid) } catch {} })
+    const leftoverReady = await waitUntil(() => leftoverProcesses(listProcesses(), { worktree: project, ownPid: process.pid }).some((item) => item.pid === leftover.pid))
     expect(leftoverReady, 'the leftover process was not in the process list').toBe(true)
     const result = await runLane(['fake', '--project', project, '--task', 'Do it.'], env)
     expect(result.code).toBe(1)

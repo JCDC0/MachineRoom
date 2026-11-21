@@ -202,7 +202,7 @@ export function stopLeftovers({ worktree, worktrees = [], namedAfter = null, chi
     if (failed > 0) console.log(`${label}: could not verify ${failed} recorded ${failed === 1 ? 'process' : 'processes'}`)
     return { found: 0, stopped: 0, failed }
   }
-  const found = leftoverProcesses(snapshot, { childPid, childCreated, recorded, worktree, worktrees, namedAfter, ownPid: process.pid, excludePids, platform })
+  const found = leftoverProcesses(snapshot, { childPid, childCreated, recorded, worktree, worktrees, namedAfter, ownPid: process.pid, excludePids, spareAncestor: process.ppid, platform })
   if (found.length === 0) return { found: 0, stopped: 0, failed: 0 }
   const currentByPid = snapshotOnly ? new Map((Array.isArray(current) ? current : list()).map((row) => [row.pid, row])) : null
   let stopped = 0
@@ -349,7 +349,7 @@ export async function refuseRunningLane(
   if (liveChild) throw new Error(laneStopProblem({ lane: laneKey, pid: holder.child }))
   const worktrees = [worktree, holder.projectRun ? '' : holder.folder, saved.worktree]
   if (!worktrees.some(Boolean) && saved.recorded.size === 0) return
-  const findLeftovers = (snapshot) => leftoverProcesses(snapshot, { worktrees, recorded: saved.recorded, ownPid: process.pid })
+  const findLeftovers = (snapshot) => leftoverProcesses(snapshot, { worktrees, recorded: saved.recorded, ownPid: process.pid, spareAncestor: process.ppid })
   if (findLeftovers(list()).length === 0) return
   await wait(500)
   const current = list()

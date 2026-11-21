@@ -94,6 +94,23 @@ describe('leftoverProcesses', () => {
     expect(leftoverProcesses(rows, { childPid: 1, worktree: '' }).map((item) => item.pid)).toEqual([2, 3, 4, 5])
   })
 
+  it('spares a live sibling that only names the worktree, and still takes an orphan and a run descendant', () => {
+    const tree = [
+      { pid: 10, ppid: 0, command: 'node bridge' },
+      { pid: 11, ppid: 10, command: 'node scripts/run-lane.mjs agy-4' },
+      { pid: 12, ppid: 10, command: 'agy.exe --print "see file:///C:/work/lane/a.md"' },
+      { pid: 13, ppid: 99, command: 'agy.exe --print "old run in C:\\work\\lane"' },
+      { pid: 14, ppid: 10, command: 'node old harness' },
+      { pid: 15, ppid: 14, command: 'agy.exe C:\\work\\lane' },
+    ]
+    const recorded = new Map([[14, undefined]])
+    const ask = (spareAncestor) => leftoverProcesses(tree, { worktree: 'C:\\work\\lane', ownPid: 11, spareAncestor, platform: 'win32' }).map((item) => item.pid)
+    expect(ask(0)).toEqual([12, 13, 15])
+    expect(ask(10)).toEqual([13])
+    const withRun = leftoverProcesses(tree, { childPid: 14, worktree: 'C:\\work\\lane', ownPid: 11, spareAncestor: 10, recorded, platform: 'win32' }).map((item) => item.pid)
+    expect(withRun).toEqual([13, 15])
+  })
+
   it('compares the folder without case on Windows and with case elsewhere', () => {
     expect(leftoverProcesses(rows, { worktree: 'c:/WORK/lane', platform: 'win32' }).map((item) => item.pid)).toEqual([4])
     expect(leftoverProcesses(rows, { worktree: 'c:/WORK/lane', platform: 'linux' }).map((item) => item.pid)).toEqual([])

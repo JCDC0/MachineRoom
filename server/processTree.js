@@ -225,7 +225,7 @@ export function descendantProcesses(processes, { rootPid = 0, ownPid = 0, exclud
   return found.sort((left, right) => left.pid - right.pid)
 }
 
-export function leftoverProcesses(processes, { childPid = 0, childCreated, recorded = new Map(), worktree = '', worktrees = [], namedAfter = null, ownPid = 0, excludePids = [], platform = process.platform } = {}) {
+export function leftoverProcesses(processes, { childPid = 0, childCreated, recorded = new Map(), worktree = '', worktrees = [], namedAfter = null, ownPid = 0, excludePids = [], spareAncestor = 0, platform = process.platform } = {}) {
   const list = (Array.isArray(processes) ? processes : [])
     .filter((item) => Number.isInteger(item?.pid) && item.pid > 0 && Number.isInteger(item?.ppid))
   const byPid = new Map(list.map((item) => [item.pid, item]))
@@ -249,7 +249,9 @@ export function leftoverProcesses(processes, { childPid = 0, childCreated, recor
     if (!related && recorded.has(item.pid)) continue
     const named = (namedAfter === null || (Number.isFinite(item.created) && item.created > namedAfter))
       && folders.some((folder) => namesFolder(processKey(item.command, platform), folder))
-    if (related || named) found.push(item)
+    // A live sibling only names the folder (an orchestrator turn carries it in its prompt); an orphan of an old run does not descend from the runner's parent.
+    const sibling = !related && named && spareAncestor > 0 && parentChain(byPid, item.pid).has(spareAncestor)
+    if ((related || named) && !sibling) found.push(item)
   }
   return found.sort((left, right) => left.pid - right.pid)
 }
