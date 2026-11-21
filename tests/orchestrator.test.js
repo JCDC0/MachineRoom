@@ -54,6 +54,8 @@ import {
   MESSAGE_PROBLEM,
   MODEL_PROBLEM,
   NO_SESSION_PROBLEM,
+  PROMPT_ARG_LIMIT,
+  PROMPT_TOO_LONG_REPLY,
 } from '../server/orchestrator.js'
 import { briefProblems } from '../src/briefs/run.js'
 import { gitPath } from '../server/programPath.js'
@@ -4772,6 +4774,104 @@ describe('the lane source and the orchestrator turn', () => {
       rig.send('Build the room')
       await waitIdle(rig, 1)
       expect(rig.answer().messages.at(-1).text).toBe('The orchestrator stopped: exit 1.')
+    })
+
+    it('fits a fresh prompt within PROMPT_ARG_LIMIT by dropping oldest history blocks first, then summary', async () => {
+      expect(PROMPT_ARG_LIMIT).toBe(20000)
+      const baseRig = makeRig({
+        prompt: 'INSTRUCTION_MARKER\nproject={{PROJECT}}',
+        harness: 'fake',
+        model: 'fake-model',
+        harnesses: { fake: silentHarness },
+        lanes: { orchestrator: { name: 'Orchestrator', harness: 'Fake', cli: { harness: 'fake', bin: process.execPath, model: 'fake-model' } } },
+      })
+      const file = chatFileFor(baseRig.projectRoot, baseRig.runs)
+      baseRig.orchestrator.close()
+      const saved = JSON.parse(readFileSync(file, 'utf8'))
+      const nowIso = new Date().toISOString()
+      saved.summary = 'SUMMARY_MARKER'
+      saved.messages = Array.from({ length: 20 }, (_, index) => {
+        const tag = `HISTORY_${String(index).padStart(2, '0')}_`
+        return {
+          id: `m-${index}`,
+          from: index % 2 === 0 ? 'owner' : 'orchestrator',
+          text: tag + 'x'.repeat(2000 - tag.length),
+          at: nowIso,
+        }
+      })
+      writeFileSync(file, JSON.stringify(saved, null, 2))
+
+      const spawned = []
+      const callsFile = join(baseRig.base, 'calls-fit.jsonl')
+      const spawnFake = (prog, args, options) => {
+        spawned.push({ prog, args: [...args] })
+        return spawn(process.execPath, [baseRig.script, ...args], {
+          ...options,
+          env: { ...(options.env ?? process.env), MR_CALLS: callsFile, MR_MODE: 'reply', MR_RELEASE: baseRig.releaseFile },
+        })
+      }
+      const orch = createOrchestrator({
+        projectRoot: baseRig.projectRoot,
+        runsFolder: baseRig.runs,
+        lanes: baseRig.lanes,
+        harness: 'fake',
+        model: 'fake-model',
+        harnesses: { fake: silentHarness },
+        spawn: spawnFake,
+        promptFile: baseRig.promptFile,
+        bridgeUrl: () => 'http://127.0.0.1:5999',
+      })
+      cleanups.push(async () => orch.close())
+
+      orch.send({ text: 'NEWEST_MESSAGE_MARKER', confirmed: true })
+      await waitFor(() => orch.answer().state === 'idle' && spawned.length === 1, 15000, 'trimmed turn to finish')
+      const sentPrompt = spawned[0].args[spawned[0].args.indexOf('--prompt') + 1]
+      expect(sentPrompt.length).toBeLessThanOrEqual(PROMPT_ARG_LIMIT)
+      expect(sentPrompt).toContain('INSTRUCTION_MARKER')
+      expect(sentPrompt).toContain('SUMMARY_MARKER')
+      expect(sentPrompt).toContain('NEWEST_MESSAGE_MARKER')
+      expect(sentPrompt).toContain('HISTORY_19_')
+      expect(sentPrompt).not.toContain('HISTORY_00_')
+
+      orch.close()
+      const withHugeSummary = JSON.parse(readFileSync(file, 'utf8'))
+      withHugeSummary.summary = 'HUGE_SUMMARY_' + 's'.repeat(PROMPT_ARG_LIMIT - 200)
+      writeFileSync(file, JSON.stringify(withHugeSummary, null, 2))
+      const orch2 = createOrchestrator({
+        projectRoot: baseRig.projectRoot,
+        runsFolder: baseRig.runs,
+        lanes: baseRig.lanes,
+        harness: 'fake',
+        model: 'fake-model',
+        harnesses: { fake: silentHarness },
+        spawn: spawnFake,
+        promptFile: baseRig.promptFile,
+        bridgeUrl: () => 'http://127.0.0.1:5999',
+      })
+      cleanups.push(async () => orch2.close())
+      orch2.send({ text: 'AFTER_HUGE_SUMMARY', confirmed: true })
+      await waitFor(() => orch2.answer().state === 'idle' && spawned.length === 2, 15000, 'summary-dropped turn to finish')
+      const secondPrompt = spawned[1].args[spawned[1].args.indexOf('--prompt') + 1]
+      expect(secondPrompt.length).toBeLessThanOrEqual(PROMPT_ARG_LIMIT)
+      expect(secondPrompt).toContain('INSTRUCTION_MARKER')
+      expect(secondPrompt).toContain('AFTER_HUGE_SUMMARY')
+      expect(secondPrompt).not.toContain('HUGE_SUMMARY_')
+    })
+
+    it('stops without spawning when instruction and new message alone exceed PROMPT_ARG_LIMIT', async () => {
+      const rig = makeRig({
+        prompt: 'INSTRUCTION_' + 'a'.repeat(PROMPT_ARG_LIMIT + 50),
+        harness: 'fake',
+        model: 'fake-model',
+        harnesses: { fake: silentHarness },
+        lanes: { orchestrator: { name: 'Orchestrator', harness: 'Fake', cli: { harness: 'fake', bin: process.execPath, model: 'fake-model' } } },
+      })
+      rig.send('Short owner message')
+      await waitFor(() => rig.answer().state === 'idle' && rig.answer().messages.length === 2, 5000, 'too-long prompt stop')
+      expect(rig.spawned).toHaveLength(0)
+      expect(rig.calls()).toHaveLength(0)
+      expect(rig.answer().messages.at(-1).text).toBe(PROMPT_TOO_LONG_REPLY)
+      expect(rig.answer().messages.at(-1).text).toBe('The orchestrator stopped: the prompt is too long for the command line.')
     })
   })
 })
