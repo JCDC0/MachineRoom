@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Review 70 fixes: the runner match reads only the node program and its script, skipping node flags that take a value, and never reads a long prompt; a seat label drops at most 40% of the gap to the ring below, so it stays clear of it with five rings; a log with no meta is given up 10 seconds after it was first seen, even while it grows (P691, R70-1 to R70-4; run by the Neon team).
 - The ring seat labels sit 70 below their ring line, where no name stands, so ring 1's label no longer lands on a sector name (P689; run by the Neon team).
 - Review 69 fixes: the leftover check counts a process as a runner only when node runs run-lane.mjs as its script, so an orchestrator turn whose prompt names run-lane.mjs is still spared; each ring's seat label stands at one fixed spot, the ring's right edge as seen from the overview camera, 160 units out, so it no longer jumps when lanes come or go; a log written a moment before its meta is adopted once the meta appears (P688, R69-1 to R69-3; run by the Neon team).
 - Review 68 fixes: a ring seat label keeps clear of the agents on its ring as well as the sector names; the leftover check no longer spares a live lane child whose parent chain passes through run-lane; the stop path's bridge pid is tested. The refused-run test's fake runner writes its meta before its log, as run-lane does, which was the cause of its CI failures (P686, R68-1 to R68-3; run by the Neon team).

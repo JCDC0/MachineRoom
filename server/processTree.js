@@ -225,37 +225,50 @@ export function descendantProcesses(processes, { rootPid = 0, ownPid = 0, exclud
   return found.sort((left, right) => left.pid - right.pid)
 }
 
-function commandTokens(command) {
-  const text = String(command ?? '')
-  const tokens = []
-  let current = ''
+const NODE_VALUE_FLAGS = new Set([
+  '-r',
+  '--require',
+  '--import',
+  '--loader',
+  '--experimental-loader',
+  '--env-file',
+  '-C',
+  '--conditions',
+  '--input-type',
+])
+
+const NODE_EVAL_FLAGS = new Set(['-e', '--eval', '-p', '--print'])
+
+function nextCommandToken(text, start) {
+  let index = start
+  while (index < text.length && /\s/.test(text[index])) index += 1
+  if (index >= text.length) return null
+  let token = ''
   let quote = ''
   let hasToken = false
-  for (let index = 0; index < text.length; index += 1) {
+  for (; index < text.length; index += 1) {
     const ch = text[index]
     if (quote) {
-      if (ch === quote) quote = ''
-      else current += ch
+      if (quote === '"' && ch === '\\' && text[index + 1] === '"') {
+        token += '"'
+        index += 1
+      } else if (ch === quote) {
+        quote = ''
+      } else {
+        token += ch
+      }
       continue
     }
-    if (ch === '"' || ch === "'") {
+    if ((ch === '"' || ch === "'") && (!hasToken || text[index - 1] === '=')) {
       quote = ch
       hasToken = true
       continue
     }
-    if (/\s/.test(ch)) {
-      if (hasToken) {
-        tokens.push(current)
-        current = ''
-        hasToken = false
-      }
-      continue
-    }
-    current += ch
+    if (/\s/.test(ch)) break
+    token += ch
     hasToken = true
   }
-  if (hasToken) tokens.push(current)
-  return tokens
+  return { token, next: index }
 }
 
 function commandBase(token, platform) {
@@ -265,13 +278,34 @@ function commandBase(token, platform) {
 }
 
 export function isRunnerCommand(command, platform = process.platform) {
-  const tokens = commandTokens(command)
-  if (tokens.length < 2) return false
-  const program = commandBase(tokens[0], platform)
+  const text = typeof command === 'string' ? command : String(command ?? '')
+  const first = nextCommandToken(text, 0)
+  if (!first) return false
+  const program = commandBase(first.token, platform)
   if (program !== 'node' && program !== 'node.exe') return false
-  const script = tokens.slice(1).find((arg) => !arg.startsWith('-'))
-  if (!script) return false
-  return commandBase(script, platform) === 'run-lane.mjs'
+  let cursor = first.next
+  let afterDoubleDash = false
+  while (cursor < text.length) {
+    const next = nextCommandToken(text, cursor)
+    if (!next) return false
+    cursor = next.next
+    const arg = next.token
+    if (afterDoubleDash) return commandBase(arg, platform) === 'run-lane.mjs'
+    if (arg === '--') {
+      afterDoubleDash = true
+      continue
+    }
+    if (NODE_EVAL_FLAGS.has(arg) || arg.startsWith('--eval=') || arg.startsWith('--print=')) return false
+    if (NODE_VALUE_FLAGS.has(arg)) {
+      const value = nextCommandToken(text, cursor)
+      if (!value) return false
+      cursor = value.next
+      continue
+    }
+    if (arg.startsWith('-')) continue
+    return commandBase(arg, platform) === 'run-lane.mjs'
+  }
+  return false
 }
 
 function isSparedSibling(byPid, pid, spare, platform) {

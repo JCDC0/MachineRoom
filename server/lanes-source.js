@@ -555,15 +555,21 @@ export function createLanesSource(options = {}) {
     }
     if (metaProject === '' && !worktreeRunsShown) {
       if (meta === null) {
-        let mtimeMs = NaN
-        try {
-          mtimeMs = statFile(path).mtimeMs
-        } catch {
-          waitingMeta.delete(key)
-          return
+        const current = now()
+        const existing = waitingMeta.get(key)
+        let firstSeen = existing?.firstSeen
+        if (firstSeen === undefined) {
+          let mtimeMs = NaN
+          try {
+            mtimeMs = statFile(path).mtimeMs
+          } catch {
+            waitingMeta.delete(key)
+            return
+          }
+          if (Number.isFinite(mtimeMs)) firstSeen = Math.min(mtimeMs, current)
         }
-        if (Number.isFinite(mtimeMs) && now() - mtimeMs <= META_GRACE_MS) {
-          waitingMeta.set(key, { name, path })
+        if (Number.isFinite(firstSeen) && current - firstSeen <= META_GRACE_MS) {
+          if (!existing) waitingMeta.set(key, { name, path, firstSeen })
           return
         }
       }

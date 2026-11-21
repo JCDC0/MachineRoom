@@ -165,6 +165,40 @@ describe('leftoverProcesses', () => {
     expect(leftoverProcesses(tree, { worktree: '/posix/lane', spareAncestor: 100, platform: 'linux' }).map((item) => item.pid)).toEqual([401])
   })
 
+  it('skips node value flags, rejects eval flags, handles escaped quotes and stops on non-node programs', () => {
+    const valueFlags = [
+      ['-r', 'dotenv/config'],
+      ['--require', 'dotenv/config'],
+      ['--import', './register.mjs'],
+      ['--loader', './loader.mjs'],
+      ['--experimental-loader', './loader.mjs'],
+      ['--env-file', '.env'],
+      ['-C', 'development'],
+      ['--conditions', 'development'],
+      ['--input-type', 'module'],
+    ]
+    for (const [flag, value] of valueFlags) {
+      expect(isRunnerCommand(`node ${flag} ${value} scripts/run-lane.mjs agy-4`, 'linux')).toBe(true)
+      if (flag.startsWith('--')) {
+        expect(isRunnerCommand(`node ${flag}=${value} scripts/run-lane.mjs agy-4`, 'linux')).toBe(true)
+      }
+    }
+    expect(isRunnerCommand('node -r', 'linux')).toBe(false)
+    expect(isRunnerCommand('node -e "console.log(\'scripts/run-lane.mjs\')"', 'linux')).toBe(false)
+    expect(isRunnerCommand('node -e scripts/run-lane.mjs', 'linux')).toBe(false)
+    expect(isRunnerCommand('node --eval "scripts/run-lane.mjs"', 'linux')).toBe(false)
+    expect(isRunnerCommand('node --eval=scripts/run-lane.mjs', 'linux')).toBe(false)
+    expect(isRunnerCommand('node -p scripts/run-lane.mjs', 'linux')).toBe(false)
+    expect(isRunnerCommand('node --print scripts/run-lane.mjs', 'linux')).toBe(false)
+    expect(isRunnerCommand('node --print=scripts/run-lane.mjs', 'linux')).toBe(false)
+    expect(isRunnerCommand('node --title="a \\"b\\" c" scripts/run-lane.mjs agy-4', 'linux')).toBe(true)
+    expect(isRunnerCommand('node --title="a \\" scripts/run-lane.mjs \\" b" other.js', 'linux')).toBe(false)
+    expect(isRunnerCommand("node --title=don't scripts/run-lane.mjs agy-4", 'linux')).toBe(true)
+    const prompt = 'x'.repeat(30000)
+    expect(isRunnerCommand(`claude -p "${prompt} scripts/run-lane.mjs"`, 'linux')).toBe(false)
+    expect(isRunnerCommand(`node scripts/run-lane.mjs "${prompt}"`, 'linux')).toBe(true)
+  })
+
   it('compares the folder without case on Windows and with case elsewhere', () => {
     expect(leftoverProcesses(rows, { worktree: 'c:/WORK/lane', platform: 'win32' }).map((item) => item.pid)).toEqual([4])
     expect(leftoverProcesses(rows, { worktree: 'c:/WORK/lane', platform: 'linux' }).map((item) => item.pid)).toEqual([])
