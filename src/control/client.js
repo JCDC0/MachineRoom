@@ -458,7 +458,31 @@ export function createClient({
       return request('POST', `/api/orchestrator/sessions/${encodeURIComponent(session ?? '')}/delete${query}`, body)
     },
 
-    setLadder: (ladder) => request('POST', '/api/orchestrator/ladder', { ladder, by: 'owner', confirmed: true }),
+    setLadder: (ladderOrOptions, options = {}) => {
+      let ladder = ladderOrOptions
+      let overRing = options?.overRing
+      if (
+        ladderOrOptions &&
+        typeof ladderOrOptions === 'object' &&
+        !Array.isArray(ladderOrOptions) &&
+        Object.hasOwn(ladderOrOptions, 'ladder')
+      ) {
+        ladder = ladderOrOptions.ladder
+        if (overRing === undefined) overRing = ladderOrOptions.overRing
+      } else if (
+        overRing === undefined &&
+        ladderOrOptions &&
+        typeof ladderOrOptions === 'object' &&
+        Object.hasOwn(ladderOrOptions, 'overRing')
+      ) {
+        const { overRing: ring, ...rest } = ladderOrOptions
+        ladder = rest
+        overRing = ring
+      }
+      const body = { ladder, by: 'owner', confirmed: true }
+      if (overRing !== undefined) body.overRing = overRing
+      return request('POST', '/api/orchestrator/ladder', body)
+    },
 
     startRun: (lane, run) => {
       const body = Array.isArray(run) ? { briefs: run } : { ...(run ?? {}) }

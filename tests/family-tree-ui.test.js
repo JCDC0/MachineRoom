@@ -1221,7 +1221,7 @@ describe('FamilyTree seats', () => {
     })
   })
 
-  it('shows a refusal under the group', async () => {
+  it('shows a refusal under the group once, without a second banner error', async () => {
     const { client } = seatsClient([{ ring: 0, taken: 1, limit: 3 }])
     client.setRingSeats = async () => {
       throw new Error('Seats must be whole numbers from 0, or empty for no limit.')
@@ -1233,6 +1233,9 @@ describe('FamilyTree seats', () => {
       await click(root, buttonWithText(container.querySelector('.mr-side-confirm'), 'Save'))
       const note = group.querySelector('.mr-family-note.is-error')
       expect(note.textContent).toBe('Seats must be whole numbers from 0, or empty for no limit.')
+      expect(container.querySelector('.mr-side-error')).toBeNull()
+      expect(container.querySelectorAll('[role="alert"]')).toHaveLength(1)
+      expect(container.querySelector('.mr-side-confirm')).toBeNull()
     })
   })
 })
@@ -1264,6 +1267,51 @@ describe('FamilyTree made by and full rings', () => {
     })
   })
 
+  it('shows made by Orchestrator or its saved label when the orchestrator node is hidden', async () => {
+    const { client } = makeClient()
+    client.orchestrators = async () => [{ id: 'orchestrator', name: 'Lead' }]
+    client.family = async () => ({
+      top: 'claude-session',
+      nodes: [
+        {
+          id: 'session:claude-session',
+          kind: 'session',
+          label: 'Claude Code',
+          harness: 'claude',
+          model: 'opus',
+          parent: null,
+          children: ['opencode'],
+          active: true,
+          working: true,
+        },
+        {
+          id: 'opencode',
+          kind: 'lane',
+          label: 'OpenCode',
+          harness: 'opencode',
+          model: 'opencode-go/deepseek-v4.1-flash',
+          effort: 'max',
+          parent: 'session:claude-session',
+          createdBy: 'orchestrator',
+          active: true,
+          working: false,
+        },
+      ],
+      keys: [],
+      proposals: [],
+    })
+    await withDom(async ({ container, root }) => {
+      await mount(root, client)
+      expect(rowByLabel(container, 'OpenCode').querySelector('.ui-row-detail').textContent).toContain('made by Lead')
+    })
+
+    client.orchestrators = async () => []
+    await withDom(async ({ container, root }) => {
+      await mount(root, client)
+      expect(rowByLabel(container, 'OpenCode').querySelector('.ui-row-detail').textContent).toContain('made by Orchestrator')
+    })
+  })
+
   it('asks before turning a lane on past a full ring and sends the ring', async () => {
     const { client, calls } = makeClient()
     let refused = false
@@ -1290,6 +1338,37 @@ describe('FamilyTree made by and full rings', () => {
         confirmed: true,
       })
       expect(container.querySelector('.mr-side-confirm-card')).toBeNull()
+    })
+  })
+
+  it('refreshes the tree after an overRing retry succeeds', async () => {
+    const { client, calls } = makeClient()
+    let activeNow = false
+    let familyCalls = 0
+    client.family = async () => {
+      familyCalls += 1
+      return {
+        ...FAMILY,
+        nodes: FAMILY.nodes.map((node) => (node.id === 'opencode2' ? { ...node, active: activeNow } : node)),
+      }
+    }
+    client.setActiveLanes = async (payload) => {
+      calls.setActiveLanes.push(payload)
+      if (payload.overRing === undefined) {
+        throw ringError('Confirm going past the seats on ring 1.', 1)
+      }
+      activeNow = true
+      return { ok: true }
+    }
+    await withDom(async ({ container, root }) => {
+      await mount(root, client)
+      const callsBefore = familyCalls
+      await click(root, container.querySelector('.mr-family-more-head'))
+      await chooseAction(root, rowByLabel(container, 'OpenCode 2'), 'Turn on')
+      expect(familyCalls).toBe(callsBefore)
+      await click(root, buttonWithText(container.querySelector('.mr-side-confirm-card'), 'Anyway'))
+      expect(familyCalls).toBe(callsBefore + 1)
+      expect(classesOf(rowByLabel(container, 'OpenCode 2').querySelector('.mr-family-row'))).not.toContain('is-off')
     })
   })
 
@@ -1341,6 +1420,114 @@ describe('FamilyTree made by and full rings', () => {
       expect(calls.createLane[1]).toMatchObject({ name: 'Writer', overRing: 0, confirmed: true })
       expect(rowByLabel(container, 'Writer')).not.toBeNull()
       expect(container.querySelector('.mr-side-confirm-card')).toBeNull()
+    })
+  })
+
+  it('skips the ring 0 confirm when creating a lane under a sub while ring 0 is full', async () => {
+    const { client, calls } = makeClient()
+    const added = []
+    let refusedCreate = false
+    client.createLane = async (payload) => {
+      calls.createLane.push(payload)
+      if (!refusedCreate) {
+        refusedCreate = true
+        throw ringError('Confirm going past the seats on ring 0.', 0)
+      }
+      const id = 'lane-2'
+      added.push({
+        id,
+        kind: 'lane',
+        label: payload.name,
+        harness: payload.harness,
+        model: payload.model,
+        effort: payload.effort,
+        parent: 'frontend',
+        active: true,
+        working: false,
+        custom: true,
+      })
+      return { key: id }
+    }
+    const before = client.family
+    client.family = async () => {
+      const answer = await before()
+      return { ...answer, nodes: [...answer.nodes.filter((node) => !added.some((row) => row.id === node.id)), ...added] }
+    }
+    await withDom(async ({ container, root }) => {
+      await mount(root, client)
+      await chooseAction(root, rowByLabel(container, 'Frontend'), 'Add a lane under this…')
+      const form = rowByLabel(container, 'Frontend').querySelector('.mr-family-child')
+      await type(root, form.querySelector('input[aria-label="New agent label"]'), 'Writer')
+      await act(async () => {
+        form.dispatchEvent({ type: 'submit', bubbles: true, cancelable: true })
+      })
+      await click(root, buttonWithText(container.querySelector('.mr-side-confirm-card'), 'Create'))
+      expect(container.querySelector('.mr-side-confirm-card')).toBeNull()
+      expect(container.querySelector('.mr-side-error')).toBeNull()
+      expect(calls.createLane).toHaveLength(2)
+      expect(calls.createLane[0]).not.toHaveProperty('overRing')
+      expect(calls.createLane[1]).toMatchObject({ name: 'Writer', overRing: 0, confirmed: true })
+      expect(calls.setLadder).toHaveLength(1)
+      expect(calls.setLadder[0].subs[0].lanes).toContain('lane-2')
+      expect(rowByLabel(container, 'Writer')).not.toBeNull()
+    })
+  })
+
+  it('asks before moving a new lane under a sub when the sub ring is full and sends overRing to setLadder', async () => {
+    const { client, calls } = makeClient()
+    const added = []
+    client.createLane = async (payload) => {
+      calls.createLane.push(payload)
+      const id = 'lane-2'
+      added.push({
+        id,
+        kind: 'lane',
+        label: payload.name,
+        harness: payload.harness,
+        model: payload.model,
+        effort: payload.effort,
+        parent: 'frontend',
+        active: true,
+        working: false,
+        custom: true,
+      })
+      return { key: id }
+    }
+    let refusedLadder = false
+    client.setLadder = async (payload, options) => {
+      calls.setLadder.push({ payload, options })
+      if (!refusedLadder) {
+        refusedLadder = true
+        throw ringError('Confirm going past the seats on ring 1.', 1)
+      }
+      return { ok: true }
+    }
+    const before = client.family
+    client.family = async () => {
+      const answer = await before()
+      return { ...answer, nodes: [...answer.nodes.filter((node) => !added.some((row) => row.id === node.id)), ...added] }
+    }
+    await withDom(async ({ container, root }) => {
+      await mount(root, client)
+      await chooseAction(root, rowByLabel(container, 'Frontend'), 'Add a lane under this…')
+      const form = rowByLabel(container, 'Frontend').querySelector('.mr-family-child')
+      await type(root, form.querySelector('input[aria-label="New agent label"]'), 'Writer')
+      await act(async () => {
+        form.dispatchEvent({ type: 'submit', bubbles: true, cancelable: true })
+      })
+      await click(root, buttonWithText(container.querySelector('.mr-side-confirm-card'), 'Create'))
+      const card = container.querySelector('.mr-side-confirm-card')
+      expect(card).not.toBeNull()
+      expect(card.textContent).toContain('Ring 1 is full. Make it anyway?')
+      expect(container.querySelector('.mr-side-error')).toBeNull()
+      expect(calls.setLadder).toHaveLength(1)
+      expect(calls.setLadder[0].options).toBeUndefined()
+      await click(root, buttonWithText(card, 'Anyway'))
+      expect(calls.setLadder).toHaveLength(2)
+      expect(calls.setLadder[1].options).toEqual({ overRing: 1 })
+      expect(calls.setLadder[1].payload.subs[0].lanes).toContain('lane-2')
+      expect(container.querySelector('.mr-side-confirm-card')).toBeNull()
+      expect(rowByLabel(container, 'Writer')).not.toBeNull()
     })
   })
 })
