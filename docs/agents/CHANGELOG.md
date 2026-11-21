@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- A sub orchestrator takes its own place on its arc (the place the ring size already counted), so it never stands inside its middle lane; the owner saw Neon drawn inside Hydrogen. A sub with an even number of lanes stays in the middle (P679, R64-7; run by the Neon team).
 - A run the runner refuses before it writes a log now wakes the orchestrator that started it with one room message, `Run on lane LANE was refused before it started: NOTE`; before, Neon waited 40 minutes on a refused P679 (P681; run by the Neon team).
 - An orchestrator turn on a harness that takes its prompt on the command line keeps the prompt under 20,000 characters: it drops the oldest history first, then the summary, and never cuts the instruction or the new message; when those alone are too long it stops without starting. A turn that fails to start names why (too long, program not found, or the error code). This was why Neon's turns stopped from 20:05 on 2026-11-21 (P677; run by the Neon team).
 - An orchestrator that makes a lane, turns a lane on or off, or adds a sub with its own grant leaves one chat-only room line in its own conversation with the ring and seats after the change, so the Team tab shows it; the owner's calls and refused calls leave none (P676, seat S4; run by the Neon team).

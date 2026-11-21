@@ -38,6 +38,7 @@ import {
   sectorLabelRadius,
   sectorLabelScale,
   sectorSlotAngles,
+  sectorSubAngle,
   slotAngle,
 } from '../src/engine/hub.js'
 import { isOrchestrator, isSubOrchestrator, shapesFor } from '../src/engine/shapes.js'
@@ -131,12 +132,12 @@ describe('sector slot angles', () => {
     }
   })
 
-  it('puts each lane in the middle of its own sector when the sector holds one lane', () => {
+  it('parks a single lane beside its sub on a sub sector and in the middle on level 0', () => {
     const keys = ['opencode', 'claude', 'hermes']
     const angles = sectorSlotAngles(LADDER, keys)
     const arcs = ringArcs(LADDER, keys)
-    expect(angles.get('opencode')).toBeCloseTo((arcs[0].start + arcs[0].end) / 2)
-    expect(angles.get('claude')).toBeCloseTo((arcs[1].start + arcs[1].end) / 2)
+    expect(angles.get('opencode')).toBeCloseTo(arcs[0].start + ((arcs[0].end - arcs[0].start) * 3) / 4)
+    expect(angles.get('claude')).toBeCloseTo(arcs[1].start + ((arcs[1].end - arcs[1].start) * 3) / 4)
     expect(angles.get('hermes')).toBeCloseTo((arcs[2].start + arcs[2].end) / 2)
   })
 
@@ -280,7 +281,7 @@ describe('the place of a sector name', () => {
 })
 
 describe('the place of a sub orchestrator', () => {
-  it('stands on the edge of its ring at the middle of its arc, above its lanes', () => {
+  it('stands on the edge of its ring at its sector sub angle, above its lanes', () => {
     const keys = ['opencode', 'claude', 'hermes']
     const layout = ringLayout(LADDER, keys)
     const agents = createAgents(new THREE.Scene(), [...ROSTER, { key: 'sub-backend', name: 'Backend', subOrchestrator: true }], new THREE.Scene())
@@ -289,13 +290,28 @@ describe('the place of a sub orchestrator', () => {
       if (arc.id === 'orchestrator') continue
       const ring = layout.ringOf(arc)
       const home = agents.views.get(`sub-${arc.id}`).home
-      const mid = (arc.start + arc.end) / 2
-      expect(home.x).toBeCloseTo(Math.cos(mid) * ring.radius)
-      expect(home.z).toBeCloseTo(Math.sin(mid) * ring.radius)
+      const angle = sectorSubAngle(arc)
+      expect(home.x).toBeCloseTo(Math.cos(angle) * ring.radius)
+      expect(home.z).toBeCloseTo(Math.sin(angle) * ring.radius)
       expect(home.y).toBeCloseTo(ring.y + SUB_STAND_LIFT)
     }
     expect(SUB_ORCHESTRATOR_SCALE).toBe(0.7)
     expect(SUB_STAND_LIFT).toBeGreaterThan(PARK_LIFT)
+    agents.dispose()
+  })
+
+  it('keeps a sub with one lane off that lane on the x-z plane', () => {
+    const ladder = { subs: [{ id: 'frontend', name: 'Frontend', lanes: ['opencode'] }] }
+    const roster = [
+      { key: 'orchestrator', name: 'Orchestrator' },
+      { key: 'sub-frontend', name: 'Frontend', subOrchestrator: true },
+      { key: 'opencode', name: 'OpenCode' },
+    ]
+    const agents = createAgents(new THREE.Scene(), roster, new THREE.Scene())
+    agents.setLadder(ladder)
+    const sub = agents.views.get('sub-frontend')
+    const lane = agents.views.get('opencode')
+    expect(Math.hypot(sub.home.x - lane.home.x, sub.home.z - lane.home.z)).toBeGreaterThan(1)
     agents.dispose()
   })
 
@@ -460,10 +476,10 @@ describe('the agents with a ladder', () => {
 
     const sub = agents.views.get('sub-frontend')
     const arcs = ringArcs(LADDER, keys)
-    const mid = (arcs[0].start + arcs[0].end) / 2
-    expect(sub.home.x).toBeCloseTo(Math.cos(mid) * ring.radius)
+    const angle = sectorSubAngle(arcs[0])
+    expect(sub.home.x).toBeCloseTo(Math.cos(angle) * ring.radius)
     expect(sub.home.y).toBeCloseTo(ring.y + SUB_STAND_LIFT)
-    expect(sub.home.z).toBeCloseTo(Math.sin(mid) * ring.radius)
+    expect(sub.home.z).toBeCloseTo(Math.sin(angle) * ring.radius)
     expect(sub.scale).toBe(SUB_ORCHESTRATOR_SCALE)
     expect(sub.shapeName).toBe('armillary')
     expect(sub.orchestrator).toBe(false)

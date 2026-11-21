@@ -170,13 +170,35 @@ function laneKeys(roster) {
   return keys
 }
 
-export function sectorLaneAngles(arc) {
+function sectorPlaces(arc) {
   const lanes = Array.isArray(arc?.lanes) ? arc.lanes : []
   const start = Number(arc?.start)
   const end = Number(arc?.end)
-  if (lanes.length === 0 || !Number.isFinite(start) || !Number.isFinite(end) || !(end > start)) return []
-  const span = end - start
-  return lanes.map((_, index) => start + ((index + 0.5) / lanes.length) * span)
+  if (!Number.isFinite(start) || !Number.isFinite(end) || !(end > start)) return null
+  return { lanes, start, span: end - start, sub: Number(arc?.level) > 0 }
+}
+
+export function sectorSubAngle(arc) {
+  const info = sectorPlaces(arc)
+  if (!info) return 0
+  if (!info.sub) return info.start + info.span / 2
+  const count = info.lanes.length + 1
+  const subIndex = Math.floor(info.lanes.length / 2)
+  return info.start + ((subIndex + 0.5) / count) * info.span
+}
+
+export function sectorLaneAngles(arc) {
+  const info = sectorPlaces(arc)
+  if (!info || info.lanes.length === 0) return []
+  if (!info.sub) {
+    return info.lanes.map((_, index) => info.start + ((index + 0.5) / info.lanes.length) * info.span)
+  }
+  const count = info.lanes.length + 1
+  const subIndex = Math.floor(info.lanes.length / 2)
+  return info.lanes.map((_, index) => {
+    const place = index < subIndex ? index : index + 1
+    return info.start + ((place + 0.5) / count) * info.span
+  })
 }
 
 export function ringDepth(value, fallback = RING_LEVEL_MAX) {
