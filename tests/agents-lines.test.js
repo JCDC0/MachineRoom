@@ -7,7 +7,7 @@ import {
   lineParentKey,
   starOriginKey,
 } from '../src/engine/agents.js'
-import { HUB_RADIUS, HUB_Y, ORCHESTRATOR_HOME, PARK_LIFT, RING_LEVEL_MAX, SUB_STAND_LIFT, ringDrop } from '../src/engine/hub.js'
+import { HUB_RADIUS, HUB_Y, ORCHESTRATOR_HOME, PARK_LIFT, READER_RADIUS, RING_LEVEL_MAX, SUB_STAND_LIFT, ringDrop } from '../src/engine/hub.js'
 import { apply, createState } from '../src/model/state.js'
 
 const LADDER = {
@@ -243,7 +243,7 @@ describe('the chosen top', () => {
     agents.dispose()
   })
 
-  it('orbits more than two top agents and keeps the Orchestrator on the ring', () => {
+  it('orbits more than two top agents outside the lane ring', () => {
     const roster = [...ROSTER_WITH_SESSION, { key: 'opencode-session', name: 'OpenCode session', parser: 'opencode' }]
     const { agents, terminals, state, world } = harness(roster)
     apply(state, { time: 0, type: 'run.start', agent: 'opencode-session', runId: 'o1' })
@@ -254,9 +254,42 @@ describe('the chosen top', () => {
     const main = agents.views.get('orchestrator')
     const other = agents.views.get('opencode-session')
     expect(agents.topKey()).toBe('claude-session')
-    expect(Math.hypot(main.group.position.x, main.group.position.z)).toBeCloseTo(HUB_RADIUS)
-    expect(Math.hypot(other.group.position.x, other.group.position.z)).toBeCloseTo(HUB_RADIUS)
+    expect(Math.hypot(main.group.position.x, main.group.position.z)).toBeCloseTo(READER_RADIUS)
+    expect(Math.hypot(other.group.position.x, other.group.position.z)).toBeCloseTo(READER_RADIUS)
     expect(session.group.position.y).toBeCloseTo(HUB_Y + PARK_LIFT)
+    agents.dispose()
+  })
+
+  it('spreads the orbiting top agents and the parked lanes over their own places', () => {
+    const roster = [
+      { key: 'orchestrator', name: 'Orchestrator' },
+      { key: 'opencode', name: 'OpenCode' },
+      { key: 'claude', name: 'Claude' },
+      { key: 'hermes', name: 'Hermes' },
+      { key: 'claude-session', name: 'Claude Code session', parser: 'claude' },
+      { key: 'opencode-session', name: 'OpenCode session', parser: 'opencode' },
+    ]
+    const { agents, terminals, state, world } = harness(roster)
+    apply(state, { time: 0, type: 'run.start', agent: 'claude-session', runId: 'c1' })
+    apply(state, { time: 0, type: 'run.start', agent: 'opencode-session', runId: 'o1' })
+    agents.setChosenTop('claude-session')
+    agents.update(state, 0.016, 0, world, terminals)
+    agents.snap(state, world)
+    const views = [...agents.views.values()].filter((view) => !view.parentKey)
+    views.forEach((view, index) => {
+      for (const other of views.slice(index + 1)) {
+        const apart = view.home.distanceTo(other.home)
+        expect(apart, `${view.key} and ${other.key}`).toBeGreaterThan(1)
+      }
+    })
+    const orbiting = ['claude-session', 'orchestrator', 'opencode-session'].map((key) => agents.views.get(key))
+    for (const view of orbiting) {
+      expect(Math.hypot(view.home.x, view.home.z), view.key).toBeCloseTo(READER_RADIUS)
+      expect(view.home.y).toBeCloseTo(HUB_Y + PARK_LIFT)
+    }
+    for (const key of ['opencode', 'claude', 'hermes']) {
+      expect(Math.hypot(agents.views.get(key).home.x, agents.views.get(key).home.z), key).toBeCloseTo(HUB_RADIUS)
+    }
     agents.dispose()
   })
 

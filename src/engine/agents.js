@@ -7,7 +7,7 @@ import { ownerOf } from '../model/hierarchy.js'
 import { isSessionTopKey, laneStarterTop, topKeyFor } from '../model/laneStarter.js'
 import { dirname } from '../model/paths.js'
 import { CHILD_LIFE_MS } from '../model/state.js'
-import { AGENT_RING_BASE, AGENT_RING_GROW, AGENT_RING_MAX_OPACITY, AGENT_RING_MS, AGENT_RING_OPACITY_FLOOR, AGENT_RING_POOL, HUB_RADIUS, HUB_Y, ORCHESTRATOR_HOME, ORCHESTRATOR_LIFT, PARK_LIFT, RING_LEVEL_MAX, SWAY_LIFT, SWAY_RATE, SWAY_SCALE, danceEnvelope, hasSubs, isSessionReader, parkedKeysFor, readerAngles, readerPoint, ringDepth, ringLayout, ringPulse, sectorSlotAngles, slotAngle, startDanceEnvelope, SUB_STAND_LIFT, topRingPoint, topRingSeats, writeColor, writeOpacity } from './hub.js'
+import { AGENT_RING_BASE, AGENT_RING_GROW, AGENT_RING_MAX_OPACITY, AGENT_RING_MS, AGENT_RING_OPACITY_FLOOR, AGENT_RING_POOL, HUB_RADIUS, HUB_Y, ORCHESTRATOR_HOME, ORCHESTRATOR_LIFT, PARK_LIFT, RING_LEVEL_MAX, SWAY_LIFT, SWAY_RATE, SWAY_SCALE, danceEnvelope, hasSubs, isSessionReader, parkedKeysFor, readerAngles, readerPoint, ringDepth, ringLayout, ringPulse, sectorSlotAngles, slotAngle, startDanceEnvelope, SUB_STAND_LIFT, topRingSeats, writeColor, writeOpacity } from './hub.js'
 import { INTERNET_RADIUS } from './internet.js'
 import { ORCHESTRATOR_PULSE_SCALE, ORCHESTRATOR_SHAPE, PREFERRED, PULSE_BANDS, PULSE_SCALE, SUB_PULSE_SCALE, bandForPoint, isOrchestrator, isSubOrchestrator, nextSpareShape, shapeGeometry, shapesFor, vertexOffset } from './shapes.js'
 import { GREEN, RED, TUNNEL_GREY, WEB, WHITE, agentColor, agentColors, cssColor, easeRate, lineMaterial, paintAgentColor, still, textSprite } from './sprites.js'
@@ -1215,10 +1215,13 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
     return depth
   }
 
-  function seatPoint(key, seats, out) {
+  function seatPoint(key, seats, out, orbitAngles = []) {
     const seat = seats.seats.get(key)
     if (seat === 'under') return out.set(ORCHESTRATOR_HOME.x, HUB_Y + PARK_LIFT, ORCHESTRATOR_HOME.z)
-    if (seat === 'orbit') return topRingPoint(slotAngle(seats.order.indexOf(key), seats.order.length), out)
+    if (seat === 'orbit') {
+      const index = seats.order.indexOf(key)
+      return readerPoint(0, 1, out, orbitAngles[index] ?? slotAngle(index, seats.order.length))
+    }
     return out.copy(ORCHESTRATOR_HOME)
   }
 
@@ -1230,6 +1233,7 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
         ? [] : [slotAngles.get(key) ?? slotAngle(index, parkedKeys.length)])
     const angles = readerAngles(mainAngles, readers.length)
     const seats = topRingSeats({ topKey: topView ? topKey : 'orchestrator', extraKeys: readers.filter((view) => ranReaders.has(view.key)).map((view) => view.key), withOrchestrator: views.has('orchestrator') })
+    const orbitAngles = seats.mode === 'orbit' ? readerAngles(mainAngles, seats.order.length) : []
     for (const view of views.values()) {
       if (view.parentKey) continue
       const agent = agentByKey.get(view.key) ?? { key: view.key, name: view.name }
@@ -1241,7 +1245,7 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
       }
       if (view.orchestrator || view === topView) {
         view.index = -1
-        seatPoint(view.key, seats, view.home)
+        seatPoint(view.key, seats, view.home, orbitAngles)
       } else if (view.subOrchestrator) {
         view.index = -1
         view.home.copy(subHome(agent))
@@ -1250,7 +1254,7 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
         const readerIndex = readers.indexOf(view)
         view.readerIndex = readerIndex
         const seat = seats.seats.get(view.key)
-        if (seat === 'orbit' || seat === 'under') seatPoint(view.key, seats, view.home)
+        if (seat === 'orbit' || seat === 'under') seatPoint(view.key, seats, view.home, orbitAngles)
         else readerPoint(readerIndex, readers.length, view.home, angles[readerIndex])
       } else {
         view.index = parkedKeys.indexOf(view.key)
