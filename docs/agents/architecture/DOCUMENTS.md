@@ -140,7 +140,7 @@ Every file in this folder, and what it is for:
 - `DECIDER-EVAL.md`: current. How to compare decision models with `npm run decide-eval`.
 - `DESIGN-PANELS.md`: plan. The shared controls and the design for the chat, lane conversation and Agents list.
 - `FLAKY-2026-11.md`: history. The November 2026 hunt of the flaky tests on main, with each cause and its fix.
-- `AGENT-SEATS.md`: plan. Seats on the park rings and the slash commands that let an orchestrator make and turn on its own agents within them; not built.
+- `AGENT-SEATS.md`: built plan. Seats on the park rings and the slash commands that let an orchestrator make and turn on its own agents within them; built as P636 to P640, with what differs from the plan at its top.
 - `FREE-HIERARCHY.md`: current. The owner's free hierarchy goal, what works and does not yet, and the test tree runbook.
 - `HARNESSES.md`: plan. The harness registry and the steps H1 to H15, with what is built.
 - `HIERARCHY.md`: plan. The sub-orchestrator ladder and its sectors, with what is built.
