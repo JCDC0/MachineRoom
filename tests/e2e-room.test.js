@@ -9,6 +9,7 @@ import { dirname, makeTree } from '../src/model/paths.js'
 import { createPipeline } from '../src/model/pipeline.js'
 import { apply, createState } from '../src/model/state.js'
 import { loadScenario } from './helpers.js'
+import { spatialSound } from '../src/ui/sound.js'
 
 const context2d = {
   font: '',
@@ -544,6 +545,54 @@ describe('the room frame clock', () => {
 })
 
 describe('the camera hold on a live room', () => {
+  it('sounds an agent at its own place and keeps the two sides of the hub apart', async () => {
+    const keys = ['west', 'left', 'east', 'right']
+    const { room } = await makeRoom(['src/a.js'], keys)
+    try {
+      tickRoom(1)
+      const left = room.soundAtAgent('left')
+      const right = room.soundAtAgent('right')
+      const root = room.soundAt('')
+
+      for (const place of [left, right]) {
+        expect(Number.isFinite(place.x)).toBe(true)
+        expect(Number.isFinite(place.y)).toBe(true)
+        expect(place.width).toBe(root.width)
+        expect(place.height).toBe(root.height)
+        expect(place.overviewDistance).toBe(root.overviewDistance)
+        expect(place.distance).toBeGreaterThan(0)
+        expect(place.distance).toBeLessThan(Infinity)
+      }
+
+      expect(left.x).toBeGreaterThanOrEqual(0)
+      expect(right.x).toBeLessThanOrEqual(right.width)
+      expect(left.x).toBeLessThan(left.width / 2)
+      expect(right.x).toBeGreaterThan(right.width / 2)
+      expect(spatialSound(left).pan).toBeLessThan(0)
+      expect(spatialSound(right).pan).toBeGreaterThan(0)
+      expect(spatialSound(left).pan).not.toBe(spatialSound(right).pan)
+
+      const elsewhere = room.soundAtAgent('west')
+      expect(elsewhere.distance).not.toBe(left.distance)
+      expect(elsewhere.x).not.toBe(left.x)
+
+      room.zoomBy(-600)
+      tickRoom(1)
+      expect(room.soundAtAgent('left').distance).toBeLessThan(left.distance)
+
+      expect(room.soundAtAgent('nobody')).toEqual({
+        x: -1,
+        y: -1,
+        width: left.width,
+        height: left.height,
+        distance: Infinity,
+        overviewDistance: left.overviewDistance,
+      })
+    } finally {
+      room.dispose()
+    }
+  })
+
   it('inspects a folder and keeps the zoom and park working', async () => {
     const { room } = await makeRoom(['src/a.js', 'docs/b.md'], ['claude'])
     try {
