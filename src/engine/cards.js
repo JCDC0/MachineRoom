@@ -530,11 +530,6 @@ export function createCards(cssScene, options = {}) {
     face.append(head, items, band)
     element.append(backs, face)
     for (const corner of BRACKETS) element.append(el('div', `mr-card-bracket is-${corner}`))
-    head.addEventListener('click', (event) => {
-      event.stopPropagation()
-      if (event.detail > 1) return
-      togglePop(path)
-    })
     const object = new CSS3DObject(element)
     const parent = path === '' ? null : nearestCard(dirname(path))
     object.position.copy(parent ? parent.object.position : rootHome)

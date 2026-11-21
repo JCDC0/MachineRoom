@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- One click on a folder card's head no longer lifts it: the card head's own click listener is gone, so only a double click lifts or drops a card, and a double click on a fresh folder now lifts it instead of lifting and dropping it in one go (P682, R67-1; run by the Neon team).
 - One click on a folder card's head now selects it, so the whole card lights yellow, the same as a double click; the camera stays still on one click. Every sub shows its name and status under its shape again (it hid when its name matched its sector's). P680 step 2, which lit every pinned card whole, was left out at the merge: pinned also means kept open or lifted, so several cards would stay yellow at once; a kept-open card keeps its yellow tab (P680; run by the Neon team).
 - A sub orchestrator takes its own place on its arc (the place the ring size already counted), so it never stands inside its middle lane; the owner saw Neon drawn inside Hydrogen. A sub with an even number of lanes stays in the middle (P679, R64-7; run by the Neon team).
 - A run the runner refuses before it writes a log now wakes the orchestrator that started it with one room message, `Run on lane LANE was refused before it started: NOTE`; before, Neon waited 40 minutes on a refused P679 (P681; run by the Neon team).

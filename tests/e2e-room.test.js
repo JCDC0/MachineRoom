@@ -71,28 +71,58 @@ function fakeElement(tag = 'div') {
     listeners,
     ownerDocument: { defaultView: { Element: function Element() {} } },
     append(...items) {
+      for (const item of items) {
+        if (item && typeof item === 'object') {
+          item.parentNode = node
+          item.parentElement = node
+        }
+      }
       node.children.push(...items)
     },
     appendChild(child) {
+      if (child && typeof child === 'object') {
+        child.parentNode = node
+        child.parentElement = node
+      }
       node.children.push(child)
       return child
     },
     replaceChildren(...items) {
+      for (const item of items) {
+        if (item && typeof item === 'object') {
+          item.parentNode = node
+          item.parentElement = node
+        }
+      }
       node.children.length = 0
       node.children.push(...items)
     },
-    addEventListener(type, fn) {
+    addEventListener(type, fn, options) {
       if (!listeners.has(type)) listeners.set(type, [])
-      listeners.get(type).push(fn)
+      const capture = options === true || Boolean(options?.capture)
+      listeners.get(type).push({ fn, capture })
     },
-    removeEventListener(type, fn) {
+    removeEventListener(type, fn, options) {
       const list = listeners.get(type)
       if (!list) return
-      const index = list.indexOf(fn)
+      const capture = options === true || Boolean(options?.capture)
+      const index = list.findIndex((entry) => entry.fn === fn && entry.capture === capture)
       if (index !== -1) list.splice(index, 1)
     },
     fire(type, event = {}) {
-      for (const fn of [...(listeners.get(type) ?? [])]) fn({ target: node, stopPropagation() {}, ...event })
+      let stopped = false
+      const payload = {
+        target: node,
+        currentTarget: node,
+        stopPropagation() {
+          stopped = true
+        },
+        ...event,
+      }
+      for (const entry of [...(listeners.get(type) ?? [])]) {
+        entry.fn(payload)
+        if (stopped) break
+      }
     },
     remove() {
       node.removed = true
@@ -109,7 +139,20 @@ function fakeElement(tag = 'div') {
     },
     querySelector: () => null,
     querySelectorAll: () => [],
-    closest: () => null,
+    closest(selector) {
+      const wanted = String(selector)
+        .split(',')
+        .map((part) => part.trim())
+        .filter((part) => part.startsWith('.'))
+        .map((part) => part.slice(1))
+      let at = node
+      while (at) {
+        const classes = String(at.className || '').split(/\s+/)
+        if (wanted.some((name) => classes.includes(name))) return at
+        at = at.parentNode
+      }
+      return null
+    },
     getBoundingClientRect: () => ({ left: 0, top: 0, width: node.clientWidth || 1200, height: node.clientHeight || 800 }),
     classList: { add() {}, remove() {}, contains: () => false },
   }
@@ -257,6 +300,40 @@ function cssRoot() {
 
 function fireCss(type, event) {
   cssRoot().fire(type, event)
+}
+
+function dispatchCss(target, type, event = {}) {
+  const chain = []
+  for (let at = target; at; at = at.parentNode) chain.unshift(at)
+  if (chain[0] !== cssRoot()) chain.unshift(cssRoot())
+  let stopped = false
+  const payload = {
+    target,
+    stopPropagation() {
+      stopped = true
+    },
+    preventDefault() {},
+    ...event,
+  }
+  for (const node of chain) {
+    for (const entry of [...(node.listeners.get(type) ?? [])]) {
+      if (entry.capture || node === target) entry.fn({ ...payload, currentTarget: node })
+    }
+    if (stopped) return
+  }
+  for (let index = chain.length - 2; index >= 0; index -= 1) {
+    const node = chain[index]
+    for (const entry of [...(node.listeners.get(type) ?? [])]) {
+      if (!entry.capture) entry.fn({ ...payload, currentTarget: node })
+    }
+    if (stopped) return
+  }
+}
+
+function doubleClickHead(head) {
+  dispatchCss(head, 'click', { detail: 1 })
+  dispatchCss(head, 'click', { detail: 2 })
+  dispatchCss(head, 'dblclick', { detail: 2 })
 }
 
 function fireWindow(type, event) {
@@ -745,25 +822,66 @@ describe('a double click on a folder card', () => {
     }
   })
 
-  it('leaves the pop as it was after a double click on the head', async () => {
+  it('selects on one real head click without lifting', async () => {
     const inspected = []
-    const { room } = await makeRoom(['src/a.js', 'src/kid/b.js', 'docs/c.md'], ['claude'], { onInspect: (detail) => inspected.push(detail) })
+    const { room } = await makeRoom(['src/a.js', 'src/kid/deep/b.js', 'docs/c.md'], ['claude'], {
+      onInspect: (detail) => inspected.push(detail),
+    })
     try {
       tickRoom(1)
-      const card = cardElement('src')
+      const card = cardElement('src/kid')
+      const head = cardParts(card).head
+      dispatchCss(head, 'click', { detail: 1 })
+      tickRoom(1)
+      expect(card.className).toContain('is-selected')
+      expect(card.className).not.toContain('is-pinned')
+      expect(cardElement('src/kid/deep')).toBeUndefined()
+      expect(room.holding()).toBe(null)
+      expect(inspected).toEqual([{ kind: 'folder', id: 'src/kid' }])
+    } finally {
+      room.dispose()
+    }
+  })
+
+  it('selects and lifts a fresh folder after the browser double-click sequence on its head', async () => {
+    const inspected = []
+    const { room } = await makeRoom(['src/a.js', 'src/kid/deep/b.js', 'docs/c.md'], ['claude'], {
+      onInspect: (detail) => inspected.push(detail),
+    })
+    try {
+      tickRoom(1)
+      const card = cardElement('src/kid')
       const head = cardParts(card).head
       expect(card.className).not.toContain('is-pinned')
-      head.fire('click', { detail: 1 })
+      doubleClickHead(head)
+      tickRoom(1)
+      expect(card.className).toContain('is-selected')
+      expect(card.className).toContain('is-pinned')
+      expect(cardElement('src/kid/deep')).toBeTruthy()
+      expect(room.holding()).toBe('src/kid')
+      expect(inspected.at(-1)).toEqual({ kind: 'folder', id: 'src/kid' })
+    } finally {
+      room.dispose()
+    }
+  })
+
+  it('drops a lifted folder after the browser double-click sequence on its head', async () => {
+    const { room } = await makeRoom(['src/a.js', 'src/kid/deep/b.js', 'docs/c.md'], ['claude'])
+    try {
+      tickRoom(1)
+      const card = cardElement('src/kid')
+      const head = cardParts(card).head
+      doubleClickHead(head)
       tickRoom(1)
       expect(card.className).toContain('is-pinned')
-      head.fire('click', { detail: 2 })
+      const deep = cardElement('src/kid/deep')
+      expect(deep).toBeTruthy()
+
+      doubleClickHead(head)
       tickRoom(1)
-      expect(card.className).toContain('is-pinned')
-      fireCss('dblclick', { target: cardTarget(card, 'head') })
-      tickRoom(1)
+      expect(card.className).toContain('is-selected')
       expect(card.className).not.toContain('is-pinned')
-      expect(room.holding()).toBe('src')
-      expect(inspected).toEqual([{ kind: 'folder', id: 'src' }])
+      expect(deep.removed).toBe(true)
     } finally {
       room.dispose()
     }
@@ -823,7 +941,7 @@ describe('returning to the room', () => {
       expect(row.className).toContain('is-inspected')
       expect(parent.className).toContain('is-selected')
       expect(parent.className).toContain('is-pinned')
-      cardParts(cardElement('docs/deep')).head.fire('click', { detail: 1 })
+      doubleClickHead(cardParts(cardElement('docs/deep')).head)
       tickRoom(1)
       expect(cardElement('docs/deep/more')).toBeTruthy()
 
@@ -849,7 +967,7 @@ describe('returning to the room', () => {
     let parked = 0
     try {
       tickRoom(1)
-      for (const top of tops) cardParts(cardElement(top)).head.fire('click', { detail: 1 })
+      for (const top of tops) doubleClickHead(cardParts(cardElement(top)).head)
       tickRoom(1)
       for (const top of tops) expect(cardElement(top).className).toContain('is-pinned')
 
@@ -874,6 +992,10 @@ describe('returning to the room', () => {
     const { room } = await makeRoom(['lib/a/x.js', 'lib/a/c/y.js', 'docs/d.md', 'docs/deep/more/e.md'], ['claude'])
     try {
       tickRoom(1)
+      doubleClickHead(cardParts(cardElement('docs/deep')).head)
+      tickRoom(1)
+      const popped = cardElement('docs/deep/more')
+      expect(popped).toBeTruthy()
       expect(room.focusPath('lib/a/x.js')).toBe(true)
       tickRoom(1)
       const parent = cardElement('lib/a')
@@ -884,10 +1006,6 @@ describe('returning to the room', () => {
       tickRoom(1)
       expect(parent.className).toContain('is-selected')
       expect(parent.className).toContain('is-pinned')
-      cardParts(cardElement('docs/deep')).head.fire('click', { detail: 1 })
-      tickRoom(1)
-      const popped = cardElement('docs/deep/more')
-      expect(popped).toBeTruthy()
       expect(room.holding()).toBe('lib/a')
 
       room.clearSelection({ pins: false, pops: false })
@@ -1032,7 +1150,7 @@ describe('the inspected row and the inspector', () => {
       expect(card).toBeTruthy()
       expect(cardElement('src/kid/deep')).toBeUndefined()
 
-      fireCss('click', { target: cardTarget(card, 'head') })
+      dispatchCss(cardParts(card).head, 'click', { detail: 1 })
       tickRoom(1)
 
       expect(card.className).toContain('is-selected')
