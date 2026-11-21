@@ -1,6 +1,6 @@
 # Agent seats: agents that make their own agents
 
-Status: built, 2026-11-21, as P636 to P640 (P639 as P639a to P639d), from the plan of 2026-11-20 the owner approved as written (seats per ring, the harness's own subagents take no seat, an AGY orchestrator uses a grant only in Bypass). What differs from the plan: the Team tab does not show an orchestrator's create, turn on or turn off with the seat it took; no route lets an orchestrator delete an agent it made, so `deleteAgent` in `seatCheck` is not reachable yet; a full-ring confirm covers Turn on and a new lane in the Agents tree. The built behaviour is in `FREE-HIERARCHY.md`, `architecture/LIVE.md` and `architecture/ROOM.md`. Builds on P634 (the Agents family tree with a chosen top) and P635 (one park ring per level of the agent tree).
+Status: built, 2026-11-21, as P636 to P640 (P639 as P639a to P639d), from the plan of 2026-11-20 the owner approved as written (seats per ring, the harness's own subagents take no seat, an AGY orchestrator uses a grant only in Bypass). What differs from the plan: no route lets an orchestrator delete an agent it made, so `deleteAgent` in `seatCheck` is not reachable yet; a full-ring confirm covers Turn on and a new lane in the Agents tree. The built behaviour is in `FREE-HIERARCHY.md`, `architecture/LIVE.md` and `architecture/ROOM.md`. Builds on P634 (the Agents family tree with a chosen top) and P635 (one park ring per level of the agent tree).
 
 ## The owner's ask
 
