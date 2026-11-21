@@ -3045,9 +3045,11 @@ ${modelSummary}` : modelSummary
     if (frame?.type !== 'heartbeat.run.status') return
     const status = frame.payload?.status
     if (status !== 'succeeded' && status !== 'failed') return
+    const refused = frame.payload?.refused === true
     const runId = typeof frame.payload?.runId === 'string' ? frame.payload.runId : ''
     const runName = runId.startsWith('run-') ? runId.slice(4) : ''
-    const record = preloadedRecord !== undefined ? preloadedRecord : recordFor(runName)
+    const frameRecord = refused && frame.payload?.record && typeof frame.payload.record === 'object' ? frame.payload.record : undefined
+    const record = preloadedRecord !== undefined ? preloadedRecord : (frameRecord !== undefined ? frameRecord : recordFor(runName))
     if (record && typeof record.log === 'string' && TURN_LOG.test(basename(record.log))) return
     const laneKey = record?.lane ?? String(frame.payload?.agentId ?? '').replace(/^agent-/, '')
     if (!laneKey || laneKey === ORCHESTRATOR_KEY) return
@@ -3062,16 +3064,24 @@ ${modelSummary}` : modelSummary
       if (startedBy !== key && (!recordedStarter || subExists(recordedStarter))) return
     }
     const named = recordedStarter ? (recordedStarter === key || (key === ORCHESTRATOR_KEY && !subExists(recordedStarter))) : false
-    if (!named && !givenWork()) return
-    if (named) ownsRun = true
+    if (!named && !refused && !givenWork()) return
+    if (named || refused) ownsRun = true
     const logName = runName || (typeof record?.log === 'string' ? basename(record.log).replace(/\.log$/i, '') : 'run')
     const starterNote =
       recordedStarter && recordedStarter !== key && !subExists(recordedStarter)
         ? ` (started by removed sub ${recordedStarter})`
         : ''
-    const first = `Run ${logName} on lane ${laneKey} ended: ${status}.${starterNote}`
-    let text = record ? `${first}\n${recordLine(record)}` : first
-    if (status === 'failed') {
+    let text
+    if (refused) {
+      const rawNote = typeof record?.note === 'string' ? record.note.trim() : ''
+      const maskedNote = rawNote ? maskText(rawNote).trim() : ''
+      const noteText = maskedNote ? maskedNote.slice(0, 600).trim() || 'no reason given' : 'no reason given'
+      text = `Run on lane ${laneKey} was refused before it started: ${noteText}`
+    } else {
+      const first = `Run ${logName} on lane ${laneKey} ended: ${status}.${starterNote}`
+      text = record ? `${first}\n${recordLine(record)}` : first
+    }
+    if (!refused && status === 'failed') {
       const candidate = typeof record?.log === 'string' && record.log ? resolve(folder, record.log) : (logName ? resolve(folder, `${logName}.log`) : '')
       const rel = candidate ? relative(folder, candidate) : ''
       const inside = Boolean(candidate && rel && !rel.startsWith('..') && !isAbsolute(rel))
@@ -3097,7 +3107,7 @@ ${modelSummary}` : modelSummary
         if (failureMessage) text = `${text}\nError: ${failureMessage}`
       }
     }
-    const outside = typeof outsideFiles === 'function' ? outsideFiles(record, laneKey) : []
+    const outside = !refused && typeof outsideFiles === 'function' ? outsideFiles(record, laneKey) : []
     if (Array.isArray(outside) && outside.length > 0) {
       text = `Outside the scope, do not merge:\n${outside.map((file) => `- ${file}`).join('\n')}\n\n${text}`
       if (typeof onOutsideScope === 'function') {
@@ -3114,7 +3124,8 @@ ${modelSummary}` : modelSummary
         pending.splice(pendingIndex, 1)
       }
     }
-    if (recordedStarter) {
+    const wakes = Boolean(recordedStarter) || refused
+    if (wakes) {
       try {
         onMessage({ from: laneKey, to: key, kind: 'wake', text })
       } catch {}
@@ -3122,20 +3133,22 @@ ${modelSummary}` : modelSummary
     if (directLaneTasks.has(laneKey)) {
       directLaneTasks.delete(laneKey)
       let laneReply = ''
-      const replyCandidate = typeof record?.log === 'string' && record.log ? resolve(folder, record.log) : (logName ? resolve(folder, `${logName}.log`) : '')
-      const replyRel = replyCandidate ? relative(folder, replyCandidate) : ''
-      const replyInside = Boolean(replyCandidate && replyRel && !replyRel.startsWith('..') && !isAbsolute(replyRel))
-      const replyFile = replyInside ? replyCandidate : ''
-      const replyContent = replyFile ? readTail(replyFile) : ''
-      if (replyContent) {
-        const laneEntry = lanes && Object.hasOwn(lanes, laneKey) ? lanes[laneKey] : null
-        const laneHarnessKey = laneEntry?.cli?.harness || laneEntry?.harness || laneKey
-        const descriptor = (harnesses && (harnesses[laneHarnessKey] || harnesses[laneKey])) || harnessByKey[laneHarnessKey] || harnessByKey[laneKey]
-        laneReply = descriptor?.reply ? descriptor.reply(replyContent).trim() : ''
-        if (!laneReply) {
-          try {
-            laneReply = replyText(laneHarnessKey, replyContent)
-          } catch {}
+      if (!refused) {
+        const replyCandidate = typeof record?.log === 'string' && record.log ? resolve(folder, record.log) : (logName ? resolve(folder, `${logName}.log`) : '')
+        const replyRel = replyCandidate ? relative(folder, replyCandidate) : ''
+        const replyInside = Boolean(replyCandidate && replyRel && !replyRel.startsWith('..') && !isAbsolute(replyRel))
+        const replyFile = replyInside ? replyCandidate : ''
+        const replyContent = replyFile ? readTail(replyFile) : ''
+        if (replyContent) {
+          const laneEntry = lanes && Object.hasOwn(lanes, laneKey) ? lanes[laneKey] : null
+          const laneHarnessKey = laneEntry?.cli?.harness || laneEntry?.harness || laneKey
+          const descriptor = (harnesses && (harnesses[laneHarnessKey] || harnesses[laneKey])) || harnessByKey[laneHarnessKey] || harnessByKey[laneKey]
+          laneReply = descriptor?.reply ? descriptor.reply(replyContent).trim() : ''
+          if (!laneReply) {
+            try {
+              laneReply = replyText(laneHarnessKey, replyContent)
+            } catch {}
+          }
         }
       }
       if (!laneReply) laneReply = text
@@ -3143,13 +3156,13 @@ ${modelSummary}` : modelSummary
     }
     const firstCommit = typeof record?.commits?.[0] === 'string' ? maskText(record.commits[0]) : ''
     const message = addMessage('room', text, false, firstCommit ? { firstCommit } : {})
-    if (recordedStarter) pending.push(message)
+    if (wakes) pending.push(message)
     if (runId) {
       completedRuns.set(runId, { status, messageId: message.id })
       while (completedRuns.size > 200) completedRuns.delete(completedRuns.keys().next().value)
       persist()
     }
-    if (recordedStarter) maybeStartTurn()
+    if (wakes) maybeStartTurn()
   }
 
   function close(options = {}) {
