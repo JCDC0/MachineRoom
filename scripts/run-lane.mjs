@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import '../server/quiet-agy.js'
 import { spawn, spawnSync } from 'node:child_process'
 import { createHash, randomUUID } from 'node:crypto'
 import { appendFileSync, closeSync, constants, copyFileSync, createWriteStream, existsSync, fstatSync, linkSync, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, realpathSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs'

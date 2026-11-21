@@ -1,3 +1,4 @@
+import './quiet-agy.js'
 import { execFile } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
 import { readdirSync, statSync, watch } from 'node:fs'
