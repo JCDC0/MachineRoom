@@ -52,12 +52,13 @@ describe('childEnvironment', () => {
       TEMP: 'C:\\Temp',
       USERPROFILE: 'C:\\Users\\user',
       PWD: 'C:\\work',
+      AGY_CLI_DISABLE_AUTO_UPDATE: '1',
     })
   })
 
-  it('keeps the AGY updater switch, so a lane or orchestrator agy opens no console window', () => {
-    const child = childEnvironment({ PATH: '/usr/bin', AGY_CLI_DISABLE_AUTO_UPDATE: '1' }, '/work', { harness: 'agy' })
-    expect(child.AGY_CLI_DISABLE_AUTO_UPDATE).toBe('1')
+  it('turns the AGY updater off, so a lane or orchestrator agy opens no console window, and keeps the owner value', () => {
+    expect(childEnvironment({ PATH: '/usr/bin' }, '/work', { harness: 'agy' }).AGY_CLI_DISABLE_AUTO_UPDATE).toBe('1')
+    expect(childEnvironment({ PATH: '/usr/bin', AGY_CLI_DISABLE_AUTO_UPDATE: '0' }, '/work', { harness: 'agy' }).AGY_CLI_DISABLE_AUTO_UPDATE).toBe('0')
   })
 
   it('keeps PATH and USERPROFILE for a lane', () => {
@@ -69,7 +70,7 @@ describe('childEnvironment', () => {
 
   it('matches the Windows names without case', () => {
     const child = childEnvironment({ SystemRoot: 'C:\\Windows', ComSpec: 'C:\\Windows\\cmd.exe', pathext: '.EXE' }, '')
-    expect(child).toEqual({ SystemRoot: 'C:\\Windows', ComSpec: 'C:\\Windows\\cmd.exe', pathext: '.EXE' })
+    expect(child).toEqual({ SystemRoot: 'C:\\Windows', ComSpec: 'C:\\Windows\\cmd.exe', pathext: '.EXE', AGY_CLI_DISABLE_AUTO_UPDATE: '1' })
   })
 
   it('gives the MachineRoom harness its own key names only', () => {

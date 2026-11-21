@@ -784,6 +784,8 @@ export function childEnvironment(env, cwd, { harness = '', names = [], extra = {
     }
   }
   if (typeof cwd === 'string' && cwd.trim() !== '') next.PWD = cwd
+  // AGY's background updater opens a visible console window on Windows; the owner's own value wins.
+  if (next.AGY_CLI_DISABLE_AUTO_UPDATE === undefined) next.AGY_CLI_DISABLE_AUTO_UPDATE = '1'
   return next
 }
 

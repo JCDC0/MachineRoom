@@ -1,4 +1,5 @@
 import { readHarnessSettings } from './harness-settings.js'
+import { quietAgy } from './quiet-agy.js'
 import { spawn } from 'node:child_process'
 import { mkdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
@@ -214,7 +215,7 @@ export function runCommand(command, args, {
     try {
       child = spawn(file, spawnArgs, {
         cwd,
-        env,
+        env: quietAgy({ ...env }),
         shell: false,
         windowsHide: true,
       })

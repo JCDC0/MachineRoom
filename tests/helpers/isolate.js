@@ -1,4 +1,5 @@
 import './hide-windows.mjs'
+import '../../server/quiet-agy.js'
 import { testRecordingsFolder, testRunsFolder } from './tempRoot.js'
 
 const hideWindowsImport = `--import=${new URL('./hide-windows.mjs', import.meta.url).href}`

@@ -286,11 +286,11 @@ describe('projectProblems', () => {
 describe('childEnvironment', () => {
   it('sets PWD and removes OLDPWD and INIT_CWD', () => {
     const child = childEnvironment({ PWD: 'C:\\old', OLDPWD: 'C:\\older', INIT_CWD: 'C:\\init', PATH: 'C:\\bin' }, 'C:\\new')
-    expect(child).toEqual({ PWD: 'C:\\new', PATH: 'C:\\bin' })
+    expect(child).toEqual({ PWD: 'C:\\new', PATH: 'C:\\bin', AGY_CLI_DISABLE_AUTO_UPDATE: '1' })
   })
 
   it('leaves no PWD when the run has no folder', () => {
-    expect(childEnvironment({ PWD: 'C:\\old', OLDPWD: 'C:\\older' }, '')).toEqual({})
+    expect(childEnvironment({ PWD: 'C:\\old', OLDPWD: 'C:\\older' }, '')).toEqual({ AGY_CLI_DISABLE_AUTO_UPDATE: '1' })
   })
 })
 
