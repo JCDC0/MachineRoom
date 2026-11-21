@@ -786,4 +786,20 @@ describe('roomLaneAgents', () => {
     const isHidden = (key) => key === 'opencode'
     expect(keys(roomLaneAgents(agents, { isHidden, running: new Set(['opencode', 'codex']) }))).toEqual(['orchestrator', 'sub-a', 'codex'])
   })
+
+  it('leaves out the orchestrator under a session top and keeps a sub', () => {
+    expect(keys(roomLaneAgents(agents, { hideOrchestrator: true }))).toEqual(['sub-a'])
+    expect(keys(roomLaneAgents(agents, { hideOrchestrator: false }))).toEqual(['orchestrator', 'sub-a'])
+  })
+
+  it('keeps a lane that just ended and still leaves out a hidden lane at work', () => {
+    const isHidden = (key) => key === 'opencode'
+    const kept = roomLaneAgents(agents, {
+      hideOrchestrator: true,
+      isHidden,
+      running: new Set(['opencode']),
+      recent: new Set(['agy3']),
+    })
+    expect(keys(kept)).toEqual(['sub-a', 'agy3'])
+  })
 })
