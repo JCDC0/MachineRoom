@@ -779,6 +779,9 @@ export function createClient({
     setFamilyTop: ({ top, confirmed = true } = {}) =>
       request('POST', '/api/family/top', { top, confirmed }),
 
+    setRingSeats: ({ rings, confirmed = true } = {}) =>
+      request('POST', '/api/family/seats', { rings, confirmed }),
+
     keys: async () => {
       const data = await request('GET', '/api/keys')
       return Array.isArray(data) ? data : data?.keys ?? []

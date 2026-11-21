@@ -1037,6 +1037,28 @@ describe('Control client and mock family methods', () => {
     expect(keysAfterDelete).toEqual([])
   })
 
+  it('keeps the ring seats in the mock and answers the same shape', async () => {
+    const mock = createMockClient({ latencyMs: 0 })
+
+    const before = await mock.family()
+    expect(before.seats.map((row) => row.ring)).toEqual([0, 1])
+    expect(before.seats.every((row) => row.limit === null)).toBe(true)
+
+    const saved = await mock.setRingSeats({ rings: [2, null] })
+    expect(saved.ok).toBe(true)
+    expect(saved.seats.map((row) => row.limit)).toEqual([2, null])
+
+    const after = await mock.family()
+    expect(after.seats.map((row) => row.limit)).toEqual([2, null])
+
+    await expect(mock.setRingSeats({ rings: [-1], confirmed: true })).rejects.toThrow(
+      'Seats must be whole numbers from 0, or empty for no limit.'
+    )
+    await expect(mock.setRingSeats({ rings: [1], confirmed: false })).rejects.toThrow(
+      'Confirm the ring seats first.'
+    )
+  })
+
   it('calls family methods on bridge client', async () => {
     const { url } = await startBridge()
     const client = createClient({
@@ -1060,6 +1082,9 @@ describe('Control client and mock family methods', () => {
     await client.deleteKey({ name: 'API_KEY' })
     const keysAfterDelete = await client.keys()
     expect(keysAfterDelete).toEqual([])
+
+    const seats = await client.setRingSeats({ rings: [3, null] })
+    expect(seats.seats.map((row) => row.limit)).toEqual([3, null])
   })
 })
 

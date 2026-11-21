@@ -103,6 +103,7 @@ export const CLIENT_METHODS = [
   'family',
   'agentDepth',
   'setAgentLabel',
+  'setRingSeats',
   'keys',
   'setKey',
   'deleteKey',
@@ -908,8 +909,43 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
   const subChats = new Map()
   const familyLabels = new Map()
   let familyTop = 'orchestrator'
+  let ringSeats = []
   const keySlots = new Map()
   const proposals = []
+
+  function mockRingRows() {
+    const subs = ladder.subs ?? []
+    const parentOf = new Map(subs.map((sub) => [sub.id, sub.parent]))
+    const levelOfSub = (id) => {
+      let level = 0
+      let current = parentOf.get(id)
+      for (let hops = 0; current && hops < 32; hops += 1) {
+        level += 1
+        current = parentOf.get(current)
+      }
+      return level
+    }
+    const subOfLane = new Map()
+    for (const sub of subs) {
+      for (const key of sub.lanes ?? []) subOfLane.set(key, sub.id)
+    }
+    const places = subs.map((sub) => levelOfSub(sub.id))
+    for (const lane of state.lanes) {
+      if (lane.hidden || !lane.active) continue
+      const host = subOfLane.get(lane.key)
+      places.push(host ? levelOfSub(host) + 1 : 0)
+    }
+    const rows = []
+    for (let ring = 0; ring <= 1; ring += 1) {
+      const raw = ringSeats[ring]
+      rows.push({
+        ring,
+        taken: places.filter((level) => level === ring).length,
+        limit: Number.isInteger(raw) && raw >= 0 ? raw : null,
+      })
+    }
+    return rows
+  }
 
   function ensureSubChat(sub) {
     if (subChats.has(sub.id)) return subChats.get(sub.id)
@@ -3044,7 +3080,25 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
           nodes: [...(sessionNode ? [sessionNode] : []), mainNode, ...subNodes, ...laneNodes],
           keys: [...keySlots.keys()].sort().map((name) => ({ name })),
           proposals: clone(proposals),
+          seats: mockRingRows(),
         }
+      }),
+
+    setRingSeats: (options = {}) =>
+      call('setRingSeats', () => {
+        const { rings, confirmed = true } = options
+        if (confirmed !== true) throw new Error('Confirm the ring seats first.')
+        if (!Array.isArray(rings) || rings.length > 2) {
+          throw new Error('Seats must be whole numbers from 0, or empty for no limit.')
+        }
+        const clean = rings.map((row) => (row === null ? null : Number(row)))
+        if (clean.some((row) => row !== null && !(Number.isInteger(row) && row >= 0))) {
+          throw new Error('Seats must be whole numbers from 0, or empty for no limit.')
+        }
+        ringSeats = clean
+        emit({ topic: 'family' })
+        emit({ topic: 'agents' })
+        return { ok: true, seats: mockRingRows() }
       }),
 
     agentDepth: () => call('agentDepth', () => ({ limit: 2, unlocked: false })),
