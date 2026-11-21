@@ -225,6 +225,22 @@ export function descendantProcesses(processes, { rootPid = 0, ownPid = 0, exclud
   return found.sort((left, right) => left.pid - right.pid)
 }
 
+function isRunnerCommand(command, platform) {
+  return /(?:^|[\s"'/])run-lane\.mjs(?:$|[\s"'])/.test(processKey(command, platform))
+}
+
+function isSparedSibling(byPid, pid, spare, platform) {
+  if (spare <= 0 || pid === spare) return false
+  const chain = parentChain(byPid, pid)
+  if (!chain.has(spare)) return false
+  for (const current of chain) {
+    if (current === pid) continue
+    if (current === spare) return true
+    if (isRunnerCommand(byPid.get(current)?.command, platform)) return false
+  }
+  return false
+}
+
 export function leftoverProcesses(processes, { childPid = 0, childCreated, recorded = new Map(), worktree = '', worktrees = [], namedAfter = null, ownPid = 0, excludePids = [], spareAncestor = 0, platform = process.platform } = {}) {
   const list = (Array.isArray(processes) ? processes : [])
     .filter((item) => Number.isInteger(item?.pid) && item.pid > 0 && Number.isInteger(item?.ppid))
@@ -251,7 +267,7 @@ export function leftoverProcesses(processes, { childPid = 0, childCreated, recor
     const named = (namedAfter === null || (Number.isFinite(item.created) && item.created > namedAfter))
       && folders.some((folder) => namesFolder(processKey(item.command, platform), folder))
     // A live sibling only names the folder (an orchestrator turn carries it in its prompt); an orphan of an old run does not descend from the runner's parent.
-    const sibling = !related && named && spare > 0 && parentChain(byPid, item.pid).has(spare)
+    const sibling = !related && named && isSparedSibling(byPid, item.pid, spare, platform)
     if ((related || named) && !sibling) found.push(item)
   }
   return found.sort((left, right) => left.pid - right.pid)
