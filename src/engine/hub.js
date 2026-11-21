@@ -152,6 +152,32 @@ export function sectorLabelAngle(arc) {
   return start + (end - start) * SECTOR_LABEL_INSET
 }
 
+export function seatLabelAngle(angles) {
+  const turn = Math.PI * 2
+  const normalized = []
+  for (const raw of Array.isArray(angles) ? angles : []) {
+    if (raw === null || raw === '' || typeof raw === 'boolean') continue
+    const value = Number(raw)
+    if (!Number.isFinite(value)) continue
+    normalized.push(((value % turn) + turn) % turn)
+  }
+  const unique = [...new Set(normalized)].sort((a, b) => a - b)
+  if (unique.length === 0) return 0
+  if (unique.length === 1) return (unique[0] + Math.PI) % turn
+  let bestStart = 0
+  let bestWidth = -1
+  for (let index = 0; index < unique.length; index += 1) {
+    const start = unique[index]
+    const end = index + 1 < unique.length ? unique[index + 1] : unique[0] + turn
+    const width = end - start
+    if (width > bestWidth) {
+      bestWidth = width
+      bestStart = start
+    }
+  }
+  return (bestStart + bestWidth / 2) % turn
+}
+
 export function sectorArcTone(main) {
   const center = main ? SECTOR_ARC_OPACITY.main : SECTOR_ARC_OPACITY.sub
   return { center, edge: center * 0.6 }

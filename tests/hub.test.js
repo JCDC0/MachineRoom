@@ -39,6 +39,7 @@ import {
   ringPulse,
   ringRadius,
   ringY,
+  seatLabelAngle,
   startDanceEnvelope,
   sectorGlow,
   sectorIdForKey,
@@ -472,6 +473,37 @@ describe('where a sector name sits', () => {
     expect(sectorLabelAngle(null)).toBe(0)
     expect(sectorLabelAngle({ start: 1, end: 1 })).toBe(0)
     expect(sectorLabelAngle({ start: Number.NaN, end: 1 })).toBe(0)
+  })
+})
+
+describe('where a ring seat label sits', () => {
+  it('returns 0 when a ring has no sector names', () => {
+    expect(seatLabelAngle([])).toBe(0)
+    expect(seatLabelAngle(null)).toBe(0)
+    expect(seatLabelAngle([Number.NaN, null, ''])).toBe(0)
+  })
+
+  it('puts the label opposite a single sector name', () => {
+    expect(seatLabelAngle([0])).toBeCloseTo(Math.PI)
+    expect(seatLabelAngle([Math.PI / 2])).toBeCloseTo(Math.PI * 1.5)
+    expect(seatLabelAngle([Math.PI * 1.5])).toBeCloseTo(Math.PI * 0.5)
+  })
+
+  it('picks the middle of the widest gap for two angles in any order', () => {
+    expect(seatLabelAngle([0, Math.PI])).toBeCloseTo(Math.PI / 2)
+    expect(seatLabelAngle([Math.PI / 2, 0])).toBeCloseTo(Math.PI * 1.25)
+  })
+
+  it('picks the middle of the widest gap for three unequal angles', () => {
+    expect(seatLabelAngle([1, 0, 0.4])).toBeCloseTo(Math.PI + 0.5)
+    expect(seatLabelAngle([5.5, 0.5, 1.5])).toBeCloseTo(3.5)
+  })
+
+  it('wraps angles below 0 and past 2 pi', () => {
+    expect(seatLabelAngle([-Math.PI / 2])).toBeCloseTo(Math.PI / 2)
+    expect(seatLabelAngle([Math.PI * 2.5])).toBeCloseTo(Math.PI * 1.5)
+    expect(seatLabelAngle([-Math.PI / 2, Math.PI * 2.5])).toBeCloseTo(Math.PI)
+    expect(seatLabelAngle([-0.2, Math.PI * 2 + 0.2, Math.PI * 2 + 1])).toBeCloseTo((1 + Math.PI * 2 - 0.2) / 2)
   })
 })
 
