@@ -261,6 +261,7 @@ export default function Transport({ snapshot, speeds, markers = [], orchestrator
       )
     }
     const { chips } = orchestratorChips(orchestrators, Number.MAX_SAFE_INTEGER)
+    const visibleChips = chips.filter((chip) => chip.tone === 'working' || chip.waiting)
     const lanes =
       laneFeed && typeof laneFeed === 'object'
         ? lanePills({
@@ -318,7 +319,7 @@ export default function Transport({ snapshot, speeds, markers = [], orchestrator
                   <span>Orchestrator</span><span className={`transport-agent-state is-${mainWaiting ? 'waiting' : 'working'}`}>{mainWaiting ? 'waiting for you' : 'working'}</span><span></span><span></span>
                 </button>
               ) : null}
-              {chips.map((chip) => (
+              {visibleChips.map((chip) => (
                 <button key={chip.id} type="button" className="transport-agent mono" onClick={() => { setListOpen(false); openOrchestratorChat(chip.id) }}>
                   <span>{chip.name}</span><span className={`transport-agent-state is-${chip.waiting ? 'waiting' : chip.tone}`}>{chip.waiting ? 'waiting for you' : chip.tone}</span><span></span><span></span>
                 </button>

@@ -172,7 +172,7 @@ describe('the transport agent list', () => {
         status: 'live',
         agents: [{ key: 'claude-session', name: 'Claude Code', status: 'working', label }],
       }
-      const subs = [IDLE_MAIN, sub('sub-one', 'Sub One', 'idle')]
+      const subs = [IDLE_MAIN, sub('sub-one', 'Sub One', 'working')]
       const feed = {
         agents: [{ id: 'a', key: 'lane', name: 'Lane', adapterType: 'opencode_local', role: null }],
         liveRuns: [{ agentId: 'a', status: 'running', startedAt: 1000 }],
@@ -192,7 +192,7 @@ describe('the transport agent list', () => {
         )
       )
       const toggle = container.querySelector('.transport-agents-toggle')
-      expect(toggle.textContent).toBe('Agents · 2 working')
+      expect(toggle.textContent).toBe('Agents · 3 working')
       await act(async () => toggle.click())
       const rows = [...container.querySelectorAll('.transport-agent')]
       expect(rows).toHaveLength(3)
