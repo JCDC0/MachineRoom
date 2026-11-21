@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Orbiting top agents stand on the reader ring between the lanes instead of on a parked lane, and the status line under an agent says queued or thinking instead of an old command (P667, R64-2, R64-4).
 - An orchestrator needs a grant to turn a lane or sub off; Start offers only the active, shown lanes of the project, reads them again on a change and says to pick lanes in Agents when there are none; the Tasks count adds an open part so it sums to the list (P663, R64-1, R64-3, R64-8).
 - The owner's copy uses today's names (Chat, Work, Start, Cost, Merge), an agent message with no recipient plays no sound, and a new run clears the last command from the status line (P664, R64-9, R64-11, R64-4).
 - Fleet AGY rows in the Agents tree offer no Delete, Remove, selection or sub checklist, which the bridge would refuse; the header plus adds a lane and the session top offers Put Orchestrator at the top while the idle orchestrator is hidden; the row meta line keeps its tooltip (P662, R65-2, R65-3).
