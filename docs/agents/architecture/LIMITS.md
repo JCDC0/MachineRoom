@@ -36,6 +36,7 @@ What the room does not do, and the measurements behind each limit.
 - The Codex rollout read accepts the race review 34 found as a limit (R34-4): a same-user process that rewrites the `.codex\sessions` folders while a run reads the rollout can point the read at an outside file. Such a process can already do worse.
 - An OpenCode lane run that is not Bypass carries `permission.external_directory: deny` in its `OPENCODE_CONFIG`, merged with the mode's `bash` and `edit` rules and the MCP servers, and a run that names no mode is guarded too (`laneConfigBody` in `scripts/run-lane.mjs`, P440). The guard is OpenCode's own file access permission. AGY runs with `--dangerously-skip-permissions` and has no folder guard, and a shell command in any harness, including one whose file tools stay in the project, can still write outside the project; the Inspector's `Outside the project` list is how the owner sees them (P339, P346, P440).
 - A check line on Windows starts only a real program or `npm` or `npx`; a `pnpm` or `yarn` shim fails to start, because the runner passes the first word to `spawn` with no shell and sends only `npm` and `npx` through Node and their own JavaScript entry point.
+- A fresh orchestrator harness prompt (`codex`, `copilot`, `hermes`, `agy`, `acp`, `machineroom`) is capped at `PROMPT_ARG_LIMIT` (20000 characters) so the command line stays under Windows's 32,767-character limit with room for the other arguments and escaped quotes.
 
 ## Six connections a host
 

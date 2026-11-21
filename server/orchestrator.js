@@ -159,6 +159,7 @@ export const MESSAGE_PROBLEM = 'Write a message from 1 to 8000 characters.'
 export const CHAT_SAVE_PROBLEM = 'The chat file could not be saved.'
 export const EMPTY_REPLY = 'The orchestrator ended its turn without a reply.'
 export const STOPPED_REPLY = 'The orchestrator stopped.'
+export const PROMPT_TOO_LONG_REPLY = 'The orchestrator stopped: the prompt is too long for the command line.'
 export const NO_NEW_REPORT = 'No new report.'
 export const NO_REPORT = 'NO_REPORT'
 export const RESTART_MESSAGE = 'The room restarted during a turn. Send the message again if it still matters.'
@@ -166,6 +167,7 @@ export const RESTART_MESSAGE = 'The room restarted during a turn. Send the messa
 const REPO_ROOT = resolve(fileURLToPath(import.meta.url), '..', '..')
 const PROMPT_FILE = join(REPO_ROOT, 'docs', 'agents', 'ORCHESTRATOR-AGENT.md')
 export const BRANCH_TRANSCRIPT_LIMIT = 20000
+export const PROMPT_ARG_LIMIT = 20000
 const PROMPT_LIMIT = BRANCH_TRANSCRIPT_LIMIT
 export const BRANCH_TRANSCRIPT_INTRO = 'Earlier messages in this conversation, quoted:'
 const GIT_OPERATION_FILES = ['MERGE_HEAD', 'REBASE_HEAD', 'CHERRY_PICK_HEAD']
@@ -512,9 +514,17 @@ function lastStderrLine(text) {
   return ''
 }
 
-function stoppedTurnText({ code, report, killed, failureMessage, stderrMessage }) {
+function spawnErrorText(error) {
+  const errCode = error?.code != null && String(error.code).trim() ? String(error.code).trim() : ''
+  if (errCode === 'ENAMETOOLONG') return PROMPT_TOO_LONG_REPLY
+  if (errCode === 'ENOENT') return 'The orchestrator stopped: the program was not found.'
+  return `The orchestrator stopped: it could not start (${errCode || 'unknown'}).`
+}
+
+function stoppedTurnText({ code, report, killed, failureMessage, stderrMessage, error }) {
   const reason = (!killed && report) || failureMessage || stderrMessage
   if (reason) return `The orchestrator stopped: ${reason}`
+  if (error) return spawnErrorText(error)
   return Number.isInteger(code) ? `The orchestrator stopped: exit ${code}.` : STOPPED_REPLY
 }
 
@@ -896,6 +906,29 @@ function fitTurnText(messages) {
     size += block.length + 2
   }
   return { text: blocks.join('\n\n'), used }
+}
+
+function joinHarnessPrompt(instruction, summary, historyBlocks, message) {
+  const parts = [instruction]
+  if (summary) parts.push(summary)
+  if (historyBlocks.length > 0) parts.push(historyBlocks.join('\n\n'))
+  parts.push(message)
+  return parts.join('\n\n')
+}
+
+function fitHarnessPrompt({ instruction, summary = '', historyBlocks = [], message, limit = PROMPT_ARG_LIMIT }) {
+  const blocks = [...historyBlocks]
+  let keptSummary = summary
+  let prompt = joinHarnessPrompt(instruction, keptSummary, blocks, message)
+  while (prompt.length > limit && blocks.length > 0) {
+    blocks.shift()
+    prompt = joinHarnessPrompt(instruction, keptSummary, blocks, message)
+  }
+  if (prompt.length > limit && keptSummary) {
+    keptSummary = ''
+    prompt = joinHarnessPrompt(instruction, keptSummary, blocks, message)
+  }
+  return prompt.length <= limit ? prompt : null
 }
 
 function recordLine(record) {
@@ -2120,12 +2153,24 @@ ${current}`
         .slice(0, firstNewIndex === -1 ? messages.length : firstNewIndex)
         .filter((m) => m.chatOnly !== true)
         .slice(-20)
-      const history = prior.map(blockFor).join('\n\n')
-      const promptParts = [instruction]
-      if (summary) promptParts.push(summary)
-      if (history) promptParts.push(history)
-      promptParts.push(message)
-      const freshPrompt = promptParts.join('\n\n')
+      const freshPrompt = fitHarnessPrompt({
+        instruction,
+        summary,
+        historyBlocks: prior.map(blockFor),
+        message,
+      })
+      if (freshPrompt === null) {
+        if (mcpConfigPath) {
+          try {
+            rmSync(mcpConfigPath, { force: true })
+          } catch {}
+        }
+        failedToStart(turn)
+        running = null
+        addMessage('orchestrator', PROMPT_TOO_LONG_REPLY)
+        setState('idle')
+        return
+      }
       const cmd = descriptor.command({
         cli,
         prompt: freshPrompt,
@@ -2273,7 +2318,7 @@ ${current}`
     const failed = turn.killed || Boolean(error) || !Number.isInteger(code) || code !== 0
     const noReport = !failed && typeof report === 'string' && report.trim() === NO_REPORT
     const text = failed
-      ? stoppedTurnText({ code, report, killed: turn.killed, failureMessage, stderrMessage })
+      ? stoppedTurnText({ code, report, killed: turn.killed, failureMessage, stderrMessage, error })
       : noReport
         ? NO_NEW_REPORT
         : report || EMPTY_REPLY

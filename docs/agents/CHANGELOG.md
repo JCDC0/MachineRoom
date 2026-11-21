@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- An orchestrator turn on a harness that takes its prompt on the command line keeps the prompt under 20,000 characters: it drops the oldest history first, then the summary, and never cuts the instruction or the new message; when those alone are too long it stops without starting. A turn that fails to start names why (too long, program not found, or the error code). This was why Neon's turns stopped from 20:05 on 2026-11-21 (P677; run by the Neon team).
 - An orchestrator that makes a lane, turns a lane on or off, or adds a sub with its own grant leaves one chat-only room line in its own conversation with the ring and seats after the change, so the Team tab shows it; the owner's calls and refused calls leave none (P676, seat S4; run by the Neon team).
 - The mock counts a top-level sub and its lanes on ring 1, as the bridge does; the issues route reads no main subjects or briefs when it serves another project; the build test checks again that the vendor chunks import nothing, and the client test checks that setActiveLanes sends overRing (P675, R66-2, R66-7, R66-8; run by the Neon team).
 - The owner's ladder save refuses a sub past the subagent depth; a new lane under a sub asks about the sub's full ring, not ring 0, and can go past it; made by names the Orchestrator when it is hidden; the seats route has its own refusal texts (P674, R66-1, R66-4, R66-6; run by the Neon team).
