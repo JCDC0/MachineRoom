@@ -53,6 +53,33 @@ it('shows the chip only while the terminal is open and visible', () => {
   }
 })
 
+it('reports a chip open only for a terminal that exists and is open', () => {
+  vi.stubGlobal('document', {
+    createElement: () => ({
+      dataset: {},
+      style: {},
+      ownerDocument: { defaultView: { Element: class {} } },
+      append() {},
+      remove() {},
+      setAttribute() {},
+    }),
+  })
+  try {
+    const roster = [{ key: 'a', name: 'Alpha' }]
+    const terminals = createTerminals(new Scene(), roster)
+
+    expect(terminals.isOpen('a')).toBe(false)
+    terminals.setOpen('a', true)
+    expect(terminals.isOpen('a')).toBe(true)
+    terminals.setOpen('a', false)
+    expect(terminals.isOpen('a')).toBe(false)
+    expect(terminals.isOpen('nobody')).toBe(false)
+    terminals.dispose()
+  } finally {
+    vi.unstubAllGlobals()
+  }
+})
+
 describe('chipTitle', () => {
   it('leaves a closed chip to its state', () => {
     expect(chipTitle('ORCHESTRATOR', 'working', false)).toBe('')

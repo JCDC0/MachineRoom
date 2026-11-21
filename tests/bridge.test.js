@@ -6,6 +6,7 @@ import { gunzipSync } from 'node:zlib'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { FOLDER_SHAPE, createBridge, isAllowedHost, packTree, trimHistory } from '../server/index.js'
 import { DEFAULT_ASSISTANT_MODEL } from '../server/assistant.js'
+import { saveLabels, topFileFor } from '../server/family.js'
 import { laneAgents } from '../server/lanes-source.js'
 import { getJson, postJson, readFrames, startLaneBridge, waitFor, waitForBridge } from './helpers/bridge.js'
 import { withoutRepoEnv } from './helpers/gitEnv.js'
@@ -318,6 +319,25 @@ describe('health and agents', () => {
       { id: 'agent-hermes', key: 'hermes', name: 'Hermes', adapterType: 'hermes_local', parser: 'hermes', role: null, harness: 'hermes', model: 'deepseek/deepseek-v4.1-flash-1017' },
       { id: 'agent-opencode', key: 'opencode', name: 'OpenCode', adapterType: 'opencode_local', parser: 'opencode', role: null, harness: 'opencode', model: 'opencode-go/deepseek-v4.1-flash' },
     ])
+  })
+
+  it('leaves out the idle orchestrator under a session top and lists it under the orchestrator top', async () => {
+    const lanes = {
+      orchestrator: { name: 'Orchestrator', cli: { harness: 'claude', model: 'opus' } },
+      opencode: { name: 'OpenCode', cli: { harness: 'opencode', model: 'opencode-go/deepseek-v4.1-flash' } },
+    }
+    const { url, projectRoot, runsDir } = await laneBridge({ lanes })
+    const topFile = topFileFor(projectRoot, runsDir)
+
+    saveLabels(topFile, { top: 'claude-session' })
+    const sessionTop = await getJson(`${url}/api/agents`)
+    expect(sessionTop.status).toBe(200)
+    expect(sessionTop.body.map((agent) => agent.key)).not.toContain('orchestrator')
+
+    saveLabels(topFile, { top: 'orchestrator' })
+    const orchestratorTop = await getJson(`${url}/api/agents`)
+    expect(orchestratorTop.status).toBe(200)
+    expect(orchestratorTop.body.map((agent) => agent.key)).toContain('orchestrator')
   })
 
   it('answers an empty agent list when no lane has a cli block', async () => {

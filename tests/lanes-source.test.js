@@ -4,7 +4,7 @@ import { basename, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
 import { createBridge } from '../server/index.js'
-import { activeLanesFileFor, writeActiveLanes } from '../server/active-lanes.js'
+import { activeLanesFileFor, ROOM_LANE_LINGER_MS, writeActiveLanes } from '../server/active-lanes.js'
 import { createLanesSource, createRecordsCache, laneAgents, mainCheckoutOf, readAllLanes, readLanes, runsFolder, subOrchestratorAgent } from '../server/lanes-source.js'
 import { gitPath } from '../server/programPath.js'
 import { buildActivities } from '../src/model/pipeline.js'
@@ -291,6 +291,26 @@ describe('the live lane source', () => {
       [{ path: 'src/briefs/recording.js', mode: 'read', kind: 'file' }],
       [{ path: 'src/model/pipeline.js', mode: 'read', kind: 'file' }],
     ])
+  })
+
+  it('keeps an ended lane for the linger window and then lets it go', async () => {
+    const base = tempDir()
+    const runs = join(base, 'runs')
+    const lanes = lanesFor({ opencode: join(base, 'MachineRoom-opencode3') })
+    let clock = Date.now()
+    const { source, frames } = startSource({ runs, lanes, now: () => clock })
+    const logPath = join(runs, 'opencode-S6a-20261024-122500.log')
+    writeFileSync(logPath, `${toolLine(`${join(base, 'MachineRoom-opencode3')}\\src\\a.js`)}\n`)
+
+    await waitFor(() => logFrames(frames).length === 1, { what: 'the log line' })
+    clock += 4000
+    const end = clock
+    appendFileSync(join(runs, 'runs.jsonl'), `${JSON.stringify({ lane: 'opencode', log: logPath, exitCode: 0, killed: false })}\n`)
+    await waitFor(() => endFrame(frames), { what: 'the run end' })
+
+    expect(source.openRuns()).toEqual([])
+    expect([...source.recentLanes(ROOM_LANE_LINGER_MS, end + ROOM_LANE_LINGER_MS - 1)]).toEqual(['opencode'])
+    expect([...source.recentLanes(ROOM_LANE_LINGER_MS, end + ROOM_LANE_LINGER_MS + 1)]).toEqual([])
   })
 
   it('tails a fresh log that was already there when it started', async () => {
