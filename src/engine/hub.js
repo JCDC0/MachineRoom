@@ -2,7 +2,7 @@ import * as THREE from 'three'
 import { SECTOR_GAP, ownerOf } from '../model/hierarchy.js'
 import { minTextScale } from './camera.js'
 import { isOrchestrator, isSubOrchestrator } from './shapes.js'
-import { WHITE, easeInOut, lineMaterial, still, textSprite } from './sprites.js'
+import { WHITE, YELLOW, easeInOut, lineMaterial, still, textSprite } from './sprites.js'
 
 export const HUB_RADIUS = 300
 export const HUB_Y = 200
@@ -33,6 +33,10 @@ export const SECTOR_LABEL_INSET = 0.1
 export const SECTOR_LABEL_OPACITY = 0.45
 export const SECTOR_LABEL_COLOR = `rgba(255,255,255,${SECTOR_LABEL_OPACITY})`
 export const SECTOR_GLOW_MS = 1000
+export const SEAT_LABEL_SCALE = 0.9
+export const SEAT_LABEL_COLOR = 'rgba(255,255,255,1)'
+export const SEAT_LABEL_OPACITY = 0.6
+export const SEAT_LABEL_OUT = 40
 
 export function writeColor(material, hex) {
   if (!material || !material.color) return false
@@ -594,12 +598,72 @@ export function createHub(scene, agentsOrCount, ladder = null) {
   tickGroup.name = 'ticks'
   const sectorGroup = new THREE.Group()
   sectorGroup.name = 'sectors'
+  const seatGroup = new THREE.Group()
+  seatGroup.name = 'seat-labels'
+  let seatRows = []
+  const seatLabels = new Map()
   slotAngles = anglesFor(currentLadder)
   slots = buildSlots(slotAngles, parkedKeys, layout)
   for (const marker of slots) group.add(marker)
   tickGroup.add(buildTicks(slotAngles, parkedKeys, layout))
-  group.add(main, inner, levelRings, dashes, tickGroup, centre, centreRing, sectorGroup, ...beatRings.map((slot) => slot.line))
+  group.add(main, inner, levelRings, dashes, tickGroup, centre, centreRing, sectorGroup, seatGroup, ...beatRings.map((slot) => slot.line))
   scene.add(group)
+
+  function seatRingPoint(ring) {
+    if (ring === 0) return { x: HUB_RADIUS + SEAT_LABEL_OUT, y: 0 }
+    if (!layout) return null
+    const entry = layout.rings[ring]
+    if (!entry) return null
+    return { x: entry.radius + SEAT_LABEL_OUT, y: entry.y - HUB_Y }
+  }
+
+  function seatLimit(limit) {
+    if (typeof limit !== 'number' || !Number.isInteger(limit) || limit < 0) return null
+    return limit
+  }
+
+  function seatTaken(value) {
+    const raw = Number(value)
+    if (!Number.isFinite(raw)) return 0
+    return Math.max(0, Math.trunc(raw))
+  }
+
+  function syncSeatLabels() {
+    const keep = new Set()
+    for (const row of seatRows) {
+      const ring = Number(row?.ring)
+      const limit = seatLimit(row?.limit)
+      if (!Number.isInteger(ring) || ring < 0 || limit === null) continue
+      const point = seatRingPoint(ring)
+      if (!point) continue
+      keep.add(ring)
+      let sprite = seatLabels.get(ring)
+      if (!sprite) {
+        sprite = textSprite('', { scale: SEAT_LABEL_SCALE, color: SEAT_LABEL_COLOR })
+        sprite.name = 'seat-label'
+        sprite.userData.ring = ring
+        seatLabels.set(ring, sprite)
+        seatGroup.add(sprite)
+      }
+      const taken = seatTaken(row?.taken)
+      sprite.userData.setText(`${taken} / ${limit}`)
+      sprite.position.set(point.x, point.y, 0)
+      const full = taken >= limit
+      writeColor(sprite.material, full ? YELLOW : WHITE)
+      writeOpacity(sprite.material, full ? 1 : SEAT_LABEL_OPACITY)
+    }
+    for (const [ring, sprite] of [...seatLabels]) {
+      if (keep.has(ring)) continue
+      seatGroup.remove(sprite)
+      disposeObject(sprite)
+      seatLabels.delete(ring)
+    }
+  }
+
+  function setSeatCounts(rows) {
+    seatRows = Array.isArray(rows) ? rows : []
+    syncSeatLabels()
+  }
 
   function clearSlots() {
     for (const marker of slots) {
@@ -637,6 +701,7 @@ export function createHub(scene, agentsOrCount, ladder = null) {
     danceTo = 0
     danceAt = 0
     ladderKeyValue = ladderKeyOf(currentLadder, parkedKeys, depth)
+    syncSeatLabels()
   }
 
   function setLadder(next) {
@@ -756,5 +821,5 @@ export function createHub(scene, agentsOrCount, ladder = null) {
 
   if (currentLadder) rebuild()
 
-  return { group, pulse, beat, setSlot, setLadder, setDepth, setRoster, setWorking, parkedKeys: () => [...parkedKeys], update, builds: () => buildCount, depth: () => depth, dispose }
+  return { group, pulse, beat, setSlot, setLadder, setDepth, setRoster, setWorking, setSeatCounts, parkedKeys: () => [...parkedKeys], update, builds: () => buildCount, depth: () => depth, dispose }
 }
