@@ -2169,6 +2169,12 @@ ${current}`
         running = null
         addMessage('orchestrator', PROMPT_TOO_LONG_REPLY)
         setState('idle')
+        if (!compaction && typeof onReply === 'function') {
+          try {
+            onReply(PROMPT_TOO_LONG_REPLY)
+          } catch {}
+        }
+        if (!stopped) maybeStartTurn()
         return
       }
       const cmd = descriptor.command({
