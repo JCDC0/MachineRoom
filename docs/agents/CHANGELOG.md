@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The room draws sub rings only down to the subagent depth less one, as the seats allow, and the owner's ladder save refuses a sub past the depth (P668, R64-5).
 - Seat notices from /grant and /revoke wait quietly: they no longer block New, Open or Branch or start a turn after a restart; the Revoke card puts Cancel first, and the grant notice no longer promises a delete no route allows (P666, R65-8, R65-9).
 - The bottom agents button agrees with the room: a working built-in orchestrator and queued lanes count, a finished or failed lane stays listed only for the five minutes the room keeps it, idle subs leave the list, and a room with no orchestrator still shows the button (P665, R65-5).
 - Orbiting top agents stand on the reader ring between the lanes instead of on a parked lane, and the status line under an agent says queued or thinking instead of an old command (P667, R64-2, R64-4).

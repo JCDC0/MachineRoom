@@ -317,7 +317,11 @@ export function seatCheck({ seats, tree, actor, action, target, parent, harness,
   if (action !== 'createLane' && action !== 'addSub') {
     if (!node || (node.kind !== 'lane' && node.kind !== 'sub')) return refuse(404, 'That agent is not in the list.')
     if (isOwner) {
-      if (action === 'turnOn' && !node.active) return room(levelOf(nodes, node))
+      if (action === 'turnOn' && !node.active) {
+        const level = levelOf(nodes, node)
+        if (node.kind === 'sub' && level > lastRing) return refuse(409, `Ring ${level} is past the subagent depth of ${depth}.`)
+        return room(level)
+      }
       return { ok: true }
     }
     if (!isUnder(nodes, node, me.id)) return refuse(403, 'You can change only the agents under you.')

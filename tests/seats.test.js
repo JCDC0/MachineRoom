@@ -72,6 +72,19 @@ describe('seatCheck', () => {
     expect(seatCheck({ seats: { rings: [], grants: {} }, tree, actor: owner, action: 'addSub' })).toEqual({ ok: true })
   })
 
+  it('refuses the owner a turn on of a sub past the depth and allows ring 1', () => {
+    const depthTree = [
+      node('orchestrator', 'orchestrator', null),
+      node('subA', 'sub', 'orchestrator', { active: false }),
+      node('subB', 'sub', 'subA', { active: false }),
+    ]
+    const roomy = { rings: [3, 4, 4], grants: {} }
+    const past = seatCheck({ seats: roomy, tree: depthTree, actor: owner, action: 'turnOn', target: 'subB', depth: 2 })
+    expect(past).toEqual({ ok: false, status: 409, reason: 'Ring 2 is past the subagent depth of 2.' })
+    expect(seatCheck({ seats: roomy, tree: depthTree, actor: owner, action: 'turnOn', target: 'subA', depth: 2 })).toEqual({ ok: true })
+    expect(seatCheck({ seats: roomy, tree: depthTree, actor: owner, action: 'turnOn', target: 'subB', depth: 3 })).toEqual({ ok: true })
+  })
+
   it('refuses a stranger and unknown actions', () => {
     expect(check({ actor: as('l1'), action: 'turnOff', target: 'l1' }).status).toBe(403)
     expect(check({ actor: owner, action: 'fly' }).status).toBe(400)
