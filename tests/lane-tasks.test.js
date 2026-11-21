@@ -259,6 +259,10 @@ describe('lane tasks', () => {
       '0.1.402: mErGe p645A, Update the room',
       '0.1.402: Fix P646, Update the room',
     ])).toEqual(new Set(['p644', 'p645a']))
+
+    expect(mergedBriefIds(['0.1.402: Merge P648 and P649, plain names'])).toEqual(new Set(['p648', 'p649']))
+    expect(mergedBriefIds(['0.1.402: Merge U167, the menu'])).toEqual(new Set(['u167']))
+    expect(mergedBriefIds(['0.1.402: Merge P639, Agent seats S4'])).toEqual(new Set(['p639']))
   })
 
   it('marks failed runs done when all of their briefs merged', () => {
