@@ -661,6 +661,9 @@ export function createBridge(options = {}) {
     lanesSource: () => lanesSource,
     activeLanes: () => activeLanes,
     onMessage: sendAgentMessage,
+    onRefusal: (frame) => {
+      if (orchestrators) orchestrators.onFrame(frame)
+    },
     bridgeUrl: () => (servingPort ? `http://127.0.0.1:${servingPort}` : ''),
     notify: (event) => {
       for (const client of clients) writeSseChange(client, event)

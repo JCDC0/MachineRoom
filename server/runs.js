@@ -646,7 +646,7 @@ function writeTimedCache(map, key, value, timestamp) {
   map.set(key, { value, at: timestamp })
 }
 
-export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand, sendJson, readJsonBody, notify = () => {}, orchestrators = () => null, lanesSource = () => null, lanesFile = '', runsFolder = '', activeLanes = null, isLaneActive = null, onMessage = () => {}, platform = process.platform, list = listProcesses, stat = statSync, readFile = readFileSync, summarize = summarizeRun, resolvePath = realPath, bridgeUrl = '', refreshModelDetails = () => {}, now = Date.now }) {
+export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand, sendJson, readJsonBody, notify = () => {}, orchestrators = () => null, lanesSource = () => null, lanesFile = '', runsFolder = '', activeLanes = null, isLaneActive = null, onMessage = () => {}, onRefusal = null, platform = process.platform, list = listProcesses, stat = statSync, readFile = readFileSync, summarize = summarizeRun, resolvePath = realPath, bridgeUrl = '', refreshModelDetails = () => {}, now = Date.now }) {
   let resolvedRoot = projectRoot ? resolvePath(projectRoot) : ''
   const resolvedBriefs = briefsDir ? resolve(briefsDir) : resolvedRoot ? join(resolvedRoot, 'docs', 'agents') : ''
   const laneFile = lanesFile ? resolve(lanesFile) : join(lanesFolder(), 'lanes.json')
@@ -1403,6 +1403,60 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
     } catch {}
   }
 
+  function newestRecordForRun(lane, startedAt) {
+    try {
+      const records = readAllRunRecords(recordsPath())
+      const startTime = Date.parse(startedAt)
+      for (let i = records.length - 1; i >= 0; i -= 1) {
+        const record = records[i]
+        if (!record || record.lane !== lane) continue
+        if (record.startedAt === startedAt) return record
+        const recordTime = Date.parse(record.startedAt)
+        if (Number.isFinite(startTime) && Number.isFinite(recordTime) && recordTime >= startTime) return record
+      }
+    } catch {}
+    return null
+  }
+
+  function notifyRefusal(item, exitCode) {
+    if (stopped || item.stoppedByOwner || item.interrupting || item.refusalNotified) return
+    item.refusalNotified = true
+    const record = newestRecordForRun(item.entry.lane, item.entry.startedAt)
+    if (!record) return
+    if (typeof record.log === 'string' && record.log.trim() !== '') return
+    const starter = (typeof record.startedBy === 'string' && record.startedBy) || item.startedBy || ''
+    let refusalRecord = record
+    if (item.ticket && typeof record.note === 'string' && record.note.includes(item.ticket)) {
+      refusalRecord = { ...refusalRecord, note: record.note.split(item.ticket).join(KEY_MASK) }
+    }
+    if (starter && refusalRecord.startedBy !== starter) {
+      refusalRecord = { ...refusalRecord, startedBy: starter }
+    }
+    const frame = {
+      type: 'heartbeat.run.status',
+      payload: {
+        runId: `refused-${item.entry.lane}-${item.entry.startedAt}`,
+        agentId: `agent-${item.entry.lane}`,
+        status: 'failed',
+        refused: true,
+        exitCode,
+        record: refusalRecord,
+      },
+    }
+    if (typeof onRefusal === 'function') {
+      try {
+        onRefusal(frame)
+      } catch {}
+      return
+    }
+    const registry = typeof orchestrators === 'function' ? orchestrators() : null
+    if (registry && typeof registry.onFrame === 'function') {
+      try {
+        registry.onFrame(frame)
+      } catch {}
+    }
+  }
+
   function startRun(lane, briefs, projectRun = null, startedBy = '', reasoning = '', model = '', mode = '', allowedLanes = null, extraOptions = {}) {
     const startMs = Math.max(Date.now(), lastStartMs + 1)
     lastStartMs = startMs
@@ -1521,12 +1575,15 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
       flushTail(item)
       if (!stopped) recordRefusal(item, 1)
       finish(item)
+      if (!stopped) notifyRefusal(item, 1)
       settleItem()
     })
     child.on('close', (code) => {
       flushTail(item)
-      if (!stopped && (code === null || code !== 0)) recordRefusal(item, code ?? 1)
+      const failed = !stopped && (code === null || code !== 0)
+      if (failed) recordRefusal(item, code ?? 1)
       finish(item)
+      if (failed) notifyRefusal(item, code ?? 1)
       settleItem()
     })
     if (startedBy) {
