@@ -1133,6 +1133,30 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
     }
   }
 
+  function runOrOverRing(run, mine) {
+    setActionError('')
+    setBusy(true)
+    Promise.resolve()
+      .then(() => run())
+      .then(() => refresh())
+      .catch((error) => {
+        if (error && Number.isInteger(error.overRing) && error.overRing >= 0) {
+          const ring = error.overRing
+          setConfirm({
+            text: `Ring ${ring} is full. ${mine} anyway?`,
+            label: 'Anyway',
+            tone: 'primary',
+            busyText: 'Trying again...',
+            run: () => run(ring),
+          })
+          return
+        }
+        setActionError(messageOf(error))
+        return refresh().catch(() => {})
+      })
+      .finally(() => setBusy(false))
+  }
+
   function openNode(node) {
     if (!node) return
     if (editing === node.id) {
@@ -1667,17 +1691,11 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
     }
     if (busy) return
     const choice = laneChoice(lanes.lanes, on ? { add: [node.id] } : { remove: [node.id] })
-    setActionError('')
-    setBusy(true)
-    try {
-      await client.setActiveLanes({ lanes: choice, confirmed: true })
-      await refresh()
-    } catch (error) {
-      setActionError(messageOf(error))
-      await refresh().catch(() => {})
-    } finally {
-      setBusy(false)
-    }
+    runOrOverRing(
+      (ring) =>
+        client.setActiveLanes(ring === undefined ? { lanes: choice, confirmed: true } : { lanes: choice, overRing: ring, confirmed: true }),
+      on ? 'Turn it on' : 'Turn it off'
+    )
   }
 
   function askProposal(proposal, approve) {
@@ -2628,7 +2646,12 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
     const status = state === 'paused' ? 'waiting' : state
     const dot = state === 'waiting' ? 'idle' : state
     const detail = familyModel(node, { harnesses, models })
-    const detailTitle = status ? (detail ? `${status} · ${detail}` : status) : detail
+    const madeBy =
+      (lane || sub) && node.createdBy
+        ? `made by ${tree.nodes.find((row) => row.id === node.createdBy)?.label || node.createdBy}`
+        : ''
+    const detailWithBy = madeBy ? `${detail} · ${madeBy}` : detail
+    const detailTitle = status ? (detailWithBy ? `${status} · ${detailWithBy}` : status) : detailWithBy
     const mode = node.mode || defaultMode(node.harness)
     const effortMode = `Effort ${node.effort || 'default'}${mode ? ` · Mode ${mode}` : ''}`
     const items = []
@@ -2708,9 +2731,9 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
             detail={status ? (
               <>
                 <span className="mr-family-state mono">{status}</span>
-                {detail ? ` · ${detail}` : ''}
+                {detailWithBy ? ` · ${detailWithBy}` : ''}
               </>
-            ) : detail}
+            ) : detailWithBy}
             detailTitle={detailTitle}
             trailing={session && items.length === 0 ? <span className="mr-family-actions" aria-hidden="true" /> : session ? (
               <span className="mr-family-actions">
