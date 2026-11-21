@@ -5353,20 +5353,19 @@ body:has(#hud-orchestrator-chat) .lens-waiting {
   border-color: var(--white);
 }
 
-.mr-card.is-pinned .mr-card-tab {
-  border-color: var(--yellow);
-}
-
+.mr-card.is-pinned .mr-card-face,
 .mr-card.is-selected .mr-card-face {
   border: 2px solid var(--yellow);
   box-shadow: 0 0 28px rgb(229 255 0 / 0.38);
 }
 
+.mr-card.is-pinned .mr-card-tab,
 .mr-card.is-selected .mr-card-tab {
   border-color: var(--yellow);
   background: rgb(229 255 0 / 0.2);
 }
 
+.mr-card.is-pinned .mr-card-name,
 .mr-card.is-selected .mr-card-name {
   color: var(--yellow);
 }
