@@ -285,9 +285,11 @@ describe('the room commands', () => {
       expect(container.textContent).toContain('ring 1 (2 of 4 seats free)')
       expect(container.textContent).toContain('Agents already made stay as they are.')
 
-      const revoke = Array.from(container.querySelectorAll('.mr-orch-confirm-btn')).find(
-        (button) => button.textContent.trim() === 'Revoke'
-      )
+      const buttons = Array.from(container.querySelectorAll('.mr-orch-confirm-btn'))
+      expect(buttons.map((button) => button.textContent.trim())).toEqual(['Cancel', 'Revoke'])
+      expect(buttons[0].className).toContain('is-cancel')
+      expect(buttons[1].className).toContain('is-stop')
+      const revoke = buttons[1]
       await click(root, revoke)
       await settle()
       expect(calls.send).toEqual([{ text: '/revoke', options: {} }])
