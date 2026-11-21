@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The room's engine and model build into their own chunk, which imports nothing from the main chunk, so the main chunk dropped from 821 to 644 kB and the size guard is 970 kB again (P671).
 - The room re-reads its roster when a lane's five-minute linger ends, Tasks reads main at most every 30 seconds, and a merge subject that names several briefs marks each one done (P669, R65-7, R64-10).
 - The room draws sub rings only down to the subagent depth less one, as the seats allow, and the owner's ladder save refuses a sub past the depth (P668, R64-5).
 - Seat notices from /grant and /revoke wait quietly: they no longer block New, Open or Branch or start a turn after a restart; the Revoke card puts Cancel first, and the grant notice no longer promises a delete no route allows (P666, R65-8, R65-9).
