@@ -14,7 +14,11 @@ function envAfterImport(file) {
 
 describe('quietAgy', () => {
   it('turns the AGY updater off when the owner has not chosen', () => {
-    expect(quietAgy({})).toEqual({ [AGY_QUIET_ENV]: '1' })
+    expect(quietAgy({})).toEqual({ [AGY_QUIET_ENV]: 'true' })
+  })
+
+  it('raises the 1 an older MachineRoom set, which agy ignores', () => {
+    expect(quietAgy({ [AGY_QUIET_ENV]: '1' })[AGY_QUIET_ENV]).toBe('true')
   })
 
   it('keeps the owner\'s own choice', () => {
@@ -22,7 +26,7 @@ describe('quietAgy', () => {
   })
 
   it('is set as the bridge and the lane runner load', () => {
-    expect(envAfterImport('server/index.js')).toBe('1')
-    expect(envAfterImport('scripts/run-lane.mjs')).toBe('1')
+    expect(envAfterImport('server/index.js')).toBe('true')
+    expect(envAfterImport('scripts/run-lane.mjs')).toBe('true')
   }, 120000)
 })
