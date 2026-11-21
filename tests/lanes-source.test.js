@@ -1394,6 +1394,108 @@ describe('the lane source carries the session that started a run', () => {
     await waitFor(() => source.openRuns().length === 1, { what: 'the open run' })
     expect(source.openRuns()[0].startedAt).toBe(new Date(current).toISOString())
   })
+
+  it('waits up to 10 seconds for a missing meta file on an external project and adopts the log once meta appears', () => {
+    const base = tempDir('mr-lanes-meta-grace-')
+    const runs = join(base, 'runs')
+    const main = join(base, 'external-project')
+    mkdirSync(runs, { recursive: true })
+    mkdirSync(main, { recursive: true })
+    const lanes = lanesFor({ opencode: join(base, 'MachineRoom-opencode') })
+    let current = Date.now()
+    const frames = []
+    const source = createLanesSource({
+      folder: runs,
+      projectRoot: main,
+      repoRoot: join(base, 'room-repo'),
+      lanes,
+      quietMs: 60000,
+      pollMs: 20,
+      scanMs: 2000,
+      now: () => current,
+      watchFolder: () => ({ on() {}, close() {} }),
+      onFrame: (frame) => frames.push(frame),
+    })
+    cleanups.push(() => source.stop())
+    source.start()
+
+    const logPath = join(runs, 'opencode-P688-20261122-010000.log')
+    const metaPath = join(runs, 'opencode-P688-20261122-010000.meta.json')
+    writeFileSync(logPath, `${toolLine('src/a.js')}\n`)
+    utimesSync(logPath, new Date(current), new Date(current))
+
+    current += 2000
+    source.tick()
+    expect(source.openRuns()).toEqual([])
+    expect(frames).toEqual([])
+
+    writeFileSync(metaPath, JSON.stringify({ project: main }))
+    current += 2000
+    source.tick()
+    expect(source.openRuns()).toHaveLength(1)
+    expect(frames.some((frame) => frame.type === 'heartbeat.run.queued')).toBe(true)
+  })
+
+  it('still skips a log with no meta older than 10 seconds on an external project', () => {
+    const base = tempDir('mr-lanes-meta-old-')
+    const runs = join(base, 'runs')
+    const main = join(base, 'external-project')
+    mkdirSync(runs, { recursive: true })
+    mkdirSync(main, { recursive: true })
+    const lanes = lanesFor({ opencode: join(base, 'MachineRoom-opencode') })
+    let current = Date.now()
+    const frames = []
+    const source = createLanesSource({
+      folder: runs,
+      projectRoot: main,
+      repoRoot: join(base, 'room-repo'),
+      lanes,
+      quietMs: 60000,
+      pollMs: 20,
+      scanMs: 2000,
+      now: () => current,
+      watchFolder: () => ({ on() {}, close() {} }),
+      onFrame: (frame) => frames.push(frame),
+    })
+    cleanups.push(() => source.stop())
+    source.start()
+
+    const oldLog = join(runs, 'opencode-P688-20261122-010100.log')
+    const oldMeta = join(runs, 'opencode-P688-20261122-010100.meta.json')
+    writeFileSync(oldLog, `${toolLine('src/a.js')}\n`)
+    const oldTime = new Date(current - 11000)
+    utimesSync(oldLog, oldTime, oldTime)
+
+    current += 2000
+    source.tick()
+    expect(source.openRuns()).toEqual([])
+
+    writeFileSync(oldMeta, JSON.stringify({ project: main }))
+    current += 2000
+    source.tick()
+    expect(source.openRuns()).toEqual([])
+    expect(frames).toEqual([])
+
+    const expiredLog = join(runs, 'opencode-P688-20261122-010200.log')
+    const expiredMeta = join(runs, 'opencode-P688-20261122-010200.meta.json')
+    writeFileSync(expiredLog, `${toolLine('src/b.js')}\n`)
+    utimesSync(expiredLog, new Date(current), new Date(current))
+    utimesSync(runs, new Date(current), new Date(current))
+
+    current += 2000
+    source.tick()
+    expect(source.openRuns()).toEqual([])
+
+    current += 9000
+    source.tick()
+    expect(source.openRuns()).toEqual([])
+
+    writeFileSync(expiredMeta, JSON.stringify({ project: main }))
+    current += 2000
+    source.tick()
+    expect(source.openRuns()).toEqual([])
+    expect(frames).toEqual([])
+  })
 })
 
 describe('lane lock stale checks in the lane source', () => {
