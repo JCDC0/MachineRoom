@@ -1,7 +1,7 @@
 import { writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { refuseRunningLane, stopLane } from '../scripts/run-lane.mjs'
+import { refuseRunningLane, stopLane, stopLeftovers } from '../scripts/run-lane.mjs'
 import { laneStopProblem } from '../src/briefs/run.js'
 import { makeTempDir, removeTempDir } from './helpers/tempRoot.js'
 
@@ -203,6 +203,27 @@ describe('refuseRunningLane leftover recheck', () => {
       expect(print).toHaveBeenCalledWith('Stopped 0 leftover processes for the opencode lane. Matched no names.')
     } finally {
       print.mockRestore()
+    }
+  })
+
+  it('spares a live bridge turn via MACHINEROOM_BRIDGE_PID even when wrapped in a shell, and ignores invalid values', async () => {
+    const runs = tempRuns()
+    const worktree = join(runs, 'opencode')
+    const tree = [
+      { pid: 10, ppid: 1, command: 'node bridge' },
+      { pid: 20, ppid: 10, command: 'cmd.exe /c node run-lane.mjs' },
+      { pid: 22, ppid: 10, command: `agy.exe --print ${join(worktree, 'prompt.md')}` },
+    ]
+    vi.stubEnv('MACHINEROOM_BRIDGE_PID', '10')
+    await expect(refuseRunningLane('opencode', worktree, runs, { list: () => tree, wait: () => {} })).resolves.toBeUndefined()
+    const kill = vi.fn(() => true)
+    expect(stopLeftovers({ worktree, processes: tree, kill, alive: () => true })).toEqual({ found: 0, stopped: 0, failed: 0 })
+    expect(kill).not.toHaveBeenCalled()
+
+    for (const invalid of ['1', '0', '-5', 'abc', '']) {
+      vi.stubEnv('MACHINEROOM_BRIDGE_PID', invalid)
+      const orphanTree = [{ pid: 12, ppid: 1, command: `agy.exe --print ${join(worktree, 'old.md')}` }]
+      await expect(refuseRunningLane('opencode', worktree, runs, { list: () => orphanTree, wait: () => {} })).rejects.toThrow('leftover process 12')
     }
   })
 })

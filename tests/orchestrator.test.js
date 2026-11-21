@@ -4913,6 +4913,73 @@ describe('the lane source and the orchestrator turn', () => {
       expect(rig.answer().messages.at(-1).text).toBe('The orchestrator stopped: the prompt is too long for the command line.')
     })
 
+    it('calls onReply with the stop text and starts a new turn for a queued message pushed back to pending', async () => {
+      const base = makeTempDir('mr-agy-pending-')
+      const runs = join(base, 'runs')
+      const projectRoot = join(base, 'project')
+      mkdirSync(runs, { recursive: true })
+      mkdirSync(projectRoot, { recursive: true })
+      const promptFile = join(base, 'orchestrator-agent.md')
+      writeFileSync(promptFile, 'INSTRUCTION_' + 'i'.repeat(8000))
+      const script = join(base, 'fake-agy.mjs')
+      const releaseFile = join(base, 'release')
+      writeFileSync(script, [
+        "import { existsSync } from 'node:fs'",
+        'const args = process.argv.slice(2)',
+        "const at = args.indexOf('--print')",
+        "const prompt = at === -1 ? '' : String(args[at + 1] ?? '')",
+        "if (process.env.MR_HOLD === '1') {",
+        "  while (!existsSync(process.env.MR_RELEASE || '')) await new Promise((done) => setTimeout(done, 20))",
+        '}',
+        "console.log(JSON.stringify({ event: 'result', result: { response: 'Reply: ' + prompt.slice(-40).split('\\n').join(' ') } }))",
+      ].join('\n'))
+
+      const spawned = []
+      const replies = []
+      const spawnFake = (file, args, options) => {
+        spawned.push({ file, args: [...args] })
+        return spawn(process.execPath, [script, ...args], {
+          ...options,
+          env: {
+            ...(options.env ?? process.env),
+            MR_HOLD: spawned.length === 1 ? '1' : '0',
+            MR_RELEASE: releaseFile,
+          },
+        })
+      }
+      const orch = createOrchestrator({
+        projectRoot,
+        runsFolder: runs,
+        lanes: AGY_LANES,
+        harness: 'agy',
+        spawn: spawnFake,
+        promptFile,
+        bridgeUrl: () => 'http://127.0.0.1:5999',
+        onReply: (text) => replies.push(text),
+      })
+      cleanups.push(async () => {
+        writeFileSync(releaseFile, '1')
+        orch.close()
+        await sleep(20)
+        rmSync(base, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+      })
+
+      orch.send({ text: 'FIRST_WARMUP', confirmed: true })
+      await waitFor(() => spawned.length === 1, 5000, 'warmup AGY turn to spawn')
+
+      orch.deliver('sub:a', 'TOO_LONG_' + 'x'.repeat(19500 - 'TOO_LONG_'.length))
+      orch.send({ text: 'y'.repeat(1000 - 'SECOND_1000_'.length) + 'SECOND_1000_', confirmed: true })
+      writeFileSync(releaseFile, '1')
+
+      await waitFor(() => orch.answer().state === 'idle' && spawned.length === 2, 15000, 'second queued message turn to finish')
+      expect(replies).toHaveLength(3)
+      expect(replies[1]).toBe(PROMPT_TOO_LONG_REPLY)
+      expect(replies[2]).toContain('SECOND_1000_')
+      const secondPrint = spawned[1].args[spawned[1].args.indexOf('--print') + 1]
+      expect(secondPrint).toContain('SECOND_1000_')
+      expect(secondPrint).not.toContain('TOO_LONG_')
+    })
+
     it('names spawn errors ENAMETOOLONG, ENOENT and other codes in the stop text', async () => {
       const cases = [
         {

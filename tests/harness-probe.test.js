@@ -123,4 +123,25 @@ console.log(JSON.stringify({ type: 'text', part: { text: 'OK' } }))`)
     expect(seen.argv[seen.argv.indexOf('--title') + 1]).toBe('MachineRoom connection test')
     expect(seen.config.permission).toMatchObject({ edit: 'deny', bash: 'deny' })
   })
+
+  it('sets AGY_CLI_DISABLE_AUTO_UPDATE to true when env omits it or holds 1', async () => {
+    const out = join(runs, 'agy-env.json')
+    const file = join(runs, 'agy.mjs')
+    writeFileSync(file, `import { writeFileSync } from 'node:fs'
+writeFileSync(${JSON.stringify(out)}, JSON.stringify({ quiet: process.env.AGY_CLI_DISABLE_AUTO_UPDATE ?? null }))
+console.log(JSON.stringify({ event: 'result', result: { response: 'OK' } }))`)
+    writeFileSync(join(runs, 'harnesses.json'), JSON.stringify({ programs: { agy: file } }))
+
+    const omitted = await probeHarness('agy', { runsFolder: runs, env: { PATH: process.env.PATH ?? '' } })
+    expect(omitted.body.status).toBe('reached')
+    expect(JSON.parse(readFileSync(out, 'utf8')).quiet).toBe('true')
+
+    const one = await probeHarness('agy', { runsFolder: runs, env: { PATH: process.env.PATH ?? '', AGY_CLI_DISABLE_AUTO_UPDATE: '1' } })
+    expect(one.body.status).toBe('reached')
+    expect(JSON.parse(readFileSync(out, 'utf8')).quiet).toBe('true')
+
+    const zero = await probeHarness('agy', { runsFolder: runs, env: { PATH: process.env.PATH ?? '', AGY_CLI_DISABLE_AUTO_UPDATE: '0' } })
+    expect(zero.body.status).toBe('reached')
+    expect(JSON.parse(readFileSync(out, 'utf8')).quiet).toBe('0')
+  })
 })

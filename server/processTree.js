@@ -230,6 +230,7 @@ export function leftoverProcesses(processes, { childPid = 0, childCreated, recor
     .filter((item) => Number.isInteger(item?.pid) && item.pid > 0 && Number.isInteger(item?.ppid))
   const byPid = new Map(list.map((item) => [item.pid, item]))
   const child = Number.isInteger(childPid) && childPid > 0 ? childPid : 0
+  const spare = Number.isInteger(spareAncestor) && spareAncestor > 1 ? spareAncestor : 0
   const excluded = ownPid > 0 ? parentChain(byPid, ownPid) : new Set()
   for (const pid of Array.isArray(excludePids) ? excludePids : []) {
     if (Number.isInteger(pid) && pid > 0) excluded.add(pid)
@@ -250,7 +251,7 @@ export function leftoverProcesses(processes, { childPid = 0, childCreated, recor
     const named = (namedAfter === null || (Number.isFinite(item.created) && item.created > namedAfter))
       && folders.some((folder) => namesFolder(processKey(item.command, platform), folder))
     // A live sibling only names the folder (an orchestrator turn carries it in its prompt); an orphan of an old run does not descend from the runner's parent.
-    const sibling = !related && named && spareAncestor > 0 && parentChain(byPid, item.pid).has(spareAncestor)
+    const sibling = !related && named && spare > 0 && parentChain(byPid, item.pid).has(spare)
     if ((related || named) && !sibling) found.push(item)
   }
   return found.sort((left, right) => left.pid - right.pid)
