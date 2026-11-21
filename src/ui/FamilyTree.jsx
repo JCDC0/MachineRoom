@@ -1123,7 +1123,7 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
     setActionError('')
     try {
       await current.run()
-      setConfirm(null)
+      setConfirm((value) => (value === current ? null : value))
     } catch (error) {
       setActionError(messageOf(error))
       setConfirm(null)
@@ -1821,36 +1821,56 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
       detail: childDetail(draft, harnesses, models),
       label: 'Create',
       busyText: 'Creating the agent...',
-      run: async () => {
-        const created = await client.createLane({ ...payload, confirmed: true })
-        const key = cleanText(created?.key, 80)
-        if (!key) throw new Error('The bridge did not name the new agent.')
-        try {
-          if (parent.kind === 'sub') {
-            const ladder = await readLadder()
-            const sub = ladder.subs.find((entry) => entry.id === parent.id)
-            if (!sub) throw new Error('This sub orchestrator is not in the ladder.')
-            await client.setLadder(changeSub(ladder, { ...sub, lanes: [...sub.lanes, key] }))
-          } else if (parent.kind === 'lane') {
-            const ladder = await readLadder()
-            const plan = convertPlan(ladder, parent, key, lanesOf(lanes))
-            if (plan.problem) throw new Error(plan.problem)
-            await client.setLadder(plan.ladder)
-            const fresh = await client.lanes()
-            await client.setActiveLanes({
-              lanes: laneChoice(fresh?.lanes ?? [], { remove: [parent.id] }),
-              confirmed: true,
-            })
-          }
-        } catch (error) {
-          closeChild()
-          await refresh().catch(() => {})
-          throw new Error(`The agent was created. ${messageOf(error)}`)
-        }
-        closeChild()
-        await refresh()
-      },
+      run: () => createUnder(parent, payload),
     })
+  }
+
+  async function createUnder(parent, payload, overRing) {
+    let created
+    try {
+      created = await client.createLane(
+        overRing === undefined ? { ...payload, confirmed: true } : { ...payload, overRing, confirmed: true }
+      )
+    } catch (error) {
+      if (overRing === undefined && error && Number.isInteger(error.overRing) && error.overRing >= 0) {
+        const ring = error.overRing
+        setConfirm({
+          text: `Ring ${ring} is full. Make it anyway?`,
+          label: 'Anyway',
+          tone: 'primary',
+          busyText: 'Trying again...',
+          run: () => createUnder(parent, payload, ring),
+        })
+        return
+      }
+      throw error
+    }
+    const key = cleanText(created?.key, 80)
+    if (!key) throw new Error('The bridge did not name the new agent.')
+    try {
+      if (parent.kind === 'sub') {
+        const ladder = await readLadder()
+        const sub = ladder.subs.find((entry) => entry.id === parent.id)
+        if (!sub) throw new Error('This sub orchestrator is not in the ladder.')
+        await client.setLadder(changeSub(ladder, { ...sub, lanes: [...sub.lanes, key] }))
+      } else if (parent.kind === 'lane') {
+        const ladder = await readLadder()
+        const plan = convertPlan(ladder, parent, key, lanesOf(lanes))
+        if (plan.problem) throw new Error(plan.problem)
+        await client.setLadder(plan.ladder)
+        const fresh = await client.lanes()
+        await client.setActiveLanes({
+          lanes: laneChoice(fresh?.lanes ?? [], { remove: [parent.id] }),
+          confirmed: true,
+        })
+      }
+    } catch (error) {
+      closeChild()
+      await refresh().catch(() => {})
+      throw new Error(`The agent was created. ${messageOf(error)}`)
+    }
+    closeChild()
+    await refresh()
   }
 
   function askSeatSave() {
