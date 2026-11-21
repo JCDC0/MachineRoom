@@ -10,6 +10,7 @@ import { resolveHarnessProgram } from './harness-models.js'
 import { harnessUnavailableProblem } from './model-list.js'
 import { killTree } from './processTree.js'
 import { endpointModels } from './models.js'
+import { quietAgy } from './quiet-agy.js'
 
 export const PROBE_PROMPT = 'Reply with the word OK and nothing else.'
 export const PROBE_LIMIT_MS = 60000
@@ -40,7 +41,7 @@ function oneTurn(command, { env, limitMs, platform }) {
     try {
       child = spawn(isNode ? process.execPath : command.file, isNode ? [command.file, ...command.args] : command.args, {
         cwd: command.cwd,
-        env: { ...env, ...command.env },
+        env: quietAgy({ ...env, ...command.env }),
         shell: false,
         windowsHide: true,
         stdio: ['ignore', 'pipe', 'pipe'],
