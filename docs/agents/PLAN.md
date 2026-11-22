@@ -1,5 +1,9 @@
 # Plan
 
+## Next, as of 2026-11-23 01:45
+
+Pushed `7189db1d` (CI green on both runners). Review 74 (P717) found 2 High, 2 Medium and 2 Low: stale agent focus (R74-1), forced idle broken by room keys, the Help backdrop and reduced motion (R74-2), the tunnel aiming at an old file (R74-3), forced idle below 900 pixels and while disconnected (R74-4), the gyro rings in phase (R74-5) and untested hand commits (R74-6). The Stage parts of R74-2, R74-4 and R74-6 are done by hand (`5d769a4f`); P718 (focus, tunnel, gyro, callout click) runs on Neon, then P719 (camera spin, Hud keys, forced idle CSS and the lens pointer block). The stop rule is not met: review 74 had user-meetable Highs. Argon (`agy-6`) is still out of usage.
+
 ## Next, as of 2026-11-22 23:10
 
 Argon (`agy-6`) is out of usage: its review 73 run was stopped after it wrote the report, and the orchestrator committed it (P709). Neon (`agy-5`) takes every brief until Argon is back. Review 73 found 2 High, 2 Medium and 1 Low: R73-1 (callout box still took the pointer) is fixed by hand (`2a221601`); P712 (R73-2, R73-4, folders), P713 (R73-3, one source for open calls, with Stage lines by the orchestrator) and P714 (R73-5) run on Neon in that order, then P711 (dead code). P710 merged a short README with fresh screenshots; the detail moved to `docs/GUIDE.md`. The stop rule is not met yet: review 73 had user-meetable Highs.
