@@ -80,6 +80,71 @@ it('reports a chip open only for a terminal that exists and is open', () => {
   }
 })
 
+it('creates no separate console object and answers consoleFor during shell calls and the 6 second hold', () => {
+  const created = []
+  vi.stubGlobal('document', {
+    createElement: () => {
+      const node = {
+        className: '',
+        dataset: {},
+        style: {},
+        ownerDocument: { defaultView: { Element: class {} } },
+        append() {},
+        remove() {},
+        setAttribute() {},
+      }
+      created.push(node)
+      return node
+    },
+  })
+  try {
+    const cssScene = new Scene()
+    const roster = [{ key: 'a', name: 'Alpha' }]
+    const terminals = createTerminals(cssScene, roster)
+    const entry = {
+      version: 1,
+      lines: [
+        line('l1'),
+        line('l2'),
+        line('l3'),
+        line('l4'),
+        line('Local: http://localhost:5173/'),
+        line('l6'),
+      ],
+    }
+
+    expect(cssScene.children).toHaveLength(1)
+    expect(created.filter((node) => /(?:^|\s)mr-term-console(?:\s|$)/.test(node.className))).toEqual([])
+    expect(terminals.consoleFor('a', entry, 1000)).toBeNull()
+
+    terminals.note({ type: 'tool.start', agent: 'a', id: 'r1', tool: 'read' }, 1000)
+    expect(terminals.consoleFor('a', entry, 1000)).toBeNull()
+
+    terminals.note({ type: 'tool.start', agent: 'a', id: 's1', tool: 'shell' }, 1000)
+    const open = terminals.consoleFor('a', entry, 1000)
+    expect(open).not.toBeNull()
+    expect(open.rows.map((row) => row.text)).toEqual(['l2', 'l3', 'l4', 'Local: http://localhost:5173/', 'l6'])
+    expect(open.address).toBe('http://localhost:5173/')
+    expect(open.url).toBe('http://localhost:5173/')
+
+    terminals.note({ type: 'tool.end', agent: 'a', id: 's1', ok: true }, 2000)
+    expect(terminals.consoleFor('a', entry, 7999)).not.toBeNull()
+    expect(terminals.consoleFor('a', entry, 8000)).toBeNull()
+
+    terminals.note({ type: 'tool.start', agent: 'a', id: 'o1', tool: 'other' }, 9000)
+    expect(terminals.consoleFor('a', entry, 9000)).not.toBeNull()
+    terminals.setVisible('a', false)
+    expect(terminals.consoleFor('a', entry, 9000)).toBeNull()
+    terminals.setVisible('a', true)
+    terminals.clearNotes()
+    expect(terminals.consoleFor('a', entry, 9000)).toBeNull()
+
+    terminals.dispose()
+  } finally {
+    vi.unstubAllGlobals()
+  }
+})
+
 describe('chipTitle', () => {
   it('leaves a closed chip to its state', () => {
     expect(chipTitle('ORCHESTRATOR', 'working', false)).toBe('')
