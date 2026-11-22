@@ -12,3 +12,7 @@ process.env.MACHINEROOM_RUNS = testRunsFolder()
 process.env.MACHINEROOM_RECORDINGS = testRecordingsFolder()
 process.env.MACHINEROOM_SAMPLE_MS = '0'
 delete process.env.MACHINEROOM_LANES_DIR
+// A lane's agent inherits these from run-lane so it can reach the bridge; a test run inside that lane must not.
+for (const name of ['MACHINEROOM_LANES_FILE', 'MACHINEROOM_LANE_TICKET', 'MACHINEROOM_LANE_REPLIES', 'MACHINEROOM_BRIDGE', 'MACHINEROOM_BRIDGE_PID', 'MACHINEROOM_PORT_OFFSET']) {
+  delete process.env[name]
+}
