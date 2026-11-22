@@ -152,6 +152,8 @@ export default function Hud({
   onSpeed,
   onFocus,
   onOverview,
+  onToggleIdle = () => {},
+  idleForced = false,
   openTerminals = [],
   onToggleTerminal = () => {},
   onShowTerminals = () => {},
@@ -1083,6 +1085,8 @@ export default function Hud({
           onSeek={onSeek}
           onSpeed={onSpeed}
           onOverview={onOverview}
+          onToggleIdle={onToggleIdle}
+          idleForced={idleForced}
         />
       )}
 
@@ -1098,6 +1102,8 @@ export default function Hud({
           onSeek={onSeek}
           onSpeed={onSpeed}
           onOverview={onOverview}
+          onToggleIdle={onToggleIdle}
+          idleForced={idleForced}
         />
       )}
 

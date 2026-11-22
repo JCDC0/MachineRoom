@@ -66,7 +66,7 @@ const DEMO_SUBS = [
 ]
 const SEAM_MIN_WIDTH = 900
 const SEAM_TOP = '.hud-band-project, .hud-band-switch, .hud-modes button, .hud-action, .hud-action-slot > .hud-action-badge, .hud-health-chip'
-const SEAM_BOTTOM = '.transport-badge, .transport-center, .transport-orchestrator, .transport-chip, .transport-chip-overflow, .transport-lane, .transport-lane-overflow, .transport-spend, .transport-context, .transport-tail > .mono, .transport.is-live > .mono, .transport:not(.is-live) > button, .transport:not(.is-live) > .mono, .speeds button'
+const SEAM_BOTTOM = '.transport-badge, .transport-center, .transport-idle, .transport-orchestrator, .transport-chip, .transport-chip-overflow, .transport-lane, .transport-lane-overflow, .transport-spend, .transport-context, .transport-tail > .mono, .transport.is-live > .mono, .transport:not(.is-live) > button, .transport:not(.is-live) > .mono, .speeds button'
 const SEAM_QUIET = ['hud-dropdown', 'hud-band-list', 'hud-health-popover']
 export const LENS_MOVE = 0.0005
 
@@ -630,6 +630,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
   inspectorRef.current = inspector
   const [following, setFollowing] = useState(false)
   const [idle, setIdle] = useState(false)
+  const [idleForced, setIdleForced] = useState(false)
   const idleRef = useRef(false)
   const idleWatchRef = useRef(null)
   const bridgeDownRef = useRef(false)
@@ -1477,6 +1478,12 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
     }
   }, [])
 
+  function toggleIdle() {
+    const next = !(idleWatchRef.current?.forced?.() ?? false)
+    idleWatchRef.current?.force?.(next)
+    setIdleForced(next)
+  }
+
   useEffect(() => {
     if (bridgeDown) idleWatchRef.current?.halt()
     else idleWatchRef.current?.arm()
@@ -1543,7 +1550,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
 
   return (
     <LiveBadgeContext.Provider value={live?.simulated ? 'demo' : 'live'}>
-      <div className={stageClassName({ disconnected: bridgeDown, idle })} style={{ '--lens-bow': `${LENS_BOW}px` }}>
+      <div className={stageClassName({ disconnected: bridgeDown, idle, idleForced })} style={{ '--lens-bow': `${LENS_BOW}px` }}>
         {clipLens && (
           <svg
             className="lens-clip-defs"
@@ -1752,6 +1759,8 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
                     onSpeed={changeSpeed}
                     onFocus={focus}
                     onOverview={overview}
+                    onToggleIdle={toggleIdle}
+                    idleForced={idleForced}
                     openTerminals={openChips}
                     onToggleTerminal={toggleTerminal}
                     onShowTerminals={showTerminals}
