@@ -1033,3 +1033,45 @@ describe('hiding folder contents', () => {
     }
   })
 })
+
+describe('the overview spheres with paths outside the file tree', () => {
+  it('yields the same top-level cards and overview spheres as the clean state and reads card.home in cardSphere', () => {
+    const tree = makeTree({ root: 'demo', files: ['src/a.js', 'docs/b.md'] })
+    const clean = createState(tree, [{ key: 'claude', name: 'Claude' }])
+    const dirty = createState(tree, [{ key: 'claude', name: 'Claude' }])
+    dirty.agents.get('claude').focus = ['C:\\Outside\\note.txt', '/etc/hosts', 'missing.txt', 'another-root.md']
+    dirty.recent = ['C:\\Outside\\note.txt', '/etc/hosts', 'missing.txt', 'another-root.md']
+    dirty.recentAt = new Map([
+      ['C:\\Outside\\note.txt', 0],
+      ['/etc/hosts', 0],
+      ['missing.txt', 0],
+      ['another-root.md', 0],
+    ])
+
+    const cleanCards = createCards(fakeScene(), { glScene: fakeScene(), alwaysDepth: 2 })
+    const dirtyCards = createCards(fakeScene(), { glScene: fakeScene(), alwaysDepth: 2 })
+    cleanCards.sync(clean)
+    dirtyCards.sync(dirty)
+
+    const cleanTop = [...cleanCards.cards.keys()].filter((path) => !path.includes('/')).sort()
+    const dirtyTop = [...dirtyCards.cards.keys()].filter((path) => !path.includes('/')).sort()
+    const cleanSpheres = cleanCards.overviewSpheres()
+    const dirtySpheres = dirtyCards.overviewSpheres()
+
+    expect(cleanTop).toEqual(['', 'docs', 'src'])
+    expect(dirtyTop).toEqual(cleanTop)
+    expect(dirtySpheres).toEqual(cleanSpheres)
+
+    const srcCard = cleanCards.cards.get('src')
+    expect(srcCard.base.equals(srcCard.home)).toBe(false)
+    expect(cleanCards.cardSphere('src')).toMatchObject({
+      x: srcCard.home.x,
+      y: srcCard.home.y,
+      z: srcCard.home.z,
+    })
+
+    cleanCards.dispose()
+    dirtyCards.dispose()
+  })
+})
+

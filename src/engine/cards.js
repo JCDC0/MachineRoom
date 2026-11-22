@@ -1242,7 +1242,7 @@ export function createCards(cssScene, options = {}) {
   function cardSphere(path) {
     const card = cards.get(path)
     if (!card?.view) return null
-    const position = card.base
+    const position = card.home
     return { x: position.x, y: position.y, z: position.z, r: cardRadius(card.view) }
   }
 

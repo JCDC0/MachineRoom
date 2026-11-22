@@ -20,10 +20,50 @@ function bulkPath(path) {
   return isBulkFolder(at === -1 ? path : path.slice(at + 1))
 }
 
+const OUTSIDE_PREFIX = /^(?:[A-Za-z]:|\/|~|%[A-Za-z_]+%(?:\/|$)|\$XDG_STATE_HOME(?:\/|$))/
+
 function clean(raw) {
-  if (typeof raw === 'string' && raw !== '.' && !raw.includes('\\') && !raw.includes('//') && !raw.startsWith('./') && !raw.endsWith('/')) return raw
+  if (typeof raw !== 'string') return null
+  if (
+    raw !== '.' &&
+    !raw.includes('\\') &&
+    !raw.includes('//') &&
+    !raw.startsWith('./') &&
+    !raw.endsWith('/') &&
+    !raw.includes('..') &&
+    !OUTSIDE_PREFIX.test(raw)
+  ) {
+    return raw
+  }
   const value = normalise(raw).replace(/^\.\//, '').replace(/\/+$/, '')
-  return value === '.' ? '' : value
+  if (value === '' || value === '.') return ''
+  if (OUTSIDE_PREFIX.test(value)) return null
+  if (!value.includes('..')) return value
+  const kept = []
+  for (const part of value.split('/')) {
+    if (part === '' || part === '.') continue
+    if (part !== '..') kept.push(part)
+    else if (kept.length === 0) return null
+    else kept.pop()
+  }
+  return kept.join('/')
+}
+
+function cleanPaths(list) {
+  const out = []
+  const seen = new Set()
+  for (const raw of list) {
+    const path = clean(raw)
+    if (path === null || seen.has(path)) continue
+    seen.add(path)
+    out.push(path)
+  }
+  return out
+}
+
+function topOf(path) {
+  const at = path.indexOf('/')
+  return at === -1 ? path : path.slice(0, at)
 }
 
 function parentOf(path) {
@@ -192,13 +232,15 @@ export function planFolderView({
   const extraFolders = new Set()
   const extraChildren = new Map()
   const isFolder = (path) => folders.has(path) || extraFolders.has(path)
-  const addExtra = (path) => addFolder(path, isFolder, (at) => extraFolders.add(at), extraChildren)
+  const addExtra = (path) => {
+    if (folders.has(topOf(path))) addFolder(path, isFolder, (at) => extraFolders.add(at), extraChildren)
+  }
 
-  const focusPaths = [...new Set(focus.map(clean))]
-  const touchedPaths = [...new Set(touched.map(clean))]
-  const changedPaths = [...new Set(changed.map(clean))]
+  const focusPaths = cleanPaths(focus)
+  const touchedPaths = cleanPaths(touched)
+  const changedPaths = cleanPaths(changed)
   const expandedPaths = new Set(
-    (expanded instanceof Set ? [...expanded] : Array.isArray(expanded) ? expanded : []).map(clean),
+    cleanPaths(expanded instanceof Set ? [...expanded] : Array.isArray(expanded) ? expanded : []),
   )
 
   const addPath = (path) => {
@@ -218,17 +260,23 @@ export function planFolderView({
 
   const focusFolders = new Set()
   focusPaths.forEach((path) => {
-    ancestors(path).forEach((part) => focusFolders.add(part))
+    ancestors(path).forEach((part) => {
+      if (isFolder(part)) focusFolders.add(part)
+    })
     if (isFolder(path) && !fileSet.has(path)) focusFolders.add(path)
   })
   expandedPaths.forEach((path) => {
-    ancestors(path).forEach((part) => focusFolders.add(part))
-    focusFolders.add(path)
+    ancestors(path).forEach((part) => {
+      if (isFolder(part)) focusFolders.add(part)
+    })
+    if (isFolder(path)) focusFolders.add(path)
   })
 
   const touchedFolders = new Set()
   touchedPaths.forEach((path) => {
-    ancestors(path).forEach((part) => touchedFolders.add(part))
+    ancestors(path).forEach((part) => {
+      if (isFolder(part)) touchedFolders.add(part)
+    })
     if (isFolder(path)) touchedFolders.add(path)
   })
 
@@ -236,7 +284,7 @@ export function planFolderView({
   changedPaths.forEach((path) => {
     if (path === '') return
     for (let at = isFolder(path) ? path : parentOf(path); ; at = parentOf(at)) {
-      changedCount.set(at, (changedCount.get(at) ?? 0) + 1)
+      if (isFolder(at)) changedCount.set(at, (changedCount.get(at) ?? 0) + 1)
       if (at === '') break
     }
   })
@@ -339,7 +387,7 @@ export function planFolderView({
 
   const rankMarks = new Map()
   const markRank = (path, rank) => {
-    if (path === '') return
+    if (path === '' || (!fileSet.has(path) && !isFolder(path))) return
     const parent = parentOf(path)
     let map = rankMarks.get(parent)
     if (!map) rankMarks.set(parent, (map = new Map()))
