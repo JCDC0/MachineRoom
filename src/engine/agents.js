@@ -127,6 +127,79 @@ export function thinkingArc(now, phase = 0, sweep = SPINNER_SWEEP_SECONDS, reduc
 
 export const CALLOUT_CROWD_LIMIT = 4
 export const CALLOUT_RECENT_KEEP = 2
+export const CALLOUT_OUT = 220
+export const CALLOUT_RISE = 40
+const CALLOUT_CENTER_RADIUS = 1
+const CALLOUT_CENTER_SIDE = 140
+const CALLOUT_CENTER_UP = 180
+const CALLOUT_HALF_WIDTH = 90
+const CALLOUT_COMPACT_HALF_WIDTH = 55
+const CALLOUT_CONSOLE_HALF_WIDTH = 110
+const CALLOUT_HALF_HEIGHT = 26
+const CALLOUT_COMPACT_HALF_HEIGHT = 12
+const CALLOUT_CONSOLE_ROW_HEIGHT = 16
+
+export function calloutPoint(agentPosition, out = {}, distance = CALLOUT_OUT, center = null) {
+  const point = out ?? {}
+  const ax = Number.isFinite(Number(agentPosition?.x)) ? Number(agentPosition.x) : 0
+  const ay = Number.isFinite(Number(agentPosition?.y)) ? Number(agentPosition.y) : 0
+  const az = Number.isFinite(Number(agentPosition?.z)) ? Number(agentPosition.z) : 0
+  const radial = Math.hypot(ax, az)
+  if (radial <= CALLOUT_CENTER_RADIUS) {
+    const right = center?.right
+    const rx = Number.isFinite(Number(right?.x)) ? Number(right.x) : 1
+    const ry = Number.isFinite(Number(right?.y)) ? Number(right.y) : 0
+    const rz = Number.isFinite(Number(right?.z)) ? Number(right.z) : 0
+    const up = center?.up
+    const ux = Number.isFinite(Number(up?.x)) ? Number(up.x) : 0
+    const uy = Number.isFinite(Number(up?.y)) ? Number(up.y) : 1
+    const uz = Number.isFinite(Number(up?.z)) ? Number(up.z) : 0
+    const side = center?.side === 1 ? 1 : -1
+    const lift = Number.isFinite(Number(center?.lift)) ? Number(center.lift) : 0
+    const sideOffset = side * CALLOUT_CENTER_SIDE
+    const upOffset = CALLOUT_CENTER_UP + lift
+    point.x = ax + rx * sideOffset + ux * upOffset
+    point.y = ay + ry * sideOffset + uy * upOffset
+    point.z = az + rz * sideOffset + uz * upOffset
+    return point
+  }
+  const reach = Number.isFinite(Number(distance)) ? Number(distance) : CALLOUT_OUT
+  const scale = reach / radial
+  point.x = ax + ax * scale
+  point.y = ay + CALLOUT_RISE
+  point.z = az + az * scale
+  return point
+}
+
+export function calloutEdgePoint(agentPosition, boxPosition, right, up, halfWidth, halfHeight, out = {}) {
+  const point = out ?? {}
+  const rx = Number.isFinite(Number(right?.x)) ? Number(right.x) : 1
+  const ry = Number.isFinite(Number(right?.y)) ? Number(right.y) : 0
+  const rz = Number.isFinite(Number(right?.z)) ? Number(right.z) : 0
+  const ux = Number.isFinite(Number(up?.x)) ? Number(up.x) : 0
+  const uy = Number.isFinite(Number(up?.y)) ? Number(up.y) : 1
+  const uz = Number.isFinite(Number(up?.z)) ? Number(up.z) : 0
+  const vx = agentPosition.x - boxPosition.x
+  const vy = agentPosition.y - boxPosition.y
+  const vz = agentPosition.z - boxPosition.z
+  const dx = vx * rx + vy * ry + vz * rz
+  const dy = vx * ux + vy * uy + vz * uz
+  const hw = Math.max(0, Number(halfWidth) || 0)
+  const hh = Math.max(0, Number(halfHeight) || 0)
+  const tx = Math.abs(dx) > 1e-6 ? hw / Math.abs(dx) : Infinity
+  const ty = Math.abs(dy) > 1e-6 ? hh / Math.abs(dy) : Infinity
+  const step = Math.min(1, tx, ty)
+  if (!Number.isFinite(step) || step <= 0) {
+    point.x = boxPosition.x
+    point.y = boxPosition.y
+    point.z = boxPosition.z
+    return point
+  }
+  point.x = boxPosition.x + rx * (dx * step) + ux * (dy * step)
+  point.y = boxPosition.y + ry * (dx * step) + uy * (dy * step)
+  point.z = boxPosition.z + rz * (dx * step) + uz * (dy * step)
+  return point
+}
 
 export function danceScale(pulse, orchestrator = false) {
   const value = Math.min(1, Math.max(0, Number(pulse) || 0))
@@ -621,7 +694,9 @@ const chipNear = new THREE.Vector3()
 const traceEnd = new THREE.Vector3()
 const webEdgePoint = new THREE.Vector3()
 const calloutPos = new THREE.Vector3()
-const camUp = new THREE.Vector3()
+const calloutEdge = new THREE.Vector3()
+const camUp = new THREE.Vector3(0, 1, 0)
+const calloutCenter = { right: null, up: camUp, side: -1, lift: 0 }
 const rotMatrix = new THREE.Matrix4()
 
 function makeCallout(agentName, key, onPick) {
@@ -1793,14 +1868,26 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
           view.callout.cmd.textContent = calloutText
         }
 
-        const calloutSide = -view.chipSide
-        calloutPos.copy(view.group.position)
-        calloutPos.addScaledVector(world.right, calloutSide * 140)
-        calloutPos.addScaledVector(camUp, 180 + (view.orchestrator ? nameLift : 0))
+        calloutCenter.right = world.right
+        calloutCenter.up = camUp
+        calloutCenter.side = -view.chipSide
+        calloutCenter.lift = view.orchestrator ? nameLift : 0
+        calloutPoint(view.group.position, calloutPos, CALLOUT_OUT, calloutCenter)
         view.callout.object.position.copy(calloutPos)
         view.callout.object.quaternion.setFromRotationMatrix(rotMatrix)
 
-        setEnds(view.calloutLine, view.group.position, calloutPos)
+        const halfWidth = compact
+          ? CALLOUT_COMPACT_HALF_WIDTH
+          : showConsole
+            ? CALLOUT_CONSOLE_HALF_WIDTH
+            : CALLOUT_HALF_WIDTH
+        const halfHeight = compact
+          ? CALLOUT_COMPACT_HALF_HEIGHT
+          : showConsole
+            ? CALLOUT_HALF_HEIGHT + ((consoleData.rows?.length ?? 0) * CALLOUT_CONSOLE_ROW_HEIGHT) / 2 + (consoleData.url ? 8 : 0)
+            : CALLOUT_HALF_HEIGHT
+        calloutEdgePoint(view.group.position, calloutPos, world.right, camUp, halfWidth, halfHeight, calloutEdge)
+        setEnds(view.calloutLine, view.group.position, calloutEdge)
         writeColor(view.calloutLine.material, WHITE)
         view.calloutLine.visible = true
       } else {
