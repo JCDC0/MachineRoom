@@ -974,20 +974,29 @@ function createSpinner(radius) {
   const group = new THREE.Group()
   const ringMaterial = lineMaterial(WHITE, SPINNER_RING_OPACITY)
   const arcMaterial = lineMaterial(WHITE, 0)
+  const planes = []
   const rings = []
   const arcs = []
   for (let index = 0; index < 2; index += 1) {
     const plane = new THREE.Group()
-    if (index === 1) plane.rotation.x = Math.PI / 2
+    plane.rotation.order = 'ZYX'
+    if (index === 1) plane.rotation.x = SPINNER_REST_B_X
     const ring = spinnerRing(radius, ringMaterial)
     const arc = spinnerArc(radius, arcMaterial)
     arc.visible = false
     plane.add(ring, arc)
     group.add(plane)
+    planes.push(plane)
     rings.push(ring)
     arcs.push(arc)
   }
-  return { group, rings, arcs, ringMaterial, arcMaterial }
+  return { group, planes, rings, arcs, ringMaterial, arcMaterial }
+}
+
+function resetSpinnerPose(spinner) {
+  spinner.planes[0].rotation.set(0, 0, 0)
+  spinner.planes[1].rotation.set(SPINNER_REST_B_X, 0, 0)
+  spinner.group.scale.setScalar(1)
 }
 
 export function createAgents(scene, roster, cssScene = null, options = {}) {
@@ -1035,6 +1044,7 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
   const parentPlaceScratch = { x: 0, y: 0, z: 0, radius: 0 }
   const orbitPlaceScratch = { x: 0, y: 0, z: 0 }
   const calloutScratch = { list: [], keys: new Set(), kept: new Set(), ranked: [], pool: [] }
+  const ringPoseScratch = { a: { x: 0, y: 0, z: 0 }, b: { x: 0, y: 0, z: 0 }, scale: 1, bright: 1 }
 
   function setBands(levels) {
     pulseSource = levels && typeof levels.length === 'number' && levels.length > 0 ? levels : null
@@ -1303,6 +1313,7 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
       spinner,
       thinking: 0,
       thinkingSince: 0,
+      thinkingPhase: thinkingPhase(agent.key),
       beatRings,
       beatNext: 0,
       label,
@@ -1934,8 +1945,8 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
       }
       view.spinner.group.visible = true
       writeColor(view.spinner.ringMaterial, ringColor)
-      writeOpacity(view.spinner.ringMaterial, SPINNER_RING_OPACITY * ringFade)
       const showArcs = !drawing && view.thinking > 0.001
+      let ringBright = 1
       if (showArcs) {
         const spinnerFade = view.thinking * fade * opacityFactor
         writeColor(view.spinner.arcMaterial, WHITE)
@@ -1943,9 +1954,25 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
         const arc = thinkingArc(now, 0, SPINNER_SWEEP_SECONDS, isStill)
         view.spinner.arcs[0].rotation.z = arc
         view.spinner.arcs[1].rotation.z = arc + SPINNER_PHASE
+        if (isStill) {
+          resetSpinnerPose(view.spinner)
+        } else {
+          const pose = thinkingRingPose(now / 1000, view.thinkingPhase, ringPoseScratch)
+          const blend = view.thinking
+          view.spinner.planes[0].rotation.set(pose.a.x * blend, pose.a.y * blend, pose.a.z * blend)
+          view.spinner.planes[1].rotation.set(
+            SPINNER_REST_B_X + (pose.b.x - SPINNER_REST_B_X) * blend,
+            pose.b.y * blend,
+            pose.b.z * blend
+          )
+          view.spinner.group.scale.setScalar(1 + (pose.scale - 1) * blend)
+          ringBright = 1 + (pose.bright - 1) * blend
+        }
       } else {
         writeOpacity(view.spinner.arcMaterial, 0)
+        resetSpinnerPose(view.spinner)
       }
+      writeOpacity(view.spinner.ringMaterial, SPINNER_RING_OPACITY * ringBright * ringFade)
       for (let index = 0; index < view.spinner.arcs.length; index += 1) {
         view.spinner.arcs[index].visible = showArcs
       }
@@ -2177,6 +2204,7 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
       view.thinking = 0
       view.thinkingSince = 0
       view.spinner.group.visible = true
+      resetSpinnerPose(view.spinner)
       for (const arc of view.spinner.arcs) arc.visible = false
       writeOpacity(view.spinner.arcMaterial, 0)
       swayTarget = 0

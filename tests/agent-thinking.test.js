@@ -639,6 +639,14 @@ describe('the thinking spinner on an agent', () => {
       agents.update(state, 0.25, 1550, world, terminals)
       expect(view.spinner.arcs[0].rotation.z).toBe(first)
       expect(view.spinner.arcs[1].rotation.z).toBe(second)
+      expect(view.spinner.planes[0].rotation.x).toBe(0)
+      expect(view.spinner.planes[0].rotation.y).toBe(0)
+      expect(view.spinner.planes[0].rotation.z).toBe(0)
+      expect(view.spinner.planes[1].rotation.x).toBeCloseTo(Math.PI / 2, 10)
+      expect(view.spinner.planes[1].rotation.y).toBe(0)
+      expect(view.spinner.planes[1].rotation.z).toBe(0)
+      expect(view.spinner.group.scale.x).toBe(1)
+      expect(view.spinner.ringMaterial.opacity).toBeCloseTo(SPINNER_RING_OPACITY, 10)
 
       apply(state, {
         time: 1600,
@@ -652,6 +660,160 @@ describe('the thinking spinner on an agent', () => {
       expect(view.spinner.group.visible).toBe(true)
       expect(view.spinner.ringMaterial.color.getHex()).toBe(YELLOW)
       expect(view.spinner.arcs.every((arc) => !arc.visible)).toBe(true)
+      agents.dispose()
+    } finally {
+      globalThis.window = savedWindow
+      disposeStill()
+    }
+  })
+
+  it('moves the ring planes and scale with the pose while thinking, blended by thinking level, and rests upright when not thinking', () => {
+    const { agents, state, terminals, world } = harness()
+    const phase = thinkingPhase('a')
+    const nowFor = (loopSeconds, loops = 10) => (loops * THINKING_LOOP_SECONDS + loopSeconds - phase * THINKING_LOOP_SECONDS) * 1000
+    startRun(state, 1000)
+    agents.update(state, 0.016, 1000, world, terminals)
+    agents.update(state, 0.4, 1400, world, terminals)
+    const view = agents.views.get('a')
+    expect(view.thinking).toBe(1)
+
+    const gyroNow = nowFor(4.0)
+    agents.update(state, 0.016, gyroNow, world, terminals)
+    const gyroPose = thinkingRingPose(gyroNow / 1000, phase)
+    expect(view.spinner.planes[0].rotation.x).toBeCloseTo(gyroPose.a.x, 10)
+    expect(view.spinner.planes[0].rotation.y).toBeCloseTo(gyroPose.a.y, 10)
+    expect(view.spinner.planes[0].rotation.z).toBeCloseTo(gyroPose.a.z, 10)
+    expect(view.spinner.planes[1].rotation.x).toBeCloseTo(gyroPose.b.x, 10)
+    expect(view.spinner.planes[1].rotation.y).toBeCloseTo(gyroPose.b.y, 10)
+    expect(view.spinner.planes[1].rotation.z).toBeCloseTo(gyroPose.b.z, 10)
+    expect(view.spinner.group.scale.x).toBeCloseTo(1, 10)
+
+    const settleNow = nowFor(6.7, 11)
+    agents.update(state, 0.016, settleNow, world, terminals)
+    const settlePose = thinkingRingPose(settleNow / 1000, phase)
+    expect(view.spinner.group.scale.x).toBeCloseTo(1.06, 10)
+    expect(view.spinner.planes[0].rotation.z).toBeCloseTo(settlePose.a.z, 10)
+    expect(view.spinner.arcs[1].rotation.z - view.spinner.arcs[0].rotation.z).toBeCloseTo(SPINNER_PHASE, 10)
+
+    apply(state, {
+      time: settleNow,
+      type: 'tool.start',
+      agent: 'a',
+      id: 't1',
+      label: 'read src/a.js',
+      touches: [{ path: 'src/a.js', mode: 'read', kind: 'file' }],
+    })
+    const blendNow = nowFor(6.7, 12)
+    agents.update(state, THINKING_OUT_SECONDS / 2, blendNow, world, terminals)
+    expect(view.thinking).toBeCloseTo(0.5, 10)
+    expect(view.spinner.planes[0].rotation.z).toBeCloseTo(settlePose.a.z * 0.5, 10)
+    expect(view.spinner.planes[1].rotation.x).toBeCloseTo(Math.PI / 2 + (settlePose.b.x - Math.PI / 2) * 0.5, 10)
+    expect(view.spinner.group.scale.x).toBeCloseTo(1.03, 10)
+
+    agents.update(state, THINKING_OUT_SECONDS / 2, blendNow + 300, world, terminals)
+    expect(view.thinking).toBe(0)
+    expect(view.spinner.planes[0].rotation.x).toBe(0)
+    expect(view.spinner.planes[0].rotation.y).toBe(0)
+    expect(view.spinner.planes[0].rotation.z).toBe(0)
+    expect(view.spinner.planes[1].rotation.x).toBeCloseTo(Math.PI / 2, 10)
+    expect(view.spinner.planes[1].rotation.y).toBe(0)
+    expect(view.spinner.planes[1].rotation.z).toBe(0)
+    expect(view.spinner.group.scale.x).toBe(1)
+
+    apply(state, { time: blendNow + 350, type: 'tool.end', agent: 'a', id: 't1', ok: true })
+    agents.update(state, 0.016, blendNow + 350, world, terminals)
+    agents.update(state, 0.4, nowFor(4.0, 14), world, terminals)
+    expect(view.spinner.planes[0].rotation.x).toBeGreaterThan(0.2)
+    agents.snap(state, world)
+    expect(view.spinner.planes[0].rotation.x).toBe(0)
+    expect(view.spinner.planes[1].rotation.x).toBeCloseTo(Math.PI / 2, 10)
+    expect(view.spinner.group.scale.x).toBe(1)
+    agents.dispose()
+  })
+
+  it('brightens the rings during Flip and Burst up to 1.5 times base opacity', () => {
+    const { agents, state, terminals, world } = harness()
+    const phase = thinkingPhase('a')
+    const nowFor = (loopSeconds, loops = 10) => (loops * THINKING_LOOP_SECONDS + loopSeconds - phase * THINKING_LOOP_SECONDS) * 1000
+    startRun(state, 1000)
+    agents.update(state, 0.016, 1000, world, terminals)
+    agents.update(state, 0.4, 1400, world, terminals)
+    const view = agents.views.get('a')
+    expect(view.thinking).toBe(1)
+
+    agents.update(state, 0.016, nowFor(0.25, 10), world, terminals)
+    expect(view.spinner.ringMaterial.opacity).toBeGreaterThan(SPINNER_RING_OPACITY)
+    expect(view.spinner.ringMaterial.opacity).toBeLessThanOrEqual(SPINNER_RING_OPACITY * SPINNER_RING_BRIGHT_MAX)
+
+    agents.update(state, 0.016, nowFor(1.5, 10), world, terminals)
+    expect(view.spinner.ringMaterial.opacity).toBeCloseTo(SPINNER_RING_OPACITY, 10)
+
+    agents.update(state, 0.016, nowFor(5.2, 10), world, terminals)
+    expect(view.spinner.ringMaterial.opacity).toBeCloseTo(SPINNER_RING_OPACITY * SPINNER_RING_BRIGHT_MAX, 10)
+
+    agents.update(state, 0.016, nowFor(6.7, 10), world, terminals)
+    expect(view.spinner.ringMaterial.opacity).toBeCloseTo(SPINNER_RING_OPACITY, 10)
+    agents.dispose()
+  })
+
+  it('moves two thinking agents out of step by their key phases', () => {
+    const pair = [
+      { key: 'claude', name: 'Claude', shape: 'claude' },
+      { key: 'agy', name: 'AGY', shape: 'agy' },
+    ]
+    const agents = createAgents(new THREE.Scene(), pair, new THREE.Scene())
+    const state = createState({ files: ['src/a.js'], dirs: ['src'], created: [] }, pair)
+    const terminals = {
+      ensure() {},
+      setVisible() {},
+      setFade() {},
+      setOpen() {},
+      remove() {},
+      edgePoint: (key, side, out) => out.set(100, 290, 0),
+    }
+    const world = {
+      right: new THREE.Vector3(1, 0, 0),
+      back: new THREE.Vector3(0, 0, 1),
+      anchor: () => ({ x: 0, y: 0, z: 0 }),
+      links: [],
+      mask: { dimmed: false, lit: new Set(), targeted: new Set() },
+      side: () => 1,
+      edge: (dir, file, side, out) => out.set(100, 0, 0),
+    }
+    apply(state, { time: 1000, type: 'run.start', agent: 'claude', runId: 'r1' })
+    apply(state, { time: 1000, type: 'run.start', agent: 'agy', runId: 'r2' })
+    agents.update(state, 0.016, 1000, world, terminals)
+    agents.update(state, 0.4, 2400, world, terminals)
+    const claude = agents.views.get('claude').spinner.planes[0].rotation
+    const agy = agents.views.get('agy').spinner.planes[0].rotation
+    const diff = Math.abs(claude.x - agy.x) + Math.abs(claude.y - agy.y) + Math.abs(claude.z - agy.z)
+    expect(diff).toBeGreaterThan(0.05)
+    agents.dispose()
+  })
+
+  it('keeps the ring planes upright and unbrightened during Flip, Burst and Settle under reduced motion', () => {
+    const savedWindow = globalThis.window
+    globalThis.window = { matchMedia: () => ({ matches: true }) }
+    disposeStill()
+    try {
+      const { agents, state, terminals, world } = harness()
+      const phase = thinkingPhase('a')
+      const nowFor = (loopSeconds, loops = 10) => (loops * THINKING_LOOP_SECONDS + loopSeconds - phase * THINKING_LOOP_SECONDS) * 1000
+      startRun(state, 1000)
+      agents.update(state, 0.016, 1000, world, terminals)
+      const view = agents.views.get('a')
+      for (const loopSec of [0.25, 4.0, 5.2, 6.7]) {
+        agents.update(state, 0.016, nowFor(loopSec), world, terminals)
+        expect(view.thinking).toBe(1)
+        expect(view.spinner.planes[0].rotation.x).toBe(0)
+        expect(view.spinner.planes[0].rotation.y).toBe(0)
+        expect(view.spinner.planes[0].rotation.z).toBe(0)
+        expect(view.spinner.planes[1].rotation.x).toBeCloseTo(Math.PI / 2, 10)
+        expect(view.spinner.planes[1].rotation.y).toBe(0)
+        expect(view.spinner.planes[1].rotation.z).toBe(0)
+        expect(view.spinner.group.scale.x).toBe(1)
+        expect(view.spinner.ringMaterial.opacity).toBeCloseTo(SPINNER_RING_OPACITY, 10)
+      }
       agents.dispose()
     } finally {
       globalThis.window = savedWindow
