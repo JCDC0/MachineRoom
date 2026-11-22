@@ -887,6 +887,81 @@ describe('run routes', () => {
     expect(done.recent[0]).toMatchObject({ lane: 'opencode', briefs: ['C3e', 'B6'], exitCode: 0, killed: false })
   })
 
+  it('passes saved effort and chosen model on a brief run and omits both when unset', async () => {
+    useRunsTemp()
+    const callsFile = join(tempDir(), 'brief-runner-calls.jsonl')
+    const script = [
+      "import { appendFileSync } from 'node:fs'",
+      `appendFileSync(${JSON.stringify(callsFile)}, JSON.stringify(process.argv.slice(2)) + '\\n')`,
+    ].join('\n')
+    const { url, dir, token } = await startRunsBridge({ script })
+    writeFileSync(
+      join(dir, 'docs', 'agents', 'lanes.json'),
+      JSON.stringify({
+        opencode: { name: 'OpenCode', harness: 'OpenCode', cli: { harness: 'opencode', bin: 'opencode.exe', model: 'opencode-go/mimo-v2.6-pro' } },
+        opencode2: { name: 'OpenCode 2', harness: 'OpenCode', effort: 'xhigh', cli: { harness: 'opencode', bin: 'opencode.exe', model: 'opencode-go/mimo-v2.6-pro' } },
+      })
+    )
+    const readCalls = () => {
+      try {
+        return readFileSync(callsFile, 'utf8')
+          .split(/\r?\n/)
+          .filter((line) => line.trim() !== '')
+          .map((line) => JSON.parse(line))
+      } catch {
+        return []
+      }
+    }
+
+    const withEffort = await tokenPost(`${url}/api/control/runs`, { lane: 'opencode2', briefs: ['C3e'], confirmed: true }, token)
+    expect(withEffort.status).toBe(202)
+    await waitFor(() => readCalls().length === 1, { what: 'brief run with saved effort' })
+    expect(readCalls()[0]).toEqual([
+      'opencode2',
+      'C3e',
+      '--started-by',
+      'orchestrator',
+      '--reasoning',
+      'xhigh',
+      '--started-at',
+      withEffort.body.startedAt,
+    ])
+    await waitFor(async () => (await getJson(`${url}/api/control/runs`)).body.running.length === 0, { what: 'opencode2 to finish' })
+
+    const withModel = await tokenPost(
+      `${url}/api/control/runs`,
+      { lane: 'opencode', briefs: ['B6'], model: 'opencode/deepseek-v4.1-flash-free', confirmed: true },
+      token
+    )
+    expect(withModel.status).toBe(202)
+    await waitFor(() => readCalls().length === 2, { what: 'brief run with chosen model' })
+    expect(readCalls()[1]).toEqual([
+      'opencode',
+      'B6',
+      '--model',
+      'opencode/deepseek-v4.1-flash-free',
+      '--started-by',
+      'orchestrator',
+      '--started-at',
+      withModel.body.startedAt,
+    ])
+    await waitFor(async () => (await getJson(`${url}/api/control/runs`)).body.running.length === 0, { what: 'opencode to finish' })
+
+    const withNeither = await tokenPost(`${url}/api/control/runs`, { lane: 'opencode', briefs: ['C3e'], confirmed: true }, token)
+    expect(withNeither.status).toBe(202)
+    await waitFor(() => readCalls().length === 3, { what: 'brief run with neither effort nor model' })
+    expect(readCalls()[2]).toEqual([
+      'opencode',
+      'C3e',
+      '--started-by',
+      'orchestrator',
+      '--started-at',
+      withNeither.body.startedAt,
+    ])
+    expect(readCalls()[2]).not.toContain('--model')
+    expect(readCalls()[2]).not.toContain('--reasoning')
+  })
+
   it('records the lock log when a runner fails', async () => {
     const tempDirRuns = useRunsTemp()
     const script = [

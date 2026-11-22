@@ -1524,7 +1524,7 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
             '--started-at',
             entry.startedAt,
           ]
-      : [...command.args, lane, ...briefs, ...modeArgs, ...allowedArgs, ...startedArgs, ...continueArgs, '--started-at', entry.startedAt]
+      : [...command.args, lane, ...briefs, ...modelArgs, ...modeArgs, ...allowedArgs, ...startedArgs, ...reasoningArgs, ...continueArgs, '--started-at', entry.startedAt]
     const existingTicket = givenTicket ? laneTickets.get(ticket) : null
     laneTickets.set(ticket, {
       lane: existingTicket?.lane ?? lane,
