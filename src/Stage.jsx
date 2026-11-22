@@ -370,6 +370,8 @@ function sameAgent(left, right) {
     left.model === right.model &&
     left.status === right.status &&
     left.label === right.label &&
+    (left.openCalls ?? 0) === (right.openCalls ?? 0) &&
+    (left.tool ?? '') === (right.tool ?? '') &&
     left.runs === right.runs &&
     (left.outsideCount ?? 0) === (right.outsideCount ?? 0) &&
     left.parent === right.parent &&
@@ -439,6 +441,7 @@ export function resetRunState(state) {
     agent.startedBy = null
     agent.error = null
     agent.calls?.clear()
+    agent.openCalls?.clear()
     agent.runWrites?.clear()
     agent.focus = []
     agent.version = (agent.version ?? 0) + 1
@@ -1502,10 +1505,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
   })
   const bridgeLive = Boolean(live) && !live.simulated
   const workingInspector = snapshot.agents.find((agent) => agent.status === 'working') ?? null
-  const inspectorLanes = snapshot.agents.map((agent) => {
-    const calls = roomRef.current?.callsFor?.(agent.key)
-    return calls && calls.count > 0 ? { ...agent, openCalls: calls.count, tool: calls.tool } : agent
-  })
+  const inspectorLanes = snapshot.agents
   const inspectorTouches = inspector?.kind === 'file' ? roomRef.current?.touches?.(inspector.id) ?? NONE : NONE
   const webAgents = roomRef.current?.webAgents?.() ?? NONE
   const failureList = failureRows(failures, FAILURE_TRAY_LIMIT)

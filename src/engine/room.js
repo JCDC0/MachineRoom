@@ -383,7 +383,6 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
   const colourOf = (key) => agentSet.views.get(key)?.color
   const masks = createWorkingMaskCache(colourOf)
   const calloutInput = { focus: null, hover: null }
-  const openCalls = new Map()
   const touchLog = new Map()
   const pendingSpawns = []
   const pendingTouches = []
@@ -537,7 +536,6 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     timers.clear()
     terminals.clearNotes()
     webCalls.clear()
-    openCalls.clear()
     touchLog.clear()
     labels.clear()
     stars.reset()
@@ -618,22 +616,11 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
   function noteActivity(activity) {
     const agent = activity?.agent
     if (typeof agent !== 'string' || agent === '') return
-    if (activity.type === 'tool.start') {
-      if (!openCalls.has(agent)) openCalls.set(agent, new Map())
-      openCalls.get(agent).set(activity.id ?? '', activity.tool)
-      const time = Number.isFinite(activity.time) ? activity.time : Date.now()
-      for (const touch of activity.touches ?? []) {
-        if (touch.kind !== 'file' || typeof touch.path !== 'string') continue
-        noteTouch(touchLog, touch.path, { key: agent, mode: touch.mode === 'read' ? 'read' : 'write', time })
-      }
-      return
-    }
-    if (activity.type === 'tool.end') {
-      openCalls.get(agent)?.delete(activity.id ?? '')
-      return
-    }
-    if (activity.type === 'run.start' || activity.type === 'run.end' || activity.type === 'agent.end') {
-      openCalls.delete(agent)
+    if (activity.type !== 'tool.start') return
+    const time = Number.isFinite(activity.time) ? activity.time : Date.now()
+    for (const touch of activity.touches ?? []) {
+      if (touch.kind !== 'file' || typeof touch.path !== 'string') continue
+      noteTouch(touchLog, touch.path, { key: agent, mode: touch.mode === 'read' ? 'read' : 'write', time })
     }
   }
 
@@ -1018,7 +1005,6 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
           if (finished.has(spawn.agent) || finished.has(spawn.child)) pendingSpawns.splice(index, 1)
         }
         for (const key of finished) {
-          openCalls.delete(key)
           agentSet.webEnd(key)
           for (const [storedKey, agentKey] of webCalls) {
             if (agentKey !== key) continue
@@ -1314,11 +1300,6 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     inspect,
     inspecting: () => inspected,
     touches: (path) => touchLog.get(path) ?? [],
-    callsFor(key) {
-      const calls = openCalls.get(key)
-      if (!calls || calls.size === 0) return { count: 0, tool: '' }
-      return { count: calls.size, tool: [...calls.values()].at(-1) ?? '' }
-    },
     webAgents: () => [...new Set(webCalls.values())],
     toggleTerminal(key) {
       if (key) terminals.toggle(key)

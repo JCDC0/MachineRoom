@@ -742,12 +742,12 @@ describe('the stars of a spawn and a web call', () => {
       apply(state, edit)
       room.onActivity(edit)
       expect(room.webAgents()).toContain('claude~1')
-      expect(room.callsFor('claude~1').count).toBeGreaterThan(0)
+      expect(state.agents.get('claude~1').openCalls.size).toBeGreaterThan(0)
       const end = { type: 'run.end', agent: 'claude', ok: true, time: 1800, runId: 'r-claude' }
       apply(state, end)
       room.onActivity(end)
       expect(room.webAgents()).not.toContain('claude~1')
-      expect(room.callsFor('claude~1').count).toBe(0)
+      expect(state.agents.get('claude~1')?.openCalls?.size ?? 0).toBe(0)
     } finally {
       room.dispose()
     }
