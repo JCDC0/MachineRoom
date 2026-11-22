@@ -16,8 +16,9 @@ The team since 2026-11-22 17:35 (the owner's word): this session orchestrates (C
 | The `ORCHESTRATOR` and `NEON` words beside the hub look like random text (sector name labels) | P700 | merged, pushed |
 | A lane shows two boxes over its head (callout and `CONSOLE`) that clip; one box, beside the agent, away from the hub centre | P701 | merged, seen in a replay |
 | Small corner brackets at the lens edges | by hand, `2583ded8` | done, pushed |
-| Found while switching the fleet: the live room's overview sat far out and Center did not bring it back until a reload. P702 showed the ladder is not the cause; later reloads drift out too | P702b | running on Argon |
-| Item 6 below: a lower subagent depth hides a ring that holds agents with no confirm | P703 | running on Neon |
+| Found while switching the fleet: the live room's overview sat far out and Center did not bring it back until a reload. P702 showed the ladder is not the cause; later reloads drift out too | P702b | merged: a path outside the project (an absolute path such as a scratchpad file) no longer becomes a top-level card. Cost: a replay no longer draws a top-level folder its recorded tree lacks; the live room gets one from the bridge's `tree` events |
+| Item 6 below: a lower subagent depth hides a ring that holds agents with no confirm | P703 | merged; try the card in the bench after its restart |
+| Review 72 of P694 to P703 | P704 | running on Neon |
 
 Findings per review: 64 had 12, 65 had 10, 66 had 8, 67 had 4, 68 had 3, 69 had 3, 70 had 4. Since review 69 they are mostly edge cases (node flags no runner uses, five-deep rings, a log that keeps growing with no meta).
 
