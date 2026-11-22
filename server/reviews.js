@@ -31,12 +31,12 @@ const MERGE_ENV = { GIT_TERMINAL_PROMPT: '0', GIT_EDITOR: 'true' }
 const MAIN_REF = 'refs/heads/main'
 const MAIN_BASE = { ref: MAIN_REF, name: 'main' }
 const REPO_ROOT = resolve(fileURLToPath(import.meta.url), '..', '..')
-export const DEFAULT_PATCH_LIMIT = 400 * 1024
-export const DEFAULT_REVIEW_CONCURRENCY = 4
+const DEFAULT_PATCH_LIMIT = 400 * 1024
+const DEFAULT_REVIEW_CONCURRENCY = 4
 export const NOT_OWNER_PROBLEM = 'The caller is not the owner, so the lane was not merged.'
-export const MERGE_TIMEOUT_PROBLEM = 'The merge took too long, so it was stopped.'
-export const REWIND_CONFIRM_PROBLEM = 'Confirm the rewind first, with the head you read.'
-export const FAILED_CHECKS_PROBLEM = 'Checks failed on this head, so the lane was not merged.'
+const MERGE_TIMEOUT_PROBLEM = 'The merge took too long, so it was stopped.'
+const REWIND_CONFIRM_PROBLEM = 'Confirm the rewind first, with the head you read.'
+const FAILED_CHECKS_PROBLEM = 'Checks failed on this head, so the lane was not merged.'
 let codeCheckoutPath = ''
 
 export function resetCodeCheckout() {

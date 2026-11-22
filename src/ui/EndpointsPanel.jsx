@@ -9,17 +9,17 @@ const MAX_ENDPOINTS = 20
 const MAX_MODELS = 1000
 
 export const ENDPOINT_NAME_PROBLEM = 'The endpoint name must be 1 to 40 letters, digits, spaces, dashes or underscores.'
-export const ENDPOINT_PROVIDER_PROBLEM = 'Choose a provider from the list.'
+const ENDPOINT_PROVIDER_PROBLEM = 'Choose a provider from the list.'
 export const ENDPOINT_BASE_URL_PROBLEM = 'The base URL must be a full https address, or http on this computer.'
 export const ENDPOINT_KEY_PROBLEM = 'A remote endpoint needs a key slot.'
 export const ENDPOINT_KEY_NAME_PROBLEM = 'The key slot name must be 1 to 40 letters, digits, spaces, dashes or underscores.'
 export const ENDPOINT_MODELS_PROBLEM = 'Models must be a list of 0 to 1000 ids.'
-export const ENDPOINT_MAX_PROBLEM = 'At most 20 endpoints are allowed.'
+const ENDPOINT_MAX_PROBLEM = 'At most 20 endpoints are allowed.'
 export const QUICK_PROVIDER_PROBLEM = 'Choose a provider from the list.'
 export const QUICK_KEY_PROBLEM = 'Write the key.'
-export const REPLACE_KEY_NO_PRESET_PROBLEM = 'This endpoint has no provider preset to replace its key.'
-export const REPLACE_KEY_NO_SLOT_PROBLEM = 'This endpoint has no key slot to replace.'
-export const REPLACE_KEY_SHARED_SLOT_PROBLEM = 'This endpoint key slot is shared with another endpoint.'
+const REPLACE_KEY_NO_PRESET_PROBLEM = 'This endpoint has no provider preset to replace its key.'
+const REPLACE_KEY_NO_SLOT_PROBLEM = 'This endpoint has no key slot to replace.'
+const REPLACE_KEY_SHARED_SLOT_PROBLEM = 'This endpoint key slot is shared with another endpoint.'
 
 export function baseUrlForProvider(providers, name) {
   const found = (Array.isArray(providers) ? providers : []).find((entry) => entry?.name === name)
@@ -58,7 +58,7 @@ export function quickConfirmText(provider, endpointName = '') {
   return `Save the ${providerName} key and load its models?`
 }
 
-export function replaceKeyProblem(endpoint, endpoints = [], presets = []) {
+function replaceKeyProblem(endpoint, endpoints = [], presets = []) {
   const provider = typeof endpoint?.provider === 'string' ? endpoint.provider.trim() : ''
   if (!(Array.isArray(presets) ? presets : []).some((entry) => entry?.name === provider)) {
     return REPLACE_KEY_NO_PRESET_PROBLEM
@@ -84,21 +84,21 @@ export function modelsFromText(text) {
   return models
 }
 
-export function modelsText(models) {
+function modelsText(models) {
   return (Array.isArray(models) ? models : []).join('\n')
 }
 
-export function modelsFromAnswer(answer) {
+function modelsFromAnswer(answer) {
   if (Array.isArray(answer)) return answer
   return Array.isArray(answer?.models) ? answer.models : []
 }
 
-export function detailsFromAnswer(answer) {
+function detailsFromAnswer(answer) {
   if (Array.isArray(answer)) return null
   return Array.isArray(answer?.modelDetails) ? answer.modelDetails : []
 }
 
-export function keySlotNames(answer) {
+function keySlotNames(answer) {
   const list = Array.isArray(answer) ? answer : Array.isArray(answer?.keys) ? answer.keys : []
   const names = []
   for (const entry of list) {

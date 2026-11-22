@@ -1,7 +1,7 @@
 import { readStorage, store, writeStorage } from '../storage.js'
 
-export const LAUNCHER_FLAG = 'machineroom.launcher'
-export const LAUNCHER_SEEN = '1'
+const LAUNCHER_FLAG = 'machineroom.launcher'
+const LAUNCHER_SEEN = '1'
 export const LAUNCHER_EVENT = 'machineroom:projects'
 export const POLL_INTERVAL_MS = 500
 export const POLL_TIMEOUT_MS = 30000

@@ -14,7 +14,7 @@ import { briefProblems, briefWorktreeProblems, checkCommandLines, checkCommandPr
 import { outcomeTable } from '../server/outcomes.js'
 import { claudeProjectSlug } from '../server/claude-sessions.js'
 import { codexThreadId, findCodexRollout, quotaForRun, readCodexQuota } from '../server/codex-rollout.js'
-export { codexThreadId, quotaForRun, readCodexQuota } from '../server/codex-rollout.js'
+export { quotaForRun, readCodexQuota } from '../server/codex-rollout.js'
 import { readMainSubjectsSync } from '../server/runs.js'
 import { isLockHolderStale, killTree, descendantProcesses, leftoverProcesses, listProcesses, sampleProcesses } from '../server/processTree.js'
 import { codexProgramFor } from '../server/agents-config.js'
@@ -131,7 +131,7 @@ function exampleLane(entries) {
   return live ? live[0] : (entries[0]?.[0] ?? 'lane')
 }
 
-export function helpLines() {
+function helpLines() {
   const entries = lanesInFile()
   const path = lanesFile()
   const names = entries.map(([key]) => key)
@@ -637,7 +637,7 @@ export function runnerCommitVersion(file = join(root, 'package.json')) {
   return nextVersion(JSON.parse(readFileSync(file, 'utf8')).version)
 }
 
-export function runnerCommit({ laneKey, worktree, briefs, version = runnerCommitVersion(), branchSuffix = '', continueFrom = '' } = {}) {
+function runnerCommit({ laneKey, worktree, briefs, version = runnerCommitVersion(), branchSuffix = '', continueFrom = '' } = {}) {
   const list = Array.isArray(briefs) ? briefs : []
   const title = String(list[0]?.title ?? '').trim()
   const result = { ok: true, committed: false, leftOut: [], error: '' }
@@ -712,7 +712,7 @@ function linkNodeModules(project, worktree) {
   }
 }
 
-export function excludeWorktrees(project) {
+function excludeWorktrees(project) {
   const found = spawnSync(gitPath(), ['rev-parse', '--git-common-dir'], { cwd: project, encoding: 'utf8', windowsHide: true })
   const common = String(found.stdout ?? '').trim()
   if (found.status !== 0 || !common) return
@@ -1146,7 +1146,7 @@ function readTask(options) {
   return text
 }
 
-export const DEFAULT_CLOSE_TIMEOUT_MS = 30000
+const DEFAULT_CLOSE_TIMEOUT_MS = 30000
 
 export function isResultLine(line) {
   if (typeof line !== 'string' || !line.trim()) return false
@@ -1320,7 +1320,7 @@ function gitFolder(cwd) {
   }
 }
 
-export const LANE_START_BRANCH = 'main'
+const LANE_START_BRANCH = 'main'
 const START_REF = 'refs/heads/main'
 
 export function laneStartProblem({ worktree, branch, count, commits } = {}) {

@@ -21,8 +21,8 @@ export const EFFECTS = [
   { key: 'bloom', label: 'Bloom', costly: false },
 ]
 
-export const SETTINGS_TAB_KEY = 'machineroom.settingsTab'
-export const SETTINGS_TABS = [
+const SETTINGS_TAB_KEY = 'machineroom.settingsTab'
+const SETTINGS_TABS = [
   { key: 'harnesses', label: 'Harnesses' },
   { key: 'direct-api', label: 'Direct API' },
   { key: 'keys', label: 'Keys' },

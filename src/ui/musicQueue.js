@@ -6,7 +6,7 @@ const SETTINGS_KEY = 'machineroom.settings'
 
 export const ALL_CHOICE = 'all'
 export const LOOSE_CHOICE = 'loose'
-export const LOOP_MODES = ['off', 'all', 'one']
+const LOOP_MODES = ['off', 'all', 'one']
 const PLAYLIST_PREFIX = 'playlist:'
 
 function cleanBase(value) {
@@ -64,7 +64,7 @@ async function readMusicList(signal = null) {
   return null
 }
 
-export function playlistChoice(raw, playlists = [], tracks = []) {
+function playlistChoice(raw, playlists = [], tracks = []) {
   const lists = Array.isArray(playlists) ? playlists : []
   const loose = Array.isArray(tracks) ? tracks : []
   if (raw === LOOSE_CHOICE) return loose.length > 0 ? LOOSE_CHOICE : ALL_CHOICE
@@ -75,7 +75,7 @@ export function playlistChoice(raw, playlists = [], tracks = []) {
   return ALL_CHOICE
 }
 
-export function playlistQueue(playlists, tracks, choice = ALL_CHOICE) {
+function playlistQueue(playlists, tracks, choice = ALL_CHOICE) {
   const lists = Array.isArray(playlists) ? playlists : []
   const loose = Array.isArray(tracks) ? tracks : []
   if (choice === LOOSE_CHOICE) return loose.map((name) => ({ playlist: '', name }))
@@ -95,7 +95,7 @@ export function playlistQueue(playlists, tracks, choice = ALL_CHOICE) {
   return all
 }
 
-export function musicTrackUrl(base, track) {
+function musicTrackUrl(base, track) {
   const name = typeof track?.name === 'string' ? track.name : ''
   const playlist = typeof track?.playlist === 'string' ? track.playlist : ''
   return playlist
@@ -110,7 +110,7 @@ export function formatTrackTime(value) {
   return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, '0')}`
 }
 
-export function readMusicSettings(storage = store()) {
+function readMusicSettings(storage = store()) {
   try {
     const raw = readStorage(SETTINGS_KEY, storage)
     const parsed = raw ? JSON.parse(raw) : null
@@ -144,14 +144,6 @@ export function saveMusicSettings(next, storage = store()) {
   if (typeof next.shuffle === 'boolean') merged.shuffle = next.shuffle
   if (LOOP_MODES.includes(next.loop)) merged.loop = next.loop
   return writeStorage(SETTINGS_KEY, JSON.stringify({ ...current, music: merged }), storage)
-}
-
-export function readMusicPlaylist(storage = store()) {
-  return readMusicSettings(storage).playlist
-}
-
-export function saveMusicPlaylist(choice, storage = store()) {
-  return saveMusicSettings({ playlist: choice }, storage)
 }
 
 export function nextLoop(loop) {

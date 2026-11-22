@@ -1,9 +1,9 @@
 import { decide } from '../src/decider/decide.js'
 
-export const DEFAULT_DECISION_MODEL = 'typesafe/jev-1.14'
-export const DECIDE_BODY_LIMIT = 32 * 1024
-export const OWNER_DECIDE_PROBLEM = 'Only the owner can spend on a decision.'
-export const CONFIRM_DECIDE_PROBLEM = 'The owner must confirm the decision first.'
+const DEFAULT_DECISION_MODEL = 'typesafe/jev-1.14'
+const DECIDE_BODY_LIMIT = 32 * 1024
+const OWNER_DECIDE_PROBLEM = 'Only the owner can spend on a decision.'
+const CONFIRM_DECIDE_PROBLEM = 'The owner must confirm the decision first.'
 
 function ownerRequest(req) {
   return Boolean(req.headers?.origin)

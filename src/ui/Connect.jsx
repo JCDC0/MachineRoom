@@ -6,7 +6,7 @@ import { DEFAULT_SETTINGS } from './settings.js'
 export const TOUR_QUERY = '?replay&fixture=scenario-i&tour'
 export const CONNECT_INTRO =
   'MachineRoom shows coding agents working on your project as a 3D room in the browser. It follows the orchestrator, sub orchestrators and coding lanes live on your files, or replays a recorded run.'
-export const LOCAL_RECORDS_NOTE =
+const LOCAL_RECORDS_NOTE =
   'MachineRoom keeps its records, logs and costs on this computer; the agents still send your code to their model providers.'
 
 const DEFAULT_INITIAL = {

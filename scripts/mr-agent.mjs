@@ -84,7 +84,7 @@ function instructionDocs(cwd) {
   return null
 }
 
-export function systemPrompt({ cwd, shell, platform = process.platform, date = new Date() } = {}) {
+function systemPrompt({ cwd, shell, platform = process.platform, date = new Date() } = {}) {
   const file = typeof shell?.file === 'string' && shell.file !== '' ? shell.file : '/bin/sh'
   const lines = [
     `You are MachineRoom, a coding agent. Work only inside the working folder ${cwd}.`,

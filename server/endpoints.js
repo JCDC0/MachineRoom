@@ -2,14 +2,12 @@ import { mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from '
 import { dirname, join } from 'node:path'
 import { keyFromFile, writeKey } from './family.js'
 
-export { keyFromFile }
-
 export const MAX_ENDPOINTS = 20
 export const MAX_ENDPOINT_MODELS = 1000
-export const MAX_MODEL_DETAIL_TEXT = 200
+const MAX_MODEL_DETAIL_TEXT = 200
 export const MAX_MODEL_PINS = 200
 export const MODELS_TIMEOUT_MS = 10000
-export const ENDPOINT_NAME_PATTERN = /^[A-Za-z0-9 _-]{1,40}$/
+const ENDPOINT_NAME_PATTERN = /^[A-Za-z0-9 _-]{1,40}$/
 
 export const PROVIDERS = [
   { name: 'OpenRouter', baseUrl: 'https://openrouter.ai/api/v1' },
@@ -36,39 +34,39 @@ export const DELETE_CONFIRM_PROBLEM = 'Confirm deleting the endpoint first.'
 export const NAME_PROBLEM = 'The endpoint name must be 1 to 40 letters, digits, spaces, dashes or underscores.'
 export const PROVIDER_PROBLEM = 'Choose a provider from the list.'
 export const BASE_URL_PROBLEM = 'The base URL must be a full https address, or http on this computer.'
-export const BASE_URL_PARTS_PROBLEM = 'The base URL cannot hold a user name, a query or a fragment.'
-export const KEY_NAME_PROBLEM = 'The key slot name must be 1 to 40 letters, digits, spaces, dashes or underscores.'
+const BASE_URL_PARTS_PROBLEM = 'The base URL cannot hold a user name, a query or a fragment.'
+const KEY_NAME_PROBLEM = 'The key slot name must be 1 to 40 letters, digits, spaces, dashes or underscores.'
 export const KEY_REQUIRED_PROBLEM = 'A remote endpoint needs a key slot.'
-export const MODELS_PROBLEM = 'Models must be a list of 0 to 1000 ids.'
+const MODELS_PROBLEM = 'Models must be a list of 0 to 1000 ids.'
 export const TOO_MANY_PROBLEM = 'At most 20 endpoints are allowed.'
 export const ENDPOINT_NOT_FOUND_PROBLEM = 'The endpoint was not found.'
 export const NO_KEY_PROBLEM = 'The key slot has no key.'
 export const MODELS_FAILED_PROBLEM = 'The endpoint did not answer its model list.'
-export const MODELS_TIMEOUT_PROBLEM = 'The endpoint did not answer within 10 seconds.'
-export const MODELS_JSON_PROBLEM = 'The endpoint model list was not JSON.'
-export const QUICK_ORIGIN_PROBLEM = 'A request to save a Direct API key needs a page Origin.'
-export const QUICK_CONFIRM_PROBLEM = 'Confirm saving the Direct API key first.'
-export const QUICK_KEY_PROBLEM = 'The key must be 1 to 500 characters.'
-export const QUICK_KEY_SAVE_PROBLEM = 'The Direct API key could not be saved.'
-export const REPLACE_KEY_PROVIDER_PROBLEM = 'The key can only be replaced on the endpoint it belongs to.'
-export const REPLACE_KEY_SLOT_PROBLEM = 'This endpoint has no key slot to replace.'
-export const REPLACE_KEY_SHARED_PROBLEM = 'That key slot is shared with another endpoint.'
+const MODELS_TIMEOUT_PROBLEM = 'The endpoint did not answer within 10 seconds.'
+const MODELS_JSON_PROBLEM = 'The endpoint model list was not JSON.'
+const QUICK_ORIGIN_PROBLEM = 'A request to save a Direct API key needs a page Origin.'
+const QUICK_CONFIRM_PROBLEM = 'Confirm saving the Direct API key first.'
+const QUICK_KEY_PROBLEM = 'The key must be 1 to 500 characters.'
+const QUICK_KEY_SAVE_PROBLEM = 'The Direct API key could not be saved.'
+const REPLACE_KEY_PROVIDER_PROBLEM = 'The key can only be replaced on the endpoint it belongs to.'
+const REPLACE_KEY_SLOT_PROBLEM = 'This endpoint has no key slot to replace.'
+const REPLACE_KEY_SHARED_PROBLEM = 'That key slot is shared with another endpoint.'
 export const PIN_PROBLEM = 'A pin is a model name of at most 200 characters.'
 export const PIN_ORIGIN_PROBLEM = 'A change to the model pins needs a page Origin.'
 
-export function endpointsFile(runsFolder) {
+function endpointsFile(runsFolder) {
   return join(runsFolder, 'endpoints.json')
 }
 
-export function modelPinsFile(runsFolder) {
+function modelPinsFile(runsFolder) {
   return join(runsFolder, 'model-pins.json')
 }
 
-export function isLocalHost(hostname) {
+function isLocalHost(hostname) {
   return LOCAL_HOSTS.has(String(hostname ?? '').toLowerCase())
 }
 
-export function parseBaseUrl(value) {
+function parseBaseUrl(value) {
   const text = typeof value === 'string' ? value.trim() : ''
   if (text === '') return { problem: BASE_URL_PROBLEM }
   let url
@@ -125,7 +123,7 @@ function detailNumber(value) {
   return Number.isFinite(number) ? number : null
 }
 
-export function cleanModelDetails(value, models) {
+function cleanModelDetails(value, models) {
   if (!Array.isArray(value)) return []
   const allowed = new Set(models)
   const details = []
@@ -158,7 +156,7 @@ export function modelPinsProblem(value) {
   return null
 }
 
-export function cleanModelPins(value) {
+function cleanModelPins(value) {
   const pins = []
   const seen = new Set()
   for (const pin of Array.isArray(value) ? value : []) {
@@ -261,25 +259,19 @@ export function saveEndpoints(runsFolder, endpoints, { rename = renameSync } = {
   }
 }
 
-export function resolveEndpoint(runsFolder, name) {
+function resolveEndpoint(runsFolder, name) {
   const wanted = typeof name === 'string' ? name.trim() : ''
   if (wanted === '') return null
   return readEndpoints(runsFolder).find((entry) => entry.name === wanted) ?? null
 }
 
-export function endpointModelDetails(runsFolder, endpointName = '') {
-  const endpoints = readEndpoints(runsFolder)
-  if (!endpointName) return endpoints
-  return endpoints.find((entry) => entry.name === endpointName) ?? null
-}
-
-export async function readEndpointKey(runsFolder, keyName) {
+async function readEndpointKey(runsFolder, keyName) {
   const name = typeof keyName === 'string' ? keyName.trim() : ''
   if (name === '') return ''
   return keyFromFile(runsFolder, name)
 }
 
-export async function writeEndpointKey(runsFolder, keyName, value) {
+async function writeEndpointKey(runsFolder, keyName, value) {
   const name = typeof keyName === 'string' ? keyName.trim() : ''
   if (name === '') return false
   try {
@@ -290,7 +282,7 @@ export async function writeEndpointKey(runsFolder, keyName, value) {
   }
 }
 
-export function quickEndpointName(provider) {
+function quickEndpointName(provider) {
   const text = typeof provider === 'string' ? provider.trim() : ''
   return text.replace(/[^A-Za-z0-9 _-]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 40)
 }

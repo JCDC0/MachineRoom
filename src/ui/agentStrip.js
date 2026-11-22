@@ -6,7 +6,7 @@ export const WIDE_LAYOUT_MIN = 900
 export const AUTOCOMPACT_MIN = 50
 export const AUTOCOMPACT_MAX = 95
 export const DEFAULT_AUTOCOMPACT_PERCENT = 80
-export const EFFORT_LEVELS = {
+const EFFORT_LEVELS = {
   claude: ['low', 'medium', 'high', 'xhigh', 'max'],
   opencode: ['low', 'medium', 'high', 'max'],
 }
@@ -90,7 +90,7 @@ export function effortLabel(value, harness) {
   return levels.includes(text) ? text : 'default'
 }
 
-export function orchestratorRows(value) {
+function orchestratorRows(value) {
   if (Array.isArray(value)) return value.filter(isObject)
   if (isObject(value) && Array.isArray(value.orchestrators)) return value.orchestrators.filter(isObject)
   if (isObject(value) && typeof value.id === 'string') return [value]

@@ -4,8 +4,8 @@ import { terminalText } from '../harnesses/common.js'
 import { parseJson } from './parsers/common.js'
 import { createParser } from './parsers/index.js'
 
-export const CONVERSATION_ENTRY_LIMIT = 2000
-export const CONVERSATION_TEXT_LIMIT = 4000
+const CONVERSATION_ENTRY_LIMIT = 2000
+const CONVERSATION_TEXT_LIMIT = 4000
 
 const READERS = new Set(['claude', 'opencode', 'codex', 'agy'])
 const SECRET_FIELD = /(?:key|token|secret|password|authorization)/i

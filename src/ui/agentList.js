@@ -7,7 +7,7 @@ export function isOrchestratorAgent(agent) {
   return ORCHESTRATOR.test(String(agent.name ?? '')) || ORCHESTRATOR.test(String(agent.key ?? ''))
 }
 
-export function isActiveAgent(agent) {
+function isActiveAgent(agent) {
   return Boolean(agent && ACTIVE_STATUSES.has(agent.status))
 }
 

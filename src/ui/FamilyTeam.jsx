@@ -23,7 +23,7 @@ function countLine(count, one, many) {
   return count === 1 ? `1 ${one}` : `${count} ${many}`
 }
 
-export function sameTeamPlan(left, right) {
+function sameTeamPlan(left, right) {
   const one = Array.isArray(left) ? left : []
   const two = Array.isArray(right) ? right : []
   if (one.length !== two.length) return false
@@ -37,7 +37,7 @@ export function sameTeamPlan(left, right) {
   })
 }
 
-export function FamilyTeam({ client = null }) {
+function FamilyTeam({ client = null }) {
   const canTeam =
     typeof client?.setLadder === 'function' && typeof client?.setAgentLabel === 'function'
   const [open, setOpen] = useState(false)

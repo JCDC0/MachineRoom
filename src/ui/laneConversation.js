@@ -1,9 +1,9 @@
-export const LANE_RUN_LIMIT = 20
+const LANE_RUN_LIMIT = 20
 export const LANE_READ_GAP_MS = 2000
-export const PROMPT_LINES = 3
-export const PROMPT_CHARS = 360
+const PROMPT_LINES = 3
+const PROMPT_CHARS = 360
 
-export function liveRunLane(run, lanes = []) {
+function liveRunLane(run, lanes = []) {
   const direct = typeof run?.lane === 'string' ? run.lane.trim() : ''
   if (direct) return direct
   const name = String(run?.runId ?? run?.issueId ?? '').replace(/^run-/, '')

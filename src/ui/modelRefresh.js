@@ -62,7 +62,7 @@ export function modelChoiceText(choice) {
   return modelName(choice?.id, [choice])
 }
 
-export function modelErrorText(value) {
+function modelErrorText(value) {
   if (typeof value === 'string') return cleanText(value)
   if (value instanceof Error) return cleanText(value.message)
   return ''

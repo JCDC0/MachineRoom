@@ -104,7 +104,7 @@ export function changeEvents(frame) {
   return []
 }
 
-export function mapAgent(raw, spendCents) {
+function mapAgent(raw, spendCents) {
   const name = String(raw?.name ?? raw?.id ?? 'agent')
   return {
     id: String(raw?.id ?? ''),

@@ -7,8 +7,8 @@ import { WORKTREES_FOLDER, laneLockPids } from '../src/briefs/run.js'
 import { runsFolder } from '../server/lanes-source.js'
 import { gitPath } from '../server/programPath.js'
 
-export const USAGE = 'Use: npm run worktrees -- --project FOLDER [--clean] [--json]'
-export const GIT_TIMEOUT_MS = 30 * 1000
+const USAGE = 'Use: npm run worktrees -- --project FOLDER [--clean] [--json]'
+const GIT_TIMEOUT_MS = 30 * 1000
 const BRANCH_PREFIX = 'refs/heads/'
 const GIT_MAX_BUFFER = 8 * 1024 * 1024
 
@@ -121,7 +121,7 @@ export function statusChanges(text) {
   })
 }
 
-export function ignoredChanges(text) {
+function ignoredChanges(text) {
   return String(text ?? '').split(/\r?\n/).filter((line) => {
     if (!line.startsWith('!! ')) return false
     const name = line.slice(3).trim().replace(/^"|"$/g, '')

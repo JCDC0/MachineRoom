@@ -14,7 +14,7 @@ import { readProjectsFile } from './projects.js'
 import { readAllLanes, runsFolder as defaultRunsFolder } from './lanes-source.js'
 import { chatFileFor, ORCHESTRATOR_KEY } from './orchestrator.js'
 
-export const MAX_TEAMS = 20
+const MAX_TEAMS = 20
 export const TEAM_NAME_PROBLEM = 'The team name must be 1 to 40 characters.'
 export const CONFIRM_TEAM_PROBLEM = 'Confirm the team action first.'
 export const ORIGIN_TEAMS_PROBLEM = 'A request to change teams needs a page Origin.'
@@ -22,7 +22,7 @@ export const TURN_RUNNING_PROBLEM = 'An orchestrator turn is running. Stop it or
 export const LANE_RUN_OPEN_PROBLEM = 'A lane run is open. Stop it or wait first.'
 export const UNKNOWN_PROJECT_PROBLEM = 'The project path must be in recent projects or be the current project.'
 
-export function teamNotFoundProblem(name) {
+function teamNotFoundProblem(name) {
   return `The team ${name} was not found.`
 }
 

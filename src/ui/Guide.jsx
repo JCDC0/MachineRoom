@@ -23,7 +23,7 @@ import {
 const NOOP = () => {}
 const useSafeLayoutEffect = typeof window !== 'undefined' ? useLayoutEffect : useEffect
 
-export function clearTourUrl() {
+function clearTourUrl() {
   if (typeof window === 'undefined' || !window.location?.search) return
   const params = new URLSearchParams(window.location.search)
   if (!params.has('tour')) return

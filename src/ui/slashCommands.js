@@ -1,7 +1,7 @@
 import { visibleChatText } from './orchestratorChat.js'
 
-export const SLASH_COMMAND_LIMIT = 200
-export const SLASH_DESCRIPTION_LIMIT = 160
+const SLASH_COMMAND_LIMIT = 200
+const SLASH_DESCRIPTION_LIMIT = 160
 export const GRANT_USAGE = 'Use /grant LANES [SUBS] with whole numbers from 0, for example /grant 3 1.'
 export const REVOKE_USAGE = 'Use /revoke with no arguments.'
 

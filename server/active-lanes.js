@@ -9,24 +9,20 @@ export const OWNER_ACTIVE_LANES_PROBLEM = 'A request with no Origin cannot set t
 export const CONFIRM_ACTIVE_LANES_PROBLEM = 'Confirm the active lanes first.'
 export const EMPTY_ACTIVE_LANES_PROBLEM = 'Choose at least one lane.'
 export const REPEATED_ACTIVE_LANE_PROBLEM = 'A lane cannot be listed more than once.'
-export const METHOD_NOT_ALLOWED_PROBLEM = 'Method not allowed.'
+const METHOD_NOT_ALLOWED_PROBLEM = 'Method not allowed.'
 export const NO_ACTIVE_CHOICE_PROBLEM = 'Pick the lanes for this project first.'
 export const ORIGIN_HIDE_PROBLEM = 'A request to hide a lane needs a page Origin.'
 export const ORIGIN_SHOW_PROBLEM = 'A request to show a lane needs a page Origin.'
 export const CONFIRM_HIDE_PROBLEM = 'Confirm hiding the lane first.'
 export const CONFIRM_SHOW_PROBLEM = 'Confirm showing the lane first.'
 export const HIDE_ORCHESTRATOR_PROBLEM = 'The orchestrator cannot be hidden.'
-export const SHOW_ORCHESTRATOR_PROBLEM = 'The orchestrator cannot be hidden.'
+const SHOW_ORCHESTRATOR_PROBLEM = 'The orchestrator cannot be hidden.'
 
-export function unknownLaneProblem(lane) {
+function unknownLaneProblem(lane) {
   return `The lane ${lane} is not known.`
 }
 
-export function inactiveLaneProblem(lane) {
-  return `The lane ${lane} is not active. Add it in Agents first.`
-}
-
-export function laneRunningProblem(lane) {
+function laneRunningProblem(lane) {
   return `The lane ${lane} is running.`
 }
 
@@ -156,7 +152,7 @@ export function eligibleLanes(lanesConfig = {}) {
   return list
 }
 
-export function activeEligibleLanes({
+function activeEligibleLanes({
   lanesConfig,
   projectRoot,
   runsFolder,
@@ -194,7 +190,7 @@ export function activeEligibleLaneKeys(options = {}) {
   return activeEligibleLanes(options).map((lane) => lane.key)
 }
 
-export function listActiveLanes({
+function listActiveLanes({
   lanesConfig,
   projectRoot,
   runsFolder,

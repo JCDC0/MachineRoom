@@ -12,10 +12,10 @@ import { killTree } from './processTree.js'
 import { programPath } from './programPath.js'
 import { harnessByKey } from '../src/harnesses/index.js'
 
-export const CACHE_TTL_MS = 6 * 60 * 60 * 1000
-export const COMMAND_TIMEOUT_MS = 30000
-export const MAX_OUTPUT_BYTES = 1024 * 1024
-export const KNOWN_HARNESSES = ['claude', 'opencode', 'agy', 'acp', 'machineroom', 'codex', 'copilot', 'hermes']
+const CACHE_TTL_MS = 6 * 60 * 60 * 1000
+const COMMAND_TIMEOUT_MS = 30000
+const MAX_OUTPUT_BYTES = 1024 * 1024
+const KNOWN_HARNESSES = ['claude', 'opencode', 'agy', 'acp', 'machineroom', 'codex', 'copilot', 'hermes']
 export const OWNER_MODELS_PROBLEM = 'Only the owner can refresh the model list.'
 export const DIRECT_API_KEY_PROBLEM = 'Add a Direct API key in Settings first.'
 
@@ -31,7 +31,7 @@ export function runsFolderDefault(env = process.env) {
   return defaultRunsFolder(env)
 }
 
-export function cacheFileFor(runsFolder) {
+function cacheFileFor(runsFolder) {
   return join(runsFolder, 'harness-models.json')
 }
 
@@ -46,7 +46,7 @@ export function readHarnessModelsCache(runsFolder) {
   }
 }
 
-export function saveHarnessModelsCache(runsFolder, cache, { rename = renameSync } = {}) {
+function saveHarnessModelsCache(runsFolder, cache, { rename = renameSync } = {}) {
   if (!runsFolder) return
   const file = cacheFileFor(runsFolder)
   mkdirSync(dirname(file), { recursive: true })
@@ -314,7 +314,7 @@ export function parseHelpForListCommand(helpText) {
   return match ? match[1].toLowerCase().split(/[ \t]+/) : null
 }
 
-export function parseCommandModels(stdout) {
+function parseCommandModels(stdout) {
   const models = []
   const seen = new Set()
   for (const raw of stdout.split(/\r?\n/)) {

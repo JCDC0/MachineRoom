@@ -22,8 +22,8 @@ const HUB_SPHERE = { x: HUB_CENTER.x, y: HUB_CENTER.y, z: HUB_CENTER.z, r: HUB_R
 const REFIT_SHIFT = 150
 const REFIT_RATIO = 0.08
 const HOVER_CHECK_MS = 100
-export const FRAME_DELTA_CAP = 0.1
-export const FRAME_ELAPSED_CAP_MS = 1000
+const FRAME_DELTA_CAP = 0.1
+const FRAME_ELAPSED_CAP_MS = 1000
 
 export function frameTimes(previous, now) {
   const elapsed = Math.min(Math.max(now - previous, 0), FRAME_ELAPSED_CAP_MS)
@@ -143,7 +143,7 @@ export function createFollowFocus() {
   }
 }
 
-export function touchedPath(state) {
+function touchedPath(state) {
   let best = null
   let bestIndex = -1
   for (const agent of state.agents.values()) {
@@ -188,7 +188,7 @@ export function nearestDrawnPath(path, drawn) {
   return drawn.has('') ? '' : null
 }
 
-export function finishedAgentKeys(state, activity) {
+function finishedAgentKeys(state, activity) {
   const keys = new Set()
   if (!state || !activity) return keys
   const key = typeof activity.agent === 'string' ? activity.agent : ''
@@ -245,7 +245,7 @@ export function createLater(delay = 250) {
   return { later, clear }
 }
 
-export function roomAgent(agent) {
+function roomAgent(agent) {
   return {
     key: agent.key,
     name: agent.name,

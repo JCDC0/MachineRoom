@@ -3,7 +3,7 @@ import { briefFileList, parseBriefs } from './briefs.js'
 import { pathAllowed } from './plan.js'
 
 export const CHANGELOG = 'docs/agents/CHANGELOG.md'
-export const STATUSES = ['PASS', 'WARN', 'FAIL']
+const STATUSES = ['PASS', 'WARN', 'FAIL']
 
 const EM_DASH = '\u2014'
 const EMOJI = /\p{Extended_Pictographic}/u
@@ -29,7 +29,7 @@ function slash(path) {
   return String(path ?? '').replace(/\\/g, '/')
 }
 
-export function foldPath(path) {
+function foldPath(path) {
   const parts = []
   for (const part of slash(path).split('/')) {
     if (part === '' || part === '.') continue

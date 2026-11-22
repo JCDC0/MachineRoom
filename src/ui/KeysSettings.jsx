@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useDialogFocus } from './dialogFocus.js'
 import { keyNamesFrom } from './SearchSettings.jsx'
 
-export const DELETE_KEY_DETAIL =
+const DELETE_KEY_DETAIL =
   'Its saved value is lost, and an endpoint or search provider that uses it stops working.'
 
 export function deleteKeyText(name) {

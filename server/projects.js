@@ -8,7 +8,7 @@ import { projectHash } from './orchestrator.js'
 import { listProcesses } from './processTree.js'
 
 export const MAX_RECENT = 20
-export const MAX_FOLDERS = 200
+const MAX_FOLDERS = 200
 export const MAX_SESSIONS = 6
 export const PRUNE_INTERVAL_MS = 60000
 
@@ -42,7 +42,7 @@ function onceList(list) {
   }
 }
 
-export function laneLockRunning(folder, { platform = process.platform, list = listProcesses, stat = statSync } = {}) {
+function laneLockRunning(folder, { platform = process.platform, list = listProcesses, stat = statSync } = {}) {
   let names = []
   try {
     names = readdirSync(folder)
@@ -84,7 +84,7 @@ function isInside(child, parent) {
   return !rel.startsWith('..') && !isAbsolute(rel)
 }
 
-export function isTempFolder(projectPath, env = process.env) {
+function isTempFolder(projectPath, env = process.env) {
   if (!projectPath) return false
   const target = resolve(projectPath)
   const candidates = []
@@ -103,13 +103,13 @@ export function isTempFolder(projectPath, env = process.env) {
   return false
 }
 
-export function hasWorktreesFolder(projectPath) {
+function hasWorktreesFolder(projectPath) {
   if (!projectPath) return false
   const parts = resolve(projectPath).split(/[\\/]/)
   return parts.includes('.worktrees')
 }
 
-export function isConfiguredLaneWorktree(projectPath) {
+function isConfiguredLaneWorktree(projectPath) {
   if (!projectPath) return false
   try {
     const lanesFile = join(lanesFolder(), 'lanes.json')
@@ -125,7 +125,7 @@ export function isConfiguredLaneWorktree(projectPath) {
   return false
 }
 
-export function isRunsFolder(projectPath) {
+function isRunsFolder(projectPath) {
   if (!projectPath) return false
   try {
     return existsSync(join(projectPath, 'runs.jsonl'))
@@ -193,7 +193,7 @@ export function recordProject(projectsFile, projectPath, now = Date.now) {
   } catch {}
 }
 
-export function readProjectSessions(runsFolder, projectPath) {
+function readProjectSessions(runsFolder, projectPath) {
   if (!runsFolder || !projectPath) return []
   try {
     const hash = projectHash(projectPath)

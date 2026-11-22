@@ -14,7 +14,7 @@ import { DEFAULTS, makeScaleTree } from '../src/model/scaleTree.js'
 import { prepareWorktree } from './run-lane.mjs'
 import { formatRows } from './scale-probe.mjs'
 
-export const LIVE_BUDGET = {
+const LIVE_BUDGET = {
   firstRead: 5000,
   folderGzip: 1000,
   secondFolderGzip: 100,
@@ -38,14 +38,14 @@ export const LIVE_BUDGET = {
 const REVIEW_LANE = 'opencode'
 const REVIEW_BRANCH = 'p19-review'
 
-export const LIVE_USAGE =
+const LIVE_USAGE =
   'Usage: npm run scale-live -- [--files N] [--folders N] [--seed N] [--quiet-ms N] [--server FOLDER] [--tree-only] [--keep]'
 
 function helpRequested(argv) {
   return argv.includes('--help') || argv.includes('-h')
 }
 
-export const MIN_FREE_BYTES = 2 * 1024 * 1024 * 1024
+const MIN_FREE_BYTES = 2 * 1024 * 1024 * 1024
 const BURST_TICK_MS = 50
 const GIT_TIMEOUT_MS = 30 * 60 * 1000
 const CLOSE_TIMEOUT_MS = 10000
@@ -908,7 +908,7 @@ export async function runScaleLive(options = {}) {
   return result
 }
 
-export function formatLiveResult(result) {
+function formatLiveResult(result) {
   const server = result.settings.server ? basename(result.settings.server) : 'current'
   const head = `scale live: ${result.settings.files} files in ${result.settings.folders} folders, seed ${result.settings.seed}, server ${server}, checkout ${result.checkout}`
   const stats = result.stats

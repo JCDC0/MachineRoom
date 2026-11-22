@@ -60,29 +60,29 @@ function pathKey(path) {
 
 export const CONFIRM_LADDER_PROBLEM = 'Confirm the ladder first.'
 export const NO_ORCHESTRATOR_PROBLEM = 'There is no orchestrator with that id.'
-export const LADDER_BY_PROBLEM = 'A ladder change comes from the owner or the orchestrator.'
+const LADDER_BY_PROBLEM = 'A ladder change comes from the owner or the orchestrator.'
 export const OWNER_LADDER_PROBLEM = 'A request with no Origin cannot change the ladder as the owner.'
 export const PAGE_LADDER_PROBLEM = 'A page cannot change the ladder as the orchestrator.'
 export const OWNER_MESSAGE_PROBLEM = 'A request with no Origin cannot send a message as the owner.'
 export const PAGE_MESSAGE_PROBLEM = 'A page cannot send a message as the orchestrator.'
-export const ORCHESTRATOR_TARGET_PROBLEM = 'The orchestrator sends a message to a sub orchestrator.'
-export const MESSAGE_FROM_PROBLEM = 'A message comes from the owner or the orchestrator.'
+const ORCHESTRATOR_TARGET_PROBLEM = 'The orchestrator sends a message to a sub orchestrator.'
+const MESSAGE_FROM_PROBLEM = 'A message comes from the owner or the orchestrator.'
 export const NO_TOKEN_PROBLEM = 'A request with no Origin needs a valid orchestrator token.'
-export const SECTOR_STOPPING_PROBLEM = 'That sector is stopping.'
-export const SUB_STOP_TREE_PROBLEM = 'A sub can only stop its own sector.'
+const SECTOR_STOPPING_PROBLEM = 'That sector is stopping.'
+const SUB_STOP_TREE_PROBLEM = 'A sub can only stop its own sector.'
 export const LANE_ENDED_PROBLEM = 'That lane run has ended or is not known.'
 export const LANE_LIMIT_PROBLEM = 'This lane run has sent its 4 messages.'
-export const LANE_MESSAGE_LIMIT = 4
-export const LANE_SELF_PROBLEM = 'A lane cannot message itself.'
-export const PAGE_INBOX_PROBLEM = 'A page cannot read a lane inbox.'
-export const TOKEN_INBOX_PROBLEM = 'A lane inbox is read with a lane ticket, not an orchestrator token.'
-export const PAGE_FAILOVER_PROBLEM = 'A page cannot take over a lane ticket.'
-export const TOKEN_FAILOVER_PROBLEM = 'A lane ticket is taken over with the lane ticket, not an orchestrator token.'
+const LANE_MESSAGE_LIMIT = 4
+const LANE_SELF_PROBLEM = 'A lane cannot message itself.'
+const PAGE_INBOX_PROBLEM = 'A page cannot read a lane inbox.'
+const TOKEN_INBOX_PROBLEM = 'A lane inbox is read with a lane ticket, not an orchestrator token.'
+const PAGE_FAILOVER_PROBLEM = 'A page cannot take over a lane ticket.'
+const TOKEN_FAILOVER_PROBLEM = 'A lane ticket is taken over with the lane ticket, not an orchestrator token.'
 export const LANE_BACKUP_PROBLEM = 'Name the backup lane the run moves to.'
 export const LANE_TAKEOVER_PROBLEM = 'A lane can take over only its own backup lane.'
-export const LANE_INBOX_LIMIT = 20
+const LANE_INBOX_LIMIT = 20
 
-export function laneNoRunProblem(key) {
+function laneNoRunProblem(key) {
   return `The lane ${key} has no run that can read a message now.`
 }
 export const MAIN_MESSAGE_PROBLEM = 'A message to a sub needs the main orchestrator\'s token.'

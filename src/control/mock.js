@@ -359,7 +359,7 @@ const SAMPLE_REVIEW_DIFF_FILES = [{ path: 'src/control/client.js', added: 2, del
 
 const SAMPLE_MERGE_COMMIT = '5e4d3c2b1a0f9e8d7c6b5a4f3e2d1c0b9a8f7e6d'
 
-export const MOCK_PROJECTS = {
+const MOCK_PROJECTS = {
   current: {
     path: '/mock/projects/machineroom',
     name: 'machineroom',
@@ -388,7 +388,7 @@ export const MOCK_PROJECTS = {
   ],
 }
 
-export const SAMPLE_GIT_BRANCHES = [
+const SAMPLE_GIT_BRANCHES = [
   {
     name: 'main',
     head: '4f3c9a1b7d2e8f0a6c5b4d3e2f1a0b9c8d7e6f5a',
@@ -418,7 +418,7 @@ export const SAMPLE_GIT_BRANCHES = [
   },
 ]
 
-export const SAMPLE_GIT_COMMITS = [
+const SAMPLE_GIT_COMMITS = [
   {
     sha: '4f3c9a1b7d2e8f0a6c5b4d3e2f1a0b9c8d7e6f5a',
     parents: ['3a1b7d2e8f0a6c5b4d3e2f1a0b9c8d7e6f5a4f2c'],
@@ -449,7 +449,7 @@ export const SAMPLE_GIT_COMMITS = [
   },
 ]
 
-export const MOCK_FILE_INFO = {
+const MOCK_FILE_INFO = {
   'README.md': {
     text: '# MachineRoom\n\nA room that shows coding agents at work.\n',
   },

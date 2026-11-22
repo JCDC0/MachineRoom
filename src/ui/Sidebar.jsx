@@ -86,7 +86,7 @@ function NoGitHint() {
   )
 }
 
-export function Sidebar({ client = null, live = false, project = '', tasks = null }) {
+function Sidebar({ client = null, live = false, project = '', tasks = null }) {
   const connected = live === true
   const canProjects = typeof client?.projects === 'function'
   const canSessions = typeof client?.orchestratorSessions === 'function'

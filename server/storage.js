@@ -7,10 +7,10 @@ import { cleanDecision, collectWorktrees } from '../scripts/worktrees.mjs'
 import { listProcesses } from './processTree.js'
 import { readAllRunRecords } from './runs.js'
 
-export const DEFAULT_ARCHIVE_DAYS = 30
-export const MIN_ARCHIVE_DAYS = 1
-export const MAX_ARCHIVE_DAYS = 365
-export const ARCHIVE_DIR_NAME = 'archive'
+const DEFAULT_ARCHIVE_DAYS = 30
+const MIN_ARCHIVE_DAYS = 1
+const MAX_ARCHIVE_DAYS = 365
+const ARCHIVE_DIR_NAME = 'archive'
 export const STAT_CONCURRENCY = 64
 const DIR_STAT_FLUSH_SIZE = 256
 
@@ -18,12 +18,12 @@ export const DAYS_PROBLEM = 'Choose 1 to 365 days.'
 export const CONFIRM_PROBLEM = 'Confirm the archive before moving files.'
 export const FILES_PROBLEM = 'Choose the files to archive from a preview first.'
 export const ORIGIN_PROBLEM = 'Archiving storage needs a page Origin.'
-export const BUSY_PROBLEM = 'A storage archive is already running.'
+const BUSY_PROBLEM = 'A storage archive is already running.'
 export const ARCHIVE_PATH_PROBLEM = 'The archive folder must stay inside the runs folder.'
 export const NOT_ELIGIBLE_REASON = 'The file is no longer eligible.'
 export const DESTINATION_EXISTS_REASON = 'The destination already exists.'
 export const ARCHIVE_CHANGED_REASON = 'The archive folder changed during the move.'
-export const METHOD_PROBLEM = 'Use GET for /api/storage or POST for /api/storage/preview and /api/storage/archive.'
+const METHOD_PROBLEM = 'Use GET for /api/storage or POST for /api/storage/preview and /api/storage/archive.'
 
 const DAY_MS = 24 * 60 * 60 * 1000
 const META_SUFFIX = /^(.+)\.meta\.json$/i
@@ -52,7 +52,7 @@ function resolvedOption(value) {
   return typeof raw === 'string' && raw.trim() ? resolve(raw.trim()) : ''
 }
 
-export function cleanArchiveDays(value) {
+function cleanArchiveDays(value) {
   if (value === undefined) return DEFAULT_ARCHIVE_DAYS
   if (typeof value === 'number' && Number.isInteger(value) && value >= MIN_ARCHIVE_DAYS && value <= MAX_ARCHIVE_DAYS) {
     return value
@@ -60,7 +60,7 @@ export function cleanArchiveDays(value) {
   throw refusal(DAYS_PROBLEM, 400)
 }
 
-export function cleanArchiveFiles(value) {
+function cleanArchiveFiles(value) {
   if (!Array.isArray(value) || value.length === 0) {
     throw refusal(FILES_PROBLEM, 400)
   }

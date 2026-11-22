@@ -1,7 +1,7 @@
 export const BRANCH_LIST_LIMIT = 200
 export const BRANCH_FOLD_LIMIT = 20
 export const BRANCH_EMPTY_PROBLEM = 'Write a name for the new branch.'
-export const BRANCH_LONG_PROBLEM = 'Keep the branch name to 200 characters.'
+const BRANCH_LONG_PROBLEM = 'Keep the branch name to 200 characters.'
 export const BRANCH_NAME_PROBLEM = 'That is not a valid branch name.'
 export const BRANCH_EXISTS_PROBLEM = 'That branch already exists.'
 export const BRANCH_FROM_PROBLEM = 'Choose the branch to start from.'

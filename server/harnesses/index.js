@@ -5,7 +5,7 @@ import { opencodeServerHarness } from './opencode.js'
 const SERVER_HALVES = [claudeServerHarness, opencodeServerHarness]
 const SERVER_HALF_BY_KEY = new Map(SERVER_HALVES.map((harness) => [harness.key, harness]))
 
-export const HARNESSES = CLIENT_HARNESSES.map((harness) => {
+const HARNESSES = CLIENT_HARNESSES.map((harness) => {
   const half = SERVER_HALF_BY_KEY.get(harness.key)
   return half ? { ...harness, ...half } : harness
 })

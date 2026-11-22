@@ -3,7 +3,7 @@ import { OVERVIEW } from './camera.js'
 import { HUB_Y } from './hub.js'
 
 export const RING_CENTER = { x: 0, y: HUB_Y, z: 0 }
-export const RING_YAW = OVERVIEW.yaw
+const RING_YAW = OVERVIEW.yaw
 export const RING_BACK = { x: -Math.sin(RING_YAW), y: 0, z: -Math.cos(RING_YAW) }
 export const RING_RIGHT = { x: Math.cos(RING_YAW), y: 0, z: -Math.sin(RING_YAW) }
 export const RING_FRONT = { x: Math.sin(RING_YAW), y: 0, z: Math.cos(RING_YAW) }
@@ -24,7 +24,7 @@ export const FAN_LIMIT = 0.9
 export const CARD_GAP = 40
 export const SPRAY_LIFT = 140
 export const SMALL_TOP = 4
-export const SMALL_TURN = 0.3
+const SMALL_TURN = 0.3
 export const SMALL_RADIUS = 900
 export const SMALL_CHILD_TURN = 0.5
 
@@ -89,24 +89,24 @@ function buildModel(entries) {
   return { nodes, paths, children, root: nodes.get('') }
 }
 
-export function ringAngle(index, count) {
+function ringAngle(index, count) {
   const total = Math.max(1, Math.floor(Number(count) || 0))
   const slot = clamp(Math.floor(Number(index) || 0), 0, total - 1)
   return (slot / total) * TURNS
 }
 
-export function smallRingAngle(index, count) {
+function smallRingAngle(index, count) {
   const total = Math.max(1, Math.floor(Number(count) || 0))
   const slot = clamp(Math.floor(Number(index) || 0), 0, total - 1)
   return ((slot + SMALL_TURN) / total) * TURNS
 }
 
-export function smallRing(count) {
+function smallRing(count) {
   const total = Math.floor(Number(count) || 0)
   return total >= 1 && total <= SMALL_TOP
 }
 
-export function ringPoint(radius, angle, y = RING_CENTER.y) {
+function ringPoint(radius, angle, y = RING_CENTER.y) {
   const r = Number.isFinite(Number(radius)) ? Number(radius) : 0
   const a = Number.isFinite(Number(angle)) ? Number(angle) : 0
   const along = r * Math.cos(a)

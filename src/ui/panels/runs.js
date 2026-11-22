@@ -109,7 +109,7 @@ export function runningLaneFiles(running, briefs) {
   return active
 }
 
-export function laneRunningLine(count) {
+function laneRunningLine(count) {
   const lanes = Number.isInteger(count) && count >= 0 ? count : 0
   return `${lanes} lane${lanes === 1 ? ' is' : 's are'} running now.`
 }
@@ -150,7 +150,7 @@ export function queueRecoveryAvailable(record) {
   return /\b(failed|stopped)\b/i.test(status)
 }
 
-export function projectFolderName(value) {
+function projectFolderName(value) {
   const folder = typeof value === 'string' ? value.trim().replace(/[\\/]+$/, '') : ''
   if (!folder) return ''
   const cut = Math.max(folder.lastIndexOf('/'), folder.lastIndexOf('\\'))
@@ -250,8 +250,8 @@ export function runStartLine(answer) {
   return `${lane} started.`
 }
 
-export const PROJECT_TASK_LIMIT = 4000
-export const PROJECT_TASK_COUNT_LIMIT = 20
+const PROJECT_TASK_LIMIT = 4000
+const PROJECT_TASK_COUNT_LIMIT = 20
 export const PROJECT_QUEUE_TEXT_LIMIT = PROJECT_TASK_LIMIT * PROJECT_TASK_COUNT_LIMIT + 4000
 export const PROJECT_CONFIRM_LIMIT = 120
 export const PROJECT_SPLIT_DELAY = 3000
@@ -456,7 +456,7 @@ export const NO_LANES_FORM_LINE =
   'Runs start from a room opened with --lanes: npm run serve -- up --lanes.'
 export const NO_CODE_LANE_FORM_LINE =
   'No code lane is set up. Add one in Agents, Build a team.'
-export const PICK_LANES_FORM_LINE =
+const PICK_LANES_FORM_LINE =
   'Pick the lanes for this project in Agents first.'
 
 export function projectFormNotice({ lanesMode = false, lanes = [], activeKeys = null } = {}) {
@@ -483,7 +483,7 @@ function idleProjectLanes(lanes) {
   return idle
 }
 
-export function routeLaneOrder(lanes, route) {
+function routeLaneOrder(lanes, route) {
   const list = Array.isArray(lanes) ? lanes : []
   if (!route || typeof route !== 'object') return list
   const rank = new Map()
@@ -574,7 +574,7 @@ export function projectWorktreeName(project, lane) {
   return `${name}/.worktrees/${key}`
 }
 
-export function projectWorktreeBase(gitState) {
+function projectWorktreeBase(gitState) {
   if (!gitState || typeof gitState !== 'object' || gitState.git === false) {
     return "the project's current branch"
   }

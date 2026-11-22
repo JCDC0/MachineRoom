@@ -37,7 +37,7 @@ function inside(parent, child, platform = process.platform) {
   return rel === '' || (!rel.startsWith('..') && !isAbsolute(rel))
 }
 
-export function parseProbeArgs(argv = []) {
+function parseProbeArgs(argv = []) {
   const options = {
     root: null,
     out: null,
@@ -74,7 +74,7 @@ export function parseProbeArgs(argv = []) {
   return options
 }
 
-export function probeCommand({ opencode = null, platform = process.platform } = {}) {
+function probeCommand({ opencode = null, platform = process.platform } = {}) {
   if (opencode) return { command: opencode, args: ['acp'], options: {} }
   if (platform === 'win32') return { command: 'opencode acp', args: [], options: { shell: true } }
   return { command: 'opencode', args: ['acp'], options: {} }
@@ -86,7 +86,7 @@ function sandboxText(file) {
   return `# ${file}\n`
 }
 
-export function prepareSandbox(given = null, fixture = FIXTURE) {
+function prepareSandbox(given = null, fixture = FIXTURE) {
   if (given) {
     const root = resolve(given)
     if (inside(REPO, root)) throw new Error('The probe must not run in this checkout. Give a fresh folder outside it.')
@@ -102,7 +102,7 @@ export function prepareSandbox(given = null, fixture = FIXTURE) {
   return { root, owned: true }
 }
 
-export function fillSandbox(root, fixture = FIXTURE) {
+function fillSandbox(root, fixture = FIXTURE) {
   const tree = JSON.parse(readFileSync(fixture, 'utf8'))
   const files = []
   for (const file of tree.files ?? []) {
@@ -132,7 +132,7 @@ function toolKey(sessionId, toolCallId) {
   return `${sessionId ?? ''}\u0000${toolCallId ?? ''}`
 }
 
-export async function runProbe(options, { log = console.log } = {}) {
+async function runProbe(options, { log = console.log } = {}) {
   const { root, owned } = prepareSandbox(options.root)
   const files = fillSandbox(root)
   const out = options.out ? resolve(options.out) : join(tmpdir(), 'machineroom-acp', `acp-${stamp()}.jsonl`)

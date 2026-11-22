@@ -1,14 +1,14 @@
 import { formatCount } from '../model/format.js'
 import { visibleText } from '../model/paths.js'
 
-export const BOARD_MIN_WIDTH = 900
-export const BOARD_HOST_ID = 'hud-dock-costs'
+const BOARD_MIN_WIDTH = 900
+const BOARD_HOST_ID = 'hud-dock-costs'
 
 export function boardVisible(width) {
   return width >= BOARD_MIN_WIDTH
 }
 
-export function boardHost(container) {
+function boardHost(container) {
   const doc = container?.ownerDocument ?? (typeof document === 'undefined' ? null : document)
   const host = doc?.getElementById?.(BOARD_HOST_ID)
   return host ?? container ?? null

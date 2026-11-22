@@ -10,8 +10,8 @@ export const HARNESS_OFF_PROBLEM = 'That harness is turned off in Settings.'
 const CHECK_TTL_MS = 10 * 60 * 1000
 const cache = new Map()
 
-export const LANE_REPLIES = ['next-turn', 'interrupt']
-export const LANE_COUNT_WARNING_PROBLEM = 'Write the lane count warning as a whole number, 0 or more.'
+const LANE_REPLIES = ['next-turn', 'interrupt']
+const LANE_COUNT_WARNING_PROBLEM = 'Write the lane count warning as a whole number, 0 or more.'
 export const WORKTREE_SETUP_PROBLEM = 'Write the worktree setup as one command line.'
 
 function laneCountWarningOf(value) {

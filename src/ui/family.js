@@ -46,7 +46,7 @@ function seatRows(value) {
   return rows
 }
 
-export const SEATS_SHAPE_PROBLEM = 'Seats must be whole numbers from 0, or empty for no limit.'
+const SEATS_SHAPE_PROBLEM = 'Seats must be whole numbers from 0, or empty for no limit.'
 
 export function seatLine(row) {
   const head = `Ring ${row.ring} · ${row.taken}`
@@ -290,7 +290,7 @@ export function deleteLaneText(label) {
   return `Delete ${name} in every project? Its runs stay in the records.`
 }
 
-export function rowStateWord(node, state = '') {
+function rowStateWord(node, state = '') {
   const word = typeof state === 'string' ? state.trim().toLowerCase() : ''
   if (word === 'working' || node?.working === true) return 'working'
   if (word === 'paused') return 'paused'

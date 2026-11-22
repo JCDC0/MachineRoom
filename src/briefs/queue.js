@@ -38,7 +38,7 @@ export function commitAuthorFor(harness, model = '') {
   return { label, address, model: String(model ?? '').trim() }
 }
 
-export function commitTrailer(author) {
+function commitTrailer(author) {
   const label = String(author?.label ?? '').trim()
   const address = String(author?.address ?? '').trim()
   if (label === '' || address === '') return ''

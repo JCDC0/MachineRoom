@@ -8,9 +8,9 @@ import { modelName } from './modelRefresh.js'
 import { hasWaitingApproval, orchestratorAnswerList } from './transportOrchestrators.js'
 
 export const DOCK_LOG_LIMIT = 12
-export const NOT_REPORTED = 'not reported'
-export const NONE = 'none'
-export const EMPTY_PROMPT = 'Pick an agent on the left to see what it is doing.'
+const NOT_REPORTED = 'not reported'
+const NONE = 'none'
+const EMPTY_PROMPT = 'Pick an agent on the left to see what it is doing.'
 
 const STATUS_WORDS = {
   active: 'idle',

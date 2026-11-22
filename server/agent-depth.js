@@ -4,9 +4,8 @@ import { familySeatsFor } from './family.js'
 import { levelOf } from './seats.js'
 
 export const AGENT_DEPTH_DEFAULT = 2
-export const AGENT_DEPTH_MIN = 1
-export const AGENT_DEPTH_MAX = 4
-export const AGENT_DEPTH_UNLOCKED_MAX = 4
+const AGENT_DEPTH_MIN = 1
+const AGENT_DEPTH_MAX = 4
 
 export const ORIGIN_DEPTH_PROBLEM = 'A change to the subagent depth needs a page Origin.'
 export const TOKEN_DEPTH_PROBLEM = 'An orchestrator cannot change the subagent depth.'

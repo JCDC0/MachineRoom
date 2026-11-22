@@ -5,7 +5,7 @@ export function normalizeChecks(checks) {
   return 'unchecked'
 }
 
-export function formatChecks(checks) {
+function formatChecks(checks) {
   const state = normalizeChecks(checks)
   if (state === 'passed') return 'checks passed'
   if (state === 'failed') return 'checks failed'
@@ -93,7 +93,7 @@ function formatRunCost(costUsd) {
   return `$${costUsd.toFixed(2)}`
 }
 
-export function formatLastRun(lastRun) {
+function formatLastRun(lastRun) {
   if (!lastRun || typeof lastRun !== 'object') {
     return 'no run yet'
   }
@@ -119,7 +119,7 @@ export function formatEvidence(evidence) {
   return `Checked on ${checkedHead.slice(0, 7)}: ${result}${staleNote}`
 }
 
-export function formatClaims(claims) {
+function formatClaims(claims) {
   if (typeof claims !== 'string') return []
   const text = claims.trim()
   if (text === '') return []
@@ -174,7 +174,7 @@ export function formatRunTotals(runs, runTotals) {
   return `${count} runs, ${minutes} run minutes, ${cost}${partial}`
 }
 
-export function formatScope(review) {
+function formatScope(review) {
   const groups = review?.fileGroups && typeof review.fileGroups === 'object' ? review.fileGroups : {}
   const counts = Object.entries(groups)
     .filter(([, group]) => group?.count > 0)

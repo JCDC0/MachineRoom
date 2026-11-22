@@ -8,7 +8,7 @@ export const SEARCH_PROVIDERS = [
   { key: 'duckduckgo', label: 'DuckDuckGo' },
 ]
 
-export const SEARCH_EMPTY = Object.freeze({ provider: '', url: '', keyName: '' })
+const SEARCH_EMPTY = Object.freeze({ provider: '', url: '', keyName: '' })
 
 export function searchChoiceFrom(value) {
   const raw = value && typeof value === 'object' && !Array.isArray(value) ? value : {}

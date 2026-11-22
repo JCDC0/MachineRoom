@@ -7,7 +7,7 @@ import { lanesFolder, runsFolder } from '../server/lanes-source.js'
 
 const root = resolve(fileURLToPath(import.meta.url), '..', '..')
 
-export const RUN_RECORDING_USAGE = 'Usage: npm run run-recording -- 1'
+const RUN_RECORDING_USAGE = 'Usage: npm run run-recording -- 1'
 
 function refusal(message) {
   return new Error(message)

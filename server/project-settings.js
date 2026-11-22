@@ -3,12 +3,12 @@ import { dirname, join } from 'node:path'
 import { checkCommandProblem as runnerCheckCommandProblem } from '../src/briefs/run.js'
 import { projectHash } from './active-lanes.js'
 
-export const CHECK_COMMAND_LIMIT = 500
+const CHECK_COMMAND_LIMIT = 500
 export const CHECK_COMMAND_PROBLEM = 'Write the check command as up to 4 commands, one per line, in 500 characters or fewer.'
 export const PLAN_BY_DEFAULT_PROBLEM = 'Choose whether new runs start in Plan.'
-export const CHECK_ORIGIN_PROBLEM = 'A request to save the check command needs a page Origin.'
-export const CHECK_CONFIRM_PROBLEM = 'Confirm the check command first.'
-export const METHOD_NOT_ALLOWED_PROBLEM = 'Method not allowed.'
+const CHECK_ORIGIN_PROBLEM = 'A request to save the check command needs a page Origin.'
+const CHECK_CONFIRM_PROBLEM = 'Confirm the check command first.'
+const METHOD_NOT_ALLOWED_PROBLEM = 'Method not allowed.'
 
 export function projectSettingsFileFor(projectRoot, runsFolder) {
   const hash = projectHash(projectRoot)

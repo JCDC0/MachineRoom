@@ -15,7 +15,7 @@ export function orderAgents(agents) {
   return [...agents].sort((a, b) => rank(a) - rank(b))
 }
 
-export function makeContext(tree) {
+function makeContext(tree) {
   const worktrees = Array.isArray(tree.worktrees) ? tree.worktrees.filter((item) => typeof item === 'string' && item !== '') : []
   return {
     rootName: tree.rootName,
@@ -34,7 +34,7 @@ function textOf(value) {
 }
 
 export const SEEN_LIMIT = 20000
-export const ENDED_LIMIT = 1000
+const ENDED_LIMIT = 1000
 export const RUN_IDLE_MS = 30 * 60000
 
 export function createPipeline({ agents, tree }) {

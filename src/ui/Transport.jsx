@@ -161,7 +161,7 @@ function openOrchestratorChat(id) {
   openConversation()
 }
 
-export function ContextRing({ orchestrator = null, onClick = () => {} }) {
+function ContextRing({ orchestrator = null, onClick = () => {} }) {
   const tokens = orchestrator?.contextTokens
   const window = orchestrator?.contextWindow
   const share = contextShare(tokens, window)

@@ -27,31 +27,30 @@ import { readLaneLock } from '../scripts/lane-lock.mjs'
 import { NO_ACTIVE_CHOICE_PROBLEM, activeLanesFileFor, hiddenLaneProblem, projectLanesFileFor, readActiveLanesChoice, readHiddenLanes } from './active-lanes.js'
 import { checkCommandProblem, createProjectSettingsApi, readProjectCheckCommand } from './project-settings.js'
 
-export const RECENT_LIMIT = 20
-export const LAST_LINE_LIMIT = 5
-export const BRIEF_ID = /^[A-Z]\d+[a-z]?$/
+const RECENT_LIMIT = 20
+const LAST_LINE_LIMIT = 5
+const BRIEF_ID = /^[A-Z]\d+[a-z]?$/
 export const TASK_LIMIT = 4000
 export const TASK_PROBLEM = 'Write the task in 1 to 4000 characters.'
-export const TASKS_LIMIT = 20
+const TASKS_LIMIT = 20
 export const TASKS_PROBLEM = 'Write one to twenty tasks, each 1 to 4000 characters.'
 export const TASK_SEPARATOR_PROBLEM = 'A task cannot hold a line of only ---.'
 export const RUN_KIND_PROBLEM = 'Send a task, a queue or briefs, not more than one.'
-export const MAIN_RUN_PROBLEM = 'A request with no Origin cannot start a run as the main orchestrator.'
 export const NO_TOKEN_PROBLEM = 'A request with no Origin needs a valid orchestrator token.'
-export const TOKEN_MISMATCH_PROBLEM = 'The startedBy orchestrator must match the token.'
+const TOKEN_MISMATCH_PROBLEM = 'The startedBy orchestrator must match the token.'
 export const QUEUE_DIRTY_PROBLEM = 'A queue needs a clean project.'
 export const BRIEF_PROJECT_PROBLEM = 'Briefs run in this repository. Use a task or a queue on another project.'
-export const CONFIRM_STOP_PROBLEM = 'Confirm the stop first.'
-export const STOP_LANE_PROBLEM = 'Choose a lane to stop.'
-export const STOP_TIME_PROBLEM = 'Name the start time to stop.'
-export const STOP_MISMATCH_PROBLEM = 'That start time does not match the running run.'
-export const STOP_BUSY_PROBLEM = 'That run is already stopping.'
-export const SECTOR_STOPPING_PROBLEM = 'That sector is stopping.'
-export const CONVERSATION_UNKNOWN_PROBLEM = 'No run of that lane started at that time.'
-export const CONVERSATION_LOG_OUTSIDE_PROBLEM = "The run's log is outside the runs folder."
-export const CONVERSATION_LOG_MISSING_PROBLEM = "The run's log is missing."
-export const CONVERSATION_LOG_BYTES = 8 * 1024 * 1024
-export const LIVE_TOUCH_LIMIT = 50
+const CONFIRM_STOP_PROBLEM = 'Confirm the stop first.'
+const STOP_LANE_PROBLEM = 'Choose a lane to stop.'
+const STOP_TIME_PROBLEM = 'Name the start time to stop.'
+const STOP_MISMATCH_PROBLEM = 'That start time does not match the running run.'
+const STOP_BUSY_PROBLEM = 'That run is already stopping.'
+const SECTOR_STOPPING_PROBLEM = 'That sector is stopping.'
+const CONVERSATION_UNKNOWN_PROBLEM = 'No run of that lane started at that time.'
+const CONVERSATION_LOG_OUTSIDE_PROBLEM = "The run's log is outside the runs folder."
+const CONVERSATION_LOG_MISSING_PROBLEM = "The run's log is missing."
+const CONVERSATION_LOG_BYTES = 8 * 1024 * 1024
+const LIVE_TOUCH_LIMIT = 50
 const STOP_TIMEOUT_MS = 15 * 1000
 const STOP_SETTLE_MS = 50
 export function notGitProblem(project, { queue = false } = {}) {
@@ -230,7 +229,7 @@ function hasSeparatorLine(text) {
   return text.split(/\r?\n/).some((line) => line.trim() === '---')
 }
 
-export function tasksProblem(tasks) {
+function tasksProblem(tasks) {
   if (!Array.isArray(tasks) || tasks.length < 1 || tasks.length > TASKS_LIMIT) return TASKS_PROBLEM
   for (const task of tasks) {
     if (typeof task !== 'string') return TASKS_PROBLEM
@@ -592,7 +591,7 @@ function conversationPrompt(record, tasksText) {
   return `Task ${ids.join(', ')}.`
 }
 
-export function newestRecordPerLane(records) {
+function newestRecordPerLane(records) {
   const latest = new Map()
   for (const record of Array.isArray(records) ? records : []) {
     if (!record || typeof record !== 'object') continue

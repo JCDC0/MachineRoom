@@ -1,4 +1,4 @@
-export const TASK_STATE_LIMIT = 20
+const TASK_STATE_LIMIT = 20
 
 function lines(list, line, mask) {
   if (!Array.isArray(list)) return 'unknown'
@@ -27,7 +27,7 @@ export function taskStateBlock({ running = null, reviews = null, scopes = null }
   ].join('\n\n')
 }
 
-export const TASK_STATE_WAIT_MS = 5000
+const TASK_STATE_WAIT_MS = 5000
 
 export async function readTaskStateBlock(read, mask, waitMs = TASK_STATE_WAIT_MS) {
   let state = {}

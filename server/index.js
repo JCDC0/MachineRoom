@@ -509,9 +509,9 @@ export function treeReadDue({ now, lastReadEndAt, lastReadMs, lastReadChanged, l
   return now - lastTreeAt >= quietMs
 }
 
-export const RUN_PIN_TIMEOUT_MS = 2 * 60 * 60 * 1000
+const RUN_PIN_TIMEOUT_MS = 2 * 60 * 60 * 1000
 
-export function readEventCursor(text, start) {
+function readEventCursor(text, start) {
   const match = /^([0-9a-f]+):(\d+)$/.exec(String(text ?? ''))
   if (!match || match[1] !== start) return null
   return Number(match[2])

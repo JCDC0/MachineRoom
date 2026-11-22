@@ -10,7 +10,7 @@ import { worktreeFor } from '../src/briefs/run.js'
 import { gitPath } from '../server/programPath.js'
 
 export const DEFAULT_PORT = 5175
-export const BUILD_TIMEOUT_MS = 5 * 60 * 1000
+const BUILD_TIMEOUT_MS = 5 * 60 * 1000
 const BAD_BUILD_COMMAND = 'MACHINEROOM_BUILD_COMMAND needs a JSON array of the command and its arguments.'
 const BAD_PORT = 'The port must be a whole number from 1 to 65535.'
 const NPM_NOT_FOUND = 'npm was not found. Run this as npm run candidate.'
@@ -135,7 +135,7 @@ function killTree(child) {
   killProcessTree(child)
 }
 
-export function runBuild({ command, cwd, env = process.env, shell = false, timeoutMs = BUILD_TIMEOUT_MS }) {
+function runBuild({ command, cwd, env = process.env, shell = false, timeoutMs = BUILD_TIMEOUT_MS }) {
   return new Promise((settle) => {
     const child = spawn(command[0], command.slice(1), {
       cwd,
@@ -202,7 +202,7 @@ function gitText(cwd, args, env) {
   })
 }
 
-export async function worktreeState(worktree, env = process.env) {
+async function worktreeState(worktree, env = process.env) {
   let branch
   let head
   let status
@@ -256,13 +256,13 @@ export function readLanes(folder = lanesFolder()) {
   return all
 }
 
-export function candidateArgs(plan, options) {
+function candidateArgs(plan, options) {
   const args = [plan.bin, '--dist', plan.dist, '--port', String(plan.port)]
   if (options.projectRoot) args.push('--root', options.projectRoot)
   return args
 }
 
-export function candidateLine(plan, state) {
+function candidateLine(plan, state) {
   return `Candidate from ${plan.lane} (${state.branch || 'detached'} at ${state.sha}) on http://127.0.0.1:${plan.port}/?live&bridge=http://127.0.0.1:${plan.port}. The stable room keeps its own port.`
 }
 
