@@ -22,8 +22,8 @@ The team since 2026-11-22 17:35 (the owner's word): this session orchestrates (C
 | Small corner brackets at the lens edges | by hand, `2583ded8` | done, pushed |
 | Found while switching the fleet: the live room's overview sat far out and Center did not bring it back until a reload. P702 showed the ladder is not the cause; later reloads drift out too | P702b | merged: a path outside the project (an absolute path such as a scratchpad file) no longer becomes a top-level card. Cost: a replay no longer draws a top-level folder its recorded tree lacks; the live room gets one from the bridge's `tree` events |
 | Item 6 below: a lower subagent depth hides a ring that holds agents with no confirm | P703 | merged; try the card in the bench after its restart |
-| Thinking rings that move: a flip top to side in 0.5 s, a slow 2 s drift, a rise upright, then a gyro, a burst and a settle, per agent out of step | P715 | queued on Neon after P711 |
-| Center moves under the agents chip, with an Idle button beside it that forces idle until pressed again | P716 | queued on Neon after P715; Stage wiring by the orchestrator |
+| Thinking rings that move: a flip top to side in 0.5 s, a slow 2 s drift, a rise upright, then a gyro, a burst and a settle, per agent out of step | P715 | merged (`9070d58c`), seen moving in a replay |
+| Center moves under the agents chip, with an Idle button beside it that forces idle until pressed again | P716 | running on Neon; Stage wiring by the orchestrator |
 | Review 72 of P694 to P703: 1 High (R72-1, rings stay yellow after the first tool call), 4 Medium, 2 Low | P704 | merged; fixes P705 (Argon: ring state, crowded callouts, callout clicks), P706 (Neon: folders open and shut), P707 (next: depth confirm). R72-2's double click and DOM contract fixed by hand (`81915cb8`) |
 | R72-2's other half: from the overview a callout can sit behind a nearer folder card or the hub | P708 | merged (`bd138b89`): callouts draw on a second CSS3D layer above the cards; seen in a replay |
 
