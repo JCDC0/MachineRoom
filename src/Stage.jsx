@@ -718,7 +718,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
     const normalized = saveEffectSettings(store(), next)
     setEffects(normalized)
     setFineDust(normalized.dust)
-    roomRef.current?.setOptions({ alwaysDepth: normalized.alwaysDepth, maxFiles: normalized.maxFiles })
+    roomRef.current?.setOptions({ alwaysDepth: normalized.alwaysDepth, maxFiles: normalized.maxFiles, folderContents: normalized.folderContents, openOnTouch: normalized.openOnTouch })
   }
 
   function resetSoundFiles(tree = data.tree) {
@@ -845,7 +845,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
       },
     })
     roomRef.current = room
-    room.setOptions({ alwaysDepth: effects.alwaysDepth, maxFiles: effects.maxFiles })
+    room.setOptions({ alwaysDepth: effects.alwaysDepth, maxFiles: effects.maxFiles, folderContents: effects.folderContents, openOnTouch: effects.openOnTouch })
     room.setBloom(effects.bloom)
     room.setIdle(idleRef.current)
     setFineDust(effects.dust)
@@ -1137,9 +1137,9 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
 
   useEffect(() => {
     setFineDust(effects.dust)
-    roomRef.current?.setOptions({ alwaysDepth: effects.alwaysDepth, maxFiles: effects.maxFiles })
+    roomRef.current?.setOptions({ alwaysDepth: effects.alwaysDepth, maxFiles: effects.maxFiles, folderContents: effects.folderContents, openOnTouch: effects.openOnTouch })
     roomRef.current?.setBloom(effects.bloom)
-  }, [effects.alwaysDepth, effects.maxFiles, effects.dust, effects.bloom])
+  }, [effects.alwaysDepth, effects.maxFiles, effects.folderContents, effects.openOnTouch, effects.dust, effects.bloom])
 
   const grainOn = Boolean(effects.grain?.on && effects.grain.strength > 0)
 
