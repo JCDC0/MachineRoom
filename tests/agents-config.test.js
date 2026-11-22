@@ -1228,8 +1228,13 @@ describe('lane runs of made lanes', () => {
     })
 
     expect(runRes.lane).toBe('claude-2')
-    await waitFor(() => existsSync(outRecord), { what: 'fake runner to write args' })
-    const recorded = JSON.parse(readFileSync(outRecord, 'utf8'))
+    const recorded = await waitFor(() => {
+      try {
+        return JSON.parse(readFileSync(outRecord, 'utf8'))
+      } catch {
+        return null
+      }
+    }, { what: 'fake runner to write args' })
     expect(recorded).toContain('claude-2')
     expect(recorded).toContain('--project')
     expect(recorded).toContain(projectRoot)
