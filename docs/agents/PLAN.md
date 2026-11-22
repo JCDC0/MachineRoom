@@ -1,6 +1,10 @@
 # Plan
 
-## Next, as of 2026-11-22 17:45
+## Next, as of 2026-11-22 19:35 (shutdown, usage limit)
+
+Pushed `fc2de03c`; its CI passed on Ubuntu and FAILED on Windows (run 45014796316, the failed log showed no test name: check for a hang or a timeout first, then rerun). Merged on main, not pushed: P704 (review 72), `81915cb8` (R72-2 double click by hand), P706 (`c86522d8`). Finished, NOT reviewed or merged: P705 on `feat/p705-review-72-fixes` (3 commits, R72-1, R72-3, R72-2 clicks) and P707 on `feat/p707-review-72-fixes` (2 commits, R72-4, R72-6); worktrees `agy-6` and `agy-5` sit on those branches. The bench is stopped. Next session: read the Windows CI log, review and merge P705 and P707 (run `tests/dialog-focus-ui.test.js` too), full suite, audit, push, then review 73 toward the stop rule.
+
+## Earlier, as of 2026-11-22 17:45
 
 Unpushed since `a5480146`: P695 to P698 with their merges, the Stage wiring of P698's settings (`65763930`), the lens corner brackets removed (`2583ded8`) and briefs P699 to P701. Run the full suite, the history audit and push, then read CI.
 
