@@ -802,8 +802,12 @@ export function createClient({
 
     agentDepth: () => request('GET', '/api/agent-depth'),
 
-    setAgentDepth: ({ limit, unlocked, confirmed = true } = {}) =>
-      request('POST', '/api/agent-depth', { limit, unlocked, confirmed }),
+    setAgentDepth: ({ limit, unlocked, confirmed = true, hideOccupied } = {}) =>
+      request(
+        'POST',
+        '/api/agent-depth',
+        hideOccupied === undefined ? { limit, unlocked, confirmed } : { limit, unlocked, confirmed, hideOccupied }
+      ),
 
     setAgentLabel: ({ id, label, confirmed = true } = {}) =>
       request('POST', '/api/family/label', { id, label, confirmed }),

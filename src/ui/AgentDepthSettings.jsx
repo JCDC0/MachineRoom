@@ -7,19 +7,39 @@ export const UNLOCK_TEXT =
 export const DEPTH_CHOICES = [1, 2]
 export const UNLOCKED_CHOICES = [1, 2, 3, 4]
 
-export function depthAnswer(value) {
+export function hideOccupiedText(ring, agents, depth) {
+  const who = agents === 1 ? '1 agent' : `${agents} agents`
+  const pronoun = agents === 1 ? 'it' : 'them'
+  return `Ring ${ring} holds ${who}. A depth of ${depth} hides ${pronoun} until you raise it again.`
+}
+
+export function depthAnswer(value, fallback = null) {
   const limit = Number.isInteger(value?.limit) && value.limit >= 1 && value.limit <= 4 ? value.limit : 2
-  return { limit, unlocked: value?.unlocked === true }
+  const deepest =
+    Number.isInteger(value?.deepest) && value.deepest >= 0
+      ? value.deepest
+      : Number.isInteger(fallback?.deepest) && fallback.deepest >= 0
+        ? fallback.deepest
+        : 0
+  const deepestAgents =
+    Number.isInteger(value?.deepestAgents) && value.deepestAgents >= 0
+      ? value.deepestAgents
+      : fallback && fallback.deepest === deepest && Number.isInteger(fallback.deepestAgents) && fallback.deepestAgents >= 0
+        ? fallback.deepestAgents
+        : deepest > 0
+          ? 1
+          : 0
+  return { limit, unlocked: value?.unlocked === true, deepest, deepestAgents }
 }
 
 export default function AgentDepthSettings({ client = null }) {
   const canRead = Boolean(client) && typeof client.agentDepth === 'function'
   const canWrite = Boolean(client) && typeof client.setAgentDepth === 'function'
   const available = canRead && canWrite
-  const [state, setState] = useState({ limit: 2, unlocked: false })
+  const [state, setState] = useState({ limit: 2, unlocked: false, deepest: 0, deepestAgents: 0 })
   const [loading, setLoading] = useState(available)
   const [error, setError] = useState('')
-  const [confirm, setConfirm] = useState(false)
+  const [dialog, setDialog] = useState(null)
   const [busy, setBusy] = useState(false)
   const busyRef = useRef(false)
   const cardRef = useRef(null)
@@ -51,10 +71,15 @@ export default function AgentDepthSettings({ client = null }) {
     busyRef.current = true
     setBusy(true)
     setError('')
-    const next = { ...state, ...patch }
+    const payload = {
+      limit: patch.limit ?? state.limit,
+      unlocked: patch.unlocked ?? state.unlocked,
+      confirmed: true,
+    }
+    if (patch.hideOccupied === true) payload.hideOccupied = true
     try {
-      const answer = await client.setAgentDepth({ ...next, confirmed: true })
-      setState(depthAnswer(answer ?? next))
+      const answer = await client.setAgentDepth(payload)
+      setState((current) => depthAnswer(answer ?? payload, current))
     } catch (failure) {
       setError(String(failure?.message ?? failure))
     }
@@ -62,20 +87,34 @@ export default function AgentDepthSettings({ client = null }) {
     setBusy(false)
   }
 
-  useDialogFocus(confirm, { containerRef: cardRef, openerSelector: 'mr-depth-confirm' })
+  function pickDepth(depth, unlocked = state.unlocked) {
+    if (depth < state.limit && depth <= state.deepest) {
+      setError('')
+      setDialog({ kind: 'hide', limit: depth, unlocked })
+      return
+    }
+    setDialog(null)
+    save({ limit: depth, unlocked })
+  }
+
+  const dialogKey = dialog ? `${dialog.kind}:${dialog.limit ?? ''}` : false
+  useDialogFocus(dialogKey, {
+    containerRef: cardRef,
+    openerSelector: dialog?.kind === 'unlock' ? 'mr-depth-confirm' : '',
+  })
 
   useEffect(() => {
-    if (!confirm) return undefined
+    if (!dialog) return undefined
     function onKey(event) {
       if (event.key !== 'Escape') return
       event.preventDefault()
       event.stopPropagation()
       event.stopImmediatePropagation?.()
-      setConfirm(false)
+      setDialog(null)
     }
     window.addEventListener('keydown', onKey, true)
     return () => window.removeEventListener('keydown', onKey, true)
-  }, [confirm])
+  }, [dialog])
 
   if (!available) return null
 
@@ -95,7 +134,7 @@ export default function AgentDepthSettings({ client = null }) {
               aria-label={`Subagent depth ${depth}`}
               aria-pressed={state.limit === depth}
               disabled={loading || busy}
-              onClick={() => save({ limit: depth, unlocked: state.unlocked })}
+              onClick={() => pickDepth(depth)}
             >
               {depth}
             </button>
@@ -105,7 +144,7 @@ export default function AgentDepthSettings({ client = null }) {
               type="button"
               className="mr-depth-unlock"
               disabled={loading || busy}
-              onClick={() => save({ limit: 2, unlocked: false })}
+              onClick={() => pickDepth(2, false)}
             >
               Lock
             </button>
@@ -114,11 +153,11 @@ export default function AgentDepthSettings({ client = null }) {
               type="button"
               className="mr-depth-unlock"
               aria-controls="mr-depth-confirm"
-              aria-expanded={confirm}
+              aria-expanded={dialog?.kind === 'unlock'}
               disabled={loading || busy}
               onClick={() => {
                 setError('')
-                setConfirm(true)
+                setDialog({ kind: 'unlock' })
               }}
             >
               Unlock
@@ -128,26 +167,30 @@ export default function AgentDepthSettings({ client = null }) {
       </div>
       {loading && <p className="mr-depth-state mono">Loading</p>}
       {error !== '' && <p className="mr-depth-state mono is-error">{error}</p>}
-      {confirm && (
+      {dialog && (
         <section
           id="mr-depth-confirm"
           ref={cardRef}
           className="mr-depth-confirm"
-          aria-label="Unlock subagent depth"
+          aria-label={dialog.kind === 'unlock' ? 'Unlock subagent depth' : 'Hide occupied ring'}
           onKeyDown={(event) => {
             if (event.key !== 'Escape') return
             event.preventDefault()
             event.stopPropagation()
-            setConfirm(false)
+            setDialog(null)
           }}
         >
-          <p className="mr-depth-confirm-text">{UNLOCK_TEXT}</p>
+          <p className="mr-depth-confirm-text">
+            {dialog.kind === 'unlock'
+              ? UNLOCK_TEXT
+              : hideOccupiedText(state.deepest, state.deepestAgents, dialog.limit)}
+          </p>
           <div className="mr-depth-confirm-actions">
             <button
               type="button"
               className="mr-depth-confirm-btn is-cancel"
               disabled={busy}
-              onClick={() => setConfirm(false)}
+              onClick={() => setDialog(null)}
             >
               Cancel
             </button>
@@ -156,11 +199,16 @@ export default function AgentDepthSettings({ client = null }) {
               className="mr-depth-confirm-btn is-danger"
               disabled={busy}
               onClick={() => {
-                setConfirm(false)
-                save({ limit: state.limit, unlocked: true })
+                const current = dialog
+                setDialog(null)
+                if (current.kind === 'unlock') {
+                  save({ limit: state.limit, unlocked: true })
+                } else {
+                  save({ limit: current.limit, unlocked: current.unlocked, hideOccupied: true })
+                }
               }}
             >
-              Unlock
+              {dialog.kind === 'unlock' ? 'Unlock' : 'Hide'}
             </button>
           </div>
         </section>
