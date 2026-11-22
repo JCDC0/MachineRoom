@@ -407,3 +407,70 @@ describe('merged console inside the callout', () => {
     }
   })
 })
+
+describe('callout scene option', () => {
+  it('adds and removes callouts on calloutScene when given, leaving cssScene clear', () => {
+    const cssScene = new THREE.Scene()
+    const calloutScene = new THREE.Scene()
+    const roster = [{ key: 'a', name: 'Alpha', shape: 'claude' }]
+    const agents = createAgents(new THREE.Scene(), roster, cssScene, { calloutScene })
+    const state = createState({ files: [], dirs: [], created: [] }, roster)
+    const terminals = {
+      ensure() {},
+      setVisible() {},
+      setFade() {},
+      setOpen() {},
+      remove() {},
+      edgePoint: (key, side, out) => out.set(100, 290, 0),
+    }
+    const world = {
+      right: new THREE.Vector3(1, 0, 0),
+      back: new THREE.Vector3(0, 0, 1),
+      side: () => 1,
+      edge: (dir, file, side, out) => out.set(500, 400, 0),
+    }
+
+    const initialCallout = agents.views.get('a').callout.object
+    expect(initialCallout.parent).toBe(calloutScene)
+    expect(calloutScene.children).toEqual([initialCallout])
+    expect(cssScene.children).toEqual([])
+
+    apply(state, { time: 1000, type: 'agent.spawn', agent: 'a', child: 'a-sub', name: 'Child' })
+    agents.update(state, 0.016, 1000, world, terminals)
+    const childCallout = agents.views.get('a-sub').callout.object
+    expect(childCallout.parent).toBe(calloutScene)
+    expect(calloutScene.children).toContain(childCallout)
+    expect(cssScene.children).toEqual([])
+
+    agents.setRoster([
+      { key: 'a', name: 'Alpha', shape: 'claude' },
+      { key: 'b', name: 'Beta', shape: 'hermes' },
+    ])
+    const addedCallout = agents.views.get('b').callout.object
+    expect(addedCallout.parent).toBe(calloutScene)
+    expect(cssScene.children).toEqual([])
+
+    agents.setRoster([{ key: 'a', name: 'Alpha', shape: 'claude' }])
+    expect(addedCallout.parent).toBeNull()
+    expect(calloutScene.children).not.toContain(addedCallout)
+
+    agents.dispose()
+    expect(initialCallout.parent).toBeNull()
+    expect(childCallout.parent).toBeNull()
+    expect(calloutScene.children).toEqual([])
+  })
+
+  it('falls back to cssScene when calloutScene is omitted', () => {
+    const cssScene = new THREE.Scene()
+    const roster = [{ key: 'a', name: 'Alpha', shape: 'claude' }]
+    const agents = createAgents(new THREE.Scene(), roster, cssScene)
+
+    const calloutObject = agents.views.get('a').callout.object
+    expect(calloutObject.parent).toBe(cssScene)
+    expect(cssScene.children).toEqual([calloutObject])
+
+    agents.dispose()
+    expect(calloutObject.parent).toBeNull()
+    expect(cssScene.children).toEqual([])
+  })
+})
