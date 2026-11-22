@@ -9131,13 +9131,6 @@ button.ui-icon-btn.mr-composer-send:hover:not(:disabled) {
 }
 
 /* Hamburger icons mark the dropdowns */
-.mr-menu-icon {
-  display: inline-block;
-  flex: none;
-  vertical-align: middle;
-  opacity: 0.8;
-}
-
 /* U42: the orchestrator and its context ring in the transport row under the lens */
 @media (min-width: 900px) {
   .transport.is-live.has-orchestrator {

@@ -1,4 +1,4 @@
-import { ancestors, dirname, normalise } from './paths.js'
+import { ancestors, normalise } from './paths.js'
 
 const DEFAULT_MAX_FOLDERS = 3
 const DEFAULT_MAX_ITEMS = 10

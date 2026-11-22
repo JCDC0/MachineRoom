@@ -17,7 +17,6 @@ import {
 import { activeLanesFileFor, eligibleLanes, projectHash, projectLanesFileFor, readActiveLanesChoice, readHiddenLanes } from './active-lanes.js'
 import { readEndpoints } from './endpoints.js'
 import { HARNESS_OFF_PROBLEM, readHarnessSettings } from './harness-settings.js'
-import { MODELS } from './models.js'
 import { ORCHESTRATOR_KEY } from './orchestrator.js'
 import { NO_TOKEN_PROBLEM, sameHarnessProblem } from './orchestrators.js'
 import { readAgentDepth } from './agent-depth.js'

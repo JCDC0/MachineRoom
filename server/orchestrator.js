@@ -42,7 +42,7 @@ import {
 import { HARNESS_EFFORTS, codexProgramFor, harnessUnavailableProblem, isHarnessAvailable, modelUnavailableProblem } from './agents-config.js'
 import { readEndpoints } from './endpoints.js'
 import { modelAllowed } from './harness-models.js'
-import { MODELS, resolveContextWindow } from './models.js'
+import { resolveContextWindow } from './models.js'
 import { MODEL_ALIASES } from './model-list.js'
 import { isLockHolderStale, killTree, listProcesses } from './processTree.js'
 import { gitEnv, gitPath, programPath } from './programPath.js'
