@@ -280,8 +280,10 @@ describe('the camera target colour', () => {
   it('puts the agent colour on the targeted card and its active row, then takes it away', () => {
     const tree = makeTree({ root: 'demo', files: ['src/a.js', 'src/b.js'] })
     const state = createState(tree, [{ key: 'hermes', name: 'Hermes' }])
-    state.agents.get('hermes').status = 'working'
-    state.agents.get('hermes').focus = ['src/a.js']
+    const hermes = state.agents.get('hermes')
+    hermes.status = 'working'
+    hermes.openCalls.set('c1', { tool: 'read', label: 'read src/a.js', touches: [{ path: 'src/a.js', kind: 'file', mode: 'read' }] })
+    hermes.focus = ['src/a.js']
     const cards = createCards(fakeScene(), { glScene: fakeScene(), alwaysDepth: 2 })
     cards.sync(state)
     const mask = {
@@ -298,8 +300,21 @@ describe('the camera target colour', () => {
     expect(card.drawn.get('src/a.js').row.style['--mr-target']).toBe('#ffb347')
     expect(card.drawn.get('src/b.js').row.style['--mr-target']).toBeUndefined()
 
-    state.agents.get('hermes').status = 'done'
-    state.agents.get('hermes').focus = []
+    hermes.openCalls.clear()
+    cards.update(state, 0.016, camera(), mask)
+    expect(card.drawn.get('src/a.js').row.className).not.toContain('is-active')
+    expect(card.drawn.get('src/a.js').row.style['--mr-target']).toBeUndefined()
+
+    hermes.openCalls.set('c2', { tool: 'read', label: 'read src/a.js', touches: [{ path: 'src/a.js', kind: 'file', mode: 'read' }] })
+    hermes.status = 'error'
+    cards.update(state, 0.016, camera(), mask)
+    expect(card.element.className).not.toContain('is-active')
+    expect(card.drawn.get('src/a.js').row.className).not.toContain('is-active')
+    expect(card.drawn.get('src/a.js').row.style['--mr-target']).toBeUndefined()
+
+    hermes.status = 'done'
+    hermes.openCalls.clear()
+    hermes.focus = []
     cards.update(state, 0.016, camera(), {
       ...mask,
       dimmed: false,
@@ -1199,7 +1214,7 @@ describe('hiding folder contents', () => {
     apply(state, { type: 'tool.end', agent: 'claude', runId: 'r1', time: 1200, id: 'c1', ok: true })
     expect(state.agents.get('claude').status).toBe('working')
     expect(state.agents.get('claude').openCalls.size).toBe(0)
-    expect(state.agents.get('claude').focus).toEqual(['src/a.js'])
+    expect(state.agents.get('claude').focus).toEqual([])
 
     for (let step = 0; step < 100; step += 1) cards.update(state, 0.1, camera(), null, 1)
     expect(src.openLevel).toBe(0)
@@ -1254,7 +1269,7 @@ describe('hiding folder contents', () => {
 
     apply(state, { type: 'tool.end', agent: 'claude', runId: 'r1', time: 1200, id: 'c1', ok: true })
     expect(state.agents.get('claude').status).toBe('working')
-    expect(state.agents.get('claude').focus).toEqual(['src/a.js'])
+    expect(state.agents.get('claude').focus).toEqual([])
 
     cards.sync(state)
     cards.update(state, 0.016, camera())
@@ -1262,6 +1277,93 @@ describe('hiding folder contents', () => {
     expect(src.height).toBe(cardHeight(0))
     expect(src.rows).toHaveLength(0)
     expect(src.element.className).toContain('is-collapsed')
+    cards.dispose()
+  })
+
+  it('keeps a folder shut during a later non-file tool, shifts on overlapping ends and shuts on error', () => {
+    const state = createState(makeTree({ root: 'demo', files: ['src/a.js', 'docs/b.md'] }), [{ key: 'claude', name: 'Claude' }])
+    const cards = createCards(fakeScene(), { glScene: fakeScene(), alwaysDepth: 2, folderContents: false, openOnTouch: true })
+    cards.sync(state)
+    cards.update(state, 0.016, camera())
+    const src = cards.cards.get('src')
+    const docs = cards.cards.get('docs')
+
+    apply(state, { type: 'run.start', agent: 'claude', runId: 'r1', time: 500 })
+    apply(state, {
+      type: 'tool.start',
+      agent: 'claude',
+      runId: 'r1',
+      time: 1000,
+      id: 'c1',
+      tool: 'read',
+      label: 'read src/a.js',
+      touches: [{ kind: 'file', path: 'src/a.js', mode: 'read' }],
+    })
+    cards.flashFile('src', 'src/a.js', 'white')
+    for (let step = 0; step < 5; step += 1) cards.update(state, 0.1, camera(), null, 1)
+    expect(src.openLevel).toBe(1)
+
+    apply(state, { type: 'tool.end', agent: 'claude', runId: 'r1', time: 1200, id: 'c1', ok: true })
+    for (let step = 0; step < 20; step += 1) cards.update(state, 0.1, camera(), null, 1)
+    expect(src.openLevel).toBe(0)
+
+    apply(state, {
+      type: 'tool.start',
+      agent: 'claude',
+      runId: 'r1',
+      time: 3000,
+      id: 'sh1',
+      tool: 'shell',
+      label: 'npm test',
+      touches: [],
+    })
+    for (let step = 0; step < 100; step += 1) cards.update(state, 0.1, camera(), null, 1)
+    expect(state.agents.get('claude').openCalls.size).toBe(1)
+    expect(src.openLevel).toBe(0)
+    expect(src.element.className).toContain('is-collapsed')
+    expect(src.element.className).not.toContain('is-active')
+    apply(state, { type: 'tool.end', agent: 'claude', runId: 'r1', time: 13000, id: 'sh1', ok: true })
+
+    apply(state, {
+      type: 'tool.start',
+      agent: 'claude',
+      runId: 'r1',
+      time: 14000,
+      id: 'o1',
+      tool: 'read',
+      label: 'read src/a.js',
+      touches: [{ kind: 'file', path: 'src/a.js', mode: 'read' }],
+    })
+    apply(state, {
+      type: 'tool.start',
+      agent: 'claude',
+      runId: 'r1',
+      time: 14100,
+      id: 'o2',
+      tool: 'read',
+      label: 'read docs/b.md',
+      touches: [{ kind: 'file', path: 'docs/b.md', mode: 'read' }],
+    })
+    cards.update(state, 0.25, camera(), null, 1)
+    expect(src.openLevel).toBe(1)
+    expect(docs.openLevel).toBe(1)
+
+    apply(state, { type: 'tool.end', agent: 'claude', runId: 'r1', time: 14200, id: 'o2', ok: true })
+    for (let step = 0; step < 20; step += 1) cards.update(state, 0.1, camera(), null, 1)
+    expect(src.openLevel).toBe(1)
+    expect(src.element.className).not.toContain('is-collapsed')
+    expect(src.element.className).toContain('is-active')
+    expect(docs.openLevel).toBe(0)
+    expect(docs.element.className).toContain('is-collapsed')
+    expect(docs.element.className).not.toContain('is-active')
+
+    apply(state, { type: 'error', agent: 'claude', runId: 'r1', time: 15000, text: 'crashed' })
+    expect(state.agents.get('claude').openCalls.size).toBe(0)
+    expect(state.agents.get('claude').focus).toEqual([])
+    for (let step = 0; step < 20; step += 1) cards.update(state, 0.1, camera(), null, 1)
+    expect(src.openLevel).toBe(0)
+    expect(src.element.className).toContain('is-collapsed')
+    expect(src.element.className).not.toContain('is-active')
     cards.dispose()
   })
 

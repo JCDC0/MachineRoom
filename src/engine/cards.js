@@ -454,15 +454,15 @@ export function createCards(cssScene, options = {}) {
   let swayTarget = 0
   let swayLevel = 0
 
-  function hasOpenCall(agent) {
-    return (agent?.openCalls?.size ?? 0) > 0
+  function hasActiveCall(agent) {
+    return agent?.status === 'working' && (agent?.openCalls?.size ?? 0) > 0
   }
 
   function focusChanged(state) {
     if (state.agents.size !== lastAgentFocus.length) return true
     let i = 0
     for (const agent of state.agents.values()) {
-      if (agent.focus !== lastAgentFocus[i] || hasOpenCall(agent) !== lastAgentOpen[i]) return true
+      if (agent.focus !== lastAgentFocus[i] || hasActiveCall(agent) !== lastAgentOpen[i]) return true
       i += 1
     }
     return false
@@ -473,7 +473,7 @@ export function createCards(cssScene, options = {}) {
     lastAgentOpen = []
     for (const agent of state.agents.values()) {
       lastAgentFocus.push(agent.focus)
-      lastAgentOpen.push(hasOpenCall(agent))
+      lastAgentOpen.push(hasActiveCall(agent))
     }
   }
 
@@ -926,16 +926,19 @@ export function createCards(cssScene, options = {}) {
   }
 
   function computeActive(state) {
-    const focusPaths = new Set()
+    const files = new Set()
     const dirs = new Set()
     for (const agent of state.agents.values()) {
-      const open = hasOpenCall(agent)
+      if (!hasActiveCall(agent)) continue
       for (const path of agent.focus ?? []) {
-        focusPaths.add(path)
-        if (open) dirs.add(state.files.has(path) ? dirname(path) : path)
+        if (state.files.has(path)) {
+          files.add(path)
+          dirs.add(dirname(path))
+        } else {
+          dirs.add(path)
+        }
       }
     }
-    const files = new Set([...focusPaths].filter((path) => state.files.has(path)))
     const chain = openChain(state)
     const changed = !sameSet(active.dirs, dirs) || !sameSet(active.files, files)
     active = { files, dirs, path: chain }
