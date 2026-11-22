@@ -336,14 +336,49 @@ describe('the room takes the chosen top and the depth', () => {
   it('passes folderContents and openOnTouch through room.setOptions', async () => {
     const { room } = await makeRoom(['src/a.js', 'docs/b.md'])
     try {
+      let now = performance.now() + 1000
+      const step = (frames = 1, ms = 100) => {
+        for (let index = 0; index < frames; index += 1) {
+          now += ms
+          roomFrame?.(now)
+        }
+      }
       const srcCard = () => createdNodes.findLast((node) => node.dataset?.path === 'src')
-      tick()
+      const docsCard = () => createdNodes.findLast((node) => node.dataset?.path === 'docs')
+      const touch = (id) => ({
+        type: 'tool.start',
+        agent: 'claude',
+        id,
+        tool: 'read',
+        label: 'read src/a.js',
+        touches: [{ kind: 'file', path: 'src/a.js', mode: 'read' }],
+      })
+
+      step(1)
       expect(srcCard().className).not.toContain('is-collapsed')
+
       room.setOptions({ folderContents: false, openOnTouch: false })
-      tick()
+      step(1)
       expect(srcCard().className).toContain('is-collapsed')
+
+      room.onActivity(touch('c1'))
+      for (let frame = 0; frame < 13; frame += 1) {
+        step(1)
+        expect(srcCard().className).toContain('is-collapsed')
+      }
+
+      room.setOptions({ openOnTouch: true })
+      step(1)
+      expect(srcCard().className).toContain('is-collapsed')
+
+      room.onActivity(touch('c2'))
+      step(13)
+      expect(srcCard().className).not.toContain('is-collapsed')
+      expect(docsCard().className).toContain('is-collapsed')
+
       room.setOptions({ folderContents: true })
-      tick()
+      step(1)
+      expect(docsCard().className).not.toContain('is-collapsed')
       expect(srcCard().className).not.toContain('is-collapsed')
     } finally {
       room.dispose()
