@@ -72,13 +72,23 @@ export const SPINNER_ARC_OPACITY = 0.95
 
 const RUNNING_STATUSES = new Set(['working', 'running'])
 
+function hasOpenCalls(entry) {
+  const openCalls = entry?.openCalls
+  if (openCalls !== undefined && openCalls !== null) {
+    if (typeof openCalls.size === 'number') return openCalls.size > 0
+    const count = Number(openCalls)
+    return Number.isFinite(count) && count > 0
+  }
+  const calls = entry?.calls
+  if (calls && typeof calls.size === 'number') return calls.size > 0
+  const open = Number(entry?.openToolCalls ?? 0)
+  return Number.isFinite(open) && open > 0
+}
+
 export function agentThinking(agent = {}) {
   const status = typeof agent?.status === 'string' ? agent.status.toLowerCase() : ''
   if (!RUNNING_STATUSES.has(status)) return false
-  const calls = agent?.calls
-  if (calls && typeof calls.size === 'number') return calls.size === 0
-  const open = Number(agent?.openCalls ?? agent?.openToolCalls ?? 0)
-  return !(Number.isFinite(open) && open > 0)
+  return !hasOpenCalls(agent)
 }
 
 export function statusRingColor(status, entry = null) {
@@ -86,10 +96,7 @@ export function statusRingColor(status, entry = null) {
   if (state === 'error') return RED
   if (state === 'done') return GREEN
   if (RUNNING_STATUSES.has(state)) {
-    const calls = entry?.calls
-    if (calls && typeof calls.size === 'number') return calls.size > 0 ? YELLOW : WHITE
-    const open = Number(entry?.openCalls ?? entry?.openToolCalls ?? 0)
-    return Number.isFinite(open) && open > 0 ? YELLOW : WHITE
+    return hasOpenCalls(entry) ? YELLOW : WHITE
   }
   return WHITE
 }
@@ -288,7 +295,8 @@ export function doingText(entry) {
   if (!entry) return ''
   const { status, label } = entry
   if (status === 'queued') return 'queued'
-  if (status === 'working' && entry.calls && typeof entry.calls.size === 'number' && entry.calls.size === 0) return 'thinking'
+  const open = entry.openCalls ?? entry.calls
+  if (status === 'working' && ((open && typeof open.size === 'number' && open.size === 0) || open === 0)) return 'thinking'
   if (status === 'working' && typeof label === 'string' && label) {
     const text = label.toLowerCase()
     return text.length > 40 ? `${text.slice(0, 39)}~` : text
