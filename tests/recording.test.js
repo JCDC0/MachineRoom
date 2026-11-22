@@ -5,6 +5,7 @@ import { buildActivities, createPipeline } from '../src/model/pipeline.js'
 import { createPlayer } from '../src/model/player.js'
 import { prepare } from '../src/model/source.js'
 import { apply, createState } from '../src/model/state.js'
+import { agentStateWord } from '../src/ui/inspector.js'
 import { loadRecording } from './helpers.js'
 
 const recording = loadRecording()
@@ -262,5 +263,44 @@ describe('player', () => {
     player.play()
     player.tick(player.duration * 2)
     expect(seen.length).toBe(activities.length)
+  })
+
+  it('reports openCalls and tool in snapshot after seeking into an open call, overlapping end, and failed call', () => {
+    const simpleTree = { files: ['src/a.js'], dirs: ['src'], created: [] }
+    const simpleAgents = [{ key: 'claude', name: 'Claude' }]
+    const touchA = [{ path: 'src/a.js', mode: 'read', kind: 'file' }]
+    const timeline = [
+      { type: 'run.start', agent: 'claude', runId: 'r1', time: 0, order: 0 },
+      { type: 'tool.start', agent: 'claude', runId: 'r1', id: 't1', tool: 'read', label: 'read src/a.js', touches: touchA, time: 1500, order: 1 },
+      { type: 'tool.end', agent: 'claude', runId: 'r1', id: 't1', ok: true, time: 3000, order: 2 },
+      { type: 'tool.start', agent: 'claude', runId: 'r1', id: 't2', tool: 'shell', label: 'npm run dev', touches: [], time: 3500, order: 3 },
+      { type: 'tool.start', agent: 'claude', runId: 'r1', id: 't3', tool: 'read', label: 'read src/a.js', touches: touchA, time: 4000, order: 4 },
+      { type: 'tool.end', agent: 'claude', runId: 'r1', id: 't3', ok: true, time: 4500, order: 5 },
+      { type: 'tool.end', agent: 'claude', runId: 'r1', id: 't2', ok: true, time: 5000, order: 6 },
+      { type: 'tool.start', agent: 'claude', runId: 'r1', id: 't4', tool: 'write', label: 'write src/a.js', touches: [{ path: 'src/a.js', mode: 'write', kind: 'file' }], time: 5500, order: 7 },
+      { type: 'tool.end', agent: 'claude', runId: 'r1', id: 't4', ok: false, time: 6000, order: 8 },
+      { type: 'run.end', agent: 'claude', runId: 'r1', ok: true, time: 7000, order: 9 },
+    ]
+    const player = createPlayer({ activities: timeline, tree: simpleTree, agents: simpleAgents })
+
+    player.seek(2000)
+    const duringRead = player.snapshot().agents[0]
+    expect(duringRead).toMatchObject({ status: 'working', label: 'read src/a.js', openCalls: 1, tool: 'read' })
+    expect(agentStateWord(duringRead)).toEqual({ word: 'working', tool: 'read', command: 'read src/a.js' })
+
+    player.seek(3200)
+    const thinking = player.snapshot().agents[0]
+    expect(thinking).toMatchObject({ status: 'working', openCalls: 0, tool: '' })
+    expect(agentStateWord(thinking)).toEqual({ word: 'thinking', tool: '', command: '' })
+
+    player.seek(4700)
+    const afterOverlapEnd = player.snapshot().agents[0]
+    expect(afterOverlapEnd).toMatchObject({ status: 'working', label: 'npm run dev', openCalls: 1, tool: 'shell' })
+    expect(agentStateWord(afterOverlapEnd)).toEqual({ word: 'working', tool: 'shell', command: 'npm run dev' })
+
+    player.seek(6500)
+    const afterSoleFail = player.snapshot().agents[0]
+    expect(afterSoleFail).toMatchObject({ status: 'working', openCalls: 0, tool: '' })
+    expect(agentStateWord(afterSoleFail)).toEqual({ word: 'thinking', tool: '', command: '' })
   })
 })

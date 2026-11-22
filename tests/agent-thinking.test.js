@@ -103,6 +103,8 @@ function startRun(state, time = 1000) {
 
 describe('agentThinking', () => {
   it('is true while the run is open and no tool call is open', () => {
+    expect(agentThinking({ status: 'working', openCalls: new Map(), calls: new Map([['t1', []]]) })).toBe(true)
+    expect(agentThinking({ status: 'working', openCalls: new Map([['t1', { tool: 'read', label: 'read src/a.js', touches: [] }]]), calls: new Map() })).toBe(false)
     expect(agentThinking({ status: 'working', openCalls: new Set(), calls: new Map([['t1', []]]) })).toBe(true)
     expect(agentThinking({ status: 'working', openCalls: new Set(['t1']), calls: new Map() })).toBe(false)
     expect(agentThinking({ status: 'working', calls: new Map() })).toBe(true)

@@ -42,13 +42,17 @@ describe('doingText', () => {
   })
 
   it('says thinking for a working entry with no open call', () => {
+    expect(doingText({ status: 'working', label: 'edit src/a.js', openCalls: new Map(), calls: new Map([['c1', []]]) })).toBe('thinking')
     expect(doingText({ status: 'working', label: 'edit src/a.js', openCalls: new Set(), calls: new Map([['c1', []]]) })).toBe('thinking')
+    expect(doingText({ status: 'working', label: 'edit src/a.js', openCalls: 0 })).toBe('thinking')
     expect(doingText({ status: 'working', label: 'edit src/a.js', calls: new Map() })).toBe('thinking')
     expect(doingText({ status: 'working', calls: new Map() })).toBe('thinking')
   })
 
   it('shows the label for a working entry with an open call', () => {
     const calls = new Map([['c1', []]])
+    expect(doingText({ status: 'working', label: 'Edit src/a.js', openCalls: new Map([['c1', { tool: 'edit', label: 'Edit src/a.js', touches: [] }]]), calls })).toBe('edit src/a.js')
+    expect(doingText({ status: 'working', label: '', openCalls: new Map([['c1', { tool: 'shell', label: 'npm run dev', touches: [] }]]), calls })).toBe('npm run dev')
     expect(doingText({ status: 'working', label: 'Edit src/a.js', openCalls: new Set(['c1']), calls })).toBe('edit src/a.js')
     expect(doingText({ status: 'working', label: 'Edit src/a.js', calls })).toBe('edit src/a.js')
   })

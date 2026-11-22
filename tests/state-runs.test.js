@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { makeTree } from '../src/model/paths.js'
-import { addAgents, apply, createState } from '../src/model/state.js'
+import { addAgents, apply, createState, latestOpenCall } from '../src/model/state.js'
 
 const tree = makeTree({ root: 'demo', files: ['src/a.js'] })
 const agents = [{ key: 'opencode', name: 'OpenCode' }]
@@ -131,15 +131,21 @@ describe('two runs of one agent', () => {
   it('tracks openCalls across tool.start, tool.end, run.start, run.end and child finish while keeping calls', () => {
     const state = createState(tree, agents)
     const agent = state.agents.get('opencode')
-    expect([...agent.openCalls]).toEqual([])
+    expect(agent.openCalls).toBeInstanceOf(Map)
+    expect([...agent.openCalls.keys()]).toEqual([])
 
     apply(state, start('r1', 1))
     apply(state, tool('r1', 2, 'src/a.js'))
-    expect([...agent.openCalls]).toEqual(['t-2'])
+    expect([...agent.openCalls.keys()]).toEqual(['t-2'])
+    expect(agent.openCalls.get('t-2')).toEqual({
+      tool: 'read',
+      label: 'read src/a.js',
+      touches: [{ path: 'src/a.js', mode: 'read', kind: 'file' }],
+    })
     expect(agent.calls.size).toBe(1)
 
     apply(state, { type: 'tool.end', agent: 'opencode', runId: 'r1', id: 't-2', ok: true, time: 3, order: 3 })
-    expect([...agent.openCalls]).toEqual([])
+    expect([...agent.openCalls.keys()]).toEqual([])
     expect(agent.calls.size).toBe(1)
 
     apply(state, tool('r1', 4, 'src/a.js'))
@@ -155,18 +161,56 @@ describe('two runs of one agent', () => {
       time: 6,
       order: 6,
     })
-    expect([...agent.openCalls]).toEqual(['t-4'])
-    expect([...state.agents.get('opencode~1').openCalls]).toEqual(['child-t1'])
+    expect([...agent.openCalls.keys()]).toEqual(['t-4'])
+    expect([...state.agents.get('opencode~1').openCalls.keys()]).toEqual(['child-t1'])
 
     apply(state, runEnd('r1', true, 7))
-    expect([...agent.openCalls]).toEqual([])
-    expect([...state.agents.get('opencode~1').openCalls]).toEqual([])
+    expect([...agent.openCalls.keys()]).toEqual([])
+    expect([...state.agents.get('opencode~1').openCalls.keys()]).toEqual([])
 
     apply(state, start('r2', 8))
     apply(state, tool('r2', 9, 'src/a.js'))
-    expect([...agent.openCalls]).toEqual(['t-9'])
+    expect([...agent.openCalls.keys()]).toEqual(['t-9'])
     apply(state, start('r3', 10))
-    expect([...agent.openCalls]).toEqual([])
+    expect([...agent.openCalls.keys()]).toEqual([])
+  })
+
+  it('restores agent.label to the newest remaining open call on tool.end and leaves it when none is open', () => {
+    const state = createState(tree, agents)
+    const agent = state.agents.get('opencode')
+    const touchA = { path: 'src/a.js', mode: 'read', kind: 'file' }
+
+    apply(state, start('r1', 1))
+    apply(state, { type: 'tool.start', agent: 'opencode', runId: 'r1', id: 't1', tool: 'shell', label: 'npm run dev', touches: [], time: 2, order: 2 })
+    apply(state, { type: 'tool.start', agent: 'opencode', runId: 'r1', id: 't2', tool: 'read', label: 'read src/a.js', touches: [touchA], time: 3, order: 3 })
+    expect(agent.openCalls.size).toBe(2)
+    expect(agent.label).toBe('read src/a.js')
+    expect(latestOpenCall(agent)).toEqual({ tool: 'read', label: 'read src/a.js', touches: [touchA] })
+
+    apply(state, { type: 'tool.end', agent: 'opencode', runId: 'r1', id: 't2', ok: true, time: 4, order: 4 })
+    expect([...agent.openCalls.keys()]).toEqual(['t1'])
+    expect(agent.label).toBe('npm run dev')
+    expect(latestOpenCall(agent)).toEqual({ tool: 'shell', label: 'npm run dev', touches: [] })
+
+    apply(state, { type: 'tool.end', agent: 'opencode', runId: 'r1', id: 't1', ok: true, time: 5, order: 5 })
+    expect(agent.openCalls.size).toBe(0)
+    expect(latestOpenCall(agent)).toBeNull()
+    expect(agent.label).toBe('npm run dev')
+
+    apply(state, { type: 'tool.start', agent: 'opencode', runId: 'r1', id: 't3', tool: 'shell', label: 'npm run dev', touches: [], time: 6, order: 6 })
+    apply(state, { type: 'tool.start', agent: 'opencode', runId: 'r1', id: 't4', tool: 'read', label: 'read src/a.js', touches: [touchA], time: 7, order: 7 })
+    apply(state, { type: 'tool.end', agent: 'opencode', runId: 'r1', id: 't3', ok: false, time: 8, order: 8 })
+    expect([...agent.openCalls.keys()]).toEqual(['t4'])
+    expect(agent.label).toBe('read src/a.js')
+    expect(agent.lines.at(-1)).toEqual({ text: 'failed npm run dev', tone: 'error' })
+
+    apply(state, { type: 'tool.end', agent: 'opencode', runId: 'r1', id: 't4', ok: false, time: 9, order: 9 })
+    expect(agent.openCalls.size).toBe(0)
+    expect(latestOpenCall(agent)).toBeNull()
+    expect(agent.status).toBe('working')
+    expect(agent.label).toBe('read src/a.js')
+    expect(state.files.get('src/a.js').failed).toBe(true)
+    expect(agent.lines.at(-1)).toEqual({ text: 'failed read src/a.js', tone: 'error' })
   })
 })
 

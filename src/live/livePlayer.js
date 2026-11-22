@@ -1,5 +1,5 @@
 import { ancestors } from '../model/paths.js'
-import { addAgents, apply, createState } from '../model/state.js'
+import { addAgents, apply, createState, latestOpenCall } from '../model/state.js'
 
 export function createLivePlayer({ tree, agents, onActivity = () => {} }) {
   const state = createState(tree, agents)
@@ -172,6 +172,8 @@ export function createLivePlayer({ tree, agents, onActivity = () => {} }) {
           model: agent.model ?? null,
           status: agent.status,
           label: agent.label,
+          openCalls: agent.openCalls?.size ?? 0,
+          tool: latestOpenCall(agent)?.tool ?? '',
           runs: agent.runs,
           parent: agent.parent ?? null,
           depth: agent.depth ?? 0,

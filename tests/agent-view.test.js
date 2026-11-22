@@ -93,18 +93,51 @@ function startWrite(state) {
 }
 
 describe('a failed tool call on a working agent', () => {
-  it('turns the strip red as well as the callout', () => {
+  it('hides the callout and fades out the tunnel when the sole call fails, and turns both red while another call stays open', () => {
     const { agents, state, terminals, world } = harness()
     startWrite(state)
-    agents.update(state, 0.016, 1000, world, terminals)
+    agents.update(state, 0.3, 1000, world, terminals)
     const view = agents.views.get('a')
+    expect(view.callout.object.visible).toBe(true)
     expect(view.callout.element.className).toBe('mr-callout is-working')
     expect(view.stripColor).toBe(TUNNEL_GREY)
+    expect(view.tunnel).toBe(1)
 
     apply(state, { time: 1100, type: 'tool.end', agent: 'a', id: 't1', ok: false })
     agents.update(state, 0.016, 1100, world, terminals)
+    expect(view.callout.object.visible).toBe(false)
+    expect(view.calloutLine.visible).toBe(false)
+    expect(view.stripColor).toBe(TUNNEL_GREY)
+    expect(view.tunnel).toBeLessThan(1)
+    agents.update(state, 0.7, 1800, world, terminals)
+    expect(view.tunnel).toBe(0)
+    expect(view.strip.visible).toBe(false)
+
+    apply(state, {
+      time: 2000,
+      type: 'tool.start',
+      agent: 'a',
+      id: 't2',
+      tool: 'read',
+      label: 'read src/a.js',
+      touches: [{ path: 'src/a.js', mode: 'read', kind: 'file' }],
+    })
+    apply(state, {
+      time: 2050,
+      type: 'tool.start',
+      agent: 'a',
+      id: 't3',
+      tool: 'write',
+      label: 'write src/a.js',
+      touches: [{ path: 'src/a.js', mode: 'write', kind: 'file' }],
+    })
+    apply(state, { time: 2100, type: 'tool.end', agent: 'a', id: 't3', ok: false })
+    agents.update(state, 0.3, 2100, world, terminals)
+    expect(view.callout.object.visible).toBe(true)
     expect(view.callout.element.className).toBe('mr-callout is-error')
+    expect(view.callout.cmd.textContent).toBe('read src/a.js')
     expect(view.stripColor).toBe(RED)
+    expect(view.tunnel).toBe(1)
     agents.dispose()
   })
 })

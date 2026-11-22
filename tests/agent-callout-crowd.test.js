@@ -390,10 +390,19 @@ describe('merged console inside the callout', () => {
       apply(state, end)
       terminals.note(end, 2000)
       agents.update(state, 0.016, 7999, world, terminals)
+      expect(view.callout.object.visible).toBe(true)
       expect(view.callout.consoleBlock.hidden).toBe(false)
 
       agents.update(state, 0.016, 8000, world, terminals)
       expect(view.callout.consoleBlock.hidden).toBe(true)
+      expect(view.callout.object.visible).toBe(false)
+      expect(view.calloutLine.visible).toBe(false)
+
+      const next = { time: 8100, type: 'tool.start', agent: 'a', id: 'r1', tool: 'read', label: 'read src/a.js', touches: [] }
+      apply(state, next)
+      terminals.note(next, 8100)
+      agents.update(state, 0.016, 8100, world, terminals)
+      expect(view.callout.object.visible).toBe(true)
       expect(view.callout.element.className).toBe('mr-callout is-working')
 
       const consoleElements = created.filter((node) => /(?:^|\s)mr-term-console(?:\s|$)/.test(node.className || ''))
