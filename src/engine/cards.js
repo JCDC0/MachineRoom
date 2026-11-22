@@ -5,13 +5,14 @@ import { basename, dirname, visibleText } from '../model/paths.js'
 import { freshRecent } from '../model/state.js'
 import { SWAY_LIFT, SWAY_RATE, SWAY_SCALE, danceEnvelope, startDanceEnvelope } from './hub.js'
 import { ROOT_PLACE, SMALL_TOP, layoutRing, ringOf } from './ring.js'
-import { easeRate, still } from './sprites.js'
+import { easeInOut, easeRate, still } from './sprites.js'
 import { speedRate } from './stars.js'
 
 export const CARD_W = 248
 export const HEAD_H = 56
 export const ROW_H = 22
 export const CARD_PAD = 8
+export const CONTENT_ANIM_SEC = 0.25
 export const BACK_STEP = 12
 export const BACK_DEPTH = 6
 export const CARD_FACE_EDGE = 1
@@ -292,9 +293,10 @@ export function tabAnchorOffset(width, height, scale = 1) {
   }
 }
 
-export function occluderParts(view, rootName = 'root') {
+export function occluderParts(view, rootName = 'root', heightOverride = null) {
   const width = cardBaseWidth(view?.path, rootName) + CARD_FACE_BORDER
-  const height = cardHeight(cardRows(view)) + CARD_FACE_BORDER
+  const baseHeight = Number.isFinite(heightOverride) ? heightOverride : cardHeight(cardRows(view))
+  const height = baseHeight + CARD_FACE_BORDER
   const tab = tabAnchorOffset(width, height)
   const parts = [
     { width, height, x: 0, y: 0 },
@@ -380,8 +382,8 @@ function paintTarget(node, value) {
   else node.style.removeProperty('--mr-target')
 }
 
-function occluderGeometry(view, rootName = 'root') {
-  const parts = occluderParts(view, rootName)
+function occluderGeometry(view, rootName = 'root', heightOverride = null) {
+  const parts = occluderParts(view, rootName, heightOverride)
   const positions = new Float32Array(parts.length * 18)
   for (let index = 0; index < parts.length; index += 1) {
     const part = parts[index]
@@ -405,11 +407,14 @@ export function createCards(cssScene, options = {}) {
   const sprayed = new Set()
   let selected = null
   const flashes = new Map()
+  const touchLife = new Map()
   const rowDirty = new Set()
   let rowDirtyAll = true
   const initialDepth = Number(alwaysDepth)
   let alwaysLevel = Number.isFinite(initialDepth) ? Math.min(3, Math.max(0, Math.floor(initialDepth))) : 2
   let maxFilesLevel = clampFileLimit(options.maxFiles)
+  let folderContentsEnabled = typeof options.folderContents === 'boolean' ? options.folderContents : true
+  let openOnTouchEnabled = typeof options.openOnTouch === 'boolean' ? options.openOnTouch : true
   const right = new THREE.Vector3(1, 0, 0)
   const up = new THREE.Vector3(0, 1, 0)
   const back = new THREE.Vector3(0, 0, 1)
@@ -583,6 +588,8 @@ export function createCards(cssScene, options = {}) {
       bandFailed: false,
       height: 0,
       lastHeight: -1,
+      openLevel: folderContentsEnabled ? 1 : 0,
+      itemsClass: 'mr-card-items',
       opacity: 1,
       lastOpacity: 1,
       dimLevel: 0,
@@ -618,9 +625,9 @@ export function createCards(cssScene, options = {}) {
     cards.delete(card.path)
   }
 
-  function paintOccluder(card, view) {
+  function paintOccluder(card, view, heightOverride = card.height) {
     card.occluder.geometry.dispose()
-    card.occluder.geometry = occluderGeometry(view, card.rootName)
+    card.occluder.geometry = occluderGeometry(view, card.rootName, heightOverride)
     card.occluderKey = `${card.height}|${backLayers(view.back)}`
   }
 
@@ -783,6 +790,65 @@ export function createCards(cssScene, options = {}) {
     }
   }
 
+  function clearRows(card) {
+    if (card.rowItems !== null || card.rows.length > 0 || (card.items.children?.length ?? 0) > 0) {
+      card.rowItems = null
+      card.rowHidden = -1
+      card.rowPaths = null
+      card.rowIndex = null
+      card.wanted = []
+      card.hiddenRows = 0
+      card.window = null
+      card.virtual = false
+      card.rows = []
+      card.drawn = new Map()
+      card.items.replaceChildren()
+      rowRevision += 1
+    }
+    card.items.hidden = true
+    if (card.items.style.maxHeight !== '0px') card.items.style.maxHeight = '0px'
+    if (card.itemsClass !== 'mr-card-items') {
+      card.itemsClass = 'mr-card-items'
+      card.items.className = 'mr-card-items'
+    }
+  }
+
+  function syncCardContents(card) {
+    const view = card.view
+    if (!view) return
+    const fullRows = cardRows(view)
+    const eased = card.openLevel <= 0 ? 0 : card.openLevel >= 1 ? 1 : easeInOut(card.openLevel)
+    const nextHeight = cardHeight(fullRows * eased)
+    if (nextHeight !== card.height) {
+      card.height = nextHeight
+      card.stamp = ++stampSeq
+    }
+    const nextOccluderKey = `${card.height}|${backLayers(view.back)}`
+    if (card.occluderKey !== nextOccluderKey) paintOccluder(card, view, card.height)
+    if (eased <= 0) {
+      clearRows(card)
+      return
+    }
+    card.items.hidden = false
+    paintRows(card, view)
+    const limit = clampFileLimit(view.maxFiles ?? maxFilesLevel)
+    if (eased < 1) {
+      const maxPx = Math.min(limit, fullRows) * ROW_H * eased
+      card.items.style.maxHeight = `${maxPx.toFixed(1)}px`
+      if (card.itemsClass !== 'mr-card-items is-opening') {
+        card.itemsClass = 'mr-card-items is-opening'
+        card.items.className = 'mr-card-items is-opening'
+      }
+    } else {
+      card.items.style.maxHeight = `${limit * ROW_H}px`
+      const itemsClass = card.wanted.length > limit ? 'mr-card-items is-scrollable' : 'mr-card-items'
+      if (card.itemsClass !== itemsClass) {
+        card.itemsClass = itemsClass
+        card.items.className = itemsClass
+      }
+    }
+  }
+
   function resetRow(entry) {
     entry.file = null
     entry.lastReads = -1
@@ -922,14 +988,8 @@ export function createCards(cssScene, options = {}) {
       }
       card.view = view
       card.baseClass = `mr-card is-${view.state}`
-      const nextHeight = cardHeight(cardRows(view))
-      if (nextHeight !== card.height) {
-        card.height = nextHeight
-        card.stamp = ++stampSeq
-      }
       paintBacks(card, view.back)
-      if (card.occluderKey !== `${card.height}|${backLayers(view.back)}`) paintOccluder(card, view)
-      paintRows(card, view)
+      syncCardContents(card)
       card.meta.textContent = metaText(view)
     }
     const entries = layout.entries
@@ -1020,6 +1080,7 @@ export function createCards(cssScene, options = {}) {
     out.copy(center(dir))
     const index = card ? rowIndexOf(card).get(file) ?? -1 : -1
     if (index === -1) return out
+    if (card.openLevel <= 0) return out
     if (card.virtual && !card.drawn.has(file)) return out
     const rows = cardRows(card.view)
     if (!(rows > 0)) return out
@@ -1078,14 +1139,34 @@ export function createCards(cssScene, options = {}) {
     return true
   }
 
+  function recordTouch(dir, duration) {
+    const life = duration / 1000
+    const prev = touchLife.get(dir) ?? 0
+    if (life > prev) touchLife.set(dir, life)
+  }
+
+  function isCardOpen(card, touchedCards) {
+    if (folderContentsEnabled) return true
+    if (cardRows(card.view) <= 0) return false
+    if (selected !== null && selected === card.path) return true
+    if (inspected !== null && dirname(inspected) === card.path) return true
+    return openOnTouchEnabled && Boolean(touchedCards?.has(card.path))
+  }
+
   function sync(state) {
     flashes.clear()
+    touchLife.clear()
     pinnedVersion += 1
     sprayed.clear()
     sprayVersion += 1
     planKey = ''
     recompute(state)
     for (const card of cards.values()) {
+      const target = isCardOpen(card, null) ? 1 : 0
+      if (card.openLevel !== target) {
+        card.openLevel = target
+        syncCardContents(card)
+      }
       for (const entry of card.rows) resetRow(entry)
     }
     rowRevision += 1
@@ -1093,6 +1174,7 @@ export function createCards(cssScene, options = {}) {
 
   function setOptions(options = {}) {
     let changed = false
+    let contentsChanged = false
     if (Object.hasOwn(options, 'alwaysDepth')) {
       const raw = Number(options.alwaysDepth)
       if (Number.isFinite(raw)) {
@@ -1110,7 +1192,27 @@ export function createCards(cssScene, options = {}) {
         changed = true
       }
     }
+    if (Object.hasOwn(options, 'folderContents')) {
+      const value = typeof options.folderContents === 'boolean' ? options.folderContents : true
+      if (value !== folderContentsEnabled) {
+        folderContentsEnabled = value
+        changed = true
+        contentsChanged = true
+      }
+    }
+    if (Object.hasOwn(options, 'openOnTouch')) {
+      const value = typeof options.openOnTouch === 'boolean' ? options.openOnTouch : true
+      if (value !== openOnTouchEnabled) {
+        openOnTouchEnabled = value
+        changed = true
+      }
+    }
     if (!changed) return false
+    if (contentsChanged) {
+      for (const card of cards.values()) {
+        card.openLevel = isCardOpen(card, null) ? 1 : 0
+      }
+    }
     pinnedVersion += 1
     planKey = ''
     layoutKey = ''
@@ -1207,6 +1309,18 @@ export function createCards(cssScene, options = {}) {
         markRowPath(path)
       }
     }
+    for (const [dir, life] of touchLife) {
+      const next = life - flashStep
+      if (next <= 0) touchLife.delete(dir)
+      else touchLife.set(dir, next)
+    }
+    const touchedCards = openOnTouchEnabled && touchLife.size > 0 ? new Set() : null
+    if (touchedCards) {
+      for (const dir of touchLife.keys()) {
+        const card = nearestCard(dir)
+        if (card) touchedCards.add(card.path)
+      }
+    }
     const hasFlashes = flashes.size > 0
     if (rowRevision !== lastRowRevision) {
       lastRowRevision = rowRevision
@@ -1269,6 +1383,17 @@ export function createCards(cssScene, options = {}) {
       }
       if (posChanged) movingNow = true
       const view = card.view
+      const openGoal = isCardOpen(card, touchedCards) ? 1 : 0
+      if (card.openLevel !== openGoal) {
+        if (isStill) {
+          card.openLevel = openGoal
+        } else {
+          const step = delta > 0 ? delta / CONTENT_ANIM_SEC : 0
+          if (card.openLevel < openGoal) card.openLevel = Math.min(openGoal, card.openLevel + step)
+          else card.openLevel = Math.max(openGoal, card.openLevel - step)
+        }
+        syncCardContents(card)
+      }
       const goal = CARD_SCALES[view.state] ?? 1
       const previousScale = card.scale
       if (Math.abs(card.scale - goal) > 0.002) {
@@ -1326,6 +1451,7 @@ export function createCards(cssScene, options = {}) {
       const lit = dimmed && Boolean(dimLit?.has(card.path))
       const isTargeted = Boolean(targeted?.has(card.path))
       const dimFlag = dimmed ? (lit ? 1 : 2) : 0
+      const isCollapsed = !folderContentsEnabled && card.openLevel <= 0
       if (
         card.classBase !== card.baseClass ||
         card.classActive !== isActive ||
@@ -1334,7 +1460,8 @@ export function createCards(cssScene, options = {}) {
         card.classSelected !== selectedNow ||
         card.classTone !== tone ||
         card.classDim !== dimFlag ||
-        card.classTargeted !== isTargeted
+        card.classTargeted !== isTargeted ||
+        card.classCollapsed !== isCollapsed
       ) {
         card.classBase = card.baseClass
         card.classActive = isActive
@@ -1344,11 +1471,13 @@ export function createCards(cssScene, options = {}) {
         card.classTone = tone
         card.classDim = dimFlag
         card.classTargeted = isTargeted
+        card.classCollapsed = isCollapsed
         let className = card.baseClass ?? `mr-card is-${view.state}`
         if (isActive) className += ' is-active'
         else if (isPath) className += ' is-path'
         if (isPinned) className += ' is-pinned'
         if (selectedNow) className += ' is-selected'
+        if (isCollapsed) className += ' is-collapsed'
         if (tone) className += ` is-flash-${tone}`
         if (dimmed) className += lit ? ' is-lit' : ' is-dim'
         if (isTargeted) className += ' is-targeted'
@@ -1500,6 +1629,8 @@ export function createCards(cssScene, options = {}) {
     edgePoint,
     flashFile: (dir, file, tone) => {
       const name = basename(file)
+      const duration = tone === 'red' ? FAIL_MS : FLASH_MS
+      recordTouch(dir, duration)
       if (tone === 'red') {
         flash(file, 'red', name)
         flash(dir, 'red', name)
@@ -1509,9 +1640,15 @@ export function createCards(cssScene, options = {}) {
     },
     flashCluster: (path, tone) => {
       const red = tone === 'red'
+      const duration = red ? FAIL_MS : FLASH_MS
       const name = basename(path)
       const own = cards.get(path)
-      if (!red && own && !own.leaving) return
+      if (own && !own.leaving) {
+        recordTouch(path, duration)
+        if (!red) return
+      } else {
+        recordTouch(dirname(path), duration)
+      }
       flash(path, red ? 'red' : 'white', name)
       if (!red) return
       const card = nearestCard(path)

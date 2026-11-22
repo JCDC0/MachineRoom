@@ -5504,6 +5504,14 @@ body:has(#hud-orchestrator-chat) .lens-waiting {
   scrollbar-color: rgb(255 255 255 / 0.35) transparent;
 }
 
+.mr-card.is-collapsed .mr-card-items {
+  display: none;
+}
+
+.mr-card-items.is-opening {
+  overflow: hidden;
+}
+
 .mr-orch {
   position: fixed;
   right: calc(var(--space) * 2);

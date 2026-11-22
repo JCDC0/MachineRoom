@@ -1297,7 +1297,12 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
       agentSet.setOnline(next)
     },
     setOptions(options = {}) {
-      if (!cards.setOptions(options)) return
+      const next = {}
+      if (Object.hasOwn(options, 'alwaysDepth')) next.alwaysDepth = options.alwaysDepth
+      if (Object.hasOwn(options, 'maxFiles')) next.maxFiles = options.maxFiles
+      if (Object.hasOwn(options, 'folderContents')) next.folderContents = options.folderContents
+      if (Object.hasOwn(options, 'openOnTouch')) next.openOnTouch = options.openOnTouch
+      if (!cards.setOptions(next)) return
       cards.sync(getState())
       releaseLostHold()
       relink()
