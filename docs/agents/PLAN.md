@@ -23,7 +23,7 @@ The team since 2026-11-22 17:35 (the owner's word): this session orchestrates (C
 | Found while switching the fleet: the live room's overview sat far out and Center did not bring it back until a reload. P702 showed the ladder is not the cause; later reloads drift out too | P702b | merged: a path outside the project (an absolute path such as a scratchpad file) no longer becomes a top-level card. Cost: a replay no longer draws a top-level folder its recorded tree lacks; the live room gets one from the bridge's `tree` events |
 | Item 6 below: a lower subagent depth hides a ring that holds agents with no confirm | P703 | merged; try the card in the bench after its restart |
 | Review 72 of P694 to P703: 1 High (R72-1, rings stay yellow after the first tool call), 4 Medium, 2 Low | P704 | merged; fixes P705 (Argon: ring state, crowded callouts, callout clicks), P706 (Neon: folders open and shut), P707 (next: depth confirm). R72-2's double click and DOM contract fixed by hand (`81915cb8`) |
-| R72-2's other half: from the overview a callout can sit behind a nearer folder card or the hub | P708 | running on Neon: a second CSS3D layer in room.js, no Stage change |
+| R72-2's other half: from the overview a callout can sit behind a nearer folder card or the hub | P708 | merged (`bd138b89`): callouts draw on a second CSS3D layer above the cards; seen in a replay |
 
 Findings per review: 64 had 12, 65 had 10, 66 had 8, 67 had 4, 68 had 3, 69 had 3, 70 had 4. Since review 69 they are mostly edge cases (node flags no runner uses, five-deep rings, a log that keeps growing with no meta).
 
