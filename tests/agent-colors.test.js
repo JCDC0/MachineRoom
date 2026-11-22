@@ -1,8 +1,10 @@
 import * as THREE from 'three'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { SPINNER_RING_OPACITY, UNSEEN_OPACITY, createAgents, doingText, statusRingColor } from '../src/engine/agents.js'
-import { AGENT_COLORS, GREEN, RED, WHITE, YELLOW, agentColors } from '../src/engine/sprites.js'
+import { AGENT_COLORS, GREEN, RED, TUNNEL_GREY, WHITE, YELLOW, agentColors } from '../src/engine/sprites.js'
 import { createTerminals } from '../src/engine/terminals.js'
+import { createLivePlayer } from '../src/live/livePlayer.js'
+import { createPlayer } from '../src/model/player.js'
 import { apply, createState } from '../src/model/state.js'
 import { agentStateWord } from '../src/ui/inspector.js'
 
@@ -179,6 +181,8 @@ describe('the agent colour on a working shape', () => {
   it('picks the status ring colour for failed, open call, thinking, done, queued and idle', () => {
     expect(statusRingColor('error', { calls: new Map([['t1', []]]) })).toBe(RED)
     expect(statusRingColor('error')).toBe(RED)
+    expect(statusRingColor('working', { openCalls: new Map([['t1', { tool: 'read', label: 'read src/a.js', touches: [] }]]), calls: new Map() })).toBe(YELLOW)
+    expect(statusRingColor('working', { openCalls: new Map(), calls: new Map([['t1', []]]) })).toBe(WHITE)
     expect(statusRingColor('working', { openCalls: new Set(['t1']), calls: new Map() })).toBe(YELLOW)
     expect(statusRingColor('working', { openCalls: new Set(), calls: new Map([['t1', []]]) })).toBe(WHITE)
     expect(statusRingColor('working', { calls: new Map([['t1', []]]) })).toBe(YELLOW)
@@ -326,6 +330,123 @@ describe('the agent colour on a working shape', () => {
 
     agents.dispose()
     terminals.dispose()
+  })
+
+  it('agrees across ring, thinking arcs, doingText, callout, tunnel and Inspector for seek, live end, overlap and failed sole call', () => {
+    const tree = { files: ['src/a.js'], dirs: ['src'], created: [] }
+    const touchRead = [{ path: 'src/a.js', mode: 'read', kind: 'file' }]
+    const touchWrite = [{ path: 'src/a.js', mode: 'write', kind: 'file' }]
+    const world = {
+      right: new THREE.Vector3(1, 0, 0),
+      back: new THREE.Vector3(0, 0, 1),
+      side: () => 1,
+      edge: (dir, file, side, out) => out.set(500, 400, 0),
+    }
+
+    const seekTimeline = [
+      { type: 'run.start', agent: 'claude', runId: 'r1', time: 0, order: 0 },
+      { type: 'tool.start', agent: 'claude', runId: 'r1', id: 't1', tool: 'read', label: 'read src/a.js', touches: touchRead, time: 1500, order: 1 },
+      { type: 'tool.end', agent: 'claude', runId: 'r1', id: 't1', ok: true, time: 3000, order: 2 },
+      { type: 'run.end', agent: 'claude', runId: 'r1', ok: true, time: 4000, order: 3 },
+    ]
+    const replay = createPlayer({ activities: seekTimeline, tree, agents: ROSTER })
+    const seekCss = new THREE.Scene()
+    const seekAgents = createAgents(new THREE.Scene(), ROSTER, seekCss)
+    const seekTerminals = createTerminals(seekCss, ROSTER)
+    const seekLane = seekAgents.views.get('claude')
+
+    replay.seek(2000)
+    seekAgents.snap(replay.state, world)
+    seekAgents.update(replay.state, 0.3, 2000, world, seekTerminals)
+    const seekOpenSnap = replay.snapshot().agents.find((agent) => agent.key === 'claude')
+    expect(seekLane.rings[0].material.color.getHex()).toBe(YELLOW)
+    expect(seekLane.spinner.arcs.every((arc) => !arc.visible)).toBe(true)
+    expect(doingText(replay.state.agents.get('claude'))).toBe('read src/a.js')
+    expect(seekLane.callout.object.visible).toBe(true)
+    expect(seekLane.callout.cmd.textContent).toBe('read src/a.js')
+    expect(seekLane.stripColor).toBe(TUNNEL_GREY)
+    expect(seekLane.tunnel).toBe(1)
+    expect(agentStateWord(seekOpenSnap)).toEqual({ word: 'working', tool: 'read', command: 'read src/a.js' })
+
+    replay.seek(3500)
+    seekAgents.snap(replay.state, world)
+    seekAgents.update(replay.state, 0.016, 3500, world, seekTerminals)
+    seekAgents.update(replay.state, 0.4, 3900, world, seekTerminals)
+    const seekClosedSnap = replay.snapshot().agents.find((agent) => agent.key === 'claude')
+    expect(seekLane.rings[0].material.color.getHex()).toBe(WHITE)
+    expect(seekLane.spinner.arcs.every((arc) => arc.visible)).toBe(true)
+    expect(doingText(replay.state.agents.get('claude'))).toBe('thinking')
+    expect(seekLane.callout.object.visible).toBe(false)
+    expect(seekLane.tunnel).toBe(0)
+    expect(agentStateWord(seekClosedSnap)).toEqual({ word: 'thinking', tool: '', command: '' })
+    seekAgents.dispose()
+    seekTerminals.dispose()
+
+    const live = createLivePlayer({ tree, agents: ROSTER })
+    const liveCss = new THREE.Scene()
+    const liveAgents = createAgents(new THREE.Scene(), ROSTER, liveCss)
+    const liveTerminals = createTerminals(liveCss, ROSTER)
+    const liveLane = liveAgents.views.get('claude')
+    const liveSnap = () => live.snapshot().agents.find((agent) => agent.key === 'claude')
+
+    live.push([
+      { type: 'run.start', agent: 'claude', runId: 'r1', time: 1000 },
+      { type: 'tool.start', agent: 'claude', runId: 'r1', id: 'l1', tool: 'read', label: 'read src/a.js', touches: touchRead, time: 1050 },
+    ])
+    liveAgents.update(live.state, 0.3, 1050, world, liveTerminals)
+    expect(liveLane.rings[0].material.color.getHex()).toBe(YELLOW)
+    expect(liveLane.callout.object.visible).toBe(true)
+    expect(liveLane.tunnel).toBe(1)
+    expect(agentStateWord(liveSnap())).toEqual({ word: 'working', tool: 'read', command: 'read src/a.js' })
+
+    live.push([{ type: 'tool.end', agent: 'claude', runId: 'r1', id: 'l1', ok: true, time: 1100 }])
+    liveAgents.update(live.state, 0.016, 1100, world, liveTerminals)
+    liveAgents.update(live.state, 0.7, 1800, world, liveTerminals)
+    expect(liveLane.rings[0].material.color.getHex()).toBe(WHITE)
+    expect(liveLane.spinner.arcs.every((arc) => arc.visible)).toBe(true)
+    expect(doingText(live.state.agents.get('claude'))).toBe('thinking')
+    expect(liveLane.callout.object.visible).toBe(false)
+    expect(liveLane.tunnel).toBe(0)
+    expect(liveLane.strip.visible).toBe(false)
+    expect(agentStateWord(liveSnap())).toEqual({ word: 'thinking', tool: '', command: '' })
+
+    live.push([
+      { type: 'tool.start', agent: 'claude', runId: 'r1', id: 'o1', tool: 'shell', label: 'npm run dev', touches: [], time: 2000 },
+      { type: 'tool.start', agent: 'claude', runId: 'r1', id: 'o2', tool: 'read', label: 'read src/a.js', touches: touchRead, time: 2100 },
+      { type: 'tool.end', agent: 'claude', runId: 'r1', id: 'o2', ok: true, time: 2200 },
+    ])
+    liveAgents.update(live.state, 0.7, 2900, world, liveTerminals)
+    expect(liveLane.rings[0].material.color.getHex()).toBe(YELLOW)
+    expect(liveLane.spinner.arcs.every((arc) => !arc.visible)).toBe(true)
+    expect(doingText(live.state.agents.get('claude'))).toBe('npm run dev')
+    expect(liveLane.callout.object.visible).toBe(true)
+    expect(liveLane.callout.cmd.textContent).toBe('npm run dev')
+    expect(agentStateWord(liveSnap())).toEqual({ word: 'working', tool: 'shell', command: 'npm run dev' })
+
+    live.push([
+      { type: 'tool.end', agent: 'claude', runId: 'r1', id: 'o1', ok: true, time: 3000 },
+      { type: 'tool.start', agent: 'claude', runId: 'r1', id: 'f1', tool: 'write', label: 'write src/a.js', touches: touchWrite, time: 3100 },
+    ])
+    liveAgents.update(live.state, 0.3, 3100, world, liveTerminals)
+    expect(liveLane.callout.object.visible).toBe(true)
+    expect(liveLane.stripColor).toBe(TUNNEL_GREY)
+    expect(liveLane.tunnel).toBe(1)
+
+    live.push([{ type: 'tool.end', agent: 'claude', runId: 'r1', id: 'f1', ok: false, time: 3200 }])
+    liveAgents.update(live.state, 0.016, 3200, world, liveTerminals)
+    liveAgents.update(live.state, 0.7, 3900, world, liveTerminals)
+    expect(liveLane.rings[0].material.color.getHex()).toBe(WHITE)
+    expect(liveLane.spinner.arcs.every((arc) => arc.visible)).toBe(true)
+    expect(doingText(live.state.agents.get('claude'))).toBe('thinking')
+    expect(liveLane.callout.object.visible).toBe(false)
+    expect(liveLane.calloutLine.visible).toBe(false)
+    expect(liveLane.stripColor).toBe(TUNNEL_GREY)
+    expect(liveLane.tunnel).toBe(0)
+    expect(liveLane.strip.visible).toBe(false)
+    expect(agentStateWord(liveSnap())).toEqual({ word: 'thinking', tool: '', command: '' })
+
+    liveAgents.dispose()
+    liveTerminals.dispose()
   })
 })
 

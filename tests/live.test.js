@@ -4,6 +4,7 @@ import { diffRoster, loadAgents, parserFor, toAgents } from '../src/live/source.
 import { makeTree } from '../src/model/paths.js'
 import { RUN_IDLE_MS, SEEN_LIMIT, buildActivities, createPipeline } from '../src/model/pipeline.js'
 import { createPlayer } from '../src/model/player.js'
+import { agentStateWord } from '../src/ui/inspector.js'
 import { loadRecording } from './helpers.js'
 
 const recording = loadRecording()
@@ -539,5 +540,46 @@ describe('live player', () => {
     player.pause()
     player.seek(0)
     expect(player.playing).toBe(true)
+  })
+
+  it('tracks openCalls and tool in live snapshots across a same-second start and end, overlapping calls, and a failed sole call', () => {
+    const tree = makeTree({ root: 'project', files: ['src/a.js'], created: [] })
+    const player = createLivePlayer({ tree, agents: recording.agents })
+    const claudeOf = (snap) => snap.agents.find((agent) => agent.key === 'claude')
+
+    player.push([
+      { type: 'run.start', agent: 'claude', runId: 'r1', time: 1000 },
+      { type: 'tool.start', agent: 'claude', runId: 'r1', id: 't1', tool: 'read', label: 'read src/a.js', touches: [{ path: 'src/a.js', mode: 'read', kind: 'file' }], time: 1100 },
+    ])
+    const during = claudeOf(player.snapshot())
+    expect(during).toMatchObject({ status: 'working', label: 'read src/a.js', openCalls: 1, tool: 'read' })
+    expect(agentStateWord(during)).toEqual({ word: 'working', tool: 'read', command: 'read src/a.js' })
+
+    player.push([{ type: 'tool.end', agent: 'claude', runId: 'r1', id: 't1', ok: true, time: 1200 }])
+    const ended = claudeOf(player.snapshot())
+    expect(ended).toMatchObject({ status: 'working', label: 'read src/a.js', openCalls: 0, tool: '' })
+    expect(ended.openCalls).not.toBe(during.openCalls)
+    expect(ended.tool).not.toBe(during.tool)
+    expect(agentStateWord(ended)).toEqual({ word: 'thinking', tool: '', command: '' })
+
+    player.push([
+      { type: 'tool.start', agent: 'claude', runId: 'r1', id: 't2', tool: 'shell', label: 'npm run dev', touches: [], time: 2000 },
+      { type: 'tool.start', agent: 'claude', runId: 'r1', id: 't3', tool: 'read', label: 'read src/a.js', touches: [{ path: 'src/a.js', mode: 'read', kind: 'file' }], time: 2100 },
+    ])
+    expect(claudeOf(player.snapshot())).toMatchObject({ openCalls: 2, tool: 'read', label: 'read src/a.js' })
+
+    player.push([{ type: 'tool.end', agent: 'claude', runId: 'r1', id: 't3', ok: true, time: 2200 }])
+    const overlap = claudeOf(player.snapshot())
+    expect(overlap).toMatchObject({ status: 'working', openCalls: 1, tool: 'shell', label: 'npm run dev' })
+    expect(agentStateWord(overlap)).toEqual({ word: 'working', tool: 'shell', command: 'npm run dev' })
+
+    player.push([
+      { type: 'tool.end', agent: 'claude', runId: 'r1', id: 't2', ok: true, time: 2300 },
+      { type: 'tool.start', agent: 'claude', runId: 'r1', id: 't4', tool: 'write', label: 'write src/a.js', touches: [{ path: 'src/a.js', mode: 'write', kind: 'file' }], time: 2400 },
+      { type: 'tool.end', agent: 'claude', runId: 'r1', id: 't4', ok: false, time: 2500 },
+    ])
+    const failedSole = claudeOf(player.snapshot())
+    expect(failedSole).toMatchObject({ status: 'working', openCalls: 0, tool: '' })
+    expect(agentStateWord(failedSole)).toEqual({ word: 'thinking', tool: '', command: '' })
   })
 })
