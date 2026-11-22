@@ -11,6 +11,8 @@ Findings per review: 64 had 12, 65 had 10, 66 had 8, 67 had 4, 68 had 3, 69 had 
 1. P691, the review 70 fixes, is merged on main (`b7a6127e`) but NOT pushed: the shutdown at 02:40 on 2026-11-22 stopped its full suite. Next session: run the full suite, the history audit and push, read CI, restart the bench (it still runs code from before P686), then start P692, review 71, on `agy-4` under Neon.
 2. The stop rule: two reviews in a row with no High and no Medium a real user hits, plus the live room by eye at desktop size. Ask the owner whether edge-case Mediums count.
 3. Decide with the owner what Chat opens on the bench, where the orchestrator is the Claude Code session.
+5. The orchestrator by-eye checks from `AUDIT-2026-11-LATER-CHECK.md`, at desktop size on 2026-11-22: `/` scrolls to the chat and focuses it, the corner counter reads `Working N / M` with its bar, and Settings and the Event Log read cleanly. Still to see: keys behind the Control drawer, dialog focus in a confirm card, the waiting card, subagent fading in `?replay&fixture=scenario-e` at 8x, and the chat error banner.
+6. Found by hand on 2026-11-22: Settings, Subagents, a lower subagent depth takes effect at once with no confirm, even when a sub stands on a ring past the new depth; the ring and its sub vanish from the Agents tree until the depth is raised again. Ask before a lower depth hides a ring that holds agents.
 4. Known and accepted: a local process can send any `Origin` header and count as the owner; a foreign Origin from a browser gets 403 and the Host check blocks DNS rebinding.
 
 ## Where we are
