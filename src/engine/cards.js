@@ -423,6 +423,7 @@ export function createCards(cssScene, options = {}) {
   let planKey = ''
   let layoutKey = ''
   let overviewLayoutKey = ''
+  let pendingChange = false
   let active = { files: new Set(), dirs: new Set(), path: new Set() }
   let targetDirColors = null
   let targetFileColors = null
@@ -685,9 +686,14 @@ export function createCards(cssScene, options = {}) {
         pinned.add(item.path)
         pinnedVersion += 1
         planKey = ''
+        if (lastState && recompute(lastState)) pendingChange = true
+        selected = item.path
+        inspected = null
+        onInspect(item.path)
+      } else {
+        onInspect(item.path)
+        inspected = item.path
       }
-      onInspect(item.path)
-      inspected = item.path
       rowRevision += 1
     })
     return {
@@ -1140,7 +1146,7 @@ export function createCards(cssScene, options = {}) {
   }
 
   function recordTouch(dir, duration) {
-    const life = duration / 1000
+    const life = Math.max(CONTENT_ANIM_SEC, duration / 1000)
     const prev = touchLife.get(dir) ?? 0
     if (life > prev) touchLife.set(dir, life)
   }
@@ -1150,7 +1156,7 @@ export function createCards(cssScene, options = {}) {
     if (cardRows(card.view) <= 0) return false
     if (selected !== null && selected === card.path) return true
     if (inspected !== null && dirname(inspected) === card.path) return true
-    return openOnTouchEnabled && Boolean(touchedCards?.has(card.path))
+    return openOnTouchEnabled && (active.dirs.has(card.path) || Boolean(touchedCards?.has(card.path)))
   }
 
   function sync(state) {
@@ -1160,6 +1166,7 @@ export function createCards(cssScene, options = {}) {
     sprayed.clear()
     sprayVersion += 1
     planKey = ''
+    pendingChange = false
     recompute(state)
     for (const card of cards.values()) {
       const target = isCardOpen(card, null) ? 1 : 0
@@ -1292,6 +1299,8 @@ export function createCards(cssScene, options = {}) {
       lastTargetVersion = targetVersion
       rowDirtyAll = true
     }
+    const hadPending = pendingChange
+    pendingChange = false
     const changed = recompute(state)
     const now = performance.now()
     const isStill = still()
@@ -1309,8 +1318,9 @@ export function createCards(cssScene, options = {}) {
         markRowPath(path)
       }
     }
+    const touchStep = delta > 0 ? delta : 0
     for (const [dir, life] of touchLife) {
-      const next = life - flashStep
+      const next = life - touchStep
       if (next <= 0) touchLife.delete(dir)
       else touchLife.set(dir, next)
     }
@@ -1565,7 +1575,7 @@ export function createCards(cssScene, options = {}) {
     }
     if (rowDirtyAll) rowDirtyAll = false
     rowDirty.clear()
-    return changed || removed
+    return changed || removed || hadPending
   }
 
   function dispose() {

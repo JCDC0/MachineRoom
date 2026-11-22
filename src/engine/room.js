@@ -1150,6 +1150,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     const dir = isFile ? dirname(path) : path
     followFocus.clear()
     cards.pin(dir)
+    cards.setSelected(dir)
     if (isFile) {
       cards.flashFile(dir, path, 'white')
       timers.later(() => {
