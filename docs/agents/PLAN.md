@@ -1,8 +1,8 @@
 # Plan
 
-## Next, as of 2026-11-22 19:35 (shutdown, usage limit)
+## Next, as of 2026-11-22 22:40 (resumed)
 
-Pushed `fc2de03c`; its CI passed on Ubuntu and FAILED on Windows (run 45014796316, the failed log showed no test name: check for a hang or a timeout first, then rerun). Merged on main, not pushed: P704 (review 72), `81915cb8` (R72-2 double click by hand), P706 (`c86522d8`). Finished, NOT reviewed or merged: P705 on `feat/p705-review-72-fixes` (3 commits, R72-1, R72-3, R72-2 clicks) and P707 on `feat/p707-review-72-fixes` (2 commits, R72-4, R72-6); worktrees `agy-6` and `agy-5` sit on those branches. The bench is stopped. Next session: read the Windows CI log, review and merge P705 and P707 (run `tests/dialog-focus-ui.test.js` too), full suite, audit, push, then review 73 toward the stop rule.
+The Windows CI failure on `fc2de03c` was the known runner hang (the test step never concluded); its job is rerunning. P705 and P707 are reviewed and merged (`cabbe4f2`, `031e2681`), so every review 72 finding is fixed except the callout layer: P708 (Neon) puts callouts in their own CSS3D layer above the cards, and P709 (Argon) is review 73 of the fixes, toward the stop rule. The full suite runs on `c5f980d1`; then audit and push.
 
 ## Earlier, as of 2026-11-22 17:45
 
@@ -23,7 +23,7 @@ The team since 2026-11-22 17:35 (the owner's word): this session orchestrates (C
 | Found while switching the fleet: the live room's overview sat far out and Center did not bring it back until a reload. P702 showed the ladder is not the cause; later reloads drift out too | P702b | merged: a path outside the project (an absolute path such as a scratchpad file) no longer becomes a top-level card. Cost: a replay no longer draws a top-level folder its recorded tree lacks; the live room gets one from the bridge's `tree` events |
 | Item 6 below: a lower subagent depth hides a ring that holds agents with no confirm | P703 | merged; try the card in the bench after its restart |
 | Review 72 of P694 to P703: 1 High (R72-1, rings stay yellow after the first tool call), 4 Medium, 2 Low | P704 | merged; fixes P705 (Argon: ring state, crowded callouts, callout clicks), P706 (Neon: folders open and shut), P707 (next: depth confirm). R72-2's double click and DOM contract fixed by hand (`81915cb8`) |
-| R72-2's other half: from the overview a callout can sit behind a nearer folder card or the hub | to decide | open: probably needs the callouts in their own CSS3D layer over the cards, a Stage change |
+| R72-2's other half: from the overview a callout can sit behind a nearer folder card or the hub | P708 | running on Neon: a second CSS3D layer in room.js, no Stage change |
 
 Findings per review: 64 had 12, 65 had 10, 66 had 8, 67 had 4, 68 had 3, 69 had 3, 70 had 4. Since review 69 they are mostly edge cases (node flags no runner uses, five-deep rings, a log that keeps growing with no meta).
 
