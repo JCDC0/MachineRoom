@@ -295,7 +295,7 @@ async function makeRoom(files, agents, handlers = {}) {
 }
 
 function cssRoot() {
-  return roomCss.children.at(-1)
+  return roomCss.children.at(-2)
 }
 
 function fireCss(type, event) {

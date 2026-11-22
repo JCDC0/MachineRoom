@@ -850,6 +850,7 @@ function createSpinner(radius) {
 export function createAgents(scene, roster, cssScene = null, options = {}) {
   const onRemove = typeof options.onRemove === 'function' ? options.onRemove : null
   const onPick = typeof options.onPick === 'function' ? options.onPick : null
+  const calloutScene = options?.calloutScene ?? cssScene
   let currentTerminals = null
   const pickAgent = (key) => {
     if (onPick) onPick(key)
@@ -1139,7 +1140,7 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
     scene.add(group, link, strip, stripSheath, beam, beamSheath, calloutLine)
     if (parentLink) scene.add(parentLink)
     if (orchestratorLink) scene.add(orchestratorLink)
-    cssScene?.add(callout.object)
+    calloutScene?.add(callout.object)
     pickables.push(picker)
     const view = {
       key: agent.key,
@@ -1255,6 +1256,7 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
     clearSpawn(view)
     if (chips) chips.remove?.(view.key)
     else pendingChipRemovals.add(view.key)
+    calloutScene?.remove(view.callout.object)
     view.callout.object.removeFromParent()
     view.callout.element.remove()
     scene.remove(view.group, view.link, view.strip, view.stripSheath, view.beam, view.beamSheath, view.calloutLine)

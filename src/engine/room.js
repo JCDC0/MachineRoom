@@ -261,6 +261,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
   const scene = new THREE.Scene()
   scene.fog = new THREE.FogExp2(0x000000, 0.00007)
   const cssScene = new THREE.Scene()
+  const calloutScene = new THREE.Scene()
 
   let width = surface.clientWidth || window.innerWidth || 1
   let height = surface.clientHeight || window.innerHeight || 1
@@ -272,14 +273,25 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
   gl.appendChild(renderer.domElement)
   const cssRenderer = new CSS3DRenderer()
   cssRenderer.setSize(width, height)
+  cssRenderer.domElement.style.position = 'absolute'
+  cssRenderer.domElement.style.top = '0'
+  cssRenderer.domElement.style.left = '0'
   cssRenderer.domElement.style.pointerEvents = 'none'
   css.appendChild(cssRenderer.domElement)
+  const calloutRenderer = new CSS3DRenderer()
+  calloutRenderer.setSize(width, height)
+  calloutRenderer.domElement.style.position = 'absolute'
+  calloutRenderer.domElement.style.top = '0'
+  calloutRenderer.domElement.style.left = '0'
+  calloutRenderer.domElement.style.pointerEvents = 'none'
+  css.appendChild(calloutRenderer.domElement)
   let bloom = null
 
   const space = createVoid(scene, texture)
   const roster = agents.map(roomAgent)
   const hub = createHub(scene, roster)
   const agentSet = createAgents(scene, roster, cssScene, {
+    calloutScene,
     onRemove: (key) => {
       stars.cancel((star) => star.agent === key || star.to === key)
       dropPendingTouches((item) => item.agent === key, false)
@@ -1048,6 +1060,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     camera.updateProjectionMatrix()
     renderer.setSize(width, height)
     cssRenderer.setSize(width, height)
+    calloutRenderer.setSize(width, height)
     bloom?.resize(width, height)
     agentSet.setViewport(width, height)
     rig.resize()
@@ -1139,6 +1152,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     renderer.render(scene, camera)
     bloom?.render()
     cssRenderer.render(cssScene, camera)
+    calloutRenderer.render(calloutScene, camera)
   }
 
   const onContextLost = () => console.warn('machine-room: WebGL context lost')
@@ -1409,6 +1423,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
       renderer.forceContextLoss()
       gl.removeChild(renderer.domElement)
       css.removeChild(cssRenderer.domElement)
+      css.removeChild(calloutRenderer.domElement)
       disposeStill()
     },
   }
