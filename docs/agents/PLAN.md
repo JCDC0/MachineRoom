@@ -1,14 +1,26 @@
 # Plan
 
-## Next, as of 2026-11-22 02:40
+## Next, as of 2026-11-22 17:45
 
-Pushed `0794311b`; CI green on both runners for the last three pushes. Since 23:40, merged and pushed: P682 to P684, P686, P688 and P689 (the fixes of reviews 67 to 69 and the ring seat labels), reviews 67 to 70 (P678, P685, P687, P690), and a test rig fix (`fd495a7f`: the refused-run test wrote its log before its meta, which the lanes source skips).
+Unpushed since `a5480146`: P695 to P698 with their merges, the Stage wiring of P698's settings (`65763930`), the lens corner brackets removed (`2583ded8`) and briefs P699 to P701. Run the full suite, the history audit and push, then read CI.
 
-The team is unchanged: this session orchestrates; the sub `neon` (AGY, Gemini 4 Neon High, Bypass) leads `agy-4` "Hydrogen" (may touch `src/engine` since 2026-11-21 22:45) and `native2` (off until its OpenRouter budget resets at 08:00 Manila). A lane's worktree must be merged before its next run starts.
+The team since 2026-11-22 17:35 (the owner's word): this session orchestrates (Claude Opus 5.5, Extra). Two AGY coders: `agy-5` "Neon" (Gemini 4 Neon XHigh) and `agy-6` "Argon" (Gemini 4 Argon High), custom lanes with worktrees `.worktrees/agy-5` and `agy-6`. The Neon sub left the bench ladder, and `agy-4` "Hydrogen" and `native2` are off. A lane's worktree must be merged before its next run starts.
+
+### The owner's design issues, 2026-11-22
+
+| Issue | Brief | State |
+| --- | --- | --- |
+| The top buttons stay bowed after the page scrolls; they should ease straight once it leaves the top | P697 | merged |
+| A setting to show folder contents, a second to open a folder an agent touches; with contents off a folder is a closed rectangle that opens with an animation on a click and closes when unfocused | P698 | merged, wired in Stage.jsx; check by eye |
+| An agent's shape keeps its own colour; an always-on ring tells its state (red failed, white thinking with loops, yellow running a command, green finished) | P699 | running on Neon |
+| The `ORCHESTRATOR` and `NEON` words beside the hub look like random text (sector name labels) | P700 | running on Argon |
+| A lane shows two boxes over its head (callout and `CONSOLE`) that clip; one box, beside the agent, away from the hub centre | P701 | next on Neon, after P699 |
+| Small corner brackets at the lens edges | by hand, `2583ded8` | done |
+| Found while switching the fleet: removing the ladder in a live room zoomed the camera far out and Center did not bring it back until a reload | to brief | open |
 
 Findings per review: 64 had 12, 65 had 10, 66 had 8, 67 had 4, 68 had 3, 69 had 3, 70 had 4. Since review 69 they are mostly edge cases (node flags no runner uses, five-deep rings, a log that keeps growing with no meta).
 
-1. P691, the review 70 fixes, is merged on main (`b7a6127e`) but NOT pushed: the shutdown at 02:40 on 2026-11-22 stopped its full suite. Next session: run the full suite, the history audit and push, read CI, restart the bench (it still runs code from before P686), then start P692, review 71, on `agy-4` under Neon.
+1. Review 71 (P692, on `agy-4`) found nothing to fix now; R71-1 (seat counts near, not over, each other) is accepted. Next: review 72 on Argon once the design briefs above are merged, toward the stop rule.
 2. The stop rule: two reviews in a row with no High and no Medium a real user hits, plus the live room by eye at desktop size. Ask the owner whether edge-case Mediums count.
 3. Decide with the owner what Chat opens on the bench, where the orchestrator is the Claude Code session.
 5. The orchestrator by-eye checks from `AUDIT-2026-11-LATER-CHECK.md`, at desktop size on 2026-11-22: `/` scrolls to the chat and focuses it, the corner counter reads `Working N / M` with its bar, and Settings and the Event Log read cleanly. Still to see: keys behind the Control drawer, dialog focus in a confirm card, the waiting card, subagent fading in `?replay&fixture=scenario-e` at 8x, and the chat error banner.
