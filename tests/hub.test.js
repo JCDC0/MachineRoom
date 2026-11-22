@@ -24,10 +24,6 @@ import {
   SEAT_LABEL_SCALE,
   SECTOR_ARC_OPACITY,
   SECTOR_GLOW_MS,
-  SECTOR_LABEL_DROP,
-  SECTOR_LABEL_INSET,
-  SECTOR_LABEL_OUT,
-  SECTOR_LABEL_SPREAD,
   SUB_RING_DROP,
   SUB_RING_OPACITY,
   SWAY_LIFT,
@@ -47,9 +43,6 @@ import {
   startDanceEnvelope,
   sectorGlow,
   sectorIdForKey,
-  sectorLabelAngle,
-  sectorLabelPoint,
-  sectorLabelRadius,
   sectorLaneAngles,
   sectorSlotAngles,
   sectorSubAngle,
@@ -447,37 +440,16 @@ describe('the park ring of each level', () => {
   })
 })
 
-describe('where a sector name sits', () => {
-  it('puts the name outside the ring and below its plane, just inside the arc start', () => {
-    const arc = { start: 0.2, end: 1.2 }
-    const angle = sectorLabelAngle(arc)
-    expect(angle).toBeGreaterThan(arc.start)
-    expect(angle).toBeLessThan((arc.start + arc.end) / 2)
-    expect(angle).toBeCloseTo(arc.start + (arc.end - arc.start) * SECTOR_LABEL_INSET)
-    const point = sectorLabelPoint(angle, HUB_RADIUS, 2)
-    expect(Math.hypot(point.x, point.z)).toBeCloseTo(sectorLabelRadius(HUB_RADIUS, 2))
-    expect(Math.hypot(point.x, point.z)).toBeGreaterThan(HUB_RADIUS + 200)
-    expect(point.y).toBe(-SECTOR_LABEL_DROP)
-    expect(point.y).toBeLessThan(0)
-  })
-
-  it('moves the name further out as sectors are added', () => {
-    expect(sectorLabelRadius(HUB_RADIUS, 2)).toBe(HUB_RADIUS + SECTOR_LABEL_OUT + SECTOR_LABEL_SPREAD)
-    expect(sectorLabelRadius(HUB_RADIUS, 4)).toBe(HUB_RADIUS + SECTOR_LABEL_OUT + SECTOR_LABEL_SPREAD * 3)
-    expect(sectorLabelRadius(HUB_RADIUS, 4)).toBeGreaterThan(sectorLabelRadius(HUB_RADIUS, 3))
-  })
-
-  it('fills the vector it is given and leaves the angle alone', () => {
-    const out = new THREE.Vector3()
-    expect(sectorLabelPoint(Math.PI / 2, HUB_RADIUS, 3, out)).toBe(out)
-    expect(out.x).toBeCloseTo(0)
-    expect(out.z).toBeCloseTo(sectorLabelRadius(HUB_RADIUS, 3))
-  })
-
-  it('falls back to the first angle when the arc is empty or malformed', () => {
-    expect(sectorLabelAngle(null)).toBe(0)
-    expect(sectorLabelAngle({ start: 1, end: 1 })).toBe(0)
-    expect(sectorLabelAngle({ start: Number.NaN, end: 1 })).toBe(0)
+describe('the sector groups on the hub', () => {
+  it('holds the arc lines and no text sprite in each built sector group', () => {
+    const hub = createHub(new THREE.Scene(), ROSTER, LADDER)
+    const sectors = hub.group.getObjectByName('sectors').children
+    expect(sectors.length).toBeGreaterThan(0)
+    for (const sector of sectors) {
+      expect(sector.children.filter((child) => child.isLine)).toHaveLength(3)
+      expect(sector.children.filter((child) => child.isSprite)).toHaveLength(0)
+    }
+    hub.dispose()
   })
 })
 
