@@ -15,12 +15,10 @@ const CONSOLE_TOOLS = new Set(['shell', 'other'])
 export const CHIP_W = 98
 export const OPEN_W = 320
 export const CHIP_REACH = AGENT_GAP + CHIP_W * SCALE + CARD_GAP
-const CONSOLE_LIFT = CHIP_W * SCALE
 
 const right = new THREE.Vector3()
 const up = new THREE.Vector3()
 const goal = new THREE.Vector3()
-const consoleGoal = new THREE.Vector3()
 
 export function chipHalfWidth(open) {
   return ((open ? OPEN_W : CHIP_W) * SCALE) / 2
@@ -166,29 +164,6 @@ export function createTerminals(cssScene, roster, { onPick = null } = {}) {
     object.visible = false
     cssScene.add(object)
 
-    const consoleElement = document.createElement('div')
-    consoleElement.className = 'mr-term-console'
-    consoleElement.dataset.agent = key
-    consoleElement.title = `${name} console`
-    if (onPick) consoleElement.addEventListener('click', () => onPick(key))
-    const consoleLabel = document.createElement('div')
-    consoleLabel.className = 'mr-term-console-label'
-    const consoleLink = document.createElement('a')
-    consoleLink.className = 'mr-term-console-link'
-    consoleLink.target = '_blank'
-    consoleLink.rel = 'noopener noreferrer'
-    consoleLink.hidden = true
-    consoleLink.onclick = (event) => event.stopPropagation()
-    consoleLabel.append('CONSOLE', consoleLink)
-    const consoleBody = document.createElement('div')
-    consoleBody.className = 'mr-term-console-body'
-    consoleElement.append(consoleLabel, consoleBody)
-
-    const consoleObject = new CSS3DObject(consoleElement)
-    consoleObject.scale.setScalar(SCALE)
-    consoleObject.visible = false
-    cssScene.add(consoleObject)
-
     const term = {
       key,
       name,
@@ -196,14 +171,8 @@ export function createTerminals(cssScene, roster, { onPick = null } = {}) {
       title,
       body,
       object,
-      consoleElement,
-      consoleLink,
-      consoleBody,
-      consoleObject,
-      consoleLines: [],
       consoleVersion: -1,
-      consoleAddress: null,
-      consolePlaced: false,
+      consoleData: null,
       open: false,
       side: 1,
       placed: false,
@@ -246,10 +215,7 @@ export function createTerminals(cssScene, roster, { onPick = null } = {}) {
     if (!term || term.visible === visible) return
     term.visible = visible
     term.object.visible = visible && term.open
-    if (!visible) {
-      term.open = false
-      term.consoleObject.visible = false
-    }
+    if (!visible) term.open = false
   }
 
   function setFade(key, alpha) {
@@ -259,10 +225,9 @@ export function createTerminals(cssScene, roster, { onPick = null } = {}) {
     if (term.fade === value) return
     term.fade = value
     term.element.style.opacity = value
-    term.consoleElement.style.opacity = value
   }
 
-  function note(activity) {
+  function note(activity, at = performance.now()) {
     if (!activity || typeof activity.agent !== 'string') return
     const key = activity.agent
     if (activity.type === 'tool.start') {
@@ -272,7 +237,7 @@ export function createTerminals(cssScene, roster, { onPick = null } = {}) {
     }
     if (activity.type === 'tool.end') {
       const open = notes.get(key)
-      if (open && open.id === activity.id) open.endAt = performance.now()
+      if (open && open.id === activity.id) open.endAt = at
       else notes.delete(key)
       return
     }
@@ -281,6 +246,33 @@ export function createTerminals(cssScene, roster, { onPick = null } = {}) {
 
   function clearNotes() {
     notes.clear()
+    for (const term of terminals.values()) {
+      term.consoleVersion = -1
+      term.consoleData = null
+    }
+  }
+
+  function consoleFor(key, entry, now = performance.now()) {
+    const term = terminals.get(key)
+    if (!term || !term.visible || !entry) return null
+    const held = notes.get(key)
+    if (!held) return null
+    if (held.endAt > 0 && now - held.endAt >= CONSOLE_HOLD_MS) return null
+    const version = typeof entry.version === 'number' ? entry.version : null
+    if (version === null || term.consoleVersion !== version || !term.consoleData) {
+      const rows = consoleRows(entry.lines)
+      let address = null
+      for (let index = rows.length - 1; index >= 0 && address === null; index -= 1) {
+        address = addressIn(rows[index]?.text)
+      }
+      term.consoleVersion = version ?? -1
+      term.consoleData = { rows, address, url: addressUrl(address), version }
+    }
+    return term.consoleData
+  }
+
+  function pick(key) {
+    if (onPick) onPick(key)
   }
 
   const colors = agentColors(roster)
@@ -308,28 +300,6 @@ export function createTerminals(cssScene, roster, { onPick = null } = {}) {
     term.typedAt = now
   }
 
-  function paintConsole(term, entry) {
-    term.consoleVersion = entry.version
-    const lines = consoleRows(entry.lines)
-    while (term.consoleLines.length < lines.length) {
-      const row = document.createElement('div')
-      row.className = 'mr-term-console-line'
-      term.consoleBody.append(row)
-      term.consoleLines.push(row)
-    }
-    while (term.consoleLines.length > lines.length) term.consoleLines.pop().remove()
-    lines.forEach((line, index) => {
-      const row = term.consoleLines[index]
-      row.className = `mr-term-console-line is-${line.tone ?? 'normal'}`
-      row.textContent = line.text
-    })
-    let address = null
-    for (let index = lines.length - 1; index >= 0 && address === null; index -= 1) {
-      address = addressIn(lines[index]?.text)
-    }
-    term.consoleAddress = address
-  }
-
   function setOpen(key, open) {
     const term = terminals.get(key)
     if (term) term.open = open
@@ -354,15 +324,8 @@ export function createTerminals(cssScene, roster, { onPick = null } = {}) {
         if (term.placed) term.object.position.lerp(goal, rate)
         else term.object.position.copy(goal)
         term.placed = true
-
-        consoleGoal.copy(anchor)
-        consoleGoal.y += CONSOLE_LIFT
-        if (term.consolePlaced) term.consoleObject.position.lerp(consoleGoal, rate)
-        else term.consoleObject.position.copy(consoleGoal)
-        term.consolePlaced = true
       }
       term.object.quaternion.copy(camera.quaternion)
-      term.consoleObject.quaternion.copy(camera.quaternion)
 
       const entry = state.agents.get(term.key)
       if (!entry) {
@@ -397,22 +360,6 @@ export function createTerminals(cssScene, roster, { onPick = null } = {}) {
         term.ariaLabel = aria
         term.element.setAttribute('aria-label', aria)
       }
-
-      const muted = Boolean(focusKey && focusKey !== term.key)
-      const held = notes.get(term.key)
-      const showing = Boolean(held) && term.visible && (held.endAt === 0 || now - held.endAt < CONSOLE_HOLD_MS)
-      if (showing && term.consoleVersion !== entry.version) paintConsole(term, entry)
-      const consoleClass = `mr-term-console${term.consoleAddress ? ' is-address' : ''}${muted ? ' is-muted' : ''}`
-      if (term.consoleElement.className !== consoleClass) term.consoleElement.className = consoleClass
-      const consoleTitle = term.consoleAddress ?? `${term.name} console`
-      if (term.consoleElement.title !== consoleTitle) term.consoleElement.title = consoleTitle
-      const linkUrl = addressUrl(term.consoleAddress)
-      if (term.consoleLink.hidden !== !linkUrl) term.consoleLink.hidden = !linkUrl
-      if (linkUrl) {
-        if (term.consoleLink.textContent !== term.consoleAddress) term.consoleLink.textContent = term.consoleAddress
-        if (term.consoleLink.getAttribute('href') !== linkUrl) term.consoleLink.href = linkUrl
-      }
-      if (term.consoleObject.visible !== showing) term.consoleObject.visible = showing
     }
   }
 
@@ -429,8 +376,6 @@ export function createTerminals(cssScene, roster, { onPick = null } = {}) {
     subKeys.delete(key)
     cssScene.remove(term.object)
     term.element.remove()
-    cssScene.remove(term.consoleObject)
-    term.consoleElement.remove()
     terminals.delete(key)
   }
 
@@ -438,8 +383,6 @@ export function createTerminals(cssScene, roster, { onPick = null } = {}) {
     for (const term of terminals.values()) {
       cssScene.remove(term.object)
       term.element.remove()
-      cssScene.remove(term.consoleObject)
-      term.consoleElement.remove()
     }
     notes.clear()
     terminals.clear()
@@ -451,6 +394,8 @@ export function createTerminals(cssScene, roster, { onPick = null } = {}) {
     ensure,
     note,
     clearNotes,
+    consoleFor,
+    pick,
     setOpen,
     setLabels,
     setVisible,

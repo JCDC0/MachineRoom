@@ -2889,7 +2889,8 @@ label.hud-settings-section {
   background-image: var(--corner-ticks);
   border: 1px solid rgb(255 255 255 / 0.35);
   border-radius: 2px;
-  pointer-events: none;
+  pointer-events: auto;
+  cursor: pointer;
   box-shadow: 0 4px 16px rgb(0 0 0 / 0.7);
   transition: border-color 200ms, box-shadow 200ms;
 }
@@ -2954,6 +2955,71 @@ label.hud-settings-section {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.mr-callout-cmd:empty {
+  display: none;
+}
+
+.mr-callout-console {
+  display: flex;
+  flex-direction: column;
+  color: var(--white);
+  line-height: 1.4;
+  border-top: 1px solid rgb(255 255 255 / 0.35);
+}
+
+.mr-callout-console[hidden] {
+  display: none;
+}
+
+.mr-callout .mr-term-console-link {
+  display: block;
+  padding: 3px 8px 0;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 400;
+  letter-spacing: 0.02em;
+  color: var(--white);
+  text-decoration: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mr-callout .mr-term-console-link[hidden] {
+  display: none;
+}
+
+.mr-callout .mr-term-console-link:hover {
+  text-decoration: underline;
+}
+
+.mr-callout-console-body {
+  padding: 4px 8px 6px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+}
+
+.mr-callout-console-line {
+  min-height: 1.4em;
+  color: var(--white);
+  white-space: pre;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mr-callout-console-line.is-dim {
+  color: rgb(255 255 255 / 0.62);
+}
+
+.mr-callout-console-line.is-error {
+  color: var(--red);
+}
+
+.mr-callout-console-line.is-done {
+  color: var(--green);
 }
 
 .stage-badge {
@@ -11219,83 +11285,6 @@ button.mr-family-heading,
 .waiting.is-error .waiting-close {
   border-color: rgb(255 255 255 / 0.45);
   color: var(--white);
-}
-
-.mr-term-console {
-  width: 220px;
-  display: flex;
-  flex-direction: column;
-  font-family: var(--mono);
-  font-size: 12px;
-  line-height: 1.4;
-  color: var(--white);
-  background: rgb(0 0 0 / 0.72);
-  border: 1px solid var(--white);
-  border-radius: 2px;
-  pointer-events: auto;
-  cursor: pointer;
-  transition: opacity 300ms, border-color 300ms, box-shadow 300ms;
-}
-
-.mr-term-console-label {
-  padding: 3px 6px;
-  font-size: 9px;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: var(--white);
-  border-bottom: 1px solid rgb(255 255 255 / 0.35);
-}
-
-.mr-term-console-link {
-  margin-left: 6px;
-  font-family: var(--mono);
-  font-size: 9px;
-  font-weight: 400;
-  letter-spacing: 0.02em;
-  text-transform: none;
-  color: var(--white);
-  text-decoration: none;
-}
-
-.mr-term-console-link:hover {
-  text-decoration: underline;
-}
-
-.mr-term-console-body {
-  padding: 5px 6px;
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-}
-
-.mr-term-console-line {
-  min-height: 1.4em;
-  white-space: pre;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.mr-term-console-line.is-dim {
-  color: rgb(255 255 255 / 0.62);
-}
-
-.mr-term-console-line.is-error {
-  color: var(--red);
-}
-
-.mr-term-console-line.is-done {
-  color: var(--green);
-}
-
-.mr-term-console.is-muted {
-  opacity: 0.35;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .mr-term-console {
-    transition: none;
-    animation: none;
-  }
 }
 
 /* P78: one model picker with search, sort and pins. */

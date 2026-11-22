@@ -624,9 +624,14 @@ const calloutPos = new THREE.Vector3()
 const camUp = new THREE.Vector3()
 const rotMatrix = new THREE.Matrix4()
 
-function makeCallout(agentName) {
+function makeCallout(agentName, key, onPick) {
   const element = document.createElement('div')
   element.className = 'mr-callout'
+  if (element.dataset) element.dataset.agent = key
+  if (typeof element.addEventListener === 'function') {
+    element.addEventListener('pointerdown', (event) => event?.stopPropagation?.())
+    element.addEventListener('click', () => onPick?.(key))
+  }
 
   const title = document.createElement('div')
   title.className = 'mr-callout-title'
@@ -638,11 +643,30 @@ function makeCallout(agentName) {
   const cmd = document.createElement('div')
   cmd.className = 'mr-callout-cmd'
 
-  element.append(title, task, cmd)
+  const consoleBlock = document.createElement('div')
+  consoleBlock.className = 'mr-callout-console'
+  consoleBlock.hidden = true
+  consoleBlock.style.display = 'none'
+
+  const consoleLink = document.createElement('a')
+  consoleLink.className = 'mr-term-console-link'
+  consoleLink.target = '_blank'
+  consoleLink.rel = 'noopener noreferrer'
+  consoleLink.hidden = true
+  consoleLink.style.display = 'none'
+  const stopLink = (event) => event?.stopPropagation?.()
+  consoleLink.onclick = stopLink
+  if (typeof consoleLink.addEventListener === 'function') consoleLink.addEventListener('click', stopLink)
+
+  const consoleBody = document.createElement('div')
+  consoleBody.className = 'mr-callout-console-body'
+  consoleBlock.append(consoleLink, consoleBody)
+
+  element.append(title, task, cmd, consoleBlock)
 
   const object = new CSS3DObject(element)
   object.visible = false
-  return { element, title, task, cmd, object }
+  return { element, title, task, cmd, consoleBlock, consoleLink, consoleBody, consoleLines: [], object }
 }
 
 function lineBetween(material) {
@@ -731,6 +755,12 @@ function createSpinner(radius) {
 
 export function createAgents(scene, roster, cssScene = null, options = {}) {
   const onRemove = typeof options.onRemove === 'function' ? options.onRemove : null
+  const onPick = typeof options.onPick === 'function' ? options.onPick : null
+  let currentTerminals = null
+  const pickAgent = (key) => {
+    if (onPick) onPick(key)
+    else currentTerminals?.pick?.(key)
+  }
   const views = new Map()
   const pickables = []
   let synced = false
@@ -1002,7 +1032,11 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
       : null
     if (orchestratorLink) orchestratorLink.renderOrder = -1
 
-    const callout = makeCallout(currentLabels && parentKey === null ? labelFor(agent.key, currentLabels) ?? agent.key : agent.name)
+    const callout = makeCallout(
+      currentLabels && parentKey === null ? labelFor(agent.key, currentLabels) ?? agent.key : agent.name,
+      agent.key,
+      pickAgent
+    )
     const calloutColor = cssColor(color)
     if (calloutColor) paintAgentColor(callout.element, calloutColor)
     const calloutLine = lineBetween(lineMaterial(WHITE, 0.3))
@@ -1070,6 +1104,12 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
       doneAt: 0,
       busySince: 0,
       calloutCompact: false,
+      calloutClass: 'mr-callout',
+      calloutTitle: '',
+      calloutFade: '',
+      calloutConsoleShown: false,
+      calloutConsoleData: null,
+      calloutConsoleVersion: -1,
       calloutColor: calloutColor ?? null,
       style: 'idle',
       presence: orchestrator ? 1 : 0,
@@ -1454,7 +1494,41 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
     }
   }
 
+  function paintCalloutConsole(view, data) {
+    const { callout } = view
+    const version = typeof data.version === 'number' ? data.version : null
+    if (view.calloutConsoleData === data && version !== null && view.calloutConsoleVersion === version) return
+    view.calloutConsoleData = data
+    view.calloutConsoleVersion = version ?? -1
+    const lines = Array.isArray(data.rows) ? data.rows : []
+    while (callout.consoleLines.length < lines.length) {
+      const row = document.createElement('div')
+      row.className = 'mr-callout-console-line'
+      callout.consoleBody.append(row)
+      callout.consoleLines.push(row)
+    }
+    while (callout.consoleLines.length > lines.length) callout.consoleLines.pop()?.remove?.()
+    for (let index = 0; index < lines.length; index += 1) {
+      const line = lines[index]
+      const row = callout.consoleLines[index]
+      row.className = `mr-callout-console-line is-${line.tone ?? 'normal'}`
+      row.textContent = line.text
+    }
+    const address = data.address ?? null
+    const linkUrl = data.url ?? null
+    if (callout.consoleLink.hidden !== !linkUrl) callout.consoleLink.hidden = !linkUrl
+    callout.consoleLink.style.display = linkUrl ? '' : 'none'
+    if (linkUrl) {
+      if (callout.consoleLink.textContent !== address) callout.consoleLink.textContent = address
+      const currentHref = typeof callout.consoleLink.getAttribute === 'function'
+        ? callout.consoleLink.getAttribute('href')
+        : callout.consoleLink.href
+      if (currentHref !== linkUrl) callout.consoleLink.href = linkUrl
+    }
+  }
+
   function update(state, delta, now, world, terminals, callout = null) {
+    currentTerminals = terminals ?? null
     lastLaneTop = laneStarterTop({ agents: state.agents, at: state.latest }) || 'orchestrator'
     const nextTop = isSessionTopKey(chosenTop)
       ? topKeyFor({ chosenTop, laneTop: lastLaneTop, viewKeys: viewKeySet() })
@@ -1654,6 +1728,7 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
       view.shape.scale.setScalar(1 + pulse)
       applyPulse(view, delta, isStill)
 
+      const consoleData = entry ? terminals?.consoleFor?.(view.key, entry, now) ?? null : null
       const lastLine = entry?.lines?.[entry.lines.length - 1]
       const lastFailed = lastLine?.tone === 'error'
       const failedFresh = status === 'error' && now - view.doneAt < DONE_GLOW_MS
@@ -1668,9 +1743,13 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
       } else if (fresh) {
         calloutTone = 'done'
         calloutText = 'FINISHED'
+      } else if (consoleData) {
+        calloutTone = status === 'error' || lastFailed ? 'error' : status === 'done' ? 'done' : 'working'
+        calloutText = entry?.label || ''
       }
 
       const compact = Boolean(working) && !full.has(view.key)
+      const showConsole = Boolean(consoleData) && !compact
       const calloutColor = cssColor(view.color)
       if (calloutColor && view.calloutColor !== calloutColor) {
         view.calloutColor = calloutColor
@@ -1681,12 +1760,30 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
         view.callout.task.style.display = compact ? 'none' : ''
         view.callout.cmd.style.display = compact ? 'none' : ''
       }
+      if (view.calloutConsoleShown !== showConsole) {
+        view.calloutConsoleShown = showConsole
+        view.callout.consoleBlock.hidden = !showConsole
+        view.callout.consoleBlock.style.display = showConsole ? '' : 'none'
+      }
 
       if (calloutTone && fade > 0.01) {
         view.callout.object.visible = true
-        if (view.calloutTone !== calloutTone) {
-          view.calloutTone = calloutTone
-          view.callout.element.className = `mr-callout is-${calloutTone}`
+        if (showConsole) paintCalloutConsole(view, consoleData)
+        const address = showConsole ? consoleData.address ?? null : null
+        const calloutClass = `mr-callout is-${calloutTone}${address ? ' is-address' : ''}`
+        if (view.calloutClass !== calloutClass) {
+          view.calloutClass = calloutClass
+          view.callout.element.className = calloutClass
+        }
+        const calloutTitle = address ?? ''
+        if (view.calloutTitle !== calloutTitle) {
+          view.calloutTitle = calloutTitle
+          view.callout.element.title = calloutTitle
+        }
+        const calloutFade = fade >= 0.999 ? '' : String(Math.max(0, fade))
+        if (view.calloutFade !== calloutFade) {
+          view.calloutFade = calloutFade
+          view.callout.element.style.opacity = calloutFade
         }
         const taskText = currentTasks?.get(view.key) ?? ''
         if (view.callout.task.textContent !== taskText) {
@@ -1865,6 +1962,7 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
   function dispose() {
     for (const view of [...views.values()]) removeView(view)
     pendingChipRemovals.clear()
+    currentTerminals = null
     views.clear()
     pickables.length = 0
   }
