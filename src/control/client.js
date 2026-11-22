@@ -73,6 +73,20 @@ export function createClient({
         if (Array.isArray(json?.problems)) error.problems = json.problems.filter((item) => typeof item === 'string')
         if (json?.outside === true) error.outside = true
         if (Number.isInteger(json?.overRing) && json.overRing >= 0) error.overRing = json.overRing
+        if (Number.isInteger(json?.deepest) && json.deepest >= 0) error.deepest = json.deepest
+        if (Number.isInteger(json?.deepestAgents) && json.deepestAgents >= 0) error.deepestAgents = json.deepestAgents
+        if (Array.isArray(json?.rings)) {
+          error.rings = json.rings
+            .filter(
+              (item) =>
+                item &&
+                Number.isInteger(item.ring) &&
+                item.ring >= 0 &&
+                Number.isInteger(item.agents) &&
+                item.agents >= 0
+            )
+            .map((item) => ({ ring: item.ring, agents: item.agents }))
+        }
         throw error
       }
       return json

@@ -4,18 +4,45 @@ import AgentDepthSettings, { UNLOCK_TEXT, hideOccupiedText } from '../src/ui/Age
 import Settings from '../src/ui/Settings.jsx'
 import { buttonWithText, click, settle, withDom, openTab } from './helpers/uiDom.js'
 
-function makeClient(start = { limit: 2, unlocked: false }) {
+function makeClient(start = { limit: 2, unlocked: false }, options = {}) {
   const calls = { agentDepth: 0, setAgentDepth: [] }
+  const listeners = new Set()
   let saved = { ...start }
+  let conflict = options.conflict ?? null
   const client = {
     calls,
+    setSaved(next) {
+      saved = { ...saved, ...next }
+    },
+    setConflict(next) {
+      conflict = next
+    },
+    emit(notice) {
+      for (const listener of [...listeners]) listener(notice)
+    },
+    listenerCount() {
+      return listeners.size
+    },
+    subscribe(listener) {
+      listeners.add(listener)
+      return () => {
+        listeners.delete(listener)
+      }
+    },
     agentDepth: async () => {
       calls.agentDepth += 1
       return { ...saved }
     },
     setAgentDepth: async (payload) => {
       calls.setAgentDepth.push(payload)
-      saved = { limit: payload.limit, unlocked: payload.unlocked }
+      if (conflict && payload.hideOccupied !== true) {
+        const error = new Error(conflict.error)
+        if (conflict.deepest !== undefined) error.deepest = conflict.deepest
+        if (conflict.deepestAgents !== undefined) error.deepestAgents = conflict.deepestAgents
+        if (conflict.rings !== undefined) error.rings = conflict.rings
+        throw error
+      }
+      saved = { ...saved, limit: payload.limit, unlocked: payload.unlocked }
       return { ...saved }
     },
   }
@@ -220,6 +247,154 @@ describe('the Subagents section', () => {
 
       await mount(root, { client: null })
       expect(container.querySelector('.mr-depth')).toBeNull()
+    })
+  })
+
+  it('refreshes on a family notice when a sub is added after mount so depth 1 asks', async () => {
+    const client = makeClient({ limit: 2, unlocked: false, deepest: 0, deepestAgents: 0, rings: [] })
+    await withDom(async ({ container, dom, root }) => {
+      await mount(root, { client })
+      expect(client.calls.agentDepth).toBe(1)
+
+      client.setSaved({ deepest: 1, deepestAgents: 1, rings: [{ ring: 1, agents: 1 }] })
+      await act(async () => {
+        client.emit({ topic: 'family' })
+      })
+      await settle()
+      expect(client.calls.agentDepth).toBe(2)
+
+      await click(root, container.querySelector('[aria-label="Subagent depth 1"]'))
+      const card = container.querySelector('.mr-depth-confirm')
+      expect(card).not.toBeNull()
+      expect(card.querySelector('.mr-depth-confirm-text').textContent).toBe(
+        'Ring 1 holds 1 agent. A depth of 1 hides it until you raise it again.'
+      )
+      expect(dom.document.activeElement).toBe(card.querySelectorAll('button')[0])
+      expect(client.calls.setAgentDepth).toEqual([])
+
+      await click(root, buttonWithText(container, 'Hide'))
+      await settle()
+      expect(client.calls.setAgentDepth).toEqual([
+        { limit: 1, unlocked: false, confirmed: true, hideOccupied: true },
+      ])
+    })
+  })
+
+  it('refreshes on an agents notice when a sub is removed after mount so depth 1 saves at once', async () => {
+    const client = makeClient({
+      limit: 2,
+      unlocked: false,
+      deepest: 1,
+      deepestAgents: 2,
+      rings: [{ ring: 1, agents: 2 }],
+    })
+    await withDom(async ({ container, root }) => {
+      await mount(root, { client })
+      expect(client.calls.agentDepth).toBe(1)
+
+      client.setSaved({ deepest: 0, deepestAgents: 0, rings: [] })
+      await act(async () => {
+        client.emit({ topic: 'agents' })
+      })
+      await settle()
+      expect(client.calls.agentDepth).toBe(2)
+
+      await click(root, container.querySelector('[aria-label="Subagent depth 1"]'))
+      await settle()
+      expect(container.querySelector('.mr-depth-confirm')).toBeNull()
+      expect(client.calls.setAgentDepth).toEqual([{ limit: 1, unlocked: false, confirmed: true }])
+    })
+  })
+
+  it('opens the Hide card from a 409 answer instead of only showing error text', async () => {
+    const client = makeClient(
+      { limit: 4, unlocked: true, deepest: 0, deepestAgents: 0, rings: [] },
+      {
+        conflict: {
+          error: 'Rings 1 and 2 hold 4 agents. A depth of 1 hides them until you raise it again.',
+          deepest: 2,
+          deepestAgents: 1,
+          rings: [
+            { ring: 1, agents: 3 },
+            { ring: 2, agents: 1 },
+          ],
+        },
+      }
+    )
+    await withDom(async ({ container, dom, root }) => {
+      await mount(root, { client })
+
+      await click(root, container.querySelector('[aria-label="Subagent depth 1"]'))
+      await settle()
+
+      expect(container.querySelector('.mr-depth-state.is-error')).toBeNull()
+      const card = container.querySelector('.mr-depth-confirm')
+      expect(card).not.toBeNull()
+      expect(card.querySelector('.mr-depth-confirm-text').textContent).toBe(
+        'Rings 1 and 2 hold 4 agents. A depth of 1 hides them until you raise it again.'
+      )
+      const buttons = card.querySelectorAll('button')
+      expect(buttons[0].textContent).toBe('Cancel')
+      expect(buttons[1].textContent).toBe('Hide')
+      expect(dom.document.activeElement).toBe(buttons[0])
+
+      await click(root, buttons[1])
+      await settle()
+
+      expect(client.calls.setAgentDepth).toEqual([
+        { limit: 1, unlocked: true, confirmed: true },
+        { limit: 1, unlocked: true, confirmed: true, hideOccupied: true },
+      ])
+      expect(container.querySelector('.mr-depth-confirm')).toBeNull()
+      expect(container.querySelector('[aria-label="Subagent depth 1"]').getAttribute('aria-pressed')).toBe('true')
+    })
+  })
+
+  it('ignores unrelated notices, closes a stale Hide card when agents leave, and unsubscribes on unmount', async () => {
+    const client = makeClient({
+      limit: 2,
+      unlocked: false,
+      deepest: 1,
+      deepestAgents: 1,
+      rings: [{ ring: 1, agents: 1 }],
+    })
+    await withDom(async ({ container, root }) => {
+      await mount(root, { client })
+      expect(client.listenerCount()).toBe(1)
+
+      await act(async () => {
+        client.emit({ topic: 'runs' })
+      })
+      await settle()
+      expect(client.calls.agentDepth).toBe(1)
+
+      await click(root, container.querySelector('[aria-label="Subagent depth 1"]'))
+      expect(container.querySelector('.mr-depth-confirm')).not.toBeNull()
+
+      client.setSaved({ deepest: 0, deepestAgents: 0, rings: [] })
+      await act(async () => {
+        client.emit({ topic: 'family' })
+      })
+      await settle()
+      expect(container.querySelector('.mr-depth-confirm')).toBeNull()
+      expect(
+        hideOccupiedText(
+          [
+            { ring: 0, agents: 2 },
+            { ring: 1, agents: 3 },
+            { ring: 2, agents: 1 },
+          ],
+          1
+        )
+      ).toBe('Rings 1 and 2 hold 4 agents. A depth of 1 hides them until you raise it again.')
+
+      await act(async () => {
+        root.unmount()
+      })
+      expect(client.listenerCount()).toBe(0)
+      client.emit({ topic: 'family' })
+      await settle()
+      expect(client.calls.agentDepth).toBe(2)
     })
   })
 
