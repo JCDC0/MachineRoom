@@ -42,7 +42,7 @@ function makeAgent(key, name, parent = null, depth = 0, runId = null, source = n
     version: 0,
     runs: 0,
     calls: new Map(),
-    openCalls: new Set(),
+    openCalls: new Map(),
     runWrites: new Set(),
     focus: [],
     outsidePaths: [],
@@ -212,6 +212,14 @@ function pruneChildren(state) {
   }
 }
 
+export function latestOpenCall(agent) {
+  const open = agent?.openCalls
+  if (!(open instanceof Map) || open.size === 0) return null
+  let last = null
+  for (const call of open.values()) last = call
+  return last
+}
+
 export function apply(state, activity) {
   if (Number.isFinite(activity.time) && activity.time > (state.latest ?? 0)) state.latest = activity.time
   pruneChildren(state)
@@ -260,7 +268,13 @@ export function apply(state, activity) {
       agent.calls.delete(activity.id)
       agent.calls.set(activity.id, activity.touches)
       if (agent.calls.size > CALL_LIMIT) agent.calls.delete(agent.calls.keys().next().value)
-      agent.openCalls.add(activity.id)
+      agent.openCalls.delete(activity.id)
+      agent.openCalls.set(activity.id, {
+        tool: typeof activity.tool === 'string' ? activity.tool : '',
+        label: typeof activity.label === 'string' ? activity.label : '',
+        touches: Array.isArray(activity.touches) ? activity.touches : [],
+      })
+      if (agent.openCalls.size > CALL_LIMIT) agent.openCalls.delete(agent.openCalls.keys().next().value)
       say(agent, activity.label)
       activity.touches.forEach((touch) => applyTouch(state, agent, touch))
       rememberOutsidePath(agent, activity)
@@ -269,11 +283,13 @@ export function apply(state, activity) {
         remember(state, agent.focus, activity.time)
       }
       break
-    case 'tool.end':
+    case 'tool.end': {
+      const ended = agent.openCalls.get(activity.id)
       agent.openCalls.delete(activity.id)
+      const newest = latestOpenCall(agent)
       if (!activity.ok) {
-        const label = activity.label ?? agent.label
-        if (activity.label) agent.label = activity.label
+        const label = activity.label ?? ended?.label ?? agent.label
+        if (activity.label && !newest) agent.label = activity.label
         if (activity.error) agent.error = activity.error
         say(agent, label ? `failed ${label}` : 'failed', 'error')
         for (const touch of agent.calls.get(activity.id) ?? []) {
@@ -281,7 +297,9 @@ export function apply(state, activity) {
           if (file) file.failed = true
         }
       }
+      if (newest) agent.label = newest.label
       break
+    }
     case 'error':
       agent.status = 'error'
       agent.error = activity.text

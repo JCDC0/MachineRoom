@@ -6,7 +6,7 @@ import { CSS3DObject } from 'three/addons/renderers/CSS3DRenderer.js'
 import { ownerOf } from '../model/hierarchy.js'
 import { isSessionTopKey, laneStarterTop, topKeyFor } from '../model/laneStarter.js'
 import { dirname } from '../model/paths.js'
-import { CHILD_LIFE_MS } from '../model/state.js'
+import { CHILD_LIFE_MS, latestOpenCall } from '../model/state.js'
 import { AGENT_RING_BASE, AGENT_RING_GROW, AGENT_RING_MAX_OPACITY, AGENT_RING_MS, AGENT_RING_OPACITY_FLOOR, AGENT_RING_POOL, HUB_RADIUS, HUB_Y, ORCHESTRATOR_HOME, ORCHESTRATOR_LIFT, PARK_LIFT, RING_LEVEL_MAX, SWAY_LIFT, SWAY_RATE, SWAY_SCALE, danceEnvelope, hasSubs, isSessionReader, parkedKeysFor, readerAngles, readerPoint, ringDepth, ringLayout, ringPulse, sectorSlotAngles, sectorSubAngle, slotAngle, startDanceEnvelope, SUB_STAND_LIFT, topRingSeats, writeColor, writeOpacity } from './hub.js'
 import { INTERNET_RADIUS } from './internet.js'
 import { ORCHESTRATOR_PULSE_SCALE, ORCHESTRATOR_SHAPE, PREFERRED, PULSE_BANDS, PULSE_SCALE, SUB_PULSE_SCALE, bandForPoint, isOrchestrator, isSubOrchestrator, nextSpareShape, shapeGeometry, shapesFor, vertexOffset } from './shapes.js'
@@ -297,8 +297,9 @@ export function doingText(entry) {
   if (status === 'queued') return 'queued'
   const open = entry.openCalls ?? entry.calls
   if (status === 'working' && ((open && typeof open.size === 'number' && open.size === 0) || open === 0)) return 'thinking'
-  if (status === 'working' && typeof label === 'string' && label) {
-    const text = label.toLowerCase()
+  const activeLabel = typeof label === 'string' && label ? label : latestOpenCall(entry)?.label ?? ''
+  if (status === 'working' && activeLabel) {
+    const text = activeLabel.toLowerCase()
     return text.length > 40 ? `${text.slice(0, 39)}~` : text
   }
   if (status === 'done') return 'finished'

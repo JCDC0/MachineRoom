@@ -1,4 +1,4 @@
-import { apply, createState } from './state.js'
+import { apply, createState, latestOpenCall } from './state.js'
 
 export function createPlayer({ activities, tree, agents, idleCapMs = 4000, tailMs = 3000, onActivity = () => {}, onReset = () => {} }) {
   const stamps = []
@@ -103,6 +103,8 @@ export function createPlayer({ activities, tree, agents, idleCapMs = 4000, tailM
           model: agent.model ?? null,
           status: agent.status,
           label: agent.label,
+          openCalls: agent.openCalls?.size ?? 0,
+          tool: latestOpenCall(agent)?.tool ?? '',
           runs: agent.runs,
           parent: agent.parent ?? null,
           depth: agent.depth ?? 0,
