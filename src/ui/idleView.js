@@ -13,10 +13,13 @@ export function idleAllowed({ width, scrollY, panelOpen, focusedInput, following
   return true
 }
 
-export function stageClassName({ disconnected = false, idle = false } = {}) {
+export function stageClassName({ disconnected = false, idle = false, idleForced = false } = {}) {
   const classes = ['stage']
   if (disconnected) classes.push('is-disconnected')
-  if (idle && !disconnected) classes.push('is-idle')
+  if (idle && !disconnected) {
+    classes.push('is-idle')
+    if (idleForced) classes.push('is-idle-forced')
+  }
   return classes.join(' ')
 }
 
@@ -26,15 +29,22 @@ export function createIdleWatch({
   target = typeof window === 'undefined' ? null : window,
   doc = typeof document === 'undefined' ? null : document,
 } = {}) {
-  if (!target) return { arm() {}, halt() {}, stop() {} }
+  if (!target) return { arm() {}, halt() {}, force() {}, forced: () => false, stop() {} }
   let timer = null
   let idle = false
   let paused = false
+  let locked = false
 
   function clear() {
     if (timer === null) return
     clearTimeout(timer)
     timer = null
+  }
+
+  function enterIdle() {
+    if (idle) return
+    idle = true
+    onIdle(true)
   }
 
   function endIdle() {
@@ -46,6 +56,10 @@ export function createIdleWatch({
   function restart() {
     clear()
     if (paused || doc?.hidden) return
+    if (locked) {
+      enterIdle()
+      return
+    }
     timer = setTimeout(check, IDLE_AFTER_MS)
   }
 
@@ -56,11 +70,11 @@ export function createIdleWatch({
       restart()
       return
     }
-    idle = true
-    onIdle(true)
+    enterIdle()
   }
 
   function wake() {
+    if (locked) return
     endIdle()
     restart()
   }
@@ -74,6 +88,22 @@ export function createIdleWatch({
     paused = true
     clear()
     endIdle()
+  }
+
+  function force(on) {
+    locked = Boolean(on)
+    if (locked) {
+      clear()
+      if (paused || doc?.hidden) return
+      enterIdle()
+      return
+    }
+    endIdle()
+    restart()
+  }
+
+  function forced() {
+    return locked
   }
 
   function onVisibility() {
@@ -93,6 +123,8 @@ export function createIdleWatch({
   return {
     arm,
     halt,
+    force,
+    forced,
     stop() {
       clear()
       for (const type of IDLE_EVENTS) target.removeEventListener(type, wake, LISTEN)

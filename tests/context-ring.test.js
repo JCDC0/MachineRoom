@@ -1,7 +1,7 @@
 import { act, createElement } from 'react'
 import { renderToString } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
-import Transport, { LiveBadgeContext, liveBadgeText } from '../src/ui/Transport.jsx'
+import Transport, { LanePillsContext, LiveBadgeContext, liveBadgeText } from '../src/ui/Transport.jsx'
 import {
   CONTEXT_RED_SHARE,
   DEFAULT_CONTEXT_RULE,
@@ -242,6 +242,123 @@ describe('the Center button', () => {
         narrow.click()
       })
       expect(calls).toBe(2)
+    })
+  })
+})
+
+describe('the transport view row (Center and Idle)', () => {
+  const LANE_FEED = {
+    agents: [{ id: 'a1', key: 'opencode', name: 'OpenCode', adapterType: 'opencode_local', role: null }],
+    liveRuns: [{ agentId: 'a1', status: 'running', startedAt: 1000 }],
+    now: 61000,
+  }
+  const FORMS = [
+    {
+      name: 'live with orchestrator',
+      props: {
+        snapshot: { ...LIVE, status: 'live' },
+        speeds: [1],
+        orchestrator: { id: 'orchestrator', state: 'idle' },
+      },
+      hasHead: true,
+    },
+    {
+      name: 'live with lanes',
+      props: {
+        snapshot: { ...LIVE, status: 'live' },
+        speeds: [1],
+      },
+      laneFeed: LANE_FEED,
+      hasHead: true,
+    },
+    {
+      name: 'live without lanes',
+      props: {
+        snapshot: { ...LIVE, status: 'live' },
+        speeds: [1],
+      },
+      hasHead: true,
+    },
+    {
+      name: 'replay',
+      props: {
+        snapshot: { position: 12000, duration: 60000, playing: false, speed: 1 },
+        speeds: [1, 2],
+      },
+      hasHead: false,
+    },
+  ]
+
+  function renderForm(form, extra = {}) {
+    const element = createElement(Transport, { ...form.props, ...extra })
+    if (!form.laneFeed) return element
+    return createElement(LanePillsContext.Provider, { value: form.laneFeed }, element)
+  }
+
+  it('renders one transport-view row with Center and Idle in every transport form', async () => {
+    await withDom(async ({ container, root }) => {
+      for (const form of FORMS) {
+        let overviewCalls = 0
+        let idleCalls = 0
+        await act(async () => {
+          root.render(
+            renderForm(form, {
+              onOverview: () => {
+                overviewCalls += 1
+              },
+              onToggleIdle: () => {
+                idleCalls += 1
+              },
+            })
+          )
+        })
+        const rows = container.querySelectorAll('.transport-view')
+        expect(rows, form.name).toHaveLength(1)
+        const centers = container.querySelectorAll('.transport-center')
+        expect(centers, form.name).toHaveLength(1)
+        if (form.hasHead) {
+          const head = container.querySelector('.transport-live-head')
+          expect(head, form.name).not.toBeNull()
+          expect(head.querySelector('.transport-center'), form.name).toBeNull()
+        }
+        const center = rows[0].querySelector('.transport-center')
+        const idle = rows[0].querySelector('.transport-idle')
+        expect(center, form.name).not.toBeNull()
+        expect(idle, form.name).not.toBeNull()
+        expect(center.textContent, form.name).toBe('Center')
+        expect(center.getAttribute('aria-label'), form.name).toBe('Center camera')
+        expect(center.getAttribute('title'), form.name).toBe('Center camera')
+        expect(idle.textContent, form.name).toBe('Idle')
+        expect(idle.getAttribute('title'), form.name).toBe('Stay idle until pressed again')
+        expect(idle.getAttribute('aria-pressed'), form.name).toBe('false')
+        await act(async () => {
+          center.click()
+          idle.click()
+        })
+        expect(overviewCalls, form.name).toBe(1)
+        expect(idleCalls, form.name).toBe(1)
+      }
+    })
+  })
+
+  it('reflects the idleForced prop through aria-pressed in every transport form', async () => {
+    await withDom(async ({ container, root }) => {
+      for (const form of FORMS) {
+        await act(async () => {
+          root.render(renderForm(form, { idleForced: true }))
+        })
+        const row = container.querySelector('.transport-view')
+        expect(row, form.name).not.toBeNull()
+        const idle = row.querySelector('.transport-idle')
+        expect(idle, form.name).not.toBeNull()
+        expect(idle.getAttribute('aria-pressed'), form.name).toBe('true')
+
+        await act(async () => {
+          root.render(renderForm(form, { idleForced: false }))
+        })
+        const updated = container.querySelector('.transport-view').querySelector('.transport-idle')
+        expect(updated.getAttribute('aria-pressed'), form.name).toBe('false')
+      }
     })
   })
 })

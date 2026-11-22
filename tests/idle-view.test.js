@@ -93,9 +93,12 @@ describe('idleAllowed', () => {
 })
 
 describe('stage class', () => {
-  it('adds is-idle only to a connected room', () => {
+  it('adds is-idle and is-idle-forced only to a connected idle room', () => {
     expect(stageClassName()).toBe('stage')
     expect(stageClassName({ idle: true })).toBe('stage is-idle')
+    expect(stageClassName({ idle: true, idleForced: true })).toBe('stage is-idle is-idle-forced')
+    expect(stageClassName({ idle: false, idleForced: true })).toBe('stage')
+    expect(stageClassName({ idle: true, idleForced: true, disconnected: true })).toBe('stage is-disconnected')
     expect(stageClassName({ idle: true, disconnected: true })).toBe('stage is-disconnected')
     expect(stageClassName({ disconnected: true })).toBe('stage is-disconnected')
   })
@@ -276,5 +279,131 @@ describe('idle watch', () => {
     } finally {
       watch.stop()
     }
+  })
+
+  it('forces idle at once, ignores every input event, and arms the timer again when released', () => {
+    const target = fakeTarget()
+    const doc = fakeDoc()
+    const { watch, seen } = watchWith(target, doc, () => false)
+    try {
+      expect(watch.forced()).toBe(false)
+      vi.advanceTimersByTime(IDLE_AFTER_MS / 2)
+      watch.force(true)
+      expect(watch.forced()).toBe(true)
+      expect(seen).toEqual([true])
+      watch.force(true)
+      expect(seen).toEqual([true])
+      for (const type of IDLE_EVENTS) {
+        target.emit(type)
+      }
+      vi.advanceTimersByTime(IDLE_AFTER_MS * 2)
+      expect(seen).toEqual([true])
+      expect(watch.forced()).toBe(true)
+      watch.force(false)
+      expect(watch.forced()).toBe(false)
+      expect(seen).toEqual([true, false])
+      watch.force(false)
+      expect(seen).toEqual([true, false])
+    } finally {
+      watch.stop()
+    }
+  })
+
+  it('arms the idle timer again after force(false) so the room goes idle and wakes normally', () => {
+    const target = fakeTarget()
+    const doc = fakeDoc()
+    const { watch, seen } = watchWith(target, doc)
+    try {
+      watch.force(true)
+      expect(seen).toEqual([true])
+      watch.force(false)
+      expect(seen).toEqual([true, false])
+      vi.advanceTimersByTime(IDLE_AFTER_MS - 1)
+      expect(seen).toEqual([true, false])
+      vi.advanceTimersByTime(1)
+      expect(seen).toEqual([true, false, true])
+      target.emit('pointermove')
+      expect(seen).toEqual([true, false, true, false])
+    } finally {
+      watch.stop()
+    }
+  })
+
+  it('ends idle while hidden and resumes forced idle when the page becomes visible again', () => {
+    const target = fakeTarget()
+    const doc = fakeDoc()
+    const { watch, seen } = watchWith(target, doc)
+    try {
+      watch.force(true)
+      expect(seen).toEqual([true])
+      doc.hidden = true
+      doc.emit('visibilitychange')
+      expect(seen).toEqual([true, false])
+      expect(watch.forced()).toBe(true)
+      vi.advanceTimersByTime(IDLE_AFTER_MS * 2)
+      expect(seen).toEqual([true, false])
+      doc.hidden = false
+      doc.emit('visibilitychange')
+      expect(seen).toEqual([true, false, true])
+      expect(watch.forced()).toBe(true)
+      target.emit('keydown')
+      expect(seen).toEqual([true, false, true])
+    } finally {
+      watch.stop()
+    }
+  })
+
+  it('does not turn a hidden page when forced while hidden, then turns when visible', () => {
+    const target = fakeTarget()
+    const doc = fakeDoc(true)
+    const { watch, seen } = watchWith(target, doc)
+    try {
+      watch.force(true)
+      expect(watch.forced()).toBe(true)
+      expect(seen).toEqual([])
+      doc.hidden = false
+      doc.emit('visibilitychange')
+      expect(seen).toEqual([true])
+    } finally {
+      watch.stop()
+    }
+  })
+
+  it('keeps halt behaviour when forced and restores forced idle on arm', () => {
+    const target = fakeTarget()
+    const doc = fakeDoc()
+    const { watch, seen } = watchWith(target, doc)
+    try {
+      watch.force(true)
+      expect(seen).toEqual([true])
+      watch.halt()
+      expect(seen).toEqual([true, false])
+      doc.hidden = true
+      doc.emit('visibilitychange')
+      doc.hidden = false
+      doc.emit('visibilitychange')
+      watch.force(true)
+      vi.advanceTimersByTime(IDLE_AFTER_MS * 2)
+      expect(seen).toEqual([true, false])
+      watch.arm()
+      expect(seen).toEqual([true, false, true])
+      watch.halt()
+      expect(seen).toEqual([true, false, true, false])
+      watch.force(false)
+      watch.arm()
+      expect(seen).toEqual([true, false, true, false])
+      vi.advanceTimersByTime(IDLE_AFTER_MS)
+      expect(seen).toEqual([true, false, true, false, true])
+    } finally {
+      watch.stop()
+    }
+  })
+
+  it('exposes no-op force and forced without a target', () => {
+    const watch = createIdleWatch({ target: null, doc: null })
+    expect(watch.forced()).toBe(false)
+    expect(() => watch.force(true)).not.toThrow()
+    expect(watch.forced()).toBe(false)
+    watch.stop()
   })
 })
