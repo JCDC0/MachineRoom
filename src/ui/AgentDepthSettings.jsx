@@ -100,7 +100,7 @@ export default function AgentDepthSettings({ client = null }) {
   const dialogKey = dialog ? `${dialog.kind}:${dialog.limit ?? ''}` : false
   useDialogFocus(dialogKey, {
     containerRef: cardRef,
-    openerSelector: dialog?.kind === 'unlock' ? 'mr-depth-confirm' : '',
+    openerSelector: 'mr-depth-confirm',
   })
 
   useEffect(() => {
@@ -133,6 +133,7 @@ export default function AgentDepthSettings({ client = null }) {
               className={`mr-depth-choice ${state.limit === depth ? 'is-on' : ''}`}
               aria-label={`Subagent depth ${depth}`}
               aria-pressed={state.limit === depth}
+              aria-controls="mr-depth-confirm"
               disabled={loading || busy}
               onClick={() => pickDepth(depth)}
             >
@@ -143,6 +144,7 @@ export default function AgentDepthSettings({ client = null }) {
             <button
               type="button"
               className="mr-depth-unlock"
+              aria-controls="mr-depth-confirm"
               disabled={loading || busy}
               onClick={() => pickDepth(2, false)}
             >
