@@ -188,6 +188,9 @@ export default function Hud({
   const [viewportWidth, setViewportWidth] = useState(() =>
     typeof window !== 'undefined' ? Number(window.innerWidth) || 0 : 0
   )
+  const [flat, setFlat] = useState(() =>
+    typeof window !== 'undefined' ? Number(window.scrollY) > 2 : false
+  )
   const [orchestratorNonce, setOrchestratorNonce] = useState(0)
   const [orchestratorInfo, setOrchestratorInfo] = useState(null)
   const [reviewList, setReviewList] = useState([])
@@ -302,6 +305,15 @@ export default function Hud({
     }
     window.addEventListener('resize', onResize)
     return () => window.removeEventListener('resize', onResize)
+  }, [])
+
+  useEffect(() => {
+    function onScroll() {
+      setFlat((Number(window.scrollY) || 0) > 2)
+    }
+    onScroll()
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => window.removeEventListener('scroll', onScroll, { passive: true })
   }, [])
 
   useEffect(() => {
@@ -752,7 +764,7 @@ export default function Hud({
 
   const hud = (
     <div className={`hud${bridgeDown ? ' is-disconnected' : ''}`}>
-      <header className={`hud-menu${menuOpen ? ' is-open' : ''}`}>
+      <header className={`hud-menu${menuOpen ? ' is-open' : ''}${flat ? ' is-flat' : ''}`}>
         {wide ? (
           <div className="hud-band" role="group" aria-label="Project and conversation">
             <span className="hud-band-project">{projectLabel}</span>

@@ -9224,6 +9224,27 @@ button.ui-icon-btn.mr-composer-send:hover:not(:disabled) {
     transform: translateY(var(--seam-y, 0)) rotate(var(--seam-r, 0));
   }
 
+  .hud-menu.is-flat .hud-band-project,
+  .hud-menu.is-flat .hud-band-switch,
+  .hud-menu.is-flat .hud-modes button,
+  .hud-menu.is-flat .hud-action,
+  .hud-menu.is-flat .hud-action-slot > .hud-action-badge,
+  .hud-menu.is-flat .hud-health-chip {
+    transform: none;
+  }
+
+  .hud-band-project {
+    transition: transform 0.24s ease;
+  }
+
+  .hud-band-switch,
+  .hud-modes button,
+  .hud-action,
+  .hud-action-slot > .hud-action-badge,
+  .hud-health-chip {
+    transition: border-color 150ms, color 150ms, background-color 150ms, transform 0.24s ease;
+  }
+
   .transport-badge,
   .transport-center,
   .transport-orchestrator,
@@ -9240,6 +9261,17 @@ button.ui-icon-btn.mr-composer-send:hover:not(:disabled) {
   .speeds button {
     position: relative;
     z-index: 5;
+  }
+}
+
+@media (min-width: 900px) and (prefers-reduced-motion: reduce) {
+  .hud-band-project,
+  .hud-band-switch,
+  .hud-modes button,
+  .hud-action,
+  .hud-action-slot > .hud-action-badge,
+  .hud-health-chip {
+    transition: none;
   }
 }
 
