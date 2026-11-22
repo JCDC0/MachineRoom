@@ -42,6 +42,7 @@ function makeAgent(key, name, parent = null, depth = 0, runId = null, source = n
     version: 0,
     runs: 0,
     calls: new Map(),
+    openCalls: new Set(),
     runWrites: new Set(),
     focus: [],
     outsidePaths: [],
@@ -194,6 +195,7 @@ function finish(agent, activity) {
   agent.status = activity.ok ? 'done' : 'error'
   agent.endedAt = activity.time
   agent.calls.clear()
+  agent.openCalls.clear()
   agent.focus = []
   if (!activity.ok) agent.error = activity.error ?? 'failed'
 }
@@ -249,6 +251,7 @@ export function apply(state, activity) {
       agent.error = null
       agent.runWrites.clear()
       agent.calls.clear()
+      agent.openCalls.clear()
       say(agent, `run ${String(activity.runId).slice(0, 4)} started`, 'dim')
       break
     case 'tool.start':
@@ -257,6 +260,7 @@ export function apply(state, activity) {
       agent.calls.delete(activity.id)
       agent.calls.set(activity.id, activity.touches)
       if (agent.calls.size > CALL_LIMIT) agent.calls.delete(agent.calls.keys().next().value)
+      agent.openCalls.add(activity.id)
       say(agent, activity.label)
       activity.touches.forEach((touch) => applyTouch(state, agent, touch))
       rememberOutsidePath(agent, activity)
@@ -266,6 +270,7 @@ export function apply(state, activity) {
       }
       break
     case 'tool.end':
+      agent.openCalls.delete(activity.id)
       if (!activity.ok) {
         const label = activity.label ?? agent.label
         if (activity.label) agent.label = activity.label
@@ -291,6 +296,7 @@ export function apply(state, activity) {
       }
       agent.endedAt = activity.time
       agent.calls.clear()
+      agent.openCalls.clear()
       agent.focus = []
       if (activity.ok) {
         agent.status = 'done'

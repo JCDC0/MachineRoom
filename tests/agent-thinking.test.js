@@ -103,6 +103,8 @@ function startRun(state, time = 1000) {
 
 describe('agentThinking', () => {
   it('is true while the run is open and no tool call is open', () => {
+    expect(agentThinking({ status: 'working', openCalls: new Set(), calls: new Map([['t1', []]]) })).toBe(true)
+    expect(agentThinking({ status: 'working', openCalls: new Set(['t1']), calls: new Map() })).toBe(false)
     expect(agentThinking({ status: 'working', calls: new Map() })).toBe(true)
     expect(agentThinking({ status: 'running', calls: new Map() })).toBe(true)
     expect(agentThinking({ status: 'working', calls: new Map([['t1', []]]) })).toBe(false)
@@ -380,15 +382,34 @@ describe('the thinking spinner on an agent', () => {
     expect(view.spinner.arcs.every((arc) => !arc.visible)).toBe(true)
     expect(view.spinner.arcMaterial.opacity).toBe(0)
 
-    apply(state, { time: 3500, type: 'run.end', agent: 'a', runId: 'r1', ok: true })
-    agents.update(state, 0.016, 3500, world, terminals)
+    apply(state, { time: 3420, type: 'tool.end', agent: 'a', id: 't1', ok: true })
+    agents.update(state, 0.016, 3420, world, terminals)
+    agents.update(state, 0.4, 3720, world, terminals)
+    expect(view.spinner.ringMaterial.color.getHex()).toBe(WHITE)
+    expect(view.spinner.arcs.every((arc) => arc.visible)).toBe(true)
+    expect(view.spinner.arcMaterial.opacity).toBeGreaterThan(0)
+
+    apply(state, {
+      time: 3750,
+      type: 'tool.start',
+      agent: 'a',
+      id: 't2',
+      label: 'write src/a.js',
+      touches: [{ path: 'src/a.js', mode: 'write', kind: 'file' }],
+    })
+    agents.update(state, 0.7, 4450, world, terminals)
+    expect(view.spinner.ringMaterial.color.getHex()).toBe(YELLOW)
+    expect(view.spinner.arcs.every((arc) => !arc.visible)).toBe(true)
+
+    apply(state, { time: 4500, type: 'run.end', agent: 'a', runId: 'r1', ok: true })
+    agents.update(state, 0.016, 4500, world, terminals)
     expect(view.spinner.group.visible).toBe(true)
     expect(view.spinner.ringMaterial.color.getHex()).toBe(GREEN)
     expect(view.spinner.arcs.every((arc) => !arc.visible)).toBe(true)
 
-    apply(state, { time: 3600, type: 'run.start', agent: 'a', runId: 'r2' })
-    apply(state, { time: 3700, type: 'run.end', agent: 'a', runId: 'r2', ok: false, error: 'boom' })
-    agents.update(state, 0.016, 3700, world, terminals)
+    apply(state, { time: 4600, type: 'run.start', agent: 'a', runId: 'r2' })
+    apply(state, { time: 4700, type: 'run.end', agent: 'a', runId: 'r2', ok: false, error: 'boom' })
+    agents.update(state, 0.016, 4700, world, terminals)
     expect(view.spinner.group.visible).toBe(true)
     expect(view.spinner.ringMaterial.color.getHex()).toBe(RED)
     expect(view.spinner.arcs.every((arc) => !arc.visible)).toBe(true)

@@ -72,13 +72,23 @@ export const SPINNER_ARC_OPACITY = 0.95
 
 const RUNNING_STATUSES = new Set(['working', 'running'])
 
+function hasOpenCalls(entry) {
+  const openCalls = entry?.openCalls
+  if (openCalls !== undefined && openCalls !== null) {
+    if (typeof openCalls.size === 'number') return openCalls.size > 0
+    const count = Number(openCalls)
+    return Number.isFinite(count) && count > 0
+  }
+  const calls = entry?.calls
+  if (calls && typeof calls.size === 'number') return calls.size > 0
+  const open = Number(entry?.openToolCalls ?? 0)
+  return Number.isFinite(open) && open > 0
+}
+
 export function agentThinking(agent = {}) {
   const status = typeof agent?.status === 'string' ? agent.status.toLowerCase() : ''
   if (!RUNNING_STATUSES.has(status)) return false
-  const calls = agent?.calls
-  if (calls && typeof calls.size === 'number') return calls.size === 0
-  const open = Number(agent?.openCalls ?? agent?.openToolCalls ?? 0)
-  return !(Number.isFinite(open) && open > 0)
+  return !hasOpenCalls(agent)
 }
 
 export function statusRingColor(status, entry = null) {
@@ -86,10 +96,7 @@ export function statusRingColor(status, entry = null) {
   if (state === 'error') return RED
   if (state === 'done') return GREEN
   if (RUNNING_STATUSES.has(state)) {
-    const calls = entry?.calls
-    if (calls && typeof calls.size === 'number') return calls.size > 0 ? YELLOW : WHITE
-    const open = Number(entry?.openCalls ?? entry?.openToolCalls ?? 0)
-    return Number.isFinite(open) && open > 0 ? YELLOW : WHITE
+    return hasOpenCalls(entry) ? YELLOW : WHITE
   }
   return WHITE
 }
@@ -288,7 +295,8 @@ export function doingText(entry) {
   if (!entry) return ''
   const { status, label } = entry
   if (status === 'queued') return 'queued'
-  if (status === 'working' && entry.calls && typeof entry.calls.size === 'number' && entry.calls.size === 0) return 'thinking'
+  const open = entry.openCalls ?? entry.calls
+  if (status === 'working' && ((open && typeof open.size === 'number' && open.size === 0) || open === 0)) return 'thinking'
   if (status === 'working' && typeof label === 'string' && label) {
     const text = label.toLowerCase()
     return text.length > 40 ? `${text.slice(0, 39)}~` : text
@@ -703,14 +711,25 @@ function makeCallout(agentName, key, onPick) {
   const element = document.createElement('div')
   element.className = 'mr-callout'
   if (element.dataset) element.dataset.agent = key
+  const stopEvent = (event) => event?.stopPropagation?.()
+  const pickFromCallout = (event) => {
+    event?.stopPropagation?.()
+    onPick?.(key)
+  }
   if (typeof element.addEventListener === 'function') {
-    element.addEventListener('pointerdown', (event) => event?.stopPropagation?.())
+    element.addEventListener('pointerdown', stopEvent)
+    element.addEventListener('dblclick', stopEvent)
     element.addEventListener('click', () => onPick?.(key))
   }
 
   const title = document.createElement('div')
   title.className = 'mr-callout-title'
   title.textContent = agentName.toUpperCase()
+  if (typeof title.addEventListener === 'function') {
+    title.addEventListener('pointerdown', stopEvent)
+    title.addEventListener('dblclick', stopEvent)
+    title.addEventListener('click', pickFromCallout)
+  }
 
   const task = document.createElement('div')
   task.className = 'mr-callout-task'
@@ -1824,7 +1843,7 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
       }
 
       const compact = Boolean(working) && !full.has(view.key)
-      const showConsole = Boolean(consoleData) && !compact
+      const showConsole = Boolean(consoleData)
       const calloutColor = cssColor(view.color)
       if (calloutColor && view.calloutColor !== calloutColor) {
         view.calloutColor = calloutColor
@@ -1876,16 +1895,15 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
         view.callout.object.position.copy(calloutPos)
         view.callout.object.quaternion.setFromRotationMatrix(rotMatrix)
 
-        const halfWidth = compact
-          ? CALLOUT_COMPACT_HALF_WIDTH
-          : showConsole
-            ? CALLOUT_CONSOLE_HALF_WIDTH
+        const halfWidth = showConsole
+          ? CALLOUT_CONSOLE_HALF_WIDTH
+          : compact
+            ? CALLOUT_COMPACT_HALF_WIDTH
             : CALLOUT_HALF_WIDTH
-        const halfHeight = compact
-          ? CALLOUT_COMPACT_HALF_HEIGHT
-          : showConsole
-            ? CALLOUT_HALF_HEIGHT + ((consoleData.rows?.length ?? 0) * CALLOUT_CONSOLE_ROW_HEIGHT) / 2 + (consoleData.url ? 8 : 0)
-            : CALLOUT_HALF_HEIGHT
+        const baseHalfHeight = compact ? CALLOUT_COMPACT_HALF_HEIGHT : CALLOUT_HALF_HEIGHT
+        const halfHeight = showConsole
+          ? baseHalfHeight + ((consoleData.rows?.length ?? 0) * CALLOUT_CONSOLE_ROW_HEIGHT) / 2 + (consoleData.url ? 8 : 0)
+          : baseHalfHeight
         calloutEdgePoint(view.group.position, calloutPos, world.right, camUp, halfWidth, halfHeight, calloutEdge)
         setEnds(view.calloutLine, view.group.position, calloutEdge)
         writeColor(view.calloutLine.material, WHITE)

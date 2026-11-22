@@ -1,9 +1,10 @@
 import * as THREE from 'three'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { SPINNER_RING_OPACITY, UNSEEN_OPACITY, createAgents, statusRingColor } from '../src/engine/agents.js'
+import { SPINNER_RING_OPACITY, UNSEEN_OPACITY, createAgents, doingText, statusRingColor } from '../src/engine/agents.js'
 import { AGENT_COLORS, GREEN, RED, WHITE, YELLOW, agentColors } from '../src/engine/sprites.js'
 import { createTerminals } from '../src/engine/terminals.js'
 import { apply, createState } from '../src/model/state.js'
+import { agentStateWord } from '../src/ui/inspector.js'
 
 const context2d = {
   font: '',
@@ -178,6 +179,8 @@ describe('the agent colour on a working shape', () => {
   it('picks the status ring colour for failed, open call, thinking, done, queued and idle', () => {
     expect(statusRingColor('error', { calls: new Map([['t1', []]]) })).toBe(RED)
     expect(statusRingColor('error')).toBe(RED)
+    expect(statusRingColor('working', { openCalls: new Set(['t1']), calls: new Map() })).toBe(YELLOW)
+    expect(statusRingColor('working', { openCalls: new Set(), calls: new Map([['t1', []]]) })).toBe(WHITE)
     expect(statusRingColor('working', { calls: new Map([['t1', []]]) })).toBe(YELLOW)
     expect(statusRingColor('working', { openCalls: 1 })).toBe(YELLOW)
     expect(statusRingColor('working', { calls: new Map() })).toBe(WHITE)
@@ -185,6 +188,59 @@ describe('the agent colour on a working shape', () => {
     expect(statusRingColor('done')).toBe(GREEN)
     expect(statusRingColor('queued')).toBe(WHITE)
     expect(statusRingColor('idle')).toBe(WHITE)
+  })
+
+  it('returns the ring to white with thinking arcs after tool.end, turns yellow on a second open call, and agrees with doingText and the Inspector state word', () => {
+    const { agents, state, terminals, world } = harness()
+    const lane = agents.views.get('claude')
+    const entry = state.agents.get('claude')
+
+    apply(state, { time: 1000, type: 'run.start', agent: 'claude', runId: 'r1' })
+    apply(state, {
+      time: 1100,
+      type: 'tool.start',
+      agent: 'claude',
+      id: 't1',
+      tool: 'read',
+      label: 'read src/a.js',
+      touches: [{ path: 'src/a.js', mode: 'read', kind: 'file' }],
+    })
+    agents.update(state, 0.016, 1100, world, terminals)
+    expect(lane.rings[0].material.color.getHex()).toBe(YELLOW)
+    expect(lane.spinner.ringMaterial.color.getHex()).toBe(YELLOW)
+    expect(lane.spinner.arcs.every((arc) => !arc.visible)).toBe(true)
+    expect(doingText(entry)).toBe('read src/a.js')
+    expect(agentStateWord({ ...entry, openCalls: entry.openCalls.size, tool: 'read' }).word).toBe('working')
+
+    apply(state, { time: 1200, type: 'tool.end', agent: 'claude', id: 't1', ok: true })
+    expect(entry.calls.size).toBe(1)
+    expect(entry.openCalls.size).toBe(0)
+    agents.update(state, 0.016, 1200, world, terminals)
+    agents.update(state, 0.4, 1500, world, terminals)
+    expect(lane.rings[0].material.color.getHex()).toBe(WHITE)
+    expect(lane.spinner.ringMaterial.color.getHex()).toBe(WHITE)
+    expect(lane.spinner.arcs.every((arc) => arc.visible)).toBe(true)
+    expect(doingText(entry)).toBe('thinking')
+    expect(agentStateWord({ ...entry, openCalls: entry.openCalls.size }).word).toBe('thinking')
+
+    apply(state, {
+      time: 1600,
+      type: 'tool.start',
+      agent: 'claude',
+      id: 't2',
+      tool: 'write',
+      label: 'write src/a.js',
+      touches: [{ path: 'src/a.js', mode: 'write', kind: 'file' }],
+    })
+    agents.update(state, 0.7, 2300, world, terminals)
+    expect(lane.rings[0].material.color.getHex()).toBe(YELLOW)
+    expect(lane.spinner.ringMaterial.color.getHex()).toBe(YELLOW)
+    expect(lane.spinner.arcs.every((arc) => !arc.visible)).toBe(true)
+    expect(doingText(entry)).toBe('write src/a.js')
+    expect(agentStateWord({ ...entry, openCalls: entry.openCalls.size, tool: 'write' }).word).toBe('working')
+
+    agents.dispose()
+    terminals.dispose()
   })
 
   it('keeps the shape in its own colour and paints both rings by status across every state', () => {

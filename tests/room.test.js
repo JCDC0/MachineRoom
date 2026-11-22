@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { RING_LEVEL_MAX } from '../src/engine/hub.js'
 import { makeTree } from '../src/model/paths.js'
-import { createState } from '../src/model/state.js'
+import { apply, createState } from '../src/model/state.js'
 
 const fakeGit = vi.hoisted(() => ({ states: [], changed: true }))
 const fakeHub = vi.hoisted(() => ({ depths: [] }))
@@ -101,15 +101,25 @@ function fakeElement(tag = 'div') {
     listeners,
     ownerDocument: { defaultView: { Element: function Element() {} } },
     append(...items) {
+      for (const item of items) {
+        if (item && typeof item === 'object') {
+          item.parentNode = node
+          item.parentElement = node
+        }
+      }
       node.children.push(...items)
     },
     appendChild(child) {
+      if (child && typeof child === 'object') {
+        child.parentNode = node
+        child.parentElement = node
+      }
       node.children.push(child)
       return child
     },
     replaceChildren(...items) {
       node.children.length = 0
-      node.children.push(...items)
+      node.append(...items)
     },
     addEventListener(type, fn) {
       if (!listeners.has(type)) listeners.set(type, [])
@@ -139,7 +149,18 @@ function fakeElement(tag = 'div') {
     },
     querySelector: () => null,
     querySelectorAll: () => [],
-    closest: () => null,
+    closest: (selector) => {
+      if (selector === '.mr-callout[data-agent]') {
+        let current = node
+        while (current) {
+          if (typeof current.className === 'string' && /(?:^|\s)mr-callout(?:\s|$)/.test(current.className) && current.dataset?.agent) {
+            return current
+          }
+          current = current.parentElement ?? current.parentNode ?? null
+        }
+      }
+      return null
+    },
     getBoundingClientRect: () => ({ left: 0, top: 0, width: node.clientWidth || 1200, height: node.clientHeight || 800 }),
     classList: { add() {}, remove() {}, contains: () => false },
   }
@@ -193,6 +214,7 @@ let roomSurface
 let roomGl
 let roomCss
 let motionMatches = false
+const windowListeners = new Map()
 
 beforeAll(() => {
   savedWindow = globalThis.window
@@ -212,8 +234,16 @@ beforeAll(() => {
       addEventListener() {},
       removeEventListener() {},
     }),
-    addEventListener() {},
-    removeEventListener() {},
+    addEventListener(type, fn) {
+      if (!windowListeners.has(type)) windowListeners.set(type, [])
+      windowListeners.get(type).push(fn)
+    },
+    removeEventListener(type, fn) {
+      const list = windowListeners.get(type)
+      if (!list) return
+      const index = list.indexOf(fn)
+      if (index !== -1) list.splice(index, 1)
+    },
   }
   globalThis.document = {
     createElement: (tag) => (tag === 'canvas' ? fakeCanvas() : fakeElement(tag)),
@@ -287,8 +317,12 @@ describe('the room and its git tree', () => {
 })
 
 describe('the room takes the chosen top and the depth', () => {
+  let clock = 1000
   function tick(times = 1) {
-    for (let index = 0; index < times; index += 1) roomFrame?.(1000 + index * 16)
+    for (let index = 0; index < times; index += 1) {
+      clock += 16
+      roomFrame?.(clock)
+    }
   }
 
   it('keeps the room running when it is handed the chosen top', async () => {
@@ -380,6 +414,48 @@ describe('the room takes the chosen top and the depth', () => {
       step(1)
       expect(docsCard().className).not.toContain('is-collapsed')
       expect(srcCard().className).not.toContain('is-collapsed')
+    } finally {
+      room.dispose()
+    }
+  })
+
+  it('expands a compact callout when the pointer moves over .mr-callout[data-agent]', async () => {
+    const keys = ['a0', 'a1', 'a2', 'a3', 'a4']
+    const { room, state } = await makeRoom(['src/a.js'], keys)
+    try {
+      const tasks = new Map()
+      keys.forEach((key, index) => {
+        tasks.set(key, `task ${index}`)
+        apply(state, {
+          time: 1000 + index * 100,
+          type: 'tool.start',
+          agent: key,
+          id: `t${index}`,
+          tool: 'read',
+          label: `read ${index}`,
+          touches: [],
+        })
+        tick()
+      })
+      room.setTasks(tasks)
+      tick()
+
+      const callout = createdNodes.findLast((node) => node.dataset?.agent === 'a0' && node.className.includes('mr-callout'))
+      const title = callout.children[0]
+      const task = callout.children[1]
+      const cmd = callout.children[2]
+      expect(task.style.display).toBe('none')
+      expect(cmd.style.display).toBe('none')
+
+      for (const fn of windowListeners.get('pointermove') ?? []) fn({ target: title })
+      tick()
+      expect(task.style.display).toBe('')
+      expect(cmd.style.display).toBe('')
+
+      for (const fn of windowListeners.get('pointermove') ?? []) fn({ target: globalThis.document.body })
+      tick()
+      expect(task.style.display).toBe('none')
+      expect(cmd.style.display).toBe('none')
     } finally {
       room.dispose()
     }

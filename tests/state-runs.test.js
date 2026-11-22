@@ -127,6 +127,47 @@ describe('two runs of one agent', () => {
     apply(state, start('r3', 8))
     expect(state.agents.get('opencode')).toMatchObject({ status: 'working', label: '' })
   })
+
+  it('tracks openCalls across tool.start, tool.end, run.start, run.end and child finish while keeping calls', () => {
+    const state = createState(tree, agents)
+    const agent = state.agents.get('opencode')
+    expect([...agent.openCalls]).toEqual([])
+
+    apply(state, start('r1', 1))
+    apply(state, tool('r1', 2, 'src/a.js'))
+    expect([...agent.openCalls]).toEqual(['t-2'])
+    expect(agent.calls.size).toBe(1)
+
+    apply(state, { type: 'tool.end', agent: 'opencode', runId: 'r1', id: 't-2', ok: true, time: 3, order: 3 })
+    expect([...agent.openCalls]).toEqual([])
+    expect(agent.calls.size).toBe(1)
+
+    apply(state, tool('r1', 4, 'src/a.js'))
+    apply(state, spawn('r1', 'opencode~1', 5))
+    apply(state, {
+      type: 'tool.start',
+      agent: 'opencode~1',
+      runId: 'r1',
+      id: 'child-t1',
+      tool: 'read',
+      label: 'read src/a.js',
+      touches: [{ path: 'src/a.js', mode: 'read', kind: 'file' }],
+      time: 6,
+      order: 6,
+    })
+    expect([...agent.openCalls]).toEqual(['t-4'])
+    expect([...state.agents.get('opencode~1').openCalls]).toEqual(['child-t1'])
+
+    apply(state, runEnd('r1', true, 7))
+    expect([...agent.openCalls]).toEqual([])
+    expect([...state.agents.get('opencode~1').openCalls]).toEqual([])
+
+    apply(state, start('r2', 8))
+    apply(state, tool('r2', 9, 'src/a.js'))
+    expect([...agent.openCalls]).toEqual(['t-9'])
+    apply(state, start('r3', 10))
+    expect([...agent.openCalls]).toEqual([])
+  })
 })
 
 describe('addAgents', () => {

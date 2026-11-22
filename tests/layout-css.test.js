@@ -501,4 +501,10 @@ describe('the command console', () => {
     expect(css).not.toMatch(/\.mr-term-console\s*\{/)
     expect(css).not.toMatch(/\.mr-term-console\.is-address\s*\{/)
   })
+
+  it('gives pointer events to the callout title and address link only, not the callout box', () => {
+    expect(rule('.mr-callout')['pointer-events']).toBe('none')
+    expect(rule('.mr-callout-title')['pointer-events']).toBe('auto')
+    expect(rule('.mr-callout .mr-term-console-link')['pointer-events']).toBe('auto')
+  })
 })

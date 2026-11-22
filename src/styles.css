@@ -2889,8 +2889,7 @@ label.hud-settings-section {
   background-image: var(--corner-ticks);
   border: 1px solid rgb(255 255 255 / 0.35);
   border-radius: 2px;
-  pointer-events: auto;
-  cursor: pointer;
+  pointer-events: none;
   box-shadow: 0 4px 16px rgb(0 0 0 / 0.7);
   transition: border-color 200ms, box-shadow 200ms;
 }
@@ -2923,6 +2922,8 @@ label.hud-settings-section {
   text-overflow: ellipsis;
   border-top-left-radius: 1px;
   border-top-right-radius: 1px;
+  pointer-events: auto;
+  cursor: pointer;
 }
 
 .mr-callout.is-error .mr-callout-title {
@@ -2985,6 +2986,8 @@ label.hud-settings-section {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  pointer-events: auto;
+  cursor: pointer;
 }
 
 .mr-callout .mr-term-console-link[hidden] {
