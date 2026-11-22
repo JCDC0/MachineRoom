@@ -792,6 +792,18 @@ describe('the control client orchestrator routes', () => {
     ])
   })
 
+  it('sends /api/agent-depth with hideOccupied only when passed', async () => {
+    const { calls, client } = recorder({ ok: true, limit: 1, unlocked: false })
+    await client.agentDepth()
+    await client.setAgentDepth({ limit: 1, unlocked: false })
+    await client.setAgentDepth({ limit: 1, unlocked: false, hideOccupied: true })
+    expect(calls.map((call) => [call.method, call.url, JSON.parse(call.body ?? 'null')])).toEqual([
+      ['GET', 'http://127.0.0.1:9/api/agent-depth', null],
+      ['POST', 'http://127.0.0.1:9/api/agent-depth', { limit: 1, unlocked: false, confirmed: true }],
+      ['POST', 'http://127.0.0.1:9/api/agent-depth', { limit: 1, unlocked: false, confirmed: true, hideOccupied: true }],
+    ])
+  })
+
   it('sends /api/control/runs/stop with lane, startedAt and confirmed', async () => {
     const { calls, client } = recorder({ ok: true })
     await client.stopRun({ lane: 'opencode', startedAt: '2026-10-24T12:00:00.000Z' })
