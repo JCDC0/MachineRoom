@@ -90,6 +90,10 @@ export default function Settings({ open = true, effects, onChange, onSettingsCha
     onChange?.({ ...current, maxFiles: clampFileLimit(maxFiles) })
   }
 
+  function updateFolderOption(key, value) {
+    onChange?.({ ...current, [key]: Boolean(value) })
+  }
+
   function updateEffect(key, patch) {
     const prev = current[key] ?? { on: false, strength: 0.2 }
     onChange?.({
@@ -203,6 +207,33 @@ export default function Settings({ open = true, effects, onChange, onSettingsCha
                 <span>12</span>
                 <span>20</span>
               </div>
+            </div>
+            <div className="hud-settings-row">
+              <span className="hud-settings-label">Show folder contents</span>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={current.folderContents}
+                aria-label="Show folder contents"
+                className={`hud-settings-switch ${current.folderContents ? 'is-on' : ''}`}
+                onClick={() => updateFolderOption('folderContents', !current.folderContents)}
+              >
+                {current.folderContents ? 'On' : 'Off'}
+              </button>
+            </div>
+            <div className="hud-settings-row">
+              <span className="hud-settings-label">Open when an agent touches it</span>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={current.openOnTouch}
+                aria-label="Open when an agent touches it"
+                className={`hud-settings-switch ${current.openOnTouch ? 'is-on' : ''}`}
+                disabled={current.folderContents}
+                onClick={() => updateFolderOption('openOnTouch', !current.openOnTouch)}
+              >
+                {current.openOnTouch ? 'On' : 'Off'}
+              </button>
             </div>
           </div>
 

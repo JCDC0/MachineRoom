@@ -2409,6 +2409,11 @@ label.hud-settings-section {
   color: var(--black);
 }
 
+.hud-settings-switch:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
 .hud-settings input[type='range'] {
   width: 100%;
   margin: 0;
