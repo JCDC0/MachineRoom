@@ -426,6 +426,7 @@
     "name": "MachineRoom native",
     "harness": "MachineRoom",
     "model": "DeepSeek V4.1 Flash 1017 on OpenRouter",
+    "effort": "xhigh",
     "modelHint": "the testbench endpoint OpenRouter; the owner keeps the key in the testbench room, and only this model is allowed",
     "cli": {
       "harness": "machineroom",
@@ -448,6 +449,7 @@
     "name": "MachineRoom native 2",
     "harness": "MachineRoom",
     "model": "DeepSeek V4.1 Flash 1017 on OpenRouter",
+    "effort": "xhigh",
     "modelHint": "the testbench endpoint OpenRouter; the owner keeps the key in the testbench room, and only this model is allowed",
     "cli": {
       "harness": "machineroom",
@@ -470,6 +472,7 @@
     "name": "MachineRoom native 3",
     "harness": "MachineRoom",
     "model": "DeepSeek V4.1 Flash 1017 on OpenRouter",
+    "effort": "xhigh",
     "modelHint": "the testbench endpoint OpenRouter; the owner keeps the key in the testbench room, and only this model is allowed",
     "cli": {
       "harness": "machineroom",
@@ -492,6 +495,7 @@
     "name": "MachineRoom native 4",
     "harness": "MachineRoom",
     "model": "DeepSeek V4.1 Flash 1017 on OpenRouter",
+    "effort": "xhigh",
     "modelHint": "the testbench endpoint OpenRouter; the owner keeps the key in the testbench room, and only this model is allowed",
     "cli": {
       "harness": "machineroom",
