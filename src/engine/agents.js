@@ -10,7 +10,7 @@ import { CHILD_LIFE_MS, latestOpenCall } from '../model/state.js'
 import { AGENT_RING_BASE, AGENT_RING_GROW, AGENT_RING_MAX_OPACITY, AGENT_RING_MS, AGENT_RING_OPACITY_FLOOR, AGENT_RING_POOL, HUB_RADIUS, HUB_Y, ORCHESTRATOR_HOME, ORCHESTRATOR_LIFT, PARK_LIFT, RING_LEVEL_MAX, SWAY_LIFT, SWAY_RATE, SWAY_SCALE, danceEnvelope, hasSubs, isSessionReader, parkedKeysFor, readerAngles, readerPoint, ringDepth, ringLayout, ringPulse, sectorSlotAngles, sectorSubAngle, slotAngle, startDanceEnvelope, SUB_STAND_LIFT, topRingSeats, writeColor, writeOpacity } from './hub.js'
 import { INTERNET_RADIUS } from './internet.js'
 import { ORCHESTRATOR_PULSE_SCALE, ORCHESTRATOR_SHAPE, PREFERRED, PULSE_BANDS, PULSE_SCALE, SUB_PULSE_SCALE, bandForPoint, isOrchestrator, isSubOrchestrator, nextSpareShape, shapeGeometry, shapesFor, vertexOffset } from './shapes.js'
-import { GREEN, RED, TUNNEL_GREY, WEB, WHITE, YELLOW, agentColor, agentColors, cssColor, easeRate, lineMaterial, paintAgentColor, still, textSprite } from './sprites.js'
+import { GREEN, RED, TUNNEL_GREY, WEB, WHITE, YELLOW, agentColor, agentColors, cssColor, easeInOut, easeRate, lineMaterial, paintAgentColor, still, textSprite } from './sprites.js'
 import { linkOnPath } from './strings.js'
 
 const STYLE = {
@@ -69,6 +69,24 @@ export const SPINNER_PHASE = Math.PI
 export const SPINNER_SWEEP_SECONDS = 1
 export const SPINNER_RING_OPACITY = 0.22
 export const SPINNER_ARC_OPACITY = 0.95
+export const THINKING_LOOP_SECONDS = 8
+export const SPINNER_RING_BRIGHT_MAX = 1.5
+const SPINNER_REST_B_X = Math.PI / 2
+const FLIP_END = 0.5
+const FLIP_LAG = 0.08
+const FLIP_SPAN = FLIP_END - FLIP_LAG
+const DRIFT_END = 2.5
+const RISE_END = 3
+const GYRO_END = 5
+const BURST_END = 5.4
+const DRIFT_WOBBLE = (6 * Math.PI) / 180
+const RISE_TURN = Math.PI / 4
+const GYRO_TILT = (20 * Math.PI) / 180
+const GYRO_RAMP = 0.25
+const BURST_TURN = (120 * Math.PI) / 180
+const SETTLE_BREATHE = 0.06
+const FLIP_BRIGHT_BOOST = 0.35
+const BURST_BRIGHT_BOOST = SPINNER_RING_BRIGHT_MAX - 1
 
 const RUNNING_STATUSES = new Set(['working', 'running'])
 
@@ -130,6 +148,128 @@ export function thinkingArc(now, phase = 0, sweep = SPINNER_SWEEP_SECONDS, reduc
   const full = Math.PI * 2
   const angle = ((Number.isFinite(time) ? time : 0) / 1000 / seconds) * full + (Number.isFinite(offset) ? offset : 0)
   return ((angle % full) + full) % full
+}
+
+function flipEase(t) {
+  if (t <= 0) return 0
+  if (t >= 1) return 1
+  const w = t - 1
+  return 1 + 2.5 * w * w * w + 1.5 * w * w
+}
+
+function easeOutQuad(t) {
+  const u = Math.min(1, Math.max(0, t))
+  return 1 - (1 - u) * (1 - u)
+}
+
+function smoothBell(t) {
+  const s = Math.sin(Math.PI * Math.min(1, Math.max(0, t)))
+  return s * s
+}
+
+function gyroEnvelope(u) {
+  if (u <= 0 || u >= 1) return 0
+  if (u < GYRO_RAMP) return easeInOut(u / GYRO_RAMP)
+  if (u > 1 - GYRO_RAMP) return easeInOut((1 - u) / GYRO_RAMP)
+  return 1
+}
+
+export function thinkingPhase(key) {
+  const text = typeof key === 'string' ? key : String(key ?? '')
+  let hash = 2166136261
+  for (let index = 0; index < text.length; index += 1) {
+    hash ^= text.charCodeAt(index)
+    hash = Math.imul(hash, 16777619)
+  }
+  hash ^= hash >>> 16
+  hash = Math.imul(hash, 0x85ebca6b)
+  hash ^= hash >>> 13
+  hash = Math.imul(hash, 0xc2b2ae35)
+  hash ^= hash >>> 16
+  return (hash >>> 0) / 4294967296
+}
+
+export function thinkingRingPose(seconds, phase = 0, out = null) {
+  const pose = out ?? {}
+  const a = pose.a ?? (pose.a = { x: 0, y: 0, z: 0 })
+  const b = pose.b ?? (pose.b = { x: 0, y: 0, z: 0 })
+  const rawSeconds = Number(seconds)
+  const rawPhase = Number(phase)
+  const clock = Number.isFinite(rawSeconds) ? rawSeconds : 0
+  const offset = Number.isFinite(rawPhase) ? rawPhase : 0
+  const wrapped = (clock + offset * THINKING_LOOP_SECONDS) % THINKING_LOOP_SECONDS
+  const t = wrapped < 0 ? wrapped + THINKING_LOOP_SECONDS : wrapped
+
+  let scale = 1
+  let bright = 1
+
+  if (t < FLIP_END) {
+    const u = t / FLIP_END
+    const flipA = flipEase(t / FLIP_SPAN)
+    const flipB = flipEase((t - FLIP_LAG) / FLIP_SPAN)
+    a.x = (Math.PI / 2) * flipA
+    a.y = 0
+    a.z = 0
+    b.x = SPINNER_REST_B_X + (Math.PI / 2) * flipB
+    b.y = 0
+    b.z = 0
+    bright = 1 + FLIP_BRIGHT_BOOST * smoothBell(u)
+  } else if (t < DRIFT_END) {
+    const u = (t - FLIP_END) / (DRIFT_END - FLIP_END)
+    const turn = (Math.PI / 2) * easeInOut(u)
+    const wobble = DRIFT_WOBBLE * Math.sin(Math.PI * 2 * u)
+    a.x = Math.PI / 2 + wobble
+    a.y = turn
+    a.z = 0
+    b.x = SPINNER_REST_B_X + Math.PI / 2 - wobble
+    b.y = turn
+    b.z = 0
+  } else if (t < RISE_END) {
+    const u = (t - DRIFT_END) / (RISE_END - DRIFT_END)
+    const e = easeInOut(u)
+    const down = 1 - e
+    a.x = (Math.PI / 2) * down
+    a.y = Math.PI / 2 + RISE_TURN * e
+    a.z = 0
+    b.x = SPINNER_REST_B_X + (Math.PI / 2) * down
+    b.y = Math.PI / 2 - RISE_TURN * e
+    b.z = 0
+  } else if (t < GYRO_END) {
+    const u = (t - RISE_END) / (GYRO_END - RISE_END)
+    const env = gyroEnvelope(u)
+    const turn = -Math.PI * 2 * easeInOut(u)
+    const tilt = GYRO_TILT * env
+    a.x = tilt
+    a.y = Math.PI / 2 + RISE_TURN + turn
+    a.z = 0
+    b.x = SPINNER_REST_B_X + tilt
+    b.y = Math.PI / 2 - RISE_TURN - (Math.PI / 2) * env + turn
+    b.z = 0
+  } else if (t < BURST_END) {
+    const u = (t - GYRO_END) / (BURST_END - GYRO_END)
+    const e = easeOutQuad(u)
+    a.x = 0
+    a.y = Math.PI / 2 + RISE_TURN - Math.PI * 2
+    a.z = BURST_TURN * e
+    b.x = SPINNER_REST_B_X + BURST_TURN * e
+    b.y = Math.PI / 2 - RISE_TURN - Math.PI * 2
+    b.z = 0
+    bright = 1 + BURST_BRIGHT_BOOST * smoothBell(u)
+  } else {
+    const u = (t - BURST_END) / (THINKING_LOOP_SECONDS - BURST_END)
+    const rest = 1 - easeInOut(u)
+    a.x = 0
+    a.y = (Math.PI / 2 + RISE_TURN - Math.PI * 2) * rest
+    a.z = BURST_TURN * rest
+    b.x = SPINNER_REST_B_X + BURST_TURN * rest
+    b.y = (Math.PI / 2 - RISE_TURN - Math.PI * 2) * rest
+    b.z = 0
+    scale = 1 + SETTLE_BREATHE * smoothBell(u)
+  }
+
+  pose.scale = scale
+  pose.bright = bright
+  return pose
 }
 
 export const CALLOUT_CROWD_LIMIT = 4
@@ -834,20 +974,29 @@ function createSpinner(radius) {
   const group = new THREE.Group()
   const ringMaterial = lineMaterial(WHITE, SPINNER_RING_OPACITY)
   const arcMaterial = lineMaterial(WHITE, 0)
+  const planes = []
   const rings = []
   const arcs = []
   for (let index = 0; index < 2; index += 1) {
     const plane = new THREE.Group()
-    if (index === 1) plane.rotation.x = Math.PI / 2
+    plane.rotation.order = 'ZYX'
+    if (index === 1) plane.rotation.x = SPINNER_REST_B_X
     const ring = spinnerRing(radius, ringMaterial)
     const arc = spinnerArc(radius, arcMaterial)
     arc.visible = false
     plane.add(ring, arc)
     group.add(plane)
+    planes.push(plane)
     rings.push(ring)
     arcs.push(arc)
   }
-  return { group, rings, arcs, ringMaterial, arcMaterial }
+  return { group, planes, rings, arcs, ringMaterial, arcMaterial }
+}
+
+function resetSpinnerPose(spinner) {
+  spinner.planes[0].rotation.set(0, 0, 0)
+  spinner.planes[1].rotation.set(SPINNER_REST_B_X, 0, 0)
+  spinner.group.scale.setScalar(1)
 }
 
 export function createAgents(scene, roster, cssScene = null, options = {}) {
@@ -895,6 +1044,7 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
   const parentPlaceScratch = { x: 0, y: 0, z: 0, radius: 0 }
   const orbitPlaceScratch = { x: 0, y: 0, z: 0 }
   const calloutScratch = { list: [], keys: new Set(), kept: new Set(), ranked: [], pool: [] }
+  const ringPoseScratch = { a: { x: 0, y: 0, z: 0 }, b: { x: 0, y: 0, z: 0 }, scale: 1, bright: 1 }
 
   function setBands(levels) {
     pulseSource = levels && typeof levels.length === 'number' && levels.length > 0 ? levels : null
@@ -1163,6 +1313,7 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
       spinner,
       thinking: 0,
       thinkingSince: 0,
+      thinkingPhase: thinkingPhase(agent.key),
       beatRings,
       beatNext: 0,
       label,
@@ -1794,8 +1945,8 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
       }
       view.spinner.group.visible = true
       writeColor(view.spinner.ringMaterial, ringColor)
-      writeOpacity(view.spinner.ringMaterial, SPINNER_RING_OPACITY * ringFade)
       const showArcs = !drawing && view.thinking > 0.001
+      let ringBright = 1
       if (showArcs) {
         const spinnerFade = view.thinking * fade * opacityFactor
         writeColor(view.spinner.arcMaterial, WHITE)
@@ -1803,9 +1954,25 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
         const arc = thinkingArc(now, 0, SPINNER_SWEEP_SECONDS, isStill)
         view.spinner.arcs[0].rotation.z = arc
         view.spinner.arcs[1].rotation.z = arc + SPINNER_PHASE
+        if (isStill) {
+          resetSpinnerPose(view.spinner)
+        } else {
+          const pose = thinkingRingPose(now / 1000, view.thinkingPhase, ringPoseScratch)
+          const blend = view.thinking
+          view.spinner.planes[0].rotation.set(pose.a.x * blend, pose.a.y * blend, pose.a.z * blend)
+          view.spinner.planes[1].rotation.set(
+            SPINNER_REST_B_X + (pose.b.x - SPINNER_REST_B_X) * blend,
+            pose.b.y * blend,
+            pose.b.z * blend
+          )
+          view.spinner.group.scale.setScalar(1 + (pose.scale - 1) * blend)
+          ringBright = 1 + (pose.bright - 1) * blend
+        }
       } else {
         writeOpacity(view.spinner.arcMaterial, 0)
+        resetSpinnerPose(view.spinner)
       }
+      writeOpacity(view.spinner.ringMaterial, SPINNER_RING_OPACITY * ringBright * ringFade)
       for (let index = 0; index < view.spinner.arcs.length; index += 1) {
         view.spinner.arcs[index].visible = showArcs
       }
@@ -2037,6 +2204,7 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
       view.thinking = 0
       view.thinkingSince = 0
       view.spinner.group.visible = true
+      resetSpinnerPose(view.spinner)
       for (const arc of view.spinner.arcs) arc.visible = false
       writeOpacity(view.spinner.arcMaterial, 0)
       swayTarget = 0
