@@ -127,6 +127,79 @@ export function thinkingArc(now, phase = 0, sweep = SPINNER_SWEEP_SECONDS, reduc
 
 export const CALLOUT_CROWD_LIMIT = 4
 export const CALLOUT_RECENT_KEEP = 2
+export const CALLOUT_OUT = 220
+export const CALLOUT_RISE = 40
+const CALLOUT_CENTER_RADIUS = 1
+const CALLOUT_CENTER_SIDE = 140
+const CALLOUT_CENTER_UP = 180
+const CALLOUT_HALF_WIDTH = 90
+const CALLOUT_COMPACT_HALF_WIDTH = 55
+const CALLOUT_CONSOLE_HALF_WIDTH = 110
+const CALLOUT_HALF_HEIGHT = 26
+const CALLOUT_COMPACT_HALF_HEIGHT = 12
+const CALLOUT_CONSOLE_ROW_HEIGHT = 16
+
+export function calloutPoint(agentPosition, out = {}, distance = CALLOUT_OUT, center = null) {
+  const point = out ?? {}
+  const ax = Number.isFinite(Number(agentPosition?.x)) ? Number(agentPosition.x) : 0
+  const ay = Number.isFinite(Number(agentPosition?.y)) ? Number(agentPosition.y) : 0
+  const az = Number.isFinite(Number(agentPosition?.z)) ? Number(agentPosition.z) : 0
+  const radial = Math.hypot(ax, az)
+  if (radial <= CALLOUT_CENTER_RADIUS) {
+    const right = center?.right
+    const rx = Number.isFinite(Number(right?.x)) ? Number(right.x) : 1
+    const ry = Number.isFinite(Number(right?.y)) ? Number(right.y) : 0
+    const rz = Number.isFinite(Number(right?.z)) ? Number(right.z) : 0
+    const up = center?.up
+    const ux = Number.isFinite(Number(up?.x)) ? Number(up.x) : 0
+    const uy = Number.isFinite(Number(up?.y)) ? Number(up.y) : 1
+    const uz = Number.isFinite(Number(up?.z)) ? Number(up.z) : 0
+    const side = center?.side === 1 ? 1 : -1
+    const lift = Number.isFinite(Number(center?.lift)) ? Number(center.lift) : 0
+    const sideOffset = side * CALLOUT_CENTER_SIDE
+    const upOffset = CALLOUT_CENTER_UP + lift
+    point.x = ax + rx * sideOffset + ux * upOffset
+    point.y = ay + ry * sideOffset + uy * upOffset
+    point.z = az + rz * sideOffset + uz * upOffset
+    return point
+  }
+  const reach = Number.isFinite(Number(distance)) ? Number(distance) : CALLOUT_OUT
+  const scale = reach / radial
+  point.x = ax + ax * scale
+  point.y = ay + CALLOUT_RISE
+  point.z = az + az * scale
+  return point
+}
+
+export function calloutEdgePoint(agentPosition, boxPosition, right, up, halfWidth, halfHeight, out = {}) {
+  const point = out ?? {}
+  const rx = Number.isFinite(Number(right?.x)) ? Number(right.x) : 1
+  const ry = Number.isFinite(Number(right?.y)) ? Number(right.y) : 0
+  const rz = Number.isFinite(Number(right?.z)) ? Number(right.z) : 0
+  const ux = Number.isFinite(Number(up?.x)) ? Number(up.x) : 0
+  const uy = Number.isFinite(Number(up?.y)) ? Number(up.y) : 1
+  const uz = Number.isFinite(Number(up?.z)) ? Number(up.z) : 0
+  const vx = agentPosition.x - boxPosition.x
+  const vy = agentPosition.y - boxPosition.y
+  const vz = agentPosition.z - boxPosition.z
+  const dx = vx * rx + vy * ry + vz * rz
+  const dy = vx * ux + vy * uy + vz * uz
+  const hw = Math.max(0, Number(halfWidth) || 0)
+  const hh = Math.max(0, Number(halfHeight) || 0)
+  const tx = Math.abs(dx) > 1e-6 ? hw / Math.abs(dx) : Infinity
+  const ty = Math.abs(dy) > 1e-6 ? hh / Math.abs(dy) : Infinity
+  const step = Math.min(1, tx, ty)
+  if (!Number.isFinite(step) || step <= 0) {
+    point.x = boxPosition.x
+    point.y = boxPosition.y
+    point.z = boxPosition.z
+    return point
+  }
+  point.x = boxPosition.x + rx * (dx * step) + ux * (dy * step)
+  point.y = boxPosition.y + ry * (dx * step) + uy * (dy * step)
+  point.z = boxPosition.z + rz * (dx * step) + uz * (dy * step)
+  return point
+}
 
 export function danceScale(pulse, orchestrator = false) {
   const value = Math.min(1, Math.max(0, Number(pulse) || 0))
@@ -621,12 +694,19 @@ const chipNear = new THREE.Vector3()
 const traceEnd = new THREE.Vector3()
 const webEdgePoint = new THREE.Vector3()
 const calloutPos = new THREE.Vector3()
-const camUp = new THREE.Vector3()
+const calloutEdge = new THREE.Vector3()
+const camUp = new THREE.Vector3(0, 1, 0)
+const calloutCenter = { right: null, up: camUp, side: -1, lift: 0 }
 const rotMatrix = new THREE.Matrix4()
 
-function makeCallout(agentName) {
+function makeCallout(agentName, key, onPick) {
   const element = document.createElement('div')
   element.className = 'mr-callout'
+  if (element.dataset) element.dataset.agent = key
+  if (typeof element.addEventListener === 'function') {
+    element.addEventListener('pointerdown', (event) => event?.stopPropagation?.())
+    element.addEventListener('click', () => onPick?.(key))
+  }
 
   const title = document.createElement('div')
   title.className = 'mr-callout-title'
@@ -638,11 +718,30 @@ function makeCallout(agentName) {
   const cmd = document.createElement('div')
   cmd.className = 'mr-callout-cmd'
 
-  element.append(title, task, cmd)
+  const consoleBlock = document.createElement('div')
+  consoleBlock.className = 'mr-callout-console'
+  consoleBlock.hidden = true
+  consoleBlock.style.display = 'none'
+
+  const consoleLink = document.createElement('a')
+  consoleLink.className = 'mr-term-console-link'
+  consoleLink.target = '_blank'
+  consoleLink.rel = 'noopener noreferrer'
+  consoleLink.hidden = true
+  consoleLink.style.display = 'none'
+  const stopLink = (event) => event?.stopPropagation?.()
+  consoleLink.onclick = stopLink
+  if (typeof consoleLink.addEventListener === 'function') consoleLink.addEventListener('click', stopLink)
+
+  const consoleBody = document.createElement('div')
+  consoleBody.className = 'mr-callout-console-body'
+  consoleBlock.append(consoleLink, consoleBody)
+
+  element.append(title, task, cmd, consoleBlock)
 
   const object = new CSS3DObject(element)
   object.visible = false
-  return { element, title, task, cmd, object }
+  return { element, title, task, cmd, consoleBlock, consoleLink, consoleBody, consoleLines: [], object }
 }
 
 function lineBetween(material) {
@@ -731,6 +830,12 @@ function createSpinner(radius) {
 
 export function createAgents(scene, roster, cssScene = null, options = {}) {
   const onRemove = typeof options.onRemove === 'function' ? options.onRemove : null
+  const onPick = typeof options.onPick === 'function' ? options.onPick : null
+  let currentTerminals = null
+  const pickAgent = (key) => {
+    if (onPick) onPick(key)
+    else currentTerminals?.pick?.(key)
+  }
   const views = new Map()
   const pickables = []
   let synced = false
@@ -1002,7 +1107,11 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
       : null
     if (orchestratorLink) orchestratorLink.renderOrder = -1
 
-    const callout = makeCallout(currentLabels && parentKey === null ? labelFor(agent.key, currentLabels) ?? agent.key : agent.name)
+    const callout = makeCallout(
+      currentLabels && parentKey === null ? labelFor(agent.key, currentLabels) ?? agent.key : agent.name,
+      agent.key,
+      pickAgent
+    )
     const calloutColor = cssColor(color)
     if (calloutColor) paintAgentColor(callout.element, calloutColor)
     const calloutLine = lineBetween(lineMaterial(WHITE, 0.3))
@@ -1070,6 +1179,12 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
       doneAt: 0,
       busySince: 0,
       calloutCompact: false,
+      calloutClass: 'mr-callout',
+      calloutTitle: '',
+      calloutFade: '',
+      calloutConsoleShown: false,
+      calloutConsoleData: null,
+      calloutConsoleVersion: -1,
       calloutColor: calloutColor ?? null,
       style: 'idle',
       presence: orchestrator ? 1 : 0,
@@ -1454,7 +1569,41 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
     }
   }
 
+  function paintCalloutConsole(view, data) {
+    const { callout } = view
+    const version = typeof data.version === 'number' ? data.version : null
+    if (view.calloutConsoleData === data && version !== null && view.calloutConsoleVersion === version) return
+    view.calloutConsoleData = data
+    view.calloutConsoleVersion = version ?? -1
+    const lines = Array.isArray(data.rows) ? data.rows : []
+    while (callout.consoleLines.length < lines.length) {
+      const row = document.createElement('div')
+      row.className = 'mr-callout-console-line'
+      callout.consoleBody.append(row)
+      callout.consoleLines.push(row)
+    }
+    while (callout.consoleLines.length > lines.length) callout.consoleLines.pop()?.remove?.()
+    for (let index = 0; index < lines.length; index += 1) {
+      const line = lines[index]
+      const row = callout.consoleLines[index]
+      row.className = `mr-callout-console-line is-${line.tone ?? 'normal'}`
+      row.textContent = line.text
+    }
+    const address = data.address ?? null
+    const linkUrl = data.url ?? null
+    if (callout.consoleLink.hidden !== !linkUrl) callout.consoleLink.hidden = !linkUrl
+    callout.consoleLink.style.display = linkUrl ? '' : 'none'
+    if (linkUrl) {
+      if (callout.consoleLink.textContent !== address) callout.consoleLink.textContent = address
+      const currentHref = typeof callout.consoleLink.getAttribute === 'function'
+        ? callout.consoleLink.getAttribute('href')
+        : callout.consoleLink.href
+      if (currentHref !== linkUrl) callout.consoleLink.href = linkUrl
+    }
+  }
+
   function update(state, delta, now, world, terminals, callout = null) {
+    currentTerminals = terminals ?? null
     lastLaneTop = laneStarterTop({ agents: state.agents, at: state.latest }) || 'orchestrator'
     const nextTop = isSessionTopKey(chosenTop)
       ? topKeyFor({ chosenTop, laneTop: lastLaneTop, viewKeys: viewKeySet() })
@@ -1654,6 +1803,7 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
       view.shape.scale.setScalar(1 + pulse)
       applyPulse(view, delta, isStill)
 
+      const consoleData = entry ? terminals?.consoleFor?.(view.key, entry, now) ?? null : null
       const lastLine = entry?.lines?.[entry.lines.length - 1]
       const lastFailed = lastLine?.tone === 'error'
       const failedFresh = status === 'error' && now - view.doneAt < DONE_GLOW_MS
@@ -1668,9 +1818,13 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
       } else if (fresh) {
         calloutTone = 'done'
         calloutText = 'FINISHED'
+      } else if (consoleData) {
+        calloutTone = status === 'error' || lastFailed ? 'error' : status === 'done' ? 'done' : 'working'
+        calloutText = entry?.label || ''
       }
 
       const compact = Boolean(working) && !full.has(view.key)
+      const showConsole = Boolean(consoleData) && !compact
       const calloutColor = cssColor(view.color)
       if (calloutColor && view.calloutColor !== calloutColor) {
         view.calloutColor = calloutColor
@@ -1681,12 +1835,30 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
         view.callout.task.style.display = compact ? 'none' : ''
         view.callout.cmd.style.display = compact ? 'none' : ''
       }
+      if (view.calloutConsoleShown !== showConsole) {
+        view.calloutConsoleShown = showConsole
+        view.callout.consoleBlock.hidden = !showConsole
+        view.callout.consoleBlock.style.display = showConsole ? '' : 'none'
+      }
 
       if (calloutTone && fade > 0.01) {
         view.callout.object.visible = true
-        if (view.calloutTone !== calloutTone) {
-          view.calloutTone = calloutTone
-          view.callout.element.className = `mr-callout is-${calloutTone}`
+        if (showConsole) paintCalloutConsole(view, consoleData)
+        const address = showConsole ? consoleData.address ?? null : null
+        const calloutClass = `mr-callout is-${calloutTone}${address ? ' is-address' : ''}`
+        if (view.calloutClass !== calloutClass) {
+          view.calloutClass = calloutClass
+          view.callout.element.className = calloutClass
+        }
+        const calloutTitle = address ?? ''
+        if (view.calloutTitle !== calloutTitle) {
+          view.calloutTitle = calloutTitle
+          view.callout.element.title = calloutTitle
+        }
+        const calloutFade = fade >= 0.999 ? '' : String(Math.max(0, fade))
+        if (view.calloutFade !== calloutFade) {
+          view.calloutFade = calloutFade
+          view.callout.element.style.opacity = calloutFade
         }
         const taskText = currentTasks?.get(view.key) ?? ''
         if (view.callout.task.textContent !== taskText) {
@@ -1696,14 +1868,26 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
           view.callout.cmd.textContent = calloutText
         }
 
-        const calloutSide = -view.chipSide
-        calloutPos.copy(view.group.position)
-        calloutPos.addScaledVector(world.right, calloutSide * 140)
-        calloutPos.addScaledVector(camUp, 180 + (view.orchestrator ? nameLift : 0))
+        calloutCenter.right = world.right
+        calloutCenter.up = camUp
+        calloutCenter.side = -view.chipSide
+        calloutCenter.lift = view.orchestrator ? nameLift : 0
+        calloutPoint(view.group.position, calloutPos, CALLOUT_OUT, calloutCenter)
         view.callout.object.position.copy(calloutPos)
         view.callout.object.quaternion.setFromRotationMatrix(rotMatrix)
 
-        setEnds(view.calloutLine, view.group.position, calloutPos)
+        const halfWidth = compact
+          ? CALLOUT_COMPACT_HALF_WIDTH
+          : showConsole
+            ? CALLOUT_CONSOLE_HALF_WIDTH
+            : CALLOUT_HALF_WIDTH
+        const halfHeight = compact
+          ? CALLOUT_COMPACT_HALF_HEIGHT
+          : showConsole
+            ? CALLOUT_HALF_HEIGHT + ((consoleData.rows?.length ?? 0) * CALLOUT_CONSOLE_ROW_HEIGHT) / 2 + (consoleData.url ? 8 : 0)
+            : CALLOUT_HALF_HEIGHT
+        calloutEdgePoint(view.group.position, calloutPos, world.right, camUp, halfWidth, halfHeight, calloutEdge)
+        setEnds(view.calloutLine, view.group.position, calloutEdge)
         writeColor(view.calloutLine.material, WHITE)
         view.calloutLine.visible = true
       } else {
@@ -1865,6 +2049,7 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
   function dispose() {
     for (const view of [...views.values()]) removeView(view)
     pendingChipRemovals.clear()
+    currentTerminals = null
     views.clear()
     pickables.length = 0
   }
