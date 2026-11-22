@@ -804,6 +804,36 @@ describe('the control client orchestrator routes', () => {
     ])
   })
 
+  it('keeps deepest, deepestAgents and rings on a 409 error from setAgentDepth', async () => {
+    const client = createClient({
+      baseUrl: 'http://127.0.0.1:9',
+      fetchImpl: async () => ({
+        ok: false,
+        status: 409,
+        json: async () => ({
+          error: 'Rings 1 and 2 hold 4 agents. A depth of 1 hides them until you raise it again.',
+          deepest: 2,
+          deepestAgents: 1,
+          rings: [
+            { ring: 1, agents: 3 },
+            { ring: 2, agents: 1 },
+            { ring: -1, agents: 2 },
+            null,
+          ],
+        }),
+      }),
+    })
+    const failure = await client.setAgentDepth({ limit: 1, unlocked: false }).catch((error) => error)
+    expect(failure).toBeInstanceOf(Error)
+    expect(failure.message).toBe('Rings 1 and 2 hold 4 agents. A depth of 1 hides them until you raise it again.')
+    expect(failure.deepest).toBe(2)
+    expect(failure.deepestAgents).toBe(1)
+    expect(failure.rings).toEqual([
+      { ring: 1, agents: 3 },
+      { ring: 2, agents: 1 },
+    ])
+  })
+
   it('sends /api/control/runs/stop with lane, startedAt and confirmed', async () => {
     const { calls, client } = recorder({ ok: true })
     await client.stopRun({ lane: 'opencode', startedAt: '2026-10-24T12:00:00.000Z' })

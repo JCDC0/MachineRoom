@@ -14,10 +14,30 @@ export const CONFIRM_DEPTH_PROBLEM = 'Confirm the subagent depth first.'
 export const LIMIT_DEPTH_PROBLEM = 'The subagent depth must be 1, 2, 3 or 4.'
 export const UNLOCK_DEPTH_PROBLEM = 'The subagent depth can be 3 or 4 only after an unlock.'
 
-export function occupiedDepthProblem(ring, count, limit) {
-  const agents = count === 1 ? '1 agent' : `${count} agents`
-  const pronoun = count === 1 ? 'it' : 'them'
-  return `Ring ${ring} holds ${agents}. A depth of ${limit} hides ${pronoun} until you raise it again.`
+export function occupiedDepthProblem(ringOrRings, countOrLimit, maybeLimit) {
+  if (Array.isArray(ringOrRings)) {
+    const limit = countOrLimit
+    const byRing = new Map()
+    for (const item of ringOrRings) {
+      if (!item || !Number.isInteger(item.ring) || item.ring < limit) continue
+      if (!Number.isInteger(item.agents) || item.agents <= 0) continue
+      byRing.set(item.ring, (byRing.get(item.ring) ?? 0) + item.agents)
+    }
+    const occupied = [...byRing.entries()].sort((a, b) => a[0] - b[0])
+    if (occupied.length === 0) return ''
+    if (occupied.length === 1) {
+      return occupiedDepthProblem(occupied[0][0], occupied[0][1], limit)
+    }
+    const total = occupied.reduce((sum, [, count]) => sum + count, 0)
+    const numbers = occupied.map(([ring]) => ring)
+    const list = `${numbers.slice(0, -1).join(', ')} and ${numbers[numbers.length - 1]}`
+    const agents = total === 1 ? '1 agent' : `${total} agents`
+    const pronoun = total === 1 ? 'it' : 'them'
+    return `Rings ${list} hold ${agents}. A depth of ${limit} hides ${pronoun} until you raise it again.`
+  }
+  const agents = countOrLimit === 1 ? '1 agent' : `${countOrLimit} agents`
+  const pronoun = countOrLimit === 1 ? 'it' : 'them'
+  return `Ring ${ringOrRings} holds ${agents}. A depth of ${maybeLimit} hides ${pronoun} until you raise it again.`
 }
 
 export function deepestRing(tree) {
@@ -25,12 +45,15 @@ export function deepestRing(tree) {
   const counts = new Map()
   let deepest = 0
   for (const node of nodes) {
-    if (!node || (node.kind !== 'lane' && node.kind !== 'sub')) continue
+    if (!node || (node.kind !== 'lane' && node.kind !== 'sub') || !node.active) continue
     const ring = levelOf(nodes, node)
     if (ring > deepest) deepest = ring
     counts.set(ring, (counts.get(ring) ?? 0) + 1)
   }
-  return { deepest, deepestAgents: counts.get(deepest) ?? 0 }
+  const rings = [...counts.entries()]
+    .sort((a, b) => a[0] - b[0])
+    .map(([ring, agents]) => ({ ring, agents }))
+  return { deepest, deepestAgents: counts.get(deepest) ?? 0, rings }
 }
 
 export function agentDepthFileFor(runsFolder) {
@@ -141,7 +164,7 @@ export function createAgentDepthApi(options = {}) {
     const info = ringInfo()
     if (body.limit < current.limit && body.limit <= info.deepest && body.hideOccupied !== true) {
       sendJson(req, res, 409, {
-        error: occupiedDepthProblem(info.deepest, info.deepestAgents, body.limit),
+        error: occupiedDepthProblem(info.rings, body.limit),
         ...info,
       })
       return true

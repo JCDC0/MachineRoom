@@ -132,7 +132,7 @@ describe('GET and POST /api/agent-depth', () => {
     const { url } = await startBridge()
     const answer = await request(`${url}/api/agent-depth`, { origin: '' })
     expect(answer.status).toBe(200)
-    expect(answer.body).toEqual({ limit: AGENT_DEPTH_DEFAULT, unlocked: false, deepest: 0, deepestAgents: 0 })
+    expect(answer.body).toEqual({ limit: AGENT_DEPTH_DEFAULT, unlocked: false, deepest: 0, deepestAgents: 0, rings: [] })
   })
 
   it('refuses a write without a page Origin', async () => {
@@ -189,42 +189,65 @@ describe('GET and POST /api/agent-depth', () => {
       body: { limit: 3, unlocked: true, confirmed: true },
     })
     expect(saved.status).toBe(200)
-    expect(saved.body).toEqual({ ok: true, limit: 3, unlocked: true, deepest: 0, deepestAgents: 0 })
+    expect(saved.body).toEqual({ ok: true, limit: 3, unlocked: true, deepest: 0, deepestAgents: 0, rings: [] })
     expect(JSON.parse(readFileSync(agentDepthFileFor(runsFolder), 'utf8'))).toEqual({ limit: 3, unlocked: true })
 
     const read = await request(`${url}/api/agent-depth`, { origin: '' })
-    expect(read.body).toEqual({ limit: 3, unlocked: true, deepest: 0, deepestAgents: 0 })
+    expect(read.body).toEqual({ limit: 3, unlocked: true, deepest: 0, deepestAgents: 0, rings: [] })
 
     const deeper = await request(`${url}/api/agent-depth`, {
       method: 'POST',
       body: { limit: 4, unlocked: true, confirmed: true },
     })
     expect(deeper.status).toBe(200)
-    expect(deeper.body).toEqual({ ok: true, limit: 4, unlocked: true, deepest: 0, deepestAgents: 0 })
+    expect(deeper.body).toEqual({ ok: true, limit: 4, unlocked: true, deepest: 0, deepestAgents: 0, rings: [] })
 
     const locked = await request(`${url}/api/agent-depth`, {
       method: 'POST',
       body: { limit: AGENT_DEPTH_DEFAULT, unlocked: false, confirmed: true },
     })
     expect(locked.status).toBe(200)
-    expect(locked.body).toEqual({ ok: true, limit: AGENT_DEPTH_DEFAULT, unlocked: false, deepest: 0, deepestAgents: 0 })
+    expect(locked.body).toEqual({ ok: true, limit: AGENT_DEPTH_DEFAULT, unlocked: false, deepest: 0, deepestAgents: 0, rings: [] })
   })
 
-  it('answers deepest 0 when only the main orchestrator lanes exist', async () => {
+  it('answers deepest 0 when only the main orchestrator lanes exist and skips off lanes', async () => {
     const { url } = await startBridge({ withLanes: true })
+    const inactive = await request(`${url}/api/agent-depth`, { origin: '' })
+    expect(inactive.status).toBe(200)
+    expect(inactive.body).toEqual({ limit: AGENT_DEPTH_DEFAULT, unlocked: false, deepest: 0, deepestAgents: 0, rings: [] })
+
+    const turnedOn = await request(`${url}/api/lanes/active`, {
+      method: 'POST',
+      body: { lanes: ['opencode', 'opencode2', 'claude'], confirmed: true },
+    })
+    expect(turnedOn.status).toBe(200)
+
     const answer = await request(`${url}/api/agent-depth`, { origin: '' })
     expect(answer.status).toBe(200)
-    expect(answer.body).toEqual({ limit: AGENT_DEPTH_DEFAULT, unlocked: false, deepest: 0, deepestAgents: 3 })
+    expect(answer.body).toEqual({
+      limit: AGENT_DEPTH_DEFAULT,
+      unlocked: false,
+      deepest: 0,
+      deepestAgents: 3,
+      rings: [{ ring: 0, agents: 3 }],
+    })
 
     const lowered = await request(`${url}/api/agent-depth`, {
       method: 'POST',
       body: { limit: 1, unlocked: false, confirmed: true },
     })
     expect(lowered.status).toBe(200)
-    expect(lowered.body).toEqual({ ok: true, limit: 1, unlocked: false, deepest: 0, deepestAgents: 3 })
+    expect(lowered.body).toEqual({
+      ok: true,
+      limit: 1,
+      unlocked: false,
+      deepest: 0,
+      deepestAgents: 3,
+      rings: [{ ring: 0, agents: 3 }],
+    })
   })
 
-  it('answers deepest and refuses a lower depth that hides an occupied ring unless hideOccupied is true', async () => {
+  it('counts only active agents on an occupied ring and refuses a lower depth unless hideOccupied is true', async () => {
     const { bridge, url, runsFolder } = await startBridge({ withLanes: true })
     const result = bridge.orchestrators().ladderChange(
       {
@@ -249,9 +272,43 @@ describe('GET and POST /api/agent-depth', () => {
     )
     expect(result.status).toBe(200)
 
+    const onlySub = await request(`${url}/api/agent-depth`, { origin: '' })
+    expect(onlySub.status).toBe(200)
+    expect(onlySub.body).toEqual({
+      limit: AGENT_DEPTH_DEFAULT,
+      unlocked: false,
+      deepest: 1,
+      deepestAgents: 1,
+      rings: [{ ring: 1, agents: 1 }],
+    })
+
+    const refusedWithOffLanes = await request(`${url}/api/agent-depth`, {
+      method: 'POST',
+      body: { limit: 1, unlocked: false, confirmed: true },
+    })
+    expect(refusedWithOffLanes.status).toBe(409)
+    expect(refusedWithOffLanes.body).toEqual({
+      error: 'Ring 1 holds 1 agent. A depth of 1 hides it until you raise it again.',
+      deepest: 1,
+      deepestAgents: 1,
+      rings: [{ ring: 1, agents: 1 }],
+    })
+
+    const active = await request(`${url}/api/lanes/active`, {
+      method: 'POST',
+      body: { lanes: ['opencode', 'opencode2'], confirmed: true },
+    })
+    expect(active.status).toBe(200)
+
     const before = await request(`${url}/api/agent-depth`, { origin: '' })
     expect(before.status).toBe(200)
-    expect(before.body).toEqual({ limit: AGENT_DEPTH_DEFAULT, unlocked: false, deepest: 1, deepestAgents: 3 })
+    expect(before.body).toEqual({
+      limit: AGENT_DEPTH_DEFAULT,
+      unlocked: false,
+      deepest: 1,
+      deepestAgents: 3,
+      rings: [{ ring: 1, agents: 3 }],
+    })
 
     const refused = await request(`${url}/api/agent-depth`, {
       method: 'POST',
@@ -262,6 +319,7 @@ describe('GET and POST /api/agent-depth', () => {
       error: occupiedDepthProblem(1, 3, 1),
       deepest: 1,
       deepestAgents: 3,
+      rings: [{ ring: 1, agents: 3 }],
     })
     expect(refused.body.error).toBe('Ring 1 holds 3 agents. A depth of 1 hides them until you raise it again.')
     expect(readAgentDepth(runsFolder)).toEqual({ limit: AGENT_DEPTH_DEFAULT, unlocked: false })
@@ -271,7 +329,14 @@ describe('GET and POST /api/agent-depth', () => {
       body: { limit: 1, unlocked: false, confirmed: true, hideOccupied: true },
     })
     expect(forced.status).toBe(200)
-    expect(forced.body).toEqual({ ok: true, limit: 1, unlocked: false, deepest: 1, deepestAgents: 3 })
+    expect(forced.body).toEqual({
+      ok: true,
+      limit: 1,
+      unlocked: false,
+      deepest: 1,
+      deepestAgents: 3,
+      rings: [{ ring: 1, agents: 3 }],
+    })
     expect(readAgentDepth(runsFolder)).toEqual({ limit: 1, unlocked: false })
 
     const unlockedAtOne = await request(`${url}/api/agent-depth`, {
@@ -279,10 +344,17 @@ describe('GET and POST /api/agent-depth', () => {
       body: { limit: 1, unlocked: true, confirmed: true },
     })
     expect(unlockedAtOne.status).toBe(200)
-    expect(unlockedAtOne.body).toEqual({ ok: true, limit: 1, unlocked: true, deepest: 1, deepestAgents: 3 })
+    expect(unlockedAtOne.body).toEqual({
+      ok: true,
+      limit: 1,
+      unlocked: true,
+      deepest: 1,
+      deepestAgents: 3,
+      rings: [{ ring: 1, agents: 3 }],
+    })
   })
 
-  it('tracks a deeper nested sub on ring 2 and allows lowering to 3 without hideOccupied', async () => {
+  it('tracks nested subs across rings and names every hidden ring on a multi-ring drop', async () => {
     const { bridge, url, runsFolder } = await startBridge({ withLanes: true })
     saveAgentDepth(runsFolder, { limit: 4, unlocked: true })
     const result = bridge.orchestrators().ladderChange(
@@ -296,7 +368,7 @@ describe('GET and POST /api/agent-depth', () => {
               name: 'Frontend',
               harness: 'opencode',
               model: 'opencode-go/deepseek-v4.1-flash',
-              lanes: ['opencode'],
+              lanes: ['opencode', 'opencode2'],
               scope: ['src/ui/**'],
               restricted: false,
               setBy: 'owner',
@@ -319,16 +391,39 @@ describe('GET and POST /api/agent-depth', () => {
     )
     expect(result.status).toBe(200)
 
+    const active = await request(`${url}/api/lanes/active`, {
+      method: 'POST',
+      body: { lanes: ['opencode', 'opencode2'], confirmed: true },
+    })
+    expect(active.status).toBe(200)
+
+    const expectedRings = [
+      { ring: 1, agents: 3 },
+      { ring: 2, agents: 1 },
+    ]
+
     const before = await request(`${url}/api/agent-depth`, { origin: '' })
     expect(before.status).toBe(200)
-    expect(before.body).toEqual({ limit: 4, unlocked: true, deepest: 2, deepestAgents: 1 })
+    expect(before.body).toEqual({ limit: 4, unlocked: true, deepest: 2, deepestAgents: 1, rings: expectedRings })
+
+    const toOne = await request(`${url}/api/agent-depth`, {
+      method: 'POST',
+      body: { limit: 1, unlocked: false, confirmed: true },
+    })
+    expect(toOne.status).toBe(409)
+    expect(toOne.body).toEqual({
+      error: 'Rings 1 and 2 hold 4 agents. A depth of 1 hides them until you raise it again.',
+      deepest: 2,
+      deepestAgents: 1,
+      rings: expectedRings,
+    })
 
     const toThree = await request(`${url}/api/agent-depth`, {
       method: 'POST',
       body: { limit: 3, unlocked: true, confirmed: true },
     })
     expect(toThree.status).toBe(200)
-    expect(toThree.body).toEqual({ ok: true, limit: 3, unlocked: true, deepest: 2, deepestAgents: 1 })
+    expect(toThree.body).toEqual({ ok: true, limit: 3, unlocked: true, deepest: 2, deepestAgents: 1, rings: expectedRings })
 
     const toTwo = await request(`${url}/api/agent-depth`, {
       method: 'POST',
@@ -339,6 +434,7 @@ describe('GET and POST /api/agent-depth', () => {
       error: 'Ring 2 holds 1 agent. A depth of 2 hides it until you raise it again.',
       deepest: 2,
       deepestAgents: 1,
+      rings: expectedRings,
     })
 
     const forced = await request(`${url}/api/agent-depth`, {
@@ -346,27 +442,164 @@ describe('GET and POST /api/agent-depth', () => {
       body: { limit: 2, unlocked: false, confirmed: true, hideOccupied: true },
     })
     expect(forced.status).toBe(200)
-    expect(forced.body).toEqual({ ok: true, limit: 2, unlocked: false, deepest: 2, deepestAgents: 1 })
+    expect(forced.body).toEqual({ ok: true, limit: 2, unlocked: false, deepest: 2, deepestAgents: 1, rings: expectedRings })
   })
 
   it('computes deepestRing and occupiedDepthProblem directly from a family tree', () => {
-    expect(deepestRing([])).toEqual({ deepest: 0, deepestAgents: 0 })
+    expect(deepestRing([])).toEqual({ deepest: 0, deepestAgents: 0, rings: [] })
     expect(
       deepestRing([
-        { id: 'orchestrator', kind: 'orchestrator', parent: null },
-        { id: 'opencode', kind: 'lane', parent: 'orchestrator' },
+        { id: 'orchestrator', kind: 'orchestrator', parent: null, active: true },
+        { id: 'opencode', kind: 'lane', parent: 'orchestrator', active: true },
+        { id: 'off-lane', kind: 'lane', parent: 'orchestrator', active: false },
       ])
-    ).toEqual({ deepest: 0, deepestAgents: 1 })
+    ).toEqual({ deepest: 0, deepestAgents: 1, rings: [{ ring: 0, agents: 1 }] })
     expect(
       deepestRing([
-        { id: 'orchestrator', kind: 'orchestrator', parent: null },
-        { id: 'sub1', kind: 'sub', parent: 'orchestrator' },
-        { id: 'lane1', kind: 'lane', parent: 'sub1' },
-        { id: 'sub2', kind: 'sub', parent: 'sub1' },
+        { id: 'orchestrator', kind: 'orchestrator', parent: null, active: true },
+        { id: 'sub1', kind: 'sub', parent: 'orchestrator', active: true },
+        { id: 'lane1', kind: 'lane', parent: 'sub1', active: true },
+        { id: 'lane2', kind: 'lane', parent: 'sub1', active: false },
+        { id: 'sub2', kind: 'sub', parent: 'sub1', active: true },
+        { id: 'sub3', kind: 'sub', parent: 'sub2', active: false },
       ])
-    ).toEqual({ deepest: 2, deepestAgents: 1 })
+    ).toEqual({
+      deepest: 2,
+      deepestAgents: 1,
+      rings: [
+        { ring: 1, agents: 2 },
+        { ring: 2, agents: 1 },
+      ],
+    })
     expect(occupiedDepthProblem(1, 1, 1)).toBe('Ring 1 holds 1 agent. A depth of 1 hides it until you raise it again.')
     expect(occupiedDepthProblem(2, 3, 2)).toBe('Ring 2 holds 3 agents. A depth of 2 hides them until you raise it again.')
+    expect(
+      occupiedDepthProblem(
+        [
+          { ring: 0, agents: 2 },
+          { ring: 1, agents: 3 },
+          { ring: 2, agents: 1 },
+        ],
+        1
+      )
+    ).toBe('Rings 1 and 2 hold 4 agents. A depth of 1 hides them until you raise it again.')
+    expect(
+      occupiedDepthProblem(
+        [
+          { ring: 0, agents: 2 },
+          { ring: 1, agents: 3 },
+          { ring: 2, agents: 1 },
+        ],
+        2
+      )
+    ).toBe('Ring 2 holds 1 agent. A depth of 2 hides it until you raise it again.')
+    expect(
+      occupiedDepthProblem(
+        [
+          { ring: 1, agents: 2 },
+          { ring: 2, agents: 1 },
+          { ring: 3, agents: 2 },
+        ],
+        1
+      )
+    ).toBe('Rings 1, 2 and 3 hold 5 agents. A depth of 1 hides them until you raise it again.')
+  })
+
+  it('ignores inactive nodes in deepestRing even when an inactive sub sits deeper than active ones', () => {
+    const info = deepestRing([
+      { id: 'orchestrator', kind: 'orchestrator', parent: null, active: true },
+      { id: 'sub1', kind: 'sub', parent: 'orchestrator', active: true },
+      { id: 'off-lane-1', kind: 'lane', parent: 'sub1', active: false },
+      { id: 'off-lane-2', kind: 'lane', parent: 'sub1', active: false },
+      { id: 'off-sub', kind: 'sub', parent: 'sub1', active: false },
+    ])
+    expect(info).toEqual({
+      deepest: 1,
+      deepestAgents: 1,
+      rings: [{ ring: 1, agents: 1 }],
+    })
+    expect(occupiedDepthProblem(info.rings, 1)).toBe(
+      'Ring 1 holds 1 agent. A depth of 1 hides it until you raise it again.'
+    )
+  })
+
+  it('names every occupied ring on a 4 to 1 drop across three rings', async () => {
+    const { bridge, url, runsFolder } = await startBridge({ withLanes: true })
+    saveAgentDepth(runsFolder, { limit: 4, unlocked: true })
+    const result = bridge.orchestrators().ladderChange(
+      {
+        confirmed: true,
+        by: 'owner',
+        ladder: {
+          subs: [
+            {
+              id: 'ring1',
+              name: 'Ring 1',
+              harness: 'opencode',
+              model: 'opencode-go/deepseek-v4.1-flash',
+              lanes: ['opencode'],
+              scope: ['src/**'],
+              restricted: false,
+              setBy: 'owner',
+            },
+            {
+              id: 'ring2',
+              name: 'Ring 2',
+              parent: 'ring1',
+              harness: 'opencode',
+              model: 'opencode-go/deepseek-v4.1-flash',
+              lanes: ['opencode2'],
+              scope: ['src/**'],
+              restricted: false,
+              setBy: 'owner',
+            },
+            {
+              id: 'ring3',
+              name: 'Ring 3',
+              parent: 'ring2',
+              harness: 'opencode',
+              model: 'opencode-go/deepseek-v4.1-flash',
+              lanes: [],
+              scope: ['src/**'],
+              restricted: false,
+              setBy: 'owner',
+            },
+          ],
+        },
+      },
+      true
+    )
+    expect(result.status).toBe(200)
+
+    const active = await request(`${url}/api/lanes/active`, {
+      method: 'POST',
+      body: { lanes: ['claude', 'opencode'], confirmed: true },
+    })
+    expect(active.status).toBe(200)
+
+    const toOne = await request(`${url}/api/agent-depth`, {
+      method: 'POST',
+      body: { limit: 1, unlocked: false, confirmed: true },
+    })
+    expect(toOne.status).toBe(409)
+    expect(toOne.body).toEqual({
+      error: 'Rings 1, 2 and 3 hold 4 agents. A depth of 1 hides them until you raise it again.',
+      deepest: 3,
+      deepestAgents: 1,
+      rings: [
+        { ring: 0, agents: 1 },
+        { ring: 1, agents: 2 },
+        { ring: 2, agents: 1 },
+        { ring: 3, agents: 1 },
+      ],
+    })
+
+    const toTwo = await request(`${url}/api/agent-depth`, {
+      method: 'POST',
+      body: { limit: 2, unlocked: false, confirmed: true },
+    })
+    expect(toTwo.status).toBe(409)
+    expect(toTwo.body.error).toBe('Rings 2 and 3 hold 2 agents. A depth of 2 hides them until you raise it again.')
   })
 
   it('sends an agents notice after a write', async () => {
