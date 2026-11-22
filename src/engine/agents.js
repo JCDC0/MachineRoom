@@ -711,14 +711,25 @@ function makeCallout(agentName, key, onPick) {
   const element = document.createElement('div')
   element.className = 'mr-callout'
   if (element.dataset) element.dataset.agent = key
+  const stopEvent = (event) => event?.stopPropagation?.()
+  const pickFromCallout = (event) => {
+    event?.stopPropagation?.()
+    onPick?.(key)
+  }
   if (typeof element.addEventListener === 'function') {
-    element.addEventListener('pointerdown', (event) => event?.stopPropagation?.())
+    element.addEventListener('pointerdown', stopEvent)
+    element.addEventListener('dblclick', stopEvent)
     element.addEventListener('click', () => onPick?.(key))
   }
 
   const title = document.createElement('div')
   title.className = 'mr-callout-title'
   title.textContent = agentName.toUpperCase()
+  if (typeof title.addEventListener === 'function') {
+    title.addEventListener('pointerdown', stopEvent)
+    title.addEventListener('dblclick', stopEvent)
+    title.addEventListener('click', pickFromCallout)
+  }
 
   const task = document.createElement('div')
   task.className = 'mr-callout-task'

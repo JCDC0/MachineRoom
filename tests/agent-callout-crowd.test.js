@@ -377,6 +377,15 @@ describe('merged console inside the callout', () => {
       view.callout.element.listeners.get('click')()
       expect(picked).toEqual(['a'])
 
+      let titleStopped = false
+      view.callout.title.listeners.get('click')({ stopPropagation: () => { titleStopped = true } })
+      expect(titleStopped).toBe(true)
+      expect(picked).toEqual(['a', 'a'])
+
+      let dblStopped = false
+      view.callout.element.listeners.get('dblclick')({ stopPropagation: () => { dblStopped = true } })
+      expect(dblStopped).toBe(true)
+
       const end = { time: 2000, type: 'tool.end', agent: 'a', id: 'sh1', ok: true }
       apply(state, end)
       terminals.note(end, 2000)
