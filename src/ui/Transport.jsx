@@ -202,7 +202,43 @@ function ContextRing({ orchestrator = null, onClick = () => {} }) {
   )
 }
 
-export default function Transport({ snapshot, speeds, markers = [], orchestrator = null, onToggle, onSeek, onSpeed, onOverview }) {
+function ViewControls({ onOverview, onToggleIdle, idleForced = false }) {
+  return (
+    <div className="transport-view">
+      <button
+        type="button"
+        className="transport-center mono"
+        onClick={onOverview}
+        aria-label="Center camera"
+        title="Center camera"
+      >
+        Center
+      </button>
+      <button
+        type="button"
+        className="transport-idle mono"
+        aria-pressed={Boolean(idleForced)}
+        onClick={onToggleIdle}
+        title="Stay idle until pressed again"
+      >
+        Idle
+      </button>
+    </div>
+  )
+}
+
+export default function Transport({
+  snapshot,
+  speeds,
+  markers = [],
+  orchestrator = null,
+  onToggle,
+  onSeek,
+  onSpeed,
+  onOverview,
+  onToggleIdle,
+  idleForced = false,
+}) {
   const { position, duration, playing, speed } = snapshot
   const finished = position >= duration
   const main = orchestrator && typeof orchestrator === 'object' ? orchestrator : null
@@ -263,16 +299,8 @@ export default function Transport({ snapshot, speeds, markers = [], orchestrator
         <div className="transport is-live">
           <div className="transport-live-head">
             {badge}
-            <button
-              type="button"
-              className="transport-center mono"
-              onClick={onOverview}
-              aria-label="Center camera"
-              title="Center camera"
-            >
-              Center
-            </button>
           </div>
+          <ViewControls onOverview={onOverview} onToggleIdle={onToggleIdle} idleForced={idleForced} />
           <span className="mono">{clock(position)} since opening</span>
         </div>
       )
@@ -292,15 +320,6 @@ export default function Transport({ snapshot, speeds, markers = [], orchestrator
       <div className="transport is-live has-orchestrator">
         <div className="transport-live-head">
           {badge}
-          <button
-            type="button"
-            className="transport-center mono"
-            onClick={onOverview}
-            aria-label="Center camera"
-            title="Center camera"
-          >
-            Center
-          </button>
         </div>
         <div className="transport-agents" ref={listRef}>
           <button type="button" className="transport-agents-toggle transport-orchestrator mono" aria-expanded={listOpen} onClick={() => setListOpen(!listOpen)}>
@@ -348,6 +367,7 @@ export default function Transport({ snapshot, speeds, markers = [], orchestrator
           {main ? <ContextRing orchestrator={main} onClick={openConversation} /> : null}
           <span className="mono">{clock(position)} since opening</span>
         </div>
+        <ViewControls onOverview={onOverview} onToggleIdle={onToggleIdle} idleForced={idleForced} />
       </div>
     )
   }
@@ -382,6 +402,7 @@ export default function Transport({ snapshot, speeds, markers = [], orchestrator
           </button>
         ))}
       </div>
+      <ViewControls onOverview={onOverview} onToggleIdle={onToggleIdle} idleForced={idleForced} />
     </div>
   )
 }
