@@ -304,9 +304,9 @@ export function createCameraRig(camera, surface) {
       goal.target.copy(spot.target)
       goal.dist = spot.dist
     }
-    if (spin && free()) goal.yaw += IDLE_SPIN * delta
-    if (![goal.target.x, goal.target.y, goal.target.z, goal.dist, goal.yaw, goal.pitch].every(Number.isFinite)) reset()
     const isStill = still()
+    if (spin && free() && !isStill) goal.yaw += IDLE_SPIN * delta
+    if (![goal.target.x, goal.target.y, goal.target.z, goal.dist, goal.yaw, goal.pitch].every(Number.isFinite)) reset()
     const rate = easeRate(delta, 5, isStill)
     let turning = false
     if (transition) {

@@ -506,6 +506,20 @@ describe('camera idle spin', () => {
     }
   })
 
+  it('does not turn the yaw under reduced motion (R74-2)', () => {
+    const { rig, close } = openRig({ still: true })
+    try {
+      rig.snap()
+      const start = rig.yaw()
+      rig.setSpin(true)
+      for (let step = 0; step < 60; step += 1) rig.update(1 / 60)
+      rig.snap()
+      expect(rig.yaw()).toBeCloseTo(start, 6)
+    } finally {
+      close()
+    }
+  })
+
   it('turns spin off under a hold', () => {
     const { rig, close } = openRig()
     try {

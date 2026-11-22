@@ -54,3 +54,25 @@ describe('Hud menu button', () => {
     })
   })
 })
+
+describe('Hud forced idle (R74-2, R74-6)', () => {
+  it('passes idleForced and onToggleIdle to the transport at either width', async () => {
+    for (const width of [1280, 600]) {
+      await withDom(async ({ container, root, window }) => {
+        window.localStorage.setItem('machineroom.guide', '1')
+        window.innerWidth = width
+        const toggled = []
+        await act(async () => {
+          root.render(createElement(Hud, { mode: 'replay', snapshot: SNAPSHOT, speeds: [1, 2, 4], idleForced: true, onToggleIdle: () => toggled.push(width) }))
+        })
+        const idle = container.querySelector('.transport-idle')
+        expect(idle, `Idle at ${width}`).toBeTruthy()
+        expect(idle.getAttribute('aria-pressed')).toBe('true')
+        await act(async () => {
+          idle.click()
+        })
+        expect(toggled).toEqual([width])
+      })
+    }
+  })
+})

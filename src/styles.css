@@ -11106,39 +11106,49 @@ button.mr-family-heading,
   transition: opacity 800ms ease-out;
 }
 
-.stage.is-idle-forced .hud-menu {
-  opacity: 0;
-  pointer-events: none;
-  transform: translateY(-100%);
-  transition: transform 800ms ease-out, opacity 800ms ease-out;
+/* R74-4: forced idle hides the menu and transport only where the idle view does, at 900 pixels and wider. */
+@media (min-width: 900px) {
+  .stage.is-idle-forced .hud-menu {
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(-100%);
+    transition: transform 800ms ease-out, opacity 800ms ease-out;
+  }
+
+  .stage.is-idle-forced .lens-rail,
+  .stage.is-idle-forced .lens-labels {
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 800ms ease-out;
+  }
+
+  .stage.is-idle-forced .transport {
+    z-index: 20;
+    opacity: 1;
+    transform: none;
+    pointer-events: none;
+    background: none;
+    border-color: transparent;
+    transition: none;
+  }
+
+  .stage.is-idle-forced .transport > :not(.transport-view),
+  .stage.is-idle-forced .transport-view > :not(.transport-idle) {
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 800ms ease-out;
+  }
+
+  .stage.is-idle-forced .transport-view .transport-idle {
+    opacity: 1;
+    pointer-events: auto;
+  }
 }
 
-.stage.is-idle-forced .lens-rail,
-.stage.is-idle-forced .lens-labels {
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 800ms ease-out;
-}
-
-.stage.is-idle-forced .transport {
-  opacity: 1;
-  transform: none;
-  pointer-events: none;
-  background: none;
-  border-color: transparent;
-  transition: none;
-}
-
-.stage.is-idle-forced .transport > :not(.transport-view),
-.stage.is-idle-forced .transport-view > :not(.transport-idle) {
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 800ms ease-out;
-}
-
-.stage.is-idle-forced .transport-view .transport-idle {
-  opacity: 1;
-  pointer-events: auto;
+/* R74-2: a forced idle takes no pointer in the room until Idle is pressed again. */
+.stage.is-idle-forced .lens,
+.stage.is-idle-forced .lens * {
+  pointer-events: none !important;
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -548,6 +548,21 @@ describe('the transport view row and forced idle state', () => {
     expect(rule('.stage.is-idle-forced .transport-view .transport-idle')['pointer-events']).toBe('auto')
   })
 
+  it('hides the menu and transport for a forced idle only at 900 pixels and wider, above every backdrop, and blocks the room (R74-2, R74-4)', () => {
+    const sheet = parse(css)
+    const hiding = []
+    sheet.walkRules((block) => {
+      if (!block.selectors.some((selector) => selector.startsWith('.stage.is-idle-forced'))) return
+      if (!block.nodes.some(({ prop, value }) => prop === 'opacity' && value === '0')) return
+      hiding.push({ selectors: block.selectors.join(', '), media: block.parent?.type === 'atrule' ? block.parent.params : '' })
+    })
+    expect(hiding.length).toBeGreaterThan(0)
+    for (const item of hiding) expect(item.media, item.selectors).toBe('(min-width: 900px)')
+    const backdrops = [...css.matchAll(/backdrop[^{]*\{[^}]*z-index:\s*(\d+)/g)].map((match) => Number(match[1]))
+    expect(Number(merged('.stage.is-idle-forced .transport')['z-index'])).toBeGreaterThan(Math.max(...backdrops))
+    expect(merged('.stage.is-idle-forced .lens *')['pointer-events']).toBe('none !important')
+  })
+
   it('drops forced-idle transitions under reduced motion', () => {
     const sheet = parse(css)
     const quieted = []

@@ -266,6 +266,8 @@ export default function Hud({
   const idleRows = list.rows.filter((row) => row.group === 'idle')
   const listRef = useRef(nav)
   const focusRef = useRef(onFocus)
+  const idleForcedRef = useRef(idleForced)
+  idleForcedRef.current = idleForced
   listRef.current = nav
   focusRef.current = onFocus
   const context = { agents, paths: assistantPaths }
@@ -565,6 +567,7 @@ export default function Hud({
 
   useEffect(() => {
     function onKey(event) {
+      if (idleForcedRef.current) return
       if (!/^[1-9]$/.test(event.key)) return
       if (event.ctrlKey || event.metaKey || event.altKey) return
       if (hudKeyBlocked(event.target)) return
@@ -592,6 +595,7 @@ export default function Hud({
 
   useEffect(() => {
     function onKey(event) {
+      if (idleForcedRef.current) return
       if (event.key === 'Escape') {
         setHelpOpen(false)
         setHealthOpen(false)
