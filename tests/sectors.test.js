@@ -5,26 +5,16 @@ import {
   agentPresence,
   createAgents,
 } from '../src/engine/agents.js'
-import { FOV, OVERVIEW, viewBasis } from '../src/engine/camera.js'
 import {
   HUB_RADIUS,
   HUB_Y,
   ORCHESTRATOR_HOME,
-  ORCHESTRATOR_LIFT,
   PARK_LIFT,
   RING_FLOOR_GAP,
   RING_FLOOR_Y,
   RING_OPACITY,
   SECTOR_ARC_HALF_WIDTH,
   SECTOR_ARC_OPACITY,
-  SECTOR_LABEL_BASE,
-  SECTOR_LABEL_COLOR,
-  SECTOR_LABEL_DROP,
-  SECTOR_LABEL_FONT,
-  SECTOR_LABEL_MIN,
-  SECTOR_LABEL_OPACITY,
-  SECTOR_LABEL_OUT,
-  SECTOR_LABEL_SPREAD,
   SUB_STAND_LIFT,
   arcDrawSpan,
   createHub,
@@ -33,9 +23,6 @@ import {
   ringLayout,
   sectorArcRadii,
   sectorArcTone,
-  sectorLabelPoint,
-  sectorLabelRadius,
-  sectorLabelScale,
   sectorSlotAngles,
   sectorSubAngle,
   slotAngle,
@@ -110,16 +97,6 @@ const ROSTER = [
   { key: 'hermes', name: 'Hermes' },
 ]
 
-const FOUR_LADDER = {
-  subs: [
-    { id: 'frontend', name: 'Frontend', lanes: ['opencode', 'opencode2'] },
-    { id: 'backend', name: 'Backend', lanes: ['claude', 'claude2'] },
-    { id: 'platform', name: 'Platform', lanes: ['hermes', 'hermes2'] },
-  ],
-}
-
-const FOUR_KEYS = ['opencode', 'opencode2', 'claude', 'claude2', 'hermes', 'hermes2', 'agy', 'agy2']
-
 describe('sector slot angles', () => {
   it('uses the plain slot angles with no ladder or an empty one', () => {
     const keys = ['opencode', 'claude', 'hermes']
@@ -159,9 +136,6 @@ describe('sector slot angles', () => {
 })
 
 describe('sector arcs a beginner can see', () => {
-  const FOCAL = 464 / 2 / Math.tan((FOV * Math.PI) / 360)
-  const OVERVIEW_DEPTH = 2854
-
   it('leaves a gap at each end of an arc', () => {
     const arc = { start: 0.04, end: 2.054 }
     const draw = arcDrawSpan(arc.start, arc.end)
@@ -176,17 +150,6 @@ describe('sector arcs a beginner can see', () => {
     expect(arcDrawSpan(1, 1)).toEqual({ start: 0, end: 0 })
     expect(arcDrawSpan(2, 1)).toEqual({ start: 0, end: 0 })
     expect(arcDrawSpan(Number.NaN, 1)).toEqual({ start: 0, end: 0 })
-  })
-
-  it('keeps the label text at 11 pixels or more in the overview', () => {
-    const factor = sectorLabelScale(OVERVIEW_DEPTH, FOCAL)
-    const pixels = SECTOR_LABEL_FONT * SECTOR_LABEL_BASE * factor * (FOCAL / OVERVIEW_DEPTH)
-    expect(pixels).toBeGreaterThanOrEqual(11)
-    expect(SECTOR_LABEL_MIN).toBeGreaterThanOrEqual(11)
-    expect(factor).toBeGreaterThan(1)
-    expect(sectorLabelScale(OVERVIEW_DEPTH / 4, FOCAL)).toBe(1)
-    expect(sectorLabelScale(0, FOCAL)).toBe(1)
-    expect(sectorLabelScale(OVERVIEW_DEPTH, 0)).toBe(1)
   })
 
   it('makes each arc brighter than the ring and the main arc dimmer than a sub arc', () => {
@@ -206,76 +169,6 @@ describe('sector arcs a beginner can see', () => {
     expect(radii[1]).toBe(HUB_RADIUS)
     expect(radii[2] - radii[0]).toBe(SECTOR_ARC_HALF_WIDTH * 2)
     expect(SECTOR_ARC_HALF_WIDTH).toBeGreaterThan(1)
-  })
-})
-
-describe('the place of a sector name', () => {
-  const FOCAL = 464 / 2 / Math.tan((FOV * Math.PI) / 360)
-  const GLYPH = 0.62
-
-  it('sits below the ring plane and outside the arc', () => {
-    const point = sectorLabelPoint(0, HUB_RADIUS, 3)
-    expect(point.x).toBeCloseTo(sectorLabelRadius(HUB_RADIUS, 3))
-    expect(point.z).toBeCloseTo(0)
-    expect(point.y).toBe(-SECTOR_LABEL_DROP)
-    expect(point.y).toBeLessThan(0)
-    expect(Math.hypot(point.x, point.z)).toBeGreaterThan(HUB_RADIUS + 120)
-  })
-
-  it('moves further out as sectors are added', () => {
-    expect(sectorLabelRadius(HUB_RADIUS, 2)).toBe(HUB_RADIUS + SECTOR_LABEL_OUT + SECTOR_LABEL_SPREAD)
-    expect(sectorLabelRadius(HUB_RADIUS, 4)).toBe(HUB_RADIUS + SECTOR_LABEL_OUT + SECTOR_LABEL_SPREAD * 3)
-    expect(sectorLabelRadius(HUB_RADIUS, 4)).toBeGreaterThan(sectorLabelRadius(HUB_RADIUS, 3))
-    expect(sectorLabelRadius(HUB_RADIUS, 1)).toBeGreaterThan(HUB_RADIUS + 120)
-    expect(sectorLabelRadius(0, 4)).toBe(sectorLabelRadius(HUB_RADIUS, 4))
-    expect(sectorLabelRadius(HUB_RADIUS, Number.NaN)).toBe(HUB_RADIUS + SECTOR_LABEL_OUT)
-  })
-
-  it('fills the vector it is given and leaves the angle alone', () => {
-    const out = new THREE.Vector3()
-    expect(sectorLabelPoint(Math.PI / 2, HUB_RADIUS, 3, out)).toBe(out)
-    expect(out.x).toBeCloseTo(0)
-    expect(out.z).toBeCloseTo(sectorLabelRadius(HUB_RADIUS, 3))
-  })
-
-  it('dims the name below the agents own names', () => {
-    expect(SECTOR_LABEL_OPACITY).toBeGreaterThan(0)
-    expect(SECTOR_LABEL_OPACITY).toBeLessThan(0.7)
-    expect(SECTOR_LABEL_COLOR).toBe(`rgba(255,255,255,${SECTOR_LABEL_OPACITY})`)
-  })
-
-  it('keeps two sector names from overlapping at four sectors', () => {
-    const layout = ringLayout(FOUR_LADDER, FOUR_KEYS)
-    const arcs = layout.arcs
-    expect(arcs).toHaveLength(4)
-    const camera = new THREE.PerspectiveCamera(FOV, 1280 / 464, 1, 60000)
-    const basis = viewBasis(OVERVIEW.yaw, OVERVIEW.pitch)
-    camera.position.set(
-      OVERVIEW.x + basis.back.x * OVERVIEW.dist,
-      OVERVIEW.y + basis.back.y * OVERVIEW.dist,
-      OVERVIEW.z + basis.back.z * OVERVIEW.dist,
-    )
-    camera.lookAt(OVERVIEW.x, OVERVIEW.y, OVERVIEW.z)
-    camera.updateMatrixWorld()
-    const boxes = arcs.map((arc) => {
-      const ring = layout.ringOf(arc)
-      const point = sectorLabelPoint((arc.start + arc.end) / 2, ring.radius, arcs.length)
-      const world = new THREE.Vector3(point.x, ring.y + point.y, point.z)
-      const distance = camera.position.distanceTo(world)
-      const projected = world.clone().project(camera)
-      const factor = (sectorLabelScale(distance, FOCAL) * FOCAL) / distance
-      const width = (String(arc.name).length * SECTOR_LABEL_FONT * GLYPH + 16) * SECTOR_LABEL_BASE * factor
-      const height = 40 * SECTOR_LABEL_BASE * factor
-      const x = (projected.x * 0.5 + 0.5) * 1280
-      const y = (-projected.y * 0.5 + 0.5) * 464
-      return { left: x - width / 2, right: x + width / 2, top: y - height / 2, bottom: y + height / 2 }
-    })
-    const overlap = (a, b) => a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom
-    for (let i = 0; i < boxes.length; i++) {
-      for (let j = i + 1; j < boxes.length; j++) {
-        expect(overlap(boxes[i], boxes[j])).toBe(false)
-      }
-    }
   })
 })
 
@@ -398,7 +291,7 @@ describe('sub orchestrator agents', () => {
 })
 
 describe('the hub with a ladder', () => {
-  it('draws one arc and one label per sector and parks the lanes inside them', () => {
+  it('draws one arc per sector with no text sprite and parks the lanes inside them', () => {
     const scene = new THREE.Scene()
     const hub = createHub(scene, ROSTER)
     const ring = hub.group.getObjectByName('ring')
@@ -417,9 +310,7 @@ describe('the hub with a ladder', () => {
       const lines = group.children.filter((child) => child.isLine)
       const labels = group.children.filter((child) => child.isSprite)
       expect(lines).toHaveLength(3)
-      expect(labels).toHaveLength(1)
-      expect(Math.hypot(labels[0].position.x, labels[0].position.z)).toBeCloseTo(sectorLabelRadius(HUB_RADIUS, arcs.length))
-      expect(labels[0].position.y).toBe(-SECTOR_LABEL_DROP)
+      expect(labels).toHaveLength(0)
     }
     const mainGroup = sectorsOf().find((group) => group.name === 'sector:orchestrator')
     const subGroup = sectorsOf().find((group) => group.name === 'sector:frontend')
@@ -428,18 +319,6 @@ describe('the hub with a ladder', () => {
     expect(brightest(subGroup)).toBe(SECTOR_ARC_OPACITY.sub)
     expect(brightest(subGroup)).toBeGreaterThan(brightest(mainGroup))
     expect(brightest(mainGroup)).toBeGreaterThan(RING_OPACITY)
-
-    const label = subGroup.children.find((child) => child.isSprite)
-    const at = new THREE.Vector3()
-    label.getWorldPosition(at)
-    const camera = new THREE.PerspectiveCamera(FOV, 1280 / 464, 1, 60000)
-    camera.position.copy(at).add(new THREE.Vector3(0, 0, 2854))
-    hub.update(0, 0.016, camera, 464)
-    const focal = 464 / 2 / Math.tan((FOV * Math.PI) / 360)
-    const pixels = SECTOR_LABEL_FONT * SECTOR_LABEL_BASE * label.userData.factor * (focal / 2854)
-    expect(pixels).toBeGreaterThanOrEqual(11)
-    expect(label.scale.x).toBeCloseTo(label.userData.base.x * label.userData.factor)
-    expect(label.scale.y).toBeCloseTo(label.userData.base.y * label.userData.factor)
 
     const angles = sectorSlotAngles(LADDER, ['opencode', 'claude', 'hermes'])
     const keys = ['opencode', 'claude', 'hermes']
