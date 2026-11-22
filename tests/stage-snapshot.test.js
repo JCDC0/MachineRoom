@@ -1,6 +1,6 @@
 import { act, createElement, useState } from 'react'
 import { describe, expect, it } from 'vitest'
-import { sameSnapshot, snapshotSink } from '../src/Stage.jsx'
+import { resetRunState, sameSnapshot, snapshotSink } from '../src/Stage.jsx'
 import { withDom } from './helpers/uiDom.js'
 
 function agent(over = {}) {
@@ -110,6 +110,9 @@ describe('sameSnapshot', () => {
     expect(sameSnapshot(snapshot(), snapshot({ agents: [agent({ name: 'Other' })] }))).toBe(false)
     expect(sameSnapshot(snapshot(), snapshot({ agents: [agent({ harness: 'claude' })] }))).toBe(false)
     expect(sameSnapshot(snapshot(), snapshot({ agents: [agent({ outsideCount: 1 })] }))).toBe(false)
+    // R73-3, R74-6: a call that starts and ends inside one second still changes the snapshot.
+    expect(sameSnapshot(snapshot(), snapshot({ agents: [agent({ openCalls: 1 })] }))).toBe(false)
+    expect(sameSnapshot(snapshot({ agents: [agent({ openCalls: 1, tool: 'shell' })] }), snapshot({ agents: [agent({ openCalls: 1, tool: 'read' })] }))).toBe(false)
     expect(sameSnapshot(snapshot(), snapshot({ agents: [] }))).toBe(false)
   })
 
@@ -132,5 +135,16 @@ describe('sameSnapshot', () => {
     expect(sameSnapshot(null, snapshot())).toBe(false)
     expect(sameSnapshot(snapshot(), null)).toBe(false)
     expect(sameSnapshot({}, {})).toBe(true)
+  })
+})
+
+describe('resetRunState', () => {
+  it('clears open calls with the rest of the run state (R74-6)', () => {
+    const agent = { status: 'working', calls: new Map([['c1', []]]), openCalls: new Map([['c1', { tool: 'shell', label: 'npm test', touches: [] }]]), runWrites: new Set(['a.js']), focus: ['a.js'] }
+    resetRunState({ agents: new Map([['a', agent]]) })
+    expect(agent.status).toBe('idle')
+    expect(agent.openCalls.size).toBe(0)
+    expect(agent.calls.size).toBe(0)
+    expect(agent.focus).toEqual([])
   })
 })

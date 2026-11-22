@@ -631,6 +631,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
   const [following, setFollowing] = useState(false)
   const [idle, setIdle] = useState(false)
   const [idleForced, setIdleForced] = useState(false)
+  const idleForcedRef = useRef(false)
   const idleRef = useRef(false)
   const idleWatchRef = useRef(null)
   const bridgeDownRef = useRef(false)
@@ -1323,6 +1324,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
 
   useEffect(() => {
     function onKey(event) {
+      if (idleForcedRef.current) return
       handleRoomKey(event, {
         player,
         room: roomRef,
@@ -1479,8 +1481,15 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
   }, [])
 
   function toggleIdle() {
+    if (bridgeDownRef.current) return
     const next = !(idleWatchRef.current?.forced?.() ?? false)
+    if (next) {
+      setFollow(false)
+      closeInspector()
+      parkRoom()
+    }
     idleWatchRef.current?.force?.(next)
+    idleForcedRef.current = next
     setIdleForced(next)
   }
 
