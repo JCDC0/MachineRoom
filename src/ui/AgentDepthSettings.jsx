@@ -23,7 +23,10 @@ function normalizedRings(value) {
 export function hideOccupiedText(ringOrRings, agentsOrDepth, maybeDepth) {
   if (Array.isArray(ringOrRings)) {
     const depth = agentsOrDepth
-    const occupied = (normalizedRings(ringOrRings) ?? []).filter((item) => item.ring >= depth)
+    const currentLimit = Number.isInteger(maybeDepth) ? maybeDepth : Infinity
+    const occupied = (normalizedRings(ringOrRings) ?? []).filter(
+      (item) => item.ring >= depth && item.ring < currentLimit
+    )
     if (occupied.length === 0) return ''
     if (occupied.length === 1) {
       return hideOccupiedText(occupied[0].ring, occupied[0].agents, depth)
@@ -133,7 +136,8 @@ export default function AgentDepthSettings({ client = null }) {
           setState(next)
           setLoading(false)
           setDialog((current) =>
-            current?.kind === 'hide' && (current.limit > next.deepest || current.limit >= next.limit)
+            current?.kind === 'hide' &&
+            (current.limit >= next.limit || !hideOccupiedText(next.rings, current.limit, next.limit))
               ? null
               : current
           )
@@ -173,7 +177,12 @@ export default function AgentDepthSettings({ client = null }) {
       ) {
         readSeqRef.current += 1
         setState((current) => depthAnswer(failure, current))
-        setDialog({ kind: 'hide', limit: payload.limit, unlocked: payload.unlocked })
+        setDialog({
+          kind: 'hide',
+          limit: payload.limit,
+          unlocked: payload.unlocked,
+          message: typeof failure?.message === 'string' ? failure.message : '',
+        })
       } else {
         setError(String(failure?.message ?? failure))
       }
@@ -184,7 +193,7 @@ export default function AgentDepthSettings({ client = null }) {
   }
 
   function pickDepth(depth, unlocked = state.unlocked) {
-    if (depth < state.limit && depth <= state.deepest) {
+    if (depth < state.limit && hideOccupiedText(state.rings, depth, state.limit)) {
       setError('')
       setDialog({ kind: 'hide', limit: depth, unlocked })
       return
@@ -281,7 +290,8 @@ export default function AgentDepthSettings({ client = null }) {
           <p className="mr-depth-confirm-text">
             {dialog.kind === 'unlock'
               ? UNLOCK_TEXT
-              : hideOccupiedText(state.rings, dialog.limit) ||
+              : hideOccupiedText(state.rings, dialog.limit, state.limit) ||
+                dialog.message ||
                 hideOccupiedText(state.deepest, state.deepestAgents, dialog.limit)}
           </p>
           <div className="mr-depth-confirm-actions">
