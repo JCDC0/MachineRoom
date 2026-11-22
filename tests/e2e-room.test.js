@@ -1416,4 +1416,47 @@ describe('the inspected row and the inspector', () => {
       room.dispose()
     }
   })
+
+  it('selects and opens the folder or file folder in room.focusPath even with openOnTouch off', async () => {
+    const { room } = await makeRoom(['README.md', 'src/ui/App.jsx', 'src/ui/sub/Panel.jsx', 'docs/d.md'], ['claude'])
+    try {
+      room.setOptions({ folderContents: false, openOnTouch: false })
+      tickRoom(1)
+      expect(cardElement('src/ui').className).toContain('is-collapsed')
+      expect(cardElement('docs').className).toContain('is-collapsed')
+
+      expect(room.focusPath('src/ui')).toBe(true)
+      tickRoom(1)
+      expect(cardElement('src/ui').className).toContain('is-selected')
+      expect(cardElement('src/ui').className).not.toContain('is-collapsed')
+      expect(cardRow(cardElement('src/ui'), 'App.jsx')).toBeTruthy()
+
+      expect(room.focusPath('src/ui/sub/Panel.jsx')).toBe(true)
+      tickRoom(1)
+      const sub = cardElement('src/ui/sub')
+      expect(sub).toBeTruthy()
+      expect(sub.className).toContain('is-selected')
+      expect(sub.className).not.toContain('is-collapsed')
+      expect(cardRow(sub, 'Panel.jsx')).toBeTruthy()
+      expect(cardElement('src/ui').className).not.toContain('is-selected')
+      expect(cardElement('src/ui').className).toContain('is-collapsed')
+
+      expect(room.focusPath('docs/d.md')).toBe(true)
+      tickRoom(1)
+      expect(cardElement('docs').className).toContain('is-selected')
+      expect(cardElement('docs').className).not.toContain('is-collapsed')
+      expect(cardRow(cardElement('docs'), 'd.md')).toBeTruthy()
+      expect(sub.className).not.toContain('is-selected')
+      expect(sub.className).toContain('is-collapsed')
+
+      expect(room.focusPath('')).toBe(true)
+      tickRoom(1)
+      expect(cardElement('').className).toContain('is-selected')
+      expect(cardElement('').className).not.toContain('is-collapsed')
+      expect(cardElement('docs').className).not.toContain('is-selected')
+      expect(cardElement('docs').className).toContain('is-collapsed')
+    } finally {
+      room.dispose()
+    }
+  })
 })
