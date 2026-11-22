@@ -432,6 +432,8 @@ describe('callout scene option', () => {
 
     const initialCallout = agents.views.get('a').callout.object
     expect(initialCallout.parent).toBe(calloutScene)
+    // R73-1: CSS3DObject writes an inline pointer-events: auto, which would beat the stylesheet.
+    expect(agents.views.get('a').callout.element.style.pointerEvents).toBe('none')
     expect(calloutScene.children).toEqual([initialCallout])
     expect(cssScene.children).toEqual([])
 

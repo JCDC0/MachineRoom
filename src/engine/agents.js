@@ -759,6 +759,8 @@ function makeCallout(agentName, key, onPick) {
   element.append(title, task, cmd, consoleBlock)
 
   const object = new CSS3DObject(element)
+  // CSS3DObject writes an inline pointer-events: auto; only the title and the address link take the pointer.
+  element.style.pointerEvents = 'none'
   object.visible = false
   return { element, title, task, cmd, consoleBlock, consoleLink, consoleBody, consoleLines: [], object }
 }
