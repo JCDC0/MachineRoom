@@ -423,6 +423,7 @@ export function createCards(cssScene, options = {}) {
   let planKey = ''
   let layoutKey = ''
   let overviewLayoutKey = ''
+  let pendingChange = false
   let active = { files: new Set(), dirs: new Set(), path: new Set() }
   let targetDirColors = null
   let targetFileColors = null
@@ -685,9 +686,14 @@ export function createCards(cssScene, options = {}) {
         pinned.add(item.path)
         pinnedVersion += 1
         planKey = ''
+        if (lastState && recompute(lastState)) pendingChange = true
+        selected = item.path
+        inspected = null
+        onInspect(item.path)
+      } else {
+        onInspect(item.path)
+        inspected = item.path
       }
-      onInspect(item.path)
-      inspected = item.path
       rowRevision += 1
     })
     return {
@@ -1160,6 +1166,7 @@ export function createCards(cssScene, options = {}) {
     sprayed.clear()
     sprayVersion += 1
     planKey = ''
+    pendingChange = false
     recompute(state)
     for (const card of cards.values()) {
       const target = isCardOpen(card, null) ? 1 : 0
@@ -1292,6 +1299,8 @@ export function createCards(cssScene, options = {}) {
       lastTargetVersion = targetVersion
       rowDirtyAll = true
     }
+    const hadPending = pendingChange
+    pendingChange = false
     const changed = recompute(state)
     const now = performance.now()
     const isStill = still()
@@ -1565,7 +1574,7 @@ export function createCards(cssScene, options = {}) {
     }
     if (rowDirtyAll) rowDirtyAll = false
     rowDirty.clear()
-    return changed || removed
+    return changed || removed || hadPending
   }
 
   function dispose() {

@@ -1382,4 +1382,38 @@ describe('the inspected row and the inspector', () => {
       room.dispose()
     }
   })
+
+  it('selects and opens a clicked subfolder card and shuts its parent when folderContents is off', async () => {
+    const inspected = []
+    const { room } = await makeRoom(['src/ui/App.jsx', 'src/ui/sub/Panel.jsx', 'docs/d.md'], ['claude'], {
+      onInspect: (detail) => inspected.push(detail),
+    })
+    try {
+      room.setOptions({ folderContents: false, openOnTouch: false })
+      tickRoom(1)
+      const parent = cardElement('src/ui')
+      expect(parent.className).toContain('is-collapsed')
+      expect(cardElement('src/ui/sub')).toBeUndefined()
+
+      dispatchCss(cardParts(parent).head, 'click', { detail: 1 })
+      tickRoom(1)
+      expect(parent.className).not.toContain('is-collapsed')
+      const subRow = cardRow(parent, 'sub/')
+      expect(subRow).toBeTruthy()
+
+      subRow.fire('click')
+      tickRoom(1)
+      const sub = cardElement('src/ui/sub')
+      expect(sub).toBeTruthy()
+      expect(room.holding()).toBe('src/ui/sub')
+      expect(inspected.at(-1)).toEqual({ kind: 'folder', id: 'src/ui/sub' })
+      expect(sub.className).toContain('is-selected')
+      expect(sub.className).not.toContain('is-collapsed')
+      expect(cardRow(sub, 'Panel.jsx')).toBeTruthy()
+      expect(parent.className).not.toContain('is-selected')
+      expect(parent.className).toContain('is-collapsed')
+    } finally {
+      room.dispose()
+    }
+  })
 })
