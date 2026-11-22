@@ -5,6 +5,7 @@ import { apply, createState } from '../src/model/state.js'
 
 const fakeGit = vi.hoisted(() => ({ states: [], changed: true }))
 const fakeHub = vi.hoisted(() => ({ depths: [] }))
+const fakeCss = vi.hoisted(() => ({ renderers: [], renders: [] }))
 
 vi.mock('../src/engine/gitTree.js', async (importOriginal) => {
   const actual = await importOriginal()
@@ -197,9 +198,18 @@ vi.mock('three/addons/renderers/CSS3DRenderer.js', async (importOriginal) => {
   class FakeCSS3DRenderer {
     constructor() {
       this.domElement = fakeElement('div')
+      this.sizes = []
+      this.renders = []
+      fakeCss.renderers.push(this)
     }
-    setSize() {}
-    render() {}
+    setSize(width, height) {
+      this.sizes.push({ width, height })
+    }
+    render(scene, camera) {
+      const entry = { renderer: this, scene, camera }
+      this.renders.push(entry)
+      fakeCss.renders.push(entry)
+    }
   }
   return { ...actual, CSS3DRenderer: FakeCSS3DRenderer }
 })
@@ -210,6 +220,7 @@ let savedRaf
 let savedCancel
 let savedResize
 let roomFrame = null
+let resizeCallback = null
 let roomSurface
 let roomGl
 let roomCss
@@ -258,8 +269,13 @@ beforeAll(() => {
     roomFrame = null
   }
   globalThis.ResizeObserver = class {
+    constructor(callback) {
+      resizeCallback = callback
+    }
     observe() {}
-    disconnect() {}
+    disconnect() {
+      resizeCallback = null
+    }
   }
   roomSurface = fakeElement('div')
   roomSurface.clientWidth = 1200
@@ -277,7 +293,7 @@ afterAll(() => {
   globalThis.cancelAnimationFrame = savedCancel
   globalThis.ResizeObserver = savedResize
 })
-async function makeRoom(files = ['src/a.js'], agents = ['claude']) {
+async function makeRoom(files = ['src/a.js'], agents = ['claude'], css = roomCss) {
   const { createRoom } = await import('../src/engine/room.js')
   const roster = agents.map((key) => ({ key, name: key }))
   const state = createState(makeTree({ root: 'demo', files }), roster)
@@ -285,7 +301,7 @@ async function makeRoom(files = ['src/a.js'], agents = ['claude']) {
   const room = createRoom({
     surface: roomSurface,
     gl: roomGl,
-    css: roomCss,
+    css,
     rootName: 'demo',
     agents: roster,
     getState: () => current,
@@ -458,6 +474,64 @@ describe('the room takes the chosen top and the depth', () => {
       expect(cmd.style.display).toBe('none')
     } finally {
       room.dispose()
+    }
+  })
+
+  it('mounts, renders, resizes and disposes a second CSS3D layer for callouts after the cards', async () => {
+    fakeCss.renderers.length = 0
+    fakeCss.renders.length = 0
+    const css = fakeElement('div')
+    const { room } = await makeRoom(['src/a.js'], ['claude'], css)
+    let disposed = false
+    try {
+      expect(fakeCss.renderers).toHaveLength(2)
+      const [cardRenderer, calloutRenderer] = fakeCss.renderers
+      expect(css.children).toEqual([cardRenderer.domElement, calloutRenderer.domElement])
+      expect(cardRenderer.domElement.style.pointerEvents).toBe('none')
+      expect(calloutRenderer.domElement.style.pointerEvents).toBe('none')
+      expect(calloutRenderer.domElement.style.position).toBe('absolute')
+      expect(calloutRenderer.domElement.style.top).toBe('0')
+      expect(calloutRenderer.domElement.style.left).toBe('0')
+
+      tick()
+      expect(fakeCss.renders).toHaveLength(2)
+      expect(fakeCss.renders[0].renderer).toBe(cardRenderer)
+      expect(fakeCss.renders[1].renderer).toBe(calloutRenderer)
+      expect(fakeCss.renders[0].camera).toBe(fakeCss.renders[1].camera)
+
+      const cardScene = fakeCss.renders[0].scene
+      const calloutScene = fakeCss.renders[1].scene
+      expect(calloutScene).not.toBe(cardScene)
+
+      const cardsInCardScene = cardScene.children.filter((obj) => obj.element?.className?.includes('mr-card'))
+      const calloutsInCardScene = cardScene.children.filter((obj) => obj.element?.className?.includes('mr-callout'))
+      const calloutsInCalloutScene = calloutScene.children.filter((obj) => obj.element?.className?.includes('mr-callout'))
+      const cardsInCalloutScene = calloutScene.children.filter((obj) => obj.element?.className?.includes('mr-card'))
+
+      expect(cardsInCardScene.length).toBeGreaterThan(0)
+      expect(calloutsInCardScene).toEqual([])
+      expect(calloutsInCalloutScene).toHaveLength(1)
+      expect(calloutsInCalloutScene[0].parent).toBe(calloutScene)
+      expect(cardsInCalloutScene).toEqual([])
+
+      expect(cardRenderer.sizes).toEqual([{ width: 1200, height: 800 }])
+      expect(calloutRenderer.sizes).toEqual([{ width: 1200, height: 800 }])
+
+      roomSurface.clientWidth = 960
+      roomSurface.clientHeight = 540
+      resizeCallback?.()
+      expect(cardRenderer.sizes.at(-1)).toEqual({ width: 960, height: 540 })
+      expect(calloutRenderer.sizes.at(-1)).toEqual({ width: 960, height: 540 })
+
+      room.dispose()
+      disposed = true
+      expect(css.children).toEqual([])
+      expect(calloutScene.children).toEqual([])
+      expect(calloutsInCalloutScene[0].parent).toBeNull()
+    } finally {
+      roomSurface.clientWidth = 1200
+      roomSurface.clientHeight = 800
+      if (!disposed) room.dispose()
     }
   })
 })
