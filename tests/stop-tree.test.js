@@ -456,7 +456,11 @@ describe('POST /api/orchestrator/stop-tree', () => {
     const rig = await makeRig({ ladder, spawnSurvivorFor: 'inside1' })
 
     expect((await tokenPost(rig.url, '/api/control/runs', { lane: 'inside1', task: 'Spawn child', allowDirty: true, confirmed: true }, rig.token('scout'))).status).toBe(202)
-    await waitFor(() => existsSync(rig.survivorPidFile), 10000, 'surviving child pid')
+    await waitFor(
+      () => existsSync(rig.survivorPidFile) && Number(readFileSync(rig.survivorPidFile, 'utf8').trim()) > 0,
+      10000,
+      'surviving child pid'
+    )
     const survivorPid = Number(readFileSync(rig.survivorPidFile, 'utf8').trim())
     expect(Number.isInteger(survivorPid) && survivorPid > 0).toBe(true)
 
