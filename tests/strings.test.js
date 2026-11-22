@@ -167,55 +167,98 @@ describe('one glow texture for every strand', () => {
   })
 })
 
-describe('strands write only when their look changes', () => {
-  it('skips the colour and opacity writes until the yellow, dim or lit value moves', () => {
+describe('strands share one material per colour', () => {
+  it('switches shared materials only when the look moves and shares them across links', () => {
     const scene = fakeScene()
     const centres = new Map([
       ['a', new THREE.Vector3(0, 0, 0)],
       ['b', new THREE.Vector3(100, 0, 0)],
+      ['c', new THREE.Vector3(200, 0, 0)],
+      ['d', new THREE.Vector3(300, 0, 0)],
     ])
     const centreOf = (key) => centres.get(key)
     const strings = createStrings(scene)
-    strings.build([{ from: 'a', to: 'b' }], centreOf)
-    const mesh = strandMesh(scene)
-    const material = mesh.material
-    const colour = vi.spyOn(material.color, 'lerpColors')
-    let opacity = material.opacity
-    let writes = 0
-    Object.defineProperty(material, 'opacity', {
-      configurable: true,
-      get: () => opacity,
-      set: (value) => {
-        writes += 1
-        opacity = value
-      },
-    })
+    strings.build([
+      { from: 'a', to: 'b' },
+      { from: 'a', to: 'c' },
+      { from: 'a', to: 'd' },
+    ], centreOf)
+    const points = scene.children.filter((child) => child.isPoints)
+    const restMaterial = points[0].material
+    expect(points[1].material).toBe(restMaterial)
+    expect(points[2].material).toBe(restMaterial)
 
-    mesh.onBeforeRender()
-    expect(colour).toHaveBeenCalledTimes(1)
-    expect(writes).toBe(1)
-
-    mesh.onBeforeRender()
-    expect(colour).toHaveBeenCalledTimes(1)
-    expect(writes).toBe(1)
+    strings.update(centreOf, null, 0.016)
+    expect(points[0].material).toBe(restMaterial)
 
     const lit = { dimmed: true, lit: new Set(['a', 'b']) }
     strings.update(centreOf, lit, 1)
-    mesh.onBeforeRender()
-    expect(colour).toHaveBeenCalledTimes(2)
-    expect(writes).toBe(2)
+    const litMaterial = points[0].material
+    const dimmedMaterial = points[1].material
+    expect(litMaterial).not.toBe(restMaterial)
+    expect(dimmedMaterial).not.toBe(restMaterial)
+    expect(dimmedMaterial).not.toBe(litMaterial)
+    expect(points[2].material).toBe(dimmedMaterial)
 
-    mesh.onBeforeRender()
-    expect(colour).toHaveBeenCalledTimes(2)
-    expect(writes).toBe(2)
+    strings.update(centreOf, lit, 0.016)
+    expect(points[0].material).toBe(litMaterial)
+    expect(points[1].material).toBe(dimmedMaterial)
 
     const offPath = { dimmed: true, lit: new Set(['a']) }
-    strings.update(centreOf, offPath, 1)
-    mesh.onBeforeRender()
-    expect(colour).toHaveBeenCalledTimes(3)
-    expect(writes).toBe(3)
+    strings.update(centreOf, offPath, 2)
+    expect(points[0].material).toBe(dimmedMaterial)
 
     strings.dispose()
+  })
+
+  it('keeps unchanged strands on rebuild and bounds materials regardless of link count', () => {
+    const scene = fakeScene()
+    const centres = new Map([['', new THREE.Vector3(0, 0, 0)]])
+    const links = []
+    for (let i = 0; i < 10; i += 1) {
+      const name = `f${i}`
+      centres.set(name, new THREE.Vector3(100 + i * 20, 0, 0))
+      links.push({ from: '', to: name })
+    }
+    centres.set('f10', new THREE.Vector3(400, 0, 0))
+    const centreOf = (key) => centres.get(key)
+    const addSpy = vi.spyOn(scene, 'add')
+    const removeSpy = vi.spyOn(scene, 'remove')
+    const strings = createStrings(scene)
+    try {
+      strings.build(links, centreOf)
+      const beforeMeshes = scene.children.filter((child) => child.isPoints)
+      expect(beforeMeshes).toHaveLength(10)
+      expect(new Set(beforeMeshes.map((mesh) => mesh.material)).size).toBe(1)
+
+      addSpy.mockClear()
+      removeSpy.mockClear()
+
+      const nextLinks = [...links.slice(0, 9), { from: '', to: 'f10' }]
+      strings.build(nextLinks, centreOf)
+      const afterMeshes = scene.children.filter((child) => child.isPoints)
+      expect(afterMeshes).toHaveLength(10)
+      expect(addSpy).toHaveBeenCalledTimes(1)
+      expect(removeSpy).toHaveBeenCalledTimes(1)
+      expect(removeSpy).toHaveBeenCalledWith(beforeMeshes[9])
+      for (let i = 0; i < 9; i += 1) {
+        expect(afterMeshes[i]).toBe(beforeMeshes[i])
+      }
+      expect(afterMeshes[9]).not.toBe(beforeMeshes[9])
+
+      const many = []
+      for (let i = 0; i < 40; i += 1) {
+        const name = `m${i}`
+        centres.set(name, new THREE.Vector3(100 + i * 10, 0, 0))
+        many.push({ from: '', to: name })
+      }
+      strings.build(many, centreOf)
+      strings.update(centreOf, { dimmed: true, lit: new Set(['', 'm0', 'm1', 'm2']) }, 1)
+      const mats = new Set(scene.children.filter((child) => child.isPoints).map((mesh) => mesh.material))
+      expect(mats.size).toBe(2)
+    } finally {
+      strings.dispose()
+    }
   })
 })
 
