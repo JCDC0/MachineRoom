@@ -908,9 +908,16 @@ describe('the selected folder', () => {
   it('keeps is-active while an agent works on it', async () => {
     const { room, state } = await makeRoom(['src/a.js', 'docs/b.md'], ['claude'])
     try {
-      const agent = state.agents.get('claude')
-      agent.status = 'working'
-      agent.focus = ['src/a.js']
+      apply(state, {
+        type: 'tool.start',
+        agent: 'claude',
+        runId: 'r1',
+        time: 1000,
+        id: 'c1',
+        tool: 'read',
+        label: 'read src/a.js',
+        touches: [{ kind: 'file', path: 'src/a.js', mode: 'read' }],
+      })
       tickRoom(2)
       const card = cardElement('src')
       expect(card.className).toContain('is-active')
@@ -928,7 +935,16 @@ describe('returning to the room', () => {
   it('clears the inspected row, the selected folder, the pins and the popped folders on park', async () => {
     const { room, state } = await makeRoom(['lib/a/x.js', 'lib/a/c/y.js', 'docs/d.md', 'docs/deep/more/e.md'], ['claude'])
     try {
-      state.agents.get('claude').focus = ['docs/d.md']
+      apply(state, {
+        type: 'tool.start',
+        agent: 'claude',
+        runId: 'r1',
+        time: 1000,
+        id: 'c1',
+        tool: 'read',
+        label: 'read docs/d.md',
+        touches: [{ kind: 'file', path: 'docs/d.md', mode: 'read' }],
+      })
       tickRoom(1)
       expect(room.focusPath('lib/a/x.js')).toBe(true)
       tickRoom(1)

@@ -448,16 +448,21 @@ export function createCards(cssScene, options = {}) {
   let lastSprayVersion = 0
   let sprayVersion = 1
   let lastAgentFocus = []
+  let lastAgentOpen = []
   let danceOrderKeys = []
   let danceNextPath = ''
   let swayTarget = 0
   let swayLevel = 0
 
+  function hasOpenCall(agent) {
+    return (agent?.openCalls?.size ?? 0) > 0
+  }
+
   function focusChanged(state) {
     if (state.agents.size !== lastAgentFocus.length) return true
     let i = 0
     for (const agent of state.agents.values()) {
-      if (agent.focus !== lastAgentFocus[i]) return true
+      if (agent.focus !== lastAgentFocus[i] || hasOpenCall(agent) !== lastAgentOpen[i]) return true
       i += 1
     }
     return false
@@ -465,8 +470,10 @@ export function createCards(cssScene, options = {}) {
 
   function saveAgentFocus(state) {
     lastAgentFocus = []
+    lastAgentOpen = []
     for (const agent of state.agents.values()) {
       lastAgentFocus.push(agent.focus)
+      lastAgentOpen.push(hasOpenCall(agent))
     }
   }
 
@@ -912,6 +919,29 @@ export function createCards(cssScene, options = {}) {
     }
   }
 
+  function sameSet(a, b) {
+    if (a.size !== b.size) return false
+    for (const item of a) if (!b.has(item)) return false
+    return true
+  }
+
+  function computeActive(state) {
+    const focusPaths = new Set()
+    const dirs = new Set()
+    for (const agent of state.agents.values()) {
+      const open = hasOpenCall(agent)
+      for (const path of agent.focus ?? []) {
+        focusPaths.add(path)
+        if (open) dirs.add(state.files.has(path) ? dirname(path) : path)
+      }
+    }
+    const files = new Set([...focusPaths].filter((path) => state.files.has(path)))
+    const chain = openChain(state)
+    const changed = !sameSet(active.dirs, dirs) || !sameSet(active.files, files)
+    active = { files, dirs, path: chain }
+    return changed
+  }
+
   function recompute(state) {
     lastState = state
     const unchanged =
@@ -930,18 +960,14 @@ export function createCards(cssScene, options = {}) {
     saveAgentFocus(state)
 
     const planKeyNext = viewKey(state, [...pinned, ...sprayed])
-    if (planKeyNext === planKey) return false
+    if (planKeyNext === planKey) {
+      if (computeActive(state)) rowRevision += 1
+      return false
+    }
     planKey = planKeyNext
     const layout = cardPlan(state, { pinned: [...pinned], alwaysDepth: alwaysLevel, maxFiles: maxFilesLevel, previous: homes, sprayed, rootName })
     const drawn = layout.drawn
-    const focusPaths = new Set()
-    for (const agent of state.agents.values()) for (const path of agent.focus ?? []) focusPaths.add(path)
-    const files = new Set([...focusPaths].filter((path) => state.files.has(path)))
-    const dirs = new Set()
-    for (const file of files) dirs.add(dirname(file))
-    for (const path of focusPaths) if (!state.files.has(path)) dirs.add(path)
-    const chain = openChain(state)
-    active = { files, dirs, path: chain }
+    computeActive(state)
     const now = performance.now()
     const isStill = still()
     for (const card of [...cards.values()]) {
