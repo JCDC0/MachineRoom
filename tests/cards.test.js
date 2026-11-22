@@ -903,3 +903,133 @@ describe('the file list behind the plan', () => {
     expect(viewInput(state, []).files).toEqual(['src/a.js', 'src/new.js'])
   })
 })
+
+describe('hiding folder contents', () => {
+  it('keeps today rows when folderContents is on', () => {
+    const state = createState(makeTree({ root: 'demo', files: ['src/a.js', 'src/b.js', 'docs/c.md'] }), [])
+    const cards = createCards(fakeScene(), { glScene: fakeScene(), alwaysDepth: 2, folderContents: true })
+    cards.sync(state)
+    cards.update(state, 0.016, camera())
+    const src = cards.cards.get('src')
+    expect(src.rows).toHaveLength(2)
+    expect(src.items.hidden).toBe(false)
+    expect(src.element.className).not.toContain('is-collapsed')
+    expect(src.height).toBe(cardHeight(2))
+    cards.dispose()
+  })
+
+  it('shows no visible rows when folderContents is off and keeps the head count', () => {
+    const state = createState(makeTree({ root: 'demo', files: ['src/a.js', 'src/b.js', 'docs/c.md'] }), [])
+    const cards = createCards(fakeScene(), { glScene: fakeScene(), alwaysDepth: 2, folderContents: false })
+    cards.sync(state)
+    cards.update(state, 0.016, camera())
+    const src = cards.cards.get('src')
+    expect(src.rows).toHaveLength(0)
+    expect(src.items.children).toHaveLength(0)
+    expect(src.items.hidden).toBe(true)
+    expect(src.items.style.maxHeight).toBe('0px')
+    expect(src.element.className).toContain('is-collapsed')
+    expect(src.height).toBe(cardHeight(0))
+    expect(src.meta.textContent).toBe('2 items')
+    cards.dispose()
+  })
+
+  it('opens on head selection over 0.25s and closes when selection is lost', () => {
+    const state = createState(makeTree({ root: 'demo', files: ['src/a.js', 'src/b.js', 'docs/c.md'] }), [])
+    const cards = createCards(fakeScene(), { glScene: fakeScene(), alwaysDepth: 2, folderContents: false })
+    cards.sync(state)
+    cards.update(state, 0.016, camera())
+    const src = cards.cards.get('src')
+    const docs = cards.cards.get('docs')
+
+    cards.setSelected('src')
+    cards.update(state, 0.125, camera())
+    expect(src.element.className).not.toContain('is-collapsed')
+    expect(src.items.className).toContain('is-opening')
+    expect(src.rows).toHaveLength(2)
+    expect(src.height).toBeGreaterThan(cardHeight(0))
+    expect(src.height).toBeLessThan(cardHeight(2))
+
+    cards.update(state, 0.125, camera())
+    expect(src.items.className).toBe('mr-card-items')
+    expect(src.height).toBe(cardHeight(2))
+
+    cards.setSelected('docs')
+    cards.update(state, 0.125, camera())
+    expect(src.height).toBeLessThan(cardHeight(2))
+    expect(src.height).toBeGreaterThan(cardHeight(0))
+    expect(docs.height).toBeGreaterThan(cardHeight(0))
+
+    cards.update(state, 0.125, camera())
+    expect(src.rows).toHaveLength(0)
+    expect(src.items.hidden).toBe(true)
+    expect(src.element.className).toContain('is-collapsed')
+    expect(src.height).toBe(cardHeight(0))
+    expect(docs.height).toBe(cardHeight(1))
+
+    cards.clearSelection()
+    cards.update(state, 0.25, camera())
+    expect(docs.rows).toHaveLength(0)
+    expect(docs.element.className).toContain('is-collapsed')
+    cards.dispose()
+  })
+
+  it('opens on touch only when openOnTouch is on and closes when the touch fades unless selected', () => {
+    const state = createState(makeTree({ root: 'demo', files: ['src/a.js', 'docs/b.md'] }), [])
+    const cards = createCards(fakeScene(), { glScene: fakeScene(), alwaysDepth: 2, folderContents: false, openOnTouch: true })
+    cards.sync(state)
+    cards.update(state, 0.016, camera())
+    const src = cards.cards.get('src')
+    const docs = cards.cards.get('docs')
+
+    cards.flashFile('src', 'src/a.js', 'white')
+    cards.update(state, 0.25, camera())
+    expect(src.rows).toHaveLength(1)
+    expect(src.height).toBe(cardHeight(1))
+
+    cards.update(state, 1.0, camera())
+    cards.update(state, 0.25, camera())
+    expect(src.rows).toHaveLength(0)
+    expect(src.element.className).toContain('is-collapsed')
+
+    cards.setSelected('src')
+    cards.flashFile('src', 'src/a.js', 'white')
+    cards.update(state, 0.25, camera())
+    cards.update(state, 1.2, camera())
+    expect(src.rows).toHaveLength(1)
+    expect(src.height).toBe(cardHeight(1))
+
+    cards.setOptions({ openOnTouch: false })
+    cards.flashFile('docs', 'docs/b.md', 'white')
+    cards.update(state, 0.25, camera())
+    expect(docs.rows).toHaveLength(0)
+    expect(docs.element.className).toContain('is-collapsed')
+    cards.dispose()
+  })
+
+  it('snaps open and closed without animation under reduced motion', () => {
+    const savedWindow = globalThis.window
+    globalThis.window = { matchMedia: () => ({ matches: true }) }
+    try {
+      const state = createState(makeTree({ root: 'demo', files: ['src/a.js', 'src/b.js'] }), [])
+      const cards = createCards(fakeScene(), { glScene: fakeScene(), alwaysDepth: 2, folderContents: false })
+      cards.sync(state)
+      cards.update(state, 0.016, camera())
+      const src = cards.cards.get('src')
+      expect(src.height).toBe(cardHeight(0))
+
+      cards.setSelected('src')
+      cards.update(state, 0.016, camera())
+      expect(src.height).toBe(cardHeight(2))
+      expect(src.rows).toHaveLength(2)
+
+      cards.setSelected(null)
+      cards.update(state, 0.016, camera())
+      expect(src.height).toBe(cardHeight(0))
+      expect(src.rows).toHaveLength(0)
+      cards.dispose()
+    } finally {
+      globalThis.window = savedWindow
+    }
+  })
+})

@@ -316,6 +316,47 @@ describe('the content files setting', () => {
     })
   })
 
+  it('renders Show folder contents and Open when an agent touches it under Screen effects', async () => {
+    await settingsPanel('Screen effects', (container) => {
+      const showContents = container.querySelector('[aria-label="Show folder contents"]')
+      const openTouch = container.querySelector('[aria-label="Open when an agent touches it"]')
+      expect(showContents).not.toBeNull()
+      expect(openTouch).not.toBeNull()
+      expect(showContents.getAttribute('role')).toBe('switch')
+      expect(showContents.getAttribute('aria-checked')).toBe('true')
+      expect(openTouch.getAttribute('role')).toBe('switch')
+      expect(openTouch.getAttribute('aria-checked')).toBe('true')
+      expect(openTouch.hasAttribute('disabled')).toBe(true)
+      const text = container.textContent
+      expect(text.indexOf('Show folder contents')).toBeGreaterThan(text.indexOf('Content files'))
+      expect(text.indexOf('Open when an agent touches it')).toBeGreaterThan(text.indexOf('Show folder contents'))
+    })
+
+    const changes = []
+    await withDom(async ({ container, root }) => {
+      await act(async () => {
+        root.render(createElement(Settings, {
+          effects: { alwaysDepth: 2, folderContents: false, openOnTouch: true },
+          onChange: (next) => changes.push(next),
+          onClose: () => {},
+        }))
+      })
+      await openTab(root, container, 'Screen effects')
+      const showContents = container.querySelector('[aria-label="Show folder contents"]')
+      const openTouch = container.querySelector('[aria-label="Open when an agent touches it"]')
+      expect(showContents.getAttribute('aria-checked')).toBe('false')
+      expect(openTouch.hasAttribute('disabled')).toBe(false)
+      await act(async () => {
+        openTouch.click()
+      })
+      expect(changes.at(-1).openOnTouch).toBe(false)
+      await act(async () => {
+        showContents.click()
+      })
+      expect(changes.at(-1).folderContents).toBe(true)
+    })
+  })
+
   it('gives every effect, Beeps, Dance and Pulse switch an accessible name', async () => {
     await settingsPanel('Screen effects', (container) => {
       for (const label of ['Chromatic aberration', 'Vignette', 'Grain', 'Fine dust', 'Bloom']) {
@@ -341,6 +382,43 @@ describe('the content files setting', () => {
       expect(text).toContain('A short tone when an agent reads, writes, makes or deletes a file.')
       expect(text.indexOf('Beeps')).toBeLessThan(text.indexOf('A short tone when an agent'))
     })
+  })
+})
+
+describe('the folder contents settings', () => {
+  it('defaults folderContents and openOnTouch to true and keeps booleans only', () => {
+    expect(DEFAULT_EFFECTS.folderContents).toBe(true)
+    expect(DEFAULT_EFFECTS.openOnTouch).toBe(true)
+    expect(effectSettings().folderContents).toBe(true)
+    expect(effectSettings().openOnTouch).toBe(true)
+    expect(effectSettings({ folderContents: false, openOnTouch: false }).folderContents).toBe(false)
+    expect(effectSettings({ folderContents: false, openOnTouch: false }).openOnTouch).toBe(false)
+    expect(effectSettings({ effects: { folderContents: false, openOnTouch: false } })).toMatchObject({
+      folderContents: false,
+      openOnTouch: false,
+    })
+
+    for (const invalid of ['false', 'yes', 0, 1, null, {}]) {
+      const normalized = effectSettings({ folderContents: invalid, openOnTouch: invalid })
+      expect(normalized.folderContents).toBe(true)
+      expect(normalized.openOnTouch).toBe(true)
+    }
+  })
+
+  it('saves and loads folderContents and openOnTouch with the other effects', () => {
+    const storage = makeStorage()
+    expect(loadEffectSettings(storage).folderContents).toBe(true)
+    expect(loadEffectSettings(storage).openOnTouch).toBe(true)
+
+    const updated = saveEffectSettings(storage, { folderContents: false, openOnTouch: false })
+    expect(updated.folderContents).toBe(false)
+    expect(updated.openOnTouch).toBe(false)
+    expect(loadEffectSettings(storage)).toMatchObject({ folderContents: false, openOnTouch: false })
+    expect(JSON.parse(storage.getItem(SETTINGS_KEY))).toMatchObject({ folderContents: false, openOnTouch: false })
+
+    const fallback = saveEffectSettings(storage, { folderContents: 'no', openOnTouch: 0 })
+    expect(fallback.folderContents).toBe(true)
+    expect(fallback.openOnTouch).toBe(true)
   })
 })
 

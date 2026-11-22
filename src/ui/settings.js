@@ -38,6 +38,8 @@ export function clampFileLimit(value) {
 export const DEFAULT_EFFECTS = Object.freeze({
   alwaysDepth: 2,
   maxFiles: FILE_LIMIT_DEFAULT,
+  folderContents: true,
+  openOnTouch: true,
   aberration: Object.freeze({ on: false, strength: 0.2 }),
   vignette: Object.freeze({ on: true, strength: 0.2 }),
   grain: Object.freeze({ on: false, strength: 0.2 }),
@@ -98,6 +100,10 @@ export function effectSettings(saved) {
 
   const alwaysDepth = clampDepth(source.alwaysDepth ?? root.alwaysDepth)
   const maxFiles = clampFileLimit(source.maxFiles ?? root.maxFiles)
+  const folderContentsRaw = source.folderContents ?? root.folderContents
+  const folderContents = typeof folderContentsRaw === 'boolean' ? folderContentsRaw : DEFAULT_EFFECTS.folderContents
+  const openOnTouchRaw = source.openOnTouch ?? root.openOnTouch
+  const openOnTouch = typeof openOnTouchRaw === 'boolean' ? openOnTouchRaw : DEFAULT_EFFECTS.openOnTouch
   const aberration = clampEffect(source.aberration ?? source.chromaticAberration, false, 0.2)
   const vignette = clampEffect(source.vignette, true, 0.2)
   const grain = clampEffect(source.grain, false, 0.2)
@@ -108,6 +114,8 @@ export function effectSettings(saved) {
   return {
     alwaysDepth,
     maxFiles,
+    folderContents,
+    openOnTouch,
     aberration,
     chromaticAberration: aberration,
     vignette,
@@ -148,6 +156,16 @@ function normalizeSettings(raw) {
   const maxFiles = raw.maxFiles ?? raw.effects?.maxFiles
   if (maxFiles !== undefined) {
     out.maxFiles = clampFileLimit(maxFiles)
+  }
+
+  const folderContents = raw.folderContents ?? raw.effects?.folderContents
+  if (typeof folderContents === 'boolean') {
+    out.folderContents = folderContents
+  }
+
+  const openOnTouch = raw.openOnTouch ?? raw.effects?.openOnTouch
+  if (typeof openOnTouch === 'boolean') {
+    out.openOnTouch = openOnTouch
   }
 
   if (raw.effects && typeof raw.effects === 'object') {
@@ -226,6 +244,8 @@ export function loadEffectSettings(storage = store()) {
   return effectSettings({
     alwaysDepth: settings.alwaysDepth,
     maxFiles: settings.maxFiles,
+    folderContents: settings.folderContents,
+    openOnTouch: settings.openOnTouch,
     ...(settings.effects ?? {}),
   })
 }
@@ -264,14 +284,20 @@ export function saveEffectSettings(storage = store(), partial) {
   }
   const alwaysDepth = incoming.alwaysDepth !== undefined ? incoming.alwaysDepth : current.alwaysDepth
   const maxFiles = incoming.maxFiles !== undefined ? incoming.maxFiles : current.maxFiles
+  const folderContents = incoming.folderContents !== undefined ? incoming.folderContents : current.folderContents
+  const openOnTouch = incoming.openOnTouch !== undefined ? incoming.openOnTouch : current.openOnTouch
   const merged = effectSettings({
     alwaysDepth,
     maxFiles,
+    folderContents,
+    openOnTouch,
     ...mergedEffects,
   })
   saveSettings(storage, {
     alwaysDepth: merged.alwaysDepth,
     maxFiles: merged.maxFiles,
+    folderContents: merged.folderContents,
+    openOnTouch: merged.openOnTouch,
     effects: {
       aberration: merged.aberration,
       vignette: merged.vignette,

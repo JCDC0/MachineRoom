@@ -332,4 +332,21 @@ describe('the room takes the chosen top and the depth', () => {
       room.dispose()
     }
   })
+
+  it('passes folderContents and openOnTouch through room.setOptions', async () => {
+    const { room } = await makeRoom(['src/a.js', 'docs/b.md'])
+    try {
+      const srcCard = () => createdNodes.findLast((node) => node.dataset?.path === 'src')
+      tick()
+      expect(srcCard().className).not.toContain('is-collapsed')
+      room.setOptions({ folderContents: false, openOnTouch: false })
+      tick()
+      expect(srcCard().className).toContain('is-collapsed')
+      room.setOptions({ folderContents: true })
+      tick()
+      expect(srcCard().className).not.toContain('is-collapsed')
+    } finally {
+      room.dispose()
+    }
+  })
 })

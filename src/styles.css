@@ -2409,6 +2409,11 @@ label.hud-settings-section {
   color: var(--black);
 }
 
+.hud-settings-switch:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
 .hud-settings input[type='range'] {
   width: 100%;
   margin: 0;
@@ -5497,6 +5502,14 @@ body:has(#hud-orchestrator-chat) .lens-waiting {
   pointer-events: auto;
   scrollbar-width: thin;
   scrollbar-color: rgb(255 255 255 / 0.35) transparent;
+}
+
+.mr-card.is-collapsed .mr-card-items {
+  display: none;
+}
+
+.mr-card-items.is-opening {
+  overflow: hidden;
 }
 
 .mr-orch {
