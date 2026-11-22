@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The folder strings keep their unchanged strands on a rebuild and share one material per colour, so a link change no longer rebuilds every strand; they look up their card anchors only when a card was added, removed, moved or resized (P696, engine findings E6 and E11). The 15 unused class rules left in styles.css are gone (P695). Both run by the Neon team.
 - A brief run started through the bridge keeps the lane's saved effort and the model the caller chose, as a project run does; the native lanes save effort xhigh, so an orchestrator can start them at xhigh. Before, a brief run dropped both (P694; run by the Neon team).
 - Review 70 fixes: the runner match reads only the node program and its script, skipping node flags that take a value, and never reads a long prompt; a seat label drops at most 40% of the gap to the ring below, so it stays clear of it with five rings; a log with no meta is given up 10 seconds after it was first seen, even while it grows (P691, R70-1 to R70-4; run by the Neon team).
 - The ring seat labels sit 70 below their ring line, where no name stands, so ring 1's label no longer lands on a sector name (P689; run by the Neon team).

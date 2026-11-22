@@ -5,6 +5,8 @@ const SEGMENTS = 16
 const LINE_LEVEL = 0.1
 const DIM_FACTOR = 0.25
 const STRAND_JITTER = 0.6
+const YELLOW_STEPS = 16
+const FACTOR_STEPS = 8
 
 const COLOR_WHITE = new THREE.Color(WHITE)
 const COLOR_YELLOW = new THREE.Color(YELLOW)
@@ -153,16 +155,91 @@ function fillStrandDirect(strand, from, to) {
   strand.mesh.geometry = nextGeo
 }
 
+function linkId(link) {
+  return `${link.from ?? ''}>${link.to ?? ''}`
+}
+
+function writeLineSegments(array, index, from, to) {
+  const ax = from.x, ay = from.y, az = from.z
+  const dx = to.x - ax, dy = to.y - ay, dz = to.z - az
+  for (let segment = 0; segment < SEGMENTS; segment += 1) {
+    const start = segment / SEGMENTS
+    const end = (segment + 1) / SEGMENTS
+    const base = (index * SEGMENTS + segment) * 6
+    array[base] = ax + dx * start
+    array[base + 1] = ay + dy * start
+    array[base + 2] = az + dz * start
+    array[base + 3] = ax + dx * end
+    array[base + 4] = ay + dy * end
+    array[base + 5] = az + dz * end
+  }
+}
+
+function makeLineGeometry(count) {
+  const geometry = new THREE.BufferGeometry()
+  geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(count * SEGMENTS * 6), 3))
+  geometry.setAttribute('color', new THREE.BufferAttribute(new Float32Array(count * SEGMENTS * 6), 3))
+  return geometry
+}
+
 export function createStrings(scene) {
   const from = new THREE.Vector3()
   const to = new THREE.Vector3()
   const glow = glowTexture()
+  const materials = new Map()
   let line = null
   let ends = []
   let strands = []
   let lineLevels = []
   let dimLevel = 0
   let currentMask = null
+
+  function materialFor(yellowLevel, lit, dim) {
+    const factor = lit ? 1 : 1 - (1 - DIM_FACTOR) * dim
+    const yellowStep = Math.round(yellowLevel * YELLOW_STEPS)
+    const factorStep = Math.round(((factor - DIM_FACTOR) / (1 - DIM_FACTOR)) * FACTOR_STEPS)
+    const key = `${yellowStep}|${factorStep}`
+    let material = materials.get(key)
+    if (!material) {
+      const y = yellowStep / YELLOW_STEPS
+      const f = DIM_FACTOR + (1 - DIM_FACTOR) * (factorStep / FACTOR_STEPS)
+      material = new THREE.PointsMaterial({
+        color: new THREE.Color().lerpColors(COLOR_WHITE, COLOR_YELLOW, y),
+        size: 8,
+        map: glow,
+        transparent: true,
+        opacity: (0.35 + y * 0.55) * f,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+      })
+      materials.set(key, material)
+    }
+    return material
+  }
+
+  function makeStrand(link) {
+    const seed = stringHash(linkId(link))
+    const mesh = new THREE.Points(new THREE.BufferGeometry(), materialFor(0, false, 0))
+    mesh.frustumCulled = false
+    scene.add(mesh)
+    return {
+      link,
+      seed,
+      mesh,
+      yellowLevel: 0,
+      paintedYellow: -1,
+      paintedLit: false,
+      paintedDim: -1,
+      from: new THREE.Vector3(NaN, NaN, NaN),
+      to: new THREE.Vector3(NaN, NaN, NaN),
+      anchorStamp: undefined,
+      fromStamp: undefined,
+      toStamp: undefined,
+      stampBasis: undefined,
+      fractions: null,
+      fractionsCount: 0,
+    }
+  }
 
   function clear() {
     if (line) {
@@ -174,9 +251,10 @@ export function createStrings(scene) {
     for (const strand of strands) {
       scene.remove(strand.mesh)
       strand.mesh.geometry.dispose()
-      strand.mesh.material.dispose()
       strand.fractions = null
     }
+    for (const material of materials.values()) material.dispose()
+    materials.clear()
     strands = []
     ends = []
     lineLevels = []
@@ -187,10 +265,11 @@ export function createStrings(scene) {
     glow.dispose()
   }
 
-  function update(anchorOf, mask = null, delta = 0) {
+  function update(anchorOf, mask = null, delta = 0, stamp = anchorOf?.stamp?.()) {
     currentMask = mask
+    const isStill = still()
     const dimGoal = mask?.dimmed ? 1 : 0
-    if (still()) {
+    if (isStill) {
       dimLevel = dimGoal
     } else if (dimLevel < dimGoal) {
       dimLevel = Math.min(dimGoal, dimLevel + delta)
@@ -215,6 +294,33 @@ export function createStrings(scene) {
         colorChanged = true
       }
 
+      if (strand) {
+        if (isStill) {
+          strand.yellowLevel = onPath ? 1 : 0
+        } else if (onPath) {
+          strand.yellowLevel = 1
+        } else if (strand.yellowLevel > 0) {
+          strand.yellowLevel = Math.max(0, strand.yellowLevel - delta / 1.5)
+        }
+        if (strand.paintedYellow !== strand.yellowLevel || strand.paintedLit !== onPath || strand.paintedDim !== dimLevel) {
+          strand.paintedYellow = strand.yellowLevel
+          strand.paintedLit = onPath
+          strand.paintedDim = dimLevel
+          const nextMaterial = materialFor(strand.yellowLevel, onPath, dimLevel)
+          if (strand.mesh.material !== nextMaterial) strand.mesh.material = nextMaterial
+        }
+      }
+
+      if (
+        strand &&
+        stamp !== undefined &&
+        strand.anchorStamp === stamp &&
+        !Number.isNaN(strand.from.x) &&
+        !Number.isNaN(strand.to.x)
+      ) {
+        continue
+      }
+
       const fromValue = anchorOf(link.from ?? '', from)
       if (fromValue && fromValue !== from) {
         from.copy(fromValue)
@@ -226,6 +332,9 @@ export function createStrings(scene) {
         to.copy(toValue)
         to.anchorStamp = undefined
         to.anchorBasis = undefined
+      }
+      if (strand) {
+        strand.anchorStamp = fromValue && toValue ? stamp : undefined
       }
 
       const fromStamp = from.anchorStamp
@@ -253,19 +362,7 @@ export function createStrings(scene) {
       if (moved) {
         written += 1
         lineChanged = true
-        const ax = from.x, ay = from.y, az = from.z
-        const dx = to.x - ax, dy = to.y - ay, dz = to.z - az
-        for (let segment = 0; segment < SEGMENTS; segment += 1) {
-          const start = segment / SEGMENTS
-          const end = (segment + 1) / SEGMENTS
-          const base = (i * SEGMENTS + segment) * 6
-          array[base] = ax + dx * start
-          array[base + 1] = ay + dy * start
-          array[base + 2] = az + dz * start
-          array[base + 3] = ax + dx * end
-          array[base + 4] = ay + dy * end
-          array[base + 5] = az + dz * end
-        }
+        writeLineSegments(array, i, from, to)
         if (strand) {
           strand.from.copy(from)
           strand.to.copy(to)
@@ -283,84 +380,87 @@ export function createStrings(scene) {
   }
 
   function build(links, anchorOf) {
-    clear()
-    ends = [...links]
-    if (ends.length === 0) return
-    const geometry = new THREE.BufferGeometry()
-    geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(ends.length * SEGMENTS * 6), 3))
-    geometry.setAttribute('color', new THREE.BufferAttribute(new Float32Array(ends.length * SEGMENTS * 6), 3))
-    line = new THREE.LineSegments(
-      geometry,
-      new THREE.LineBasicMaterial({
-        color: WHITE,
-        vertexColors: true,
-        transparent: true,
-        opacity: 1,
-        depthWrite: false,
-        blending: THREE.AdditiveBlending,
-      })
-    )
-    line.frustumCulled = false
-    scene.add(line)
+    const list = links ? [...links] : []
+    if (list.length === 0) {
+      clear()
+      return
+    }
+    const existing = new Map()
+    for (let i = 0; i < strands.length; i += 1) {
+      const strand = strands[i]
+      const key = linkId(strand.link)
+      let bucket = existing.get(key)
+      if (!bucket) {
+        bucket = []
+        existing.set(key, bucket)
+      }
+      bucket.push({ strand, index: i })
+    }
+
+    const nextStrands = []
+    let orderChanged = list.length !== ends.length
+    for (let i = 0; i < list.length; i += 1) {
+      const link = list[i]
+      const key = linkId(link)
+      const bucket = existing.get(key)
+      if (bucket && bucket.length > 0) {
+        const entry = bucket.shift()
+        entry.strand.link = link
+        if (entry.index !== i) orderChanged = true
+        nextStrands.push(entry.strand)
+      } else {
+        orderChanged = true
+        nextStrands.push(makeStrand(link))
+      }
+    }
+
+    for (const bucket of existing.values()) {
+      for (const entry of bucket) {
+        scene.remove(entry.strand.mesh)
+        entry.strand.mesh.geometry.dispose()
+        entry.strand.fractions = null
+      }
+    }
+
+    ends = list
+    strands = nextStrands
     lineLevels = new Array(ends.length).fill(-1)
 
-    strands = ends.map((link) => {
-      const seed = stringHash(`${link.from ?? ''}>${link.to ?? ''}`)
-      const material = new THREE.PointsMaterial({
-        color: WHITE,
-        size: 8,
-        map: glow,
-        transparent: true,
-        opacity: 0.35,
-        depthWrite: false,
-        blending: THREE.AdditiveBlending,
-      })
-      const mesh = new THREE.Points(new THREE.BufferGeometry(), material)
-      mesh.frustumCulled = false
-      let lastTime = performance.now()
-      const strand = {
-        link,
-        seed,
-        mesh,
-        yellowLevel: 0,
-        paintedYellow: -1,
-        paintedLit: false,
-        paintedDim: -1,
-        from: new THREE.Vector3(NaN, NaN, NaN),
-        to: new THREE.Vector3(NaN, NaN, NaN),
-        fromStamp: undefined,
-        toStamp: undefined,
-        stampBasis: undefined,
-        fractions: null,
-        fractionsCount: 0,
-      }
-      mesh.onBeforeRender = () => {
-        const now = performance.now()
-        const delta = Math.min((now - lastTime) / 1000, 0.1)
-        lastTime = now
-        const active = linkOnPath(strand.link, currentMask)
-        const isStill = still()
-        if (isStill) {
-          strand.yellowLevel = active ? 1 : 0
-        } else if (active) {
-          strand.yellowLevel = 1
-        } else if (strand.yellowLevel > 0) {
-          strand.yellowLevel = Math.max(0, strand.yellowLevel - delta / 1.5)
-        }
-        const lit = active
-        if (strand.paintedYellow === strand.yellowLevel && strand.paintedLit === lit && strand.paintedDim === dimLevel) return
-        strand.paintedYellow = strand.yellowLevel
-        strand.paintedLit = lit
-        strand.paintedDim = dimLevel
-        const factor = lit ? 1 : 1 - (1 - DIM_FACTOR) * dimLevel
-        material.color.lerpColors(COLOR_WHITE, COLOR_YELLOW, strand.yellowLevel)
-        material.opacity = (0.35 + strand.yellowLevel * 0.55) * factor
-      }
-      scene.add(mesh)
-      return strand
-    })
+    let lineRebuilt = false
+    if (!line) {
+      line = new THREE.LineSegments(
+        makeLineGeometry(ends.length),
+        new THREE.LineBasicMaterial({
+          color: WHITE,
+          vertexColors: true,
+          transparent: true,
+          opacity: 1,
+          depthWrite: false,
+          blending: THREE.AdditiveBlending,
+        })
+      )
+      line.frustumCulled = false
+      scene.add(line)
+      lineRebuilt = true
+    } else if (line.geometry.attributes.position.count !== ends.length * SEGMENTS * 2) {
+      line.geometry.dispose()
+      line.geometry = makeLineGeometry(ends.length)
+      lineRebuilt = true
+    }
 
-    update(anchorOf)
+    if (lineRebuilt || orderChanged) {
+      const posArray = line.geometry.attributes.position.array
+      let seededPos = false
+      for (let i = 0; i < strands.length; i += 1) {
+        const strand = strands[i]
+        if (Number.isNaN(strand.from.x) || Number.isNaN(strand.to.x)) continue
+        writeLineSegments(posArray, i, strand.from, strand.to)
+        seededPos = true
+      }
+      if (seededPos) line.geometry.attributes.position.needsUpdate = true
+    }
+
+    update(anchorOf, currentMask, 0)
   }
 
   return { build, update, dispose }

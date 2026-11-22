@@ -747,6 +747,42 @@ describe('the frame cost of a card that did not move', () => {
     cards.dispose()
   })
 
+  it('calls anchorOf at most once per end across ten resting frames and refreshes only the moved card strands', () => {
+    const state = makeWideState(10)
+    const { cards } = makeCards()
+    const strings = createStrings(fakeScene())
+    const cam = camera()
+    cards.sync(state)
+    cards.update(state, 0.016, cam)
+    const anchorOf = vi.fn((path, out) => cards.anchor(path, out))
+    anchorOf.stamp = cards.stamp
+    const links = cards.visibleLinks()
+    strings.build(links, anchorOf)
+    settle(cards, state, cam)
+    strings.update(anchorOf)
+    anchorOf.mockClear()
+
+    for (let frame = 0; frame < 10; frame += 1) {
+      cards.update(state, 0.016, cam)
+      expect(strings.update(anchorOf)).toBe(0)
+    }
+    expect(anchorOf).not.toHaveBeenCalled()
+
+    const moving = cards.cards.get('d5')
+    moving.home.x += 50
+    cards.update(state, 0.016, cam)
+    expect(strings.update(anchorOf)).toBe(1)
+
+    const stampBeforeResize = cards.stamp()
+    const resizeState = makeState(['d5/a.js', 'd5/b.js'], [])
+    cards.sync(resizeState)
+    cards.update(resizeState, 0.016, cam)
+    expect(cards.stamp()).not.toBe(stampBeforeResize)
+
+    strings.dispose()
+    cards.dispose()
+  })
+
   it('computes a card width once and its offset once per size change', () => {
     const state = makeState(Array.from({ length: 8 }, (_, index) => `d0/f${index}.js`), [])
     const { cards } = makeCards()
