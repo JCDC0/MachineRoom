@@ -398,6 +398,173 @@ describe('the Subagents section', () => {
     })
   })
 
+  it('counts only newly hidden rings on a second drop after hiding a deeper ring', async () => {
+    const client = makeClient({
+      limit: 4,
+      unlocked: true,
+      deepest: 2,
+      deepestAgents: 1,
+      rings: [
+        { ring: 1, agents: 1 },
+        { ring: 2, agents: 1 },
+      ],
+    })
+    await withDom(async ({ container, root }) => {
+      await mount(root, { client })
+
+      await click(root, buttonWithText(container, 'Lock'))
+      const firstCard = container.querySelector('.mr-depth-confirm')
+      expect(firstCard).not.toBeNull()
+      expect(firstCard.querySelector('.mr-depth-confirm-text').textContent).toBe(
+        'Ring 2 holds 1 agent. A depth of 2 hides it until you raise it again.'
+      )
+
+      await click(root, buttonWithText(container, 'Hide'))
+      await settle()
+      expect(client.calls.setAgentDepth).toEqual([
+        { limit: 2, unlocked: false, confirmed: true, hideOccupied: true },
+      ])
+
+      await click(root, container.querySelector('[aria-label="Subagent depth 1"]'))
+      const secondCard = container.querySelector('.mr-depth-confirm')
+      expect(secondCard).not.toBeNull()
+      expect(secondCard.querySelector('.mr-depth-confirm-text').textContent).toBe(
+        'Ring 1 holds 1 agent. A depth of 1 hides it until you raise it again.'
+      )
+      expect(client.calls.setAgentDepth).toHaveLength(1)
+
+      await click(root, buttonWithText(container, 'Hide'))
+      await settle()
+      expect(client.calls.setAgentDepth).toEqual([
+        { limit: 2, unlocked: false, confirmed: true, hideOccupied: true },
+        { limit: 1, unlocked: false, confirmed: true, hideOccupied: true },
+      ])
+    })
+
+    expect(
+      hideOccupiedText(
+        [
+          { ring: 1, agents: 1 },
+          { ring: 2, agents: 1 },
+        ],
+        1,
+        2
+      )
+    ).toBe('Ring 1 holds 1 agent. A depth of 1 hides it until you raise it again.')
+    expect(
+      hideOccupiedText(
+        [
+          { ring: 1, agents: 2 },
+          { ring: 2, agents: 1 },
+          { ring: 3, agents: 2 },
+        ],
+        1,
+        3
+      )
+    ).toBe('Rings 1 and 2 hold 3 agents. A depth of 1 hides them until you raise it again.')
+    expect(hideOccupiedText([{ ring: 2, agents: 1 }], 1, 2)).toBe('')
+  })
+
+  it('saves at once without asking when only already-hidden deeper rings hold agents', async () => {
+    const atTwo = makeClient({
+      limit: 2,
+      unlocked: false,
+      deepest: 2,
+      deepestAgents: 1,
+      rings: [{ ring: 2, agents: 1 }],
+    })
+    await withDom(async ({ container, root }) => {
+      await mount(root, { client: atTwo })
+
+      await click(root, container.querySelector('[aria-label="Subagent depth 1"]'))
+      await settle()
+
+      expect(container.querySelector('.mr-depth-confirm')).toBeNull()
+      expect(atTwo.calls.setAgentDepth).toEqual([{ limit: 1, unlocked: false, confirmed: true }])
+    })
+
+    const atThree = makeClient({
+      limit: 3,
+      unlocked: true,
+      deepest: 3,
+      deepestAgents: 1,
+      rings: [
+        { ring: 1, agents: 1 },
+        { ring: 3, agents: 1 },
+      ],
+    })
+    await withDom(async ({ container, root }) => {
+      await mount(root, { client: atThree })
+
+      await click(root, buttonWithText(container, 'Lock'))
+      await settle()
+
+      expect(container.querySelector('.mr-depth-confirm')).toBeNull()
+      expect(atThree.calls.setAgentDepth).toEqual([{ limit: 2, unlocked: false, confirmed: true }])
+    })
+  })
+
+  it('closes a stale Hide card when newly hidden rings empty while a hidden ring stays occupied, and scopes 409 text', async () => {
+    const client = makeClient({
+      limit: 2,
+      unlocked: false,
+      deepest: 2,
+      deepestAgents: 1,
+      rings: [
+        { ring: 1, agents: 1 },
+        { ring: 2, agents: 1 },
+      ],
+    })
+    await withDom(async ({ container, root }) => {
+      await mount(root, { client })
+
+      await click(root, container.querySelector('[aria-label="Subagent depth 1"]'))
+      expect(container.querySelector('.mr-depth-confirm-text').textContent).toBe(
+        'Ring 1 holds 1 agent. A depth of 1 hides it until you raise it again.'
+      )
+
+      client.setSaved({
+        limit: 2,
+        unlocked: false,
+        deepest: 2,
+        deepestAgents: 1,
+        rings: [{ ring: 2, agents: 1 }],
+      })
+      await act(async () => {
+        client.emit({ topic: 'family' })
+      })
+      await settle()
+      expect(container.querySelector('.mr-depth-confirm')).toBeNull()
+    })
+
+    const conflictClient = makeClient(
+      { limit: 2, unlocked: false, deepest: 0, deepestAgents: 0, rings: [] },
+      {
+        conflict: {
+          error: 'Ring 1 holds 1 agent. A depth of 1 hides it until you raise it again.',
+          deepest: 2,
+          deepestAgents: 1,
+          rings: [
+            { ring: 1, agents: 1 },
+            { ring: 2, agents: 1 },
+          ],
+        },
+      }
+    )
+    await withDom(async ({ container, root }) => {
+      await mount(root, { client: conflictClient })
+
+      await click(root, container.querySelector('[aria-label="Subagent depth 1"]'))
+      await settle()
+
+      const card = container.querySelector('.mr-depth-confirm')
+      expect(card).not.toBeNull()
+      expect(card.querySelector('.mr-depth-confirm-text').textContent).toBe(
+        'Ring 1 holds 1 agent. A depth of 1 hides it until you raise it again.'
+      )
+    })
+  })
+
   it('sits in Settings', async () => {
     const client = makeClient()
     await withDom(async ({ container, root }) => {

@@ -17,9 +17,10 @@ export const UNLOCK_DEPTH_PROBLEM = 'The subagent depth can be 3 or 4 only after
 export function occupiedDepthProblem(ringOrRings, countOrLimit, maybeLimit) {
   if (Array.isArray(ringOrRings)) {
     const limit = countOrLimit
+    const currentLimit = Number.isInteger(maybeLimit) ? maybeLimit : Infinity
     const byRing = new Map()
     for (const item of ringOrRings) {
-      if (!item || !Number.isInteger(item.ring) || item.ring < limit) continue
+      if (!item || !Number.isInteger(item.ring) || item.ring < limit || item.ring >= currentLimit) continue
       if (!Number.isInteger(item.agents) || item.agents <= 0) continue
       byRing.set(item.ring, (byRing.get(item.ring) ?? 0) + item.agents)
     }
@@ -106,6 +107,7 @@ export function createAgentDepthApi(options = {}) {
   const notify = options.notify
 
   function ringInfo() {
+    if (typeof options.ringInfo === 'function') return options.ringInfo()
     const context = familySeatsFor(sendJson, {
       projectRoot: options.projectRoot ?? '',
       runsFolder: runsDir,
@@ -162,9 +164,13 @@ export function createAgentDepthApi(options = {}) {
 
     const current = readAgentDepth(runsDir)
     const info = ringInfo()
-    if (body.limit < current.limit && body.limit <= info.deepest && body.hideOccupied !== true) {
+    const problem =
+      body.limit < current.limit && body.hideOccupied !== true
+        ? occupiedDepthProblem(info.rings, body.limit, current.limit)
+        : ''
+    if (problem) {
       sendJson(req, res, 409, {
-        error: occupiedDepthProblem(info.rings, body.limit),
+        error: problem,
         ...info,
       })
       return true
