@@ -1,5 +1,9 @@
 # Plan
 
+## Next, as of 2026-11-23 02:30
+
+Pushed `c9771c4c` (full suite 9287 green, audit clean). Both AGY lanes ran out of credits (Argon at 23:00, Neon at 01:43 during P718); the orchestrator finished P718 from Neon's partial work (`166bc968`, the six replay layout digests changed, every plan digest held) and did P719 by hand (`c9771c4c`). Every review 74 finding is fixed. Next: review 75 of `7189db1d..c9771c4c` on the first lane with credits, toward the stop rule (two clean reviews in a row).
+
 ## Next, as of 2026-11-23 01:45
 
 Pushed `7189db1d` (CI green on both runners). Review 74 (P717) found 2 High, 2 Medium and 2 Low: stale agent focus (R74-1), forced idle broken by room keys, the Help backdrop and reduced motion (R74-2), the tunnel aiming at an old file (R74-3), forced idle below 900 pixels and while disconnected (R74-4), the gyro rings in phase (R74-5) and untested hand commits (R74-6). The Stage parts of R74-2, R74-4 and R74-6 are done by hand (`5d769a4f`); P718 (focus, tunnel, gyro, callout click) runs on Neon, then P719 (camera spin, Hud keys, forced idle CSS and the lens pointer block). The stop rule is not met: review 74 had user-meetable Highs. Argon (`agy-6`) is still out of usage.
