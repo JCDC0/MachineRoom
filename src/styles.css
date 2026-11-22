@@ -9137,6 +9137,31 @@ button.ui-icon-btn.mr-composer-send:hover:not(:disabled) {
     display: grid;
     grid-template-columns: minmax(max-content, 1fr) minmax(0, auto) minmax(max-content, 1fr);
     column-gap: calc(var(--space) * 2);
+    row-gap: var(--space);
+  }
+
+  .transport.is-live:not(.has-orchestrator) {
+    display: grid;
+    grid-template-columns: minmax(max-content, 1fr) minmax(0, auto) minmax(max-content, 1fr);
+    column-gap: calc(var(--space) * 2);
+    row-gap: var(--space);
+  }
+
+  .transport.is-live:not(.has-orchestrator) > .mono {
+    justify-self: end;
+  }
+
+  .transport:not(.is-live) {
+    row-gap: var(--space);
+  }
+
+  .transport.is-live .transport-view {
+    grid-column: 2;
+    justify-self: center;
+  }
+
+  .transport.is-live.has-orchestrator .transport-view {
+    grid-row: 2;
   }
 
   .hud-lower-main {
@@ -9284,6 +9309,7 @@ button.ui-icon-btn.mr-composer-send:hover:not(:disabled) {
   .hud-health-chip,
   .transport-badge,
   .transport-center,
+  .transport-idle,
   .transport-orchestrator,
   .transport-chip,
   .transport-chip-overflow,
@@ -9322,6 +9348,7 @@ button.ui-icon-btn.mr-composer-send:hover:not(:disabled) {
 
   .transport-badge,
   .transport-center,
+  .transport-idle,
   .transport-orchestrator,
   .transport-chip,
   .transport-chip-overflow,
@@ -10637,8 +10664,20 @@ button.mr-family-heading,
   color: var(--red);
 }
 
-/* U60: the Center button sits beside the live link tag in the transport head */
-.transport .transport-center {
+.transport-view {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.transport:not(.is-live) .transport-view {
+  grid-column: 1 / -1;
+  justify-self: center;
+}
+
+.transport .transport-center,
+.transport .transport-idle {
   padding: 0 6px;
   border: 1px solid rgb(255 255 255 / 0.24);
   border-radius: 2px;
@@ -10651,9 +10690,19 @@ button.mr-family-heading,
 }
 
 .transport .transport-center:hover,
-.transport .transport-center:focus-visible {
+.transport .transport-center:focus-visible,
+.transport .transport-idle:hover,
+.transport .transport-idle:focus-visible {
   color: var(--text);
   border-color: rgb(255 255 255 / 0.5);
+}
+
+.transport .transport-idle[aria-pressed='true'],
+.transport .transport-idle[aria-pressed='true']:hover,
+.transport .transport-idle[aria-pressed='true']:focus-visible {
+  border-color: var(--yellow);
+  color: var(--yellow);
+  background: rgb(229 255 0 / 0.08);
 }
 
 /* U47: one refresh button and one search field for every model picker. */
@@ -10973,6 +11022,11 @@ button.mr-family-heading,
   transition: transform 300ms ease, opacity 300ms ease;
 }
 
+.transport > :not(.transport-view),
+.transport-view > :not(.transport-idle) {
+  transition: border-color 150ms, color 150ms, background-color 150ms, opacity 300ms ease;
+}
+
 @media (min-width: 900px) {
   .stage.is-idle {
     padding-top: 0;
@@ -10980,6 +11034,22 @@ button.mr-family-heading,
 
   .stage.is-idle .lens {
     height: 100vh;
+  }
+
+  .stage.is-idle-forced {
+    padding-top: 0;
+  }
+
+  .stage.is-idle-forced .lens {
+    height: 100vh;
+  }
+
+  .stage.is-idle-forced .transport {
+    position: fixed;
+    top: calc(100vh - var(--transport-h));
+    left: 0;
+    right: 0;
+    z-index: 8;
   }
 }
 
@@ -10992,8 +11062,8 @@ button.mr-family-heading,
     transition: height 300ms ease;
   }
 
-  .stage:not(.is-idle) .lens:has(.lens-rail:hover),
-  .stage:not(.is-idle) .lens:has(.lens-rail:focus-within) {
+  .stage:not(.is-idle):not(.is-idle-forced) .lens:has(.lens-rail:hover),
+  .stage:not(.is-idle):not(.is-idle-forced) .lens:has(.lens-rail:focus-within) {
     transition: none;
   }
 
@@ -11002,6 +11072,14 @@ button.mr-family-heading,
   }
 
   .stage.is-idle .lens {
+    transition: height 800ms ease-out;
+  }
+
+  .stage.is-idle-forced {
+    transition: padding-top 800ms ease-out;
+  }
+
+  .stage.is-idle-forced .lens {
     transition: height 800ms ease-out;
   }
 }
@@ -11028,11 +11106,58 @@ button.mr-family-heading,
   transition: opacity 800ms ease-out;
 }
 
+.stage.is-idle-forced .hud-menu {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-100%);
+  transition: transform 800ms ease-out, opacity 800ms ease-out;
+}
+
+.stage.is-idle-forced .lens-rail,
+.stage.is-idle-forced .lens-labels {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 800ms ease-out;
+}
+
+.stage.is-idle-forced .transport {
+  opacity: 1;
+  transform: none;
+  pointer-events: none;
+  background: none;
+  border-color: transparent;
+  transition: none;
+}
+
+.stage.is-idle-forced .transport > :not(.transport-view),
+.stage.is-idle-forced .transport-view > :not(.transport-idle) {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 800ms ease-out;
+}
+
+.stage.is-idle-forced .transport-view .transport-idle {
+  opacity: 1;
+  pointer-events: auto;
+}
+
 @media (prefers-reduced-motion: reduce) {
+  .hud-menu,
+  .transport,
+  .transport > :not(.transport-view),
+  .transport-view > :not(.transport-idle),
+  .lens-rail,
+  .lens-labels,
   .stage.is-idle .hud-menu,
   .stage.is-idle .transport,
   .stage.is-idle .lens-rail,
-  .stage.is-idle .lens-labels {
+  .stage.is-idle .lens-labels,
+  .stage.is-idle-forced .hud-menu,
+  .stage.is-idle-forced .lens-rail,
+  .stage.is-idle-forced .lens-labels,
+  .stage.is-idle-forced .transport,
+  .stage.is-idle-forced .transport > :not(.transport-view),
+  .stage.is-idle-forced .transport-view > :not(.transport-idle) {
     transition: none;
   }
 }
