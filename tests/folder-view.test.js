@@ -10,7 +10,7 @@ const PLAN_DIGESTS = {
   sandbox: 'c2b708087298eb0c',
   'scenario-a': '73dd68c909528680',
   'scenario-b': 'f773c6e02d64c9dd',
-  'scenario-c': 'a7524ec50b89129f',
+  'scenario-c': '180e9e935a5364bd',
   'scenario-d': '1abaa12fe0269330',
 }
 
@@ -656,6 +656,27 @@ describe('planFolderView', () => {
     })
 
     expect(second).toEqual(first)
+  })
+
+  it('drops outside paths and does not make a top-level folder for a root path missing from the tree', () => {
+    const files = ['docs/b.md', 'src/a.js']
+    const clean = planFolderView({ files, focus: [''], alwaysDepth: 2 })
+    const dirty = planFolderView({
+      files,
+      focus: ['', 'C:\\Outside\\note.txt', '/etc/hosts', '../outside.js', '~/notes.md', '%USERPROFILE%\\.gitconfig', 'missing.txt', 'ghost/file.js'],
+      touched: ['C:\\Outside\\note.txt', '/etc/hosts', '../outside.js', 'missing.txt', 'ghost/file.js'],
+      alwaysDepth: 2,
+    })
+
+    expect(dirty).toEqual(clean)
+
+    const withFile = planFolderView({
+      files: [...files, 'ghost/file.js'],
+      focus: ['', 'ghost/file.js'],
+      touched: ['ghost/file.js'],
+      alwaysDepth: 2,
+    })
+    expect(paths(withFile)).toEqual(['', 'docs', 'ghost', 'src'])
   })
 })
 

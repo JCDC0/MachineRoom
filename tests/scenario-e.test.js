@@ -21,8 +21,8 @@ const OTHER_FIXTURES = {
   },
   'fixtures/scenario-c': {
     activities: '394bd8e0fe7863bc',
-    plans: '209e2edc80cfd82f',
-    layouts: 'cf9437e37f63146d',
+    plans: '2cc40e0a1006e392',
+    layouts: '2737fc7980b4a88e',
   },
   'fixtures/scenario-d': {
     activities: 'b5b12e98ea6c1c52',
