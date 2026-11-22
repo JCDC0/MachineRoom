@@ -1475,4 +1475,42 @@ describe('the inspected row and the inspector', () => {
       room.dispose()
     }
   })
+
+  it('opens an undrawn subfolder without holding its parent open and clears a prior inspected file in room.focusPath', async () => {
+    const { room } = await makeRoom(['src/ui/App.jsx', 'src/ui/sub/Panel.jsx', 'docs/d.md'], ['claude'])
+    try {
+      room.setOptions({ folderContents: false, openOnTouch: true })
+      tickRoom(1)
+      expect(cardElement('src/ui').className).toContain('is-collapsed')
+      expect(cardElement('src/ui/sub')).toBeUndefined()
+
+      dispatchCss(cardParts(cardElement('src/ui')).head, 'click', { detail: 1 })
+      tickRoom(1)
+      expect(cardElement('src/ui').className).not.toContain('is-collapsed')
+
+      expect(room.focusPath('src/ui/sub')).toBe(true)
+      tickRoom(1)
+      const sub = cardElement('src/ui/sub')
+      expect(sub).toBeTruthy()
+      expect(sub.className).toContain('is-selected')
+      expect(sub.className).not.toContain('is-collapsed')
+      expect(cardRow(sub, 'Panel.jsx')).toBeTruthy()
+      expect(cardElement('src/ui').className).not.toContain('is-selected')
+      expect(cardElement('src/ui').className).toContain('is-collapsed')
+
+      expect(room.inspect({ kind: 'file', id: 'docs/d.md' })).toBe(true)
+      tickRoom(1)
+      expect(cardElement('docs').className).not.toContain('is-collapsed')
+      expect(cardRow(cardElement('docs'), 'd.md').className).toContain('is-inspected')
+
+      expect(room.focusPath('src/ui/App.jsx')).toBe(true)
+      tickRoom(1)
+      expect(room.inspecting()).toBe(null)
+      expect(cardElement('src/ui').className).toContain('is-selected')
+      expect(cardElement('src/ui').className).not.toContain('is-collapsed')
+      expect(cardElement('docs').className).toContain('is-collapsed')
+    } finally {
+      room.dispose()
+    }
+  })
 })

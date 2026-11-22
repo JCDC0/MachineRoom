@@ -1679,7 +1679,7 @@ export function createCards(cssScene, options = {}) {
       const duration = red ? FAIL_MS : FLASH_MS
       const name = basename(path)
       const own = cards.get(path)
-      if (own && !own.leaving) {
+      if ((own && !own.leaving) || pinned.has(path)) {
         recordTouch(path, duration)
         if (!red) return
       } else {

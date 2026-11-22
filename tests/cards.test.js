@@ -1264,6 +1264,34 @@ describe('hiding folder contents', () => {
     expect(src.element.className).toContain('is-collapsed')
     cards.dispose()
   })
+
+  it('records a touch on a pinned undrawn subfolder itself in flashCluster and not its parent', () => {
+    const state = createState(makeTree({ root: 'demo', files: ['src/ui/App.jsx', 'src/ui/sub/Panel.jsx'] }), [])
+    const cards = createCards(fakeScene(), { glScene: fakeScene(), alwaysDepth: 2, folderContents: false, openOnTouch: true })
+    cards.sync(state)
+    cards.update(state, 0.016, camera())
+    const parent = cards.cards.get('src/ui')
+    expect(cards.cards.get('src/ui/sub')).toBeUndefined()
+
+    cards.setSelected('src/ui')
+    cards.update(state, 0.25, camera())
+    expect(parent.openLevel).toBe(1)
+
+    cards.pin('src/ui/sub')
+    cards.setSelected('src/ui/sub')
+    cards.flashCluster('src/ui/sub', 'white')
+    cards.update(state, 0.25, camera())
+
+    const sub = cards.cards.get('src/ui/sub')
+    expect(sub).toBeTruthy()
+    expect(sub.openLevel).toBe(1)
+    expect(sub.rows).toHaveLength(1)
+    expect(sub.element.className).not.toContain('is-collapsed')
+    expect(parent.openLevel).toBe(0)
+    expect(parent.rows).toHaveLength(0)
+    expect(parent.element.className).toContain('is-collapsed')
+    cards.dispose()
+  })
 })
 
 describe('the overview spheres with paths outside the file tree', () => {

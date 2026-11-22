@@ -1180,10 +1180,8 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     if (!isFile && path !== '' && !state.dirs.has(path)) return false
     releaseHold()
     endFollow()
-    if (!isFile) {
-      inspected = null
-      cards.setInspected(null)
-    }
+    inspected = null
+    cards.setInspected(null)
     const dir = isFile ? dirname(path) : path
     followFocus.clear()
     cards.pin(dir)
