@@ -1758,7 +1758,7 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
         terminals.setVisible?.(view.key, !presence.dim)
       }
 
-      const working = (status === 'working' || status === 'queued') && Boolean(entry?.label)
+      const working = (status === 'working' || status === 'queued') && hasOpenCalls(entry)
       if (view.parentKey) {
         const parentView = views.get(view.parentKey)
         if (parentView) orbitHome(view, parentView, isStill ? 0 : now / 1000)
@@ -1835,7 +1835,7 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
       let calloutText = ''
       if (working) {
         calloutTone = lastFailed ? 'error' : 'working'
-        calloutText = entry.label
+        calloutText = entry?.label || latestOpenCall(entry)?.label || ''
       } else if (failedFresh) {
         calloutTone = 'error'
         calloutText = entry?.error || 'FAILED'
