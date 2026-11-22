@@ -220,6 +220,22 @@ export function latestOpenCall(agent) {
   return last
 }
 
+function focusFromOpenCalls(agent) {
+  const open = agent?.openCalls
+  if (!(open instanceof Map) || open.size === 0) return []
+  const seen = new Set()
+  const out = []
+  for (const call of open.values()) {
+    for (const touch of call?.touches ?? []) {
+      const path = touch?.path
+      if (typeof path !== 'string' || seen.has(path)) continue
+      seen.add(path)
+      out.push(path)
+    }
+  }
+  return out
+}
+
 export function apply(state, activity) {
   if (Number.isFinite(activity.time) && activity.time > (state.latest ?? 0)) state.latest = activity.time
   pruneChildren(state)
@@ -260,29 +276,32 @@ export function apply(state, activity) {
       agent.runWrites.clear()
       agent.calls.clear()
       agent.openCalls.clear()
+      agent.focus = []
       say(agent, `run ${String(activity.runId).slice(0, 4)} started`, 'dim')
       break
-    case 'tool.start':
+    case 'tool.start': {
+      const touches = Array.isArray(activity.touches) ? activity.touches : []
       agent.status = 'working'
       agent.label = activity.label
       agent.calls.delete(activity.id)
-      agent.calls.set(activity.id, activity.touches)
+      agent.calls.set(activity.id, touches)
       if (agent.calls.size > CALL_LIMIT) agent.calls.delete(agent.calls.keys().next().value)
       agent.openCalls.delete(activity.id)
       agent.openCalls.set(activity.id, {
         tool: typeof activity.tool === 'string' ? activity.tool : '',
         label: typeof activity.label === 'string' ? activity.label : '',
-        touches: Array.isArray(activity.touches) ? activity.touches : [],
+        touches,
       })
       if (agent.openCalls.size > CALL_LIMIT) agent.openCalls.delete(agent.openCalls.keys().next().value)
       say(agent, activity.label)
-      activity.touches.forEach((touch) => applyTouch(state, agent, touch))
+      touches.forEach((touch) => applyTouch(state, agent, touch))
       rememberOutsidePath(agent, activity)
-      if (activity.touches.length > 0) {
-        agent.focus = activity.touches.map((touch) => touch.path)
-        remember(state, agent.focus, activity.time)
+      if (touches.length > 0) {
+        remember(state, touches.map((touch) => touch.path), activity.time)
       }
+      agent.focus = focusFromOpenCalls(agent)
       break
+    }
     case 'tool.end': {
       const ended = agent.openCalls.get(activity.id)
       agent.openCalls.delete(activity.id)
@@ -298,11 +317,14 @@ export function apply(state, activity) {
         }
       }
       if (newest) agent.label = newest.label
+      agent.focus = focusFromOpenCalls(agent)
       break
     }
     case 'error':
       agent.status = 'error'
       agent.error = activity.text
+      agent.openCalls.clear()
+      agent.focus = []
       say(agent, activity.text, 'error')
       break
     case 'run.end':

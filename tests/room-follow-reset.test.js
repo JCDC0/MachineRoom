@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createFollowFocus, createLater, createWorkingMaskCache, followAfterSeek, inspectorNamesPath, noteTouch, TOUCH_ENTRY_LIMIT, TOUCH_PATH_LIMIT, workingMask } from '../src/engine/room.js'
 import { agentColors } from '../src/engine/sprites.js'
+import { makeTree } from '../src/model/paths.js'
+import { apply, createState } from '../src/model/state.js'
 
 function state(status, focus, recent = []) {
   return {
@@ -41,13 +43,14 @@ describe('followAfterSeek', () => {
 })
 
 describe('the working mask', () => {
-  const working = (focus, status = 'working', latest = 10) => ({
+  const openMap = (has = true) => (has ? new Map([['t1', { tool: 'read', label: 'read', touches: [] }]]) : new Map())
+  const working = (focus, status = 'working', latest = 10, openCalls = openMap(true)) => ({
     latest,
     files: new Map([['src/a.js', { path: 'src/a.js', exists: true }]]),
-    agents: new Map([['hermes', { key: 'hermes', status, focus }]]),
+    agents: new Map([['hermes', { key: 'hermes', status, focus, openCalls }]]),
   })
 
-  it('builds once over idle frames and again when an agent, a focus or the activity changes', () => {
+  it('builds once over idle frames and again when an agent, a focus, openCalls or the activity changes', () => {
     const cache = createWorkingMaskCache()
     const state = working(['src/a.js'])
     const mask = cache.of(state)
@@ -67,23 +70,95 @@ describe('the working mask', () => {
     state.agents.get('hermes').focus = ['docs/b.md']
     cache.of(state)
     expect(cache.builds()).toBe(3)
+    state.agents.get('hermes').openCalls.clear()
+    const thinking = cache.of(state)
+    expect(thinking.dimmed).toBe(false)
+    expect(thinking.targeted.size).toBe(0)
+    expect(cache.builds()).toBe(4)
     state.agents.get('hermes').status = 'done'
     const idle = cache.of(state)
     expect(idle.dimmed).toBe(false)
-    expect(cache.builds()).toBe(4)
+    expect(cache.builds()).toBe(5)
     for (let frame = 0; frame < 5; frame += 1) expect(cache.of(state)).toBe(idle)
-    expect(cache.builds()).toBe(4)
+    expect(cache.builds()).toBe(5)
   })
 
-  it('lights a working path only, not a recent touch or an idle agent', () => {
+  it('lights a working path with an open call only, not a thinking agent, recent touch or idle agent', () => {
     const cache = createWorkingMaskCache()
     const state = working(['src/a.js'])
     state.recent = ['docs/b.md']
-    state.agents.set('claude', { key: 'claude', status: 'done', focus: ['docs/b.md'] })
+    state.agents.set('claude', { key: 'claude', status: 'done', focus: ['docs/b.md'], openCalls: openMap(true) })
+    state.agents.set('agy', { key: 'agy', status: 'working', focus: ['docs/b.md'], openCalls: openMap(false) })
     const mask = cache.of(state)
     expect(mask.lit).toEqual(new Set(['', 'src']))
     expect(mask.lit.has('docs')).toBe(false)
     expect(mask.targeted).toEqual(new Set(['src']))
+  })
+
+  it('clears the mask while thinking, during a non-file tool, on error, and shifts to the remaining open call', () => {
+    const state = createState(makeTree({ root: 'demo', files: ['src/a.js', 'docs/b.md'] }), [{ key: 'claude', name: 'Claude' }])
+    const colourOf = () => 0xffb347
+    apply(state, { type: 'run.start', agent: 'claude', runId: 'r1', time: 1 })
+    apply(state, {
+      type: 'tool.start',
+      agent: 'claude',
+      runId: 'r1',
+      time: 2,
+      id: 'o1',
+      tool: 'read',
+      label: 'read src/a.js',
+      touches: [{ kind: 'file', path: 'src/a.js', mode: 'read' }],
+    })
+    let mask = workingMask(state, colourOf)
+    expect(mask.dimmed).toBe(true)
+    expect(mask.targeted).toEqual(new Set(['src']))
+    expect(mask.fileColors).toEqual(new Map([['src/a.js', '#ffb347']]))
+
+    apply(state, {
+      type: 'tool.start',
+      agent: 'claude',
+      runId: 'r1',
+      time: 3,
+      id: 'o2',
+      tool: 'read',
+      label: 'read docs/b.md',
+      touches: [{ kind: 'file', path: 'docs/b.md', mode: 'read' }],
+    })
+    mask = workingMask(state, colourOf)
+    expect(mask.targeted).toEqual(new Set(['src', 'docs']))
+
+    apply(state, { type: 'tool.end', agent: 'claude', runId: 'r1', time: 4, id: 'o2', ok: true })
+    mask = workingMask(state, colourOf)
+    expect(mask.targeted).toEqual(new Set(['src']))
+    expect(mask.fileColors).toEqual(new Map([['src/a.js', '#ffb347']]))
+
+    apply(state, { type: 'tool.end', agent: 'claude', runId: 'r1', time: 5, id: 'o1', ok: true })
+    mask = workingMask(state, colourOf)
+    expect(mask.dimmed).toBe(false)
+    expect(mask.targeted.size).toBe(0)
+    expect(mask.fileColors.size).toBe(0)
+
+    apply(state, { type: 'tool.start', agent: 'claude', runId: 'r1', time: 6, id: 'sh1', tool: 'shell', label: 'npm test', touches: [] })
+    mask = workingMask(state, colourOf)
+    expect(mask.dimmed).toBe(false)
+    expect(mask.targeted.size).toBe(0)
+
+    apply(state, {
+      type: 'tool.start',
+      agent: 'claude',
+      runId: 'r1',
+      time: 7,
+      id: 'o3',
+      tool: 'read',
+      label: 'read src/a.js',
+      touches: [{ kind: 'file', path: 'src/a.js', mode: 'read' }],
+    })
+    expect(workingMask(state, colourOf).dimmed).toBe(true)
+    apply(state, { type: 'error', agent: 'claude', runId: 'r1', time: 8, text: 'failed' })
+    mask = workingMask(state, colourOf)
+    expect(mask.dimmed).toBe(false)
+    expect(mask.targeted.size).toBe(0)
+    expect(mask.fileColors.size).toBe(0)
   })
 })
 
@@ -100,7 +175,12 @@ describe('the target colours', () => {
     agents: new Map(
       agents.map((agent) => [
         agent.key,
-        { key: agent.key, status: agent.status ?? 'working', focus: agent.focus },
+        {
+          key: agent.key,
+          status: agent.status ?? 'working',
+          focus: agent.focus,
+          openCalls: agent.openCalls ?? new Map([['t1', { tool: 'read', label: 'read', touches: [] }]]),
+        },
       ]),
     ),
   })

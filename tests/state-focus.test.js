@@ -8,22 +8,68 @@ const call = (agent, id, touches, time = 1) => ({ type: 'tool.start', agent, run
 const touch = (path, kind = 'file', mode = 'read') => ({ path, kind, mode })
 
 describe('agent focus and recent paths', () => {
-  it('keeps the paths of the latest call as the agent focus', () => {
+  it('rebuilds focus from the touches of open calls and clears it as calls end', () => {
     const state = createState(tree, agents)
     apply(state, { type: 'run.start', agent: 'hermes', runId: 'r1', time: 0, order: 0 })
     apply(state, call('hermes', 'c1', [touch('src/a.js')]))
     apply(state, call('hermes', 'c2', [touch('docs/notes.md'), touch('src', 'dir', 'list')], 2))
-    expect(state.agents.get('hermes').focus).toEqual(['docs/notes.md', 'src'])
+    expect(state.agents.get('hermes').focus).toEqual(['src/a.js', 'docs/notes.md', 'src'])
     expect(state.agents.get('agy').focus).toEqual([])
+
+    apply(state, { type: 'tool.end', agent: 'hermes', runId: 'r1', time: 3, order: 3, id: 'c1', ok: true })
+    expect(state.agents.get('hermes').focus).toEqual(['docs/notes.md', 'src'])
+
+    apply(state, { type: 'tool.end', agent: 'hermes', runId: 'r1', time: 4, order: 4, id: 'c2', ok: true })
+    expect(state.agents.get('hermes').focus).toEqual([])
   })
 
-  it('keeps the focus through a call with no touches and clears it when the run ends', () => {
+  it('keeps an open call focus during a concurrent call with no touches, and leaves focus empty after a file call ends', () => {
     const state = createState(tree, agents)
     apply(state, call('hermes', 'c1', [touch('src/a.js')]))
     apply(state, call('hermes', 'c2', [], 2))
     expect(state.agents.get('hermes').focus).toEqual(['src/a.js'])
-    apply(state, { type: 'run.end', agent: 'hermes', runId: 'r1', time: 3, order: 3, ok: true })
+
+    apply(state, { type: 'tool.end', agent: 'hermes', runId: 'r1', time: 3, order: 3, id: 'c1', ok: true })
+    expect(state.agents.get('hermes').openCalls.size).toBe(1)
     expect(state.agents.get('hermes').focus).toEqual([])
+
+    apply(state, call('hermes', 'c3', [touch('src/b.js')], 4))
+    expect(state.agents.get('hermes').focus).toEqual(['src/b.js'])
+    apply(state, { type: 'run.end', agent: 'hermes', runId: 'r1', time: 5, order: 5, ok: true })
+    expect(state.agents.get('hermes').focus).toEqual([])
+  })
+
+  it('clears focus after tool.end so a later non-file tool stays unfocused, restores older overlaps, and clears on run.start and error', () => {
+    const state = createState(tree, agents)
+    const hermes = state.agents.get('hermes')
+    apply(state, { type: 'run.start', agent: 'hermes', runId: 'r1', time: 0, order: 0 })
+    apply(state, call('hermes', 'c1', [touch('src/a.js')], 1))
+    apply(state, { type: 'tool.end', agent: 'hermes', runId: 'r1', time: 2, order: 2, id: 'c1', ok: true })
+    expect(hermes.openCalls.size).toBe(0)
+    expect(hermes.focus).toEqual([])
+
+    apply(state, { type: 'tool.start', agent: 'hermes', runId: 'r1', time: 3, order: 3, id: 'sh1', tool: 'shell', label: 'npm test', touches: [] })
+    expect(hermes.openCalls.size).toBe(1)
+    expect(hermes.focus).toEqual([])
+    apply(state, { type: 'tool.end', agent: 'hermes', runId: 'r1', time: 4, order: 4, id: 'sh1', ok: true })
+
+    apply(state, call('hermes', 'o1', [touch('src/a.js')], 5))
+    apply(state, call('hermes', 'o2', [touch('docs/notes.md')], 6))
+    expect(hermes.focus).toEqual(['src/a.js', 'docs/notes.md'])
+    apply(state, { type: 'tool.end', agent: 'hermes', runId: 'r1', time: 7, order: 7, id: 'o2', ok: true })
+    expect(hermes.focus).toEqual(['src/a.js'])
+
+    apply(state, { type: 'run.start', agent: 'hermes', runId: 'r2', time: 8, order: 8 })
+    expect(hermes.openCalls.size).toBe(0)
+    expect(hermes.focus).toEqual([])
+
+    apply(state, call('hermes', 'e1', [touch('src/a.js')], 9))
+    expect(hermes.openCalls.size).toBe(1)
+    expect(hermes.focus).toEqual(['src/a.js'])
+    apply(state, { type: 'error', agent: 'hermes', runId: 'r2', time: 10, order: 10, text: 'boom' })
+    expect(hermes.status).toBe('error')
+    expect(hermes.openCalls.size).toBe(0)
+    expect(hermes.focus).toEqual([])
   })
 
   it('remembers the last touched paths across agents, newest last, without repeats', () => {

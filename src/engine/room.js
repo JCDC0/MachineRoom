@@ -30,6 +30,10 @@ export function frameTimes(previous, now) {
   return { elapsed, delta: Math.min(elapsed / 1000, FRAME_DELTA_CAP) }
 }
 
+function hasOpenCall(agent) {
+  return (agent?.openCalls?.size ?? 0) > 0
+}
+
 export function workingMask(state, colourOf = null, into = null) {
   const lit = into?.lit ?? new Set()
   const targeted = into?.targeted ?? new Set()
@@ -41,7 +45,7 @@ export function workingMask(state, colourOf = null, into = null) {
   fileColors.clear()
   let touched = false
   for (const agent of state.agents.values()) {
-    if (agent.status !== 'working') continue
+    if (agent.status !== 'working' || !hasOpenCall(agent)) continue
     const colour = colourOf ? cssColor(colourOf(agent.key)) : null
     for (const path of agent.focus ?? []) {
       touched = true
@@ -80,6 +84,7 @@ export function createWorkingMaskCache(colourOf = null) {
   let latest = null
   let focus = []
   let statuses = []
+  let open = []
   let colours = []
   let builds = 0
 
@@ -87,7 +92,7 @@ export function createWorkingMaskCache(colourOf = null) {
     if (state.latest !== latest || state.agents.size !== focus.length) return true
     let index = 0
     for (const agent of state.agents.values()) {
-      if (agent.focus !== focus[index] || agent.status !== statuses[index]) return true
+      if (agent.focus !== focus[index] || agent.status !== statuses[index] || hasOpenCall(agent) !== open[index]) return true
       if (colourOf && colourOf(agent.key) !== colours[index]) return true
       index += 1
     }
@@ -107,10 +112,12 @@ export function createWorkingMaskCache(colourOf = null) {
     latest = state.latest
     focus.length = 0
     statuses.length = 0
+    open.length = 0
     colours.length = 0
     for (const agent of state.agents.values()) {
       focus.push(agent.focus)
       statuses.push(agent.status)
+      open.push(hasOpenCall(agent))
       colours.push(colourOf ? colourOf(agent.key) : null)
     }
     const next = workingMask(state, colourOf, spare)

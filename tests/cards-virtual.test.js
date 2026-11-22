@@ -103,7 +103,12 @@ function files(count) {
 
 function setup(count) {
   const state = createState(makeTree({ root: 'demo', files: files(count) }), [{ key: 'hermes', name: 'Hermes' }])
-  if (count > 70) state.agents.get('hermes').focus = ['src/f70.js']
+  if (count > 70) {
+    const hermes = state.agents.get('hermes')
+    hermes.status = 'working'
+    hermes.openCalls.set('c1', { tool: 'read', label: 'read src/f70.js', touches: [{ path: 'src/f70.js', kind: 'file', mode: 'read' }] })
+    hermes.focus = ['src/f70.js']
+  }
   const cards = createCards(fakeScene(), { glScene: fakeScene(), alwaysDepth: 1, maxFiles: 4 })
   cards.sync(state)
   cards.update(state, 0.016, camera())

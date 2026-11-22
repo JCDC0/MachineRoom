@@ -7,7 +7,7 @@ const OTHER_FIXTURES = {
   'fixtures/sandbox': {
     activities: '4e1d0649be6925a9',
     plans: '6dab246be0dc06a2',
-    layouts: 'cb9a4332076900b8',
+    layouts: '59787788cab614ea',
   },
   'fixtures/scenario-a': {
     activities: '00673deaecca9630',
@@ -98,6 +98,6 @@ describe('the replay digests', () => {
   })
 
   it('keeps the scenario E layout digest', () => {
-    expect(results.get('fixtures/scenario-e')?.digest.layouts).toEqual('46f1ee22a9e7eaf8')
+    expect(results.get('fixtures/scenario-e')?.digest.layouts).toEqual('9ec236dd77f7bb96')
   })
 })
