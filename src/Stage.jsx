@@ -494,8 +494,6 @@ function LensEdge({ side, yaw = 0, disconnected = false }) {
     : `M 0 ${lineY} Q ${width / 2} ${lineY - LENS_BOW * 2} ${width} ${lineY}`
   return (
     <div className={`lens-edge is-${side}${disconnected ? ' is-disconnected' : ''}`} ref={ref} aria-hidden="true">
-      <span className="lens-edge-corner is-left" />
-      <span className="lens-edge-corner is-right" />
       <span className="lens-edge-cross">+</span>
       <svg
         className="lens-edge-rule"

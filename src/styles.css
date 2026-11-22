@@ -10547,38 +10547,6 @@ button.mr-family-heading,
   bottom: calc(var(--lens-bow, 28px) + 2px);
 }
 
-.lens-edge-corner {
-  position: absolute;
-  width: 12px;
-  height: 12px;
-  box-sizing: border-box;
-  border: 0 solid currentColor;
-}
-
-.lens-edge.is-top .lens-edge-corner.is-left {
-  left: 0;
-  top: 0;
-  border-width: 1px 0 0 1px;
-}
-
-.lens-edge.is-top .lens-edge-corner.is-right {
-  right: 0;
-  top: 0;
-  border-width: 1px 1px 0 0;
-}
-
-.lens-edge.is-bottom .lens-edge-corner.is-left {
-  left: 0;
-  bottom: 0;
-  border-width: 0 0 1px 1px;
-}
-
-.lens-edge.is-bottom .lens-edge-corner.is-right {
-  right: 0;
-  bottom: 0;
-  border-width: 0 1px 1px 0;
-}
-
 .transport-live-head {
   display: inline-flex;
   align-items: center;
@@ -10903,7 +10871,6 @@ button.mr-family-heading,
 .stage.is-disconnected .lens-edge,
 .stage.is-disconnected .lens-edge-line,
 .stage.is-disconnected .lens-edge-tick,
-.stage.is-disconnected .lens-edge-corner,
 .stage.is-disconnected .lens-edge-cross,
 .stage.is-disconnected .lens-edge-cross::before,
 .stage.is-disconnected .lens-edge-cross::after,
