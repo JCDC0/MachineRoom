@@ -1,5 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
+import { familySeatsFor } from './family.js'
+import { levelOf } from './seats.js'
 
 export const AGENT_DEPTH_DEFAULT = 2
 export const AGENT_DEPTH_MIN = 1
@@ -11,6 +13,25 @@ export const TOKEN_DEPTH_PROBLEM = 'An orchestrator cannot change the subagent d
 export const CONFIRM_DEPTH_PROBLEM = 'Confirm the subagent depth first.'
 export const LIMIT_DEPTH_PROBLEM = 'The subagent depth must be 1, 2, 3 or 4.'
 export const UNLOCK_DEPTH_PROBLEM = 'The subagent depth can be 3 or 4 only after an unlock.'
+
+export function occupiedDepthProblem(ring, count, limit) {
+  const agents = count === 1 ? '1 agent' : `${count} agents`
+  const pronoun = count === 1 ? 'it' : 'them'
+  return `Ring ${ring} holds ${agents}. A depth of ${limit} hides ${pronoun} until you raise it again.`
+}
+
+export function deepestRing(tree) {
+  const nodes = Array.isArray(tree) ? tree : []
+  const counts = new Map()
+  let deepest = 0
+  for (const node of nodes) {
+    if (!node || (node.kind !== 'lane' && node.kind !== 'sub')) continue
+    const ring = levelOf(nodes, node)
+    if (ring > deepest) deepest = ring
+    counts.set(ring, (counts.get(ring) ?? 0) + 1)
+  }
+  return { deepest, deepestAgents: counts.get(deepest) ?? 0 }
+}
 
 export function agentDepthFileFor(runsFolder) {
   return join(resolve(runsFolder), 'agent-depth.json')
@@ -61,12 +82,22 @@ export function createAgentDepthApi(options = {}) {
   const readJsonBody = options.readJsonBody
   const notify = options.notify
 
+  function ringInfo() {
+    const context = familySeatsFor(sendJson, {
+      projectRoot: options.projectRoot ?? '',
+      runsFolder: runsDir,
+      lanesConfig: options.lanes ?? {},
+      orchestrators: options.orchestrators ?? null,
+    })
+    return deepestRing(context.tree)
+  }
+
   async function handle(req, res, url) {
     if (url.pathname !== '/api/agent-depth') return false
     const method = req.method ?? 'GET'
 
     if (method === 'GET') {
-      sendJson(req, res, 200, readAgentDepth(runsDir))
+      sendJson(req, res, 200, { ...readAgentDepth(runsDir), ...ringInfo() })
       return true
     }
 
@@ -106,9 +137,19 @@ export function createAgentDepthApi(options = {}) {
       return true
     }
 
+    const current = readAgentDepth(runsDir)
+    const info = ringInfo()
+    if (body.limit < current.limit && body.limit <= info.deepest && body.hideOccupied !== true) {
+      sendJson(req, res, 409, {
+        error: occupiedDepthProblem(info.deepest, info.deepestAgents, body.limit),
+        ...info,
+      })
+      return true
+    }
+
     const saved = saveAgentDepth(runsDir, { limit: body.limit, unlocked })
     if (typeof notify === 'function') notify({ topic: 'agents' })
-    sendJson(req, res, 200, { ok: true, ...saved })
+    sendJson(req, res, 200, { ok: true, ...saved, ...info })
     return true
   }
 
