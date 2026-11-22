@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { createAgents } from '../src/engine/agents.js'
-import { AGENT_COLORS, YELLOW, agentColors } from '../src/engine/sprites.js'
+import { SPINNER_RING_OPACITY, UNSEEN_OPACITY, createAgents, statusRingColor } from '../src/engine/agents.js'
+import { AGENT_COLORS, GREEN, RED, WHITE, YELLOW, agentColors } from '../src/engine/sprites.js'
 import { createTerminals } from '../src/engine/terminals.js'
 import { apply, createState } from '../src/model/state.js'
 
@@ -162,14 +162,112 @@ describe('the agent colour on a chip and a callout', () => {
 })
 
 describe('the agent colour on a working shape', () => {
-  it('colours the status ring and the callout border with the agent colour', () => {
+  it('colours the shape and the callout border with the agent colour and the status ring yellow during an open call', () => {
     const { agents, state, terminals, world } = harness()
     startWrite(state)
     agents.update(state, 0.016, 1000, world, terminals)
     const view = agents.views.get('claude')
     expect(view.callout.element.className).toBe('mr-callout is-working')
     expect(view.callout.element.style.getPropertyValue('--agent-color')).toBe('#ff8c1a')
-    expect(view.rings[0].material.color.getHex()).toBe(AGENT_COLORS[0])
+    expect(view.shape.material.color.getHex()).toBe(AGENT_COLORS[0])
+    expect(view.rings[0].material.color.getHex()).toBe(YELLOW)
+    agents.dispose()
+    terminals.dispose()
+  })
+
+  it('picks the status ring colour for failed, open call, thinking, done, queued and idle', () => {
+    expect(statusRingColor('error', { calls: new Map([['t1', []]]) })).toBe(RED)
+    expect(statusRingColor('error')).toBe(RED)
+    expect(statusRingColor('working', { calls: new Map([['t1', []]]) })).toBe(YELLOW)
+    expect(statusRingColor('working', { openCalls: 1 })).toBe(YELLOW)
+    expect(statusRingColor('working', { calls: new Map() })).toBe(WHITE)
+    expect(statusRingColor('working', null)).toBe(WHITE)
+    expect(statusRingColor('done')).toBe(GREEN)
+    expect(statusRingColor('queued')).toBe(WHITE)
+    expect(statusRingColor('idle')).toBe(WHITE)
+  })
+
+  it('keeps the shape in its own colour and paints both rings by status across every state', () => {
+    const { agents, state, terminals, world } = harness()
+    const lane = agents.views.get('claude')
+    const main = agents.views.get('orchestrator')
+
+    agents.update(state, 0.016, 1000, world, terminals)
+    expect(lane.shape.material.color.getHex()).toBe(AGENT_COLORS[0])
+    expect(lane.shape.material.opacity).toBeCloseTo(0.35 * UNSEEN_OPACITY, 5)
+    expect(main.shape.material.color.getHex()).toBe(YELLOW)
+    expect(main.shape.material.opacity).toBeCloseTo(0.35, 5)
+    expect(lane.rings[0].material.color.getHex()).toBe(WHITE)
+    expect(lane.spinner.ringMaterial.color.getHex()).toBe(WHITE)
+    expect(main.rings[0].material.color.getHex()).toBe(WHITE)
+    expect(main.rings[1].material.color.getHex()).toBe(WHITE)
+    expect(main.spinner.ringMaterial.color.getHex()).toBe(WHITE)
+    const idleFlatOpacity = lane.rings[0].material.opacity
+    const idleSpinnerOpacity = lane.spinner.ringMaterial.opacity
+
+    apply(state, { time: 1100, type: 'run.queued', agent: 'claude' })
+    agents.update(state, 1, 2100, world, terminals)
+    expect(lane.shape.material.color.getHex()).toBe(AGENT_COLORS[0])
+    expect(lane.shape.material.opacity).toBeCloseTo(0.6, 5)
+    expect(lane.rings[0].material.color.getHex()).toBe(WHITE)
+    expect(lane.spinner.ringMaterial.color.getHex()).toBe(WHITE)
+    expect(lane.rings[0].material.opacity).toBeGreaterThan(idleFlatOpacity)
+    expect(lane.spinner.ringMaterial.opacity).toBeGreaterThan(idleSpinnerOpacity)
+    const queuedFlatOpacity = lane.rings[0].material.opacity
+    const queuedSpinnerOpacity = lane.spinner.ringMaterial.opacity
+
+    apply(state, { time: 2200, type: 'run.start', agent: 'claude', runId: 'r1' })
+    agents.update(state, 0.016, 2200, world, terminals)
+    expect(lane.shape.material.color.getHex()).toBe(AGENT_COLORS[0])
+    expect(lane.shape.material.opacity).toBeCloseTo(1, 5)
+    expect(lane.rings[0].material.color.getHex()).toBe(WHITE)
+    expect(lane.spinner.ringMaterial.color.getHex()).toBe(WHITE)
+    expect(lane.rings[0].material.opacity).toBeGreaterThan(queuedFlatOpacity)
+    expect(lane.spinner.ringMaterial.opacity).toBeCloseTo(SPINNER_RING_OPACITY, 5)
+    expect(lane.spinner.ringMaterial.opacity).toBeGreaterThan(queuedSpinnerOpacity)
+
+    apply(state, {
+      time: 2300,
+      type: 'tool.start',
+      agent: 'claude',
+      id: 't1',
+      label: 'write a.js',
+      touches: [{ path: 'src/a.js', mode: 'write', kind: 'file' }],
+    })
+    agents.update(state, 0.016, 2300, world, terminals)
+    expect(lane.shape.material.color.getHex()).toBe(AGENT_COLORS[0])
+    expect(lane.rings[0].material.color.getHex()).toBe(YELLOW)
+    expect(lane.spinner.ringMaterial.color.getHex()).toBe(YELLOW)
+
+    apply(state, { time: 2400, type: 'run.end', agent: 'claude', runId: 'r1', ok: true })
+    agents.update(state, 0.016, 2400, world, terminals)
+    expect(lane.shape.material.color.getHex()).toBe(AGENT_COLORS[0])
+    expect(lane.shape.material.opacity).toBeCloseTo(1, 5)
+    expect(lane.rings[0].material.color.getHex()).toBe(GREEN)
+    expect(lane.spinner.ringMaterial.color.getHex()).toBe(GREEN)
+
+    agents.update(state, 0.016, 8000, world, terminals)
+    expect(lane.shape.material.color.getHex()).toBe(AGENT_COLORS[0])
+    expect(lane.shape.material.opacity).toBeCloseTo(0.6, 5)
+    expect(lane.rings[0].material.color.getHex()).toBe(GREEN)
+    expect(lane.spinner.ringMaterial.color.getHex()).toBe(GREEN)
+
+    apply(state, { time: 8100, type: 'run.start', agent: 'claude', runId: 'r2' })
+    apply(state, { time: 8200, type: 'run.end', agent: 'claude', runId: 'r2', ok: false, error: 'boom' })
+    agents.update(state, 0.016, 8200, world, terminals)
+    expect(lane.shape.material.color.getHex()).toBe(AGENT_COLORS[0])
+    expect(lane.shape.material.opacity).toBeCloseTo(1, 5)
+    expect(lane.rings[0].material.color.getHex()).toBe(RED)
+    expect(lane.spinner.ringMaterial.color.getHex()).toBe(RED)
+
+    apply(state, { time: 8300, type: 'run.start', agent: 'orchestrator', runId: 'm1' })
+    apply(state, { time: 8400, type: 'run.end', agent: 'orchestrator', runId: 'm1', ok: false, error: 'boom' })
+    agents.update(state, 0.016, 8400, world, terminals)
+    expect(main.shape.material.color.getHex()).toBe(YELLOW)
+    expect(main.rings[0].material.color.getHex()).toBe(RED)
+    expect(main.rings[1].material.color.getHex()).toBe(RED)
+    expect(main.spinner.ringMaterial.color.getHex()).toBe(RED)
+
     agents.dispose()
     terminals.dispose()
   })
