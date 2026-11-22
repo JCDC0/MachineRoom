@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 import { SECTOR_GAP, ownerOf } from '../model/hierarchy.js'
-import { OVERVIEW, minTextScale } from './camera.js'
+import { OVERVIEW } from './camera.js'
 import { isOrchestrator, isSubOrchestrator } from './shapes.js'
 import { WHITE, YELLOW, easeInOut, lineMaterial, still, textSprite } from './sprites.js'
 
@@ -23,15 +23,6 @@ export const RING_OPACITY = 0.32
 export const SECTOR_ARC_HALF_WIDTH = 9
 export const SECTOR_ARC_GAP = 0.055
 export const SECTOR_ARC_OPACITY = Object.freeze({ main: 0.52, sub: 0.88 })
-export const SECTOR_LABEL_BASE = 0.9
-export const SECTOR_LABEL_FONT = 28
-export const SECTOR_LABEL_MIN = 12
-export const SECTOR_LABEL_OUT = 300
-export const SECTOR_LABEL_SPREAD = 20
-export const SECTOR_LABEL_DROP = 40
-export const SECTOR_LABEL_INSET = 0.1
-export const SECTOR_LABEL_OPACITY = 0.45
-export const SECTOR_LABEL_COLOR = `rgba(255,255,255,${SECTOR_LABEL_OPACITY})`
 export const SECTOR_GLOW_MS = 1000
 export const SEAT_LABEL_SCALE = 1.5
 export const SEAT_LABEL_COLOR = 'rgba(255,255,255,1)'
@@ -60,7 +51,6 @@ const DASHES = 72
 const SLOT_RADIUS = 46
 const ARC_STEPS = 96
 const SECTOR_EPSILON = 0.0001
-const labelWorld = new THREE.Vector3()
 
 export function slotAngle(index, count) {
   return Math.PI / 2 + (index / Math.max(1, count)) * Math.PI * 2
@@ -123,34 +113,6 @@ export function arcDrawSpan(start, end, gap = SECTOR_ARC_GAP) {
   const span = to - from
   const pad = Math.min(Math.max(0, Number(gap) || 0), span * 0.2)
   return { start: from + pad, end: to - pad }
-}
-
-export function sectorLabelScale(depth, focal, base = SECTOR_LABEL_BASE) {
-  const distance = Number(depth)
-  const focus = Number(focal)
-  if (!(distance > 0) || !(focus > 0)) return 1
-  return minTextScale((focus / distance) * base, SECTOR_LABEL_FONT, SECTOR_LABEL_MIN)
-}
-
-export function sectorLabelRadius(radius = HUB_RADIUS, sectors = 1) {
-  const ring = Number(radius)
-  const count = Number.isFinite(Number(sectors)) ? Math.max(1, Math.floor(Number(sectors))) : 1
-  const base = Number.isFinite(ring) && ring > 0 ? ring : HUB_RADIUS
-  return base + SECTOR_LABEL_OUT + (count - 1) * SECTOR_LABEL_SPREAD
-}
-
-export function sectorLabelPoint(angle, radius = HUB_RADIUS, sectors = 1, out = new THREE.Vector3()) {
-  const mid = Number(angle)
-  const theta = Number.isFinite(mid) ? mid : 0
-  const distance = sectorLabelRadius(radius, sectors)
-  return out.set(Math.cos(theta) * distance, -SECTOR_LABEL_DROP, Math.sin(theta) * distance)
-}
-
-export function sectorLabelAngle(arc) {
-  const start = Number(arc?.start)
-  const end = Number(arc?.end)
-  if (!Number.isFinite(start) || !Number.isFinite(end) || !(end > start)) return 0
-  return start + (end - start) * SECTOR_LABEL_INSET
 }
 
 export function seatRingPoint(ring, layout = null) {
@@ -531,9 +493,8 @@ function buildLevelRings(layout, group) {
 
 function buildSectors(layout, group) {
   const lines = []
-  const labels = []
   const groups = []
-  if (!layout) return { lines, labels, groups }
+  if (!layout) return { lines, groups }
   const arcs = layout.arcs
   for (const arc of arcs) {
     const span = arc.end - arc.start
@@ -559,16 +520,10 @@ function buildSectors(layout, group) {
       sector.add(line)
       lines.push(line)
     })
-    const label = textSprite(String(arc.name).toUpperCase(), { scale: SECTOR_LABEL_BASE, color: SECTOR_LABEL_COLOR })
-    label.position.copy(sectorLabelPoint(sectorLabelAngle(arc), ring.radius, arcs.length))
-    label.userData.base = { x: label.scale.x, y: label.scale.y }
-    label.userData.factor = 1
-    sector.add(label)
-    labels.push(label)
     groups.push(sector)
     group.add(sector)
   }
-  return { lines, labels, groups }
+  return { lines, groups }
 }
 
 export function createHub(scene, agentsOrCount, ladder = null) {
@@ -613,7 +568,6 @@ export function createHub(scene, agentsOrCount, ladder = null) {
   let slots = []
   let layout = hasSubs(ladder) ? ringLayout(ladder, parkedKeys, depth) : null
   let sectorLines = []
-  let sectorLabels = []
   let sectorGroups = []
   let sectorLevels = new Map()
   let workingSet = new Set()
@@ -717,7 +671,6 @@ export function createHub(scene, agentsOrCount, ladder = null) {
     buildLevelRings(layout, levelRings)
     const built = buildSectors(layout, sectorGroup)
     sectorLines = built.lines
-    sectorLabels = built.labels
     sectorGroups = built.groups
     sectorLevels = new Map(sectorGroups.map((sector) => [sector.userData.id, 0]))
     main.visible = !currentLadder
@@ -823,17 +776,6 @@ export function createHub(scene, agentsOrCount, ladder = null) {
       const level = line.userData.sector ? sectorLevels.get(line.userData.sector) ?? 0 : 0
       writeOpacity(line.material, Math.min(1, base + extra * 0.5 + (1 - base) * level))
       if (level > 0 || boost <= 0.01) writeColor(line.material, WHITE)
-    }
-    if (camera && viewportHeight > 0) {
-      const focal = viewportHeight / 2 / Math.tan(((camera.fov || 50) * Math.PI) / 360)
-      for (const label of sectorLabels) {
-        label.getWorldPosition(labelWorld)
-        const factor = sectorLabelScale(camera.position.distanceTo(labelWorld), focal)
-        if (Math.abs(factor - label.userData.factor) > 0.01) {
-          label.userData.factor = factor
-          label.scale.set(label.userData.base.x * factor, label.userData.base.y * factor, 1)
-        }
-      }
     }
     if (!isStill) {
       dashes.rotation.y += delta * 0.04
