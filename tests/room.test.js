@@ -435,6 +435,99 @@ describe('the room takes the chosen top and the depth', () => {
     }
   })
 
+  it('opens a folder touched just before run.end at 8x even when the end cancels the star', async () => {
+    const { room, state } = await makeRoom(['src/a.js', 'docs/b.md'])
+    try {
+      let now = performance.now() + 1000
+      const step = (frames = 1, ms = 16) => {
+        for (let index = 0; index < frames; index += 1) {
+          now += ms
+          roomFrame?.(now)
+        }
+      }
+      const cardOf = (path) => createdNodes.findLast((node) => node.dataset?.path === path)
+      const itemsOf = (card) => card.children[1].children[1]
+      const send = (activity) => {
+        apply(state, activity)
+        room.onActivity(activity)
+      }
+
+      room.setOptions({ folderContents: false, openOnTouch: true })
+      room.setSpeed(8)
+      step(1)
+      const src = cardOf('src')
+      const docs = cardOf('docs')
+      expect(src.className).toContain('is-collapsed')
+      expect(docs.className).toContain('is-collapsed')
+
+      send({ type: 'run.start', agent: 'claude', runId: 'r1', time: 500 })
+      send({
+        type: 'tool.start',
+        agent: 'claude',
+        runId: 'r1',
+        id: 'c1',
+        time: 1000,
+        tool: 'read',
+        label: 'read src/a.js',
+        touches: [{ kind: 'file', path: 'src/a.js', mode: 'read' }],
+      })
+      step(2)
+      send({ type: 'run.end', agent: 'claude', runId: 'r1', time: 1300, ok: true })
+      step(16)
+      expect(src.className).not.toContain('is-collapsed')
+      expect(itemsOf(src).hidden).toBe(false)
+      expect(itemsOf(src).className).toBe('mr-card-items')
+      expect(itemsOf(src).children).toHaveLength(1)
+      expect(docs.className).toContain('is-collapsed')
+
+      step(80)
+      expect(src.className).toContain('is-collapsed')
+      expect(itemsOf(src).hidden).toBe(true)
+
+      send({ type: 'run.start', agent: 'claude', runId: 'r2', time: 3000 })
+      send({
+        type: 'tool.start',
+        agent: 'claude',
+        runId: 'r2',
+        id: 'c2',
+        time: 3100,
+        tool: 'read',
+        label: 'read docs/b.md',
+        touches: [{ kind: 'file', path: 'docs/b.md', mode: 'read' }],
+      })
+      send({ type: 'run.end', agent: 'claude', runId: 'r2', time: 3150, ok: true })
+      step(16)
+      expect(docs.className).not.toContain('is-collapsed')
+      expect(itemsOf(docs).hidden).toBe(false)
+      expect(itemsOf(docs).className).toBe('mr-card-items')
+      expect(itemsOf(docs).children).toHaveLength(1)
+      expect(src.className).toContain('is-collapsed')
+
+      step(80)
+      expect(docs.className).toContain('is-collapsed')
+      expect(itemsOf(docs).hidden).toBe(true)
+
+      room.setOptions({ openOnTouch: false })
+      send({ type: 'run.start', agent: 'claude', runId: 'r3', time: 5000 })
+      send({
+        type: 'tool.start',
+        agent: 'claude',
+        runId: 'r3',
+        id: 'c3',
+        time: 5100,
+        tool: 'read',
+        label: 'read src/a.js',
+        touches: [{ kind: 'file', path: 'src/a.js', mode: 'read' }],
+      })
+      step(2)
+      send({ type: 'run.end', agent: 'claude', runId: 'r3', time: 5300, ok: true })
+      step(16)
+      expect(src.className).toContain('is-collapsed')
+    } finally {
+      room.dispose()
+    }
+  })
+
   it('expands a compact callout when the pointer moves over .mr-callout[data-agent]', async () => {
     const keys = ['a0', 'a1', 'a2', 'a3', 'a4']
     const { room, state } = await makeRoom(['src/a.js'], keys)

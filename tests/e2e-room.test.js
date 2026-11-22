@@ -908,9 +908,16 @@ describe('the selected folder', () => {
   it('keeps is-active while an agent works on it', async () => {
     const { room, state } = await makeRoom(['src/a.js', 'docs/b.md'], ['claude'])
     try {
-      const agent = state.agents.get('claude')
-      agent.status = 'working'
-      agent.focus = ['src/a.js']
+      apply(state, {
+        type: 'tool.start',
+        agent: 'claude',
+        runId: 'r1',
+        time: 1000,
+        id: 'c1',
+        tool: 'read',
+        label: 'read src/a.js',
+        touches: [{ kind: 'file', path: 'src/a.js', mode: 'read' }],
+      })
       tickRoom(2)
       const card = cardElement('src')
       expect(card.className).toContain('is-active')
@@ -928,7 +935,16 @@ describe('returning to the room', () => {
   it('clears the inspected row, the selected folder, the pins and the popped folders on park', async () => {
     const { room, state } = await makeRoom(['lib/a/x.js', 'lib/a/c/y.js', 'docs/d.md', 'docs/deep/more/e.md'], ['claude'])
     try {
-      state.agents.get('claude').focus = ['docs/d.md']
+      apply(state, {
+        type: 'tool.start',
+        agent: 'claude',
+        runId: 'r1',
+        time: 1000,
+        id: 'c1',
+        tool: 'read',
+        label: 'read docs/d.md',
+        touches: [{ kind: 'file', path: 'docs/d.md', mode: 'read' }],
+      })
       tickRoom(1)
       expect(room.focusPath('lib/a/x.js')).toBe(true)
       tickRoom(1)
@@ -1454,6 +1470,44 @@ describe('the inspected row and the inspector', () => {
       expect(cardElement('').className).toContain('is-selected')
       expect(cardElement('').className).not.toContain('is-collapsed')
       expect(cardElement('docs').className).not.toContain('is-selected')
+      expect(cardElement('docs').className).toContain('is-collapsed')
+    } finally {
+      room.dispose()
+    }
+  })
+
+  it('opens an undrawn subfolder without holding its parent open and clears a prior inspected file in room.focusPath', async () => {
+    const { room } = await makeRoom(['src/ui/App.jsx', 'src/ui/sub/Panel.jsx', 'docs/d.md'], ['claude'])
+    try {
+      room.setOptions({ folderContents: false, openOnTouch: true })
+      tickRoom(1)
+      expect(cardElement('src/ui').className).toContain('is-collapsed')
+      expect(cardElement('src/ui/sub')).toBeUndefined()
+
+      dispatchCss(cardParts(cardElement('src/ui')).head, 'click', { detail: 1 })
+      tickRoom(1)
+      expect(cardElement('src/ui').className).not.toContain('is-collapsed')
+
+      expect(room.focusPath('src/ui/sub')).toBe(true)
+      tickRoom(1)
+      const sub = cardElement('src/ui/sub')
+      expect(sub).toBeTruthy()
+      expect(sub.className).toContain('is-selected')
+      expect(sub.className).not.toContain('is-collapsed')
+      expect(cardRow(sub, 'Panel.jsx')).toBeTruthy()
+      expect(cardElement('src/ui').className).not.toContain('is-selected')
+      expect(cardElement('src/ui').className).toContain('is-collapsed')
+
+      expect(room.inspect({ kind: 'file', id: 'docs/d.md' })).toBe(true)
+      tickRoom(1)
+      expect(cardElement('docs').className).not.toContain('is-collapsed')
+      expect(cardRow(cardElement('docs'), 'd.md').className).toContain('is-inspected')
+
+      expect(room.focusPath('src/ui/App.jsx')).toBe(true)
+      tickRoom(1)
+      expect(room.inspecting()).toBe(null)
+      expect(cardElement('src/ui').className).toContain('is-selected')
+      expect(cardElement('src/ui').className).not.toContain('is-collapsed')
       expect(cardElement('docs').className).toContain('is-collapsed')
     } finally {
       room.dispose()

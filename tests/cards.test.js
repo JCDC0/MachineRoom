@@ -1170,6 +1170,128 @@ describe('hiding folder contents', () => {
       cards.dispose()
     }
   })
+
+  it('shuts a touched folder after tool.end while the agent thinks for 10 seconds', () => {
+    const state = createState(makeTree({ root: 'demo', files: ['src/a.js', 'docs/b.md'] }), [{ key: 'claude', name: 'Claude' }])
+    const cards = createCards(fakeScene(), { glScene: fakeScene(), alwaysDepth: 2, folderContents: false, openOnTouch: true })
+    cards.sync(state)
+    cards.update(state, 0.016, camera())
+    const src = cards.cards.get('src')
+
+    apply(state, { type: 'run.start', agent: 'claude', runId: 'r1', time: 500 })
+    apply(state, {
+      type: 'tool.start',
+      agent: 'claude',
+      runId: 'r1',
+      time: 1000,
+      id: 'c1',
+      tool: 'read',
+      label: 'read src/a.js',
+      touches: [{ kind: 'file', path: 'src/a.js', mode: 'read' }],
+    })
+    cards.flashFile('src', 'src/a.js', 'white')
+    for (let step = 0; step < 20; step += 1) cards.update(state, 0.1, camera(), null, 1)
+    expect(src.openLevel).toBe(1)
+    expect(src.rows).toHaveLength(1)
+    expect(src.element.className).not.toContain('is-collapsed')
+    expect(src.element.className).toContain('is-active')
+
+    apply(state, { type: 'tool.end', agent: 'claude', runId: 'r1', time: 1200, id: 'c1', ok: true })
+    expect(state.agents.get('claude').status).toBe('working')
+    expect(state.agents.get('claude').openCalls.size).toBe(0)
+    expect(state.agents.get('claude').focus).toEqual(['src/a.js'])
+
+    for (let step = 0; step < 100; step += 1) cards.update(state, 0.1, camera(), null, 1)
+    expect(src.openLevel).toBe(0)
+    expect(src.height).toBe(cardHeight(0))
+    expect(src.rows).toHaveLength(0)
+    expect(src.element.className).toContain('is-collapsed')
+    expect(src.element.className).not.toContain('is-active')
+
+    apply(state, {
+      type: 'tool.start',
+      agent: 'claude',
+      runId: 'r1',
+      time: 2000,
+      id: 'c2',
+      tool: 'read',
+      label: 'read src/a.js',
+      touches: [{ kind: 'file', path: 'src/a.js', mode: 'read' }],
+    })
+    cards.update(state, 0.25, camera(), null, 1)
+    expect(src.openLevel).toBe(1)
+
+    apply(state, { type: 'tool.end', agent: 'claude', runId: 'r1', time: 2000, id: 'c2', ok: true })
+    for (let step = 0; step < 20; step += 1) cards.update(state, 0.1, camera(), null, 1)
+    expect(src.openLevel).toBe(0)
+    expect(src.element.className).toContain('is-collapsed')
+    cards.dispose()
+  })
+
+  it('keeps a folder shut after seeking past tool.end mid-run', () => {
+    const state = createState(makeTree({ root: 'demo', files: ['src/a.js', 'docs/b.md'] }), [{ key: 'claude', name: 'Claude' }])
+    const cards = createCards(fakeScene(), { glScene: fakeScene(), alwaysDepth: 2, folderContents: false, openOnTouch: true })
+    cards.sync(state)
+    cards.update(state, 0.016, camera())
+
+    apply(state, { type: 'run.start', agent: 'claude', runId: 'r1', time: 500 })
+    apply(state, {
+      type: 'tool.start',
+      agent: 'claude',
+      runId: 'r1',
+      time: 1000,
+      id: 'c1',
+      tool: 'read',
+      label: 'read src/a.js',
+      touches: [{ kind: 'file', path: 'src/a.js', mode: 'read' }],
+    })
+    cards.sync(state)
+    cards.update(state, 0.016, camera())
+    const src = cards.cards.get('src')
+    expect(src.openLevel).toBe(1)
+    expect(src.rows).toHaveLength(1)
+    expect(src.element.className).not.toContain('is-collapsed')
+
+    apply(state, { type: 'tool.end', agent: 'claude', runId: 'r1', time: 1200, id: 'c1', ok: true })
+    expect(state.agents.get('claude').status).toBe('working')
+    expect(state.agents.get('claude').focus).toEqual(['src/a.js'])
+
+    cards.sync(state)
+    cards.update(state, 0.016, camera())
+    expect(src.openLevel).toBe(0)
+    expect(src.height).toBe(cardHeight(0))
+    expect(src.rows).toHaveLength(0)
+    expect(src.element.className).toContain('is-collapsed')
+    cards.dispose()
+  })
+
+  it('records a touch on a pinned undrawn subfolder itself in flashCluster and not its parent', () => {
+    const state = createState(makeTree({ root: 'demo', files: ['src/ui/App.jsx', 'src/ui/sub/Panel.jsx'] }), [])
+    const cards = createCards(fakeScene(), { glScene: fakeScene(), alwaysDepth: 2, folderContents: false, openOnTouch: true })
+    cards.sync(state)
+    cards.update(state, 0.016, camera())
+    const parent = cards.cards.get('src/ui')
+    expect(cards.cards.get('src/ui/sub')).toBeUndefined()
+
+    cards.setSelected('src/ui')
+    cards.update(state, 0.25, camera())
+    expect(parent.openLevel).toBe(1)
+
+    cards.pin('src/ui/sub')
+    cards.setSelected('src/ui/sub')
+    cards.flashCluster('src/ui/sub', 'white')
+    cards.update(state, 0.25, camera())
+
+    const sub = cards.cards.get('src/ui/sub')
+    expect(sub).toBeTruthy()
+    expect(sub.openLevel).toBe(1)
+    expect(sub.rows).toHaveLength(1)
+    expect(sub.element.className).not.toContain('is-collapsed')
+    expect(parent.openLevel).toBe(0)
+    expect(parent.rows).toHaveLength(0)
+    expect(parent.element.className).toContain('is-collapsed')
+    cards.dispose()
+  })
 })
 
 describe('the overview spheres with paths outside the file tree', () => {
