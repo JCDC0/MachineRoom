@@ -232,6 +232,7 @@ export function createStrings(scene) {
       paintedDim: -1,
       from: new THREE.Vector3(NaN, NaN, NaN),
       to: new THREE.Vector3(NaN, NaN, NaN),
+      anchorStamp: undefined,
       fromStamp: undefined,
       toStamp: undefined,
       stampBasis: undefined,
@@ -264,7 +265,7 @@ export function createStrings(scene) {
     glow.dispose()
   }
 
-  function update(anchorOf, mask = null, delta = 0) {
+  function update(anchorOf, mask = null, delta = 0, stamp = anchorOf?.stamp?.()) {
     currentMask = mask
     const isStill = still()
     const dimGoal = mask?.dimmed ? 1 : 0
@@ -310,6 +311,16 @@ export function createStrings(scene) {
         }
       }
 
+      if (
+        strand &&
+        stamp !== undefined &&
+        strand.anchorStamp === stamp &&
+        !Number.isNaN(strand.from.x) &&
+        !Number.isNaN(strand.to.x)
+      ) {
+        continue
+      }
+
       const fromValue = anchorOf(link.from ?? '', from)
       if (fromValue && fromValue !== from) {
         from.copy(fromValue)
@@ -321,6 +332,9 @@ export function createStrings(scene) {
         to.copy(toValue)
         to.anchorStamp = undefined
         to.anchorBasis = undefined
+      }
+      if (strand) {
+        strand.anchorStamp = fromValue && toValue ? stamp : undefined
       }
 
       const fromStamp = from.anchorStamp

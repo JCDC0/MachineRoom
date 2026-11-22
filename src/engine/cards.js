@@ -609,6 +609,7 @@ export function createCards(cssScene, options = {}) {
 
   function removeCard(card) {
     linksCache = null
+    stampSeq += 1
     cssScene.remove(card.object)
     glScene?.remove(card.occluder)
     card.occluder.geometry.dispose()
@@ -875,6 +876,7 @@ export function createCards(cssScene, options = {}) {
       if (drawn.has(card.path) || card.leaving) continue
       if (!isStill && !(card.view && isPinnedView(card.view))) {
         card.leaving = true
+        card.stamp = ++stampSeq
         linksCache = null
         card.fade = { from: card.opacity, to: 0, start: now }
       } else {
@@ -887,6 +889,7 @@ export function createCards(cssScene, options = {}) {
       const pinnedView = isPinnedView(view)
       if (card.leaving) {
         card.leaving = false
+        card.stamp = ++stampSeq
         linksCache = null
         if (!isStill && !pinnedView) {
           card.fade = { from: card.opacity, to: 1, start: now }
@@ -972,8 +975,12 @@ export function createCards(cssScene, options = {}) {
     return card.anchorOffset
   }
 
-  function anchor(path, out = new THREE.Vector3(), includeLeaving = false) {
-    const card = nearestCard(path, includeLeaving)
+  function stamp() {
+    return `${stampSeq}:${basisVersion}`
+  }
+
+  function anchor(path = '', out = new THREE.Vector3(), includeLeaving = false) {
+    const card = nearestCard(path ?? '', includeLeaving)
     if (!card) return null
     if (card.tabStamp !== card.stamp || card.tabBasis !== basisVersion) {
       const offset = anchorOffsetOf(card)
@@ -989,6 +996,7 @@ export function createCards(cssScene, options = {}) {
     out.anchorBasis = basisVersion
     return out
   }
+  anchor.stamp = stamp
 
   function halfWidth(dir) {
     const card = nearestCard(dir)
@@ -1484,6 +1492,7 @@ export function createCards(cssScene, options = {}) {
     clearSelection,
     center,
     anchor,
+    stamp,
     bottom,
     halfWidth,
     sideOf,

@@ -333,4 +333,50 @@ describe('link endpoints', () => {
       strings.dispose()
     }
   })
+
+  it('calls anchorOf at most once per end over ten idle frames when stamped, and refreshes only moved strands', () => {
+    const scene = fakeScene()
+    const places = new Map([
+      ['', new THREE.Vector3(0, 0, 0)],
+      ['a', new THREE.Vector3(100, 0, 0)],
+      ['b', new THREE.Vector3(200, 0, 0)],
+      ['c', new THREE.Vector3(300, 0, 0)],
+    ])
+    let stamp = 1
+    const anchorOf = vi.fn((key, out) => out.copy(places.get(key)))
+    anchorOf.stamp = () => stamp
+    const strings = createStrings(scene)
+    try {
+      const links = [
+        { from: '', to: 'a' },
+        { from: '', to: 'b' },
+        { from: '', to: 'c' },
+      ]
+      strings.build(links, anchorOf)
+      expect(anchorOf).toHaveBeenCalledTimes(6)
+
+      for (let frame = 0; frame < 10; frame += 1) {
+        expect(strings.update(anchorOf, null, 0.016)).toBe(0)
+      }
+      expect(anchorOf).toHaveBeenCalledTimes(6)
+
+      const geometries = scene.children.filter((child) => child.isPoints).map((mesh) => mesh.geometry)
+      const versionsBefore = geometries.map((geometry) => geometry.getAttribute('position').version)
+
+      places.set('b', new THREE.Vector3(200, 12, 0))
+      stamp += 1
+      expect(strings.update(anchorOf, null, 0.016)).toBe(1)
+
+      const geometriesAfter = scene.children.filter((child) => child.isPoints).map((mesh) => mesh.geometry)
+      expect(geometriesAfter[0]).toBe(geometries[0])
+      expect(geometriesAfter[1]).toBe(geometries[1])
+      expect(geometriesAfter[2]).toBe(geometries[2])
+      const versionsAfter = geometriesAfter.map((geometry) => geometry.getAttribute('position').version)
+      expect(versionsAfter[0]).toBe(versionsBefore[0])
+      expect(versionsAfter[1]).toBeGreaterThan(versionsBefore[1])
+      expect(versionsAfter[2]).toBe(versionsBefore[2])
+    } finally {
+      strings.dispose()
+    }
+  })
 })

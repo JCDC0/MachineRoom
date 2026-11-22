@@ -310,7 +310,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
   let fitted = null
   let heldPath = null
   const tunnelAnchor = new THREE.Vector3()
-  const cardAnchorOf = (path, out) => cards.anchor(path ?? '', out)
+  const cardAnchorOf = cards.anchor
   const world = {
     anchor: (path) => cards.anchor(path ?? '', tunnelAnchor),
     slot: (dir, file, out) => (file ? cards.slotPosition(dir, file, out) : out.copy(cards.center(dir))),
