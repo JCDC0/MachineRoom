@@ -1,8 +1,8 @@
 # Plan
 
-## Next, as of 2026-11-22 22:40 (resumed)
+## Next, as of 2026-11-22 23:10
 
-The Windows CI failure on `fc2de03c` was the known runner hang (the test step never concluded); its job is rerunning. P705 and P707 are reviewed and merged (`cabbe4f2`, `031e2681`), so every review 72 finding is fixed except the callout layer: P708 (Neon) puts callouts in their own CSS3D layer above the cards, and P709 (Argon) is review 73 of the fixes, toward the stop rule. The full suite runs on `c5f980d1`; then audit and push.
+Argon (`agy-6`) is out of usage: its review 73 run was stopped after it wrote the report, and the orchestrator committed it (P709). Neon (`agy-5`) takes every brief until Argon is back. Review 73 found 2 High, 2 Medium and 1 Low: R73-1 (callout box still took the pointer) is fixed by hand (`2a221601`); P712 (R73-2, R73-4, folders), P713 (R73-3, one source for open calls, with Stage lines by the orchestrator) and P714 (R73-5) run on Neon in that order, then P711 (dead code). P710 merged a short README with fresh screenshots; the detail moved to `docs/GUIDE.md`. The stop rule is not met yet: review 73 had user-meetable Highs.
 
 ## Earlier, as of 2026-11-22 17:45
 
