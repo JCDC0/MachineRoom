@@ -188,6 +188,64 @@ describe('the crowded room callouts', () => {
     expect(agents.views.get('a3').callout.task.style.display).not.toBe('none')
     agents.dispose()
   })
+
+  it('keeps the console rows and address link visible on a compact callout while its console is live', () => {
+    const cssScene = new THREE.Scene()
+    const roster = Array.from({ length: 5 }, (_, index) => ({ key: `a${index}`, name: `Agent ${index}`, shape: 'claude' }))
+    const agents = createAgents(new THREE.Scene(), roster, cssScene)
+    const terminals = createTerminals(cssScene, roster)
+    const state = createState({ files: ['src/a.js'], dirs: ['src'], created: [] }, roster)
+    const world = {
+      right: new THREE.Vector3(1, 0, 0),
+      back: new THREE.Vector3(0, 0, 1),
+      side: () => 1,
+      edge: (dir, file, side, out) => out.set(500, 400, 0),
+    }
+
+    const tasks = new Map()
+    for (let index = 0; index < 5; index += 1) {
+      const key = `a${index}`
+      const time = 1000 + index * 100
+      tasks.set(key, `task ${index}`)
+      const activity = {
+        time,
+        type: 'tool.start',
+        agent: key,
+        id: `t${index}`,
+        tool: index === 0 ? 'shell' : 'read',
+        label: index === 0 ? 'npm run dev' : `read ${index}`,
+        touches: [],
+      }
+      apply(state, activity)
+      terminals.note(activity, time)
+      if (index === 0) {
+        const entry = state.agents.get('a0')
+        entry.lines.push({ text: 'Local: http://localhost:5173/', tone: 'done' })
+        entry.version += 1
+      }
+      agents.update(state, 0.016, time, world, terminals, { focus: null, hover: null })
+    }
+    agents.setTasks(tasks)
+    agents.update(state, 0.016, 2000, world, terminals, { focus: null, hover: null })
+
+    const view = agents.views.get('a0')
+    expect(view.callout.task.style.display).toBe('none')
+    expect(view.callout.cmd.style.display).toBe('none')
+    expect(view.callout.consoleBlock.hidden).toBe(false)
+    expect(view.callout.consoleBlock.style.display).toBe('')
+    expect(view.callout.consoleLines.map((row) => row.textContent)).toEqual([
+      'npm run dev',
+      'Local: http://localhost:5173/',
+    ])
+    expect(view.callout.consoleLink.hidden).toBe(false)
+    expect(view.callout.consoleLink.style.display).toBe('')
+    expect(view.callout.consoleLink.href).toBe('http://localhost:5173/')
+    expect(view.callout.consoleLink.textContent).toBe('http://localhost:5173/')
+    expect(view.callout.element.className).toBe('mr-callout is-working is-address')
+
+    agents.dispose()
+    terminals.dispose()
+  })
 })
 
 describe('calloutPoint', () => {

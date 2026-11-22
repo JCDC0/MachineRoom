@@ -417,8 +417,31 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
   let hoverAt = 0
 
   function onPointerMove(event) {
-    if (event.target !== renderer.domElement) {
+    const target = event?.target
+    let callout = typeof target?.closest === 'function' ? target.closest('.mr-callout[data-agent]') : null
+    if (!callout) {
+      let node = target
+      while (node && typeof node === 'object') {
+        if (typeof node.className === 'string' && /(?:^|\s)mr-callout(?:\s|$)/.test(node.className) && node.dataset?.agent) {
+          callout = node
+          break
+        }
+        node = node.parentElement ?? node.parentNode ?? null
+      }
+    }
+    const calloutKey = typeof callout?.dataset?.agent === 'string' && callout.dataset.agent !== '' ? callout.dataset.agent : null
+    if (calloutKey !== null) {
+      hoverAt = 0
+      let busy = 0
+      for (const agent of getState().agents.values()) {
+        if (agent.status === 'working' || agent.status === 'queued') busy += 1
+      }
+      hoveredKey = busy > CALLOUT_CROWD_LIMIT ? calloutKey : null
+      return
+    }
+    if (target !== renderer.domElement) {
       hoveredKey = null
+      hoverAt = 0
       return
     }
     const at = performance.now()

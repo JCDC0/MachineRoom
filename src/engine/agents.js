@@ -1832,7 +1832,7 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
       }
 
       const compact = Boolean(working) && !full.has(view.key)
-      const showConsole = Boolean(consoleData) && !compact
+      const showConsole = Boolean(consoleData)
       const calloutColor = cssColor(view.color)
       if (calloutColor && view.calloutColor !== calloutColor) {
         view.calloutColor = calloutColor
@@ -1884,16 +1884,15 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
         view.callout.object.position.copy(calloutPos)
         view.callout.object.quaternion.setFromRotationMatrix(rotMatrix)
 
-        const halfWidth = compact
-          ? CALLOUT_COMPACT_HALF_WIDTH
-          : showConsole
-            ? CALLOUT_CONSOLE_HALF_WIDTH
+        const halfWidth = showConsole
+          ? CALLOUT_CONSOLE_HALF_WIDTH
+          : compact
+            ? CALLOUT_COMPACT_HALF_WIDTH
             : CALLOUT_HALF_WIDTH
-        const halfHeight = compact
-          ? CALLOUT_COMPACT_HALF_HEIGHT
-          : showConsole
-            ? CALLOUT_HALF_HEIGHT + ((consoleData.rows?.length ?? 0) * CALLOUT_CONSOLE_ROW_HEIGHT) / 2 + (consoleData.url ? 8 : 0)
-            : CALLOUT_HALF_HEIGHT
+        const baseHalfHeight = compact ? CALLOUT_COMPACT_HALF_HEIGHT : CALLOUT_HALF_HEIGHT
+        const halfHeight = showConsole
+          ? baseHalfHeight + ((consoleData.rows?.length ?? 0) * CALLOUT_CONSOLE_ROW_HEIGHT) / 2 + (consoleData.url ? 8 : 0)
+          : baseHalfHeight
         calloutEdgePoint(view.group.position, calloutPos, world.right, camUp, halfWidth, halfHeight, calloutEdge)
         setEnds(view.calloutLine, view.group.position, calloutEdge)
         writeColor(view.calloutLine.material, WHITE)
