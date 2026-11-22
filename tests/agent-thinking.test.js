@@ -5,10 +5,12 @@ import {
   SPINNER_ARC_SHARE,
   SPINNER_PHASE,
   SPINNER_RADIUS_SCALE,
+  SPINNER_RING_BRIGHT_MAX,
   SPINNER_RING_OPACITY,
   SPINNER_SWEEP_SECONDS,
   THINKING_DELAY_MS,
   THINKING_IN_SECONDS,
+  THINKING_LOOP_SECONDS,
   THINKING_OUT_SECONDS,
   THINKING_SPIN,
   agentThinking,
@@ -16,6 +18,8 @@ import {
   thinkingArc,
   thinkingDue,
   thinkingLevel,
+  thinkingPhase,
+  thinkingRingPose,
 } from '../src/engine/agents.js'
 import { GREEN, RED, WHITE, YELLOW, disposeStill } from '../src/engine/sprites.js'
 import { apply, createState } from '../src/model/state.js'
@@ -193,6 +197,196 @@ describe('thinkingArc', () => {
     expect(thinkingArc(250, 'x')).toBeCloseTo(Math.PI / 2, 10)
     expect(thinkingArc(250, 0, 0)).toBeCloseTo(Math.PI / 2, 10)
     expect(thinkingArc(2000, 0, 2)).toBeCloseTo(0, 10)
+  })
+})
+
+describe('thinkingPhase', () => {
+  it('hashes an agent key into a stable fraction in [0, 1) and separates distinct keys', () => {
+    const keys = ['a', 'b', 'claude', 'opencode', 'agy', 'orchestrator']
+    const phases = keys.map((key) => thinkingPhase(key))
+    for (const value of phases) {
+      expect(value).toBeGreaterThanOrEqual(0)
+      expect(value).toBeLessThan(1)
+    }
+    expect(thinkingPhase('claude')).toBe(thinkingPhase('claude'))
+    expect(new Set(phases).size).toBe(keys.length)
+  })
+
+  it('handles empty and non-string keys safely', () => {
+    for (const key of ['', null, undefined, 42]) {
+      const value = thinkingPhase(key)
+      expect(Number.isFinite(value)).toBe(true)
+      expect(value).toBeGreaterThanOrEqual(0)
+      expect(value).toBeLessThan(1)
+    }
+  })
+})
+
+describe('thinkingRingPose', () => {
+  it('places each segment start, midpoint and end across the 8-second loop', () => {
+    expect(THINKING_LOOP_SECONDS).toBe(8)
+    expect(SPINNER_RING_BRIGHT_MAX).toBe(1.5)
+
+    const at0 = thinkingRingPose(0, 0)
+    expect(at0.a).toEqual({ x: 0, y: 0, z: 0 })
+    expect(at0.b.x).toBeCloseTo(Math.PI / 2, 10)
+    expect(at0.b.y).toBe(0)
+    expect(at0.b.z).toBe(0)
+    expect(at0.scale).toBe(1)
+    expect(at0.bright).toBe(1)
+
+    const atLag = thinkingRingPose(0.08, 0)
+    expect(atLag.a.x).toBeGreaterThan(0.2)
+    expect(atLag.b.x).toBeCloseTo(Math.PI / 2, 10)
+
+    const flipPeakA = thinkingRingPose(0.252, 0)
+    expect(flipPeakA.a.x).toBeGreaterThan(Math.PI / 2)
+    expect(flipPeakA.bright).toBeGreaterThan(1)
+    expect(flipPeakA.bright).toBeLessThanOrEqual(SPINNER_RING_BRIGHT_MAX)
+
+    const flipPeakB = thinkingRingPose(0.332, 0)
+    expect(flipPeakB.b.x - Math.PI / 2).toBeCloseTo(flipPeakA.a.x, 10)
+
+    const atDriftStart = thinkingRingPose(0.5, 0)
+    expect(atDriftStart.a.x).toBeCloseTo(Math.PI / 2, 10)
+    expect(atDriftStart.a.y).toBeCloseTo(0, 10)
+    expect(atDriftStart.b.x).toBeCloseTo(Math.PI, 10)
+    expect(atDriftStart.b.y).toBeCloseTo(0, 10)
+    expect(atDriftStart.bright).toBe(1)
+
+    const wobbleRad = (6 * Math.PI) / 180
+    const atDriftQuarter = thinkingRingPose(1.0, 0)
+    expect(atDriftQuarter.a.x).toBeCloseTo(Math.PI / 2 + wobbleRad, 10)
+    expect(atDriftQuarter.b.x).toBeCloseTo(Math.PI - wobbleRad, 10)
+
+    const atDriftThreeQuarter = thinkingRingPose(2.0, 0)
+    expect(atDriftThreeQuarter.a.x).toBeCloseTo(Math.PI / 2 - wobbleRad, 10)
+    expect(atDriftThreeQuarter.b.x).toBeCloseTo(Math.PI + wobbleRad, 10)
+
+    const atRiseStart = thinkingRingPose(2.5, 0)
+    expect(atRiseStart.a.x).toBeCloseTo(Math.PI / 2, 10)
+    expect(atRiseStart.a.y).toBeCloseTo(Math.PI / 2, 10)
+    expect(atRiseStart.b.x).toBeCloseTo(Math.PI, 10)
+    expect(atRiseStart.b.y).toBeCloseTo(Math.PI / 2, 10)
+
+    const atGyroStart = thinkingRingPose(3.0, 0)
+    expect(atGyroStart.a.x).toBeCloseTo(0, 10)
+    expect(atGyroStart.a.y).toBeCloseTo((Math.PI * 3) / 4, 10)
+    expect(atGyroStart.b.x).toBeCloseTo(Math.PI / 2, 10)
+    expect(atGyroStart.b.y).toBeCloseTo(Math.PI / 4, 10)
+
+    const tiltRad = (20 * Math.PI) / 180
+    const atGyroMid = thinkingRingPose(4.0, 0)
+    expect(atGyroMid.a.x).toBeCloseTo(tiltRad, 10)
+    expect(atGyroMid.b.x).toBeCloseTo(Math.PI / 2 + tiltRad, 10)
+    expect(atGyroMid.a.y - atGyroMid.b.y).toBeCloseTo(Math.PI, 10)
+
+    const atBurstStart = thinkingRingPose(5.0, 0)
+    expect(atBurstStart.a.x).toBeCloseTo(0, 10)
+    expect(atBurstStart.a.z).toBeCloseTo(0, 10)
+    expect(atBurstStart.b.x).toBeCloseTo(Math.PI / 2, 10)
+    expect(Math.abs(atBurstStart.a.y - atGyroStart.a.y)).toBeCloseTo(Math.PI * 2, 10)
+    expect(Math.abs(atBurstStart.b.y - atGyroStart.b.y)).toBeCloseTo(Math.PI * 2, 10)
+
+    const atBurstMid = thinkingRingPose(5.2, 0)
+    expect(atBurstMid.bright).toBeCloseTo(SPINNER_RING_BRIGHT_MAX, 10)
+    expect(atBurstMid.a.z).toBeGreaterThan((Math.PI * 2) / 6)
+    expect(atBurstMid.b.x - Math.PI / 2).toBeGreaterThan((Math.PI * 2) / 6)
+
+    const burstRad = (120 * Math.PI) / 180
+    const atSettleStart = thinkingRingPose(5.4, 0)
+    expect(atSettleStart.a.z).toBeCloseTo(burstRad, 10)
+    expect(atSettleStart.b.x).toBeCloseTo(Math.PI / 2 + burstRad, 10)
+    expect(atSettleStart.bright).toBe(1)
+    expect(atSettleStart.scale).toBe(1)
+
+    const atSettleMid = thinkingRingPose(6.7, 0)
+    expect(atSettleMid.scale).toBeCloseTo(1.06, 10)
+
+    const atWrap = thinkingRingPose(8.0, 0)
+    expect(atWrap.a).toEqual(at0.a)
+    expect(atWrap.b).toEqual(at0.b)
+    expect(atWrap.scale).toBe(1)
+    expect(atWrap.bright).toBe(1)
+  })
+
+  it('is continuous in 1 ms steps across every segment edge and the loop wrap', () => {
+    const prev = thinkingRingPose(0, 0)
+    const next = { a: { x: 0, y: 0, z: 0 }, b: { x: 0, y: 0, z: 0 }, scale: 1, bright: 1 }
+    let maxAngleStep = 0
+    let maxScaleStep = 0
+    let maxBrightStep = 0
+    for (let ms = 1; ms <= THINKING_LOOP_SECONDS * 1000; ms += 1) {
+      thinkingRingPose(ms / 1000, 0, next)
+      for (const ring of ['a', 'b']) {
+        for (const axis of ['x', 'y', 'z']) {
+          const jump = Math.abs(next[ring][axis] - prev[ring][axis])
+          if (jump > maxAngleStep) maxAngleStep = jump
+        }
+      }
+      maxScaleStep = Math.max(maxScaleStep, Math.abs(next.scale - prev.scale))
+      maxBrightStep = Math.max(maxBrightStep, Math.abs(next.bright - prev.bright))
+      prev.a.x = next.a.x
+      prev.a.y = next.a.y
+      prev.a.z = next.a.z
+      prev.b.x = next.b.x
+      prev.b.y = next.b.y
+      prev.b.z = next.b.z
+      prev.scale = next.scale
+      prev.bright = next.bright
+    }
+    expect(maxAngleStep).toBeLessThan(0.02)
+    expect(maxScaleStep).toBeLessThan(0.001)
+    expect(maxBrightStep).toBeLessThan(0.01)
+
+    for (const edge of [0, 0.5, 2.5, 3.0, 5.0, 5.4, 8.0]) {
+      const before = thinkingRingPose(edge - 0.001, 0)
+      const at = thinkingRingPose(edge, 0)
+      const after = thinkingRingPose(edge + 0.001, 0)
+      for (const ring of ['a', 'b']) {
+        for (const axis of ['x', 'y', 'z']) {
+          expect(Math.abs(at[ring][axis] - before[ring][axis])).toBeLessThan(0.02)
+          expect(Math.abs(after[ring][axis] - at[ring][axis])).toBeLessThan(0.02)
+        }
+      }
+    }
+  })
+
+  it('wraps every 8 seconds, shifts by phase, reuses out and handles invalid inputs', () => {
+    const base = thinkingRingPose(1.75, 0.3)
+    const later = thinkingRingPose(1.75 + THINKING_LOOP_SECONDS * 3, 0.3)
+    const earlier = thinkingRingPose(1.75 - THINKING_LOOP_SECONDS * 2, 0.3)
+    for (const ring of ['a', 'b']) {
+      for (const axis of ['x', 'y', 'z']) {
+        expect(later[ring][axis]).toBeCloseTo(base[ring][axis], 10)
+        expect(earlier[ring][axis]).toBeCloseTo(base[ring][axis], 10)
+      }
+    }
+    expect(later.scale).toBeCloseTo(base.scale, 10)
+    expect(earlier.scale).toBeCloseTo(base.scale, 10)
+
+    const shifted = thinkingRingPose(0, 0.25)
+    const direct = thinkingRingPose(2, 0)
+    expect(shifted.a.x).toBeCloseTo(direct.a.x, 10)
+    expect(shifted.a.y).toBeCloseTo(direct.a.y, 10)
+    expect(shifted.b.x).toBeCloseTo(direct.b.x, 10)
+    expect(shifted.b.y).toBeCloseTo(direct.b.y, 10)
+
+    const out = {}
+    const first = thinkingRingPose(1, 0, out)
+    const aRef = first.a
+    const bRef = first.b
+    const second = thinkingRingPose(4, 0, out)
+    expect(first).toBe(out)
+    expect(second).toBe(out)
+    expect(second.a).toBe(aRef)
+    expect(second.b).toBe(bRef)
+
+    const fallback = thinkingRingPose('bad', 'bad')
+    expect(fallback.a).toEqual({ x: 0, y: 0, z: 0 })
+    expect(fallback.b.x).toBeCloseTo(Math.PI / 2, 10)
+    expect(fallback.scale).toBe(1)
+    expect(fallback.bright).toBe(1)
   })
 })
 
