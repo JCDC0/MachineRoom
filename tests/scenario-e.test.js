@@ -12,22 +12,22 @@ const OTHER_FIXTURES = {
   'fixtures/scenario-a': {
     activities: '00673deaecca9630',
     plans: '70d7b3ec3fb1f703',
-    layouts: '74321cc8e8feda76',
+    layouts: '3a2206ad946e7e1e',
   },
   'fixtures/scenario-b': {
     activities: '0a10dbb64e548bb9',
     plans: '8ffbd6484e9cfd8d',
-    layouts: '28237138c87c28bf',
+    layouts: '4d9589795d1b8cc9',
   },
   'fixtures/scenario-c': {
     activities: '394bd8e0fe7863bc',
     plans: '2cc40e0a1006e392',
-    layouts: '2737fc7980b4a88e',
+    layouts: 'aa562fd11cf77faa',
   },
   'fixtures/scenario-d': {
     activities: 'b5b12e98ea6c1c52',
     plans: '895e32dddf24ede1',
-    layouts: '76e5d528b7944672',
+    layouts: 'c727f4e0a5cead5d',
   },
 }
 
