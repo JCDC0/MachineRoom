@@ -1181,35 +1181,6 @@ summary:focus-visible,
   background: rgb(0 0 0 / 0.88);
 }
 
-.strip-half.is-left {
-  display: grid;
-  grid-template-columns: minmax(150px, 0.9fr) minmax(0, 1.3fr);
-  gap: var(--space);
-  padding-right: calc(var(--space) * 1.5);
-  border-right: 1px solid var(--line);
-}
-
-.strip-half.is-right {
-  gap: var(--space);
-  padding-left: calc(var(--space) * 1.5);
-}
-
-.strip-dot.is-working {
-  background: var(--yellow);
-}
-
-.strip-dot.is-queued {
-  background: var(--white);
-}
-
-.strip-dot.is-error {
-  background: var(--red);
-}
-
-.strip-dot.is-done {
-  background: var(--green);
-}
-
 .strip-btn {
   padding: 2px 7px;
   border: 1px solid var(--line);
@@ -1229,18 +1200,6 @@ summary:focus-visible,
 .strip-btn:disabled {
   color: rgb(255 255 255 / 0.4);
   cursor: default;
-}
-
-.strip-log-line.is-dim {
-  color: rgb(255 255 255 / 0.5);
-}
-
-.strip-log-line.is-error {
-  color: var(--red);
-}
-
-.strip-log-line.is-done {
-  color: var(--green);
 }
 
 .strip-pop {
@@ -1304,7 +1263,6 @@ summary:focus-visible,
   box-shadow: none;
 }
 
-.strip-agent-choice,
 .strip-model-choice {
   display: flex;
   align-items: center;
@@ -1320,7 +1278,6 @@ summary:focus-visible,
   cursor: pointer;
 }
 
-.strip-agent-choice:hover,
 .strip-model-choice:hover {
   background: rgb(255 255 255 / 0.1);
 }
@@ -4091,10 +4048,6 @@ body:has(#hud-orchestrator-chat) .lens-waiting {
   color: var(--red);
 }
 
-.plan-brief-route.is-error {
-  color: var(--red);
-}
-
 .runs-section {
   display: flex;
   flex-direction: column;
@@ -6627,11 +6580,6 @@ button.ui-icon-btn.mr-composer-send:hover:not(:disabled) {
   background: var(--red);
 }
 
-.mr-orch-field-input.is-scope {
-  min-height: 54px;
-  resize: vertical;
-}
-
 .mr-orch-confirm-detail {
   color: rgb(255 255 255 / 0.7);
   font-size: 11px;
@@ -7636,33 +7584,6 @@ button.ui-icon-btn.mr-composer-send:hover:not(:disabled) {
   font-size: 10px;
 }
 
-.mr-side-dot.is-working {
-  background: var(--yellow);
-  box-shadow: 0 0 6px rgb(229 255 0 / 0.6);
-}
-
-.mr-side-lane .mr-side-action {
-  flex: 0 0 auto;
-}
-
-.mr-side .mr-side-add {
-  height: 28px;
-  padding: 0 4px;
-  font-family: var(--mono);
-  font-size: 10px;
-  color: rgb(255 255 255 / 0.6);
-}
-
-.mr-side .mr-side-add:hover:not(:disabled) {
-  color: var(--white);
-}
-
-.mr-side-foot {
-  flex: 0 0 auto;
-  padding: 6px 8px;
-  border-top: 1px solid rgb(255 255 255 / 0.08);
-}
-
 .mr-side .hud-strip-settings {
   display: flex;
   align-items: center;
@@ -8384,7 +8305,6 @@ button.ui-icon-btn.mr-composer-send:hover:not(:disabled) {
     margin: 0 32px;
   }
 
-  .mr-orch.is-inline .mr-orch-attach,
   .mr-orch.is-inline .mr-orch-confirm.is-attach {
     flex: 0 0 auto;
     margin: 0 32px;
@@ -8606,26 +8526,6 @@ button.ui-icon-btn.mr-composer-send:hover:not(:disabled) {
   padding-bottom: 6px;
 }
 
-.mr-side .mr-side-orch {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  width: 100%;
-  padding: 5px 4px;
-  border-left: 2px solid transparent;
-  border-radius: 2px;
-}
-
-.mr-side .mr-side-orch:hover:not(:disabled),
-.mr-side .mr-side-orch.is-open {
-  border-left-color: var(--yellow);
-  background: rgb(255 255 255 / 0.05);
-}
-
-.mr-side-lane:not(.is-active) .mr-side-lane-body {
-  opacity: 0.55;
-}
-
 .mr-side .mr-side-switch {
   position: relative;
   flex: 0 0 auto;
@@ -8709,11 +8609,6 @@ button.ui-icon-btn.mr-composer-send:hover:not(:disabled) {
   resize: vertical;
 }
 
-.mr-side-auto .mr-side-field {
-  flex: 1 1 auto;
-}
-
-.mr-side-auto input[type='checkbox'],
 .mr-side-field input[type='checkbox'] {
   accent-color: var(--yellow);
 }
@@ -8777,11 +8672,6 @@ button.ui-icon-btn.mr-composer-send:hover:not(:disabled) {
 
 .mr-side .mr-side-note.is-dim {
   color: rgb(255 255 255 / 0.32);
-}
-
-.mr-side .mr-side-add {
-  margin-top: 4px;
-  border-top: 1px solid rgb(255 255 255 / 0.06);
 }
 
 /* Log and Settings open from the menu as dropdowns, like Control */
@@ -10539,11 +10429,6 @@ button.mr-family-heading,
 .mr-side .mr-ladder button:hover:not(:disabled) {
   border-color: var(--white);
   background: rgb(255 255 255 / 0.08);
-}
-
-.mr-side .mr-ladder .mr-orch-attach-open {
-  margin-left: auto;
-  color: rgb(255 255 255 / 0.8);
 }
 
 .mr-side .mr-ladder .mr-orch-confirm-btn.is-start {
