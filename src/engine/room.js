@@ -293,6 +293,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
   const agentSet = createAgents(scene, roster, cssScene, {
     calloutScene,
     onRemove: (key) => {
+      dropFlyingTouches((item) => item.agent === key)
       stars.cancel((star) => star.agent === key || star.to === key)
       dropPendingTouches((item) => item.agent === key, false)
       for (let index = pendingSpawns.length - 1; index >= 0; index -= 1) {
@@ -386,6 +387,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
   const touchLog = new Map()
   const pendingSpawns = []
   const pendingTouches = []
+  const flyingTouches = new Set()
   const starChain = []
   const starRoutePoints = []
   const starPath = []
@@ -539,6 +541,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     touchLog.clear()
     labels.clear()
     stars.reset()
+    flyingTouches.clear()
     pendingSpawns.length = 0
     pendingTouches.length = 0
     cards.sync(state)
@@ -878,20 +881,41 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     return root && !root.leaving ? root : null
   }
 
-  function followTouch(path, touch) {
+  function followTouch(path, touch, flying) {
     return (end) => {
       const card = cards.cards.get(path)
-      if (!card) return null
+      if (!card) {
+        if (flying) flyingTouches.delete(flying)
+        return null
+      }
       if (card.leaving) {
+        if (flying) flyingTouches.delete(flying)
         showTouch(touch)
         return null
       }
       const anchor = cards.anchor(path, starEnd)
-      if (!anchor) return null
+      if (!anchor) {
+        if (flying) flyingTouches.delete(flying)
+        return null
+      }
       end.x = anchor.x
       end.y = anchor.y
       end.z = anchor.z
       return end
+    }
+  }
+
+  function recordTouchTarget(touch) {
+    if (!touch || typeof touch.path !== 'string') return
+    const dir = touch.kind === 'file' ? dirname(touch.path) : touch.path
+    cards.recordTouch(dir)
+  }
+
+  function dropFlyingTouches(test, record = false) {
+    for (const item of [...flyingTouches]) {
+      if (!test(item)) continue
+      flyingTouches.delete(item)
+      if (record) recordTouchTarget(item.touch)
     }
   }
 
@@ -906,26 +930,32 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     const chain = litChain(dir, world.links, world.mask, starChain)
     const route = tunnelRoute(chain, world.links, world.mask, starRoutePoints)
     const points = starRoute(view.group.position, route, cardAnchorOf, starEnd, starPath)
-    stars.launch({
+    const flying = { agent, call, touch }
+    const launched = stars.launch({
       points,
       color: view.color,
-      onLand: () => showTouch(touch),
+      onLand: () => {
+        flyingTouches.delete(flying)
+        showTouch(touch)
+      },
       agent,
       call,
-      follow: target ? followTouch(target.path, touch) : null,
+      follow: target ? followTouch(target.path, touch, flying) : null,
     })
+    if (launched) flyingTouches.add(flying)
   }
 
   function queueTouchStar(activity, touch) {
     pendingTouches.push({ agent: activity.agent, touch, call: callOf(activity) })
   }
 
-  function dropPendingTouches(test, land = false) {
+  function dropPendingTouches(test, land = false, record = false) {
     for (let index = pendingTouches.length - 1; index >= 0; index -= 1) {
       const item = pendingTouches[index]
       if (!test(item)) continue
       pendingTouches.splice(index, 1)
       if (land) showTouch(item.touch)
+      else if (record) recordTouchTarget(item.touch)
     }
   }
 
@@ -980,8 +1010,9 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     if (activity.type === 'run.end' || activity.type === 'agent.end') {
       const finished = finishedAgentKeys(getState(), activity)
       if (finished.size > 0) {
+        dropFlyingTouches((item) => finished.has(item.agent), true)
         stars.cancel((star) => finished.has(star.agent) || finished.has(star.to))
-        dropPendingTouches((item) => finished.has(item.agent), false)
+        dropPendingTouches((item) => finished.has(item.agent), false, true)
         for (let index = pendingSpawns.length - 1; index >= 0; index -= 1) {
           const spawn = pendingSpawns[index]
           if (finished.has(spawn.agent) || finished.has(spawn.child)) pendingSpawns.splice(index, 1)
@@ -1019,6 +1050,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     if (activity.type === 'tool.end' && !activity.ok) {
       const call = callOf(activity)
       if (call !== null) {
+        dropFlyingTouches((item) => item.agent === activity.agent && item.call === call)
         stars.cancel((star) => star.agent === activity.agent && star.call === call)
         dropPendingTouches((item) => item.agent === activity.agent && item.call === call)
       }

@@ -1171,8 +1171,10 @@ export function createCards(cssScene, options = {}) {
     return true
   }
 
-  function recordTouch(dir, duration) {
-    const life = Math.max(CONTENT_ANIM_SEC, duration / 1000)
+  function recordTouch(dir, duration = FLASH_MS) {
+    if (typeof dir !== 'string') return
+    const ms = Number.isFinite(duration) ? duration : FLASH_MS
+    const life = Math.max(CONTENT_ANIM_SEC, ms / 1000)
     const prev = touchLife.get(dir) ?? 0
     if (life > prev) touchLife.set(dir, life)
   }
@@ -1663,6 +1665,7 @@ export function createCards(cssScene, options = {}) {
     sideOf,
     slotPosition,
     edgePoint,
+    recordTouch,
     flashFile: (dir, file, tone) => {
       const name = basename(file)
       const duration = tone === 'red' ? FAIL_MS : FLASH_MS
