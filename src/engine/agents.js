@@ -939,7 +939,7 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
 
   function addView(agent, { index, shapeName, home, scale = 1, parentKey = null, subOrchestrator = false, childIndex = 0, color = agentColor(0) }) {
     const group = new THREE.Group()
-    const shape = new THREE.LineSegments(shapeGeometry(shapeName), lineMaterial(WHITE, 0.35))
+    const shape = new THREE.LineSegments(shapeGeometry(shapeName), lineMaterial(color, 0.35))
     shape.geometry.computeBoundingSphere()
     const shellRadius = shape.geometry.boundingSphere?.radius ?? 120
     const orchestrator = parentKey === null && isOrchestrator(agent)
@@ -1287,6 +1287,7 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
       const existing = views.get(agent.key)
       if (existing) {
         existing.color = color
+        writeColor(existing.shape.material, color)
         return
       }
       const sub = isSubOrchestrator(agent)
@@ -1306,7 +1307,10 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
     for (const view of views.values()) {
       if (!view.parentKey) continue
       const parent = views.get(view.parentKey)
-      if (parent) view.color = parent.color
+      if (parent) {
+        view.color = parent.color
+        writeColor(view.shape.material, view.color)
+      }
     }
     layoutHomes(currentLadder)
     placeViews()
@@ -1583,7 +1587,7 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
 
       const fresh = status === 'done' && now - view.doneAt < DONE_GLOW_MS
       const opacity = status === 'done' ? (fresh ? 1 : 0.6) : style.opacity
-      writeColor(view.shape.material, drawing ? view.color : style.color)
+      writeColor(view.shape.material, view.color)
       writeOpacity(view.shape.material, drawing ? 1 : opacity * fade * opacityFactor)
       const labelOpacity = drawing ? 0 : fade * opacityFactor
       writeOpacity(view.label.material, labelOpacity)
