@@ -17,7 +17,7 @@ import {
   thinkingDue,
   thinkingLevel,
 } from '../src/engine/agents.js'
-import { WHITE } from '../src/engine/sprites.js'
+import { GREEN, RED, WHITE, YELLOW, disposeStill } from '../src/engine/sprites.js'
 import { apply, createState } from '../src/model/state.js'
 
 const context2d = {
@@ -338,5 +338,107 @@ describe('the thinking spinner on an agent', () => {
     expect(view.spinner.group.visible).toBe(true)
     expect(view.spinner.arcs.every((arc) => !arc.visible)).toBe(true)
     agents.dispose()
+  })
+
+  it('keeps the spinner ring visible in every status and shows its arcs only while thinking', () => {
+    const { agents, state, terminals, world } = harness()
+    const view = agents.views.get('a')
+
+    agents.update(state, 0.016, 1000, world, terminals)
+    expect(view.spinner.group.visible).toBe(true)
+    expect(view.spinner.rings.every((ring) => ring.visible)).toBe(true)
+    expect(view.spinner.ringMaterial.color.getHex()).toBe(WHITE)
+    expect(view.spinner.ringMaterial.opacity).toBeGreaterThan(0)
+    expect(view.spinner.arcs.every((arc) => !arc.visible)).toBe(true)
+    expect(view.spinner.arcMaterial.opacity).toBe(0)
+
+    apply(state, { time: 1100, type: 'run.queued', agent: 'a' })
+    agents.update(state, 1, 2100, world, terminals)
+    expect(view.spinner.group.visible).toBe(true)
+    expect(view.spinner.ringMaterial.color.getHex()).toBe(WHITE)
+    expect(view.spinner.arcs.every((arc) => !arc.visible)).toBe(true)
+
+    apply(state, { time: 2200, type: 'run.start', agent: 'a', runId: 'r1' })
+    agents.update(state, 0.016, 2200, world, terminals)
+    agents.update(state, 0.4, 2600, world, terminals)
+    expect(view.spinner.group.visible).toBe(true)
+    expect(view.spinner.ringMaterial.color.getHex()).toBe(WHITE)
+    expect(view.spinner.arcs.every((arc) => arc.visible)).toBe(true)
+    expect(view.spinner.arcMaterial.opacity).toBeGreaterThan(0)
+
+    apply(state, {
+      time: 2700,
+      type: 'tool.start',
+      agent: 'a',
+      id: 't1',
+      label: 'read src/a.js',
+      touches: [{ path: 'src/a.js', mode: 'read', kind: 'file' }],
+    })
+    agents.update(state, 0.7, 3400, world, terminals)
+    expect(view.spinner.group.visible).toBe(true)
+    expect(view.spinner.ringMaterial.color.getHex()).toBe(YELLOW)
+    expect(view.spinner.arcs.every((arc) => !arc.visible)).toBe(true)
+    expect(view.spinner.arcMaterial.opacity).toBe(0)
+
+    apply(state, { time: 3500, type: 'run.end', agent: 'a', runId: 'r1', ok: true })
+    agents.update(state, 0.016, 3500, world, terminals)
+    expect(view.spinner.group.visible).toBe(true)
+    expect(view.spinner.ringMaterial.color.getHex()).toBe(GREEN)
+    expect(view.spinner.arcs.every((arc) => !arc.visible)).toBe(true)
+
+    apply(state, { time: 3600, type: 'run.start', agent: 'a', runId: 'r2' })
+    apply(state, { time: 3700, type: 'run.end', agent: 'a', runId: 'r2', ok: false, error: 'boom' })
+    agents.update(state, 0.016, 3700, world, terminals)
+    expect(view.spinner.group.visible).toBe(true)
+    expect(view.spinner.ringMaterial.color.getHex()).toBe(RED)
+    expect(view.spinner.arcs.every((arc) => !arc.visible)).toBe(true)
+
+    agents.snap(state, world)
+    expect(view.spinner.group.visible).toBe(true)
+    expect(view.spinner.arcs.every((arc) => !arc.visible)).toBe(true)
+    agents.dispose()
+  })
+
+  it('holds the thinking arcs still under reduced motion while keeping the status ring visible', () => {
+    const savedWindow = globalThis.window
+    globalThis.window = { matchMedia: () => ({ matches: true }) }
+    disposeStill()
+    try {
+      const { agents, state, terminals, world } = harness()
+      startRun(state, 1000)
+      agents.update(state, 0.016, 1000, world, terminals)
+      const view = agents.views.get('a')
+      expect(view.spinner.group.visible).toBe(true)
+      expect(view.spinner.arcs.every((arc) => !arc.visible)).toBe(true)
+
+      agents.update(state, 0.016, 1300, world, terminals)
+      expect(view.spinner.group.visible).toBe(true)
+      expect(view.spinner.arcs.every((arc) => arc.visible)).toBe(true)
+      const first = view.spinner.arcs[0].rotation.z
+      const second = view.spinner.arcs[1].rotation.z
+      expect(first).toBe(0)
+      expect(second).toBeCloseTo(SPINNER_PHASE, 10)
+
+      agents.update(state, 0.25, 1550, world, terminals)
+      expect(view.spinner.arcs[0].rotation.z).toBe(first)
+      expect(view.spinner.arcs[1].rotation.z).toBe(second)
+
+      apply(state, {
+        time: 1600,
+        type: 'tool.start',
+        agent: 'a',
+        id: 't1',
+        label: 'read src/a.js',
+        touches: [{ path: 'src/a.js', mode: 'read', kind: 'file' }],
+      })
+      agents.update(state, 0.016, 1600, world, terminals)
+      expect(view.spinner.group.visible).toBe(true)
+      expect(view.spinner.ringMaterial.color.getHex()).toBe(YELLOW)
+      expect(view.spinner.arcs.every((arc) => !arc.visible)).toBe(true)
+      agents.dispose()
+    } finally {
+      globalThis.window = savedWindow
+      disposeStill()
+    }
   })
 })
