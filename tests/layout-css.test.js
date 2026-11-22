@@ -508,3 +508,65 @@ describe('the command console', () => {
     expect(rule('.mr-callout .mr-term-console-link')['pointer-events']).toBe('auto')
   })
 })
+
+describe('the transport view row and forced idle state', () => {
+  it('centres the view row with an 8 pixel gap and styles Idle like Center', () => {
+    const view = rule('.transport-view')
+    expect(view.display).toBe('inline-flex')
+    expect(pixels(view.gap)).toBe(8)
+    expect(rule('.transport.is-live .transport-view')['grid-column']).toBe('2')
+    expect(rule('.transport.is-live .transport-view')['justify-self']).toBe('center')
+    expect(rule('.transport.is-live.has-orchestrator .transport-view')['grid-row']).toBe('2')
+    expect(rule('.transport:not(.is-live) .transport-view')['grid-column']).toBe('1 / -1')
+    expect(rule('.transport:not(.is-live) .transport-view')['justify-self']).toBe('center')
+    const shared = sharedBlock(['.transport .transport-center', '.transport .transport-idle'])
+    expect(shared).toBeTruthy()
+    const pressed = merged(".transport .transport-idle[aria-pressed='true']")
+    expect(pressed['border-color']).toBe('var(--yellow)')
+    expect(pressed.color).toBe('var(--yellow)')
+    const seamRule = css.match(/([^{}]+)\{\s*transform:\s*translateY\(var\(--seam-y, 0\)\) rotate\(var\(--seam-r, 0\)\);\s*\}/)[1]
+    const seamSelectors = seamRule.split(',').map((selector) => selector.trim())
+    expect(seamSelectors).toContain('.transport-center')
+    expect(seamSelectors).toContain('.transport-idle')
+    expect(merged('.hud-menu.is-flat .transport-idle').transform).toBeUndefined()
+  })
+
+  it('keeps the Idle button visible and clickable in place while forced idle hides the rest', () => {
+    const transport = merged('.stage.is-idle-forced .transport')
+    expect(transport.opacity).toBe('1')
+    expect(transport.transform).toBe('none')
+    expect(transport['pointer-events']).toBe('none')
+    expect(transport.position).toBe('fixed')
+    expect(transport.top).toBe('calc(100vh - var(--transport-h))')
+    expect(merged('.stage.is-idle-forced .hud-menu').opacity).toBe('0')
+    expect(merged('.stage.is-idle-forced .hud-menu').transform).toBe('translateY(-100%)')
+    expect(merged('.stage.is-idle-forced .transport > :not(.transport-view)').opacity).toBe('0')
+    expect(merged('.stage.is-idle-forced .transport > :not(.transport-view)')['pointer-events']).toBe('none')
+    expect(merged('.stage.is-idle-forced .transport-view > :not(.transport-idle)').opacity).toBe('0')
+    expect(merged('.stage.is-idle-forced .transport-view > :not(.transport-idle)')['pointer-events']).toBe('none')
+    expect(rule('.stage.is-idle-forced .transport-view .transport-idle').opacity).toBe('1')
+    expect(rule('.stage.is-idle-forced .transport-view .transport-idle')['pointer-events']).toBe('auto')
+  })
+
+  it('drops forced-idle transitions under reduced motion', () => {
+    const sheet = parse(css)
+    const quieted = []
+    sheet.walkAtRules('media', (atRule) => {
+      if (atRule.params !== '(prefers-reduced-motion: reduce)') return
+      atRule.walkRules((block) => {
+        if (!block.nodes.some(({ prop, value }) => prop === 'transition' && value === 'none')) return
+        quieted.push(...block.selectors)
+      })
+    })
+    for (const selector of [
+      '.stage.is-idle-forced .hud-menu',
+      '.stage.is-idle-forced .transport',
+      '.stage.is-idle-forced .transport > :not(.transport-view)',
+      '.stage.is-idle-forced .transport-view > :not(.transport-idle)',
+      '.stage.is-idle-forced .lens-rail',
+      '.stage.is-idle-forced .lens-labels',
+    ]) {
+      expect(quieted, selector).toContain(selector)
+    }
+  })
+})

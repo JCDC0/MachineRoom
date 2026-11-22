@@ -114,7 +114,7 @@ The 3D room shows these objects:
 - Terminal chips: a chip beside each agent shows its name and status word. Click it or press T to show the log. An agent running shell commands also shows a cyan CONSOLE above its head with its last five log lines. Clicking an address inside it opens the URL in a new tab.
 - Camera and follow mode: the overview fits the hub and top-level cards. Follow mode (F) cycles wide, close up, and off. It follows the card an agent touches. Clicking an agent focuses it. Clicking a card body holds the camera 700 units away. Press 0, Escape with no panel open, or double click empty space to return to the park view.
 - Failure tray: in a live room, a red failure tray sits at the bottom right of the lens, showing recent failed runs and tool calls. Click a row to inspect that agent. Click Clear to dismiss the tray.
-- Idle view: after a minute without input, the menu and the transport slide away, the lens fills the whole window and the room turns slowly. Any key, click or scroll brings them back.
+- Idle view: after a minute without input, the menu and the transport slide away, the lens fills the whole window and the room turns slowly. Any key, click or scroll brings them back. Press `Idle` in the transport to enter the idle view at once and hold it until you press `Idle` again.
 
 ## The sidebar
 
@@ -135,6 +135,7 @@ The transport bar sits between the lens and the lower columns at 900 pixels and 
 - Sub orchestrator chips: compact chips after the state word show each sub orchestrator with its name and state dot. Up to four show before `+N`. Clicking a chip opens that sub orchestrator chat tab and focuses the chat input.
 - Lane pills: compact pills after the sub chips show lanes that are queued, working or failed in their last run. Each pill shows the lane label, task or brief id, a state dot, runtime minutes, and `N/M` for queue steps. Working lanes come first, failed lanes newest first, up to six before `+N`. Clicking a pill inspects that lane.
 - Spend pill: sits just left of the context ring, showing `$X.XX today · $Y.YY mo` from the cost board. Clicking it scrolls the cost board into view in the right column.
+- Center and Idle: a centred row under the agents chip in every transport form (live with and without lanes, and replay) holds `Center` and `Idle`. `Center` returns the camera to the overview. `Idle` sends the room into the idle view at once and keeps it idle through pointer, key and scroll input until `Idle` is pressed again; while forced, everything the idle view hides stays hidden except the pressed `Idle` button.
 
 ## The inspector
 
