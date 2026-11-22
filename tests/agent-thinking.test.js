@@ -200,9 +200,10 @@ describe('the thinking spinner on an agent', () => {
     const view = agents.views.get('a')
     const spinner = view.spinner
     expect(spinner.group.children).toHaveLength(2)
-    expect(spinner.group.visible).toBe(false)
+    expect(spinner.group.visible).toBe(true)
     expect(spinner.rings).toHaveLength(2)
     expect(spinner.arcs).toHaveLength(2)
+    expect(spinner.arcs.every((arc) => !arc.visible)).toBe(true)
     expect(spinner.rings[1].parent.rotation.x).toBeCloseTo(Math.PI / 2, 10)
     expect(spinner.ringMaterial.color.getHex()).toBe(WHITE)
     expect(spinner.arcMaterial.color.getHex()).toBe(WHITE)
@@ -235,11 +236,13 @@ describe('the thinking spinner on an agent', () => {
     agents.update(state, 0.016, 1000, world, terminals)
     const view = agents.views.get('a')
     expect(view.thinking).toBe(0)
-    expect(view.spinner.group.visible).toBe(false)
+    expect(view.spinner.group.visible).toBe(true)
+    expect(view.spinner.arcs.every((arc) => !arc.visible)).toBe(true)
 
     agents.update(state, 0.2, 1200, world, terminals)
     expect(view.thinking).toBe(0)
-    expect(view.spinner.group.visible).toBe(false)
+    expect(view.spinner.group.visible).toBe(true)
+    expect(view.spinner.arcs.every((arc) => !arc.visible)).toBe(true)
 
     agents.update(state, 0.049, 1249, world, terminals)
     expect(view.thinking).toBe(0)
@@ -247,7 +250,8 @@ describe('the thinking spinner on an agent', () => {
     agents.update(state, 0.001, 1250, world, terminals)
     expect(view.thinking).toBeCloseTo(0.001 / THINKING_IN_SECONDS, 10)
     expect(view.spinner.group.visible).toBe(true)
-    expect(view.spinner.ringMaterial.opacity).toBeCloseTo(SPINNER_RING_OPACITY * view.thinking, 10)
+    expect(view.spinner.arcs.every((arc) => arc.visible)).toBe(true)
+    expect(view.spinner.ringMaterial.opacity).toBeCloseTo(SPINNER_RING_OPACITY, 10)
     expect(view.spinner.arcMaterial.opacity).toBeCloseTo(SPINNER_ARC_OPACITY * view.thinking, 10)
 
     const firstArc = view.spinner.arcs[0].rotation.z
@@ -299,18 +303,21 @@ describe('the thinking spinner on an agent', () => {
     agents.update(state, 0.3, now, world, terminals)
     expect(view.thinking).toBeCloseTo(0.5, 10)
     expect(view.spinner.group.visible).toBe(true)
+    expect(view.spinner.arcs.every((arc) => arc.visible)).toBe(true)
     now += 300
     agents.update(state, 0.3, now, world, terminals)
     expect(view.thinking).toBe(0)
-    expect(view.spinner.group.visible).toBe(false)
+    expect(view.spinner.group.visible).toBe(true)
+    expect(view.spinner.arcs.every((arc) => !arc.visible)).toBe(true)
 
     apply(state, { time: now, type: 'run.end', agent: 'a', ok: true })
     agents.update(state, 0.016, now + 16, world, terminals)
-    expect(view.spinner.group.visible).toBe(false)
+    expect(view.spinner.group.visible).toBe(true)
+    expect(view.spinner.arcs.every((arc) => !arc.visible)).toBe(true)
     agents.dispose()
   })
 
-  it('never shows the spinner for a run of tool calls shorter than the delay', () => {
+  it('never shows the spinner arcs for a run of tool calls shorter than the delay', () => {
     const { agents, state, terminals, world } = harness()
     startRun(state)
     agents.update(state, 0.016, 1000, world, terminals)
@@ -328,7 +335,8 @@ describe('the thinking spinner on an agent', () => {
     apply(state, { time: 1120, type: 'tool.end', agent: 'a', id: 't1', ok: true })
     agents.update(state, 0.016, 1132, world, terminals)
     expect(view.thinking).toBe(0)
-    expect(view.spinner.group.visible).toBe(false)
+    expect(view.spinner.group.visible).toBe(true)
+    expect(view.spinner.arcs.every((arc) => !arc.visible)).toBe(true)
     agents.dispose()
   })
 })

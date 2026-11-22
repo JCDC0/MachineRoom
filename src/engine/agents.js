@@ -10,7 +10,7 @@ import { CHILD_LIFE_MS } from '../model/state.js'
 import { AGENT_RING_BASE, AGENT_RING_GROW, AGENT_RING_MAX_OPACITY, AGENT_RING_MS, AGENT_RING_OPACITY_FLOOR, AGENT_RING_POOL, HUB_RADIUS, HUB_Y, ORCHESTRATOR_HOME, ORCHESTRATOR_LIFT, PARK_LIFT, RING_LEVEL_MAX, SWAY_LIFT, SWAY_RATE, SWAY_SCALE, danceEnvelope, hasSubs, isSessionReader, parkedKeysFor, readerAngles, readerPoint, ringDepth, ringLayout, ringPulse, sectorSlotAngles, sectorSubAngle, slotAngle, startDanceEnvelope, SUB_STAND_LIFT, topRingSeats, writeColor, writeOpacity } from './hub.js'
 import { INTERNET_RADIUS } from './internet.js'
 import { ORCHESTRATOR_PULSE_SCALE, ORCHESTRATOR_SHAPE, PREFERRED, PULSE_BANDS, PULSE_SCALE, SUB_PULSE_SCALE, bandForPoint, isOrchestrator, isSubOrchestrator, nextSpareShape, shapeGeometry, shapesFor, vertexOffset } from './shapes.js'
-import { GREEN, RED, TUNNEL_GREY, WEB, WHITE, agentColor, agentColors, cssColor, easeRate, lineMaterial, paintAgentColor, still, textSprite } from './sprites.js'
+import { GREEN, RED, TUNNEL_GREY, WEB, WHITE, YELLOW, agentColor, agentColors, cssColor, easeRate, lineMaterial, paintAgentColor, still, textSprite } from './sprites.js'
 import { linkOnPath } from './strings.js'
 
 const STYLE = {
@@ -79,6 +79,19 @@ export function agentThinking(agent = {}) {
   if (calls && typeof calls.size === 'number') return calls.size === 0
   const open = Number(agent?.openCalls ?? agent?.openToolCalls ?? 0)
   return !(Number.isFinite(open) && open > 0)
+}
+
+export function statusRingColor(status, entry = null) {
+  const state = typeof status === 'string' ? status.toLowerCase() : ''
+  if (state === 'error') return RED
+  if (state === 'done') return GREEN
+  if (RUNNING_STATUSES.has(state)) {
+    const calls = entry?.calls
+    if (calls && typeof calls.size === 'number') return calls.size > 0 ? YELLOW : WHITE
+    const open = Number(entry?.openCalls ?? entry?.openToolCalls ?? 0)
+    return Number.isFinite(open) && open > 0 ? YELLOW : WHITE
+  }
+  return WHITE
 }
 
 export function thinkingDue(since, now, delay = THINKING_DELAY_MS) {
@@ -699,7 +712,7 @@ function spinnerArc(radius, material) {
 function createSpinner(radius) {
   const group = new THREE.Group()
   const ringMaterial = lineMaterial(WHITE, SPINNER_RING_OPACITY)
-  const arcMaterial = lineMaterial(WHITE, SPINNER_ARC_OPACITY)
+  const arcMaterial = lineMaterial(WHITE, 0)
   const rings = []
   const arcs = []
   for (let index = 0; index < 2; index += 1) {
@@ -707,12 +720,12 @@ function createSpinner(radius) {
     if (index === 1) plane.rotation.x = Math.PI / 2
     const ring = spinnerRing(radius, ringMaterial)
     const arc = spinnerArc(radius, arcMaterial)
+    arc.visible = false
     plane.add(ring, arc)
     group.add(plane)
     rings.push(ring)
     arcs.push(arc)
   }
-  group.visible = false
   return { group, rings, arcs, ringMaterial, arcMaterial }
 }
 
@@ -1594,27 +1607,34 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
       view.doing.userData.setText(doingText(entry))
       writeOpacity(view.doing.material, labelOpacity)
       view.doing.visible = view.label.visible
-      const ringColor = status === 'working' || status === 'queued' ? view.color : style.color
+      const ringColor = statusRingColor(status, entry)
+      const ringFade = drawing ? 0 : opacity * fade * opacityFactor
       for (let index = 0; index < view.rings.length; index += 1) {
         const ring = view.rings[index]
         writeColor(ring.material, ringColor)
-        writeOpacity(ring.material, (drawing ? 0 : opacity * fade * opacityFactor) * (index === 0 ? 0.55 : 0.4))
+        writeOpacity(ring.material, ringFade * (index === 0 ? 0.55 : 0.4))
       }
       if (!isStill) {
         const spin = style.spin + (THINKING_SPIN - style.spin) * view.thinking
         view.shape.rotation.y += delta * spin
         view.shape.rotation.x += delta * style.spin * 0.4
       }
-      if (view.thinking > 0.001) {
+      view.spinner.group.visible = true
+      writeColor(view.spinner.ringMaterial, ringColor)
+      writeOpacity(view.spinner.ringMaterial, SPINNER_RING_OPACITY * ringFade)
+      const showArcs = !drawing && view.thinking > 0.001
+      if (showArcs) {
         const spinnerFade = view.thinking * fade * opacityFactor
-        view.spinner.group.visible = true
-        writeOpacity(view.spinner.ringMaterial, SPINNER_RING_OPACITY * spinnerFade)
+        writeColor(view.spinner.arcMaterial, WHITE)
         writeOpacity(view.spinner.arcMaterial, SPINNER_ARC_OPACITY * spinnerFade)
         const arc = thinkingArc(now, 0, SPINNER_SWEEP_SECONDS, isStill)
         view.spinner.arcs[0].rotation.z = arc
         view.spinner.arcs[1].rotation.z = arc + SPINNER_PHASE
       } else {
-        view.spinner.group.visible = false
+        writeOpacity(view.spinner.arcMaterial, 0)
+      }
+      for (let index = 0; index < view.spinner.arcs.length; index += 1) {
+        view.spinner.arcs[index].visible = showArcs
       }
       const dance = isStill ? 0 : danceEnvelope(view.danceFrom, view.danceTo, now - view.danceAt)
       const less = view.orchestrator || view.subOrchestrator
@@ -1809,7 +1829,9 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
       view.danceTurn = 0
       view.thinking = 0
       view.thinkingSince = 0
-      view.spinner.group.visible = false
+      view.spinner.group.visible = true
+      for (const arc of view.spinner.arcs) arc.visible = false
+      writeOpacity(view.spinner.arcMaterial, 0)
       swayTarget = 0
       swayLevel = 0
       view.pulseLevels.fill(0)

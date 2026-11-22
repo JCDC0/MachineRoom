@@ -162,14 +162,15 @@ describe('the agent colour on a chip and a callout', () => {
 })
 
 describe('the agent colour on a working shape', () => {
-  it('colours the status ring and the callout border with the agent colour', () => {
+  it('colours the shape and the callout border with the agent colour and the status ring yellow during an open call', () => {
     const { agents, state, terminals, world } = harness()
     startWrite(state)
     agents.update(state, 0.016, 1000, world, terminals)
     const view = agents.views.get('claude')
     expect(view.callout.element.className).toBe('mr-callout is-working')
     expect(view.callout.element.style.getPropertyValue('--agent-color')).toBe('#ff8c1a')
-    expect(view.rings[0].material.color.getHex()).toBe(AGENT_COLORS[0])
+    expect(view.shape.material.color.getHex()).toBe(AGENT_COLORS[0])
+    expect(view.rings[0].material.color.getHex()).toBe(YELLOW)
     agents.dispose()
     terminals.dispose()
   })
