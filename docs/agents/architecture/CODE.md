@@ -99,6 +99,7 @@ server/           the bridge: frames from the lane runs and the sessions, the ag
   agents-config.js  owner-made lanes, /api/harnesses, /api/lanes/create, update, delete
   family.js         the family tree, key slots, proposals and agent labels
   agent-depth.js    the subagent depth in <runs>/agent-depth.json: limit and unlocked, the default of 2, GET and POST /api/agent-depth with the page Origin check and no orchestrator write
+  seats.js          per-project ring seat limits and orchestrator grants in <runs>/seats-<hash>.json (`readSeats`, `writeSeats`, `setRings`, `setGrant`, `seatCheck`, `overRingProblem`, `ringSummary`, `seatSummary`, `parseSeatCommand` and formatters for `/seats`, `/grant`, `/revoke` and `/agents`)
   runs.js           run and outcome records, the command behind a run, and a task or a queue run on the room's project (L3, S8b); GET /api/control/issues via laneTaskState, and maskRecordCommits on returned records; startProjectTask starts a lane task for the bridge and the chat with the lane, task, project and dirty checks, and a runner that fails to start, dies by a signal or exits nonzero without writing a record leaves a failed one behind; its busy test reads a lane lock through the same holder check (P138)
   outcomes.js       outcomeTable: merge rate and cost per lane and model
   models.js         the model list, with each saved endpoint's models for the machineroom harness as NAME/MODEL

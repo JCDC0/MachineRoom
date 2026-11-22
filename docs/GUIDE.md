@@ -24,6 +24,8 @@ This guide covers how to start, use, configure and control MachineRoom on your p
 
 ## Start it on your project
 
+You need Node 24 or newer, git, a browser with WebGL, and Claude Code, OpenCode, Codex or AGY signed in, or a Direct API key. On Windows PowerShell, use `npm.cmd` instead of `npm` when the script policy refuses it, and `npm.cmd link` to link. Leave the execution policy as it is.
+
 The short way links the `machineroom` command once, then starts the room from any project folder.
 
 ```
@@ -41,12 +43,12 @@ machineroom
 `machineroom` runs `up` on the folder you are in. It prints the address and opens the room in your browser.
 
 - `machineroom <folder>` starts the room on another folder.
-- `--no-open` leaves the browser closed.
+- `--no-open` leaves the browser closed and still prints the address in the terminal.
 - `--port <n>` picks another port, 5174 by default.
 - `--no-sessions` leaves your own Claude Code and OpenCode sessions out.
 - `--help` prints the usage text.
 
-After you pull a new MachineRoom version, run `npm run build` in the MachineRoom folder again. Run `npm unlink -g machine-room` to remove the linked command.
+`npm link` binds the global `machineroom` command to the current clone folder. Moving or deleting that folder breaks `machineroom` until you run `npm unlink -g machine-room` (or `npm.cmd unlink -g machine-room` on Windows PowerShell) and link again. After you pull a new MachineRoom version, run `npm run build` in the MachineRoom folder again.
 
 The long way runs these commands in the MachineRoom folder:
 
@@ -56,22 +58,23 @@ npm run build
 npm run serve -- up --root <your project folder>
 ```
 
-`up` checks the project folder, git, the built viewer, the runs folder and the lane programs. It prints one line for each check, then serves the room on one port. It prints the address to open, such as `http://127.0.0.1:5174/?live&bridge=http://127.0.0.1:5174`. Open that address in your browser.
+`up` checks the project folder, git, the built viewer, the runs folder and the lane programs. It prints one line for each check, then `All checks passed.`, the process id, the port, the room address (`machine-room: open http://...`) and a Dispatch tip. `npm run serve -- up` keeps the browser closed unless you pass `--open`. Open the printed address in your browser.
 
-Flags for `serve`:
+Flags for `serve` and `up`:
 
-- `--root <folder>` sets the project folder. Quote paths that have spaces.
-- `--port <n>` picks another port.
-- `--dist <folder>` sets the built viewer folder.
+- `--root <folder>` sets the project folder (optional, defaults to the current folder or `PROJECT_ROOT`). Quote paths that have spaces.
+- `--port <n>` picks another port (`PORT`, default `5174`).
+- `--dist <folder>` sets the built viewer folder (default `dist` beside `bin`).
 - `--open` opens the browser automatically.
-- `--no-open` leaves the browser closed.
-- `--lanes` shows runs started by the lane runner and by Dispatch.
-- `--sessions` shows your own Claude Code and OpenCode sessions on that folder.
+- `--no-open` leaves the browser closed and still prints `machine-room: open http://...` in the terminal.
+- `--lanes` shows runs started by the lane runner and by Dispatch (`MACHINEROOM_LANES=1`).
+- `--sessions` shows your own Claude Code and OpenCode sessions on that folder (`MACHINEROOM_SESSIONS=1`).
 - `--no-sessions` leaves sessions out.
+- `--help` shows all commands and options (`npm run serve -- --help` or `npm run serve -- up --help`).
 
-`up` turns on both `--lanes` and `--sessions` automatically. Plain `npm run serve` needs `--lanes` or `--sessions` passed by hand.
+`up` turns on both `--lanes` and `--sessions` automatically. Without `up`, plain `npm run serve` skips the doctor checks and leaves both sources off unless you pass `--lanes` or `--sessions`.
 
-`npm run serve -- doctor --root <your project folder>` runs the checks without serving the room.
+`npm run serve -- doctor --root <your project folder>` runs the checks without serving the room. If the folder is not a git repository, it prints `All checks passed, 1 warning.` and still exits 0.
 
 A first visit with no saved connection opens the connect screen.
 
@@ -111,6 +114,7 @@ The 3D room shows these objects:
 - Terminal chips: a chip beside each agent shows its name and status word. Click it or press T to show the log. An agent running shell commands also shows a cyan CONSOLE above its head with its last five log lines. Clicking an address inside it opens the URL in a new tab.
 - Camera and follow mode: the overview fits the hub and top-level cards. Follow mode (F) cycles wide, close up, and off. It follows the card an agent touches. Clicking an agent focuses it. Clicking a card body holds the camera 700 units away. Press 0, Escape with no panel open, or double click empty space to return to the park view.
 - Failure tray: in a live room, a red failure tray sits at the bottom right of the lens, showing recent failed runs and tool calls. Click a row to inspect that agent. Click Clear to dismiss the tray.
+- Idle view: after a minute without input, the menu and the transport slide away, the lens fills the whole window and the room turns slowly. Any key, click or scroll brings them back.
 
 ## The sidebar
 
@@ -169,6 +173,7 @@ Click Settings in the top menu to open the panel. At 900 pixels and wider it is 
 - MCP tools: lists configured Model Context Protocol servers with transport, command or URL, an on/off switch, and Remove. Add servers with stdio commands and arguments or HTTP URLs. Refresh tools lists available tools. Run tool runs a tool behind a confirm card. Enabled servers are passed to Claude Code and OpenCode lane runs.
 - Subagents: sets subagent depth limit. Pick 1 or 2. Unlock opens a confirm card to enable depths 3 and 4. Lock returns the limit to 2.
 - Keys: lists saved key slot names. Key values are never displayed. Delete removes a saved key slot behind a confirm card.
+- Lanes: holds four runner settings (reply handling, running-lane warning count, worktree setup command and files to copy) above the list to hide, show or delete lanes. Remove from project hides a lane in that project. Delete everywhere removes a lane you made across all projects.
 
 ## Ask the orchestrator for work
 
@@ -195,7 +200,9 @@ Each sub orchestrator gets its own ring sector and its own tab in the chat. Deta
 
 ## Start one lane by hand
 
-A lane is one agent on one harness. Press C or click CONTROL, then open Dispatch. The `Run on this project` section appears when the room runs with `--lanes`.
+A lane is one agent on one harness. A new room starts with the orchestrator and no custom lane. While the session source is on (the default for `up`), the room also lists `Claude Code session` and `OpenCode session`. Make a lane in the sidebar Agents tab: press `+` (`Add a lane`) in the `Agents` header, or `Add a lane under this...` in an orchestrator row's menu, and fill in the label, harness, model, mode (if offered) and effort. Each lane runs in its own harness on the owner's account.
+
+Press C or click CONTROL, then open Dispatch. The `Run on this project` section appears when the room runs with `--lanes`.
 
 - Pick a lane, such as OpenCode, Claude Code or a Direct API lane. An AGY lane shows here only when you added it yourself in the sidebar's Agents tab.
 - Write one task in the box.
@@ -207,6 +214,8 @@ A lane is one agent on one harness. Press C or click CONTROL, then open Dispatch
 - A queue makes the branch `machineroom/queue-<lane>-<stamp>`. It runs your project tests after each task, using `npm test` when `package.json` has a test script. It commits each task that passes and stops at the first failed task or test. It never touches your current branch and never pushes. It leaves the folder on the queue branch. `git switch -` goes back. With Own worktree on, the worktree stays on the queue branch and your project folder stays where it was.
 
 The Runs list in Dispatch shows running and recent runs with their last lines.
+
+Open a lane's conversation from the chat button on its row in Agents or Open conversation in its Inspector. It loads the lane's newest run with a picker for its last 20 runs, updates while the run is live, and shows Stop while it runs.
 
 ## Run a lane from a terminal
 
@@ -233,6 +242,12 @@ A queue needs a clean git folder, so keep the queue file outside it or commit it
 
 With `--sessions`, the room follows your own Claude Code and OpenCode sessions on that folder too. Start it with `npm run serve -- up --sessions --root <folder>`. It reads the session files Claude Code keeps in `.claude/projects` under your profile for that folder. It keeps only lines whose `cwd` is inside the folder. It shows each prompt as a run and each tool call on the room cards, and follows subagents through their own files. A run that `run-lane` starts on the same folder is skipped to prevent duplicate runs. OpenCode sessions come from OpenCode database (`.local/share/opencode/opencode.db` under your profile), opened read-only. The bridge reads only its two session tables, never account or key tables. Only tool calls and their results reach the room, never prompts or replies.
 
+`MACHINEROOM_LANES_DIR` points a room at another lane list, which is how MachineRoom's own development runs its lanes. In PowerShell, set `$env:MACHINEROOM_LANES_DIR = "docs/agents"`, or `MACHINEROOM_LANES_DIR=docs/agents` in bash.
+
+A lane can name a backup lane with `fallback` in the lane file (`lanes.json`). When a brief run or a single project task fails with a quota, rate limit or overload error, or fails to start, `npm run run-lane` moves that run once to the backup lane. In a queue, each task can move on its own. A busy backup lane leaves the run failed.
+
+Run `npm run run-lane -- --list` to print the last 10 runs. A run that moved carries `| moved to LANE (KIND)`, and the backup run carries `| taken over from LANE`.
+
 ## Replay a recorded run
 
 - `/?replay` plays the frames this page recorded while it was live. Before the first conversation it says `Nothing recorded yet. Replay starts with the first conversation.` It needs no lane and no project.
@@ -255,7 +270,7 @@ Press C or click CONTROL at the top right to open the drawer. It has five tabs: 
 
 ## Where the logs and records are
 
-Every lane run writes its log to `<runs>`, which is `%LOCALAPPDATA%\MachineRoom\runs` on Windows, or `$XDG_STATE_HOME/machineroom/runs` (or `~/.local/state/machineroom/runs`) elsewhere. `MACHINEROOM_RUNS` names another runs folder, and the first start copies the old `%TEMP%\machineroom-runs` folder there once.
+Every lane run writes its log to `<runs>`, which is `%LOCALAPPDATA%\MachineRoom\runs` on Windows, or `$XDG_STATE_HOME/machineroom/runs` (or `~/.local/state/machineroom/runs`) elsewhere. `MACHINEROOM_RUNS` names another runs folder (in PowerShell `$env:MACHINEROOM_RUNS = "$env:TEMP\machineroom-runs"`, or `MACHINEROOM_RUNS=/path/to/runs` in bash), and the first start copies the old `%TEMP%\machineroom-runs` folder there once.
 
 - `<lane>-<briefs>-<stamp>.log` for a run on briefs.
 - `<lane>-project-<stamp>.log` for one task on a project without `--worktree`.
@@ -263,9 +278,9 @@ Every lane run writes its log to `<runs>`, which is `%LOCALAPPDATA%\MachineRoom\
 - `<log name>.meta.json` beside a run on a project, with the lane, project folder, session id and base commit.
 - `runs.jsonl` has one record for each run: lane, model, start time, minutes, exit code, cost, tokens, log and branch.
 - `outcomes.jsonl` holds the outcomes recorded with `npm run outcome`.
-- The orchestrator chat and session live in `orchestrator-<hash>.json`. Each sub orchestrator has its own chat file beside it, and each turn writes a `...-chat-<stamp>.log` log file.
+- The orchestrator chat, session and lock live in `orchestrator-<hash>.json` and `orchestrator-<hash>.lock`, beside the lane lock files. Each sub orchestrator has its own chat file beside it, and each turn writes a `...-chat-<stamp>.log` log file.
 
-The runner prints `log:` and `record:` at the end of each run.
+The runner prints `log:` and `record:` at the end of each run. MachineRoom keeps its records, logs and costs on this computer; the agents still send your code to their model providers.
 
 ## Keyboard
 
