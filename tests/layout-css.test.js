@@ -163,6 +163,64 @@ describe('the panel toolbar buttons', () => {
   })
 })
 
+describe('the flat menu row', () => {
+  const top = [
+    '.hud-band-project',
+    '.hud-band-switch',
+    '.hud-modes button',
+    '.hud-action',
+    '.hud-action-slot > .hud-action-badge',
+    '.hud-health-chip',
+  ]
+
+  function wideBlock() {
+    const sheet = parse(css)
+    const found = sheet.nodes.find(
+      (node) =>
+        node.type === 'atrule' &&
+        node.params === '(min-width: 900px)' &&
+        node.toString().includes('.hud-menu.is-flat')
+    )
+    expect(found, 'the flat rule in the 900 pixel block').toBeDefined()
+    return found
+  }
+
+  it('straightens the six top buttons once the page leaves the top', () => {
+    expect(merged('.hud-menu.is-flat .hud-action').transform).toBe('none')
+    const wide = wideBlock()
+    for (const selector of top) {
+      expect(merged(`.hud-menu.is-flat ${selector}`).transform, selector).toBe('none')
+      const slows = []
+      wide.walkRules((block) => {
+        if (!block.selectors.includes(selector)) return
+        block.walkDecls('transition', (decl) => slows.push(decl.value))
+      })
+      expect(slows.join(' '), selector).toContain('transform 0.24s ease')
+    }
+    expect(rule('.hud-action').transition).toBeUndefined()
+    expect(css).toContain('border-color 150ms, color 150ms, background-color 150ms, transform 0.24s ease')
+    for (const selector of ['.transport-badge', '.transport-center', '.speeds button']) {
+      expect(merged(`.hud-menu.is-flat ${selector}`).transform, selector).toBeUndefined()
+    }
+  })
+
+  it('does not animate the straightening under reduced motion', () => {
+    const sheet = parse(css)
+    const quiet = sheet.nodes.find(
+      (node) =>
+        node.type === 'atrule' &&
+        node.params === '(min-width: 900px) and (prefers-reduced-motion: reduce)'
+    )
+    expect(quiet, 'the reduced motion block for the flat menu row').toBeDefined()
+    const quieted = []
+    quiet.walkRules((block) => {
+      if (!block.nodes.some(({ prop, value }) => prop === 'transition' && value === 'none')) return
+      quieted.push(...block.selectors)
+    })
+    for (const selector of top) expect(quieted, selector).toContain(selector)
+  })
+})
+
 describe('the storage days label', () => {
   it('stays on one line beside its number box', () => {
     const label = rule(".mr-search-row:has(> input[type='number']) > .hud-settings-label")
