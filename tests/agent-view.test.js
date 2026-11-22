@@ -140,6 +140,31 @@ describe('a failed tool call on a working agent', () => {
     expect(view.tunnel).toBe(1)
     agents.dispose()
   })
+
+  it('aims the working tunnel at the newest open call with touches and draws none for a call with no touches (R74-3)', () => {
+    const { agents, state, terminals, world } = harness()
+    const aimed = []
+    world.side = (dir) => {
+      aimed.push(dir)
+      return 1
+    }
+    const read = (id, path, time) => apply(state, { time, type: 'tool.start', agent: 'a', id, tool: 'read', label: `read ${path}`, touches: [{ path, mode: 'read', kind: 'file' }] })
+    read('o1', 'src/a.js', 1000)
+    read('o2', 'docs/b.md', 1010)
+    agents.aimAt('a', 'docs', 'docs/b.md', 1015)
+    apply(state, { time: 1020, type: 'tool.end', agent: 'a', id: 'o2', ok: true })
+    aimed.length = 0
+    agents.update(state, 0.3, 1020, world, terminals)
+    const view = agents.views.get('a')
+    expect(aimed.at(-1)).toBe('src')
+
+    apply(state, { time: 1100, type: 'tool.end', agent: 'a', id: 'o1', ok: true })
+    apply(state, { time: 1110, type: 'tool.start', agent: 'a', id: 'n1', tool: 'shell', label: 'npm test', touches: [] })
+    agents.update(state, 0.7, 1110, world, terminals)
+    agents.update(state, 0.7, 1810, world, terminals)
+    expect(view.tunnel).toBe(0)
+    agents.dispose()
+  })
 })
 
 describe('a child chip', () => {

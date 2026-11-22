@@ -243,7 +243,7 @@ export function thinkingRingPose(seconds, phase = 0, out = null) {
     a.y = Math.PI / 2 + RISE_TURN + turn
     a.z = 0
     b.x = SPINNER_REST_B_X + tilt
-    b.y = Math.PI / 2 - RISE_TURN - (Math.PI / 2) * env + turn
+    b.y = Math.PI / 2 - RISE_TURN + (Math.PI / 2) * env + turn
     b.z = 0
   } else if (t < BURST_END) {
     const u = (t - GYRO_END) / (BURST_END - GYRO_END)
@@ -860,7 +860,6 @@ function makeCallout(agentName, key, onPick) {
   if (typeof element.addEventListener === 'function') {
     element.addEventListener('pointerdown', stopEvent)
     element.addEventListener('dblclick', stopEvent)
-    element.addEventListener('click', () => onPick?.(key))
   }
 
   const title = document.createElement('div')
@@ -891,7 +890,11 @@ function makeCallout(agentName, key, onPick) {
   consoleLink.style.display = 'none'
   const stopLink = (event) => event?.stopPropagation?.()
   consoleLink.onclick = stopLink
-  if (typeof consoleLink.addEventListener === 'function') consoleLink.addEventListener('click', stopLink)
+  if (typeof consoleLink.addEventListener === 'function') {
+    consoleLink.addEventListener('click', stopLink)
+    consoleLink.addEventListener('pointerdown', stopLink)
+    consoleLink.addEventListener('dblclick', stopLink)
+  }
 
   const consoleBody = document.createElement('div')
   consoleBody.className = 'mr-callout-console-body'
@@ -1681,7 +1684,15 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
   }
 
   function focusPointer(state, entry, out = null) {
-    const path = entry?.focus?.[0]
+    let path
+    if (entry?.openCalls instanceof Map) {
+      for (const call of entry.openCalls.values()) {
+        const touch = call?.touches?.find?.((item) => typeof item?.path === 'string')
+        if (touch) path = touch.path
+      }
+    } else {
+      path = entry?.focus?.[0]
+    }
     if (path === undefined) return null
     const point = out ?? { dir: '', file: null }
     if (state.files.has(path)) {
@@ -2114,7 +2125,7 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
 
       if (view.web && (!online || (status !== 'working' && status !== 'queued'))) view.web = false
       const webOn = view.web && online && (status === 'working' || status === 'queued')
-      const pointer = view.pointer ?? (working ? focusPointer(state, entry, focusScratch) : null)
+      const pointer = working ? focusPointer(state, entry, focusScratch) : view.pointer
       let color = null
       if (pointer) {
         if (working && lastFailed) color = RED

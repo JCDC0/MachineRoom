@@ -279,7 +279,17 @@ describe('thinkingRingPose', () => {
     const atGyroMid = thinkingRingPose(4.0, 0)
     expect(atGyroMid.a.x).toBeCloseTo(tiltRad, 10)
     expect(atGyroMid.b.x).toBeCloseTo(Math.PI / 2 + tiltRad, 10)
-    expect(atGyroMid.a.y - atGyroMid.b.y).toBeCloseTo(Math.PI, 10)
+    // R74-5: the rings precess half a turn apart, measured on their 3D normals, not on raw Euler angles.
+    const azimuth = (ring) => {
+      const normal = new THREE.Vector3(0, 0, 1).applyEuler(new THREE.Euler(ring.x, ring.y, ring.z, 'ZYX'))
+      return Math.atan2(normal.x, normal.z)
+    }
+    for (const seconds of [3.5, 4.0, 4.5]) {
+      const pose = thinkingRingPose(seconds, 0)
+      const turn = 2 * Math.PI
+      const apart = Math.abs(((((azimuth(pose.a) - azimuth(pose.b) + Math.PI) % turn) + turn) % turn) - Math.PI)
+      expect(apart).toBeCloseTo(Math.PI, 5)
+    }
 
     const atBurstStart = thinkingRingPose(5.0, 0)
     expect(atBurstStart.a.x).toBeCloseTo(0, 10)

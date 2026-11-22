@@ -374,13 +374,16 @@ describe('merged console inside the callout', () => {
       expect(stopped).toBe(true)
       expect(picked).toEqual([])
 
-      view.callout.element.listeners.get('click')()
-      expect(picked).toEqual(['a'])
+      expect(view.callout.element.listeners.has('click')).toBe(false)
 
       let titleStopped = false
       view.callout.title.listeners.get('click')({ stopPropagation: () => { titleStopped = true } })
       expect(titleStopped).toBe(true)
-      expect(picked).toEqual(['a', 'a'])
+      expect(picked).toEqual(['a'])
+
+      let linkPressStopped = false
+      view.callout.consoleLink.listeners.get('pointerdown')({ stopPropagation: () => { linkPressStopped = true } })
+      expect(linkPressStopped).toBe(true)
 
       let dblStopped = false
       view.callout.element.listeners.get('dblclick')({ stopPropagation: () => { dblStopped = true } })
