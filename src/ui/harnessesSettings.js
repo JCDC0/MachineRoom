@@ -1,4 +1,4 @@
-export const HARNESS_STATE_COLORS = {
+const HARNESS_STATE_COLORS = {
   ready: '#2aff80',
   'not-ready': '#ff2a2a',
   off: 'rgb(255 255 255 / 0.5)',

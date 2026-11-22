@@ -264,7 +264,7 @@ function agentCount(count) {
   return `${count} ${count === 1 ? 'agent' : 'agents'}`
 }
 
-export function sessionRowsFor({ agents = [], liveRuns = [], records = [] } = {}) {
+function sessionRowsFor({ agents = [], liveRuns = [], records = [] } = {}) {
   const roster = Array.isArray(agents) ? agents : []
   const rows = new Map()
   const runs = [

@@ -53,7 +53,7 @@ export const SPAWNED_SCRIPTS = [
   'scripts/mr-agent.mjs',
 ]
 
-export const PACK_SCRIPTS = new Set([
+const PACK_SCRIPTS = new Set([
   'scripts/acp-run.mjs',
   'scripts/lane-lock.mjs',
   'scripts/mcp-bridge.mjs',
@@ -153,7 +153,7 @@ export function readPackReport(stdout) {
   }
 }
 
-export function formatSize(bytes) {
+function formatSize(bytes) {
   if (bytes < 1024) return `${bytes} bytes`
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} kB`
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`

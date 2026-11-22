@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url'
 import { parseBriefs } from '../src/briefs/briefs.js'
 import { laneAgents, readLanes } from './lanes-source.js'
 
-export const LANE_TASK_RECORDS = 30
+const LANE_TASK_RECORDS = 30
 export const LANE_TASK_REFUSAL = 'Lane runs start from Work, then Start, not from a task.'
 
 const REPO_ROOT = resolve(fileURLToPath(import.meta.url), '..', '..')
@@ -55,7 +55,7 @@ export function runNameOf(record) {
   return file.replace(/\.log$/i, '')
 }
 
-export function runIdentity(name, lane) {
+function runIdentity(name, lane) {
   let rest = text(name)
   const prefix = `${text(lane)}-`
   if (prefix !== '-' && rest.startsWith(prefix)) rest = rest.slice(prefix.length)

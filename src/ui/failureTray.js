@@ -1,5 +1,5 @@
 export const FAILURE_TRAY_LIMIT = 5
-export const FAILURE_TRAY_KEEP = 50
+const FAILURE_TRAY_KEEP = 50
 
 export function emptyFailureTray() {
   return { rows: [], calls: {}, seq: 0 }

@@ -1,6 +1,6 @@
 export const LEAK_KINDS = ['key', 'email', 'userpath', 'profile', 'graded']
 
-export const SAMPLE_WIDTH = 80
+const SAMPLE_WIDTH = 80
 
 const SK_TOKEN = /(?<![A-Za-z0-9])sk-[A-Za-z0-9_-]{20,}/g
 const GOOGLE_KEY = /(?<![A-Za-z0-9_-])AIza[0-9A-Za-z_-]{35}/g

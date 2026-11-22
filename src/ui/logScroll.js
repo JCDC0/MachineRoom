@@ -1,8 +1,8 @@
 import { useEffect, useRef } from 'react'
 
-export const LOG_BOTTOM_SLACK = 24
+const LOG_BOTTOM_SLACK = 24
 
-export function atLogBottom(node, slack = LOG_BOTTOM_SLACK) {
+function atLogBottom(node, slack = LOG_BOTTOM_SLACK) {
   if (!node) return true
   const height = Number(node.scrollHeight)
   const top = Number(node.scrollTop)

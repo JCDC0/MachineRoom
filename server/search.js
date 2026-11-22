@@ -3,23 +3,23 @@ import { mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from '
 import { isIP } from 'node:net'
 import { dirname, join } from 'node:path'
 
-export const SEARCH_PROVIDERS = ['searxng', 'tavily', 'brave', 'duckduckgo']
+const SEARCH_PROVIDERS = ['searxng', 'tavily', 'brave', 'duckduckgo']
 export const SEARCH_OFF = 'Web search is off. Pick a provider in Settings.'
 export const SEARCH_ORIGIN_PROBLEM = 'A request with no Origin cannot set web search.'
 export const SEARCH_CONFIRM_PROBLEM = 'Confirm web search first.'
 export const SEARCH_PROVIDER_PROBLEM = 'Pick SearXNG, Tavily, Brave, DuckDuckGo or Off.'
 export const SEARCH_URL_PROBLEM = 'The SearXNG address must be an http or https address.'
-export const SEARCH_KEY_PROBLEM = 'A key slot name holds 1 to 40 letters, digits, spaces, - or _.'
-export const SEARCH_SAVE_PROBLEM = 'The bridge could not save the web search provider.'
-export const METHOD_PROBLEM = 'Method not allowed.'
-export const SEARCH_TIMEOUT_MS = 20000
-export const FETCH_TIMEOUT_MS = 20000
+const SEARCH_KEY_PROBLEM = 'A key slot name holds 1 to 40 letters, digits, spaces, - or _.'
+const SEARCH_SAVE_PROBLEM = 'The bridge could not save the web search provider.'
+const METHOD_PROBLEM = 'Method not allowed.'
+const SEARCH_TIMEOUT_MS = 20000
+const FETCH_TIMEOUT_MS = 20000
 export const FETCH_BYTES = 1024 * 1024
 export const FETCH_CHARS = 20000
 export const MAX_REDIRECTS = 3
 export const MAX_RESULTS = 8
 
-export const SEARCH_ENDPOINTS = {
+const SEARCH_ENDPOINTS = {
   tavily: 'https://api.tavily.com/search',
   brave: 'https://api.search.brave.com/res/v1/web/search',
   duckduckgo: 'https://html.duckduckgo.com/html/',
@@ -36,11 +36,11 @@ const NAMED_ENTITIES = new Map([
   ['nbsp', ' '],
 ])
 
-export function searchFileFor(runsFolder) {
+function searchFileFor(runsFolder) {
   return join(runsFolder || '.', 'search.json')
 }
 
-export function searchChoice(value) {
+function searchChoice(value) {
   const raw = value && typeof value === 'object' && !Array.isArray(value) ? value : {}
   const provider = typeof raw.provider === 'string' ? raw.provider.trim().toLowerCase() : ''
   if (!SEARCH_PROVIDERS.includes(provider)) return { provider: '', url: '', keyName: '' }
@@ -76,7 +76,7 @@ export function writeSearchChoice(runsFolder, choice, { rename = renameSync } = 
   }
 }
 
-export function httpAddress(value) {
+function httpAddress(value) {
   try {
     const parsed = new URL(String(value ?? '').trim())
     return (parsed.protocol === 'http:' || parsed.protocol === 'https:') && parsed.hostname !== ''
@@ -85,7 +85,7 @@ export function httpAddress(value) {
   }
 }
 
-export function cleanSearchChoice(body) {
+function cleanSearchChoice(body) {
   const raw = body && typeof body === 'object' && !Array.isArray(body) ? body : {}
   const provider = typeof raw.provider === 'string' ? raw.provider.trim().toLowerCase() : ''
   if (provider !== '' && !SEARCH_PROVIDERS.includes(provider)) return { problem: SEARCH_PROVIDER_PROBLEM }
@@ -145,7 +145,7 @@ export function createSearchApi({ runsFolder = '', sendJson, readJsonBody } = {}
   return { handle }
 }
 
-export function decodeEntities(value) {
+function decodeEntities(value) {
   return String(value ?? '').replace(/&(#x?[0-9a-f]+|[a-z]+);/gi, (whole, code) => {
     const lower = String(code).toLowerCase()
     if (NAMED_ENTITIES.has(lower)) return NAMED_ENTITIES.get(lower)
@@ -161,7 +161,7 @@ export function decodeEntities(value) {
   })
 }
 
-export function cleanText(value, limit = 500) {
+function cleanText(value, limit = 500) {
   const text = decodeEntities(String(value ?? '').replace(/<[^>]*>/g, ' '))
     .replace(/\s+/g, ' ')
     .trim()
@@ -547,7 +547,7 @@ async function duckDuckGoSearch(query, { fetchImpl, timeoutMs, endpoints }) {
   return parseDuckDuckGo(html)
 }
 
-export function formatSearchResults(results) {
+function formatSearchResults(results) {
   if (!Array.isArray(results) || results.length === 0) return 'No results.'
   return results
     .slice(0, MAX_RESULTS)

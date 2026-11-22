@@ -10,9 +10,9 @@ import { mcpConfigForClaude, mcpConfigForOpencode, normalizeMcpServers } from '.
 
 export { mcpConfigForClaude, mcpConfigForOpencode }
 
-export const MCP_PROTOCOL_VERSION = '2024-11-05'
-export const LIST_TIMEOUT_MS = 8000
-export const CALL_TIMEOUT_MS = 15000
+const MCP_PROTOCOL_VERSION = '2024-11-05'
+const LIST_TIMEOUT_MS = 8000
+const CALL_TIMEOUT_MS = 15000
 const CLOSE_WAIT_MS = 2000
 const STDERR_LIMIT = 2000
 const PAGE_LIMIT = 5
@@ -27,7 +27,7 @@ export function mcpRunsDir(env = process.env) {
   return runsFolder(env ?? process.env)
 }
 
-export function readMcpServers(runsDir = mcpRunsDir()) {
+function readMcpServers(runsDir = mcpRunsDir()) {
   let parsed
   try {
     parsed = JSON.parse(readFileSync(join(runsDir, 'mcp.json'), 'utf8'))
@@ -238,7 +238,7 @@ async function openSession(server, options) {
   }
 }
 
-export async function listServerTools(server, { timeoutMs = LIST_TIMEOUT_MS, spawnImpl, fetchImpl } = {}) {
+async function listServerTools(server, { timeoutMs = LIST_TIMEOUT_MS, spawnImpl, fetchImpl } = {}) {
   const session = await openSession(server, { timeoutMs, spawnImpl, fetchImpl })
   const tools = []
   try {
@@ -263,7 +263,7 @@ export async function listServerTools(server, { timeoutMs = LIST_TIMEOUT_MS, spa
   }
 }
 
-export async function callServerTool(server, tool, toolArgs = {}, { timeoutMs = CALL_TIMEOUT_MS, spawnImpl, fetchImpl } = {}) {
+async function callServerTool(server, tool, toolArgs = {}, { timeoutMs = CALL_TIMEOUT_MS, spawnImpl, fetchImpl } = {}) {
   const name = typeof tool === 'string' ? tool.trim() : ''
   if (name === '') throw new Error('The MCP tool name is missing.')
   const args = toolArgs && typeof toolArgs === 'object' && !Array.isArray(toolArgs) ? toolArgs : {}

@@ -6,9 +6,9 @@ export const STAR_POOL = 48
 export const STAR_SPEED = 1800
 export const STAR_MIN_SECONDS = 0.25
 export const STAR_MAX_SECONDS = 0.9
-export const STAR_CORE_PIXELS = 22
-export const STAR_HALO_PIXELS = 40
-export const STAR_HALO_OPACITY = 0.35
+const STAR_CORE_PIXELS = 22
+const STAR_HALO_PIXELS = 40
+const STAR_HALO_OPACITY = 0.35
 export const STAR_LABEL_LIFT = 24
 
 const MESSAGE_STAR_KINDS = new Set(['order', 'report', 'wake'])

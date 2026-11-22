@@ -4,8 +4,8 @@ import { useDialogFocus } from './dialogFocus.js'
 export const UNLOCK_TEXT =
   'Allow subagents deeper than 2 levels? Each level can multiply the runs, tokens and cost of one task, and a deep tree is hard to stop. Only unlock this if you watch the costs.'
 
-export const DEPTH_CHOICES = [1, 2]
-export const UNLOCKED_CHOICES = [1, 2, 3, 4]
+const DEPTH_CHOICES = [1, 2]
+const UNLOCKED_CHOICES = [1, 2, 3, 4]
 
 function normalizedRings(value) {
   if (!Array.isArray(value)) return null
@@ -43,7 +43,7 @@ export function hideOccupiedText(ringOrRings, agentsOrDepth, maybeDepth) {
   return `Ring ${ringOrRings} holds ${who}. A depth of ${maybeDepth} hides ${pronoun} until you raise it again.`
 }
 
-export function depthAnswer(value, fallback = null) {
+function depthAnswer(value, fallback = null) {
   const limit =
     Number.isInteger(value?.limit) && value.limit >= 1 && value.limit <= 4
       ? value.limit

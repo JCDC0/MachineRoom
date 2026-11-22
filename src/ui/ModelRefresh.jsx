@@ -6,7 +6,7 @@ import {
   modelChoiceText,
 } from './modelRefresh.js'
 
-export function ModelRefreshIcon() {
+function ModelRefreshIcon() {
   return (
     <svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true">
       <path

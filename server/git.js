@@ -5,10 +5,10 @@ import { gitEnv, gitPath } from './programPath.js'
 
 export const GIT_TIMEOUT_MS = 10000
 export const GIT_WRITE_TIMEOUT_MS = 120 * 1000
-export const CACHE_TTL_MS = 1000
+const CACHE_TTL_MS = 1000
 const GIT_MAX_BUFFER = 64 * 1024 * 1024
 const MAX_COMMITS = 200
-export const MAX_CHANGES = 200
+const MAX_CHANGES = 200
 
 export const ORIGIN_SWITCH_PROBLEM = 'A request to switch branches needs a page Origin.'
 export const ORIGIN_BRANCH_PROBLEM = 'A request to create a branch needs a page Origin.'
@@ -22,7 +22,7 @@ export const WORKTREE_HOLDS_BRANCH_PROBLEM = 'Another worktree holds that branch
 export const BAD_BRANCH_NAME_PROBLEM = 'That branch name is not valid.'
 export const BRANCH_TAKEN_PROBLEM = 'That branch already exists.'
 export const BAD_FROM_BRANCH_PROBLEM = 'Choose a known branch to branch from.'
-export const NOT_GIT_PROBLEM = 'That folder is not a git repository.'
+const NOT_GIT_PROBLEM = 'That folder is not a git repository.'
 export const STATUS_FAILED_PROBLEM = 'Could not check for uncommitted changes.'
 export const REFS_FAILED_PROBLEM = 'Could not read the branches.'
 export const LOG_FAILED_PROBLEM = 'Could not read the commits.'
@@ -141,7 +141,7 @@ export function endRepoWrite(key) {
   if (key) writesInFlight.delete(key)
 }
 
-export async function isGitCheckout(folder, runner = defaultGitRunner) {
+async function isGitCheckout(folder, runner = defaultGitRunner) {
   if (!folder) return false
   let resolved
   try {
@@ -181,7 +181,7 @@ async function otherWorktreeBranches(runner, folder) {
   return held
 }
 
-export async function computeGitState(projectRoot, runner = defaultGitRunner) {
+async function computeGitState(projectRoot, runner = defaultGitRunner) {
   if (!projectRoot) return { git: false }
   let resolved
   try {

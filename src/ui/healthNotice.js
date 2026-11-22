@@ -42,5 +42,3 @@ export function healthNotice(health) {
 
   return null
 }
-
-export default healthNotice

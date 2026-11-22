@@ -3,7 +3,7 @@ import { readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-export const USAGE = 'Use: npm run bump -- X.Y.Z'
+const USAGE = 'Use: npm run bump -- X.Y.Z'
 const VERSION = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/
 const ARCHITECTURE = join('docs', 'agents', 'ARCHITECTURE.md')
 const ARCHITECTURE_LINE = /^Version (\d+\.\d+\.\d+)\./m

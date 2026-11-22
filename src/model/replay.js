@@ -31,7 +31,7 @@ async function fetchOk(url) {
   return response
 }
 
-export function fixtureName(fixture) {
+function fixtureName(fixture) {
   if (fixture === SANDBOX_FIXTURE) return SANDBOX_FIXTURE
   return typeof fixture === 'string' && FIXTURE_NAME.test(fixture) ? fixture : null
 }

@@ -5,10 +5,10 @@ import { killTree } from './processTree.js'
 import { programPath } from './programPath.js'
 
 export const DEFAULT_ASSISTANT_MODEL = 'opencode/deepseek-v4.1-flash-free'
-export const PROMPT_LIMIT = 2000
-export const ASSISTANT_TIMEOUT_MS = 8000
-export const OWNER_ASSISTANT_PROBLEM = 'Only the owner can run the assistant.'
-export const CONFIRM_ASSISTANT_PROBLEM = 'The owner must confirm the assistant run first.'
+const PROMPT_LIMIT = 2000
+const ASSISTANT_TIMEOUT_MS = 8000
+const OWNER_ASSISTANT_PROBLEM = 'Only the owner can run the assistant.'
+const CONFIRM_ASSISTANT_PROBLEM = 'The owner must confirm the assistant run first.'
 
 const OFF = new Set(['', 'none', 'off', 'false', 'no'])
 
@@ -16,14 +16,14 @@ function ownerRequest(req) {
   return Boolean(req.headers?.origin)
 }
 
-export function resolveAssistantModel({ env = {}, settings = {} } = {}) {
+function resolveAssistantModel({ env = {}, settings = {} } = {}) {
   const raw = env.ASSISTANT_MODEL !== undefined ? env.ASSISTANT_MODEL : settings.assistantModel !== undefined ? settings.assistantModel : DEFAULT_ASSISTANT_MODEL
   if (raw === null || raw === undefined) return null
   const value = String(raw).trim()
   return OFF.has(value.toLowerCase()) ? null : value
 }
 
-export function readSettings(path) {
+function readSettings(path) {
   if (!path) return {}
   try {
     const parsed = JSON.parse(readFileSync(path, 'utf8'))

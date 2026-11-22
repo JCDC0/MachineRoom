@@ -12,7 +12,7 @@ const DEFAULT_OUT = join(ROOT, 'docs', 'images')
 const VIEWPORT = { width: 1600, height: 1000 }
 const FILE_LIMIT = 400 * 1024
 
-export const SCREENSHOTS_USAGE = 'Usage: npm run screenshots -- [--port 5180] [--out docs/images]'
+const SCREENSHOTS_USAGE = 'Usage: npm run screenshots -- [--port 5180] [--out docs/images]'
 
 function valueOf(name, fallback) {
   const args = process.argv.slice(2)

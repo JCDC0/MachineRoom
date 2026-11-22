@@ -13,10 +13,10 @@ import { processAlive, readLaneLock } from './lane-lock.mjs'
 import { GRADES, recordOutcome } from './outcome.mjs'
 
 export const USAGE = 'Use: npm run merge-lane -- LANE [--finish --subject TEXT --line TEXT --grade G --fixes N [--note TEXT] [--ids A,B] [--trailer TEXT]] | [--abort]'
-export const GIT_TIMEOUT_MS = 60 * 1000
-export const TEST_TIMEOUT_MS = 10 * 60 * 1000
-export const BUILD_TIMEOUT_MS = 5 * 60 * 1000
-export const PACK_CHECK_TIMEOUT_MS = 60 * 1000
+const GIT_TIMEOUT_MS = 60 * 1000
+const TEST_TIMEOUT_MS = 10 * 60 * 1000
+const BUILD_TIMEOUT_MS = 5 * 60 * 1000
+const PACK_CHECK_TIMEOUT_MS = 60 * 1000
 
 const OUTPUT_LIMIT = 4 * 1024 * 1024
 
@@ -117,7 +117,7 @@ export function defaultGitRunner(cwd, args, { timeoutMs = GIT_TIMEOUT_MS, env = 
   }
 }
 
-export function defaultRunCommand(command, { cwd, env = process.env, timeoutMs = 60000 } = {}) {
+function defaultRunCommand(command, { cwd, env = process.env, timeoutMs = 60000 } = {}) {
   return runCheck(command, { cwd, env, timeoutMs, outputLimit: OUTPUT_LIMIT })
 }
 

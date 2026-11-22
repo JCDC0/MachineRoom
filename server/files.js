@@ -3,15 +3,15 @@ import { isAbsolute, relative, resolve } from 'node:path'
 import { maskKeys } from '../src/briefs/audit.js'
 
 export const FILE_MAX_BYTES = 256 * 1024
-export const FILE_BINARY_BYTES = 8 * 1024
+const FILE_BINARY_BYTES = 8 * 1024
 
 export const FILE_ORIGIN_PROBLEM = 'A file request needs the page Origin or a same-origin fetch.'
-export const FILE_PATH_PROBLEM = 'Send a relative file path.'
+const FILE_PATH_PROBLEM = 'Send a relative file path.'
 export const FILE_OUTSIDE_PROBLEM = 'That path is outside the project.'
 export const FILE_REFUSED_PROBLEM = 'That file is not served.'
 export const FILE_NOT_FOUND_PROBLEM = 'That file was not found.'
 export const FILE_NOT_A_FILE_PROBLEM = 'That path is not a file.'
-export const FILE_READ_PROBLEM = 'The bridge could not read that file.'
+const FILE_READ_PROBLEM = 'The bridge could not read that file.'
 
 const REFUSED_FOLDERS = new Set(['.git', '.worktrees'])
 

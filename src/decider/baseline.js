@@ -3,7 +3,7 @@ import { sanitize } from './decide.js'
 import { NONE } from './questions.js'
 import { parseAnswers } from './wire.js'
 
-export const LLM_URL = 'https://openrouter.ai/api/v1/chat/completions'
+const LLM_URL = 'https://openrouter.ai/api/v1/chat/completions'
 
 export function rulesPredict(text, context) {
   const result = interpret(text, context)
@@ -29,7 +29,7 @@ function describe(name, question) {
   return `- ${name} (level): ${question.instructions} Levels: ${levels.join(' | ')}`
 }
 
-export function llmPrompt(state, questions) {
+function llmPrompt(state, questions) {
   return [
     'Answer each question about the text. Reply with one JSON object and nothing else.',
     'For a choice give one option key. For a true or false question give true or false. For a level give its number, counting from 0.',

@@ -2,13 +2,13 @@ import { basename, visibleText } from '../model/paths.js'
 import { effortLabel, orchestratorEffort } from './agentStrip.js'
 
 export const INSPECT_EVENT = 'machineroom:inspect'
-export const INSPECT_KINDS = ['agent', 'folder', 'file', 'internet', 'git']
+const INSPECT_KINDS = ['agent', 'folder', 'file', 'internet', 'git']
 export const CONTEXT_NOT_REPORTED = 'context not reported'
-export const TOO_LARGE = 'Too large, showing the first 256 KB.'
-export const BINARY_FILE = 'Binary file.'
-export const CONNECTED = 'Connected'
-export const NO_CONNECTION = 'No connection'
-export const CONNECTION_UNKNOWN = 'Connection not reported'
+const TOO_LARGE = 'Too large, showing the first 256 KB.'
+const BINARY_FILE = 'Binary file.'
+const CONNECTED = 'Connected'
+const NO_CONNECTION = 'No connection'
+const CONNECTION_UNKNOWN = 'Connection not reported'
 
 const RUNNING = new Set(['working', 'running'])
 const FAILED = new Set(['error', 'failed', 'cancelled', 'timed_out', 'terminated'])

@@ -13,7 +13,7 @@ export const DEFAULT_MODELS = [
   'microsoft/microsoft-decision-1',
 ]
 
-export const PRIMARY = { assistant: 'action', routing: 'tier' }
+const PRIMARY = { assistant: 'action', routing: 'tier' }
 
 const PRICE_PER_TOKEN = 0.042 / 1e6
 const tokensOf = (request) => Math.ceil(JSON.stringify(request).length / 4)

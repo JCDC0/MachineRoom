@@ -1,4 +1,4 @@
-export const LIVE_PARAMS = ['bridge', 'simulate']
+const LIVE_PARAMS = ['bridge', 'simulate']
 
 const LOOPBACK = new Set(['localhost', '127.0.0.1', '[::1]'])
 
@@ -27,7 +27,7 @@ export function connectionFrom(params, saved) {
   return saved
 }
 
-export function linkAddresses(params) {
+function linkAddresses(params) {
   const out = []
   if (params.has('simulate')) return out
   if (params.get('bridge')) out.push(params.get('bridge'))

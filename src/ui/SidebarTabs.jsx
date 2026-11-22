@@ -49,7 +49,7 @@ function AgentsIcon() {
 
 const ICONS = { chat: ChatIcon, projects: FolderIcon, agents: AgentsIcon }
 
-export function SidebarTabs({ value = 'chat', onChange = () => {} }) {
+function SidebarTabs({ value = 'chat', onChange = () => {} }) {
   const active = normalizeSidebarTab(value)
   return (
     <div className="mr-side-tabs" role="tablist" aria-label="Sidebar tabs">

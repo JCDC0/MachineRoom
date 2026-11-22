@@ -29,9 +29,9 @@ import { runCheck } from '../server/processTree.js'
 import { gitPath } from '../server/programPath.js'
 import { laneEnv } from './candidate.mjs'
 
-export const USAGE = 'Use: npm run review-lane -- LANE [--json] [--keep]'
-export const TEST_TIMEOUT_MS = 20 * 60 * 1000
-export const BUILD_TIMEOUT_MS = 10 * 60 * 1000
+const USAGE = 'Use: npm run review-lane -- LANE [--json] [--keep]'
+const TEST_TIMEOUT_MS = 20 * 60 * 1000
+const BUILD_TIMEOUT_MS = 10 * 60 * 1000
 
 const OUTPUT_LIMIT = 2 * 1024 * 1024
 const TAIL_LINES = 15
@@ -68,7 +68,7 @@ function gitText(cwd, args) {
   return result.ok ? result.stdout : null
 }
 
-export function mainCheckout(from) {
+function mainCheckout(from) {
   const common = gitText(from, ['rev-parse', '--git-common-dir'])
   return common ? dirname(resolve(from, common.trim())) : from
 }

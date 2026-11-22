@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { railShareFromPointer, railStep } from './lensResize.js'
 
-export const RAIL_REACH = 64
+const RAIL_REACH = 64
 export const RAIL_WHEEL_HOLD_MS = 1000
 
 export function railNear(x, rect, side, reach = RAIL_REACH) {

@@ -2,8 +2,8 @@ import * as THREE from 'three'
 
 export const PREFERRED = { claude: 'compound', hermes: 'knot', opencode: 'stella', agy: 'geodesic' }
 export const ORCHESTRATOR_SHAPE = 'armillary'
-export const SPARE = ['shells', 'knot35', 'helix', 'prism']
-export const SHAPE_NAMES = ['compound', 'knot', 'stella', 'geodesic', ORCHESTRATOR_SHAPE, ...SPARE]
+const SPARE = ['shells', 'knot35', 'helix', 'prism']
+const SHAPE_NAMES = ['compound', 'knot', 'stella', 'geodesic', ORCHESTRATOR_SHAPE, ...SPARE]
 export const PULSE_BANDS = 5
 export const PULSE_SCALE = 0.12
 export const SUB_PULSE_SCALE = 0.06

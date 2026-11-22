@@ -1,8 +1,8 @@
-export const PERCENT_MAX = 100
-export const TOKENS_MIN = 1000
-export const TOKENS_MAX = 10000000
+const PERCENT_MAX = 100
+const TOKENS_MIN = 1000
+const TOKENS_MAX = 10000000
 export const RULES_LIMIT = 2000
-export const DEFAULT_AUTOCOMPACT_PERCENT = 80
+const DEFAULT_AUTOCOMPACT_PERCENT = 80
 export const DEFAULT_COMPACT_RULES =
   "Keep the owner's goals and standing rules in the owner's words, the decisions made and why, each lane run started with its branch and result, the files changed, what is unfinished or blocked, and the next steps. Leave out tool output, logs and work already merged and checked."
 
@@ -17,11 +17,11 @@ function parseNumber(value) {
   return Number.isFinite(number) ? number : null
 }
 
-export function autocompactMode(mode) {
+function autocompactMode(mode) {
   return mode === 'tokens' ? 'tokens' : 'percent'
 }
 
-export function contextWindowOf(value) {
+function contextWindowOf(value) {
   const number = isObject(value) ? parseNumber(value.contextWindow) : parseNumber(value)
   if (number === null || number <= 0) return null
   return Math.round(number)
@@ -34,7 +34,7 @@ export function defaultCompactRulesFor(value) {
   return DEFAULT_COMPACT_RULES
 }
 
-export function autocompactId(value) {
+function autocompactId(value) {
   const row = isObject(value) ? value : {}
   const id = typeof row.id === 'string' ? row.id.trim() : ''
   return id || 'orchestrator'
@@ -80,7 +80,7 @@ export function convertAutocompactValue(value, from, to, window = null) {
   return number
 }
 
-export function compactsAtTokens(mode, value, window = null) {
+function compactsAtTokens(mode, value, window = null) {
   const number = parseNumber(value)
   if (number === null) return null
   const size = contextWindowOf(window)

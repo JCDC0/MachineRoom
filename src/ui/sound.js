@@ -3,7 +3,7 @@ import { DEFAULT_SETTINGS } from './settings.js'
 export const SOUND_LIMIT = 8
 export const SOUND_WINDOW_MS = 1000
 export const BAND_COUNT = 5
-export const BAND_WINDOW_MS = 45
+const BAND_WINDOW_MS = 45
 
 export function bandIndexForBin(bin, binCount, bandCount = BAND_COUNT) {
   const index = Number(bin)
@@ -53,13 +53,13 @@ export function spatialSound(place = {}) {
   return { audible: true, pan: panForScreen(x, width), gain }
 }
 
-export const BEAT_WINDOW = 22
-export const GROUP_REST_MS = 160
-export const LOW_BANDS = Object.freeze([0, 1])
-export const HIGH_BANDS = Object.freeze([2, 3, 4])
-export const ONSET_STEPS = 2
-export const ONSET_SHARE = 0.6
-export const ONSET_LOOK = 10
+const BEAT_WINDOW = 22
+const GROUP_REST_MS = 160
+const LOW_BANDS = Object.freeze([0, 1])
+const HIGH_BANDS = Object.freeze([2, 3, 4])
+const ONSET_STEPS = 2
+const ONSET_SHARE = 0.6
+const ONSET_LOOK = 10
 
 export function sharpOnset(levels, { steps = ONSET_STEPS, share = ONSET_SHARE, look = ONSET_LOOK, floor = 0.02 } = {}) {
   if (!Array.isArray(levels)) return false
@@ -151,17 +151,17 @@ export function createBandBeatDetector({ rest = GROUP_REST_MS, window = BEAT_WIN
   return { push, reset, levels }
 }
 
-export const LOCK_WINDOW_MS = 8000
-export const LOCK_MIN_GAP_MS = 300
-export const LOCK_MAX_GAP_MS = 1500
-export const LOCK_MIN_ONSETS = 6
-export const LOCK_TOLERANCE = 0.2
+const LOCK_WINDOW_MS = 8000
+const LOCK_MIN_GAP_MS = 300
+const LOCK_MAX_GAP_MS = 1500
+const LOCK_MIN_ONSETS = 6
+const LOCK_TOLERANCE = 0.2
 export const LOCK_GRID_MS = 90
-export const LOCK_STALE_GAPS = 4
-export const LOCK_MIN_GAPS = 3
-export const GAP_STEP_MS = 10
+const LOCK_STALE_GAPS = 4
+const LOCK_MIN_GAPS = 3
+const GAP_STEP_MS = 10
 export const SWAY_MS = 1500
-export const SWAY_GAIN = 1.5
+const SWAY_GAIN = 1.5
 
 function cleanOnsets(onsets) {
   const times = []
@@ -172,7 +172,7 @@ function cleanOnsets(onsets) {
   return times.sort((a, b) => a - b)
 }
 
-export function recentOnsets(onsets, at, window = LOCK_WINDOW_MS) {
+function recentOnsets(onsets, at, window = LOCK_WINDOW_MS) {
   const stamp = Number(at)
   const span = Math.max(1, Number(window) || LOCK_WINDOW_MS)
   const times = cleanOnsets(onsets)
@@ -208,7 +208,7 @@ export function findBeatGap(onsets, options = {}) {
   return gapStats(onsets, options.min, options.max).gap
 }
 
-export function beatGrid(onsets, gap, { tolerance = LOCK_TOLERANCE } = {}) {
+function beatGrid(onsets, gap, { tolerance = LOCK_TOLERANCE } = {}) {
   const times = cleanOnsets(onsets)
   const span = Number(gap)
   if (!(span > 0) || times.length === 0) return { anchor: 0, count: 0 }

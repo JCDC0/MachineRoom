@@ -4,19 +4,19 @@ import { HUB_CENTER, ORCHESTRATOR_HOME } from './hub.js'
 import { RED, WEB, easeRate, seeded, still, textSprite } from './sprites.js'
 
 export const INTERNET_RADIUS = 260
-export const INTERNET_LIFT = 720
+const INTERNET_LIFT = 720
 export const INTERNET_HOME = new THREE.Vector3(HUB_CENTER.x, ORCHESTRATOR_HOME.y + INTERNET_LIFT, HUB_CENTER.z)
 export const INTERNET_LABEL = 'INTERNET'
 export const INTERNET_OFF_LABEL = 'NO CONNECTION'
 export const INTERNET_OFF_COLOR = RED
 export const INTERNET_SEED = 20261025
 export const MORPH_SWING = 0.11
-export const MORPH_RATE = 0.8
+const MORPH_RATE = 0.8
 export const BASE_OPACITY = 0.08
 export const GLOW_OPACITY = 0.62
-export const HALO_OPACITY = 0.35
-export const LABEL_REST = 0.3
-export const TURN_RATE = 0.05
+const HALO_OPACITY = 0.35
+const LABEL_REST = 0.3
+const TURN_RATE = 0.05
 
 export function morphOffsets(seed, count, time, rate = MORPH_RATE) {
   const total = Math.max(0, Math.floor(Number(count) || 0))

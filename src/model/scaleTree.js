@@ -2,14 +2,14 @@ import { makeTree } from './paths.js'
 
 export const DEFAULTS = { files: 40000, folders: 4000, seed: 20261021, depth: 12, activities: 5000 }
 
-export const WORDS = [
+const WORDS = [
   'src', 'lib', 'core', 'util', 'utils', 'model', 'view', 'views', 'api', 'client', 'server', 'shared', 'common',
   'components', 'pages', 'hooks', 'store', 'state', 'config', 'tests', 'fixtures', 'docs', 'scripts', 'tools',
   'assets', 'images', 'styles', 'types', 'parsers', 'engine', 'render', 'layout', 'auth', 'users', 'billing',
   'reports', 'search', 'cache', 'queue', 'jobs', 'events', 'storage', 'network', 'session', 'admin', 'widgets',
 ]
 
-export const EXTENSIONS = ['.js', '.ts', '.jsx', '.json', '.md', '.css', '.test.js', '.d.ts', '.py', '.go']
+const EXTENSIONS = ['.js', '.ts', '.jsx', '.json', '.md', '.css', '.test.js', '.d.ts', '.py', '.go']
 
 export const AGENTS = [
   { id: 'a1', key: 'claude', name: 'Claude', parser: 'claude' },

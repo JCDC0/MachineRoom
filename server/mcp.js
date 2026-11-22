@@ -7,11 +7,11 @@ import { maskProfilePaths } from '../src/model/paths.js'
 import { killTree } from './processTree.js'
 
 export const MCP_PROTOCOL_VERSION = '2024-11-05'
-export const MCP_SERVER_NAME_PATTERN = /^[a-zA-Z0-9_-]{1,40}$/
+const MCP_SERVER_NAME_PATTERN = /^[a-zA-Z0-9_-]{1,40}$/
 export const MCP_LIST_TIMEOUT_MS = 8000
 export const MCP_CALL_TIMEOUT_MS = 15000
 export const MCP_CALL_CEILING_MS = 600000
-export const MCP_LIST_CACHE_MS = 60000
+const MCP_LIST_CACHE_MS = 60000
 
 export const MCP_NAME_PROBLEM = 'The MCP server name must be 1 to 40 letters, digits, dashes or underscores.'
 export const MCP_TRANSPORT_PROBLEM = 'The MCP transport must be stdio or http.'
@@ -36,7 +36,7 @@ export const MCP_CEILING_PROBLEM = 'The MCP tool call ran past its ten minute li
 export const MCP_HTTP_PROBLEM = 'The MCP server did not answer.'
 export const MCP_HTTP_STATUS_PROBLEM = 'The MCP server refused the request.'
 export const MCP_JSON_PROBLEM = 'The MCP server answer was not JSON.'
-export const MCP_NO_ANSWER_PROBLEM = 'The MCP server did not answer the request.'
+const MCP_NO_ANSWER_PROBLEM = 'The MCP server did not answer the request.'
 export const MCP_RPC_PROBLEM = 'The MCP server answered with an error:'
 export const MCP_TOOLS_PROBLEM = 'The MCP server tools list was not a list.'
 

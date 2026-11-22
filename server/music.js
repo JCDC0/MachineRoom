@@ -8,14 +8,14 @@ import { isInsideRoot } from './static.js'
 
 const INSTALL_FOLDER = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
-export const MUSIC_EXTENSIONS = new Set(['.mp3', '.ogg', '.wav', '.m4a', '.flac', '.opus'])
+const MUSIC_EXTENSIONS = new Set(['.mp3', '.ogg', '.wav', '.m4a', '.flac', '.opus'])
 export const MUSIC_LIMIT = 500
 export const MUSIC_ORIGIN_PROBLEM = 'A request to open the music folder needs a page Origin.'
 export const MUSIC_CONFIRM_PROBLEM = 'Confirm opening the music folder first.'
 export const MUSIC_OPEN_PROBLEM = 'No file manager could be started.'
-export const MUSIC_FOLDER_PROBLEM = 'The music folder could not be made.'
+const MUSIC_FOLDER_PROBLEM = 'The music folder could not be made.'
 
-export const MUSIC_TYPES = Object.freeze({
+const MUSIC_TYPES = Object.freeze({
   '.mp3': 'audio/mpeg',
   '.ogg': 'audio/ogg',
   '.wav': 'audio/wav',
@@ -134,7 +134,7 @@ export function musicOpenCommand(folder, { platform = process.platform, env = pr
   return { command: program, args: [folder] }
 }
 
-export function openMusicFolder(folder, { platform, env, check, spawn: spawnImpl = spawn } = {}) {
+function openMusicFolder(folder, { platform, env, check, spawn: spawnImpl = spawn } = {}) {
   const plan = musicOpenCommand(folder, { platform, env, check })
   if (!plan) return Promise.resolve(false)
   return new Promise((resolveOpen) => {

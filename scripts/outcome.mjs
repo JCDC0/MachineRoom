@@ -5,14 +5,14 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 import { outcomesFile, readAllRunRecords, runsFile } from '../server/runs.js'
 
 export const GRADES = new Set(['A+', 'A', 'A-', 'B+', 'B', 'B-', 'C', 'D', 'F'])
-export const OUTCOMES = new Set(['merged', 'rejected'])
-export const NOTE_LIMIT = 200
-export const FIXES_LIMIT = 50
-export const USAGE = 'Use: npm run outcome -- BRANCH merged|rejected [--grade A-] [--fixes N] [--note TEXT]'
+const OUTCOMES = new Set(['merged', 'rejected'])
+const NOTE_LIMIT = 200
+const FIXES_LIMIT = 50
+const USAGE = 'Use: npm run outcome -- BRANCH merged|rejected [--grade A-] [--fixes N] [--note TEXT]'
 
 const root = resolve(fileURLToPath(import.meta.url), '..', '..')
 
-export function parseArgs(argv) {
+function parseArgs(argv) {
   const values = { grade: null, fixes: null, note: '' }
   const positional = []
   for (let index = 0; index < argv.length; index += 1) {
@@ -32,7 +32,7 @@ export function parseArgs(argv) {
   return { branch: positional[0], outcome: positional[1], ...values }
 }
 
-export function problemFor({ branch, outcome, grade, fixes, note, runsPath = null }) {
+function problemFor({ branch, outcome, grade, fixes, note, runsPath = null }) {
   if (!branch) return 'A branch is required.'
   if (!OUTCOMES.has(outcome)) return 'The outcome must be merged or rejected.'
   if (grade !== null && !GRADES.has(grade)) return 'The grade must be A+, A, A-, B+, B, B-, C, D or F.'
@@ -66,7 +66,7 @@ export function recordOutcome({ branch, outcome, grade = null, fixes = null, not
   return record
 }
 
-export function main(argv) {
+function main(argv) {
   const parsed = parseArgs(argv)
   if (parsed.error) {
     console.error(parsed.error)

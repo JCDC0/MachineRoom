@@ -44,8 +44,8 @@ export const TUNNEL_SHEATH_SHARE = 0.25
 export const TUNNEL_IN_SECONDS = 0.3
 export const TUNNEL_OUT_SECONDS = 0.6
 export const BEAM_OPACITY = 1
-export const BEAM_CORE_WIDTH = 1.5
-export const BEAM_SHEATH_WIDTH = 7
+const BEAM_CORE_WIDTH = 1.5
+const BEAM_SHEATH_WIDTH = 7
 const MAX_CHAIN = 32
 export const CHILD_SCALE = 0.35
 export const CHILD_RADIUS = 100
@@ -61,7 +61,7 @@ export const ORCHESTRATOR_DANCE_SCALE = 0.03
 export const THINKING_DELAY_MS = 250
 export const THINKING_IN_SECONDS = 0.3
 export const THINKING_OUT_SECONDS = 0.6
-export const THINKING_TURN_SECONDS = 4
+const THINKING_TURN_SECONDS = 4
 export const THINKING_SPIN = (Math.PI * 2) / THINKING_TURN_SECONDS
 export const SPINNER_RADIUS_SCALE = 1.35
 export const SPINNER_ARC_SHARE = 0.25
@@ -281,7 +281,7 @@ export function childEndIsFresh(entry, state) {
   return endedAt > 0 && (state?.latest ?? 0) - endedAt <= CHILD_LIFE_MS
 }
 
-export function entryRan(entry) {
+function entryRan(entry) {
   return Boolean(entry) && (entry.status !== 'idle' || (entry.runs ?? 0) > 0 || (entry.lines?.length ?? 0) > 0)
 }
 

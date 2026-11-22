@@ -12,9 +12,9 @@ export const CARD_W = 248
 export const HEAD_H = 56
 export const ROW_H = 22
 export const CARD_PAD = 8
-export const CONTENT_ANIM_SEC = 0.25
+const CONTENT_ANIM_SEC = 0.25
 export const BACK_STEP = 12
-export const BACK_DEPTH = 6
+const BACK_DEPTH = 6
 export const CARD_FACE_EDGE = 1
 export const CARD_FACE_BORDER = 2
 export const CARD_TAB_W = 72
@@ -23,12 +23,12 @@ export const CARD_TAB_LEFT = -1
 export const CARD_TAB_TOP = -9
 export const CARD_SCALES = { closed: 1, open: 1.2, files: 1.8 }
 export const CARD_NAME_MAX = 24
-export const CARD_NAME_PAD = 28
+const CARD_NAME_PAD = 28
 export const FILE_LIMIT_MIN = 4
 export const FILE_LIMIT_MAX = 20
 export const FILE_LIMIT_DEFAULT = 6
-export const VIRTUAL_MIN_ROWS = 60
-export const VIRTUAL_OVERSCAN = 4
+const VIRTUAL_MIN_ROWS = 60
+const VIRTUAL_OVERSCAN = 4
 const NAME_WIDE = new Set(['M', 'W'])
 const NAME_NARROW = new Set(['I', 'J'])
 const FLASH_MS = 1100
@@ -220,7 +220,7 @@ export function cardMetaText(view) {
   return ''
 }
 
-export function clipCardName(name, max = CARD_NAME_MAX) {
+function clipCardName(name, max = CARD_NAME_MAX) {
   const chars = Array.from(String(name ?? ''))
   const limit = Math.max(4, Math.floor(Number(max) || CARD_NAME_MAX))
   if (chars.length <= limit) return chars.join('')
@@ -328,7 +328,7 @@ export function occluderBox(view, scale = 1, rootName = 'root') {
   }
 }
 
-export function cardRadius(view) {
+function cardRadius(view) {
   const { width, height } = cardSize(view)
   return Math.hypot(width, height) / 2
 }

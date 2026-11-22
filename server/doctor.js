@@ -15,7 +15,7 @@ const VARIABLE = /%([A-Za-z_][A-Za-z0-9_]*)%/g
 export const ALL_CHECKS_PASSED = 'All checks passed.'
 export const NEXT_STEP = 'Press C in the room for Work, then Start.'
 export const READY_MEANS = 'Ready means the program was found. It does not prove sign-in, a model or the sandbox.'
-export const NO_AGENT_GUIDE = 'The project has no agent guide (AGENTS.md, CLAUDE.md or GEMINI.md).'
+const NO_AGENT_GUIDE = 'The project has no agent guide (AGENTS.md, CLAUDE.md or GEMINI.md).'
 const AGENT_GUIDES = ['AGENTS.md', 'CLAUDE.md', 'GEMINI.md']
 
 export function checksPassedLine(warnings = 0) {
@@ -88,7 +88,7 @@ function folderLine(projectRoot, env) {
   return { ok: true, text: `The project folder ${shown} exists.` }
 }
 
-export function agentGuideLine(projectRoot) {
+function agentGuideLine(projectRoot) {
   const folder = resolve(projectRoot)
   const found = AGENT_GUIDES.filter((name) => isFile(join(folder, name)))
   if (found.length === 0) return { warn: true, text: NO_AGENT_GUIDE }
@@ -235,7 +235,7 @@ export function runDoctor(options = {}) {
   return { exitCode: ok ? 0 : 1, lines, folderOk: true, warnings }
 }
 
-export function harnessLine(row) {
+function harnessLine(row) {
   const name = typeof row?.name === 'string' && row.name ? row.name : row?.key
   if (row?.enabled === false) return `info ${name} is turned off in Settings.`
   if (row?.ready) {
@@ -246,7 +246,7 @@ export function harnessLine(row) {
   return `warn ${name} is not ready: ${reason}`
 }
 
-export async function harnessLines({ runsFolder: folder, lanes = {}, env = process.env, platform = process.platform } = {}) {
+async function harnessLines({ runsFolder: folder, lanes = {}, env = process.env, platform = process.platform } = {}) {
   const rows = listHarnesses({ lanes, env, platform, runsFolder: folder })
   const checked = await Promise.all(rows.map(async (row) => ({
     ...row,
@@ -255,7 +255,7 @@ export async function harnessLines({ runsFolder: folder, lanes = {}, env = proce
   return checked.map(harnessLine)
 }
 
-export function projectCounts(files) {
+function projectCounts(files) {
   const folders = new Set()
   let count = 0
   for (const file of Array.isArray(files) ? files : []) {
@@ -268,7 +268,7 @@ export function projectCounts(files) {
   return { files: count, folders: folders.size }
 }
 
-export function projectLine(files) {
+function projectLine(files) {
   const counts = projectCounts(files)
   const fileWord = counts.files === 1 ? 'file' : 'files'
   const folderWord = counts.folders === 1 ? 'folder' : 'folders'
@@ -323,7 +323,7 @@ export async function runDoctorWithProject(options = {}) {
   }
 }
 
-export function openProgramName(platform = process.platform) {
+function openProgramName(platform = process.platform) {
   if (platform === 'win32') return 'rundll32'
   if (platform === 'darwin') return 'open'
   return 'xdg-open'

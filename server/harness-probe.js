@@ -12,11 +12,11 @@ import { killTree } from './processTree.js'
 import { endpointModels } from './models.js'
 import { quietAgy } from './quiet-agy.js'
 
-export const PROBE_PROMPT = 'Reply with the word OK and nothing else.'
-export const PROBE_LIMIT_MS = 60000
+const PROBE_PROMPT = 'Reply with the word OK and nothing else.'
+const PROBE_LIMIT_MS = 60000
 export const PROBE_RUNNING_PROBLEM = 'A connection test is already running.'
-export const PROBE_ACP_PROBLEM = 'A connection test is not available for ACP.'
-export const PROBE_DIRECT_PROBLEM = 'Set a Direct API model first.'
+const PROBE_ACP_PROBLEM = 'A connection test is not available for ACP.'
+const PROBE_DIRECT_PROBLEM = 'Set a Direct API model first.'
 const PROBE_TITLE = 'MachineRoom connection test'
 const PROBE_PLAN_CONFIG = { permission: { external_directory: 'deny', edit: 'deny', bash: 'deny' } }
 

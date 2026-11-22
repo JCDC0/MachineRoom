@@ -4,7 +4,7 @@ import { visibleText } from '../model/paths.js'
 import { INSPECT_EVENT } from './inspector.js'
 
 export const LANE_PILL_LIMIT = 6
-export const LANE_TASK_LIMIT = 16
+const LANE_TASK_LIMIT = 16
 export const ROOM_LINGER_MS = 5 * 60 * 1000
 
 const ACTIVE_STATUS = new Set(['queued', 'running'])

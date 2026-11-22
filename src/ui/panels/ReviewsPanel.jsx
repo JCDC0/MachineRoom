@@ -18,7 +18,7 @@ import {
 
 const OUTSIDE_SCOPE_START = 'The lane changed files outside the scope of '
 
-export function isOutsideScopeRefusal(error) {
+function isOutsideScopeRefusal(error) {
   if (error?.outside === true) return true
   const message = typeof error?.message === 'string' ? error.message : ''
   return message.startsWith(OUTSIDE_SCOPE_START)
@@ -30,7 +30,7 @@ function checksColor(checks) {
   return 'var(--yellow)'
 }
 
-export function playNotice(play, commit, playHead) {
+function playNotice(play, commit, playHead) {
   const short = typeof commit === 'string' ? commit.slice(0, 7) : ''
   const stayedShort = typeof playHead === 'string' ? playHead.slice(0, 7) : ''
   if (play === 'moved') return `The play worktree moved to ${short}.`
@@ -134,7 +134,7 @@ export function MergeConfirmCard({
   )
 }
 
-export function PrepareConfirmCard({ target, sending, onConfirm, onCancel }) {
+function PrepareConfirmCard({ target, sending, onConfirm, onCancel }) {
   if (!target) return null
   const branch = target.branch || 'its work'
   const base = target.base || 'main'
@@ -172,7 +172,7 @@ export function PrepareConfirmCard({ target, sending, onConfirm, onCancel }) {
   )
 }
 
-export function OutsideConfirmCard({ target, files, mergeError, merging, onConfirm, onCancel }) {
+function OutsideConfirmCard({ target, files, mergeError, merging, onConfirm, onCancel }) {
   if (!target) return null
   const branch = target.branch ? `${target.lane}'s ${target.branch}` : `${target.lane}'s work`
   return (

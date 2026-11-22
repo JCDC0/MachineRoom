@@ -5,8 +5,8 @@ import { inScope } from '../src/model/hierarchy.js'
 import { projectHash } from './active-lanes.js'
 import { AGENT_DEPTH_DEFAULT } from './agent-depth.js'
 
-export const SEAT_ACTIONS = ['createLane', 'turnOn', 'turnOff', 'addSub', 'deleteAgent']
-export const SEAT_COMMANDS = ['seats', 'grant', 'revoke', 'agents']
+const SEAT_ACTIONS = ['createLane', 'turnOn', 'turnOff', 'addSub', 'deleteAgent']
+const SEAT_COMMANDS = ['seats', 'grant', 'revoke', 'agents']
 export const GRANT_USAGE = 'Use /grant LANES [SUBS] with whole numbers from 0, for example /grant 3 1.'
 export const REVOKE_USAGE = 'Use /revoke with no arguments.'
 const MAIN_ID = 'orchestrator'
@@ -36,7 +36,7 @@ export function readSeats(file) {
   }
 }
 
-export function seatsProblem(value) {
+function seatsProblem(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return 'Seats must be an object.'
   if (!Array.isArray(value.rings) || value.rings.some((seats) => seats !== null && !count(seats))) {
     return 'Rings must be a list of whole numbers from 0, or null for no limit.'

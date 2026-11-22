@@ -16,10 +16,10 @@ import { fallbackProblem } from '../src/briefs/run.js'
 import { familySeatsFor, seatActor } from './family.js'
 import { formatSeatAction, levelOf, overRingProblem, ringSummary, seatCheck } from './seats.js'
 
-export const MAX_AGENTS = 30
+const MAX_AGENTS = 30
 export const HARNESS_KEYS = ['claude', 'opencode', 'agy', 'acp', 'machineroom', 'codex', 'copilot', 'hermes']
 
-export const HARNESS_NAMES = {
+const HARNESS_NAMES = {
   claude: 'Claude Code',
   opencode: 'OpenCode',
   agy: 'AGY',
@@ -41,13 +41,13 @@ export const HARNESS_EFFORTS = {
 }
 
 export const ORIGIN_CREATE_PROBLEM = 'A request to create a lane needs a page Origin.'
-export const ORIGIN_UPDATE_PROBLEM = 'A request to update a lane needs a page Origin.'
-export const ORIGIN_DELETE_PROBLEM = 'A request to delete a lane needs a page Origin.'
+const ORIGIN_UPDATE_PROBLEM = 'A request to update a lane needs a page Origin.'
+const ORIGIN_DELETE_PROBLEM = 'A request to delete a lane needs a page Origin.'
 export const CONFIRM_CREATE_PROBLEM = 'Confirm creating the lane first.'
-export const CONFIRM_UPDATE_PROBLEM = 'Confirm updating the lane first.'
-export const CONFIRM_DELETE_PROBLEM = 'Confirm deleting the lane first.'
+const CONFIRM_UPDATE_PROBLEM = 'Confirm updating the lane first.'
+const CONFIRM_DELETE_PROBLEM = 'Confirm deleting the lane first.'
 export const NAME_LENGTH_PROBLEM = 'The lane name must be 1 to 40 characters.'
-export const MAX_AGENTS_PROBLEM = 'At most 30 custom agents are allowed.'
+const MAX_AGENTS_PROBLEM = 'At most 30 custom agents are allowed.'
 export const LANES_JSON_DELETE_PROBLEM = 'A lane from lanes.json cannot be deleted; make it inactive instead.'
 export const LANES_JSON_UPDATE_PROBLEM = 'A lane from lanes.json cannot be updated.'
 
@@ -61,7 +61,7 @@ export function laneRunningProblem(lane) {
   return `The lane ${lane} is running.`
 }
 
-export function laneNotFoundProblem(lane) {
+function laneNotFoundProblem(lane) {
   return `The lane ${lane} was not found.`
 }
 
@@ -222,7 +222,7 @@ export function listHarnesses({ lanes = {}, env = process.env, platform = proces
   })
 }
 
-export function agentsConfigFile(runsDir) {
+function agentsConfigFile(runsDir) {
   return join(runsDir, 'agents.json')
 }
 

@@ -2,7 +2,7 @@ import { ancestors, dirname } from './paths.js'
 
 const LINE_LIMIT = 80
 export const CALL_LIMIT = 500
-export const OUTSIDE_PATH_LIMIT = 20
+const OUTSIDE_PATH_LIMIT = 20
 export const MAX_DEPTH = 3
 export const MAX_DEPTH_ALLOWED = 4
 export const CHILD_LIFE_MS = 7500

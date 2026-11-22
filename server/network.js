@@ -1,12 +1,12 @@
 import { connect } from 'node:net'
 
-export const NETWORK_HOST = '1.1.1.1'
-export const NETWORK_PORT = 443
-export const NETWORK_TIMEOUT_MS = 3000
-export const NETWORK_INTERVAL_MS = 30000
-export const NETWORK_ACTIVE_MS = 120000
+const NETWORK_HOST = '1.1.1.1'
+const NETWORK_PORT = 443
+const NETWORK_TIMEOUT_MS = 3000
+const NETWORK_INTERVAL_MS = 30000
+const NETWORK_ACTIVE_MS = 120000
 
-export function defaultConnector({ host = NETWORK_HOST, port = NETWORK_PORT, timeoutMs = NETWORK_TIMEOUT_MS } = {}) {
+function defaultConnector({ host = NETWORK_HOST, port = NETWORK_PORT, timeoutMs = NETWORK_TIMEOUT_MS } = {}) {
   return new Promise((resolveConnect) => {
     let settled = false
     let socket

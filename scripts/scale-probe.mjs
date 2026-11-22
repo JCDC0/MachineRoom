@@ -19,27 +19,19 @@ import { layoutRing } from '../src/engine/ring.js'
 import {
   AGENTS,
   DEFAULTS,
-  EXTENSIONS,
-  WORDS,
   makeScaleTree,
   random,
   scaleActivities,
-  uniqueName,
 } from '../src/model/scaleTree.js'
 
 export {
-  AGENTS,
   DEFAULTS,
-  EXTENSIONS,
-  WORDS,
   makeScaleTree,
   random,
-  scaleActivities,
-  uniqueName,
 }
 
 export const BUDGET = { frame: 16, load: 1000, event: 2 * 1024 * 1024, firstEvent: 1024 * 1024 }
-export const PROBE_USAGE = 'Usage: npm run scale-probe -- [--files N] [--folders N] [--seed N] [--replay]'
+const PROBE_USAGE = 'Usage: npm run scale-probe -- [--files N] [--folders N] [--seed N] [--replay]'
 const gzipAsync = promisify(gzipCallback)
 
 function helpRequested(argv) {
@@ -68,7 +60,7 @@ export function fakeListDir(rootDir, files) {
   }
 }
 
-export function hermesFrames(tree, { count = 200, seed = DEFAULTS.seed, start = Date.UTC(2026, 9, 21) } = {}) {
+function hermesFrames(tree, { count = 200, seed = DEFAULTS.seed, start = Date.UTC(2026, 9, 21) } = {}) {
   const next = random(seed + 2)
   const pick = (list) => list[Math.floor(next() * list.length)]
   const agentId = AGENTS[1].id
@@ -89,7 +81,7 @@ function median(list) {
   return sorted[Math.floor(sorted.length / 2)]
 }
 
-export function timeIt(fn, runs = 5) {
+function timeIt(fn, runs = 5) {
   fn()
   const times = []
   let result
@@ -101,7 +93,7 @@ export function timeIt(fn, runs = 5) {
   return { ms: median(times), result }
 }
 
-export async function timeItAsync(fn, runs = 5) {
+async function timeItAsync(fn, runs = 5) {
   await fn()
   const times = []
   let result
@@ -113,7 +105,7 @@ export async function timeItAsync(fn, runs = 5) {
   return { ms: median(times), result }
 }
 
-export function perCall(items, fn) {
+function perCall(items, fn) {
   let worst = 0
   const started = performance.now()
   for (const item of items) {
@@ -125,7 +117,7 @@ export function perCall(items, fn) {
   return { total, mean: total / Math.max(items.length, 1), worst }
 }
 
-export function topCovered(entries, placed, fit) {
+function topCovered(entries, placed, fit) {
   const { back, right, up } = viewBasis(OVERVIEW.yaw, OVERVIEW.pitch)
   const rects = []
   for (const entry of entries) {
@@ -158,7 +150,7 @@ export function topCovered(entries, placed, fit) {
   return false
 }
 
-export function ringChain(activities, tree, agents = AGENTS, { alwaysDepth = 2 } = {}) {
+function ringChain(activities, tree, agents = AGENTS, { alwaysDepth = 2 } = {}) {
   const state = createState(tree, agents)
   let homes = new Map()
   let key = ''

@@ -54,7 +54,7 @@ export function validLanes(agents) {
   return names
 }
 
-export const OWNER_LABELS = Object.freeze({
+const OWNER_LABELS = Object.freeze({
   hermes: 'Hermes',
   opencode: 'OpenCode',
   agy: 'AGY',

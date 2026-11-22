@@ -29,7 +29,7 @@ export const ORIGIN_SEATS_PROBLEM = 'A request to set the seats needs a page Ori
 export const SEATS_SHAPE_PROBLEM = 'Seats must be whole numbers from 0, or empty for no limit.'
 export const CONFIRM_TOP_PROBLEM = 'Confirm putting the agent at the top first.'
 export const CONFIRM_SEATS_PROBLEM = 'Confirm the seats first.'
-export const TOP_KEY_PROBLEM = 'The top must be orchestrator, claude-session or opencode-session.'
+const TOP_KEY_PROBLEM = 'The top must be orchestrator, claude-session or opencode-session.'
 export const ORIGIN_KEY_PROBLEM = 'A request to set a key needs a page Origin.'
 export const ORIGIN_DELETE_KEY_PROBLEM = 'A request to delete a key needs a page Origin.'
 export const ORIGIN_APPROVE_PROBLEM = 'A request to approve a proposal needs a page Origin.'
@@ -37,15 +37,14 @@ export const ORIGIN_DECLINE_PROBLEM = 'A request to decline a proposal needs a p
 
 export const CONFIRM_LABEL_PROBLEM = 'Confirm setting the label first.'
 export const CONFIRM_KEY_PROBLEM = 'Confirm setting the key first.'
-export const CONFIRM_DELETE_KEY_PROBLEM = 'Confirm deleting the key first.'
-export const CONFIRM_APPROVE_PROBLEM = 'Confirm approving the proposal first.'
-export const CONFIRM_DECLINE_PROBLEM = 'Confirm declining the proposal first.'
+const CONFIRM_DELETE_KEY_PROBLEM = 'Confirm deleting the key first.'
+const CONFIRM_APPROVE_PROBLEM = 'Confirm approving the proposal first.'
+const CONFIRM_DECLINE_PROBLEM = 'Confirm declining the proposal first.'
 
 export const LABEL_LENGTH_PROBLEM = 'The label must be 1 to 40 characters.'
 export const KEY_NAME_PROBLEM = 'The key name must be 1 to 40 letters, digits, space, dash or underscore.'
 export const KEY_VALUE_PROBLEM = 'The key value must be 1 to 500 characters.'
-export const KEY_NOT_FOUND_PROBLEM = 'The key was not found.'
-export const PROPOSAL_NOT_FOUND_PROBLEM = 'The proposal was not found.'
+const PROPOSAL_NOT_FOUND_PROBLEM = 'The proposal was not found.'
 
 const KEY_NAME_PATTERN = /^[A-Za-z0-9 _-]{1,40}$/
 const MAX_PROPOSALS = 20
@@ -107,7 +106,7 @@ export function saveLabels(file, labels, { rename = renameSync } = {}) {
   }
 }
 
-export const SESSION_TOPS = {
+const SESSION_TOPS = {
   'claude-session': { label: 'Claude Code session', harness: 'claude' },
   'opencode-session': { label: 'OpenCode session', harness: 'opencode' },
 }
@@ -125,11 +124,11 @@ export function readTop(file) {
   }
 }
 
-export function keysFileFor(runsFolder) {
+function keysFileFor(runsFolder) {
   return join(runsFolder, 'keys.json')
 }
 
-export function parseKeyMap(parsed) {
+function parseKeyMap(parsed) {
   const map = {}
   if (!parsed) return map
   if (Array.isArray(parsed)) {
@@ -205,7 +204,7 @@ export function writeKey(runsFolder, name, value) {
   saveKeys(runsFolder, keys)
 }
 
-export function proposalsFileFor(runsFolder) {
+function proposalsFileFor(runsFolder) {
   return join(runsFolder, 'proposals.json')
 }
 

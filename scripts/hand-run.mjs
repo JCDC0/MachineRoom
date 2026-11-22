@@ -14,7 +14,7 @@ const docs = join(root, 'docs', 'agents')
 const MINUTES_PROBLEM = '--minutes needs a number from 1 to 600.'
 const MAIN_PROBLEM = 'The worktree is on main. Pass --branch.'
 const OPTIONS = ['minutes', 'model', 'branch', 'exit']
-export const HAND_RUN_USAGE =
+const HAND_RUN_USAGE =
   'Usage: npm run hand-run -- LANE ID [--minutes N] [--branch NAME] [--model NAME] [--exit N]'
 
 function helpRequested(argv) {
@@ -26,7 +26,7 @@ function failure(sentence) {
   return { code: 1, lines: [sentence] }
 }
 
-export function parseHandArgs(argv) {
+function parseHandArgs(argv) {
   const args = (Array.isArray(argv) ? argv : []).map((value) => String(value))
   const options = { lane: '', id: '', minutes: null, model: null, branch: null, exit: null }
   const positionals = []

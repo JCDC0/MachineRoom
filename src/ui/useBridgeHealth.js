@@ -50,5 +50,3 @@ export function useBridgeHealth(bridge, { everyMs = 60000, fetchImpl = fetch } =
 
   return health
 }
-
-export default useBridgeHealth

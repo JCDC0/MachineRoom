@@ -1,7 +1,7 @@
 export const ORCHESTRATOR_ID = 'orchestrator'
 export const SESSION_LIMIT = 6
-export const SESSION_TITLE_MAX = 80
-export const PREVIEW_LIMIT = 200
+const SESSION_TITLE_MAX = 80
+const PREVIEW_LIMIT = 200
 export const AGENT_NAME_MAX = 40
 
 export const SIDEBAR_TABS = Object.freeze([
@@ -42,8 +42,8 @@ export const SESSION_SORTS = Object.freeze([
   { key: 'oldest', label: 'Oldest' },
   { key: 'name', label: 'Name' },
 ])
-export const SESSION_SORT_DEFAULT = 'newest'
-export const SESSION_SORT_KEY = 'machineroom.sessionSort'
+const SESSION_SORT_DEFAULT = 'newest'
+const SESSION_SORT_KEY = 'machineroom.sessionSort'
 
 export function normalizeSessionSort(value) {
   const key = typeof value === 'string' ? value.trim().toLowerCase() : ''
@@ -218,7 +218,7 @@ export function sessionRows(
   }
 }
 
-export const SESSION_MENU_KEYS = Object.freeze({
+const SESSION_MENU_KEYS = Object.freeze({
   pin: 'P',
   rename: 'R',
   fork: 'F',
@@ -397,7 +397,7 @@ export function previewLines(answer, limit = PREVIEW_LIMIT, options = {}) {
   return lines.slice(-cap)
 }
 
-export const EXPORT_MESSAGE_LIMIT = 200
+const EXPORT_MESSAGE_LIMIT = 200
 const UNSAFE_FILENAME = /[<>:"/\\|?*\u0000-\u001F]/g
 
 function exportTime(value) {

@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { useDialogFocus } from './dialogFocus.js'
 
-export const MCP_TRANSPORTS = ['stdio', 'http']
-export const MCP_NAME_PATTERN = /^[A-Za-z0-9_-]{1,40}$/
+const MCP_TRANSPORTS = ['stdio', 'http']
+const MCP_NAME_PATTERN = /^[A-Za-z0-9_-]{1,40}$/
 export const MCP_EMPTY_DRAFT = Object.freeze({
   name: '',
   transport: 'stdio',
@@ -116,7 +116,7 @@ export function mcpDraftProblem(draft) {
   return ''
 }
 
-export function mcpServerFields(server, patch = {}) {
+function mcpServerFields(server, patch = {}) {
   const merged = { ...server, ...patch }
   const transport = merged.transport === 'http' ? 'http' : 'stdio'
   return {

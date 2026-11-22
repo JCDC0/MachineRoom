@@ -1,8 +1,4 @@
-import { cachedRunRecords, clearRunsCache, runsFile } from './runs.js'
-
-export function clearRunRecordsCache() {
-  clearRunsCache()
-}
+import { cachedRunRecords, runsFile } from './runs.js'
 
 export { cachedRunRecords }
 

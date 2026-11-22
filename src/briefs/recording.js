@@ -194,7 +194,7 @@ export function agentsFile(lane, lanes) {
   }
 }
 
-export function projectName(folder) {
+function projectName(folder) {
   const parts = String(folder ?? '').split(/[\\/]+/).filter(Boolean)
   return parts.length >= 3 && parts.at(-2) === '.worktrees' ? parts.at(-3) : basename(folder ?? '')
 }

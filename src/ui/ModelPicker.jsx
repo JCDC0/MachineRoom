@@ -56,7 +56,7 @@ export function modelDetailMap(value) {
   return map
 }
 
-export function endpointDetailMap(endpoints) {
+function endpointDetailMap(endpoints) {
   const map = new Map()
   for (const endpoint of Array.isArray(endpoints) ? endpoints : []) {
     const name = cleanText(endpoint?.name)

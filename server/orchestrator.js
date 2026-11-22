@@ -50,17 +50,16 @@ import { createRecordsCache, runsFolder as sharedRunsFolder } from './lanes-sour
 
 export const ORCHESTRATOR_KEY = 'orchestrator'
 export const ORCHESTRATOR_CHAT_LIMIT = 200
-export const ORCHESTRATOR_TURN_LIMIT_MS = 60 * 60 * 1000
-export const ORCHESTRATOR_ROOM_TURNS = 30
+const ORCHESTRATOR_TURN_LIMIT_MS = 60 * 60 * 1000
+const ORCHESTRATOR_ROOM_TURNS = 30
 export const ORCHESTRATOR_ROOM_WINDOW_MS = 60 * 60 * 1000
-export const ORCHESTRATOR_MERGE_WAIT_MS = 30 * 1000
+const ORCHESTRATOR_MERGE_WAIT_MS = 30 * 1000
 export const ORCHESTRATOR_MESSAGE_LIMIT = 8000
-export const AUTOCOMPACT_SHARE = 0.8
 export const DEFAULT_AUTOCOMPACT_MODE = 'percent'
 const SPAWN_DEPTH_LINE = /Spawn subagents at most \d+ levels deep\. A subagent at depth \d+ spawns none\.\s*/g
 export const DEFAULT_AUTOCOMPACT_VALUE = 80
 export const DEFAULT_AUTOCOMPACT_PERCENT = 80
-export const COMPACT_RULES_LIMIT = 2000
+const COMPACT_RULES_LIMIT = 2000
 export const CONFIRM_HARNESS_PROBLEM = 'Confirm the harness change first.'
 export const DEFAULT_COMPACT_RULES =
   "keep the owner's goals and standing rules in the owner's words, the decisions made and why, each lane run started with its branch and result, the files changed, what is unfinished or blocked, and the next steps; leave out tool output, logs and work already merged and checked."
@@ -115,8 +114,8 @@ export function compactedSummary(report, logs = []) {
 export const CONFIRM_MESSAGE_PROBLEM = 'Confirm the message first.'
 export const CONFIRM_STOP_PROBLEM = 'Confirm the stop first.'
 export const CONFIRM_AUTOCOMPACT_PROBLEM = 'Confirm the autocompact change first.'
-export const CONFIRM_COMPACT_PROBLEM = 'Confirm the compact first.'
-export const CONFIRM_MODEL_PROBLEM = 'Confirm the model change first.'
+const CONFIRM_COMPACT_PROBLEM = 'Confirm the compact first.'
+const CONFIRM_MODEL_PROBLEM = 'Confirm the model change first.'
 export const CONFIRM_MODE_PROBLEM = 'Confirm the mode change first.'
 export const MODE_PROBLEM = 'Choose a permission mode listed for this harness.'
 export const AUTOCOMPACT_PROBLEM = 'Say whether autocompact is on or off.'
@@ -126,39 +125,39 @@ export const AUTOCOMPACT_TOKENS_PROBLEM = 'Tokens must be a whole number from 10
 export const AUTOCOMPACT_RULES_PROBLEM = 'Compact rules must be at most 2000 characters.'
 export const COMPACT_RUNNING_PROBLEM = 'A turn is already running.'
 export const APPROVAL_TIMEOUT_MS = 4 * 60 * 1000
-export const APPROVAL_LIMIT = 20
+const APPROVAL_LIMIT = 20
 export const APPROVAL_NO_ANSWER = 'The owner did not answer.'
 export const APPROVAL_DENIED = 'The owner denied it.'
-export const APPROVAL_SERVER = 'machineroom-approve'
+const APPROVAL_SERVER = 'machineroom-approve'
 export const APPROVAL_PROMPT_TOOL = 'mcp__machineroom-approve__approve'
 export const NO_SESSION_PROBLEM = 'The orchestrator has no session yet.'
-export const COMPACT_KEEP_LIMIT = 2000
+const COMPACT_KEEP_LIMIT = 2000
 export const COMPACT_KEEP_PROBLEM = 'Write at most 2000 characters to keep.'
 export const MODEL_PROBLEM = 'Choose a model listed for this harness.'
 export const CONFIRM_EFFORT_PROBLEM = 'Confirm the effort change first.'
 export const CONFIRM_SESSION_PROBLEM = 'Confirm the session change first.'
 export const EFFORT_PROBLEM = 'Choose an effort level listed for this harness.'
-export const NO_SESSION_ID_PROBLEM = 'There is no session with that id.'
-export const SESSION_TITLE_PROBLEM = 'Write a title from 1 to 80 characters.'
-export const SESSION_PINNED_PROBLEM = 'Say whether pinned is true or false.'
-export const SESSION_STARRED_PROBLEM = 'Say whether starred is true or false.'
+const NO_SESSION_ID_PROBLEM = 'There is no session with that id.'
+const SESSION_TITLE_PROBLEM = 'Write a title from 1 to 80 characters.'
+const SESSION_PINNED_PROBLEM = 'Say whether pinned is true or false.'
+const SESSION_STARRED_PROBLEM = 'Say whether starred is true or false.'
 export const SESSION_UNREAD_PROBLEM = 'Say whether unread is true or false.'
 export const SESSION_ARCHIVED_PROBLEM = 'Say whether archived is true or false.'
-export const SESSION_CHANGE_PROBLEM = 'Choose a field to change: pinned, starred, unread, archived or title.'
+const SESSION_CHANGE_PROBLEM = 'Choose a field to change: pinned, starred, unread, archived or title.'
 export const CURRENT_SESSION_PROBLEM = 'The current conversation cannot be archived or deleted.'
 export const CURRENT_SESSION_KEY = 'current'
 export const SESSION_PENDING_PROBLEM = 'Messages are waiting for a turn. Wait for them to run or stop the orchestrator first.'
 export const BRANCH_INDEX_PROBLEM = 'Choose a message to branch from.'
-export const SESSIONS_LIMIT = 50
+const SESSIONS_LIMIT = 50
 export const SESSION_MESSAGES_LIMIT = 200
 export const SESSIONS_FULL_PROBLEM = 'The saved list is full of pinned conversations. Unpin or delete one to save this conversation.'
-export const TURN_STEP_LIMIT = 100
+const TURN_STEP_LIMIT = 100
 const effortLevelsFor = (harness) => HARNESS_EFFORTS[harness]?.length ? HARNESS_EFFORTS[harness] : HARNESS_EFFORTS.opencode
-export const NO_PROJECT_PROBLEM = 'The bridge has no project folder, so the orchestrator has nothing to work on.'
+const NO_PROJECT_PROBLEM = 'The bridge has no project folder, so the orchestrator has nothing to work on.'
 export const MESSAGE_PROBLEM = 'Write a message from 1 to 8000 characters.'
 export const CHAT_SAVE_PROBLEM = 'The chat file could not be saved.'
 export const EMPTY_REPLY = 'The orchestrator ended its turn without a reply.'
-export const STOPPED_REPLY = 'The orchestrator stopped.'
+const STOPPED_REPLY = 'The orchestrator stopped.'
 export const PROMPT_TOO_LONG_REPLY = 'The orchestrator stopped: the prompt is too long for the command line.'
 export const NO_NEW_REPORT = 'No new report.'
 export const NO_REPORT = 'NO_REPORT'
@@ -179,7 +178,7 @@ const DEFAULT_LANE = { name: 'Orchestrator', harness: 'Claude Code', cli: { harn
 const VARIABLE = /%([^%]+)%/g
 
 export const SLASH_COMMAND_LIMIT = 200
-export const SLASH_DESCRIPTION_LIMIT = 200
+const SLASH_DESCRIPTION_LIMIT = 200
 const SLASH_HEAD_BYTES = 4096
 const SLASH_WALK_LIMIT = 400
 const SLASH_DEPTH_LIMIT = 6
@@ -528,7 +527,7 @@ function stoppedTurnText({ code, report, killed, failureMessage, stderrMessage, 
   return Number.isInteger(code) ? `The orchestrator stopped: exit ${code}.` : STOPPED_REPLY
 }
 
-export function turnStepOf(activity) {
+function turnStepOf(activity) {
   if (!activity || activity.type !== 'tool.start') return null
   const tool = typeof activity.tool === 'string' && activity.tool.trim() ? activity.tool.trim() : 'tool'
   const label = typeof activity.label === 'string' ? activity.label.trim() : ''
@@ -536,22 +535,6 @@ export function turnStepOf(activity) {
   const stripped = label.startsWith('$ ') ? label.slice(2).trim() : label
   const target = stripped.toLowerCase().startsWith(prefix.toLowerCase()) ? stripped.slice(prefix.length).trim() : stripped
   return { tool, target }
-}
-
-export function turnStepsOf(descriptor, log, rootName = '') {
-  if (!descriptor || typeof descriptor.createParser !== 'function') return []
-  try {
-    const parser = descriptor.createParser({ rootName: String(rootName ?? ''), files: [], dirs: [] })
-    const activities = [...parser.push(String(log ?? ''), 0), ...parser.flush(0)]
-    const steps = []
-    for (const activity of activities) {
-      const step = turnStepOf(activity)
-      if (step) steps.push(step)
-    }
-    return steps.slice(-TURN_STEP_LIMIT)
-  } catch {
-    return []
-  }
 }
 
 function cleanStep(item, mask = (text) => maskMessageText(text).text) {

@@ -15,7 +15,7 @@ export function visibleChatText(text) {
 }
 
 export const ORCH_MAX_CHARS = 8000
-export const ORCH_COUNT_FROM = 7000
+const ORCH_COUNT_FROM = 7000
 export const ORCH_REFRESH_MS = 10000
 export const ORCH_MAX_LINES = 200
 export const TEAM_TAB = 'team'
@@ -179,7 +179,7 @@ function pluralCount(n, word) {
   return `${n} ${word}${n === 1 ? '' : 's'}`
 }
 
-export function normalizeSeatSummary(value) {
+function normalizeSeatSummary(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null
   const ring = wholeCount(value.ring) ? value.ring : 0
   const nextRing = wholeCount(value.nextRing) ? value.nextRing : null
@@ -509,7 +509,7 @@ export function chatLines(chat, limit = ORCH_MAX_LINES, options = {}) {
   return lines.slice(-cap)
 }
 
-export function normalizeWork(value) {
+function normalizeWork(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null
   const steps = []
   for (const entry of Array.isArray(value.steps) ? value.steps : []) {

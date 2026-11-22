@@ -3,7 +3,7 @@ import { readdirSync, readFileSync } from 'node:fs'
 import { createInterface } from 'node:readline'
 
 export const KILL_TIMEOUT_MS = 10000
-export const LIST_TIMEOUT_MS = 20000
+const LIST_TIMEOUT_MS = 20000
 const SAMPLE_MS = 2000
 
 export const WINDOWS_LIST_COMMAND = 'Get-CimInstance Win32_Process | Select-Object ProcessId,ParentProcessId,CommandLine,CreationDate | ConvertTo-Json -Compress'
@@ -392,7 +392,7 @@ export function isLockHolderStale(pid, lockMtime, { platform = process.platform,
 }
 
 export const TIMEOUT_MESSAGE = 'The check passed its time limit.'
-export const SETTLE_WAIT_MS = 5000
+const SETTLE_WAIT_MS = 5000
 const EXIT_SNAPSHOT_MS = 1000
 
 export function runCheck(command, {

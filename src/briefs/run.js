@@ -369,7 +369,7 @@ export function worktreeProblems({ worktree, project } = {}) {
 
 export const CHECK_SHELL_PROBLEM = 'The check command cannot use shell syntax; put it in an npm script.'
 export const CHECK_QUOTE_PROBLEM = 'The check command has an unclosed quote.'
-export const CHECK_COMMAND_COUNT = 4
+const CHECK_COMMAND_COUNT = 4
 export const CHECK_COMMAND_COUNT_PROBLEM = 'A check holds at most 4 commands, one per line.'
 
 function quoteIsOpen(text) {
@@ -737,7 +737,7 @@ export function pathInside(child, parent) {
   return one.startsWith(two.endsWith('/') ? two : `${two}/`)
 }
 
-export const LANE_ENV_NAMES = [
+const LANE_ENV_NAMES = [
   'PATH', 'Path', 'PATHEXT', 'SystemRoot', 'WINDIR', 'COMSPEC', 'TEMP', 'TMP',
   'USERPROFILE', 'HOMEDRIVE', 'HOMEPATH', 'APPDATA', 'LOCALAPPDATA',
   'PROGRAMFILES', 'PROGRAMFILES(X86)', 'PROGRAMDATA', 'NUMBER_OF_PROCESSORS',
@@ -745,14 +745,14 @@ export const LANE_ENV_NAMES = [
   'CODEX_HOME', 'AGY_CLI_DISABLE_AUTO_UPDATE',
 ]
 
-export const HARNESS_KEY_NAMES = {
+const HARNESS_KEY_NAMES = {
   hermes: ['OPENROUTER_API_KEY'],
   machineroom: ['MACHINEROOM_API_KEY', 'OPENROUTER_API_KEY', 'MACHINEROOM_API_URL', 'MR_AGENT_MAX_COST_USD', 'MR_AGENT_MINUTES'],
 }
 
 const LANE_ENV_SET = new Set(LANE_ENV_NAMES.map((name) => name.toLowerCase()))
 
-export function harnessKeyNames(harness, { model = '', endpoints = [] } = {}) {
+function harnessKeyNames(harness, { model = '', endpoints = [] } = {}) {
   const key = typeof harness === 'string' ? harness : ''
   if (key === 'machineroom') {
     const list = Array.isArray(endpoints) ? endpoints : []
@@ -798,7 +798,7 @@ function stringMap(value) {
   return out
 }
 
-export function normalizeServer(entry) {
+function normalizeServer(entry) {
   if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return null
   const name = typeof entry.name === 'string' ? entry.name.trim() : ''
   if (name === '') return null
@@ -1168,10 +1168,6 @@ export function sessionToolLines(exportText) {
   return lines
 }
 
-export function claudeReport(log) {
-  return harnessByKey.claude.report(log)
-}
-
 export function replyText(harness, log) {
   const key = harness === 'opencode' ? 'opencode' : 'claude'
   return harnessByKey[key].reply(log).trim()
@@ -1185,7 +1181,7 @@ export function summarizeRun({ harness, log, worktree } = {}) {
   return summaryOf(descriptor.key, activities, descriptor.report(log), descriptor.usage(log))
 }
 
-export const READINESS_FAILURE = /Standalone server exited before reporting readiness/i
+const READINESS_FAILURE = /Standalone server exited before reporting readiness/i
 
 export function readinessLine(log) {
   const line = String(log ?? '')

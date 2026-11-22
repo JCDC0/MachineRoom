@@ -3,7 +3,7 @@ import { readStorage, store, writeStorage } from '../storage.js'
 import { SETTINGS_KEY, savedSource } from './settings.js'
 
 export const GUIDE_FLAG = 'machineroom.guide'
-export const GUIDE_SEEN = '1'
+const GUIDE_SEEN = '1'
 
 export const GUIDE_STEPS = [
   {
