@@ -41,7 +41,7 @@ A web search or fetch becomes tool `web` with no touches, and its label holds th
 
 ## DOM contract for terminals and cards
 
-`engine/terminals.js` and `engine/cards.js` build, and the stylesheet styles, these structures:
+`engine/terminals.js`, `engine/agents.js` (the callout) and `engine/cards.js` build, and the stylesheet styles, these structures:
 
 ```
 .mr-term.is-{idle|queued|working|error|done}[.is-open][.is-muted]
@@ -49,11 +49,14 @@ A web search or fetch becomes tool `web` with no touches, and its label holds th
   .mr-term-body
     .mr-line.is-{normal|dim|error|done}
 
-.mr-term-console[.is-address][.is-muted]
-  .mr-term-console-label
+.mr-callout.is-{working|error|done}[.is-address]
+  .mr-callout-title
+  .mr-callout-task
+  .mr-callout-cmd
+  .mr-callout-console[hidden]
     .mr-term-console-link[hidden]
-  .mr-term-console-body
-    .mr-term-console-line.is-{normal|dim|error|done}
+    .mr-callout-console-body
+      .mr-callout-console-line.is-{normal|dim|error|done}
 
 .mr-card.is-{closed|open|files}[.is-active|.is-path][.is-pinned][.is-selected][.is-targeted][.is-lit|.is-dim][.is-flash-white|.is-flash-red]
   .mr-card-backs

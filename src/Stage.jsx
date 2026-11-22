@@ -1366,7 +1366,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
   }
 
   function onEmptyDoubleClick(event) {
-    if (event.target?.closest?.('.mr-card, .mr-term, .mr-term-console, .mr-board, .mr-inspector')) return
+    if (event.target?.closest?.('.mr-card, .mr-term, .mr-callout, .mr-board, .mr-inspector')) return
     if (roomRef.current?.agentAt?.(event)) return
     if (roomRef.current?.gitAt?.(event)) {
       inspectHere({ kind: 'git', id: 'git' })
