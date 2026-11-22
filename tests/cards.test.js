@@ -1087,6 +1087,89 @@ describe('hiding folder contents', () => {
     expect(parent.rows).toHaveLength(0)
     cards.dispose()
   })
+
+  it('stays open while a working agent touches a path in it and shuts when the touch ends', () => {
+    const state = createState(makeTree({ root: 'demo', files: ['src/a.js', 'docs/b.md'] }), [{ key: 'claude', name: 'Claude' }])
+    const cards = createCards(fakeScene(), { glScene: fakeScene(), alwaysDepth: 2, folderContents: false, openOnTouch: true })
+    cards.sync(state)
+    cards.update(state, 0.016, camera())
+    const src = cards.cards.get('src')
+    const docs = cards.cards.get('docs')
+    expect(src.element.className).toContain('is-collapsed')
+
+    apply(state, {
+      type: 'tool.start',
+      agent: 'claude',
+      runId: 'r1',
+      time: 1000,
+      order: 1,
+      id: 'c1',
+      tool: 'read',
+      label: 'read src/a.js',
+      touches: [{ kind: 'file', path: 'src/a.js', mode: 'read' }],
+    })
+    cards.flashFile('src', 'src/a.js', 'white')
+    for (let step = 0; step < 30; step += 1) cards.update(state, 0.1, camera(), null, 1)
+    expect(src.rows).toHaveLength(1)
+    expect(src.height).toBe(cardHeight(1))
+    expect(src.element.className).not.toContain('is-collapsed')
+    expect(docs.element.className).toContain('is-collapsed')
+
+    apply(state, {
+      type: 'run.end',
+      agent: 'claude',
+      runId: 'r1',
+      time: 4000,
+      order: 2,
+      ok: true,
+    })
+    cards.update(state, 0.25, camera(), null, 1)
+    expect(src.rows).toHaveLength(0)
+    expect(src.element.className).toContain('is-collapsed')
+    expect(src.height).toBe(cardHeight(0))
+
+    cards.setOptions({ openOnTouch: false })
+    apply(state, {
+      type: 'tool.start',
+      agent: 'claude',
+      runId: 'r2',
+      time: 5000,
+      order: 3,
+      id: 'c2',
+      tool: 'read',
+      label: 'read src/a.js',
+      touches: [{ kind: 'file', path: 'src/a.js', mode: 'read' }],
+    })
+    cards.update(state, 0.25, camera(), null, 1)
+    expect(src.rows).toHaveLength(0)
+    expect(src.element.className).toContain('is-collapsed')
+    cards.dispose()
+  })
+
+  it('opens a touched folder before shutting on wall time at 1x and 8x replay speed', () => {
+    for (const speed of [1, 8]) {
+      const state = createState(makeTree({ root: 'demo', files: ['src/a.js', 'docs/b.md'] }), [])
+      const cards = createCards(fakeScene(), { glScene: fakeScene(), alwaysDepth: 2, folderContents: false, openOnTouch: true })
+      cards.sync(state)
+      cards.update(state, 0.016, camera(), null, speed)
+      const src = cards.cards.get('src')
+      expect(src.element.className).toContain('is-collapsed')
+
+      cards.flashFile('src', 'src/a.js', 'white')
+      for (let step = 0; step < 16; step += 1) cards.update(state, 0.016, camera(), null, speed)
+      expect(src.openLevel, `speed ${speed}`).toBe(1)
+      expect(src.height, `speed ${speed}`).toBe(cardHeight(1))
+      expect(src.rows, `speed ${speed}`).toHaveLength(1)
+      expect(src.element.className, `speed ${speed}`).not.toContain('is-collapsed')
+
+      for (let step = 0; step < 75; step += 1) cards.update(state, 0.016, camera(), null, speed)
+      expect(src.openLevel, `speed ${speed}`).toBe(0)
+      expect(src.height, `speed ${speed}`).toBe(cardHeight(0))
+      expect(src.rows, `speed ${speed}`).toHaveLength(0)
+      expect(src.element.className, `speed ${speed}`).toContain('is-collapsed')
+      cards.dispose()
+    }
+  })
 })
 
 describe('the overview spheres with paths outside the file tree', () => {

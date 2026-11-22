@@ -1146,7 +1146,7 @@ export function createCards(cssScene, options = {}) {
   }
 
   function recordTouch(dir, duration) {
-    const life = duration / 1000
+    const life = Math.max(CONTENT_ANIM_SEC, duration / 1000)
     const prev = touchLife.get(dir) ?? 0
     if (life > prev) touchLife.set(dir, life)
   }
@@ -1156,7 +1156,7 @@ export function createCards(cssScene, options = {}) {
     if (cardRows(card.view) <= 0) return false
     if (selected !== null && selected === card.path) return true
     if (inspected !== null && dirname(inspected) === card.path) return true
-    return openOnTouchEnabled && Boolean(touchedCards?.has(card.path))
+    return openOnTouchEnabled && (active.dirs.has(card.path) || Boolean(touchedCards?.has(card.path)))
   }
 
   function sync(state) {
@@ -1318,8 +1318,9 @@ export function createCards(cssScene, options = {}) {
         markRowPath(path)
       }
     }
+    const touchStep = delta > 0 ? delta : 0
     for (const [dir, life] of touchLife) {
-      const next = life - flashStep
+      const next = life - touchStep
       if (next <= 0) touchLife.delete(dir)
       else touchLife.set(dir, next)
     }
