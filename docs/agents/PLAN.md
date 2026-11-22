@@ -12,11 +12,12 @@ The team since 2026-11-22 17:35 (the owner's word): this session orchestrates (C
 | --- | --- | --- |
 | The top buttons stay bowed after the page scrolls; they should ease straight once it leaves the top | P697 | merged |
 | A setting to show folder contents, a second to open a folder an agent touches; with contents off a folder is a closed rectangle that opens with an animation on a click and closes when unfocused | P698 | merged, wired in Stage.jsx; check by eye |
-| An agent's shape keeps its own colour; an always-on ring tells its state (red failed, white thinking with loops, yellow running a command, green finished) | P699 | running on Neon |
-| The `ORCHESTRATOR` and `NEON` words beside the hub look like random text (sector name labels) | P700 | running on Argon |
-| A lane shows two boxes over its head (callout and `CONSOLE`) that clip; one box, beside the agent, away from the hub centre | P701 | next on Neon, after P699 |
-| Small corner brackets at the lens edges | by hand, `2583ded8` | done |
-| Found while switching the fleet: removing the ladder in a live room zoomed the camera far out and Center did not bring it back until a reload | to brief | open |
+| An agent's shape keeps its own colour; an always-on ring tells its state (red failed, white thinking with loops, yellow running a command, green finished) | P699 | merged, seen in the bench |
+| The `ORCHESTRATOR` and `NEON` words beside the hub look like random text (sector name labels) | P700 | merged, pushed |
+| A lane shows two boxes over its head (callout and `CONSOLE`) that clip; one box, beside the agent, away from the hub centre | P701 | merged, seen in a replay |
+| Small corner brackets at the lens edges | by hand, `2583ded8` | done, pushed |
+| Found while switching the fleet: removing the ladder in a live room zoomed the camera far out and Center did not bring it back until a reload | P702 | running on Argon |
+| Item 6 below: a lower subagent depth hides a ring that holds agents with no confirm | P703 | running on Neon |
 
 Findings per review: 64 had 12, 65 had 10, 66 had 8, 67 had 4, 68 had 3, 69 had 3, 70 had 4. Since review 69 they are mostly edge cases (node flags no runner uses, five-deep rings, a log that keeps growing with no meta).
 
