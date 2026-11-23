@@ -951,7 +951,7 @@ export function createCards(cssScene, options = {}) {
   function armTouchPulses(touchedCards) {
     for (const card of cards.values()) {
       const nowOpen = touchOpenGoal(card, touchedCards)
-      if (nowOpen && !card.touchOpen) {
+      if (nowOpen && !card.touchOpen && card.path !== '') {
         let at = dirname(card.path)
         for (;;) {
           const parent = nearestCard(at)
@@ -970,18 +970,6 @@ export function createCards(cssScene, options = {}) {
     return active.dirs.has(card.path) || Boolean(touchedCards?.has(card.path))
   }
 
-  function currentTouches() {
-    let touched = null
-    if (openOnTouchEnabled && touchLife.size > 0) {
-      touched = new Set()
-      for (const dir of touchLife.keys()) {
-        const card = nearestCard(dir)
-        if (card) touched.add(card.path)
-      }
-    }
-    return touched
-  }
-
   function recompute(state) {
     lastState = state
     const unchanged =
@@ -991,10 +979,7 @@ export function createCards(cssScene, options = {}) {
       state.existingFiles === lastExistingFiles &&
       state.latest === lastLatest &&
       !focusChanged(state)
-    if (unchanged) {
-      if (!still()) armTouchPulses(currentTouches())
-      return false
-    }
+    if (unchanged) return false
 
     lastPinnedVersion = pinnedVersion
     lastSprayVersion = sprayVersion
@@ -1005,7 +990,6 @@ export function createCards(cssScene, options = {}) {
     const planKeyNext = viewKey(state, [...pinned, ...sprayed])
     if (planKeyNext === planKey) {
       if (computeActive(state)) rowRevision += 1
-      if (!still()) armTouchPulses(currentTouches())
       return false
     }
     planKey = planKeyNext
@@ -1084,7 +1068,6 @@ export function createCards(cssScene, options = {}) {
       }
       danceOrderKeys = danceOrder(spots)
     }
-    if (!still()) armTouchPulses(currentTouches())
     const nextOverviewKey = entries
       .filter((entry) => entry.path === '' || !entry.path.includes('/'))
       .map((entry) => `${entry.path}:${entry.width}:${entry.height}`)
@@ -1412,6 +1395,7 @@ export function createCards(cssScene, options = {}) {
         if (card) touchedCards.add(card.path)
       }
     }
+    if (!isStill) armTouchPulses(touchedCards)
     const hasFlashes = flashes.size > 0
     if (rowRevision !== lastRowRevision) {
       lastRowRevision = rowRevision
