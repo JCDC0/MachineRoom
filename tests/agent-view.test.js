@@ -143,26 +143,41 @@ describe('a failed tool call on a working agent', () => {
 
   it('aims the working tunnel at the newest open call with touches and draws none for a call with no touches (R74-3)', () => {
     const { agents, state, terminals, world } = harness()
-    const aimed = []
-    world.side = (dir) => {
-      aimed.push(dir)
-      return 1
-    }
+    const coords = { src: 100, docs: -200 }
+    world.edge = (dir, file, side, out) => out.set(coords[dir] ?? 500, 400, 0)
     const read = (id, path, time) => apply(state, { time, type: 'tool.start', agent: 'a', id, tool: 'read', label: `read ${path}`, touches: [{ path, mode: 'read', kind: 'file' }] })
-    read('o1', 'src/a.js', 1000)
-    read('o2', 'docs/b.md', 1010)
-    agents.aimAt('a', 'docs', 'docs/b.md', 1015)
-    apply(state, { time: 1020, type: 'tool.end', agent: 'a', id: 'o2', ok: true })
-    aimed.length = 0
+    apply(state, { time: 1000, type: 'run.start', agent: 'a', runId: 'r1' })
+    agents.update(state, 0.016, 1000, world, terminals)
+    read('o1', 'src/a.js', 1010)
+    agents.aimAt('a', 'src', 'src/a.js', 1010)
+    read('o2', 'docs/b.md', 1020)
+    agents.aimAt('a', 'docs', 'docs/b.md', 1020)
     agents.update(state, 0.3, 1020, world, terminals)
     const view = agents.views.get('a')
-    expect(aimed.at(-1)).toBe('src')
+    expect(view.touch.x).toBe(-200)
 
-    apply(state, { time: 1100, type: 'tool.end', agent: 'a', id: 'o1', ok: true })
-    apply(state, { time: 1110, type: 'tool.start', agent: 'a', id: 'n1', tool: 'shell', label: 'npm test', touches: [] })
-    agents.update(state, 0.7, 1110, world, terminals)
-    agents.update(state, 0.7, 1810, world, terminals)
+    apply(state, { time: 1030, type: 'tool.end', agent: 'a', id: 'o2', ok: true })
+    agents.update(state, 0.3, 1030, world, terminals)
+    expect(view.touch.x).toBe(100)
+    expect(view.tunnel).toBe(1)
+
+    apply(state, { time: 1040, type: 'tool.start', agent: 'a', id: 'n1', tool: 'shell', label: 'npm test', touches: [] })
+    agents.update(state, 0.3, 1040, world, terminals)
+    expect(view.touch.x).toBe(100)
+    expect(view.tunnel).toBe(1)
+
+    apply(state, { time: 1050, type: 'tool.end', agent: 'a', id: 'o1', ok: true })
+    agents.update(state, 0.1, 1150, world, terminals)
+    expect(view.tunnel).toBeCloseTo(1 - 0.1 / 0.6, 5)
+    agents.update(state, 0.7, 1850, world, terminals)
     expect(view.tunnel).toBe(0)
+
+    apply(state, { time: 1900, type: 'tool.end', agent: 'a', id: 'n1', ok: true })
+    apply(state, { time: 1950, type: 'run.end', agent: 'a', runId: 'r1', ok: true })
+    agents.update(state, 0.3, 1950, world, terminals)
+    expect(view.stripColor).toBe(GREEN)
+    expect(view.tunnel).toBe(1)
+    expect(view.touch.x).toBe(100)
     agents.dispose()
   })
 
