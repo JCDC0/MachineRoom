@@ -1,5 +1,9 @@
 # Plan
 
+## Next, as of 2026-11-23 19:50
+
+AGY credits refilled. Review 75 (P720) found 3 High, 2 Medium and 1 Low, nearly all in forced idle: Idle hidden below 900 pixels (R75-1), wheel, `/`, open panels and Tab breaking it (R75-2), a dropped bridge locking keys (R75-3), the tunnel jumping on a call end (R75-4), tests that pass undone (R75-5) and extra layouts (R75-6). The Stage part is done by hand (`80bac196`: forced idle only at 900 pixels and wider, it scrolls to the top, ends on a dropped bridge or a narrow resize, and the room ignores picks while it holds). P721 (Argon: tunnel, test, dedupe) and P722 (Neon: Hud panels, Assistant, scroll lock, CSS scoping, tests) run now. The stop rule is not met.
+
 ## Next, as of 2026-11-23 02:30
 
 Pushed `c9771c4c` (full suite 9287 green, audit clean). Both AGY lanes ran out of credits (Argon at 23:00, Neon at 01:43 during P718); the orchestrator finished P718 from Neon's partial work (`166bc968`, the six replay layout digests changed, every plan digest held) and did P719 by hand (`c9771c4c`). Every review 74 finding is fixed. Next: review 75 of `7189db1d..c9771c4c` on the first lane with credits, toward the stop rule (two clean reviews in a row).
