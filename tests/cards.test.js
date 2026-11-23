@@ -1501,6 +1501,115 @@ describe('hiding folder contents', () => {
     expect(engine.element.className).toContain('is-collapsed')
     cards.dispose()
   })
+
+  it('opens the three cards in a wave from the root when folder contents turns on', () => {
+    const state = createState(
+      makeTree({ root: 'demo', files: ['README.md', 'src/b.js', 'src/engine/a.js'] }),
+      [],
+    )
+    const cards = createCards(fakeScene(), { glScene: fakeScene(), alwaysDepth: 2, folderContents: false, openOnTouch: false })
+    cards.sync(state)
+    cards.update(state, 0.05, camera())
+    const root = cards.cards.get('')
+    const src = cards.cards.get('src')
+    const engine = cards.cards.get('src/engine')
+    expect(root.openLevel).toBe(0)
+    expect(src.openLevel).toBe(0)
+    expect(engine.openLevel).toBe(0)
+
+    cards.setOptions({ folderContents: true })
+    const order = []
+    for (let frame = 0; frame < 60; frame += 1) {
+      if (src.openLevel > 0 && !order.includes('src')) {
+        order.push('src')
+        expect(root.openLevel, 'the root before src starts').toBeGreaterThan(0.7)
+      }
+      if (engine.openLevel > 0 && !order.includes('src/engine')) {
+        order.push('src/engine')
+        expect(src.openLevel, 'src before engine starts').toBeGreaterThan(0.7)
+      }
+      if (root.openLevel > 0 && !order.includes('')) order.push('')
+      cards.update(state, 0.05, camera())
+    }
+    expect(order).toEqual(['', 'src', 'src/engine'])
+    expect(root.openLevel).toBe(1)
+    expect(src.openLevel).toBe(1)
+    expect(engine.openLevel).toBe(1)
+    expect(engine.rows).toHaveLength(1)
+    cards.dispose()
+  })
+
+  it('shuts the three cards in the same wave from the root when folder contents turns off', () => {
+    const state = createState(
+      makeTree({ root: 'demo', files: ['README.md', 'src/b.js', 'src/engine/a.js'] }),
+      [],
+    )
+    const cards = createCards(fakeScene(), { glScene: fakeScene(), alwaysDepth: 2, folderContents: true, openOnTouch: false })
+    cards.sync(state)
+    cards.update(state, 0.05, camera())
+    const root = cards.cards.get('')
+    const src = cards.cards.get('src')
+    const engine = cards.cards.get('src/engine')
+    expect(root.openLevel).toBe(1)
+    expect(src.openLevel).toBe(1)
+    expect(engine.openLevel).toBe(1)
+
+    cards.setOptions({ folderContents: false })
+    const order = []
+    for (let frame = 0; frame < 60; frame += 1) {
+      if (src.openLevel < 1 && !order.includes('src')) {
+        order.push('src')
+        expect(root.openLevel, 'the root before src starts').toBeLessThan(0.3)
+      }
+      if (engine.openLevel < 1 && !order.includes('src/engine')) {
+        order.push('src/engine')
+        expect(src.openLevel, 'src before engine starts').toBeLessThan(0.3)
+      }
+      if (root.openLevel < 1 && !order.includes('')) order.push('')
+      cards.update(state, 0.05, camera())
+    }
+    expect(order).toEqual(['', 'src', 'src/engine'])
+    expect(root.openLevel).toBe(0)
+    expect(src.openLevel).toBe(0)
+    expect(engine.openLevel).toBe(0)
+    expect(engine.element.className).toContain('is-collapsed')
+    cards.dispose()
+  })
+
+  it('moves all three cards in the same frame on a toggle under reduced motion', () => {
+    const savedWindow = globalThis.window
+    globalThis.window = { matchMedia: () => ({ matches: true }) }
+    try {
+      const state = createState(
+        makeTree({ root: 'demo', files: ['README.md', 'src/b.js', 'src/engine/a.js'] }),
+        [],
+      )
+      const cards = createCards(fakeScene(), { glScene: fakeScene(), alwaysDepth: 2, folderContents: false, openOnTouch: false })
+      cards.sync(state)
+      cards.update(state, 0.05, camera())
+      const root = cards.cards.get('')
+      const src = cards.cards.get('src')
+      const engine = cards.cards.get('src/engine')
+      expect(root.openLevel).toBe(0)
+      expect(src.openLevel).toBe(0)
+      expect(engine.openLevel).toBe(0)
+
+      cards.setOptions({ folderContents: true })
+      cards.update(state, 0.05, camera())
+      expect(root.openLevel).toBe(1)
+      expect(src.openLevel).toBe(1)
+      expect(engine.openLevel).toBe(1)
+
+      cards.setOptions({ folderContents: false })
+      cards.update(state, 0.05, camera())
+      expect(root.openLevel).toBe(0)
+      expect(src.openLevel).toBe(0)
+      expect(engine.openLevel).toBe(0)
+      cards.dispose()
+    } finally {
+      globalThis.window = savedWindow
+    }
+  })
 })
 
 describe('the overview spheres with paths outside the file tree', () => {
