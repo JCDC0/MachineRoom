@@ -11028,6 +11028,12 @@ button.mr-family-heading,
 }
 
 @media (min-width: 900px) {
+  html:has(.stage.is-idle-forced),
+  html:has(.stage.is-idle-forced) body {
+    height: 100%;
+    overflow: hidden;
+  }
+
   .stage.is-idle {
     padding-top: 0;
   }
@@ -11038,6 +11044,8 @@ button.mr-family-heading,
 
   .stage.is-idle-forced {
     padding-top: 0;
+    height: 100vh;
+    overflow: hidden;
   }
 
   .stage.is-idle-forced .lens {
@@ -11084,33 +11092,33 @@ button.mr-family-heading,
   }
 }
 
-.stage.is-idle .hud-menu,
-.stage.is-idle .transport {
-  opacity: 0;
-  pointer-events: none;
-  transition: transform 800ms ease-out, opacity 800ms ease-out;
-}
-
-.stage.is-idle .hud-menu {
-  transform: translateY(-100%);
-}
-
-.stage.is-idle .transport {
-  transform: translateY(100%);
-}
-
-.stage.is-idle .lens-rail,
-.stage.is-idle .lens-labels {
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 800ms ease-out;
-}
-
-/* R74-4: forced idle hides the menu and transport only where the idle view does, at 900 pixels and wider. */
 @media (min-width: 900px) {
+  .stage.is-idle .hud-menu,
+  .stage.is-idle .transport {
+    opacity: 0;
+    pointer-events: none;
+    transition: transform 800ms ease-out, opacity 800ms ease-out;
+  }
+
+  .stage.is-idle .hud-menu {
+    transform: translateY(-100%);
+  }
+
+  .stage.is-idle .transport {
+    transform: translateY(100%);
+  }
+
+  .stage.is-idle .lens-rail,
+  .stage.is-idle .lens-labels {
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 800ms ease-out;
+  }
+
   .stage.is-idle-forced .hud-menu {
     opacity: 0;
     pointer-events: none;
+    visibility: hidden;
     transform: translateY(-100%);
     transition: transform 800ms ease-out, opacity 800ms ease-out;
   }
@@ -11119,6 +11127,7 @@ button.mr-family-heading,
   .stage.is-idle-forced .lens-labels {
     opacity: 0;
     pointer-events: none;
+    visibility: hidden;
     transition: opacity 800ms ease-out;
   }
 
@@ -11136,19 +11145,25 @@ button.mr-family-heading,
   .stage.is-idle-forced .transport-view > :not(.transport-idle) {
     opacity: 0;
     pointer-events: none;
+    visibility: hidden;
     transition: opacity 800ms ease-out;
   }
 
   .stage.is-idle-forced .transport-view .transport-idle {
     opacity: 1;
     pointer-events: auto;
+    visibility: visible;
   }
-}
 
-/* R74-2: a forced idle takes no pointer in the room until Idle is pressed again. */
-.stage.is-idle-forced .lens,
-.stage.is-idle-forced .lens * {
-  pointer-events: none !important;
+  .stage.is-idle-forced .hud-lower {
+    visibility: hidden;
+    pointer-events: none;
+  }
+
+  .stage.is-idle-forced .lens,
+  .stage.is-idle-forced .lens * {
+    pointer-events: none !important;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
