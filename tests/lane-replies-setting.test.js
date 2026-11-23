@@ -417,9 +417,10 @@ describe('the reply choice in Settings', () => {
 
       const select = container.querySelector('#harness-lane-replies')
       expect(select).not.toBeNull()
-      expect(container.textContent).toContain('Replies to a working lane')
+      expect(container.textContent).toContain('Messages to a working agent')
       const options = select.querySelectorAll('option')
-      expect(options.map((option) => option.textContent)).toEqual(['Wait for its next turn', 'Interrupt it at once'])
+      expect(options.map((option) => option.textContent)).toEqual(['After its current action', 'Interrupt it at once'])
+      expect(container.textContent).toContain('Native lanes take a message after their current model reply and its tool calls.')
 
       await type(root, select, 'interrupt')
       await settle()
