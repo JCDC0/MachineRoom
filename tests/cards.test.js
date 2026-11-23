@@ -1401,6 +1401,55 @@ describe('hiding folder contents', () => {
     expect(parent.element.className).toContain('is-collapsed')
     cards.dispose()
   })
+
+  it('opens each card only once its parent card is 70 percent of the way', () => {
+    const state = createState(
+      makeTree({ root: 'demo', files: ['README.md', 'src/b.js', 'src/engine/a.js'] }),
+      [],
+    )
+    const cards = createCards(fakeScene(), { glScene: fakeScene(), alwaysDepth: 2, folderContents: false, openOnTouch: true })
+    cards.sync(state)
+    cards.update(state, 0.05, camera())
+    const root = cards.cards.get('')
+    const src = cards.cards.get('src')
+    const engine = cards.cards.get('src/engine')
+    expect(root.openLevel).toBe(0)
+    expect(src.openLevel).toBe(0)
+    expect(engine.openLevel).toBe(0)
+
+    cards.recordTouch('', 4000)
+    cards.recordTouch('src', 4000)
+    cards.recordTouch('src/engine', 4000)
+
+    cards.update(state, 0.05, camera())
+    expect(root.openLevel).toBeGreaterThan(0)
+    expect(src.openLevel).toBe(0)
+    expect(engine.openLevel).toBe(0)
+
+    let frames = 1
+    while (src.openLevel === 0 && frames < 20) {
+      expect(root.openLevel).toBeLessThanOrEqual(1)
+      expect(engine.openLevel).toBe(0)
+      cards.update(state, 0.05, camera())
+      frames += 1
+    }
+    expect(src.openLevel).toBeGreaterThan(0)
+    expect(root.openLevel).toBeGreaterThan(0.7)
+
+    while (engine.openLevel === 0 && frames < 40) {
+      cards.update(state, 0.05, camera())
+      frames += 1
+    }
+    expect(engine.openLevel).toBeGreaterThan(0)
+    expect(src.openLevel).toBeGreaterThan(0.7)
+
+    for (let step = 0; step < 40; step += 1) cards.update(state, 0.05, camera())
+    expect(root.openLevel).toBe(1)
+    expect(src.openLevel).toBe(1)
+    expect(engine.openLevel).toBe(1)
+    expect(engine.rows).toHaveLength(1)
+    cards.dispose()
+  })
 })
 
 describe('the overview spheres with paths outside the file tree', () => {

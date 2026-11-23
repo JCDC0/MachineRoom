@@ -13,6 +13,7 @@ export const HEAD_H = 56
 export const ROW_H = 22
 export const CARD_PAD = 8
 const CONTENT_ANIM_SEC = 0.25
+const CHAIN_GATE = 0.7
 export const BACK_STEP = 12
 const BACK_DEPTH = 6
 export const CARD_FACE_EDGE = 1
@@ -1190,6 +1191,16 @@ export function createCards(cssScene, options = {}) {
     return openOnTouchEnabled && (active.dirs.has(card.path) || Boolean(touchedCards?.has(card.path)))
   }
 
+  function chainHeld(card, openGoal, touchedCards) {
+    if (card.path === '') return false
+    const parent = nearestCard(dirname(card.path))
+    if (!parent || parent === card) return false
+    const parentGoal = isCardOpen(parent, touchedCards) ? 1 : 0
+    if (parentGoal !== openGoal) return false
+    if (openGoal === 1) return parent.openLevel < CHAIN_GATE
+    return parent.openLevel > 1 - CHAIN_GATE
+  }
+
   function sync(state) {
     flashes.clear()
     touchLife.clear()
@@ -1428,12 +1439,13 @@ export function createCards(cssScene, options = {}) {
       if (card.openLevel !== openGoal) {
         if (isStill) {
           card.openLevel = openGoal
-        } else {
+          syncCardContents(card)
+        } else if (!chainHeld(card, openGoal, touchedCards)) {
           const step = delta > 0 ? delta / CONTENT_ANIM_SEC : 0
           if (card.openLevel < openGoal) card.openLevel = Math.min(openGoal, card.openLevel + step)
           else card.openLevel = Math.max(openGoal, card.openLevel - step)
+          syncCardContents(card)
         }
-        syncCardContents(card)
       }
       const goal = CARD_SCALES[view.state] ?? 1
       const previousScale = card.scale
