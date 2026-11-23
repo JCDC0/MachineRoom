@@ -90,4 +90,39 @@ describe('Assistant drag', () => {
       expect(writes).toEqual([])
     })
   })
+
+  it('does not open on / while idleForced is true and closes when idleForced turns true (R75-2)', async () => {
+    const { storage, writes } = makeStorage()
+    await withDom(async ({ container, dom, root }) => {
+      let closed = 0
+      await act(async () => {
+        root.render(createElement(Assistant, { idleForced: true, storage, onClose: () => { closed += 1 } }))
+      })
+      await act(async () => {
+        dom.window.dispatchEvent({ type: 'keydown', key: '/', bubbles: true, cancelable: true })
+      })
+      expect(container.querySelector('.mr-assistant')).toBeNull()
+      expect(closed).toBe(0)
+
+      await act(async () => {
+        root.render(createElement(Assistant, { idleForced: false, storage, onClose: () => { closed += 1 } }))
+      })
+      await act(async () => {
+        dom.window.dispatchEvent({ type: 'keydown', key: '/', bubbles: true, cancelable: true })
+      })
+      const terminal = container.querySelector('.mr-assistant')
+      expect(terminal).not.toBeNull()
+
+      await pointerDown(terminal.querySelector('.mr-assistant-title'))
+      await pointerMove(dom.window, 80, 90)
+      await act(async () => {
+        root.render(createElement(Assistant, { idleForced: true, storage, onClose: () => { closed += 1 } }))
+      })
+      expect(container.querySelector('.mr-assistant')).toBeNull()
+      expect(closed).toBe(1)
+
+      await pointerUp(dom.window, 80, 90)
+      expect(writes).toEqual([])
+    })
+  })
 })

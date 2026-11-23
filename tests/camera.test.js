@@ -59,6 +59,17 @@ function openRig({ still = false } = {}) {
     surfaceListeners.pointerdown({ clientX: 500, clientY: 400, target: { closest: () => null } })
     for (const handler of listeners.pointermove ?? []) handler({ clientX: 500 + dx, clientY: 400 + dy })
   }
+  const press = (selectorMatch, dx = 0, dy = 0) => {
+    const target = {
+      closest: (selector) =>
+        selectorMatch && selector.split(',').map((part) => part.trim()).includes(selectorMatch) ? {} : null,
+    }
+    surfaceListeners.pointerdown({ clientX: 500, clientY: 400, target })
+    if (dx || dy) {
+      for (const handler of listeners.pointermove ?? []) handler({ clientX: 500 + dx, clientY: 400 + dy })
+    }
+    for (const handler of listeners.pointerup ?? []) handler({ clientX: 500 + dx, clientY: 400 + dy })
+  }
   const wheel = (deltaY) => {
     surfaceListeners.wheel({ deltaY, target: { closest: () => null }, preventDefault() {} })
   }
@@ -75,7 +86,7 @@ function openRig({ still = false } = {}) {
   const close = () => {
     globalThis.window = saved
   }
-  return { rig, drag, wheel, rest, move, scroll, close, camera, rectReads: () => rectReads }
+  return { rig, drag, press, wheel, rest, move, scroll, close, camera, rectReads: () => rectReads }
 }
 
 describe('camera rig yaw and pitch', () => {
@@ -137,6 +148,32 @@ describe('camera rig yaw and pitch', () => {
       rig.snap()
       expect(rig.yaw()).toBeCloseTo(OVERVIEW.yaw)
       expect(rig.pitch()).toBeCloseTo(OVERVIEW.pitch)
+    } finally {
+      close()
+    }
+  })
+
+  it('ignores pointerdown on .mr-callout (R75-5)', () => {
+    const { rig, press, close } = openRig()
+    try {
+      let clicks = 0
+      rig.setClickHandler(() => {
+        clicks += 1
+      })
+      press('.mr-callout', -200, 100)
+      rig.snap()
+      expect(rig.yaw()).toBeCloseTo(OVERVIEW.yaw)
+      expect(rig.pitch()).toBeCloseTo(OVERVIEW.pitch)
+      expect(clicks).toBe(0)
+
+      press('.mr-callout', 0, 0)
+      expect(clicks).toBe(0)
+
+      press(null, -200, 100)
+      rig.snap()
+      expect(rig.yaw()).not.toBeCloseTo(OVERVIEW.yaw)
+      press(null, 0, 0)
+      expect(clicks).toBe(1)
     } finally {
       close()
     }

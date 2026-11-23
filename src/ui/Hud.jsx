@@ -324,6 +324,28 @@ export default function Hud({
     if (wide) setSessionsOpen(false)
   }, [wide])
 
+  useEffect(() => {
+    if (!idleForced) return
+    setControlOpen(false)
+    setSettingsOpen(false)
+    setLogOpen(false)
+    setHelpOpen(false)
+    setHealthOpen(false)
+    setMenuOpen(false)
+    setSessionsOpen(false)
+    setChatOpen(false)
+    setIdleOpen(false)
+    if (typeof document !== 'undefined' && document.querySelector('.transport-agents-list')) {
+      const event =
+        typeof window?.PointerEvent === 'function'
+          ? new window.PointerEvent('pointerdown', { bubbles: false })
+          : typeof window?.Event === 'function'
+            ? new window.Event('pointerdown', { bubbles: false })
+            : { type: 'pointerdown', bubbles: false }
+      document.dispatchEvent(event)
+    }
+  }, [idleForced])
+
   function toggleLog() {
     const next = !logOpen
     setLogOpen(next)
@@ -1341,6 +1363,7 @@ export default function Hud({
           ask={askAssistant}
           askAssistant={askAssistant}
           initialOpen={assistantOpen}
+          idleForced={idleForced}
         />
         </PanelBoundary>
       )}

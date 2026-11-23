@@ -584,4 +584,331 @@ describe('the transport view row and forced idle state', () => {
       expect(quieted, selector).toContain(selector)
     }
   })
+
+  it('cascades stage is-idle is-idle-forced with nothing hidden at 800 pixels and only Idle shown at 1280 pixels (R75-1, R75-2)', () => {
+    const sheet = parse(css)
+
+    function node(tag, { id = '', classes = [], attrs = {}, children = [] } = {}) {
+      const item = { tag, id, classes, attrs, children, parent: null }
+      for (const child of children) child.parent = item
+      return item
+    }
+
+    const idleButton = node('button', { classes: ['transport-idle', 'mono'], attrs: { 'aria-pressed': 'true' } })
+    const centerButton = node('button', { classes: ['transport-center', 'mono'] })
+    const transportView = node('div', { classes: ['transport-view'], children: [centerButton, idleButton] })
+    const transportAgents = node('div', { classes: ['transport-agents'] })
+    const transportTail = node('div', { classes: ['transport-tail'] })
+    const transport = node('div', {
+      classes: ['transport', 'is-live', 'has-orchestrator'],
+      children: [node('div', { classes: ['transport-live-head'] }), transportAgents, transportTail, transportView],
+    })
+    const menu = node('header', { classes: ['hud-menu'] })
+    const lower = node('div', { classes: ['hud-lower'] })
+    const surfaceLayers = node('div', { classes: ['surface-layers'] })
+    const lensLabels = node('div', { classes: ['lens-labels'] })
+    const lensRail = node('div', { classes: ['lens-rail'] })
+    const lens = node('div', {
+      classes: ['lens'],
+      children: [node('div', { classes: ['lens-frame'], children: [surfaceLayers, lensLabels] }), lensRail],
+    })
+    const stage = node('div', {
+      classes: ['stage', 'is-idle', 'is-idle-forced'],
+      children: [lens, node('div', { classes: ['hud'], children: [menu, transport, lower] })],
+    })
+    const body = node('body', { children: [node('div', { id: 'root', children: [stage] })] })
+    const html = node('html', { children: [body] })
+
+    function descendants(root) {
+      const found = []
+      for (const child of root.children) {
+        found.push(child, ...descendants(child))
+      }
+      return found
+    }
+
+    function mediaMatches(params, width) {
+      const parts = params.split(/\s+and\s+/i).map((part) => part.trim())
+      for (const part of parts) {
+        let match = /^\(min-width:\s*(\d+)px\)$/.exec(part)
+        if (match) {
+          if (width < Number(match[1])) return false
+          continue
+        }
+        match = /^\(max-width:\s*(\d+)px\)$/.exec(part)
+        if (match) {
+          if (width > Number(match[1])) return false
+          continue
+        }
+        if (part === '(prefers-reduced-motion: no-preference)') continue
+        return false
+      }
+      return true
+    }
+
+    function splitTopLevel(text, delimiter) {
+      const parts = []
+      let depth = 0
+      let start = 0
+      for (let index = 0; index < text.length; index += 1) {
+        const ch = text[index]
+        if (ch === '(' || ch === '[') depth += 1
+        else if (ch === ')' || ch === ']') depth -= 1
+        else if (depth === 0 && ch === delimiter) {
+          parts.push(text.slice(start, index))
+          start = index + 1
+        }
+      }
+      parts.push(text.slice(start))
+      return parts
+    }
+
+    function tokenizeComplex(selector) {
+      const tokens = []
+      let depth = 0
+      let current = ''
+      let combinator = null
+      const push = () => {
+        const trimmed = current.trim()
+        if (trimmed) {
+          if (tokens.length > 0) tokens.push(combinator ?? ' ')
+          tokens.push(trimmed)
+        }
+        current = ''
+        combinator = null
+      }
+      for (let index = 0; index < selector.length; index += 1) {
+        const ch = selector[index]
+        if (ch === '(' || ch === '[') {
+          depth += 1
+          current += ch
+        } else if (ch === ')' || ch === ']') {
+          depth -= 1
+          current += ch
+        } else if (depth === 0 && (ch === '>' || ch === '+' || ch === '~')) {
+          push()
+          combinator = ch
+        } else if (depth === 0 && /\s/.test(ch)) {
+          if (current.trim()) push()
+        } else {
+          current += ch
+        }
+      }
+      push()
+      return tokens
+    }
+
+    function addSpec(a, b) {
+      return [a[0] + b[0], a[1] + b[1], a[2] + b[2]]
+    }
+
+    function compareSpec(a, b) {
+      return a[0] - b[0] || a[1] - b[1] || a[2] - b[2]
+    }
+
+    function matchCompound(el, compound) {
+      let index = 0
+      let spec = [0, 0, 0]
+      while (index < compound.length) {
+        const ch = compound[index]
+        if (ch === '*') {
+          index += 1
+        } else if (ch === '.') {
+          const match = /^\.([\w-]+)/.exec(compound.slice(index))
+          if (!match || !el.classes.includes(match[1])) return null
+          spec[1] += 1
+          index += match[0].length
+        } else if (ch === '#') {
+          const match = /^#([\w-]+)/.exec(compound.slice(index))
+          if (!match || el.id !== match[1]) return null
+          spec[0] += 1
+          index += match[0].length
+        } else if (ch === '[') {
+          const end = compound.indexOf(']', index)
+          if (end < 0) return null
+          const bodyText = compound.slice(index + 1, end)
+          const match = /^([\w-]+)(?:=['"]?([^'"]*)['"]?)?$/.exec(bodyText)
+          if (!match || !Object.hasOwn(el.attrs, match[1])) return null
+          if (match[2] !== undefined && el.attrs[match[1]] !== match[2]) return null
+          spec[1] += 1
+          index = end + 1
+        } else if (ch === ':') {
+          if (compound[index + 1] === ':') return null
+          const match = /^:([\w-]+)/.exec(compound.slice(index))
+          if (!match) return null
+          const name = match[1]
+          index += match[0].length
+          if (compound[index] === '(') {
+            let depth = 1
+            let end = index + 1
+            while (end < compound.length && depth > 0) {
+              if (compound[end] === '(') depth += 1
+              else if (compound[end] === ')') depth -= 1
+              end += 1
+            }
+            const inner = compound.slice(index + 1, end - 1).trim()
+            index = end
+            if (name === 'not') {
+              let best = [0, 0, 0]
+              for (const alt of splitTopLevel(inner, ',')) {
+                const sub = matchComplex(el, alt.trim())
+                if (sub) return null
+                const altSpec = selectorSpecificity(alt.trim())
+                if (compareSpec(altSpec, best) > 0) best = altSpec
+              }
+              spec = addSpec(spec, best)
+            } else if (name === 'is' || name === 'where') {
+              let matched = false
+              let best = [0, 0, 0]
+              for (const alt of splitTopLevel(inner, ',')) {
+                const sub = matchComplex(el, alt.trim())
+                if (sub) {
+                  matched = true
+                  if (compareSpec(sub, best) > 0) best = sub
+                }
+              }
+              if (!matched) return null
+              if (name === 'is') spec = addSpec(spec, best)
+            } else if (name === 'has') {
+              let matched = false
+              let best = [0, 0, 0]
+              for (const alt of splitTopLevel(inner, ',')) {
+                const trimmed = alt.trim()
+                const direct = trimmed.startsWith('>')
+                const candidate = direct ? trimmed.slice(1).trim() : trimmed
+                const pool = direct ? el.children : descendants(el)
+                for (const item of pool) {
+                  const sub = matchComplex(item, candidate)
+                  if (sub) {
+                    matched = true
+                    if (compareSpec(sub, best) > 0) best = sub
+                    break
+                  }
+                }
+              }
+              if (!matched) return null
+              spec = addSpec(spec, best)
+            } else {
+              return null
+            }
+          } else {
+            return null
+          }
+        } else {
+          const match = /^([a-zA-Z][\w-]*)/.exec(compound.slice(index))
+          if (!match || el.tag !== match[1].toLowerCase()) return null
+          spec[2] += 1
+          index += match[0].length
+        }
+      }
+      return spec
+    }
+
+    function selectorSpecificity(selector) {
+      let spec = [0, 0, 0]
+      for (const token of tokenizeComplex(selector)) {
+        if (token === ' ' || token === '>' || token === '+' || token === '~') continue
+        for (const match of token.matchAll(/#[\w-]+/g)) spec[0] += match ? 1 : 0
+        for (const match of token.matchAll(/\.[\w-]+|\[[^\]]+\]/g)) spec[1] += match ? 1 : 0
+        if (/^[a-zA-Z][\w-]*/.test(token)) spec[2] += 1
+      }
+      return spec
+    }
+
+    function matchComplex(el, selector) {
+      const tokens = tokenizeComplex(selector)
+      if (tokens.length === 0) return null
+      function step(current, pos) {
+        const own = matchCompound(current, tokens[pos])
+        if (!own) return null
+        if (pos === 0) return own
+        const comb = tokens[pos - 1]
+        if (comb === '>') {
+          if (!current.parent) return null
+          const up = step(current.parent, pos - 2)
+          return up ? addSpec(own, up) : null
+        }
+        if (comb === ' ') {
+          let ancestor = current.parent
+          while (ancestor) {
+            const up = step(ancestor, pos - 2)
+            if (up) return addSpec(own, up)
+            ancestor = ancestor.parent
+          }
+          return null
+        }
+        return null
+      }
+      return step(el, tokens.length - 1)
+    }
+
+    function cascade(el, width) {
+      const winner = new Map()
+      let order = 0
+      const visit = (container) => {
+        for (const item of container.nodes) {
+          if (item.type === 'atrule') {
+            if (item.name === 'media' && mediaMatches(item.params, width)) visit(item)
+            continue
+          }
+          if (item.type !== 'rule') continue
+          let bestSpec = null
+          for (const selector of item.selectors) {
+            const spec = matchComplex(el, selector.trim())
+            if (spec && (!bestSpec || compareSpec(spec, bestSpec) > 0)) bestSpec = spec
+          }
+          if (!bestSpec) continue
+          for (const decl of item.nodes) {
+            if (decl.type !== 'decl') continue
+            order += 1
+            const score = [decl.important ? 1 : 0, bestSpec[0], bestSpec[1], bestSpec[2], order]
+            const prev = winner.get(decl.prop)
+            if (!prev || score.some((val, at) => val !== prev.score[at] && val > prev.score[at] && score.slice(0, at).every((v, i) => v === prev.score[i]))) {
+              winner.set(decl.prop, {
+                value: decl.important ? `${decl.value} !important` : decl.value,
+                score,
+              })
+            }
+          }
+        }
+      }
+      visit(sheet)
+      return Object.fromEntries([...winner.entries()].map(([prop, entry]) => [prop, entry.value]))
+    }
+
+    const interactive = [menu, transport, transportAgents, transportTail, centerButton, idleButton, lensRail]
+    const allTargets = [...interactive, lensLabels, lens, surfaceLayers, lower]
+    stage.classes = ['stage']
+    const plain800 = new Map(allTargets.map((target) => [target, cascade(target, 800)]))
+    stage.classes = ['stage', 'is-idle', 'is-idle-forced']
+
+    for (const target of allTargets) {
+      const narrow = cascade(target, 800)
+      expect(narrow, `800px cascade unchanged on ${target.classes.join('.')}`).toEqual(plain800.get(target))
+      expect(narrow.opacity, `800px opacity on ${target.classes.join('.')}`).not.toBe('0')
+      expect(narrow.visibility, `800px visibility on ${target.classes.join('.')}`).not.toBe('hidden')
+      expect(narrow.transform, `800px transform on ${target.classes.join('.')}`).not.toBe('translateY(-100%)')
+      expect(narrow.transform, `800px transform on ${target.classes.join('.')}`).not.toBe('translateY(100%)')
+    }
+    for (const target of interactive) {
+      expect(cascade(target, 800)['pointer-events'], `800px pointer-events on ${target.classes.join('.')}`).not.toBe('none')
+    }
+    expect(cascade(lens, 800)['pointer-events']).not.toBe('none !important')
+    expect(cascade(surfaceLayers, 800)['pointer-events']).not.toBe('none !important')
+
+    expect(cascade(html, 1280).overflow).toBe('hidden')
+    expect(cascade(body, 1280).overflow).toBe('hidden')
+    expect(cascade(stage, 1280)).toMatchObject({ height: '100vh', overflow: 'hidden', 'padding-top': '0' })
+    expect(cascade(lens, 1280)).toMatchObject({ height: '100vh', 'pointer-events': 'none !important' })
+    expect(cascade(surfaceLayers, 1280)['pointer-events']).toBe('none !important')
+    expect(cascade(menu, 1280)).toMatchObject({ opacity: '0', 'pointer-events': 'none', visibility: 'hidden', transform: 'translateY(-100%)' })
+    expect(cascade(lensRail, 1280)).toMatchObject({ opacity: '0', 'pointer-events': 'none !important', visibility: 'hidden' })
+    expect(cascade(lensLabels, 1280)).toMatchObject({ opacity: '0', 'pointer-events': 'none !important', visibility: 'hidden' })
+    expect(cascade(transport, 1280)).toMatchObject({ opacity: '1', transform: 'none', 'pointer-events': 'none', position: 'fixed', 'z-index': '20' })
+    expect(cascade(transportAgents, 1280)).toMatchObject({ opacity: '0', 'pointer-events': 'none', visibility: 'hidden' })
+    expect(cascade(transportTail, 1280)).toMatchObject({ opacity: '0', 'pointer-events': 'none', visibility: 'hidden' })
+    expect(cascade(centerButton, 1280)).toMatchObject({ opacity: '0', 'pointer-events': 'none', visibility: 'hidden' })
+    expect(cascade(lower, 1280)).toMatchObject({ visibility: 'hidden', 'pointer-events': 'none' })
+    expect(cascade(idleButton, 1280)).toMatchObject({ opacity: '1', 'pointer-events': 'auto', visibility: 'visible' })
+  })
 })

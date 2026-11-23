@@ -385,6 +385,11 @@ describe('merged console inside the callout', () => {
       view.callout.consoleLink.listeners.get('pointerdown')({ stopPropagation: () => { linkPressStopped = true } })
       expect(linkPressStopped).toBe(true)
 
+      let linkDblStopped = false
+      expect(view.callout.consoleLink.listeners.has('dblclick')).toBe(true)
+      view.callout.consoleLink.listeners.get('dblclick')({ stopPropagation: () => { linkDblStopped = true } })
+      expect(linkDblStopped).toBe(true)
+
       let dblStopped = false
       view.callout.element.listeners.get('dblclick')({ stopPropagation: () => { dblStopped = true } })
       expect(dblStopped).toBe(true)
