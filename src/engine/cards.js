@@ -13,6 +13,7 @@ export const HEAD_H = 56
 export const ROW_H = 22
 export const CARD_PAD = 8
 const CONTENT_ANIM_SEC = 0.25
+const CHAIN_GATE = 0.7
 export const BACK_STEP = 12
 const BACK_DEPTH = 6
 export const CARD_FACE_EDGE = 1
@@ -424,6 +425,7 @@ export function createCards(cssScene, options = {}) {
   let layoutKey = ''
   let overviewLayoutKey = ''
   let pendingChange = false
+  let keepLevels = false
   let active = { files: new Set(), dirs: new Set(), path: new Set() }
   let targetDirColors = null
   let targetFileColors = null
@@ -597,6 +599,8 @@ export function createCards(cssScene, options = {}) {
       height: 0,
       lastHeight: -1,
       openLevel: folderContentsEnabled ? 1 : 0,
+      touchOpen: false,
+      pulse: false,
       itemsClass: 'mr-card-items',
       opacity: 1,
       lastOpacity: 1,
@@ -945,6 +949,28 @@ export function createCards(cssScene, options = {}) {
     return changed
   }
 
+  function armTouchPulses(touchedCards) {
+    for (const card of cards.values()) {
+      const nowOpen = touchOpenGoal(card, touchedCards)
+      if (nowOpen && !card.touchOpen && card.path !== '') {
+        let at = dirname(card.path)
+        for (;;) {
+          const parent = nearestCard(at)
+          if (!parent) break
+          parent.pulse = true
+          if (parent.path === '') break
+          at = dirname(parent.path)
+        }
+      }
+      card.touchOpen = nowOpen
+    }
+  }
+
+  function touchOpenGoal(card, touchedCards) {
+    if (folderContentsEnabled || !openOnTouchEnabled) return false
+    return active.dirs.has(card.path) || Boolean(touchedCards?.has(card.path))
+  }
+
   function recompute(state) {
     lastState = state
     const unchanged =
@@ -1185,26 +1211,46 @@ export function createCards(cssScene, options = {}) {
   function isCardOpen(card, touchedCards) {
     if (folderContentsEnabled) return true
     if (cardRows(card.view) <= 0) return false
+    if (card.pulse) return true
     if (selected !== null && selected === card.path) return true
     if (inspected !== null && dirname(inspected) === card.path) return true
     return openOnTouchEnabled && (active.dirs.has(card.path) || Boolean(touchedCards?.has(card.path)))
   }
 
+  function chainHeld(card, openGoal, touchedCards) {
+    if (card.path === '') return false
+    const parent = nearestCard(dirname(card.path))
+    if (!parent || parent === card) return false
+    const parentGoal = isCardOpen(parent, touchedCards) ? 1 : 0
+    if (parentGoal !== openGoal) return false
+    if (openGoal === 1) return parent.openLevel < CHAIN_GATE
+    return parent.openLevel > 1 - CHAIN_GATE
+  }
+
   function sync(state) {
     flashes.clear()
     touchLife.clear()
+    for (const card of cards.values()) {
+      card.pulse = false
+      card.touchOpen = false
+    }
     pinnedVersion += 1
     sprayed.clear()
     sprayVersion += 1
     planKey = ''
     pendingChange = false
     recompute(state)
-    for (const card of cards.values()) {
-      const target = isCardOpen(card, null) ? 1 : 0
-      if (card.openLevel !== target) {
-        card.openLevel = target
-        syncCardContents(card)
+    if (keepLevels) keepLevels = false
+    else {
+      for (const card of cards.values()) {
+        const target = isCardOpen(card, null) ? 1 : 0
+        if (card.openLevel !== target) {
+          card.openLevel = target
+          syncCardContents(card)
+        }
       }
+    }
+    for (const card of cards.values()) {
       for (const entry of card.rows) resetRow(entry)
     }
     rowRevision += 1
@@ -1246,11 +1292,7 @@ export function createCards(cssScene, options = {}) {
       }
     }
     if (!changed) return false
-    if (contentsChanged) {
-      for (const card of cards.values()) {
-        card.openLevel = isCardOpen(card, null) ? 1 : 0
-      }
-    }
+    if (contentsChanged) keepLevels = true
     pinnedVersion += 1
     planKey = ''
     layoutKey = ''
@@ -1362,6 +1404,7 @@ export function createCards(cssScene, options = {}) {
         if (card) touchedCards.add(card.path)
       }
     }
+    if (!isStill) armTouchPulses(touchedCards)
     const hasFlashes = flashes.size > 0
     if (rowRevision !== lastRowRevision) {
       lastRowRevision = rowRevision
@@ -1428,13 +1471,15 @@ export function createCards(cssScene, options = {}) {
       if (card.openLevel !== openGoal) {
         if (isStill) {
           card.openLevel = openGoal
-        } else {
+          syncCardContents(card)
+        } else if (!chainHeld(card, openGoal, touchedCards)) {
           const step = delta > 0 ? delta / CONTENT_ANIM_SEC : 0
           if (card.openLevel < openGoal) card.openLevel = Math.min(openGoal, card.openLevel + step)
           else card.openLevel = Math.max(openGoal, card.openLevel - step)
+          syncCardContents(card)
         }
-        syncCardContents(card)
       }
+      if (card.pulse && (card.openLevel >= 1 || cardRows(view) <= 0)) card.pulse = false
       const goal = CARD_SCALES[view.state] ?? 1
       const previousScale = card.scale
       if (Math.abs(card.scale - goal) > 0.002) {

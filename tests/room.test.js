@@ -409,6 +409,8 @@ describe('the room takes the chosen top and the depth', () => {
 
       room.setOptions({ folderContents: false, openOnTouch: false })
       step(1)
+      expect(srcCard().className).not.toContain('is-collapsed')
+      step(3)
       expect(srcCard().className).toContain('is-collapsed')
 
       room.onActivity(touch('c1'))
@@ -427,7 +429,7 @@ describe('the room takes the chosen top and the depth', () => {
       expect(docsCard().className).toContain('is-collapsed')
 
       room.setOptions({ folderContents: true })
-      step(1)
+      step(10)
       expect(docsCard().className).not.toContain('is-collapsed')
       expect(srcCard().className).not.toContain('is-collapsed')
     } finally {
@@ -454,7 +456,7 @@ describe('the room takes the chosen top and the depth', () => {
 
       room.setOptions({ folderContents: false, openOnTouch: true })
       room.setSpeed(8)
-      step(1)
+      step(60)
       const src = cardOf('src')
       const docs = cardOf('docs')
       expect(src.className).toContain('is-collapsed')

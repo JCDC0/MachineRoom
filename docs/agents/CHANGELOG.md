@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Folder cards open and shut in a wave from the root, each card starting once its parent is 70 percent of the way, and with contents off an agent touch pulses the cards from the root to the folder and keeps only that folder open (P723).
 - Review 75 fixes: forced idle works only at 900 pixels and wider, scrolls to the top, closes the HUD panels and the assistant, locks the page scroll, hides its hidden controls from Tab and ends on a dropped bridge or a narrow resize; the tunnel keeps its last working target through the fade and the run end; the card plan skips a layout when the set of focus paths is unchanged (P721, P722).
 - Review 74 fixes: an agent's focus follows its open calls, the tunnel aims at the newest open call with touches, the gyro rings precess half a turn apart, and forced idle holds against room keys, reduced motion and the backdrops (P718, P719).
 - Center and an Idle button sit under the agents chip; Idle forces the idle view until it is pressed again (P716).

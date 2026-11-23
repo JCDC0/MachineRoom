@@ -1396,10 +1396,247 @@ describe('hiding folder contents', () => {
     expect(sub.openLevel).toBe(1)
     expect(sub.rows).toHaveLength(1)
     expect(sub.element.className).not.toContain('is-collapsed')
+    for (let step = 0; step < 40; step += 1) cards.update(state, 0.05, camera())
     expect(parent.openLevel).toBe(0)
     expect(parent.rows).toHaveLength(0)
     expect(parent.element.className).toContain('is-collapsed')
     cards.dispose()
+  })
+
+  it('opens each card only once its parent card is 70 percent of the way', () => {
+    const state = createState(
+      makeTree({ root: 'demo', files: ['README.md', 'src/b.js', 'src/engine/a.js'] }),
+      [],
+    )
+    const cards = createCards(fakeScene(), { glScene: fakeScene(), alwaysDepth: 2, folderContents: false, openOnTouch: true })
+    cards.sync(state)
+    cards.update(state, 0.05, camera())
+    const root = cards.cards.get('')
+    const src = cards.cards.get('src')
+    const engine = cards.cards.get('src/engine')
+    expect(root.openLevel).toBe(0)
+    expect(src.openLevel).toBe(0)
+    expect(engine.openLevel).toBe(0)
+
+    cards.recordTouch('', 4000)
+    cards.recordTouch('src', 4000)
+    cards.recordTouch('src/engine', 4000)
+
+    cards.update(state, 0.05, camera())
+    expect(root.openLevel).toBeGreaterThan(0)
+    expect(src.openLevel).toBe(0)
+    expect(engine.openLevel).toBe(0)
+
+    let frames = 1
+    while (src.openLevel === 0 && frames < 20) {
+      expect(root.openLevel).toBeLessThanOrEqual(1)
+      expect(engine.openLevel).toBe(0)
+      cards.update(state, 0.05, camera())
+      frames += 1
+    }
+    expect(src.openLevel).toBeGreaterThan(0)
+    expect(root.openLevel).toBeGreaterThan(0.7)
+
+    while (engine.openLevel === 0 && frames < 40) {
+      cards.update(state, 0.05, camera())
+      frames += 1
+    }
+    expect(engine.openLevel).toBeGreaterThan(0)
+    expect(src.openLevel).toBeGreaterThan(0.7)
+
+    for (let step = 0; step < 40; step += 1) cards.update(state, 0.05, camera())
+    expect(root.openLevel).toBe(1)
+    expect(src.openLevel).toBe(1)
+    expect(engine.openLevel).toBe(1)
+    expect(engine.rows).toHaveLength(1)
+    cards.dispose()
+  })
+
+  it('sends a pulse from the root to the touched folder and keeps only that folder open', () => {
+    const state = createState(
+      makeTree({ root: 'demo', files: ['README.md', 'src/b.js', 'src/engine/a.js'] }),
+      [{ key: 'claude', name: 'Claude' }],
+    )
+    const cards = createCards(fakeScene(), { glScene: fakeScene(), alwaysDepth: 2, folderContents: false, openOnTouch: true })
+    cards.sync(state)
+    cards.update(state, 0.05, camera())
+    const root = cards.cards.get('')
+    const src = cards.cards.get('src')
+    const engine = cards.cards.get('src/engine')
+
+    apply(state, { type: 'run.start', agent: 'claude', runId: 'r1', time: 500 })
+    apply(state, {
+      type: 'tool.start',
+      agent: 'claude',
+      runId: 'r1',
+      time: 1000,
+      id: 'c1',
+      tool: 'read',
+      label: 'read src/engine/a.js',
+      touches: [{ kind: 'file', path: 'src/engine/a.js', mode: 'read' }],
+    })
+    cards.flashFile('src/engine', 'src/engine/a.js', 'white')
+
+    const order = []
+    let rootPeak = false
+    let srcPeak = false
+    for (let frame = 0; frame < 60; frame += 1) {
+      cards.update(state, 0.05, camera())
+      if (root.openLevel > 0 && !order.includes('')) order.push('')
+      if (src.openLevel > 0 && !order.includes('src')) order.push('src')
+      if (engine.openLevel > 0 && !order.includes('src/engine')) order.push('src/engine')
+      if (root.openLevel >= 1) rootPeak = true
+      if (src.openLevel >= 1) srcPeak = true
+    }
+    expect(order).toEqual(['', 'src', 'src/engine'])
+    expect(rootPeak).toBe(true)
+    expect(srcPeak).toBe(true)
+    expect(root.openLevel).toBe(0)
+    expect(src.openLevel).toBe(0)
+    expect(engine.openLevel).toBe(1)
+    expect(engine.rows).toHaveLength(1)
+
+    apply(state, { type: 'tool.end', agent: 'claude', runId: 'r1', time: 1200, id: 'c1', ok: true })
+    for (let frame = 0; frame < 80; frame += 1) cards.update(state, 0.05, camera())
+    expect(root.openLevel).toBe(0)
+    expect(src.openLevel).toBe(0)
+    expect(engine.openLevel).toBe(0)
+    expect(engine.element.className).toContain('is-collapsed')
+    cards.dispose()
+  })
+
+  it('clears the pulse of a card with no rows, so it does not open later', () => {
+    const state = createState(makeTree({ root: 'demo', files: ['src/b.js', 'src/engine/a.js'] }), [{ key: 'claude', name: 'Claude' }])
+    const cards = createCards(fakeScene(), { glScene: fakeScene(), alwaysDepth: 2, folderContents: false, openOnTouch: true })
+    cards.sync(state)
+    cards.update(state, 0.05, camera())
+    const root = cards.cards.get('')
+    expect(root.rows).toHaveLength(0)
+    apply(state, { type: 'run.start', agent: 'claude', runId: 'r1', time: 500 })
+    apply(state, {
+      type: 'tool.start',
+      agent: 'claude',
+      runId: 'r1',
+      time: 1000,
+      id: 'c1',
+      tool: 'read',
+      label: 'read src/engine/a.js',
+      touches: [{ kind: 'file', path: 'src/engine/a.js', mode: 'read' }],
+    })
+    for (let frame = 0; frame < 20; frame += 1) cards.update(state, 0.05, camera())
+    expect(cards.cards.get('src/engine').openLevel).toBe(1)
+    expect(root.openLevel).toBe(0)
+    expect(root.pulse).toBe(false)
+    cards.dispose()
+  })
+
+  it('opens the three cards in a wave from the root when folder contents turns on', () => {
+    const state = createState(
+      makeTree({ root: 'demo', files: ['README.md', 'src/b.js', 'src/engine/a.js'] }),
+      [],
+    )
+    const cards = createCards(fakeScene(), { glScene: fakeScene(), alwaysDepth: 2, folderContents: false, openOnTouch: false })
+    cards.sync(state)
+    cards.update(state, 0.05, camera())
+    const root = cards.cards.get('')
+    const src = cards.cards.get('src')
+    const engine = cards.cards.get('src/engine')
+    expect(root.openLevel).toBe(0)
+    expect(src.openLevel).toBe(0)
+    expect(engine.openLevel).toBe(0)
+
+    cards.setOptions({ folderContents: true })
+    const order = []
+    for (let frame = 0; frame < 60; frame += 1) {
+      if (src.openLevel > 0 && !order.includes('src')) {
+        order.push('src')
+        expect(root.openLevel, 'the root before src starts').toBeGreaterThan(0.7)
+      }
+      if (engine.openLevel > 0 && !order.includes('src/engine')) {
+        order.push('src/engine')
+        expect(src.openLevel, 'src before engine starts').toBeGreaterThan(0.7)
+      }
+      if (root.openLevel > 0 && !order.includes('')) order.push('')
+      cards.update(state, 0.05, camera())
+    }
+    expect(order).toEqual(['', 'src', 'src/engine'])
+    expect(root.openLevel).toBe(1)
+    expect(src.openLevel).toBe(1)
+    expect(engine.openLevel).toBe(1)
+    expect(engine.rows).toHaveLength(1)
+    cards.dispose()
+  })
+
+  it('shuts the three cards in the same wave from the root when folder contents turns off', () => {
+    const state = createState(
+      makeTree({ root: 'demo', files: ['README.md', 'src/b.js', 'src/engine/a.js'] }),
+      [],
+    )
+    const cards = createCards(fakeScene(), { glScene: fakeScene(), alwaysDepth: 2, folderContents: true, openOnTouch: false })
+    cards.sync(state)
+    cards.update(state, 0.05, camera())
+    const root = cards.cards.get('')
+    const src = cards.cards.get('src')
+    const engine = cards.cards.get('src/engine')
+    expect(root.openLevel).toBe(1)
+    expect(src.openLevel).toBe(1)
+    expect(engine.openLevel).toBe(1)
+
+    cards.setOptions({ folderContents: false })
+    const order = []
+    for (let frame = 0; frame < 60; frame += 1) {
+      if (src.openLevel < 1 && !order.includes('src')) {
+        order.push('src')
+        expect(root.openLevel, 'the root before src starts').toBeLessThan(0.3)
+      }
+      if (engine.openLevel < 1 && !order.includes('src/engine')) {
+        order.push('src/engine')
+        expect(src.openLevel, 'src before engine starts').toBeLessThan(0.3)
+      }
+      if (root.openLevel < 1 && !order.includes('')) order.push('')
+      cards.update(state, 0.05, camera())
+    }
+    expect(order).toEqual(['', 'src', 'src/engine'])
+    expect(root.openLevel).toBe(0)
+    expect(src.openLevel).toBe(0)
+    expect(engine.openLevel).toBe(0)
+    expect(engine.element.className).toContain('is-collapsed')
+    cards.dispose()
+  })
+
+  it('moves all three cards in the same frame on a toggle under reduced motion', () => {
+    const savedWindow = globalThis.window
+    globalThis.window = { matchMedia: () => ({ matches: true }) }
+    try {
+      const state = createState(
+        makeTree({ root: 'demo', files: ['README.md', 'src/b.js', 'src/engine/a.js'] }),
+        [],
+      )
+      const cards = createCards(fakeScene(), { glScene: fakeScene(), alwaysDepth: 2, folderContents: false, openOnTouch: false })
+      cards.sync(state)
+      cards.update(state, 0.05, camera())
+      const root = cards.cards.get('')
+      const src = cards.cards.get('src')
+      const engine = cards.cards.get('src/engine')
+      expect(root.openLevel).toBe(0)
+      expect(src.openLevel).toBe(0)
+      expect(engine.openLevel).toBe(0)
+
+      cards.setOptions({ folderContents: true })
+      cards.update(state, 0.05, camera())
+      expect(root.openLevel).toBe(1)
+      expect(src.openLevel).toBe(1)
+      expect(engine.openLevel).toBe(1)
+
+      cards.setOptions({ folderContents: false })
+      cards.update(state, 0.05, camera())
+      expect(root.openLevel).toBe(0)
+      expect(src.openLevel).toBe(0)
+      expect(engine.openLevel).toBe(0)
+      cards.dispose()
+    } finally {
+      globalThis.window = savedWindow
+    }
   })
 })
 
