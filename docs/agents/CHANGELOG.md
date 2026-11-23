@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+- Review 75 fixes: forced idle works only at 900 pixels and wider, scrolls to the top, closes the HUD panels and the assistant, locks the page scroll, hides its hidden controls from Tab and ends on a dropped bridge or a narrow resize; the tunnel keeps its last working target through the fade and the run end; the card plan skips a layout when the set of focus paths is unchanged (P721, P722).
+- Review 74 fixes: an agent's focus follows its open calls, the tunnel aims at the newest open call with touches, the gyro rings precess half a turn apart, and forced idle holds against room keys, reduced motion and the backdrops (P718, P719).
+- Center and an Idle button sit under the agents chip; Idle forces the idle view until it is pressed again (P716).
+- The thinking rings move through an 8 second loop: a quick flip, a slow drift, a rise, a gyro spin, a burst and a settle (P715).
+- Unused exports, `MenuIcon.jsx` and six unused imports are removed (P711).
+- The README is short, with fresh screenshots; the detail moves to the guide (P710).
+- Review 73 fixes: a callout takes the pointer only on its title and link, one source holds open calls for the ring, callout, tunnel and snapshots, a touched folder shuts when its call ends, and the depth confirm counts only the rings a drop newly hides (P712 to P714).
+- Callouts draw on their own layer above the folder cards (P708).
+- Review 72 fixes: rings return to white after a tool call, folders open and shut at the right time, and the depth confirm counts active agents on every ring it hides (P705 to P707).
+- The room asks before a lower subagent depth hides a ring that holds agents (P703).
+- Paths outside the project no longer widen the live overview (P702b).
+- Each agent has one box beside it, away from the hub, in place of a callout and a console (P701).
+- An agent's shape keeps its colour, and an always-on ring tells its state (P699).
+- The hub draws no sector name labels (P700), and the lens has no corner brackets.
+- Settings show folder contents and open a folder an agent touches (P698).
+- The top buttons ease straight once the page leaves the top (P697).
 - The folder strings keep their unchanged strands on a rebuild and share one material per colour, so a link change no longer rebuilds every strand; they look up their card anchors only when a card was added, removed, moved or resized (P696, engine findings E6 and E11). The 15 unused class rules left in styles.css are gone (P695). Both run by the Neon team.
 - A brief run started through the bridge keeps the lane's saved effort and the model the caller chose, as a project run does; the native lanes save effort xhigh, so an orchestrator can start them at xhigh. Before, a brief run dropped both (P694; run by the Neon team).
 - Review 70 fixes: the runner match reads only the node program and its script, skipping node flags that take a value, and never reads a long prompt; a seat label drops at most 40% of the gap to the ring below, so it stays clear of it with five rings; a log with no meta is given up 10 seconds after it was first seen, even while it grows (P691, R70-1 to R70-4; run by the Neon team).
