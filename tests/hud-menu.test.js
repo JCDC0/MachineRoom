@@ -210,4 +210,97 @@ describe('Hud forced idle (R74-2, R74-6)', () => {
       expect(container.querySelector('#hud-assistant-terminal')).not.toBeNull()
     })
   })
+
+  it('ignores number keys while idleForced is true (R75-5)', async () => {
+    await withDom(async ({ root, window }) => {
+      window.localStorage.setItem('machineroom.guide', '1')
+      window.innerWidth = 1280
+      const focused = []
+      const renderHud = async (idleForced) => {
+        await act(async () => {
+          root.render(
+            createElement(Hud, {
+              mode: 'replay',
+              snapshot: SNAPSHOT,
+              speeds: [1, 2, 4],
+              onFocus: (key) => focused.push(key),
+              idleForced,
+            })
+          )
+        })
+      }
+
+      await renderHud(true)
+      await act(async () => {
+        window.dispatchEvent({ type: 'keydown', key: '1', bubbles: true, cancelable: true })
+      })
+      expect(focused).toEqual([])
+
+      await renderHud(false)
+      await act(async () => {
+        window.dispatchEvent({ type: 'keydown', key: '1', bubbles: true, cancelable: true })
+      })
+      expect(focused).toEqual(['opencode'])
+    })
+  })
+
+  it('ignores L, C, ? and / while idleForced is true (R75-5)', async () => {
+    const client = createMockClient({ latencyMs: 0 })
+    await withDom(async ({ container, root, window }) => {
+      window.localStorage.setItem('machineroom.guide', '1')
+      window.innerWidth = 1280
+      const renderHud = async (idleForced) => {
+        await act(async () => {
+          root.render(
+            createElement(Hud, {
+              mode: 'replay',
+              client,
+              health: { ok: true, orchestrator: true },
+              snapshot: SNAPSHOT,
+              speeds: [1, 2, 4],
+              idleForced,
+            })
+          )
+        })
+        await settle()
+      }
+
+      await renderHud(true)
+      for (const key of ['l', 'c', '?', '/']) {
+        await act(async () => {
+          window.dispatchEvent({ type: 'keydown', key, bubbles: true, cancelable: true })
+        })
+      }
+      expect(container.querySelector('#hud-log-drawer')).toBeNull()
+      expect(container.querySelector('#hud-control-drawer')).toBeNull()
+      expect(container.querySelector('#hud-help-dialog')).toBeNull()
+      expect(container.querySelector('#hud-orchestrator-chat')).toBeNull()
+
+      await renderHud(false)
+      await act(async () => {
+        window.dispatchEvent({ type: 'keydown', key: 'l', bubbles: true, cancelable: true })
+      })
+      expect(container.querySelector('#hud-log-drawer')).not.toBeNull()
+      await act(async () => {
+        window.dispatchEvent({ type: 'keydown', key: 'c', bubbles: true, cancelable: true })
+      })
+      expect(container.querySelector('#hud-control-drawer')).not.toBeNull()
+      await act(async () => {
+        window.dispatchEvent({ type: 'keydown', key: 'c', bubbles: true, cancelable: true })
+      })
+      expect(container.querySelector('#hud-control-drawer')).toBeNull()
+      await act(async () => {
+        window.dispatchEvent({ type: 'keydown', key: '?', bubbles: true, cancelable: true })
+      })
+      expect(container.querySelector('#hud-help-dialog')).not.toBeNull()
+      await act(async () => {
+        window.dispatchEvent({ type: 'keydown', key: 'Escape', bubbles: true, cancelable: true })
+      })
+      expect(container.querySelector('#hud-help-dialog')).toBeNull()
+      await act(async () => {
+        window.dispatchEvent({ type: 'keydown', key: '/', bubbles: true, cancelable: true })
+      })
+      expect(container.querySelector('#hud-orchestrator-chat')).not.toBeNull()
+    })
+  })
 })
