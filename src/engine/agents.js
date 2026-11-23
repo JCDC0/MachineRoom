@@ -1684,18 +1684,24 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
   }
 
   function focusPointer(state, entry, out = null) {
+    let picked = null
     let path
     if (entry?.openCalls instanceof Map) {
       for (const call of entry.openCalls.values()) {
-        const touch = call?.touches?.find?.((item) => typeof item?.path === 'string')
-        if (touch) path = touch.path
+        for (const touch of call?.touches ?? []) {
+          if (typeof touch?.path === 'string') {
+            picked = touch
+            path = touch.path
+          }
+        }
       }
     } else {
       path = entry?.focus?.[0]
     }
     if (path === undefined) return null
     const point = out ?? { dir: '', file: null }
-    if (state.files.has(path)) {
+    const isFile = picked && 'kind' in picked ? picked.kind === 'file' : state.files.has(path)
+    if (isFile) {
       point.dir = dirname(path)
       point.file = path
     } else {
@@ -2126,6 +2132,14 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
       if (view.web && (!online || (status !== 'working' && status !== 'queued'))) view.web = false
       const webOn = view.web && online && (status === 'working' || status === 'queued')
       const pointer = working ? focusPointer(state, entry, focusScratch) : view.pointer
+      if (working && pointer) {
+        if (view.pointer) {
+          view.pointer.dir = pointer.dir
+          view.pointer.file = pointer.file
+        } else {
+          view.pointer = { dir: pointer.dir, file: pointer.file }
+        }
+      }
       let color = null
       if (pointer) {
         if (working && lastFailed) color = RED

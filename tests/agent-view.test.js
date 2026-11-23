@@ -2,7 +2,7 @@ import * as THREE from 'three'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { createAgents } from '../src/engine/agents.js'
 import { AGENT_RING_BASE, AGENT_RING_GROW, AGENT_RING_MAX_OPACITY, AGENT_RING_MS, AGENT_RING_OPACITY_FLOOR, AGENT_RING_POOL, SWAY_LIFT, SWAY_SCALE } from '../src/engine/hub.js'
-import { RED, TUNNEL_GREY } from '../src/engine/sprites.js'
+import { GREEN, RED, TUNNEL_GREY } from '../src/engine/sprites.js'
 import { createTerminals } from '../src/engine/terminals.js'
 import { apply, createState } from '../src/model/state.js'
 
@@ -163,6 +163,128 @@ describe('a failed tool call on a working agent', () => {
     agents.update(state, 0.7, 1110, world, terminals)
     agents.update(state, 0.7, 1810, world, terminals)
     expect(view.tunnel).toBe(0)
+    agents.dispose()
+  })
+
+  it('keeps the last working target through fade and run end after overlapping calls (R75-4a)', () => {
+    const { agents, state, terminals, world } = harness()
+    const coords = { src: 100, docs: -200 }
+    world.edge = (dir, file, side, out) => out.set(coords[dir] ?? 500, 400, 0)
+    const run = (ok, baseTime) => {
+      apply(state, { time: baseTime, type: 'run.start', agent: 'a', runId: `r-${baseTime}` })
+      agents.update(state, 0.016, baseTime, world, terminals)
+      apply(state, {
+        time: baseTime + 10,
+        type: 'tool.start',
+        agent: 'a',
+        id: `o1-${baseTime}`,
+        tool: 'read',
+        label: 'read src/a.js',
+        touches: [{ path: 'src/a.js', mode: 'read', kind: 'file' }],
+      })
+      agents.aimAt('a', 'src', 'src/a.js', baseTime + 10)
+      apply(state, {
+        time: baseTime + 20,
+        type: 'tool.start',
+        agent: 'a',
+        id: `o2-${baseTime}`,
+        tool: 'read',
+        label: 'read docs/b.md',
+        touches: [{ path: 'docs/b.md', mode: 'read', kind: 'file' }],
+      })
+      agents.aimAt('a', 'docs', 'docs/b.md', baseTime + 20)
+      agents.update(state, 0.3, baseTime + 20, world, terminals)
+      const view = agents.views.get('a')
+      expect(view.touch.x).toBe(-200)
+
+      apply(state, { time: baseTime + 30, type: 'tool.end', agent: 'a', id: `o2-${baseTime}`, ok: true })
+      agents.update(state, 0.3, baseTime + 30, world, terminals)
+      expect(view.touch.x).toBe(100)
+      expect(view.tunnel).toBe(1)
+
+      apply(state, { time: baseTime + 40, type: 'tool.end', agent: 'a', id: `o1-${baseTime}`, ok: true })
+      agents.update(state, 0.1, baseTime + 140, world, terminals)
+      expect(view.tunnel).toBeCloseTo(1 - 0.1 / 0.6, 5)
+      expect(view.touch.x).toBe(100)
+
+      apply(state, { time: baseTime + 200, type: 'run.end', agent: 'a', runId: `r-${baseTime}`, ok, error: ok ? undefined : 'boom' })
+      agents.update(state, 0.3, baseTime + 200, world, terminals)
+      expect(view.stripColor).toBe(ok ? GREEN : RED)
+      expect(view.tunnel).toBe(1)
+      expect(view.touch.x).toBe(100)
+    }
+
+    run(true, 1000)
+    run(false, 8000)
+    agents.dispose()
+  })
+
+  it('picks the same touch as aimAt on a multi-touch call while working and on end (R75-4b)', () => {
+    const { agents, state, terminals, world } = harness()
+    const coords = { src: 100, docs: -200 }
+    world.edge = (dir, file, side, out) => out.set(coords[dir] ?? 500, 400, 0)
+    apply(state, { time: 1000, type: 'run.start', agent: 'a', runId: 'r1' })
+    agents.update(state, 0.016, 1000, world, terminals)
+    const touches = [
+      { path: 'src/a.js', mode: 'read', kind: 'file' },
+      { path: 'docs/b.md', mode: 'read', kind: 'file' },
+    ]
+    apply(state, { time: 1010, type: 'tool.start', agent: 'a', id: 'm1', tool: 'read', label: 'read two', touches })
+    for (const touch of touches) {
+      const dir = touch.kind === 'file' ? touch.path.split('/').slice(0, -1).join('/') : touch.path
+      agents.aimAt('a', dir, touch.kind === 'file' ? touch.path : null, 1010)
+    }
+    agents.update(state, 0.3, 1010, world, terminals)
+    const view = agents.views.get('a')
+    expect(view.touch.x).toBe(-200)
+    expect(view.tunnel).toBe(1)
+
+    apply(state, { time: 1020, type: 'tool.end', agent: 'a', id: 'm1', ok: true })
+    agents.update(state, 0.1, 1120, world, terminals)
+    expect(view.tunnel).toBeCloseTo(1 - 0.1 / 0.6, 5)
+    expect(view.touch.x).toBe(-200)
+
+    apply(state, { time: 1200, type: 'run.end', agent: 'a', runId: 'r1', ok: true })
+    agents.update(state, 0.3, 1200, world, terminals)
+    expect(view.stripColor).toBe(GREEN)
+    expect(view.tunnel).toBe(1)
+    expect(view.touch.x).toBe(-200)
+
+    apply(state, { time: 2000, type: 'run.start', agent: 'a', runId: 'r2' })
+    apply(state, { time: 2010, type: 'tool.start', agent: 'a', id: 'm2', tool: 'read', label: 'read two', touches })
+    agents.snap(state, world)
+    agents.update(state, 0.3, 2010, world, terminals)
+    expect(view.touch.x).toBe(-200)
+    agents.dispose()
+  })
+
+  it('keeps the post-run glow target after seeking into an open call (R75-4c)', () => {
+    const { agents, state, terminals, world } = harness()
+    const coords = { src: 100, docs: -200 }
+    world.edge = (dir, file, side, out) => out.set(coords[dir] ?? 500, 400, 0)
+    for (const [ok, baseTime] of [[true, 1000], [false, 8000]]) {
+      apply(state, { time: baseTime, type: 'run.start', agent: 'a', runId: `r-${baseTime}` })
+      apply(state, {
+        time: baseTime + 10,
+        type: 'tool.start',
+        agent: 'a',
+        id: `s-${baseTime}`,
+        tool: 'read',
+        label: 'read src/a.js',
+        touches: [{ path: 'src/a.js', mode: 'read', kind: 'file' }],
+      })
+      agents.snap(state, world)
+      agents.update(state, 0.3, baseTime + 10, world, terminals)
+      const view = agents.views.get('a')
+      expect(view.tunnel).toBe(1)
+      expect(view.touch.x).toBe(100)
+
+      apply(state, { time: baseTime + 100, type: 'run.end', agent: 'a', runId: `r-${baseTime}`, ok, error: ok ? undefined : 'boom' })
+      agents.update(state, 0.3, baseTime + 100, world, terminals)
+      expect(view.stripColor).toBe(ok ? GREEN : RED)
+      expect(view.tunnel).toBe(1)
+      expect(view.touch.x).toBe(100)
+    }
     agents.dispose()
   })
 })
