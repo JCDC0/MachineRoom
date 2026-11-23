@@ -35,6 +35,7 @@ export default function Assistant({
   open: controlledOpen,
   onClose,
   initialOpen = false,
+  idleForced = false,
   storage = store(),
 }) {
   const handleAction = onAssistantAction ?? onAction ?? (() => {})
@@ -76,10 +77,32 @@ export default function Assistant({
   posRef.current = pos
   const dragRef = useRef(null)
   const [dragging, setDragging] = useState(false)
+  const inputValueRef = useRef(input)
+  inputValueRef.current = input
+  const onCloseRef = useRef(onClose)
+  onCloseRef.current = onClose
+  const isOpenRef = useRef(isOpen)
+  isOpenRef.current = isOpen
+
+  useEffect(() => {
+    if (!idleForced || !isOpenRef.current) return
+    dragRef.current = null
+    setDragging(false)
+    if (controlledOpen === undefined) {
+      setInternalOpen(false)
+    }
+    if (containsSecret(inputValueRef.current)) {
+      setInput('')
+      setDraft('')
+      setHistoryIndex(-1)
+    }
+    onCloseRef.current?.()
+  }, [idleForced, controlledOpen])
 
   useEffect(() => {
     function onKeyDown(event) {
       if (event.key === '/' && !isOpen) {
+        if (idleForced) return
         if (event.target?.closest?.('input, textarea, select')) return
         if (event.ctrlKey || event.metaKey || event.altKey) return
         event.preventDefault()
@@ -103,7 +126,7 @@ export default function Assistant({
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [isOpen, controlledOpen, onClose, input])
+  }, [isOpen, controlledOpen, onClose, input, idleForced])
 
   useEffect(() => {
     if (isOpen) {
