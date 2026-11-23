@@ -1223,7 +1223,6 @@ export function createCards(cssScene, options = {}) {
 
   function setOptions(options = {}) {
     let changed = false
-    let contentsChanged = false
     if (Object.hasOwn(options, 'alwaysDepth')) {
       const raw = Number(options.alwaysDepth)
       if (Number.isFinite(raw)) {
@@ -1246,7 +1245,6 @@ export function createCards(cssScene, options = {}) {
       if (value !== folderContentsEnabled) {
         folderContentsEnabled = value
         changed = true
-        contentsChanged = true
       }
     }
     if (Object.hasOwn(options, 'openOnTouch')) {
@@ -1257,11 +1255,6 @@ export function createCards(cssScene, options = {}) {
       }
     }
     if (!changed) return false
-    if (contentsChanged) {
-      for (const card of cards.values()) {
-        card.openLevel = isCardOpen(card, null) ? 1 : 0
-      }
-    }
     pinnedVersion += 1
     planKey = ''
     layoutKey = ''

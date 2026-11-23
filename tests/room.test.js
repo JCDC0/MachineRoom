@@ -427,7 +427,7 @@ describe('the room takes the chosen top and the depth', () => {
       expect(docsCard().className).toContain('is-collapsed')
 
       room.setOptions({ folderContents: true })
-      step(1)
+      step(6)
       expect(docsCard().className).not.toContain('is-collapsed')
       expect(srcCard().className).not.toContain('is-collapsed')
     } finally {
