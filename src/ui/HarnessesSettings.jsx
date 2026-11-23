@@ -561,7 +561,7 @@ export function LaneSettingsFields({ client }) {
       ) : null}
       <div className="endpoints-field">
         <label className="endpoints-label mono" htmlFor="harness-lane-replies">
-          Replies to a working lane
+          Messages to a working agent
         </label>
         <select
           id="harness-lane-replies"
@@ -569,9 +569,12 @@ export function LaneSettingsFields({ client }) {
           disabled={busy || !loaded}
           onChange={(event) => saveReplies(event.target.value)}
         >
-          <option value="next-turn">Wait for its next turn</option>
+          <option value="next-turn">After its current action</option>
           <option value="interrupt">Interrupt it at once</option>
         </select>
+        <p className="endpoints-note mono">
+          Native lanes take a message after their current model reply and its tool calls. Other harnesses read it when they next check their inbox.
+        </p>
       </div>
       <div className="endpoints-field">
         <label className="endpoints-label mono" htmlFor="harness-lane-count-warning">

@@ -241,6 +241,7 @@ describe('page sends to a running lane', { timeout: slowMs(120000) }, () => {
         from: 'owner',
         text: 'Check the header.',
         at: expect.any(String),
+        interrupt: false,
       },
     ])
 

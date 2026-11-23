@@ -1433,23 +1433,31 @@ export function boundMessages(messages, limit) {
 const INBOX_TIMEOUT_MS = 3000
 const INBOX_POLL_MS = 1000
 
+const NO_INBOX = { lines: [], interrupt: false }
+
+function inboxText(lines) {
+  return lines.length === 0 ? '' : `Messages for you while you work:\n${lines.join('\n')}`
+}
+
 async function readLaneInbox(seen, env = process.env) {
   const bridge = String(env?.MACHINEROOM_BRIDGE ?? '').trim().replace(/\/+$/, '')
   const ticket = String(env?.MACHINEROOM_LANE_TICKET ?? '').trim()
-  if (!bridge || !ticket) return ''
+  if (!bridge || !ticket) return NO_INBOX
   let data = null
   try {
     const response = await fetch(`${bridge}/api/orchestrator/messages`, {
       headers: { 'X-MachineRoom-Lane': ticket },
       signal: AbortSignal.timeout(INBOX_TIMEOUT_MS),
     })
-    if (!response.ok) return ''
+    if (!response.ok) return NO_INBOX
     data = await response.json()
   } catch {
-    return ''
+    return NO_INBOX
   }
+  const fallback = String(env?.MACHINEROOM_LANE_REPLIES ?? '').trim() === 'interrupt'
   const items = Array.isArray(data?.messages) ? data.messages : []
   const lines = []
+  let interrupt = false
   for (const item of items) {
     if (!item || typeof item !== 'object') continue
     const text = typeof item.text === 'string' ? item.text : ''
@@ -1460,9 +1468,9 @@ async function readLaneInbox(seen, env = process.env) {
     seen.add(key)
     const from = typeof item.from === 'string' && item.from.trim() !== '' ? item.from.trim() : 'unknown'
     lines.push(`${from}: ${text}`)
+    if (typeof item.interrupt === 'boolean' ? item.interrupt : fallback) interrupt = true
   }
-  if (lines.length === 0) return ''
-  return `Messages for you while you work:\n${lines.join('\n')}`
+  return { lines, interrupt }
 }
 
 function startInboxWatch(seen, env, onMessage) {
@@ -1478,12 +1486,11 @@ function startInboxWatch(seen, env, onMessage) {
       await wait(INBOX_POLL_MS)
       if (stopped) return
       const inbox = await readLaneInbox(seen, env)
-      if (inbox === '') {
+      if (inbox.lines.length === 0) {
         if (stopped) return
         continue
       }
       onMessage(inbox)
-      return
     }
   })()
   return {
@@ -1561,8 +1568,10 @@ async function main() {
   let lastFailure = ''
   let failureRun = 0
   const seenInbox = new Set()
-  const interruptReplies = String(process.env.MACHINEROOM_LANE_REPLIES ?? '').trim() === 'interrupt'
-  let heldInbox = ''
+  const watchInbox =
+    String(process.env.MACHINEROOM_BRIDGE ?? '').trim() !== '' &&
+    String(process.env.MACHINEROOM_LANE_TICKET ?? '').trim() !== ''
+  let heldLines = []
 
   const finish = (isError, result, exitCode = isError ? 1 : 0) => {
     writeJson({
@@ -1591,12 +1600,12 @@ async function main() {
         process.stdout.write(`${sentence}\n`)
         return
       }
-      if (heldInbox !== '') {
-        messages.push({ role: 'user', content: heldInbox })
-        heldInbox = ''
+      if (heldLines.length > 0) {
+        messages.push({ role: 'user', content: inboxText(heldLines) })
+        heldLines = []
       } else if (step > 0) {
         const inbox = await readLaneInbox(seenInbox)
-        if (inbox !== '') messages.push({ role: 'user', content: inbox })
+        if (inbox.lines.length > 0) messages.push({ role: 'user', content: inboxText(inbox.lines) })
       }
       boundMessages(messages, limit)
       const payload = {
@@ -1612,28 +1621,26 @@ async function main() {
         onDamaged: () => { damagedAnswers += 1 },
       }
       let data = null
-      if (interruptReplies) {
-        const controller = new AbortController()
-        let inbox = ''
-        const watch = startInboxWatch(seenInbox, process.env, (text) => {
-          inbox = text
-          controller.abort()
-        })
-        try {
-          data = await post(url, key, payload, { ...postOptions, signal: controller.signal })
-        } catch (error) {
+      const controller = watchInbox ? new AbortController() : null
+      const watch = controller
+        ? startInboxWatch(seenInbox, process.env, (inbox) => {
+            heldLines.push(...inbox.lines)
+            if (inbox.interrupt && !controller.signal.aborted) controller.abort()
+          })
+        : null
+      try {
+        data = await post(url, key, payload, { ...postOptions, ...(controller ? { signal: controller.signal } : {}) })
+      } catch (error) {
+        if (watch) {
           watch.stop()
-          if (inbox !== '') {
-            heldInbox = inbox
-            continue
-          }
-          throw error
+          await watch.done
         }
+        if (controller?.signal.aborted && heldLines.length > 0) continue
+        throw error
+      }
+      if (watch) {
         watch.stop()
         await watch.done
-        if (inbox !== '') heldInbox = inbox
-      } else {
-        data = await post(url, key, payload, postOptions)
       }
       const choice = Array.isArray(data?.choices) ? data.choices[0] : null
       const providerError = providerErrorOf(data, choice)
@@ -1683,7 +1690,7 @@ async function main() {
           },
         })
       }
-      if (calls.length === 0 && heldInbox !== '') {
+      if (calls.length === 0 && heldLines.length > 0) {
         messages.push({ role: 'assistant', content: text })
         continue
       }

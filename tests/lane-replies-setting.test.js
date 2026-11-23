@@ -264,6 +264,69 @@ describe('the native agent and the reply choice', () => {
     expect(second.some((message) => message.role === 'tool')).toBe(true)
     expect(JSON.stringify(second)).toContain('Stop and read this.')
   }, 30000)
+
+  it('interrupts a model call the bridge marks interrupt while the env says next-turn', async () => {
+    const folder = setup()
+    let aborted = false
+    const bridge = await startBridge(async (req, res, record) => {
+      if (record.url === '/api/orchestrator/messages') return { messages: [{ ...MESSAGE, interrupt: true }] }
+      if (chatCalls(bridge.requests).length === 1) {
+        res.on('close', () => {
+          if (!res.writableEnded) aborted = true
+        })
+        return { hold: true }
+      }
+      return chatAnswer({ text: 'Done.' })
+    })
+
+    const result = await runAgent({ folder, env: agentEnv(bridge, 'next-turn') })
+
+    expect(result.code).toBe(0)
+    expect(aborted).toBe(true)
+    const calls = chatCalls(bridge.requests)
+    expect(calls).toHaveLength(2)
+    expect(JSON.stringify(calls[1].body.messages)).toContain('Stop and read this.')
+    expect(result.stdout).toContain('"result":"Done."')
+  }, 30000)
+
+  it('holds a message the bridge marks next-turn while the env says interrupt until the tool result', async () => {
+    const folder = setup()
+    writeFileSync(join(folder, 'a.txt'), 'hello\n')
+    let aborted = false
+    let inboxRead = null
+    const firstInbox = new Promise((resolve) => {
+      inboxRead = resolve
+    })
+    const bridge = await startBridge(async (req, res, record) => {
+      if (record.url === '/api/orchestrator/messages') {
+        inboxRead()
+        return { messages: [{ ...MESSAGE, interrupt: false }] }
+      }
+      if (chatCalls(bridge.requests).length === 1) {
+        res.on('close', () => {
+          if (!res.writableEnded) aborted = true
+        })
+        await firstInbox
+        await new Promise((done) => setTimeout(done, 1300))
+        return chatAnswer({ calls: [{ name: 'read_file', arguments: { path: 'a.txt' } }] })
+      }
+      return chatAnswer({ text: 'Done.' })
+    })
+
+    const result = await runAgent({ folder, env: agentEnv(bridge, 'interrupt') })
+
+    expect(result.code).toBe(0)
+    expect(aborted).toBe(false)
+    const calls = chatCalls(bridge.requests)
+    expect(calls).toHaveLength(2)
+    const second = calls[1].body.messages
+    const toolAt = second.findIndex((message) => message.role === 'tool')
+    const heldAt = second.findIndex((message) => message.role === 'user' && String(message.content).includes('Stop and read this.'))
+    expect(toolAt).toBeGreaterThan(-1)
+    expect(heldAt).toBeGreaterThan(toolAt)
+    expect(second[heldAt].content).toBe('Messages for you while you work:\nlane:main: Stop and read this.')
+    expect(result.stdout).toContain('"result":"Done."')
+  }, 30000)
 })
 
 describe('the reply choice in harness settings', () => {
@@ -354,9 +417,10 @@ describe('the reply choice in Settings', () => {
 
       const select = container.querySelector('#harness-lane-replies')
       expect(select).not.toBeNull()
-      expect(container.textContent).toContain('Replies to a working lane')
+      expect(container.textContent).toContain('Messages to a working agent')
       const options = select.querySelectorAll('option')
-      expect(options.map((option) => option.textContent)).toEqual(['Wait for its next turn', 'Interrupt it at once'])
+      expect(options.map((option) => option.textContent)).toEqual(['After its current action', 'Interrupt it at once'])
+      expect(container.textContent).toContain('Native lanes take a message after their current model reply and its tool calls.')
 
       await type(root, select, 'interrupt')
       await settle()
