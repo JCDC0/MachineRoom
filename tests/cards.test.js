@@ -1478,16 +1478,19 @@ describe('hiding folder contents', () => {
     cards.flashFile('src/engine', 'src/engine/a.js', 'white')
 
     const order = []
-    let peak = false
+    let rootPeak = false
+    let srcPeak = false
     for (let frame = 0; frame < 60; frame += 1) {
       cards.update(state, 0.05, camera())
       if (root.openLevel > 0 && !order.includes('')) order.push('')
       if (src.openLevel > 0 && !order.includes('src')) order.push('src')
       if (engine.openLevel > 0 && !order.includes('src/engine')) order.push('src/engine')
-      if (root.openLevel >= 1) peak = true
+      if (root.openLevel >= 1) rootPeak = true
+      if (src.openLevel >= 1) srcPeak = true
     }
     expect(order).toEqual(['', 'src', 'src/engine'])
-    expect(peak).toBe(true)
+    expect(rootPeak).toBe(true)
+    expect(srcPeak).toBe(true)
     expect(root.openLevel).toBe(0)
     expect(src.openLevel).toBe(0)
     expect(engine.openLevel).toBe(1)
