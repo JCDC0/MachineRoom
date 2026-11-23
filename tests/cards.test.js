@@ -589,12 +589,12 @@ describe('viewInput', () => {
 
   it('opens only the recent paths touched in the last minute and a half', () => {
     const input = viewInput(state(['docs/b.md', 'src/a.js'], { 'docs/b.md': 0, 'src/a.js': 100000 }, 100000))
-    expect(input.focus).toEqual(['', 'src/a.js', 'src/a.js'])
+    expect(input.focus).toEqual(['', 'src/a.js'])
     expect(input.touched).toEqual(['docs/b.md', 'src/a.js'])
   })
 
   it('keeps pinned folders open', () => {
-    expect(viewInput(state([], {}, 0), ['docs']).focus).toEqual(['', 'src/a.js', 'docs'])
+    expect(viewInput(state([], {}, 0), ['docs']).focus).toEqual(['', 'docs', 'src/a.js'])
   })
 })
 
@@ -622,6 +622,13 @@ describe('viewKey', () => {
     expect(viewKey(state, ['docs'])).toBe(before)
   })
 
+  it('keeps the key when a focused path ends but stays recent (R75-6)', () => {
+    const state = fixture()
+    const before = viewKey(state, ['docs'])
+    state.agents.get('hermes').focus = []
+    expect(viewKey(state, ['docs'])).toBe(before)
+  })
+
   it('changes when a write creates a file', () => {
     const state = fixture()
     const before = viewKey(state)
@@ -642,7 +649,7 @@ describe('viewKey', () => {
   it('changes when an agent focus changes', () => {
     const state = fixture()
     const before = viewKey(state)
-    state.agents.get('hermes').focus = ['docs/b.md']
+    state.agents.get('hermes').focus = ['src/new.js']
     expect(viewKey(state)).not.toBe(before)
   })
 

@@ -74,7 +74,7 @@ function viewFocus(state, pinned) {
   const focus = ['']
   for (const agent of state.agents.values()) focus.push(...(agent.focus ?? []))
   focus.push(...(state.recent ? freshRecent(state) : []), ...pinned)
-  return focus
+  return [...new Set(focus)].sort()
 }
 
 let cachedFiles = []
