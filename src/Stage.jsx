@@ -36,6 +36,7 @@ import { activitySounds, sound } from './ui/sound.js'
 import { setFineDust } from './engine/void.js'
 import { still } from './engine/sprites.js'
 import { createIdleWatch, idleAllowed, stageClassName } from './ui/idleView.js'
+import { WIDE_LAYOUT_MIN } from './ui/agentStrip.js'
 import { LiveBadgeContext, LanePillsContext, OrchestratorsContext, TransportCostsContext } from './ui/Transport.jsx'
 import { orchestratorAnswerList } from './ui/transportOrchestrators.js'
 import { displayName } from './ui/agentList.js'
@@ -828,6 +829,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
         passSound(roomRef.current, sound.bands(), sound.dance())
       },
       onPick: (key) => {
+        if (idleForcedRef.current) return
         if (key === null || key === undefined) {
           followRef.current = false
           setFollowing(false)
@@ -841,6 +843,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
         setInspector({ kind: 'agent', id: key })
       },
       onInspect: (detail) => {
+        if (idleForcedRef.current) return
         showInspector(detail)
       },
       onDismiss: () => {
@@ -1068,6 +1071,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
 
   useEffect(() => {
     function onShowGitTree() {
+      if (idleForcedRef.current) return
       inspectHere({ kind: 'git', id: 'git' })
     }
     window.addEventListener('machineroom:show-git-tree', onShowGitTree)
@@ -1349,6 +1353,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
   }
 
   function focus(key) {
+    if (idleForcedRef.current) return
     setFollow(false)
     roomRef.current?.inspect({ kind: 'agent', id: key })
     setFocused(key)
@@ -1382,6 +1387,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
   }
 
   function overview() {
+    if (idleForcedRef.current) return
     parkRoom()
   }
 
@@ -1480,23 +1486,38 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
     }
   }, [])
 
-  function toggleIdle() {
-    if (bridgeDownRef.current) return
-    const next = !(idleWatchRef.current?.forced?.() ?? false)
-    if (next) {
-      setFollow(false)
-      closeInspector()
-      parkRoom()
-    }
+  function setForcedIdle(next) {
     idleWatchRef.current?.force?.(next)
     idleForcedRef.current = next
     setIdleForced(next)
   }
 
+  function toggleIdle() {
+    const next = !(idleWatchRef.current?.forced?.() ?? false)
+    if (next && (bridgeDownRef.current || window.innerWidth < WIDE_LAYOUT_MIN)) return
+    if (next) {
+      setFollow(false)
+      closeInspector()
+      parkRoom()
+      window.scrollTo(0, 0)
+      document.activeElement?.blur?.()
+    }
+    setForcedIdle(next)
+  }
+
   useEffect(() => {
+    if (bridgeDown && idleForcedRef.current) setForcedIdle(false)
     if (bridgeDown) idleWatchRef.current?.halt()
     else idleWatchRef.current?.arm()
   }, [bridgeDown])
+
+  useEffect(() => {
+    function onResize() {
+      if (idleForcedRef.current && window.innerWidth < WIDE_LAYOUT_MIN) setForcedIdle(false)
+    }
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
 
   const chromaOn = Boolean(effects.aberration?.on && effects.aberration?.strength > 0)
   const chromaChannels = aberrationChannels(effects.aberration?.strength)
