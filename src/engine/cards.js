@@ -598,6 +598,8 @@ export function createCards(cssScene, options = {}) {
       height: 0,
       lastHeight: -1,
       openLevel: folderContentsEnabled ? 1 : 0,
+      touchOpen: false,
+      pulse: false,
       itemsClass: 'mr-card-items',
       opacity: 1,
       lastOpacity: 1,
@@ -946,6 +948,40 @@ export function createCards(cssScene, options = {}) {
     return changed
   }
 
+  function armTouchPulses(touchedCards) {
+    for (const card of cards.values()) {
+      const nowOpen = touchOpenGoal(card, touchedCards)
+      if (nowOpen && !card.touchOpen) {
+        let at = dirname(card.path)
+        for (;;) {
+          const parent = nearestCard(at)
+          if (!parent) break
+          parent.pulse = true
+          if (parent.path === '') break
+          at = dirname(parent.path)
+        }
+      }
+      card.touchOpen = nowOpen
+    }
+  }
+
+  function touchOpenGoal(card, touchedCards) {
+    if (folderContentsEnabled || !openOnTouchEnabled) return false
+    return active.dirs.has(card.path) || Boolean(touchedCards?.has(card.path))
+  }
+
+  function currentTouches() {
+    let touched = null
+    if (openOnTouchEnabled && touchLife.size > 0) {
+      touched = new Set()
+      for (const dir of touchLife.keys()) {
+        const card = nearestCard(dir)
+        if (card) touched.add(card.path)
+      }
+    }
+    return touched
+  }
+
   function recompute(state) {
     lastState = state
     const unchanged =
@@ -955,7 +991,10 @@ export function createCards(cssScene, options = {}) {
       state.existingFiles === lastExistingFiles &&
       state.latest === lastLatest &&
       !focusChanged(state)
-    if (unchanged) return false
+    if (unchanged) {
+      if (!still()) armTouchPulses(currentTouches())
+      return false
+    }
 
     lastPinnedVersion = pinnedVersion
     lastSprayVersion = sprayVersion
@@ -966,6 +1005,7 @@ export function createCards(cssScene, options = {}) {
     const planKeyNext = viewKey(state, [...pinned, ...sprayed])
     if (planKeyNext === planKey) {
       if (computeActive(state)) rowRevision += 1
+      if (!still()) armTouchPulses(currentTouches())
       return false
     }
     planKey = planKeyNext
@@ -1044,6 +1084,7 @@ export function createCards(cssScene, options = {}) {
       }
       danceOrderKeys = danceOrder(spots)
     }
+    if (!still()) armTouchPulses(currentTouches())
     const nextOverviewKey = entries
       .filter((entry) => entry.path === '' || !entry.path.includes('/'))
       .map((entry) => `${entry.path}:${entry.width}:${entry.height}`)
@@ -1186,6 +1227,7 @@ export function createCards(cssScene, options = {}) {
   function isCardOpen(card, touchedCards) {
     if (folderContentsEnabled) return true
     if (cardRows(card.view) <= 0) return false
+    if (card.pulse) return true
     if (selected !== null && selected === card.path) return true
     if (inspected !== null && dirname(inspected) === card.path) return true
     return openOnTouchEnabled && (active.dirs.has(card.path) || Boolean(touchedCards?.has(card.path)))
@@ -1204,6 +1246,10 @@ export function createCards(cssScene, options = {}) {
   function sync(state) {
     flashes.clear()
     touchLife.clear()
+    for (const card of cards.values()) {
+      card.pulse = false
+      card.touchOpen = false
+    }
     pinnedVersion += 1
     sprayed.clear()
     sprayVersion += 1
@@ -1440,6 +1486,7 @@ export function createCards(cssScene, options = {}) {
           syncCardContents(card)
         }
       }
+      if (card.pulse && card.openLevel >= 1) card.pulse = false
       const goal = CARD_SCALES[view.state] ?? 1
       const previousScale = card.scale
       if (Math.abs(card.scale - goal) > 0.002) {

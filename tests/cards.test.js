@@ -1396,6 +1396,7 @@ describe('hiding folder contents', () => {
     expect(sub.openLevel).toBe(1)
     expect(sub.rows).toHaveLength(1)
     expect(sub.element.className).not.toContain('is-collapsed')
+    for (let step = 0; step < 40; step += 1) cards.update(state, 0.05, camera())
     expect(parent.openLevel).toBe(0)
     expect(parent.rows).toHaveLength(0)
     expect(parent.element.className).toContain('is-collapsed')
@@ -1448,6 +1449,56 @@ describe('hiding folder contents', () => {
     expect(src.openLevel).toBe(1)
     expect(engine.openLevel).toBe(1)
     expect(engine.rows).toHaveLength(1)
+    cards.dispose()
+  })
+
+  it('sends a pulse from the root to the touched folder and keeps only that folder open', () => {
+    const state = createState(
+      makeTree({ root: 'demo', files: ['README.md', 'src/b.js', 'src/engine/a.js'] }),
+      [{ key: 'claude', name: 'Claude' }],
+    )
+    const cards = createCards(fakeScene(), { glScene: fakeScene(), alwaysDepth: 2, folderContents: false, openOnTouch: true })
+    cards.sync(state)
+    cards.update(state, 0.05, camera())
+    const root = cards.cards.get('')
+    const src = cards.cards.get('src')
+    const engine = cards.cards.get('src/engine')
+
+    apply(state, { type: 'run.start', agent: 'claude', runId: 'r1', time: 500 })
+    apply(state, {
+      type: 'tool.start',
+      agent: 'claude',
+      runId: 'r1',
+      time: 1000,
+      id: 'c1',
+      tool: 'read',
+      label: 'read src/engine/a.js',
+      touches: [{ kind: 'file', path: 'src/engine/a.js', mode: 'read' }],
+    })
+    cards.flashFile('src/engine', 'src/engine/a.js', 'white')
+
+    const order = []
+    let peak = false
+    for (let frame = 0; frame < 60; frame += 1) {
+      cards.update(state, 0.05, camera())
+      if (root.openLevel > 0 && !order.includes('')) order.push('')
+      if (src.openLevel > 0 && !order.includes('src')) order.push('src')
+      if (engine.openLevel > 0 && !order.includes('src/engine')) order.push('src/engine')
+      if (root.openLevel >= 1) peak = true
+    }
+    expect(order).toEqual(['', 'src', 'src/engine'])
+    expect(peak).toBe(true)
+    expect(root.openLevel).toBe(0)
+    expect(src.openLevel).toBe(0)
+    expect(engine.openLevel).toBe(1)
+    expect(engine.rows).toHaveLength(1)
+
+    apply(state, { type: 'tool.end', agent: 'claude', runId: 'r1', time: 1200, id: 'c1', ok: true })
+    for (let frame = 0; frame < 80; frame += 1) cards.update(state, 0.05, camera())
+    expect(root.openLevel).toBe(0)
+    expect(src.openLevel).toBe(0)
+    expect(engine.openLevel).toBe(0)
+    expect(engine.element.className).toContain('is-collapsed')
     cards.dispose()
   })
 })
