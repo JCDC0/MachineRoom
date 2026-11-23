@@ -1505,6 +1505,31 @@ describe('hiding folder contents', () => {
     cards.dispose()
   })
 
+  it('clears the pulse of a card with no rows, so it does not open later', () => {
+    const state = createState(makeTree({ root: 'demo', files: ['src/b.js', 'src/engine/a.js'] }), [{ key: 'claude', name: 'Claude' }])
+    const cards = createCards(fakeScene(), { glScene: fakeScene(), alwaysDepth: 2, folderContents: false, openOnTouch: true })
+    cards.sync(state)
+    cards.update(state, 0.05, camera())
+    const root = cards.cards.get('')
+    expect(root.rows).toHaveLength(0)
+    apply(state, { type: 'run.start', agent: 'claude', runId: 'r1', time: 500 })
+    apply(state, {
+      type: 'tool.start',
+      agent: 'claude',
+      runId: 'r1',
+      time: 1000,
+      id: 'c1',
+      tool: 'read',
+      label: 'read src/engine/a.js',
+      touches: [{ kind: 'file', path: 'src/engine/a.js', mode: 'read' }],
+    })
+    for (let frame = 0; frame < 20; frame += 1) cards.update(state, 0.05, camera())
+    expect(cards.cards.get('src/engine').openLevel).toBe(1)
+    expect(root.openLevel).toBe(0)
+    expect(root.pulse).toBe(false)
+    cards.dispose()
+  })
+
   it('opens the three cards in a wave from the root when folder contents turns on', () => {
     const state = createState(
       makeTree({ root: 'demo', files: ['README.md', 'src/b.js', 'src/engine/a.js'] }),

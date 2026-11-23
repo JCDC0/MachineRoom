@@ -425,6 +425,7 @@ export function createCards(cssScene, options = {}) {
   let layoutKey = ''
   let overviewLayoutKey = ''
   let pendingChange = false
+  let keepLevels = false
   let active = { files: new Set(), dirs: new Set(), path: new Set() }
   let targetDirColors = null
   let targetFileColors = null
@@ -1239,12 +1240,17 @@ export function createCards(cssScene, options = {}) {
     planKey = ''
     pendingChange = false
     recompute(state)
-    for (const card of cards.values()) {
-      const target = isCardOpen(card, null) ? 1 : 0
-      if (card.openLevel !== target) {
-        card.openLevel = target
-        syncCardContents(card)
+    if (keepLevels) keepLevels = false
+    else {
+      for (const card of cards.values()) {
+        const target = isCardOpen(card, null) ? 1 : 0
+        if (card.openLevel !== target) {
+          card.openLevel = target
+          syncCardContents(card)
+        }
       }
+    }
+    for (const card of cards.values()) {
       for (const entry of card.rows) resetRow(entry)
     }
     rowRevision += 1
@@ -1252,6 +1258,7 @@ export function createCards(cssScene, options = {}) {
 
   function setOptions(options = {}) {
     let changed = false
+    let contentsChanged = false
     if (Object.hasOwn(options, 'alwaysDepth')) {
       const raw = Number(options.alwaysDepth)
       if (Number.isFinite(raw)) {
@@ -1274,6 +1281,7 @@ export function createCards(cssScene, options = {}) {
       if (value !== folderContentsEnabled) {
         folderContentsEnabled = value
         changed = true
+        contentsChanged = true
       }
     }
     if (Object.hasOwn(options, 'openOnTouch')) {
@@ -1284,6 +1292,7 @@ export function createCards(cssScene, options = {}) {
       }
     }
     if (!changed) return false
+    if (contentsChanged) keepLevels = true
     pinnedVersion += 1
     planKey = ''
     layoutKey = ''
@@ -1470,7 +1479,7 @@ export function createCards(cssScene, options = {}) {
           syncCardContents(card)
         }
       }
-      if (card.pulse && card.openLevel >= 1) card.pulse = false
+      if (card.pulse && (card.openLevel >= 1 || cardRows(view) <= 0)) card.pulse = false
       const goal = CARD_SCALES[view.state] ?? 1
       const previousScale = card.scale
       if (Math.abs(card.scale - goal) > 0.002) {
