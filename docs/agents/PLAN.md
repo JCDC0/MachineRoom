@@ -1,5 +1,9 @@
 # Plan
 
+## Next, as of 2026-11-24
+
+Pushed `f4814ab8` (CI green on both runners after one Windows rerun). The owner asked for folder cards that open and shut in a wave from the root, and a chain from the root to a folder an agent touches (P723), and to plan for one native lane while every other lane's usage is down. P723 runs on `native2` (DeepSeek V4.1 Flash on OpenRouter), the only native lane, then review 76 on the same lane when it ends.
+
 ## Next, as of 2026-11-23 20:20
 
 Both AGY lanes are out of credits until next week's reset, at the owner's word. Pushed `3fc8ca05` (full suite 9300 green, audit clean) with P722. Neon made step 1 of P721 (the tunnel keeps its last working target, `a2b1f846`) before its credits ran out; the orchestrator did steps 2 and 3 by hand: the R74-3 test now fails with its change undone, and the card plan key is the sorted set of focus paths, so 459 layouts across the ten fixtures are skipped (275 before) and none of them is stale; every plan digest held and the six layout digests changed. Every review 75 finding is fixed. Next, when credits return: review 76 of `c9771c4c` to the P721 merge, toward the stop rule (two clean reviews in a row). The stop rule is not met: reviews 72 to 75 each had Highs.
@@ -43,6 +47,7 @@ The team since 2026-11-22 17:35 (the owner's word): this session orchestrates (C
 | Review 72 of P694 to P703: 1 High (R72-1, rings stay yellow after the first tool call), 4 Medium, 2 Low | P704 | merged; fixes P705 (Argon: ring state, crowded callouts, callout clicks), P706 (Neon: folders open and shut), P707 (next: depth confirm). R72-2's double click and DOM contract fixed by hand (`81915cb8`) |
 | R72-2's other half: from the overview a callout can sit behind a nearer folder card or the hub | P708 | merged (`bd138b89`): callouts draw on a second CSS3D layer above the cards; seen in a replay |
 | Reviews 73 to 75 of the design changes: 2, 2 and 3 Highs, mostly forced idle, open-call focus and the tunnel | P712 to P714, P718, P719, P721, P722 | merged; P719 and most of P718 and P721 finished by hand when AGY credits ran out; forced idle checked by eye at 1280 pixels |
+| Toggling `Show folder contents` pops every card at once; each card should open or shut on its own timeline, in a wave from the root outward, and with contents off an agent touch should open the cards from the root to the folder one after another | P723 | briefed; runs on the native lane |
 
 Findings per review: 64 had 12, 65 had 10, 66 had 8, 67 had 4, 68 had 3, 69 had 3, 70 had 4. Since review 69 they are mostly edge cases (node flags no runner uses, five-deep rings, a log that keeps growing with no meta).
 
