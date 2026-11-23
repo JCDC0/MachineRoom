@@ -246,7 +246,7 @@ describe('a failover backup in the bridge', () => {
     const read = await laneGet(rig.url, ticket)
     expect(read.status).toBe(200)
     expect(read.body.messages).toEqual([
-      { id: expect.any(String), from: 'orchestrator', text: 'Read this before you go.', at: expect.any(String) },
+      { id: expect.any(String), from: 'orchestrator', text: 'Read this before you go.', at: expect.any(String), interrupt: false },
     ])
     await releaseRun(rig)
   })

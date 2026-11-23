@@ -179,8 +179,8 @@ describe('a lane message id', () => {
     const read = await laneGet(rig.url, other)
     expect(read.status).toBe(200)
     expect(read.body.messages).toEqual([
-      { id: fromToken.body.id, from: 'orchestrator', text: 'Which header?', at: expect.any(String) },
-      { id: fromLane.body.id, from: 'lane:opencode', text: 'The field is ready.', at: expect.any(String) },
+      { id: fromToken.body.id, from: 'orchestrator', text: 'Which header?', at: expect.any(String), interrupt: false },
+      { id: fromLane.body.id, from: 'lane:opencode', text: 'The field is ready.', at: expect.any(String), interrupt: false },
     ])
     await releaseRuns(rig)
   })

@@ -6,6 +6,7 @@ import { createBridge } from '../server/index.js'
 import { activeLanesFileFor, writeActiveLanes } from '../server/active-lanes.js'
 import { chatFileFor } from '../server/orchestrator.js'
 import { LANE_ENDED_PROBLEM, LANE_LIMIT_PROBLEM } from '../server/orchestrators.js'
+import { saveHarnessSettings } from '../server/harness-settings.js'
 import { getJson } from './helpers/bridge.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 
@@ -201,15 +202,40 @@ describe('a lane inbox', () => {
     expect(read.status).toBe(200)
     expect(Object.keys(read.body)).toEqual(['messages'])
     expect(read.body.messages).toEqual([
-      { id: expect.any(String), from: 'orchestrator', text: 'Which header?', at: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/) },
+      { id: expect.any(String), from: 'orchestrator', text: 'Which header?', at: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/), interrupt: false },
     ])
-    expect(Object.keys(read.body.messages[0])).toEqual(['id', 'from', 'text', 'at'])
+    expect(Object.keys(read.body.messages[0])).toEqual(['id', 'from', 'text', 'at', 'interrupt'])
 
     const team = rig.chat('orchestrator').messages.filter((message) => message.from === 'agent' && message.agent?.kind === 'message')
     expect(team).toEqual([
       expect.objectContaining({
         agent: expect.objectContaining({ from: 'orchestrator', to: 'opencode', kind: 'message', text: 'Which header?' }),
       }),
+    ])
+    await releaseRun(rig)
+  })
+
+  it('marks each message with the reply choice saved when it was sent', async () => {
+    const rig = await makeBridge(makeBase({ ladder: { subs: [FRONTEND] } }))
+    const ticket = await startRun(rig, 'opencode')
+
+    saveHarnessSettings(rig.runs, { programs: {}, off: [], laneReplies: 'interrupt' })
+    const interrupting = await tokenPost(rig.url, '/api/orchestrator/messages', { to: 'lane:opencode', text: 'Read it now.' }, rig.token('orchestrator'))
+    expect(interrupting.status).toBe(202)
+
+    saveHarnessSettings(rig.runs, { programs: {}, off: [], laneReplies: 'next-turn' })
+    const waiting = await tokenPost(rig.url, '/api/orchestrator/messages', { to: 'lane:opencode', text: 'Read it after.' }, rig.token('orchestrator'))
+    expect(waiting.status).toBe(202)
+
+    const pageForced = await pagePost(rig.url, '/api/orchestrator/messages', { to: 'lane:opencode', text: 'Read this at once.', interrupt: true })
+    expect(pageForced.status).toBe(202)
+
+    const read = await laneGet(rig.url, ticket)
+    expect(read.status).toBe(200)
+    expect(read.body.messages.map((message) => [message.text, message.interrupt])).toEqual([
+      ['Read it now.', true],
+      ['Read it after.', false],
+      ['Read this at once.', true],
     ])
     await releaseRun(rig)
   })
@@ -223,7 +249,7 @@ describe('a lane inbox', () => {
 
     const read = await laneGet(rig.url, ticket)
     expect(read.body.messages).toEqual([
-      { id: expect.any(String), from: 'sub:frontend', text: 'Use the new header.', at: expect.any(String) },
+      { id: expect.any(String), from: 'sub:frontend', text: 'Use the new header.', at: expect.any(String), interrupt: false },
     ])
     await releaseRun(rig)
   })
@@ -237,7 +263,7 @@ describe('a lane inbox', () => {
     expect(first.status).toBe(202)
     const read = await laneGet(rig.url, other)
     expect(read.body.messages).toEqual([
-      { id: expect.any(String), from: 'lane:opencode', text: 'The field is ready.', at: expect.any(String) },
+      { id: expect.any(String), from: 'lane:opencode', text: 'The field is ready.', at: expect.any(String), interrupt: false },
     ])
 
     for (let index = 2; index <= 4; index += 1) {

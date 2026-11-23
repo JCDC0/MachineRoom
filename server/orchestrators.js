@@ -954,14 +954,14 @@ export function createOrchestrators({
     const held = lastLaneTicket(lane) ?? backupHeld(lane)
     if (startedAt !== undefined && held?.startedAt !== startedAt) return 'stale'
     if (!held || !Array.isArray(held.inbox)) return false
-    const entry = { id: randomUUID(), from, text, at: new Date(at).toISOString(), status: 'queued', sender }
-    held.inbox.push(entry)
-    laneMessageEntries.set(entry.id, entry)
-    while (held.inbox.length > LANE_INBOX_LIMIT) laneMessageEntries.delete(held.inbox.shift().id)
     const shouldInterrupt =
       typeof interrupt === 'boolean'
         ? interrupt
         : readHarnessSettings(folder).laneReplies === 'interrupt'
+    const entry = { id: randomUUID(), from, text, at: new Date(at).toISOString(), status: 'queued', sender, interrupt: shouldInterrupt }
+    held.inbox.push(entry)
+    laneMessageEntries.set(entry.id, entry)
+    while (held.inbox.length > LANE_INBOX_LIMIT) laneMessageEntries.delete(held.inbox.shift().id)
     if (
       !stopped &&
       typeof interruptLane === 'function' &&
@@ -1015,7 +1015,7 @@ export function createOrchestrators({
             entry.status = 'fetched'
             entry.fetchedAt = new Date(clock()).toISOString()
           }
-          return { id: entry.id, from: entry.from, text: entry.text, at: entry.at }
+          return { id: entry.id, from: entry.from, text: entry.text, at: entry.at, interrupt: entry.interrupt === true }
         })
       : []
     return { status: 200, body: { messages } }
