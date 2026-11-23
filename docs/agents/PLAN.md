@@ -2,7 +2,7 @@
 
 ## Next, as of 2026-11-24
 
-Pushed `f4814ab8` (CI green on both runners after one Windows rerun). The owner asked for folder cards that open and shut in a wave from the root, and a chain from the root to a folder an agent touches (P723), and to plan for one native lane while every other lane's usage is down. P723 runs on `native2` (DeepSeek V4.1 Flash on OpenRouter), the only native lane, then review 76 on the same lane when it ends.
+Pushed `f4814ab8` (CI green on both runners after one Windows rerun). The owner asked for folder cards that open and shut in a wave from the root, and a chain from the root to a folder an agent touches (P723), and to plan for one native lane while every other lane's usage is down. P723 runs on `native2` (DeepSeek V4.1 Flash on OpenRouter), the only native lane, then P724 (the message delivery setting), then review 76 of `c9771c4c` to the P724 merge on the same lane.
 
 ## Next, as of 2026-11-23 20:20
 
@@ -48,6 +48,7 @@ The team since 2026-11-22 17:35 (the owner's word): this session orchestrates (C
 | R72-2's other half: from the overview a callout can sit behind a nearer folder card or the hub | P708 | merged (`bd138b89`): callouts draw on a second CSS3D layer above the cards; seen in a replay |
 | Reviews 73 to 75 of the design changes: 2, 2 and 3 Highs, mostly forced idle, open-call focus and the tunnel | P712 to P714, P718, P719, P721, P722 | merged; P719 and most of P718 and P721 finished by hand when AGY credits ran out; forced idle checked by eye at 1280 pixels |
 | Toggling `Show folder contents` pops every card at once; each card should open or shut on its own timeline, in a wave from the root outward, and with contents off an agent touch should pulse from the root to the folder, leaving only the folder open (owner corrected from the whole chain staying open) | P723 | briefed; runs on the native lane, corrected by message mid-run |
+| One setting decides whether a message from the owner or any agent to a working agent interrupts it now or reaches it after its current action, and the native harness follows it | P724 | briefed; runs on the native lane after P723 |
 
 Findings per review: 64 had 12, 65 had 10, 66 had 8, 67 had 4, 68 had 3, 69 had 3, 70 had 4. Since review 69 they are mostly edge cases (node flags no runner uses, five-deep rings, a log that keeps growing with no meta).
 
