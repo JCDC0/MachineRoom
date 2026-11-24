@@ -419,7 +419,10 @@ export function createAgySessionsReader(options = {}) {
 
   function apply(entry, root, json) {
     entry.lines += 1
-    if (json.type === 'USER_INPUT') return
+    if (json.type === 'USER_INPUT') {
+      ensureRun(root)
+      return
+    }
     if (json.type === 'PLANNER_RESPONSE') {
       const calls = Array.isArray(json.tool_calls) ? json.tool_calls : []
       if (calls.length === 0) return

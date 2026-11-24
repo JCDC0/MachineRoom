@@ -753,23 +753,29 @@ describe('the Antigravity session reader and its runs', () => {
     expect(reader.open().has('conv-open')).toBe(true)
   })
 
-  it('opens a run at a user input line, before its first step', () => {
+  it('opens a second run when a user input line starts another turn', () => {
     const { projectRoot, home, dbPath } = setup()
+    let time = 1000000
     const frames = []
-    const reader = makeReader({ projectRoot, home, dbPath, frames })
+    const reader = makeReader({ projectRoot, home, dbPath, frames, now: () => time, quietMs: 1000 })
     reader.tick()
 
     addConversation(dbPath, { id: 'conv-input' })
-    appendTranscript(home, 'conv-input', [userInput(0, 'Do the thing.'), planner(1, [readCall(join(projectRoot, 'src', 'math.js'))]), generic(2, 'ok')])
+    appendTranscript(home, 'conv-input', [planner(1, [readCall(join(projectRoot, 'src', 'math.js'))]), generic(2, 'ok')])
     reader.tick()
 
-    expect(frames.map((frame) => frame.type)).toEqual([
-      'heartbeat.run.queued',
-      'heartbeat.run.status',
-      'heartbeat.run.log',
-      'heartbeat.run.log',
+    time += 60000
+    reader.tick()
+    expect(frames.filter((frame) => frame.type === 'heartbeat.run.status').map((frame) => frame.payload.status)).toEqual([
+      'running',
+      'succeeded',
     ])
-    expect(frames[1].payload.status).toBe('running')
+
+    appendTranscript(home, 'conv-input', [userInput(3, 'One more thing.')])
+    reader.tick()
+    const runs = frames.filter((frame) => frame.type === 'heartbeat.run.queued')
+    expect(runs).toHaveLength(2)
+    expect(runs[1].payload.runId).toBe('conv-input:' + runs[0].payload.runId.split(':')[1] + ':2')
   })
 
   it('gives two reader lifetimes over one database different run ids', () => {
