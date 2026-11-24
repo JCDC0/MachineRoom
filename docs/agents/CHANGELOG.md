@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The room shows the owner's own Hermes sessions: the bridge reads only `state.db` in the Hermes home, follows the sessions in the project, sends their tool calls and results to the Hermes parser and makes a child agent per child session (P727).
 - An outside session that leads subagents takes the top seat on its own, below the owner's chosen top and the room's working orchestrator (P728).
 - The Antigravity reader decides a conversation's project from a path in any call of its tree, joins a running conversation from up to the last 512 KB of its existing transcript, never marks one outside, keeps a run open while any conversation in its tree runs, and stats only the transcripts a tick needs (P726b).
 - The room shows the owner's own Antigravity sessions and their subagents: the bridge reads the Antigravity summaries database and each conversation's transcript, keeps the conversations that touch the project, sends their tool calls as AGY steps and makes one child agent per subagent conversation (P726).
