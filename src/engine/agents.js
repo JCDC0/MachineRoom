@@ -4,7 +4,7 @@ import { LineGeometry } from 'three/addons/lines/LineGeometry.js'
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js'
 import { CSS3DObject } from 'three/addons/renderers/CSS3DRenderer.js'
 import { ownerOf } from '../model/hierarchy.js'
-import { isSessionTopKey, laneStarterTop, topKeyFor } from '../model/laneStarter.js'
+import { delegatingSessionTop, laneStarterTop, topKeyFor } from '../model/laneStarter.js'
 import { dirname } from '../model/paths.js'
 import { CHILD_LIFE_MS, latestOpenCall } from '../model/state.js'
 import { AGENT_RING_BASE, AGENT_RING_GROW, AGENT_RING_MAX_OPACITY, AGENT_RING_MS, AGENT_RING_OPACITY_FLOOR, AGENT_RING_POOL, HUB_RADIUS, HUB_Y, ORCHESTRATOR_HOME, ORCHESTRATOR_LIFT, PARK_LIFT, RING_LEVEL_MAX, SWAY_LIFT, SWAY_RATE, SWAY_SCALE, danceEnvelope, hasSubs, isSessionReader, parkedKeysFor, readerAngles, readerPoint, ringDepth, ringLayout, ringPulse, sectorSlotAngles, sectorSubAngle, slotAngle, startDanceEnvelope, SUB_STAND_LIFT, topRingSeats, writeColor, writeOpacity } from './hub.js'
@@ -1033,7 +1033,9 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
   let chosenTop = ''
   let ranReaders = new Set()
   let ranSignature = ''
-  let lastLaneTop = 'orchestrator'
+  let lastLaneTop = ''
+  let lastDelegatingTop = ''
+  let lastOwnBusy = false
   let depth = RING_LEVEL_MAX
   const chainCache = { links: null, mask: null, parents: null, back: [] }
   let pulseSource = null
@@ -1498,8 +1500,17 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
     return chosenTop
   }
 
+  function computeTop() {
+    const chosen = topKeyFor({ chosenTop, laneTop: '', viewKeys: viewKeySet() })
+    if (chosen !== 'orchestrator') return chosen
+    if (lastOwnBusy) return 'orchestrator'
+    if (lastLaneTop !== '') return lastLaneTop
+    if (lastDelegatingTop !== '' && views.has(lastDelegatingTop)) return lastDelegatingTop
+    return 'orchestrator'
+  }
+
   function refreshTop() {
-    const nextTop = topKeyFor({ chosenTop, laneTop: lastLaneTop, viewKeys: viewKeySet() })
+    const nextTop = computeTop()
     if (nextTop === topKey) return false
     topKey = nextTop
     placeViews()
@@ -1796,10 +1807,11 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
 
   function update(state, delta, now, world, terminals, callout = null) {
     currentTerminals = terminals ?? null
-    lastLaneTop = laneStarterTop({ agents: state.agents, at: state.latest }) || 'orchestrator'
-    const nextTop = isSessionTopKey(chosenTop)
-      ? topKeyFor({ chosenTop, laneTop: lastLaneTop, viewKeys: viewKeySet() })
-      : lastLaneTop
+    const own = state.agents.get('orchestrator') ?? null
+    lastOwnBusy = Boolean(own) && (own.status === 'working' || own.status === 'queued')
+    lastLaneTop = laneStarterTop({ agents: state.agents, at: state.latest })
+    lastDelegatingTop = delegatingSessionTop({ agents: state.agents, at: state.latest })
+    const nextTop = computeTop()
     const ranNow = []
     for (const view of views.values()) {
       if (view.sessionReader && !view.parentKey && entryRan(state.agents.get(view.key))) ranNow.push(view.key)

@@ -8,6 +8,7 @@ import {
   starOriginKey,
 } from '../src/engine/agents.js'
 import { HUB_RADIUS, HUB_Y, ORCHESTRATOR_HOME, PARK_LIFT, READER_RADIUS, RING_LEVEL_MAX, SUB_STAND_LIFT, ringDrop } from '../src/engine/hub.js'
+import { LANE_START_TOP_MS } from '../src/model/laneStarter.js'
 import { apply, createState } from '../src/model/state.js'
 
 const LADDER = {
@@ -340,6 +341,87 @@ describe('starOriginKey', () => {
     expect(starOriginKey('orchestrator', '')).toBe('orchestrator')
     expect(starOriginKey('sub-frontend', 'claude-session')).toBe('sub-frontend')
     expect(starOriginKey('', 'claude-session')).toBe('')
+  })
+})
+
+describe('an outside session that leads subagents takes the top', () => {
+  const ROSTER_WITH_SESSIONS = [
+    ...ROSTER,
+    { key: 'antigravity-session', name: 'Antigravity session', parser: 'agy' },
+    { key: 'claude-session', name: 'Claude Code session', parser: 'claude' },
+  ]
+
+  function spawn(state, session, child, time) {
+    apply(state, { type: 'run.start', agent: session, runId: `${session}:1`, time })
+    apply(state, { type: 'agent.spawn', agent: session, child, name: child, time })
+  }
+
+  it('seats the session whose children work in the orchestrator place', () => {
+    const { agents, state, terminals, world } = harness(ROSTER_WITH_SESSIONS)
+    spawn(state, 'antigravity-session', 'antigravity-session~1', 1000)
+    apply(state, { type: 'agent.spawn', agent: 'antigravity-session', child: 'antigravity-session~2', name: 'second', time: 1200 })
+    agents.update(state, 0.016, 0, world, terminals)
+    agents.snap(state, world)
+    const session = agents.views.get('antigravity-session')
+    const main = agents.views.get('orchestrator')
+    expect(agents.topKey()).toBe('antigravity-session')
+    expectAt(session.group.position, ORCHESTRATOR_HOME)
+    expectAt(main.group.position, new THREE.Vector3(ORCHESTRATOR_HOME.x, HUB_Y + PARK_LIFT, ORCHESTRATOR_HOME.z))
+    agents.dispose()
+  })
+
+  it('keeps the seat for a watch-only room with no orchestrator agent', () => {
+    const roster = [
+      { key: 'antigravity-session', name: 'Antigravity session', parser: 'agy' },
+      { key: 'opencode', name: 'OpenCode' },
+    ]
+    const { agents, state, terminals, world } = harness(roster)
+    spawn(state, 'antigravity-session', 'antigravity-session~1', 1000)
+    agents.update(state, 0.016, 0, world, terminals)
+    agents.snap(state, world)
+    expect(agents.topKey()).toBe('antigravity-session')
+    expectAt(agents.views.get('antigravity-session').group.position, ORCHESTRATOR_HOME)
+    agents.dispose()
+  })
+
+  it('keeps a chosen top on another drawn session', () => {
+    const roster = [...ROSTER_WITH_SESSIONS.filter((agent) => agent.key !== 'orchestrator')]
+    const { agents, state, terminals, world } = harness(roster)
+    spawn(state, 'antigravity-session', 'antigravity-session~1', 1000)
+    apply(state, { type: 'run.start', agent: 'claude-session', runId: 'claude-session:1', time: 1100 })
+    agents.setChosenTop('claude-session')
+    agents.update(state, 0.016, 0, world, terminals)
+    agents.snap(state, world)
+    expect(agents.topKey()).toBe('claude-session')
+    expectAt(agents.views.get('claude-session').group.position, ORCHESTRATOR_HOME)
+    expect(agents.views.get('antigravity-session').group.position.y).toBeCloseTo(HUB_Y + PARK_LIFT)
+    agents.dispose()
+  })
+
+  it('keeps the seat for the room orchestrator while it works', () => {
+    const { agents, state, terminals, world } = harness(ROSTER_WITH_SESSIONS)
+    spawn(state, 'antigravity-session', 'antigravity-session~1', 1000)
+    apply(state, { type: 'run.start', agent: 'orchestrator', runId: 'orchestrator:1', time: 2000 })
+    agents.update(state, 0.016, 0, world, terminals)
+    agents.snap(state, world)
+    expect(agents.topKey()).toBe('orchestrator')
+    expectAt(agents.views.get('orchestrator').group.position, ORCHESTRATOR_HOME)
+    agents.dispose()
+  })
+
+  it('gives the seat back once the children ended and the window has passed', () => {
+    const { agents, state, terminals, world } = harness(ROSTER_WITH_SESSIONS)
+    spawn(state, 'antigravity-session', 'antigravity-session~1', 1000)
+    apply(state, { type: 'agent.end', agent: 'antigravity-session~1', ok: true, time: 2000 })
+    agents.update(state, 0.016, 0, world, terminals)
+    expect(agents.topKey()).toBe('antigravity-session')
+
+    state.latest = 2000 + LANE_START_TOP_MS + 1
+    agents.update(state, 0.016, 0, world, terminals)
+    agents.snap(state, world)
+    expect(agents.topKey()).toBe('orchestrator')
+    expectAt(agents.views.get('orchestrator').group.position, ORCHESTRATOR_HOME)
+    agents.dispose()
   })
 })
 

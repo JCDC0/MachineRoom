@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { LANE_START_TOP_MS, cleanStartedBy, isSessionTopKey, laneStarterTop, sessionKeyFor, topKeyFor } from '../src/model/laneStarter.js'
+import { LANE_START_TOP_MS, cleanStartedBy, delegatingSessionTop, isSessionTopKey, laneStarterTop, sessionKeyFor, topKeyFor } from '../src/model/laneStarter.js'
 
 const HOUR = 60 * 60 * 1000
 
@@ -91,6 +91,66 @@ describe('laneStarter', () => {
     agents.set('opencode2', agent({ status: 'working', startedAt: 1000, startedBy: { harness: 'opencode', session: 's2' } }))
     agents.set('opencode-session', agent({ sessions: new Set(['s2']) }))
     expect(laneStarterTop({ agents, at: 6000 })).toBe('opencode-session')
+  })
+})
+
+describe('delegatingSessionTop', () => {
+  function room(entries) {
+    const agents = new Map()
+    for (const [key, fields] of entries) agents.set(key, agent({ key, ...fields }))
+    return agents
+  }
+
+  it('takes the session whose children work', () => {
+    const agents = room([
+      ['antigravity-session', {}],
+      ['worker-a', { parent: 'antigravity-session', status: 'working', startedAt: 1000 }],
+      ['worker-b', { parent: 'antigravity-session', status: 'queued', startedAt: 2000 }],
+    ])
+    expect(delegatingSessionTop({ agents, at: 2000 })).toBe('antigravity-session')
+  })
+
+  it('keeps the session only while a child ended inside the window', () => {
+    const agents = room([
+      ['antigravity-session', {}],
+      ['worker-a', { parent: 'antigravity-session', status: 'done', startedAt: 1000, endedAt: 2000 }],
+    ])
+    expect(delegatingSessionTop({ agents, at: 2000 })).toBe('antigravity-session')
+    expect(delegatingSessionTop({ agents, at: 2000 + LANE_START_TOP_MS })).toBe('antigravity-session')
+    expect(delegatingSessionTop({ agents, at: 2000 + LANE_START_TOP_MS + 1 })).toBe('')
+  })
+
+  it('prefers a working child over a newer ended one', () => {
+    const agents = room([
+      ['antigravity-session', {}],
+      ['claude-session', {}],
+      ['worker-a', { parent: 'antigravity-session', status: 'working', startedAt: 1000 }],
+      ['worker-b', { parent: 'claude-session', status: 'done', startedAt: 5000, endedAt: 6000 }],
+    ])
+    expect(delegatingSessionTop({ agents, at: 6000 })).toBe('antigravity-session')
+  })
+
+  it('takes the newest child start among sessions that both have working children', () => {
+    const agents = room([
+      ['antigravity-session', {}],
+      ['claude-session', {}],
+      ['worker-a', { parent: 'antigravity-session', status: 'working', startedAt: 1000 }],
+      ['worker-b', { parent: 'claude-session', status: 'working', startedAt: 4000 }],
+    ])
+    expect(delegatingSessionTop({ agents, at: 5000 })).toBe('claude-session')
+  })
+
+  it('wants a session key with no parent and a child of its own', () => {
+    const agents = room([
+      ['antigravity-session', {}],
+      ['opencode', { status: 'working', startedAt: 1000 }],
+      ['worker-a', { parent: 'opencode', status: 'working', startedAt: 1000 }],
+      ['nested-session', { parent: 'opencode', status: 'working', startedAt: 1000 }],
+      ['worker-b', { parent: 'nested-session', status: 'working', startedAt: 1000 }],
+    ])
+    expect(delegatingSessionTop({ agents, at: 1000 })).toBe('')
+    expect(delegatingSessionTop({ agents: null, at: 1000 })).toBe('')
+    expect(delegatingSessionTop({ agents: new Map(), at: 1000 })).toBe('')
   })
 })
 

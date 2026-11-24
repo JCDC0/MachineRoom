@@ -32,6 +32,43 @@ export function topKeyFor({ chosenTop = '', laneTop = '', viewKeys = null } = {}
   return typeof laneTop === 'string' && laneTop !== '' ? laneTop : 'orchestrator'
 }
 
+function childStart(child) {
+  if (Number.isFinite(child?.startedAt) && child.startedAt > 0) return child.startedAt
+  return Number.isFinite(child?.endedAt) ? child.endedAt : 0
+}
+
+export function delegatingSessionTop({ agents, at, windowMs = LANE_START_TOP_MS } = {}) {
+  if (!agents || typeof agents.get !== 'function' || typeof agents.values !== 'function') return ''
+  const now = Number.isFinite(at) ? at : 0
+  const span = Number.isFinite(windowMs) ? windowMs : LANE_START_TOP_MS
+  let best = ''
+  let bestOpen = false
+  let bestAt = -Infinity
+  for (const session of agents.values()) {
+    const key = session?.key
+    if (!isSessionTopKey(key) || session.parent) continue
+    let open = false
+    let when = -Infinity
+    for (const child of agents.values()) {
+      if (child?.parent !== key) continue
+      const running = child.status === 'working' || child.status === 'queued'
+      const endedAt = Number.isFinite(child.endedAt) ? child.endedAt : 0
+      const fresh = endedAt > 0 && now >= endedAt && now - endedAt <= span
+      if (!running && !fresh) continue
+      if (running) open = true
+      const started = childStart(child)
+      if (started > when) when = started
+    }
+    if (when === -Infinity) continue
+    if (best === '' || (open && !bestOpen) || (open === bestOpen && when > bestAt)) {
+      best = key
+      bestOpen = open
+      bestAt = when
+    }
+  }
+  return best
+}
+
 export function laneStarterTop({ agents, at, orchestratorKey = 'orchestrator', windowMs = LANE_START_TOP_MS } = {}) {
   if (!agents || typeof agents.get !== 'function') return ''
   const own = agents.get(orchestratorKey)
