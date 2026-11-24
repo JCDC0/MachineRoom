@@ -1,14 +1,45 @@
-import { closeSync, openSync, readSync, statSync } from 'node:fs'
+import { closeSync, openSync, readFileSync, readdirSync, readSync, statSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { StringDecoder } from 'node:string_decoder'
+import { pathInside } from '../src/briefs/run.js'
 
 const READ_CHUNK = 64 * 1024
 const MAX_PARTIAL = 1024 * 1024
+const HELD_LIMIT = 200
 const FULL_READ_MS = 60 * 1000
+const PATH_KEYS = ['Path', 'AbsolutePath', 'TargetFile']
 const TRANSCRIPT = join('.system_generated', 'logs', 'transcript.jsonl')
 const COLUMNS = 'conversation_id, parent_conversation_id, agent_name, status, nesting_depth, last_modified_time'
 const LINE_TYPES = new Set(['USER_INPUT', 'PLANNER_RESPONSE', 'GENERIC'])
+
+function absolutePath(value) {
+  const text = String(value ?? '').trim()
+  if (!text) return ''
+  if (!/^[a-zA-Z]:[\\/]/.test(text) && !text.startsWith('/')) return ''
+  try {
+    return resolve(text)
+  } catch {
+    return ''
+  }
+}
+
+function parseArgs(args) {
+  if (!args || typeof args !== 'object') return {}
+  const out = {}
+  for (const [key, raw] of Object.entries(args)) {
+    if (typeof raw !== 'string') {
+      out[key] = raw
+      continue
+    }
+    try {
+      out[key] = JSON.parse(raw)
+    } catch {
+      out[key] = raw.replace(/^"|"$/g, '')
+    }
+  }
+  return out
+}
 
 function sizeOf(path) {
   try {
@@ -25,10 +56,16 @@ function newStream(path, offset) {
 export function createAgySessionsReader(options = {}) {
   const projectRoot = resolve(options.projectRoot ?? process.cwd())
   const home = options.home ?? homedir()
+  const runsFolder = options.runsFolder ? resolve(options.runsFolder) : ''
   const dbPath = options.dbPath ? resolve(String(options.dbPath)) : join(home, '.gemini', 'antigravity', 'conversation_summaries.db')
   const brainRoot = options.brainRoot ? resolve(String(options.brainRoot)) : join(home, '.gemini', 'antigravity', 'brain')
   const now = options.now ?? Date.now
+  const emit = typeof options.emit === 'function' ? options.emit : () => {}
+  const listFolder = typeof options.listFolder === 'function' ? options.listFolder : (dir) => readdirSync(dir, { withFileTypes: true })
   const conversations = new Map()
+  const metaFiles = new Map()
+  let metaNames = null
+  let metaFolderStamp = null
   let db = null
   let allStmt = null
   let sinceStmt = null
@@ -55,6 +92,68 @@ export function createAgySessionsReader(options = {}) {
     sinceStmt = db.prepare(`SELECT ${COLUMNS} FROM conversation_summaries WHERE last_modified_time > ?`)
   }
 
+  function runsFolderStamp() {
+    try {
+      const stat = statSync(runsFolder, { bigint: true })
+      return String(stat.mtimeNs ?? stat.mtimeMs)
+    } catch {
+      return null
+    }
+  }
+
+  function listMetaNames() {
+    let entries
+    try {
+      entries = listFolder(runsFolder)
+    } catch {
+      return []
+    }
+    const names = []
+    for (const entry of entries) {
+      if (!entry.isFile() || !entry.name.endsWith('.meta.json')) continue
+      names.push(entry.name)
+    }
+    return names
+  }
+
+  function skippedSessions() {
+    const skipped = new Set()
+    if (!runsFolder) return skipped
+    const stamp = runsFolderStamp()
+    if (metaNames === null || stamp === null || stamp !== metaFolderStamp) {
+      metaNames = listMetaNames()
+      metaFolderStamp = stamp
+    }
+    const seen = new Set(metaNames)
+    for (const name of metaNames) {
+      const path = join(runsFolder, name)
+      let mtimeMs
+      try {
+        mtimeMs = statSync(path).mtimeMs
+      } catch {
+        metaFiles.delete(name)
+        continue
+      }
+      const cached = metaFiles.get(name)
+      if (cached && cached.mtimeMs === mtimeMs) {
+        if (cached.sessionId) skipped.add(cached.sessionId)
+        continue
+      }
+      try {
+        const meta = JSON.parse(readFileSync(path, 'utf8'))
+        const sessionId = typeof meta?.sessionId === 'string' && meta.sessionId !== '' ? meta.sessionId : null
+        metaFiles.set(name, { mtimeMs, sessionId })
+        if (sessionId) skipped.add(sessionId)
+      } catch {
+        metaFiles.delete(name)
+      }
+    }
+    for (const name of metaFiles.keys()) {
+      if (!seen.has(name)) metaFiles.delete(name)
+    }
+    return skipped
+  }
+
   function readRows() {
     if (!openDatabase()) return []
     prepare()
@@ -76,7 +175,7 @@ export function createAgySessionsReader(options = {}) {
     return join(brainRoot, id, TRANSCRIPT)
   }
 
-  function takeRows(rows) {
+  function takeRows(rows, skipped) {
     for (const row of rows) {
       const id = typeof row?.conversation_id === 'string' ? row.conversation_id : ''
       if (!id) continue
@@ -87,13 +186,87 @@ export function createAgySessionsReader(options = {}) {
       if (!entry) {
         const path = transcriptPath(id)
         const offset = primed ? 0 : sizeOf(path)
-        entry = { id, parentId, depth, status, path, stream: newStream(path, offset), lines: 0 }
+        entry = {
+          id,
+          parentId,
+          depth,
+          status,
+          path,
+          stream: newStream(path, offset),
+          held: [],
+          decision: 'unknown',
+          lines: 0,
+          skipped: skipped.has(id),
+        }
         conversations.set(id, entry)
       } else {
         if (parentId) entry.parentId = parentId
         if (status !== entry.status) entry.status = status
         if (depth !== entry.depth) entry.depth = depth
+        if (skipped.has(id)) entry.skipped = true
       }
+    }
+  }
+
+  function rootOf(entry) {
+    let current = entry
+    const seen = new Set()
+    while (current) {
+      if (!current.parentId) return current
+      if (seen.has(current.id)) return null
+      seen.add(current.id)
+      current = conversations.get(current.parentId)
+    }
+    return null
+  }
+
+  function byDepth(a, b) {
+    const one = a.parentId ? a.depth : 0
+    const two = b.parentId ? b.depth : 0
+    if (one !== two) return one - two
+    return a.id < b.id ? -1 : a.id > b.id ? 1 : 0
+  }
+
+  function treeOf(root) {
+    const rest = []
+    for (const entry of conversations.values()) {
+      if (entry === root) continue
+      if (rootOf(entry) === root) rest.push(entry)
+    }
+    rest.sort(byDepth)
+    return [root].concat(rest)
+  }
+
+  function decide(root, json) {
+    if (json.type !== 'PLANNER_RESPONSE') return false
+    const calls = Array.isArray(json.tool_calls) ? json.tool_calls : []
+    for (const call of calls) {
+      const parameters = parseArgs(call?.args)
+      for (const key of PATH_KEYS) {
+        const path = absolutePath(parameters[key])
+        if (!path) continue
+        root.decision = pathInside(path, projectRoot) ? 'inside' : 'outside'
+        return true
+      }
+    }
+    return false
+  }
+
+  function hold(entry, json) {
+    if (entry.held.length >= HELD_LIMIT) entry.held.shift()
+    entry.held.push(json)
+  }
+
+  function dropHeld(root) {
+    for (const entry of treeOf(root)) entry.held = []
+  }
+
+  function flushTree(root) {
+    for (const entry of treeOf(root)) {
+      if (entry.held.length === 0) continue
+      const queued = entry.held
+      entry.held = []
+      for (const json of queued) apply(entry, root, json)
     }
   }
 
@@ -106,6 +279,29 @@ export function createAgySessionsReader(options = {}) {
     }
     if (!json || typeof json !== 'object') return
     if (!LINE_TYPES.has(json.type)) return
+    const root = rootOf(entry)
+    if (!root) return
+    if (root.decision === 'unknown') {
+      if (entry !== root || !decide(root, json)) {
+        hold(entry, json)
+        return
+      }
+      if (root.decision !== 'inside') {
+        dropHeld(root)
+        return
+      }
+      hold(entry, json)
+      flushTree(root)
+      return
+    }
+    if (root.decision !== 'inside') {
+      dropHeld(root)
+      return
+    }
+    apply(entry, root, json)
+  }
+
+  function apply(entry, root, json) {
     entry.lines += 1
   }
 
@@ -171,8 +367,21 @@ export function createAgySessionsReader(options = {}) {
     if (stopped || ticking) return
     ticking = true
     try {
-      takeRows(readRows())
-      for (const entry of conversations.values()) readStream(entry.stream, (line) => handleLine(entry, line))
+      const skipped = skippedSessions()
+      takeRows(readRows(), skipped)
+      for (const entry of conversations.values()) {
+        if (skipped.has(entry.id)) entry.skipped = true
+      }
+      for (const entry of conversations.values()) {
+        const root = rootOf(entry)
+        if (root?.decision === 'outside') dropHeld(root)
+      }
+      for (const entry of [...conversations.values()].sort(byDepth)) {
+        if (entry.skipped) continue
+        const root = rootOf(entry)
+        if (!root || root.skipped || root.decision === 'outside') continue
+        readStream(entry.stream, (line) => handleLine(entry, line))
+      }
       primed = true
     } catch {
     } finally {
@@ -183,6 +392,9 @@ export function createAgySessionsReader(options = {}) {
   function stop() {
     stopped = true
     conversations.clear()
+    metaFiles.clear()
+    metaNames = null
+    metaFolderStamp = null
     highWater = null
     lastFullReadAt = null
     if (db) {
@@ -195,5 +407,5 @@ export function createAgySessionsReader(options = {}) {
     sinceStmt = null
   }
 
-  return { tick, stop, projectRoot, sessions: () => conversations }
+  return { tick, stop, projectRoot, sessions: () => conversations, metaFiles: () => metaFiles, emit }
 }

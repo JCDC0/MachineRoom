@@ -1,4 +1,4 @@
-import { appendFileSync, mkdirSync, mkdtempSync, readdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { appendFileSync, mkdirSync, mkdtempSync, readdirSync, realpathSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
@@ -117,8 +117,8 @@ function readCall(path) {
   return { name: 'read_file', args: { Path: JSON.stringify(path), StartLine: '1', EndLine: '10' } }
 }
 
-function makeReader({ projectRoot, home, dbPath, frames, now, quietMs, listFolder }) {
-  const reader = createAgySessionsReader({ projectRoot, home, dbPath, now, quietMs, listFolder, emit: (frame) => frames.push(frame) })
+function makeReader({ projectRoot, home, dbPath, runsFolder, frames, now, quietMs, listFolder }) {
+  const reader = createAgySessionsReader({ projectRoot, home, dbPath, runsFolder, now, quietMs, listFolder, emit: (frame) => frames.push(frame) })
   cleanups.push(() => reader.stop())
   return reader
 }
@@ -153,9 +153,10 @@ describe('the Antigravity session reader, reading the summaries and the transcri
     reader.tick()
     expect(reader.sessions().get('conv-old').lines).toBe(0)
 
-    appendTranscript(home, 'conv-old', [generic(3, 'new')])
+    appendTranscript(home, 'conv-old', [planner(3, [readCall(join(projectRoot, 'src', 'new.js'))]), generic(4, 'new')])
     reader.tick()
-    expect(reader.sessions().get('conv-old').lines).toBe(1)
+    expect(reader.sessions().get('conv-old').lines).toBe(2)
+    expect(reader.sessions().get('conv-old').decision).toBe('inside')
   })
 
   it('reads a conversation first seen after the first tick from its first byte', () => {
@@ -250,6 +251,168 @@ describe('the Antigravity session reader, reading the summaries and the transcri
       },
     })
     reader.tick()
-    expect(lists).toBe(0)
+    expect(lists).toBe(1)
+    reader.tick()
+    reader.tick()
+    expect(lists).toBe(1)
+    expect(reader.metaFiles().get('agy-a.meta.json')).toMatchObject({ sessionId: 'conv-a' })
+  })
+})
+
+describe('the Antigravity session reader around the project', () => {
+  it('keeps a conversation once a tool path resolves inside the project', () => {
+    const { projectRoot, home, dbPath } = setup()
+    const reader = makeReader({ projectRoot, home, dbPath, frames: [] })
+    reader.tick()
+
+    addConversation(dbPath, { id: 'conv-in' })
+    writeTranscript(home, 'conv-in', [userInput(0), planner(1, [readCall(join(projectRoot, 'src', 'math.js'))]), generic(2, 'inside words')])
+    reader.tick()
+
+    expect(reader.sessions().get('conv-in').decision).toBe('inside')
+    expect(reader.sessions().get('conv-in').lines).toBe(3)
+  })
+
+  it('reads a subfolder of the project as inside', () => {
+    const { projectRoot, home, dbPath } = setup()
+    const reader = makeReader({ projectRoot, home, dbPath, frames: [] })
+    reader.tick()
+
+    addConversation(dbPath, { id: 'conv-sub' })
+    writeTranscript(home, 'conv-sub', [
+      planner(1, [{ name: 'write_to_file', args: { TargetFile: JSON.stringify(join(projectRoot, 'packages', 'web', 'page.ts')) } }]),
+    ])
+    reader.tick()
+
+    expect(reader.sessions().get('conv-sub').decision).toBe('inside')
+  })
+
+  it('keeps no line of a conversation that names another project first', () => {
+    const { base, projectRoot, home, dbPath } = setup()
+    const outside = join(base, 'other')
+    mkdirSync(outside, { recursive: true })
+    const frames = []
+    const reader = makeReader({ projectRoot, home, dbPath, frames })
+    reader.tick()
+
+    addConversation(dbPath, { id: 'conv-out' })
+    writeTranscript(home, 'conv-out', [userInput(0), planner(1, [readCall(join(outside, 'x.js'))]), generic(2, { note: 'outside words' })])
+    reader.tick()
+
+    expect(reader.sessions().get('conv-out').decision).toBe('outside')
+    expect(reader.sessions().get('conv-out').lines).toBe(0)
+    expect(frames).toEqual([])
+  })
+
+  it('holds the lines of a conversation with no path yet, up to 200', () => {
+    const { projectRoot, home, dbPath } = setup()
+    const reader = makeReader({ projectRoot, home, dbPath, frames: [] })
+    reader.tick()
+
+    addConversation(dbPath, { id: 'conv-held' })
+    const items = []
+    for (let i = 0; i < 260; i += 1) items.push(userInput(i))
+    items.push(planner(260, [readCall(join(projectRoot, 'src', 'math.js'))]))
+    writeTranscript(home, 'conv-held', items)
+    reader.tick()
+
+    const entry = reader.sessions().get('conv-held')
+    expect(entry.decision).toBe('inside')
+    expect(entry.lines).toBe(200)
+    expect(entry.held).toEqual([])
+  })
+
+  it('follows a child conversation on its parent decision', () => {
+    const { projectRoot, home, dbPath } = setup()
+    const reader = makeReader({ projectRoot, home, dbPath, frames: [] })
+    reader.tick()
+
+    addConversation(dbPath, { id: 'conv-parent' })
+    addConversation(dbPath, { id: 'conv-child', parent: 'conv-parent', agent: 'ui-worker', depth: 1 })
+    writeTranscript(home, 'conv-child', [planner(1, [readCall(join(projectRoot, 'src', 'child.js'))])])
+    reader.tick()
+    expect(reader.sessions().get('conv-parent')).toBeDefined()
+    expect(reader.sessions().get('conv-child').lines).toBe(0)
+
+    writeTranscript(home, 'conv-parent', [planner(1, [readCall(join(projectRoot, 'src', 'math.js'))]), generic(2, 'parent words')])
+    reader.tick()
+    expect(reader.sessions().get('conv-parent').decision).toBe('inside')
+    expect(reader.sessions().get('conv-child').lines).toBe(1)
+  })
+
+  it('drops the held lines of a child whose parent names another project', () => {
+    const { base, projectRoot, home, dbPath } = setup()
+    const outside = join(base, 'other')
+    mkdirSync(outside, { recursive: true })
+    const reader = makeReader({ projectRoot, home, dbPath, frames: [] })
+    reader.tick()
+
+    addConversation(dbPath, { id: 'conv-parent-out' })
+    addConversation(dbPath, { id: 'conv-child-out', parent: 'conv-parent-out', agent: 'ui-worker', depth: 1 })
+    writeTranscript(home, 'conv-parent-out', [planner(1, [readCall(join(outside, 'x.js'))])])
+    writeTranscript(home, 'conv-child-out', [planner(1, [readCall(join(projectRoot, 'src', 'child.js'))])])
+    reader.tick()
+    reader.tick()
+
+    expect(reader.sessions().get('conv-parent-out').decision).toBe('outside')
+    expect(reader.sessions().get('conv-child-out').lines).toBe(0)
+  })
+
+  it('skips a conversation that run-lane wrote, named in the runs folder meta', () => {
+    const { projectRoot, home, dbPath, base } = setup()
+    const runs = join(base, 'runs')
+    mkdirSync(runs, { recursive: true })
+    writeFileSync(join(runs, 'agy-test.meta.json'), `${JSON.stringify({ lane: 'agy', project: projectRoot, sessionId: 'conv-lane' })}\n`)
+    const frames = []
+    const reader = makeReader({ projectRoot, home, dbPath, runsFolder: runs, frames })
+    reader.tick()
+
+    addConversation(dbPath, { id: 'conv-lane' })
+    writeTranscript(home, 'conv-lane', [userInput(0), planner(1, [readCall(join(projectRoot, 'src', 'math.js'))]), generic(2, 'lane words')])
+    reader.tick()
+    reader.tick()
+
+    expect(reader.sessions().get('conv-lane').skipped).toBe(true)
+    expect(reader.sessions().get('conv-lane').lines).toBe(0)
+    expect(frames).toEqual([])
+  })
+
+  it('notices a lane meta file written after the conversation was registered', () => {
+    const { projectRoot, home, dbPath, base } = setup()
+    const runs = join(base, 'runs')
+    mkdirSync(runs, { recursive: true })
+    const reader = makeReader({ projectRoot, home, dbPath, runsFolder: runs, frames: [] })
+    reader.tick()
+
+    addConversation(dbPath, { id: 'conv-late' })
+    writeTranscript(home, 'conv-late', [planner(1, [readCall(join(projectRoot, 'src', 'math.js'))]), generic(2, 'first')])
+    reader.tick()
+    expect(reader.sessions().get('conv-late').lines).toBe(2)
+
+    writeFileSync(join(runs, 'agy-lane.meta.json'), `${JSON.stringify({ lane: 'agy', project: projectRoot, sessionId: 'conv-late' })}\n`)
+    const later = new Date(Date.now() + 60000)
+    utimesSync(runs, later, later)
+    appendTranscript(home, 'conv-late', [planner(3, [readCall(join(projectRoot, 'src', 'app.js'))]), generic(4, 'second')])
+    reader.tick()
+
+    expect(reader.sessions().get('conv-late').skipped).toBe(true)
+    expect(reader.sessions().get('conv-late').lines).toBe(2)
+  })
+
+  it('forgets a removed meta file', () => {
+    const { projectRoot, home, dbPath, base } = setup()
+    const runs = join(base, 'runs')
+    mkdirSync(runs, { recursive: true })
+    const meta = join(runs, 'agy-gone.meta.json')
+    writeFileSync(meta, `${JSON.stringify({ sessionId: 'conv-a' })}\n`)
+    const reader = makeReader({ projectRoot, home, dbPath, runsFolder: runs, frames: [] })
+    reader.tick()
+    expect(reader.metaFiles().has('agy-gone.meta.json')).toBe(true)
+
+    rmSync(meta)
+    const later = new Date(Date.now() + 60000)
+    utimesSync(runs, later, later)
+    reader.tick()
+    expect(reader.metaFiles().has('agy-gone.meta.json')).toBe(false)
   })
 })
