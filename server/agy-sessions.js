@@ -356,6 +356,7 @@ export function createAgySessionsReader(options = {}) {
       for (const key of PATH_KEYS) {
         const path = absolutePath(parameters[key])
         if (!path) continue
+        if (pathInside(path, brainRoot)) continue
         root.decision = pathInside(path, projectRoot) ? 'inside' : 'outside'
         return true
       }

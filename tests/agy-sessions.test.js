@@ -273,6 +273,29 @@ describe('the Antigravity session reader around the project', () => {
     expect(reader.sessions().get('conv-in').lines).toBe(3)
   })
 
+  it('passes over the screenshots Antigravity keeps in its own brain folder when it picks the project', () => {
+    const { base, projectRoot, home, dbPath } = setup()
+    const outside = join(base, 'other')
+    mkdirSync(outside, { recursive: true })
+    const own = (name) => join(home, '.gemini', 'antigravity', 'brain', 'conv-brain', '.system_generated', 'browser_evidence', name)
+    const reader = makeReader({ projectRoot, home, dbPath, frames: [] })
+    reader.tick()
+
+    addConversation(dbPath, { id: 'conv-brain' })
+    writeTranscript(home, 'conv-brain', [
+      planner(1, [readCall(own('final_step_14.png'))]),
+      planner(2, [readCall(join(projectRoot, 'src', 'math.js'))]),
+      generic(3, 'ok'),
+    ])
+    addConversation(dbPath, { id: 'conv-brain-out' })
+    writeTranscript(home, 'conv-brain-out', [planner(1, [readCall(own('page.png'))]), planner(2, [readCall(join(outside, 'x.js'))])])
+    reader.tick()
+
+    expect(reader.sessions().get('conv-brain').decision).toBe('inside')
+    expect(reader.sessions().get('conv-brain').lines).toBe(3)
+    expect(reader.sessions().get('conv-brain-out').decision).toBe('outside')
+  })
+
   it('reads a subfolder of the project as inside', () => {
     const { projectRoot, home, dbPath } = setup()
     const reader = makeReader({ projectRoot, home, dbPath, frames: [] })
