@@ -1,5 +1,9 @@
 # Plan
 
+## Next, as of 2026-11-24 21:10
+
+Pushed after P723 and P724 (full suite 9317 green). The owner asked for the room to show their own Antigravity, OpenCode and Hermes sessions on a project, watching only: P726 (Antigravity transcripts and the conversation summaries DB, subagents under their orchestrator) and P727 (the Hermes state DB) run on `native2` in turn. P725 (orchestrators follow the message setting) is planned, not started. Review 76 follows.
+
 ## Next, as of 2026-11-24
 
 Pushed `f4814ab8` (CI green on both runners after one Windows rerun). The owner asked for folder cards that open and shut in a wave from the root, and a chain from the root to a folder an agent touches (P723), and to plan for one native lane while every other lane's usage is down. P723 runs on `native2` (DeepSeek V4.1 Flash on OpenRouter), the only native lane, then P724 (the message delivery setting), then review 76 of `c9771c4c` to the P724 merge on the same lane.
@@ -50,6 +54,7 @@ The team since 2026-11-22 17:35 (the owner's word): this session orchestrates (C
 | Toggling `Show folder contents` pops every card at once; each card should open or shut on its own timeline, in a wave from the root outward, and with contents off an agent touch should pulse from the root to the folder, leaving only the folder open (owner corrected from the whole chain staying open) | P723 | merged (`4d9ab51d`), finished by hand: the room's sync after a toggle kept snapping, and a pulse on a card with no rows stuck; seen live: the toggle runs outward level by level, and a touch on `src/ui` opened the root, `src`, then `src/ui`, and only `src/ui` stayed open |
 | One setting decides whether a message from the owner or any agent to a working agent interrupts it now or reaches it after its current action, and the native harness follows it | P724 | merged (`417788c8`): each lane message carries the choice made when it was sent, the native agent watches its inbox through every model call and aborts only for a message marked interrupt; orchestrators still take a message after their current turn (owner asked whether they should follow it too) |
 | Messages to a working orchestrator follow the same setting (owner: yes, 2026-11-24, plan only, no code yet) | P725 | planned, not started; open point: CLI orchestrators wait for the turn end or stop at the next tool result |
+| The owner's own Antigravity work (an orchestrator such as Carbon Medium with Hydrogen subagents), OpenCode CLI and Hermes sessions show in the room when it is open on that project; the room only watches | P726 (Antigravity), P727 (Hermes); OpenCode already shows since S7b | briefed; P726 then P727 on the native lane |
 
 Findings per review: 64 had 12, 65 had 10, 66 had 8, 67 had 4, 68 had 3, 69 had 3, 70 had 4. Since review 69 they are mostly edge cases (node flags no runner uses, five-deep rings, a log that keeps growing with no meta).
 
