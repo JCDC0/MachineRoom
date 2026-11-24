@@ -7,10 +7,12 @@ import { pathInside } from '../src/briefs/run.js'
 
 const READ_CHUNK = 64 * 1024
 const MAX_PARTIAL = 1024 * 1024
+const LOOKBACK_BYTES = 512 * 1024
 const RESULT_LIMIT = 2000
 const HELD_LIMIT = 200
 const FULL_READ_MS = 60 * 1000
 const DEFAULT_QUIET_MS = 30000
+const RUNNING_QUIET_MS = 30 * 60 * 1000
 const IDLE_STATUS = 'CASCADE_RUN_STATUS_IDLE'
 const PATH_KEYS = ['Path', 'AbsolutePath', 'TargetFile']
 const TRANSCRIPT = join('.system_generated', 'logs', 'transcript.jsonl')
@@ -59,9 +61,9 @@ function parseArgs(args) {
   return out
 }
 
-function sizeOf(path) {
+function sizeOf(stat, path) {
   try {
-    return statSync(path).size
+    return stat(path).size
   } catch {
     return 0
   }
@@ -82,6 +84,7 @@ export function createAgySessionsReader(options = {}) {
   const quietMs = Number.isFinite(Number(options.quietMs)) ? Number(options.quietMs) : DEFAULT_QUIET_MS
   const emit = typeof options.emit === 'function' ? options.emit : () => {}
   const listFolder = typeof options.listFolder === 'function' ? options.listFolder : (dir) => readdirSync(dir, { withFileTypes: true })
+  const statFile = typeof options.statFile === 'function' ? options.statFile : (path) => statSync(path)
   const conversations = new Map()
   const pending = new Map()
   const metaFiles = new Map()
@@ -117,7 +120,9 @@ export function createAgySessionsReader(options = {}) {
   function prepare() {
     if (!db || allStmt) return
     allStmt = db.prepare(`SELECT ${COLUMNS} FROM conversation_summaries`)
-    sinceStmt = db.prepare(`SELECT ${COLUMNS} FROM conversation_summaries WHERE last_modified_time > ?`)
+    sinceStmt = db.prepare(
+      `SELECT ${COLUMNS} FROM conversation_summaries WHERE last_modified_time > ? OR status != '${IDLE_STATUS}'`
+    )
   }
 
   function runsFolderStamp() {
@@ -210,11 +215,12 @@ export function createAgySessionsReader(options = {}) {
       const parentId = typeof row.parent_conversation_id === 'string' ? row.parent_conversation_id : ''
       const agentName = typeof row.agent_name === 'string' ? row.agent_name : ''
       const status = typeof row.status === 'string' ? row.status : ''
+      const stamp = typeof row.last_modified_time === 'string' ? row.last_modified_time : ''
       const depth = Number.isFinite(row.nesting_depth) ? row.nesting_depth : parentId ? 1 : 0
       let entry = conversations.get(id)
       if (!entry) {
         const path = transcriptPath(id)
-        const offset = primed ? 0 : sizeOf(path)
+        const offset = primed ? 0 : sizeOf(statFile, path)
         entry = {
           id,
           parentId,
@@ -232,6 +238,9 @@ export function createAgySessionsReader(options = {}) {
           run: null,
           number: 0,
           skipped: skipped.has(id),
+          lastModified: stamp,
+          changed: true,
+          lookback: offset > 0 && status !== IDLE_STATUS && !skipped.has(id),
         }
         conversations.set(id, entry)
       } else {
@@ -243,6 +252,10 @@ export function createAgySessionsReader(options = {}) {
         }
         if (depth !== entry.depth) entry.depth = depth
         if (skipped.has(id)) entry.skipped = true
+        if (stamp !== '' && stamp !== entry.lastModified) {
+          entry.lastModified = stamp
+          entry.changed = true
+        }
       }
     }
   }
@@ -348,7 +361,7 @@ export function createAgySessionsReader(options = {}) {
     return list
   }
 
-  function decide(root, json) {
+  function namesProjectFile(json) {
     if (json.type !== 'PLANNER_RESPONSE') return false
     const calls = Array.isArray(json.tool_calls) ? json.tool_calls : []
     for (const call of calls) {
@@ -357,9 +370,51 @@ export function createAgySessionsReader(options = {}) {
         const path = absolutePath(parameters[key])
         if (!path) continue
         if (pathInside(path, brainRoot)) continue
-        root.decision = pathInside(path, projectRoot) ? 'inside' : 'outside'
-        return true
+        if (pathInside(path, projectRoot)) return true
       }
+    }
+    return false
+  }
+
+  function tailNamesProjectFile(path) {
+    let size
+    try {
+      size = statFile(path).size
+    } catch {
+      return false
+    }
+    if (size <= 0) return false
+    const start = Math.max(0, size - LOOKBACK_BYTES)
+    let fd
+    try {
+      fd = openSync(path, 'r')
+    } catch {
+      return false
+    }
+    let text = ''
+    try {
+      const buffer = Buffer.alloc(size - start)
+      const read = readSync(fd, buffer, 0, buffer.length, start)
+      if (read > 0) text = buffer.subarray(0, read).toString('utf8')
+    } catch {
+      text = ''
+    } finally {
+      closeSync(fd)
+    }
+    if (!text) return false
+    const lines = text.split(/\r?\n/)
+    if (start > 0) lines.shift()
+    for (const line of lines) {
+      if (!line.trim()) continue
+      let json
+      try {
+        json = JSON.parse(line)
+      } catch {
+        continue
+      }
+      if (!json || typeof json !== 'object') continue
+      if (!LINE_TYPES.has(json.type)) continue
+      if (namesProjectFile(json)) return true
     }
     return false
   }
@@ -369,13 +424,10 @@ export function createAgySessionsReader(options = {}) {
     entry.held.push(json)
   }
 
-  function dropHeld(root) {
-    for (const entry of treeOf(root)) entry.held = []
-  }
-
   function flushTree(root) {
     for (const entry of treeOf(root)) {
       if (entry.held.length === 0) continue
+      if (entry !== root && (!entry.parentId || !entry.linked)) continue
       const queued = entry.held
       entry.held = []
       for (const json of queued) apply(entry, root, json)
@@ -393,21 +445,14 @@ export function createAgySessionsReader(options = {}) {
     if (!LINE_TYPES.has(json.type)) return
     const root = rootOf(entry)
     if (!root) return
-    if (root.decision === 'unknown') {
-      if (entry !== root || !decide(root, json)) {
-        hold(entry, json)
-        return
-      }
-      if (root.decision !== 'inside') {
-        dropHeld(root)
-        return
-      }
+    if (root.decision === 'unknown' && namesProjectFile(json)) {
+      root.decision = 'inside'
       hold(entry, json)
       flushTree(root)
       return
     }
     if (root.decision !== 'inside') {
-      dropHeld(root)
+      hold(entry, json)
       return
     }
     if (entry.parentId && !entry.linked) {
@@ -530,7 +575,7 @@ export function createAgySessionsReader(options = {}) {
   function readStream(stream, onLine) {
     let size
     try {
-      size = statSync(stream.path).size
+      size = statFile(stream.path).size
     } catch {
       return false
     }
@@ -597,16 +642,31 @@ export function createAgySessionsReader(options = {}) {
     }
   }
 
+  function treeIdle(root) {
+    for (const entry of treeOf(root)) {
+      if (entry.skipped) continue
+      if (entry.status !== IDLE_STATUS) return false
+    }
+    return true
+  }
+
+  function dueRead(entry, root) {
+    if (entry.changed) return true
+    if (entry.status !== IDLE_STATUS) return true
+    return Boolean(root.run?.open)
+  }
+
   function endRuns() {
     for (const entry of conversations.values()) {
       if (entry.parentId) continue
       const run = entry.run
       if (!run?.open) continue
-      if (run.openCalls === 0 && entry.decision === 'inside' && entry.status === IDLE_STATUS) {
+      const idle = treeIdle(entry)
+      if (run.openCalls === 0 && entry.decision === 'inside' && idle) {
         endRun(entry, 'succeeded')
         continue
       }
-      if (now() - run.lastGrowth >= quietMs) endRun(entry, 'succeeded')
+      if (now() - run.lastGrowth >= (idle ? quietMs : RUNNING_QUIET_MS)) endRun(entry, 'succeeded')
     }
   }
 
@@ -619,18 +679,20 @@ export function createAgySessionsReader(options = {}) {
       for (const entry of conversations.values()) {
         if (skipped.has(entry.id)) entry.skipped = true
       }
-      for (const entry of conversations.values()) {
-        const root = rootOf(entry)
-        if (root?.decision === 'outside') dropHeld(root)
-      }
       for (const entry of [...conversations.values()].sort(byDepth)) {
         if (entry.skipped) continue
         const root = rootOf(entry)
-        if (!root || root.skipped || root.decision === 'outside') continue
+        if (!root || root.skipped) continue
+        if (entry.lookback) {
+          entry.lookback = false
+          if (root.decision === 'unknown' && tailNamesProjectFile(entry.path)) root.decision = 'inside'
+        }
+        if (!dueRead(entry, root)) continue
         if (readStream(entry.stream, (line) => handleLine(entry, line))) {
           if (root.run?.open) root.run.lastGrowth = now()
         }
       }
+      for (const entry of conversations.values()) entry.changed = false
       linkChildren()
       drainHeld()
       endIdleChildren()
