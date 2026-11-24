@@ -22,9 +22,10 @@ export const HERMES_SESSION_AGENT = {
 }
 
 export function hermesHome({ home, env = process.env, platform = process.platform } = {}) {
-  const joinFor = platform === 'win32' ? win32.join : posix.join
+  const paths = platform === 'win32' ? win32 : posix
+  const joinFor = paths.join
   const given = String(env?.HERMES_HOME ?? '').trim()
-  if (given !== '') return resolve(given)
+  if (given !== '') return paths.resolve(given)
   const local = platform === 'win32' ? String(env?.LOCALAPPDATA ?? '').trim() : ''
   if (local !== '') return joinFor(local, 'hermes')
   return joinFor(home ?? homedir(), '.hermes')
