@@ -7,6 +7,7 @@ import { looksFailed } from '../src/model/parsers/common.js'
 import { runsFolder as defaultRunsFolder } from './lanes-source.js'
 
 const DEFAULT_QUIET_MS = 30000
+const OPEN_CALL_QUIET_MS = 30 * 60 * 1000
 const READ_LIMIT = 200
 const SESSION_COLUMNS = 'id, source, model, parent_session_id, started_at, ended_at, cwd, git_repo_root, last_activity_at, title'
 const MESSAGE_COLUMNS = 'id, session_id, role, content, tool_calls, tool_call_id, tool_name, timestamp'
@@ -396,7 +397,7 @@ export function createHermesSessionsReader(options = {}) {
         endRun(info, 'succeeded')
         continue
       }
-      if (at - run.lastGrowth >= quietMs) endRun(info, 'succeeded')
+      if (at - run.lastGrowth >= (run.openCalls > 0 ? OPEN_CALL_QUIET_MS : quietMs)) endRun(info, 'succeeded')
     }
   }
 

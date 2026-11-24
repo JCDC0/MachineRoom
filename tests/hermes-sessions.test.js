@@ -259,7 +259,7 @@ describe('the Hermes session reader', () => {
     expect(endFrame(frames).payload.runId).toBe(statusFrames(frames)[0].payload.runId)
   })
 
-  it('ends the run after the quiet time with no new rows', () => {
+  it('ends the run after the quiet time with no new rows and no open call', () => {
     const { projectRoot, runsFolder, dbPath } = setup()
     const clock = { value: 5000 }
     const { reader, frames } = startReader({ dbPath, projectRoot, runsFolder, clock, quietMs: 30000 })
@@ -267,10 +267,30 @@ describe('the Hermes session reader', () => {
 
     addSession(dbPath, { id: 'ses-1', cwd: projectRoot })
     addMessage(dbPath, { sessionId: 'ses-1', role: 'assistant', calls: [call('read_file', { path: 'src/math.js' }, 'c1')], timestamp: 6001 })
+    addMessage(dbPath, { sessionId: 'ses-1', role: 'tool', content: 'ok', toolCallId: 'c1', toolName: 'read_file', timestamp: 6002 })
     reader.tick()
     expect(endFrame(frames)).toBeUndefined()
 
     clock.value += 30000
+    reader.tick()
+    expect(endFrame(frames).payload.status).toBe('succeeded')
+  })
+
+  it('keeps the run open through a long open call and ends it after 30 minutes of nothing', () => {
+    const { projectRoot, runsFolder, dbPath } = setup()
+    const clock = { value: 5000 }
+    const { reader, frames } = startReader({ dbPath, projectRoot, runsFolder, clock, quietMs: 30000 })
+    reader.tick()
+
+    addSession(dbPath, { id: 'ses-1', cwd: projectRoot })
+    addMessage(dbPath, { sessionId: 'ses-1', role: 'assistant', calls: [call('terminal', { command: 'npm test' }, 'c1')], timestamp: 6001 })
+    reader.tick()
+
+    clock.value += 5 * 60 * 1000
+    reader.tick()
+    expect(endFrame(frames)).toBeUndefined()
+
+    clock.value += 25 * 60 * 1000
     reader.tick()
     expect(endFrame(frames).payload.status).toBe('succeeded')
   })
