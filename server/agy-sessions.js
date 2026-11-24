@@ -61,9 +61,9 @@ function parseArgs(args) {
   return out
 }
 
-function sizeOf(path) {
+function sizeOf(stat, path) {
   try {
-    return statSync(path).size
+    return stat(path).size
   } catch {
     return 0
   }
@@ -84,6 +84,7 @@ export function createAgySessionsReader(options = {}) {
   const quietMs = Number.isFinite(Number(options.quietMs)) ? Number(options.quietMs) : DEFAULT_QUIET_MS
   const emit = typeof options.emit === 'function' ? options.emit : () => {}
   const listFolder = typeof options.listFolder === 'function' ? options.listFolder : (dir) => readdirSync(dir, { withFileTypes: true })
+  const statFile = typeof options.statFile === 'function' ? options.statFile : (path) => statSync(path)
   const conversations = new Map()
   const pending = new Map()
   const metaFiles = new Map()
@@ -120,7 +121,7 @@ export function createAgySessionsReader(options = {}) {
     if (!db || allStmt) return
     allStmt = db.prepare(`SELECT ${COLUMNS} FROM conversation_summaries`)
     sinceStmt = db.prepare(
-      `SELECT ${COLUMNS} FROM conversation_summaries WHERE last_modified_time > ?`
+      `SELECT ${COLUMNS} FROM conversation_summaries WHERE last_modified_time > ? OR status != '${IDLE_STATUS}'`
     )
   }
 
@@ -219,7 +220,7 @@ export function createAgySessionsReader(options = {}) {
       let entry = conversations.get(id)
       if (!entry) {
         const path = transcriptPath(id)
-        const offset = primed ? 0 : sizeOf(path)
+        const offset = primed ? 0 : sizeOf(statFile, path)
         entry = {
           id,
           parentId,
@@ -237,6 +238,8 @@ export function createAgySessionsReader(options = {}) {
           run: null,
           number: 0,
           skipped: skipped.has(id),
+          lastModified: stamp,
+          changed: true,
           lookback: offset > 0 && status !== IDLE_STATUS && !skipped.has(id),
         }
         conversations.set(id, entry)
@@ -249,6 +252,10 @@ export function createAgySessionsReader(options = {}) {
         }
         if (depth !== entry.depth) entry.depth = depth
         if (skipped.has(id)) entry.skipped = true
+        if (stamp !== '' && stamp !== entry.lastModified) {
+          entry.lastModified = stamp
+          entry.changed = true
+        }
       }
     }
   }
@@ -372,7 +379,7 @@ export function createAgySessionsReader(options = {}) {
   function tailNamesProjectFile(path) {
     let size
     try {
-      size = statSync(path).size
+      size = statFile(path).size
     } catch {
       return false
     }
@@ -568,7 +575,7 @@ export function createAgySessionsReader(options = {}) {
   function readStream(stream, onLine) {
     let size
     try {
-      size = statSync(stream.path).size
+      size = statFile(stream.path).size
     } catch {
       return false
     }
@@ -643,6 +650,12 @@ export function createAgySessionsReader(options = {}) {
     return true
   }
 
+  function dueRead(entry, root) {
+    if (entry.changed) return true
+    if (entry.status !== IDLE_STATUS) return true
+    return Boolean(root.run?.open)
+  }
+
   function endRuns() {
     for (const entry of conversations.values()) {
       if (entry.parentId) continue
@@ -674,10 +687,12 @@ export function createAgySessionsReader(options = {}) {
           entry.lookback = false
           if (root.decision === 'unknown' && tailNamesProjectFile(entry.path)) root.decision = 'inside'
         }
+        if (!dueRead(entry, root)) continue
         if (readStream(entry.stream, (line) => handleLine(entry, line))) {
           if (root.run?.open) root.run.lastGrowth = now()
         }
       }
+      for (const entry of conversations.values()) entry.changed = false
       linkChildren()
       drainHeld()
       endIdleChildren()

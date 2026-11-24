@@ -1,4 +1,4 @@
-import { appendFileSync, mkdirSync, mkdtempSync, readdirSync, realpathSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
+import { appendFileSync, mkdirSync, mkdtempSync, readdirSync, realpathSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
@@ -118,8 +118,18 @@ function readCall(path) {
   return { name: 'read_file', args: { Path: JSON.stringify(path), StartLine: '1', EndLine: '10' } }
 }
 
-function makeReader({ projectRoot, home, dbPath, runsFolder, frames, now, quietMs, listFolder }) {
-  const reader = createAgySessionsReader({ projectRoot, home, dbPath, runsFolder, now, quietMs, listFolder, emit: (frame) => frames.push(frame) })
+function makeReader({ projectRoot, home, dbPath, runsFolder, frames, now, quietMs, listFolder, statFile }) {
+  const reader = createAgySessionsReader({
+    projectRoot,
+    home,
+    dbPath,
+    runsFolder,
+    now,
+    quietMs,
+    listFolder,
+    statFile,
+    emit: (frame) => frames.push(frame),
+  })
   cleanups.push(() => reader.stop())
   return reader
 }
@@ -255,6 +265,53 @@ describe('the Antigravity session reader, reading the summaries and the transcri
     rmSync(dbPath)
     expect(() => reader.tick()).not.toThrow()
     expect(reader.sessions().size).toBe(0)
+  })
+
+  it('stats no transcript of 300 idle conversations on a tick', () => {
+    const { projectRoot, home, dbPath } = setup()
+    addConversation(dbPath, { id: 'conv-live', status: 'CASCADE_RUN_STATUS_RUNNING' })
+    writeTranscript(home, 'conv-live', [planner(1, [readCall(join(projectRoot, 'src', 'math.js'))])])
+    let stats = 0
+    const reader = makeReader({
+      projectRoot,
+      home,
+      dbPath,
+      frames: [],
+      statFile: (path) => {
+        stats += 1
+        return statSync(path)
+      },
+    })
+    reader.tick()
+    for (let i = 0; i < 300; i += 1) addConversation(dbPath, { id: `conv-idle-${i}`, status: 'CASCADE_RUN_STATUS_IDLE' })
+    setStatus(dbPath, 'conv-live', 'CASCADE_RUN_STATUS_IDLE')
+    reader.tick()
+    reader.tick()
+    expect(reader.sessions().size).toBe(301)
+    expect(reader.sessions().get('conv-idle-150').decision).toBe('unknown')
+    expect(reader.open().size).toBe(0)
+
+    stats = 0
+    reader.tick()
+    expect(stats).toBe(0)
+  })
+
+  it('finds a new child at once even when its modified time is still zero', () => {
+    const { projectRoot, home, dbPath } = setup()
+    let time = 1000000
+    const reader = makeReader({ projectRoot, home, dbPath, frames: [], now: () => time })
+    addConversation(dbPath, { id: 'conv-top' })
+    reader.tick()
+
+    withDb(dbPath, (db) => {
+      db.prepare(
+        'INSERT OR REPLACE INTO conversation_summaries (conversation_id, parent_conversation_id, agent_name, status, nesting_depth, not_fully_idle, last_modified_time) VALUES (?, ?, ?, ?, ?, ?, ?)'
+      ).run('conv-child', 'conv-top', 'ui-worker', 'CASCADE_RUN_STATUS_RUNNING', 1, 0, '0001-01-01 00:00:00')
+    })
+    time += 500
+    reader.tick()
+    expect(reader.sessions().has('conv-child')).toBe(true)
+    expect(reader.sessions().get('conv-child').status).toBe('CASCADE_RUN_STATUS_RUNNING')
   })
 
   it('keeps one entry per conversation across ticks', () => {
