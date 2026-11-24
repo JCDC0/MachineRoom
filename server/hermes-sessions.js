@@ -365,10 +365,14 @@ export function createHermesSessionsReader(options = {}) {
   }
 
   function readSession(info) {
-    for (const row of rowStmt.all(info.id, info.lastId)) {
-      if (Number.isFinite(row.id)) info.lastId = row.id
-      if (info.root.run?.open) info.root.run.lastGrowth = now()
-      handleRow(info, row)
+    for (;;) {
+      const rows = rowStmt.all(info.id, info.lastId)
+      for (const row of rows) {
+        if (Number.isFinite(row.id)) info.lastId = row.id
+        if (info.root.run?.open) info.root.run.lastGrowth = now()
+        handleRow(info, row)
+      }
+      if (rows.length < READ_LIMIT) break
     }
   }
 

@@ -363,4 +363,11 @@ describe('the Hermes session reader', () => {
     const { reader } = startReader({ dbPath, projectRoot, runsFolder })
     expect(reader.agents).toEqual([HERMES_SESSION_AGENT])
   })
+
+  it('registers the reader as the Hermes harness half', async () => {
+    const { harnessByKey } = await import('../server/harnesses/index.js')
+    expect(harnessByKey.hermes.createSessionsReader).toBe(createHermesSessionsReader)
+    const { SESSION_HARNESSES } = await import('../server/harnesses/index.js')
+    expect(SESSION_HARNESSES.some((harness) => harness.key === 'hermes')).toBe(true)
+  })
 })
