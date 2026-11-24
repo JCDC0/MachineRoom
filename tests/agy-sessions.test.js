@@ -682,6 +682,38 @@ describe('the Antigravity session reader through the room pipeline', () => {
     expect(ends.map((activity) => activity.agent).sort()).toEqual(spawns.map((activity) => activity.child).sort())
     expect(ends.every((activity) => activity.ok)).toBe(true)
   })
+
+  it('names each child and keeps the top for a page that joins after the link steps', () => {
+    const { projectRoot, home, dbPath } = setup()
+    const frames = []
+    const reader = makeReader({ projectRoot, home, dbPath, frames })
+    reader.tick()
+
+    const inside = join(projectRoot, 'src', 'math.js')
+    addConversation(dbPath, { id: 'conv-parent' })
+    appendTranscript(home, 'conv-parent', [userInput(0), planner(1, [readCall(inside)]), generic(2, 'ok')])
+    reader.tick()
+    addConversation(dbPath, { id: 'conv-ui', parent: 'conv-parent', agent: 'ui-designer', depth: 1 })
+    reader.tick()
+    appendTranscript(home, 'conv-ui', [planner(1, [readCall(join(projectRoot, 'src', 'ui.js'))]), generic(2, 'ui words')])
+    reader.tick()
+    appendTranscript(home, 'conv-parent', [planner(3, [readCall(join(projectRoot, 'docs', 'a.md'))]), generic(4, 'parent words')])
+    reader.tick()
+
+    const isChildStep = (frame) => frame.type === 'heartbeat.run.log' && JSON.parse(frame.payload.chunk).step_update.conversation_id === 'conv-ui'
+    const late = frames.slice(frames.findIndex(isChildStep))
+    const childSteps = late.filter(isChildStep).map((frame) => JSON.parse(frame.payload.chunk).step_update)
+    expect(childSteps.every((step) => step.name === 'ui-designer' && step.root_conversation_id === 'conv-parent')).toBe(true)
+
+    const tree = { rootName: 'project', rootPath: projectRoot, files: ['src/math.js', 'src/ui.js', 'docs/a.md'], dirs: ['src', 'docs'] }
+    const pipeline = createPipeline({ agents: [ANTIGRAVITY_SESSION_AGENT], tree })
+    const activities = []
+    for (const frame of late) activities.push(...pipeline.push(frame))
+    const spawns = activities.filter((activity) => activity.type === 'agent.spawn')
+    expect(spawns.map((activity) => activity.name)).toEqual(['ui-designer'])
+    const parentRead = activities.find((activity) => activity.type === 'tool.start' && activity.touches?.[0]?.path === 'docs/a.md')
+    expect(parentRead.agent).toBe('antigravity-session')
+  })
 })
 
 describe('the Antigravity session reader and its subagents', () => {

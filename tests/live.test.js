@@ -22,6 +22,11 @@ describe('agent discovery', () => {
     expect(parserFor(raw[2])).toBeNull()
   })
 
+  it('takes a session reader row parser that names a known harness', () => {
+    expect(parserFor({ name: 'Antigravity session', adapterType: 'process', parser: 'agy' })).toBe('agy')
+    expect(parserFor({ name: 'Bot', adapterType: 'http', parser: 'nothing' })).toBeNull()
+  })
+
   it('orders known agents first and gives every agent its own key', () => {
     expect(toAgents(raw).map((agent) => agent.key)).toEqual(['claude', 'agy', 'some-bot'])
   })

@@ -335,6 +335,9 @@ export function createAgySessionsReader(options = {}) {
   }
 
   function sendStep(run, step) {
+    const own = conversations.get(step.conversation_id)
+    step.root_conversation_id = run.rootId
+    if (own?.parentId && own.agentName) step.name = own.agentName
     run.seq += 1
     const at = now()
     safeEmit({

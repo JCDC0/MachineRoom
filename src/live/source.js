@@ -1,4 +1,4 @@
-import { harnessByAdapter } from '../harnesses/index.js'
+import { harnessByAdapter, harnessByKey } from '../harnesses/index.js'
 import { AGENT_ORDER } from '../model/pipeline.js'
 import { FOLDER_SHAPE_ACCEPT, readFileList, readTreeVersion, rememberTreeVersion } from './tree.js'
 
@@ -17,6 +17,7 @@ function adapterParser(adapterType) {
 }
 
 export function parserFor(raw) {
+  if (typeof raw?.parser === 'string' && Object.hasOwn(harnessByKey, raw.parser)) return raw.parser
   const direct = adapterParser(raw?.adapterType)
   if (direct) return direct
   const harness = adapterHarness(raw?.adapterType)

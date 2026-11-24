@@ -127,6 +127,8 @@ export function createAgyParser(ctx) {
 
   function conversationFor(step, time) {
     const conversation = typeof step.conversation_id === 'string' && step.conversation_id ? step.conversation_id : null
+    const top = typeof step.root_conversation_id === 'string' && step.root_conversation_id ? step.root_conversation_id : null
+    if (top) parentConversation = top
     if (parentConversation === undefined) parentConversation = conversation
     if (parentConversation === null && conversation) parentConversation = conversation
     if (!conversation || conversation === parentConversation) return parent

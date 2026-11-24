@@ -378,6 +378,24 @@ describe('agy parser', () => {
     expect(summary(second)).toEqual(['end true'])
   })
 
+  it('takes the top from root_conversation_id when a child step comes first', () => {
+    const parser = createAgyParser({ ...ctx, agentKey: 'antigravity-session' })
+    const child = {
+      event: 'step_update',
+      step_update: { conversation_id: 'kid', root_conversation_id: 'top', name: 'browser', step_index: 1, state: 'ACTIVE', step_type: 'tool', tool_name: 'run_command', tool_info: { name: 'run_command', parameters: { CommandLine: 'npm test' } } },
+    }
+    const top = {
+      event: 'step_update',
+      step_update: { conversation_id: 'top', root_conversation_id: 'top', step_index: 2, state: 'ACTIVE', step_type: 'tool', tool_name: 'run_command', tool_info: { name: 'run_command', parameters: { CommandLine: 'npm run build' } } },
+    }
+    const first = parser.push(lines(child), 100)
+    const second = parser.push(lines(top), 200)
+    const spawn = first.find((activity) => activity.type === 'agent.spawn')
+    expect(spawn).toMatchObject({ agent: 'antigravity-session', name: 'browser' })
+    expect(first.find((activity) => activity.type === 'tool.start').agent).toBe(spawn.child)
+    expect(second.find((activity) => activity.type === 'tool.start').agent ?? 'antigravity-session').toBe('antigravity-session')
+  })
+
   it('fails a command whose output shows a failing test', () => {
     const parser = createAgyParser(ctx)
     const out = parser.push(lines(step('DONE', 'run_command', { CommandLine: 'npm test' }, '\u2716 add sums two numbers')), 300)
