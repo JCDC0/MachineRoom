@@ -55,6 +55,7 @@ The team since 2026-11-22 17:35 (the owner's word): this session orchestrates (C
 | One setting decides whether a message from the owner or any agent to a working agent interrupts it now or reaches it after its current action, and the native harness follows it | P724 | merged (`417788c8`): each lane message carries the choice made when it was sent, the native agent watches its inbox through every model call and aborts only for a message marked interrupt; orchestrators still take a message after their current turn (owner asked whether they should follow it too) |
 | Messages to a working orchestrator follow the same setting (owner: yes, 2026-11-24, plan only, no code yet) | P725 | planned, not started; open point: CLI orchestrators wait for the turn end or stop at the next tool result |
 | The owner's own Antigravity work (an orchestrator such as Carbon Medium with Hydrogen subagents), OpenCode CLI and Hermes sessions show in the room when it is open on that project; the room only watches | P726 (Antigravity), P727 (Hermes); OpenCode already shows since S7b | briefed; P726 then P727 on the native lane |
+| An outside orchestrator that leads subagents (the owner's Carbon conversation) takes the top seat on its own (owner: "Yes, seat it"); the owner's family tree choice still wins | P728 | briefed; runs after P726, before P727 |
 
 Findings per review: 64 had 12, 65 had 10, 66 had 8, 67 had 4, 68 had 3, 69 had 3, 70 had 4. Since review 69 they are mostly edge cases (node flags no runner uses, five-deep rings, a log that keeps growing with no meta).
 
