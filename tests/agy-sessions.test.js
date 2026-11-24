@@ -3,7 +3,8 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { afterEach, describe, expect, it } from 'vitest'
-import { createAgySessionsReader } from '../server/agy-sessions.js'
+import { ANTIGRAVITY_SESSION_AGENT, createAgySessionsReader } from '../server/agy-sessions.js'
+import { createPipeline } from '../src/model/pipeline.js'
 
 const cleanups = []
 
@@ -137,7 +138,6 @@ describe('the Antigravity session reader, reading the summaries and the transcri
     const entry = reader.sessions().get('conv-in')
     expect(entry).toMatchObject({ id: 'conv-in', parentId: '', status: 'CASCADE_RUN_STATUS_RUNNING', depth: 0, lines: 3 })
     expect(entry.stream.offset).toBeGreaterThan(0)
-    expect(frames).toEqual([])
 
     appendTranscript(home, 'conv-in', [generic(4, 'more words')])
     reader.tick()
@@ -414,5 +414,242 @@ describe('the Antigravity session reader around the project', () => {
     utimesSync(runs, later, later)
     reader.tick()
     expect(reader.metaFiles().has('agy-gone.meta.json')).toBe(false)
+  })
+})
+
+function stepsOf(frames) {
+  return frames
+    .filter((frame) => frame.type === 'heartbeat.run.log')
+    .map((frame) => JSON.parse(frame.payload.chunk).step_update)
+}
+
+function invokeCall(role, prompt = 'Read it.') {
+  return {
+    name: 'invoke_subagent',
+    args: {
+      Model: JSON.stringify('flash'),
+      Role: JSON.stringify(role),
+      TypeName: JSON.stringify(role),
+      Prompt: JSON.stringify(prompt),
+    },
+  }
+}
+
+function swarmAdd(name) {
+  return { name: 'swarm', args: { action: JSON.stringify('add'), name: JSON.stringify(name) } }
+}
+
+describe('the Antigravity session reader turning lines into steps', () => {
+  it('sends an ACTIVE step per call and its result as the DONE step, with the quotes parsed', () => {
+    const { projectRoot, home, dbPath } = setup()
+    const frames = []
+    const reader = makeReader({ projectRoot, home, dbPath, frames })
+    reader.tick()
+
+    addConversation(dbPath, { id: 'conv-steps' })
+    writeTranscript(home, 'conv-steps', [
+      userInput(0),
+      planner(1, [readCall(join(projectRoot, 'src', 'math.js')), { name: 'run_command', args: { CommandLine: JSON.stringify('node -v') } }]),
+      generic(2, 'file words'),
+      generic(3, 'v24'),
+    ])
+    reader.tick()
+
+    const sent = stepsOf(frames)
+    expect(sent.map((step) => [step.state, step.step_index])).toEqual([
+      ['ACTIVE', '1.0'],
+      ['ACTIVE', '1.1'],
+      ['DONE', '1.0'],
+      ['DONE', '1.1'],
+    ])
+    expect(sent[0].conversation_id).toBe('conv-steps')
+    expect(sent[0].step_type).toBe('tool')
+    expect(sent[0].tool_info.parameters).toEqual({ Path: join(projectRoot, 'src', 'math.js'), StartLine: 1, EndLine: 10 })
+    expect(sent[1].tool_info.parameters).toEqual({ CommandLine: 'node -v' })
+    expect(sent[2].tool_info.output).toBe('file words')
+    expect(sent[3].tool_info.output).toBe('v24')
+  })
+
+  it('marks an ERROR result as an error step with its text', () => {
+    const { projectRoot, home, dbPath } = setup()
+    const frames = []
+    const reader = makeReader({ projectRoot, home, dbPath, frames })
+    reader.tick()
+
+    addConversation(dbPath, { id: 'conv-error' })
+    writeTranscript(home, 'conv-error', [
+      planner(1, [readCall(join(projectRoot, 'src', 'math.js'))]),
+      { ...generic(2, 'Encountered error in step execution: file does not exist'), status: 'ERROR', error: 'file does not exist' },
+    ])
+    reader.tick()
+
+    const done = stepsOf(frames).find((step) => step.state !== 'ACTIVE')
+    expect(done.state).toBe('ERROR')
+    expect(done.tool_info.error).toBe('file does not exist')
+    expect(done.tool_info.output).toContain('file does not exist')
+  })
+
+  it('cuts a result to its first 2000 characters', () => {
+    const { projectRoot, home, dbPath } = setup()
+    const frames = []
+    const reader = makeReader({ projectRoot, home, dbPath, frames })
+    reader.tick()
+
+    addConversation(dbPath, { id: 'conv-long' })
+    writeTranscript(home, 'conv-long', [planner(1, [readCall(join(projectRoot, 'src', 'math.js'))]), generic(2, 'x'.repeat(2500))])
+    reader.tick()
+
+    expect(stepsOf(frames)[1].tool_info.output).toHaveLength(2000)
+  })
+})
+
+describe('the Antigravity session reader through the room pipeline', () => {
+  it('shows three child agents under the parent, each with its own calls, none twice', () => {
+    const { projectRoot, home, dbPath } = setup()
+    const frames = []
+    const reader = makeReader({ projectRoot, home, dbPath, frames })
+    reader.tick()
+
+    const inside = join(projectRoot, 'src', 'math.js')
+    addConversation(dbPath, { id: 'conv-parent' })
+    appendTranscript(home, 'conv-parent', [userInput(0), planner(1, [readCall(inside)]), generic(2, 'ok')])
+    reader.tick()
+
+    appendTranscript(home, 'conv-parent', [
+      planner(3, [invokeCall('reviewer'), swarmAdd('ui-designer'), swarmAdd('stage-closeup')]),
+      generic(4, 'child one'),
+      generic(5, 'child two'),
+      generic(6, 'child three'),
+    ])
+    addConversation(dbPath, { id: 'conv-reviewer', parent: 'conv-parent', agent: 'reviewer', depth: 1 })
+    addConversation(dbPath, { id: 'conv-ui', parent: 'conv-parent', agent: 'ui-designer', depth: 1 })
+    addConversation(dbPath, { id: 'conv-stage', parent: 'conv-parent', agent: 'stage-closeup', depth: 1 })
+    appendTranscript(home, 'conv-reviewer', [planner(1, [readCall(join(projectRoot, 'docs', 'a.md'))]), generic(2, 'reviewer words')])
+    appendTranscript(home, 'conv-ui', [planner(1, [readCall(join(projectRoot, 'src', 'ui.js'))]), generic(2, 'ui words')])
+    appendTranscript(home, 'conv-stage', [planner(1, [readCall(join(projectRoot, 'src', 'stage.js'))]), generic(2, 'stage words')])
+    reader.tick()
+
+    setStatus(dbPath, 'conv-reviewer', 'CASCADE_RUN_STATUS_IDLE')
+    setStatus(dbPath, 'conv-ui', 'CASCADE_RUN_STATUS_IDLE')
+    setStatus(dbPath, 'conv-stage', 'CASCADE_RUN_STATUS_IDLE')
+    reader.tick()
+
+    const tree = { rootName: 'project', rootPath: projectRoot, files: ['src/math.js', 'docs/a.md', 'src/ui.js', 'src/stage.js'], dirs: ['src', 'docs'] }
+    const pipeline = createPipeline({ agents: [ANTIGRAVITY_SESSION_AGENT], tree })
+    const activities = []
+    for (const frame of frames) activities.push(...pipeline.push(frame))
+    activities.push(...pipeline.flush())
+
+    const spawns = activities.filter((activity) => activity.type === 'agent.spawn')
+    expect(spawns.map((activity) => activity.name).sort()).toEqual(['reviewer', 'stage-closeup', 'ui-designer'])
+    expect(new Set(spawns.map((activity) => activity.child)).size).toBe(3)
+
+    const childStarts = activities.filter((activity) => activity.type === 'tool.start' && activity.agent !== 'antigravity-session')
+    expect(childStarts.map((activity) => activity.touches[0].path).sort()).toEqual(['docs/a.md', 'src/stage.js', 'src/ui.js'])
+    expect(childStarts.every((activity) => activity.tool === 'read')).toBe(true)
+
+    const ends = activities.filter((activity) => activity.type === 'agent.end')
+    expect(ends.map((activity) => activity.agent).sort()).toEqual(spawns.map((activity) => activity.child).sort())
+    expect(ends.every((activity) => activity.ok)).toBe(true)
+  })
+})
+
+describe('the Antigravity session reader and its subagents', () => {
+  it('makes every child from the summaries and ends it when it goes idle', () => {
+    const { projectRoot, home, dbPath } = setup()
+    const frames = []
+    const reader = makeReader({ projectRoot, home, dbPath, frames })
+    reader.tick()
+
+    const inside = join(projectRoot, 'src', 'math.js')
+    addConversation(dbPath, { id: 'conv-parent' })
+    appendTranscript(home, 'conv-parent', [userInput(0), planner(1, [readCall(inside)]), generic(2, 'ok')])
+    reader.tick()
+
+    appendTranscript(home, 'conv-parent', [
+      planner(3, [invokeCall('reviewer'), swarmAdd('ui-designer'), swarmAdd('stage-closeup')]),
+      generic(4, 'child one'),
+      generic(5, 'child two'),
+      generic(6, 'child three'),
+    ])
+    addConversation(dbPath, { id: 'conv-reviewer', parent: 'conv-parent', agent: 'reviewer', depth: 1 })
+    addConversation(dbPath, { id: 'conv-ui', parent: 'conv-parent', agent: 'ui-designer', depth: 1 })
+    addConversation(dbPath, { id: 'conv-stage', parent: 'conv-parent', agent: 'stage-closeup', depth: 1 })
+    appendTranscript(home, 'conv-reviewer', [planner(1, [readCall(inside)]), generic(2, 'reviewer words')])
+    appendTranscript(home, 'conv-ui', [planner(1, [readCall(inside)]), generic(2, 'ui words')])
+    appendTranscript(home, 'conv-stage', [planner(1, [readCall(inside)]), generic(2, 'stage words')])
+    reader.tick()
+
+    const sent = stepsOf(frames)
+    const links = sent.filter((step) => step.step_index.startsWith('link.'))
+    expect(links).toHaveLength(6)
+    expect(links.filter((step) => step.state === 'DONE').map((step) => step.subagent_info.subagents[0]).sort((a, b) => (a.role < b.role ? -1 : 1))).toEqual([
+      { role: 'reviewer', conversation_id: 'conv-reviewer' },
+      { role: 'stage-closeup', conversation_id: 'conv-stage' },
+      { role: 'ui-designer', conversation_id: 'conv-ui' },
+    ])
+    expect(links.every((step) => step.step_type === 'subagent' && step.tool_name === 'invoke_subagent')).toBe(true)
+    expect(links.every((step) => step.conversation_id === 'conv-parent')).toBe(true)
+
+    const own = sent.filter((step) => !step.step_index.startsWith('link.') && !step.step_index.startsWith('end.'))
+    expect(own.filter((step) => step.tool_name === 'subagent_call')).toHaveLength(2)
+    expect(own.filter((step) => step.tool_name === 'swarm')).toHaveLength(4)
+    expect(own.filter((step) => step.state === 'DONE').map((step) => step.tool_info.output).sort()).toEqual([
+      'child one',
+      'child three',
+      'child two',
+      'ok',
+      'reviewer words',
+      'stage words',
+      'ui words',
+    ])
+    expect(own.some((step) => step.tool_name === 'invoke_subagent')).toBe(false)
+
+    const before = frames.length
+    setStatus(dbPath, 'conv-ui', 'CASCADE_RUN_STATUS_IDLE')
+    reader.tick()
+    const ended = stepsOf(frames.slice(before)).filter((step) => step.tool_name === 'manage_subagents')
+    expect(ended).toHaveLength(1)
+    expect(ended[0].conversation_id).toBe('conv-parent')
+    expect(JSON.parse(ended[0].tool_info.output)).toEqual([{ conversationId: 'conv-ui', state: 'idle' }])
+
+    reader.tick()
+    expect(stepsOf(frames.slice(before)).filter((step) => step.tool_name === 'manage_subagents')).toHaveLength(1)
+  })
+
+  it('does not link the same child twice across ticks', () => {
+    const { projectRoot, home, dbPath } = setup()
+    const frames = []
+    const reader = makeReader({ projectRoot, home, dbPath, frames })
+    reader.tick()
+
+    addConversation(dbPath, { id: 'conv-parent' })
+    addConversation(dbPath, { id: 'conv-child', parent: 'conv-parent', agent: 'ui-worker', depth: 1 })
+    appendTranscript(home, 'conv-parent', [planner(1, [readCall(join(projectRoot, 'src', 'math.js'))]), generic(2, 'ok')])
+    appendTranscript(home, 'conv-child', [planner(1, [readCall(join(projectRoot, 'src', 'child.js'))]), generic(2, 'child words')])
+    reader.tick()
+    reader.tick()
+    reader.tick()
+
+    expect(stepsOf(frames).filter((step) => step.step_index.startsWith('link.'))).toHaveLength(2)
+  })
+
+  it('links a deeper child to its own parent', () => {
+    const { projectRoot, home, dbPath } = setup()
+    const frames = []
+    const reader = makeReader({ projectRoot, home, dbPath, frames })
+    reader.tick()
+
+    addConversation(dbPath, { id: 'conv-top' })
+    addConversation(dbPath, { id: 'conv-mid', parent: 'conv-top', agent: 'coordinator', depth: 1 })
+    addConversation(dbPath, { id: 'conv-deep', parent: 'conv-mid', agent: 'browser', depth: 2 })
+    appendTranscript(home, 'conv-top', [planner(1, [readCall(join(projectRoot, 'src', 'math.js'))]), generic(2, 'ok')])
+    reader.tick()
+
+    const links = stepsOf(frames).filter((step) => step.step_index.startsWith('link.'))
+    expect(links.filter((step) => step.state === 'DONE').map((step) => [step.conversation_id, step.subagent_info.subagents[0].role])).toEqual([
+      ['conv-top', 'coordinator'],
+      ['conv-mid', 'browser'],
+    ])
   })
 })

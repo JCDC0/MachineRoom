@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto'
 import { closeSync, openSync, readFileSync, readdirSync, readSync, statSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
@@ -6,12 +7,28 @@ import { pathInside } from '../src/briefs/run.js'
 
 const READ_CHUNK = 64 * 1024
 const MAX_PARTIAL = 1024 * 1024
+const RESULT_LIMIT = 2000
 const HELD_LIMIT = 200
 const FULL_READ_MS = 60 * 1000
+const IDLE_STATUS = 'CASCADE_RUN_STATUS_IDLE'
 const PATH_KEYS = ['Path', 'AbsolutePath', 'TargetFile']
 const TRANSCRIPT = join('.system_generated', 'logs', 'transcript.jsonl')
 const COLUMNS = 'conversation_id, parent_conversation_id, agent_name, status, nesting_depth, last_modified_time'
 const LINE_TYPES = new Set(['USER_INPUT', 'PLANNER_RESPONSE', 'GENERIC'])
+
+export const ANTIGRAVITY_SESSION_AGENT = {
+  id: 'agent-antigravity-session',
+  key: 'antigravity-session',
+  name: 'Antigravity session',
+  adapterType: 'process',
+  parser: 'agy',
+  role: null,
+}
+
+function iso(ms) {
+  const value = Number.isFinite(ms) ? ms : Date.now()
+  return new Date(value).toISOString()
+}
 
 function absolutePath(value) {
   const text = String(value ?? '').trim()
@@ -59,10 +76,12 @@ export function createAgySessionsReader(options = {}) {
   const runsFolder = options.runsFolder ? resolve(options.runsFolder) : ''
   const dbPath = options.dbPath ? resolve(String(options.dbPath)) : join(home, '.gemini', 'antigravity', 'conversation_summaries.db')
   const brainRoot = options.brainRoot ? resolve(String(options.brainRoot)) : join(home, '.gemini', 'antigravity', 'brain')
+  const token = randomBytes(4).toString('hex')
   const now = options.now ?? Date.now
   const emit = typeof options.emit === 'function' ? options.emit : () => {}
   const listFolder = typeof options.listFolder === 'function' ? options.listFolder : (dir) => readdirSync(dir, { withFileTypes: true })
   const conversations = new Map()
+  const pending = new Map()
   const metaFiles = new Map()
   let metaNames = null
   let metaFolderStamp = null
@@ -71,9 +90,16 @@ export function createAgySessionsReader(options = {}) {
   let sinceStmt = null
   let highWater = null
   let lastFullReadAt = null
+  let endNumber = 0
   let primed = false
   let stopped = false
   let ticking = false
+
+  function safeEmit(frame) {
+    try {
+      emit(frame)
+    } catch {}
+  }
 
   function openDatabase() {
     if (db) return db
@@ -180,6 +206,7 @@ export function createAgySessionsReader(options = {}) {
       const id = typeof row?.conversation_id === 'string' ? row.conversation_id : ''
       if (!id) continue
       const parentId = typeof row.parent_conversation_id === 'string' ? row.parent_conversation_id : ''
+      const agentName = typeof row.agent_name === 'string' ? row.agent_name : ''
       const status = typeof row.status === 'string' ? row.status : ''
       const depth = Number.isFinite(row.nesting_depth) ? row.nesting_depth : parentId ? 1 : 0
       let entry = conversations.get(id)
@@ -189,19 +216,29 @@ export function createAgySessionsReader(options = {}) {
         entry = {
           id,
           parentId,
+          agentName,
           depth,
           status,
           path,
           stream: newStream(path, offset),
           held: [],
+          linked: false,
+          ended: false,
           decision: 'unknown',
           lines: 0,
+          openCalls: 0,
+          run: null,
+          number: 0,
           skipped: skipped.has(id),
         }
         conversations.set(id, entry)
       } else {
         if (parentId) entry.parentId = parentId
-        if (status !== entry.status) entry.status = status
+        if (agentName) entry.agentName = agentName
+        if (status !== entry.status) {
+          entry.status = status
+          if (status !== IDLE_STATUS) entry.ended = false
+        }
         if (depth !== entry.depth) entry.depth = depth
         if (skipped.has(id)) entry.skipped = true
       }
@@ -235,6 +272,77 @@ export function createAgySessionsReader(options = {}) {
     }
     rest.sort(byDepth)
     return [root].concat(rest)
+  }
+
+  function basePayload(run) {
+    return { runId: run.runId, agentId: ANTIGRAVITY_SESSION_AGENT.id, issueId: run.issueId }
+  }
+
+  function startRun(root) {
+    if (root.run?.open) endRun(root, 'succeeded')
+    root.number += 1
+    const at = now()
+    const run = {
+      runId: `${root.id}:${token}:${root.number}`,
+      rootId: root.id,
+      seq: 0,
+      startedAt: at,
+      openCalls: 0,
+      open: true,
+    }
+    root.run = run
+    safeEmit({ type: 'heartbeat.run.queued', companyId: `company-${root.id}`, createdAt: iso(at), payload: basePayload(run) })
+    safeEmit({
+      type: 'heartbeat.run.status',
+      companyId: `company-${root.id}`,
+      createdAt: iso(at),
+      payload: { ...basePayload(run), status: 'running', error: null, errorCode: null, startedAt: iso(at), finishedAt: null },
+    })
+    return run
+  }
+
+  function ensureRun(root) {
+    return root.run?.open ? root.run : startRun(root)
+  }
+
+  function endRun(root, status) {
+    const run = root.run
+    if (!run?.open) return
+    run.open = false
+    const at = now()
+    safeEmit({
+      type: 'heartbeat.run.status',
+      companyId: `company-${root.id}`,
+      createdAt: iso(at),
+      payload: { ...basePayload(run), status, error: null, errorCode: null, startedAt: iso(run.startedAt), finishedAt: iso(at) },
+    })
+  }
+
+  function sendStep(run, step) {
+    run.seq += 1
+    const at = now()
+    safeEmit({
+      type: 'heartbeat.run.log',
+      companyId: `company-${run.rootId}`,
+      createdAt: iso(at),
+      payload: {
+        ...basePayload(run),
+        ts: iso(at),
+        seq: run.seq,
+        stream: 'stdout',
+        chunk: `${JSON.stringify({ event: 'step_update', step_update: step })}\n`,
+        truncated: false,
+      },
+    })
+  }
+
+  function pendingOf(id) {
+    let list = pending.get(id)
+    if (!list) {
+      list = []
+      pending.set(id, list)
+    }
+    return list
   }
 
   function decide(root, json) {
@@ -298,11 +406,118 @@ export function createAgySessionsReader(options = {}) {
       dropHeld(root)
       return
     }
+    if (entry.parentId && !entry.linked) {
+      hold(entry, json)
+      return
+    }
     apply(entry, root, json)
   }
 
   function apply(entry, root, json) {
     entry.lines += 1
+    if (json.type === 'USER_INPUT') return
+    if (json.type === 'PLANNER_RESPONSE') {
+      const calls = Array.isArray(json.tool_calls) ? json.tool_calls : []
+      if (calls.length === 0) return
+      const run = ensureRun(root)
+      const base = Number.isFinite(json.step_index) ? json.step_index : 0
+      calls.forEach((call, index) => {
+        const name = typeof call?.name === 'string' && call.name !== '' ? call.name : 'other'
+        const parameters = parseArgs(call?.args)
+        const toolName = name === 'invoke_subagent' ? 'subagent_call' : name
+        const stepIndex = `${base}.${index}`
+        sendStep(run, {
+          conversation_id: entry.id,
+          step_index: stepIndex,
+          state: 'ACTIVE',
+          step_type: 'tool',
+          tool_name: toolName,
+          tool_info: { name: toolName, parameters },
+        })
+        entry.openCalls += 1
+        run.openCalls += 1
+        pendingOf(entry.id).push({ stepIndex, toolName, parameters })
+      })
+      return
+    }
+    if (json.type !== 'GENERIC') return
+    const list = pending.get(entry.id)
+    const call = list?.shift()
+    if (!call) return
+    const run = root.run
+    if (!run?.open) return
+    const state = json.status === 'ERROR' ? 'ERROR' : 'DONE'
+    const output = typeof json.content === 'string' ? json.content.slice(0, RESULT_LIMIT) : ''
+    const error = typeof json.error === 'string' && json.error.trim() !== '' ? json.error.trim() : ''
+    sendStep(run, {
+      conversation_id: entry.id,
+      step_index: call.stepIndex,
+      state,
+      step_type: 'tool',
+      tool_name: call.toolName,
+      tool_info: { name: call.toolName, parameters: call.parameters, output, ...(error ? { error } : {}) },
+    })
+    entry.openCalls = Math.max(0, entry.openCalls - 1)
+    run.openCalls = Math.max(0, run.openCalls - 1)
+  }
+
+  function linkChildren() {
+    const children = [...conversations.values()].filter((entry) => entry.parentId).sort(byDepth)
+    for (const entry of children) {
+      if (entry.linked || entry.skipped) continue
+      const parent = conversations.get(entry.parentId)
+      if (!parent || parent.skipped) continue
+      const root = rootOf(entry)
+      if (!root || root.skipped || root.decision !== 'inside') continue
+      const run = ensureRun(root)
+      entry.linked = true
+      const name = entry.agentName || 'subagent'
+      const parameters = { Role: name, TypeName: name }
+      const stepIndex = `link.${entry.id}`
+      sendStep(run, {
+        conversation_id: parent.id,
+        step_index: stepIndex,
+        state: 'ACTIVE',
+        step_type: 'subagent',
+        tool_name: 'invoke_subagent',
+        tool_info: { name: 'invoke_subagent', parameters },
+      })
+      sendStep(run, {
+        conversation_id: parent.id,
+        step_index: stepIndex,
+        state: 'DONE',
+        step_type: 'subagent',
+        tool_name: 'invoke_subagent',
+        tool_info: { name: 'invoke_subagent', parameters },
+        subagent_info: { subagents: [{ role: name, conversation_id: entry.id }] },
+      })
+    }
+  }
+
+  function endIdleChildren() {
+    for (const entry of conversations.values()) {
+      if (!entry.parentId || entry.skipped || !entry.linked || entry.ended) continue
+      if (entry.status !== IDLE_STATUS) continue
+      if (entry.openCalls > 0) continue
+      const root = rootOf(entry)
+      if (!root || !root.run?.open) continue
+      const parent = conversations.get(entry.parentId)
+      if (!parent) continue
+      entry.ended = true
+      endNumber += 1
+      sendStep(root.run, {
+        conversation_id: parent.id,
+        step_index: `end.${endNumber}`,
+        state: 'DONE',
+        step_type: 'tool',
+        tool_name: 'manage_subagents',
+        tool_info: {
+          name: 'manage_subagents',
+          parameters: { Action: 'list' },
+          output: JSON.stringify([{ conversationId: entry.id, state: 'idle' }]),
+        },
+      })
+    }
   }
 
   function readStream(stream, onLine) {
@@ -363,6 +578,18 @@ export function createAgySessionsReader(options = {}) {
     }
   }
 
+  function drainHeld() {
+    for (const entry of [...conversations.values()].sort(byDepth)) {
+      if (entry.held.length === 0) continue
+      if (entry.parentId && !entry.linked) continue
+      const root = rootOf(entry)
+      if (!root || root.skipped || root.decision !== 'inside') continue
+      const queued = entry.held
+      entry.held = []
+      for (const json of queued) apply(entry, root, json)
+    }
+  }
+
   function tick() {
     if (stopped || ticking) return
     ticking = true
@@ -382,6 +609,9 @@ export function createAgySessionsReader(options = {}) {
         if (!root || root.skipped || root.decision === 'outside') continue
         readStream(entry.stream, (line) => handleLine(entry, line))
       }
+      linkChildren()
+      drainHeld()
+      endIdleChildren()
       primed = true
     } catch {
     } finally {
@@ -392,6 +622,7 @@ export function createAgySessionsReader(options = {}) {
   function stop() {
     stopped = true
     conversations.clear()
+    pending.clear()
     metaFiles.clear()
     metaNames = null
     metaFolderStamp = null
