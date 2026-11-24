@@ -83,7 +83,7 @@ function callList(raw) {
 
 export function createHermesSessionsReader(options = {}) {
   const projectRoot = resolve(options.projectRoot ?? process.cwd())
-  const runsFolder = options.runsFolder ? resolve(String(options.runsFolder)) : defaultRunsFolder()
+  const runsFolder = resolve(String(options.runsFolder || defaultRunsFolder()))
   const token = randomBytes(4).toString('hex')
   const home = options.home ?? homedir()
   const dbPath = options.dbPath
@@ -117,8 +117,8 @@ export function createHermesSessionsReader(options = {}) {
     try {
       const { DatabaseSync } = process.getBuiltinModule('node:sqlite')
       db = new DatabaseSync(dbPath, { readOnly: true })
-    } catch (error) {
-      lastError = error instanceof Error ? error.message : String(error)
+    } catch {
+      lastError = 'The Hermes sessions database could not be opened for reading.'
       db = null
     }
     return db
@@ -412,8 +412,8 @@ export function createHermesSessionsReader(options = {}) {
       for (const info of ordered) readSession(info)
       endRuns()
       lastError = ''
-    } catch (error) {
-      lastError = error instanceof Error ? error.message : String(error)
+    } catch {
+      lastError = 'The Hermes sessions tables could not be read.'
     }
   }
 
