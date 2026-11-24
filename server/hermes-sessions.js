@@ -293,7 +293,16 @@ export function createHermesSessionsReader(options = {}) {
   }
 
   function dropSession(info) {
-    if (info.root?.run?.open) endRun(info.root, 'succeeded')
+    const root = info.root
+    if (root && root !== info && root.run?.open) {
+      root.run.openCalls = Math.max(0, root.run.openCalls - info.open.size)
+      sessions.delete(info.id)
+      return
+    }
+    if (root?.run?.open) endRun(root, 'succeeded')
+    for (const child of [...sessions.values()]) {
+      if (child !== info && child.root === info) dropSession(child)
+    }
     sessions.delete(info.id)
   }
 
@@ -336,6 +345,7 @@ export function createHermesSessionsReader(options = {}) {
     const at = timeMs(row.timestamp) || now()
     if (row.role === 'user') {
       if (info.parentId === '') startRun(root)
+      else ensureRun(root)
       return
     }
     if (row.role === 'assistant') {
