@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The room shows the owner's own Antigravity sessions and their subagents: the bridge reads the Antigravity summaries database and each conversation's transcript, keeps the conversations that touch the project, sends their tool calls as AGY steps and makes one child agent per subagent conversation (P726).
 - Messages to a working agent: the bridge writes the `next-turn` or `interrupt` choice on each lane message when it is sent and the inbox answers it, the native lane polls its inbox through every model call and aborts only for a message that asks to interrupt, holds the rest to the top of its next step, and Settings names the choice `Messages to a working agent` (P724).
 - Folder cards open and shut in a wave from the root, each card starting once its parent is 70 percent of the way, and with contents off an agent touch pulses the cards from the root to the folder and keeps only that folder open (P723).
 - Review 75 fixes: forced idle works only at 900 pixels and wider, scrolls to the top, closes the HUD panels and the assistant, locks the page scroll, hides its hidden controls from Tab and ends on a dropped bridge or a narrow resize; the tunnel keeps its last working target through the fade and the run end; the card plan skips a layout when the set of focus paths is unchanged (P721, P722).
