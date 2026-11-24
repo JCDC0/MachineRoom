@@ -10,6 +10,7 @@ const MAX_PARTIAL = 1024 * 1024
 const RESULT_LIMIT = 2000
 const HELD_LIMIT = 200
 const FULL_READ_MS = 60 * 1000
+const DEFAULT_QUIET_MS = 30000
 const IDLE_STATUS = 'CASCADE_RUN_STATUS_IDLE'
 const PATH_KEYS = ['Path', 'AbsolutePath', 'TargetFile']
 const TRANSCRIPT = join('.system_generated', 'logs', 'transcript.jsonl')
@@ -78,6 +79,7 @@ export function createAgySessionsReader(options = {}) {
   const brainRoot = options.brainRoot ? resolve(String(options.brainRoot)) : join(home, '.gemini', 'antigravity', 'brain')
   const token = randomBytes(4).toString('hex')
   const now = options.now ?? Date.now
+  const quietMs = Number.isFinite(Number(options.quietMs)) ? Number(options.quietMs) : DEFAULT_QUIET_MS
   const emit = typeof options.emit === 'function' ? options.emit : () => {}
   const listFolder = typeof options.listFolder === 'function' ? options.listFolder : (dir) => readdirSync(dir, { withFileTypes: true })
   const conversations = new Map()
@@ -287,6 +289,7 @@ export function createAgySessionsReader(options = {}) {
       rootId: root.id,
       seq: 0,
       startedAt: at,
+      lastGrowth: at,
       openCalls: 0,
       open: true,
     }
@@ -590,6 +593,19 @@ export function createAgySessionsReader(options = {}) {
     }
   }
 
+  function endRuns() {
+    for (const entry of conversations.values()) {
+      if (entry.parentId) continue
+      const run = entry.run
+      if (!run?.open) continue
+      if (run.openCalls === 0 && entry.decision === 'inside' && entry.status === IDLE_STATUS) {
+        endRun(entry, 'succeeded')
+        continue
+      }
+      if (now() - run.lastGrowth >= quietMs) endRun(entry, 'succeeded')
+    }
+  }
+
   function tick() {
     if (stopped || ticking) return
     ticking = true
@@ -607,11 +623,14 @@ export function createAgySessionsReader(options = {}) {
         if (entry.skipped) continue
         const root = rootOf(entry)
         if (!root || root.skipped || root.decision === 'outside') continue
-        readStream(entry.stream, (line) => handleLine(entry, line))
+        if (readStream(entry.stream, (line) => handleLine(entry, line))) {
+          if (root.run?.open) root.run.lastGrowth = now()
+        }
       }
       linkChildren()
       drainHeld()
       endIdleChildren()
+      endRuns()
       primed = true
     } catch {
     } finally {
@@ -638,5 +657,15 @@ export function createAgySessionsReader(options = {}) {
     sinceStmt = null
   }
 
-  return { tick, stop, projectRoot, sessions: () => conversations, metaFiles: () => metaFiles, emit }
+  return {
+    agent: { ...ANTIGRAVITY_SESSION_AGENT },
+    agents: [{ ...ANTIGRAVITY_SESSION_AGENT }],
+    tick,
+    stop,
+    projectRoot,
+    sessions: () => conversations,
+    metaFiles: () => metaFiles,
+    open: () => new Map([...conversations.values()].filter((entry) => entry.run?.open).map((entry) => [entry.id, entry.run])),
+    emit,
+  }
 }

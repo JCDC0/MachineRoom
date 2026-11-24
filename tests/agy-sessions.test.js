@@ -653,3 +653,145 @@ describe('the Antigravity session reader and its subagents', () => {
     ])
   })
 })
+
+describe('the Antigravity session reader and its runs', () => {
+  it('opens one run per top conversation with the queued frame, running, the logs and the end', () => {
+    const { projectRoot, home, dbPath } = setup()
+    let time = 1000000
+    const frames = []
+    const reader = makeReader({ projectRoot, home, dbPath, frames, now: () => time, quietMs: 60000 })
+    reader.tick()
+
+    addConversation(dbPath, { id: 'conv-run' })
+    appendTranscript(home, 'conv-run', [planner(1, [readCall(join(projectRoot, 'src', 'math.js'))]), generic(2, 'ok')])
+    reader.tick()
+
+    expect(frames.map((frame) => frame.type)).toEqual([
+      'heartbeat.run.queued',
+      'heartbeat.run.status',
+      'heartbeat.run.log',
+      'heartbeat.run.log',
+    ])
+    const run = frames[0].payload
+    expect(frames[0].payload.runId).toMatch(/^conv-run:[0-9a-f]{8}:1$/)
+    expect(frames[1].payload.status).toBe('running')
+    expect(frames[1].payload.runId).toBe(run.runId)
+    for (const frame of frames) {
+      expect(frame.payload.agentId).toBe(ANTIGRAVITY_SESSION_AGENT.id)
+      expect(frame.payload.runId).toBe(run.runId)
+    }
+    expect(frames.slice(2).map((frame) => frame.payload.seq)).toEqual([1, 2])
+    expect(frames.slice(2).every((frame) => frame.payload.stream === 'stdout')).toBe(true)
+    expect(frames[2].payload.chunk.endsWith(`${String.fromCharCode(10)}`)).toBe(true)
+
+    time += 500
+    setStatus(dbPath, 'conv-run', 'CASCADE_RUN_STATUS_IDLE')
+    reader.tick()
+
+    const statuses = frames.filter((frame) => frame.type === 'heartbeat.run.status').map((frame) => frame.payload.status)
+    expect(statuses).toEqual(['running', 'succeeded'])
+    expect(frames.filter((frame) => frame.type === 'heartbeat.run.status')[1].payload.runId).toBe(run.runId)
+  })
+
+  it('ends a run that stops growing after the quiet time', () => {
+    const { projectRoot, home, dbPath } = setup()
+    let time = 1000000
+    const frames = []
+    const reader = makeReader({ projectRoot, home, dbPath, frames, now: () => time, quietMs: 1000 })
+    reader.tick()
+
+    addConversation(dbPath, { id: 'conv-quiet' })
+    appendTranscript(home, 'conv-quiet', [planner(1, [readCall(join(projectRoot, 'src', 'math.js'))]), generic(2, 'ok')])
+    reader.tick()
+    expect(frames.filter((frame) => frame.type === 'heartbeat.run.status').map((frame) => frame.payload.status)).toEqual(['running'])
+
+    time += 1000
+    reader.tick()
+    expect(frames.filter((frame) => frame.type === 'heartbeat.run.status').map((frame) => frame.payload.status)).toEqual([
+      'running',
+      'succeeded',
+    ])
+  })
+
+  it('does not end a run while a call is still open', () => {
+    const { projectRoot, home, dbPath } = setup()
+    let time = 1000000
+    const frames = []
+    const reader = makeReader({ projectRoot, home, dbPath, frames, now: () => time, quietMs: 60000 })
+    reader.tick()
+
+    addConversation(dbPath, { id: 'conv-open' })
+    appendTranscript(home, 'conv-open', [planner(1, [readCall(join(projectRoot, 'src', 'math.js'))])])
+    reader.tick()
+    setStatus(dbPath, 'conv-open', 'CASCADE_RUN_STATUS_IDLE')
+    reader.tick()
+
+    expect(frames.filter((frame) => frame.type === 'heartbeat.run.status').map((frame) => frame.payload.status)).toEqual(['running'])
+    expect(reader.open().has('conv-open')).toBe(true)
+  })
+
+  it('opens a run at a user input line, before its first step', () => {
+    const { projectRoot, home, dbPath } = setup()
+    const frames = []
+    const reader = makeReader({ projectRoot, home, dbPath, frames })
+    reader.tick()
+
+    addConversation(dbPath, { id: 'conv-input' })
+    appendTranscript(home, 'conv-input', [userInput(0, 'Do the thing.'), planner(1, [readCall(join(projectRoot, 'src', 'math.js'))]), generic(2, 'ok')])
+    reader.tick()
+
+    expect(frames.map((frame) => frame.type)).toEqual([
+      'heartbeat.run.queued',
+      'heartbeat.run.status',
+      'heartbeat.run.log',
+      'heartbeat.run.log',
+    ])
+    expect(frames[1].payload.status).toBe('running')
+  })
+
+  it('gives two reader lifetimes over one database different run ids', () => {
+    const { projectRoot, home, dbPath } = setup()
+    addConversation(dbPath, { id: 'conv-token' })
+    writeTranscript(home, 'conv-token', [planner(1, [readCall(join(projectRoot, 'src', 'math.js'))]), generic(2, 'ok')])
+
+    const first = []
+    const firstReader = makeReader({ projectRoot, home, dbPath, frames: first })
+    firstReader.tick()
+    appendTranscript(home, 'conv-token', [planner(3, [readCall(join(projectRoot, 'src', 'app.js'))]), generic(4, 'ok')])
+    firstReader.tick()
+    firstReader.stop()
+
+    const second = []
+    const secondReader = makeReader({ projectRoot, home, dbPath, frames: second })
+    secondReader.tick()
+    appendTranscript(home, 'conv-token', [planner(5, [readCall(join(projectRoot, 'src', 'more.js'))]), generic(6, 'ok')])
+    secondReader.tick()
+
+    expect(first[0].payload.runId).toMatch(/^conv-token:[0-9a-f]{8}:1$/)
+    expect(second[0].payload.runId).toMatch(/^conv-token:[0-9a-f]{8}:1$/)
+    expect(first[0].payload.runId).not.toBe(second[0].payload.runId)
+  })
+
+  it('sends no frame for a conversation outside the project and none for a lane run', () => {
+    const { base, projectRoot, home, dbPath } = setup()
+    const outside = join(base, 'other')
+    const runs = join(base, 'runs')
+    mkdirSync(outside, { recursive: true })
+    mkdirSync(runs, { recursive: true })
+    writeFileSync(join(runs, 'agy-lane.meta.json'), `${JSON.stringify({ sessionId: 'conv-lane' })}
+`)
+
+    const frames = []
+    const reader = makeReader({ projectRoot, home, dbPath, runsFolder: runs, frames })
+    reader.tick()
+
+    addConversation(dbPath, { id: 'conv-out' })
+    appendTranscript(home, 'conv-out', [planner(1, [readCall(join(outside, 'x.js'))]), generic(2, 'outside words')])
+    addConversation(dbPath, { id: 'conv-lane' })
+    appendTranscript(home, 'conv-lane', [planner(1, [readCall(join(projectRoot, 'src', 'math.js'))]), generic(2, 'lane words')])
+    reader.tick()
+
+    expect(frames).toEqual([])
+    expect(reader.open().size).toBe(0)
+  })
+})

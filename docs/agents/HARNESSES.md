@@ -18,7 +18,7 @@ After H1 and H2, adding a harness means touching these:
 | --- | --- |
 | `src/model/parsers/unreadable.js` | the list of parsers the unread-line counter knows |
 | `src/engine/shapes.js` | the wireframe shape per agent key |
-| `server/harnesses/<key>.js` (S7) | `createSessionsReader`, a reader of the harness's own session files (Claude Code and OpenCode today) |
+| `server/harnesses/<key>.js` (S7) | `createSessionsReader`, a reader of the harness's own session files (Claude Code, OpenCode and Antigravity today) |
 | `server/agents-config.js` | `HARNESS_KEYS`, `HARNESS_NAMES`, `HARNESS_EFFORTS` and the Codex app fallback |
 | `server/model-list.js` | the static `MODELS` list per harness (re-exported by `server/models.js`) |
 | `server/harness-models.js` | per-harness live model discovery commands and output parsers |
