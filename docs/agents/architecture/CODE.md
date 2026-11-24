@@ -77,6 +77,7 @@ server/           the bridge: frames from the lane runs and the sessions, the ag
   claude-sessions.js   the Claude Code session reader: session files, subagent files, kept tool items; it lists the runs folder for meta files only when that folder's change time moves (P30)
   opencode-sessions.js  the OpenCode session reader: the two session tables in opencode.db, read only; after its first read it asks only for the session rows whose time_updated passed the highest it has seen, once a second while a run is open and every 5 seconds at rest, so a new OpenCode session can show up to 5 seconds late, and once a minute it reads every row and forgets the sessions the database no longer holds (P30, P42)
   agy-sessions.js   the Antigravity session reader: the summaries table in conversation_summaries.db and the transcript lines under brain, read only; the project filter, the one step pair per child conversation and the runs (P726)
+  hermes-sessions.js  the Hermes session reader: state.db in the Hermes home, read only and nothing else there; the project and bridge-start filter, the runs folder skip, the messages above the last id seen and the child session under its parent's run (P727)
   sessions-source.js  ticks every registered session reader once a second
   lanes-source.js   watches the run-lane and orchestrator logs, turns them into frames, and lists the lane and sub orchestrator agents; it checks for work every 2 seconds, but lists the runs folder only when its change time moves, a log watcher event requests a list or 60 seconds have passed, checks a finished log's size only on a watcher event that names it or on that scan, and reads the lanes again only when lanes.json or agents.json changes; it ends a quiet run only when its lane lock has no live run or child pid, by the runner's stale test (P30, P42, P138)
   control.js        /api/control routes: agents, comments, approvals, live runs, budget refusal, costs and models
@@ -321,6 +322,8 @@ tests/            vitest; tests/helpers/bridge.js starts a bridge on port 0 over
   online.test.js                    src/model/online.js: isOnlineCall, isLocalAddress and laneNeedsNetwork classification
   opencode-sessions.test.js         server/opencode-sessions.js: SQLite session polling, run ids, forgotten cap and delete cleanup
   agy-sessions.test.js              server/agy-sessions.js: the summaries rows, the byte offset, the project filter, the child links and the runs
+  hermes-sessions.test.js           server/hermes-sessions.js: the Hermes home, the project and start filter, the runs folder skip, the messages above the last id and the child under its parent (P727)
+  hermes-parser.test.js             src/model/parsers/hermes.js: the JSON call and result lines, the tool map, the child session and the delegate task (P727)
   orchestrator-chat.test.js         src/ui/OrchestratorChat.jsx, orchestratorChat.js: status/tone mapping, masking and Team unread tags
   orchestrator-effort.test.js       server/orchestrator.js, agents-config.js: harness effort validation, persistence and passing reasoning to turns
   orchestrator-e2e.test.js          server/orchestrator.js: end-to-end turn, lane worktree run, wake cycle and sub scope wake

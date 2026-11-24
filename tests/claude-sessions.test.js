@@ -599,22 +599,22 @@ describe('sessions source', () => {
     return { id: `agent-${key}`, key, name: key, adapterType: 'claude_local', parser: 'claude', role: null }
   }
 
-  it('builds the Claude, OpenCode and Antigravity readers by default and exposes their agents', () => {
+  it('builds the Claude, OpenCode, Antigravity and Hermes readers by default and exposes their agents', () => {
     const { projectRoot, runs } = setup()
     const source = createSessionsSource({ projectRoot, runsFolder: runs })
     cleanups.push(() => source.stop())
-    expect(source.agents.map((agent) => agent.key)).toEqual(['claude-session', 'opencode-session', 'antigravity-session'])
+    expect(source.agents.map((agent) => agent.key)).toEqual(['claude-session', 'hermes-session', 'opencode-session', 'antigravity-session'])
     expect(source.agents[0]).toEqual(AGENT)
-    expect(source.readers).toHaveLength(3)
+    expect(source.readers).toHaveLength(4)
   })
 
   it('registers one session reader per harness that has one', () => {
-    expect(SESSION_HARNESSES.map((harness) => harness.key)).toEqual(['claude', 'opencode', 'agy'])
+    expect(SESSION_HARNESSES.map((harness) => harness.key)).toEqual(['claude', 'hermes', 'opencode', 'agy'])
     expect(harnessByKey.claude.createSessionsReader).toBe(createClaudeSessionsReader)
     expect(typeof harnessByKey.opencode.createSessionsReader).toBe('function')
     expect(harnessByAdapter.claude_local).toBe(harnessByKey.claude)
     expect(harnessByAdapter.opencode_local).toBe(harnessByKey.opencode)
-    expect(harnessByKey.hermes.createSessionsReader).toBeUndefined()
+    expect(typeof harnessByKey.hermes.createSessionsReader).toBe('function')
     expect(typeof harnessByKey.agy.createSessionsReader).toBe('function')
   })
 

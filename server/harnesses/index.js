@@ -1,9 +1,10 @@
 import { HARNESSES as CLIENT_HARNESSES } from '../../src/harnesses/index.js'
 import { agyServerHarness } from './agy.js'
 import { claudeServerHarness } from './claude.js'
+import { hermesServerHarness } from './hermes.js'
 import { opencodeServerHarness } from './opencode.js'
 
-const SERVER_HALVES = [claudeServerHarness, opencodeServerHarness, agyServerHarness]
+const SERVER_HALVES = [claudeServerHarness, opencodeServerHarness, agyServerHarness, hermesServerHarness]
 const SERVER_HALF_BY_KEY = new Map(SERVER_HALVES.map((harness) => [harness.key, harness]))
 
 const HARNESSES = CLIENT_HARNESSES.map((harness) => {

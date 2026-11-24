@@ -18,7 +18,7 @@ After H1 and H2, adding a harness means touching these:
 | --- | --- |
 | `src/model/parsers/unreadable.js` | the list of parsers the unread-line counter knows |
 | `src/engine/shapes.js` | the wireframe shape per agent key |
-| `server/harnesses/<key>.js` (S7) | `createSessionsReader`, a reader of the harness's own session files (Claude Code, OpenCode and Antigravity today) |
+| `server/harnesses/<key>.js` (S7) | `createSessionsReader`, a reader of the harness's own session files (Claude Code, OpenCode, Antigravity and Hermes today) |
 | `server/agents-config.js` | `HARNESS_KEYS`, `HARNESS_NAMES`, `HARNESS_EFFORTS` and the Codex app fallback |
 | `server/model-list.js` | the static `MODELS` list per harness (re-exported by `server/models.js`) |
 | `server/harness-models.js` | per-harness live model discovery commands and output parsers |
@@ -51,7 +51,7 @@ The generic path: the `acp` harness runs any Agent Client Protocol agent (`openc
 
 1. H1 (done, 0.1.292). The registry and descriptors for the four harnesses we have, with no change in behaviour: the `--replay` digests and the full suite stay the same.
 2. H2 (done, 0.1.304). The UI lists and adapter maps read the registry and `/api/agents`.
-3. H3 (done, 0.1.302). The S7 session readers register through `server/harnesses`, so a harness brings its own.
+3. H3 (done, 0.1.302). The S7 session readers register through `server/harnesses`, so a harness brings its own. Hermes joined at P727: `server/harnesses/hermes.js` carries `createHermesSessionsReader`.
 4. H4 (done, 0.1.305). The `acp` harness, tested on `opencode acp` with the probe in `scripts/acp-probe.mjs` and end to end with a fake ACP agent.
 5. H5 (done, 0.1.386). The `machineroom` harness: `scripts/mr-agent.mjs` reads `MACHINEROOM_API_KEY` or `OPENROUTER_API_KEY`, calls `{url}/chat/completions` with read, write, edit, list, search and shell tools, and prints the assistant, tool result and result lines in Claude Code's stream-json shape. `isHarnessAvailable` reports it when either key is set (or an endpoint is saved), and the two OpenRouter models in `server/model-list.js` (re-exported by `server/models.js`) are its built-in models.
 6. H10 (done, 0.1.386). Provider endpoints: `server/endpoints.js` keeps up to 20 endpoints in `<runs>/endpoints.json` with a provider preset, a base URL, a key slot and up to 1000 models. `GET /api/providers`, `GET /api/endpoints`, `POST /api/endpoints`, `POST /api/endpoints/NAME/delete` and `GET /api/endpoints/NAME/models` serve them, and the model list asks `BASEURL/models` with the slot key and a 10 second timeout. A `machineroom` lane may carry `cli.endpoint`, `run-lane` adds `--endpoint NAME`, and `mr-agent` reads the endpoint and its key slot instead of the environment keys. `server/models.js` lists each endpoint's models for the harness as `NAME/MODEL`, and Settings has `Direct API` below `Harnesses`.
