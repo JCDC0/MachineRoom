@@ -766,7 +766,7 @@ describe('the Antigravity session reader and its runs', () => {
     expect(frames.filter((frame) => frame.type === 'heartbeat.run.status')[1].payload.runId).toBe(run.runId)
   })
 
-  it('ends a run that stops growing after the quiet time', () => {
+  it('ends a running run that stops growing after thirty minutes', () => {
     const { projectRoot, home, dbPath } = setup()
     let time = 1000000
     const frames = []
@@ -776,6 +776,32 @@ describe('the Antigravity session reader and its runs', () => {
     addConversation(dbPath, { id: 'conv-quiet' })
     appendTranscript(home, 'conv-quiet', [planner(1, [readCall(join(projectRoot, 'src', 'math.js'))]), generic(2, 'ok')])
     reader.tick()
+    expect(frames.filter((frame) => frame.type === 'heartbeat.run.status').map((frame) => frame.payload.status)).toEqual(['running'])
+
+    time += 1000
+    reader.tick()
+    expect(frames.filter((frame) => frame.type === 'heartbeat.run.status').map((frame) => frame.payload.status)).toEqual(['running'])
+
+    time += 30 * 60 * 1000
+    reader.tick()
+    expect(frames.filter((frame) => frame.type === 'heartbeat.run.status').map((frame) => frame.payload.status)).toEqual([
+      'running',
+      'succeeded',
+    ])
+  })
+
+  it('ends a run that stops growing after the quiet time once its tree is idle', () => {
+    const { projectRoot, home, dbPath } = setup()
+    let time = 1000000
+    const frames = []
+    const reader = makeReader({ projectRoot, home, dbPath, frames, now: () => time, quietMs: 1000 })
+    reader.tick()
+
+    addConversation(dbPath, { id: 'conv-quiet' })
+    appendTranscript(home, 'conv-quiet', [planner(1, [readCall(join(projectRoot, 'src', 'math.js'))])])
+    reader.tick()
+    setStatus(dbPath, 'conv-quiet', 'CASCADE_RUN_STATUS_IDLE')
+    reader.tick()
 
     time += 1000
     reader.tick()
@@ -783,6 +809,33 @@ describe('the Antigravity session reader and its runs', () => {
       'running',
       'succeeded',
     ])
+  })
+
+  it('keeps a run open while a child of its tree is still running', () => {
+    const { projectRoot, home, dbPath } = setup()
+    let time = 1000000
+    const frames = []
+    const reader = makeReader({ projectRoot, home, dbPath, frames, now: () => time, quietMs: 1000 })
+    reader.tick()
+
+    addConversation(dbPath, { id: 'conv-top' })
+    appendTranscript(home, 'conv-top', [planner(1, [readCall(join(projectRoot, 'src', 'math.js'))])])
+    reader.tick()
+    addConversation(dbPath, { id: 'conv-worker', parent: 'conv-top', agent: 'ui-worker', depth: 1 })
+    appendTranscript(home, 'conv-worker', [planner(1, [readCall(join(projectRoot, 'src', 'ui.js'))])])
+    reader.tick()
+    setStatus(dbPath, 'conv-top', 'CASCADE_RUN_STATUS_IDLE')
+    reader.tick()
+
+    time += 5 * 60 * 1000
+    reader.tick()
+    expect(reader.open().has('conv-top')).toBe(true)
+
+    setStatus(dbPath, 'conv-worker', 'CASCADE_RUN_STATUS_IDLE')
+    reader.tick()
+    time += 1000
+    reader.tick()
+    expect(reader.open().has('conv-top')).toBe(false)
   })
 
   it('does not end a run while a call is still open', () => {
@@ -813,6 +866,7 @@ describe('the Antigravity session reader and its runs', () => {
     appendTranscript(home, 'conv-input', [planner(1, [readCall(join(projectRoot, 'src', 'math.js'))]), generic(2, 'ok')])
     reader.tick()
 
+    setStatus(dbPath, 'conv-input', 'CASCADE_RUN_STATUS_IDLE')
     time += 60000
     reader.tick()
     expect(frames.filter((frame) => frame.type === 'heartbeat.run.status').map((frame) => frame.payload.status)).toEqual([
@@ -821,6 +875,7 @@ describe('the Antigravity session reader and its runs', () => {
     ])
 
     appendTranscript(home, 'conv-input', [userInput(3, 'One more thing.')])
+    setStatus(dbPath, 'conv-input', 'CASCADE_RUN_STATUS_RUNNING')
     reader.tick()
     const runs = frames.filter((frame) => frame.type === 'heartbeat.run.queued')
     expect(runs).toHaveLength(2)

@@ -12,6 +12,7 @@ const RESULT_LIMIT = 2000
 const HELD_LIMIT = 200
 const FULL_READ_MS = 60 * 1000
 const DEFAULT_QUIET_MS = 30000
+const RUNNING_QUIET_MS = 30 * 60 * 1000
 const IDLE_STATUS = 'CASCADE_RUN_STATUS_IDLE'
 const PATH_KEYS = ['Path', 'AbsolutePath', 'TargetFile']
 const TRANSCRIPT = join('.system_generated', 'logs', 'transcript.jsonl')
@@ -634,16 +635,25 @@ export function createAgySessionsReader(options = {}) {
     }
   }
 
+  function treeIdle(root) {
+    for (const entry of treeOf(root)) {
+      if (entry.skipped) continue
+      if (entry.status !== IDLE_STATUS) return false
+    }
+    return true
+  }
+
   function endRuns() {
     for (const entry of conversations.values()) {
       if (entry.parentId) continue
       const run = entry.run
       if (!run?.open) continue
-      if (run.openCalls === 0 && entry.decision === 'inside' && entry.status === IDLE_STATUS) {
+      const idle = treeIdle(entry)
+      if (run.openCalls === 0 && entry.decision === 'inside' && idle) {
         endRun(entry, 'succeeded')
         continue
       }
-      if (now() - run.lastGrowth >= quietMs) endRun(entry, 'succeeded')
+      if (now() - run.lastGrowth >= (idle ? quietMs : RUNNING_QUIET_MS)) endRun(entry, 'succeeded')
     }
   }
 
