@@ -3,6 +3,10 @@
 ## Unreleased
 
 - An agent's beat ring is a ring again: it was scaled on the flat axis of its rotated circle, so each beat drew a straight line under the agent instead of a ring (found by the owner with music playing; done by hand).
+- The native lane merges held and fresh inbox replies by ID at each step and checks again before finishing (P733).
+- Ordinary Send follows the saved reply choice. The lane message menu can override it in either direction (P733).
+- CLI replies included in a restart prompt keep the `prompted` status and stay out of the inbox (P733).
+- Antigravity and Hermes runs save their app session IDs so outside-session readers skip the room's own lanes (P733).
 - Antigravity uses the tree's path majority to choose its room and skips unchanged idle transcripts. Hermes keeps the first resumed turn and waits for descendant activity. Both readers confine their data paths and cache lane meta checks (P732).
 - Thinking rings orbit and wobble slowly, with a loop length and orbit speed set by each agent's key (P731).
 - The native lane records serving providers and cached prompt tokens, shows the latest run's totals in the Inspector, and can pin OpenRouter providers with `providerOrder` (P730).

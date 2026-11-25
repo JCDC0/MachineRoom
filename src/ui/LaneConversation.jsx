@@ -26,6 +26,7 @@ const STATUS_LABELS = {
   queued: 'Queued',
   fetched: 'Read by the runner',
   interrupted: 'Interrupted the run',
+  prompted: 'Included in the restart prompt',
 }
 const RUN_TONES = { running: 'working', finished: 'finished', failed: 'paused', stopped: 'paused' }
 
@@ -585,7 +586,9 @@ export default function LaneConversation({
         clearStartedRun()
         startedRunRef.current = startPending
       }
-      const answer = sendToRunning ? await client.sendLaneMessage({ lane, startedAt: selected, text: trimmedDraft, interrupt: Boolean(interrupt) }) : await onRecipientSend(trimmedDraft)
+      const answer = sendToRunning
+        ? await client.sendLaneMessage({ lane, startedAt: selected, text: trimmedDraft, ...(typeof interrupt === 'boolean' ? { interrupt } : {}) })
+        : await onRecipientSend(trimmedDraft)
       if (answer?.ok === false) throw new Error(answer.error)
       if (mountedRef.current && startPending && startedRunRef.current === startPending) {
         startPending.settled = true
@@ -887,7 +890,7 @@ export default function LaneConversation({
         } : null}
         onSubmit={(event) => {
           event.preventDefault()
-          sendMessage(false)
+          sendMessage()
         }}
         sending={sending}
         sendDisabled={!canSend || sending}
@@ -909,6 +912,7 @@ export default function LaneConversation({
             {selectedRunning && (
               <Menu label="Lane message options" items={[
                 { label: 'Send and interrupt', disabled: !canSend || sending, onSelect: () => sendMessage(true) },
+                { label: 'Send after current action', disabled: !canSend || sending, onSelect: () => sendMessage(false) },
               ]} />
             )}
           </>

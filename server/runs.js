@@ -2005,7 +2005,6 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
       item.interrupting = true
       item.stopping = true
       item.logPath = join(recordsDir(), `${runName}.log`)
-      writeInterruptFile(recordsDir(), runName, unseen)
       const stopTarget = lane !== item.entry.lane && existsSync(join(recordsDir(), `${lane}.lock`)) ? lane : item.entry.lane
       const stopStartedAt = stopTarget === item.entry.lane ? item.entry.startedAt : readLockInfo(stopTarget).startedAt
       const stopResult = await stopRunningItem(item, stopTarget, stopStartedAt)
@@ -2022,18 +2021,16 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
       if (stopTarget !== item.entry.lane && existsSync(join(recordsDir(), `${item.entry.lane}.lock`))) {
         await runStopCommand(item.entry.lane, Boolean(item.project), item.entry.startedAt)
       }
-      const more = typeof takeUnseen === 'function' ? takeUnseen() : []
-      const fresh = Array.isArray(more) ? more.filter((entry) => !unseen.includes(entry)) : []
-      if (fresh.length > 0) {
-        unseen.push(...fresh)
-        writeInterruptFile(recordsDir(), runName, unseen)
-      }
       const nextLane = lane !== item.entry.lane ? lane : item.entry.lane
       if (interruptState.cancelled || sectorStoppingError(nextLane, item.startedBy)) {
         item.stopping = false
         item.interrupting = false
         return false
       }
+      const more = typeof takeUnseen === 'function' ? takeUnseen() : []
+      const prompted = [...new Set([...unseen, ...(Array.isArray(more) ? more : [])])]
+        .filter((entry) => entry.status !== 'fetched')
+      writeInterruptFile(recordsDir(), runName, prompted)
       startRun(
         nextLane,
         item.briefs,
@@ -2045,7 +2042,7 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
         item.allowedLanes,
         { continueFrom: runName, ticket: item.ticket, interruptedBy: sender }
       )
-      if (typeof markSeen === 'function') markSeen(unseen)
+      if (typeof markSeen === 'function') markSeen(prompted)
       laneTickets.get(item.ticket).interruptCount = interruptCount + 1
       notify({ topic: 'runs' })
       return true

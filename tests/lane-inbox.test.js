@@ -44,11 +44,17 @@ const BACKEND = {
 }
 
 const LANE_RUNNER = [
-  "import { appendFileSync, existsSync } from 'node:fs'",
-  'const args = process.argv.slice(2)',
-  "const calls = String(args[0] ?? '')",
-  "const release = String(args[1] ?? '')",
-  "appendFileSync(calls, JSON.stringify({ args: args.slice(2), ticket: process.env.MACHINEROOM_LANE_TICKET ?? '' }) + '\\n')",
+  "import { appendFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs'",
+  "import { join } from 'node:path'",
+  'const [calls, initialRelease, restartable, ...args] = process.argv.slice(2)',
+  'const runs = process.env.MACHINEROOM_RUNS',
+  "if (restartable && args[0] === '--stop') { writeFileSync(initialRelease, 'go'); process.exit(0) }",
+  "const continues = args[args.indexOf('--continue-from') + 1]",
+  "const restarted = restartable && args.includes('--continue-from')",
+  "if (restartable && !restarted) writeFileSync(join(runs, args[0] + '.lock'), JSON.stringify({ pid: process.pid, startedAt: args[args.indexOf('--started-at') + 1], log: 'first-run.log' }))",
+  "const prompt = restarted ? readFileSync(join(runs, continues + '.interrupt.txt'), 'utf8') : ''",
+  "const release = restarted ? initialRelease + '-continued' : initialRelease",
+  "appendFileSync(calls, JSON.stringify({ args, prompt, ticket: process.env.MACHINEROOM_LANE_TICKET ?? '' }) + '\\n')",
   "while (release && !existsSync(release)) await new Promise((done) => setTimeout(done, 20))",
 ].join('\n')
 
@@ -90,7 +96,7 @@ function readLines(file) {
     .filter(Boolean)
 }
 
-function makeBase({ ladder = null } = {}) {
+function makeBase({ ladder = null, restartable = false } = {}) {
   const base = makeTempDir('mr-lane-inbox-')
   const runs = join(base, 'runs')
   const projectRoot = join(base, 'project')
@@ -115,7 +121,7 @@ function makeBase({ ladder = null } = {}) {
     promptFile,
     calls,
     release,
-    runnerCommand: { file: process.execPath, args: [runner, calls, release] },
+    runnerCommand: { file: process.execPath, args: [runner, calls, release, restartable ? 'yes' : ''] },
     chat: (id = 'orchestrator') => {
       try {
         return JSON.parse(readFileSync(chatFileFor(projectRoot, runs, id), 'utf8'))
@@ -191,6 +197,33 @@ async function releaseRun(rig) {
 }
 
 describe('a lane inbox', () => {
+  it('keeps replies in the restart prompt out of later inbox reads', async () => {
+    const rig = await makeBridge(makeBase({ restartable: true }))
+    try {
+      const ticket = await startRun(rig, 'opencode')
+      const before = await pagePost(rig.url, '/api/orchestrator/messages', { to: 'lane:opencode', text: 'Already read.' })
+      expect(before.status).toBe(202)
+      expect((await laneGet(rig.url, ticket)).body.messages.map(({ id }) => id)).toEqual([before.body.id])
+
+      const sent = await pagePost(rig.url, '/api/orchestrator/messages', { to: 'lane:opencode', text: 'Use the new header.', interrupt: true })
+      expect(sent.status).toBe(202)
+      const restart = await waitFor(() => readLines(rig.calls).find((entry) => entry.args.includes('--continue-from')))
+      expect(restart.prompt).toContain('owner: Use the new header.')
+      expect(restart.prompt).not.toContain('Already read.')
+
+      const later = await pagePost(rig.url, '/api/orchestrator/messages', { to: 'lane:opencode', text: 'One more thing.' })
+      expect(later.status).toBe(202)
+      expect((await laneGet(rig.url, restart.ticket)).body.messages.map(({ id }) => id)).toEqual([before.body.id, later.body.id])
+      const status = await getJson(`${rig.url}/api/orchestrator/messages/status?id=${sent.body.id}`, {
+        headers: { origin: 'http://localhost:5173' },
+      })
+      expect(status.body).toMatchObject({ id: sent.body.id, status: 'prompted' })
+    } finally {
+      writeFileSync(`${rig.release}-continued`, 'go\n')
+      await releaseRun(rig)
+    }
+  })
+
   it('takes an orchestrator message for a running lane', async () => {
     const rig = await makeBridge(makeBase({ ladder: { subs: [FRONTEND] } }))
     const ticket = await startRun(rig, 'opencode')

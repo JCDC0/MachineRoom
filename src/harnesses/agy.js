@@ -82,6 +82,14 @@ export const agyHarness = {
   readLine() {
     return jsonLineReader(createAgyParser)
   },
+  sessionIdFromLine(line) {
+    if (!line.trimStart().startsWith('{')) return ''
+    try {
+      return JSON.parse(line)?.step_update?.conversation_id ?? ''
+    } catch {
+      return ''
+    }
+  },
   report(log) {
     return headLines(agyReply(log))
   },

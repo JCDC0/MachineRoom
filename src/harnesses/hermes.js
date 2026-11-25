@@ -31,6 +31,12 @@ export const hermesHarness = {
       return { chunk: `${text}\n`, at: Number.isFinite(at) ? at : null, read: HERMES_LINE.test(text) }
     }
   },
+  sessionIdFromLine(line) {
+    const text = terminalText(line).trim()
+    const session = text.match(/^Session(?: ID)?:\s*([\w-]+)$/i)
+    const resume = text.match(/^hermes(?:\.exe)?\s+--resume\s+(\d{8}_\d{6}_[a-f0-9]{6,8})$/i)
+    return session?.[1] ?? resume?.[1] ?? ''
+  },
   report(log) {
     return headLines(hermesReply(log))
   },

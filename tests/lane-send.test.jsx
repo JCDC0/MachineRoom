@@ -305,6 +305,13 @@ describe('page sends to a running lane', { timeout: slowMs(120000) }, () => {
       laneReplies: 'next-turn',
       script: fakeCliScript({ callsFile, releaseFile, stopAtCall: 2 }),
     })
+    cleanups.push(async () => {
+      writeFileSync(releaseFile, 'go\n')
+      await waitFor(
+        async () => (await getJson(`${rig.url}/api/control/runs`)).body.running.length === 0,
+        { timeoutMs: 5000, what: 'the CLI test runs to close' }
+      )
+    })
 
     const started = await pagePost(rig.url, '/api/control/runs', {
       lane: 'opencode',
@@ -336,7 +343,7 @@ describe('page sends to a running lane', { timeout: slowMs(120000) }, () => {
       { timeoutMs: CLI_WAIT_MS, what: 'continuation run to end' }
     )
     const status = await pageGet(rig.url, `/api/orchestrator/messages/status?id=${sent.body.id}`)
-    expect(status.body.status).toBe('interrupted')
+    expect(status.body.status).toBe('prompted')
   })
 
   it('ignores interrupt: true on a machineroom lane as today', async () => {
@@ -571,13 +578,13 @@ describe('LaneConversation message box and status updates', () => {
     })
   })
 
-  it('sends with interrupt false on Send and refreshes status every 5 seconds and once more when the run ends', async () => {
+  it('uses the saved choice on Send and refreshes status every 5 seconds and once more when the run ends', async () => {
     vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'Date'] })
     try {
       let live = true
       const sentCalls = []
       const statusCalls = []
-      const statuses = ['queued', 'fetched', 'fetched', 'interrupted']
+      const statuses = ['queued', 'fetched', 'fetched', 'prompted']
       const listeners = new Set()
       const client = {
         runs: async () => ({
@@ -597,7 +604,7 @@ describe('LaneConversation message box and status updates', () => {
         },
         laneMessageStatus: async (id) => {
           statusCalls.push(id)
-          const next = statuses.shift() ?? 'interrupted'
+          const next = statuses.shift() ?? 'prompted'
           return { id, status: next, at: STARTED }
         },
         subscribe: (fn) => {
@@ -626,7 +633,7 @@ describe('LaneConversation message box and status updates', () => {
         await act(async () => container.querySelector('.mr-composer-box').dispatchEvent({ type: 'submit', bubbles: true, cancelable: true }))
         await settle(10)
 
-        expect(sentCalls).toEqual([{ lane: 'opencode', startedAt: STARTED, text: 'Check the header.', interrupt: false }])
+        expect(sentCalls).toStrictEqual([{ lane: 'opencode', startedAt: STARTED, text: 'Check the header.' }])
         expect(input.value).toBe('')
         expect(container.textContent).toContain('Check the header.')
         expect(container.textContent).toContain('Queued')
@@ -659,7 +666,7 @@ describe('LaneConversation message box and status updates', () => {
         await settle(15)
 
         expect(statusCalls).toHaveLength(4)
-        expect(container.textContent).toContain('Interrupted the run')
+        expect(container.textContent).toContain('Included in the restart prompt')
         expect(container.textContent).toContain('Check the header.')
         expect(container.querySelector('button[aria-label="Send"]')).toBeNull()
 
@@ -674,7 +681,10 @@ describe('LaneConversation message box and status updates', () => {
     }
   })
 
-  it('sends with interrupt true on Send and interrupt and shows Interrupted the run', async () => {
+  it.each([
+    ['Send and interrupt', true, 'prompted', 'Included in the restart prompt'],
+    ['Send after current action', false, 'queued', 'Queued'],
+  ])('%s sends its explicit choice', async (label, interrupt, status, statusText) => {
     const sentCalls = []
     const client = {
       runs: async () => ({
@@ -692,7 +702,7 @@ describe('LaneConversation message box and status updates', () => {
         sentCalls.push(payload)
         return { id: 'msg-int' }
       },
-      laneMessageStatus: async (id) => ({ id, status: 'interrupted', at: STARTED }),
+      laneMessageStatus: async (id) => ({ id, status, at: STARTED }),
       subscribe: () => () => {},
     }
 
@@ -713,12 +723,13 @@ describe('LaneConversation message box and status updates', () => {
 
       await type(root, container.querySelector('textarea'), 'Switch to helper.')
       await click(root, container.querySelector('button[aria-label="Lane message options"]'))
-      await click(root, document.querySelector('[role="menuitem"]'))
+      const option = [...document.querySelectorAll('[role="menuitem"]')].find((item) => item.textContent.trim() === label)
+      await click(root, option)
       await settle(15)
 
-      expect(sentCalls).toEqual([{ lane: 'opencode', startedAt: STARTED, text: 'Switch to helper.', interrupt: true }])
+      expect(sentCalls).toEqual([{ lane: 'opencode', startedAt: STARTED, text: 'Switch to helper.', interrupt }])
       expect(container.textContent).toContain('Switch to helper.')
-      expect(container.textContent).toContain('Interrupted the run')
+      expect(container.textContent).toContain(statusText)
     })
   })
 

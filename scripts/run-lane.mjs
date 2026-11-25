@@ -13,6 +13,7 @@ import { maskKeys } from '../src/briefs/audit.js'
 import { briefProblems, briefWorktreeProblems, checkCommandLines, checkCommandProblem, childEnvironment, commandFor, continueFromProblem, createLaneLog, DEFAULT_MINUTES, fallbackProblem, failoverKind, filterRunsSince, formatOutcomes, formatStats, formatSummary, interruptSenderFrom, laneCommandProblem, laneLockLog, laneLockStartedAt, laneLockText, laneModeProblem, laneStats, laneStopProblem, laneWithOverrides, limitedFor, maskProfilePaths, maskedQueueTasks, ORCHESTRATOR_LANE_PROBLEM, parseRunArgs, projectProblems, projectRunGit, retryStartProblem, runListLine, runRecord, sessionToolLines, splitCheckCommand, startFailureText, summarizeRun, unattendedPrompt, worktreeFor, WORKTREES_FOLDER } from '../src/briefs/run.js'
 import { outcomeTable } from '../server/outcomes.js'
 import { claudeProjectSlug } from '../server/claude-sessions.js'
+import { hermesHome } from '../server/hermes-sessions.js'
 import { codexThreadId, findCodexRollout, quotaForRun, readCodexQuota } from '../server/codex-rollout.js'
 export { quotaForRun, readCodexQuota } from '../server/codex-rollout.js'
 import { readMainSubjectsSync } from '../server/runs.js'
@@ -1393,6 +1394,32 @@ function readUsage(path) {
   }
 }
 
+function hermesSessionFor(cwd, env, startedAt) {
+  const home = hermesHome({ env })
+  let db
+  try {
+    const path = realpathSync.native(join(home, 'state.db'))
+    if (dirname(path) !== realpathSync.native(home)) return ''
+    const { DatabaseSync } = process.getBuiltinModule('node:sqlite')
+    db = new DatabaseSync(path, { readOnly: true })
+    const folder = cwd.replaceAll('\\', '/').replace(/\/+$/, '')
+    const collation = process.platform === 'win32' ? 'COLLATE NOCASE' : ''
+    const row = db.prepare(`
+      SELECT id FROM sessions
+      WHERE replace(rtrim(cwd, char(47, 92)), char(92), '/') ${collation} = ?
+        AND coalesce(parent_session_id, '') = ''
+        AND started_at >= ?
+      ORDER BY started_at DESC
+      LIMIT 1
+    `).get(folder, startedAt / 1000)
+    return row?.id ?? ''
+  } catch {
+    return ''
+  } finally {
+    db?.close()
+  }
+}
+
 function totalCost(report) {
   const total = report?.total_including_auxiliary?.estimated_cost_usd ?? report?.estimated_cost_usd
   return typeof total === 'number' && Number.isFinite(total) ? total : null
@@ -2295,6 +2322,7 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
 
   try {
     const sessionId = resumedSessionId || randomUUID()
+    const sessionIdFromLine = harnessByKey[harness]?.sessionIdFromLine
     const effectivePrompt = resumedSessionId ? (interruptText || 'Continue your brief from where you stopped.') : fullPrompt
     const codex = laneRunProgram(lane, { folder })
     const command = commandFor({
@@ -2311,7 +2339,8 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
     const startedBy = options.startedBy ? null : sessionStartedBy(process.env)
     const startedAt = Number.isFinite(Number(givenStartedAt)) && Number(givenStartedAt) > 0 ? Number(givenStartedAt) : Date.now()
     const meta = {
-      lane: options.lane, sessionId, briefHash, briefs: project ? [] : wanted.map((brief) => brief.id),
+      lane: options.lane, briefHash, briefs: project ? [] : wanted.map((brief) => brief.id),
+      ...(sessionIdFromLine ? {} : { sessionId }),
       startedAt: new Date(startedAt).toISOString(), branch: checkpoint?.branch ?? '',
       model: lane.cli.model, reasoning: lane.reasoning, mode: lane.cli.mode,
       ...(runBase ? { base: runBase } : {}),
@@ -2325,7 +2354,8 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
       meta.index = queue.index
     }
     if (startedBy) meta.startedBy = startedBy
-    writeFileSync(join(dirname(logPath), `${name}.meta.json`), `${JSON.stringify(meta)}\n`)
+    const metaPath = join(dirname(logPath), `${name}.meta.json`)
+    writeFileSync(metaPath, `${JSON.stringify(meta)}\n`)
     const log = openLog(logPath)
     let logBroken = false
     const logClosed = new Promise((done) => finished(log, () => done()))
@@ -2352,6 +2382,7 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
       'MACHINEROOM_LANE_TICKET',
       'MACHINEROOM_LANE_REPLIES',
       'MACHINEROOM_BRIDGE',
+      ...(harness === 'hermes' ? ['HERMES_HOME'] : []),
     ]
       .filter((name) => typeof process.env[name] === 'string' && process.env[name] !== '')
     const endpoints = readEndpoints(runsDir)
@@ -2372,6 +2403,41 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
       endpoints,
     })
     const secrets = Object.entries(childEnv).filter(([key]) => /key|ticket|token|secret/i.test(key)).map(([, value]) => String(value ?? '')).filter((value) => value.length >= 8)
+    let sessionPoll = null
+    const validSessionId = (id) => typeof id === 'string' && /^[\w-]{1,128}$/.test(id)
+      && maskKeys(id).text === id && !secrets.some((secret) => id.includes(secret))
+    const saveSessionId = (id) => {
+      if (!validSessionId(id)) return false
+      if (meta.sessionId === id) return true
+      const temp = `${metaPath}.${process.pid}.tmp`
+      try {
+        writeFileSync(temp, `${JSON.stringify({ ...meta, sessionId: id })}\n`)
+        renameSync(temp, metaPath)
+        meta.sessionId = id
+        clearInterval(sessionPoll)
+        sessionPoll = null
+        return true
+      } catch {
+        try {
+          rmSync(temp, { force: true })
+        } catch {}
+        return false
+      }
+    }
+    const sessionTails = {}
+    let printedSessionId = ''
+    const readSessionChunk = (stream, text) => {
+      if (!sessionIdFromLine || printedSessionId) return
+      const lines = ((sessionTails[stream] ?? '') + text).split(/\r\n?|\n/)
+      sessionTails[stream] = lines.pop().slice(-8 * 1024 * 1024)
+      for (const line of lines) {
+        const id = sessionIdFromLine(line)
+        if (!validSessionId(id)) continue
+        printedSessionId = id
+        if (!saveSessionId(id) && !settled) sessionPoll ??= setInterval(refreshSession, 500).unref()
+        break
+      }
+    }
     const laneLog = createLaneLog({
       write: (text) => {
         if (logBroken) return
@@ -2387,7 +2453,12 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
     const setupLine = typeof worktreeSetup === 'string' ? worktreeSetup.trim() : ''
     if (setupLine !== '') laneLog.push('stdout', `${setupLine}\n`)
     const namedAfter = process.platform === 'linux' ? Math.ceil(uptime() * 100) : Date.now()
+    const harnessStartedAt = Date.now()
     const child = spawn(spawnSpec.file, spawnSpec.args, { cwd: command.cwd, env: childEnv, stdio: spawnSpec.input ? ['pipe', 'pipe', 'pipe'] : ['ignore', 'pipe', 'pipe'], windowsHide: true })
+    const refreshSession = () => {
+      if (printedSessionId) saveSessionId(printedSessionId)
+      else if (harness === 'hermes' && !meta.sessionId) saveSessionId(hermesSessionFor(command.cwd, childEnv, harnessStartedAt))
+    }
     if (typeof onStart === 'function') onStart()
     const lockStart = queue && lockPath ? laneLockStartedAt(lockText(lockPath)) || startedAt : startedAt
     if (lockPath) writeLaneChild(lockPath, child.pid)
@@ -2511,10 +2582,15 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
     child.stdout?.setEncoding('utf8')
     child.stderr?.setEncoding('utf8')
     child.stdout?.on('data', (text) => {
+      readSessionChunk('stdout', text)
       laneLog.push('stdout', text)
       onChunk(text)
     })
-    child.stderr?.on('data', (text) => laneLog.push('stderr', text))
+    child.stderr?.on('data', (text) => {
+      readSessionChunk('stderr', text)
+      laneLog.push('stderr', text)
+    })
+    if (harness === 'hermes') sessionPoll = setInterval(refreshSession, 500).unref()
 
     let killed = false
     let stopNote = ''
@@ -2567,6 +2643,10 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
       })
     })
     clearTimeout(timer)
+    clearInterval(sessionPoll)
+    readSessionChunk('stdout', '\n')
+    readSessionChunk('stderr', '\n')
+    refreshSession()
     if (closeTimer !== null) {
       clearTimeout(closeTimer)
       closeTimer = null
@@ -2617,6 +2697,7 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
     const report = harness === 'hermes' ? readUsage(usageFile) : null
     let toolLines = { count: 0, session: '' }
     if (harness === 'hermes') {
+      if (!printedSessionId) saveSessionId(report?.session_id)
       printUsage(usageFile)
       toolLines = captureToolLines(command.file, report?.session_id, logPath, secrets)
       console.log(`tool lines: ${toolLines.count}`)

@@ -799,7 +799,6 @@ export function createOrchestrators({
   const sentMessages = new Map()
   const laneSent = new Map()
   const laneBackups = new Map()
-  const seenLaneEntries = new WeakSet()
   const laneMessageEntries = new Map()
   const clock = typeof now === 'function' ? now : Date.now
 
@@ -974,12 +973,9 @@ export function createOrchestrators({
           interruptLane({
             lane,
             held,
-            takeUnseen: () => held.inbox.filter((item) => !seenLaneEntries.has(item)),
+            takeUnseen: () => held.inbox.filter((item) => item.status === 'queued'),
             markSeen: (items) => {
-              for (const item of items) {
-                seenLaneEntries.add(item)
-                item.status = 'interrupted'
-              }
+              for (const item of items) item.status = 'prompted'
             },
           })
         ).catch(() => {})
@@ -1009,8 +1005,7 @@ export function createOrchestrators({
     const held = ticket && typeof laneTicket === 'function' ? laneTicket(ticket) : null
     if (!held) return { status: 403, body: { error: LANE_ENDED_PROBLEM } }
     const messages = Array.isArray(held.inbox)
-      ? held.inbox.map((entry) => {
-          seenLaneEntries.add(entry)
+      ? held.inbox.filter((entry) => entry.status !== 'prompted').map((entry) => {
           if (entry.status === 'queued') {
             entry.status = 'fetched'
             entry.fetchedAt = new Date(clock()).toISOString()

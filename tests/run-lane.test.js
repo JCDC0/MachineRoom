@@ -3365,6 +3365,73 @@ describe('a lane log that cannot be written', () => {
 })
 
 describe('run-lane session attribution', () => {
+  it.each([
+    ['agy', 'first-conversation', [
+      'process.stdout.write(\'{"event":"step_update","step_update":{"conversation_id":"first-\')',
+      "await new Promise((done) => setTimeout(done, 100))",
+      'console.log(\'conversation"}}\')',
+      'console.log(\'{"event":"step_update","step_update":{"conversation_id":"child-conversation"}}\')',
+    ]],
+    ['hermes', '20261126_123456_a1b2c3', [
+      "console.log('hermes --resume latest')",
+      "console.error('\\u001b[36mSession: 20261126_123456_a1b2c3\\u001b[0m')",
+    ]],
+    ['hermes', '20261126_123456_d1e2f3', [
+      "const db = new DatabaseSync(join(process.env.HERMES_HOME, 'state.db'))",
+      "db.exec('CREATE TABLE sessions (id TEXT, cwd TEXT, started_at REAL, parent_session_id TEXT)')",
+      "const add = db.prepare('INSERT INTO sessions VALUES (?, ?, ?, ?)')",
+      'const now = Date.now() / 1000',
+      "add.run('old-session', process.cwd(), now - 60, null)",
+      "add.run('20261126_123456_d1e2f3', process.cwd(), now, null)",
+      "add.run('other-worktree-session', join(process.cwd(), 'other'), now + 1, null)",
+      "add.run('child-session', process.cwd(), now + 1, '20261126_123456_d1e2f3')",
+      'db.close()',
+    ]],
+  ])('saves the %s session %s in the sidecar while the harness is still running', async (harness, id, output) => {
+    const folder = makeTempDir('mr-lane-session-id-')
+    const name = `${harness}-test-run`
+    const metaPath = join(folder, `${name}.meta.json`)
+    const script = join(folder, 'fake-harness.mjs')
+    const hermesHome = join(folder, 'hermes')
+    mkdirSync(hermesHome)
+    writeFileSync(script, [
+      "import { readFileSync } from 'node:fs'",
+      "import { join } from 'node:path'",
+      "import { DatabaseSync } from 'node:sqlite'",
+      ...output,
+      `const file = ${JSON.stringify(metaPath)}`,
+      'for (let attempt = 0; attempt < 100; attempt += 1) {',
+      "  if (JSON.parse(readFileSync(file, 'utf8')).sessionId) {",
+      "    console.log('The sidecar has the session id.')",
+      '    process.exit(0)',
+      '  }',
+      '  await new Promise((done) => setTimeout(done, 50))',
+      '}',
+      'process.exit(1)',
+      '',
+    ].join('\n'))
+    const command = vi.spyOn(harnessByKey[harness], 'command').mockReturnValue({
+      file: process.execPath, args: [script], cwd: folder,
+    })
+    vi.stubEnv('MACHINEROOM_RUNS', folder)
+    vi.stubEnv('HERMES_HOME', hermesHome)
+    try {
+      const lane = { name: harness, worktree: folder, cli: { harness, bin: process.execPath } }
+      const logPath = join(folder, `${name}.log`)
+      await startLane({
+        options: { lane: harness, minutes: 1 },
+        lane, lanes: { [harness]: lane }, wanted: [], prompt, name, logPath,
+        project: folder, task: prompt, usageFile: join(folder, `${name}.usage.json`),
+      })
+      expect(JSON.parse(readFileSync(metaPath, 'utf8')).sessionId).toBe(id)
+      expect(readFileSync(logPath, 'utf8')).toContain('The sidecar has the session id.')
+    } finally {
+      command.mockRestore()
+      vi.unstubAllEnvs()
+      rmSync(folder, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+    }
+  })
+
   it('reads the Claude Code and OpenCode session variables', () => {
     expect(sessionStartedBy({ CLAUDE_CODE_SESSION_ID: 'c1', OPENCODE_SESSION_ID: 'o1' })).toEqual({ harness: 'claude', session: 'c1' })
     expect(sessionStartedBy({ OPENCODE_SESSION_ID: 'o1' })).toEqual({ harness: 'opencode', session: 'o1' })
