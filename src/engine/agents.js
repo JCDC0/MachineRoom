@@ -71,6 +71,8 @@ export const SPINNER_RING_OPACITY = 0.22
 export const SPINNER_ARC_OPACITY = 0.95
 export const THINKING_LOOP_SECONDS = 8
 export const SPINNER_RING_BRIGHT_MAX = 1.5
+const FULL_TURN = Math.PI * 2
+const REST_WOBBLE = (8 * Math.PI) / 180
 const SPINNER_REST_B_X = Math.PI / 2
 const FLIP_END = 0.5
 const FLIP_LAG = 0.08
@@ -189,16 +191,30 @@ export function thinkingPhase(key) {
   return (hash >>> 0) / 4294967296
 }
 
-export function thinkingRingPose(seconds, phase = 0, out = null) {
+export function thinkingMotion(key) {
+  const phase = thinkingPhase(key)
+  const direction = phase < 0.5 ? 1 : -1
+  const orbitPeriod = 40 + 50 * ((phase * 2) % 1)
+  return {
+    phase,
+    orbitStart: FULL_TURN * phase,
+    orbitSpeed: (direction * FULL_TURN) / orbitPeriod,
+    loopSeconds: 7 + 2.5 * phase,
+    wobblePeriod: 20 + 25 * phase,
+  }
+}
+
+export function thinkingRingPose(seconds, motion = 0, out = null) {
   const pose = out ?? {}
   const a = pose.a ?? (pose.a = { x: 0, y: 0, z: 0 })
   const b = pose.b ?? (pose.b = { x: 0, y: 0, z: 0 })
   const rawSeconds = Number(seconds)
-  const rawPhase = Number(phase)
+  const rawPhase = Number(motion?.phase ?? motion)
   const clock = Number.isFinite(rawSeconds) ? rawSeconds : 0
   const offset = Number.isFinite(rawPhase) ? rawPhase : 0
-  const wrapped = (clock + offset * THINKING_LOOP_SECONDS) % THINKING_LOOP_SECONDS
-  const t = wrapped < 0 ? wrapped + THINKING_LOOP_SECONDS : wrapped
+  const loopSeconds = motion?.loopSeconds ?? THINKING_LOOP_SECONDS
+  const wrapped = (clock / loopSeconds + offset) % 1
+  const t = (wrapped < 0 ? wrapped + 1 : wrapped) * THINKING_LOOP_SECONDS
 
   let scale = 1
   let bright = 1
@@ -267,6 +283,15 @@ export function thinkingRingPose(seconds, phase = 0, out = null) {
     scale = 1 + SETTLE_BREATHE * smoothBell(u)
   }
 
+  const orbit = (motion?.orbitStart ?? 0) + clock * (motion?.orbitSpeed ?? 0)
+  a.y += orbit
+  b.y += orbit
+  if (motion?.wobblePeriod) {
+    const wobble = FULL_TURN * (clock / motion.wobblePeriod + offset)
+    a.x += REST_WOBBLE * Math.sin(wobble)
+    b.x += REST_WOBBLE * Math.cos(wobble)
+  }
+  pose.orbit = orbit
   pose.scale = scale
   pose.bright = bright
   return pose
@@ -993,10 +1018,12 @@ function createSpinner(radius) {
     rings.push(ring)
     arcs.push(arc)
   }
-  return { group, planes, rings, arcs, ringMaterial, arcMaterial }
+  return { group, planes, rings, arcs, ringMaterial, arcMaterial, orbitOffset: null }
 }
 
 function resetSpinnerPose(spinner) {
+  spinner.orbitOffset = null
+  spinner.group.rotation.y = 0
   spinner.planes[0].rotation.set(0, 0, 0)
   spinner.planes[1].rotation.set(SPINNER_REST_B_X, 0, 0)
   spinner.group.scale.setScalar(1)
@@ -1318,7 +1345,7 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
       spinner,
       thinking: 0,
       thinkingSince: 0,
-      thinkingPhase: thinkingPhase(agent.key),
+      thinkingMotion: thinkingMotion(agent.key),
       beatRings,
       beatNext: 0,
       label,
@@ -1986,15 +2013,24 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
         if (isStill) {
           resetSpinnerPose(view.spinner)
         } else {
-          const pose = thinkingRingPose(now / 1000, view.thinkingPhase, ringPoseScratch)
+          const spinner = view.spinner
+          const pose = thinkingRingPose(now / 1000, view.thinkingMotion, ringPoseScratch)
           const blend = view.thinking
-          view.spinner.planes[0].rotation.set(pose.a.x * blend, pose.a.y * blend, pose.a.z * blend)
-          view.spinner.planes[1].rotation.set(
+          /*
+           * The parent applies yaw about the vertical even when a ring is tilted.
+           * Keep the same full-turn offset during a fade to avoid a jump.
+           */
+          if (blend === 1 || spinner.orbitOffset === null) {
+            spinner.orbitOffset = Math.round(pose.orbit / FULL_TURN) * FULL_TURN
+          }
+          spinner.group.rotation.y = (pose.orbit - spinner.orbitOffset) * blend
+          spinner.planes[0].rotation.set(pose.a.x * blend, (pose.a.y - pose.orbit) * blend, pose.a.z * blend)
+          spinner.planes[1].rotation.set(
             SPINNER_REST_B_X + (pose.b.x - SPINNER_REST_B_X) * blend,
-            pose.b.y * blend,
+            (pose.b.y - pose.orbit) * blend,
             pose.b.z * blend
           )
-          view.spinner.group.scale.setScalar(1 + (pose.scale - 1) * blend)
+          spinner.group.scale.setScalar(1 + (pose.scale - 1) * blend)
           ringBright = 1 + (pose.bright - 1) * blend
         }
       } else {
