@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto'
 import { closeSync, openSync, readFileSync, readdirSync, readSync, realpathSync, statSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
+import { isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { StringDecoder } from 'node:string_decoder'
 import { pathInside } from '../src/briefs/run.js'
 
@@ -212,7 +212,7 @@ export function createAgySessionsReader(options = {}) {
 
   function confinedTranscript(path) {
     try {
-      const root = join(realpathSync.native(dirname(brainRoot)), basename(brainRoot))
+      const root = realpathSync.native(brainRoot)
       const target = realpathSync.native(path)
       const within = relative(root, target)
       if (within && within !== '..' && !within.startsWith(`..${sep}`) && !isAbsolute(within)) return target

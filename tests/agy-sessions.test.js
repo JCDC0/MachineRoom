@@ -402,6 +402,21 @@ describe('the Antigravity session reader, reading the summaries and the transcri
     expect(frames).toEqual([])
   })
 
+  it('reads through a brain folder that is itself a link, since that is where Antigravity keeps it', () => {
+    const { base, projectRoot, home, dbPath } = setup()
+    const id = 'a6c03003'
+    const moved = join(base, 'moved')
+    writeTranscript(moved, id, [userInput(0), planner(1, [projectRead(join(projectRoot, 'src', 'math.js'))])])
+    symlinkSync(join(moved, '.gemini', 'antigravity', 'brain'), join(home, '.gemini', 'antigravity', 'brain'), 'junction')
+    const reader = makeReader({ projectRoot, home, dbPath, frames: [] })
+    reader.tick()
+
+    addConversation(dbPath, { id })
+    reader.tick()
+
+    expect(reader.sessions().get(id).lines).toBe(2)
+  })
+
   it('does not read a conversation folder linked outside the brain', () => {
     const { base, projectRoot, home, dbPath } = setup()
     const id = 'a6c03002'

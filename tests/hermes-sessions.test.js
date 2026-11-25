@@ -376,13 +376,32 @@ describe('the Hermes session reader', () => {
     expect(reader.problem()).toBe('')
   })
 
-  it('does not open state.db through a home folder linked elsewhere', () => {
+  it('follows a Hermes home that is itself a link, since the owner named that home', () => {
     const { dir, home, projectRoot, runsFolder, dbPath } = setup()
     const linkedHome = join(dir, 'linked')
     symlinkSync(home, linkedHome, 'junction')
     const { reader, frames } = startReader({ dbPath: join(linkedHome, 'state.db'), projectRoot, runsFolder })
     addSession(dbPath, { id: 'ses-1', cwd: projectRoot })
-    addMessage(dbPath, { sessionId: 'ses-1', role: 'user' })
+    addMessage(dbPath, { sessionId: 'ses-1', role: 'assistant', calls: [call('read_file', { path: 'src/math.js' }, 'c1')] })
+    reader.tick()
+
+    expect(lines(frames)).toEqual([{ hermes: 'call', id: 'c1', name: 'read_file', args: { path: 'src/math.js' } }])
+    expect(reader.problem()).toBe('')
+  })
+
+  it('does not open a state.db that links to a file outside the Hermes home', (context) => {
+    const { dir, projectRoot, runsFolder, dbPath } = setup()
+    const otherHome = join(dir, 'other')
+    mkdirSync(otherHome, { recursive: true })
+    const linkedDb = join(otherHome, 'state.db')
+    try {
+      symlinkSync(dbPath, linkedDb, 'file')
+    } catch {
+      context.skip()
+    }
+    const { reader, frames } = startReader({ dbPath: linkedDb, projectRoot, runsFolder })
+    addSession(dbPath, { id: 'ses-1', cwd: projectRoot })
+    addMessage(dbPath, { sessionId: 'ses-1', role: 'assistant', calls: [call('read_file', { path: 'src/math.js' }, 'c1')] })
     reader.tick()
 
     expect(frames).toEqual([])

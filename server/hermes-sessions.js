@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto'
 import { existsSync, readFileSync, readdirSync, realpathSync, statSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { basename, dirname, isAbsolute, join, posix, relative, resolve, sep, win32 } from 'node:path'
+import { dirname, isAbsolute, join, posix, relative, resolve, sep, win32 } from 'node:path'
 import { pathInside } from '../src/briefs/run.js'
 import { looksFailed } from '../src/model/parsers/common.js'
 import { runsFolder as defaultRunsFolder } from './lanes-source.js'
@@ -119,7 +119,7 @@ export function createHermesSessionsReader(options = {}) {
     if (db) return db
     if (!dbPath || !existsSync(dbPath)) return null
     try {
-      const root = join(realpathSync.native(dirname(stateHome)), basename(stateHome))
+      const root = realpathSync.native(stateHome)
       const target = realpathSync.native(dbPath)
       const within = relative(root, target)
       if (!within || within === '..' || within.startsWith(`..${sep}`) || isAbsolute(within)) {
