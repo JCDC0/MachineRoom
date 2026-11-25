@@ -128,6 +128,30 @@ describe('the inspector panel', () => {
     })
   })
 
+  it.each([
+    [{ cachedInputTokens: 82, providers: { A: 40, B: 35 } }, ' · last run (cached 82%, 2 providers: A 40 calls, B 35 calls)'],
+    [{ cachedInputTokens: 0 }, ' · last run (cached 0%)'],
+    [{ providers: { A: 1 } }, ' · last run (1 provider: A 1 call)'],
+    [{}, ''],
+  ])('shows latest native usage beside the cost when reported (%j)', async (usage, suffix) => {
+    const native = { id: 'native', key: 'native', name: 'Native', harness: 'machineroom', status: 'idle' }
+    const client = makeClient({
+      runs: async () => ({ last: [{ lane: 'native', inputTokens: 100, ...usage }] }),
+    })
+    await withDom(async ({ container, root }) => {
+      await mount(root, {
+        target: { kind: 'agent', id: 'native' },
+        live: true,
+        bridge: true,
+        client,
+        lanes: [native],
+        costs: { rows: [{ key: 'native', costCents: 2, reported: true }] },
+      })
+      const row = [...container.querySelectorAll('.mr-inspector-row')].find((item) => item.querySelector('dt')?.textContent === 'Cost')
+      expect(row?.querySelector('dd')?.textContent).toBe(`$0.02${suffix}`)
+    })
+  })
+
   it('shows a moved run and a taken-over run under the state', async () => {
     const opencode = {
       key: 'opencode',

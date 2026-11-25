@@ -1,5 +1,5 @@
 import { createClaudeParser } from '../model/parsers/claude.js'
-import { finiteNumber, headLines, jsonLineReader, lastJsonLine, sumTokens, terminalText, tokenCount } from './common.js'
+import { finiteNumber, headLines, jsonLineReader, lastJsonLine, terminalText, tokenCount } from './common.js'
 
 function resultLine(log) {
   return lastJsonLine(log, (item) => item?.type === 'result' && !item.parent_tool_use_id)
@@ -23,7 +23,7 @@ function machineroomPeak(log) {
     if (item?.type !== 'assistant') continue
     const usage = item.message?.usage
     if (!usage || typeof usage !== 'object' || Array.isArray(usage)) continue
-    const stepTokens = sumTokens([usage.input_tokens, usage.cache_creation_input_tokens, usage.cache_read_input_tokens])
+    const stepTokens = tokenCount(usage.input_tokens)
     if (stepTokens !== null) peakTokens = peakTokens === null ? stepTokens : Math.max(peakTokens, stepTokens)
   }
   return peakTokens
@@ -35,10 +35,16 @@ function machineroomUsage(log) {
   const peak = peakTokens === null ? {} : { peakTokens }
   if (!line) return { costUsd: null, inputTokens: null, outputTokens: null, ...peak }
   const usage = line.usage && typeof line.usage === 'object' ? line.usage : {}
+  const cachedInputTokens = tokenCount(line.cached_input_tokens)
+  const providers = line.providers && typeof line.providers === 'object' && !Array.isArray(line.providers)
+    ? Object.entries(line.providers).filter(([name, calls]) => name.trim() !== '' && Number.isInteger(calls) && calls > 0)
+    : []
   return {
     costUsd: finiteNumber(line.total_cost_usd),
     inputTokens: tokenCount(usage.input_tokens),
     outputTokens: tokenCount(usage.output_tokens),
+    ...(cachedInputTokens === null ? {} : { cachedInputTokens }),
+    ...(providers.length === 0 ? {} : { providers: Object.fromEntries(providers) }),
     ...peak,
   }
 }

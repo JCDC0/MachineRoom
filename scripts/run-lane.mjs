@@ -2360,6 +2360,10 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
     if (lane.cli.harness === 'machineroom' && Number.isFinite(Number(options?.minutes))) {
       extra.MR_AGENT_MINUTES = String(options.minutes)
     }
+    if (lane.cli.harness === 'machineroom' && Array.isArray(lane.providerOrder)) {
+      const order = lane.providerOrder.filter((name) => typeof name === 'string' && name.trim() !== '')
+      if (order.length > 0) extra.MR_AGENT_PROVIDER_ORDER = order.join(',')
+    }
     const childEnv = childEnvironment(process.env, command.cwd, {
       harness: lane.cli.harness,
       names: runnerNames,
@@ -2675,6 +2679,8 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
         outputTokens: summary.outputTokens,
         cacheReadTokens: summary.cacheReadTokens,
         cacheWriteTokens: summary.cacheWriteTokens,
+        cachedInputTokens: summary.cachedInputTokens,
+        providers: summary.providers,
         peakTokens: summary.peakTokens,
         log: logPath,
         branch: git.branch,
@@ -2720,6 +2726,8 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
       outputTokens: summary.outputTokens,
       cacheReadTokens: summary.cacheReadTokens,
       cacheWriteTokens: summary.cacheWriteTokens,
+      cachedInputTokens: summary.cachedInputTokens,
+      providers: summary.providers,
       peakTokens: summary.peakTokens,
       repeatedFailure: summary.repeatedFailure,
       log: logPath,
