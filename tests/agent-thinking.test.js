@@ -18,6 +18,7 @@ import {
   thinkingArc,
   thinkingDue,
   thinkingLevel,
+  thinkingMotion,
   thinkingPhase,
   thinkingRingPose,
 } from '../src/engine/agents.js'
@@ -103,6 +104,10 @@ function harness() {
 
 function startRun(state, time = 1000) {
   apply(state, { time, type: 'run.start', agent: 'a', runId: 'r1' })
+}
+
+function timeInThinkingLoop(motion, seconds, loops = 10) {
+  return (loops + seconds / THINKING_LOOP_SECONDS - motion.phase) * motion.loopSeconds
 }
 
 describe('agentThinking', () => {
@@ -398,6 +403,64 @@ describe('thinkingRingPose', () => {
     expect(fallback.scale).toBe(1)
     expect(fallback.bright).toBe(1)
   })
+
+  it('starts the next loop at a different angle for the same agent', () => {
+    const motion = thinkingMotion('claude')
+    const seconds = timeInThinkingLoop(motion, 0)
+    const first = thinkingRingPose(seconds, motion)
+    const next = thinkingRingPose(seconds + motion.loopSeconds, motion)
+    const turn = motion.orbitSpeed * motion.loopSeconds
+    expect(Math.abs(turn)).toBeGreaterThan(0.4)
+    expect(next.a.y - first.a.y).toBeCloseTo(turn, 10)
+    expect(next.b.y - first.b.y).toBeCloseTo(turn, 10)
+    expect(next.a.x).not.toBeCloseTo(first.a.x, 3)
+    expect(next.b.x).not.toBeCloseTo(first.b.x, 3)
+  })
+
+  it('gives two keys different orbit angles and loop lengths at the same time', () => {
+    const seconds = 17
+    const claude = thinkingMotion('claude')
+    const agy = thinkingMotion('agy')
+    expect(claude.loopSeconds).not.toBeCloseTo(agy.loopSeconds, 3)
+    for (const motion of [claude, agy]) {
+      const orbitPeriod = (Math.PI * 2) / Math.abs(motion.orbitSpeed)
+      expect(orbitPeriod).toBeGreaterThanOrEqual(40)
+      expect(orbitPeriod).toBeLessThanOrEqual(90)
+      expect(motion.loopSeconds).toBeGreaterThanOrEqual(7)
+      expect(motion.loopSeconds).toBeLessThanOrEqual(9.5)
+      expect(motion.wobblePeriod).toBeGreaterThanOrEqual(20)
+      expect(motion.wobblePeriod).toBeLessThanOrEqual(45)
+    }
+    const firstAngle = thinkingRingPose(seconds, claude).orbit
+    const secondAngle = thinkingRingPose(seconds, agy).orbit
+    expect(Math.cos(firstAngle - secondAngle)).toBeLessThan(0.999)
+  })
+
+  it('keeps orbiting across the loop seam within the nearby change per 60 fps frame', () => {
+    const motion = thinkingMotion('agy')
+    const seam = timeInThinkingLoop(motion, 0)
+    const frame = 1 / 60
+    const [previous, before, after, next] = [-1.5, -0.5, 0.5, 1.5].map(
+      (offset) => thinkingRingPose(seam + offset * frame, motion)
+    )
+    for (const ring of ['a', 'b']) {
+      expect(after[ring].y - before[ring].y).toBeCloseTo(motion.orbitSpeed * frame, 3)
+      const frameStep = (from, to) => Math.max(
+        Math.abs(to[ring].x - from[ring].x),
+        Math.abs(to[ring].y - from[ring].y),
+        Math.abs(to[ring].z - from[ring].z)
+      )
+      const normalStep = Math.max(frameStep(previous, before), frameStep(after, next))
+      expect(frameStep(before, after)).toBeLessThanOrEqual(normalStep)
+    }
+  })
+
+  it('returns the same pose for the same key and clock time', () => {
+    const seconds = 123.456
+    const pose = thinkingRingPose(seconds, thinkingMotion('orchestrator'))
+    const scratch = thinkingRingPose(seconds + 1, thinkingMotion('claude'))
+    expect(thinkingRingPose(seconds, thinkingMotion('orchestrator'), scratch)).toEqual(pose)
+  })
 })
 
 describe('the thinking spinner on an agent', () => {
@@ -679,8 +742,8 @@ describe('the thinking spinner on an agent', () => {
 
   it('moves the ring planes and scale with the pose while thinking, blended by thinking level, and rests upright when not thinking', () => {
     const { agents, state, terminals, world } = harness()
-    const phase = thinkingPhase('a')
-    const nowFor = (loopSeconds, loops = 10) => (loops * THINKING_LOOP_SECONDS + loopSeconds - phase * THINKING_LOOP_SECONDS) * 1000
+    const motion = thinkingMotion('a')
+    const nowFor = (seconds, loops) => timeInThinkingLoop(motion, seconds, loops) * 1000
     startRun(state, 1000)
     agents.update(state, 0.016, 1000, world, terminals)
     agents.update(state, 0.4, 1400, world, terminals)
@@ -689,20 +752,22 @@ describe('the thinking spinner on an agent', () => {
 
     const gyroNow = nowFor(4.0)
     agents.update(state, 0.016, gyroNow, world, terminals)
-    const gyroPose = thinkingRingPose(gyroNow / 1000, phase)
+    const gyroPose = thinkingRingPose(gyroNow / 1000, motion)
+    expect(Math.cos(view.spinner.group.rotation.y - gyroPose.orbit)).toBeCloseTo(1, 10)
     expect(view.spinner.planes[0].rotation.x).toBeCloseTo(gyroPose.a.x, 10)
-    expect(view.spinner.planes[0].rotation.y).toBeCloseTo(gyroPose.a.y, 10)
+    expect(view.spinner.planes[0].rotation.y).toBeCloseTo(gyroPose.a.y - gyroPose.orbit, 10)
     expect(view.spinner.planes[0].rotation.z).toBeCloseTo(gyroPose.a.z, 10)
     expect(view.spinner.planes[1].rotation.x).toBeCloseTo(gyroPose.b.x, 10)
-    expect(view.spinner.planes[1].rotation.y).toBeCloseTo(gyroPose.b.y, 10)
+    expect(view.spinner.planes[1].rotation.y).toBeCloseTo(gyroPose.b.y - gyroPose.orbit, 10)
     expect(view.spinner.planes[1].rotation.z).toBeCloseTo(gyroPose.b.z, 10)
     expect(view.spinner.group.scale.x).toBeCloseTo(1, 10)
 
     const settleNow = nowFor(6.7, 11)
     agents.update(state, 0.016, settleNow, world, terminals)
-    const settlePose = thinkingRingPose(settleNow / 1000, phase)
+    const settlePose = thinkingRingPose(settleNow / 1000, motion)
     expect(view.spinner.group.scale.x).toBeCloseTo(1.06, 10)
     expect(view.spinner.planes[0].rotation.z).toBeCloseTo(settlePose.a.z, 10)
+    const settleYaw = view.spinner.group.rotation.y
     expect(view.spinner.arcs[1].rotation.z - view.spinner.arcs[0].rotation.z).toBeCloseTo(SPINNER_PHASE, 10)
 
     apply(state, {
@@ -715,13 +780,16 @@ describe('the thinking spinner on an agent', () => {
     })
     const blendNow = nowFor(6.7, 12)
     agents.update(state, THINKING_OUT_SECONDS / 2, blendNow, world, terminals)
+    const blendPose = thinkingRingPose(blendNow / 1000, motion)
     expect(view.thinking).toBeCloseTo(0.5, 10)
-    expect(view.spinner.planes[0].rotation.z).toBeCloseTo(settlePose.a.z * 0.5, 10)
-    expect(view.spinner.planes[1].rotation.x).toBeCloseTo(Math.PI / 2 + (settlePose.b.x - Math.PI / 2) * 0.5, 10)
+    expect(view.spinner.group.rotation.y).toBeCloseTo((settleYaw + blendPose.orbit - settlePose.orbit) * 0.5, 10)
+    expect(view.spinner.planes[0].rotation.z).toBeCloseTo(blendPose.a.z * 0.5, 10)
+    expect(view.spinner.planes[1].rotation.x).toBeCloseTo(Math.PI / 2 + (blendPose.b.x - Math.PI / 2) * 0.5, 10)
     expect(view.spinner.group.scale.x).toBeCloseTo(1.03, 10)
 
     agents.update(state, THINKING_OUT_SECONDS / 2, blendNow + 300, world, terminals)
     expect(view.thinking).toBe(0)
+    expect(view.spinner.group.rotation.y).toBe(0)
     expect(view.spinner.planes[0].rotation.x).toBe(0)
     expect(view.spinner.planes[0].rotation.y).toBe(0)
     expect(view.spinner.planes[0].rotation.z).toBe(0)
@@ -743,8 +811,8 @@ describe('the thinking spinner on an agent', () => {
 
   it('brightens the rings during Flip and Burst up to 1.5 times base opacity', () => {
     const { agents, state, terminals, world } = harness()
-    const phase = thinkingPhase('a')
-    const nowFor = (loopSeconds, loops = 10) => (loops * THINKING_LOOP_SECONDS + loopSeconds - phase * THINKING_LOOP_SECONDS) * 1000
+    const motion = thinkingMotion('a')
+    const nowFor = (seconds, loops) => timeInThinkingLoop(motion, seconds, loops) * 1000
     startRun(state, 1000)
     agents.update(state, 0.016, 1000, world, terminals)
     agents.update(state, 0.4, 1400, world, terminals)
@@ -807,14 +875,15 @@ describe('the thinking spinner on an agent', () => {
     disposeStill()
     try {
       const { agents, state, terminals, world } = harness()
-      const phase = thinkingPhase('a')
-      const nowFor = (loopSeconds, loops = 10) => (loops * THINKING_LOOP_SECONDS + loopSeconds - phase * THINKING_LOOP_SECONDS) * 1000
+      const motion = thinkingMotion('a')
+      const nowFor = (seconds) => timeInThinkingLoop(motion, seconds) * 1000
       startRun(state, 1000)
       agents.update(state, 0.016, 1000, world, terminals)
       const view = agents.views.get('a')
       for (const loopSec of [0.25, 4.0, 5.2, 6.7]) {
         agents.update(state, 0.016, nowFor(loopSec), world, terminals)
         expect(view.thinking).toBe(1)
+        expect(view.spinner.group.rotation.y).toBe(0)
         expect(view.spinner.planes[0].rotation.x).toBe(0)
         expect(view.spinner.planes[0].rotation.y).toBe(0)
         expect(view.spinner.planes[0].rotation.z).toBe(0)
