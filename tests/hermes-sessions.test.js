@@ -1,4 +1,4 @@
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -92,13 +92,14 @@ function touchSession(dbPath, id, at, endedAt = null) {
   })
 }
 
-function startReader({ dbPath, projectRoot, runsFolder, clock = { value: 5000 }, quietMs = 30000 }) {
+function startReader({ dbPath, projectRoot, runsFolder, clock = { value: 5000 }, quietMs = 30000, statFile }) {
   const frames = []
   const reader = createHermesSessionsReader({
     projectRoot,
     runsFolder,
     dbPath,
     quietMs,
+    statFile,
     now: () => clock.value,
     emit: (frame) => frames.push(frame),
   })
@@ -145,16 +146,33 @@ describe('the Hermes session reader', () => {
 
   it('reads only the rows above the last one seen', () => {
     const { projectRoot, runsFolder, dbPath } = setup()
-    const { reader, frames } = startReader({ dbPath, projectRoot, runsFolder })
-
     addSession(dbPath, { id: 'ses-1', cwd: projectRoot, startedAt: 4000, lastActivity: 7000 })
     addMessage(dbPath, { sessionId: 'ses-1', role: 'assistant', calls: [call('read_file', { path: 'old.js' }, 'old')], timestamp: 4000 })
+    const { reader, frames } = startReader({ dbPath, projectRoot, runsFolder })
     reader.tick()
     expect(lines(frames)).toEqual([])
 
     addMessage(dbPath, { sessionId: 'ses-1', role: 'assistant', calls: [call('read_file', { path: 'new.js' }, 'new')], timestamp: 7100 })
     reader.tick()
     expect(lines(frames)).toEqual([{ hermes: 'call', id: 'new', name: 'read_file', args: { path: 'new.js' } }])
+  })
+
+  it('keeps the first completed tool of a resumed session before its first qualifying tick', () => {
+    const { projectRoot, runsFolder, dbPath } = setup()
+    addSession(dbPath, { id: 'ses-resumed', cwd: projectRoot, startedAt: 4000, lastActivity: 4500 })
+    addMessage(dbPath, { sessionId: 'ses-resumed', role: 'assistant', calls: [call('read_file', { path: 'old.js' }, 'old')], timestamp: 4500 })
+    const { reader, frames } = startReader({ dbPath, projectRoot, runsFolder })
+
+    touchSession(dbPath, 'ses-resumed', 6002)
+    addMessage(dbPath, { sessionId: 'ses-resumed', role: 'user', content: 'Go.', timestamp: 6000 })
+    addMessage(dbPath, { sessionId: 'ses-resumed', role: 'assistant', calls: [call('read_file', { path: 'new.js' }, 'new')], timestamp: 6001 })
+    addMessage(dbPath, { sessionId: 'ses-resumed', role: 'tool', content: 'ok', toolCallId: 'new', toolName: 'read_file', timestamp: 6002 })
+    reader.tick()
+
+    expect(lines(frames)).toEqual([
+      { hermes: 'call', id: 'new', name: 'read_file', args: { path: 'new.js' } },
+      { hermes: 'result', id: 'new', ok: true },
+    ])
   })
 
   it('shows nothing for a session outside the project', () => {
@@ -186,10 +204,18 @@ describe('the Hermes session reader', () => {
     expect(lines(frames)).toEqual([{ hermes: 'call', id: 'c1', name: 'read_file', args: { path: 'src/math.js' } }])
   })
 
-  it('skips a session a runs folder meta file names', () => {
+  it('skips a session a runs folder meta file names without restatting the file', () => {
     const { projectRoot, runsFolder, dbPath } = setup()
-    writeFileSync(join(runsFolder, 'lane-1.meta.json'), JSON.stringify({ sessionId: 'ses-lane' }))
-    const { reader, frames } = startReader({ dbPath, projectRoot, runsFolder })
+    const metaPath = join(runsFolder, 'lane-1.meta.json')
+    writeFileSync(metaPath, JSON.stringify({ sessionId: 'ses-lane' }))
+    const stats = []
+    const { reader, frames } = startReader({
+      dbPath, projectRoot, runsFolder,
+      statFile: (path) => {
+        stats.push(path)
+        return statSync(path)
+      },
+    })
     reader.tick()
 
     addSession(dbPath, { id: 'ses-lane', cwd: projectRoot })
@@ -197,6 +223,7 @@ describe('the Hermes session reader', () => {
     reader.tick()
 
     expect(frames).toEqual([])
+    expect(stats).toEqual([metaPath])
     expect(reader.metaFiles().get('lane-1.meta.json').sessionId).toBe('ses-lane')
   })
 
@@ -295,6 +322,39 @@ describe('the Hermes session reader', () => {
     expect(endFrame(frames).payload.status).toBe('succeeded')
   })
 
+  it('keeps an ended top open for a descendant call and until the descendant goes quiet', () => {
+    const { projectRoot, runsFolder, dbPath } = setup()
+    const clock = { value: 5000 }
+    const quietMs = 30000
+    const { reader, frames } = startReader({ dbPath, projectRoot, runsFolder, clock, quietMs })
+    addSession(dbPath, { id: 'ses-top', cwd: projectRoot, endedAt: 6100 })
+    addSession(dbPath, { id: 'ses-worker', parent: 'ses-top' })
+    addSession(dbPath, { id: 'ses-descendant', parent: 'ses-worker' })
+    addMessage(dbPath, { sessionId: 'ses-descendant', role: 'assistant', calls: [call('read_file', { path: 'src/math.js' }, 'c1')] })
+    reader.tick()
+    const runId = statusFrames(frames)[0].payload.runId
+    expect(reader.open().get('ses-top').runId).toBe(runId)
+
+    clock.value += 31 * 60 * 1000
+    reader.tick()
+    expect(reader.open().get('ses-top').runId).toBe(runId)
+
+    addMessage(dbPath, { sessionId: 'ses-descendant', role: 'tool', content: 'ok', toolCallId: 'c1', toolName: 'read_file' })
+    reader.tick()
+    expect(reader.open().get('ses-top').runId).toBe(runId)
+
+    clock.value += quietMs - 1
+    addMessage(dbPath, { sessionId: 'ses-descendant', role: 'assistant', content: 'Thinking.' })
+    reader.tick()
+    clock.value += quietMs - 1
+    reader.tick()
+    expect(reader.open().get('ses-top').runId).toBe(runId)
+
+    clock.value += 1
+    reader.tick()
+    expect(endFrame(frames).payload.runId).toBe(runId)
+  })
+
   it('opens a run at a user row with no call', () => {
     const { projectRoot, runsFolder, dbPath } = setup()
     const { reader, frames } = startReader({ dbPath, projectRoot, runsFolder })
@@ -314,6 +374,38 @@ describe('the Hermes session reader', () => {
     expect(() => reader.tick()).not.toThrow()
     expect(frames).toEqual([])
     expect(reader.problem()).toBe('')
+  })
+
+  it('follows a Hermes home that is itself a link, since the owner named that home', () => {
+    const { dir, home, projectRoot, runsFolder, dbPath } = setup()
+    const linkedHome = join(dir, 'linked')
+    symlinkSync(home, linkedHome, 'junction')
+    const { reader, frames } = startReader({ dbPath: join(linkedHome, 'state.db'), projectRoot, runsFolder })
+    addSession(dbPath, { id: 'ses-1', cwd: projectRoot })
+    addMessage(dbPath, { sessionId: 'ses-1', role: 'assistant', calls: [call('read_file', { path: 'src/math.js' }, 'c1')] })
+    reader.tick()
+
+    expect(lines(frames)).toEqual([{ hermes: 'call', id: 'c1', name: 'read_file', args: { path: 'src/math.js' } }])
+    expect(reader.problem()).toBe('')
+  })
+
+  it('does not open a state.db that links to a file outside the Hermes home', (context) => {
+    const { dir, projectRoot, runsFolder, dbPath } = setup()
+    const otherHome = join(dir, 'other')
+    mkdirSync(otherHome, { recursive: true })
+    const linkedDb = join(otherHome, 'state.db')
+    try {
+      symlinkSync(dbPath, linkedDb, 'file')
+    } catch {
+      context.skip()
+    }
+    const { reader, frames } = startReader({ dbPath: linkedDb, projectRoot, runsFolder })
+    addSession(dbPath, { id: 'ses-1', cwd: projectRoot })
+    addMessage(dbPath, { sessionId: 'ses-1', role: 'assistant', calls: [call('read_file', { path: 'src/math.js' }, 'c1')] })
+    reader.tick()
+
+    expect(frames).toEqual([])
+    expect(reader.problem()).toBe('The Hermes sessions database is outside the Hermes home.')
   })
 
   it('names the Hermes home from HERMES_HOME, then LOCALAPPDATA, then the home folder', () => {

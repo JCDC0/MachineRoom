@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto'
-import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync, realpathSync, statSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { join, posix, resolve, win32 } from 'node:path'
+import { dirname, isAbsolute, join, posix, relative, resolve, sep, win32 } from 'node:path'
 import { pathInside } from '../src/briefs/run.js'
 import { looksFailed } from '../src/model/parsers/common.js'
 import { runsFolder as defaultRunsFolder } from './lanes-source.js'
@@ -90,19 +90,21 @@ export function createHermesSessionsReader(options = {}) {
   const home = options.home ?? homedir()
   const dbPath = options.dbPath
     ? resolve(String(options.dbPath))
-    : join(hermesHome({ home, env: options.env ?? process.env, platform: options.platform ?? process.platform }), 'state.db')
+    : resolve(hermesHome({ home, env: options.env ?? process.env, platform: options.platform ?? process.platform }), 'state.db')
+  const stateHome = dirname(dbPath)
   const now = typeof options.now === 'function' ? options.now : Date.now
   const quietMs = Number.isFinite(Number(options.quietMs)) ? Number(options.quietMs) : DEFAULT_QUIET_MS
   const emit = typeof options.emit === 'function' ? options.emit : () => {}
   const listFolder = typeof options.listFolder === 'function' ? options.listFolder : (dir) => readdirSync(dir, { withFileTypes: true })
+  const statFile = options.statFile ?? statSync
   const startupAt = now()
   const sessions = new Map()
   const metaFiles = new Map()
-  let metaNames = null
+  let skippedIds = new Set()
   let metaFolderStamp = null
   let db = null
   let sessionStmt = null
-  let maxStmt = null
+  let startupId = null
   let rowStmt = null
   let stopped = false
   let lastError = ''
@@ -117,8 +119,15 @@ export function createHermesSessionsReader(options = {}) {
     if (db) return db
     if (!dbPath || !existsSync(dbPath)) return null
     try {
+      const root = realpathSync.native(stateHome)
+      const target = realpathSync.native(dbPath)
+      const within = relative(root, target)
+      if (!within || within === '..' || within.startsWith(`..${sep}`) || isAbsolute(within)) {
+        lastError = 'The Hermes sessions database is outside the Hermes home.'
+        return null
+      }
       const { DatabaseSync } = process.getBuiltinModule('node:sqlite')
-      db = new DatabaseSync(dbPath, { readOnly: true })
+      db = new DatabaseSync(target, { readOnly: true })
     } catch {
       lastError = 'The Hermes sessions database could not be opened for reading.'
       db = null
@@ -127,9 +136,9 @@ export function createHermesSessionsReader(options = {}) {
   }
 
   function prepare() {
-    if (!db || sessionStmt) return
+    if (!db || rowStmt) return
+    if (startupId === null) startupId = db.prepare('SELECT max(id) AS top FROM messages').get()?.top ?? 0
     sessionStmt = db.prepare(`SELECT ${SESSION_COLUMNS} FROM sessions`)
-    maxStmt = db.prepare('SELECT max(id) AS top FROM messages WHERE session_id = ?')
     rowStmt = db.prepare(`SELECT ${MESSAGE_COLUMNS} FROM messages WHERE session_id = ? AND id > ? ORDER BY id ASC LIMIT ${READ_LIMIT}`)
   }
 
@@ -158,18 +167,16 @@ export function createHermesSessionsReader(options = {}) {
   }
 
   function skippedSessions() {
-    const skipped = new Set()
     const stamp = runsFolderStamp()
-    if (metaNames === null || stamp === null || stamp !== metaFolderStamp) {
-      metaNames = listMetaNames()
-      metaFolderStamp = stamp
-    }
+    if (stamp === metaFolderStamp) return skippedIds
+    const metaNames = listMetaNames()
+    const skipped = new Set()
     const seen = new Set(metaNames)
     for (const name of metaNames) {
       const path = join(runsFolder, name)
       let mtimeMs
       try {
-        mtimeMs = statSync(path).mtimeMs
+        mtimeMs = statFile(path).mtimeMs
       } catch {
         metaFiles.delete(name)
         continue
@@ -191,7 +198,9 @@ export function createHermesSessionsReader(options = {}) {
     for (const name of metaFiles.keys()) {
       if (!seen.has(name)) metaFiles.delete(name)
     }
-    return skipped
+    metaFolderStamp = stamp
+    skippedIds = skipped
+    return skippedIds
   }
 
   function insideProject(folder) {
@@ -220,7 +229,7 @@ export function createHermesSessionsReader(options = {}) {
     if (root.run?.open) endRun(root, 'succeeded')
     root.number += 1
     const at = now()
-    const run = { runId: `${root.id}:${token}:${root.number}`, seq: 0, startedAt: at, lastGrowth: at, openCalls: 0, open: true }
+    const run = { runId: `${root.id}:${token}:${root.number}`, seq: 0, startedAt: at, lastGrowth: at, open: true }
     root.run = run
     safeEmit({ type: 'heartbeat.run.queued', companyId: `company-${root.id}`, createdAt: iso(at), payload: basePayload(run) })
     safeEmit({
@@ -270,19 +279,14 @@ export function createHermesSessionsReader(options = {}) {
     return source === 'subagent' || source === '' ? 'subagent' : source
   }
 
-  function maxMessageId(id) {
-    const row = maxStmt.all(id)[0]
-    return Number.isFinite(row?.top) ? row.top : 0
-  }
-
   function addSession(row, parent) {
-    const fresh = timeMs(row.started_at) > startupAt
     const info = {
       id: row.id,
       parentId: parent ? parent.id : '',
       name: childName(row),
-      lastId: fresh ? 0 : maxMessageId(row.id),
+      lastId: startupId,
       endedAt: timeMs(row.ended_at),
+      lastGrowth: null,
       open: new Set(),
       root: null,
       number: 0,
@@ -296,8 +300,7 @@ export function createHermesSessionsReader(options = {}) {
 
   function dropSession(info) {
     const root = info.root
-    if (root && root !== info && root.run?.open) {
-      root.run.openCalls = Math.max(0, root.run.openCalls - info.open.size)
+    if (root !== info) {
       sessions.delete(info.id)
       return
     }
@@ -346,8 +349,10 @@ export function createHermesSessionsReader(options = {}) {
     const root = info.root
     const at = timeMs(row.timestamp) || now()
     if (row.role === 'user') {
-      if (info.parentId === '') startRun(root)
-      else ensureRun(root)
+      if (info === root) {
+        root.open.clear()
+        startRun(root)
+      } else ensureRun(root)
       return
     }
     if (row.role === 'assistant') {
@@ -364,7 +369,6 @@ export function createHermesSessionsReader(options = {}) {
           ...(info.parentId === '' ? {} : { agent: info.id, agentName: info.name }),
         }, at)
         info.open.add(id)
-        root.run.openCalls += 1
       })
       return
     }
@@ -373,7 +377,7 @@ export function createHermesSessionsReader(options = {}) {
     if (id === '') return
     const failed = textOf(row.tool_name) === 'terminal' && looksFailed(row.content)
     sendLine(root, { hermes: 'result', id, ok: !failed }, at)
-    if (info.open.delete(id)) root.run.openCalls = Math.max(0, root.run.openCalls - 1)
+    info.open.delete(id)
   }
 
   function readSession(info) {
@@ -381,7 +385,8 @@ export function createHermesSessionsReader(options = {}) {
       const rows = rowStmt.all(info.id, info.lastId)
       for (const row of rows) {
         if (Number.isFinite(row.id)) info.lastId = row.id
-        if (info.root.run?.open) info.root.run.lastGrowth = now()
+        info.lastGrowth = now()
+        if (info.root.run?.open) info.root.run.lastGrowth = info.lastGrowth
         handleRow(info, row)
       }
       if (rows.length < READ_LIMIT) break
@@ -390,15 +395,20 @@ export function createHermesSessionsReader(options = {}) {
 
   function endRuns() {
     const at = now()
+    const activeChildRoots = new Set()
+    for (const info of sessions.values()) {
+      if (info === info.root) continue
+      if (info.open.size || (info.lastGrowth !== null && at - info.lastGrowth < quietMs)) activeChildRoots.add(info.root)
+    }
     for (const info of sessions.values()) {
       if (info.parentId !== '') continue
       const run = info.run
-      if (!run?.open) continue
-      if (info.endedAt > 0 && run.openCalls === 0) {
+      if (!run?.open || activeChildRoots.has(info)) continue
+      if (info.endedAt > 0 && info.open.size === 0) {
         endRun(info, 'succeeded')
         continue
       }
-      if (at - run.lastGrowth >= (run.openCalls > 0 ? OPEN_CALL_QUIET_MS : quietMs)) endRun(info, 'succeeded')
+      if (at - run.lastGrowth >= (info.open.size > 0 ? OPEN_CALL_QUIET_MS : quietMs)) endRun(info, 'succeeded')
     }
   }
 
@@ -423,7 +433,7 @@ export function createHermesSessionsReader(options = {}) {
     stopped = true
     sessions.clear()
     metaFiles.clear()
-    metaNames = null
+    skippedIds.clear()
     metaFolderStamp = null
     if (db) {
       try {
@@ -432,8 +442,16 @@ export function createHermesSessionsReader(options = {}) {
       db = null
     }
     sessionStmt = null
-    maxStmt = null
     rowStmt = null
+  }
+
+  if (!existsSync(dbPath)) startupId = 0
+  if (openDatabase()) {
+    try {
+      prepare()
+    } catch {
+      lastError = 'The Hermes sessions tables could not be read.'
+    }
   }
 
   return {
