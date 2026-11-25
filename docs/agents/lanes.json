@@ -407,7 +407,8 @@
       "bin": "codex",
       "commits": "runner",
       "model": "gpt-6.2-sol",
-      "effort": "high"
+      "effort": "high",
+      "addDirs": ["C:\\GitHub\\MachineRoom\\node_modules"]
     },
     "worktree": "C:\\GitHub\\MachineRoom\\.worktrees\\codex",
     "role": "You work on the brief in your own worktree and report back.",
@@ -524,7 +525,8 @@
       "bin": "codex",
       "commits": "runner",
       "model": "gpt-6.2-sol",
-      "effort": "high"
+      "effort": "high",
+      "addDirs": ["C:\\GitHub\\MachineRoom\\node_modules"]
     },
     "worktree": "C:\\GitHub\\MachineRoom\\.worktrees\\codex2",
     "role": "You work on the brief in your own worktree and report back.",
@@ -549,7 +551,8 @@
       "bin": "codex",
       "commits": "runner",
       "model": "gpt-6.2-sol",
-      "effort": "high"
+      "effort": "high",
+      "addDirs": ["C:\\GitHub\\MachineRoom\\node_modules"]
     },
     "worktree": "C:\\GitHub\\MachineRoom\\.worktrees\\codex3",
     "role": "You work on the brief in your own worktree and report back.",
