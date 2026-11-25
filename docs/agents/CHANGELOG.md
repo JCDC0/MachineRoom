@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The native lane records serving providers and cached prompt tokens, shows the latest run's totals in the Inspector, and can pin OpenRouter providers with `providerOrder` (P730).
 - A live page reads an Antigravity session at all: the page now takes the parser a session reader names in its agent row, and each Antigravity step carries its top conversation and, for a subagent, its name, so a page that joins mid-run keeps the orchestrator on top and names every worker (found by the orchestrator's check by eye; done by hand).
 - The room shows the owner's own Hermes sessions: the bridge reads only `state.db` in the Hermes home, follows the sessions in the project, sends their tool calls and results to the Hermes parser and makes a child agent per child session (P727).
 - An outside session that leads subagents takes the top seat on its own, below the owner's chosen top and the room's working orchestrator (P728).

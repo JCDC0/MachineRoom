@@ -229,6 +229,7 @@ describe('mr-agent', () => {
     expect(assistants).toHaveLength(2)
     expect(assistants[0].message.content[0]).toEqual({ type: 'text', text: 'Working.' })
     expect(assistants[0].message.usage).toEqual({ input_tokens: 10, output_tokens: 5 })
+    expect(assistants[0].message).not.toHaveProperty('provider')
     const tools = assistants[0].message.content.filter((item) => item.type === 'tool_use')
     expect(tools.map((item) => item.name)).toEqual(['Read', 'Write', 'Edit', 'Read', 'Bash', 'LS', 'Grep'])
     expect(tools[0].input).toEqual({ file_path: 'a.txt' })
@@ -261,6 +262,8 @@ describe('mr-agent', () => {
       usage: { input_tokens: 110, output_tokens: 25 },
     })
     expect(final.total_cost_usd).toBeCloseTo(0.0015)
+    expect(final).not.toHaveProperty('providers')
+    expect(final).not.toHaveProperty('cached_input_tokens')
     expect(result.stdout).not.toContain('test-key')
     expect(result.stderr).not.toContain('test-key')
 
@@ -269,6 +272,7 @@ describe('mr-agent', () => {
     expect(api.calls[0].body.model).toBe('test/model')
     expect(api.calls[0].body.max_tokens).toBe(32000)
     expect(api.calls[0].body.reasoning).toBeUndefined()
+    expect(api.calls.every(({ body }) => !Object.hasOwn(body, 'provider'))).toBe(true)
     expect(api.calls[0].body.messages.at(-1)).toEqual({ role: 'user', content: 'Do the task.' })
     expect(api.calls[0].body.tools.map((tool) => tool.function.name)).toEqual([
       'read_file',
@@ -284,6 +288,41 @@ describe('mr-agent', () => {
       'mcp_call_tool',
     ])
     expect(api.calls[1].body.messages.some((message) => message.role === 'tool' && message.tool_call_id === 'call_read')).toBe(true)
+  })
+
+  it('records cache reads and serving providers for each answer and the run', async () => {
+    const folder = tempDir()
+    const answers = [
+      { ...chatAnswer({ reasoning: 'Working.', usage: { prompt_tokens: 100, prompt_tokens_details: { cached_tokens: 0 }, cache_read_input_tokens: 90 } }), provider: 'Provider A' },
+      { ...chatAnswer({ calls: [{ name: 'list_dir', arguments: { path: '.' } }], usage: { prompt_tokens: 200, cache_read_input_tokens: 150 } }), provider: 'Provider B' },
+      { ...chatAnswer({ text: 'Done.', usage: { prompt_tokens: 300, prompt_tokens_details: { cached_tokens: 280 } } }), provider: 'Provider A' },
+    ]
+    const api = await startFakeApi((_body, index) => answers[index])
+    const result = await runAgent({ folder, api })
+    expect(result.code).toBe(0)
+    const lines = jsonLines(result.stdout)
+    const messages = lines.filter((line) => line.type === 'assistant').map((line) => line.message)
+    expect(messages.map((message) => [message.provider, message.usage.cache_read_input_tokens])).toEqual([
+      ['Provider A', 0], ['Provider B', 150], ['Provider A', 280],
+    ])
+    expect(lines.at(-1)).toMatchObject({ type: 'result', providers: { 'Provider A': 2, 'Provider B': 1 }, cached_input_tokens: 430 })
+    expect(summarizeRun({ harness: 'machineroom', log: result.stdout, worktree: folder })).toMatchObject({
+      providers: { 'Provider A': 2, 'Provider B': 1 },
+      cachedInputTokens: 430,
+      inputTokens: 600,
+      peakTokens: 300,
+    })
+  })
+
+  it('sends the configured provider order on every request', async () => {
+    const folder = tempDir()
+    const api = await startFakeApi((_body, index) => index === 0
+      ? chatAnswer({ calls: [{ name: 'list_dir', arguments: { path: '.' } }] })
+      : chatAnswer({ text: 'Done.' }))
+    const result = await runAgent({ folder, api, env: { MR_AGENT_PROVIDER_ORDER: 'Provider B, Provider A' } })
+    expect(result.code).toBe(0)
+    const provider = { order: ['Provider B', 'Provider A'], allow_fallbacks: false }
+    expect(api.calls.map(({ body }) => body.provider)).toEqual([provider, provider])
   })
 
   it('writes the project instructions and the shell into the system prompt', async () => {

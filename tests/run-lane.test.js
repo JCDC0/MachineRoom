@@ -2149,6 +2149,64 @@ describe('scripts/run-lane.mjs', () => {
     }
   })
 
+  it.each([
+    ['machineroom', ['Provider B', 'Provider A'], 'Provider B,Provider A'],
+    ['machineroom', undefined, null],
+    ['opencode', ['Provider B', 'Provider A'], null],
+  ])('sets the provider order for %s with %j only when configured and saves native usage', async (harness, providerOrder, expected) => {
+    const folder = makeTempDir('mr-provider-order-')
+    const runs = join(folder, 'runs')
+    mkdirSync(runs)
+    const checkFile = join(folder, 'provider.json')
+    const script = join(folder, 'record-provider.mjs')
+    const result = JSON.stringify({
+      type: 'result',
+      usage: { input_tokens: 100, output_tokens: 25 },
+      total_cost_usd: 0.02,
+      providers: { A: 4, B: 3 },
+      cached_input_tokens: 82,
+    })
+    writeFileSync(script, [
+      "import { writeFileSync } from 'node:fs'",
+      'writeFileSync(process.argv[2], JSON.stringify(process.env.MR_AGENT_PROVIDER_ORDER ?? null))',
+      `console.log(${JSON.stringify(result)})`,
+    ].join('\n'))
+    const command = vi.spyOn(harnessByKey[harness], 'command').mockReturnValue({
+      file: process.execPath,
+      args: [script, checkFile],
+      cwd: folder,
+    })
+    vi.stubEnv('MR_AGENT_PROVIDER_ORDER', 'Parent provider')
+    vi.stubEnv('MACHINEROOM_RUNS', runs)
+    try {
+      const lane = { worktree: folder, providerOrder, cli: { harness, bin: process.execPath, model: 'fake/model' } }
+      await startLane({
+        options: { lane: 'test-provider', minutes: 1, runs },
+        lane,
+        lanes: { 'test-provider': lane },
+        wanted: [],
+        prompt: 'test prompt',
+        logPath: join(runs, 'run.log'),
+        usageFile: join(runs, 'run.usage.json'),
+        name: 'run-provider',
+        project: folder,
+        task: 'task',
+      })
+      expect(JSON.parse(readFileSync(checkFile, 'utf8'))).toBe(expected)
+      const record = JSON.parse(readFileSync(join(runs, 'runs.jsonl'), 'utf8'))
+      if (harness === 'machineroom') {
+        expect(record).toMatchObject({ providers: { A: 4, B: 3 }, cachedInputTokens: 82, inputTokens: 100, costUsd: 0.02 })
+      } else {
+        expect(record).not.toHaveProperty('providers')
+        expect(record).not.toHaveProperty('cachedInputTokens')
+      }
+    } finally {
+      vi.unstubAllEnvs()
+      command.mockRestore()
+      rmSync(folder, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+    }
+  })
+
   it('writes a retried: true record for the first log before retrying on readiness exit', async () => {
     const folder = makeTempDir('machine-room-retry-run-')
     try {

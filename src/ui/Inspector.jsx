@@ -37,6 +37,20 @@ function Row({ label, children }) {
   )
 }
 
+function runUsageText(record) {
+  const { inputTokens, cachedInputTokens, providers } = record ?? {}
+  const parts = []
+  if (Number.isFinite(inputTokens) && inputTokens > 0 && Number.isFinite(cachedInputTokens)) {
+    parts.push(`cached ${Math.round(cachedInputTokens / inputTokens * 100)}%`)
+  }
+  const names = Object.entries(providers ?? {})
+  if (names.length > 0) {
+    const calls = names.map(([name, count]) => `${name} ${count} ${count === 1 ? 'call' : 'calls'}`)
+    parts.push(`${names.length} ${names.length === 1 ? 'provider' : 'providers'}: ${calls.join(', ')}`)
+  }
+  return parts.join(', ')
+}
+
 function sameAgent(agent, id) {
   const wanted = String(id ?? '').toLowerCase()
   if (!wanted) return false
@@ -453,6 +467,7 @@ export default function Inspector({
   const laneKey = String(lane?.key || context.key || item?.id || '').toLowerCase()
   const laneRecords = Array.isArray(lastRuns) ? lastRuns : []
   const laneRecord = laneRecords.find((record) => String(record?.lane ?? '').trim().toLowerCase() === laneKey)
+  const lastRunUsage = runUsageText(laneRecord)
   let failoverLine = ''
   if (!orchestratorAgent && laneRecord?.failover) {
     const kind = typeof laneRecord.failover.kind === 'string' ? laneRecord.failover.kind.trim() : ''
@@ -595,7 +610,7 @@ export default function Inspector({
                   ? context.context.window ? `${context.context.percent}% · ${context.context.tokens} of ${context.context.window} tokens` : `${context.context.tokens} tokens`
                   : CONTEXT_NOT_REPORTED}
               </Row>
-              {live && <Row label="Cost">{context.cost}</Row>}
+              {live && <Row label="Cost">{context.cost}{lastRunUsage && ` · last run (${lastRunUsage})`}</Row>}
               <Row label="Tokens">{context.tokens}</Row>
             </dl>
 
