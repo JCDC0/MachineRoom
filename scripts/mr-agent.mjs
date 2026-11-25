@@ -422,7 +422,8 @@ function usageOf(data) {
   const input = counted(usage.input_tokens) ?? counted(usage.prompt_tokens) ?? 0
   const output = counted(usage.output_tokens) ?? counted(usage.completion_tokens) ?? 0
   const cost = counted(usage.cost) ?? counted(usage.total_cost_usd) ?? counted(usage.total_cost) ?? counted(data?.cost)
-  return { input, output, cost }
+  const cachedInput = counted(usage.prompt_tokens_details?.cached_tokens) ?? counted(usage.cache_read_input_tokens)
+  return { input, output, cost, cachedInput }
 }
 
 function replyOf(data) {
@@ -1555,10 +1556,13 @@ async function main() {
   const stepLimit = maxSteps(process.env)
   const costLimit = costLimitOf(process.env)
   const minuteLimit = minuteLimitOf(process.env)
+  const providerOrder = (process.env.MR_AGENT_PROVIDER_ORDER ?? '').split(',').map((name) => name.trim()).filter(Boolean)
   const startedAt = readClock(process.env)
   let warned60 = false
   let inputTokens = 0
   let outputTokens = 0
+  let cachedInputTokens = null
+  const providers = new Map()
   let cost = null
   let costUnknown = false
   let lastText = ''
@@ -1580,6 +1584,8 @@ async function main() {
       is_error: isError,
       result,
       usage: { input_tokens: inputTokens, output_tokens: outputTokens },
+      ...(cachedInputTokens === null ? {} : { cached_input_tokens: cachedInputTokens }),
+      ...(providers.size === 0 ? {} : { providers: Object.fromEntries(providers) }),
       ...(cost === null ? {} : { total_cost_usd: cost }),
       ...(damagedAnswers > 0 ? { damagedAnswers } : {}),
     })
@@ -1616,6 +1622,7 @@ async function main() {
         max_tokens: MAX_TOKENS,
       }
       if (options.reasoning !== '') payload.reasoning = { effort: options.reasoning }
+      if (providerOrder.length > 0) payload.provider = { order: providerOrder, allow_fallbacks: false }
       const postOptions = {
         costLimit,
         onDamaged: () => { damagedAnswers += 1 },
@@ -1647,8 +1654,11 @@ async function main() {
       if (providerError !== '') throw new Error(sanitize(providerError, key))
       const message = replyOf(data)
       const usage = usageOf(data)
+      const provider = typeof data?.provider === 'string' ? sanitize(data.provider.trim(), key) : ''
       inputTokens += usage.input
       outputTokens += usage.output
+      if (usage.cachedInput !== null) cachedInputTokens = (cachedInputTokens ?? 0) + usage.cachedInput
+      if (provider !== '') providers.set(provider, (providers.get(provider) ?? 0) + 1)
       if (usage.cost !== null) {
         cost = (cost ?? 0) + usage.cost
       } else {
@@ -1657,17 +1667,6 @@ async function main() {
       const text = textOf(message.content).trim()
       if (text !== '') lastText = text
       const calls = toolCallsOf(message, `call_${step}`)
-      if (calls.length === 0 && text === '') {
-        if (nudged) {
-          finish(true, 'The agent stopped without a final answer.')
-          return
-        }
-        nudged = true
-        messages.push({ role: 'user', content: NUDGE })
-        writeJson({ type: 'user', message: { role: 'user', content: [{ type: 'text', text: NUDGE }] } })
-        continue
-      }
-      nudged = false
       const inputs = calls.map((call) => {
         try {
           return { args: argumentsOf(call.arguments), error: '' }
@@ -1680,16 +1679,32 @@ async function main() {
       calls.forEach((call, index) => {
         items.push({ type: 'tool_use', id: call.id, name: STREAM_NAMES[call.name] ?? call.name, input: streamInput(call.name, inputs[index].args) })
       })
-      if (items.length > 0) {
+      if (items.length > 0 || provider !== '' || usage.cachedInput !== null) {
         writeJson({
           type: 'assistant',
           message: {
             role: 'assistant',
             content: items,
-            usage: { input_tokens: usage.input, output_tokens: usage.output },
+            ...(provider === '' ? {} : { provider }),
+            usage: {
+              input_tokens: usage.input,
+              output_tokens: usage.output,
+              ...(usage.cachedInput === null ? {} : { cache_read_input_tokens: usage.cachedInput }),
+            },
           },
         })
       }
+      if (items.length === 0) {
+        if (nudged) {
+          finish(true, 'The agent stopped without a final answer.')
+          return
+        }
+        nudged = true
+        messages.push({ role: 'user', content: NUDGE })
+        writeJson({ type: 'user', message: { role: 'user', content: [{ type: 'text', text: NUDGE }] } })
+        continue
+      }
+      nudged = false
       if (calls.length === 0 && heldLines.length > 0) {
         messages.push({ role: 'assistant', content: text })
         continue
