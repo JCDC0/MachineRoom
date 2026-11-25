@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Antigravity uses the tree's path majority to choose its room and skips unchanged idle transcripts. Hermes keeps the first resumed turn and waits for descendant activity. Both readers confine their data paths and cache lane meta checks (P732).
 - Thinking rings orbit and wobble slowly, with a loop length and orbit speed set by each agent's key (P731).
 - The native lane records serving providers and cached prompt tokens, shows the latest run's totals in the Inspector, and can pin OpenRouter providers with `providerOrder` (P730).
 - A live page reads an Antigravity session at all: the page now takes the parser a session reader names in its agent row, and each Antigravity step carries its top conversation and, for a subagent, its name, so a page that joins mid-run keeps the orchestrator on top and names every worker (found by the orchestrator's check by eye; done by hand).

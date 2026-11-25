@@ -1,19 +1,21 @@
 import { randomBytes } from 'node:crypto'
-import { closeSync, openSync, readFileSync, readdirSync, readSync, statSync } from 'node:fs'
+import { closeSync, openSync, readFileSync, readdirSync, readSync, realpathSync, statSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { join, resolve } from 'node:path'
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { StringDecoder } from 'node:string_decoder'
 import { pathInside } from '../src/briefs/run.js'
 
 const READ_CHUNK = 64 * 1024
 const MAX_PARTIAL = 1024 * 1024
 const LOOKBACK_BYTES = 512 * 1024
+const LOOKBACK_CHILDREN = 5
 const RESULT_LIMIT = 2000
 const HELD_LIMIT = 200
 const FULL_READ_MS = 60 * 1000
 const DEFAULT_QUIET_MS = 30000
 const RUNNING_QUIET_MS = 30 * 60 * 1000
 const IDLE_STATUS = 'CASCADE_RUN_STATUS_IDLE'
+const CONVERSATION_ID = /^[0-9a-f-]{8,64}$/i
 const PATH_KEYS = ['Path', 'AbsolutePath', 'TargetFile']
 const TRANSCRIPT = join('.system_generated', 'logs', 'transcript.jsonl')
 const COLUMNS = 'conversation_id, parent_conversation_id, agent_name, status, nesting_depth, last_modified_time'
@@ -88,7 +90,7 @@ export function createAgySessionsReader(options = {}) {
   const conversations = new Map()
   const pending = new Map()
   const metaFiles = new Map()
-  let metaNames = null
+  let skippedIds = new Set()
   let metaFolderStamp = null
   let db = null
   let allStmt = null
@@ -150,19 +152,17 @@ export function createAgySessionsReader(options = {}) {
   }
 
   function skippedSessions() {
-    const skipped = new Set()
-    if (!runsFolder) return skipped
+    if (!runsFolder) return skippedIds
     const stamp = runsFolderStamp()
-    if (metaNames === null || stamp === null || stamp !== metaFolderStamp) {
-      metaNames = listMetaNames()
-      metaFolderStamp = stamp
-    }
+    if (stamp === metaFolderStamp) return skippedIds
+    const metaNames = listMetaNames()
+    const skipped = new Set()
     const seen = new Set(metaNames)
     for (const name of metaNames) {
       const path = join(runsFolder, name)
       let mtimeMs
       try {
-        mtimeMs = statSync(path).mtimeMs
+        mtimeMs = statFile(path).mtimeMs
       } catch {
         metaFiles.delete(name)
         continue
@@ -184,7 +184,9 @@ export function createAgySessionsReader(options = {}) {
     for (const name of metaFiles.keys()) {
       if (!seen.has(name)) metaFiles.delete(name)
     }
-    return skipped
+    metaFolderStamp = stamp
+    skippedIds = skipped
+    return skippedIds
   }
 
   function readRows() {
@@ -208,11 +210,22 @@ export function createAgySessionsReader(options = {}) {
     return join(brainRoot, id, TRANSCRIPT)
   }
 
+  function confinedTranscript(path) {
+    try {
+      const root = join(realpathSync.native(dirname(brainRoot)), basename(brainRoot))
+      const target = realpathSync.native(path)
+      const within = relative(root, target)
+      if (within && within !== '..' && !within.startsWith(`..${sep}`) && !isAbsolute(within)) return target
+    } catch {}
+    return ''
+  }
+
   function takeRows(rows, skipped) {
     for (const row of rows) {
       const id = typeof row?.conversation_id === 'string' ? row.conversation_id : ''
-      if (!id) continue
+      if (!CONVERSATION_ID.test(id)) continue
       const parentId = typeof row.parent_conversation_id === 'string' ? row.parent_conversation_id : ''
+      if (parentId && !CONVERSATION_ID.test(parentId)) continue
       const agentName = typeof row.agent_name === 'string' ? row.agent_name : ''
       const status = typeof row.status === 'string' ? row.status : ''
       const stamp = typeof row.last_modified_time === 'string' ? row.last_modified_time : ''
@@ -220,7 +233,8 @@ export function createAgySessionsReader(options = {}) {
       let entry = conversations.get(id)
       if (!entry) {
         const path = transcriptPath(id)
-        const offset = primed ? 0 : sizeOf(statFile, path)
+        const existing = primed || skipped.has(id) ? '' : confinedTranscript(path)
+        const offset = existing ? sizeOf(statFile, existing) : 0
         entry = {
           id,
           parentId,
@@ -233,6 +247,8 @@ export function createAgySessionsReader(options = {}) {
           linked: false,
           ended: false,
           decision: 'unknown',
+          pathCount: 0,
+          projectPaths: 0,
           lines: 0,
           openCalls: 0,
           run: null,
@@ -240,7 +256,6 @@ export function createAgySessionsReader(options = {}) {
           skipped: skipped.has(id),
           lastModified: stamp,
           changed: true,
-          lookback: offset > 0 && status !== IDLE_STATUS && !skipped.has(id),
         }
         conversations.set(id, entry)
       } else {
@@ -364,8 +379,8 @@ export function createAgySessionsReader(options = {}) {
     return list
   }
 
-  function namesProjectFile(json) {
-    if (json.type !== 'PLANNER_RESPONSE') return false
+  function countPaths(root, json) {
+    if (json.type !== 'PLANNER_RESPONSE') return
     const calls = Array.isArray(json.tool_calls) ? json.tool_calls : []
     for (const call of calls) {
       const parameters = parseArgs(call?.args)
@@ -373,26 +388,27 @@ export function createAgySessionsReader(options = {}) {
         const path = absolutePath(parameters[key])
         if (!path) continue
         if (pathInside(path, brainRoot)) continue
-        if (pathInside(path, projectRoot)) return true
+        root.pathCount += 1
+        if (pathInside(path, projectRoot)) root.projectPaths += 1
       }
     }
-    return false
   }
 
-  function tailNamesProjectFile(path) {
-    let size
-    try {
-      size = statFile(path).size
-    } catch {
-      return false
-    }
-    if (size <= 0) return false
+  function hasProjectMajority(root) {
+    return root.projectPaths >= 2 && root.projectPaths * 2 > root.pathCount
+  }
+
+  function countTailPaths(root, stream) {
+    const size = stream.offset
+    if (size <= 0) return
+    const path = confinedTranscript(stream.path)
+    if (!path) return
     const start = Math.max(0, size - LOOKBACK_BYTES)
     let fd
     try {
       fd = openSync(path, 'r')
     } catch {
-      return false
+      return
     }
     let text = ''
     try {
@@ -404,7 +420,7 @@ export function createAgySessionsReader(options = {}) {
     } finally {
       closeSync(fd)
     }
-    if (!text) return false
+    if (!text) return
     const lines = text.split(/\r?\n/)
     if (start > 0) lines.shift()
     for (const line of lines) {
@@ -416,10 +432,31 @@ export function createAgySessionsReader(options = {}) {
         continue
       }
       if (!json || typeof json !== 'object') continue
-      if (!LINE_TYPES.has(json.type)) continue
-      if (namesProjectFile(json)) return true
+      countPaths(root, json)
     }
-    return false
+  }
+
+  function lookBack(entries) {
+    const byRoot = new Map()
+    for (const entry of entries) {
+      if (entry.skipped) continue
+      const root = rootOf(entry)
+      if (!root || root.skipped) continue
+      if (!byRoot.has(root)) byRoot.set(root, [])
+      if (entry !== root && entry.stream.offset > 0) byRoot.get(root).push(entry)
+    }
+    for (const [root, children] of byRoot) {
+      if (root.status !== IDLE_STATUS) {
+        countTailPaths(root, root.stream)
+        children.sort((a, b) => b.lastModified.localeCompare(a.lastModified))
+        for (const child of children.slice(0, LOOKBACK_CHILDREN)) countTailPaths(root, child.stream)
+      } else {
+        for (const child of children) {
+          if (child.status !== IDLE_STATUS) countTailPaths(root, child.stream)
+        }
+      }
+      if (hasProjectMajority(root)) root.decision = 'inside'
+    }
   }
 
   function hold(entry, json) {
@@ -448,14 +485,13 @@ export function createAgySessionsReader(options = {}) {
     if (!LINE_TYPES.has(json.type)) return
     const root = rootOf(entry)
     if (!root) return
-    if (root.decision === 'unknown' && namesProjectFile(json)) {
-      root.decision = 'inside'
+    if (root.decision === 'unknown') {
+      countPaths(root, json)
       hold(entry, json)
-      flushTree(root)
-      return
-    }
-    if (root.decision !== 'inside') {
-      hold(entry, json)
+      if (hasProjectMajority(root)) {
+        root.decision = 'inside'
+        flushTree(root)
+      }
       return
     }
     if (entry.parentId && !entry.linked) {
@@ -576,9 +612,11 @@ export function createAgySessionsReader(options = {}) {
   }
 
   function readStream(stream, onLine) {
+    const path = confinedTranscript(stream.path)
+    if (!path) return false
     let size
     try {
-      size = statFile(stream.path).size
+      size = statFile(path).size
     } catch {
       return false
     }
@@ -591,7 +629,7 @@ export function createAgySessionsReader(options = {}) {
     if (size === stream.offset) return false
     let fd
     try {
-      fd = openSync(stream.path, 'r')
+      fd = openSync(path, 'r')
     } catch {
       return false
     }
@@ -653,12 +691,6 @@ export function createAgySessionsReader(options = {}) {
     return true
   }
 
-  function dueRead(entry, root) {
-    if (entry.changed) return true
-    if (entry.status !== IDLE_STATUS) return true
-    return Boolean(root.run?.open)
-  }
-
   function endRuns() {
     for (const entry of conversations.values()) {
       if (entry.parentId) continue
@@ -682,15 +714,13 @@ export function createAgySessionsReader(options = {}) {
       for (const entry of conversations.values()) {
         if (skipped.has(entry.id)) entry.skipped = true
       }
-      for (const entry of [...conversations.values()].sort(byDepth)) {
+      const entries = [...conversations.values()].sort(byDepth)
+      if (!primed) lookBack(entries)
+      for (const entry of entries) {
         if (entry.skipped) continue
         const root = rootOf(entry)
         if (!root || root.skipped) continue
-        if (entry.lookback) {
-          entry.lookback = false
-          if (root.decision === 'unknown' && tailNamesProjectFile(entry.path)) root.decision = 'inside'
-        }
-        if (!dueRead(entry, root)) continue
+        if (!entry.changed && entry.status === IDLE_STATUS) continue
         if (readStream(entry.stream, (line) => handleLine(entry, line))) {
           if (root.run?.open) root.run.lastGrowth = now()
         }
@@ -712,7 +742,7 @@ export function createAgySessionsReader(options = {}) {
     conversations.clear()
     pending.clear()
     metaFiles.clear()
-    metaNames = null
+    skippedIds.clear()
     metaFolderStamp = null
     highWater = null
     lastFullReadAt = null

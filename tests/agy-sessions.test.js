@@ -1,4 +1,4 @@
-import { appendFileSync, mkdirSync, mkdtempSync, readdirSync, realpathSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs'
+import { appendFileSync, mkdirSync, mkdtempSync, readdirSync, realpathSync, rmSync, statSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
@@ -118,6 +118,12 @@ function readCall(path) {
   return { name: 'read_file', args: { Path: JSON.stringify(path), StartLine: '1', EndLine: '10' } }
 }
 
+function projectRead(path) {
+  const call = readCall(path)
+  call.args.AbsolutePath = JSON.stringify(dirname(path))
+  return call
+}
+
 function makeReader({ projectRoot, home, dbPath, runsFolder, frames, now, quietMs, listFolder, statFile }) {
   const reader = createAgySessionsReader({
     projectRoot,
@@ -141,32 +147,32 @@ describe('the Antigravity session reader, reading the summaries and the transcri
     const reader = makeReader({ projectRoot, home, dbPath, frames })
     reader.tick()
 
-    addConversation(dbPath, { id: 'conv-in' })
-    writeTranscript(home, 'conv-in', [userInput(0), planner(1, [readCall(join(projectRoot, 'src', 'math.js'))]), generic(2, 'words')])
+    addConversation(dbPath, { id: 'a6c00000' })
+    writeTranscript(home, 'a6c00000', [userInput(0), planner(1, [projectRead(join(projectRoot, 'src', 'math.js'))]), generic(2, 'words')])
     reader.tick()
 
-    const entry = reader.sessions().get('conv-in')
-    expect(entry).toMatchObject({ id: 'conv-in', parentId: '', status: 'CASCADE_RUN_STATUS_RUNNING', depth: 0, lines: 3 })
+    const entry = reader.sessions().get('a6c00000')
+    expect(entry).toMatchObject({ id: 'a6c00000', parentId: '', status: 'CASCADE_RUN_STATUS_RUNNING', depth: 0, lines: 3 })
     expect(entry.stream.offset).toBeGreaterThan(0)
 
-    appendTranscript(home, 'conv-in', [generic(4, 'more words')])
+    appendTranscript(home, 'a6c00000', [generic(4, 'more words')])
     reader.tick()
-    expect(reader.sessions().get('conv-in').lines).toBe(4)
+    expect(reader.sessions().get('a6c00000').lines).toBe(4)
   })
 
   it('reads a transcript that exists when it starts from its end', () => {
     const { projectRoot, home, dbPath } = setup()
-    addConversation(dbPath, { id: 'conv-old' })
-    writeTranscript(home, 'conv-old', [userInput(0), planner(1, [readCall(join(projectRoot, 'src', 'old.js'))]), generic(2, 'old')])
+    addConversation(dbPath, { id: 'a6c00001' })
+    writeTranscript(home, 'a6c00001', [userInput(0), planner(1, [projectRead(join(projectRoot, 'src', 'old.js'))]), generic(2, 'old')])
 
     const reader = makeReader({ projectRoot, home, dbPath, frames: [] })
     reader.tick()
-    expect(reader.sessions().get('conv-old').lines).toBe(0)
+    expect(reader.sessions().get('a6c00001').lines).toBe(0)
 
-    appendTranscript(home, 'conv-old', [planner(3, [readCall(join(projectRoot, 'src', 'new.js'))]), generic(4, 'new')])
+    appendTranscript(home, 'a6c00001', [planner(3, [projectRead(join(projectRoot, 'src', 'new.js'))]), generic(4, 'new')])
     reader.tick()
-    expect(reader.sessions().get('conv-old').lines).toBe(2)
-    expect(reader.sessions().get('conv-old').decision).toBe('inside')
+    expect(reader.sessions().get('a6c00001').lines).toBe(2)
+    expect(reader.sessions().get('a6c00001').decision).toBe('inside')
   })
 
   it('reads a conversation first seen after the first tick from its first byte', () => {
@@ -174,47 +180,69 @@ describe('the Antigravity session reader, reading the summaries and the transcri
     const reader = makeReader({ projectRoot, home, dbPath, frames: [] })
     reader.tick()
 
-    addConversation(dbPath, { id: 'conv-new' })
-    writeTranscript(home, 'conv-new', [userInput(0), planner(1, [readCall(join(projectRoot, 'src', 'math.js'))])])
+    addConversation(dbPath, { id: 'a6c00002' })
+    writeTranscript(home, 'a6c00002', [userInput(0), planner(1, [projectRead(join(projectRoot, 'src', 'math.js'))])])
     reader.tick()
 
-    expect(reader.sessions().get('conv-new').lines).toBe(2)
+    expect(reader.sessions().get('a6c00002').lines).toBe(2)
   })
 
   it('decides a running top from its existing transcript and shows it from its next line', () => {
     const { projectRoot, home, dbPath } = setup()
-    addConversation(dbPath, { id: 'conv-before' })
-    writeTranscript(home, 'conv-before', [userInput(0), planner(1, [readCall(join(projectRoot, 'src', 'math.js'))]), generic(2, 'old words')])
+    addConversation(dbPath, { id: 'a6c00003' })
+    writeTranscript(home, 'a6c00003', [userInput(0), planner(1, [projectRead(join(projectRoot, 'src', 'math.js'))]), generic(2, 'old words')])
 
     const frames = []
     const reader = makeReader({ projectRoot, home, dbPath, frames })
     reader.tick()
 
-    expect(reader.sessions().get('conv-before').decision).toBe('inside')
-    expect(reader.sessions().get('conv-before').lines).toBe(0)
+    expect(reader.sessions().get('a6c00003').decision).toBe('inside')
+    expect(reader.sessions().get('a6c00003').lines).toBe(0)
     expect(frames).toEqual([])
 
-    appendTranscript(home, 'conv-before', [planner(3, [readCall(join(projectRoot, 'src', 'app.js'))]), generic(4, 'new words')])
+    appendTranscript(home, 'a6c00003', [planner(3, [projectRead(join(projectRoot, 'src', 'app.js'))]), generic(4, 'new words')])
     reader.tick()
 
-    expect(reader.sessions().get('conv-before').lines).toBe(2)
+    expect(reader.sessions().get('a6c00003').lines).toBe(2)
     expect(stepsOf(frames).map((step) => step.step_index)).toEqual(['3.0', '3.0'])
   })
 
   it('reads the last 512 KB of an existing transcript only', () => {
     const { projectRoot, home, dbPath } = setup()
-    addConversation(dbPath, { id: 'conv-far' })
-    const path = transcript(home, 'conv-far')
+    addConversation(dbPath, { id: 'a6c00004' })
+    const path = transcript(home, 'a6c00004')
     mkdirSync(dirname(path), { recursive: true })
     const pad = `${JSON.stringify(generic(1, 'x'.repeat(2000)))}\n`
     let text = ''
     while (text.length < 600 * 1024) text += pad
-    writeFileSync(path, `${JSON.stringify(planner(0, [readCall(join(projectRoot, 'src', 'old.js'))]))}\n${text}`)
+    writeFileSync(path, `${JSON.stringify(planner(0, [projectRead(join(projectRoot, 'src', 'old.js'))]))}\n${text}`)
 
     const reader = makeReader({ projectRoot, home, dbPath, frames: [] })
     reader.tick()
 
-    expect(reader.sessions().get('conv-far').decision).toBe('unknown')
+    expect(reader.sessions().get('a6c00004').decision).toBe('unknown')
+  })
+
+  it('shows a running top from one of its five most recently modified workers on first sight', () => {
+    const { base, projectRoot, home, dbPath } = setup()
+    const top = 'a6c01000'
+    const outside = join(base, 'other')
+    addConversation(dbPath, { id: top })
+    for (let i = 1; i <= 6; i += 1) {
+      const id = `a6c0100${i}`
+      addConversation(dbPath, { id, parent: top, status: 'CASCADE_RUN_STATUS_IDLE' })
+      const items = i === 1
+        ? [planner(1, [readCall(join(outside, 'a.js')), readCall(join(outside, 'b.js'))])]
+        : i === 2 ? [planner(1, [readCall(join(projectRoot, 'a.js')), readCall(join(projectRoot, 'b.js'))])] : [userInput(0)]
+      writeTranscript(home, id, items)
+    }
+    const frames = []
+    const reader = makeReader({ projectRoot, home, dbPath, frames })
+    reader.tick()
+
+    expect(reader.sessions().get(top).decision).toBe('inside')
+    expect(reader.open().has(top)).toBe(true)
+    expect(stepsOf(frames).some((step) => step.tool_name === 'read_file')).toBe(false)
   })
 
   it('holds a partial last line until the rest arrives', () => {
@@ -222,36 +250,36 @@ describe('the Antigravity session reader, reading the summaries and the transcri
     const reader = makeReader({ projectRoot, home, dbPath, frames: [] })
     reader.tick()
 
-    addConversation(dbPath, { id: 'conv-part' })
-    const first = JSON.stringify(planner(1, [readCall(join(projectRoot, 'src', 'math.js'))]))
+    addConversation(dbPath, { id: 'a6c00005' })
+    const first = JSON.stringify(planner(1, [projectRead(join(projectRoot, 'src', 'math.js'))]))
     const second = `${JSON.stringify(generic(2, 'split words'))}\n`
-    const path = transcript(home, 'conv-part')
+    const path = transcript(home, 'a6c00005')
     mkdirSync(dirname(path), { recursive: true })
     writeFileSync(path, `${first}\n${second.slice(0, 20)}`)
     reader.tick()
-    expect(reader.sessions().get('conv-part').lines).toBe(1)
+    expect(reader.sessions().get('a6c00005').lines).toBe(1)
 
     appendFileSync(path, second.slice(20))
     reader.tick()
-    expect(reader.sessions().get('conv-part').lines).toBe(2)
+    expect(reader.sessions().get('a6c00005').lines).toBe(2)
   })
 
   it('asks only for the rows changed since the last read, and reads them all once a minute', () => {
     const { projectRoot, home, dbPath } = setup()
     let time = 1000000
     const reader = makeReader({ projectRoot, home, dbPath, frames: [], now: () => time })
-    addConversation(dbPath, { id: 'conv-a' })
+    addConversation(dbPath, { id: 'a6c00006' })
     reader.tick()
-    expect(reader.sessions().has('conv-a')).toBe(true)
+    expect(reader.sessions().has('a6c00006')).toBe(true)
 
-    setStatus(dbPath, 'conv-a', 'CASCADE_RUN_STATUS_IDLE')
+    setStatus(dbPath, 'a6c00006', 'CASCADE_RUN_STATUS_IDLE')
     time += 500
     reader.tick()
-    expect(reader.sessions().get('conv-a').status).toBe('CASCADE_RUN_STATUS_IDLE')
+    expect(reader.sessions().get('a6c00006').status).toBe('CASCADE_RUN_STATUS_IDLE')
 
     time += 60 * 1000
     reader.tick()
-    expect(reader.sessions().get('conv-a').status).toBe('CASCADE_RUN_STATUS_IDLE')
+    expect(reader.sessions().get('a6c00006').status).toBe('CASCADE_RUN_STATUS_IDLE')
   })
 
   it('skips a missing database quietly until it appears', () => {
@@ -269,8 +297,8 @@ describe('the Antigravity session reader, reading the summaries and the transcri
 
   it('stats no transcript of 300 idle conversations on a tick', () => {
     const { projectRoot, home, dbPath } = setup()
-    addConversation(dbPath, { id: 'conv-live', status: 'CASCADE_RUN_STATUS_RUNNING' })
-    writeTranscript(home, 'conv-live', [planner(1, [readCall(join(projectRoot, 'src', 'math.js'))])])
+    addConversation(dbPath, { id: 'a6c00007', status: 'CASCADE_RUN_STATUS_RUNNING' })
+    writeTranscript(home, 'a6c00007', [planner(1, [projectRead(join(projectRoot, 'src', 'math.js'))])])
     let stats = 0
     const reader = makeReader({
       projectRoot,
@@ -283,12 +311,12 @@ describe('the Antigravity session reader, reading the summaries and the transcri
       },
     })
     reader.tick()
-    for (let i = 0; i < 300; i += 1) addConversation(dbPath, { id: `conv-idle-${i}`, status: 'CASCADE_RUN_STATUS_IDLE' })
-    setStatus(dbPath, 'conv-live', 'CASCADE_RUN_STATUS_IDLE')
+    for (let i = 0; i < 300; i += 1) addConversation(dbPath, { id: `1d1e-${i.toString(16).padStart(4, '0')}`, status: 'CASCADE_RUN_STATUS_IDLE' })
+    setStatus(dbPath, 'a6c00007', 'CASCADE_RUN_STATUS_IDLE')
     reader.tick()
     reader.tick()
     expect(reader.sessions().size).toBe(301)
-    expect(reader.sessions().get('conv-idle-150').decision).toBe('unknown')
+    expect(reader.sessions().get('1d1e-0096').decision).toBe('unknown')
     expect(reader.open().size).toBe(0)
 
     stats = 0
@@ -296,42 +324,113 @@ describe('the Antigravity session reader, reading the summaries and the transcri
     expect(stats).toBe(0)
   })
 
+  it('stats no unchanged idle child transcript while its top has an open run', () => {
+    const { projectRoot, home, dbPath } = setup()
+    const top = 'a6c01020'
+    const files = []
+    const reader = makeReader({
+      projectRoot, home, dbPath, frames: [],
+      statFile: (path) => {
+        files.push(path)
+        return statSync(path)
+      },
+    })
+    reader.tick()
+
+    addConversation(dbPath, { id: top, status: 'CASCADE_RUN_STATUS_IDLE' })
+    writeTranscript(home, top, [planner(1, [projectRead(join(projectRoot, 'math.js'))])])
+    for (let i = 0; i < 100; i += 1) {
+      const id = `a6c02${i.toString(16).padStart(3, '0')}`
+      addConversation(dbPath, { id, parent: top, status: 'CASCADE_RUN_STATUS_IDLE' })
+      writeTranscript(home, id, [userInput(0)])
+    }
+    reader.tick()
+    expect(reader.open().has(top)).toBe(true)
+    expect(files).toHaveLength(101)
+    files.length = 0
+
+    reader.tick()
+    expect(reader.open().has(top)).toBe(true)
+    expect(files).toEqual([])
+
+    setStatus(dbPath, 'a6c02000', 'CASCADE_RUN_STATUS_IDLE')
+    reader.tick()
+    expect(files).toEqual([transcript(home, 'a6c02000')])
+  })
+
   it('finds a new child at once even when its modified time is still zero', () => {
     const { projectRoot, home, dbPath } = setup()
     let time = 1000000
     const reader = makeReader({ projectRoot, home, dbPath, frames: [], now: () => time })
-    addConversation(dbPath, { id: 'conv-top' })
+    addConversation(dbPath, { id: 'a6c00008' })
     reader.tick()
 
     withDb(dbPath, (db) => {
       db.prepare(
         'INSERT OR REPLACE INTO conversation_summaries (conversation_id, parent_conversation_id, agent_name, status, nesting_depth, not_fully_idle, last_modified_time) VALUES (?, ?, ?, ?, ?, ?, ?)'
-      ).run('conv-child', 'conv-top', 'ui-worker', 'CASCADE_RUN_STATUS_RUNNING', 1, 0, '0001-01-01 00:00:00')
+      ).run('a6c00009', 'a6c00008', 'ui-worker', 'CASCADE_RUN_STATUS_RUNNING', 1, 0, '0001-01-01 00:00:00')
     })
     time += 500
     reader.tick()
-    expect(reader.sessions().has('conv-child')).toBe(true)
-    expect(reader.sessions().get('conv-child').status).toBe('CASCADE_RUN_STATUS_RUNNING')
+    expect(reader.sessions().has('a6c00009')).toBe(true)
+    expect(reader.sessions().get('a6c00009').status).toBe('CASCADE_RUN_STATUS_RUNNING')
   })
 
   it('keeps one entry per conversation across ticks', () => {
     const { projectRoot, home, dbPath } = setup()
-    addConversation(dbPath, { id: 'conv-a' })
-    addConversation(dbPath, { id: 'conv-b', parent: 'conv-a', agent: 'ui-worker', depth: 1 })
+    addConversation(dbPath, { id: 'a6c00006' })
+    addConversation(dbPath, { id: 'a6c0000a', parent: 'a6c00006', agent: 'ui-worker', depth: 1 })
     const reader = makeReader({ projectRoot, home, dbPath, frames: [] })
     reader.tick()
     reader.tick()
 
-    expect([...reader.sessions().keys()].sort()).toEqual(['conv-a', 'conv-b'])
-    expect(reader.sessions().get('conv-b')).toMatchObject({ parentId: 'conv-a', depth: 1 })
+    expect([...reader.sessions().keys()].sort()).toEqual(['a6c00006', 'a6c0000a'])
+    expect(reader.sessions().get('a6c0000a')).toMatchObject({ parentId: 'a6c00006', depth: 1 })
   })
 
-  it('lists a folder it was given for the runs meta', () => {
+  it('ignores a conversation id with a path part even when it points inside the brain', () => {
+    const { projectRoot, home, dbPath } = setup()
+    const frames = []
+    const reader = makeReader({ projectRoot, home, dbPath, frames })
+    reader.tick()
+
+    addConversation(dbPath, { id: 'a6c03000/../a6c03001' })
+    writeTranscript(home, 'a6c03001', [planner(1, [projectRead(join(projectRoot, 'math.js'))])])
+    reader.tick()
+
+    expect(reader.sessions().size).toBe(0)
+    expect(frames).toEqual([])
+  })
+
+  it('does not read a conversation folder linked outside the brain', () => {
+    const { base, projectRoot, home, dbPath } = setup()
+    const id = 'a6c03002'
+    const brain = join(home, '.gemini', 'antigravity', 'brain')
+    const outside = join(base, 'outside')
+    const linked = join(outside, '.gemini', 'antigravity', 'brain', id)
+    const items = [planner(1, [projectRead(join(projectRoot, 'math.js'))])]
+    writeTranscript(outside, id, items)
+    mkdirSync(brain, { recursive: true })
+    symlinkSync(linked, join(brain, id), 'junction')
+    addConversation(dbPath, { id })
+
+    const frames = []
+    const reader = makeReader({ projectRoot, home, dbPath, frames })
+    reader.tick()
+    appendTranscript(outside, id, items)
+    reader.tick()
+
+    expect(reader.sessions().get(id).stream.offset).toBe(0)
+    expect(frames).toEqual([])
+  })
+
+  it('lists the runs folder and stats its meta files only when the folder changes', () => {
     const { projectRoot, home, dbPath, base } = setup()
     const runs = join(base, 'runs')
     mkdirSync(runs, { recursive: true })
-    writeFileSync(join(runs, 'agy-a.meta.json'), `${JSON.stringify({ sessionId: 'conv-a' })}\n`)
+    writeFileSync(join(runs, 'agy-a.meta.json'), `${JSON.stringify({ sessionId: 'a6c00006' })}\n`)
     let lists = 0
+    const stats = []
     const reader = makeReader({
       projectRoot,
       home,
@@ -342,52 +441,57 @@ describe('the Antigravity session reader, reading the summaries and the transcri
         lists += 1
         return readdirSync(dir, { withFileTypes: true })
       },
+      statFile: (path) => {
+        stats.push(path)
+        return statSync(path)
+      },
     })
     reader.tick()
     expect(lists).toBe(1)
     reader.tick()
     reader.tick()
+    expect(stats).toEqual([join(runs, 'agy-a.meta.json')])
     expect(lists).toBe(1)
-    expect(reader.metaFiles().get('agy-a.meta.json')).toMatchObject({ sessionId: 'conv-a' })
+    expect(reader.metaFiles().get('agy-a.meta.json')).toMatchObject({ sessionId: 'a6c00006' })
   })
 })
 
 describe('the Antigravity session reader around the project', () => {
-  it('keeps a conversation once a tool path resolves inside the project', () => {
+  it('keeps a conversation once two tool paths resolve inside the project', () => {
     const { projectRoot, home, dbPath } = setup()
     const reader = makeReader({ projectRoot, home, dbPath, frames: [] })
     reader.tick()
 
-    addConversation(dbPath, { id: 'conv-in' })
-    writeTranscript(home, 'conv-in', [userInput(0), planner(1, [readCall(join(projectRoot, 'src', 'math.js'))]), generic(2, 'inside words')])
+    addConversation(dbPath, { id: 'a6c00000' })
+    writeTranscript(home, 'a6c00000', [userInput(0), planner(1, [projectRead(join(projectRoot, 'src', 'math.js'))]), generic(2, 'inside words')])
     reader.tick()
 
-    expect(reader.sessions().get('conv-in').decision).toBe('inside')
-    expect(reader.sessions().get('conv-in').lines).toBe(3)
+    expect(reader.sessions().get('a6c00000').decision).toBe('inside')
+    expect(reader.sessions().get('a6c00000').lines).toBe(3)
   })
 
   it('passes over the screenshots Antigravity keeps in its own brain folder when it picks the project', () => {
     const { base, projectRoot, home, dbPath } = setup()
     const outside = join(base, 'other')
     mkdirSync(outside, { recursive: true })
-    const own = (name) => join(home, '.gemini', 'antigravity', 'brain', 'conv-brain', '.system_generated', 'browser_evidence', name)
+    const own = (name) => join(home, '.gemini', 'antigravity', 'brain', 'a6c0000b', '.system_generated', 'browser_evidence', name)
     const reader = makeReader({ projectRoot, home, dbPath, frames: [] })
     reader.tick()
 
-    addConversation(dbPath, { id: 'conv-brain' })
-    writeTranscript(home, 'conv-brain', [
+    addConversation(dbPath, { id: 'a6c0000b' })
+    writeTranscript(home, 'a6c0000b', [
       planner(1, [readCall(own('final_step_14.png'))]),
-      planner(2, [readCall(join(projectRoot, 'src', 'math.js'))]),
+      planner(2, [projectRead(join(projectRoot, 'src', 'math.js'))]),
       generic(3, 'ok'),
     ])
-    addConversation(dbPath, { id: 'conv-brain-out' })
-    writeTranscript(home, 'conv-brain-out', [planner(1, [readCall(own('page.png'))]), planner(2, [readCall(join(outside, 'x.js'))])])
+    addConversation(dbPath, { id: 'a6c0000c' })
+    writeTranscript(home, 'a6c0000c', [planner(1, [readCall(own('page.png'))]), planner(2, [readCall(join(outside, 'x.js'))])])
     reader.tick()
 
-    expect(reader.sessions().get('conv-brain').decision).toBe('inside')
-    expect(reader.sessions().get('conv-brain').lines).toBe(3)
-    expect(reader.sessions().get('conv-brain-out').decision).toBe('unknown')
-    expect(reader.sessions().get('conv-brain-out').lines).toBe(0)
+    expect(reader.sessions().get('a6c0000b').decision).toBe('inside')
+    expect(reader.sessions().get('a6c0000b').lines).toBe(3)
+    expect(reader.sessions().get('a6c0000c').decision).toBe('unknown')
+    expect(reader.sessions().get('a6c0000c').lines).toBe(0)
   })
 
   it('reads a subfolder of the project as inside', () => {
@@ -395,16 +499,18 @@ describe('the Antigravity session reader around the project', () => {
     const reader = makeReader({ projectRoot, home, dbPath, frames: [] })
     reader.tick()
 
-    addConversation(dbPath, { id: 'conv-sub' })
-    writeTranscript(home, 'conv-sub', [
-      planner(1, [{ name: 'write_to_file', args: { TargetFile: JSON.stringify(join(projectRoot, 'packages', 'web', 'page.ts')) } }]),
+    addConversation(dbPath, { id: 'a6c0000d' })
+    writeTranscript(home, 'a6c0000d', [
+      planner(1, ['page.ts', 'route.ts'].map((name) => ({
+        name: 'write_to_file', args: { TargetFile: JSON.stringify(join(projectRoot, 'packages', 'web', name)) },
+      }))),
     ])
     reader.tick()
 
-    expect(reader.sessions().get('conv-sub').decision).toBe('inside')
+    expect(reader.sessions().get('a6c0000d').decision).toBe('inside')
   })
 
-  it('keeps no frame for a conversation that names another repository first, and joins it when a project path follows', () => {
+  it('joins a conversation only after its project paths outnumber its other paths', () => {
     const { base, projectRoot, home, dbPath } = setup()
     const outside = join(base, 'other')
     mkdirSync(outside, { recursive: true })
@@ -412,20 +518,45 @@ describe('the Antigravity session reader around the project', () => {
     const reader = makeReader({ projectRoot, home, dbPath, frames })
     reader.tick()
 
-    addConversation(dbPath, { id: 'conv-out' })
-    writeTranscript(home, 'conv-out', [userInput(0), planner(1, [readCall(join(outside, 'x.js'))]), generic(2, { note: 'outside words' })])
+    addConversation(dbPath, { id: 'a6c0000e' })
+    writeTranscript(home, 'a6c0000e', [userInput(0), planner(1, [readCall(join(outside, 'a.js')), readCall(join(outside, 'b.js'))]), generic(2, { note: 'outside words' })])
     reader.tick()
 
-    expect(reader.sessions().get('conv-out').decision).toBe('unknown')
-    expect(reader.sessions().get('conv-out').lines).toBe(0)
+    expect(reader.sessions().get('a6c0000e').decision).toBe('unknown')
+    expect(reader.sessions().get('a6c0000e').lines).toBe(0)
     expect(frames).toEqual([])
 
-    appendTranscript(home, 'conv-out', [planner(3, [readCall(join(projectRoot, 'src', 'math.js'))]), generic(4, 'inside words')])
+    appendTranscript(home, 'a6c0000e', [planner(3, [projectRead(join(projectRoot, 'src', 'math.js'))]), generic(4, 'inside words')])
     reader.tick()
 
-    expect(reader.sessions().get('conv-out').decision).toBe('inside')
-    expect(reader.sessions().get('conv-out').lines).toBe(5)
+    expect(reader.sessions().get('a6c0000e').decision).toBe('unknown')
+    expect(frames).toEqual([])
+
+    appendTranscript(home, 'a6c0000e', [planner(5, [readCall(join(projectRoot, 'src', 'more.js'))])])
+    reader.tick()
+
+    expect(reader.sessions().get('a6c0000e').decision).toBe('inside')
+    expect(reader.sessions().get('a6c0000e').lines).toBe(6)
     expect(frames.length).toBeGreaterThan(0)
+  })
+
+  it('keeps a tree outside the room when its worker reads one project reference', () => {
+    const { base, projectRoot, home, dbPath } = setup()
+    const outside = join(base, 'other')
+    const top = 'a6c01010'
+    const worker = 'a6c01011'
+    const frames = []
+    const reader = makeReader({ projectRoot, home, dbPath, frames })
+    reader.tick()
+
+    addConversation(dbPath, { id: top })
+    addConversation(dbPath, { id: worker, parent: top })
+    writeTranscript(home, top, [planner(1, [readCall(join(outside, 'a.js')), readCall(join(outside, 'b.js'))])])
+    writeTranscript(home, worker, [planner(1, [readCall(join(projectRoot, 'reference.js'))])])
+    reader.tick()
+
+    expect(reader.sessions().get(top).decision).toBe('unknown')
+    expect(frames).toEqual([])
   })
 
   it('holds the lines of a conversation with no path yet, up to 200', () => {
@@ -433,14 +564,14 @@ describe('the Antigravity session reader around the project', () => {
     const reader = makeReader({ projectRoot, home, dbPath, frames: [] })
     reader.tick()
 
-    addConversation(dbPath, { id: 'conv-held' })
+    addConversation(dbPath, { id: 'a6c0000f' })
     const items = []
     for (let i = 0; i < 260; i += 1) items.push(userInput(i))
-    items.push(planner(260, [readCall(join(projectRoot, 'src', 'math.js'))]))
-    writeTranscript(home, 'conv-held', items)
+    items.push(planner(260, [projectRead(join(projectRoot, 'src', 'math.js'))]))
+    writeTranscript(home, 'a6c0000f', items)
     reader.tick()
 
-    const entry = reader.sessions().get('conv-held')
+    const entry = reader.sessions().get('a6c0000f')
     expect(entry.decision).toBe('inside')
     expect(entry.lines).toBe(200)
     expect(entry.held).toEqual([])
@@ -452,58 +583,58 @@ describe('the Antigravity session reader around the project', () => {
     const reader = makeReader({ projectRoot, home, dbPath, frames })
     reader.tick()
 
-    addConversation(dbPath, { id: 'conv-parent' })
-    addConversation(dbPath, { id: 'conv-child', parent: 'conv-parent', agent: 'ui-worker', depth: 1 })
-    appendTranscript(home, 'conv-parent', [
+    addConversation(dbPath, { id: 'a6c00010' })
+    addConversation(dbPath, { id: 'a6c00009', parent: 'a6c00010', agent: 'ui-worker', depth: 1 })
+    appendTranscript(home, 'a6c00010', [
       userInput(0),
       planner(1, [swarmAdd('ui-worker')]),
       planner(2, [swarmAdd('reviewer')]),
     ])
-    writeTranscript(home, 'conv-child', [planner(1, [readCall(join(projectRoot, 'src', 'child.js'))]), generic(2, 'child words')])
+    writeTranscript(home, 'a6c00009', [planner(1, [projectRead(join(projectRoot, 'src', 'child.js'))]), generic(2, 'child words')])
     reader.tick()
     reader.tick()
 
-    expect(reader.sessions().get('conv-child').decision).toBe('unknown')
-    expect(reader.sessions().get('conv-parent').decision).toBe('inside')
-    expect(reader.sessions().get('conv-parent').lines).toBe(3)
-    expect(reader.sessions().get('conv-child').lines).toBe(2)
-    expect(stepsOf(frames).some((step) => step.conversation_id === 'conv-child')).toBe(true)
+    expect(reader.sessions().get('a6c00009').decision).toBe('unknown')
+    expect(reader.sessions().get('a6c00010').decision).toBe('inside')
+    expect(reader.sessions().get('a6c00010').lines).toBe(3)
+    expect(reader.sessions().get('a6c00009').lines).toBe(2)
+    expect(stepsOf(frames).some((step) => step.conversation_id === 'a6c00009')).toBe(true)
   })
 
-  it('joins a tree whose child names a project file after its parent named another repository', () => {
+  it('joins a tree whose child names enough project paths after its parent named another repository', () => {
     const { base, projectRoot, home, dbPath } = setup()
     const outside = join(base, 'other')
     mkdirSync(outside, { recursive: true })
     const reader = makeReader({ projectRoot, home, dbPath, frames: [] })
     reader.tick()
 
-    addConversation(dbPath, { id: 'conv-parent-out' })
-    addConversation(dbPath, { id: 'conv-child-out', parent: 'conv-parent-out', agent: 'ui-worker', depth: 1 })
-    writeTranscript(home, 'conv-parent-out', [planner(1, [readCall(join(outside, 'x.js'))])])
-    writeTranscript(home, 'conv-child-out', [planner(1, [readCall(join(projectRoot, 'src', 'child.js'))])])
+    addConversation(dbPath, { id: 'a6c00011' })
+    addConversation(dbPath, { id: 'a6c00012', parent: 'a6c00011', agent: 'ui-worker', depth: 1 })
+    writeTranscript(home, 'a6c00011', [planner(1, [readCall(join(outside, 'x.js'))])])
+    writeTranscript(home, 'a6c00012', [planner(1, [projectRead(join(projectRoot, 'src', 'child.js'))])])
     reader.tick()
     reader.tick()
 
-    expect(reader.sessions().get('conv-parent-out').decision).toBe('inside')
-    expect(reader.sessions().get('conv-child-out').lines).toBe(1)
+    expect(reader.sessions().get('a6c00011').decision).toBe('inside')
+    expect(reader.sessions().get('a6c00012').lines).toBe(1)
   })
 
   it('skips a conversation that run-lane wrote, named in the runs folder meta', () => {
     const { projectRoot, home, dbPath, base } = setup()
     const runs = join(base, 'runs')
     mkdirSync(runs, { recursive: true })
-    writeFileSync(join(runs, 'agy-test.meta.json'), `${JSON.stringify({ lane: 'agy', project: projectRoot, sessionId: 'conv-lane' })}\n`)
+    writeFileSync(join(runs, 'agy-test.meta.json'), `${JSON.stringify({ lane: 'agy', project: projectRoot, sessionId: 'a6c00013' })}\n`)
     const frames = []
     const reader = makeReader({ projectRoot, home, dbPath, runsFolder: runs, frames })
     reader.tick()
 
-    addConversation(dbPath, { id: 'conv-lane' })
-    writeTranscript(home, 'conv-lane', [userInput(0), planner(1, [readCall(join(projectRoot, 'src', 'math.js'))]), generic(2, 'lane words')])
+    addConversation(dbPath, { id: 'a6c00013' })
+    writeTranscript(home, 'a6c00013', [userInput(0), planner(1, [projectRead(join(projectRoot, 'src', 'math.js'))]), generic(2, 'lane words')])
     reader.tick()
     reader.tick()
 
-    expect(reader.sessions().get('conv-lane').skipped).toBe(true)
-    expect(reader.sessions().get('conv-lane').lines).toBe(0)
+    expect(reader.sessions().get('a6c00013').skipped).toBe(true)
+    expect(reader.sessions().get('a6c00013').lines).toBe(0)
     expect(frames).toEqual([])
   })
 
@@ -514,19 +645,19 @@ describe('the Antigravity session reader around the project', () => {
     const reader = makeReader({ projectRoot, home, dbPath, runsFolder: runs, frames: [] })
     reader.tick()
 
-    addConversation(dbPath, { id: 'conv-late' })
-    writeTranscript(home, 'conv-late', [planner(1, [readCall(join(projectRoot, 'src', 'math.js'))]), generic(2, 'first')])
+    addConversation(dbPath, { id: 'a6c00014' })
+    writeTranscript(home, 'a6c00014', [planner(1, [projectRead(join(projectRoot, 'src', 'math.js'))]), generic(2, 'first')])
     reader.tick()
-    expect(reader.sessions().get('conv-late').lines).toBe(2)
+    expect(reader.sessions().get('a6c00014').lines).toBe(2)
 
-    writeFileSync(join(runs, 'agy-lane.meta.json'), `${JSON.stringify({ lane: 'agy', project: projectRoot, sessionId: 'conv-late' })}\n`)
+    writeFileSync(join(runs, 'agy-lane.meta.json'), `${JSON.stringify({ lane: 'agy', project: projectRoot, sessionId: 'a6c00014' })}\n`)
     const later = new Date(Date.now() + 60000)
     utimesSync(runs, later, later)
-    appendTranscript(home, 'conv-late', [planner(3, [readCall(join(projectRoot, 'src', 'app.js'))]), generic(4, 'second')])
+    appendTranscript(home, 'a6c00014', [planner(3, [projectRead(join(projectRoot, 'src', 'app.js'))]), generic(4, 'second')])
     reader.tick()
 
-    expect(reader.sessions().get('conv-late').skipped).toBe(true)
-    expect(reader.sessions().get('conv-late').lines).toBe(2)
+    expect(reader.sessions().get('a6c00014').skipped).toBe(true)
+    expect(reader.sessions().get('a6c00014').lines).toBe(2)
   })
 
   it('forgets a removed meta file', () => {
@@ -534,7 +665,7 @@ describe('the Antigravity session reader around the project', () => {
     const runs = join(base, 'runs')
     mkdirSync(runs, { recursive: true })
     const meta = join(runs, 'agy-gone.meta.json')
-    writeFileSync(meta, `${JSON.stringify({ sessionId: 'conv-a' })}\n`)
+    writeFileSync(meta, `${JSON.stringify({ sessionId: 'a6c00006' })}\n`)
     const reader = makeReader({ projectRoot, home, dbPath, runsFolder: runs, frames: [] })
     reader.tick()
     expect(reader.metaFiles().has('agy-gone.meta.json')).toBe(true)
@@ -576,10 +707,10 @@ describe('the Antigravity session reader turning lines into steps', () => {
     const reader = makeReader({ projectRoot, home, dbPath, frames })
     reader.tick()
 
-    addConversation(dbPath, { id: 'conv-steps' })
-    writeTranscript(home, 'conv-steps', [
+    addConversation(dbPath, { id: 'a6c00015' })
+    writeTranscript(home, 'a6c00015', [
       userInput(0),
-      planner(1, [readCall(join(projectRoot, 'src', 'math.js')), { name: 'run_command', args: { CommandLine: JSON.stringify('node -v') } }]),
+      planner(1, [projectRead(join(projectRoot, 'src', 'math.js')), { name: 'run_command', args: { CommandLine: JSON.stringify('node -v') } }]),
       generic(2, 'file words'),
       generic(3, 'v24'),
     ])
@@ -592,9 +723,9 @@ describe('the Antigravity session reader turning lines into steps', () => {
       ['DONE', '1.0'],
       ['DONE', '1.1'],
     ])
-    expect(sent[0].conversation_id).toBe('conv-steps')
+    expect(sent[0].conversation_id).toBe('a6c00015')
     expect(sent[0].step_type).toBe('tool')
-    expect(sent[0].tool_info.parameters).toEqual({ Path: join(projectRoot, 'src', 'math.js'), StartLine: 1, EndLine: 10 })
+    expect(sent[0].tool_info.parameters).toEqual({ Path: join(projectRoot, 'src', 'math.js'), StartLine: 1, EndLine: 10, AbsolutePath: join(projectRoot, 'src') })
     expect(sent[1].tool_info.parameters).toEqual({ CommandLine: 'node -v' })
     expect(sent[2].tool_info.output).toBe('file words')
     expect(sent[3].tool_info.output).toBe('v24')
@@ -606,9 +737,9 @@ describe('the Antigravity session reader turning lines into steps', () => {
     const reader = makeReader({ projectRoot, home, dbPath, frames })
     reader.tick()
 
-    addConversation(dbPath, { id: 'conv-error' })
-    writeTranscript(home, 'conv-error', [
-      planner(1, [readCall(join(projectRoot, 'src', 'math.js'))]),
+    addConversation(dbPath, { id: 'a6c00016' })
+    writeTranscript(home, 'a6c00016', [
+      planner(1, [projectRead(join(projectRoot, 'src', 'math.js'))]),
       { ...generic(2, 'Encountered error in step execution: file does not exist'), status: 'ERROR', error: 'file does not exist' },
     ])
     reader.tick()
@@ -625,8 +756,8 @@ describe('the Antigravity session reader turning lines into steps', () => {
     const reader = makeReader({ projectRoot, home, dbPath, frames })
     reader.tick()
 
-    addConversation(dbPath, { id: 'conv-long' })
-    writeTranscript(home, 'conv-long', [planner(1, [readCall(join(projectRoot, 'src', 'math.js'))]), generic(2, 'x'.repeat(2500))])
+    addConversation(dbPath, { id: 'a6c00017' })
+    writeTranscript(home, 'a6c00017', [planner(1, [projectRead(join(projectRoot, 'src', 'math.js'))]), generic(2, 'x'.repeat(2500))])
     reader.tick()
 
     expect(stepsOf(frames)[1].tool_info.output).toHaveLength(2000)
@@ -641,27 +772,27 @@ describe('the Antigravity session reader through the room pipeline', () => {
     reader.tick()
 
     const inside = join(projectRoot, 'src', 'math.js')
-    addConversation(dbPath, { id: 'conv-parent' })
-    appendTranscript(home, 'conv-parent', [userInput(0), planner(1, [readCall(inside)]), generic(2, 'ok')])
+    addConversation(dbPath, { id: 'a6c00010' })
+    appendTranscript(home, 'a6c00010', [userInput(0), planner(1, [projectRead(inside)]), generic(2, 'ok')])
     reader.tick()
 
-    appendTranscript(home, 'conv-parent', [
+    appendTranscript(home, 'a6c00010', [
       planner(3, [invokeCall('reviewer'), swarmAdd('ui-designer'), swarmAdd('stage-closeup')]),
       generic(4, 'child one'),
       generic(5, 'child two'),
       generic(6, 'child three'),
     ])
-    addConversation(dbPath, { id: 'conv-reviewer', parent: 'conv-parent', agent: 'reviewer', depth: 1 })
-    addConversation(dbPath, { id: 'conv-ui', parent: 'conv-parent', agent: 'ui-designer', depth: 1 })
-    addConversation(dbPath, { id: 'conv-stage', parent: 'conv-parent', agent: 'stage-closeup', depth: 1 })
-    appendTranscript(home, 'conv-reviewer', [planner(1, [readCall(join(projectRoot, 'docs', 'a.md'))]), generic(2, 'reviewer words')])
-    appendTranscript(home, 'conv-ui', [planner(1, [readCall(join(projectRoot, 'src', 'ui.js'))]), generic(2, 'ui words')])
-    appendTranscript(home, 'conv-stage', [planner(1, [readCall(join(projectRoot, 'src', 'stage.js'))]), generic(2, 'stage words')])
+    addConversation(dbPath, { id: 'a6c00018', parent: 'a6c00010', agent: 'reviewer', depth: 1 })
+    addConversation(dbPath, { id: 'a6c00019', parent: 'a6c00010', agent: 'ui-designer', depth: 1 })
+    addConversation(dbPath, { id: 'a6c0001a', parent: 'a6c00010', agent: 'stage-closeup', depth: 1 })
+    appendTranscript(home, 'a6c00018', [planner(1, [projectRead(join(projectRoot, 'docs', 'a.md'))]), generic(2, 'reviewer words')])
+    appendTranscript(home, 'a6c00019', [planner(1, [projectRead(join(projectRoot, 'src', 'ui.js'))]), generic(2, 'ui words')])
+    appendTranscript(home, 'a6c0001a', [planner(1, [projectRead(join(projectRoot, 'src', 'stage.js'))]), generic(2, 'stage words')])
     reader.tick()
 
-    setStatus(dbPath, 'conv-reviewer', 'CASCADE_RUN_STATUS_IDLE')
-    setStatus(dbPath, 'conv-ui', 'CASCADE_RUN_STATUS_IDLE')
-    setStatus(dbPath, 'conv-stage', 'CASCADE_RUN_STATUS_IDLE')
+    setStatus(dbPath, 'a6c00018', 'CASCADE_RUN_STATUS_IDLE')
+    setStatus(dbPath, 'a6c00019', 'CASCADE_RUN_STATUS_IDLE')
+    setStatus(dbPath, 'a6c0001a', 'CASCADE_RUN_STATUS_IDLE')
     reader.tick()
 
     const tree = { rootName: 'project', rootPath: projectRoot, files: ['src/math.js', 'docs/a.md', 'src/ui.js', 'src/stage.js'], dirs: ['src', 'docs'] }
@@ -690,20 +821,20 @@ describe('the Antigravity session reader through the room pipeline', () => {
     reader.tick()
 
     const inside = join(projectRoot, 'src', 'math.js')
-    addConversation(dbPath, { id: 'conv-parent' })
-    appendTranscript(home, 'conv-parent', [userInput(0), planner(1, [readCall(inside)]), generic(2, 'ok')])
+    addConversation(dbPath, { id: 'a6c00010' })
+    appendTranscript(home, 'a6c00010', [userInput(0), planner(1, [projectRead(inside)]), generic(2, 'ok')])
     reader.tick()
-    addConversation(dbPath, { id: 'conv-ui', parent: 'conv-parent', agent: 'ui-designer', depth: 1 })
+    addConversation(dbPath, { id: 'a6c00019', parent: 'a6c00010', agent: 'ui-designer', depth: 1 })
     reader.tick()
-    appendTranscript(home, 'conv-ui', [planner(1, [readCall(join(projectRoot, 'src', 'ui.js'))]), generic(2, 'ui words')])
+    appendTranscript(home, 'a6c00019', [planner(1, [projectRead(join(projectRoot, 'src', 'ui.js'))]), generic(2, 'ui words')])
     reader.tick()
-    appendTranscript(home, 'conv-parent', [planner(3, [readCall(join(projectRoot, 'docs', 'a.md'))]), generic(4, 'parent words')])
+    appendTranscript(home, 'a6c00010', [planner(3, [projectRead(join(projectRoot, 'docs', 'a.md'))]), generic(4, 'parent words')])
     reader.tick()
 
-    const isChildStep = (frame) => frame.type === 'heartbeat.run.log' && JSON.parse(frame.payload.chunk).step_update.conversation_id === 'conv-ui'
+    const isChildStep = (frame) => frame.type === 'heartbeat.run.log' && JSON.parse(frame.payload.chunk).step_update.conversation_id === 'a6c00019'
     const late = frames.slice(frames.findIndex(isChildStep))
     const childSteps = late.filter(isChildStep).map((frame) => JSON.parse(frame.payload.chunk).step_update)
-    expect(childSteps.every((step) => step.name === 'ui-designer' && step.root_conversation_id === 'conv-parent')).toBe(true)
+    expect(childSteps.every((step) => step.name === 'ui-designer' && step.root_conversation_id === 'a6c00010')).toBe(true)
 
     const tree = { rootName: 'project', rootPath: projectRoot, files: ['src/math.js', 'src/ui.js', 'docs/a.md'], dirs: ['src', 'docs'] }
     const pipeline = createPipeline({ agents: [ANTIGRAVITY_SESSION_AGENT], tree })
@@ -724,34 +855,34 @@ describe('the Antigravity session reader and its subagents', () => {
     reader.tick()
 
     const inside = join(projectRoot, 'src', 'math.js')
-    addConversation(dbPath, { id: 'conv-parent' })
-    appendTranscript(home, 'conv-parent', [userInput(0), planner(1, [readCall(inside)]), generic(2, 'ok')])
+    addConversation(dbPath, { id: 'a6c00010' })
+    appendTranscript(home, 'a6c00010', [userInput(0), planner(1, [projectRead(inside)]), generic(2, 'ok')])
     reader.tick()
 
-    appendTranscript(home, 'conv-parent', [
+    appendTranscript(home, 'a6c00010', [
       planner(3, [invokeCall('reviewer'), swarmAdd('ui-designer'), swarmAdd('stage-closeup')]),
       generic(4, 'child one'),
       generic(5, 'child two'),
       generic(6, 'child three'),
     ])
-    addConversation(dbPath, { id: 'conv-reviewer', parent: 'conv-parent', agent: 'reviewer', depth: 1 })
-    addConversation(dbPath, { id: 'conv-ui', parent: 'conv-parent', agent: 'ui-designer', depth: 1 })
-    addConversation(dbPath, { id: 'conv-stage', parent: 'conv-parent', agent: 'stage-closeup', depth: 1 })
-    appendTranscript(home, 'conv-reviewer', [planner(1, [readCall(inside)]), generic(2, 'reviewer words')])
-    appendTranscript(home, 'conv-ui', [planner(1, [readCall(inside)]), generic(2, 'ui words')])
-    appendTranscript(home, 'conv-stage', [planner(1, [readCall(inside)]), generic(2, 'stage words')])
+    addConversation(dbPath, { id: 'a6c00018', parent: 'a6c00010', agent: 'reviewer', depth: 1 })
+    addConversation(dbPath, { id: 'a6c00019', parent: 'a6c00010', agent: 'ui-designer', depth: 1 })
+    addConversation(dbPath, { id: 'a6c0001a', parent: 'a6c00010', agent: 'stage-closeup', depth: 1 })
+    appendTranscript(home, 'a6c00018', [planner(1, [projectRead(inside)]), generic(2, 'reviewer words')])
+    appendTranscript(home, 'a6c00019', [planner(1, [projectRead(inside)]), generic(2, 'ui words')])
+    appendTranscript(home, 'a6c0001a', [planner(1, [projectRead(inside)]), generic(2, 'stage words')])
     reader.tick()
 
     const sent = stepsOf(frames)
     const links = sent.filter((step) => step.step_index.startsWith('link.'))
     expect(links).toHaveLength(6)
     expect(links.filter((step) => step.state === 'DONE').map((step) => step.subagent_info.subagents[0]).sort((a, b) => (a.role < b.role ? -1 : 1))).toEqual([
-      { role: 'reviewer', conversation_id: 'conv-reviewer' },
-      { role: 'stage-closeup', conversation_id: 'conv-stage' },
-      { role: 'ui-designer', conversation_id: 'conv-ui' },
+      { role: 'reviewer', conversation_id: 'a6c00018' },
+      { role: 'stage-closeup', conversation_id: 'a6c0001a' },
+      { role: 'ui-designer', conversation_id: 'a6c00019' },
     ])
     expect(links.every((step) => step.step_type === 'subagent' && step.tool_name === 'invoke_subagent')).toBe(true)
-    expect(links.every((step) => step.conversation_id === 'conv-parent')).toBe(true)
+    expect(links.every((step) => step.conversation_id === 'a6c00010')).toBe(true)
 
     const own = sent.filter((step) => !step.step_index.startsWith('link.') && !step.step_index.startsWith('end.'))
     expect(own.filter((step) => step.tool_name === 'subagent_call')).toHaveLength(2)
@@ -768,12 +899,12 @@ describe('the Antigravity session reader and its subagents', () => {
     expect(own.some((step) => step.tool_name === 'invoke_subagent')).toBe(false)
 
     const before = frames.length
-    setStatus(dbPath, 'conv-ui', 'CASCADE_RUN_STATUS_IDLE')
+    setStatus(dbPath, 'a6c00019', 'CASCADE_RUN_STATUS_IDLE')
     reader.tick()
     const ended = stepsOf(frames.slice(before)).filter((step) => step.tool_name === 'manage_subagents')
     expect(ended).toHaveLength(1)
-    expect(ended[0].conversation_id).toBe('conv-parent')
-    expect(JSON.parse(ended[0].tool_info.output)).toEqual([{ conversationId: 'conv-ui', state: 'idle' }])
+    expect(ended[0].conversation_id).toBe('a6c00010')
+    expect(JSON.parse(ended[0].tool_info.output)).toEqual([{ conversationId: 'a6c00019', state: 'idle' }])
 
     reader.tick()
     expect(stepsOf(frames.slice(before)).filter((step) => step.tool_name === 'manage_subagents')).toHaveLength(1)
@@ -785,10 +916,10 @@ describe('the Antigravity session reader and its subagents', () => {
     const reader = makeReader({ projectRoot, home, dbPath, frames })
     reader.tick()
 
-    addConversation(dbPath, { id: 'conv-parent' })
-    addConversation(dbPath, { id: 'conv-child', parent: 'conv-parent', agent: 'ui-worker', depth: 1 })
-    appendTranscript(home, 'conv-parent', [planner(1, [readCall(join(projectRoot, 'src', 'math.js'))]), generic(2, 'ok')])
-    appendTranscript(home, 'conv-child', [planner(1, [readCall(join(projectRoot, 'src', 'child.js'))]), generic(2, 'child words')])
+    addConversation(dbPath, { id: 'a6c00010' })
+    addConversation(dbPath, { id: 'a6c00009', parent: 'a6c00010', agent: 'ui-worker', depth: 1 })
+    appendTranscript(home, 'a6c00010', [planner(1, [projectRead(join(projectRoot, 'src', 'math.js'))]), generic(2, 'ok')])
+    appendTranscript(home, 'a6c00009', [planner(1, [projectRead(join(projectRoot, 'src', 'child.js'))]), generic(2, 'child words')])
     reader.tick()
     reader.tick()
     reader.tick()
@@ -802,16 +933,16 @@ describe('the Antigravity session reader and its subagents', () => {
     const reader = makeReader({ projectRoot, home, dbPath, frames })
     reader.tick()
 
-    addConversation(dbPath, { id: 'conv-top' })
-    addConversation(dbPath, { id: 'conv-mid', parent: 'conv-top', agent: 'coordinator', depth: 1 })
-    addConversation(dbPath, { id: 'conv-deep', parent: 'conv-mid', agent: 'browser', depth: 2 })
-    appendTranscript(home, 'conv-top', [planner(1, [readCall(join(projectRoot, 'src', 'math.js'))]), generic(2, 'ok')])
+    addConversation(dbPath, { id: 'a6c00008' })
+    addConversation(dbPath, { id: 'a6c0001b', parent: 'a6c00008', agent: 'coordinator', depth: 1 })
+    addConversation(dbPath, { id: 'a6c0001c', parent: 'a6c0001b', agent: 'browser', depth: 2 })
+    appendTranscript(home, 'a6c00008', [planner(1, [projectRead(join(projectRoot, 'src', 'math.js'))]), generic(2, 'ok')])
     reader.tick()
 
     const links = stepsOf(frames).filter((step) => step.step_index.startsWith('link.'))
     expect(links.filter((step) => step.state === 'DONE').map((step) => [step.conversation_id, step.subagent_info.subagents[0].role])).toEqual([
-      ['conv-top', 'coordinator'],
-      ['conv-mid', 'browser'],
+      ['a6c00008', 'coordinator'],
+      ['a6c0001b', 'browser'],
     ])
   })
 })
@@ -824,8 +955,8 @@ describe('the Antigravity session reader and its runs', () => {
     const reader = makeReader({ projectRoot, home, dbPath, frames, now: () => time, quietMs: 60000 })
     reader.tick()
 
-    addConversation(dbPath, { id: 'conv-run' })
-    appendTranscript(home, 'conv-run', [planner(1, [readCall(join(projectRoot, 'src', 'math.js'))]), generic(2, 'ok')])
+    addConversation(dbPath, { id: 'a6c0001d' })
+    appendTranscript(home, 'a6c0001d', [planner(1, [projectRead(join(projectRoot, 'src', 'math.js'))]), generic(2, 'ok')])
     reader.tick()
 
     expect(frames.map((frame) => frame.type)).toEqual([
@@ -835,7 +966,7 @@ describe('the Antigravity session reader and its runs', () => {
       'heartbeat.run.log',
     ])
     const run = frames[0].payload
-    expect(frames[0].payload.runId).toMatch(/^conv-run:[0-9a-f]{8}:1$/)
+    expect(frames[0].payload.runId).toMatch(/^a6c0001d:[0-9a-f]{8}:1$/)
     expect(frames[1].payload.status).toBe('running')
     expect(frames[1].payload.runId).toBe(run.runId)
     for (const frame of frames) {
@@ -847,7 +978,7 @@ describe('the Antigravity session reader and its runs', () => {
     expect(frames[2].payload.chunk.endsWith(`${String.fromCharCode(10)}`)).toBe(true)
 
     time += 500
-    setStatus(dbPath, 'conv-run', 'CASCADE_RUN_STATUS_IDLE')
+    setStatus(dbPath, 'a6c0001d', 'CASCADE_RUN_STATUS_IDLE')
     reader.tick()
 
     const statuses = frames.filter((frame) => frame.type === 'heartbeat.run.status').map((frame) => frame.payload.status)
@@ -862,8 +993,8 @@ describe('the Antigravity session reader and its runs', () => {
     const reader = makeReader({ projectRoot, home, dbPath, frames, now: () => time, quietMs: 1000 })
     reader.tick()
 
-    addConversation(dbPath, { id: 'conv-quiet' })
-    appendTranscript(home, 'conv-quiet', [planner(1, [readCall(join(projectRoot, 'src', 'math.js'))]), generic(2, 'ok')])
+    addConversation(dbPath, { id: 'a6c0001e' })
+    appendTranscript(home, 'a6c0001e', [planner(1, [projectRead(join(projectRoot, 'src', 'math.js'))]), generic(2, 'ok')])
     reader.tick()
     expect(frames.filter((frame) => frame.type === 'heartbeat.run.status').map((frame) => frame.payload.status)).toEqual(['running'])
 
@@ -886,10 +1017,10 @@ describe('the Antigravity session reader and its runs', () => {
     const reader = makeReader({ projectRoot, home, dbPath, frames, now: () => time, quietMs: 1000 })
     reader.tick()
 
-    addConversation(dbPath, { id: 'conv-quiet' })
-    appendTranscript(home, 'conv-quiet', [planner(1, [readCall(join(projectRoot, 'src', 'math.js'))])])
+    addConversation(dbPath, { id: 'a6c0001e' })
+    appendTranscript(home, 'a6c0001e', [planner(1, [projectRead(join(projectRoot, 'src', 'math.js'))])])
     reader.tick()
-    setStatus(dbPath, 'conv-quiet', 'CASCADE_RUN_STATUS_IDLE')
+    setStatus(dbPath, 'a6c0001e', 'CASCADE_RUN_STATUS_IDLE')
     reader.tick()
 
     time += 1000
@@ -907,24 +1038,24 @@ describe('the Antigravity session reader and its runs', () => {
     const reader = makeReader({ projectRoot, home, dbPath, frames, now: () => time, quietMs: 1000 })
     reader.tick()
 
-    addConversation(dbPath, { id: 'conv-top' })
-    appendTranscript(home, 'conv-top', [planner(1, [readCall(join(projectRoot, 'src', 'math.js'))])])
+    addConversation(dbPath, { id: 'a6c00008' })
+    appendTranscript(home, 'a6c00008', [planner(1, [projectRead(join(projectRoot, 'src', 'math.js'))])])
     reader.tick()
-    addConversation(dbPath, { id: 'conv-worker', parent: 'conv-top', agent: 'ui-worker', depth: 1 })
-    appendTranscript(home, 'conv-worker', [planner(1, [readCall(join(projectRoot, 'src', 'ui.js'))])])
+    addConversation(dbPath, { id: 'a6c0001f', parent: 'a6c00008', agent: 'ui-worker', depth: 1 })
+    appendTranscript(home, 'a6c0001f', [planner(1, [projectRead(join(projectRoot, 'src', 'ui.js'))])])
     reader.tick()
-    setStatus(dbPath, 'conv-top', 'CASCADE_RUN_STATUS_IDLE')
+    setStatus(dbPath, 'a6c00008', 'CASCADE_RUN_STATUS_IDLE')
     reader.tick()
 
     time += 5 * 60 * 1000
     reader.tick()
-    expect(reader.open().has('conv-top')).toBe(true)
+    expect(reader.open().has('a6c00008')).toBe(true)
 
-    setStatus(dbPath, 'conv-worker', 'CASCADE_RUN_STATUS_IDLE')
+    setStatus(dbPath, 'a6c0001f', 'CASCADE_RUN_STATUS_IDLE')
     reader.tick()
     time += 1000
     reader.tick()
-    expect(reader.open().has('conv-top')).toBe(false)
+    expect(reader.open().has('a6c00008')).toBe(false)
   })
 
   it('does not end a run while a call is still open', () => {
@@ -934,14 +1065,14 @@ describe('the Antigravity session reader and its runs', () => {
     const reader = makeReader({ projectRoot, home, dbPath, frames, now: () => time, quietMs: 60000 })
     reader.tick()
 
-    addConversation(dbPath, { id: 'conv-open' })
-    appendTranscript(home, 'conv-open', [planner(1, [readCall(join(projectRoot, 'src', 'math.js'))])])
+    addConversation(dbPath, { id: 'a6c00020' })
+    appendTranscript(home, 'a6c00020', [planner(1, [projectRead(join(projectRoot, 'src', 'math.js'))])])
     reader.tick()
-    setStatus(dbPath, 'conv-open', 'CASCADE_RUN_STATUS_IDLE')
+    setStatus(dbPath, 'a6c00020', 'CASCADE_RUN_STATUS_IDLE')
     reader.tick()
 
     expect(frames.filter((frame) => frame.type === 'heartbeat.run.status').map((frame) => frame.payload.status)).toEqual(['running'])
-    expect(reader.open().has('conv-open')).toBe(true)
+    expect(reader.open().has('a6c00020')).toBe(true)
   })
 
   it('opens a second run when a user input line starts another turn', () => {
@@ -951,11 +1082,11 @@ describe('the Antigravity session reader and its runs', () => {
     const reader = makeReader({ projectRoot, home, dbPath, frames, now: () => time, quietMs: 1000 })
     reader.tick()
 
-    addConversation(dbPath, { id: 'conv-input' })
-    appendTranscript(home, 'conv-input', [planner(1, [readCall(join(projectRoot, 'src', 'math.js'))]), generic(2, 'ok')])
+    addConversation(dbPath, { id: 'a6c00021' })
+    appendTranscript(home, 'a6c00021', [planner(1, [projectRead(join(projectRoot, 'src', 'math.js'))]), generic(2, 'ok')])
     reader.tick()
 
-    setStatus(dbPath, 'conv-input', 'CASCADE_RUN_STATUS_IDLE')
+    setStatus(dbPath, 'a6c00021', 'CASCADE_RUN_STATUS_IDLE')
     time += 60000
     reader.tick()
     expect(frames.filter((frame) => frame.type === 'heartbeat.run.status').map((frame) => frame.payload.status)).toEqual([
@@ -963,34 +1094,34 @@ describe('the Antigravity session reader and its runs', () => {
       'succeeded',
     ])
 
-    appendTranscript(home, 'conv-input', [userInput(3, 'One more thing.')])
-    setStatus(dbPath, 'conv-input', 'CASCADE_RUN_STATUS_RUNNING')
+    appendTranscript(home, 'a6c00021', [userInput(3, 'One more thing.')])
+    setStatus(dbPath, 'a6c00021', 'CASCADE_RUN_STATUS_RUNNING')
     reader.tick()
     const runs = frames.filter((frame) => frame.type === 'heartbeat.run.queued')
     expect(runs).toHaveLength(2)
-    expect(runs[1].payload.runId).toBe('conv-input:' + runs[0].payload.runId.split(':')[1] + ':2')
+    expect(runs[1].payload.runId).toBe('a6c00021:' + runs[0].payload.runId.split(':')[1] + ':2')
   })
 
   it('gives two reader lifetimes over one database different run ids', () => {
     const { projectRoot, home, dbPath } = setup()
-    addConversation(dbPath, { id: 'conv-token' })
-    writeTranscript(home, 'conv-token', [planner(1, [readCall(join(projectRoot, 'src', 'math.js'))]), generic(2, 'ok')])
+    addConversation(dbPath, { id: 'a6c00022' })
+    writeTranscript(home, 'a6c00022', [planner(1, [projectRead(join(projectRoot, 'src', 'math.js'))]), generic(2, 'ok')])
 
     const first = []
     const firstReader = makeReader({ projectRoot, home, dbPath, frames: first })
     firstReader.tick()
-    appendTranscript(home, 'conv-token', [planner(3, [readCall(join(projectRoot, 'src', 'app.js'))]), generic(4, 'ok')])
+    appendTranscript(home, 'a6c00022', [planner(3, [projectRead(join(projectRoot, 'src', 'app.js'))]), generic(4, 'ok')])
     firstReader.tick()
     firstReader.stop()
 
     const second = []
     const secondReader = makeReader({ projectRoot, home, dbPath, frames: second })
     secondReader.tick()
-    appendTranscript(home, 'conv-token', [planner(5, [readCall(join(projectRoot, 'src', 'more.js'))]), generic(6, 'ok')])
+    appendTranscript(home, 'a6c00022', [planner(5, [projectRead(join(projectRoot, 'src', 'more.js'))]), generic(6, 'ok')])
     secondReader.tick()
 
-    expect(first[0].payload.runId).toMatch(/^conv-token:[0-9a-f]{8}:1$/)
-    expect(second[0].payload.runId).toMatch(/^conv-token:[0-9a-f]{8}:1$/)
+    expect(first[0].payload.runId).toMatch(/^a6c00022:[0-9a-f]{8}:1$/)
+    expect(second[0].payload.runId).toMatch(/^a6c00022:[0-9a-f]{8}:1$/)
     expect(first[0].payload.runId).not.toBe(second[0].payload.runId)
   })
 
@@ -1000,17 +1131,17 @@ describe('the Antigravity session reader and its runs', () => {
     const runs = join(base, 'runs')
     mkdirSync(outside, { recursive: true })
     mkdirSync(runs, { recursive: true })
-    writeFileSync(join(runs, 'agy-lane.meta.json'), `${JSON.stringify({ sessionId: 'conv-lane' })}
+    writeFileSync(join(runs, 'agy-lane.meta.json'), `${JSON.stringify({ sessionId: 'a6c00013' })}
 `)
 
     const frames = []
     const reader = makeReader({ projectRoot, home, dbPath, runsFolder: runs, frames })
     reader.tick()
 
-    addConversation(dbPath, { id: 'conv-out' })
-    appendTranscript(home, 'conv-out', [planner(1, [readCall(join(outside, 'x.js'))]), generic(2, 'outside words')])
-    addConversation(dbPath, { id: 'conv-lane' })
-    appendTranscript(home, 'conv-lane', [planner(1, [readCall(join(projectRoot, 'src', 'math.js'))]), generic(2, 'lane words')])
+    addConversation(dbPath, { id: 'a6c0000e' })
+    appendTranscript(home, 'a6c0000e', [planner(1, [readCall(join(outside, 'x.js'))]), generic(2, 'outside words')])
+    addConversation(dbPath, { id: 'a6c00013' })
+    appendTranscript(home, 'a6c00013', [planner(1, [projectRead(join(projectRoot, 'src', 'math.js'))]), generic(2, 'lane words')])
     reader.tick()
 
     expect(frames).toEqual([])
