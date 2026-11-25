@@ -1594,7 +1594,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
             </defs>
           </svg>
         )}
-        <div className={`lens${bridgeDown ? ' is-disconnected' : ''}`}>
+        <div className={`lens${bridgeDown ? ' is-disconnected' : ''}`} inert={idleForced}>
           <LensCompass updateRef={compassRef} disconnected={bridgeDown} />
           <div className="lens-frame" ref={surfaceRef} onDoubleClick={onEmptyDoubleClick}>
             <div

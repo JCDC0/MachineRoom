@@ -510,6 +510,11 @@ describe('the command console', () => {
 })
 
 describe('the transport view row and forced idle state', () => {
+  it('makes the lens inert while idle is forced, so Tab and clicks never reach its controls (R76-4)', () => {
+    const stage = readFileSync(new URL('../src/Stage.jsx', import.meta.url), 'utf8')
+    expect(stage).toMatch(/<div className=\{`lens\$\{bridgeDown \? ' is-disconnected' : ''\}`\} inert=\{idleForced\}>/)
+  })
+
   it('centres the view row with an 8 pixel gap and styles Idle like Center', () => {
     const view = rule('.transport-view')
     expect(view.display).toBe('inline-flex')
