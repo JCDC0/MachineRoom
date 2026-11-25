@@ -451,6 +451,9 @@ describe('the beat rings around an agent', () => {
       expect(lit[0].line.scale.x).toBeGreaterThan(AGENT_RING_BASE)
       expect(lit[0].line.scale.x).toBeLessThan(AGENT_RING_BASE + AGENT_RING_GROW)
       expect(lit[0].line.material.opacity).toBeGreaterThan(0)
+      const size = new THREE.Box3().setFromObject(lit[0].line).getSize(new THREE.Vector3())
+      expect(size.z / size.x).toBeCloseTo(1, 2)
+      expect(size.y).toBeLessThan(1)
       clock += AGENT_RING_MS
       agents.update(state, 0.016, clock, world, terminals)
       expect(view.beatRings.some((slot) => slot.line.visible)).toBe(false)

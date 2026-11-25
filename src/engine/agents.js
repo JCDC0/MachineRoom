@@ -1794,7 +1794,7 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
         slot.line.visible = false
         continue
       }
-      slot.line.scale.set(slot.pulse.radius, 1, slot.pulse.radius)
+      slot.line.scale.set(slot.pulse.radius, slot.pulse.radius, 1)
       writeOpacity(slot.line.material, slot.pulse.opacity)
     }
   }
