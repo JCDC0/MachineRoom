@@ -183,14 +183,38 @@ function agentEnv(bridge, replies) {
   }
 }
 
-const MESSAGE = { from: 'lane:main', text: 'Stop and read this.', at: '2026-11-16T10:00:00.000Z' }
+const MESSAGE = { id: 'message-1', from: 'lane:main', text: 'Stop and read this.', at: '2026-11-16T10:00:00.000Z' }
 
 describe('the native agent and the reply choice', () => {
+  it('answers a message accepted during its final model call', async () => {
+    const folder = setup()
+    const inbox = []
+    const bridge = await startBridge((req, res, record) => {
+      if (record.url === '/api/orchestrator/messages') return { messages: inbox }
+      if (chatCalls(bridge.requests).length === 1) {
+        inbox.push(MESSAGE)
+        return chatAnswer({ text: 'Task done.' })
+      }
+      return chatAnswer({ text: 'I read your message.' })
+    })
+
+    const result = await runAgent({ folder, env: agentEnv(bridge, 'next-turn') })
+
+    expect(result.code).toBe(0)
+    const calls = chatCalls(bridge.requests)
+    expect(calls).toHaveLength(2)
+    expect(calls[1].body.messages.slice(-2)).toEqual([
+      { role: 'assistant', content: 'Task done.' },
+      { role: 'user', content: 'Messages for you while you work:\nlane:main: Stop and read this.' },
+    ])
+    expect(result.stdout).toContain('"result":"I read your message."')
+  }, 30000)
+
   it('interrupts a slow model call when a message arrives and carries it into the next call', async () => {
     const folder = setup()
     let aborted = false
     const bridge = await startBridge(async (req, res, record) => {
-      if (record.url === '/api/orchestrator/messages') return { messages: [MESSAGE] }
+      if (record.url === '/api/orchestrator/messages') return { messages: chatCalls(bridge.requests).length > 0 ? [MESSAGE] : [] }
       if (chatCalls(bridge.requests).length === 1) {
         res.on('close', () => {
           if (!res.writableEnded) aborted = true
@@ -220,6 +244,7 @@ describe('the native agent and the reply choice', () => {
     })
     const bridge = await startBridge(async (req, res, record) => {
       if (record.url === '/api/orchestrator/messages') {
+        if (chatCalls(bridge.requests).length === 0) return { messages: [] }
         inboxRead()
         await new Promise((done) => setTimeout(done, 800))
         return { messages: [MESSAGE] }
@@ -247,7 +272,7 @@ describe('the native agent and the reply choice', () => {
     const folder = setup()
     writeFileSync(join(folder, 'a.txt'), 'hello\n')
     const bridge = await startBridge(async (req, res, record) => {
-      if (record.url === '/api/orchestrator/messages') return { messages: [MESSAGE] }
+      if (record.url === '/api/orchestrator/messages') return { messages: chatCalls(bridge.requests).length > 0 ? [MESSAGE] : [] }
       if (chatCalls(bridge.requests).length === 1) {
         await new Promise((done) => setTimeout(done, 1300))
         return chatAnswer({ calls: [{ name: 'read_file', arguments: { path: 'a.txt' } }] })
@@ -269,7 +294,7 @@ describe('the native agent and the reply choice', () => {
     const folder = setup()
     let aborted = false
     const bridge = await startBridge(async (req, res, record) => {
-      if (record.url === '/api/orchestrator/messages') return { messages: [{ ...MESSAGE, interrupt: true }] }
+      if (record.url === '/api/orchestrator/messages') return { messages: chatCalls(bridge.requests).length > 0 ? [{ ...MESSAGE, interrupt: true }] : [] }
       if (chatCalls(bridge.requests).length === 1) {
         res.on('close', () => {
           if (!res.writableEnded) aborted = true
@@ -289,9 +314,10 @@ describe('the native agent and the reply choice', () => {
     expect(result.stdout).toContain('"result":"Done."')
   }, 30000)
 
-  it('holds a message the bridge marks next-turn while the env says interrupt until the tool result', async () => {
+  it('merges a message sent during a tool with a held next-turn message by id', async () => {
     const folder = setup()
-    writeFileSync(join(folder, 'a.txt'), 'hello\n')
+    const held = { ...MESSAGE, interrupt: false }
+    const inbox = []
     let aborted = false
     let inboxRead = null
     const firstInbox = new Promise((resolve) => {
@@ -299,21 +325,29 @@ describe('the native agent and the reply choice', () => {
     })
     const bridge = await startBridge(async (req, res, record) => {
       if (record.url === '/api/orchestrator/messages') {
-        inboxRead()
-        return { messages: [{ ...MESSAGE, interrupt: false }] }
+        if (inbox.length > 0) inboxRead()
+        return { messages: inbox }
+      }
+      if (record.url === '/api/orchestrator/approvals') {
+        inbox.push({ ...held, text: 'This duplicate should stay out.' }, { ...held, id: 'message-2', text: 'Use the file now.' })
+        return { allow: true }
       }
       if (chatCalls(bridge.requests).length === 1) {
         res.on('close', () => {
           if (!res.writableEnded) aborted = true
         })
+        inbox.push(held)
         await firstInbox
-        await new Promise((done) => setTimeout(done, 1300))
-        return chatAnswer({ calls: [{ name: 'read_file', arguments: { path: 'a.txt' } }] })
+        return chatAnswer({ calls: [{ name: 'write_file', arguments: { path: 'a.txt', content: 'hello\n' } }] })
       }
       return chatAnswer({ text: 'Done.' })
     })
 
-    const result = await runAgent({ folder, env: agentEnv(bridge, 'interrupt') })
+    const result = await runAgent({ folder, env: {
+      ...agentEnv(bridge, 'interrupt'),
+      MACHINEROOM_PERMISSION_MODE: 'ask',
+      MACHINEROOM_ORCHESTRATOR_TOKEN: 'test-approval',
+    } })
 
     expect(result.code).toBe(0)
     expect(aborted).toBe(false)
@@ -324,7 +358,8 @@ describe('the native agent and the reply choice', () => {
     const heldAt = second.findIndex((message) => message.role === 'user' && String(message.content).includes('Stop and read this.'))
     expect(toolAt).toBeGreaterThan(-1)
     expect(heldAt).toBeGreaterThan(toolAt)
-    expect(second[heldAt].content).toBe('Messages for you while you work:\nlane:main: Stop and read this.')
+    expect(second[heldAt].content).toBe('Messages for you while you work:\nlane:main: Stop and read this.\nlane:main: Use the file now.')
+    expect(readFileSync(join(folder, 'a.txt'), 'utf8')).toBe('hello\n')
     expect(result.stdout).toContain('"result":"Done."')
   }, 30000)
 })

@@ -1464,10 +1464,12 @@ async function readLaneInbox(seen, env = process.env) {
     const text = typeof item.text === 'string' ? item.text : ''
     if (text.trim() === '') continue
     const at = typeof item.at === 'string' ? item.at : typeof item.at === 'number' ? String(item.at) : ''
-    const key = JSON.stringify([at, text])
+    const from = typeof item.from === 'string' && item.from.trim() !== '' ? item.from.trim() : 'unknown'
+    const key = typeof item.id === 'string' && item.id !== ''
+      ? JSON.stringify(item.id)
+      : JSON.stringify([from, at, text])
     if (seen.has(key)) continue
     seen.add(key)
-    const from = typeof item.from === 'string' && item.from.trim() !== '' ? item.from.trim() : 'unknown'
     lines.push(`${from}: ${text}`)
     if (typeof item.interrupt === 'boolean' ? item.interrupt : fallback) interrupt = true
   }
@@ -1575,7 +1577,7 @@ async function main() {
   const watchInbox =
     String(process.env.MACHINEROOM_BRIDGE ?? '').trim() !== '' &&
     String(process.env.MACHINEROOM_LANE_TICKET ?? '').trim() !== ''
-  let heldLines = []
+  const heldLines = []
 
   const finish = (isError, result, exitCode = isError ? 1 : 0) => {
     writeJson({
@@ -1606,13 +1608,9 @@ async function main() {
         process.stdout.write(`${sentence}\n`)
         return
       }
-      if (heldLines.length > 0) {
-        messages.push({ role: 'user', content: inboxText(heldLines) })
-        heldLines = []
-      } else if (step > 0) {
-        const inbox = await readLaneInbox(seenInbox)
-        if (inbox.lines.length > 0) messages.push({ role: 'user', content: inboxText(inbox.lines) })
-      }
+      const inbox = await readLaneInbox(seenInbox)
+      heldLines.push(...inbox.lines)
+      if (heldLines.length > 0) messages.push({ role: 'user', content: inboxText(heldLines.splice(0)) })
       boundMessages(messages, limit)
       const payload = {
         model: options.model,
@@ -1705,11 +1703,13 @@ async function main() {
         continue
       }
       nudged = false
-      if (calls.length === 0 && heldLines.length > 0) {
-        messages.push({ role: 'assistant', content: text })
-        continue
-      }
       if (calls.length === 0) {
+        const inbox = await readLaneInbox(seenInbox)
+        heldLines.push(...inbox.lines)
+        if (heldLines.length > 0) {
+          messages.push({ role: 'assistant', content: text })
+          continue
+        }
         finish(false, lastText)
         return
       }
