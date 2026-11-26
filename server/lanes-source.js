@@ -487,7 +487,7 @@ export function createLanesSource(options = {}) {
     const harness = HARNESSES.find(({ key: harnessKey }) => meta.harness ? harnessKey === meta.harness : key.startsWith(harnessKey))
     if (!harness) return null
     return {
-      id: `agent-${key}`, key, name: harness.name, adapterType: harness.adapterType,
+      id: `agent-${key}`, key, name: key === harness.key ? harness.name : `${harness.name} (${key})`, adapterType: harness.adapterType,
       parser: harness.key, role: null, harness: harness.key,
       model: typeof meta.model === 'string' && meta.model ? meta.model : null,
       discovered: true,

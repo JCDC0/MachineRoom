@@ -348,7 +348,7 @@ describe('the live lane source', () => {
     const readRuns = () => fetch(`${url}/api/control/runs`).then((response) => response.json())
 
     expect(await readAgents()).toEqual([{
-      id: 'agent-claude2', key: 'claude2', name: 'OpenCode', adapterType: 'opencode_local',
+      id: 'agent-claude2', key: 'claude2', name: 'OpenCode (claude2)', adapterType: 'opencode_local',
       parser: 'opencode', harness: 'opencode', model, role: null, discovered: true,
     }])
     const live = await fetch(`${url}/api/control/live-runs`).then((response) => response.json())
@@ -388,7 +388,7 @@ describe('the live lane source', () => {
     const { source, frames } = startSource({ runs, projectRoot, lanes })
     expect(source.agents).toMatchObject([
       { key: 'claude', name: 'Configured', harness: 'opencode', model: 'configured-model' },
-      { key: 'claude2', name: 'Claude Code', harness: 'claude', parser: 'claude', model: 'sidecar-model', discovered: true },
+      { key: 'claude2', name: 'Claude Code (claude2)', harness: 'claude', parser: 'claude', model: 'sidecar-model', discovered: true },
     ])
     expect(source.allAgents).toEqual(source.agents)
     expect(source.agents[0]).not.toHaveProperty('discovered')
