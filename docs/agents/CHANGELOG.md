@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The room hides an unused main orchestrator when another agent is present and lets the owner pin or clear the top seat (P740).
 - Antigravity and Hermes runs keep their own workers when sessions overlap (P734, R76-9).
 - Antigravity workers wait for the reader's idle signal and grandchildren sit under their own parents (P734, R76-8).
 - Hermes credits a worker session's calls to its delegate child (P734, R76-13).

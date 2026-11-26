@@ -966,13 +966,15 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
   function launchAgentStar(activity) {
     const pair = agentStar(activity, ladder)
     if (!pair) return
-    const state = getState()
     const topKey = agentSet.topKey()
-    const fromKey = starOriginKey(pair.from, topKey)
-    const from = agentSet.views.get(fromKey)
     const to = agentSet.views.get(pair.to)
-    if (!from || !to) return
-    launchStarPath(from.group.position, to.group.position, from.color, fromKey, null, pair.to)
+    const laneStart = activity.type === 'run.start' && to?.index >= 0
+    const origin = laneStart && agentSet.mainHidden() && topKey !== 'orchestrator' ? topKey : pair.from
+    const fromKey = starOriginKey(origin, topKey)
+    const from = agentSet.views.get(fromKey)
+    const useHub = laneStart && agentSet.mainHidden() && fromKey === 'orchestrator'
+    if (!from || !to?.group.visible || from === to || (!from.group.visible && !useHub)) return
+    launchStarPath(useHub ? from.home : from.group.position, to.group.position, from.color, fromKey, null, pair.to)
   }
 
   function launchWebStar(view, activity) {
@@ -994,6 +996,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
   function onActivity(activity) {
     noteActivity(activity)
     terminals.note(activity)
+    if (activity.agent === 'orchestrator') agentSet.rememberMainWork(getState())
     const view = agentSet.views.get(activity.agent)
     trackWeb(activity)
     if (followFocus.following() && activity.type === 'tool.start') {
@@ -1065,7 +1068,11 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
 
     if (activity.type === 'run.start') {
       hub.pulse(WHITE, 1)
-      if (!still()) launchAgentStar(activity)
+      if (!still()) {
+        agentSet.updateTop(getState())
+        if (agentSet.mainHidden() && agentSet.topKey() !== 'orchestrator') pendingSpawns.push(activity)
+        else launchAgentStar(activity)
+      }
     } else if (activity.type === 'error') {
       hub.pulse(RED, 0.6)
     } else if (activity.type === 'agent.spawn' && typeof activity.child === 'string') {
@@ -1379,8 +1386,8 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
       terminals.setLabels(labels)
       agentSet.setLabels(labels)
     },
-    setChosenTop(key) {
-      agentSet.setChosenTop(key)
+    setChosenTop(key, options) {
+      agentSet.setChosenTop(key, options)
       return agentSet.topKey()
     },
     setDepth(value) {

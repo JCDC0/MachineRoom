@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { LANE_START_TOP_MS, cleanStartedBy, delegatingSessionTop, isSessionTopKey, laneStarterTop, sessionKeyFor, topKeyFor } from '../src/model/laneStarter.js'
+import { LANE_START_TOP_MS, cleanStartedBy, delegatingSessionTop, isSessionTopKey, laneStarterTop, latestSessionTop, sessionKeyFor, topKeyFor } from '../src/model/laneStarter.js'
 import { CHILD_LIFE_MS, apply, createState } from '../src/model/state.js'
 
 const HOUR = 60 * 60 * 1000
@@ -109,6 +109,24 @@ describe('laneStarter', () => {
     agents.set('opencode2', agent({ status: 'working', startedAt: 1000, startedBy: { harness: 'opencode', session: 's2' } }))
     agents.set('opencode-session', agent({ sessions: new Set(['s2']) }))
     expect(laneStarterTop({ agents, at: 6000 })).toBe('opencode-session')
+  })
+})
+
+describe('latestSessionTop', () => {
+  it('uses the most recent start or finish among sessions with activity and a view', () => {
+    const agents = new Map([
+      ['claude-session', agent({ status: 'working', startedAt: 1000 })],
+      ['opencode-session', agent({ status: 'done', startedAt: 500, endedAt: 2000 })],
+      ['antigravity-session', agent({ status: 'working', startedAt: 3000 })],
+      ['hermes-session', agent()],
+      ['codex', agent({ status: 'working', startedAt: 4000 })],
+    ])
+    const views = new Set(['claude-session', 'opencode-session', 'hermes-session', 'codex'])
+    expect(latestSessionTop(agents, views)).toBe('opencode-session')
+    views.delete('opencode-session')
+    expect(latestSessionTop(agents, views)).toBe('claude-session')
+    views.delete('claude-session')
+    expect(latestSessionTop(agents, views)).toBe('')
   })
 })
 

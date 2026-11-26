@@ -28,10 +28,24 @@ export function isSessionTopKey(key) {
   return SESSION_TOP_KEYS.has(key)
 }
 
-export function topKeyFor({ chosenTop = '', laneTop = '', viewKeys = null } = {}) {
+export function topKeyFor({ chosenTop = '', pinned = false, laneTop = '', viewKeys = null } = {}) {
   const drawn = viewKeys instanceof Set ? viewKeys.has(chosenTop) : Array.isArray(viewKeys) && viewKeys.includes(chosenTop)
-  if (drawn && isSessionTopKey(chosenTop)) return chosenTop
+  if (drawn && (isSessionTopKey(chosenTop) || (pinned && chosenTop === 'orchestrator'))) return chosenTop
   return typeof laneTop === 'string' && laneTop !== '' ? laneTop : 'orchestrator'
+}
+
+export function latestSessionTop(agents, views) {
+  let best = ''
+  let bestAt = -Infinity
+  for (const [key, agent] of agents) {
+    if (!isSessionTopKey(key) || agent.parent || !views.has(key)) continue
+    if (agent.status === 'idle' && !agent.runs && !agent.lines?.length) continue
+    const at = Math.max(agent.startedAt || 0, agent.endedAt || 0)
+    if (at <= bestAt) continue
+    best = key
+    bestAt = at
+  }
+  return best
 }
 
 function childStart(child) {
