@@ -7,12 +7,13 @@ import { fileURLToPath } from 'node:url'
 import { isHolderAlive } from '../scripts/lane-lock.mjs'
 import { agentsFile, createRunLineReader, failureText } from '../src/briefs/recording.js'
 import { laneLockLog, laneLockPids, laneLockStartedAt } from '../src/briefs/run.js'
+import { HARNESSES } from '../src/harnesses/index.js'
 import { codexThreadId, findCodexRollout, readCodexQuota } from './codex-rollout.js'
 import { readEndpoints } from './endpoints.js'
 import { resolveContextWindow } from './model-list.js'
 import { claudeContextWindow } from '../src/harnesses/claude.js'
 import { contextTokensFromLog } from './orchestrator.js'
-import { activeLanesFileFor, readActiveLanesChoice } from './active-lanes.js'
+import { activeLanesFileFor, readActiveLanesChoice, ROOM_LANE_LINGER_MS } from './active-lanes.js'
 import { readAllLanes } from './agents-config.js'
 import { listProcesses } from './processTree.js'
 import { gitEnv, gitPath } from './programPath.js'
@@ -29,6 +30,7 @@ const META_GRACE_MS = 10 * 1000
 const READ_CHUNK = 64 * 1024
 const MAX_PARTIAL = 8 * 1024 * 1024
 const QUIET_KEPT = 50
+const LANE_KEY = /^[A-Za-z0-9_-]{1,40}$/
 const REPO_ROOT = resolve(fileURLToPath(import.meta.url), '..', '..')
 
 export function lanesFolder(env = process.env) {
@@ -389,7 +391,7 @@ export function createLanesSource(options = {}) {
   const laggingPollMs = Number(options.laggingPollMs ?? 10000)
   const now = options.now ?? Date.now
   const onFrame = options.onFrame ?? (() => {})
-  const lingerMs = Number(options.lingerMs)
+  const lingerMs = Number(options.lingerMs ?? ROOM_LANE_LINGER_MS)
   const onNotice = typeof options.onNotice === 'function' ? options.onNotice : null
   const listFolder = typeof options.listFolder === 'function' ? options.listFolder : (dir) => readdirSync(dir, { withFileTypes: true })
   const watchFolder = typeof options.watchFolder === 'function' ? options.watchFolder : watch
@@ -427,8 +429,7 @@ export function createLanesSource(options = {}) {
     } catch {}
   }
 
-  function allAgents() {
-    const lanes = currentLanes()
+  function configuredAgents(lanes = currentLanes()) {
     let subs = []
     try {
       subs = subOrchestrators() ?? []
@@ -447,27 +448,59 @@ export function createLanesSource(options = {}) {
     return agents
   }
 
+  function allAgents() {
+    const lanes = currentLanes()
+    const agents = configuredAgents(lanes)
+    const discovered = new Map()
+    const at = now()
+    for (const [key, run] of ended) {
+      if (!run.agent.discovered) continue
+      if (at - run.at > lingerMs) ended.delete(key)
+      else discovered.set(key, run.agent)
+    }
+    for (const { agent } of active.values()) {
+      if (agent.discovered) discovered.set(agent.key, agent)
+    }
+    if (discovered.size === 0) return agents
+    return [...agents, ...[...discovered.values()].filter((agent) => !Object.hasOwn(lanes, agent.key))]
+  }
+
   function agentsNow() {
     const list = allAgents()
     const choiceFile = activeLanesFileFor(roomRoot, folder)
     if (readActiveLanesChoice(choiceFile) === null) {
       const running = new Set([...active.values()].map((run) => run.agent.key))
-      return list.filter((agent) => agent.key === 'orchestrator' || String(agent.key ?? '').startsWith('sub-') || running.has(agent.key))
+      return list.filter((agent) => agent.discovered || agent.key === 'orchestrator' || String(agent.key ?? '').startsWith('sub-') || running.has(agent.key))
     }
     return list
   }
 
-  function agentFor(name, map) {
+  function agentFor(name, meta, map) {
     const sub = subOf(name)
     if (sub) return map.get(sub) ?? null
-    const lane = laneOf(name, currentLanes())
-    return lane ? map.get(lane) ?? null : null
+    const lanes = currentLanes()
+    if (!meta?.project || meta.lane === undefined) return map.get(laneOf(name, lanes)) ?? null
+    const key = meta.lane
+    if (typeof key !== 'string' || !LANE_KEY.test(key)) return null
+    if (Object.hasOwn(lanes, key)) return map.get(key) ?? null
+    if (!roomRoot || key === 'orchestrator' || key.startsWith('sub-') || key.endsWith('-session')) return null
+    const harness = HARNESSES.find(({ key: harnessKey }) => meta.harness ? harnessKey === meta.harness : key.startsWith(harnessKey))
+    if (!harness) return null
+    return {
+      id: `agent-${key}`, key, name: harness.name, adapterType: harness.adapterType,
+      parser: harness.key, role: null, harness: harness.key,
+      model: typeof meta.model === 'string' && meta.model ? meta.model : null,
+      discovered: true,
+    }
   }
 
   function inRoomRepo(project) {
     if (!roomCheckout) return false
     const key = pathKey(project)
-    if (!sameRepo.has(key)) sameRepo.set(key, pathKey(mainCheckoutOf(project) || '') === pathKey(roomCheckout))
+    if (!sameRepo.has(key)) {
+      const checkout = mainCheckoutOf(project)
+      sameRepo.set(key, Boolean(checkout) && pathKey(checkout) === pathKey(roomCheckout))
+    }
     return sameRepo.get(key)
   }
 
@@ -539,12 +572,6 @@ export function createLanesSource(options = {}) {
   function adoptLog(name, path, getAgentMap) {
     const key = pathKey(path)
     if (seen.has(key)) return
-    const agent = agentFor(name, getAgentMap())
-    if (!agent) {
-      waitingMeta.delete(key)
-      seen.add(key)
-      return
-    }
     const meta = metaFor(path)
     const metaProject = meta?.project ?? ''
     const ownProject = metaProject !== '' && pathKey(metaProject) === pathKey(roomRoot)
@@ -553,7 +580,8 @@ export function createLanesSource(options = {}) {
       seen.add(key)
       return
     }
-    if (metaProject === '' && !worktreeRunsShown) {
+    const agent = agentFor(name, meta, getAgentMap())
+    if (metaProject === '' && (!agent || !worktreeRunsShown)) {
       if (meta === null) {
         const current = now()
         const existing = waitingMeta.get(key)
@@ -579,7 +607,7 @@ export function createLanesSource(options = {}) {
     }
     waitingMeta.delete(key)
     seen.add(key)
-    beginRun(name.slice(0, -4), path, agent, Boolean(ownProject), metaProject, meta?.startedBy ?? null)
+    if (agent) beginRun(name.slice(0, -4), path, agent, Boolean(ownProject), metaProject, meta?.startedBy ?? null)
   }
 
   function scan() {
@@ -588,7 +616,7 @@ export function createLanesSource(options = {}) {
     if (hasListed && !listWanted && stamp !== null && stamp === lastFolderStamp && current - lastListAt < fullListMs) {
       if (waitingMeta.size > 0) {
         let agentMap = null
-        const getAgentMap = () => (agentMap ??= new Map(allAgents().map((agent) => [agent.key, agent])))
+        const getAgentMap = () => (agentMap ??= new Map(configuredAgents().map((agent) => [agent.key, agent])))
         for (const info of [...waitingMeta.values()]) {
           adoptLog(info.name, info.path, getAgentMap)
         }
@@ -607,7 +635,7 @@ export function createLanesSource(options = {}) {
     hasListed = true
     const present = new Set()
     let agentMap = null
-    const getAgentMap = () => (agentMap ??= new Map(allAgents().map((agent) => [agent.key, agent])))
+    const getAgentMap = () => (agentMap ??= new Map(configuredAgents().map((agent) => [agent.key, agent])))
     let records = null
     const getRecords = () => (records ??= recordsCache.read())
     for (const entry of entries) {
@@ -665,7 +693,7 @@ export function createLanesSource(options = {}) {
     if (lagging.size === 0) return
     const current = now()
     let agentMap = null
-    const getAgentMap = () => (agentMap ??= new Map(allAgents().map((agent) => [agent.key, agent])))
+    const getAgentMap = () => (agentMap ??= new Map(configuredAgents().map((agent) => [agent.key, agent])))
     let records = null
     const getRecords = () => (records ??= recordsCache.read())
     for (const [key, info] of [...lagging.entries()]) {
@@ -749,7 +777,7 @@ export function createLanesSource(options = {}) {
     run.buffer = final ? '' : parts.pop() ?? ''
     for (const line of parts) {
       if (!line.trim()) continue
-      const cli = currentLanes()[run.agent.key]?.cli ?? {}
+      const cli = run.agent.discovered ? run.agent : currentLanes()[run.agent.key]?.cli ?? {}
       if (cli.harness === 'codex') run.threadId ||= codexThreadId(line)
       let item
       try { item = JSON.parse(line) } catch { item = null }
@@ -809,7 +837,7 @@ export function createLanesSource(options = {}) {
     flushRun(run)
     active.delete(run.key)
     const at = now()
-    ended.set(run.agent.key, at)
+    ended.set(run.agent.key, { at, agent: run.agent })
     if (onNotice && Number.isFinite(lingerMs) && lingerMs > 0) {
       const lingerTimer = setTimeout(() => {
         lingerTimers.delete(lingerTimer)
@@ -996,6 +1024,7 @@ export function createLanesSource(options = {}) {
   function stop() {
     stopped = true
     active.clear()
+    ended.clear()
     quiet.clear()
     lagging.clear()
     dropped.clear()
@@ -1027,7 +1056,7 @@ export function createLanesSource(options = {}) {
 
   function openRuns() {
     return [...active.values()].map((run) => {
-      const cli = currentLanes()[run.agent.key]?.cli ?? {}
+      const cli = run.agent.discovered ? run.agent : currentLanes()[run.agent.key]?.cli ?? {}
       const file = cli.harness === 'codex' && run.threadId ? findCodexRollout({ threadId: run.threadId, env: process.env, startedAt: run.startedAt, now: now() }) : ''
       const reading = file ? readCodexQuota(file) : null
       return {
@@ -1035,6 +1064,7 @@ export function createLanesSource(options = {}) {
         lane: run.agent.key,
         startedAt: iso(run.startedAt),
         project: run.project || null,
+        ...(run.agent.discovered ? { discovered: true } : {}),
         ...(run.startedBy ? { startedBy: run.startedBy } : {}),
         contextTokens: reading?.contextTokens ?? run.contextTokens,
         contextWindow: resolveContextWindow(cli.model, cli.harness, cli.contextWindow) ?? reading?.contextWindow ?? run.contextWindow ?? resolveContextWindow(cli.model, cli.harness, 0, readEndpoints(folder)),
@@ -1050,7 +1080,7 @@ export function createLanesSource(options = {}) {
       return allAgents()
     },
     openRuns,
-    recentLanes: (windowMs, at = now()) => new Set([...ended].filter(([, endedAt]) => at - endedAt <= windowMs).map(([key]) => key)),
+    recentLanes: (windowMs, at = now()) => new Set([...ended].filter(([, run]) => at - run.at <= windowMs).map(([key]) => key)),
     start,
     stop,
     tick,
