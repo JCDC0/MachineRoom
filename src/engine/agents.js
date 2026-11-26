@@ -204,7 +204,7 @@ export function thinkingMotion(key) {
   }
 }
 
-export function thinkingRingPose(seconds, motion = 0, out = null) {
+export function thinkingRingPose(seconds, motion = 0, out = null, blend = 1) {
   const pose = out ?? {}
   const a = pose.a ?? (pose.a = { x: 0, y: 0, z: 0 })
   const b = pose.b ?? (pose.b = { x: 0, y: 0, z: 0 })
@@ -219,7 +219,14 @@ export function thinkingRingPose(seconds, motion = 0, out = null) {
   let scale = 1
   let bright = 1
 
-  if (t < FLIP_END) {
+  if (blend === 0) {
+    a.x = 0
+    a.y = 0
+    a.z = 0
+    b.x = SPINNER_REST_B_X
+    b.y = 0
+    b.z = 0
+  } else if (t < FLIP_END) {
     const u = t / FLIP_END
     const flipA = flipEase(t / FLIP_SPAN)
     const flipB = flipEase((t - FLIP_LAG) / FLIP_SPAN)
@@ -284,16 +291,20 @@ export function thinkingRingPose(seconds, motion = 0, out = null) {
   }
 
   const orbit = (motion?.orbitStart ?? 0) + clock * (motion?.orbitSpeed ?? 0)
-  a.y += orbit
-  b.y += orbit
+  a.x *= blend
+  a.y = orbit + a.y * blend
+  a.z *= blend
+  b.x = SPINNER_REST_B_X + (b.x - SPINNER_REST_B_X) * blend
+  b.y = orbit + b.y * blend
+  b.z *= blend
   if (motion?.wobblePeriod) {
     const wobble = FULL_TURN * (clock / motion.wobblePeriod + offset)
     a.x += REST_WOBBLE * Math.sin(wobble)
     b.x += REST_WOBBLE * Math.cos(wobble)
   }
   pose.orbit = orbit
-  pose.scale = scale
-  pose.bright = bright
+  pose.scale = 1 + (scale - 1) * blend
+  pose.bright = 1 + (bright - 1) * blend
   return pose
 }
 
@@ -1018,11 +1029,10 @@ function createSpinner(radius) {
     rings.push(ring)
     arcs.push(arc)
   }
-  return { group, planes, rings, arcs, ringMaterial, arcMaterial, orbitOffset: null }
+  return { group, planes, rings, arcs, ringMaterial, arcMaterial }
 }
 
 function resetSpinnerPose(spinner) {
-  spinner.orbitOffset = null
   spinner.group.rotation.y = 0
   spinner.planes[0].rotation.set(0, 0, 0)
   spinner.planes[1].rotation.set(SPINNER_REST_B_X, 0, 0)
@@ -2010,32 +2020,20 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
         const arc = thinkingArc(now, 0, SPINNER_SWEEP_SECONDS, isStill)
         view.spinner.arcs[0].rotation.z = arc
         view.spinner.arcs[1].rotation.z = arc + SPINNER_PHASE
-        if (isStill) {
-          resetSpinnerPose(view.spinner)
-        } else {
-          const spinner = view.spinner
-          const pose = thinkingRingPose(now / 1000, view.thinkingMotion, ringPoseScratch)
-          const blend = view.thinking
-          /*
-           * The parent applies yaw about the vertical even when a ring is tilted.
-           * Keep the same full-turn offset during a fade to avoid a jump.
-           */
-          if (blend === 1 || spinner.orbitOffset === null) {
-            spinner.orbitOffset = Math.round(pose.orbit / FULL_TURN) * FULL_TURN
-          }
-          spinner.group.rotation.y = (pose.orbit - spinner.orbitOffset) * blend
-          spinner.planes[0].rotation.set(pose.a.x * blend, (pose.a.y - pose.orbit) * blend, pose.a.z * blend)
-          spinner.planes[1].rotation.set(
-            SPINNER_REST_B_X + (pose.b.x - SPINNER_REST_B_X) * blend,
-            (pose.b.y - pose.orbit) * blend,
-            pose.b.z * blend
-          )
-          spinner.group.scale.setScalar(1 + (pose.scale - 1) * blend)
-          ringBright = 1 + (pose.bright - 1) * blend
-        }
       } else {
         writeOpacity(view.spinner.arcMaterial, 0)
+      }
+      if (isStill) {
         resetSpinnerPose(view.spinner)
+      } else {
+        const spinner = view.spinner
+        const blend = drawing ? 0 : view.thinking
+        const pose = thinkingRingPose(now / 1000, view.thinkingMotion, ringPoseScratch, blend)
+        spinner.group.rotation.y = pose.orbit
+        spinner.planes[0].rotation.set(pose.a.x, pose.a.y - pose.orbit, pose.a.z)
+        spinner.planes[1].rotation.set(pose.b.x, pose.b.y - pose.orbit, pose.b.z)
+        spinner.group.scale.setScalar(pose.scale)
+        ringBright = pose.bright
       }
       writeOpacity(view.spinner.ringMaterial, SPINNER_RING_OPACITY * ringBright * ringFade)
       for (let index = 0; index < view.spinner.arcs.length; index += 1) {
