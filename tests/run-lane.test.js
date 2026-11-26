@@ -3423,7 +3423,7 @@ describe('run-lane session attribution', () => {
         lane, lanes: { [harness]: lane }, wanted: [], prompt, name, logPath,
         project: folder, task: prompt, usageFile: join(folder, `${name}.usage.json`),
       })
-      expect(JSON.parse(readFileSync(metaPath, 'utf8')).sessionId).toBe(id)
+      expect(JSON.parse(readFileSync(metaPath, 'utf8'))).toMatchObject({ harness, sessionId: id })
       expect(readFileSync(logPath, 'utf8')).toContain('The sidecar has the session id.')
     } finally {
       command.mockRestore()

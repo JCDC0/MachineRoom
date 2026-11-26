@@ -313,6 +313,88 @@ describe('the live lane source', () => {
     expect([...source.recentLanes(ROOM_LANE_LINGER_MS, end + ROOM_LANE_LINGER_MS + 1)]).toEqual([])
   })
 
+  it('shows a discovered lane from a worktree in the room repo and sends its frames', async () => {
+    const base = tempDir()
+    const runs = join(base, 'runs')
+    const projectRoot = join(base, 'Game')
+    const worktree = join(projectRoot, '.worktrees', 'claude2')
+    const otherRepo = join(base, 'Elsewhere')
+    for (const dir of [runs, projectRoot, otherRepo]) mkdirSync(dir)
+    git(projectRoot, ['init'])
+    git(projectRoot, ['commit', '--allow-empty', '-m', 'base'])
+    git(projectRoot, ['worktree', 'add', '--detach', worktree])
+    git(otherRepo, ['init'])
+
+    const model = 'local/example-model'
+    const name = 'claude2-project-20261126-010000'
+    const log = join(runs, `${name}.log`)
+    writeFileSync(join(runs, `${name}.meta.json`), JSON.stringify({ lane: 'claude2', project: worktree, harness: 'opencode', model }))
+    writeFileSync(log, `${toolLine(join(worktree, 'src', 'a.js'))}\n`)
+    const foreign = 'opencode2-project-20261126-010001'
+    writeFileSync(join(runs, `${foreign}.meta.json`), JSON.stringify({ lane: 'opencode2', project: otherRepo, harness: 'opencode' }))
+    writeFileSync(join(runs, `${foreign}.log`), `${toolLine(join(otherRepo, 'src', 'b.js'))}\n`)
+
+    let clock = Date.now()
+    const bridge = createBridge({
+      projectRoot,
+      runsFolder: runs,
+      port: 0,
+      env: {},
+      lanesSource: { folder: runs, lanes: {}, now: () => clock },
+    })
+    cleanups.push(() => bridge.stop())
+    const { url } = await bridge.start()
+    const readAgents = () => fetch(`${url}/api/agents`).then((response) => response.json())
+    const readRuns = () => fetch(`${url}/api/control/runs`).then((response) => response.json())
+
+    expect(await readAgents()).toEqual([{
+      id: 'agent-claude2', key: 'claude2', name: 'OpenCode (claude2)', adapterType: 'opencode_local',
+      parser: 'opencode', harness: 'opencode', model, role: null, discovered: true,
+    }])
+    const live = await fetch(`${url}/api/control/live-runs`).then((response) => response.json())
+    expect(live.runs).toMatchObject([{ runId: `run-${name}`, agentId: 'agent-claude2', status: 'running' }])
+    const running = (await readRuns()).running
+    expect(running).toMatchObject([{ lane: 'claude2', startedAt: new Date(clock).toISOString() }])
+    const frames = await readFrames(url, (list) => logFrames(list).length > 0)
+    expect(frames.every((frame) => frame.payload?.agentId === 'agent-claude2')).toBe(true)
+    const [frame] = logFrames(frames)
+    expect(JSON.parse(frame.payload.chunk).part.state.input.path.replace(/\\/g, '/')).toBe(
+      `${projectRoot.replace(/\\/g, '/')}/src/a.js`
+    )
+
+    appendFileSync(join(runs, 'runs.jsonl'), `${JSON.stringify({ lane: 'claude2', log, project: worktree, startedAt: new Date(clock).toISOString(), exitCode: 0 })}\n`)
+    await readFrames(url, (list) => Boolean(endFrame(list)))
+    expect((await readRuns()).running).toEqual([])
+    expect((await readRuns()).recent).toMatchObject([{ lane: 'claude2' }])
+    expect(await readAgents()).toMatchObject([{ key: 'claude2', discovered: true }])
+    clock += ROOM_LANE_LINGER_MS + 1
+    expect(await readAgents()).toEqual([])
+  })
+
+  it('infers the harness for an older lane sidecar and keeps the configured agent for a known lane', () => {
+    const base = tempDir()
+    const runs = join(base, 'runs')
+    const projectRoot = join(base, 'Game')
+    mkdirSync(runs)
+    mkdirSync(projectRoot)
+    const lanes = { claude: { name: 'Configured', cli: { harness: 'opencode', model: 'configured-model' } } }
+    for (const lane of ['claude', 'claude2', 'orchestrator', 'sub-ghost', 'codex-session', 'bad.key']) {
+      const file = join(runs, `${lane}-project-20261126-010000`)
+      writeFileSync(`${file}.meta.json`, JSON.stringify({
+        lane, project: projectRoot, model: 'sidecar-model', ...(lane === 'claude2' ? {} : { harness: 'claude' }),
+      }))
+      writeFileSync(`${file}.log`, `${toolLine('src/a.js')}\n`)
+    }
+    const { source, frames } = startSource({ runs, projectRoot, lanes })
+    expect(source.agents).toMatchObject([
+      { key: 'claude', name: 'Configured', harness: 'opencode', model: 'configured-model' },
+      { key: 'claude2', name: 'Claude Code (claude2)', harness: 'claude', parser: 'claude', model: 'sidecar-model', discovered: true },
+    ])
+    expect(source.allAgents).toEqual(source.agents)
+    expect(source.agents[0]).not.toHaveProperty('discovered')
+    expect(new Set(frames.map((frame) => frame.payload.agentId))).toEqual(new Set(['agent-claude', 'agent-claude2']))
+  })
+
   it('tails a fresh log that was already there when it started', async () => {
     const base = tempDir()
     const runs = join(base, 'runs')

@@ -655,7 +655,7 @@ export function createBridge(options = {}) {
     refreshModelDetails: (...args) => endpoints.refreshMissing(...args),
     lanesFile: options.lanesFile,
     runsFolder: options.runsFolder ?? options.orchestratorFolder,
-    sendJson,
+    sendJson: sendRunsJson,
     readJsonBody,
     orchestrators: () => orchestrators,
     lanesSource: () => lanesSource,
@@ -738,6 +738,7 @@ export function createBridge(options = {}) {
         subOrchestrators: () => (orchestrators ? orchestrators.subs() : []),
         lingerMs: ROOM_LANE_LINGER_MS,
         onFrame: (frame) => {
+          if (frame.type === 'heartbeat.run.status' && frame.payload.status === 'running') rememberLaneParsers()
           if (orchestrators) orchestrators.onFrame(frame)
           accept(frame)
         },
@@ -746,6 +747,21 @@ export function createBridge(options = {}) {
         },
       })
     : null
+
+  function sendRunsJson(req, res, status, body) {
+    if (!lanesSource || req.method !== 'GET' || !Array.isArray(body?.running)) return sendJson(req, res, status, body)
+    const url = new URL(req.url, 'http://localhost')
+    if (url.pathname !== '/api/control/runs') return sendJson(req, res, status, body)
+    const lane = (url.searchParams.get('lane') ?? '').trim()
+    const running = [...body.running]
+    const startedHere = new Set(running.map((run) => run.lane))
+    for (const run of lanesSource.openRuns()) {
+      if (!run.discovered || startedHere.has(run.lane) || (lane && lane !== run.lane)) continue
+      running.push({ lane: run.lane, startedAt: run.startedAt, briefs: [], lastLines: [], touched: null })
+    }
+    return sendJson(req, res, status, { ...body, running })
+  }
+
   const sessionsSourceOption = options.sessionsSource
   const sessionsSourceOn =
     sessionsSourceOption === true || (sessionsSourceOption !== null && typeof sessionsSourceOption === 'object') || env.MACHINEROOM_SESSIONS === '1'
