@@ -118,12 +118,14 @@ export function laneAgents(lanes) {
       if (agent) {
         const harness = entry.cli.harness
         const model = entry.cli.model
+        const effort = entry.cli.effort ?? entry.effort
         agents.push({
           ...agent,
           key: lane,
           role: null,
           harness: typeof harness === 'string' && harness ? harness : agent.parser,
           model: typeof model === 'string' && model ? model : null,
+          ...(typeof effort === 'string' && effort ? { effort } : {}),
           mode: entry.cli.mode,
         })
       }
@@ -513,6 +515,7 @@ export function createLanesSource(options = {}) {
       id: `agent-${key}`, key, name: key === harness.key ? harness.name : `${harness.name} (${key})`, adapterType: harness.adapterType,
       parser: harness.key, role: null, harness: harness.key,
       model: typeof meta.model === 'string' && meta.model ? meta.model : null,
+      ...(typeof meta.reasoning === 'string' && meta.reasoning ? { effort: meta.reasoning } : {}),
       discovered: true,
     }
   }

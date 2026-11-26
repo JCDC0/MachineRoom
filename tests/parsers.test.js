@@ -59,6 +59,22 @@ it.each(['agy', 'hermes'])('keeps interleaved %s runs and their children separat
 })
 
 describe('claude parser', () => {
+  it('reports the session model once per change and leaves subagent and synthetic lines out', () => {
+    const parser = createClaudeParser(ctx)
+    const assistant = (model, extra = {}) => ({ type: 'assistant', message: { model, content: [{ type: 'text', text: 'ok' }] }, ...extra })
+    const out = parser.push(
+      lines(
+        assistant('claude-opus-5-5'),
+        assistant('claude-opus-5-5'),
+        assistant('claude-haiku-5-5', { parent_tool_use_id: 'toolu_1' }),
+        assistant('<synthetic>'),
+        assistant('claude-sonnet-5-5')
+      ),
+      1000
+    )
+    expect(out.filter((activity) => activity.type === 'agent.model').map((activity) => activity.model)).toEqual(['claude-opus-5-5', 'claude-sonnet-5-5'])
+  })
+
   it('turns an edit into a write touch and a completed end', () => {
     const parser = createClaudeParser(ctx)
     const out = parser.push(

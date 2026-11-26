@@ -157,8 +157,8 @@ tests/            vitest; tests/helpers/bridge.js starts a bridge on port 0 over
   agent-depth-settings.test.js      src/ui/AgentDepthSettings.jsx, Settings.jsx: depth 1 or 2 selection and unlock 3 or 4 confirm card
   agent-depth.test.js               server/agent-depth.js and /api/agent-depth: default 2, unlock persistence and corrupt file fallback
   agent-dock-ui.test.js             src/ui/Hud.jsx, Transport.jsx: agent dock display showing a lane's sub with multiple orchestrators
-  agent-label-sprite.test.js        src/engine/agents.js, sprites.js: Space Mono text sprites, canvas reuse and callout updates
-  agent-label.test.js               src/engine/agents.js: nameLabel uppercasing, 32-character cap with trailing tilde and non-text handling
+  agent-label-sprite.test.js        src/engine/agents.js, sprites.js: Space Mono text sprites, canvas reuse, callout updates, and the name above and the model below the shape
+  agent-label.test.js               src/engine/agents.js: nameLabel uppercasing, 32-character cap with trailing tilde and non-text handling; modelLabel and agentModelText (model with effort, a session's reported model)
   agent-list.test.js                src/ui/agentList.js: agent ordering, done/failed placement, idle toggle and number key lookup
   agent-presence.test.js            src/engine/agents.js: agentPresence dimming of never-run idle lanes while keeping active and queued full
   agent-strip.test.js               src/engine/agents.js, src/ui/agentStrip.js: stripPoints segment copies and orchestratorLineEnds

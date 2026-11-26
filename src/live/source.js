@@ -72,6 +72,7 @@ export function toAgents(rawAgents) {
       parser,
       harness: typeof raw.harness === 'string' ? raw.harness : null,
       model: typeof raw.model === 'string' ? raw.model : null,
+      effort: typeof raw.effort === 'string' ? raw.effort : null,
       subOrchestrator: raw.subOrchestrator === true,
       sessionReader: raw.sessionReader === true || isSessionReaderKey(key),
     }

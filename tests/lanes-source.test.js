@@ -157,6 +157,22 @@ describe('lane agents', () => {
     ])
   })
 
+  it('carries the effort of each lane from its command line or its entry, for the model label', () => {
+    const folder = tempDir('mr-lane-effort-')
+    writeFileSync(
+      join(folder, 'lanes.json'),
+      JSON.stringify({
+        codex3: { name: 'Codex 3', cli: { harness: 'codex', model: 'gpt-6.2-sol', effort: 'high' } },
+        native: { name: 'Native', effort: 'xhigh', cli: { harness: 'machineroom', model: 'OpenRouter/deepseek/deepseek-v4.1-flash-1017' } },
+        agy: { name: 'AGY', cli: { harness: 'agy', model: 'gemini-4-hydrogen-xhigh' } },
+      })
+    )
+    const agents = laneAgents(readLanes(folder))
+    expect(agents.find((agent) => agent.key === 'codex3')).toMatchObject({ model: 'gpt-6.2-sol', effort: 'high' })
+    expect(agents.find((agent) => agent.key === 'native')).toMatchObject({ effort: 'xhigh' })
+    expect(agents.find((agent) => agent.key === 'agy').effort).toBeUndefined()
+  })
+
   it('lists AGY once its lane has a command line, with the process adapter', () => {
     expect(laneAgents({ ...realLanes, agy: { ...realLanes.agy, retired: false } }).find((agent) => agent.key === 'agy')).toMatchObject({
       id: 'agent-agy',

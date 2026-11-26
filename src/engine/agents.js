@@ -53,6 +53,9 @@ export const CHILD_ORBIT_SCALE = 1.6
 export const CHILD_ORBIT_SECONDS = 40
 export const CHILD_ORBIT_TILT = Math.PI / 18
 export const SUB_ORCHESTRATOR_SCALE = 0.7
+export const NAME_LABEL_Y = 170
+export const MODEL_LABEL_Y = -150
+export const DOING_LABEL_Y = -190
 export const ORCHESTRATOR_NAME_LIFT = (ORCHESTRATOR_LIFT * 2) / 3
 export const ORCHESTRATOR_LINK_OPACITY = 0.1
 export const SUB_ORCHESTRATOR_LINK_OPACITY = 0.3
@@ -472,6 +475,19 @@ export function nameLabel(name) {
   if (typeof name !== 'string') return ''
   const label = name.toUpperCase()
   return label.length > 32 ? `${label.slice(0, 31)}~` : label
+}
+
+export function modelLabel(agent) {
+  const raw = typeof agent?.model === 'string' ? agent.model.trim() : ''
+  const model = raw.split('/').filter(Boolean).at(-1) ?? ''
+  const effort = typeof agent?.effort === 'string' ? agent.effort.trim() : ''
+  const named = effort !== '' && model.toLowerCase().split(/[^a-z0-9]+/).includes(effort.toLowerCase())
+  const label = [model, named ? '' : effort].filter(Boolean).join(' · ').toUpperCase()
+  return label.length > 40 ? `${label.slice(0, 39)}~` : label
+}
+
+export function agentModelText(rosterAgent, entry) {
+  return modelLabel(rosterAgent?.model ? rosterAgent : entry)
 }
 
 export function doingText(entry) {
@@ -1308,13 +1324,15 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
       return { line, start: -Infinity, strength: 0, pulse: { radius: 1, opacity: 0 } }
     })
     const label = textSprite(nameLabel(agent.name), { scale: 1.5, color: 'rgba(255,255,255,.7)' })
-    label.position.set(0, -150, 0)
+    label.position.set(0, NAME_LABEL_Y, 0)
+    const modelText = textSprite(modelLabel(agent), { scale: 1.1, color: 'rgba(255,255,255,.6)' })
+    modelText.position.set(0, MODEL_LABEL_Y, 0)
     const doing = textSprite('', { scale: 0.9, color: 'rgba(255,255,255,.5)' })
-    doing.position.set(0, -190, 0)
+    doing.position.set(0, DOING_LABEL_Y, 0)
     const picker = new THREE.Mesh(new THREE.SphereGeometry(170, 8, 8), new THREE.MeshBasicMaterial({ visible: false }))
     picker.userData.key = agent.key
     const spinner = createSpinner(shellRadius * SPINNER_RADIUS_SCALE)
-    group.add(shape, ...rings, ...beatRings.map((slot) => slot.line), label, doing, picker, spinner.group)
+    group.add(shape, ...rings, ...beatRings.map((slot) => slot.line), label, modelText, doing, picker, spinner.group)
     group.position.copy(home)
     group.scale.setScalar(scale)
 
@@ -1371,6 +1389,8 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
       beatRings,
       beatNext: 0,
       label,
+      modelText,
+      modelShown: modelLabel(agent),
       doing,
       picker,
       callout,
@@ -2034,6 +2054,13 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
       view.doing.userData.setText(doingText(entry))
       writeOpacity(view.doing.material, labelOpacity)
       view.doing.visible = view.label.visible
+      const modelText = agentModelText(agentByKey.get(view.key), entry)
+      if (view.modelShown !== modelText) {
+        view.modelShown = modelText
+        view.modelText.userData.setText?.(modelText)
+      }
+      writeOpacity(view.modelText.material, labelOpacity)
+      view.modelText.visible = view.label.visible
       const ringColor = statusRingColor(status, entry)
       const ringFade = drawing ? 0 : opacity * fade * opacityFactor
       for (let index = 0; index < view.rings.length; index += 1) {

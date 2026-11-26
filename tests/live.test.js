@@ -31,6 +31,15 @@ describe('agent discovery', () => {
     expect(toAgents(raw).map((agent) => agent.key)).toEqual(['claude', 'agy', 'some-bot'])
   })
 
+  it('keeps each agent\'s model and effort for its label, and nothing that is not text', () => {
+    const [codex, bad] = toAgents([
+      { key: 'codex3', name: 'Codex 3', adapterType: 'codex_local', model: 'gpt-6.2-sol', effort: 'high' },
+      { key: 'odd', name: 'Odd', adapterType: 'process', model: 7, effort: { level: 'high' } },
+    ])
+    expect(codex).toMatchObject({ model: 'gpt-6.2-sol', effort: 'high' })
+    expect(bad).toMatchObject({ model: null, effort: null })
+  })
+
   it('keeps two agents with the same parser apart', () => {
     const twins = [
       { id: '1', name: 'Orchestrator', adapterType: 'claude_local', role: 'ceo' },

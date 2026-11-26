@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { createAgents } from '../src/engine/agents.js'
+import { DOING_LABEL_Y, MODEL_LABEL_Y, NAME_LABEL_Y, createAgents } from '../src/engine/agents.js'
 import { textSprite } from '../src/engine/sprites.js'
 
 const drawn = []
@@ -73,4 +73,22 @@ describe('agent labels', () => {
     expect(drawn.at(-1)).toBe('ALPHA')
     agents.dispose()
   })
+})
+
+describe('the name above and the model below', () => {
+  it('puts the name over the shape and the model with its effort under it, above the status line', () => {
+    drawn.length = 0
+    const agents = createAgents(new THREE.Scene(), [{ key: 'codex3', name: 'Codex 3', shape: 'codex', model: 'gpt-6.2-sol', effort: 'high' }])
+    const view = agents.views.get('codex3')
+    expect(NAME_LABEL_Y).toBeGreaterThan(0)
+    expect(MODEL_LABEL_Y).toBeLessThan(0)
+    expect(DOING_LABEL_Y).toBeLessThan(MODEL_LABEL_Y)
+    expect(view.label.position.y).toBe(NAME_LABEL_Y)
+    expect(view.modelText.position.y).toBe(MODEL_LABEL_Y)
+    expect(view.doing.position.y).toBe(DOING_LABEL_Y)
+    expect(drawn).toContain('CODEX 3')
+    expect(drawn).toContain('GPT-6.2-SOL · HIGH')
+    agents.dispose()
+  })
+
 })

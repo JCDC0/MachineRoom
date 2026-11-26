@@ -42,6 +42,7 @@ export function createClaudeParser(ctx) {
   const childCounts = new Map()
   const out = []
   const parentKey = ctx.agentKey ?? 'agent'
+  let lastModel = ''
 
   function start(call, time) {
     if (call.started) return
@@ -200,6 +201,11 @@ export function createClaudeParser(ctx) {
 
   function handleStream(json, time) {
     if (!json || (json.type !== 'assistant' && json.type !== 'user')) return
+    const model = json.message?.model
+    if (json.type === 'assistant' && !json.parent_tool_use_id && typeof model === 'string' && /^[\w.:/-]+$/.test(model) && model !== lastModel) {
+      lastModel = model
+      out.push({ time, type: 'agent.model', model })
+    }
     const content = json.message?.content
     if (!Array.isArray(content)) return
     for (const item of content) {

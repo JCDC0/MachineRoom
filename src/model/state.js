@@ -267,6 +267,9 @@ export function apply(state, activity) {
     case 'agent.end':
       finishChild(state, agent, activity)
       break
+    case 'agent.model':
+      if (typeof activity.model === 'string' && activity.model) agent.model = activity.model
+      break
     case 'run.queued':
       agent.status = 'queued'
       agent.label = ''
