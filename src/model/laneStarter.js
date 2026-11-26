@@ -43,24 +43,25 @@ export function delegatingSessionTop({ agents, at, windowMs = LANE_START_TOP_MS 
   if (!agents || typeof agents.get !== 'function' || typeof agents.values !== 'function') return ''
   const now = Number.isFinite(at) ? at : 0
   const span = Number.isFinite(windowMs) ? windowMs : LANE_START_TOP_MS
+  const fresh = (endedAt) => Number.isFinite(endedAt) && now >= endedAt && now - endedAt <= span
   let best = ''
   let bestOpen = false
   let bestAt = -Infinity
   for (const session of agents.values()) {
     const key = session?.key
     if (!isSessionTopKey(key) || session.parent) continue
-    let open = false
-    let when = -Infinity
+    let openAt = -Infinity
+    let recentAt = fresh(session.lastChildEnd?.endedAt) ? childStart(session.lastChildEnd) : -Infinity
     for (const child of agents.values()) {
       if (child?.parent !== key) continue
       const running = child.status === 'working' || child.status === 'queued'
-      const endedAt = Number.isFinite(child.endedAt) ? child.endedAt : 0
-      const fresh = endedAt > 0 && now >= endedAt && now - endedAt <= span
-      if (!running && !fresh) continue
-      if (running) open = true
-      const started = childStart(child)
-      if (started > when) when = started
+      if (running) openAt = Math.max(openAt, childStart(child))
+      else if ((child.status === 'done' || child.status === 'error') && fresh(child.endedAt)) {
+        recentAt = Math.max(recentAt, childStart(child))
+      }
     }
+    const open = openAt !== -Infinity
+    const when = open ? openAt : recentAt
     if (when === -Infinity) continue
     if (best === '' || (open && !bestOpen) || (open === bestOpen && when > bestAt)) {
       best = key

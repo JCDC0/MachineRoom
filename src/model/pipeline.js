@@ -44,6 +44,7 @@ export function createPipeline({ agents, tree }) {
   const lastRunTime = new Map()
   const seen = new Set()
   const ended = new Set()
+  const firstRunByAgent = new Map()
   let order = 0
   let lastTime = 0
   let feedTime = 0
@@ -141,8 +142,10 @@ export function createPipeline({ agents, tree }) {
       let entry = parsers.get(runId)
       if (!entry) {
         const worktree = textOf(agent.worktree)
+        if (!firstRunByAgent.has(agent.key)) firstRunByAgent.set(agent.key, runId)
+        const runToken = firstRunByAgent.get(agent.key) === runId ? '' : `r:${runId}`
         entry = {
-          parser: createParser(agent, { ...ctx, agentKey: agent.key, ...(worktree ? { worktree } : {}) }),
+          parser: createParser(agent, { ...ctx, agentKey: agent.key, runToken, ...(worktree ? { worktree } : {}) }),
           agent,
           runId,
         }

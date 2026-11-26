@@ -1847,7 +1847,7 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
     const own = state.agents.get('orchestrator') ?? null
     lastOwnBusy = Boolean(own) && (own.status === 'working' || own.status === 'queued')
     lastLaneTop = laneStarterTop({ agents: state.agents, at: state.latest })
-    lastDelegatingTop = delegatingSessionTop({ agents: state.agents, at: state.latest })
+    lastDelegatingTop = delegatingSessionTop({ agents: state.agents, at: state.liveNow ?? state.latest })
     const nextTop = computeTop()
     const ranNow = []
     for (const view of views.values()) {

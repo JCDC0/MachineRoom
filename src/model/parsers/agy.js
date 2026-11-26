@@ -43,10 +43,10 @@ export function createAgyParser(ctx) {
   const started = new Set()
   const calls = new Map()
   const conversations = new Map()
-  const invoked = new Map()
   const pending = new Map()
   const parentKey = ctx.agentKey ?? 'agent'
-  const parent = { key: null, doneAt: null, doneOk: true }
+  const childPrefix = ctx.runToken ? `${parentKey}~${ctx.runToken}` : parentKey
+  const parent = { key: null }
   let parentConversation
   let children = 0
 
@@ -101,15 +101,15 @@ export function createAgyParser(ctx) {
     out.push(credit(entry, toolStart({ time, id, tool, label, touches, outsidePath, ...(ctx.trackCalls && step.tool_name && step.tool_info?.parameters ? { callKey: JSON.stringify([step.tool_name, step.tool_info.parameters]), callName: step.tool_name } : {}) })))
   }
 
-  function newChild() {
+  function newChild(owner) {
     const number = (children += 1)
-    return { key: `${parentKey}~${number}`, doneAt: null, doneOk: true, ended: false, spawned: false }
+    return { key: `${childPrefix}~${number}`, parent: owner.key ?? parentKey, ended: false, spawned: false }
   }
 
   function spawnChild(child, name, label, time) {
     if (child.spawned) return
     child.spawned = true
-    out.push({ time, type: 'agent.spawn', agent: parentKey, child: child.key, name: shorten(name, 40), label })
+    out.push({ time, type: 'agent.spawn', agent: child.parent, child: child.key, name: shorten(name, 40), label })
   }
 
   function endChild(child, time) {
@@ -136,16 +136,17 @@ export function createAgyParser(ctx) {
     if (known) return known
     const raw = typeof step.name === 'string' ? step.name.trim() : ''
     const name = raw || `subagent ${children + 1}`
-    const child = newChild()
+    const child = newChild(parent)
     spawnChild(child, name, `subagent: ${name}`, time)
     conversations.set(conversation, child)
     return child
   }
 
-  function beginInvoke(step, time, id) {
+  function beginInvoke(step, owner, time, id) {
+    if (pending.has(id)) return
     const role = typeof step.tool_info?.parameters?.Role === 'string' ? step.tool_info.parameters.Role.trim() : ''
     const name = role || `subagent ${children + 1}`
-    pending.set(id, { child: newChild(), name, role, time })
+    pending.set(id, { child: newChild(owner), name, role, time })
   }
 
   function finishInvoke(step, id) {
@@ -158,8 +159,16 @@ export function createAgyParser(ctx) {
     spawnChild(held.child, held.name, prompt || held.role || held.name, held.time)
     const conversation = typeof match?.conversation_id === 'string' ? match.conversation_id : null
     if (conversation) {
-      invoked.set(conversation, held.child)
+      held.child.linked = true
       conversations.set(conversation, held.child)
+    }
+  }
+
+  function finishListedChildren(step, time) {
+    for (const item of subagentList(step.tool_info?.output)) {
+      if (typeof item?.conversationId !== 'string' || item.state !== 'idle') continue
+      const child = conversations.get(item.conversationId)
+      if (child) endChild(child, time)
     }
   }
 
@@ -170,47 +179,34 @@ export function createAgyParser(ctx) {
     const id = `${step.conversation_id}:${step.step_index}`
     for (const [key, held] of pending) {
       if (key === id) continue
-      pending.delete(key)
       spawnChild(held.child, held.name, held.role || held.name, held.time)
     }
-    const entry = conversationFor(step, time)
-    if (!entry.key) {
-      for (const child of conversations.values()) {
-        if (child.ended || child.doneAt === null) continue
-        endChild(child, child.doneAt)
-      }
-    }
     const isEnd = step.state === 'DONE' || step.state === 'ERROR'
-    if (isEnd) {
-      entry.doneAt = time
-      const err = typeof step.tool_info?.error === 'string' ? step.tool_info.error.trim() : ''
-      const failed = step.state === 'ERROR'
-        || Boolean(err)
-        || (step.tool_name === 'run_command' && looksFailed(step.tool_info?.output))
-      entry.doneOk = !failed
-      entry.error = err || (step.state === 'ERROR' ? 'error' : null)
-    } else {
-      entry.doneAt = null
-      entry.error = null
+    const isList = isEnd && step.tool_name === 'manage_subagents' && step.tool_info?.parameters?.Action === 'list'
+    if (isList && step.root_conversation_id && String(step.step_index).startsWith('end.')) {
+      finishListedChildren(step, time)
+      return
     }
-    if (step.step_type !== 'tool' && step.step_type !== 'subagent') return
+    const entry = conversationFor(step, time)
+    if (step.step_type !== 'tool' && step.step_type !== 'subagent') {
+      if (entry.key && !step.root_conversation_id && !entry.linked && step.step_type === 'agent_response' && step.state === 'DONE') {
+        endChild(entry, time)
+      }
+      return
+    }
     begin(step, entry, time, id)
-    if (step.tool_name === 'invoke_subagent' && step.state === 'ACTIVE') beginInvoke(step, time, id)
+    if (step.tool_name === 'invoke_subagent' && step.state === 'ACTIVE') beginInvoke(step, entry, time, id)
     if (!isEnd) return
+    const err = typeof step.tool_info?.error === 'string' ? step.tool_info.error.trim() : ''
+    const ok = step.state !== 'ERROR' && !err && !(step.tool_name === 'run_command' && looksFailed(step.tool_info?.output))
+    const error = err || (step.state === 'ERROR' ? 'error' : null)
     const callLabel = calls.get(id) ?? step.tool_name ?? 'tool'
-    const endLabel = entry.error && !callLabel.includes(entry.error) ? `${callLabel}: ${shorten(entry.error)}` : callLabel
-    out.push(credit(entry, toolEnd({ time, id, ok: entry.doneOk, ...(entry.error ? { label: endLabel, error: entry.error } : {}) })))
+    const endLabel = error && !callLabel.includes(error) ? `${callLabel}: ${shorten(error)}` : callLabel
+    out.push(credit(entry, toolEnd({ time, id, ok, ...(error ? { label: endLabel, error } : {}) })))
     calls.delete(id)
     started.delete(id)
     if (step.tool_name === 'invoke_subagent') finishInvoke(step, id)
-    if (step.tool_name === 'manage_subagents' && step.tool_info?.parameters?.Action === 'list') {
-      for (const item of subagentList(step.tool_info?.output)) {
-        const conversation = typeof item?.conversationId === 'string' ? item.conversationId : null
-        if (!conversation || item.state === 'running') continue
-        const child = invoked.get(conversation)
-        if (child) endChild(child, time)
-      }
-    }
+    if (isList) finishListedChildren(step, time)
   })
 
   return {

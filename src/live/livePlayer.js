@@ -7,6 +7,10 @@ export function createLivePlayer({ tree, agents, onActivity = () => {} }) {
   const listeners = new Set()
   const pendingRemovals = new Set()
   let status = 'connecting'
+  let eventAt = 0
+  let receivedAt = started
+
+  Object.defineProperty(state, 'liveNow', { get: () => eventAt + (performance.now() - receivedAt) })
 
   function notify() {
     listeners.forEach((listener) => listener())
@@ -124,11 +128,17 @@ export function createLivePlayer({ tree, agents, onActivity = () => {} }) {
     tick() {},
     push(activities) {
       if (activities.length === 0) return
+      const latest = state.latest
       for (const activity of activities) {
         apply(state, activity)
         onActivity(activity, state)
       }
-      state.now = elapsed()
+      const now = performance.now()
+      if (state.latest > latest) {
+        eventAt = Math.max(state.latest, eventAt + (now - receivedAt))
+        receivedAt = now
+      }
+      state.now = now - started
       flushRemovals()
       notify()
     },

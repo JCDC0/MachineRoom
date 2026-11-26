@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Antigravity and Hermes runs keep their own workers when sessions overlap (P734, R76-9).
+- Antigravity workers wait for the reader's idle signal and grandchildren sit under their own parents (P734, R76-8).
+- Hermes credits a worker session's calls to its delegate child (P734, R76-13).
+- The session that leads workers keeps the top seat for ten minutes after the last worker ends, even in a quiet room (P734, R76-14).
 - The room credits Antigravity and Hermes sessions for lane runs they start from their shells and shows the parent in the family tree (P739b).
 - Any session harness can take the top seat, and `run-lane` can record an explicit session starter (P739).
 - The status rings keep orbiting and wobbling in every state, including through the thinking blend (P737).

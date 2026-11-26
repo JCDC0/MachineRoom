@@ -31,10 +31,12 @@ function makeAgent(key, name, parent = null, depth = 0, runId = null, source = n
     model: typeof source?.model === 'string' ? source.model : null,
     status: 'idle',
     runId,
+    spawnRunId: runId,
     label: '',
     target: '',
     endedAt: 0,
     startedAt: 0,
+    lastChildEnd: null,
     startedBy: null,
     sessions: null,
     error: null,
@@ -182,22 +184,28 @@ function applyTouch(state, agent, touch) {
   }
 }
 
-function isDescendant(state, agent, parentKey) {
-  let key = agent.parent
-  while (key) {
-    if (key === parentKey) return true
-    key = state.agents.get(key)?.parent ?? null
+function descendsFromRun(state, agent, parentKey, runId) {
+  let child = agent
+  let matchesRun = child.runId === runId
+  while (child?.parent) {
+    matchesRun ||= child.spawnRunId === runId
+    if (child.parent === parentKey) return matchesRun
+    child = state.agents.get(child.parent)
   }
   return false
 }
 
-function finish(agent, activity) {
+function finishChild(state, agent, activity) {
   agent.status = activity.ok ? 'done' : 'error'
   agent.endedAt = activity.time
   agent.calls.clear()
   agent.openCalls.clear()
   agent.focus = []
   if (!activity.ok) agent.error = activity.error ?? 'failed'
+  const parent = state.agents.get(agent.parent)
+  if (parent && Number.isFinite(agent.endedAt) && agent.endedAt >= (parent.lastChildEnd?.endedAt ?? -Infinity)) {
+    parent.lastChildEnd = { startedAt: agent.startedAt, endedAt: agent.endedAt }
+  }
 }
 
 function pruneChildren(state) {
@@ -249,14 +257,15 @@ export function apply(state, activity) {
       if (depth > limit) break
       const existing = state.agents.get(activity.child)
       if (existing && (existing.status === 'working' || existing.parent !== agent.key || existing.depth !== depth)) break
-      const child = makeAgent(activity.child, activity.name || activity.child, agent.key, depth, activity.runId ?? null)
+      const child = makeAgent(activity.child, activity.name || activity.child, agent.key, depth, activity.runId ?? agent.runId)
       child.status = 'working'
       child.label = activity.label ?? ''
+      child.startedAt = activity.time
       state.agents.set(child.key, child)
       break
     }
     case 'agent.end':
-      finish(agent, activity)
+      finishChild(state, agent, activity)
       break
     case 'run.queued':
       agent.status = 'queued'
@@ -281,7 +290,7 @@ export function apply(state, activity) {
       break
     case 'tool.start': {
       const touches = Array.isArray(activity.touches) ? activity.touches : []
-      agent.status = 'working'
+      if (activity.keepFinished !== true) agent.status = 'working'
       agent.label = activity.label
       agent.calls.delete(activity.id)
       agent.calls.set(activity.id, touches)
@@ -328,12 +337,10 @@ export function apply(state, activity) {
       say(agent, activity.text, 'error')
       break
     case 'run.end':
-      if (agent.runId !== null && activity.runId !== agent.runId) {
-        for (const child of state.agents.values()) {
-          if (child.status === 'working' && child.runId === activity.runId && isDescendant(state, child, agent.key)) finish(child, activity)
-        }
-        break
+      for (const child of state.agents.values()) {
+        if (child.status === 'working' && descendsFromRun(state, child, agent.key, activity.runId ?? null)) finishChild(state, child, activity)
       }
+      if (agent.runId !== null && activity.runId !== agent.runId) break
       agent.endedAt = activity.time
       agent.calls.clear()
       agent.openCalls.clear()
@@ -352,9 +359,6 @@ export function apply(state, activity) {
         say(agent, `FAILED ${activity.error ?? ''}`.trim(), 'error')
       }
       agent.runWrites.clear()
-      for (const child of state.agents.values()) {
-        if (child.status === 'working' && isDescendant(state, child, agent.key)) finish(child, activity)
-      }
       break
     default:
       break
