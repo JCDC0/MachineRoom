@@ -4,7 +4,7 @@ import { LineGeometry } from 'three/addons/lines/LineGeometry.js'
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js'
 import { CSS3DObject } from 'three/addons/renderers/CSS3DRenderer.js'
 import { ownerOf } from '../model/hierarchy.js'
-import { delegatingSessionTop, laneStarterTop, topKeyFor } from '../model/laneStarter.js'
+import { delegatingSessionTop, laneStarterTop, latestSessionTop, topKeyFor } from '../model/laneStarter.js'
 import { dirname } from '../model/paths.js'
 import { CHILD_LIFE_MS, latestOpenCall } from '../model/state.js'
 import { AGENT_RING_BASE, AGENT_RING_GROW, AGENT_RING_MAX_OPACITY, AGENT_RING_MS, AGENT_RING_OPACITY_FLOOR, AGENT_RING_POOL, HUB_RADIUS, HUB_Y, ORCHESTRATOR_HOME, ORCHESTRATOR_LIFT, PARK_LIFT, RING_LEVEL_MAX, SWAY_LIFT, SWAY_RATE, SWAY_SCALE, danceEnvelope, hasSubs, isSessionReader, parkedKeysFor, readerAngles, readerPoint, ringDepth, ringLayout, ringPulse, sectorSlotAngles, sectorSubAngle, slotAngle, startDanceEnvelope, SUB_STAND_LIFT, topRingSeats, writeColor, writeOpacity } from './hub.js'
@@ -1068,11 +1068,16 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
   let slotAngles = sectorSlotAngles(null, parkedKeys)
   let topKey = 'orchestrator'
   let chosenTop = ''
+  let pinnedTop = false
+  let mainHasConversation = false
+  let mainHidden = false
   let ranReaders = new Set()
   let ranSignature = ''
   let lastLaneTop = ''
   let lastDelegatingTop = ''
+  let lastSessionTop = ''
   let lastOwnBusy = false
+  let mainEverBusy = false
   let depth = RING_LEVEL_MAX
   const chainCache = { links: null, mask: null, parents: null, back: [] }
   let pulseSource = null
@@ -1426,9 +1431,12 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
 
   function clearSpawn(view) {
     if (!view.spawn) return
-    view.spawn.pen.removeFromParent()
-    view.spawn.pen.geometry.dispose()
-    view.spawn.pen.material.dispose()
+    const { pen } = view.spawn
+    if (pen) {
+      pen.removeFromParent()
+      pen.geometry.dispose()
+      pen.material.dispose()
+    }
     view.spawn.head.removeFromParent()
     view.spawn.head.geometry.dispose()
     view.spawn.head.material.dispose()
@@ -1437,12 +1445,12 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
   }
 
   function startSpawn(view) {
-    const parent = views.get(view.parentKey ?? lineParentKey(view.key, currentLadder))
-      ?? [...views.values()].find((candidate) => candidate.orchestrator)
-    if (!synced || !parent || parent === view || still() || globalThis.document?.hidden) return
-    const pen = lineBetween(lineMaterial(parent.color, 1))
+    const key = view.parentKey ?? lineParentKey(view.key, currentLadder)
+    const parent = (key === 'orchestrator' && mainHidden ? topAnchorView() : views.get(key)) ?? topAnchorView()
+    if (!synced || (!parent && !mainHidden) || parent === view || still() || globalThis.document?.hidden) return
+    const pen = parent && !(parent.orchestrator && mainHidden) ? lineBetween(lineMaterial(parent.color, 1)) : null
     const head = new THREE.Points(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3()]), new THREE.PointsMaterial({ color: view.color, size: 12 }))
-    scene.add(pen)
+    if (pen) scene.add(pen)
     view.group.add(head)
     view.shape.geometry.setDrawRange(0, 0)
     view.spawn = { pen, head, parent, start: null }
@@ -1529,29 +1537,31 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
     return new Set(views.keys())
   }
 
-  function setChosenTop(key) {
+  function setChosenTop(key, { pinned = false, mainHasConversation: hasConversation = false } = {}) {
     const next = typeof key === 'string' ? key : ''
-    if (next === chosenTop) return chosenTop
     chosenTop = next
+    pinnedTop = pinned === true
+    mainHasConversation = hasConversation === true
     refreshTop()
     return chosenTop
   }
 
   function computeTop() {
-    const chosen = topKeyFor({ chosenTop, laneTop: '', viewKeys: viewKeySet() })
-    if (chosen !== 'orchestrator') return chosen
-    if (lastOwnBusy) return 'orchestrator'
-    if (lastLaneTop !== '') return lastLaneTop
-    if (lastDelegatingTop !== '' && views.has(lastDelegatingTop)) return lastDelegatingTop
-    return 'orchestrator'
+    const automatic = lastOwnBusy ? 'orchestrator'
+      : [lastLaneTop, lastDelegatingTop, mainHidden ? lastSessionTop : ''].find((key) => views.has(key))
+    return topKeyFor({ chosenTop, pinned: pinnedTop, laneTop: automatic, viewKeys: viewKeySet() })
   }
 
-  function refreshTop() {
+  function refreshTop(readersChanged = false) {
+    const wasHidden = mainHidden
+    mainHidden = views.has('orchestrator') && !mainEverBusy && !mainHasConversation
+      && !(pinnedTop && chosenTop === 'orchestrator')
+      && (parkedKeys.length > 0 || [chosenTop, lastSessionTop, lastLaneTop, lastDelegatingTop]
+        .some((key) => views.get(key)?.sessionReader))
     const nextTop = computeTop()
-    if (nextTop === topKey) return false
+    if (nextTop === topKey && mainHidden === wasHidden && !readersChanged) return
     topKey = nextTop
     placeViews()
-    return true
   }
 
   function setDepth(value) {
@@ -1580,7 +1590,7 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
       currentLadder && ownerOf(currentLadder, key) !== 'orchestrator'
         ? [] : [slotAngles.get(key) ?? slotAngle(index, parkedKeys.length)])
     const angles = readerAngles(mainAngles, readers.length)
-    const seats = topRingSeats({ topKey: topView ? topKey : 'orchestrator', extraKeys: readers.filter((view) => ranReaders.has(view.key)).map((view) => view.key), withOrchestrator: views.has('orchestrator') })
+    const seats = topRingSeats({ topKey: topView ? topKey : 'orchestrator', extraKeys: readers.filter((view) => ranReaders.has(view.key)).map((view) => view.key), withOrchestrator: views.has('orchestrator') && !mainHidden })
     const orbitAngles = seats.mode === 'orbit' ? readerAngles(mainAngles, seats.order.length) : []
     for (const view of views.values()) {
       if (view.parentKey) continue
@@ -1667,8 +1677,7 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
       }
     }
     layoutHomes(currentLadder)
-    placeViews()
-    refreshTop()
+    refreshTop(true)
     for (const view of added) {
       view.group.position.copy(view.home)
       view.touch.copy(view.home)
@@ -1759,13 +1768,27 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
     return point
   }
 
+  function topAnchorView() {
+    const session = topKey === 'orchestrator' ? null : views.get(topKey)
+    if (session || mainHidden) return session
+    for (const view of views.values()) {
+      if (view.orchestrator) return view
+    }
+    return null
+  }
+
   function aimOrchestratorLine(view, mainView) {
     if (!view.orchestratorLink) return
-    const mainAt = mainView ? mainView.group.position : ORCHESTRATOR_HOME
     const parentKey = lineParentKey(view.key, currentLadder)
-    const parentView = parentKey === 'orchestrator' ? null : views.get(parentKey)
-    const [start, end] = orchestratorLineEnds(parentView ? parentView.group.position : mainAt, view.group.position, view.orchestratorEnds)
+    const parentView = parentKey === 'orchestrator' || (mainHidden && mainView) ? null : views.get(parentKey)
+    const origin = parentView ?? mainView
+    if (view.key === topKey || (mainHidden && !origin)) {
+      view.orchestratorLink.visible = false
+      return
+    }
+    const [start, end] = orchestratorLineEnds(origin?.group.position ?? ORCHESTRATOR_HOME, view.group.position, view.orchestratorEnds)
     setEnds(view.orchestratorLink, start, end)
+    view.orchestratorLink.visible = true
   }
 
   function setSway(level) {
@@ -1842,24 +1865,33 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
     }
   }
 
-  function update(state, delta, now, world, terminals, callout = null) {
-    currentTerminals = terminals ?? null
-    const own = state.agents.get('orchestrator') ?? null
-    lastOwnBusy = Boolean(own) && (own.status === 'working' || own.status === 'queued')
+  function rememberMainWork(state) {
+    const own = state.agents.get('orchestrator')
+    lastOwnBusy = own?.status === 'working' || own?.status === 'queued'
+    mainEverBusy ||= lastOwnBusy || own?.runs > 0
+  }
+
+  function updateTop(state) {
+    rememberMainWork(state)
     lastLaneTop = laneStarterTop({ agents: state.agents, at: state.latest })
     lastDelegatingTop = delegatingSessionTop({ agents: state.agents, at: state.liveNow ?? state.latest })
-    const nextTop = computeTop()
+    lastSessionTop = latestSessionTop(state.agents, views)
     const ranNow = []
     for (const view of views.values()) {
       if (view.sessionReader && !view.parentKey && entryRan(state.agents.get(view.key))) ranNow.push(view.key)
     }
     const signature = ranNow.join('|')
-    if (nextTop !== topKey || signature !== ranSignature) {
-      topKey = nextTop
+    const readersChanged = signature !== ranSignature
+    if (readersChanged) {
       ranSignature = signature
       ranReaders = new Set(ranNow)
-      placeViews()
     }
+    refreshTop(readersChanged)
+  }
+
+  function update(state, delta, now, world, terminals, callout = null) {
+    currentTerminals = terminals ?? null
+    updateTop(state)
     if (world.back && world.right) {
       camUp.crossVectors(world.back, world.right).normalize()
       rotMatrix.makeBasis(world.right, camUp, world.back)
@@ -1870,16 +1902,7 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
     swayLevel = isStill ? 0 : swayLevel + (swayTarget - swayLevel) * easeRate(delta, 1.5, false)
     endedList.length = 0
     syncViews(state, terminals)
-    let mainView = null
-    if (topKey !== 'orchestrator') mainView = views.get(topKey) ?? null
-    if (!mainView) {
-      for (const view of views.values()) {
-        if (view.orchestrator) {
-          mainView = view
-          break
-        }
-      }
-    }
+    const mainView = topAnchorView()
     let subCount = 0
     for (const view of views.values()) {
       if (view.subOrchestrator) subCount += 1
@@ -1906,8 +1929,10 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
       const style = STYLE[status] ?? STYLE.idle
       const fade = view.parentKey ? (view.fadeStart > 0 ? childFade(now - view.fadeStart, isStill) : 1) : 1
       const ran = entryRan(entry)
-      if (view.sessionReader && !ran && view.key !== topKey) {
+      if ((view.orchestrator && mainHidden)
+        || (view.sessionReader && !ran && view.key !== topKey)) {
         view.group.visible = false
+        clearSpawn(view)
         for (const slot of view.beatRings) slot.line.visible = false
         view.link.visible = false
         view.callout.object.visible = false
@@ -1940,9 +1965,14 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
         } else {
           drawing = draw.segments < count
           view.shape.geometry.setDrawRange(0, draw.segments * 2)
-          const end = spawn.parent.group.position.clone().lerp(view.group.position, draw.penProgress)
-          setEnds(spawn.pen, spawn.parent.group.position, end)
-          writeOpacity(spawn.pen.material, draw.penOpacity)
+          if (spawn.pen) {
+            spawn.pen.visible = !spawn.parent.orchestrator || !mainHidden
+            if (spawn.pen.visible) {
+              const start = spawn.parent.group.position
+              setEnds(spawn.pen, start, start.clone().lerp(view.group.position, draw.penProgress))
+              writeOpacity(spawn.pen.material, draw.penOpacity)
+            }
+          }
           spawn.head.visible = draw.segments > 0 && drawing
           if (spawn.head.visible) spawn.head.position.fromBufferAttribute(view.shape.geometry.getAttribute('position'), draw.segments * 2 - 1)
         }
@@ -2159,7 +2189,7 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
       view.link.visible = !presence.dim && !drawing && Boolean(terminals.isOpen?.(view.key))
       if (view.parentLink) {
         const parentView = views.get(view.parentKey)
-        if (parentView) {
+        if (parentView?.group.visible) {
           setEnds(view.parentLink, parentView.group.position, view.group.position)
           writeColor(view.parentLink.material, parentView.shape.material.color.getHex())
           writeOpacity(view.parentLink.material, 0.3 * fade)
@@ -2172,7 +2202,6 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
         aimOrchestratorLine(view, mainView)
         writeColor(view.orchestratorLink.material, WHITE)
         writeOpacity(view.orchestratorLink.material, view.subOrchestrator ? SUB_ORCHESTRATOR_LINK_OPACITY : ORCHESTRATOR_LINK_OPACITY)
-        view.orchestratorLink.visible = view.key !== topKey
       }
 
       if (view.web && (!online || (status !== 'working' && status !== 'queued'))) view.web = false
@@ -2248,6 +2277,7 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
   }
 
   function snap(state, world) {
+    updateTop(state)
     retired = new WeakSet()
     syncViews(state, null, false)
     for (const view of views.values()) {
@@ -2295,16 +2325,7 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
         view.group.position.copy(view.home)
       }
     }
-    let mainView = null
-    if (topKey !== 'orchestrator') mainView = views.get(topKey) ?? null
-    if (!mainView) {
-      for (const view of views.values()) {
-        if (view.orchestrator) {
-          mainView = view
-          break
-        }
-      }
-    }
+    const mainView = topAnchorView()
     for (const view of views.values()) aimOrchestratorLine(view, mainView)
   }
 
@@ -2316,5 +2337,5 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
     pickables.length = 0
   }
 
-  return { views, pickables, update, snap, aimAt, setTasks, setLadder, setLabels, setChosenTop, setDepth, setRoster, setBands, setViewport, dispose, beat, setSway, webStart, webEnd, webActive, setOnline, topKey: () => topKey, chosenTop: () => chosenTop, depth: () => depth }
+  return { views, pickables, update, updateTop, snap, aimAt, setTasks, setLadder, setLabels, setChosenTop, setDepth, setRoster, setBands, setViewport, dispose, beat, setSway, webStart, webEnd, webActive, setOnline, rememberMainWork, topKey: () => topKey, chosenTop: () => chosenTop, mainHidden: () => mainHidden, depth: () => depth }
 }

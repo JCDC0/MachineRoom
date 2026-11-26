@@ -431,6 +431,35 @@ describe('FamilyTree rows', () => {
     })
   })
 
+  it('offers to clear the top only while pinned and asks before saving', async () => {
+    const { client } = makeClient()
+    let pinned = false
+    client.family = async () => ({ ...FAMILY, top: 'orchestrator', pinned })
+    client.setFamilyTop = vi.fn(async ({ top }) => {
+      pinned = top !== ''
+    })
+    await withDom(async ({ container, root }) => {
+      await mount(root, client)
+      const main = () => rowByLabel(container, 'Orchestrator')
+      const trigger = () => main().querySelector('[aria-haspopup="menu"]')
+      const menu = () => container.ownerDocument.body.querySelector('[role="menu"]')
+      const confirm = () => container.querySelector('.mr-side-confirm-card')
+      const clear = 'Let the room choose the top'
+      await click(root, trigger())
+      expect(buttonWithText(menu(), clear)).toBeNull()
+      await click(root, buttonWithText(menu(), 'Put at the top'))
+      await click(root, buttonWithText(confirm(), 'Put at the top'))
+      expect(client.setFamilyTop).toHaveBeenLastCalledWith({ top: 'orchestrator', confirmed: true })
+      await chooseAction(root, main(), clear)
+      expect(confirm().textContent).toContain(`${clear}?`)
+      expect(client.setFamilyTop).toHaveBeenCalledTimes(1)
+      await click(root, buttonWithText(confirm(), clear))
+      expect(client.setFamilyTop).toHaveBeenLastCalledWith({ top: '', confirmed: true })
+      await click(root, trigger())
+      expect(buttonWithText(menu(), clear)).toBeNull()
+    })
+  })
+
   it('puts the name and status over harness and model, with shared trailing actions', async () => {
     const { client } = makeClient()
     await withDom(async ({ container, root }) => {

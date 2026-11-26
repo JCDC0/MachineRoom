@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -259,10 +259,9 @@ describe('buildFamilyNodes pure helper', () => {
       runsFolder: runs,
       lanesConfig: lanes,
       isWorking: () => false,
-      hideIdleMain: true,
     })
-    expect(sessionNodes.find((n) => n.id === 'agy3').parent).toBe('session:claude-session')
-    expect(sessionNodes[0].children).toContain('agy3')
+    expect(sessionNodes.find((n) => n.id === 'agy3').parent).toBe('orchestrator')
+    expect(sessionNodes.find((n) => n.id === 'orchestrator').children).toContain('agy3')
   })
 })
 
@@ -1219,23 +1218,34 @@ describe('the chosen top and nested subs', () => {
   })
 
   it('saves the top from a confirmed page request and makes a session the root', async () => {
-    const { url } = await startBridge()
+    const { url, projectRoot, runsFolder } = await startBridge()
+    const readFamily = async () => (await request(`${url}/api/family`, { origin: '' })).body
+    expect(await readFamily()).toMatchObject({ top: 'orchestrator', pinned: false, mainHasConversation: false })
     const body = { top: 'claude-session', confirmed: true }
     expect((await request(`${url}/api/family/top`, { method: 'POST', origin: '', body })).status).toBe(403)
     expect((await request(`${url}/api/family/top`, { method: 'POST', body: { top: 'nope', confirmed: true } })).status).toBe(400)
     expect((await request(`${url}/api/family/top`, { method: 'POST', body: { top: 'claude-session' } })).status).toBe(400)
     expect((await request(`${url}/api/family/top`, { method: 'POST', body })).body).toEqual({ ok: true, top: 'claude-session' })
-    const family = (await request(`${url}/api/family`, { origin: '' })).body
-    expect(family.top).toBe('claude-session')
-    expect(family.nodes[0]).toMatchObject({ id: 'session:claude-session', kind: 'session', parent: null })
-    expect(family.nodes.some((n) => n.id === 'orchestrator')).toBe(false)
-    expect(family.nodes.find((n) => n.id === 'opencode').parent).toBe('session:claude-session')
-    expect(family.nodes[0].children).toEqual(expect.arrayContaining(['opencode', 'opencode2', 'claude']))
+    const family = await readFamily()
+    expect(family).toMatchObject({ top: 'claude-session', pinned: true })
+    expect(family.nodes[0]).toMatchObject({ id: 'session:claude-session', kind: 'session', parent: null, children: ['orchestrator'] })
+    expect(family.nodes.find((node) => node.id === 'orchestrator')).toMatchObject({ parent: 'session:claude-session', working: false })
+    expect(family.nodes.find((node) => node.id === 'opencode').parent).toBe('orchestrator')
     await request(`${url}/api/family/top`, { method: 'POST', body: { top: 'orchestrator', confirmed: true } })
-    const back = (await request(`${url}/api/family`, { origin: '' })).body
-    expect(back.top).toBe('orchestrator')
+    const back = await readFamily()
+    expect(back).toMatchObject({ top: 'orchestrator', pinned: true })
     expect(back.nodes.some((n) => n.kind === 'session')).toBe(false)
     expect(back.nodes[0].id).toBe('orchestrator')
+    const file = topFileFor(projectRoot, runsFolder)
+    expect(existsSync(file)).toBe(true)
+    expect((await request(`${url}/api/family/top`, { method: 'POST', body: { confirmed: true } })).status).toBe(400)
+    expect((await request(`${url}/api/family/top`, { method: 'POST', body: { top: '' } })).status).toBe(400)
+    expect(existsSync(file)).toBe(true)
+    const clear = () => request(`${url}/api/family/top`, { method: 'POST', body: { top: '', confirmed: true } })
+    expect((await clear()).body).toEqual({ ok: true, top: '' })
+    expect(existsSync(file)).toBe(false)
+    expect(await readFamily()).toMatchObject({ top: 'orchestrator', pinned: false })
+    expect((await clear()).status).toBe(200)
   })
 
   it.each([
@@ -1249,7 +1259,7 @@ describe('the chosen top and nested subs', () => {
     const id = `session:${top}`
     expect(family.top).toBe(top)
     expect(family.nodes[0]).toMatchObject({ id, kind: 'session', parent: null, harness, label })
-    expect(family.nodes.find((node) => node.id === 'opencode')?.parent).toBe(id)
+    expect(family.nodes.find((node) => node.id === 'opencode')?.parent).toBe('orchestrator')
   })
 
   it('puts a lane with an open or recent run under its starter session', async () => {
@@ -1285,7 +1295,7 @@ describe('the chosen top and nested subs', () => {
     expect(node(await readFamily(), 'opencode').parent).toBe('orchestrator')
   })
 
-  it('keeps an idle orchestrator by default and leaves it out only with hideIdleMain', () => {
+  it('keeps an idle orchestrator and its hierarchy under a session top', () => {
     const root = tempDir('mr-top-hide-')
     const runs = tempDir('mr-top-hide-runs-')
     writeFileSync(topFileFor(root, runs), JSON.stringify({ top: 'claude-session' }))
@@ -1312,38 +1322,18 @@ describe('the chosen top and nested subs', () => {
       expect(keptNodes.find((n) => n.id === laneId).parent).toBe('orchestrator')
     }
 
-    const plainNodes = buildFamilyNodes({
-      projectRoot: root,
-      runsFolder: runs,
-      lanesConfig: SAMPLE_LANES,
-      isWorking: () => false,
-      hideIdleMain: true,
-    })
-    expect(plainNodes.some((n) => n.id === 'orchestrator')).toBe(false)
-    expect(plainNodes[0]).toMatchObject({
-      id: 'session:claude-session',
-      kind: 'session',
-      parent: null,
-      children: ['opencode', 'opencode2', 'claude'],
-    })
-    for (const laneId of ['opencode', 'opencode2', 'claude']) {
-      expect(plainNodes.find((n) => n.id === laneId).parent).toBe('session:claude-session')
-    }
-
     const withSubs = buildFamilyNodes({
       projectRoot: root,
       runsFolder: runs,
       lanesConfig: SAMPLE_LANES,
       orchestrators,
       isWorking: () => false,
-      hideIdleMain: true,
     })
-    expect(withSubs.some((n) => n.id === 'orchestrator')).toBe(false)
-    expect(withSubs[0].children).toEqual(expect.arrayContaining(['a', 'c', 'x', 'y', 'opencode2', 'claude']))
-    expect(withSubs.find((n) => n.id === 'a').parent).toBe('session:claude-session')
+    expect(withSubs[0].children).toEqual(['orchestrator'])
+    expect(withSubs.find((n) => n.id === 'a').parent).toBe('orchestrator')
     expect(withSubs.find((n) => n.id === 'b').parent).toBe('a')
     expect(withSubs.find((n) => n.id === 'opencode').parent).toBe('a')
-    expect(withSubs.find((n) => n.id === 'claude').parent).toBe('session:claude-session')
+    expect(withSubs.find((n) => n.id === 'claude').parent).toBe('orchestrator')
   })
 
   it('keeps the orchestrator under a session top while it is working, and when it is the top', () => {
@@ -1356,7 +1346,6 @@ describe('the chosen top and nested subs', () => {
       runsFolder: runs,
       lanesConfig: SAMPLE_LANES,
       isWorking: (key) => key === 'orchestrator',
-      hideIdleMain: true,
     })
     expect(workingNodes[0]).toMatchObject({
       id: 'session:claude-session',
@@ -1380,7 +1369,6 @@ describe('the chosen top and nested subs', () => {
       runsFolder: runs,
       lanesConfig: SAMPLE_LANES,
       isWorking: () => false,
-      hideIdleMain: true,
     })
     expect(orchTopNodes.some((n) => n.kind === 'session')).toBe(false)
     expect(orchTopNodes[0]).toMatchObject({
@@ -1452,6 +1440,36 @@ describe('the chosen top and nested subs', () => {
     expect(notices).toEqual([{ topic: 'family' }, { topic: 'agents' }])
   })
 
+  it('reports a conversation from either the current thread or the saved history', async () => {
+    const projectRoot = tempDir('mr-family-chat-')
+    const runsFolder = tempDir('mr-family-chat-runs-')
+    let current = 0
+    let saved = 0
+    let family
+    const api = createFamilyApi({
+      projectRoot,
+      runsFolder,
+      lanes: SAMPLE_LANES,
+      orchestrators: {
+        main: {
+          currentSessionInfo: () => ({ count: current }),
+          listSessions: () => [{ count: saved }],
+        },
+      },
+      sendJson: (req, res, status, body) => { family = body },
+    })
+    const read = async () => {
+      await api.handle({ method: 'GET', headers: {} }, {}, new URL('http://127.0.0.1/api/family'))
+      return family.mainHasConversation
+    }
+    expect(await read()).toBe(false)
+    current = 1
+    expect(await read()).toBe(true)
+    current = 0
+    saved = 1
+    expect(await read()).toBe(true)
+  })
+
   it('keeps orchestrator in GET /api/agents under a session top while an orchestrator lane run is open', async () => {
     const { url, projectRoot, runsFolder } = await startBridge()
     await request(`${url}/api/family/top`, {
@@ -1488,8 +1506,10 @@ describe('the chosen top and nested subs', () => {
     const client = createMockClient()
     await client.setFamilyTop({ top })
     const family = await client.family()
-    expect(family.top).toBe(top)
+    expect(family).toMatchObject({ top, pinned: true })
     expect(family.nodes[0]).toMatchObject({ kind: 'session', harness, label })
+    await client.setFamilyTop({ top: '' })
+    expect(await client.family()).toMatchObject({ top: 'orchestrator', pinned: false })
   })
 
   it('sets the top session node working state from isWorking and from the sessions source', async () => {

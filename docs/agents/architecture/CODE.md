@@ -417,6 +417,7 @@ tests/            vitest; tests/helpers/bridge.js starts a bridge on port 0 over
   sound-engine.test.js              src/ui/sound.js, src/Stage.jsx: beat detection on kicks/soft tracks, Dance/Pulse toggles and seek
   sound.test.js                     src/ui/sound.js: screen-X pan, offscreen culling and rolling beat energy detector
   sprites.test.js                   src/engine/sprites.js: seeded deterministic PRNG in [0, 1) and easeInOut curve
+  stage-family-top.test.js          src/Stage.jsx: familyTopOptions, the pin and saved main conversation handed to setChosenTop
   stage-lens.test.js                src/Stage.jsx, src/ui/Hud.jsx: lens labels, live empty-room text, link tag and offline borders
   stage-live-files.test.js          src/Stage.jsx: touchedFiles extraction and afterIdle callback vs timer fallback
   stage-seam.test.js                src/Stage.jsx: animation-frame seam batching, changed pose writes and popover exclusions

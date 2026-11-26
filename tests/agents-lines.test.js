@@ -89,7 +89,7 @@ function harness(roster = ROSTER) {
     remove() {},
     setFade() {},
     setOpen() {},
-    setVisible() {},
+    setVisible: vi.fn(),
     edgePoint: (key, side, out) => out.set(100, 290, 0),
   }
   const world = {
@@ -144,6 +144,7 @@ describe('lineParentKey', () => {
 describe('the lane line with a ladder', () => {
   it('ends a lane line on its sub and keeps the sub line on the main', () => {
     const { agents, state, terminals, world } = harness()
+    agents.setChosenTop('orchestrator', { mainHasConversation: true })
     agents.setLadder(LADDER)
     agents.update(state, 0.016, 0, world, terminals)
     const lane = agents.views.get('opencode')
@@ -166,6 +167,7 @@ describe('the lane line with a ladder', () => {
   it('falls back to the main when the sub has no view yet', () => {
     const roster = ROSTER.filter((agent) => agent.key !== 'sub-frontend')
     const { agents, state, terminals, world } = harness(roster)
+    agents.setChosenTop('orchestrator', { mainHasConversation: true })
     agents.setLadder(LADDER)
     agents.update(state, 0.016, 0, world, terminals)
     const lane = agents.views.get('opencode')
@@ -177,6 +179,7 @@ describe('the lane line with a ladder', () => {
 
   it('re-aims the lines in place when the ladder changes', () => {
     const { agents, state, terminals, world } = harness()
+    agents.setChosenTop('orchestrator', { mainHasConversation: true })
     agents.setLadder(LADDER)
     agents.update(state, 0.016, 0, world, terminals)
     const lane = agents.views.get('opencode')
@@ -196,15 +199,76 @@ describe('the lane line with a ladder', () => {
 describe('the chosen top', () => {
   const ROSTER_WITH_SESSION = [...ROSTER, { key: 'claude-session', name: 'Claude Code session', parser: 'claude' }]
 
+  it('hides a never-run main and seats the outside session at the top', () => {
+    const { agents, terminals, state, world } = harness(ROSTER_WITH_SESSION)
+    const main = agents.views.get('orchestrator')
+    const session = agents.views.get('claude-session')
+    const lane = agents.views.get('opencode')
+    apply(state, { type: 'run.start', agent: 'claude-session', runId: 'c1', time: 1000 })
+    agents.setLadder(LADDER)
+    agents.snap(state, world)
+    agents.update(state, 0.016, 0, world, terminals)
+    expect(main.group.visible).toBe(false)
+    expect(main.callout.object.visible).toBe(false)
+    expect(main.calloutLine.visible).toBe(false)
+    expect(main.link.visible).toBe(false)
+    expect(main.index).toBe(-1)
+    expect(terminals.setVisible).toHaveBeenCalledWith('orchestrator', false)
+    expect(state.agents.has('orchestrator')).toBe(true)
+    expect(agents.topKey()).toBe('claude-session')
+    expect(session.group.visible).toBe(true)
+    expectAt(session.group.position, ORCHESTRATOR_HOME)
+    expect(lane.orchestratorLink.visible).toBe(true)
+    expectAt(lineEnds(lane.orchestratorLink).start, session.group.position)
+    agents.dispose()
+  })
+
+  it.each(['queued', 'working'])('reveals main once it is %s and keeps it after the turn', (status) => {
+    const { agents, terminals, state, world } = harness(ROSTER_WITH_SESSION)
+    const main = agents.views.get('orchestrator')
+    apply(state, { type: 'run.start', agent: 'claude-session', runId: 'c1', time: 1000 })
+    agents.update(state, 0.016, 0, world, terminals)
+    expect(main.group.visible).toBe(false)
+    const type = status === 'queued' ? 'run.queued' : 'run.start'
+    apply(state, { type, agent: 'orchestrator', runId: 'o1', time: 2000 })
+    agents.update(state, 0.016, 16, world, terminals)
+    expect(main.group.visible).toBe(true)
+    expect(agents.topKey()).toBe('orchestrator')
+    apply(state, { type: 'run.end', agent: 'orchestrator', runId: 'o1', time: 3000, ok: true })
+    agents.update(state, 0.016, 32, world, terminals)
+    expect(main.group.visible).toBe(true)
+    agents.dispose()
+  })
+
+  it('still draws main in an empty room with an unused session reader', () => {
+    const roster = ROSTER_WITH_SESSION.filter(({ key }) => key === 'orchestrator' || key === 'claude-session')
+    const { agents, terminals, state, world } = harness(roster)
+    agents.update(state, 0.016, 0, world, terminals)
+    expect(agents.topKey()).toBe('orchestrator')
+    const main = agents.views.get('orchestrator')
+    expect(main.group.visible).toBe(true)
+    expectAt(main.group.position, ORCHESTRATOR_HOME)
+    agents.dispose()
+  })
+
+  it('hides main in a lane-only room and leaves the lane without a line to main', () => {
+    const { agents, terminals, state, world } = harness(ROSTER)
+    agents.update(state, 0.016, 0, world, terminals)
+    expect(agents.views.get('orchestrator').group.visible).toBe(false)
+    expect(agents.views.get('opencode').orchestratorLink.visible).toBe(false)
+    agents.dispose()
+  })
+
   it('puts the chosen session above the hub with no lane run of its own', () => {
     const { agents, terminals, state, world } = harness(ROSTER_WITH_SESSION)
     expect(agents.topKey()).toBe('orchestrator')
-    agents.setChosenTop('claude-session')
+    agents.setChosenTop('claude-session', { mainHasConversation: true })
     agents.update(state, 0.016, 0, world, terminals)
     agents.snap(state, world)
     const session = agents.views.get('claude-session')
     const main = agents.views.get('orchestrator')
     expect(agents.topKey()).toBe('claude-session')
+    expect(main.group.visible).toBe(true)
     expectAt(session.group.position, ORCHESTRATOR_HOME)
     expectAt(main.group.position, new THREE.Vector3(ORCHESTRATOR_HOME.x, HUB_Y + PARK_LIFT, ORCHESTRATOR_HOME.z))
     expect(lineEnds(agents.views.get('opencode').orchestratorLink).start).toEqual(
@@ -237,10 +301,11 @@ describe('the chosen top', () => {
     agents.setChosenTop('claude-session')
     agents.update(state, 0.016, 0, world, terminals)
     agents.snap(state, world)
-    agents.setChosenTop('orchestrator')
+    agents.setChosenTop('orchestrator', { pinned: true })
     agents.update(state, 0.016, 0, world, terminals)
     agents.snap(state, world)
     expect(agents.topKey()).toBe('orchestrator')
+    expect(agents.views.get('orchestrator').group.visible).toBe(true)
     expectAt(agents.views.get('orchestrator').group.position, ORCHESTRATOR_HOME)
     agents.dispose()
   })
@@ -249,7 +314,7 @@ describe('the chosen top', () => {
     const roster = [...ROSTER_WITH_SESSION, { key: 'opencode-session', name: 'OpenCode session', parser: 'opencode' }]
     const { agents, terminals, state, world } = harness(roster)
     apply(state, { time: 0, type: 'run.start', agent: 'opencode-session', runId: 'o1' })
-    agents.setChosenTop('claude-session')
+    agents.setChosenTop('claude-session', { mainHasConversation: true })
     agents.update(state, 0.016, 0, world, terminals)
     agents.snap(state, world)
     const session = agents.views.get('claude-session')
@@ -274,7 +339,7 @@ describe('the chosen top', () => {
     const { agents, terminals, state, world } = harness(roster)
     apply(state, { time: 0, type: 'run.start', agent: 'claude-session', runId: 'c1' })
     apply(state, { time: 0, type: 'run.start', agent: 'opencode-session', runId: 'o1' })
-    agents.setChosenTop('claude-session')
+    agents.setChosenTop('claude-session', { mainHasConversation: true })
     agents.update(state, 0.016, 0, world, terminals)
     agents.snap(state, world)
     const views = [...agents.views.values()].filter((view) => !view.parentKey)
@@ -357,6 +422,29 @@ describe('an outside session that leads subagents takes the top', () => {
     apply(state, { type: 'agent.spawn', agent: session, child, name: child, time })
   }
 
+  it.each(['a delegating session', 'a lane starter'])('keeps pinned main above %s', (other) => {
+    const { agents, state, terminals, world } = harness(ROSTER_WITH_SESSIONS)
+    const session = 'antigravity-session'
+    if (other === 'a delegating session') {
+      spawn(state, session, 'worker', 1000)
+    } else {
+      apply(state, { type: 'run.start', agent: session, runId: 's1', time: 1000 })
+      apply(state, { type: 'run.start', agent: 'opencode', runId: 'o1', time: 2000, startedBy: { harness: 'agy', session: 's1' } })
+    }
+    agents.setChosenTop('orchestrator')
+    agents.update(state, 0.016, 0, world, terminals)
+    expect(agents.topKey()).toBe(session)
+    agents.setChosenTop('orchestrator', { pinned: true })
+    agents.update(state, 0.016, 16, world, terminals)
+    expect(agents.topKey()).toBe('orchestrator')
+    expect(agents.views.get('orchestrator').group.visible).toBe(true)
+    agents.setChosenTop('orchestrator', { pinned: false })
+    agents.update(state, 0.016, 32, world, terminals)
+    expect(agents.topKey()).toBe(session)
+    expect(agents.views.get('orchestrator').group.visible).toBe(false)
+    agents.dispose()
+  })
+
   it('seats the session whose children work in the orchestrator place', () => {
     const { agents, state, terminals, world } = harness(ROSTER_WITH_SESSIONS)
     spawn(state, 'antigravity-session', 'antigravity-session~1', 1000)
@@ -367,7 +455,7 @@ describe('an outside session that leads subagents takes the top', () => {
     const main = agents.views.get('orchestrator')
     expect(agents.topKey()).toBe('antigravity-session')
     expectAt(session.group.position, ORCHESTRATOR_HOME)
-    expectAt(main.group.position, new THREE.Vector3(ORCHESTRATOR_HOME.x, HUB_Y + PARK_LIFT, ORCHESTRATOR_HOME.z))
+    expect(main.group.visible).toBe(false)
     agents.dispose()
   })
 
@@ -410,7 +498,7 @@ describe('an outside session that leads subagents takes the top', () => {
     agents.dispose()
   })
 
-  it('gives the seat back once the children ended and the window has passed', () => {
+  it('uses the most recent session once the delegation window has passed', () => {
     const { agents, terminals, world } = harness(ROSTER_WITH_SESSIONS)
     const clock = vi.spyOn(performance, 'now').mockReturnValue(0)
     try {
@@ -421,6 +509,7 @@ describe('an outside session that leads subagents takes the top', () => {
         { type: 'run.start', agent: session, runId: 'run', time: 1000 },
         { type: 'agent.spawn', agent: session, child, name: 'Worker', runId: 'run', time: 1000 },
         { type: 'agent.end', agent: child, ok: true, time: 2000 },
+        { type: 'run.start', agent: 'claude-session', runId: 'c1', time: 2000 },
       ])
       agents.update(player.state, 0.016, 0, world, terminals)
       expect(agents.topKey()).toBe(session)
@@ -432,8 +521,8 @@ describe('an outside session that leads subagents takes the top', () => {
       agents.update(player.state, 0.016, LANE_START_TOP_MS + 1, world, terminals)
       agents.snap(player.state, world)
       expect(player.state.latest).toBe(2000)
-      expect(agents.topKey()).toBe('orchestrator')
-      expectAt(agents.views.get('orchestrator').group.position, ORCHESTRATOR_HOME)
+      expect(agents.topKey()).toBe('claude-session')
+      expect(agents.views.get('orchestrator').group.visible).toBe(false)
     } finally {
       clock.mockRestore()
       agents.dispose()
@@ -463,7 +552,7 @@ describe('the session that starts a lane sits at the top', () => {
     const lane = agents.views.get('opencode')
     expect(agents.topKey()).toBe('claude-session')
     expectAt(session.group.position, ORCHESTRATOR_HOME)
-    expectAt(main.group.position, new THREE.Vector3(ORCHESTRATOR_HOME.x, HUB_Y + PARK_LIFT, ORCHESTRATOR_HOME.z))
+    expect(main.group.visible).toBe(false)
     expectAt(lineEnds(lane.orchestratorLink).start, session.group.position)
 
     apply(state, { type: 'run.start', agent: 'orchestrator', runId: 'orchestrator:1', time: 2000 })

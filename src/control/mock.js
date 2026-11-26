@@ -911,7 +911,7 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
   }
   const subChats = new Map()
   const familyLabels = new Map()
-  let familyTop = 'orchestrator'
+  let familyTop = ''
   let ringSeats = []
   const keySlots = new Map()
   const proposals = []
@@ -3080,7 +3080,10 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
         } : null
         if (sessionNode) mainNode.parent = sessionNode.id
         return {
-          top: familyTop,
+          top: familyTop || 'orchestrator',
+          pinned: familyTop !== '',
+          mainHasConversation: state.orchestratorChat.messages.length > 0
+            || state.orchestratorChat.sessions.some((session) => session.messages?.length > 0),
           nodes: [...(sessionNode ? [sessionNode] : []), mainNode, ...subNodes, ...laneNodes],
           keys: [...keySlots.keys()].sort().map((name) => ({ name })),
           proposals: clone(proposals),
@@ -3123,11 +3126,12 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
       call('setFamilyTop', () => {
         const { top, confirmed = true } = options
         if (confirmed !== true) throw new Error('Confirm putting the agent at the top first.')
-        if (top !== 'orchestrator' && !SESSION_TOPS.has(top)) {
+        if (top !== '' && top !== 'orchestrator' && !SESSION_TOPS.has(top)) {
           throw new Error('Choose orchestrator or a registered session as the top agent.')
         }
         familyTop = top
         emit({ topic: 'family' })
+        emit({ topic: 'agents' })
         return { ok: true, top }
       }),
 

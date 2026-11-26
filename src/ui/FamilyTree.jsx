@@ -1420,10 +1420,10 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
       setActionError('This bridge cannot set the top agent.')
       return
     }
-    const key = node.kind === 'session' ? node.id.replace(/^session:/, '') : 'orchestrator'
+    const key = node ? (node.kind === 'session' ? node.id.replace(/^session:/, '') : 'orchestrator') : ''
     ask({
-      text: `Put ${node.label} at the top of the Agents list?`,
-      label: 'Put at the top',
+      text: node ? `Put ${node.label} at the top of the Agents list?` : 'Let the room choose the top?',
+      label: node ? 'Put at the top' : 'Let the room choose the top',
       busyText: 'Setting the top...',
       run: async () => {
         await client.setFamilyTop({ top: key, confirmed: true })
@@ -2717,8 +2717,13 @@ export function FamilyTree({ client = null, tasks = null, project = '' }) {
       })
     }
     const topKey = family?.top ?? (tree.root?.kind === 'session' ? tree.root.id.slice(8) : 'orchestrator')
-    if ((session || node.kind === 'orchestrator') && (session ? node.id.slice(8) : 'orchestrator') !== topKey) {
+    const main = node.kind === 'orchestrator'
+    const pinned = family?.pinned === true
+    if ((session && node.id.slice(8) !== topKey) || (main && (topKey !== 'orchestrator' || !pinned))) {
       items.push({ label: 'Put at the top', disabled: busy, onSelect: () => askTop(node) })
+    }
+    if (main && pinned) {
+      items.push({ label: 'Let the room choose the top', disabled: busy, onSelect: () => askTop(null) })
     }
     if (!mainAgent && session && node.id.slice(8) === topKey) {
       items.push({ label: 'Put Orchestrator at the top', disabled: busy, onSelect: () => askTop(orchestratorTarget) })
