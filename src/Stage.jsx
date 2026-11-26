@@ -47,6 +47,11 @@ import { multiplierText } from './ui/lensResize.js'
 
 const SPEEDS = [1, 2, 4, 8]
 const NONE = []
+const UNPINNED = Object.freeze({ pinned: false, mainHasConversation: false })
+
+export function familyTopOptions(answer) {
+  return { pinned: answer?.pinned === true, mainHasConversation: answer?.mainHasConversation === true }
+}
 const COVER_PANEL = '.control-drawer, .hud-settings, .hud-dropdown, .mr-side-overlay, .hud-help-backdrop, .hud-band-list, .hud-menu.is-open, .mr-assistant, .mr-guide-backdrop, .mr-launcher, .mr-setup-backdrop'
 const IDLE_PANEL = `${COVER_PANEL}, .mr-inspector, .brief-confirm-card, .mr-side-confirm-card, .endpoints-confirm`
 const BADGE = {
@@ -708,6 +713,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
   const latestLadderRef = useRef(null)
   const latestLabelsRef = useRef(null)
   const latestTopRef = useRef('orchestrator')
+  const latestTopOptionsRef = useRef(UNPINNED)
   const latestSeatsRef = useRef(null)
   const latestGitRef = useRef(null)
   const knownSoundRef = useRef(null)
@@ -867,7 +873,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
     if (latestLabelsRef.current) {
       room.setLabels(latestLabelsRef.current)
     }
-    room.setChosenTop?.(latestTopRef.current)
+    room.setChosenTop?.(latestTopRef.current, latestTopOptionsRef.current)
     room.setSeatCounts?.(latestSeatsRef.current)
     if (latestGitRef.current) {
       room.setGitState(latestGitRef.current)
@@ -944,12 +950,13 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
   }, [client, demoLadder, live])
 
   useEffect(() => {
-    function apply(next, top = 'orchestrator', seats = null) {
+    function apply(next, top = 'orchestrator', seats = null, topOptions = UNPINNED) {
       latestLabelsRef.current = next
       latestTopRef.current = top
+      latestTopOptionsRef.current = topOptions
       latestSeatsRef.current = Array.isArray(seats) ? seats : null
       setLabels(next)
-      roomRef.current?.setChosenTop?.(top)
+      roomRef.current?.setChosenTop?.(top, topOptions)
       roomRef.current?.setSeatCounts?.(latestSeatsRef.current)
     }
     if (!live || !client || typeof client.family !== 'function') {
@@ -968,7 +975,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
         const answer = await client.family()
         if (!active || !isLatest()) return
         const next = labelsFromFamily(answer)
-        apply(next, typeof answer?.top === 'string' ? answer.top : 'orchestrator', answer?.seats)
+        apply(next, typeof answer?.top === 'string' ? answer.top : 'orchestrator', answer?.seats, familyTopOptions(answer))
         setFamilyNodes(Array.isArray(answer?.nodes) ? answer.nodes : NONE)
         setFamilyProposals(Array.isArray(answer?.proposals) ? answer.proposals : NONE)
         roomRef.current?.setLabels(next)
