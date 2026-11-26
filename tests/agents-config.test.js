@@ -342,8 +342,9 @@ describe('GET /api/harnesses', () => {
     const codex = body.find((item) => item.key === 'codex')
     expect(codex.name).toBe('Codex')
     expect(codex.efforts).toEqual(['low', 'medium', 'high', 'xhigh'])
-    expect(codex.models.map((item) => item.id)).toEqual(['gpt-6-luna', 'gpt-6.1-sol', 'gpt-6.1-terra', 'gpt-6-astra'])
+    expect(codex.models.map((item) => item.id)).toEqual(['gpt-6-luna', 'gpt-6.2-sol', 'gpt-6.1-sol', 'gpt-6.1-terra', 'gpt-6-astra'])
     expect(modelAllowed('codex', 'gpt-6.1-terra')).toBe(true)
+    expect(modelAllowed('codex', 'gpt-6.2-sol')).toBe(true)
 
     const copilot = body.find((item) => item.key === 'copilot')
     expect(copilot.name).toBe('GitHub Copilot')
