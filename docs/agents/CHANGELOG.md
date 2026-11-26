@@ -3,7 +3,7 @@
 ## Unreleased
 
 - Folder cards keep their spacing as contents change, turn around the hub, drift on their own, and have a Folder spacing slider (P742).
-- The sounds are serious now: soft old-computer beeps for touches and messages, a low vwoomp for each star, and quieter folder wooshes; the whir stays.
+- The sounds are serious now: soft old-computer beeps for touches and messages, a cold falling transfer tone for each star, and quieter folder wooshes; the whir stays.
 
 - A deep folder touch keeps its full hold while it waits for the opening wave (P735, R76-5).
 - The room plays stereo folder wooshes, star sparkles, 8-bit touch blips and thinking whirs (P741).

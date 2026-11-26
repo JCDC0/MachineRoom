@@ -31,8 +31,8 @@ const WOOSHES = {
 const WOOSH_PEAK = 0.09
 const CLICK_PEAK = 0.03
 const NOISE_SECONDS = 1
-const STAR_AIR = { from: 380, to: 1500, q: 0.9, level: 0.045 }
-const STAR_TONE = { low: 130, high: 300, end: 170, rise: 0.7, cutoff: 900, level: 0.09 }
+const STAR_AIR = { from: 900, to: 300, q: 0.9, level: 0.035 }
+const STAR_TONE = { from: 150, to: 72, beat: 1.027, cutoff: 520, level: 0.08 }
 const WHIR_LEVEL = 0.04
 const STAR_LIMIT = 4
 const WHIR_LIMIT = 3
@@ -66,9 +66,8 @@ export function computerBeep(kind) {
 export function starSweep(seconds = 0.45) {
   const length = Number.isFinite(seconds) && seconds > 0 ? seconds : 0.45
   return [
-    { at: 0, frequency: STAR_TONE.low },
-    { at: length * STAR_TONE.rise, frequency: STAR_TONE.high },
-    { at: length, frequency: STAR_TONE.end },
+    { at: 0, frequency: STAR_TONE.from },
+    { at: length, frequency: STAR_TONE.to },
   ]
 }
 
@@ -657,27 +656,31 @@ function starParts(context, gate, now, flightSeconds) {
   band.type = 'bandpass'
   band.Q.value = STAR_AIR.q
   band.frequency.setValueAtTime(STAR_AIR.from, now)
-  band.frequency.exponentialRampToValueAtTime(STAR_AIR.to, now + flight * STAR_TONE.rise)
+  band.frequency.exponentialRampToValueAtTime(STAR_AIR.to, now + flight)
   air.gain.value = STAR_AIR.level
   noise.connect(band)
   band.connect(air)
   air.connect(gate)
-  const tone = context.createOscillator()
   const muffle = context.createBiquadFilter()
   const body = context.createGain()
-  tone.type = 'sine'
-  const [start, ...sweep] = starSweep(flight)
-  tone.frequency.setValueAtTime(start.frequency, now)
-  for (const point of sweep) tone.frequency.exponentialRampToValueAtTime(point.frequency, now + point.at)
   muffle.type = 'lowpass'
   muffle.frequency.value = STAR_TONE.cutoff
   body.gain.value = STAR_TONE.level
-  tone.connect(muffle)
   muffle.connect(body)
   body.connect(gate)
+  const tones = [1, STAR_TONE.beat].map((ratio) => {
+    const tone = context.createOscillator()
+    tone.type = 'sine'
+    for (const [index, point] of starSweep(flight).entries()) {
+      if (index === 0) tone.frequency.setValueAtTime(point.frequency * ratio, now)
+      else tone.frequency.exponentialRampToValueAtTime(point.frequency * ratio, now + point.at)
+    }
+    tone.connect(muffle)
+    tone.start(now)
+    return tone
+  })
   noise.start(now)
-  tone.start(now)
-  return { sources: [noise, tone], nodes: [band, air, muffle, body] }
+  return { sources: [noise, ...tones], nodes: [band, air, muffle, body] }
 }
 
 function retireVoice(voice, immediate = false) {

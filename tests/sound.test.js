@@ -66,15 +66,13 @@ describe('room sound shapes', () => {
     expect(computerBeep('folderOpen')).toEqual([])
   })
 
-  it('sweeps each star low, rising through the flight and dropping as it lands, never a tune', () => {
+  it('sweeps each star low and down through the flight, cold and never rising', () => {
     for (const seconds of [0.0625, 0.25, 0.9]) {
-      const [start, peak, end] = starSweep(seconds)
+      const [start, end] = starSweep(seconds)
       expect(start.at).toBe(0)
-      expect(peak.frequency).toBeGreaterThan(start.frequency)
-      expect(end.frequency).toBeLessThan(peak.frequency)
-      expect(peak.at).toBeGreaterThan(start.at)
       expect(end.at).toBeCloseTo(seconds)
-      expect(Math.max(start.frequency, peak.frequency, end.frequency)).toBeLessThan(400)
+      expect(end.frequency).toBeLessThan(start.frequency)
+      expect(start.frequency).toBeLessThan(200)
     }
     expect(starSweep(0)).toEqual(starSweep(0.45))
   })
