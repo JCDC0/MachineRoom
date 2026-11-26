@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The room plays stereo folder wooshes, star sparkles, 8-bit touch blips and thinking whirs (P741).
 - The room hides an unused main orchestrator when another agent is present and lets the owner pin or clear the top seat (P740).
 - Antigravity and Hermes runs keep their own workers when sessions overlap (P734, R76-9).
 - Antigravity workers wait for the reader's idle signal and grandchildren sit under their own parents (P734, R76-8).

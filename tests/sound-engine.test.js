@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { passSound } from '../src/Stage.jsx'
 import { bandIndexForBin, createDanceTracker, sound } from '../src/ui/sound.js'
 
@@ -56,22 +56,53 @@ class FakeAnalyser {
   }
 }
 
-class FakeGain {
-  constructor() {
-    this.gain = { value: 1, setValueAtTime() {}, exponentialRampToValueAtTime() {} }
+function param(value = 0) {
+  return {
+    value,
+    setValueAtTime: vi.fn(),
+    setTargetAtTime: vi.fn(),
+    linearRampToValueAtTime: vi.fn(),
+    exponentialRampToValueAtTime: vi.fn(),
+    cancelScheduledValues: vi.fn(),
   }
-  connect() {}
-  disconnect() {}
 }
 
 class FakeContext {
   constructor() {
+    FakeContext.last = this
     this.state = 'running'
     this.destination = {}
     this.currentTime = 0
+    this.sampleRate = 8000
+    this.nodes = []
+    this.buffers = []
+  }
+  node(kind, fields) {
+    const node = { kind, disconnect: vi.fn(), ...fields }
+    node.connect = (target) => { node.output = target }
+    this.nodes.push(node)
+    return node
   }
   createGain() {
-    return new FakeGain()
+    return this.node('gain', { gain: param(1) })
+  }
+  createDynamicsCompressor() {
+    return this.node('compressor', {
+      threshold: param(), knee: param(), ratio: param(), attack: param(), release: param(),
+    })
+  }
+  createBiquadFilter() {
+    return this.node('filter', { frequency: param(), Q: param() })
+  }
+  createBuffer(channels, length) {
+    expect(channels).toBe(1)
+    const samples = new Float32Array(length)
+    const buffer = { getChannelData: vi.fn(() => samples) }
+    this.buffers.push(buffer)
+    return buffer
+  }
+  createBufferSource() {
+    return this.node('noise', { start: vi.fn(), stop: vi.fn() })
   }
   createAnalyser() {
     return new FakeAnalyser()
@@ -80,10 +111,10 @@ class FakeContext {
     return { connect() {}, disconnect() {} }
   }
   createStereoPanner() {
-    return { pan: { value: 0 }, connect() {}, disconnect() {} }
+    return this.node('panner', { pan: param() })
   }
   createOscillator() {
-    return { type: '', frequency: { value: 0 }, connect() {}, start() {}, stop() {} }
+    return this.node('oscillator', { frequency: param(), start: vi.fn(), stop: vi.fn() })
   }
   resume() {
     return Promise.resolve()
@@ -135,6 +166,157 @@ beforeEach(async () => {
   sampled = 0
   sound.setSettings({ on: true, dance: true, pulse: true, volume: 0.3, musicVolume: 0.5 })
   await sound.playMusic(`/music/track-${clock}.mp3`)
+})
+
+describe('the stereo room sounds', () => {
+  const left = { x: 10, y: 50, width: 100, height: 100, distance: 100, overviewDistance: 1000 }
+  const right = { ...left, x: 90 }
+  let context
+  let first
+
+  function made(kind) {
+    return context.nodes.slice(first).filter((node) => node.kind === kind)
+  }
+
+  function outputOf(node) {
+    return node.output
+  }
+
+  function routing(node) {
+    const chain = []
+    for (let next = node; next !== context.destination; next = outputOf(next)) chain.push(next.kind)
+    return chain
+  }
+
+  beforeEach(() => {
+    vi.useFakeTimers()
+    sound.resetLimit()
+    context = FakeContext.last
+    context.currentTime = 0
+    first = context.nodes.length
+  })
+
+  afterEach(() => {
+    sound.setSettings({ on: false })
+    vi.useRealTimers()
+  })
+
+  it('routes square notes, wooshes and held voices through panners, one compressor and the master', () => {
+    expect(sound.play('read', left)).toBe(true)
+    expect(sound.play('folderOpen', left)).toBe(true)
+    expect(sound.play('folderClose', right)).toBe(true)
+    expect(sound.beep('message', right)).toBe(true)
+    sound.voice('star', 'star', left)
+    sound.voice('think', 'whir', right, 0.7)
+    const [read, second, , , message, star, shimmer, whir] = made('oscillator')
+    const panners = made('panner')
+    const filters = made('filter')
+    const bus = outputOf(panners[0])
+    const master = outputOf(bus)
+    expect([read.type, second.type, message.type, star.type, shimmer.type, whir.type]).toEqual([
+      'square', 'square', 'triangle', 'triangle', 'sine', 'triangle',
+    ])
+    expect(read.frequency.value).not.toBe(second.frequency.value)
+    expect(routing(read)).toEqual(['oscillator', 'gain', 'gain', 'panner', 'compressor', 'gain'])
+    expect(routing(star)).toEqual(['oscillator', 'gain', 'gain', 'gain', 'panner', 'compressor', 'gain'])
+    expect(routing(whir)).toContain('filter')
+    expect(filters.map((filter) => filter.type)).toEqual(['bandpass', 'bandpass', 'lowpass'])
+    expect(filters[0].frequency.exponentialRampToValueAtTime).toHaveBeenCalledWith(3400, 0.35)
+    expect(filters[1].frequency.exponentialRampToValueAtTime).toHaveBeenCalledWith(260, 0.3)
+    expect(made('noise').map((node) => node.buffer)).toEqual([context.buffers[0], context.buffers[0]])
+    expect(context.buffers).toHaveLength(1)
+    expect(context.buffers[0].getChannelData).toHaveBeenCalledTimes(1)
+    expect(panners).toHaveLength(6)
+    expect(panners.every((panner) => outputOf(panner) === bus)).toBe(true)
+    expect(panners[0].pan.value).toBe(-0.8)
+    expect(panners[2].pan.value).toBeCloseTo(0.8)
+    sound.setSettings({ volume: 0.6 })
+    expect(master.gain.value).toBe(0.6)
+    sound.setSettings({ on: false })
+    expect(master.gain.value).toBe(0)
+    expect([star, shimmer, whir].every((source) => source.stop.mock.lastCall[0] === 0)).toBe(true)
+    expect(sound.play('read', left)).toBe(false)
+    sound.voice('new', 'star', left)
+    expect(made('panner')).toHaveLength(6)
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('moves a held voice without replacing it and fades it on explicit stop', () => {
+    sound.voice('s', 'star', left, 1)
+    const [panner] = made('panner')
+    const [source] = made('oscillator')
+    const gain = outputOf(outputOf(outputOf(source)))
+    const gate = outputOf(outputOf(source))
+    context.currentTime = 0.2
+    sound.voice('s', 'star', { ...right, distance: 300 }, 0.5)
+    expect(made('panner')).toHaveLength(1)
+    expect(panner.pan.setTargetAtTime).toHaveBeenLastCalledWith(0.8, 0.2, expect.any(Number))
+    expect(gain.gain.setTargetAtTime).toHaveBeenLastCalledWith(0.425, 0.2, expect.any(Number))
+    sound.stopVoice('s')
+    expect(gate.gain.setTargetAtTime).toHaveBeenLastCalledWith(0, 0.2, expect.any(Number))
+    expect(source.stop.mock.lastCall[0]).toBeCloseTo(0.26)
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('renews the watchdog on movement and releases after half a second without a frame', () => {
+    sound.voice('s', 'star', left)
+    const [source] = made('oscillator')
+    const gate = outputOf(outputOf(source))
+    expect(gate.gain.setTargetAtTime).toHaveBeenLastCalledWith(0, 0.5, expect.any(Number))
+    vi.advanceTimersByTime(300)
+    context.currentTime = 0.3
+    sound.voice('s', 'star', right)
+    expect(gate.gain.setTargetAtTime).toHaveBeenLastCalledWith(0, 0.8, expect.any(Number))
+    expect(source.stop.mock.lastCall[0]).toBeCloseTo(0.86)
+    vi.advanceTimersByTime(499)
+    expect(vi.getTimerCount()).toBe(1)
+    expect(source.stop).toHaveBeenCalledTimes(2)
+    context.currentTime = 0.8
+    vi.advanceTimersByTime(1)
+    expect(gate.gain.setTargetAtTime).toHaveBeenLastCalledWith(0, 0.8, expect.any(Number))
+    expect(source.stop).toHaveBeenCalledTimes(3)
+    expect(vi.getTimerCount()).toBe(0)
+    sound.voice('s', 'star', right)
+    expect(made('panner')).toHaveLength(2)
+  })
+
+  it('shares one rolling limit across twelve one-shots', () => {
+    for (let index = 0; index < 11; index += 1) expect(sound.play('list', left)).toBe(true)
+    expect(sound.beep('message', left)).toBe(true)
+    expect(sound.play('folderClose', left)).toBe(false)
+    vi.advanceTimersByTime(1000)
+    expect(sound.play('folderClose', left)).toBe(true)
+  })
+
+  it('replaces the oldest of four stars and keeps it silent on later moves', () => {
+    for (let index = 0; index < 5; index += 1) sound.voice(index, 'star', left)
+    const sources = made('oscillator').filter((node) => node.type === 'triangle')
+    expect(sources).toHaveLength(5)
+    expect(sources[0].stop.mock.lastCall[0]).toBeLessThan(0.1)
+    expect(sources.slice(1).every((source) => source.stop.mock.lastCall[0] > 0.5)).toBe(true)
+    sound.voice(0, 'star', right)
+    expect(made('panner')).toHaveLength(5)
+  })
+
+  it('keeps three whirs by level and distance and changes the filter as the rings turn', () => {
+    sound.voice('a', 'whir', left, 1)
+    sound.voice('b', 'whir', left, 0.8)
+    sound.voice('c', 'whir', left, 0.6)
+    sound.voice('d', 'whir', { ...left, distance: 1900 }, 1)
+    expect(made('filter')).toHaveLength(3)
+    sound.voice('d', 'whir', right, 1)
+    const sources = made('oscillator')
+    expect(sources).toHaveLength(4)
+    expect(sources[2].stop.mock.lastCall[0]).toBeLessThan(0.1)
+    expect([sources[0], sources[1], sources[3]].every((source) => source.stop.mock.lastCall[0] > 0.5)).toBe(true)
+    const filter = made('filter')[3]
+    const before = filter.frequency.setTargetAtTime.mock.lastCall[0]
+    const gain = outputOf(outputOf(filter))
+    const beforeGain = gain.gain.setTargetAtTime.mock.lastCall[0]
+    sound.voice('d', 'whir', { ...right, orbit: 1, loop: 2 }, 1)
+    expect(filter.frequency.setTargetAtTime.mock.lastCall[0]).not.toBe(before)
+    expect(gain.gain.setTargetAtTime.mock.lastCall[0]).not.toBe(beforeGain)
+  })
 })
 
 describe('the sound engine with a fake analyser', () => {

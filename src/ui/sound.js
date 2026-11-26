@@ -1,6 +1,6 @@
 import { DEFAULT_SETTINGS } from './settings.js'
 
-export const SOUND_LIMIT = 8
+export const SOUND_LIMIT = 12
 export const SOUND_WINDOW_MS = 1000
 export const BAND_COUNT = 5
 const BAND_WINDOW_MS = 45
@@ -16,12 +16,60 @@ export function bandIndexForBin(bin, binCount, bandCount = BAND_COUNT) {
 }
 
 const TONES = {
-  read: { frequency: 620, type: 'sine', duration: 0.07 },
-  write: { frequency: 440, type: 'triangle', duration: 0.08 },
-  created: { frequency: 880, type: 'sine', duration: 0.09 },
-  deleted: { frequency: 220, type: 'sine', duration: 0.11 },
-  list: { frequency: 520, type: 'sine', duration: 0.06 },
-  message: { frequency: 990, type: 'triangle', duration: 0.1 },
+  read: [659, 880],
+  write: [494, 587],
+  created: [784, 1175],
+  deleted: [392, 247],
+  list: [523, 698],
+}
+const MESSAGE = { frequency: 990, type: 'triangle', duration: 0.1 }
+const WOOSHES = {
+  folderOpen: { from: 380, to: 3400, duration: 0.35, clickAt: 0 },
+  folderClose: { from: 2800, to: 260, duration: 0.3, clickAt: 0.286 },
+}
+const STAR_PITCHES = [784, 988, 1319, 1568, 2093]
+const STAR_LIMIT = 4
+const WHIR_LIMIT = 3
+const VOICE_IDLE = 0.5
+const GLIDE = 0.012
+const RELEASE = 0.06
+
+export function fillNoise(samples, seed = 1) {
+  let state = seed >>> 0
+  for (let index = 0; index < samples.length; index += 1) {
+    state = (Math.imul(state, 1664525) + 1013904223) >>> 0
+    samples[index] = state / 2147483648 - 1
+  }
+  return samples
+}
+
+export function folderSweep(kind) {
+  return Object.hasOwn(WOOSHES, kind) ? WOOSHES[kind] : null
+}
+
+export function labelBlip(kind) {
+  if (!Object.hasOwn(TONES, kind)) return []
+  return TONES[kind].map((frequency, index) => ({
+    frequency,
+    type: 'square',
+    at: index * 0.055,
+    duration: 0.045,
+  }))
+}
+
+export function starArpeggio(seconds = 0.45) {
+  const length = Number.isFinite(seconds) && seconds > 0 ? seconds : 0.45
+  return STAR_PITCHES.map((frequency, index) => ({
+    frequency,
+    at: (index / STAR_PITCHES.length) * length,
+  }))
+}
+
+export function loudestWhirs(voices) {
+  return [...voices]
+    .filter((voice) => voice.level * voice.spatial.gain > 0)
+    .sort((a, b) => b.level * b.spatial.gain - a.level * a.spatial.gain)
+    .slice(0, WHIR_LIMIT)
 }
 
 export function panForScreen(x, width) {
@@ -392,31 +440,28 @@ export function activitySounds(activity, missing, state = null) {
   }
   if (activity?.type !== 'tool.start' || !Array.isArray(activity.touches)) return []
   const absent = missing instanceof Set ? missing : new Set()
-  const exists = (path) => {
-    const file = state?.files?.get?.(path)
-    return Boolean(file && file.exists !== false)
-  }
   const removes = isDeleteCommand(activity.label)
   const sounds = []
   for (const touch of activity.touches) {
     if (typeof touch?.path !== 'string') continue
-    if (touch.kind === 'dir') {
-      sounds.push({ path: touch.path, kind: 'list' })
-      continue
-    }
-    if (touch.kind !== 'file') continue
-    const wasGone = absent.has(touch.path)
-    let kind = touch.mode === 'read' ? 'read' : 'write'
-    if (touch.mode !== 'read' && removes) {
-      kind = 'deleted'
-      absent.add(touch.path)
-    } else if (touch.mode !== 'read') {
-      if (wasGone || !exists(touch.path)) kind = 'created'
-      absent.delete(touch.path)
-    }
-    sounds.push({ path: touch.path, kind })
+    const kind = touchSoundKind(touch, removes, absent, () => {
+      const file = state?.files?.get?.(touch.path)
+      return Boolean(file && file.exists !== false)
+    })
+    if (kind) sounds.push({ path: touch.path, kind })
   }
   return sounds
+}
+
+export function touchSoundKind(touch, removes, missing, exists) {
+  if (touch.kind === 'dir') return 'list'
+  if (touch.kind !== 'file') return null
+  if (touch.mode === 'read') return 'read'
+  if (removes) {
+    missing.add(touch.path)
+    return 'deleted'
+  }
+  return missing.delete(touch.path) || !exists() ? 'created' : 'write'
 }
 
 function browserWindow() {
@@ -435,6 +480,10 @@ const engine = {
   gestureBound: false,
   context: null,
   master: null,
+  bus: null,
+  noise: null,
+  voices: new Map(),
+  voiceTimer: null,
   musicGain: null,
   analyser: null,
   bins: null,
@@ -461,8 +510,15 @@ function ensureContext() {
   if (!engine.context) {
     engine.context = new Context()
     engine.master = engine.context.createGain()
-    engine.master.gain.value = 1
+    applyRoomVolume()
     engine.master.connect(engine.context.destination)
+    engine.bus = engine.context.createDynamicsCompressor()
+    engine.bus.threshold.value = -18
+    engine.bus.knee.value = 8
+    engine.bus.ratio.value = 12
+    engine.bus.attack.value = 0
+    engine.bus.release.value = 0.14
+    engine.bus.connect(engine.master)
     engine.musicGain = engine.context.createGain()
     engine.musicGain.gain.value = 1
     engine.analyser = engine.context.createAnalyser()
@@ -477,6 +533,169 @@ function ensureContext() {
     engine.context.resume().catch(() => {})
   }
   return engine.context
+}
+
+function applyRoomVolume() {
+  if (engine.master) {
+    engine.master.gain.value = engine.settings.on ? Math.min(1, Math.max(0, Number(engine.settings.volume) || 0)) : 0
+  }
+}
+
+function spatialOutput(context, spatial, level) {
+  const gain = context.createGain()
+  const panner = context.createStereoPanner()
+  gain.gain.value = spatial.gain * level
+  panner.pan.value = spatial.pan
+  gain.connect(panner)
+  panner.connect(engine.bus)
+  return { gain, panner }
+}
+
+function envelope(param, at, duration, peak, attack) {
+  param.setValueAtTime(0, at)
+  param.linearRampToValueAtTime(peak, at + attack)
+  param.exponentialRampToValueAtTime(0.0001, at + duration)
+}
+
+function playNote(context, output, at, note, peak, attack, onEnd) {
+  const oscillator = context.createOscillator()
+  const gain = context.createGain()
+  oscillator.type = note.type
+  oscillator.frequency.value = note.frequency
+  envelope(gain.gain, at, note.duration, peak, attack)
+  oscillator.connect(gain)
+  gain.connect(output)
+  oscillator.onended = () => {
+    oscillator.disconnect()
+    gain.disconnect()
+    onEnd()
+  }
+  oscillator.start(at)
+  oscillator.stop(at + note.duration)
+}
+
+function playSweep(context, output, at, sweep, onEnd) {
+  if (!engine.noise) {
+    const rate = context.sampleRate
+    engine.noise = context.createBuffer(1, Math.ceil(rate * WOOSHES.folderOpen.duration), rate)
+    fillNoise(engine.noise.getChannelData(0))
+  }
+  const noise = context.createBufferSource()
+  const filter = context.createBiquadFilter()
+  const gain = context.createGain()
+  noise.buffer = engine.noise
+  filter.type = 'bandpass'
+  filter.Q.value = 0.8
+  filter.frequency.setValueAtTime(sweep.from, at)
+  filter.frequency.exponentialRampToValueAtTime(sweep.to, at + sweep.duration)
+  envelope(gain.gain, at, sweep.duration, 0.42, sweep.duration * 0.33)
+  noise.connect(filter)
+  filter.connect(gain)
+  gain.connect(output)
+  noise.onended = () => {
+    noise.disconnect()
+    filter.disconnect()
+    gain.disconnect()
+    onEnd()
+  }
+  noise.start(at)
+  noise.stop(at + sweep.duration)
+  playNote(context, output, at + sweep.clickAt, { type: 'triangle', frequency: 1560, duration: 0.014 }, 0.28, 0.001, onEnd)
+}
+
+function moveVoice(voice, now) {
+  const { gain, panner, gate, filter, sources } = voice.nodes
+  const orbit = Number(voice.place.orbit) || 0
+  const loop = Number(voice.place.loop) || 0
+  const wobble = filter ? 0.84 + 0.10 * Math.sin(loop) + 0.06 * Math.sin(orbit) : 1
+  gain.gain.setTargetAtTime(voice.spatial.gain * voice.level * wobble, now, GLIDE)
+  panner.pan.setTargetAtTime(voice.spatial.pan, now, GLIDE)
+  if (filter) filter.frequency.setTargetAtTime(260 + 70 * Math.sin(orbit) + 60 * Math.cos(loop), now, GLIDE)
+  gate.gain.cancelScheduledValues(now)
+  gate.gain.setTargetAtTime(0, now + VOICE_IDLE, GLIDE)
+  for (const source of sources) source.stop(now + VOICE_IDLE + RELEASE)
+}
+
+function startVoice(voice, context) {
+  const now = context.currentTime
+  const { gain, panner } = spatialOutput(context, voice.spatial, 0)
+  const gate = context.createGain()
+  gate.connect(gain)
+  const sources = []
+  const tones = []
+  const filter = voice.kind === 'whir' ? context.createBiquadFilter() : null
+  if (filter) {
+    filter.type = 'lowpass'
+    filter.frequency.value = 260
+    filter.connect(gate)
+  }
+  const notes = filter ? [{ frequency: 116, at: 0 }] : starArpeggio(voice.place.flightSeconds)
+  const parts = filter ? [['triangle', 1, 0.12]] : [['triangle', 1, 0.20], ['sine', 1.012, 0.08]]
+  for (const [type, ratio, level] of parts) {
+    const source = context.createOscillator()
+    const tone = context.createGain()
+    source.type = type
+    for (const note of notes) source.frequency.setValueAtTime(note.frequency * ratio, now + note.at)
+    tone.gain.value = level
+    source.connect(tone)
+    tone.connect(filter ?? gate)
+    source.start(now)
+    sources.push(source)
+    tones.push(tone)
+  }
+  sources[0].onended = () => {
+    for (const source of sources) source.disconnect()
+    for (const tone of tones) tone.disconnect()
+    filter?.disconnect()
+    gate.disconnect()
+    gain.disconnect()
+    panner.disconnect()
+  }
+  voice.nodes = { gain, panner, gate, filter, sources }
+  moveVoice(voice, now)
+}
+
+function retireVoice(voice, immediate = false) {
+  if (!voice.nodes) return
+  const now = engine.context.currentTime
+  const { gate, sources } = voice.nodes
+  gate.gain.cancelScheduledValues(now)
+  gate.gain.setTargetAtTime(0, now, GLIDE)
+  for (const source of sources) source.stop(immediate ? now : now + RELEASE)
+  voice.nodes = null
+}
+
+function watchVoices() {
+  if (engine.voices.size === 0) {
+    clearTimeout(engine.voiceTimer)
+    engine.voiceTimer = null
+  } else if (engine.voiceTimer === null) {
+    const nextExpiry = Math.min(...Array.from(engine.voices.values(), (voice) => voice.expires))
+    engine.voiceTimer = setTimeout(() => {
+      engine.voiceTimer = null
+      expireVoices(Date.now())
+      watchVoices()
+    }, Math.max(0, nextExpiry - Date.now()))
+  }
+}
+
+function expireVoices(now) {
+  for (const [id, voice] of engine.voices) {
+    if (now < voice.expires) continue
+    retireVoice(voice)
+    engine.voices.delete(id)
+  }
+}
+
+function chooseWhirs(context) {
+  const candidates = [...engine.voices.values()].filter((voice) => voice.kind === 'whir')
+  const chosen = loudestWhirs(candidates)
+  for (const voice of candidates) {
+    if (!chosen.includes(voice)) retireVoice(voice)
+  }
+  for (const voice of chosen) {
+    if (!voice.nodes) startVoice(voice, context)
+  }
 }
 
 function ensureAudio() {
@@ -537,6 +756,12 @@ export const sound = {
     if (!next || typeof next !== 'object') return engine.settings
     engine.settings = { ...engine.settings, ...next }
     if (typeof next.musicMuted === 'boolean') engine.musicMuted = next.musicMuted
+    applyRoomVolume()
+    if (!engine.settings.on) {
+      for (const voice of engine.voices.values()) retireVoice(voice, true)
+      engine.voices.clear()
+      watchVoices()
+    }
     applyMusicVolume()
     return engine.settings
   },
@@ -559,35 +784,61 @@ export const sound = {
   },
   armed: () => engine.armed,
   beep(kind, place) {
+    return sound.play(kind, place)
+  },
+  play(kind, place) {
     if (!engine.armed || !engine.settings.on) return false
-    const tone = TONES[kind]
-    if (!tone) return false
+    const sweep = folderSweep(kind)
+    const notes = kind === 'message' ? [{ ...MESSAGE, at: 0 }] : labelBlip(kind)
+    if (!sweep && notes.length === 0) return false
     const spatial = spatialSound(place)
     if (!spatial.audible) return false
-    if (!engine.limiter.take()) return false
     const context = ensureContext()
-    if (!context || !engine.master) return false
-    const oscillator = context.createOscillator()
-    const gain = context.createGain()
-    oscillator.type = tone.type
-    oscillator.frequency.value = tone.frequency
+    if (!context || !engine.limiter.take()) return false
+    const { gain, panner } = spatialOutput(context, spatial, 1)
     const now = context.currentTime
-    const peak = Math.max(0.0001, 0.3 * engine.settings.volume * spatial.gain)
-    gain.gain.setValueAtTime(0.0001, now)
-    gain.gain.exponentialRampToValueAtTime(peak, now + 0.012)
-    gain.gain.exponentialRampToValueAtTime(0.0001, now + tone.duration)
-    oscillator.connect(gain)
-    let tail = gain
-    if (typeof context.createStereoPanner === 'function') {
-      const panner = context.createStereoPanner()
-      panner.pan.value = spatial.pan
-      gain.connect(panner)
-      tail = panner
+    let remaining = sweep ? 2 : notes.length
+    function onEnd() {
+      remaining -= 1
+      if (remaining === 0) {
+        gain.disconnect()
+        panner.disconnect()
+      }
     }
-    tail.connect(engine.master)
-    oscillator.start(now)
-    oscillator.stop(now + tone.duration + 0.02)
+    if (sweep) playSweep(context, gain, now, sweep, onEnd)
+    else {
+      for (const note of notes) playNote(context, gain, now + note.at, note, kind === 'message' ? 0.3 : 0.18, 0.006, onEnd)
+    }
     return true
+  },
+  voice(id, kind, place = {}, level = 1) {
+    if (!engine.armed || !engine.settings.on || (kind !== 'star' && kind !== 'whir')) return
+    const context = ensureContext()
+    if (!context) return
+    const now = Date.now()
+    expireVoices(now)
+    const current = engine.voices.get(id)
+    const voice = current ?? { kind, nodes: null }
+    voice.place = place
+    voice.level = Math.min(1, Math.max(0, Number(level) || 0))
+    voice.spatial = spatialSound(place)
+    voice.expires = now + VOICE_IDLE * 1000
+    if (!current) engine.voices.set(id, voice)
+    if (voice.nodes) moveVoice(voice, context.currentTime)
+    if (voice.kind === 'whir') chooseWhirs(context)
+    else if (!current) {
+      const active = [...engine.voices.values()].filter((item) => item.kind === 'star' && item.nodes)
+      if (active.length >= STAR_LIMIT) retireVoice(active[0])
+      startVoice(voice, context)
+    }
+    watchVoices()
+  },
+  stopVoice(id) {
+    const voice = engine.voices.get(id)
+    if (!voice) return
+    retireVoice(voice)
+    engine.voices.delete(id)
+    watchVoices()
   },
   dance(now = typeof performance === 'undefined' ? Date.now() : performance.now()) {
     const stamp = Number.isFinite(now) ? now : Date.now()

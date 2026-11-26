@@ -204,17 +204,23 @@ export function thinkingMotion(key) {
   }
 }
 
-export function thinkingRingPose(seconds, motion = 0, out = null, blend = 1) {
-  const pose = out ?? {}
-  const a = pose.a ?? (pose.a = { x: 0, y: 0, z: 0 })
-  const b = pose.b ?? (pose.b = { x: 0, y: 0, z: 0 })
+export function thinkingLoopPhase(seconds, motion = 0) {
   const rawSeconds = Number(seconds)
   const rawPhase = Number(motion?.phase ?? motion)
   const clock = Number.isFinite(rawSeconds) ? rawSeconds : 0
   const offset = Number.isFinite(rawPhase) ? rawPhase : 0
   const loopSeconds = motion?.loopSeconds ?? THINKING_LOOP_SECONDS
   const wrapped = (clock / loopSeconds + offset) % 1
-  const t = (wrapped < 0 ? wrapped + 1 : wrapped) * THINKING_LOOP_SECONDS
+  return wrapped < 0 ? wrapped + 1 : wrapped
+}
+
+export function thinkingRingPose(seconds, motion = 0, out = null, blend = 1) {
+  const pose = out ?? {}
+  const a = pose.a ?? (pose.a = { x: 0, y: 0, z: 0 })
+  const b = pose.b ?? (pose.b = { x: 0, y: 0, z: 0 })
+  const rawSeconds = Number(seconds)
+  const clock = Number.isFinite(rawSeconds) ? rawSeconds : 0
+  const t = thinkingLoopPhase(clock, motion) * THINKING_LOOP_SECONDS
 
   let scale = 1
   let bright = 1
@@ -298,7 +304,8 @@ export function thinkingRingPose(seconds, motion = 0, out = null, blend = 1) {
   b.y = orbit + b.y * blend
   b.z *= blend
   if (motion?.wobblePeriod) {
-    const wobble = FULL_TURN * (clock / motion.wobblePeriod + offset)
+    const phase = Number(motion.phase ?? motion)
+    const wobble = FULL_TURN * (clock / motion.wobblePeriod + (Number.isFinite(phase) ? phase : 0))
     a.x += REST_WOBBLE * Math.sin(wobble)
     b.x += REST_WOBBLE * Math.cos(wobble)
   }
