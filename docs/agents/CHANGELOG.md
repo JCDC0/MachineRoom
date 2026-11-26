@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The status rings keep orbiting and wobbling in every state, including through the thinking blend (P737).
 - The room shows live runs on its project from lanes outside its own lane list, using the harness and model saved by `run-lane` (P738).
 - An agent's beat ring is a ring again: it was scaled on the flat axis of its rotated circle, so each beat drew a straight line under the agent instead of a ring (found by the owner with music playing; done by hand).
 - The native lane merges held and fresh inbox replies by ID at each step and checks again before finishing (P733).

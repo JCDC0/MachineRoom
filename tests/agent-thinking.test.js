@@ -78,10 +78,10 @@ afterAll(() => {
 
 const ROSTER = [{ key: 'a', name: 'Alpha', shape: 'claude' }]
 
-function harness() {
+function harness(roster = ROSTER) {
   const scene = new THREE.Scene()
-  const agents = createAgents(scene, ROSTER, new THREE.Scene())
-  const state = createState({ files: ['src/a.js'], dirs: ['src'], created: [] }, ROSTER)
+  const agents = createAgents(scene, roster, new THREE.Scene())
+  const state = createState({ files: ['src/a.js'], dirs: ['src'], created: [] }, roster)
   const terminals = {
     ensure() {},
     setVisible() {},
@@ -108,6 +108,13 @@ function startRun(state, time = 1000) {
 
 function timeInThinkingLoop(motion, seconds, loops = 10) {
   return (loops + seconds / THINKING_LOOP_SECONDS - motion.phase) * motion.loopSeconds
+}
+
+function spinnerAngles(spinner) {
+  return [
+    spinner.group.rotation.y,
+    ...spinner.planes.flatMap(({ rotation }) => [rotation.x, rotation.y, rotation.z]),
+  ]
 }
 
 describe('agentThinking', () => {
@@ -464,7 +471,7 @@ describe('thinkingRingPose', () => {
 })
 
 describe('the thinking spinner on an agent', () => {
-  it('builds once as two faint white rings at right angles with a bright quarter arc each', () => {
+  it('builds once as two faint white rings with a bright quarter arc each', () => {
     const { agents, state, terminals, world } = harness()
     startRun(state)
     agents.update(state, 0.016, 1000, world, terminals)
@@ -475,7 +482,6 @@ describe('the thinking spinner on an agent', () => {
     expect(spinner.rings).toHaveLength(2)
     expect(spinner.arcs).toHaveLength(2)
     expect(spinner.arcs.every((arc) => !arc.visible)).toBe(true)
-    expect(spinner.rings[1].parent.rotation.x).toBeCloseTo(Math.PI / 2, 10)
     expect(spinner.ringMaterial.color.getHex()).toBe(WHITE)
     expect(spinner.arcMaterial.color.getHex()).toBe(WHITE)
     expect(SPINNER_RING_OPACITY).toBeLessThan(SPINNER_ARC_OPACITY)
@@ -498,6 +504,54 @@ describe('the thinking spinner on an agent', () => {
     agents.update(state, 0.4, 1400, world, terminals)
     expect(view.spinner).toBe(spinner)
     expect(agents.views.get('a').spinner.group.children).toHaveLength(2)
+    agents.dispose()
+  })
+
+  it('keeps an idle spinner yawing and both ring planes wobbling', () => {
+    const { agents, state, terminals, world } = harness()
+    agents.update(state, 0.016, 1000, world, terminals)
+    const view = agents.views.get('a')
+    const [yaw, firstTilt, , , secondTilt] = spinnerAngles(view.spinner)
+    agents.update(state, 0.016, 3000, world, terminals)
+    expect(view.thinking).toBe(0)
+    expect(view.spinner.group.rotation.y).not.toBeCloseTo(yaw, 3)
+    expect(view.spinner.planes[0].rotation.x).not.toBeCloseTo(firstTilt, 3)
+    expect(view.spinner.planes[1].rotation.x).not.toBeCloseTo(secondTilt, 3)
+    expect(view.spinner.group.scale.x).toBe(1)
+    expect(view.spinner.arcs.every((arc) => !arc.visible)).toBe(true)
+    agents.dispose()
+  })
+
+  it.each([
+    ['start', 0.8],
+    ['end', 1.3],
+  ])('keeps the 60 fps ring step smooth at the %s of a thinking blend', (edge, loopSeconds) => {
+    const { agents, state, terminals, world } = harness()
+    const motion = thinkingMotion('a')
+    const frame = 1 / 60
+    const frameMs = frame * 1000
+    const seam = timeInThinkingLoop(motion, loopSeconds) * 1000
+    const start = seam - THINKING_DELAY_MS - (edge === 'start' ? frameMs / 2 : 1200)
+    startRun(state, start)
+    agents.update(state, frame, start, world, terminals)
+    if (edge === 'end') {
+      agents.update(state, THINKING_IN_SECONDS, start + THINKING_DELAY_MS + 1, world, terminals)
+      const end = seam - THINKING_OUT_SECONDS * 1000 + frameMs / 2
+      apply(state, { time: end, type: 'run.end', agent: 'a', runId: 'r1', ok: true })
+      agents.update(state, THINKING_OUT_SECONDS - 2.5 * frame, seam - 3 * frameMs, world, terminals)
+    }
+
+    const view = agents.views.get('a')
+    const [previous, before, after, next] = [-2, -1, 0, 1].map((offset) => {
+      agents.update(state, frame, seam + offset * frameMs, world, terminals)
+      return { angles: spinnerAngles(view.spinner), thinking: view.thinking }
+    })
+    expect(before.thinking > 0).toBe(edge === 'end')
+    expect(after.thinking > 0).toBe(edge === 'start')
+    const frameStep = (from, to) => Math.max(...to.angles.map((angle, index) => Math.abs(angle - from.angles[index])))
+    const normalStep = Math.max(frameStep(previous, before), frameStep(after, next))
+    expect(frameStep(before, after)).toBeLessThanOrEqual(normalStep + 1e-10)
+    expect(after.angles[0] - before.angles[0]).toBeCloseTo(motion.orbitSpeed * frame, 10)
     agents.dispose()
   })
 
@@ -740,7 +794,7 @@ describe('the thinking spinner on an agent', () => {
     }
   })
 
-  it('moves the ring planes and scale with the pose while thinking, blended by thinking level, and rests upright when not thinking', () => {
+  it('blends the thinking loop into the moving rest pose', () => {
     const { agents, state, terminals, world } = harness()
     const motion = thinkingMotion('a')
     const nowFor = (seconds, loops) => timeInThinkingLoop(motion, seconds, loops) * 1000
@@ -767,7 +821,6 @@ describe('the thinking spinner on an agent', () => {
     const settlePose = thinkingRingPose(settleNow / 1000, motion)
     expect(view.spinner.group.scale.x).toBeCloseTo(1.06, 10)
     expect(view.spinner.planes[0].rotation.z).toBeCloseTo(settlePose.a.z, 10)
-    const settleYaw = view.spinner.group.rotation.y
     expect(view.spinner.arcs[1].rotation.z - view.spinner.arcs[0].rotation.z).toBeCloseTo(SPINNER_PHASE, 10)
 
     apply(state, {
@@ -781,21 +834,17 @@ describe('the thinking spinner on an agent', () => {
     const blendNow = nowFor(6.7, 12)
     agents.update(state, THINKING_OUT_SECONDS / 2, blendNow, world, terminals)
     const blendPose = thinkingRingPose(blendNow / 1000, motion)
+    const restPose = thinkingRingPose(blendNow / 1000, motion, null, 0)
     expect(view.thinking).toBeCloseTo(0.5, 10)
-    expect(view.spinner.group.rotation.y).toBeCloseTo((settleYaw + blendPose.orbit - settlePose.orbit) * 0.5, 10)
+    expect(view.spinner.group.rotation.y).toBeCloseTo(blendPose.orbit, 10)
     expect(view.spinner.planes[0].rotation.z).toBeCloseTo(blendPose.a.z * 0.5, 10)
-    expect(view.spinner.planes[1].rotation.x).toBeCloseTo(Math.PI / 2 + (blendPose.b.x - Math.PI / 2) * 0.5, 10)
+    expect(view.spinner.planes[1].rotation.x).toBeCloseTo((restPose.b.x + blendPose.b.x) * 0.5, 10)
     expect(view.spinner.group.scale.x).toBeCloseTo(1.03, 10)
 
     agents.update(state, THINKING_OUT_SECONDS / 2, blendNow + 300, world, terminals)
+    const toolPose = thinkingRingPose((blendNow + 300) / 1000, motion, null, 0)
     expect(view.thinking).toBe(0)
-    expect(view.spinner.group.rotation.y).toBe(0)
-    expect(view.spinner.planes[0].rotation.x).toBe(0)
-    expect(view.spinner.planes[0].rotation.y).toBe(0)
-    expect(view.spinner.planes[0].rotation.z).toBe(0)
-    expect(view.spinner.planes[1].rotation.x).toBeCloseTo(Math.PI / 2, 10)
-    expect(view.spinner.planes[1].rotation.y).toBe(0)
-    expect(view.spinner.planes[1].rotation.z).toBe(0)
+    expect(spinnerAngles(view.spinner)).toEqual([toolPose.orbit, toolPose.a.x, 0, 0, toolPose.b.x, 0, 0])
     expect(view.spinner.group.scale.x).toBe(1)
 
     apply(state, { time: blendNow + 350, type: 'tool.end', agent: 'a', id: 't1', ok: true })
@@ -834,42 +883,28 @@ describe('the thinking spinner on an agent', () => {
     agents.dispose()
   })
 
-  it('moves two thinking agents out of step by their key phases', () => {
+  it.each(['idle', 'thinking'])('gives two %s agents different ring angles at the same time', (status) => {
     const pair = [
       { key: 'claude', name: 'Claude', shape: 'claude' },
       { key: 'agy', name: 'AGY', shape: 'agy' },
     ]
-    const agents = createAgents(new THREE.Scene(), pair, new THREE.Scene())
-    const state = createState({ files: ['src/a.js'], dirs: ['src'], created: [] }, pair)
-    const terminals = {
-      ensure() {},
-      setVisible() {},
-      setFade() {},
-      setOpen() {},
-      remove() {},
-      edgePoint: (key, side, out) => out.set(100, 290, 0),
+    const { agents, state, terminals, world } = harness(pair)
+    if (status === 'thinking') {
+      apply(state, { time: 1000, type: 'run.start', agent: 'claude', runId: 'r1' })
+      apply(state, { time: 1000, type: 'run.start', agent: 'agy', runId: 'r2' })
     }
-    const world = {
-      right: new THREE.Vector3(1, 0, 0),
-      back: new THREE.Vector3(0, 0, 1),
-      anchor: () => ({ x: 0, y: 0, z: 0 }),
-      links: [],
-      mask: { dimmed: false, lit: new Set(), targeted: new Set() },
-      side: () => 1,
-      edge: (dir, file, side, out) => out.set(100, 0, 0),
-    }
-    apply(state, { time: 1000, type: 'run.start', agent: 'claude', runId: 'r1' })
-    apply(state, { time: 1000, type: 'run.start', agent: 'agy', runId: 'r2' })
     agents.update(state, 0.016, 1000, world, terminals)
     agents.update(state, 0.4, 2400, world, terminals)
-    const claude = agents.views.get('claude').spinner.planes[0].rotation
-    const agy = agents.views.get('agy').spinner.planes[0].rotation
-    const diff = Math.abs(claude.x - agy.x) + Math.abs(claude.y - agy.y) + Math.abs(claude.z - agy.z)
-    expect(diff).toBeGreaterThan(0.05)
+    const claude = agents.views.get('claude')
+    const agy = agents.views.get('agy')
+    expect(claude.thinking).toBe(status === 'idle' ? 0 : 1)
+    expect(agy.thinking).toBe(claude.thinking)
+    expect(Math.cos(claude.spinner.group.rotation.y - agy.spinner.group.rotation.y)).toBeLessThan(0.999)
+    expect(claude.spinner.planes[0].quaternion.angleTo(agy.spinner.planes[0].quaternion)).toBeGreaterThan(0.01)
     agents.dispose()
   })
 
-  it('keeps the ring planes upright and unbrightened during Flip, Burst and Settle under reduced motion', () => {
+  it('keeps the ring planes upright and unbrightened in every state under reduced motion', () => {
     const savedWindow = globalThis.window
     globalThis.window = { matchMedia: () => ({ matches: true }) }
     disposeStill()
@@ -877,22 +912,31 @@ describe('the thinking spinner on an agent', () => {
       const { agents, state, terminals, world } = harness()
       const motion = thinkingMotion('a')
       const nowFor = (seconds) => timeInThinkingLoop(motion, seconds) * 1000
-      startRun(state, 1000)
-      agents.update(state, 0.016, 1000, world, terminals)
       const view = agents.views.get('a')
-      for (const loopSec of [0.25, 4.0, 5.2, 6.7]) {
-        agents.update(state, 0.016, nowFor(loopSec), world, terminals)
-        expect(view.thinking).toBe(1)
-        expect(view.spinner.group.rotation.y).toBe(0)
-        expect(view.spinner.planes[0].rotation.x).toBe(0)
-        expect(view.spinner.planes[0].rotation.y).toBe(0)
-        expect(view.spinner.planes[0].rotation.z).toBe(0)
-        expect(view.spinner.planes[1].rotation.x).toBeCloseTo(Math.PI / 2, 10)
-        expect(view.spinner.planes[1].rotation.y).toBe(0)
-        expect(view.spinner.planes[1].rotation.z).toBe(0)
+      const checkAt = (now, thinking, color) => {
+        agents.update(state, 0.016, now, world, terminals)
+        expect(view.thinking).toBe(thinking)
+        expect(spinnerAngles(view.spinner)).toEqual([0, 0, 0, 0, Math.PI / 2, 0, 0])
         expect(view.spinner.group.scale.x).toBe(1)
-        expect(view.spinner.ringMaterial.opacity).toBeCloseTo(SPINNER_RING_OPACITY, 10)
+        expect(view.spinner.ringMaterial.color.getHex()).toBe(color)
+        if (thinking) expect(view.spinner.ringMaterial.opacity).toBeCloseTo(SPINNER_RING_OPACITY, 10)
       }
+      for (const time of [1000, 3000]) checkAt(time, 0, WHITE)
+      apply(state, { time: 3100, type: 'run.queued', agent: 'a' })
+      for (const time of [3100, 5000]) checkAt(time, 0, WHITE)
+      startRun(state, 5100)
+      checkAt(5100, 0, WHITE)
+      for (const loopSec of [0.25, 4.0, 5.2, 6.7]) {
+        checkAt(nowFor(loopSec), 1, WHITE)
+      }
+      const afterLoop = nowFor(7)
+      apply(state, { time: afterLoop, type: 'tool.start', agent: 'a', id: 't1', label: 'read src/a.js', touches: [] })
+      for (const time of [afterLoop, afterLoop + 2000]) checkAt(time, 0, YELLOW)
+      apply(state, { time: afterLoop + 2100, type: 'run.end', agent: 'a', runId: 'r1', ok: true })
+      for (const time of [afterLoop + 2100, afterLoop + 4100]) checkAt(time, 0, GREEN)
+      startRun(state, afterLoop + 4200)
+      apply(state, { time: afterLoop + 4300, type: 'run.end', agent: 'a', runId: 'r1', ok: false })
+      for (const time of [afterLoop + 4300, afterLoop + 6300]) checkAt(time, 0, RED)
       agents.dispose()
     } finally {
       globalThis.window = savedWindow
