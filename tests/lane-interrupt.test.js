@@ -347,7 +347,7 @@ describe('interrupting a working CLI lane run', { timeout: slowMs(180000) }, () 
     expect(secondCall.prompt).toContain(INTERRUPT_PARAGRAPH)
     expect(secondCall.prompt).toContain('orchestrator: Use the shared helper.')
     expect(secondCall.ticket).toBe(firstCall.ticket)
-    expect(secondCall.inbox.map((m) => `${m.from}: ${m.text}`)).toEqual(['orchestrator: Use the shared helper.'])
+    expect(secondCall.inbox).toEqual([])
     expect(secondCall.postStatuses).toEqual([202, 202, 429])
 
     const files = interruptFiles(rig.runs)

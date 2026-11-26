@@ -1290,7 +1290,7 @@ describe('talking to a lane and seeing agent messages', () => {
       await click(root, container.querySelector('button[aria-label="Lane message options"]'))
       await click(root, document.querySelector('[role="menuitem"]'))
       expect(calls).toEqual([
-        { lane: 'opencode', startedAt, text: 'Keep going', interrupt: false },
+        { lane: 'opencode', startedAt, text: 'Keep going' },
         { lane: 'opencode', startedAt, text: 'Change course', interrupt: true },
       ])
     })
