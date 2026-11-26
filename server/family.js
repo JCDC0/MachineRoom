@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
+import { SESSION_HARNESSES } from '../src/harnesses/index.js'
 import {
   HARNESS_EFFORTS,
   HARNESS_KEYS,
@@ -28,7 +29,6 @@ export const ORIGIN_SEATS_PROBLEM = 'A request to set the seats needs a page Ori
 export const SEATS_SHAPE_PROBLEM = 'Seats must be whole numbers from 0, or empty for no limit.'
 export const CONFIRM_TOP_PROBLEM = 'Confirm putting the agent at the top first.'
 export const CONFIRM_SEATS_PROBLEM = 'Confirm the seats first.'
-const TOP_KEY_PROBLEM = 'The top must be orchestrator, claude-session or opencode-session.'
 export const ORIGIN_KEY_PROBLEM = 'A request to set a key needs a page Origin.'
 export const ORIGIN_DELETE_KEY_PROBLEM = 'A request to delete a key needs a page Origin.'
 export const ORIGIN_APPROVE_PROBLEM = 'A request to approve a proposal needs a page Origin.'
@@ -105,10 +105,11 @@ export function saveLabels(file, labels, { rename = renameSync } = {}) {
   }
 }
 
-const SESSION_TOPS = {
-  'claude-session': { label: 'Claude Code session', harness: 'claude' },
-  'opencode-session': { label: 'OpenCode session', harness: 'opencode' },
-}
+const SESSION_TOPS = Object.fromEntries(SESSION_HARNESSES.map((harness) => [harness.sessionKey, {
+  label: harness.sessionName ?? `${harness.name} session`,
+  harness: harness.key,
+}]))
+const TOP_KEY_PROBLEM = 'Choose orchestrator or a registered session as the top agent.'
 
 export function topFileFor(projectRoot, runsFolder) {
   return join(runsFolder, `top-${projectHash(projectRoot)}.json`)
