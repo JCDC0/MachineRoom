@@ -131,7 +131,7 @@ function starTexture() {
   return new THREE.CanvasTexture(canvas)
 }
 
-export function createStars(scene) {
+export function createStars(scene, { onFlight, onStop } = {}) {
   const coreTexture = starTexture()
   const haloTexture = glowTexture()
   const geometry = new THREE.BufferGeometry()
@@ -193,6 +193,7 @@ export function createStars(scene) {
   let sequence = 0
 
   function dropAt(star) {
+    if (star.active) onStop?.(star.start)
     star.active = false
     star.age = 0
     star.onLand = null
@@ -208,7 +209,7 @@ export function createStars(scene) {
     if (onLand) onLand()
   }
 
-  function launch({ points, color = WHITE, onLand = null, agent = null, to = null, call = null, follow = null } = {}) {
+  function launch({ points, color = WHITE, onLand = null, agent = null, to = null, call = null, follow = null, speed = 1 } = {}) {
     const list = Array.isArray(points) ? points : []
     if (list.length === 0) return false
     const index = starSlot(pool)
@@ -238,6 +239,7 @@ export function createStars(scene) {
     star.call = typeof call === 'string' ? call : null
     star.follow = typeof follow === 'function' ? follow : null
     star.active = true
+    onFlight?.(star.start, star.points[0], star.duration / speedRate(speed))
     return true
   }
 
@@ -290,6 +292,7 @@ export function createStars(scene) {
         continue
       }
       starPoint(star.points, share, star.point, star.lengths)
+      onFlight?.(star.start, star.point, (star.duration - star.age) / speedRate(speed))
       const base = count * 3
       positions[base] = star.point.x
       positions[base + 1] = star.point.y
@@ -317,6 +320,7 @@ export function createStars(scene) {
   }
 
   function dispose() {
+    reset()
     scene.remove(halo, core)
     geometry.dispose()
     coreMaterial.dispose()

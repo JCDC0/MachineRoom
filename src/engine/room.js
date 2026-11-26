@@ -2,7 +2,8 @@ import * as THREE from 'three'
 import { CSS3DRenderer } from 'three/addons/renderers/CSS3DRenderer.js'
 import { basename, dirname } from '../model/paths.js'
 import { isOnlineCall } from '../model/online.js'
-import { CALLOUT_CROWD_LIMIT, createAgents, litChain, starOriginKey, tunnelRoute, webTunnelEnd } from './agents.js'
+import { isDeleteCommand, touchSoundKind } from '../ui/sound.js'
+import { CALLOUT_CROWD_LIMIT, createAgents, litChain, starOriginKey, thinkingLoopPhase, tunnelRoute, webTunnelEnd } from './agents.js'
 import { BLOOM_STRENGTH_DEFAULT, createBloomLayer } from './bloom.js'
 import { ANCHOR_DIST, FOV, OVERVIEW, createCameraRig, distanceForRatio, fitView, followTarget, projectPoint } from './camera.js'
 import { createCards } from './cards.js'
@@ -263,7 +264,7 @@ function roomAgent(agent) {
   }
 }
 
-export function createRoom({ surface, gl, css, rootName, agents, getState, beforeFrame = () => {}, onPick = () => {}, onInspect = () => {}, onDismiss = () => {} }) {
+export function createRoom({ surface, gl, css, rootName, agents, getState, sound, beforeFrame = () => {}, onPick = () => {}, onInspect = () => {}, onDismiss = () => {} }) {
   const texture = glowTexture()
   const scene = new THREE.Scene()
   scene.fog = new THREE.FogExp2(0x000000, 0.00007)
@@ -297,9 +298,14 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
   const space = createVoid(scene, texture)
   const roster = agents.map(roomAgent)
   const hub = createHub(scene, roster)
+  const whirs = new Set()
+  const deletedFiles = new Set()
+  let knownFiles
+  let soundFileVersion
   const agentSet = createAgents(scene, roster, cssScene, {
     calloutScene,
     onRemove: (key) => {
+      stopWhir(key)
       dropFlyingTouches((item) => item.agent === key)
       stars.cancel((star) => star.agent === key || star.to === key)
       dropPendingTouches((item) => item.agent === key, false)
@@ -310,7 +316,10 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     },
   })
   agentSet.setViewport(width, height)
-  const stars = createStars(scene)
+  const stars = createStars(scene, sound ? {
+    onFlight: (id, point, flightSeconds) => sound.voice(`star:${id}`, 'star', { ...soundFrom(point), flightSeconds }, 1),
+    onStop: (id) => sound.stopVoice(`star:${id}`),
+  } : undefined)
   const internet = createInternet(scene, texture)
   const gitTree = createGitTree(scene)
   const terminals = createTerminals(cssScene, roster, { onPick })
@@ -324,6 +333,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     glScene: scene,
     rootName,
     onInspect: (path) => inspectPath(path),
+    onOpenChange: sound ? (point, open) => sound.play(open ? 'folderOpen' : 'folderClose', soundFrom(point)) : undefined,
     alwaysDepth: 2,
   })
   let linkKey = ''
@@ -546,6 +556,15 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     touchLog.clear()
     labels.clear()
     stars.reset()
+    for (const key of whirs) stopWhir(key)
+    if (sound) {
+      deletedFiles.clear()
+      knownFiles = new WeakSet()
+      for (const file of state.files.values()) {
+        if (file.exists !== false) knownFiles.add(file)
+      }
+      soundFileVersion = state.fileVersion
+    }
     flyingTouches.clear()
     pendingSpawns.length = 0
     pendingTouches.length = 0
@@ -786,6 +805,22 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     return soundFrom(anchorOf(key))
   }
 
+  function stopWhir(key) {
+    if (whirs.delete(key)) sound.stopVoice(`whir:${key}`)
+  }
+
+  function moveWhir(view, now) {
+    if (view.thinking <= 0 || !view.group.visible) {
+      stopWhir(view.key)
+      return
+    }
+    const place = soundFrom(view.group.position)
+    place.orbit = view.spinner.group.rotation.y
+    place.loop = thinkingLoopPhase(now / 1000, view.thinkingMotion) * 2 * Math.PI
+    sound.voice(`whir:${view.key}`, 'whir', place, view.thinking)
+    whirs.add(view.key)
+  }
+
   function followCardPath(path, style) {
     const wide = style !== 'close'
     const start = []
@@ -845,14 +880,14 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
   }
 
   function showTouch(touch) {
-    if (touch.kind === 'file') {
-      const dir = dirname(touch.path)
-      cards.flashFile(dir, touch.path, 'white')
-      touchLabel(dir, starLabelPoint)
-      labels.show(`${touch.mode === 'read' ? 'read' : 'write'} ${basename(touch.path)}`, starLabelPoint, '#ffffff')
-      return
-    }
-    cards.flashCluster(touch.path, 'white')
+    const isFile = touch.kind === 'file'
+    const dir = isFile ? dirname(touch.path) : touch.path
+    const verb = isFile ? (touch.mode === 'read' ? 'read' : 'write') : 'list'
+    if (isFile) cards.flashFile(dir, touch.path, 'white')
+    else cards.flashCluster(dir, 'white')
+    touchLabel(dir, starLabelPoint)
+    labels.show(`${verb} ${basename(touch.path) || rootName || 'root'}`, starLabelPoint, '#ffffff')
+    if (touch.soundKind) sound.play(touch.soundKind, soundFrom(starLabelPoint))
   }
 
   function callOf(activity) {
@@ -861,7 +896,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
 
   function launchStarPath(from, to, color, agent = null, call = null, target = null) {
     const points = starRoute(from, null, cardAnchorOf, to, starPath)
-    stars.launch({ points, color, agent, to: target, call })
+    stars.launch({ points, color, agent, to: target, call, speed: replaySpeed })
   }
 
   function drawnCard(path) {
@@ -934,6 +969,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
       },
       agent,
       call,
+      speed: replaySpeed,
       follow: target ? followTouch(target.path, touch, flying) : null,
     })
     if (launched) flyingTouches.add(flying)
@@ -1030,6 +1066,8 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     }
 
     if (activity.type === 'tool.start') {
+      const state = getState()
+      const removes = sound && isDeleteCommand(activity.label)
       for (const touch of activity.touches ?? []) {
         if (touch.kind === 'file') {
           const dir = dirname(touch.path)
@@ -1037,8 +1075,18 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
         } else {
           agentSet.aimAt(activity.agent, touch.path, null, performance.now())
         }
-        queueTouchStar(activity, touch)
+        let soundKind
+        if (sound) {
+          const file = touch.kind === 'file' ? state.files.get(touch.path) : null
+          soundKind = touchSoundKind(touch, removes, deletedFiles, () => (
+            file && file.exists !== false &&
+            (state.fileVersion === soundFileVersion || knownFiles.has(file) || file.writes > 1)
+          ))
+          if (file && file.exists !== false && soundKind !== 'deleted') knownFiles.add(file)
+        }
+        queueTouchStar(activity, soundKind ? { ...touch, soundKind } : touch)
       }
+      if (sound) soundFileVersion = state.fileVersion
       if (view && isOnlineCall(activity) && !still()) launchWebStar(view, activity)
       return
     }
@@ -1178,6 +1226,10 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     }
 
     rig.update(delta)
+    if (sound) {
+      for (const view of agentSet.views.values()) moveWhir(view, now)
+      soundFileVersion = state.fileVersion
+    }
     const hubPoint = projectPoint(camera, HUB_CENTER, width, height)
     hubScreenX = hubPoint ? hubPoint.x : NaN
     terminals.update(state, now, camera, followFocus.focused(), anchorOf, delta, chipSideOf, colourOf)
@@ -1366,7 +1418,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
       if (Object.hasOwn(options, 'folderContents')) next.folderContents = options.folderContents
       if (Object.hasOwn(options, 'openOnTouch')) next.openOnTouch = options.openOnTouch
       if (!cards.setOptions(next)) return
-      cards.sync(getState())
+      cards.sync(getState(), { quiet: false })
       releaseLostHold()
       relink()
       refit(true)
@@ -1422,6 +1474,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     dispose() {
       cancelAnimationFrame(frameId)
       timers.clear()
+      for (const key of whirs) stopWhir(key)
       observer.disconnect()
       bloom?.dispose()
       bloom = null

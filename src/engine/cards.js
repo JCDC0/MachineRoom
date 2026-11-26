@@ -400,7 +400,7 @@ function occluderGeometry(view, rootName = 'root', heightOverride = null) {
 }
 
 export function createCards(cssScene, options = {}) {
-  const { glScene = null, rootName = 'root', onInspect = () => {}, alwaysDepth = 2 } = options
+  const { glScene = null, rootName = 'root', onInspect = () => {}, onOpenChange, alwaysDepth = 2 } = options
   const cards = new Map()
   const hider = new THREE.MeshBasicMaterial({ colorWrite: false, side: THREE.DoubleSide })
   const homes = new Map()
@@ -599,6 +599,7 @@ export function createCards(cssScene, options = {}) {
       height: 0,
       lastHeight: -1,
       openLevel: folderContentsEnabled ? 1 : 0,
+      soundGoal: undefined,
       touchOpen: false,
       pulse: false,
       itemsClass: 'mr-card-items',
@@ -1227,12 +1228,13 @@ export function createCards(cssScene, options = {}) {
     return parent.openLevel > 1 - CHAIN_GATE
   }
 
-  function sync(state) {
+  function sync(state, { quiet = true } = {}) {
     flashes.clear()
     touchLife.clear()
     for (const card of cards.values()) {
       card.pulse = false
       card.touchOpen = false
+      if (quiet) card.soundGoal = undefined
     }
     pinnedVersion += 1
     sprayed.clear()
@@ -1468,6 +1470,7 @@ export function createCards(cssScene, options = {}) {
       if (posChanged) movingNow = true
       const view = card.view
       const openGoal = isCardOpen(card, touchedCards) ? 1 : 0
+      const previousOpen = card.openLevel
       if (card.openLevel !== openGoal) {
         if (isStill) {
           card.openLevel = openGoal
@@ -1477,6 +1480,14 @@ export function createCards(cssScene, options = {}) {
           if (card.openLevel < openGoal) card.openLevel = Math.min(openGoal, card.openLevel + step)
           else card.openLevel = Math.max(openGoal, card.openLevel - step)
           syncCardContents(card)
+        }
+      }
+      if (onOpenChange) {
+        if (card.leaving) card.soundGoal = undefined
+        else if (card.soundGoal === undefined) card.soundGoal = openGoal
+        else if (openGoal !== card.soundGoal && (card.openLevel !== previousOpen || card.openLevel === openGoal)) {
+          card.soundGoal = openGoal
+          if (card.openLevel !== previousOpen) onOpenChange(position, openGoal === 1)
         }
       }
       if (card.pulse && (card.openLevel >= 1 || cardRows(view) <= 0)) card.pulse = false
