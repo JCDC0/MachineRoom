@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- A deep folder touch keeps its full hold while it waits for the opening wave (P735, R76-5).
 - The room plays stereo folder wooshes, star sparkles, 8-bit touch blips and thinking whirs (P741).
 - The owner tuned the sounds: quieter, subtler folder wooshes and clicks, a whir at a third of its level, and each star now a soft woosh with glitter instead of an 8-bit arpeggio.
 - The room hides an unused main orchestrator when another agent is present and lets the owner pin or clear the top seat (P740).

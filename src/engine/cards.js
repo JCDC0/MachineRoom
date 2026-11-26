@@ -1209,6 +1209,16 @@ export function createCards(cssScene, options = {}) {
     if (life > prev) touchLife.set(dir, life)
   }
 
+  function touchedCardPaths() {
+    if (!openOnTouchEnabled || touchLife.size === 0) return null
+    const paths = new Set()
+    for (const dir of touchLife.keys()) {
+      const card = nearestCard(dir)
+      if (card) paths.add(card.path)
+    }
+    return paths
+  }
+
   function isCardOpen(card, touchedCards) {
     if (folderContentsEnabled) return true
     if (cardRows(card.view) <= 0) return false
@@ -1393,20 +1403,24 @@ export function createCards(cssScene, options = {}) {
         markRowPath(path)
       }
     }
-    const touchStep = delta > 0 ? delta : 0
-    for (const [dir, life] of touchLife) {
-      const next = life - touchStep
-      if (next <= 0) touchLife.delete(dir)
-      else touchLife.set(dir, next)
-    }
-    const touchedCards = openOnTouchEnabled && touchLife.size > 0 ? new Set() : null
-    if (touchedCards) {
-      for (const dir of touchLife.keys()) {
-        const card = nearestCard(dir)
-        if (card) touchedCards.add(card.path)
-      }
-    }
+    let touchedCards = touchedCardPaths()
     if (!isStill) armTouchPulses(touchedCards)
+    const waitForWave = !isStill && !folderContentsEnabled && touchedCards
+    const touchStep = delta > 0 ? delta : 0
+    let touchExpired = false
+    for (const [dir, life] of touchLife) {
+      const card = waitForWave ? nearestCard(dir) : null
+      if (card?.openLevel === 0 && isCardOpen(card, touchedCards) && chainHeld(card, 1, touchedCards)) continue
+      const next = life - touchStep
+      if (next <= 0) {
+        touchLife.delete(dir)
+        touchExpired = true
+      } else touchLife.set(dir, next)
+    }
+    if (touchExpired && touchedCards) {
+      touchedCards = touchedCardPaths()
+      if (!isStill) armTouchPulses(touchedCards)
+    }
     const hasFlashes = flashes.size > 0
     if (rowRevision !== lastRowRevision) {
       lastRowRevision = rowRevision
