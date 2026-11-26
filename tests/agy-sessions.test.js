@@ -63,14 +63,16 @@ function stamp() {
   )
 }
 
-function addConversation(dbPath, { id, parent = '', agent = '', status = 'CASCADE_RUN_STATUS_RUNNING', depth = 0 }) {
+function insertConversation(db, { id, parent = '', agent = '', status = 'CASCADE_RUN_STATUS_RUNNING', depth = 0 }) {
   const at = stamp()
-  withDb(dbPath, (db) => {
-    db.prepare(
-      'INSERT OR REPLACE INTO conversation_summaries (conversation_id, parent_conversation_id, agent_name, status, nesting_depth, not_fully_idle, last_modified_time) VALUES (?, ?, ?, ?, ?, ?, ?)'
-    ).run(id, parent, agent, status, depth, 0, at)
-  })
+  db.prepare(
+    'INSERT OR REPLACE INTO conversation_summaries (conversation_id, parent_conversation_id, agent_name, status, nesting_depth, not_fully_idle, last_modified_time) VALUES (?, ?, ?, ?, ?, ?, ?)'
+  ).run(id, parent, agent, status, depth, 0, at)
   return at
+}
+
+function addConversation(dbPath, row) {
+  return withDb(dbPath, (db) => insertConversation(db, row))
 }
 
 function setStatus(dbPath, id, status) {
@@ -316,7 +318,11 @@ describe('the Antigravity session reader, reading the summaries and the transcri
       },
     })
     reader.tick()
-    for (let i = 0; i < 300; i += 1) addConversation(dbPath, { id: `1d1e-${i.toString(16).padStart(4, '0')}`, status: 'CASCADE_RUN_STATUS_IDLE' })
+    withDb(dbPath, (db) => {
+      db.exec('BEGIN')
+      for (let i = 0; i < 300; i += 1) insertConversation(db, { id: `1d1e-${i.toString(16).padStart(4, '0')}`, status: 'CASCADE_RUN_STATUS_IDLE' })
+      db.exec('COMMIT')
+    })
     setStatus(dbPath, 'a6c00007', 'CASCADE_RUN_STATUS_IDLE')
     reader.tick()
     reader.tick()
@@ -344,11 +350,15 @@ describe('the Antigravity session reader, reading the summaries and the transcri
 
     addConversation(dbPath, { id: top, status: 'CASCADE_RUN_STATUS_IDLE' })
     writeTranscript(home, top, [planner(1, [projectRead(join(projectRoot, 'math.js'))])])
-    for (let i = 0; i < 100; i += 1) {
-      const id = `a6c02${i.toString(16).padStart(3, '0')}`
-      addConversation(dbPath, { id, parent: top, status: 'CASCADE_RUN_STATUS_IDLE' })
-      writeTranscript(home, id, [userInput(0)])
-    }
+    withDb(dbPath, (db) => {
+      db.exec('BEGIN')
+      for (let i = 0; i < 100; i += 1) {
+        const id = `a6c02${i.toString(16).padStart(3, '0')}`
+        insertConversation(db, { id, parent: top, status: 'CASCADE_RUN_STATUS_IDLE' })
+        writeTranscript(home, id, [userInput(0)])
+      }
+      db.exec('COMMIT')
+    })
     reader.tick()
     expect(reader.open().has(top)).toBe(true)
     expect(files).toHaveLength(101)
