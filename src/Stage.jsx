@@ -611,16 +611,12 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
       agents,
       onActivity: (activity, state) => {
         roomRef.current?.onActivity(activity, state)
-        const sounds = activitySounds(activity, knownSoundRef.current, state)
-        for (const item of sounds) {
-          sound.beep(item.kind, item.agent ? roomRef.current?.soundAtAgent?.(item.agent) : roomRef.current?.soundAt(item.path))
-        }
+        for (const item of activitySounds(activity)) sound.beep(item.kind, roomRef.current?.soundAtAgent?.(item.agent))
       },
     }
     if (live) return createLivePlayer(handlers)
     return createPlayer({ ...handlers, activities: data.activities, onReset: (state) => {
       roomRef.current?.reset(state)
-      resetSoundFiles()
     } })
   }, [data, live, agents])
   const notices = useMemo(() => (live && !live.simulated && live.bridge ? createNoticeRelay() : null), [live])
@@ -656,10 +652,6 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
     sound.armOnGesture()
     startMusicQueue()
   }, [])
-
-  useEffect(() => {
-    resetSoundFiles()
-  }, [data.tree])
 
   useEffect(() => {
     const node = layersRef.current
@@ -716,8 +708,6 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
   const latestTopOptionsRef = useRef(UNPINNED)
   const latestSeatsRef = useRef(null)
   const latestGitRef = useRef(null)
-  const knownSoundRef = useRef(null)
-  if (knownSoundRef.current === null) knownSoundRef.current = new Set(data.tree?.created ?? [])
   const framesRef = useRef([])
   const lastFrameRef = useRef(0)
   const grainRef = useRef(null)
@@ -731,9 +721,6 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
     roomRef.current?.setOptions({ alwaysDepth: normalized.alwaysDepth, maxFiles: normalized.maxFiles, folderContents: normalized.folderContents, openOnTouch: normalized.openOnTouch })
   }
 
-  function resetSoundFiles(tree = data.tree) {
-    knownSoundRef.current = new Set(tree?.created ?? [])
-  }
   const fileCount = player.state.files.size
   const dirCount = player.state.dirs.size
   const assistantPathsRef = useRef({ key: '', player: null, paths: [] })
@@ -817,6 +804,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
       rootName: data.tree.rootName,
       agents,
       getState: () => player.state,
+      sound,
       beforeFrame: (ms) => {
         if (fps) {
           const now = performance.now()
@@ -1281,11 +1269,6 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
     }
     learnRoster(liveRosterRef.current ?? [])
     learnRosterRef.current = learnRoster
-    const noteNewFiles = (paths) => {
-      for (const path of paths) {
-        if (!player.state.files.has(path)) knownSoundRef.current?.add(path)
-      }
-    }
     const learned = (paths) => {
       if (paths.length > 0) pipeline.learn(paths)
     }
@@ -1300,7 +1283,6 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
         recorder?.push(frame)
         const activities = pipeline.push(frame)
         const paths = touchedFiles(activities)
-        noteNewFiles(paths)
         player.push(activities)
         if (activities.length > 0) {
           setFailures((current) => addFailureActivities(current, activities))

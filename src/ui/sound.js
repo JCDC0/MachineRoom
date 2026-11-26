@@ -433,24 +433,10 @@ export function createRateLimit({ limit = SOUND_LIMIT, windowMs = SOUND_WINDOW_M
   }
 }
 
-export function activitySounds(activity, missing, state = null) {
-  if (activity?.type === 'agent.message') {
-    if (typeof activity.to !== 'string' || activity.to.trim() === '') return []
-    return [{ agent: activity.to, kind: 'message' }]
-  }
-  if (activity?.type !== 'tool.start' || !Array.isArray(activity.touches)) return []
-  const absent = missing instanceof Set ? missing : new Set()
-  const removes = isDeleteCommand(activity.label)
-  const sounds = []
-  for (const touch of activity.touches) {
-    if (typeof touch?.path !== 'string') continue
-    const kind = touchSoundKind(touch, removes, absent, () => {
-      const file = state?.files?.get?.(touch.path)
-      return Boolean(file && file.exists !== false)
-    })
-    if (kind) sounds.push({ path: touch.path, kind })
-  }
-  return sounds
+export function activitySounds(activity) {
+  if (activity?.type !== 'agent.message') return []
+  if (typeof activity.to !== 'string' || activity.to.trim() === '') return []
+  return [{ agent: activity.to, kind: 'message' }]
 }
 
 export function touchSoundKind(touch, removes, missing, exists) {

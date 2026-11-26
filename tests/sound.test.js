@@ -27,6 +27,7 @@ import {
   starArpeggio,
   swayStep,
   swayTarget,
+  touchSoundKind,
 } from '../src/ui/sound.js'
 
 describe('room sound shapes', () => {
@@ -191,40 +192,42 @@ describe('the sound rate limit', () => {
 describe('the sound of an activity', () => {
   it('names a read, a write, a created file and a deleted file', () => {
     const missing = new Set(['src/old.js'])
-    const state = { files: new Map([['src/a.js', { exists: true }]]) }
-    expect(activitySounds({ type: 'tool.start', touches: [{ kind: 'file', path: 'src/a.js', mode: 'read' }] }, missing, state)).toEqual([
-      { path: 'src/a.js', kind: 'read' },
-    ])
-    expect(activitySounds({ type: 'tool.start', touches: [{ kind: 'file', path: 'src/a.js', mode: 'write' }] }, missing, state)).toEqual([
-      { path: 'src/a.js', kind: 'write' },
-    ])
-    expect(activitySounds({ type: 'tool.start', touches: [{ kind: 'file', path: 'src/old.js', mode: 'write' }] }, missing, state)).toEqual([
-      { path: 'src/old.js', kind: 'created' },
-    ])
+    const files = new Map([['src/a.js', { exists: true }]])
+    const kind = (touch, removes = false) => touchSoundKind(touch, removes, missing, () => Boolean(files.get(touch.path)?.exists))
+    expect(kind({ kind: 'file', path: 'src/a.js', mode: 'read' })).toBe('read')
+    expect(kind({ kind: 'file', path: 'src/a.js', mode: 'write' })).toBe('write')
+    expect(kind({ kind: 'file', path: 'src/old.js', mode: 'write' })).toBe('created')
     expect(missing.has('src/old.js')).toBe(false)
-    state.files.set('src/old.js', { exists: true })
-    expect(activitySounds({ type: 'tool.start', touches: [{ kind: 'file', path: 'src/old.js', mode: 'write' }] }, missing, state)).toEqual([
-      { path: 'src/old.js', kind: 'write' },
-    ])
-    expect(activitySounds({ type: 'tool.start', touches: [{ kind: 'file', path: 'src/new.js', mode: 'write' }] }, missing, state)).toEqual([
-      { path: 'src/new.js', kind: 'created' },
-    ])
-    expect(activitySounds({ type: 'tool.start', label: '$ rm src/a.js', touches: [{ kind: 'file', path: 'src/a.js', mode: 'write' }] }, missing, state)).toEqual([
-      { path: 'src/a.js', kind: 'deleted' },
-    ])
+    files.set('src/old.js', { exists: true })
+    expect(kind({ kind: 'file', path: 'src/old.js', mode: 'write' })).toBe('write')
+    expect(kind({ kind: 'file', path: 'src/new.js', mode: 'write' })).toBe('created')
+    expect(kind({ kind: 'file', path: 'src/a.js', mode: 'write' }, true)).toBe('deleted')
     expect(missing.has('src/a.js')).toBe(true)
   })
 
-  it('makes a list sound for a directory touch', () => {
-    expect(activitySounds({ type: 'tool.start', touches: [{ kind: 'dir', path: 'src', mode: 'list' }] })).toEqual([
-      { path: 'src', kind: 'list' },
-    ])
+  it('makes a list sound for a directory touch and none for another kind', () => {
+    expect(touchSoundKind({ kind: 'dir', path: 'src', mode: 'list' }, false, new Set(), () => true)).toBe('list')
+    expect(touchSoundKind({ kind: 'url', path: 'https://example.test' }, false, new Set(), () => true)).toBe(null)
   })
 
-  it('makes a message sound for the recipient', () => {
+  it('asks whether a file exists only for a write that is not a known new file', () => {
+    const asked = []
+    const exists = () => {
+      asked.push('asked')
+      return true
+    }
+    expect(touchSoundKind({ kind: 'file', path: 'src/a.js', mode: 'read' }, false, new Set(), exists)).toBe('read')
+    expect(touchSoundKind({ kind: 'file', path: 'src/b.js', mode: 'write' }, false, new Set(['src/b.js']), exists)).toBe('created')
+    expect(asked).toEqual([])
+    expect(touchSoundKind({ kind: 'file', path: 'src/c.js', mode: 'write' }, false, new Set(), exists)).toBe('write')
+    expect(asked).toEqual(['asked'])
+  })
+
+  it('makes a message sound for the recipient and nothing for a file touch', () => {
     expect(activitySounds({ type: 'agent.message', agent: 'claude', to: 'codex' })).toEqual([
       { agent: 'codex', kind: 'message' },
     ])
+    expect(activitySounds({ type: 'tool.start', touches: [{ kind: 'file', path: 'src/a.js', mode: 'read' }] })).toEqual([])
   })
 
   it('stays silent for a message with no recipient', () => {
@@ -234,26 +237,6 @@ describe('the sound of an activity', () => {
     expect(activitySounds({ type: 'agent.message', agent: 'claude', to: 'agy2' })).toEqual([
       { agent: 'agy2', kind: 'message' },
     ])
-  })
-
-  it('holds only the created paths and asks the room state for the rest', () => {
-    const files = new Map()
-    for (let index = 0; index < 2000; index += 1) files.set(`src/file${index}.js`, { exists: true })
-    const missing = new Set()
-    const asked = []
-    const state = {
-      files: {
-        get(path) {
-          asked.push(path)
-          return files.get(path)
-        },
-      },
-    }
-    expect(activitySounds({ type: 'tool.start', touches: [{ kind: 'file', path: 'src/file42.js', mode: 'write' }] }, missing, state)).toEqual([
-      { path: 'src/file42.js', kind: 'write' },
-    ])
-    expect(asked).toEqual(['src/file42.js'])
-    expect(missing.size).toBe(0)
   })
 })
 
