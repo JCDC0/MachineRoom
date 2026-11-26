@@ -5,11 +5,11 @@ import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createBridge } from '../server/index.js'
 import { activeLanesFileFor, ROOM_LANE_LINGER_MS, writeActiveLanes } from '../server/active-lanes.js'
-import { createLanesSource, createRecordsCache, laneAgents, mainCheckoutOf, readAllLanes, readLanes, runsFolder, subOrchestratorAgent } from '../server/lanes-source.js'
+import { createLanesSource, createRecordsCache, laneAgents, lanesFromShell, mainCheckoutOf, readAllLanes, readLanes, runsFolder, subOrchestratorAgent } from '../server/lanes-source.js'
 import { gitPath } from '../server/programPath.js'
 import { buildActivities } from '../src/model/pipeline.js'
 import { makeTree } from '../src/model/paths.js'
-import { readFrames, waitFor } from './helpers/bridge.js'
+import { readFrames, startLaneBridge, waitFor } from './helpers/bridge.js'
 import { withoutRepoEnv } from './helpers/gitEnv.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 
@@ -44,7 +44,7 @@ function toolLine(path, { at = Date.now(), id = 'call-1', tool = 'read' } = {}) 
   })
 }
 
-function startSource({ runs, projectRoot = '', lanes, quietMs = 60000, pollMs = 20, repoRoot = projectRoot, now }) {
+function startSource({ runs, projectRoot = '', lanes, quietMs = 60000, pollMs = 20, repoRoot = projectRoot, now, takeLaneStarter }) {
   const frames = []
   const source = createLanesSource({
     folder: runs,
@@ -53,6 +53,7 @@ function startSource({ runs, projectRoot = '', lanes, quietMs = 60000, pollMs = 
     lanes,
     quietMs,
     pollMs,
+    takeLaneStarter,
     ...(now ? { now } : {}),
     onFrame: (frame) => frames.push(frame),
   })
@@ -1393,6 +1394,113 @@ describe('the runs folder', () => {
 })
 
 describe('the lane source carries the session that started a run', () => {
+  it.each(['--list', '--stats', '--outcomes', '--stop', '--dry-run'])('ignores a shell call with %s', (flag) => {
+    expect(lanesFromShell(`node scripts/run-lane.mjs codex P1 ${flag}`)).toEqual([])
+    expect(lanesFromShell(`npm run run-lane -- ${flag} codex`)).toEqual([])
+  })
+
+  it('reads shell invocations and skips text that only mentions the script', () => {
+    expect(lanesFromShell('echo "node scripts/run-lane.mjs fake P1"; node "scripts/run-lane.mjs" codex P1 && npm run run-lane -- hermes P2'))
+      .toEqual(['codex', 'hermes'])
+  })
+
+  it.each([
+    { reason: 'the command is 90 seconds old', start: 90000 },
+    { reason: 'the command names another lane', commandLane: 'hermes' },
+    { reason: 'the run has an explicit starter', explicit: 'orchestrator' },
+    { reason: 'the command has expired by the time the file is read', observed: 121000 },
+  ])('leaves the starter alone when $reason', async ({ start = 10000, commandLane = 'codex', explicit, observed = start }) => {
+    const projectRoot = tempDir()
+    const runsDir = tempDir()
+    const at = Date.now()
+    let time = at
+    const now = () => time
+    const bridge = await startLaneBridge({
+      projectRoot, runsDir, lanes: { codex: realLanes.codex }, lanesSource: { now },
+      bridge: {
+        now,
+        sessionsSource: {
+          readers: [({ onLaneCommand }) => {
+            let first = true
+            return { tick: () => {
+              if (!first) return
+              first = false
+              onLaneCommand?.({ harness: 'agy', session: 'session-a', lane: commandLane, at })
+            } }
+          }],
+        },
+      },
+    })
+    cleanups.push(() => bridge.stop())
+    time = at + observed
+    const name = 'codex-P1-20261126-120000'
+    writeFileSync(join(runsDir, 'codex.lock'), JSON.stringify({ startedAt: new Date(at + start).toISOString(), log: `${name}.log` }))
+    writeFileSync(join(runsDir, `${name}.meta.json`), JSON.stringify({ project: projectRoot, startedBy: explicit }))
+    bridge.writeLog(name, '{}\n')
+    const isStart = (frame) => frame.payload?.runId === `run-${name}` && frame.payload.status === 'running'
+    const frames = await readFrames(bridge.url, (list) => list.some(isStart))
+    expect(frames.find(isStart).payload.startedBy).toBe(explicit)
+  })
+
+  it('takes the newest command at or before each start and consumes it once', async () => {
+    const projectRoot = tempDir()
+    const runsDir = tempDir()
+    const at = Date.now()
+    let time = at
+    const now = () => time
+    const commands = [
+      { session: 'newest', at: at + 1000 },
+      { session: 'future', at: at + 61001 },
+      { session: 'older', at },
+    ]
+    const bridge = await startLaneBridge({
+      projectRoot, runsDir, lanes: { codex: realLanes.codex }, lanesSource: { now },
+      bridge: {
+        now,
+        sessionsSource: {
+          readers: [({ onLaneCommand }) => ({ tick: () => {
+            for (const command of commands.splice(0)) onLaneCommand?.({ ...command, harness: 'hermes', lane: 'codex' })
+          } })],
+        },
+      },
+    })
+    cleanups.push(() => bridge.stop())
+    time = at + 62000
+    for (const [index, session] of ['newest', 'older', undefined].entries()) {
+      const name = `codex-P${index + 1}-20261126-120000`
+      writeFileSync(join(runsDir, 'codex.lock'), JSON.stringify({ startedAt: new Date(at + 60000).toISOString(), log: `${name}.log` }))
+      writeFileSync(join(runsDir, `${name}.meta.json`), JSON.stringify({ project: projectRoot }))
+      bridge.writeLog(name, '{}\n')
+      const isStart = (frame) => frame.payload?.runId === `run-${name}` && frame.payload.status === 'running'
+      const frames = await readFrames(bridge.url, (list) => list.some(isStart))
+      expect(frames.find(isStart).payload.startedBy).toEqual(session ? { harness: 'hermes', session } : undefined)
+    }
+  })
+
+  it('keeps a matched starter on an open run and through the recent window', async () => {
+    const runs = tempDir()
+    const projectRoot = tempDir()
+    const lanes = { opencode: realLanes.opencode }
+    const startedBy = { harness: 'agy', session: 'session-a' }
+    let time = Date.now()
+    const { source, frames } = startSource({ runs, projectRoot, lanes, now: () => time, takeLaneStarter: () => startedBy })
+    const name = 'opencode-P1-20261126-120000'
+    const log = join(runs, `${name}.log`)
+    writeFileSync(join(runs, `${name}.meta.json`), JSON.stringify({ project: projectRoot }))
+    writeFileSync(log, `${toolLine('src/a.js')}\n`)
+    await waitFor(() => source.openRuns().length === 1, { what: 'the open run' })
+    expect(source.openRuns()[0].startedBy).toEqual(startedBy)
+    expect(source.starterFor('opencode')).toEqual(startedBy)
+
+    writeFileSync(join(runs, 'runs.jsonl'), `${JSON.stringify({ log, exitCode: 0 })}\n`)
+    await waitFor(() => endFrame(frames), { what: 'the run end' })
+    expect(source.openRuns()).toHaveLength(0)
+    expect(endFrame(frames).payload.startedBy).toEqual(startedBy)
+    expect(source.starterFor('opencode')).toEqual(startedBy)
+    time += ROOM_LANE_LINGER_MS + 1
+    expect(source.starterFor('opencode')).toBeNull()
+  })
+
   it('reads startedBy from a brief run meta and sends it on the first frame', async () => {
     const base = tempDir()
     const runs = join(base, 'runs')

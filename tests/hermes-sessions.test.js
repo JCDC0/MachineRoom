@@ -3,15 +3,21 @@ import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { afterEach, describe, expect, it } from 'vitest'
 import { createHermesSessionsReader, HERMES_SESSION_AGENT, hermesHome } from '../server/hermes-sessions.js'
+import { laneAgents } from '../server/lanes-source.js'
+import { laneStarterTop } from '../src/model/laneStarter.js'
 import { createHermesParser } from '../src/model/parsers/hermes.js'
+import { makeTree } from '../src/model/paths.js'
+import { createPipeline } from '../src/model/pipeline.js'
+import { apply, createState } from '../src/model/state.js'
+import { readFrames, startLaneBridge } from './helpers/bridge.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 
 const cleanups = []
 
-afterEach(() => {
+afterEach(async () => {
   while (cleanups.length > 0) {
     try {
-      cleanups.pop()()
+      await cleanups.pop()()
     } catch {}
   }
 })
@@ -124,6 +130,48 @@ function endFrame(frames) {
 }
 
 describe('the Hermes session reader', () => {
+  it('seats the Hermes session whose shell started a Codex lane', async () => {
+    const { projectRoot, runsFolder, dbPath } = setup()
+    const lanes = { codex: { name: 'Codex', cli: { harness: 'codex' } } }
+    const session = 'hermes-starter'
+    const callAt = Date.now()
+    let time = callAt - 1000
+    const now = () => time
+    const bridge = await startLaneBridge({
+      projectRoot, runsDir: runsFolder, lanes, lanesSource: { now },
+      bridge: {
+        now,
+        sessionsSource: {
+          now, runsFolder, pollMs: 60000,
+          readers: [(options) => createHermesSessionsReader({ ...options, dbPath })],
+        },
+      },
+    })
+    cleanups.push(() => bridge.stop())
+
+    addSession(dbPath, { id: session, cwd: projectRoot, startedAt: callAt })
+    addMessage(dbPath, {
+      sessionId: session, role: 'assistant', timestamp: callAt / 1000,
+      calls: [call('terminal', { command: 'npm run run-lane -- codex P1' }, 'call-1')],
+    })
+    time = callAt + 10000
+    const name = 'codex-P1-20261126-120000'
+    writeFileSync(join(runsFolder, `${name}.meta.json`), JSON.stringify({ project: projectRoot }))
+    bridge.writeLog(name, '{"type":"item.completed","item":{"id":"one","type":"command_execution","command":"node -v","exit_code":0}}\n')
+
+    const isLane = (frame) => frame.payload?.runId === `run-${name}`
+    const frames = await readFrames(bridge.url, (list) => list.some((frame) => isLane(frame) && frame.type === 'heartbeat.run.log'))
+    for (const frame of frames.filter(isLane)) expect(frame.payload.startedBy).toEqual({ harness: 'hermes', session })
+
+    const agents = [HERMES_SESSION_AGENT, ...laneAgents(lanes)]
+    const tree = makeTree({ root: 'project', files: [] })
+    const state = createState(tree, agents)
+    const pipeline = createPipeline({ agents, tree })
+    for (const frame of frames) for (const activity of pipeline.push(frame)) apply(state, activity)
+    expect(state.agents.get('hermes-session').sessions).toEqual(new Set([session]))
+    expect(laneStarterTop({ agents: state.agents, at: time })).toBe('hermes-session')
+  })
+
   it('follows a session in the project and sends its calls and results', () => {
     const { projectRoot, runsFolder, dbPath } = setup()
     const { reader, frames } = startReader({ dbPath, projectRoot, runsFolder })

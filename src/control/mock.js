@@ -3,6 +3,7 @@ import { outcomeTable } from '../../server/outcomes.js'
 import { branchFor, buildPrompt, modelFor, parseBriefs } from '../briefs/briefs.js'
 import { briefMarkdown, planPrompt } from '../briefs/plan.js'
 import { SINCE_PROBLEM, dayStart, fallbackProblem, laneStats } from '../briefs/run.js'
+import { SESSION_HARNESSES } from '../harnesses/index.js'
 import { defaultMode, legacyMode, modesFor } from './modes.js'
 import { readLadder } from '../model/hierarchy.js'
 import { chooseRoute, routeLane } from '../policy/route.js'
@@ -10,6 +11,8 @@ import { profileFromBrief } from '../policy/profile.js'
 
 export const AGENT_REFUSAL = 'Agents come from docs/agents/lanes.json.'
 export const LANE_TASK_REFUSAL = 'Lane runs start from Work, then Start, not from a task.'
+
+const SESSION_TOPS = new Map(SESSION_HARNESSES.map((harness) => [harness.sessionKey, harness]))
 
 function laneHasHarness(lanes, harness) {
   return Object.values(lanes ?? {}).some((lane) => lane?.cli?.harness === harness)
@@ -3061,11 +3064,12 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
             custom: Boolean(lane.custom),
           }
         })
-        const sessionNode = familyTop === 'orchestrator' ? null : {
+        const sessionHarness = SESSION_TOPS.get(familyTop)
+        const sessionNode = sessionHarness ? {
           id: `session:${familyTop}`,
           kind: 'session',
-          label: familyTop === 'claude-session' ? 'Claude Code session' : 'OpenCode session',
-          harness: familyTop === 'claude-session' ? 'claude' : 'opencode',
+          label: sessionHarness.sessionName ?? `${sessionHarness.name} session`,
+          harness: sessionHarness.key,
           model: '',
           effort: null,
           parent: null,
@@ -3073,7 +3077,7 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
           active: true,
           working: false,
           custom: false,
-        }
+        } : null
         if (sessionNode) mainNode.parent = sessionNode.id
         return {
           top: familyTop,
@@ -3119,8 +3123,8 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
       call('setFamilyTop', () => {
         const { top, confirmed = true } = options
         if (confirmed !== true) throw new Error('Confirm putting the agent at the top first.')
-        if (!['orchestrator', 'claude-session', 'opencode-session'].includes(top)) {
-          throw new Error('The top must be orchestrator, claude-session or opencode-session.')
+        if (top !== 'orchestrator' && !SESSION_TOPS.has(top)) {
+          throw new Error('Choose orchestrator or a registered session as the top agent.')
         }
         familyTop = top
         emit({ topic: 'family' })

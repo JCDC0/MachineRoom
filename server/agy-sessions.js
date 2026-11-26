@@ -4,6 +4,7 @@ import { homedir } from 'node:os'
 import { isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { StringDecoder } from 'node:string_decoder'
 import { pathInside } from '../src/briefs/run.js'
+import { lanesFromShell } from './lanes-source.js'
 
 const READ_CHUNK = 64 * 1024
 const MAX_PARTIAL = 1024 * 1024
@@ -305,7 +306,7 @@ export function createAgySessionsReader(options = {}) {
   }
 
   function basePayload(run) {
-    return { runId: run.runId, agentId: ANTIGRAVITY_SESSION_AGENT.id, issueId: run.issueId }
+    return { runId: run.runId, agentId: ANTIGRAVITY_SESSION_AGENT.id, issueId: run.issueId, session: run.rootId }
   }
 
   function startRun(root) {
@@ -512,9 +513,15 @@ export function createAgySessionsReader(options = {}) {
       if (calls.length === 0) return
       const run = ensureRun(root)
       const base = Number.isFinite(json.step_index) ? json.step_index : 0
+      const at = Date.parse(json.created_at)
       calls.forEach((call, index) => {
         const name = typeof call?.name === 'string' && call.name !== '' ? call.name : 'other'
         const parameters = parseArgs(call?.args)
+        if (typeof options.onLaneCommand === 'function' && name === 'run_command' && Number.isFinite(at)) {
+          for (const lane of lanesFromShell(parameters.CommandLine)) {
+            options.onLaneCommand({ harness: 'agy', session: root.id, lane, at })
+          }
+        }
         const toolName = name === 'invoke_subagent' ? 'subagent_call' : name
         const stepIndex = `${base}.${index}`
         sendStep(run, {

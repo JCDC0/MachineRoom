@@ -21,6 +21,7 @@ import { createEndpointsApi, createModelPinsApi } from './endpoints.js'
 import { createFilesApi } from './files.js'
 import { createGitApi } from './git.js'
 import { createHarnessModelsApi } from './harness-models.js'
+import { SESSION_HARNESSES } from './harnesses/index.js'
 import { createLanesSource, readLanes, runsFolder } from './lanes-source.js'
 import { createMcpApi } from './mcp.js'
 import { createMusicApi } from './music.js'
@@ -730,11 +731,38 @@ export function createBridge(options = {}) {
     openFolder: options.musicOpenFolder,
   })
   const serveStatic = createStaticHandler({ staticDir: options.staticDir })
+  let laneCommands = []
+
+  function expireLaneCommands() {
+    const cutoff = now() - 120000
+    laneCommands = laneCommands.filter((command) => command.at >= cutoff)
+    return cutoff
+  }
+
+  function rememberLaneCommand(command) {
+    if (command.at >= expireLaneCommands()) laneCommands.push(command)
+  }
+
+  function takeLaneStarter(lane, startedAt) {
+    sessionsSource?.tick()
+    expireLaneCommands()
+    let best = -1
+    for (const [index, command] of laneCommands.entries()) {
+      const age = startedAt - command.at
+      if (command.lane !== lane || age < 0 || age > 60000) continue
+      if (best === -1 || command.at >= laneCommands[best].at) best = index
+    }
+    if (best === -1) return null
+    const [{ harness, session }] = laneCommands.splice(best, 1)
+    return { harness, session }
+  }
+
   const lanesConfig = lanesSourceOn ? lanesSourceObject.lanes ?? readLanes() : {}
   const lanesSource = lanesSourceOn
     ? createLanesSource({
         ...lanesSourceObject,
         projectRoot,
+        takeLaneStarter,
         subOrchestrators: () => (orchestrators ? orchestrators.subs() : []),
         lingerMs: ROOM_LANE_LINGER_MS,
         onFrame: (frame) => {
@@ -763,13 +791,18 @@ export function createBridge(options = {}) {
   }
 
   const sessionsSourceOption = options.sessionsSource
+  const sessionSettings = sessionsSourceOption && typeof sessionsSourceOption === 'object' ? sessionsSourceOption : {}
   const sessionsSourceOn =
     sessionsSourceOption === true || (sessionsSourceOption !== null && typeof sessionsSourceOption === 'object') || env.MACHINEROOM_SESSIONS === '1'
   const sessionsSource = sessionsSourceOn
     ? createSessionsSource({
-        ...(sessionsSourceOption !== null && typeof sessionsSourceOption === 'object' ? sessionsSourceOption : {}),
+        ...sessionSettings,
         projectRoot,
         onFrame: (frame) => accept(frame),
+        readers: (Array.isArray(sessionSettings.readers) && sessionSettings.readers.length > 0
+          ? sessionSettings.readers
+          : SESSION_HARNESSES.map((harness) => harness.createSessionsReader)
+        ).map((make) => typeof make === 'function' ? (shared) => make({ ...shared, onLaneCommand: rememberLaneCommand }) : make),
       })
     : null
 
@@ -909,6 +942,7 @@ export function createBridge(options = {}) {
     lanes: () => (lanesSourceOn ? lanesConfig : readLanes()),
     activeLanes: () => activeLanes,
     orchestrators: () => orchestrators,
+    laneStarter: lanesSource?.starterFor,
     isWorking: (key) => {
       const fromSource = lanesSource ? lanesSource.openRuns().some((r) => r.lane === key) : false
       const fromRuns = runs && typeof runs.isRunning === 'function' ? runs.isRunning(key) : false
@@ -2016,8 +2050,8 @@ export function createBridge(options = {}) {
     }
     rememberLaneParsers()
     rememberSessionsParsers()
-    lanesSource?.start()
     sessionsSource?.start()
+    lanesSource?.start()
     startWatcher()
     projects.recordCurrent()
     if (stopped) throw new Error('The bridge stopped before it started.')
@@ -2047,6 +2081,7 @@ export function createBridge(options = {}) {
     networkApi.stop()
     lanesSource?.stop()
     sessionsSource?.stop()
+    laneCommands = []
     clearInterval(heartbeatTimer)
     if (pollTimer) {
       clearInterval(pollTimer)

@@ -4,14 +4,19 @@ import { dirname, join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { afterEach, describe, expect, it } from 'vitest'
 import { ANTIGRAVITY_SESSION_AGENT, createAgySessionsReader } from '../server/agy-sessions.js'
+import { laneAgents } from '../server/lanes-source.js'
+import { laneStarterTop } from '../src/model/laneStarter.js'
+import { makeTree } from '../src/model/paths.js'
 import { createPipeline } from '../src/model/pipeline.js'
+import { apply, createState } from '../src/model/state.js'
+import { readFrames, startLaneBridge } from './helpers/bridge.js'
 
 const cleanups = []
 
-afterEach(() => {
+afterEach(async () => {
   while (cleanups.length > 0) {
     try {
-      cleanups.pop()()
+      await cleanups.pop()()
     } catch {}
   }
 })
@@ -780,6 +785,50 @@ describe('the Antigravity session reader turning lines into steps', () => {
 })
 
 describe('the Antigravity session reader through the room pipeline', () => {
+  it('seats the Antigravity session whose shell started a Codex lane', async () => {
+    const { base, projectRoot, home, dbPath } = setup()
+    const runsDir = join(base, 'runs')
+    const lanes = { codex: { name: 'Codex', cli: { harness: 'codex' } } }
+    const session = 'a6c00099'
+    const callAt = Date.now()
+    let time = callAt
+    const now = () => time
+    const bridge = await startLaneBridge({
+      projectRoot, runsDir, lanes, lanesSource: { now },
+      bridge: {
+        now,
+        sessionsSource: {
+          now, runsFolder: runsDir, pollMs: 60000,
+          readers: [(options) => createAgySessionsReader({ ...options, home, dbPath })],
+        },
+      },
+    })
+    cleanups.push(() => bridge.stop())
+
+    addConversation(dbPath, { id: session })
+    const calls = [
+      projectRead(join(projectRoot, 'src', 'math.js')),
+      { name: 'run_command', args: { CommandLine: JSON.stringify('node scripts/run-lane.mjs codex P1') } },
+    ]
+    writeTranscript(home, session, [{ ...planner(1, calls), created_at: new Date(callAt).toISOString() }])
+    time = callAt + 10000
+    const name = 'codex-P1-20261126-120000'
+    writeFileSync(join(runsDir, `${name}.meta.json`), JSON.stringify({ project: projectRoot }))
+    bridge.writeLog(name, '{"type":"item.completed","item":{"id":"one","type":"command_execution","command":"node -v","exit_code":0}}\n')
+
+    const isLane = (frame) => frame.payload?.runId === `run-${name}`
+    const frames = await readFrames(bridge.url, (list) => list.some((frame) => isLane(frame) && frame.type === 'heartbeat.run.log'))
+    for (const frame of frames.filter(isLane)) expect(frame.payload.startedBy).toEqual({ harness: 'agy', session })
+
+    const agents = [ANTIGRAVITY_SESSION_AGENT, ...laneAgents(lanes)]
+    const tree = makeTree({ root: 'project', files: [] })
+    const state = createState(tree, agents)
+    const pipeline = createPipeline({ agents, tree })
+    for (const frame of frames) for (const activity of pipeline.push(frame)) apply(state, activity)
+    expect(state.agents.get('antigravity-session').sessions).toEqual(new Set([session]))
+    expect(laneStarterTop({ agents: state.agents, at: time })).toBe('antigravity-session')
+  })
+
   it('shows three child agents under the parent, each with its own calls, none twice', () => {
     const { projectRoot, home, dbPath } = setup()
     const frames = []
