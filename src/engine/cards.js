@@ -405,6 +405,8 @@ export function createCards(cssScene, options = {}) {
   let selected = null
   const flashes = new Map()
   const touchLife = new Map()
+  const heldCards = new Set()
+  const heldRows = new Map()
   const rowDirty = new Set()
   let rowDirtyAll = true
   const initialDepth = Number(alwaysDepth)
@@ -687,6 +689,9 @@ export function createCards(cssScene, options = {}) {
   function makeRow(item, state) {
     const look = rowLook(state, item.path, item.kind)
     const row = el('div', look.rowClass)
+    const heldAlpha = item.kind === 'file' ? heldRows.get(item.path) : undefined
+    const rowOpacity = heldAlpha !== undefined ? String(heldAlpha) : ''
+    if (rowOpacity !== '') row.style.opacity = rowOpacity
     if (look.target) paintTarget(row, look.target)
     const label = el('span', 'mr-item-name', visibleText(item.kind === 'dir' ? `${basename(item.path)}/` : basename(item.path)))
     const note = el('span', 'mr-item-note', look.short)
@@ -722,6 +727,7 @@ export function createCards(cssScene, options = {}) {
       mark: look.mark,
       short: look.short,
       targetColor: look.target,
+      lastOpacity: rowOpacity,
     }
   }
 
@@ -876,6 +882,7 @@ export function createCards(cssScene, options = {}) {
     entry.short = ''
     entry.noteText = null
     entry.rowClass = null
+    entry.lastOpacity = null
   }
 
   function metaText(view) {
@@ -1018,7 +1025,10 @@ export function createCards(cssScene, options = {}) {
         card.leaving = false
         card.stamp = ++stampSeq
         linksCache = null
-        if (!isStill && !pinnedView) {
+        if (heldCards.has(card.path)) {
+          card.fade = null
+          setCardOpacity(card, 0)
+        } else if (!isStill && !pinnedView) {
           card.fade = { from: card.opacity, to: 1, start: now }
         } else {
           card.fade = null
@@ -1027,7 +1037,10 @@ export function createCards(cssScene, options = {}) {
       }
       if (card.fresh) {
         card.fresh = false
-        if (!isStill && !pinnedView) {
+        if (heldCards.has(card.path)) {
+          setCardOpacity(card, 0)
+          card.fade = null
+        } else if (!isStill && !pinnedView) {
           setCardOpacity(card, 0)
           card.fade = { from: 0, to: 1, start: now }
         } else {
@@ -1155,6 +1168,115 @@ export function createCards(cssScene, options = {}) {
     return out
   }
 
+  const rowScratch = []
+
+  function holdCard(path) {
+    if (typeof path === 'string') heldCards.add(path)
+  }
+
+  function revealCard(path, level = 1) {
+    if (typeof path !== 'string') return
+    const alpha = Math.min(1, Math.max(0, Number(level) || 0))
+    if (alpha >= 1) heldCards.delete(path)
+    else heldCards.add(path)
+    const card = cards.get(path)
+    if (card) {
+      card.fade = null
+      setCardOpacity(card, alpha)
+    }
+  }
+
+  function holdRow(filePath) {
+    if (typeof filePath !== 'string') return
+    heldRows.set(filePath, 0)
+    markRowPath(filePath)
+  }
+
+  function revealRow(filePath, level = 1) {
+    if (typeof filePath !== 'string') return
+    const alpha = Math.min(1, Math.max(0, Number(level) || 0))
+    if (alpha >= 1) heldRows.delete(filePath)
+    else heldRows.set(filePath, alpha)
+    markRowPath(filePath)
+    const card = nearestCard(dirname(filePath))
+    const entry = card?.drawn?.get(filePath)
+    if (entry) {
+      const text = alpha >= 1 ? '' : String(alpha)
+      if (entry.lastOpacity !== text) {
+        entry.lastOpacity = text
+        entry.row.style.opacity = text
+      }
+    }
+  }
+
+  function writeOutlinePoint(out, index, cx, cy, cz, lx, ly) {
+    const point = out[index] ?? (out[index] = { x: 0, y: 0, z: 0 })
+    point.x = cx + right.x * lx + up.x * ly
+    point.y = cy + right.y * lx + up.y * ly
+    point.z = cz + right.z * lx + up.z * ly
+  }
+
+  function faceOutline(dir, out = []) {
+    const card = cards.get(dir)
+    if (!card || card.leaving) return null
+    const scale = card.object.scale.x || card.scale || 1
+    const baseHeight = (card.height || cardHeight(card.view ? cardRows(card.view) : 0)) + CARD_FACE_BORDER
+    const halfW = (card.anchorWidth * scale) / 2
+    const halfH = (baseHeight * scale) / 2
+    const tab = tabAnchorOffset(card.anchorWidth, baseHeight, scale)
+    const cx = card.object.position.x + back.x * 2
+    const cy = card.object.position.y + back.y * 2
+    const cz = card.object.position.z + back.z * 2
+    writeOutlinePoint(out, 0, cx, cy, cz, tab.x, tab.y)
+    writeOutlinePoint(out, 1, cx, cy, cz, tab.x, halfH)
+    writeOutlinePoint(out, 2, cx, cy, cz, halfW, halfH)
+    writeOutlinePoint(out, 3, cx, cy, cz, halfW, -halfH)
+    writeOutlinePoint(out, 4, cx, cy, cz, -halfW, -halfH)
+    writeOutlinePoint(out, 5, cx, cy, cz, -halfW, halfH)
+    writeOutlinePoint(out, 6, cx, cy, cz, tab.x, halfH)
+    writeOutlinePoint(out, 7, cx, cy, cz, tab.x, tab.y)
+    out.length = 8
+    return out
+  }
+
+  function rowOutline(dir, file, out = []) {
+    const card = cards.get(dir)
+    if (!card || card.leaving) return null
+    const index = rowIndexOf(card).get(file) ?? -1
+    if (index === -1 || card.openLevel <= 0) return null
+    if (card.virtual && !card.drawn.has(file)) return null
+    const rows = cardRows(card.view)
+    if (!(rows > 0)) return null
+    const scroll = card.virtual ? Math.max(0, Number(card.items.scrollTop) || 0) : 0
+    const steps = Math.floor(scroll / ROW_H)
+    const rest = scroll - steps * ROW_H
+    const slot = index - steps
+    if (card.virtual && (slot < 0 || slot >= rows)) return null
+    const scale = card.object.scale.x || card.scale || 1
+    const cardH = card.height || cardHeight(rows)
+    const clamped = Math.min(rows - 1, Math.max(0, slot))
+    const offset = cardH / 2 - (HEAD_H + (clamped + 0.5) * ROW_H) - (slot >= 0 && slot < rows ? rest : 0)
+    const halfW = ((card.anchorWidth - CARD_FACE_BORDER - CARD_PAD * 2) * scale) / 2
+    const halfH = (ROW_H * scale) / 2
+    const cx = card.object.position.x + up.x * (offset * scale) + back.x * 2
+    const cy = card.object.position.y + up.y * (offset * scale) + back.y * 2
+    const cz = card.object.position.z + up.z * (offset * scale) + back.z * 2
+    writeOutlinePoint(out, 0, cx, cy, cz, -halfW, halfH)
+    writeOutlinePoint(out, 1, cx, cy, cz, halfW, halfH)
+    writeOutlinePoint(out, 2, cx, cy, cz, halfW, -halfH)
+    writeOutlinePoint(out, 3, cx, cy, cz, -halfW, -halfH)
+    writeOutlinePoint(out, 4, cx, cy, cz, -halfW, halfH)
+    out.length = 5
+    return out
+  }
+
+  function rowStart(dir, file, out = new THREE.Vector3()) {
+    const points = rowOutline(dir, file, rowScratch)
+    if (!points || points.length === 0) return null
+    out.set(points[0].x, points[0].y, points[0].z)
+    return out
+  }
+
   function edgePoint(dir, file, side, out) {
     const card = cards.get(dir)
     if (card?.virtual && !card.drawn.has(file)) {
@@ -1240,6 +1362,8 @@ export function createCards(cssScene, options = {}) {
   function sync(state, { quiet = true } = {}) {
     flashes.clear()
     touchLife.clear()
+    heldCards.clear()
+    heldRows.clear()
     for (const card of cards.values()) {
       card.pulse = false
       card.touchOpen = false
@@ -1396,6 +1520,14 @@ export function createCards(cssScene, options = {}) {
     const changed = recompute(state)
     const now = performance.now()
     const isStill = still()
+    if (isStill) {
+      if (heldCards.size > 0) {
+        for (const path of [...heldCards]) revealCard(path, 1)
+      }
+      if (heldRows.size > 0) {
+        for (const path of [...heldRows.keys()]) revealRow(path, 1)
+      }
+    }
     const orbit = !isStill && Number.isFinite(wallSeconds)
     const rotation = orbit ? ringRotation(wallSeconds) : null
     swayLevel = isStill ? 0 : swayLevel + (swayTarget - swayLevel) * easeRate(delta, 1.5, false)
@@ -1680,6 +1812,12 @@ export function createCards(cssScene, options = {}) {
           entry.noteText = entry.short
           entry.note.textContent = entry.short
         }
+        const heldAlpha = entry.item.kind === 'file' ? heldRows.get(path) : undefined
+        const rowOpacity = heldAlpha !== undefined ? String(heldAlpha) : ''
+        if (entry.lastOpacity !== rowOpacity) {
+          entry.lastOpacity = rowOpacity
+          entry.row.style.opacity = rowOpacity
+        }
       }
     }
     if (rowDirtyAll) rowDirtyAll = false
@@ -1746,6 +1884,13 @@ export function createCards(cssScene, options = {}) {
     sideOf,
     slotPosition,
     edgePoint,
+    holdCard,
+    revealCard,
+    holdRow,
+    revealRow,
+    faceOutline,
+    rowOutline,
+    rowStart,
     recordTouch,
     flashFile: (dir, file, tone) => {
       const name = basename(file)

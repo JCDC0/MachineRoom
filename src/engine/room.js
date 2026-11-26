@@ -17,6 +17,7 @@ import { agentStar, createStars, speedRate, starRoute, touchLabelPoint } from '.
 import { GREEN, RED, WHITE, cssColor, disposeStill, glowTexture, still } from './sprites.js'
 import { createStrings } from './strings.js'
 import { CHIP_REACH, chipSideFromScreen, createTerminals } from './terminals.js'
+import { FILE_TRACE_SECONDS, FOLDER_TRACE_SECONDS, TRACE_FADE_SECONDS, TRACE_HOLD_SECONDS, createTraces } from './trace.js'
 import { createVoid } from './void.js'
 
 const HUB_SPHERE = { x: HUB_CENTER.x, y: HUB_CENTER.y, z: HUB_CENTER.z, r: HUB_RADIUS + 160 }
@@ -329,6 +330,8 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, sound
   let boardShown = boardVisible(width)
   board.setVisible(boardShown)
   const labels = createLabels(scene)
+  const traces = createTraces(scene)
+  traces.setViewport(width, height)
 
   const strings = createStrings(scene)
   const cards = createCards(cssScene, {
@@ -402,11 +405,13 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, sound
   const touchLog = new Map()
   const pendingSpawns = []
   const pendingTouches = []
+  const pendingFolderTraces = new Set()
   const flyingTouches = new Set()
   const starChain = []
   const starRoutePoints = []
   const starPath = []
   const starEnd = new THREE.Vector3()
+  const traceEnd = new THREE.Vector3()
   const starLabelPoint = new THREE.Vector3()
   let replaySpeed = 1
   let ladder = null
@@ -554,16 +559,16 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, sound
     webCalls.clear()
     touchLog.clear()
     labels.clear()
+    traces.clear()
+    pendingFolderTraces.clear()
     stars.reset()
     for (const key of whirs) stopWhir(key)
-    if (sound) {
-      deletedFiles.clear()
-      knownFiles = new WeakSet()
-      for (const file of state.files.values()) {
-        if (file.exists !== false) knownFiles.add(file)
-      }
-      soundFileVersion = state.fileVersion
+    deletedFiles.clear()
+    knownFiles = new WeakSet()
+    for (const file of state.files.values()) {
+      if (file.exists !== false) knownFiles.add(file)
     }
+    soundFileVersion = state.fileVersion
     flyingTouches.clear()
     pendingSpawns.length = 0
     pendingTouches.length = 0
@@ -886,7 +891,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, sound
     else cards.flashCluster(dir, 'white')
     touchLabel(dir, starLabelPoint)
     labels.show(`${verb} ${basename(touch.path) || rootName || 'root'}`, starLabelPoint, '#ffffff')
-    if (touch.soundKind) sound.play(touch.soundKind, soundFrom(starLabelPoint))
+    if (sound && touch.soundKind) sound.play(touch.soundKind, soundFrom(starLabelPoint))
   }
 
   function callOf(activity) {
@@ -909,20 +914,45 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, sound
     return root && !root.leaving ? root : null
   }
 
-  function followTouch(path, touch, flying) {
+  function releaseTouchHold(item) {
+    if (!item) return
+    if (item.holdDir !== null && item.holdDir !== undefined) {
+      pendingFolderTraces.delete(item.holdDir)
+      cards.revealCard(item.holdDir, 1)
+      item.holdDir = null
+    }
+    if (item.holdFile) {
+      cards.revealRow(item.holdFile, 1)
+      item.holdFile = null
+    }
+  }
+
+  function followTouch(path, touch, flying, traceFile = null) {
     return (end) => {
       const card = cards.cards.get(path)
       if (!card) {
+        releaseTouchHold(flying)
         if (flying) flyingTouches.delete(flying)
         return null
       }
       if (card.leaving) {
+        releaseTouchHold(flying)
         if (flying) flyingTouches.delete(flying)
         showTouch(touch)
         return null
       }
+      if (traceFile) {
+        const rowPoint = cards.rowStart(path, traceFile, traceEnd)
+        if (rowPoint) {
+          end.x = rowPoint.x
+          end.y = rowPoint.y
+          end.z = rowPoint.z
+          return end
+        }
+      }
       const anchor = cards.anchor(path, starEnd)
       if (!anchor) {
+        releaseTouchHold(flying)
         if (flying) flyingTouches.delete(flying)
         return null
       }
@@ -942,40 +972,131 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, sound
   function dropFlyingTouches(test, record = false) {
     for (const item of [...flyingTouches]) {
       if (!test(item)) continue
+      releaseTouchHold(item)
       flyingTouches.delete(item)
       if (record) recordTouchTarget(item.touch)
     }
   }
 
-  function launchTouchStar(agent, touch, call = null) {
-    const view = agentSet.views.get(agent)
-    if (!view) return
+  function startTouchTrace(color, traceKind, cardDir, filePath, item) {
+    if (!traceKind || still()) {
+      releaseTouchHold(item)
+      return
+    }
+    if (traceKind === 'folder') {
+      const points = cards.faceOutline(cardDir, [])
+      if (!points) {
+        releaseTouchHold(item)
+        return
+      }
+      item.holdDir = null
+      traces.start({
+        points,
+        color,
+        duration: FOLDER_TRACE_SECONDS,
+        hold: TRACE_HOLD_SECONDS,
+        fade: TRACE_FADE_SECONDS,
+        follow: (out) => cards.faceOutline(cardDir, out),
+        onProgress: (share) => cards.revealCard(cardDir, share),
+        onDone: () => cards.revealCard(cardDir, 1),
+      })
+      return
+    }
+    if (traceKind === 'file') {
+      const points = cards.rowOutline(cardDir, filePath, [])
+      if (!points) {
+        releaseTouchHold(item)
+        return
+      }
+      item.holdFile = null
+      traces.start({
+        points,
+        color,
+        duration: FILE_TRACE_SECONDS,
+        hold: TRACE_HOLD_SECONDS,
+        fade: TRACE_FADE_SECONDS,
+        follow: (out) => cards.rowOutline(cardDir, filePath, out),
+        onProgress: (share) => cards.revealRow(filePath, share),
+        onDone: () => cards.revealRow(filePath, 1),
+      })
+    }
+  }
+
+  function launchTouchStar(item) {
+    const view = agentSet.views.get(item.agent)
+    if (!view) {
+      releaseTouchHold(item)
+      return
+    }
+    const touch = item.touch
     const isFile = touch.kind === 'file'
     const dir = isFile ? dirname(touch.path) : touch.path
     const file = isFile ? touch.path : null
+    if (item.traceKind === 'folder') {
+      pendingFolderTraces.delete(dir)
+      const ownCard = cards.cards.get(dir)
+      if (!ownCard || ownCard.leaving) {
+        cards.revealCard(dir, 1)
+        item.holdDir = null
+        if (isFile && touch.soundKind === 'created') {
+          item.traceKind = 'file'
+          item.holdFile = touch.path
+          cards.holdRow(touch.path)
+        } else {
+          item.traceKind = null
+        }
+      }
+    }
+    const traceKind = item.traceKind
     const target = drawnCard(dir)
-    if (!cardAnchorOf(dir, starEnd)) world.edge(dir, file, world.side(dir), starEnd)
+    if (traceKind === 'file' && target) {
+      if (!cards.rowStart(target.path, file, starEnd) && !cardAnchorOf(dir, starEnd)) {
+        world.edge(dir, file, world.side(dir), starEnd)
+      }
+    } else if (!cardAnchorOf(dir, starEnd)) {
+      world.edge(dir, file, world.side(dir), starEnd)
+    }
     const chain = litChain(dir, world.links, world.mask, starChain)
     const route = tunnelRoute(chain, world.links, world.mask, starRoutePoints)
     const points = starRoute(view.group.position, route, cardAnchorOf, starEnd, starPath)
-    const flying = { agent, call, touch }
+    const flying = { agent: item.agent, call: item.call, touch, holdDir: item.holdDir, holdFile: item.holdFile }
     const launched = stars.launch({
       points,
       color: view.color,
       onLand: () => {
         flyingTouches.delete(flying)
         showTouch(touch)
+        startTouchTrace(view.color, traceKind, target?.path ?? dir, file, flying)
       },
-      agent,
-      call,
+      agent: item.agent,
+      call: item.call,
       speed: replaySpeed,
-      follow: target ? followTouch(target.path, touch, flying) : null,
+      follow: target ? followTouch(target.path, touch, flying, traceKind === 'file' ? file : null) : null,
     })
     if (launched) flyingTouches.add(flying)
+    else releaseTouchHold(flying)
   }
 
-  function queueTouchStar(activity, touch) {
-    pendingTouches.push({ agent: activity.agent, touch, call: callOf(activity) })
+  function queueTouchStar(activity, touch, removes = false) {
+    const dir = touch.kind === 'file' ? dirname(touch.path) : touch.path
+    const isCreate = touch.soundKind === 'created' || (touch.kind === 'dir' && touch.mode !== 'read' && touch.mode !== 'list' && !removes)
+    let traceKind = null
+    let holdDir = null
+    let holdFile = null
+    if (!still() && isCreate) {
+      const card = cards.cards.get(dir)
+      if ((!card || card.leaving) && !pendingFolderTraces.has(dir)) {
+        pendingFolderTraces.add(dir)
+        cards.holdCard(dir)
+        traceKind = 'folder'
+        holdDir = dir
+      } else if (touch.kind === 'file' && touch.soundKind === 'created') {
+        cards.holdRow(touch.path)
+        traceKind = 'file'
+        holdFile = touch.path
+      }
+    }
+    pendingTouches.push({ agent: activity.agent, touch, call: callOf(activity), traceKind, holdDir, holdFile })
   }
 
   function dropPendingTouches(test, land = false, record = false) {
@@ -983,6 +1104,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, sound
       const item = pendingTouches[index]
       if (!test(item)) continue
       pendingTouches.splice(index, 1)
+      releaseTouchHold(item)
       if (land) showTouch(item.touch)
       else if (record) recordTouchTarget(item.touch)
     }
@@ -992,8 +1114,12 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, sound
     if (pendingTouches.length === 0) return
     const isStill = still()
     for (const item of pendingTouches) {
-      if (isStill) showTouch(item.touch)
-      else launchTouchStar(item.agent, item.touch, item.call)
+      if (isStill) {
+        releaseTouchHold(item)
+        showTouch(item.touch)
+      } else {
+        launchTouchStar(item)
+      }
     }
     pendingTouches.length = 0
   }
@@ -1066,7 +1192,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, sound
 
     if (activity.type === 'tool.start') {
       const state = getState()
-      const removes = sound && isDeleteCommand(activity.label)
+      const removes = isDeleteCommand(activity.label)
       for (const touch of activity.touches ?? []) {
         if (touch.kind === 'file') {
           const dir = dirname(touch.path)
@@ -1074,18 +1200,15 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, sound
         } else {
           agentSet.aimAt(activity.agent, touch.path, null, performance.now())
         }
-        let soundKind
-        if (sound) {
-          const file = touch.kind === 'file' ? state.files.get(touch.path) : null
-          soundKind = touchSoundKind(touch, removes, deletedFiles, () => (
-            file && file.exists !== false &&
-            (state.fileVersion === soundFileVersion || knownFiles.has(file) || file.writes > 1)
-          ))
-          if (file && file.exists !== false && soundKind !== 'deleted') knownFiles.add(file)
-        }
-        queueTouchStar(activity, soundKind ? { ...touch, soundKind } : touch)
+        const file = touch.kind === 'file' ? state.files.get(touch.path) : null
+        const soundKind = touchSoundKind(touch, removes, deletedFiles, () => (
+          file && file.exists !== false &&
+          (state.fileVersion === soundFileVersion || knownFiles.has(file) || file.writes > 1)
+        ))
+        if (file && file.exists !== false && soundKind !== 'deleted') knownFiles.add(file)
+        queueTouchStar(activity, soundKind ? { ...touch, soundKind } : touch, removes)
       }
-      if (sound) soundFileVersion = state.fileVersion
+      soundFileVersion = state.fileVersion
       if (view && isOnlineCall(activity) && !still()) launchWebStar(view, activity)
       return
     }
@@ -1142,6 +1265,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, sound
     calloutRenderer.setSize(width, height)
     bloom?.resize(width, height)
     agentSet.setViewport(width, height)
+    traces.setViewport(width, height)
     rig.resize()
     const shown = boardVisible(width)
     if (shown !== boardShown) {
@@ -1216,6 +1340,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, sound
     flushTouchStars()
     flushSpawnStars()
     stars.update(delta, replaySpeed)
+    traces.update(delta)
     for (const view of agentSet.views.values()) {
       const status = state.agents.get(view.key)?.status ?? 'idle'
       const active = status === 'working' || status === 'queued'
@@ -1227,8 +1352,8 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, sound
     rig.update(delta)
     if (sound) {
       for (const view of agentSet.views.values()) moveWhir(view, now)
-      soundFileVersion = state.fileVersion
     }
+    soundFileVersion = state.fileVersion
     const hubPoint = projectPoint(camera, HUB_CENTER, width, height)
     hubScreenX = hubPoint ? hubPoint.x : NaN
     terminals.update(state, now, camera, followFocus.focused(), anchorOf, delta, chipSideOf, colourOf)
@@ -1486,6 +1611,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, sound
       gitTree.dispose()
       board.dispose()
       labels.dispose()
+      traces.dispose()
       strings.dispose()
       cards.dispose()
       hub.dispose()

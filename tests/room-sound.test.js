@@ -187,6 +187,17 @@ describe('room sound cues', () => {
     expect(labels).toContain('list src')
   })
 
+  it('plays created even when the sound option was computed for a new folder', () => {
+    const deepTree = makeTree({ root: 'demo', files: ['src/a.js', 'extra/b.js'], created: ['extra/b.js'] })
+    state = createState(deepTree, roster)
+    room.reset(state)
+    sound.play.mockClear()
+    tick()
+    touch({ path: 'extra/b.js', mode: 'write', id: 'new-dir' })
+    tick(62)
+    expect(plays()).toContain('created')
+  })
+
   it('stops a cancelled flight without a label blip', () => {
     tick()
     touch()

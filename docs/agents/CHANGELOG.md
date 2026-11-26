@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- A star that creates a file or folder traces its outline like a light trail while the card or row fades in behind it, following moving cards (P745).
 - Folder cards keep their spacing as contents change, turn around the hub, drift on their own, and have a Folder spacing slider (P742).
 - The room lists GPT-6.2 Sol for Codex, so a sub orchestrator can be made on it.
 - Each agent shows its name over its shape and its model with the effort under it; a Claude session shows the model its transcript names.
