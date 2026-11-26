@@ -16,25 +16,23 @@ export function bandIndexForBin(bin, binCount, bandCount = BAND_COUNT) {
 }
 
 const TONES = {
-  read: [659, 880],
-  write: [494, 587],
-  created: [784, 1175],
-  deleted: [392, 247],
-  list: [523, 698],
+  read: [1319],
+  write: [1175],
+  created: [1568],
+  deleted: [880],
+  list: [1047],
+  message: [988, 1319],
 }
-const MESSAGE = { frequency: 990, type: 'triangle', duration: 0.1 }
+const BEEP = { duration: 0.05, gap: 0.07, peak: 0.07 }
 const WOOSHES = {
   folderOpen: { from: 320, to: 2200, duration: 0.35, clickAt: 0 },
   folderClose: { from: 1900, to: 240, duration: 0.3, clickAt: 0.286 },
 }
-const WOOSH_PEAK = 0.16
-const CLICK_PEAK = 0.06
+const WOOSH_PEAK = 0.09
+const CLICK_PEAK = 0.03
 const NOISE_SECONDS = 1
-const STAR_WOOSH = { from: 900, to: 4200, q: 1.4, level: 0.06 }
-const GLITTER = [[0.06, 2637], [0.2, 3520], [0.31, 3136], [0.45, 4186], [0.57, 3951], [0.72, 4699], [0.85, 5274]]
-const GLITTER_GAP = 0.06
-const GLITTER_PEAK = 0.035
-const GLITTER_DECAY = 0.045
+const STAR_AIR = { from: 380, to: 1500, q: 0.9, level: 0.045 }
+const STAR_TONE = { low: 130, high: 300, end: 170, rise: 0.7, cutoff: 900, level: 0.09 }
 const WHIR_LEVEL = 0.04
 const STAR_LIMIT = 4
 const WHIR_LIMIT = 3
@@ -55,23 +53,23 @@ export function folderSweep(kind) {
   return Object.hasOwn(WOOSHES, kind) ? WOOSHES[kind] : null
 }
 
-export function labelBlip(kind) {
+export function computerBeep(kind) {
   if (!Object.hasOwn(TONES, kind)) return []
   return TONES[kind].map((frequency, index) => ({
     frequency,
-    type: 'square',
-    at: index * 0.055,
-    duration: 0.045,
+    type: 'sine',
+    at: index * BEEP.gap,
+    duration: BEEP.duration,
   }))
 }
 
-export function starGlitter(seconds = 0.45) {
+export function starSweep(seconds = 0.45) {
   const length = Number.isFinite(seconds) && seconds > 0 ? seconds : 0.45
-  const count = Math.max(2, Math.min(GLITTER.length, Math.floor(length / GLITTER_GAP)))
-  return Array.from({ length: count }, (_, index) => {
-    const [share, frequency] = GLITTER[Math.round((index * (GLITTER.length - 1)) / Math.max(1, count - 1))]
-    return { frequency, at: share * length }
-  })
+  return [
+    { at: 0, frequency: STAR_TONE.low },
+    { at: length * STAR_TONE.rise, frequency: STAR_TONE.high },
+    { at: length, frequency: STAR_TONE.end },
+  ]
 }
 
 export function loudestWhirs(voices) {
@@ -657,29 +655,29 @@ function starParts(context, gate, now, flightSeconds) {
   noise.buffer = noiseBuffer(context)
   noise.loop = true
   band.type = 'bandpass'
-  band.Q.value = STAR_WOOSH.q
-  band.frequency.setValueAtTime(STAR_WOOSH.from, now)
-  band.frequency.exponentialRampToValueAtTime(STAR_WOOSH.to, now + flight)
-  air.gain.value = STAR_WOOSH.level
+  band.Q.value = STAR_AIR.q
+  band.frequency.setValueAtTime(STAR_AIR.from, now)
+  band.frequency.exponentialRampToValueAtTime(STAR_AIR.to, now + flight * STAR_TONE.rise)
+  air.gain.value = STAR_AIR.level
   noise.connect(band)
   band.connect(air)
   air.connect(gate)
-  const ping = context.createOscillator()
-  const sparkle = context.createGain()
-  ping.type = 'sine'
-  sparkle.gain.value = 0
-  for (const note of starGlitter(flight)) {
-    const at = now + note.at
-    ping.frequency.setValueAtTime(note.frequency, at)
-    sparkle.gain.setValueAtTime(0.0001, at)
-    sparkle.gain.linearRampToValueAtTime(GLITTER_PEAK, at + 0.004)
-    sparkle.gain.exponentialRampToValueAtTime(0.0001, at + GLITTER_DECAY)
-  }
-  ping.connect(sparkle)
-  sparkle.connect(gate)
+  const tone = context.createOscillator()
+  const muffle = context.createBiquadFilter()
+  const body = context.createGain()
+  tone.type = 'sine'
+  const [start, ...sweep] = starSweep(flight)
+  tone.frequency.setValueAtTime(start.frequency, now)
+  for (const point of sweep) tone.frequency.exponentialRampToValueAtTime(point.frequency, now + point.at)
+  muffle.type = 'lowpass'
+  muffle.frequency.value = STAR_TONE.cutoff
+  body.gain.value = STAR_TONE.level
+  tone.connect(muffle)
+  muffle.connect(body)
+  body.connect(gate)
   noise.start(now)
-  ping.start(now)
-  return { sources: [noise, ping], nodes: [band, air, sparkle] }
+  tone.start(now)
+  return { sources: [noise, tone], nodes: [band, air, muffle, body] }
 }
 
 function retireVoice(voice, immediate = false) {
@@ -816,7 +814,7 @@ export const sound = {
   play(kind, place) {
     if (!engine.armed || !engine.settings.on) return false
     const sweep = folderSweep(kind)
-    const notes = kind === 'message' ? [{ ...MESSAGE, at: 0 }] : labelBlip(kind)
+    const notes = computerBeep(kind)
     if (!sweep && notes.length === 0) return false
     const spatial = spatialSound(place)
     if (!spatial.audible) return false
@@ -834,7 +832,7 @@ export const sound = {
     }
     if (sweep) playSweep(context, gain, now, sweep, onEnd)
     else {
-      for (const note of notes) playNote(context, gain, now + note.at, note, kind === 'message' ? 0.3 : 0.18, 0.006, onEnd)
+      for (const note of notes) playNote(context, gain, now + note.at, note, BEEP.peak, 0.004, onEnd)
     }
     return true
   },

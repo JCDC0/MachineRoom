@@ -11,6 +11,7 @@ import {
   bandIndexForBin,
   beatDetector,
   beatLock,
+  computerBeep,
   createBandBeatDetector,
   createDanceTracker,
   createRateLimit,
@@ -18,13 +19,12 @@ import {
   findBeatGap,
   folderSweep,
   isDeleteCommand,
-  labelBlip,
   loudestWhirs,
   onBeatGrid,
   panForScreen,
   sharpOnset,
   spatialSound,
-  starGlitter,
+  starSweep,
   swayStep,
   swayTarget,
   touchSoundKind,
@@ -50,33 +50,33 @@ describe('room sound shapes', () => {
     expect(close.duration - close.clickAt).toBeCloseTo(0.014)
   })
 
-  it('gives each label two distinct square notes in at most 120 milliseconds', () => {
-    const pairs = ['read', 'write', 'created', 'deleted', 'list'].map((kind) => {
-      const notes = labelBlip(kind)
-      expect(notes).toHaveLength(2)
-      expect(notes.every((note) => note.type === 'square')).toBe(true)
-      expect(notes[1].at).toBeGreaterThanOrEqual(notes[0].at + notes[0].duration)
-      expect(notes[1].at + notes[1].duration).toBeLessThanOrEqual(0.12)
-      expect(notes[0].frequency).not.toBe(notes[1].frequency)
-      return notes.map((note) => note.frequency).join(',')
+  it('gives each touch one soft sine beep of its own pitch and a message two, like an old computer', () => {
+    const pitches = ['read', 'write', 'created', 'deleted', 'list'].map((kind) => {
+      const notes = computerBeep(kind)
+      expect(notes).toHaveLength(1)
+      expect(notes[0]).toMatchObject({ type: 'sine', at: 0 })
+      expect(notes[0].duration).toBeLessThanOrEqual(0.06)
+      return notes[0].frequency
     })
-    expect(new Set(pairs).size).toBe(5)
+    expect(new Set(pitches).size).toBe(5)
+    const message = computerBeep('message')
+    expect(message).toHaveLength(2)
+    expect(message.every((note) => note.type === 'sine')).toBe(true)
+    expect(message[1].at).toBeGreaterThanOrEqual(message[0].at + message[0].duration)
+    expect(computerBeep('folderOpen')).toEqual([])
   })
 
-  it('scatters high glitter pings through the flight, rising overall, never closer than a ping lasts', () => {
+  it('sweeps each star low, rising through the flight and dropping as it lands, never a tune', () => {
     for (const seconds of [0.0625, 0.25, 0.9]) {
-      const notes = starGlitter(seconds)
-      expect(notes.length).toBeGreaterThanOrEqual(2)
-      expect(notes.length).toBeLessThanOrEqual(Math.max(2, Math.floor(seconds / 0.06)))
-      expect(notes.every((note) => note.frequency > 2000)).toBe(true)
-      expect(notes.at(-1).frequency).toBeGreaterThan(notes[0].frequency)
-      for (let index = 1; index < notes.length; index += 1) {
-        expect(notes[index].at - notes[index - 1].at).toBeGreaterThanOrEqual(0.045)
-      }
-      expect(notes[0].at).toBeGreaterThanOrEqual(0)
-      expect(notes.at(-1).at).toBeLessThan(seconds)
+      const [start, peak, end] = starSweep(seconds)
+      expect(start.at).toBe(0)
+      expect(peak.frequency).toBeGreaterThan(start.frequency)
+      expect(end.frequency).toBeLessThan(peak.frequency)
+      expect(peak.at).toBeGreaterThan(start.at)
+      expect(end.at).toBeCloseTo(seconds)
+      expect(Math.max(start.frequency, peak.frequency, end.frequency)).toBeLessThan(400)
     }
-    expect(starGlitter(0.9)).toEqual(starGlitter(0.9))
+    expect(starSweep(0)).toEqual(starSweep(0.45))
   })
 
   it('picks the three loudest whirs after distance loss', () => {
