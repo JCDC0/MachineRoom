@@ -24,10 +24,18 @@ const TONES = {
 }
 const MESSAGE = { frequency: 990, type: 'triangle', duration: 0.1 }
 const WOOSHES = {
-  folderOpen: { from: 380, to: 3400, duration: 0.35, clickAt: 0 },
-  folderClose: { from: 2800, to: 260, duration: 0.3, clickAt: 0.286 },
+  folderOpen: { from: 320, to: 2200, duration: 0.35, clickAt: 0 },
+  folderClose: { from: 1900, to: 240, duration: 0.3, clickAt: 0.286 },
 }
-const STAR_PITCHES = [784, 988, 1319, 1568, 2093]
+const WOOSH_PEAK = 0.16
+const CLICK_PEAK = 0.06
+const NOISE_SECONDS = 1
+const STAR_WOOSH = { from: 900, to: 4200, q: 1.4, level: 0.06 }
+const GLITTER = [[0.06, 2637], [0.2, 3520], [0.31, 3136], [0.45, 4186], [0.57, 3951], [0.72, 4699], [0.85, 5274]]
+const GLITTER_GAP = 0.06
+const GLITTER_PEAK = 0.035
+const GLITTER_DECAY = 0.045
+const WHIR_LEVEL = 0.04
 const STAR_LIMIT = 4
 const WHIR_LIMIT = 3
 const VOICE_IDLE = 0.5
@@ -57,12 +65,13 @@ export function labelBlip(kind) {
   }))
 }
 
-export function starArpeggio(seconds = 0.45) {
+export function starGlitter(seconds = 0.45) {
   const length = Number.isFinite(seconds) && seconds > 0 ? seconds : 0.45
-  return STAR_PITCHES.map((frequency, index) => ({
-    frequency,
-    at: (index / STAR_PITCHES.length) * length,
-  }))
+  const count = Math.max(2, Math.min(GLITTER.length, Math.floor(length / GLITTER_GAP)))
+  return Array.from({ length: count }, (_, index) => {
+    const [share, frequency] = GLITTER[Math.round((index * (GLITTER.length - 1)) / Math.max(1, count - 1))]
+    return { frequency, at: share * length }
+  })
 }
 
 export function loudestWhirs(voices) {
@@ -560,21 +569,25 @@ function playNote(context, output, at, note, peak, attack, onEnd) {
   oscillator.stop(at + note.duration)
 }
 
-function playSweep(context, output, at, sweep, onEnd) {
+function noiseBuffer(context) {
   if (!engine.noise) {
     const rate = context.sampleRate
-    engine.noise = context.createBuffer(1, Math.ceil(rate * WOOSHES.folderOpen.duration), rate)
+    engine.noise = context.createBuffer(1, Math.ceil(rate * NOISE_SECONDS), rate)
     fillNoise(engine.noise.getChannelData(0))
   }
+  return engine.noise
+}
+
+function playSweep(context, output, at, sweep, onEnd) {
   const noise = context.createBufferSource()
   const filter = context.createBiquadFilter()
   const gain = context.createGain()
-  noise.buffer = engine.noise
+  noise.buffer = noiseBuffer(context)
   filter.type = 'bandpass'
   filter.Q.value = 0.8
   filter.frequency.setValueAtTime(sweep.from, at)
   filter.frequency.exponentialRampToValueAtTime(sweep.to, at + sweep.duration)
-  envelope(gain.gain, at, sweep.duration, 0.42, sweep.duration * 0.33)
+  envelope(gain.gain, at, sweep.duration, WOOSH_PEAK, sweep.duration * 0.33)
   noise.connect(filter)
   filter.connect(gain)
   gain.connect(output)
@@ -586,7 +599,7 @@ function playSweep(context, output, at, sweep, onEnd) {
   }
   noise.start(at)
   noise.stop(at + sweep.duration)
-  playNote(context, output, at + sweep.clickAt, { type: 'triangle', frequency: 1560, duration: 0.014 }, 0.28, 0.001, onEnd)
+  playNote(context, output, at + sweep.clickAt, { type: 'triangle', frequency: 1560, duration: 0.014 }, CLICK_PEAK, 0.001, onEnd)
 }
 
 function moveVoice(voice, now) {
@@ -607,38 +620,66 @@ function startVoice(voice, context) {
   const { gain, panner } = spatialOutput(context, voice.spatial, 0)
   const gate = context.createGain()
   gate.connect(gain)
-  const sources = []
-  const tones = []
-  const filter = voice.kind === 'whir' ? context.createBiquadFilter() : null
-  if (filter) {
-    filter.type = 'lowpass'
-    filter.frequency.value = 260
-    filter.connect(gate)
-  }
-  const notes = filter ? [{ frequency: 116, at: 0 }] : starArpeggio(voice.place.flightSeconds)
-  const parts = filter ? [['triangle', 1, 0.12]] : [['triangle', 1, 0.20], ['sine', 1.012, 0.08]]
-  for (const [type, ratio, level] of parts) {
-    const source = context.createOscillator()
-    const tone = context.createGain()
-    source.type = type
-    for (const note of notes) source.frequency.setValueAtTime(note.frequency * ratio, now + note.at)
-    tone.gain.value = level
-    source.connect(tone)
-    tone.connect(filter ?? gate)
-    source.start(now)
-    sources.push(source)
-    tones.push(tone)
-  }
+  const { sources, nodes, filter = null } = voice.kind === 'whir'
+    ? whirParts(context, gate, now)
+    : starParts(context, gate, now, voice.place.flightSeconds)
   sources[0].onended = () => {
-    for (const source of sources) source.disconnect()
-    for (const tone of tones) tone.disconnect()
-    filter?.disconnect()
+    for (const node of [...sources, ...nodes]) node.disconnect()
     gate.disconnect()
     gain.disconnect()
     panner.disconnect()
   }
   voice.nodes = { gain, panner, gate, filter, sources }
   moveVoice(voice, now)
+}
+
+function whirParts(context, gate, now) {
+  const filter = context.createBiquadFilter()
+  const source = context.createOscillator()
+  const tone = context.createGain()
+  filter.type = 'lowpass'
+  filter.frequency.value = 260
+  filter.connect(gate)
+  source.type = 'triangle'
+  source.frequency.setValueAtTime(116, now)
+  tone.gain.value = WHIR_LEVEL
+  source.connect(tone)
+  tone.connect(filter)
+  source.start(now)
+  return { sources: [source], nodes: [tone, filter], filter }
+}
+
+function starParts(context, gate, now, flightSeconds) {
+  const flight = Number.isFinite(flightSeconds) && flightSeconds > 0 ? flightSeconds : 0.45
+  const noise = context.createBufferSource()
+  const band = context.createBiquadFilter()
+  const air = context.createGain()
+  noise.buffer = noiseBuffer(context)
+  noise.loop = true
+  band.type = 'bandpass'
+  band.Q.value = STAR_WOOSH.q
+  band.frequency.setValueAtTime(STAR_WOOSH.from, now)
+  band.frequency.exponentialRampToValueAtTime(STAR_WOOSH.to, now + flight)
+  air.gain.value = STAR_WOOSH.level
+  noise.connect(band)
+  band.connect(air)
+  air.connect(gate)
+  const ping = context.createOscillator()
+  const sparkle = context.createGain()
+  ping.type = 'sine'
+  sparkle.gain.value = 0
+  for (const note of starGlitter(flight)) {
+    const at = now + note.at
+    ping.frequency.setValueAtTime(note.frequency, at)
+    sparkle.gain.setValueAtTime(0.0001, at)
+    sparkle.gain.linearRampToValueAtTime(GLITTER_PEAK, at + 0.004)
+    sparkle.gain.exponentialRampToValueAtTime(0.0001, at + GLITTER_DECAY)
+  }
+  ping.connect(sparkle)
+  sparkle.connect(gate)
+  noise.start(now)
+  ping.start(now)
+  return { sources: [noise, ping], nodes: [band, air, sparkle] }
 }
 
 function retireVoice(voice, immediate = false) {

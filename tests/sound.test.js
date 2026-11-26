@@ -24,7 +24,7 @@ import {
   panForScreen,
   sharpOnset,
   spatialSound,
-  starArpeggio,
+  starGlitter,
   swayStep,
   swayTarget,
   touchSoundKind,
@@ -63,18 +63,20 @@ describe('room sound shapes', () => {
     expect(new Set(pairs).size).toBe(5)
   })
 
-  it('rises through the flight and fits short and long routes', () => {
+  it('scatters high glitter pings through the flight, rising overall, never closer than a ping lasts', () => {
     for (const seconds of [0.0625, 0.25, 0.9]) {
-      const notes = starArpeggio(seconds)
-      expect(notes.length).toBeGreaterThan(3)
-      expect(notes[0].at).toBe(0)
+      const notes = starGlitter(seconds)
+      expect(notes.length).toBeGreaterThanOrEqual(2)
+      expect(notes.length).toBeLessThanOrEqual(Math.max(2, Math.floor(seconds / 0.06)))
+      expect(notes.every((note) => note.frequency > 2000)).toBe(true)
+      expect(notes.at(-1).frequency).toBeGreaterThan(notes[0].frequency)
       for (let index = 1; index < notes.length; index += 1) {
-        expect(notes[index].frequency).toBeGreaterThan(notes[index - 1].frequency)
-        expect(notes[index].at).toBeGreaterThan(notes[index - 1].at)
+        expect(notes[index].at - notes[index - 1].at).toBeGreaterThanOrEqual(0.045)
       }
+      expect(notes[0].at).toBeGreaterThanOrEqual(0)
       expect(notes.at(-1).at).toBeLessThan(seconds)
-      expect(notes.at(-1).at).toBeGreaterThan(seconds * 0.7)
     }
+    expect(starGlitter(0.9)).toEqual(starGlitter(0.9))
   })
 
   it('picks the three loudest whirs after distance loss', () => {
