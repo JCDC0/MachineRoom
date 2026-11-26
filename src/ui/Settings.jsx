@@ -10,7 +10,7 @@ import SearchSettings from './SearchSettings.jsx'
 import StorageSettings from './StorageSettings.jsx'
 import { readStorage, store, writeStorage } from '../storage.js'
 import { RECORD_MINUTES_MAX, RECORD_MINUTES_MIN, clampRecordMinutes } from '../model/recordLimits.js'
-import { effectSettings, clampFileLimit, FILE_LIMIT_MAX, FILE_LIMIT_MIN, loadSettings, loadSoundSettings, saveSettings, saveSoundSettings } from './settings.js'
+import { effectSettings, clampFileLimit, clampFolderSpacing, FILE_LIMIT_MAX, FILE_LIMIT_MIN, FOLDER_SPACING_MAX, FOLDER_SPACING_MIN, FOLDER_SPACING_STEP, loadSettings, loadSoundSettings, saveSettings, saveSoundSettings } from './settings.js'
 import { sound } from './sound.js'
 
 export const EFFECTS = [
@@ -206,6 +206,26 @@ export default function Settings({ open = true, effects, onChange, onSettingsCha
                 <span>4</span>
                 <span>12</span>
                 <span>20</span>
+              </div>
+            </div>
+            <div className="hud-settings-row">
+              <span className="hud-settings-label">Folder spacing</span>
+              <span className="hud-settings-value mono">{current.folderSpacing}</span>
+            </div>
+            <div className="hud-settings-control">
+              <input
+                type="range"
+                min={FOLDER_SPACING_MIN}
+                max={FOLDER_SPACING_MAX}
+                step={FOLDER_SPACING_STEP}
+                value={current.folderSpacing}
+                aria-label="Folder spacing"
+                onChange={(event) => onChange?.({ ...current, folderSpacing: clampFolderSpacing(event.target.value) })}
+              />
+              <div className="hud-settings-ticks mono">
+                <span>{FOLDER_SPACING_MIN}</span>
+                <span>2000</span>
+                <span>{FOLDER_SPACING_MAX}</span>
               </div>
             </div>
             <div className="hud-settings-row">

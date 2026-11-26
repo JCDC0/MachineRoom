@@ -718,6 +718,21 @@ describe('fitView', () => {
     }
   })
 
+  it('fits the same overview through a full orbit at wide spacing', () => {
+    const center = { x: 0, y: 200, z: 0 }
+    const card = { ...center, y: 340, rx: 380, ry: 450, orbitRadius: 6152 }
+    for (const aspect of [0.7, 1.6, 2.7]) {
+      const fit = fitView([card], { aspect, center, max: 30000 })
+      expect(fit.target).toEqual(center)
+      expect(fit.dist).toBeGreaterThan(8000)
+      for (let step = 0; step < 72; step += 1) {
+        const angle = step * Math.PI / 36
+        const at = { ...card, x: card.orbitRadius * Math.cos(angle), z: card.orbitRadius * Math.sin(angle) }
+        expect(inside(fit, [at], aspect)).toBe(true)
+      }
+    }
+  })
+
   it('never goes closer than the minimum', () => {
     expect(fitView([{ x: 0, y: 0, z: 0, r: 10 }]).dist).toBe(FIT_MIN)
   })

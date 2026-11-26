@@ -368,7 +368,8 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, sound
 
   function refit(force = false) {
     const spheres = [HUB_SPHERE, ...cards.overviewSpheres()]
-    const next = fitView(spheres, { width, height, center: HUB_CENTER })
+    const max = camera.far / 2
+    const next = fitView(spheres, { width, height, center: HUB_CENTER, max })
     if (heldPath !== null) {
       fitted = { target: next.target, dist: next.dist }
       return
@@ -376,12 +377,8 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, sound
     let distance = next.dist
     const drawn = [...cards.cards.values()].filter((card) => card.view && !card.leaving)
     if (drawn.length > 0 && drawn.length - 1 <= SMALL_TOP) {
-      const points = []
-      for (const card of drawn) {
-        const sphere = cards.cardSphere(card.path)
-        if (sphere) points.push(sphere)
-      }
-      distance = Math.max(distance, distanceForRatio(points, { center: HUB_CENTER }))
+      const points = cards.overviewSpheres(true)
+      distance = Math.min(max, Math.max(distance, distanceForRatio(points, { center: HUB_CENTER })))
     }
     if (!force && fitted) {
       const shift = Math.hypot(next.target.x - fitted.target.x, next.target.y - fitted.target.y, next.target.z - fitted.target.z)
@@ -1198,7 +1195,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, sound
     internet.update(delta, agentSet.webActive() > 0)
     if (gitTree.setTop(cards.bottom(''))) space.setLevels(gitTree.bottom())
     gitTree.update(delta)
-    if (cards.update(state, delta, camera, mask, replaySpeed)) {
+    if (cards.update(state, delta, camera, mask, replaySpeed, now / 1000)) {
       const holdLost = releaseLostHold()
       relink()
       refit(holdLost)
@@ -1415,6 +1412,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, sound
       const next = {}
       if (Object.hasOwn(options, 'alwaysDepth')) next.alwaysDepth = options.alwaysDepth
       if (Object.hasOwn(options, 'maxFiles')) next.maxFiles = options.maxFiles
+      if (Object.hasOwn(options, 'folderSpacing')) next.folderSpacing = options.folderSpacing
       if (Object.hasOwn(options, 'folderContents')) next.folderContents = options.folderContents
       if (Object.hasOwn(options, 'openOnTouch')) next.openOnTouch = options.openOnTouch
       if (!cards.setOptions(next)) return

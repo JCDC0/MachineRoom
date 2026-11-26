@@ -45,14 +45,24 @@ const radiusY = (s) => {
 }
 const radius = (s) => Math.max(radiusX(s), radiusY(s))
 
-export function fitView(spheres, { yaw = OVERVIEW.yaw, pitch = OVERVIEW.pitch, fov = FOV, aspect = 1.6, width = 0, height = 0, min = FIT_MIN, center = null } = {}) {
+function fitAxis(d, depth, back, axis, tangent, extent, orbitRadius) {
+  const projected = dot(d, axis) / tangent
+  if (!orbitRadius) return depth + Math.abs(projected) + extent / tangent
+  const dx = axis.x / tangent
+  const dz = axis.z / tangent
+  const positive = projected + orbitRadius * Math.hypot(back.x + dx, back.z + dz)
+  const negative = -projected + orbitRadius * Math.hypot(back.x - dx, back.z - dz)
+  return depth + Math.max(positive, negative) + extent / tangent
+}
+
+export function fitView(spheres, { yaw = OVERVIEW.yaw, pitch = OVERVIEW.pitch, fov = FOV, aspect = 1.6, width = 0, height = 0, min = FIT_MIN, max = MAX_DIST, center = null } = {}) {
   if (spheres.length === 0) return { target: center ? { x: center.x, y: center.y, z: center.z } : { x: OVERVIEW.x, y: OVERVIEW.y, z: OVERVIEW.z }, dist: OVERVIEW.dist }
   const lensAspect = Number(width) > 0 && Number(height) > 0 ? Number(width) / Number(height) : aspect
   const { back, right, up } = viewBasis(yaw, pitch)
   const low = { x: Infinity, y: Infinity, z: Infinity }
   const high = { x: -Infinity, y: -Infinity, z: -Infinity }
   for (const s of spheres) {
-    const r = radius(s)
+    const r = radius(s) + (s.orbitRadius ?? 0)
     for (const axis of ['x', 'y', 'z']) {
       low[axis] = Math.min(low[axis], s[axis] - r)
       high[axis] = Math.max(high[axis], s[axis] + r)
@@ -64,10 +74,13 @@ export function fitView(spheres, { yaw = OVERVIEW.yaw, pitch = OVERVIEW.pitch, f
     const d = { x: s.x - middle.x, y: s.y - middle.y, z: s.z - middle.z }
     const x = dot(d, right)
     const y = dot(d, up)
-    span.x0 = Math.min(span.x0, x - radiusX(s))
-    span.x1 = Math.max(span.x1, x + radiusX(s))
-    span.y0 = Math.min(span.y0, y - radiusY(s))
-    span.y1 = Math.max(span.y1, y + radiusY(s))
+    const orbitRadius = s.orbitRadius ?? 0
+    const rx = radiusX(s) + orbitRadius * Math.hypot(right.x, right.z)
+    const ry = radiusY(s) + orbitRadius * Math.hypot(up.x, up.z)
+    span.x0 = Math.min(span.x0, x - rx)
+    span.x1 = Math.max(span.x1, x + rx)
+    span.y0 = Math.min(span.y0, y - ry)
+    span.y1 = Math.max(span.y1, y + ry)
   }
   const sx = (span.x0 + span.x1) / 2
   const sy = (span.y0 + span.y1) / 2
@@ -84,9 +97,9 @@ export function fitView(spheres, { yaw = OVERVIEW.yaw, pitch = OVERVIEW.pitch, f
   for (const s of spheres) {
     const d = { x: s.x - target.x, y: s.y - target.y, z: s.z - target.z }
     const depth = dot(d, back)
-    dist = Math.max(dist, (Math.abs(dot(d, right)) + radiusX(s)) / tanH + depth, (Math.abs(dot(d, up)) + radiusY(s)) / tanV + depth)
+    dist = Math.max(dist, fitAxis(d, depth, back, right, tanH, radiusX(s), s.orbitRadius), fitAxis(d, depth, back, up, tanV, radiusY(s), s.orbitRadius))
   }
-  return { target, dist: Math.min(dist, MAX_DIST) }
+  return { target, dist: Math.min(dist, max) }
 }
 
 export function distanceForRatio(spheres, { yaw = OVERVIEW.yaw, pitch = OVERVIEW.pitch, ratio = 2, center = null } = {}) {
@@ -94,6 +107,7 @@ export function distanceForRatio(spheres, { yaw = OVERVIEW.yaw, pitch = OVERVIEW
   const want = Number(ratio)
   if (!(want > 1)) return 0
   const { back } = viewBasis(yaw, pitch)
+  const planarDepth = Math.hypot(back.x, back.z)
   const at = center ?? { x: 0, y: 0, z: 0 }
   let near = 0
   let far = 0
@@ -102,8 +116,9 @@ export function distanceForRatio(spheres, { yaw = OVERVIEW.yaw, pitch = OVERVIEW
     const d = { x: Number(sphere.x) - at.x, y: Number(sphere.y) - at.y, z: Number(sphere.z) - at.z }
     if (!Number.isFinite(d.x) || !Number.isFinite(d.y) || !Number.isFinite(d.z)) continue
     const depth = dot(d, back)
-    if (depth > near) near = depth
-    if (-depth > far) far = -depth
+    const sweep = (sphere.orbitRadius ?? 0) * planarDepth
+    near = Math.max(near, depth + sweep)
+    far = Math.max(far, -depth + sweep)
   }
   return Math.max(0, (want * near + far) / (want - 1))
 }
@@ -158,16 +173,16 @@ export function followTarget(previous, next, frame, now) {
   return { path: wanted.path, at: now, moved: true }
 }
 
-export function shareFromDistance(dist) {
-  const span = Math.log(MAX_DIST) - Math.log(MIN_DIST)
-  const d = THREE.MathUtils.clamp(Number(dist) || MAX_DIST, MIN_DIST, MAX_DIST)
-  return (Math.log(MAX_DIST) - Math.log(d)) / span
+export function shareFromDistance(dist, max = MAX_DIST) {
+  const span = Math.log(max) - Math.log(MIN_DIST)
+  const d = THREE.MathUtils.clamp(Number(dist) || max, MIN_DIST, max)
+  return (Math.log(max) - Math.log(d)) / span
 }
 
-export function distanceFromShare(share) {
-  const span = Math.log(MAX_DIST) - Math.log(MIN_DIST)
+export function distanceFromShare(share, max = MAX_DIST) {
+  const span = Math.log(max) - Math.log(MIN_DIST)
   const s = THREE.MathUtils.clamp(Number(share) || 0, 0, 1)
-  return Math.exp(Math.log(MAX_DIST) - s * span)
+  return Math.exp(Math.log(max) - s * span)
 }
 
 export function createCameraRig(camera, surface) {
@@ -179,6 +194,7 @@ export function createCameraRig(camera, surface) {
   let transition = null
   let onClick = () => {}
   let overviewDist = OVERVIEW.dist
+  const zoomLimit = () => Math.max(MAX_DIST, overviewDist)
   const overviewTarget = new THREE.Vector3(OVERVIEW.x, OVERVIEW.y, OVERVIEW.z)
   let adjusted = false
   let spin = false
@@ -234,7 +250,7 @@ export function createCameraRig(camera, surface) {
   function zoomBy(deltaY) {
     adjusted = true
     transition = null
-    goal.dist = THREE.MathUtils.clamp(goal.dist * Math.exp(deltaY * 0.001), MIN_DIST, MAX_DIST)
+    goal.dist = THREE.MathUtils.clamp(goal.dist * Math.exp(deltaY * 0.001), MIN_DIST, zoomLimit())
     if (heldDist !== null) heldDist = goal.dist
   }
 
@@ -370,11 +386,11 @@ export function createCameraRig(camera, surface) {
     },
     yaw: () => view.yaw,
     pitch: () => view.pitch,
-    zoomShare: () => shareFromDistance(goal.dist),
+    zoomShare: () => shareFromDistance(goal.dist, zoomLimit()),
     setZoomShare(share) {
       adjusted = true
       transition = null
-      goal.dist = distanceFromShare(share)
+      goal.dist = distanceFromShare(share, zoomLimit())
       if (heldDist !== null) heldDist = goal.dist
     },
     zoomMultiplier: () => overviewDist / goal.dist,
@@ -404,6 +420,7 @@ export function createCameraRig(camera, surface) {
           fov: camera.fov || FOV,
           aspect: camera.aspect || 1,
           min: mode === 'close' ? FOLLOW_CLOSE_MIN : FOLLOW_WIDE_MIN,
+          max: Math.max(MAX_DIST, camera.far / 2),
         })
         return { target: next.target, dist: next.dist }
       }
@@ -421,7 +438,7 @@ export function createCameraRig(camera, surface) {
     },
     setFit(target, distance) {
       overviewTarget.copy(target)
-      overviewDist = THREE.MathUtils.clamp(distance, MIN_DIST, MAX_DIST)
+      overviewDist = THREE.MathUtils.clamp(distance, MIN_DIST, Math.max(MAX_DIST, camera.far / 2))
       aimOverview()
     },
     setOverviewDistance(distance) {
