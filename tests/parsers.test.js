@@ -5,7 +5,8 @@ import { createHermesParser } from '../src/model/parsers/hermes.js'
 import { createParser } from '../src/model/parsers/index.js'
 import { createOpencodeParser } from '../src/model/parsers/opencode.js'
 import { looksFailed } from '../src/model/parsers/common.js'
-import { buildActivities } from '../src/model/pipeline.js'
+import { buildActivities, createPipeline } from '../src/model/pipeline.js'
+import { apply, createState } from '../src/model/state.js'
 import { unreadableLines } from '../src/model/parsers/unreadable.js'
 import { testContext } from './helpers.js'
 
@@ -13,6 +14,49 @@ const ctx = testContext()
 const lines = (...items) => items.map((item) => (typeof item === 'string' ? item : JSON.stringify(item))).join('\n') + '\n'
 const summary = (activities) =>
   activities.filter((a) => a.type === 'tool.start' || a.type === 'tool.end').map((a) => (a.type === 'tool.start' ? `start ${a.label}` : `end ${a.ok}`))
+
+it.each(['agy', 'hermes'])('keeps interleaved %s runs and their children separate', (parser) => {
+  const agent = { id: 'session', key: `${parser}-session`, name: 'Session', parser }
+  const tree = { ...ctx, created: [] }
+  const pipeline = createPipeline({ agents: [agent], tree })
+  const state = createState(tree, [agent])
+  let time = 1000
+  function send(type, runId, extra) {
+    const activities = pipeline.push({
+      type: `heartbeat.run.${type}`,
+      createdAt: new Date(time++).toISOString(),
+      payload: { agentId: agent.id, runId, ...extra },
+    })
+    for (const activity of activities) apply(state, activity)
+    return activities
+  }
+  function read(runId, path, id) {
+    const chunk = parser === 'agy'
+      ? lines({ event: 'step_update', step_update: {
+        root_conversation_id: 'root', conversation_id: 'worker', step_index: id, state: 'ACTIVE',
+        step_type: 'tool', tool_name: 'read_file', tool_info: { parameters: { Path: path } },
+      } })
+      : lines({ hermes: 'call', agent: 'worker', id, name: 'read_file', args: { path } })
+    return send('log', runId, { stream: 'stdout', chunk })
+  }
+
+  send('status', 'one', { status: 'running' })
+  const first = read('one', 'src/math.js', 'a').find((activity) => activity.type === 'agent.spawn').child
+  send('status', 'two', { status: 'running' })
+  const second = read('two', 'src/strings.js', 'a').find((activity) => activity.type === 'agent.spawn').child
+  expect(first).not.toBe(second)
+  expect(state.agents.get(first)).toMatchObject({ runId: 'one', status: 'working', focus: ['src/math.js'] })
+  expect(state.agents.get(second)).toMatchObject({ runId: 'two', status: 'working', focus: ['src/strings.js'] })
+  apply(state, { type: 'run.start', agent: first, runId: 'worker-run', time: time++ })
+
+  send('status', 'two', { status: 'succeeded' })
+  expect(state.agents.get(second).status).toBe('done')
+  expect(state.agents.get(first).status).toBe('working')
+  expect(read('one', 'docs/notes.md', 'b')).toMatchObject([{ type: 'tool.start', agent: first }])
+  send('status', 'one', { status: 'failed' })
+  expect(state.agents.get(first).status).toBe('error')
+  expect(state.agents.get(second).status).toBe('done')
+})
 
 describe('claude parser', () => {
   it('turns an edit into a write touch and a completed end', () => {
@@ -619,6 +663,20 @@ describe('agy parser', () => {
     const afterDone = parser.push(lines(done), 200)
     expect(afterDone.map((activity) => activity.type)).toEqual(['tool.end', 'agent.spawn'])
     expect(afterDone[1]).toMatchObject({ agent: 'agy', child: 'agy~1', name: 'Math Documenter', label: 'Read src/strings.js.' })
+    const worked = parser.push(lines({
+      event: 'step_update',
+      step_update: {
+        root_conversation_id: 'c1', conversation_id: 'child-1', step_index: 1, state: 'DONE',
+        step_type: 'tool', tool_name: 'read_file', tool_info: { parameters: { Path: 'src/strings.js' } },
+      },
+    }, {
+      event: 'step_update',
+      step_update: {
+        root_conversation_id: 'c1', conversation_id: 'c1', step_index: 9, state: 'ACTIVE',
+        step_type: 'tool', tool_name: 'read_board',
+      },
+    }), 250)
+    expect(worked.map((activity) => activity.type)).toEqual(['tool.start', 'tool.end', 'tool.start'])
     const running = parser.push(lines(list(10, 'running')), 300)
     expect(running.some((activity) => activity.type === 'agent.end')).toBe(false)
     const idle = parser.push(lines(list(12, 'idle')), 400)

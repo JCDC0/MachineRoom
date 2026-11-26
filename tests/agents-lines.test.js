@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import {
   ORCHESTRATOR_LINK_OPACITY,
   SUB_ORCHESTRATOR_LINK_OPACITY,
@@ -8,6 +8,7 @@ import {
   starOriginKey,
 } from '../src/engine/agents.js'
 import { HUB_RADIUS, HUB_Y, ORCHESTRATOR_HOME, PARK_LIFT, READER_RADIUS, RING_LEVEL_MAX, SUB_STAND_LIFT, ringDrop } from '../src/engine/hub.js'
+import { createLivePlayer } from '../src/live/livePlayer.js'
 import { LANE_START_TOP_MS } from '../src/model/laneStarter.js'
 import { apply, createState } from '../src/model/state.js'
 
@@ -410,18 +411,33 @@ describe('an outside session that leads subagents takes the top', () => {
   })
 
   it('gives the seat back once the children ended and the window has passed', () => {
-    const { agents, state, terminals, world } = harness(ROSTER_WITH_SESSIONS)
-    spawn(state, 'antigravity-session', 'antigravity-session~1', 1000)
-    apply(state, { type: 'agent.end', agent: 'antigravity-session~1', ok: true, time: 2000 })
-    agents.update(state, 0.016, 0, world, terminals)
-    expect(agents.topKey()).toBe('antigravity-session')
+    const { agents, terminals, world } = harness(ROSTER_WITH_SESSIONS)
+    const clock = vi.spyOn(performance, 'now').mockReturnValue(0)
+    try {
+      const player = createLivePlayer({ tree: { files: [], dirs: [], created: [] }, agents: ROSTER_WITH_SESSIONS })
+      const session = 'antigravity-session'
+      const child = 'antigravity-session~1'
+      player.push([
+        { type: 'run.start', agent: session, runId: 'run', time: 1000 },
+        { type: 'agent.spawn', agent: session, child, name: 'Worker', runId: 'run', time: 1000 },
+        { type: 'agent.end', agent: child, ok: true, time: 2000 },
+      ])
+      agents.update(player.state, 0.016, 0, world, terminals)
+      expect(agents.topKey()).toBe(session)
 
-    state.latest = 2000 + LANE_START_TOP_MS + 1
-    agents.update(state, 0.016, 0, world, terminals)
-    agents.snap(state, world)
-    expect(agents.topKey()).toBe('orchestrator')
-    expectAt(agents.views.get('orchestrator').group.position, ORCHESTRATOR_HOME)
-    agents.dispose()
+      clock.mockReturnValue(LANE_START_TOP_MS)
+      agents.update(player.state, 0.016, LANE_START_TOP_MS, world, terminals)
+      expect(agents.topKey()).toBe(session)
+      clock.mockReturnValue(LANE_START_TOP_MS + 1)
+      agents.update(player.state, 0.016, LANE_START_TOP_MS + 1, world, terminals)
+      agents.snap(player.state, world)
+      expect(player.state.latest).toBe(2000)
+      expect(agents.topKey()).toBe('orchestrator')
+      expectAt(agents.views.get('orchestrator').group.position, ORCHESTRATOR_HOME)
+    } finally {
+      clock.mockRestore()
+      agents.dispose()
+    }
   })
 })
 

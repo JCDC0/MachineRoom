@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { createHermesParser } from '../src/model/parsers/hermes.js'
 import { unreadableLines } from '../src/model/parsers/unreadable.js'
+import { apply, createState } from '../src/model/state.js'
 import { testContext } from './helpers.js'
 
 const ctx = testContext()
@@ -95,6 +96,31 @@ describe('the Hermes parser and its JSON call lines', () => {
     const parser = createHermesParser({ ...ctx, agentKey: 'hermes' })
     const out = parser.push(line({ hermes: 'call', id: 'd2', name: 'delegate_task', args: JSON.stringify({ tasks: [{ description: 'Read the docs' }] }) }), 1000)
     expect(out.find((a) => a.type === 'agent.spawn').name).toBe('Read the docs')
+  })
+
+  it.each([
+    { resultFirst: false, ok: true },
+    { resultFirst: true, ok: true },
+    { resultFirst: true, ok: false },
+  ])('credits worker calls to the delegate child (result first: $resultFirst, succeeded: $ok)', ({ resultFirst, ok }) => {
+    const parser = createHermesParser({ ...ctx, agentKey: 'hermes' })
+    const started = parser.push(line({ hermes: 'call', id: 'delegate', name: 'delegate_task', args: { tasks: [{ goal: 'Read the docs' }] } }), 1000)
+    const child = started.find((activity) => activity.type === 'agent.spawn').child
+    const result = () => parser.push(line({ hermes: 'result', id: 'delegate', ok }), 3000)
+    const early = resultFirst ? result() : []
+    const work = parser.push(line({ hermes: 'call', id: 'read', name: 'read_file', agent: 'worker-session', args: { path: 'docs/notes.md' } }), 2000)
+    expect(work).toMatchObject([{ type: 'tool.start', agent: child, label: 'read docs/notes.md' }])
+    const done = parser.push(line({ hermes: 'result', id: 'read', ok: true }), 2500)
+    expect(done).toMatchObject([{ type: 'tool.end', agent: child }])
+    const late = resultFirst ? [] : result()
+    expect([...early, ...late].filter((activity) => activity.type === 'agent.end')).toEqual([
+      { time: 3000, type: 'agent.end', agent: child, ok },
+    ])
+    const state = createState({ ...ctx, created: [] }, [{ key: 'hermes' }])
+    for (const activity of [...started, ...early, ...work, ...done, ...late]) apply(state, { agent: 'hermes', ...activity })
+    expect([...state.agents.keys()]).toEqual(['hermes', child])
+    expect(state.agents.get(child)).toMatchObject({ status: ok ? 'done' : 'error', endedAt: 3000 })
+    expect(state.agents.get(child).lines.map((entry) => entry.text)).toEqual(['read docs/notes.md'])
   })
 
   it('puts a child session calls on a child of its own', () => {

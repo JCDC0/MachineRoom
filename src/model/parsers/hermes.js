@@ -50,22 +50,31 @@ export function createHermesParser(ctx) {
   const out = []
   const open = new Map()
   const children = new Map()
+  const awaitingWorker = new Set()
   let counter = 0
   let spawned = 0
   let near
   const parentKey = ctx.agentKey ?? 'agent'
+  const childPrefix = ctx.runToken ? `${parentKey}~${ctx.runToken}` : parentKey
 
   function childFor(json, time) {
     const marker = typeof json.agent === 'string' ? json.agent.trim() : ''
-    if (marker === '') return ''
+    if (marker === '') return null
     const known = children.get(marker)
     if (known) return known
-    const key = `${parentKey}~${(spawned += 1)}`
-    children.set(marker, key)
+    for (const child of awaitingWorker) {
+      if (time < child.startedAt || (child.endedAt !== null && time > child.endedAt)) continue
+      awaitingWorker.delete(child)
+      children.set(marker, child)
+      return child
+    }
+    const key = `${childPrefix}~${(spawned += 1)}`
+    const child = { key, endedAt: null }
+    children.set(marker, child)
     const raw = typeof json.agentName === 'string' ? json.agentName.trim() : ''
     const name = raw || `subagent ${spawned}`
     out.push({ time, type: 'agent.spawn', agent: parentKey, child: key, name: shorten(name, 40), label: name })
-    return key
+    return child
   }
 
   function startCall(json, time) {
@@ -105,12 +114,17 @@ export function createHermesParser(ctx) {
     }
     const goal = name === 'delegate_task' ? delegateGoal(args.tasks) : ''
     if (name === 'delegate_task') label = goal ? `delegate ${shorten(goal)}` : 'delegate'
-    const call = { owner, child: '' }
+    const call = { owner: owner?.key, child: null }
     open.set(id, call)
-    out.push({ ...toolStart({ time, id, tool, label, touches, outsidePath }), ...(owner ? { agent: owner } : {}) })
+    const activity = toolStart({ time, id, tool, label, touches, outsidePath })
+    if (owner) activity.agent = owner.key
+    if (owner?.endedAt != null) activity.keepFinished = true
+    out.push(activity)
     if (name === 'delegate_task') {
-      call.child = `${parentKey}~${(spawned += 1)}`
-      out.push({ time, type: 'agent.spawn', agent: parentKey, child: call.child, name: shorten(goal || 'delegate', 40), label })
+      const key = `${childPrefix}~${(spawned += 1)}`
+      call.child = { key, startedAt: time, endedAt: null }
+      awaitingWorker.add(call.child)
+      out.push({ time, type: 'agent.spawn', agent: parentKey, child: key, name: shorten(goal || 'delegate', 40), label })
     }
   }
 
@@ -121,7 +135,10 @@ export function createHermesParser(ctx) {
     open.delete(id)
     const ok = json.ok !== false
     out.push({ ...toolEnd({ time, id, ok }), ...(call.owner ? { agent: call.owner } : {}) })
-    if (call.child) out.push({ time, type: 'agent.end', agent: call.child, ok })
+    if (call.child) {
+      call.child.endedAt = time
+      out.push({ time, type: 'agent.end', agent: call.child.key, ok })
+    }
   }
 
   const reader = createLineReader((line, time) => {
@@ -163,7 +180,7 @@ export function createHermesParser(ctx) {
     out.push(toolStart({ time: startTime, id, tool, label, touches, outsidePath }))
     out.push(toolEnd({ time, id, ok }))
     if (verb === 'delegate') {
-      const child = `${parentKey}~${(spawned += 1)}`
+      const child = `${childPrefix}~${(spawned += 1)}`
       const goal = detail.replace(/^\d+x:\s*/i, '').replace(/(?:\.\.\.|…)\s*$/u, '')
       out.push({ time, type: 'agent.spawn', agent: parentKey, child, name: shorten(goal || 'delegate', 40), label })
       out.push({ time, type: 'agent.end', agent: child, ok })

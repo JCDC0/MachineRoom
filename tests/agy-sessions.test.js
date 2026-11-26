@@ -7,7 +7,7 @@ import { ANTIGRAVITY_SESSION_AGENT, createAgySessionsReader } from '../server/ag
 import { laneAgents } from '../server/lanes-source.js'
 import { laneStarterTop } from '../src/model/laneStarter.js'
 import { makeTree } from '../src/model/paths.js'
-import { createPipeline } from '../src/model/pipeline.js'
+import { buildActivities, createPipeline } from '../src/model/pipeline.js'
 import { apply, createState } from '../src/model/state.js'
 import { readFrames, startLaneBridge } from './helpers/bridge.js'
 
@@ -922,6 +922,14 @@ describe('the Antigravity session reader through the room pipeline', () => {
 })
 
 describe('the Antigravity session reader and its subagents', () => {
+  function roomFrom(frames) {
+    const agents = [ANTIGRAVITY_SESSION_AGENT]
+    const tree = makeTree({ root: 'project', files: [] })
+    const state = createState(tree, agents)
+    for (const activity of buildActivities(frames, { agents, tree })) apply(state, activity)
+    return state
+  }
+
   it('makes every child from the summaries and ends it when it goes idle', () => {
     const { projectRoot, home, dbPath } = setup()
     const frames = []
@@ -972,6 +980,12 @@ describe('the Antigravity session reader and its subagents', () => {
     ])
     expect(own.some((step) => step.tool_name === 'invoke_subagent')).toBe(false)
 
+    appendTranscript(home, 'a6c00010', [planner(7, [{ name: 'read_board', args: {} }]), generic(8, 'board')])
+    reader.tick()
+    expect(stepsOf(frames).some((step) => step.tool_name === 'read_board')).toBe(true)
+    const worker = [...roomFrom(frames).agents.values()].find((agent) => agent.name === 'ui-designer')
+    expect(worker).toMatchObject({ parent: 'antigravity-session', status: 'working' })
+
     const before = frames.length
     setStatus(dbPath, 'a6c00019', 'CASCADE_RUN_STATUS_IDLE')
     reader.tick()
@@ -979,6 +993,7 @@ describe('the Antigravity session reader and its subagents', () => {
     expect(ended).toHaveLength(1)
     expect(ended[0].conversation_id).toBe('a6c00010')
     expect(JSON.parse(ended[0].tool_info.output)).toEqual([{ conversationId: 'a6c00019', state: 'idle' }])
+    expect(roomFrom(frames).agents.get(worker.key)).toMatchObject({ status: 'done' })
 
     reader.tick()
     expect(stepsOf(frames.slice(before)).filter((step) => step.tool_name === 'manage_subagents')).toHaveLength(1)
@@ -1018,6 +1033,18 @@ describe('the Antigravity session reader and its subagents', () => {
       ['a6c00008', 'coordinator'],
       ['a6c0001b', 'browser'],
     ])
+    const entries = [...roomFrom(frames).agents.values()]
+    const parent = entries.find((agent) => agent.name === 'coordinator')
+    const grandchild = entries.find((agent) => agent.name === 'browser')
+    expect(parent).toMatchObject({ parent: 'antigravity-session', depth: 1 })
+    expect(grandchild).toMatchObject({ parent: parent.key, depth: 2 })
+
+    setStatus(dbPath, 'a6c0001b', 'CASCADE_RUN_STATUS_IDLE')
+    setStatus(dbPath, 'a6c0001c', 'CASCADE_RUN_STATUS_IDLE')
+    reader.tick()
+    const ended = roomFrom(frames).agents
+    expect(ended.get(parent.key).status).toBe('done')
+    expect(ended.get(grandchild.key).status).toBe('done')
   })
 })
 

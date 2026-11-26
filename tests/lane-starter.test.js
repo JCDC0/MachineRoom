@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { LANE_START_TOP_MS, cleanStartedBy, delegatingSessionTop, isSessionTopKey, laneStarterTop, sessionKeyFor, topKeyFor } from '../src/model/laneStarter.js'
+import { CHILD_LIFE_MS, apply, createState } from '../src/model/state.js'
 
 const HOUR = 60 * 60 * 1000
 
@@ -137,6 +138,17 @@ describe('delegatingSessionTop', () => {
     expect(delegatingSessionTop({ agents, at: 2000 + LANE_START_TOP_MS + 1 })).toBe('')
   })
 
+  it('keeps the seat until the window expires even after the worker is pruned', () => {
+    const state = createState({ files: [], dirs: [], created: [] }, [{ key: 'antigravity-session' }])
+    apply(state, { type: 'agent.spawn', agent: 'antigravity-session', child: 'worker', time: 1000 })
+    apply(state, { type: 'agent.end', agent: 'worker', ok: true, time: 2000 })
+    const at = 2000 + CHILD_LIFE_MS
+    apply(state, { type: 'run.start', agent: 'antigravity-session', runId: 'next', time: at })
+    expect(state.agents.has('worker')).toBe(false)
+    expect(delegatingSessionTop({ agents: state.agents, at })).toBe('antigravity-session')
+    expect(delegatingSessionTop({ agents: state.agents, at: 2000 + LANE_START_TOP_MS + 1 })).toBe('')
+  })
+
   it('prefers a working child over a newer ended one', () => {
     const agents = room([
       ['antigravity-session', {}],
@@ -148,13 +160,11 @@ describe('delegatingSessionTop', () => {
   })
 
   it('takes the newest child start among sessions that both have working children', () => {
-    const agents = room([
-      ['antigravity-session', {}],
-      ['claude-session', {}],
-      ['worker-a', { parent: 'antigravity-session', status: 'working', startedAt: 1000 }],
-      ['worker-b', { parent: 'claude-session', status: 'working', startedAt: 4000 }],
-    ])
-    expect(delegatingSessionTop({ agents, at: 5000 })).toBe('claude-session')
+    const state = createState({ files: [], dirs: [], created: [] }, [{ key: 'antigravity-session' }, { key: 'claude-session' }])
+    apply(state, { type: 'agent.spawn', agent: 'antigravity-session', child: 'worker-a', time: 1000 })
+    apply(state, { type: 'agent.spawn', agent: 'claude-session', child: 'worker-b', time: 4000 })
+    expect(state.agents.get('worker-b').startedAt).toBe(4000)
+    expect(delegatingSessionTop({ agents: state.agents, at: 5000 })).toBe('claude-session')
   })
 
   it('wants a session key with no parent and a child of its own', () => {
