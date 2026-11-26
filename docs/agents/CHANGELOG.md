@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Folder cards keep their spacing as contents change, turn around the hub, drift on their own, and have a Folder spacing slider (P742).
+
 - A deep folder touch keeps its full hold while it waits for the opening wave (P735, R76-5).
 - The room plays stereo folder wooshes, star sparkles, 8-bit touch blips and thinking whirs (P741).
 - The owner tuned the sounds: quieter, subtler folder wooshes and clicks, a whir at a third of its level, and each star now a soft woosh with glitter instead of an 8-bit arpeggio.

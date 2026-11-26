@@ -30,6 +30,7 @@ import {
   viewKey,
 } from '../src/engine/cards.js'
 import { HUB_CENTER } from '../src/engine/hub.js'
+import { starRoute } from '../src/engine/stars.js'
 import { makeTree } from '../src/model/paths.js'
 import { RECENT_KEEP_MS, apply, createState } from '../src/model/state.js'
 
@@ -544,6 +545,91 @@ describe('the strings the room draws', () => {
     cards.update(state, 0.016, camera())
     expect(cards.visibleLinks()).not.toBe(links)
     cards.dispose()
+  })
+})
+
+describe('the moving folder cards', () => {
+  it('moves the anchor and routes a star to its new place', () => {
+    const state = recentState()
+    const cards = createCards(fakeScene(), { glScene: fakeScene() })
+    const cam = camera()
+    try {
+      cards.sync(state)
+      cards.update(state, 10, cam)
+      const card = cards.cards.get('src')
+      const layout = card.home.clone()
+      const parkedAnchor = cards.anchor('src')
+      const rootAnchor = cards.anchor('')
+      const overview = cards.overviewSpheres()
+      const start = new THREE.Vector3(0, 400, 0)
+
+      cards.update(state, 0.016, cam, null, 0, 12)
+      const movingAnchor = cards.anchor('src')
+      const movingRoot = cards.anchor('')
+      expect(movingAnchor.distanceTo(parkedAnchor)).toBeGreaterThan(40)
+      expect(card.home).toEqual(layout)
+      expect(card.glide).toEqual(layout)
+      expect(cards.center('src')).toEqual(card.object.position)
+      expect(cards.cardSphere('src')).toMatchObject({ x: card.base.x, y: card.base.y, z: card.base.z })
+      expect(cards.overviewSpheres()).toEqual(overview)
+      expect(movingRoot.distanceTo(rootAnchor)).toBeCloseTo(40, 6)
+
+      const route = starRoute(start, ['', 'src'], cards.anchor, movingAnchor)
+      expect(route).toEqual([
+        { x: start.x, y: start.y, z: start.z },
+        { x: movingRoot.x, y: movingRoot.y, z: movingRoot.z },
+        { x: movingAnchor.x, y: movingAnchor.y, z: movingAnchor.z },
+      ])
+
+      cards.update(state, 0.016, cam, null, 0, 36)
+      expect(cards.anchor('src').distanceTo(movingAnchor)).toBeGreaterThan(40)
+    } finally {
+      cards.dispose()
+    }
+  })
+
+  it('keeps every card at its home under reduced motion', () => {
+    const savedWindow = globalThis.window
+    globalThis.window = { matchMedia: () => ({ matches: true }) }
+    const state = recentState()
+    const cards = createCards(fakeScene(), { glScene: fakeScene() })
+    const cam = camera()
+    try {
+      cards.sync(state)
+      cards.update(state, 0.016, cam, null, 1, 12)
+      const anchors = [...cards.cards.keys()].map((path) => cards.anchor(path))
+      cards.update(state, 0.016, cam, null, 1, 36)
+      for (const [index, [path, card]] of [...cards.cards].entries()) {
+        expect(card.object.position, path).toEqual(card.home)
+        expect(cards.anchor(path), path).toEqual(anchors[index])
+      }
+    } finally {
+      cards.dispose()
+      globalThis.window = savedWindow
+    }
+  })
+
+  it('glides to the new layout after a spacing change', () => {
+    const state = recentState()
+    const cards = createCards(fakeScene(), { glScene: fakeScene() })
+    const cam = camera()
+    try {
+      cards.sync(state)
+      cards.update(state, 10, cam)
+      const card = cards.cards.get('src')
+      const previous = card.home.clone()
+      expect(cards.setOptions({ folderSpacing: 3200 })).toBe(true)
+      cards.update(state, 0.016, cam)
+      const next = card.home.clone()
+      expect(next.length()).toBeGreaterThan(previous.length())
+      expect(card.object.position.distanceTo(previous)).toBeGreaterThan(0)
+      expect(card.object.position.distanceTo(next)).toBeGreaterThan(0)
+      cards.update(state, 10, cam)
+      expect(card.object.position.distanceTo(next)).toBeLessThan(0.001)
+      expect(cards.setOptions({ folderSpacing: 3200 })).toBe(false)
+    } finally {
+      cards.dispose()
+    }
   })
 })
 
@@ -1692,7 +1778,7 @@ describe('hiding folder contents', () => {
 })
 
 describe('the overview spheres with paths outside the file tree', () => {
-  it('yields the same top-level cards and overview spheres as the clean state and reads card.home in cardSphere', () => {
+  it('yields the same top-level cards and overview spheres as the clean state and reads the drawn position in cardSphere', () => {
     const tree = makeTree({ root: 'demo', files: ['src/a.js', 'docs/b.md'] })
     const clean = createState(tree, [{ key: 'claude', name: 'Claude' }])
     const dirty = createState(tree, [{ key: 'claude', name: 'Claude' }])
@@ -1722,9 +1808,9 @@ describe('the overview spheres with paths outside the file tree', () => {
     const srcCard = cleanCards.cards.get('src')
     expect(srcCard.base.equals(srcCard.home)).toBe(false)
     expect(cleanCards.cardSphere('src')).toMatchObject({
-      x: srcCard.home.x,
-      y: srcCard.home.y,
-      z: srcCard.home.z,
+      x: srcCard.base.x,
+      y: srcCard.base.y,
+      z: srcCard.base.z,
     })
 
     cleanCards.dispose()

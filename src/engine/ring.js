@@ -16,28 +16,36 @@ export const ROOT_PLACE = {
   z: 0,
 }
 export const TOP_MIN_RADIUS = 900
+export const FOLDER_SPACING_MIN = 800
+export const FOLDER_SPACING_MAX = 3200
+export const FOLDER_SPACING_DEFAULT = 1600
+export const FOLDER_SPACING_STEP = 100
 export const RING_MAX_TOP = 12
 export const CHILD_STEP = 450
 export const SHOTGUN_ROW_STEP = 380
 export const FAN_STEP = 0.22
 export const FAN_LIMIT = 0.9
-export const CARD_GAP = 40
 export const SPRAY_LIFT = 140
 export const SMALL_TOP = 4
+export const SMALL_RADIUS = TOP_MIN_RADIUS
 const SMALL_TURN = 0.3
-export const SMALL_RADIUS = 900
 export const SMALL_CHILD_TURN = 0.5
 
 const TURNS = Math.PI * 2
+const RING_PERIOD = 480
+export const FOLDER_DRIFT_RADIUS = 40
 
 const clamp = (value, low, high) => Math.min(high, Math.max(low, value))
 
-function byName(a, b) {
-  return a < b ? -1 : a > b ? 1 : 0
+export function clampFolderSpacing(value) {
+  if (typeof value !== 'number' && (typeof value !== 'string' || !value.trim())) return FOLDER_SPACING_DEFAULT
+  const number = Number(value)
+  if (!Number.isFinite(number)) return FOLDER_SPACING_DEFAULT
+  return clamp(Math.round(number / FOLDER_SPACING_STEP) * FOLDER_SPACING_STEP, FOLDER_SPACING_MIN, FOLDER_SPACING_MAX)
 }
 
-function depthOf(path) {
-  return path === '' ? 0 : path.split('/').length
+function byName(a, b) {
+  return a < b ? -1 : a > b ? 1 : 0
 }
 
 function sizeOf(entry, fallback = DEFAULT_CARD) {
@@ -55,8 +63,6 @@ function makeNode(path, entry) {
     path,
     width: size.width,
     height: size.height,
-    depth: depthOf(path),
-    radius: Math.hypot(size.width, size.height) / 2,
   }
 }
 
@@ -128,26 +134,41 @@ export function ringOf(position) {
   return { radius, angle }
 }
 
-export function ringRadius(count, cards = []) {
-  const total = Math.max(0, Math.floor(Number(count) || 0))
-  if (total < 2) return TOP_MIN_RADIUS
-  let radius = TOP_MIN_RADIUS
-  for (let index = 0; index < total; index += 1) {
-    const card = cards[index] ?? DEFAULT_CARD
-    for (let other = index + 1; other < total; other += 1) {
-      const next = cards[other] ?? DEFAULT_CARD
-      const apart = Math.min(other - index, total - (other - index))
-      const chord = 2 * Math.sin((Math.PI * apart) / total)
-      const span = Math.hypot(card.width, card.height) / 2 + Math.hypot(next.width, next.height) / 2 + CARD_GAP
-      radius = Math.max(radius, span / chord)
-    }
-  }
-  return radius
+export function ringRotation(seconds) {
+  const angle = ((seconds % RING_PERIOD) / RING_PERIOD) * TURNS
+  return { cos: Math.cos(angle), sin: Math.sin(angle) }
 }
 
-export function shotgunOffset(index, count) {
+export function folderDrift(path) {
+  let hash = 2166136261
+  for (let index = 0; index < path.length; index += 1) {
+    hash = Math.imul(hash ^ path.charCodeAt(index), 16777619)
+  }
+  const seed = hash >>> 0
+  return { phase: (seed / 0x100000000) * TURNS, period: 24 + (seed % 24001) / 1000 }
+}
+
+export function orbitPlace(place, rotation, drift, seconds) {
+  const x = place.x - RING_CENTER.x
+  const z = place.z - RING_CENTER.z
+  const angle = drift.phase + ((seconds % drift.period) / drift.period) * TURNS
+  return {
+    x: RING_CENTER.x + (rotation ? x * rotation.cos - z * rotation.sin : x) + FOLDER_DRIFT_RADIUS * Math.cos(angle),
+    y: place.y,
+    z: RING_CENTER.z + (rotation ? x * rotation.sin + z * rotation.cos : z) + FOLDER_DRIFT_RADIUS * Math.sin(angle),
+  }
+}
+
+export function ringRadius(count, spacing = FOLDER_SPACING_DEFAULT) {
   const total = Math.max(0, Math.floor(Number(count) || 0))
-  if (total <= 1) return { angleOffset: 0, radiusStep: CHILD_STEP, row: 0, col: 0, cols: 1, rows: 1 }
+  const gap = clampFolderSpacing(spacing)
+  return Math.max(TOP_MIN_RADIUS * gap / FOLDER_SPACING_DEFAULT, total * gap / TURNS)
+}
+
+export function shotgunOffset(index, count, spacing = FOLDER_SPACING_DEFAULT) {
+  const total = Math.max(0, Math.floor(Number(count) || 0))
+  const scale = clampFolderSpacing(spacing) / FOLDER_SPACING_DEFAULT
+  if (total <= 1) return { angleOffset: 0, radiusStep: CHILD_STEP * scale, row: 0, col: 0, cols: 1, rows: 1 }
   const cols = Math.max(1, Math.ceil(Math.sqrt(total)))
   const rows = Math.max(1, Math.ceil(total / cols))
   const slot = Math.max(0, Math.floor(Number(index) || 0))
@@ -158,7 +179,7 @@ export function shotgunOffset(index, count) {
   const spreadFactor = 1 + Math.min(total, 20) * 0.035
   const stepAngle = Math.min(0.38, FAN_STEP * spreadFactor)
   const angleOffset = colsInRow <= 1 ? 0 : centered * stepAngle
-  const radiusStep = CHILD_STEP + row * SHOTGUN_ROW_STEP
+  const radiusStep = (CHILD_STEP + row * SHOTGUN_ROW_STEP) * scale
   return { angleOffset, radiusStep, row, col, cols, rows }
 }
 
@@ -191,7 +212,7 @@ function lifted(spot, sprayed, path) {
 }
 
 export function layoutRing(entries, options = {}) {
-  const { previous, sprayed, small } = options
+  const { previous, sprayed, small, spacing = FOLDER_SPACING_DEFAULT } = options
   const model = buildModel(entries)
   const { nodes, children, root } = model
   const positions = new Map()
@@ -207,7 +228,7 @@ export function layoutRing(entries, options = {}) {
   }
   positions.set('', tagPosition(rootSpot, root, 'root'))
 
-  const radius = Math.max(ringRadius(ringCount, ringTops.map((path) => nodes.get(path))), smallRingNow ? SMALL_RADIUS : 0)
+  const radius = ringRadius(ringCount, spacing)
   const ringSlot = `radius:${radius.toFixed(3)}${smallRingNow ? ':small' : ''}`
   ringTops.forEach((path, index) => {
     const node = nodes.get(path)
@@ -218,7 +239,7 @@ export function layoutRing(entries, options = {}) {
   })
   overflow.forEach((path, index) => {
     const node = nodes.get(path)
-    const off = shotgunOffset(index, overflow.length)
+    const off = shotgunOffset(index, overflow.length, spacing)
     const slot = `${ringSlot}>spray>${index}/${overflow.length}${sprayedAt(sprayed, path) ? ':spray' : ''}`
     const spot = tagPosition(ringPoint(radius + off.radiusStep, off.angleOffset), node, slot)
     positions.set(path, keepPlace(previous, path, lifted(spot, sprayed, path)))
@@ -231,7 +252,7 @@ export function layoutRing(entries, options = {}) {
     const kids = children.get(parentPath) ?? []
     kids.forEach((path, index) => {
       const node = nodes.get(path)
-      const off = shotgunOffset(index, kids.length)
+      const off = shotgunOffset(index, kids.length, spacing)
       const slot = `${parent.slot}>${index}/${kids.length}${sprayedAt(sprayed, path) ? ':spray' : ''}`
       const turn = smallRingNow ? SMALL_CHILD_TURN : 0
       const angle = parentSpot.angle + off.angleOffset + turn

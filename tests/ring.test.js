@@ -3,7 +3,6 @@ import { cardSize, overviewSpheres } from '../src/engine/cards.js'
 import { fitView } from '../src/engine/camera.js'
 import { HUB_CENTER, HUB_RADIUS } from '../src/engine/hub.js'
 import {
-  CARD_GAP,
   CHILD_STEP,
   FAN_LIMIT,
   FAN_STEP,
@@ -18,8 +17,11 @@ import {
   SHOTGUN_ROW_STEP,
   SPRAY_LIFT,
   TOP_MIN_RADIUS,
+  folderDrift,
   layoutRing,
+  orbitPlace,
   ringOf,
+  ringRotation,
   ringRadius,
   shotgunOffset,
 } from '../src/engine/ring.js'
@@ -73,7 +75,7 @@ describe('the flat ring', () => {
       const entries = topTree(count)
       const placed = layoutRing(entries)
       const sizes = entries.filter((entry) => entry.path !== '')
-      const radius = ringRadius(count, sizes)
+      const radius = ringRadius(count)
       sizes.forEach((entry, index) => {
         const at = placeOf(placed, entry.path)
         const spot = ringOf(at)
@@ -94,7 +96,7 @@ describe('the flat ring', () => {
     const tops = entries.filter((entry) => entry.path !== '')
     const base = tops.slice(0, RING_MAX_TOP)
     const overflow = tops.slice(RING_MAX_TOP)
-    const radius = ringRadius(RING_MAX_TOP, base)
+    const radius = ringRadius(RING_MAX_TOP)
     expect(RING_MAX_TOP).toBe(12)
     expect(overflow).toHaveLength(5)
     base.forEach((entry, index) => {
@@ -122,16 +124,14 @@ describe('the flat ring', () => {
     expect(placeOf(after, topEntry(15).path)).toBeTruthy()
   })
 
-  it('grows its radius with the count and never goes under 900 from the hub', () => {
-    expect(TOP_MIN_RADIUS).toBe(900)
-    expect(ringRadius(0, [])).toBe(TOP_MIN_RADIUS)
-    expect(ringRadius(1, [FILES])).toBe(TOP_MIN_RADIUS)
-    expect(ringRadius(3, [FILES, FILES, FILES])).toBe(TOP_MIN_RADIUS)
-    const twelve = ringRadius(12, Array.from({ length: 12 }, () => FILES))
-    const thirty = ringRadius(30, Array.from({ length: 30 }, () => FILES))
-    expect(twelve).toBeGreaterThan(TOP_MIN_RADIUS)
-    expect(thirty).toBeGreaterThan(twelve)
-    expect(twelve).toBeGreaterThanOrEqual((Math.hypot(FILES.width, FILES.height) + CARD_GAP) / (2 * Math.sin(Math.PI / 12)) - EPS)
+  it('grows its radius with the count and spacing', () => {
+    for (const spacing of [800, 1600, 3200]) {
+      expect(ringRadius(0, spacing)).toBe(TOP_MIN_RADIUS * spacing / 1600)
+      expect(ringRadius(1, spacing)).toBe(TOP_MIN_RADIUS * spacing / 1600)
+      expect(ringRadius(12, spacing) * Math.PI * 2 / 12).toBeCloseTo(spacing, 6)
+      expect(ringRadius(30, spacing)).toBeGreaterThan(ringRadius(12, spacing))
+    }
+    expect(ringRadius(12, 3200)).toBeGreaterThan(ringRadius(12, 800))
   })
 
   it('keeps every pair of top-level cards apart', () => {
@@ -152,23 +152,32 @@ describe('the flat ring', () => {
     }
   })
 
-  it('grows the ring when a top card grows on a warm start', () => {
+  it('keeps the same ring radius when a folder grows', () => {
     const entries = topTree(12)
-    const before = layoutRing(entries)
-    const grown = entries.map((entry) => (entry.path === 'top-000' ? { path: entry.path, ...TALL } : entry))
-    const after = layoutRing(grown, { previous: before })
-    const sizes = grown.filter((entry) => entry.path !== '')
-    const radius = ringRadius(12, sizes)
-    expect(radius).toBeGreaterThan(ringOf(placeOf(before, 'top-000')).radius)
-    for (const entry of sizes) expect(ringOf(placeOf(after, entry.path)).radius).toBeCloseTo(radius, 6)
-    for (let i = 0; i < sizes.length; i += 1) {
-      for (let j = i + 1; j < sizes.length; j += 1) {
-        const a = placeOf(after, sizes[i].path)
-        const b = placeOf(after, sizes[j].path)
-        const apart = Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z)
-        const needed = Math.hypot(sizes[i].width, sizes[i].height) / 2 + Math.hypot(sizes[j].width, sizes[j].height) / 2
-        expect(apart, `${sizes[i].path} and ${sizes[j].path}`).toBeGreaterThanOrEqual(needed - EPS)
-      }
+    const spacing = 800
+    const before = layoutRing(entries, { spacing })
+    const tall = cardSize({ ...filesView(20), path: 'W'.repeat(24), back: 3 })
+    const grown = entries.map((entry) => (entry.path === 'top-000' ? { path: entry.path, ...tall } : entry))
+    const after = layoutRing(grown, { spacing, previous: before })
+    expect(after.get('top-000').height).toBeGreaterThan(before.get('top-000').height)
+    for (const { path } of grown) {
+      expect(spotOf(placeOf(after, path)), path).toEqual(spotOf(placeOf(before, path)))
+    }
+  })
+
+  it('keeps two fully expanded faces apart when they share a plane at 800', () => {
+    const entries = ['M'.repeat(24), 'W'.repeat(24)].map((path) => ({
+      path,
+      ...cardSize({ ...filesView(20), path, back: 3 }),
+    }))
+    const [a, b] = entries
+    for (const small of [false, true]) {
+      const placed = layoutRing(entries, { spacing: 800, small })
+      const first = placed.get(a.path)
+      const second = placed.get(b.path)
+      const distance = Math.hypot(first.x - second.x, first.z - second.z)
+      const width = (a.width + b.width) / 2 * 1.02
+      expect(distance - 80).toBeGreaterThan(width)
     }
   })
 
@@ -216,7 +225,46 @@ describe('the flat ring', () => {
   })
 })
 
+describe('folder orbit', () => {
+  it('turns the ring once in 480 seconds with bounded path-specific drift', () => {
+    const place = { x: 0, y: RING_CENTER.y, z: 900 }
+    const first = folderDrift('src')
+    const second = folderDrift('src/ui')
+    expect(folderDrift('src')).toEqual(first)
+    expect(second).not.toEqual(first)
+    expect(ringRotation(480)).toEqual(ringRotation(0))
+    expect(ringRotation(120).cos).toBeCloseTo(0, 8)
+    expect(ringRotation(120).sin).toBeCloseTo(1, 8)
+    for (const drift of [first, second, folderDrift('')]) {
+      expect(drift.period).toBeGreaterThanOrEqual(24)
+      expect(drift.period).toBeLessThanOrEqual(48)
+      for (const seconds of [0, 120, 480]) {
+        const rotation = ringRotation(seconds)
+        const at = orbitPlace(place, rotation, drift, seconds)
+        expect(Math.hypot(at.x + 900 * rotation.sin, at.z - 900 * rotation.cos)).toBeCloseTo(40, 8)
+        expect(at.y).toBe(place.y)
+      }
+    }
+    expect(orbitPlace(place, ringRotation(120), first, 120)).not.toEqual(orbitPlace(place, ringRotation(120), second, 120))
+  })
+})
+
 describe('the shotgun spray', () => {
+  it('scales the lone child and each shotgun row with spacing', () => {
+    const entries = [rootEntry(), { path: 'src/only', ...FILES }, ...topTree(18).slice(1)]
+    for (const path of ['src', 'src/a', 'src/b', 'src/c']) entries.push({ path, ...FILES })
+    const before = layoutRing(entries)
+    const minimum = layoutRing(entries, { previous: before, spacing: 800 })
+    const maximum = layoutRing(entries, { previous: minimum, spacing: 3200 })
+    for (const path of ['src/a', 'src/only', topEntry(17).path]) {
+      const radius = ringOf(placeOf(before, path)).radius
+      expect(ringOf(placeOf(minimum, path)).radius, path).toBeCloseTo(radius / 2, 6)
+      expect(ringOf(placeOf(maximum, path)).radius, path).toBeCloseTo(radius * 2, 6)
+    }
+    expect(shotgunOffset(0, 1, 800).radiusStep).toBe(CHILD_STEP / 2)
+    expect(shotgunOffset(3, 4, 3200).radiusStep).toBe(2 * (CHILD_STEP + SHOTGUN_ROW_STEP))
+  })
+
   it('steps a lone folder outward on the parent line', () => {
     for (const count of [0, 1]) {
       expect(shotgunOffset(0, count)).toEqual({ angleOffset: 0, radiusStep: CHILD_STEP, row: 0, col: 0, cols: 1, rows: 1 })

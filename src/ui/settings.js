@@ -1,6 +1,9 @@
+import { FOLDER_SPACING_DEFAULT, clampFolderSpacing } from '../engine/ring.js'
 import { readStorage, store, writeStorage } from '../storage.js'
 import { RECORD_MINUTES_DEFAULT, clampRecordMinutes } from '../model/recordLimits.js'
 import { SIDEBAR_TAB_DEFAULT, normalizeSidebarTab } from './sidebar.js'
+
+export { FOLDER_SPACING_MIN, FOLDER_SPACING_MAX, FOLDER_SPACING_STEP, clampFolderSpacing } from '../engine/ring.js'
 
 export const SETTINGS_KEY = 'machineroom.settings'
 
@@ -38,6 +41,7 @@ export function clampFileLimit(value) {
 export const DEFAULT_EFFECTS = Object.freeze({
   alwaysDepth: 2,
   maxFiles: FILE_LIMIT_DEFAULT,
+  folderSpacing: FOLDER_SPACING_DEFAULT,
   folderContents: true,
   openOnTouch: true,
   aberration: Object.freeze({ on: false, strength: 0.2 }),
@@ -100,6 +104,7 @@ export function effectSettings(saved) {
 
   const alwaysDepth = clampDepth(source.alwaysDepth ?? root.alwaysDepth)
   const maxFiles = clampFileLimit(source.maxFiles ?? root.maxFiles)
+  const folderSpacing = clampFolderSpacing(source.folderSpacing ?? root.folderSpacing)
   const folderContentsRaw = source.folderContents ?? root.folderContents
   const folderContents = typeof folderContentsRaw === 'boolean' ? folderContentsRaw : DEFAULT_EFFECTS.folderContents
   const openOnTouchRaw = source.openOnTouch ?? root.openOnTouch
@@ -114,6 +119,7 @@ export function effectSettings(saved) {
   return {
     alwaysDepth,
     maxFiles,
+    folderSpacing,
     folderContents,
     openOnTouch,
     aberration,
@@ -156,6 +162,11 @@ function normalizeSettings(raw) {
   const maxFiles = raw.maxFiles ?? raw.effects?.maxFiles
   if (maxFiles !== undefined) {
     out.maxFiles = clampFileLimit(maxFiles)
+  }
+
+  const folderSpacing = raw.folderSpacing ?? raw.effects?.folderSpacing
+  if (folderSpacing !== undefined) {
+    out.folderSpacing = clampFolderSpacing(folderSpacing)
   }
 
   const folderContents = raw.folderContents ?? raw.effects?.folderContents
@@ -244,6 +255,7 @@ export function loadEffectSettings(storage = store()) {
   return effectSettings({
     alwaysDepth: settings.alwaysDepth,
     maxFiles: settings.maxFiles,
+    folderSpacing: settings.folderSpacing,
     folderContents: settings.folderContents,
     openOnTouch: settings.openOnTouch,
     ...(settings.effects ?? {}),
@@ -284,11 +296,13 @@ export function saveEffectSettings(storage = store(), partial) {
   }
   const alwaysDepth = incoming.alwaysDepth !== undefined ? incoming.alwaysDepth : current.alwaysDepth
   const maxFiles = incoming.maxFiles !== undefined ? incoming.maxFiles : current.maxFiles
+  const folderSpacing = incoming.folderSpacing !== undefined ? incoming.folderSpacing : current.folderSpacing
   const folderContents = incoming.folderContents !== undefined ? incoming.folderContents : current.folderContents
   const openOnTouch = incoming.openOnTouch !== undefined ? incoming.openOnTouch : current.openOnTouch
   const merged = effectSettings({
     alwaysDepth,
     maxFiles,
+    folderSpacing,
     folderContents,
     openOnTouch,
     ...mergedEffects,
@@ -296,6 +310,7 @@ export function saveEffectSettings(storage = store(), partial) {
   saveSettings(storage, {
     alwaysDepth: merged.alwaysDepth,
     maxFiles: merged.maxFiles,
+    folderSpacing: merged.folderSpacing,
     folderContents: merged.folderContents,
     openOnTouch: merged.openOnTouch,
     effects: {

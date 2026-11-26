@@ -6,7 +6,7 @@ import Settings, { EFFECTS } from '../src/ui/Settings.jsx'
 import { RECORD_MINUTES_DEFAULT, RECORD_MINUTES_MAX, RECORD_MINUTES_MIN, clampRecordMinutes } from '../src/model/recordLimits.js'
 import { DEFAULT_EFFECTS, DEFAULT_SETTINGS, clampFileLimit, effectSettings, FILE_LIMIT_DEFAULT, FILE_LIMIT_MAX, FILE_LIMIT_MIN, loadAssistantPosition, loadEffectSettings, loadSettings, loadSoundSettings, saveAssistantPosition, saveEffectSettings, saveSettings, saveSoundSettings, savedSource, SETTINGS_KEY, soundSettings } from '../src/ui/settings.js'
 import { saveMusicSettings } from '../src/ui/musicQueue.js'
-import { openTab, withDom } from './helpers/uiDom.js'
+import { openTab, type, withDom } from './helpers/uiDom.js'
 
 async function settingsPanel(tab, check) {
   await withDom(async ({ container, root }) => {
@@ -381,6 +381,47 @@ describe('the content files setting', () => {
       expect(text).toContain('30%')
       expect(text).toContain('A short tone when an agent reads, writes, makes or deletes a file.')
       expect(text.indexOf('Beeps')).toBeLessThan(text.indexOf('A short tone when an agent'))
+    })
+  })
+})
+
+describe('the folder spacing setting', () => {
+  it('defaults, clamps and merges folder spacing with other effects', () => {
+    expect(DEFAULT_EFFECTS.folderSpacing).toBe(1600)
+    for (const value of [undefined, null, '', 'broken', Infinity, false, []]) {
+      expect(effectSettings({ folderSpacing: value }).folderSpacing).toBe(1600)
+    }
+    expect(effectSettings({ effects: { folderSpacing: '1960' } }).folderSpacing).toBe(2000)
+    const storage = makeStorage()
+    expect(loadEffectSettings(storage).folderSpacing).toBe(1600)
+    expect(saveEffectSettings(storage, { folderSpacing: 20 }).folderSpacing).toBe(800)
+    expect(saveEffectSettings(storage, { folderSpacing: 5000 }).folderSpacing).toBe(3200)
+    saveEffectSettings(storage, { maxFiles: 9, bloom: { on: true } })
+    expect(loadEffectSettings(storage)).toMatchObject({ folderSpacing: 3200, maxFiles: 9, bloom: { on: true } })
+    expect(JSON.parse(storage.getItem(SETTINGS_KEY)).folderSpacing).toBe(3200)
+  })
+
+  it('shows the Folder spacing slider beside Content files and saves changes', async () => {
+    await withDom(async ({ container, root }) => {
+      const storage = makeStorage()
+      function render(effects) {
+        root.render(createElement(Settings, {
+          effects,
+          onChange: (next) => render(saveEffectSettings(storage, next)),
+        }))
+      }
+      await act(async () => render(loadEffectSettings(storage)))
+      await openTab(root, container, 'Screen effects')
+      expect(container.textContent.indexOf('Folder spacing')).toBeGreaterThan(container.textContent.indexOf('Content files'))
+      const input = container.querySelector('[aria-label="Folder spacing"]')
+      expect(input.getAttribute('min')).toBe('800')
+      expect(input.getAttribute('max')).toBe('3200')
+      expect(input.getAttribute('step')).toBe('100')
+      expect(input.value).toBe('1600')
+      expect(input.parentNode.querySelectorAll('span').map((span) => span.textContent)).toEqual(['800', '2000', '3200'])
+      await type(root, input, '2300')
+      expect(input.value).toBe('2300')
+      expect(loadEffectSettings(storage).folderSpacing).toBe(2300)
     })
   })
 })

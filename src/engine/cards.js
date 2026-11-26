@@ -4,7 +4,7 @@ import { planFolderView } from '../model/folderView.js'
 import { basename, dirname, visibleText } from '../model/paths.js'
 import { freshRecent } from '../model/state.js'
 import { SWAY_LIFT, SWAY_RATE, SWAY_SCALE, danceEnvelope, startDanceEnvelope } from './hub.js'
-import { ROOT_PLACE, SMALL_TOP, layoutRing, ringOf } from './ring.js'
+import { FOLDER_DRIFT_RADIUS, FOLDER_SPACING_DEFAULT, RING_CENTER, ROOT_PLACE, clampFolderSpacing, folderDrift, layoutRing, orbitPlace, ringOf, ringRotation } from './ring.js'
 import { easeInOut, easeRate, still } from './sprites.js'
 import { speedRate } from './stars.js'
 
@@ -329,12 +329,7 @@ export function occluderBox(view, scale = 1, rootName = 'root') {
   }
 }
 
-function cardRadius(view) {
-  const { width, height } = cardSize(view)
-  return Math.hypot(width, height) / 2
-}
-
-export function cardPlan(state, { pinned = [], alwaysDepth = 2, maxFiles = FILE_LIMIT_DEFAULT, previous = new Map(), sprayed = new Set(), rootName = 'root' } = {}) {
+export function cardPlan(state, { pinned = [], alwaysDepth = 2, maxFiles = FILE_LIMIT_DEFAULT, spacing = FOLDER_SPACING_DEFAULT, previous = new Map(), sprayed = new Set(), rootName = 'root' } = {}) {
   const pins = [...pinned]
   const sprays = [...sprayed]
   const input = viewInput(state, [...pins, ...sprays])
@@ -345,27 +340,28 @@ export function cardPlan(state, { pinned = [], alwaysDepth = 2, maxFiles = FILE_
     drawn.set(view.path, { ...view, maxFiles: fileLimit, back: view.path === '' ? 0 : view.back })
   }
   const entries = [...drawn.values()].map((view) => ({ path: view.path, ...cardSize(view, rootName) }))
-  const layoutKey = `${entries.map((entry) => `${entry.path}:${entry.width}:${entry.height}`).join(';')}|${sprays.sort().join(',')}`
-  const placed = layoutRing(entries, { previous, sprayed, small: entries.length - 1 <= SMALL_TOP })
+  const layoutKey = `${spacing}|${entries.map((entry) => `${entry.path}:${entry.width}:${entry.height}`).join(';')}|${sprays.sort().join(',')}`
+  const placed = layoutRing(entries, { previous, sprayed, small: true, spacing })
   return { input, plan, views: plan, drawn, entries, placed, layoutKey }
 }
 
-export function overviewSpheres(cards) {
+export function overviewSpheres(cards, { orbit = false, includeChildren = false } = {}) {
   const out = []
   for (const card of cards ?? []) {
     const root = card?.path === ''
     const top = !root && typeof card?.path === 'string' && !card.path.includes('/')
-    if (!root && !top) continue
+    if (!root && !top && !includeChildren) continue
     const at = card?.home
     if (!at || ![at.x, at.y, at.z].every(Number.isFinite)) continue
     const size = card.view ? cardSize(card.view, card.rootName) : null
     out.push({
-      x: at.x,
+      x: orbit ? RING_CENTER.x : at.x,
       y: at.y,
-      z: at.z,
+      z: orbit ? RING_CENTER.z : at.z,
       r: size ? Math.hypot(size.width, size.height) / 2 : 0,
       rx: size ? size.width / 2 : 0,
       ry: size ? size.height / 2 : 0,
+      ...(orbit && { orbitRadius: (root ? 0 : ringOf(at).radius) + FOLDER_DRIFT_RADIUS }),
     })
   }
   return out
@@ -414,6 +410,7 @@ export function createCards(cssScene, options = {}) {
   const initialDepth = Number(alwaysDepth)
   let alwaysLevel = Number.isFinite(initialDepth) ? Math.min(3, Math.max(0, Math.floor(initialDepth))) : 2
   let maxFilesLevel = clampFileLimit(options.maxFiles)
+  let spacing = clampFolderSpacing(options.folderSpacing)
   let folderContentsEnabled = typeof options.folderContents === 'boolean' ? options.folderContents : true
   let openOnTouchEnabled = typeof options.openOnTouch === 'boolean' ? options.openOnTouch : true
   const right = new THREE.Vector3(1, 0, 0)
@@ -568,6 +565,8 @@ export function createCards(cssScene, options = {}) {
       occluder,
       base,
       home: base.clone(),
+      glide: parent ? parent.glide.clone() : base.clone(),
+      drift: folderDrift(path),
       danceFrom: 0,
       danceTo: 0,
       danceAt: 0,
@@ -995,7 +994,7 @@ export function createCards(cssScene, options = {}) {
       return false
     }
     planKey = planKeyNext
-    const layout = cardPlan(state, { pinned: [...pinned], alwaysDepth: alwaysLevel, maxFiles: maxFilesLevel, previous: homes, sprayed, rootName })
+    const layout = cardPlan(state, { pinned: [...pinned], alwaysDepth: alwaysLevel, maxFiles: maxFilesLevel, spacing, previous: homes, sprayed, rootName })
     const drawn = layout.drawn
     computeActive(state)
     const now = performance.now()
@@ -1086,10 +1085,11 @@ export function createCards(cssScene, options = {}) {
 
   function anchorOffsetOf(card) {
     const faceHeight = (card.height || cardHeight(card.view ? cardRows(card.view) : 0)) + CARD_FACE_BORDER
-    if (card.anchorHeight !== faceHeight || card.anchorScale !== card.scale) {
+    const scale = card.object.scale.x
+    if (card.anchorHeight !== faceHeight || card.anchorScale !== scale) {
       card.anchorHeight = faceHeight
-      card.anchorScale = card.scale
-      const offset = tabAnchorOffset(card.anchorWidth, faceHeight, card.scale)
+      card.anchorScale = scale
+      const offset = tabAnchorOffset(card.anchorWidth, faceHeight, scale)
       card.anchorOffset.x = offset.x
       card.anchorOffset.y = offset.y
       counters.offsets += 1
@@ -1133,8 +1133,7 @@ export function createCards(cssScene, options = {}) {
 
   function sideOf(dir) {
     const card = nearestCard(dir)
-    const spot = card ? homes.get(card.path) : null
-    return spot && spot.x < 0 ? 1 : -1
+    return card?.base.x < 0 ? 1 : -1
   }
 
   function slotPosition(dir, file, out) {
@@ -1288,6 +1287,13 @@ export function createCards(cssScene, options = {}) {
         changed = true
       }
     }
+    if (Object.hasOwn(options, 'folderSpacing')) {
+      const value = clampFolderSpacing(options.folderSpacing)
+      if (value !== spacing) {
+        spacing = value
+        changed = true
+      }
+    }
     if (Object.hasOwn(options, 'folderContents')) {
       const value = typeof options.folderContents === 'boolean' ? options.folderContents : true
       if (value !== folderContentsEnabled) {
@@ -1327,15 +1333,16 @@ export function createCards(cssScene, options = {}) {
     return links
   }
 
-  function overview() {
-    return overviewSpheres(cards.values())
+  function overview(includeChildren = false) {
+    return overviewSpheres(cards.values(), { orbit: !still(), includeChildren })
   }
 
   function cardSphere(path) {
     const card = cards.get(path)
     if (!card?.view) return null
-    const position = card.home
-    return { x: position.x, y: position.y, z: position.z, r: cardRadius(card.view) }
+    const { width, height } = cardSize(card.view, rootName)
+    const { x, y, z } = card.base
+    return { x, y, z, r: Math.hypot(width, height) / 2 }
   }
 
   function screenFrame(path, camera, viewWidth, viewHeight) {
@@ -1367,7 +1374,7 @@ export function createCards(cssScene, options = {}) {
     }
   }
 
-  function update(state, delta, camera, mask = null, speed = 1) {
+  function update(state, delta, camera, mask = null, speed = 1, wallSeconds) {
     lastState = state
     movingNow = false
     previousRight.copy(right)
@@ -1389,6 +1396,8 @@ export function createCards(cssScene, options = {}) {
     const changed = recompute(state)
     const now = performance.now()
     const isStill = still()
+    const orbit = !isStill && Number.isFinite(wallSeconds)
+    const rotation = orbit ? ringRotation(wallSeconds) : null
     swayLevel = isStill ? 0 : swayLevel + (swayTarget - swayLevel) * easeRate(delta, 1.5, false)
     const ease = easeRate(delta, 3, isStill)
     const dimmed = Boolean(mask?.dimmed)
@@ -1460,14 +1469,12 @@ export function createCards(cssScene, options = {}) {
       }
       const position = card.object.position
       const base = card.base
-      let posChanged = false
-      if (base.distanceToSquared(card.home) > 0.25) {
-        base.lerp(card.home, ease)
-        posChanged = true
-      } else if (!base.equals(card.home)) {
-        base.copy(card.home)
-        posChanged = true
-      }
+      const glide = card.glide
+      if (glide.distanceToSquared(card.home) > 0.25) glide.lerp(card.home, ease)
+      else glide.copy(card.home)
+      const next = orbit ? orbitPlace(glide, card.path === '' ? null : rotation, card.drift, wallSeconds) : glide
+      const posChanged = !base.equals(next)
+      if (posChanged) base.copy(next)
       const wave = 0.5 + 0.5 * Math.sin(now * SWAY_RATE + Math.atan2(card.home.z, card.home.x))
       const swayLift = isStill ? 0 : swayLevel * SWAY_LIFT * wave
       const danceLift = !isStill && card.danceAt > 0
@@ -1514,6 +1521,7 @@ export function createCards(cssScene, options = {}) {
       }
       if (card.scale !== previousScale) card.stamp = ++stampSeq
       const swayScale = isStill ? 1 : 1 + swayLevel * SWAY_SCALE * wave
+      if (card.lastSwayScale !== swayScale) card.stamp = ++stampSeq
       if (card.lastScale !== card.scale || card.lastHeight !== card.height || card.lastSwayScale !== swayScale) {
         card.lastScale = card.scale
         card.lastHeight = card.height
