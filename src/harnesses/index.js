@@ -7,7 +7,14 @@ import { hermesHarness } from './hermes.js'
 import { machineroomHarness } from './machineroom.js'
 import { opencodeHarness } from './opencode.js'
 
-export const HARNESSES = [claudeHarness, hermesHarness, opencodeHarness, agyHarness, acpHarness, machineroomHarness, codexHarness, copilotHarness]
+export const HARNESSES = [
+  { ...claudeHarness, sessionKey: 'claude-session' },
+  { ...hermesHarness, sessionKey: 'hermes-session' },
+  { ...opencodeHarness, sessionKey: 'opencode-session' },
+  { ...agyHarness, sessionKey: 'antigravity-session', sessionName: 'Antigravity session' },
+  acpHarness, machineroomHarness, codexHarness, copilotHarness,
+]
+export const SESSION_HARNESSES = HARNESSES.filter((harness) => harness.sessionKey)
 export const AGENT_ORDER = HARNESSES.map((harness) => harness.key)
 export const OWNER_ORDER = ['hermes', 'opencode', 'agy', 'claude']
 export const harnessByKey = Object.fromEntries(HARNESSES.map((harness) => [harness.key, harness]))

@@ -1237,6 +1237,20 @@ describe('the chosen top and nested subs', () => {
     expect(back.nodes[0].id).toBe('orchestrator')
   })
 
+  it.each([
+    ['antigravity-session', 'agy', 'Antigravity session'],
+    ['hermes-session', 'hermes', 'Hermes session'],
+  ])('accepts %s as the family root', async (top, harness, label) => {
+    const { url } = await startBridge()
+    const body = { top, confirmed: true }
+    expect((await request(`${url}/api/family/top`, { method: 'POST', body })).body).toEqual({ ok: true, top })
+    const family = (await request(`${url}/api/family`, { origin: '' })).body
+    const id = `session:${top}`
+    expect(family.top).toBe(top)
+    expect(family.nodes[0]).toMatchObject({ id, kind: 'session', parent: null, harness, label })
+    expect(family.nodes.find((node) => node.id === 'opencode')?.parent).toBe(id)
+  })
+
   it('keeps an idle orchestrator by default and leaves it out only with hideIdleMain', () => {
     const root = tempDir('mr-top-hide-')
     const runs = tempDir('mr-top-hide-runs-')

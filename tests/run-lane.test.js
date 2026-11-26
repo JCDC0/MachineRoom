@@ -2321,6 +2321,38 @@ describe('the record of a project run on a git project', { timeout: 30000 }, () 
     return JSON.parse(lines[lines.length - 1])
   }
 
+  it.each([
+    { name: 'flag', flags: ['--started-by', 'agy:session-a'], fromEnv: 'hermes:other', harness: 'agy', session: 'session-a' },
+    { name: 'variable', flags: [], fromEnv: 'hermes:session_b', harness: 'hermes', session: 'session_b' },
+  ])('saves the starter from the $name in the meta and record', async ({ name, flags, fromEnv, harness, session }) => {
+    const base = makeTempDir('machine-room-project-starter-')
+    try {
+      const { project, runs, env } = setupProject(base)
+      const result = await runLane(['opencode', '--project', project, '--task', 'Write the lane note.', ...flags], {
+        ...env,
+        MACHINEROOM_STARTED_BY: fromEnv,
+        CLAUDE_CODE_SESSION_ID: 'inherited',
+      })
+      expect(result.stderr, name).toBe('')
+      expect(result.code).toBe(0)
+      const record = readLatestRecord(runs)
+      expect(record.startedBy).toEqual({ harness, session })
+      const meta = JSON.parse(readFileSync(join(runs, basename(record.log).replace(/\.log$/, '.meta.json')), 'utf8'))
+      expect(meta.startedBy).toEqual({ harness, session })
+    } finally {
+      rmSync(base, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+    }
+  })
+
+  it.each([
+    { source: '--started-by', flags: ['--started-by=agy:bad/path'], fromEnv: '' },
+    { source: 'MACHINEROOM_STARTED_BY', flags: [], fromEnv: 'codex:session-a' },
+  ])('refuses a bad session starter from $source', async ({ source, flags, fromEnv }) => {
+    const result = await runLane(['opencode', 'P739', ...flags], { MACHINEROOM_STARTED_BY: fromEnv })
+    expect(result.code).toBe(1)
+    expect(result.stderr.trim()).toBe(`${source} needs a registered session harness and a plain session key in HARNESS:SESSION form.`)
+  })
+
   it('records its branch and one commit for a queue run with one committed task', async () => {
     const base = makeTempDir('machine-room-project-record-')
     try {

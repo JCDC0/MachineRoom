@@ -22,6 +22,7 @@ import { codexProgramFor } from '../server/agents-config.js'
 import { HARNESS_OFF_PROBLEM, readHarnessSettings, worktreeCopiesProblem, worktreeSetupOf } from '../server/harness-settings.js'
 import { defaultMode, legacyMode } from '../src/control/modes.js'
 import { harnessByKey } from '../src/harnesses/index.js'
+import { cleanStartedBy, sessionKeyFor } from '../src/model/laneStarter.js'
 import { gitPath } from '../server/programPath.js'
 import { isWindowsPath, printedRunsFolder, realPath } from '../server/printed-path.js'
 import { lanesFolder, readAllLanes, runsFolder } from '../server/lanes-source.js'
@@ -159,7 +160,7 @@ function helpLines() {
     '  --reasoning <level>  use this reasoning level for this run only',
     '  --minutes <n>        stop the run after n minutes (100 by default)',
     '  --test <command>     run this check after each task; repeat for more, or npm test when the package has one',
-    '  --started-by <id>    name the orchestrator that started the run',
+    '  --started-by <id>    name the starter as an orchestrator id or HARNESS:SESSION',
     '  --allowed-lanes <keys> keep a failover inside these lane keys, separated by commas',
     '  --continue-from <name> continue an interrupted run on its branch and worktree',
     '  --force              run a retired lane or a brief marked done',
@@ -846,7 +847,15 @@ function printWorktree(plan) {
   console.log(`worktree: ${plan.made ? 'would be made' : 'would be reused'}`)
 }
 
+function parseSessionStarter(value, source) {
+  const match = /^([a-z0-9-]+):([A-Za-z0-9_-]+)$/.exec(value)
+  const starter = match ? { harness: match[1], session: match[2] } : null
+  if (!sessionKeyFor(starter)) throw new Error(`${source} needs a registered session harness and a plain session key in HARNESS:SESSION form.`)
+  return starter
+}
+
 export function sessionStartedBy(env = {}) {
+  if (env.MACHINEROOM_STARTED_BY) return parseSessionStarter(env.MACHINEROOM_STARTED_BY, 'MACHINEROOM_STARTED_BY')
   const claude = typeof env.CLAUDE_CODE_SESSION_ID === 'string' ? env.CLAUDE_CODE_SESSION_ID.trim() : ''
   if (claude) return { harness: 'claude', session: claude }
   const opencode = typeof env.OPENCODE_SESSION_ID === 'string' ? env.OPENCODE_SESSION_ID.trim() : ''
@@ -867,13 +876,21 @@ function allowedLanesOption(argv) {
 }
 
 function startedByOption(argv) {
-  const index = argv.findIndex((arg) => arg === '--started-by' || arg.startsWith('--started-by='))
-  if (index === -1) return { args: argv, startedBy: '' }
-  const arg = argv[index]
-  const value = arg === '--started-by' ? argv[index + 1] : arg.slice('--started-by='.length)
-  if (typeof value !== 'string' || !/^[a-z0-9-]{1,24}$/.test(value)) throw new Error('--started-by needs an orchestrator id.')
-  const args = [...argv.slice(0, index), ...(arg === '--started-by' ? argv.slice(index + 2) : argv.slice(index + 1))]
-  return { args, startedBy: value }
+  const args = []
+  let startedBy = ''
+  for (let index = 0; index < argv.length; index += 1) {
+    const arg = argv[index]
+    if (arg === '--started-by' || arg.startsWith('--started-by=')) {
+      const value = arg === '--started-by' ? argv[++index] : arg.slice('--started-by='.length)
+      if (value?.includes(':')) startedBy = parseSessionStarter(value, '--started-by')
+      else if (/^[a-z0-9-]{1,24}$/.test(value ?? '')) startedBy = value
+      else throw new Error('--started-by needs an orchestrator id or a session in HARNESS:SESSION form.')
+      continue
+    }
+    args.push(arg)
+    if (VALUE_FLAGS.has(arg) && index + 1 < argv.length) args.push(argv[++index])
+  }
+  return { args, startedBy }
 }
 
 function startedAtOption(argv) {
@@ -888,14 +905,15 @@ function startedAtOption(argv) {
 
 function runOptions(argv) {
   const allowed = allowedLanesOption(argv)
-  const queued = allowed.args.some((arg) => arg === '--queue' || arg.startsWith('--queue='))
+  const started = startedByOption(allowed.args)
+  const queued = started.args.some((arg) => arg === '--queue' || arg.startsWith('--queue='))
   if (!queued) {
     return {
-      ...parseRunArgs(allowed.args),
+      ...parseRunArgs(started.args),
+      ...(started.startedBy ? { startedBy: started.startedBy } : {}),
       ...(allowed.allowedLanes ? { allowedLanes: allowed.allowedLanes } : {}),
     }
   }
-  const started = startedByOption(allowed.args)
   const timed = startedAtOption(started.args)
   const worktree = timed.args.includes('--worktree')
   const queueArgs = timed.args.filter((arg) => arg !== '--worktree')
@@ -1361,6 +1379,8 @@ export function laneWorktreeStart({ worktree, move = false } = {}) {
 
 export function laneRunRecord(input = {}) {
   const record = runRecord(input)
+  const session = cleanStartedBy(input.startedBy)
+  if (session) record.startedBy = session
   const startBranch = typeof input?.startBranch === 'string' ? input.startBranch.trim() : ''
   if (startBranch !== '') record.startBranch = startBranch
   const note = typeof input?.note === 'string' ? input.note.trim() : ''
@@ -1538,10 +1558,11 @@ function lostRunRecord(file, name, required = false) {
     return null
   }
 
-  const record = runRecord({
+  const record = laneRunRecord({
     lane, briefs, log, startedAt: meta.startedAt ?? metaStat.mtimeMs,
     branch: meta.branch, base: meta.base, project: meta.project,
     model: meta.model, reasoning: meta.reasoning, mode: meta.mode,
+    startedBy: meta.startedBy,
     continues: meta.continues, failoverFrom: meta.failoverFrom,
     queue: meta.queue ? { branch: meta.queue, index: meta.index } : null,
     killed: true, stopReason: 'lost',
@@ -1863,12 +1884,10 @@ async function runQueueProject({ options, lane, lanes }) {
           queue: { branch, index: 1, size: tasks.length, remaining: tasks.slice(1) },
           project,
           task: tasks[0] || '',
-          startedBy: options.startedBy || '',
+          startedBy: options.startedBy,
           note: String(error?.message ?? error).slice(0, 200),
         })
         failedRecord.queueStatus = 'failed: the queue stopped'
-        const session = options.startedBy ? null : sessionStartedBy(process.env)
-        if (session) failedRecord.startedBy = session
         if (appendRunRecord(failedRecord)) console.log(`record: ${printedRunsFolder(runsFile())}`)
       }
       const back = startBranch
@@ -1925,6 +1944,7 @@ async function main() {
   if (options.list) return listRuns()
   if (options.stats) return statsRuns(options)
   if (options.outcomes) return outcomeRuns(options)
+  options.startedBy ||= sessionStartedBy(process.env)
   const lanesPath = lanesFile()
   const lanesJson = JSON.parse(readFileSync(lanesPath, 'utf8'))
   const badKey = Object.keys(lanesJson ?? {}).find((key) => !/^[A-Za-z0-9_-]+$/.test(key))
@@ -2336,7 +2356,8 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
       ...(project ? { cwd: project } : {}),
     })
     if (resumedSessionId) command.args.push('--resume', resumedSessionId)
-    const startedBy = options.startedBy ? null : sessionStartedBy(process.env)
+    const startedBy = options.startedBy || sessionStartedBy(process.env)
+    const sessionStarter = cleanStartedBy(startedBy)
     const startedAt = Number.isFinite(Number(givenStartedAt)) && Number(givenStartedAt) > 0 ? Number(givenStartedAt) : Date.now()
     const meta = {
       lane: options.lane, briefHash, briefs: project ? [] : wanted.map((brief) => brief.id),
@@ -2353,7 +2374,7 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
       meta.queue = queue.branch
       meta.index = queue.index
     }
-    if (startedBy) meta.startedBy = startedBy
+    if (sessionStarter) meta.startedBy = sessionStarter
     const metaPath = join(dirname(logPath), `${name}.meta.json`)
     writeFileSync(metaPath, `${JSON.stringify(meta)}\n`)
     const log = openLog(logPath)
@@ -2773,14 +2794,13 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
         retried: true,
         startFailed: startFailure !== '' ? true : undefined,
         ...(start ? { startBranch: start.startBranch } : {}),
-        ...(options.startedBy ? { startedBy: options.startedBy } : {}),
+        startedBy,
         ...(project ? { project, task, head: gitRead(project, ['rev-parse', 'HEAD']) || undefined } : {}),
         ...(queue ? { queue } : {}),
         ...(failoverFrom ? { failoverFrom } : {}),
         ...(continueFrom !== '' ? { continues: continueFrom } : {}),
         ...(continueFrom !== '' && interruptedBy !== '' ? { interruptedBy } : {}),
       })
-      if (startedBy) retryRecord.startedBy = startedBy
       if (appendRunRecord(retryRecord)) console.log(`record: ${printedRunsFolder(runsFile())}`)
       const retryName = `${name}-retry`
       return await startLane({
@@ -2822,14 +2842,13 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
       note: note || undefined,
       startFailed: startFailure !== '' ? true : undefined,
       ...(start ? { startBranch: start.startBranch } : {}),
-      ...(options.startedBy ? { startedBy: options.startedBy } : {}),
+      startedBy,
       ...(project ? { project, task, ...(!deferRecord ? { head: gitRead(project, ['rev-parse', 'HEAD']) || undefined } : {}) } : {}),
       ...(queue ? { queue } : {}),
       ...(failoverFrom ? { failoverFrom } : {}),
       ...(continueFrom !== '' ? { continues: continueFrom } : {}),
       ...(continueFrom !== '' && interruptedBy !== '' ? { interruptedBy } : {}),
     })
-    if (startedBy) record.startedBy = startedBy
     const kind = failoverKind({ exitCode: result.code, limited, startFailed: startFailure !== '', killed })
     const target = kind !== '' && typeof lane.fallback === 'string' ? lane.fallback.trim() : ''
     if (target !== '' && options?.failedOver !== true) {

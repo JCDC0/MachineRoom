@@ -1,7 +1,9 @@
+import { SESSION_HARNESSES } from '../harnesses/index.js'
+
 export const LANE_START_TOP_MS = 10 * 60 * 1000
 
-const SESSION_KEYS = { claude: 'claude-session', opencode: 'opencode-session' }
-const SESSION_SUFFIX = '-session'
+const SESSION_KEYS = new Map(SESSION_HARNESSES.map((harness) => [harness.key, harness.sessionKey]))
+const SESSION_TOP_KEYS = new Set(SESSION_KEYS.values())
 
 export function cleanStartedBy(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null
@@ -13,7 +15,7 @@ export function cleanStartedBy(value) {
 
 export function sessionKeyFor(startedBy) {
   const value = cleanStartedBy(startedBy)
-  return value ? SESSION_KEYS[value.harness] ?? '' : ''
+  return value ? SESSION_KEYS.get(value.harness) ?? '' : ''
 }
 
 function sessionSawStart(session, startedBy) {
@@ -23,7 +25,7 @@ function sessionSawStart(session, startedBy) {
 }
 
 export function isSessionTopKey(key) {
-  return typeof key === 'string' && key.length > SESSION_SUFFIX.length && key.endsWith(SESSION_SUFFIX)
+  return SESSION_TOP_KEYS.has(key)
 }
 
 export function topKeyFor({ chosenTop = '', laneTop = '', viewKeys = null } = {}) {
@@ -72,8 +74,7 @@ export function delegatingSessionTop({ agents, at, windowMs = LANE_START_TOP_MS 
 export function laneStarterTop({ agents, at, orchestratorKey = 'orchestrator', windowMs = LANE_START_TOP_MS } = {}) {
   if (!agents || typeof agents.get !== 'function') return ''
   const own = agents.get(orchestratorKey)
-  if (!own) return ''
-  if (own.status === 'working' || own.status === 'queued') return ''
+  if (own?.status === 'working' || own?.status === 'queued') return ''
   const now = Number.isFinite(at) ? at : 0
   let best = ''
   let bestOpen = false

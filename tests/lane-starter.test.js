@@ -30,7 +30,24 @@ describe('laneStarter', () => {
     expect(cleanStartedBy(null)).toBe(null)
     expect(sessionKeyFor({ harness: 'claude', session: 's1' })).toBe('claude-session')
     expect(sessionKeyFor({ harness: 'opencode', session: 's1' })).toBe('opencode-session')
-    expect(sessionKeyFor({ harness: 'hermes', session: 's1' })).toBe('')
+    expect(sessionKeyFor({ harness: 'codex', session: 's1' })).toBe('')
+  })
+
+  it.each([['agy', 'antigravity-session'], ['hermes', 'hermes-session']])('seats a %s session that started a lane', (harness, key) => {
+    const agents = new Map([
+      ['orchestrator', agent()],
+      [key, agent({ key, sessions: new Set(['s1']) })],
+      ['codex', agent({ key: 'codex', status: 'working', startedAt: 1000, startedBy: { harness, session: 's1' } })],
+    ])
+    expect(sessionKeyFor({ harness, session: 's1' })).toBe(key)
+    expect(laneStarterTop({ agents, at: 1000 })).toBe(key)
+    expect(topKeyFor({ chosenTop: key, viewKeys: new Set(agents.keys()) })).toBe(key)
+  })
+
+  it('seats a lane starter even without an orchestrator', () => {
+    const agents = room({ lane: { status: 'working', startedAt: 1000, startedBy: { harness: 'claude', session: 's1' } } })
+    agents.delete('orchestrator')
+    expect(laneStarterTop({ agents, at: 1000 })).toBe('claude-session')
   })
 
   it('puts the session that started an open lane run at the top while the orchestrator is idle', () => {
@@ -41,9 +58,9 @@ describe('laneStarter', () => {
     expect(laneStarterTop({ agents, at: 1000 })).toBe('claude-session')
   })
 
-  it('gives the top back when the orchestrator starts a turn', () => {
+  it.each(['working', 'queued'])('gives the top back when the orchestrator is %s', (status) => {
     const agents = room({
-      orchestrator: { status: 'working', startedAt: 2000 },
+      orchestrator: { status, startedAt: 2000 },
       lane: { status: 'working', startedAt: 1000, startedBy: { harness: 'claude', session: 's1' } },
       session: { sessions: new Set(['s1']) },
     })
