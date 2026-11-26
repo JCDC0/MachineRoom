@@ -158,7 +158,7 @@ function jsonLines(text) {
 }
 
 describe('mr-agent lane inbox', () => {
-  it('reads unseen messages after the first model call and does not repeat them on the third', async () => {
+  it('reads unseen messages after the first model call and before it finishes, and does not repeat them on the third', async () => {
     const folder = tempDir()
     const ticket = 'lane-ticket-1'
     let inbox = []
@@ -189,7 +189,7 @@ describe('mr-agent lane inbox', () => {
     expect(result.code).toBe(0)
     expect(result.stderr).toBe('')
     expect(api.calls).toHaveLength(3)
-    expect(bridge.requests).toHaveLength(2)
+    expect(bridge.requests).toHaveLength(3)
     for (const request of bridge.requests) {
       expect(request.method).toBe('GET')
       expect(request.url).toBe('/api/orchestrator/messages')
@@ -211,7 +211,7 @@ describe('mr-agent lane inbox', () => {
     expect(api.calls[2].body.messages.at(-1).role).toBe('tool')
   })
 
-  it('compares messages by at and text so only unseen replies are appended', async () => {
+  it('compares messages by id, or else by sender, time and text, so only unseen replies are appended', async () => {
     const folder = tempDir()
     const firstMessage = { from: 'orchestrator', text: 'Same text.', at: '2026-11-15T10:00:00.000Z' }
     let inbox = []
@@ -252,7 +252,7 @@ describe('mr-agent lane inbox', () => {
     })
     expect(api.calls[2].body.messages.at(-1)).toEqual({
       role: 'user',
-      content: 'Messages for you while you work:\norchestrator: Same text.\nlane:opencode: Schema landed.',
+      content: 'Messages for you while you work:\nsub:ui: Same text.\norchestrator: Same text.\nlane:opencode: Schema landed.',
     })
   })
 
@@ -279,7 +279,7 @@ describe('mr-agent lane inbox', () => {
 
     expect(result.code).toBe(0)
     expect(result.stderr).toBe('')
-    expect(bridge.requests).toHaveLength(1)
+    expect(bridge.requests).toHaveLength(2)
     expect(api.calls[1].body.messages.filter((m) => m.role === 'user')).toHaveLength(1)
   })
 
@@ -305,7 +305,7 @@ describe('mr-agent lane inbox', () => {
     const result = await runAgent({
       folder,
       api,
-      seconds: 8,
+      seconds: 16,
       env: {
         MACHINEROOM_BRIDGE: bridge.url,
         MACHINEROOM_LANE_TICKET: 'lane-ticket-slow',
@@ -315,11 +315,11 @@ describe('mr-agent lane inbox', () => {
 
     expect(result.code).toBe(0)
     expect(result.stderr).toBe('')
-    expect(elapsedMs).toBeGreaterThanOrEqual(2500)
-    expect(elapsedMs).toBeLessThan(7500)
-    expect(bridge.requests).toHaveLength(1)
+    expect(elapsedMs).toBeGreaterThanOrEqual(5500)
+    expect(elapsedMs).toBeLessThan(13000)
+    expect(bridge.requests).toHaveLength(2)
     expect(api.calls[1].body.messages.filter((m) => m.role === 'user')).toHaveLength(1)
-  }, 15000)
+  }, 25000)
 
   it('makes no inbox request when either variable is missing and makes one when both are set', async () => {
     const folder = tempDir()
@@ -355,7 +355,7 @@ describe('mr-agent lane inbox', () => {
       },
     })
     expect(result.code).toBe(0)
-    expect(bridge.requests).toHaveLength(1)
+    expect(bridge.requests).toHaveLength(2)
     expect(api.calls[1].body.messages.at(-1)).toEqual({
       role: 'user',
       content: 'Messages for you while you work:\norchestrator: Ping.',
@@ -394,7 +394,7 @@ describe('mr-agent lane inbox', () => {
 
     expect(result.code).toBe(0)
     expect(result.stderr).toBe('')
-    expect(bridge.requests).toHaveLength(2)
+    expect(bridge.requests).toHaveLength(3)
     expect(api.calls[1].body.messages.at(-1).content).toBe('Messages for you while you work:\norchestrator: Carry on.')
     expect(result.stdout).not.toContain(ticket)
     expect(result.stderr).not.toContain(ticket)

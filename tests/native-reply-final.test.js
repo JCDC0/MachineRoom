@@ -76,8 +76,9 @@ describe('a native final answer and a reply read at the same time', () => {
     const bridge = await startBridge(async (record, requests) => {
       if (record.url === '/api/orchestrator/messages') {
         inboxStarted()
+        const accepted = requests.some((r) => r.url === '/v1/chat/completions')
         await new Promise((done) => setTimeout(done, 800))
-        return { messages: [{ from: 'lane:main', text: 'Also check the docs.', at: '2026-11-16T10:00:00.000Z' }] }
+        return { messages: accepted ? [{ from: 'lane:main', text: 'Also check the docs.', at: '2026-11-16T10:00:00.000Z' }] : [] }
       }
       if (requests.filter((r) => r.url === '/v1/chat/completions').length === 1) {
         await started

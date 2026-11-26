@@ -1608,8 +1608,7 @@ async function main() {
         process.stdout.write(`${sentence}\n`)
         return
       }
-      const inbox = await readLaneInbox(seenInbox)
-      heldLines.push(...inbox.lines)
+      if (step > 0) heldLines.push(...(await readLaneInbox(seenInbox)).lines)
       if (heldLines.length > 0) messages.push({ role: 'user', content: inboxText(heldLines.splice(0)) })
       boundMessages(messages, limit)
       const payload = {
