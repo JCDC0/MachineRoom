@@ -39,6 +39,7 @@ import { readSeats, seatCheck, seatsFileFor } from '../server/seats.js'
 import { createClient } from '../src/control/client.js'
 import { createMockClient } from '../src/control/mock.js'
 import { childFormProblem } from '../src/ui/family.js'
+import { waitFor } from './helpers/bridge.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 
 const REPO_ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)))
@@ -1251,6 +1252,39 @@ describe('the chosen top and nested subs', () => {
     expect(family.nodes.find((node) => node.id === 'opencode')?.parent).toBe(id)
   })
 
+  it('puts a lane with an open or recent run under its starter session', async () => {
+    const { url, projectRoot, runsFolder } = await startBridge()
+    const top = 'antigravity-session'
+    await request(`${url}/api/family/top`, { method: 'POST', body: { top, confirmed: true } })
+    const main = 'orchestrator-P1-20261126-120000'
+    const lane = 'opencode-P1-20261126-120000'
+    const startedBy = { harness: 'agy', session: 'session-a' }
+    writeFileSync(join(runsFolder, `${main}.meta.json`), JSON.stringify({ project: projectRoot }))
+    writeFileSync(join(runsFolder, `${lane}.meta.json`), JSON.stringify({ project: projectRoot, startedBy }))
+    for (const name of [main, lane]) writeFileSync(join(runsFolder, `${name}.log`), '{}\n')
+
+    const readFamily = async () => (await request(`${url}/api/family`, { origin: '' })).body.nodes
+    const node = (nodes, id) => nodes.find((item) => item.id === id)
+    const open = await waitFor(async () => {
+      const nodes = await readFamily()
+      return node(nodes, 'orchestrator')?.working && node(nodes, 'opencode')?.working && nodes
+    })
+    expect(node(open, 'opencode').parent).toBe(`session:${top}`)
+    expect(node(open, `session:${top}`).children).toEqual(['orchestrator', 'opencode'])
+    expect(node(open, 'orchestrator').children).toContain('opencode2')
+    expect(node(open, 'orchestrator').children).not.toContain('opencode')
+
+    writeFileSync(join(runsFolder, 'runs.jsonl'), `${JSON.stringify({ log: `${lane}.log`, exitCode: 0 })}\n`)
+    const recent = await waitFor(async () => {
+      const nodes = await readFamily()
+      return !node(nodes, 'opencode')?.working && nodes
+    })
+    expect(node(recent, 'opencode').parent).toBe(`session:${top}`)
+
+    await request(`${url}/api/family/top`, { method: 'POST', body: { top: 'hermes-session', confirmed: true } })
+    expect(node(await readFamily(), 'opencode').parent).toBe('orchestrator')
+  })
+
   it('keeps an idle orchestrator by default and leaves it out only with hideIdleMain', () => {
     const root = tempDir('mr-top-hide-')
     const runs = tempDir('mr-top-hide-runs-')
@@ -1446,12 +1480,16 @@ describe('the chosen top and nested subs', () => {
     expect(found).toBe(true)
   })
 
-  it('the mock client keeps the top too', async () => {
+  it.each([
+    ['opencode-session', 'opencode', 'OpenCode session'],
+    ['antigravity-session', 'agy', 'Antigravity session'],
+    ['hermes-session', 'hermes', 'Hermes session'],
+  ])('the mock client keeps %s as the top', async (top, harness, label) => {
     const client = createMockClient()
-    await client.setFamilyTop({ top: 'opencode-session' })
+    await client.setFamilyTop({ top })
     const family = await client.family()
-    expect(family.top).toBe('opencode-session')
-    expect(family.nodes[0].kind).toBe('session')
+    expect(family.top).toBe(top)
+    expect(family.nodes[0]).toMatchObject({ kind: 'session', harness, label })
   })
 
   it('sets the top session node working state from isWorking and from the sessions source', async () => {

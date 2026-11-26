@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The room credits Antigravity and Hermes sessions for lane runs they start from their shells and shows the parent in the family tree (P739b).
 - Any session harness can take the top seat, and `run-lane` can record an explicit session starter (P739).
 - The status rings keep orbiting and wobbling in every state, including through the thinking blend (P737).
 - The room shows live runs on its project from lanes outside its own lane list, using the harness and model saved by `run-lane` (P738).

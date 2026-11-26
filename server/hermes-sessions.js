@@ -4,7 +4,7 @@ import { homedir } from 'node:os'
 import { dirname, isAbsolute, join, posix, relative, resolve, sep, win32 } from 'node:path'
 import { pathInside } from '../src/briefs/run.js'
 import { looksFailed } from '../src/model/parsers/common.js'
-import { runsFolder as defaultRunsFolder } from './lanes-source.js'
+import { lanesFromShell, runsFolder as defaultRunsFolder } from './lanes-source.js'
 
 const DEFAULT_QUIET_MS = 30000
 const OPEN_CALL_QUIET_MS = 30 * 60 * 1000
@@ -222,14 +222,14 @@ export function createHermesSessionsReader(options = {}) {
   }
 
   function basePayload(run) {
-    return { runId: run.runId, agentId: HERMES_SESSION_AGENT.id, issueId: `issue-${run.runId}` }
+    return { runId: run.runId, agentId: HERMES_SESSION_AGENT.id, issueId: `issue-${run.runId}`, session: run.rootId }
   }
 
   function startRun(root) {
     if (root.run?.open) endRun(root, 'succeeded')
     root.number += 1
     const at = now()
-    const run = { runId: `${root.id}:${token}:${root.number}`, seq: 0, startedAt: at, lastGrowth: at, open: true }
+    const run = { runId: `${root.id}:${token}:${root.number}`, rootId: root.id, seq: 0, startedAt: at, lastGrowth: at, open: true }
     root.run = run
     safeEmit({ type: 'heartbeat.run.queued', companyId: `company-${root.id}`, createdAt: iso(at), payload: basePayload(run) })
     safeEmit({
@@ -347,7 +347,8 @@ export function createHermesSessionsReader(options = {}) {
 
   function handleRow(info, row) {
     const root = info.root
-    const at = timeMs(row.timestamp) || now()
+    const calledAt = timeMs(row.timestamp)
+    const at = calledAt || now()
     if (row.role === 'user') {
       if (info === root) {
         root.open.clear()
@@ -361,6 +362,11 @@ export function createHermesSessionsReader(options = {}) {
       ensureRun(root)
       calls.forEach((call, index) => {
         const id = call.id || `${info.id}:${row.id}:${index}`
+        if (typeof options.onLaneCommand === 'function' && call.name === 'terminal' && calledAt) {
+          for (const lane of lanesFromShell(call.args?.command)) {
+            options.onLaneCommand({ harness: 'hermes', session: root.id, lane, at: calledAt })
+          }
+        }
         sendLine(root, {
           hermes: 'call',
           id,

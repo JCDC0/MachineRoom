@@ -15,7 +15,7 @@ import { claudeContextWindow } from '../src/harnesses/claude.js'
 import { contextTokensFromLog } from './orchestrator.js'
 import { activeLanesFileFor, readActiveLanesChoice, ROOM_LANE_LINGER_MS } from './active-lanes.js'
 import { readAllLanes } from './agents-config.js'
-import { listProcesses } from './processTree.js'
+import { isRunnerCommand, listProcesses } from './processTree.js'
 import { gitEnv, gitPath } from './programPath.js'
 
 export { readAllLanes }
@@ -310,6 +310,29 @@ function startedByOf(value) {
   return harness && session ? { harness, session } : null
 }
 
+const RUN_LANE_SCRIPT = /(?:^|[\\/])run-lane\.mjs$/
+const RUN_LANE_READ_FLAGS = new Set(['--list', '--stats', '--outcomes', '--stop', '--dry-run', '--help', '-h'])
+
+export function lanesFromShell(command) {
+  if (typeof command !== 'string') return []
+  const lanes = []
+  const parts = command.match(/(?:[^"'&|;\r\n]|"(?:\\.|[^"\\])*"|'[^']*')+/g) ?? []
+  for (const part of parts) {
+    const words = (part.match(/(?:[^\s"']|"(?:\\.|[^"\\])*"|'[^']*')+/g) ?? [])
+      .map((word) => word.replace(/^(["'])(.*)\1$/, '$2'))
+    let script = -1
+    if (/(?:^|[\\/])npm(?:\.cmd|\.exe)?$/.test(words[0]) && words[1] === 'run' && words[2] === 'run-lane') script = 2
+    else if (RUN_LANE_SCRIPT.test(words[0])) script = 0
+    else if (isRunnerCommand(part)) script = words.findIndex((word) => RUN_LANE_SCRIPT.test(word))
+    if (script === -1) continue
+    const args = words.slice(script + 1)
+    if (args.some((word) => RUN_LANE_READ_FLAGS.has(word))) continue
+    const lane = args.find((word) => word !== '' && !word.startsWith('-'))
+    if (lane && LANE_KEY.test(lane)) lanes.push(lane)
+  }
+  return lanes
+}
+
 function metaFor(logPath) {
   try {
     const meta = JSON.parse(readFileSync(String(logPath).replace(/\.log$/i, '.meta.json'), 'utf8'))
@@ -519,7 +542,9 @@ export function createLanesSource(options = {}) {
 
   function beginRun(name, path, agent, keepPaths = false, project = '', startedBy = null) {
     const locked = lockStartedAt(agent?.key, basename(path))
-    const startedAt = Number.isFinite(locked) && locked <= now() ? locked : now()
+    const current = now()
+    const startedAt = Number.isFinite(locked) && locked <= current ? locked : current
+    startedBy ??= options.takeLaneStarter?.(agent.key, startedAt) ?? null
     const run = {
       name,
       path,
@@ -837,7 +862,7 @@ export function createLanesSource(options = {}) {
     flushRun(run)
     active.delete(run.key)
     const at = now()
-    ended.set(run.agent.key, { at, agent: run.agent })
+    ended.set(run.agent.key, { at, agent: run.agent, startedBy: run.startedBy })
     if (onNotice && Number.isFinite(lingerMs) && lingerMs > 0) {
       const lingerTimer = setTimeout(() => {
         lingerTimers.delete(lingerTimer)
@@ -1072,6 +1097,16 @@ export function createLanesSource(options = {}) {
     })
   }
 
+  function starterFor(lane) {
+    let newest = null
+    for (const run of active.values()) {
+      if (run.agent.key === lane && (!newest || run.startedAt >= newest.startedAt)) newest = run
+    }
+    if (newest) return newest.startedBy
+    const recent = ended.get(lane)
+    return recent && now() - recent.at <= lingerMs ? recent.startedBy : null
+  }
+
   return {
     get agents() {
       return agentsNow()
@@ -1080,6 +1115,7 @@ export function createLanesSource(options = {}) {
       return allAgents()
     },
     openRuns,
+    starterFor,
     recentLanes: (windowMs, at = now()) => new Set([...ended].filter(([, run]) => at - run.at <= windowMs).map(([key]) => key)),
     start,
     stop,
