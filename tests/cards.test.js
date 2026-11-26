@@ -1505,6 +1505,57 @@ describe('hiding folder contents', () => {
     cards.dispose()
   })
 
+  it('keeps the hold for a completed read eight folders deep until the wave reaches it', () => {
+    const folders = Array.from({ length: 8 }, (_, index) => `dir${index + 1}`)
+    const ancestorFiles = folders.map((_, index) => [...folders.slice(0, index), 'a.js'].join('/'))
+    const dir = folders.join('/')
+    const path = `${dir}/a.js`
+    const state = createState(
+      makeTree({ root: 'demo', files: [...ancestorFiles, path] }),
+      [{ key: 'claude', name: 'Claude' }],
+    )
+    const cards = createCards(fakeScene(), { glScene: fakeScene(), alwaysDepth: 2, folderContents: false, openOnTouch: true })
+    const view = camera()
+    const step = 1 / 120
+    const holdFrames = 132
+    cards.sync(state)
+
+    apply(state, { type: 'run.start', agent: 'claude', runId: 'r1', time: 500 })
+    apply(state, {
+      type: 'tool.start',
+      agent: 'claude',
+      runId: 'r1',
+      time: 1000,
+      id: 'c1',
+      tool: 'read',
+      label: `read ${path}`,
+      touches: [{ kind: 'file', path, mode: 'read' }],
+    })
+    apply(state, { type: 'tool.end', agent: 'claude', runId: 'r1', time: 1200, id: 'c1', ok: true })
+    cards.update(state, step, view)
+    const card = cards.cards.get(dir)
+    expect(card.openLevel).toBe(0)
+    cards.flashFile(dir, path, 'white')
+
+    let waitingFrames = 0
+    while (card.openLevel === 0 && waitingFrames < 240) {
+      cards.update(state, step, view)
+      waitingFrames += 1
+    }
+    expect(card.openLevel).toBeGreaterThan(0)
+    expect(waitingFrames).toBeGreaterThan(holdFrames)
+
+    for (let frame = 1; frame < holdFrames; frame += 1) {
+      cards.update(state, step, view)
+      if (frame >= 30) expect(card.openLevel).toBe(1)
+    }
+    expect(card.rows).toHaveLength(1)
+
+    for (let frame = 0; frame < 35; frame += 1) cards.update(state, step, view)
+    expect(card.openLevel).toBe(0)
+    cards.dispose()
+  })
+
   it('clears the pulse of a card with no rows, so it does not open later', () => {
     const state = createState(makeTree({ root: 'demo', files: ['src/b.js', 'src/engine/a.js'] }), [{ key: 'claude', name: 'Claude' }])
     const cards = createCards(fakeScene(), { glScene: fakeScene(), alwaysDepth: 2, folderContents: false, openOnTouch: true })

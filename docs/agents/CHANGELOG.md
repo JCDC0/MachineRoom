@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- A deep folder touch keeps its full hold while it waits for the opening wave (P735, R76-5).
 - The room plays stereo folder wooshes, star sparkles, 8-bit touch blips and thinking whirs (P741).
 - The room hides an unused main orchestrator when another agent is present and lets the owner pin or clear the top seat (P740).
 - Antigravity and Hermes runs keep their own workers when sessions overlap (P734, R76-9).
