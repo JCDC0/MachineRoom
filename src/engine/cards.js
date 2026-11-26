@@ -4,7 +4,7 @@ import { planFolderView } from '../model/folderView.js'
 import { basename, dirname, visibleText } from '../model/paths.js'
 import { freshRecent } from '../model/state.js'
 import { SWAY_LIFT, SWAY_RATE, SWAY_SCALE, danceEnvelope, startDanceEnvelope } from './hub.js'
-import { FOLDER_DRIFT_RADIUS, FOLDER_SPACING_DEFAULT, RING_CENTER, ROOT_PLACE, clampFolderSpacing, folderDrift, layoutRing, orbitPlace, ringOf, ringRotation } from './ring.js'
+import { FOLDER_DRIFT_RADIUS, FOLDER_SPACING_DEFAULT, RING_CENTER, ROOT_PLACE, SMALL_TOP, clampFolderSpacing, folderDrift, layoutRing, orbitPlace, ringOf, ringRotation } from './ring.js'
 import { easeInOut, easeRate, still } from './sprites.js'
 import { speedRate } from './stars.js'
 
@@ -341,7 +341,7 @@ export function cardPlan(state, { pinned = [], alwaysDepth = 2, maxFiles = FILE_
   }
   const entries = [...drawn.values()].map((view) => ({ path: view.path, ...cardSize(view, rootName) }))
   const layoutKey = `${spacing}|${entries.map((entry) => `${entry.path}:${entry.width}:${entry.height}`).join(';')}|${sprays.sort().join(',')}`
-  const placed = layoutRing(entries, { previous, sprayed, small: true, spacing })
+  const placed = layoutRing(entries, { previous, sprayed, small: entries.length - 1 <= SMALL_TOP, spacing })
   return { input, plan, views: plan, drawn, entries, placed, layoutKey }
 }
 
