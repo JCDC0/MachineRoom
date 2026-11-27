@@ -158,7 +158,7 @@ export function orbitPlace(place, rotation, drift, seconds) {
 }
 
 function cardGapFloor() {
-  return Math.hypot(CARD_W, cardHeight(FILE_LIMIT_DEFAULT)) * CARD_SCALES.files
+  return Math.hypot(CARD_W, cardHeight(FILE_LIMIT_DEFAULT)) * CARD_SCALES.files + 2 * FOLDER_DRIFT_RADIUS
 }
 
 export function ringRadius(count, spacing = FOLDER_SPACING_DEFAULT) {
@@ -241,11 +241,13 @@ export function layoutRing(entries, options = {}) {
     const spot = tagPosition(ringPoint(radius, angle), node, slot)
     positions.set(path, keepPlace(previous, path, lifted(spot, sprayed, path)))
   })
+  const angleOf = smallRingNow ? smallRingAngle : ringAngle
+  const overflowAngle = (angleOf(ringCount - 2, ringCount) + angleOf(ringCount - 1, ringCount)) / 2
   overflow.forEach((path, index) => {
     const node = nodes.get(path)
     const off = shotgunOffset(index, overflow.length, spacing, radius)
     const slot = `${ringSlot}>spray>${index}/${overflow.length}${sprayedAt(sprayed, path) ? ':spray' : ''}`
-    const spot = tagPosition(ringPoint(radius + off.radiusStep, off.angleOffset), node, slot)
+    const spot = tagPosition(ringPoint(radius + off.radiusStep, overflowAngle + off.angleOffset), node, slot)
     positions.set(path, keepPlace(previous, path, lifted(spot, sprayed, path)))
   })
 
