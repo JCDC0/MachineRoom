@@ -89,6 +89,7 @@ async function startBridge({
   projectRoot = tempDir('mr-proj-'),
   runsFolder = tempDir('mr-runs-'),
   lanes = SAMPLE_LANES,
+  sessionsSource,
 } = {}) {
   mkdirSync(runsFolder, { recursive: true })
   mkdirSync(join(projectRoot, 'docs', 'agents'), { recursive: true })
@@ -110,6 +111,7 @@ async function startBridge({
       pollMs: 20,
       quietMs: 60000,
     },
+    sessionsSource,
     orchestratorPrompt: promptFile,
     orchestratorSpawn: () => {
       throw new Error('No real agent in tests.')
@@ -142,6 +144,21 @@ async function request(url, { method = 'GET', origin = 'http://localhost:5173', 
 }
 
 describe('buildFamilyNodes pure helper', () => {
+  it('only credits a starter session seen in this project', () => {
+    const root = tempDir('mr-bn-session-')
+    const runs = tempDir('mr-bn-session-runs-')
+    const build = (session) => buildFamilyNodes({
+      projectRoot: root,
+      runsFolder: runs,
+      lanesConfig: SAMPLE_LANES,
+      top: 'hermes-session',
+      laneStarter: () => ({ harness: 'hermes', session }),
+      sessionIds: () => new Set(['here']),
+    })
+    expect(build('elsewhere').find((node) => node.id === 'opencode').parent).toBe('orchestrator')
+    expect(build('here').find((node) => node.id === 'opencode').parent).toBe('session:hermes-session')
+  })
+
   it('builds nodes with defaults when labels file is missing', () => {
     const root = tempDir('mr-bn-')
     const runs = tempDir('mr-bn-runs-')
@@ -1263,7 +1280,20 @@ describe('the chosen top and nested subs', () => {
   })
 
   it('puts a lane with an open or recent run under its starter session', async () => {
-    const { url, projectRoot, runsFolder } = await startBridge()
+    const { url, projectRoot, runsFolder } = await startBridge({
+      sessionsSource: { readers: [({ emit }) => {
+        let sent = false
+        return {
+          agent: { id: 'agent-agy-session', key: 'antigravity-session', name: 'Antigravity session' },
+          tick: () => {
+            if (sent) return
+            sent = true
+            emit({ type: 'heartbeat.run.queued', payload: { agentId: 'agent-agy-session', session: 'session-a' } })
+          },
+          stop: () => {},
+        }
+      }] },
+    })
     const top = 'antigravity-session'
     await request(`${url}/api/family/top`, { method: 'POST', body: { top, confirmed: true } })
     const main = 'orchestrator-P1-20261126-120000'
