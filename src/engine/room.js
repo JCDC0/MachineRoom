@@ -260,6 +260,7 @@ function roomAgent(agent) {
     name: agent.name,
     shape: agent.parser ?? agent.key,
     role: agent.role ?? null,
+    harness: typeof agent.harness === 'string' ? agent.harness : null,
     model: typeof agent.model === 'string' ? agent.model : null,
     effort: typeof agent.effort === 'string' ? agent.effort : null,
     subOrchestrator: agent.subOrchestrator === true,

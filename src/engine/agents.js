@@ -3,6 +3,7 @@ import { Line2 } from 'three/addons/lines/Line2.js'
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js'
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js'
 import { CSS3DObject } from 'three/addons/renderers/CSS3DRenderer.js'
+import { HARNESSES } from '../harnesses/index.js'
 import { ownerOf } from '../model/hierarchy.js'
 import { delegatingSessionTop, laneStarterTop, latestSessionTop, topKeyFor } from '../model/laneStarter.js'
 import { dirname } from '../model/paths.js'
@@ -484,6 +485,22 @@ export function modelLabel(agent) {
   const named = effort !== '' && model.toLowerCase().split(/[^a-z0-9]+/).includes(effort.toLowerCase())
   const label = [model, named ? '' : effort].filter(Boolean).join(' · ').toUpperCase()
   return label.length > 40 ? `${label.slice(0, 39)}~` : label
+}
+
+const HARNESS_TITLES = { agy: 'Antigravity', machineroom: 'Native' }
+
+export function agentTitle(agent, label = null) {
+  const key = String(agent?.key ?? '')
+  const harnessKey = agent?.harness ?? agent?.shape ?? ''
+  const listed = HARNESSES.find((entry) => entry.key === harnessKey)?.name ?? ''
+  const harness = HARNESS_TITLES[harnessKey] ?? listed
+  const named = typeof label === 'string' && label.trim() ? label.trim() : typeof agent?.name === 'string' && agent.name.trim() ? agent.name.trim() : key
+  const plain = named.toLowerCase()
+  let title = harness && (plain === harnessKey || plain === listed.toLowerCase()) ? harness : named
+  if (harness && !title.toLowerCase().includes(harness.toLowerCase())) title = `${harness} ${title}`
+  const number = /(\d+)$/.exec(key)?.[1]
+  if (number && !/\d/.test(title)) title = `${title} ${number}`
+  return title
 }
 
 export function agentModelText(rosterAgent, entry) {
@@ -1323,7 +1340,8 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
       line.visible = false
       return { line, start: -Infinity, strength: 0, pulse: { radius: 1, opacity: 0 } }
     })
-    const label = textSprite(nameLabel(agent.name), { scale: 1.5, color: 'rgba(255,255,255,.7)' })
+    const title = parentKey === null ? agentTitle(agent, currentLabels ? labelFor(agent.key, currentLabels) : null) : agent.name
+    const label = textSprite(nameLabel(title), { scale: 1.5, color: 'rgba(255,255,255,.7)' })
     label.position.set(0, NAME_LABEL_Y, 0)
     const modelText = textSprite(modelLabel(agent), { scale: 1.1, color: 'rgba(255,255,255,.6)' })
     modelText.position.set(0, MODEL_LABEL_Y, 0)
@@ -1352,11 +1370,7 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
       : null
     if (orchestratorLink) orchestratorLink.renderOrder = -1
 
-    const callout = makeCallout(
-      currentLabels && parentKey === null ? labelFor(agent.key, currentLabels) ?? agent.key : agent.name,
-      agent.key,
-      pickAgent
-    )
+    const callout = makeCallout(title, agent.key, pickAgent)
     const calloutColor = cssColor(color)
     if (calloutColor) paintAgentColor(callout.element, calloutColor)
     const calloutLine = lineBetween(lineMaterial(WHITE, 0.3))
@@ -1754,7 +1768,9 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
   function setLabels(labels) {
     currentLabels = labels instanceof Map || (labels && typeof labels === 'object') ? labels : null
     for (const view of views.values()) {
-      const name = currentLabels && !view.parentKey ? labelFor(view.key, currentLabels) ?? view.key : view.name
+      const name = view.parentKey
+        ? view.name
+        : agentTitle(agentByKey.get(view.key) ?? { key: view.key, name: view.name }, currentLabels ? labelFor(view.key, currentLabels) : null)
       view.callout.title.textContent = name.toUpperCase()
       view.label.userData.setText?.(nameLabel(name))
     }

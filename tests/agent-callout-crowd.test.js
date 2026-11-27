@@ -145,7 +145,7 @@ describe('the crowded room callouts', () => {
     const full = ['a0', 'a4', 'a5']
     for (let index = 0; index < 6; index += 1) {
       const callout = agents.views.get(`a${index}`).callout
-      expect(callout.title.textContent).toBe(`AGENT ${index}`)
+      expect(callout.title.textContent).toBe(`CLAUDE CODE AGENT ${index}`)
       expect(callout.task.textContent).toBe(`task ${index}`)
       expect(callout.cmd.textContent).toBe(`work ${index}`)
       if (full.includes(`a${index}`)) expect(callout.task.style.display).not.toBe('none')

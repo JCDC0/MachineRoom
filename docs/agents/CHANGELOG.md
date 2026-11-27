@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The label over each agent names its harness with its name and lane number, such as Antigravity Hydrogen 4, and a session shows its name, not its key.
 - Folder spacing now ranges from 600 to 2000 and spreads inner folders as well as the top ring (P744).
 
 - A star that creates a file or folder traces its outline like a light trail while the card or row fades in behind it, following moving cards (P745).

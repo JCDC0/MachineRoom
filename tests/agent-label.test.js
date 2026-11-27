@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { agentModelText, doingText, modelLabel, nameLabel } from '../src/engine/agents.js'
+import { agentModelText, agentTitle, doingText, modelLabel, nameLabel } from '../src/engine/agents.js'
 import { apply, createState } from '../src/model/state.js'
 
 describe('agent name label', () => {
@@ -95,5 +95,29 @@ describe('agentModelText', () => {
     apply(state, { type: 'agent.model', agent: 'claude-session', model: 'claude-opus-5-5', time: 1 })
     expect(agentModelText(roster[0], entry)).toBe('CLAUDE-OPUS-5-5')
     expect(agentModelText({ key: 'codex3', model: 'gpt-6.2-sol', effort: 'high' }, entry)).toBe('GPT-6.2-SOL · HIGH')
+  })
+})
+
+describe('agentTitle', () => {
+  it('puts the harness before a lane label and keeps the lane number', () => {
+    expect(agentTitle({ key: 'agy-4', name: 'agy-4', harness: 'agy' }, 'Hydrogen')).toBe('Antigravity Hydrogen 4')
+  })
+
+  it('keeps a session name that already names its harness', () => {
+    expect(agentTitle({ key: 'claude-session', name: 'Claude Code session', shape: 'claude' })).toBe('Claude Code session')
+    expect(agentTitle({ key: 'antigravity-session', name: 'Antigravity session', shape: 'agy' })).toBe('Antigravity session')
+  })
+
+  it('names a bare harness key by its harness', () => {
+    expect(agentTitle({ key: 'agy', name: 'agy', harness: 'agy' })).toBe('Antigravity')
+    expect(agentTitle({ key: 'native3', name: 'Native 3', harness: 'machineroom' })).toBe('Native 3')
+  })
+
+  it('leaves a name with its harness and number alone', () => {
+    expect(agentTitle({ key: 'codex2', name: 'Codex 2', harness: 'codex' })).toBe('Codex 2')
+  })
+
+  it('falls back to the key with no harness', () => {
+    expect(agentTitle({ key: 'mystery' })).toBe('mystery')
   })
 })

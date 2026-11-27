@@ -65,12 +65,12 @@ describe('agent labels', () => {
     drawn.length = 0
 
     agents.setLabels(new Map([['a', 'Bridge Coder']]))
-    expect(view.callout.title.textContent).toBe('BRIDGE CODER')
-    expect(drawn).toContain('BRIDGE CODER')
+    expect(view.callout.title.textContent).toBe('CLAUDE CODE BRIDGE CODER')
+    expect(drawn).toContain('CLAUDE CODE BRIDGE CODER')
 
     agents.setLabels(null)
-    expect(view.callout.title.textContent).toBe('ALPHA')
-    expect(drawn.at(-1)).toBe('ALPHA')
+    expect(view.callout.title.textContent).toBe('CLAUDE CODE ALPHA')
+    expect(drawn.at(-1)).toBe('CLAUDE CODE ALPHA')
     agents.dispose()
   })
 })

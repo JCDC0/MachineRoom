@@ -8,7 +8,7 @@ The room above is a real session: Claude Code leads on top, Gemini 4 Neon (Antig
 
 ## What you see
 
-- Agents: each agent is a wireframe shape in its own colour. Its name floats over it, and its model and effort sit under it, with what it is doing right now beneath.
+- Agents: each agent is a wireframe shape in its own colour. Its harness and name float over it, and its model and effort sit under it, with what it is doing right now beneath.
 - A team: the orchestrator sits on top. Each sub orchestrator floats over its own arc of the hub ring, with its coders inside it.
 - Your project: folder cards orbit the hub slowly, far apart, each drifting on its own. A slider in Settings sets how far apart they sit.
 - Work as it happens: a working agent sends a tunnel and a star to the file it touches. A new file or folder is drawn by a light trail as the star lands, and its label pops up when it arrives.
