@@ -4,6 +4,7 @@
 
 - Native lanes report replies pending at the step limit, and Codex MCP calls end on failure with the known turn outcome at flush (review 77, findings 9 and 17).
 
+- Discovered lanes keep their first frames, and finished logs leave current shell matches for live runs (P748).
 - Touch labels and star waypoints follow moving cards (review 77, finding 13).
 - A resumed Antigravity child ends again when it next goes idle (review 77, finding 11).
 

@@ -94,14 +94,21 @@ export function createPipeline({ agents, tree }) {
       const ts = typeof parsed === 'number' && Number.isFinite(parsed) ? parsed : Date.parse(frame.createdAt)
       return finalise([{ time: ts, type: 'agent.message', agent: from, runId: null, to, kind, order: (order += 1) }])
     }
-    const agent = byId.get(payload?.agentId)
+    let agent = byId.get(payload?.agentId)
+    const descriptor = payload?.agent
+    if (!agent && descriptor?.discovered === true && descriptor.id === payload.agentId &&
+        typeof descriptor.key === 'string' && descriptor.key !== '' && typeof descriptor.name === 'string') {
+      addAgents([descriptor])
+      agent = byId.get(payload.agentId)
+    }
     if (!agent) return []
     const runId = payload.runId ?? null
     const time = Date.parse(frame.createdAt)
     const out = []
+    const agentDescriptor = agent.discovered ? { agentDescriptor: agent } : null
 
     function emit(activity) {
-      out.push({ ...activity, agent: activity.agent ?? agent.key, runId, order: (order += 1) })
+      out.push({ ...activity, ...agentDescriptor, agent: activity.agent ?? agent.key, runId, order: (order += 1) })
     }
 
     if (frame.type === 'heartbeat.run.queued') {
