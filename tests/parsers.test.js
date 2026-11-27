@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { createAgyParser } from '../src/model/parsers/agy.js'
 import { createClaudeParser } from '../src/model/parsers/claude.js'
+import { createCodexParser } from '../src/model/parsers/codex.js'
 import { createHermesParser } from '../src/model/parsers/hermes.js'
 import { createParser } from '../src/model/parsers/index.js'
 import { createOpencodeParser } from '../src/model/parsers/opencode.js'
@@ -259,6 +260,33 @@ describe('hermes parser', () => {
       },
     ])
     expect(out.filter((a) => a.type === 'agent.end')).toEqual([{ time: 10000, type: 'agent.end', agent: 'hermes~1', ok: true }])
+  })
+})
+
+describe('codex parser', () => {
+  const mcpItem = (type, status, extra = {}) => ({
+    type,
+    item: { id: 'item_26', type: 'mcp_tool_call', server: 'node_repl', tool: 'js', arguments: { code: '1 + 1' }, status, ...extra },
+  })
+
+  it('reports an mcp_tool_call as an mcp start and one completed end', () => {
+    const parser = createCodexParser(ctx)
+    const out = parser.push(lines(mcpItem('item.started', 'in_progress'), mcpItem('item.completed', 'completed')), 1000)
+    expect(out).toHaveLength(2)
+    expect(out[0]).toMatchObject({ time: 1000, type: 'tool.start', id: 'item_26', tool: 'mcp', label: 'mcp node_repl js', touches: [] })
+    expect(out[1]).toMatchObject({ time: 1000, type: 'tool.end', id: 'item_26', ok: true })
+  })
+
+  it('ends a failed mcp_tool_call with ok false', () => {
+    const parser = createCodexParser(ctx)
+    const out = parser.push(lines(mcpItem('item.started', 'in_progress'), mcpItem('item.completed', 'failed')), 2000)
+    expect(summary(out)).toEqual(['start mcp node_repl js', 'end false'])
+  })
+
+  it('starts and ends once for an item that only completes', () => {
+    const parser = createCodexParser(ctx)
+    const out = parser.push(lines(mcpItem('item.completed', 'completed')), 3000)
+    expect(summary(out)).toEqual(['start mcp node_repl js', 'end true'])
   })
 })
 

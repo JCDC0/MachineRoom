@@ -3,6 +3,7 @@
 ## Unreleased
 
 - Folder cards keep their spacing as contents change, turn around the hub, drift on their own, and have a Folder spacing slider (P742).
+- Codex MCP calls show in the room as MCP calls, `mcp SERVER TOOL` (P746a).
 - The room lists GPT-6.2 Sol for Codex, so a sub orchestrator can be made on it.
 - Each agent shows its name over its shape and its model with the effort under it; a Claude session shows the model its transcript names.
 - The sounds are serious now: soft old-computer beeps for touches and messages, a cold falling transfer tone for each star, and quieter folder wooshes; the whir stays.
