@@ -24,6 +24,7 @@ const TONES = {
   message: [988, 1319],
 }
 const BEEP = { duration: 0.05, gap: 0.07, peak: 0.07 }
+const FAULT = { notes: [392, 277], type: 'triangle', duration: 0.12, gap: 0.15, peak: 0.055 }
 const WOOSHES = {
   folderOpen: { from: 320, to: 2200, duration: 0.35, clickAt: 0 },
   folderClose: { from: 1900, to: 240, duration: 0.3, clickAt: 0.286 },
@@ -54,6 +55,9 @@ export function folderSweep(kind) {
 }
 
 export function computerBeep(kind) {
+  if (kind === 'failed') {
+    return FAULT.notes.map((frequency, index) => ({ frequency, type: FAULT.type, at: index * FAULT.gap, duration: FAULT.duration, peak: FAULT.peak }))
+  }
   if (!Object.hasOwn(TONES, kind)) return []
   return TONES[kind].map((frequency, index) => ({
     frequency,
@@ -841,7 +845,7 @@ export const sound = {
     }
     if (sweep) shot.sources = playSweep(context, gain, now, sweep, onEnd)
     else {
-      for (const note of notes) shot.sources.push(playNote(context, gain, now + note.at, note, BEEP.peak, 0.004, onEnd))
+      for (const note of notes) shot.sources.push(playNote(context, gain, now + note.at, note, note.peak ?? BEEP.peak, 0.004, onEnd))
     }
     return true
   },

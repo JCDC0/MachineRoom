@@ -25,6 +25,7 @@ const HUB_SPHERE = { x: HUB_CENTER.x, y: HUB_CENTER.y, z: HUB_CENTER.z, r: HUB_R
 const REFIT_SHIFT = 150
 const REFIT_RATIO = 0.08
 const HOVER_CHECK_MS = 100
+export const FAULT_SOUND_GAP_MS = 600
 const FRAME_DELTA_CAP = 0.1
 const FRAME_ELAPSED_CAP_MS = 1000
 
@@ -307,6 +308,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, sound
   const deletedFiles = new Set()
   let knownFiles
   let soundFileVersion
+  let faultSoundAt = -Infinity
   const agentSet = createAgents(scene, roster, cssScene, {
     calloutScene,
     onRemove: (key) => {
@@ -1452,6 +1454,11 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, sound
           cards.flashCluster(touch.path, 'red')
         }
       })
+      const faultAt = performance.now()
+      if (sound && touches.length > 0 && faultAt - faultSoundAt >= FAULT_SOUND_GAP_MS) {
+        faultSoundAt = faultAt
+        sound.play('failed', soundAt(touches[0].path))
+      }
       hub.pulse(RED, 0.5)
       return
     }

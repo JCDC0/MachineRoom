@@ -66,6 +66,18 @@ describe('room sound shapes', () => {
     expect(computerBeep('folderOpen')).toEqual([])
   })
 
+  it('gives a failure two low triangle notes falling a tritone, quieter than a touch beep', () => {
+    const fault = computerBeep('failed')
+    expect(fault).toHaveLength(2)
+    expect(fault.every((note) => note.type === 'triangle')).toBe(true)
+    expect(fault[1].frequency).toBeLessThan(fault[0].frequency)
+    expect(fault[0].frequency / fault[1].frequency).toBeCloseTo(Math.SQRT2, 1)
+    expect(fault[1].at).toBeGreaterThanOrEqual(fault[0].at + fault[0].duration)
+    const touchPitches = ['read', 'write', 'created', 'deleted', 'list'].map((kind) => computerBeep(kind)[0].frequency)
+    expect(fault[0].frequency).toBeLessThan(Math.min(...touchPitches))
+    expect(fault.every((note) => note.peak < 0.07)).toBe(true)
+  })
+
   it('sweeps each star low and down through the flight, cold and never rising', () => {
     for (const seconds of [0.0625, 0.25, 0.9]) {
       const [start, end] = starSweep(seconds)

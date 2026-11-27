@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { THINKING_OUT_SECONDS } from '../src/engine/agents.js'
-import { createRoom } from '../src/engine/room.js'
+import { FAULT_SOUND_GAP_MS, createRoom } from '../src/engine/room.js'
 import { makeTree } from '../src/model/paths.js'
 import { apply, createState } from '../src/model/state.js'
 import { createTestDom } from './helpers/uiDom.js'
@@ -154,6 +154,32 @@ describe('room sound cues', () => {
     expect(plays()).toEqual(['folderOpen', 'folderClose'])
   })
 
+  it('plays one fault tone for a failed file or folder touch, at most once a gap', () => {
+    tick()
+    let clock = 10000
+    const spy = vi.spyOn(performance, 'now').mockImplementation(() => clock)
+    try {
+      touch({ id: 'bad', mode: 'write' })
+      activity({ type: 'tool.end', id: 'bad', ok: false })
+      expect(plays().filter((kind) => kind === 'failed')).toHaveLength(1)
+      const place = sound.play.mock.calls.find(([kind]) => kind === 'failed')[1]
+      expect(Number.isFinite(place.distance)).toBe(true)
+      touch({ id: 'bad-dir', path: 'src', kind: 'dir', mode: 'list' })
+      activity({ type: 'tool.end', id: 'bad-dir', ok: false })
+      expect(plays().filter((kind) => kind === 'failed')).toHaveLength(1)
+      clock += FAULT_SOUND_GAP_MS
+      touch({ id: 'bad-dir-2', path: 'src', kind: 'dir', mode: 'list' })
+      activity({ type: 'tool.end', id: 'bad-dir-2', ok: false })
+      expect(plays().filter((kind) => kind === 'failed')).toHaveLength(2)
+      clock += FAULT_SOUND_GAP_MS
+      activity({ type: 'tool.start', id: 'shell', label: '$ false', touches: [] })
+      activity({ type: 'tool.end', id: 'shell', ok: false })
+      expect(plays().filter((kind) => kind === 'failed')).toHaveLength(2)
+    } finally {
+      spy.mockRestore()
+    }
+  })
+
   it('moves a launched star and plays the read blip with the label when it lands', () => {
     tick()
     touch()
@@ -198,7 +224,7 @@ describe('room sound cues', () => {
     expect(plays()).toContain('created')
   })
 
-  it('stops a cancelled flight without a label blip', () => {
+  it('stops a cancelled flight without a label blip, with only the fault tone', () => {
     tick()
     touch()
     tick()
@@ -206,7 +232,7 @@ describe('room sound cues', () => {
     activity({ type: 'tool.end', id: 'call', ok: false })
     expect(sound.stopVoice).toHaveBeenCalledExactlyOnceWith(id)
     tick(62)
-    expect(plays()).toEqual([])
+    expect(plays()).toEqual(['failed'])
     expect(labels).not.toContain('read a.js')
   })
 

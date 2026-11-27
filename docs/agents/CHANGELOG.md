@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- A call that fails on a file or folder plays a low, cold fault tone at that card, at most once every 0.6 second.
 - The family tree and room match lane starters to exact project session IDs (review 77, finding 6).
 
 - Native lanes report replies pending at the step limit, and Codex MCP calls end on failure with the known turn outcome at flush (review 77, findings 9 and 17).
