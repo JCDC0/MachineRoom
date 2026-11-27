@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- The family tree and room match lane starters to exact project session IDs (review 77, finding 6).
+
 - Native lanes report replies pending at the step limit, and Codex MCP calls end on failure with the known turn outcome at flush (review 77, findings 9 and 17).
 
 - Discovered lanes keep their first frames, and finished logs leave current shell matches for live runs (P748).

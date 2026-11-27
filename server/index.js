@@ -732,6 +732,7 @@ export function createBridge(options = {}) {
   })
   const serveStatic = createStaticHandler({ staticDir: options.staticDir })
   let laneCommands = []
+  const projectSessionIds = new Map()
 
   function expireLaneCommands() {
     const cutoff = now() - 120000
@@ -943,6 +944,7 @@ export function createBridge(options = {}) {
     activeLanes: () => activeLanes,
     orchestrators: () => orchestrators,
     laneStarter: lanesSource?.starterFor,
+    sessionIds: (key) => projectSessionIds.get(key),
     isWorking: (key) => {
       const fromSource = lanesSource ? lanesSource.openRuns().some((r) => r.lane === key) : false
       const fromRuns = runs && typeof runs.isRunning === 'function' ? runs.isRunning(key) : false
@@ -1776,6 +1778,13 @@ export function createBridge(options = {}) {
   }
 
   function accept(parsed) {
+    if ((parsed.type === 'heartbeat.run.queued' || (parsed.type === 'heartbeat.run.status' && parsed.payload?.status === 'running')) && typeof parsed.payload?.session === 'string' && parsed.payload.session) {
+      const agent = sessionsSource?.agents.find((item) => item.id === parsed.payload.agentId)
+      if (agent) {
+        if (!projectSessionIds.has(agent.key)) projectSessionIds.set(agent.key, new Set())
+        projectSessionIds.get(agent.key).add(parsed.payload.session)
+      }
+    }
     countUnreadable(parsed)
     release(masker.push(parsed, Date.now()))
   }

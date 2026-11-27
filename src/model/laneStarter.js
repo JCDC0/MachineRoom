@@ -18,10 +18,9 @@ export function sessionKeyFor(startedBy) {
   return value ? SESSION_KEYS.get(value.harness) ?? '' : ''
 }
 
-function sessionSawStart(session, startedBy) {
-  const seen = session?.sessions
-  if (!(seen instanceof Set) || seen.size === 0) return true
-  return seen.has(startedBy.session)
+export function sessionSawStart(key, sessions, startedBy) {
+  const value = cleanStartedBy(startedBy)
+  return Boolean(value && sessionKeyFor(value) === key && sessions instanceof Set && sessions.has(value.session))
 }
 
 export function isSessionTopKey(key) {
@@ -100,7 +99,7 @@ export function laneStarterTop({ agents, at, orchestratorKey = 'orchestrator', w
     const sessionKey = sessionKeyFor(startedBy)
     if (!sessionKey || sessionKey === agent.key) continue
     const session = agents.get(sessionKey)
-    if (!session || !sessionSawStart(session, startedBy)) continue
+    if (!session || !sessionSawStart(sessionKey, session.sessions, startedBy)) continue
     const open = agent.status === 'working' || agent.status === 'queued'
     const endedAt = Number.isFinite(agent.endedAt) ? agent.endedAt : 0
     const beganAt = Number.isFinite(agent.startedAt) ? agent.startedAt : endedAt

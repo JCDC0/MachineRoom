@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { SESSION_HARNESSES } from '../src/harnesses/index.js'
-import { sessionKeyFor } from '../src/model/laneStarter.js'
+import { sessionSawStart } from '../src/model/laneStarter.js'
 import {
   HARNESS_EFFORTS,
   HARNESS_KEYS,
@@ -253,6 +253,7 @@ export function buildFamilyNodes({
   orchestrators,
   isWorking,
   laneStarter,
+  sessionIds,
   ladder = orchestrators?.getLadder?.() ?? { subs: [] },
   top = readTop(topFileFor(projectRoot, runsFolder)),
 } = {}) {
@@ -452,7 +453,7 @@ export function buildFamilyNodes({
     custom: false,
   }
   for (const node of laneNodes) {
-    if (node.parent === sessionId || sessionKeyFor(laneStarter?.(node.id)) !== top) continue
+    if (node.parent === sessionId || !sessionSawStart(top, sessionIds?.(top), laneStarter?.(node.id))) continue
     const parent = nodeOf.get(node.parent) ?? mainNode
     parent.children = parent.children.filter((id) => id !== node.id)
     node.parent = sessionId
@@ -515,6 +516,7 @@ export function createFamilyApi(options = {}) {
         orchestrators: orchs,
         isWorking,
         laneStarter: options.laneStarter,
+        sessionIds: options.sessionIds,
         top: choice.top,
       })
       const keys = Object.keys(readKeys(runsDir)).sort().map((name) => ({ name }))
