@@ -953,10 +953,19 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, sound
     dropAgentSatellites(activity.agent)
   }
 
-  function touchLabel(dir, out) {
-    out.copy(cards.center(dir))
-    cards.anchor(dir, out, true)
-    return touchLabelPoint(out, out)
+  function currentCardAnchor(card, out) {
+    if (!card || cards.cards.get(card.path) !== card) return null
+    return cardAnchorOf(card.path, out, true)
+  }
+
+  function showTouchLabel(dir, text, color) {
+    const card = drawnCard(dir, true)
+    const follow = (out) => {
+      const anchor = currentCardAnchor(card, out)
+      return anchor ? touchLabelPoint(anchor, out) : null
+    }
+    if (!follow(starLabelPoint)) touchLabelPoint(cards.center(dir), starLabelPoint)
+    labels.show(text, starLabelPoint, color, follow)
   }
 
   function showTouch(touch) {
@@ -965,8 +974,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, sound
     const verb = isFile ? (touch.mode === 'read' ? 'read' : 'write') : 'list'
     if (isFile) cards.flashFile(dir, touch.path, 'white')
     else cards.flashCluster(dir, 'white')
-    touchLabel(dir, starLabelPoint)
-    labels.show(`${verb} ${basename(touch.path) || rootName || 'root'}`, starLabelPoint, '#ffffff')
+    showTouchLabel(dir, `${verb} ${basename(touch.path) || rootName || 'root'}`, '#ffffff')
     if (sound && touch.soundKind) sound.play(touch.soundKind, soundFrom(starLabelPoint))
   }
 
@@ -979,15 +987,15 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, sound
     stars.launch({ points, color, agent, to: target, call, speed: replaySpeed })
   }
 
-  function drawnCard(path) {
+  function drawnCard(path, includeLeaving = false) {
     let at = path ?? ''
     while (at !== '') {
       const card = cards.cards.get(at)
-      if (card && !card.leaving) return card
+      if (card && (includeLeaving || !card.leaving)) return card
       at = dirname(at)
     }
     const root = cards.cards.get('')
-    return root && !root.leaving ? root : null
+    return root && (includeLeaving || !root.leaving) ? root : null
   }
 
   function releaseTouchHold(item) {
@@ -1135,6 +1143,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, sound
     const chain = litChain(dir, world.links, world.mask, starChain)
     const route = tunnelRoute(chain, world.links, world.mask, starRoutePoints)
     const points = starRoute(view.group.position, route, cardAnchorOf, starEnd, starPath)
+    const waypointCards = route.slice(0, points.length - 2).map((path) => drawnCard(path))
     const flying = { agent: item.agent, call: item.call, touch, holdDir: item.holdDir, holdFile: item.holdFile, traceKind, dir, file, color: view.color }
     const launched = stars.launch({
       points,
@@ -1148,6 +1157,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, sound
       call: item.call,
       speed: replaySpeed,
       follow: target ? followTouch(target.path, touch, flying, traceKind === 'file' ? file : null) : null,
+      followWaypoint: waypointCards.length ? (index) => currentCardAnchor(waypointCards[index], traceEnd) : null,
     })
     if (launched) flyingTouches.add(flying)
     else releaseTouchHold(flying)
@@ -1437,8 +1447,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, sound
       touches.forEach((touch) => {
         if (touch.kind === 'file') {
           cards.flashFile(dirname(touch.path), touch.path, 'red')
-          touchLabel(dirname(touch.path), scratch)
-          labels.show(`failed ${basename(touch.path)}`, scratch, '#ff2a2a')
+          showTouchLabel(dirname(touch.path), `failed ${basename(touch.path)}`, '#ff2a2a')
         } else {
           cards.flashCluster(touch.path, 'red')
         }
