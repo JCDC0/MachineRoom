@@ -30,7 +30,7 @@ A touch is `{path, mode, kind}`. `kind` is `file` or `dir`. `mode` is `read`, `w
 | Hermes | `hermes_local` | Plain lines such as `┊ 📖 read  strings.js  1.2s` and JSON `hermes: 'call'` / `'result'` lines from `state.db`; `mcp_` tool names that name a server and tool report as tool `mcp` with the label `mcp SERVER TOOL` (P746) |
 | OpenCode | `opencode_local` | JSON lines `tool_use` with `part.tool` and `part.state.input` |
 | agy | `process` | JSON lines `step_update`; `ACTIVE` starts a tool, `DONE` ends it |
-| Codex | `codex_local` | JSON lines `item.started` and `item.completed`; `command_execution` runs a shell command, `file_change` touches a file, `web_search` reaches the web and `mcp_tool_call` is an MCP call, tool `mcp` with the label `mcp SERVER TOOL` (P746a) |
+| Codex | `codex_local` | JSON lines `item.started`, `item.completed` and `item.failed`; open calls end at flush with the `turn.completed` or `turn.failed` outcome when seen, otherwise success; `command_execution` runs a shell command, `file_change` touches a file, `web_search` reaches the web and `mcp_tool_call` is an MCP call, tool `mcp` with the label `mcp SERVER TOOL` (P746a) |
 | GitHub Copilot | `copilot_local` | JSON tool events (`tool.execution_start`, `tool_call`, `tool_use` and their completion events) with the tool name and arguments, and a plain-text fallback for shell, read, write, edit and web lines |
 | ACP | `acp_local` | JSON lines whose `session/update` carries a `tool_call` or `tool_call_update`, with the call's kind and input |
 | MachineRoom | `machineroom_local` | Claude Code's stream-json lines, read by the same parser, from `scripts/mr-agent.mjs` |

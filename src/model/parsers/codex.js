@@ -8,6 +8,8 @@ export function createCodexParser(ctx) {
   const out = []
   const calls = new Map()
   let counter = 0
+  let runOk = true
+  const anonymousMcp = new Map()
   const parentKey = ctx?.agentKey ?? 'agent'
 
   function startCall(id, tool, label, touches, time, outsidePath, callKey, callName) {
@@ -86,14 +88,19 @@ export function createCodexParser(ctx) {
     }
   }
 
-  function handleMcp(item, isComplete, time) {
-    const id = String(item.id ?? `mcp-${(counter += 1)}`)
+  function handleMcp(item, isComplete, time, failed) {
+    const key = JSON.stringify([item.server ?? '', item.tool ?? ''])
+    const pending = anonymousMcp.get(key) ?? []
+    const id = String(item.id ?? (isComplete && pending.length ? pending.shift() : `mcp-${(counter += 1)}`))
+    if (item.id == null && !isComplete) pending.push(id)
+    if (pending.length) anonymousMcp.set(key, pending)
+    else anonymousMcp.delete(key)
     if (!calls.has(id)) {
       const label = mcpLabelOf('mcp_call_tool', { server: item.server, tool: item.tool })
       startCall(id, 'mcp', label, [], time, undefined, JSON.stringify([item.type, item.server ?? '', item.tool ?? '']), item.type)
     }
     if (isComplete) {
-      const ok = item.status !== 'failed' && item.status !== 'error' && !item.error
+      const ok = !failed && item.status !== 'failed' && item.status !== 'error' && !item.error
       endCall(id, ok, time)
     }
   }
@@ -102,11 +109,13 @@ export function createCodexParser(ctx) {
     const json = parseJson(line)
     if (!json || typeof json !== 'object') return
     const type = json.type
+    if (type === 'turn.completed') runOk = true
+    else if (type === 'turn.failed') runOk = false
     const item = json.item
     if (!item || typeof item !== 'object') return
 
     const isStart = type === 'item.started'
-    const isComplete = type === 'item.completed'
+    const isComplete = type === 'item.completed' || type === 'item.failed'
     if (!isStart && !isComplete) return
 
     const itemType = item.type
@@ -117,7 +126,7 @@ export function createCodexParser(ctx) {
     } else if (itemType === 'web_search') {
       handleWebSearch(item, isComplete, time)
     } else if (itemType === 'mcp_tool_call') {
-      handleMcp(item, isComplete, time)
+      handleMcp(item, isComplete, time, type === 'item.failed')
     }
   })
 
@@ -131,7 +140,7 @@ export function createCodexParser(ctx) {
       out.length = 0
       reader.flush(time)
       for (const [id] of calls) {
-        out.push({ ...toolEnd({ time, id, ok: true }), agent: parentKey })
+        out.push({ ...toolEnd({ time, id, ok: runOk }), agent: parentKey })
       }
       calls.clear()
       return [...out]
