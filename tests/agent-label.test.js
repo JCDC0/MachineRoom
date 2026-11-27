@@ -87,14 +87,15 @@ describe('modelLabel', () => {
 })
 
 describe('agentModelText', () => {
-  it('takes the roster model first and the model a session reported otherwise', () => {
+  it('takes the model a session reported first and the roster model otherwise', () => {
     const roster = [{ key: 'claude-session', name: 'Claude Code session' }]
     const state = createState({ files: [], dirs: [], created: [] }, roster)
     const entry = state.agents.get('claude-session')
     expect(agentModelText(roster[0], entry)).toBe('')
     apply(state, { type: 'agent.model', agent: 'claude-session', model: 'claude-opus-5-5', time: 1 })
     expect(agentModelText(roster[0], entry)).toBe('CLAUDE-OPUS-5-5')
-    expect(agentModelText({ key: 'codex3', model: 'gpt-6.2-sol', effort: 'high' }, entry)).toBe('GPT-6.2-SOL · HIGH')
+    expect(agentModelText({ key: 'claude', model: 'claude-sonnet-5-5', effort: 'high' }, entry)).toBe('CLAUDE-OPUS-5-5 · HIGH')
+    expect(agentModelText({ key: 'codex3', model: 'gpt-6.2-sol', effort: 'high' }, null)).toBe('GPT-6.2-SOL · HIGH')
   })
 })
 
@@ -115,6 +116,11 @@ describe('agentTitle', () => {
 
   it('leaves a name with its harness and number alone', () => {
     expect(agentTitle({ key: 'codex2', name: 'Codex 2', harness: 'codex' })).toBe('Codex 2')
+  })
+
+  it('keeps the lane number when the label holds another number', () => {
+    expect(agentTitle({ key: 'codex2', name: 'codex2', harness: 'codex' }, 'Neon 7')).toBe('Codex Neon 7 2')
+    expect(agentTitle({ key: 'codex12', name: 'codex12', harness: 'codex' }, 'Codex 2')).toBe('Codex 2 12')
   })
 
   it('falls back to the key with no harness', () => {

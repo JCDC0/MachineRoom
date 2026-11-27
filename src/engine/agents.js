@@ -499,12 +499,12 @@ export function agentTitle(agent, label = null) {
   let title = harness && (plain === harnessKey || plain === listed.toLowerCase()) ? harness : named
   if (harness && !title.toLowerCase().includes(harness.toLowerCase())) title = `${harness} ${title}`
   const number = /(\d+)$/.exec(key)?.[1]
-  if (number && !/\d/.test(title)) title = `${title} ${number}`
+  if (number && !new RegExp(`(^|\\D)${number}(\\D|$)`).test(title)) title = `${title} ${number}`
   return title
 }
 
 export function agentModelText(rosterAgent, entry) {
-  return modelLabel(rosterAgent?.model ? rosterAgent : entry)
+  return modelLabel({ model: entry?.model || rosterAgent?.model, effort: rosterAgent?.effort ?? entry?.effort })
 }
 
 export function doingText(entry) {
@@ -1419,6 +1419,7 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
       label,
       modelText,
       modelShown: modelLabel(agent),
+      titleShown: title,
       doing,
       picker,
       callout,
@@ -1737,6 +1738,7 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
     }
     layoutHomes(currentLadder)
     refreshTop(true)
+    refreshTitles()
     for (const view of added) {
       view.group.position.copy(view.home)
       view.touch.copy(view.home)
@@ -1783,15 +1785,21 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
     currentTasks = tasksMap instanceof Map ? tasksMap : null
   }
 
-  function setLabels(labels) {
-    currentLabels = labels instanceof Map || (labels && typeof labels === 'object') ? labels : null
+  function refreshTitles() {
     for (const view of views.values()) {
       const name = view.parentKey
         ? view.name
         : agentTitle(agentByKey.get(view.key) ?? { key: view.key, name: view.name }, currentLabels ? labelFor(view.key, currentLabels) : null)
+      if (view.titleShown === name) continue
+      view.titleShown = name
       view.callout.title.textContent = name.toUpperCase()
       view.label.userData.setText?.(nameLabel(name))
     }
+  }
+
+  function setLabels(labels) {
+    currentLabels = labels instanceof Map || (labels && typeof labels === 'object') ? labels : null
+    refreshTitles()
   }
 
   function aimAt(key, dir, file, now) {

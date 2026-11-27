@@ -73,6 +73,21 @@ describe('agent labels', () => {
     expect(drawn.at(-1)).toBe('CLAUDE CODE ALPHA')
     agents.dispose()
   })
+
+  it('retitles an agent when the roster names its harness', () => {
+    const agents = createAgents(new THREE.Scene(), [{ key: 'agy-4', name: 'agy-4', shape: 'agy' }])
+    const view = agents.views.get('agy-4')
+    agents.setLabels(new Map([['agy-4', 'Hydrogen']]))
+    expect(view.callout.title.textContent).toBe('ANTIGRAVITY HYDROGEN 4')
+    drawn.length = 0
+    agents.setRoster([{ key: 'agy-4', name: 'agy-4', shape: 'codex', harness: 'codex' }])
+    expect(view.callout.title.textContent).toBe('CODEX HYDROGEN 4')
+    expect(drawn).toContain('CODEX HYDROGEN 4')
+    drawn.length = 0
+    agents.setRoster([{ key: 'agy-4', name: 'agy-4', shape: 'codex', harness: 'codex' }])
+    expect(drawn).not.toContain('CODEX HYDROGEN 4')
+    agents.dispose()
+  })
 })
 
 describe('the name above and the model below', () => {
