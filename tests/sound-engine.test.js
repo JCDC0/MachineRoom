@@ -303,6 +303,18 @@ describe('the stereo room sounds', () => {
     expect(sound.play('folderClose', left)).toBe(true)
   })
 
+  it('plays no one-shot while the tab is hidden', () => {
+    const saved = globalThis.document
+    globalThis.document = { hidden: true }
+    try {
+      expect(sound.beep('message', left)).toBe(false)
+      expect(sound.play('folderOpen', left)).toBe(false)
+    } finally {
+      globalThis.document = saved
+    }
+    expect(sound.beep('message', left)).toBe(true)
+  })
+
   it('replaces the oldest of four stars and keeps it silent on later moves', () => {
     for (let index = 0; index < 5; index += 1) sound.voice(index, 'star', left)
     const sources = made('oscillator').filter((node) => node.type === 'sine')

@@ -815,7 +815,7 @@ export const sound = {
     return sound.play(kind, place)
   },
   play(kind, place) {
-    if (!engine.armed || !engine.settings.on) return false
+    if (!engine.armed || !engine.settings.on || globalThis.document?.hidden) return false
     const sweep = folderSweep(kind)
     const notes = computerBeep(kind)
     if (!sweep && notes.length === 0) return false

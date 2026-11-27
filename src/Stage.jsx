@@ -52,6 +52,18 @@ const UNPINNED = Object.freeze({ pinned: false, mainHasConversation: false })
 export function familyTopOptions(answer) {
   return { pinned: answer?.pinned === true, mainHasConversation: answer?.mainHasConversation === true }
 }
+
+export async function refreshFamily(client, isCurrent, onAnswer) {
+  let answer
+  try {
+    answer = await client.family()
+  } catch {
+    return false
+  }
+  if (!isCurrent()) return false
+  onAnswer(answer)
+  return true
+}
 const COVER_PANEL = '.control-drawer, .hud-settings, .hud-dropdown, .mr-side-overlay, .hud-help-backdrop, .hud-band-list, .hud-menu.is-open, .mr-assistant, .mr-guide-backdrop, .mr-launcher, .mr-setup-backdrop'
 const IDLE_PANEL = `${COVER_PANEL}, .mr-inspector, .brief-confirm-card, .mr-side-confirm-card, .endpoints-confirm`
 const BADGE = {
@@ -959,21 +971,13 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
 
     async function updateLabels() {
       const isLatest = latest()
-      try {
-        const answer = await client.family()
-        if (!active || !isLatest()) return
+      await refreshFamily(client, () => active && isLatest(), (answer) => {
         const next = labelsFromFamily(answer)
         apply(next, typeof answer?.top === 'string' ? answer.top : 'orchestrator', answer?.seats, familyTopOptions(answer))
         setFamilyNodes(Array.isArray(answer?.nodes) ? answer.nodes : NONE)
         setFamilyProposals(Array.isArray(answer?.proposals) ? answer.proposals : NONE)
         roomRef.current?.setLabels(next)
-      } catch {
-        if (!active || !isLatest()) return
-        apply(null)
-        setFamilyNodes(NONE)
-        setFamilyProposals(NONE)
-        roomRef.current?.setLabels(null)
-      }
+      })
     }
 
     updateLabels()
