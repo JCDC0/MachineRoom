@@ -57,6 +57,7 @@ export function createAgyParser(ctx) {
   function begin(step, entry, time, id) {
     if (started.has(id)) return
     started.add(id)
+    if (entry.key) entry.ended = false
     const [tool, field] = Object.hasOwn(TOOLS, step.tool_name) ? TOOLS[step.tool_name] : ['other', null]
     const value = field ? step.tool_info?.parameters?.[field] : null
     let touches = []
