@@ -46,7 +46,7 @@ describe('laneStarter', () => {
   })
 
   it('seats a lane starter even without an orchestrator', () => {
-    const agents = room({ lane: { status: 'working', startedAt: 1000, startedBy: { harness: 'claude', session: 's1' } } })
+    const agents = room({ session: { sessions: new Set(['s1']) }, lane: { status: 'working', startedAt: 1000, startedBy: { harness: 'claude', session: 's1' } } })
     agents.delete('orchestrator')
     expect(laneStarterTop({ agents, at: 1000 })).toBe('claude-session')
   })
@@ -90,6 +90,8 @@ describe('laneStarter', () => {
       lane: { status: 'working', startedAt: 1000, startedBy: { harness: 'claude', session: 'other' } },
       session: { sessions: new Set(['s1']) },
     })
+    expect(laneStarterTop({ agents, at: 1000 })).toBe('')
+    agents.get('claude-session').sessions = null
     expect(laneStarterTop({ agents, at: 1000 })).toBe('')
   })
 
