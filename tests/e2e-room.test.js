@@ -579,7 +579,7 @@ describe('the room, played from a recorded lane run', () => {
       expect(turn(spot.angle, (index / RING_MAX_TOP) * Math.PI * 2), entry.path).toBeCloseTo(0, 6)
     })
     overflow.forEach((entry, index) => {
-      const off = shotgunOffset(index, overflow.length)
+      const off = shotgunOffset(index, overflow.length, undefined, radius)
       const spot = ringOf(layout.placed.get(entry.path))
       expect(spot.radius, entry.path).toBeCloseTo(radius + off.radiusStep, 6)
       expect(turn(spot.angle, off.angleOffset), entry.path).toBeCloseTo(0, 6)
@@ -587,13 +587,13 @@ describe('the room, played from a recorded lane run', () => {
     const parent = ringOf(layout.placed.get('wide'))
     const kids = ['wide/kid-0', 'wide/kid-1', 'wide/kid-2', 'wide/kid-3']
     kids.forEach((path, index) => {
-      const off = shotgunOffset(index, kids.length)
+      const off = shotgunOffset(index, kids.length, undefined, parent.radius)
       const spot = ringOf(layout.placed.get(path))
       expect(spot.radius, path).toBeCloseTo(parent.radius + off.radiusStep, 6)
       expect(turn(spot.angle, parent.angle + off.angleOffset), path).toBeCloseTo(0, 6)
     })
-    expect(kids.map((_, index) => shotgunOffset(index, kids.length).cols)).toEqual([2, 2, 2, 2])
-    expect(kids.map((_, index) => shotgunOffset(index, kids.length).rows)).toEqual([2, 2, 2, 2])
+    expect(kids.map((_, index) => shotgunOffset(index, kids.length, undefined, parent.radius).cols)).toEqual([2, 2, 2, 2])
+    expect(kids.map((_, index) => shotgunOffset(index, kids.length, undefined, parent.radius).rows)).toEqual([2, 2, 2, 2])
   })
 })
 

@@ -1,3 +1,4 @@
+import { CARD_W, CARD_SCALES, FILE_LIMIT_DEFAULT, cardHeight } from './cards.js'
 import { dirname } from '../model/paths.js'
 import { OVERVIEW } from './camera.js'
 import { HUB_Y } from './hub.js'
@@ -16,14 +17,11 @@ export const ROOT_PLACE = {
   z: 0,
 }
 export const TOP_MIN_RADIUS = 900
-export const FOLDER_SPACING_MIN = 800
-export const FOLDER_SPACING_MAX = 3200
-export const FOLDER_SPACING_DEFAULT = 1600
+export const FOLDER_SPACING_MIN = 600
+export const FOLDER_SPACING_MAX = 2000
+export const FOLDER_SPACING_DEFAULT = 1200
 export const FOLDER_SPACING_STEP = 100
 export const RING_MAX_TOP = 12
-export const CHILD_STEP = 450
-export const SHOTGUN_ROW_STEP = 380
-export const FAN_STEP = 0.22
 export const FAN_LIMIT = 0.9
 export const SPRAY_LIFT = 140
 export const SMALL_TOP = 4
@@ -159,27 +157,33 @@ export function orbitPlace(place, rotation, drift, seconds) {
   }
 }
 
+function cardGapFloor() {
+  return Math.hypot(CARD_W, cardHeight(FILE_LIMIT_DEFAULT)) * CARD_SCALES.files
+}
+
 export function ringRadius(count, spacing = FOLDER_SPACING_DEFAULT) {
   const total = Math.max(0, Math.floor(Number(count) || 0))
   const gap = clampFolderSpacing(spacing)
-  return Math.max(TOP_MIN_RADIUS * gap / FOLDER_SPACING_DEFAULT, total * gap / TURNS)
+  return Math.max(TOP_MIN_RADIUS * gap / FOLDER_SPACING_DEFAULT, total * gap / TURNS, total > 1 ? cardGapFloor() / (2 * Math.sin(Math.PI / total)) : 0)
 }
 
-export function shotgunOffset(index, count, spacing = FOLDER_SPACING_DEFAULT) {
+export function shotgunOffset(index, count, spacing = FOLDER_SPACING_DEFAULT, parentRadius = ringRadius(1, spacing)) {
   const total = Math.max(0, Math.floor(Number(count) || 0))
-  const scale = clampFolderSpacing(spacing) / FOLDER_SPACING_DEFAULT
-  if (total <= 1) return { angleOffset: 0, radiusStep: CHILD_STEP * scale, row: 0, col: 0, cols: 1, rows: 1 }
-  const cols = Math.max(1, Math.ceil(Math.sqrt(total)))
-  const rows = Math.max(1, Math.ceil(total / cols))
+  const floor = cardGapFloor()
+  const gap = Math.max(clampFolderSpacing(spacing) * 0.6, floor)
+  if (total <= 1) return { angleOffset: 0, radiusStep: gap, row: 0, col: 0, cols: 1, rows: 1 }
+  const firstRadius = parentRadius + gap
+  const firstAngle = 2 * Math.asin(Math.min(1, gap / (2 * firstRadius)))
+  const capacity = Math.max(1, Math.floor(2 * FAN_LIMIT / firstAngle) + 1)
+  const cols = Math.min(Math.ceil(Math.sqrt(total)), capacity)
+  const rows = Math.ceil(total / cols)
   const slot = Math.max(0, Math.floor(Number(index) || 0))
   const row = Math.floor(slot / cols)
   const col = slot % cols
   const colsInRow = row === rows - 1 ? total - row * cols : cols
-  const centered = col - (colsInRow - 1) / 2
-  const spreadFactor = 1 + Math.min(total, 20) * 0.035
-  const stepAngle = Math.min(0.38, FAN_STEP * spreadFactor)
-  const angleOffset = colsInRow <= 1 ? 0 : centered * stepAngle
-  const radiusStep = (CHILD_STEP + row * SHOTGUN_ROW_STEP) * scale
+  const radiusStep = gap * (row + 1)
+  const stepAngle = 2 * Math.asin(Math.min(1, gap / (2 * (parentRadius + radiusStep))))
+  const angleOffset = (col - (colsInRow - 1) / 2) * stepAngle
   return { angleOffset, radiusStep, row, col, cols, rows }
 }
 
@@ -239,7 +243,7 @@ export function layoutRing(entries, options = {}) {
   })
   overflow.forEach((path, index) => {
     const node = nodes.get(path)
-    const off = shotgunOffset(index, overflow.length, spacing)
+    const off = shotgunOffset(index, overflow.length, spacing, radius)
     const slot = `${ringSlot}>spray>${index}/${overflow.length}${sprayedAt(sprayed, path) ? ':spray' : ''}`
     const spot = tagPosition(ringPoint(radius + off.radiusStep, off.angleOffset), node, slot)
     positions.set(path, keepPlace(previous, path, lifted(spot, sprayed, path)))
@@ -252,7 +256,7 @@ export function layoutRing(entries, options = {}) {
     const kids = children.get(parentPath) ?? []
     kids.forEach((path, index) => {
       const node = nodes.get(path)
-      const off = shotgunOffset(index, kids.length, spacing)
+      const off = shotgunOffset(index, kids.length, spacing, parentSpot.radius)
       const slot = `${parent.slot}>${index}/${kids.length}${sprayedAt(sprayed, path) ? ':spray' : ''}`
       const turn = smallRingNow ? SMALL_CHILD_TURN : 0
       const angle = parentSpot.angle + off.angleOffset + turn

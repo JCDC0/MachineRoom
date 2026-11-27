@@ -387,18 +387,18 @@ describe('the content files setting', () => {
 
 describe('the folder spacing setting', () => {
   it('defaults, clamps and merges folder spacing with other effects', () => {
-    expect(DEFAULT_EFFECTS.folderSpacing).toBe(1600)
+    expect(DEFAULT_EFFECTS.folderSpacing).toBe(1200)
     for (const value of [undefined, null, '', 'broken', Infinity, false, []]) {
-      expect(effectSettings({ folderSpacing: value }).folderSpacing).toBe(1600)
+      expect(effectSettings({ folderSpacing: value }).folderSpacing).toBe(1200)
     }
     expect(effectSettings({ effects: { folderSpacing: '1960' } }).folderSpacing).toBe(2000)
     const storage = makeStorage()
-    expect(loadEffectSettings(storage).folderSpacing).toBe(1600)
-    expect(saveEffectSettings(storage, { folderSpacing: 20 }).folderSpacing).toBe(800)
-    expect(saveEffectSettings(storage, { folderSpacing: 5000 }).folderSpacing).toBe(3200)
+    expect(loadEffectSettings(storage).folderSpacing).toBe(1200)
+    expect(saveEffectSettings(storage, { folderSpacing: 20 }).folderSpacing).toBe(600)
+    expect(saveEffectSettings(storage, { folderSpacing: 5000 }).folderSpacing).toBe(2000)
     saveEffectSettings(storage, { maxFiles: 9, bloom: { on: true } })
-    expect(loadEffectSettings(storage)).toMatchObject({ folderSpacing: 3200, maxFiles: 9, bloom: { on: true } })
-    expect(JSON.parse(storage.getItem(SETTINGS_KEY)).folderSpacing).toBe(3200)
+    expect(loadEffectSettings(storage)).toMatchObject({ folderSpacing: 2000, maxFiles: 9, bloom: { on: true } })
+    expect(JSON.parse(storage.getItem(SETTINGS_KEY)).folderSpacing).toBe(2000)
   })
 
   it('shows the Folder spacing slider beside Content files and saves changes', async () => {
@@ -414,14 +414,14 @@ describe('the folder spacing setting', () => {
       await openTab(root, container, 'Screen effects')
       expect(container.textContent.indexOf('Folder spacing')).toBeGreaterThan(container.textContent.indexOf('Content files'))
       const input = container.querySelector('[aria-label="Folder spacing"]')
-      expect(input.getAttribute('min')).toBe('800')
-      expect(input.getAttribute('max')).toBe('3200')
+      expect(input.getAttribute('min')).toBe('600')
+      expect(input.getAttribute('max')).toBe('2000')
       expect(input.getAttribute('step')).toBe('100')
-      expect(input.value).toBe('1600')
-      expect(input.parentNode.querySelectorAll('span').map((span) => span.textContent)).toEqual(['800', '2000', '3200'])
-      await type(root, input, '2300')
-      expect(input.value).toBe('2300')
-      expect(loadEffectSettings(storage).folderSpacing).toBe(2300)
+      expect(input.value).toBe('1200')
+      expect(input.parentNode.querySelectorAll('span').map((span) => span.textContent)).toEqual(['600', '1300', '2000'])
+      await type(root, input, '1800')
+      expect(input.value).toBe('1800')
+      expect(loadEffectSettings(storage).folderSpacing).toBe(1800)
     })
   })
 })

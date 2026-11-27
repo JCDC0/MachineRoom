@@ -224,7 +224,7 @@ export default function Settings({ open = true, effects, onChange, onSettingsCha
               />
               <div className="hud-settings-ticks mono">
                 <span>{FOLDER_SPACING_MIN}</span>
-                <span>2000</span>
+                <span>1300</span>
                 <span>{FOLDER_SPACING_MAX}</span>
               </div>
             </div>

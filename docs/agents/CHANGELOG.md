@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Folder spacing now ranges from 600 to 2000 and spreads inner folders as well as the top ring (P744).
+
 - A star that creates a file or folder traces its outline like a light trail while the card or row fades in behind it, following moving cards (P745).
 - Folder cards keep their spacing as contents change, turn around the hub, drift on their own, and have a Folder spacing slider (P742).
 - Codex MCP calls show in the room as MCP calls, `mcp SERVER TOOL` (P746a).
