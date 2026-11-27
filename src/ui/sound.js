@@ -475,6 +475,7 @@ const engine = {
   bus: null,
   noise: null,
   voices: new Map(),
+  oneShots: new Set(),
   voiceTimer: null,
   musicGain: null,
   analyser: null,
@@ -564,6 +565,7 @@ function playNote(context, output, at, note, peak, attack, onEnd) {
   }
   oscillator.start(at)
   oscillator.stop(at + note.duration)
+  return oscillator
 }
 
 function noiseBuffer(context) {
@@ -596,7 +598,8 @@ function playSweep(context, output, at, sweep, onEnd) {
   }
   noise.start(at)
   noise.stop(at + sweep.duration)
-  playNote(context, output, at + sweep.clickAt, { type: 'triangle', frequency: 1560, duration: 0.014 }, CLICK_PEAK, 0.001, onEnd)
+  const click = playNote(context, output, at + sweep.clickAt, { type: 'triangle', frequency: 1560, duration: 0.014 }, CLICK_PEAK, 0.001, onEnd)
+  return [noise, click]
 }
 
 function moveVoice(voice, now) {
@@ -825,17 +828,20 @@ export const sound = {
     if (!context || !engine.limiter.take()) return false
     const { gain, panner } = spatialOutput(context, spatial, 1)
     const now = context.currentTime
+    const shot = { gain, sources: [] }
+    engine.oneShots.add(shot)
     let remaining = sweep ? 2 : notes.length
     function onEnd() {
       remaining -= 1
       if (remaining === 0) {
+        engine.oneShots.delete(shot)
         gain.disconnect()
         panner.disconnect()
       }
     }
-    if (sweep) playSweep(context, gain, now, sweep, onEnd)
+    if (sweep) shot.sources = playSweep(context, gain, now, sweep, onEnd)
     else {
-      for (const note of notes) playNote(context, gain, now + note.at, note, BEEP.peak, 0.004, onEnd)
+      for (const note of notes) shot.sources.push(playNote(context, gain, now + note.at, note, BEEP.peak, 0.004, onEnd))
     }
     return true
   },
@@ -859,6 +865,16 @@ export const sound = {
       if (active.length >= STAR_LIMIT) retireVoice(active[0])
       startVoice(voice, context)
     }
+    watchVoices()
+  },
+  stopRoom() {
+    for (const shot of engine.oneShots) {
+      shot.gain.disconnect()
+      for (const source of shot.sources) source.stop()
+    }
+    engine.oneShots.clear()
+    for (const voice of engine.voices.values()) retireVoice(voice, true)
+    engine.voices.clear()
     watchVoices()
   },
   stopVoice(id) {

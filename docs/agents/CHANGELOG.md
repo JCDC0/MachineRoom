@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- A reset stops room sounds and reveals held cards and rows, and creation traces wait for their rows (review 77, findings 12, 15 and 18).
 - A failed family refresh keeps the last answer, so a pin holds, and a hidden tab plays no message beeps (review 77, findings 8 and 12).
 - An agent's title keeps its lane number when its label holds another number and follows roster changes, and its model line prefers the model the transcript names (review 77, finding 16).
 - The label over each agent names its harness with its name and lane number, such as Antigravity Hydrogen 4, and a session shows its name, not its key.

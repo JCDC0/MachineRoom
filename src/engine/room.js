@@ -411,6 +411,8 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, sound
   const pendingTouches = []
   const pendingFolderTraces = new Set()
   const flyingTouches = new Set()
+  const waitingTraces = new Set()
+  let soundClock = null
   const starChain = []
   const starRoutePoints = []
   const starPath = []
@@ -559,6 +561,9 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, sound
 
   function sync(state) {
     timers.clear()
+    sound?.stopRoom?.()
+    soundClock = state.now
+    waitingTraces.clear()
     terminals.clearNotes()
     webCalls.clear()
     satelliteCalls.clear()
@@ -1078,7 +1083,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, sound
     if (traceKind === 'file') {
       const points = cards.rowOutline(cardDir, filePath, [])
       if (!points) {
-        releaseTouchHold(item)
+        waitingTraces.add({ color, cardDir, filePath, item, started: performance.now() })
         return
       }
       item.holdFile = null
@@ -1132,14 +1137,14 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, sound
     const chain = litChain(dir, world.links, world.mask, starChain)
     const route = tunnelRoute(chain, world.links, world.mask, starRoutePoints)
     const points = starRoute(view.group.position, route, cardAnchorOf, starEnd, starPath)
-    const flying = { agent: item.agent, call: item.call, touch, holdDir: item.holdDir, holdFile: item.holdFile }
+    const flying = { agent: item.agent, call: item.call, touch, holdDir: item.holdDir, holdFile: item.holdFile, traceKind, dir, file, color: view.color }
     const launched = stars.launch({
       points,
       color: view.color,
       onLand: () => {
         flyingTouches.delete(flying)
         showTouch(touch)
-        startTouchTrace(view.color, traceKind, target?.path ?? dir, file, flying)
+        startTouchTrace(view.color, traceKind, dir, file, flying)
       },
       agent: item.agent,
       call: item.call,
@@ -1346,6 +1351,26 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, sound
     if (activity.type === 'run.end' || activity.type === 'agent.end') {
       const finished = finishedAgentKeys(getState(), activity)
       if (finished.size > 0) {
+        for (const item of pendingTouches) {
+          if (!activity.ok || !finished.has(item.agent) || !item.traceKind) continue
+          const dir = item.touch.kind === 'file' ? dirname(item.touch.path) : item.touch.path
+          const file = item.touch.kind === 'file' ? item.touch.path : null
+          const view = agentSet.views.get(item.agent)
+          if (view && (item.traceKind !== 'file' || cards.rowOutline(dir, file, []))) {
+            startTouchTrace(view.color, item.traceKind, dir, file, item)
+          }
+        }
+        for (const item of [...flyingTouches]) {
+          if (!finished.has(item.agent)) continue
+          if (activity.ok && item.traceKind && (item.traceKind !== 'file' || cards.rowOutline(item.dir, item.file, []))) {
+            startTouchTrace(item.color, item.traceKind, item.dir, item.file, item)
+          }
+        }
+        for (const waiting of [...waitingTraces]) {
+          if (!finished.has(waiting.item.agent)) continue
+          releaseTouchHold(waiting.item)
+          waitingTraces.delete(waiting)
+        }
         dropFlyingTouches((item) => finished.has(item.agent), true)
         stars.cancel((star) => finished.has(star.agent) || finished.has(star.to))
         dropPendingTouches((item) => finished.has(item.agent), false, true)
@@ -1401,6 +1426,11 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, sound
       }
       const call = callOf(activity)
       if (call !== null) {
+        for (const waiting of [...waitingTraces]) {
+          if (waiting.item.agent !== activity.agent || waiting.item.call !== call) continue
+          releaseTouchHold(waiting.item)
+          waitingTraces.delete(waiting)
+        }
         dropFlyingTouches((item) => item.agent === activity.agent && item.call === call)
         stars.cancel((star) => star.agent === activity.agent && star.call === call)
         dropPendingTouches((item) => item.agent === activity.agent && item.call === call)
@@ -1523,6 +1553,16 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, sound
     calloutInput.focus = followFocus.focused()
     calloutInput.hover = hoveredKey
     agentSet.update(state, delta, now, world, terminals, calloutInput)
+    for (const waiting of [...waitingTraces]) {
+      const card = cards.cards.get(waiting.cardDir)
+      if (now - waiting.started >= 10000 || (card && (card.leaving || card.view?.state !== 'files'))) {
+        releaseTouchHold(waiting.item)
+        waitingTraces.delete(waiting)
+      } else if (cards.rowOutline(waiting.cardDir, waiting.filePath, [])) {
+        waitingTraces.delete(waiting)
+        startTouchTrace(waiting.color, 'file', waiting.cardDir, waiting.filePath, waiting.item)
+      }
+    }
     flushTouchStars()
     flushSpawnStars()
     stars.update(delta, replaySpeed)
@@ -1537,7 +1577,13 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, sound
 
     rig.update(delta)
     if (sound) {
-      for (const view of agentSet.views.values()) moveWhir(view, now)
+      const moving = soundClock === null || state.now > soundClock
+      if (moving) {
+        for (const view of agentSet.views.values()) moveWhir(view, now)
+      } else {
+        for (const key of whirs) stopWhir(key)
+      }
+      soundClock = state.now
     }
     soundFileVersion = state.fileVersion
     const hubPoint = projectPoint(camera, HUB_CENTER, width, height)
