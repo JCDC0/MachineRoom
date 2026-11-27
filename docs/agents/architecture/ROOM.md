@@ -2,6 +2,8 @@
 
 What the room shows and how it behaves.
 
+A reset stops room one-shots and held voices and reveals held cards and rows. A paused replay (room speed 0) plays no thinking whir until it plays again; live keeps the whir between frames. A creation trace waits for its row to open, up to ten seconds; a folded row or an ended run releases it without a trace if it cannot be drawn. Normal replay draws creation traces, while seeking draws none.
+
 Settings offers exact, opt-in file copies for new worktrees. These copies are excluded from commits. The lane port offset does not reserve a port across projects.
 
 Denied storage leaves the room usable. A render fault in a HUD part shows that part's error while the others stay open. A room-level fault shows its message and a Reload button.

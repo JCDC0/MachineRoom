@@ -256,6 +256,18 @@ describe('the stereo room sounds', () => {
     expect(vi.getTimerCount()).toBe(0)
   })
 
+  it('disconnects one-shots and stops held voices on room reset', () => {
+    expect(sound.play('folderOpen', left)).toBe(true)
+    const sweepOutput = made('panner')[0].output
+    const gain = made('gain').find((node) => node.output?.kind === 'panner')
+    sound.voice('reset-whir', 'whir', right)
+    const voice = made('oscillator').at(-1)
+    sound.stopRoom()
+    expect(gain.disconnect).toHaveBeenCalled()
+    expect(voice.stop.mock.lastCall[0]).toBe(0)
+    expect(sweepOutput.kind).toBe('compressor')
+  })
+
   it('moves a held voice without replacing it and fades it on explicit stop', () => {
     sound.voice('s', 'star', left, 1)
     const [panner] = made('panner')

@@ -1362,8 +1362,8 @@ export function createCards(cssScene, options = {}) {
   function sync(state, { quiet = true } = {}) {
     flashes.clear()
     touchLife.clear()
-    heldCards.clear()
-    heldRows.clear()
+    for (const path of [...heldCards]) revealCard(path, 1)
+    for (const path of [...heldRows.keys()]) revealRow(path, 1)
     for (const card of cards.values()) {
       card.pulse = false
       card.touchOpen = false
