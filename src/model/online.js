@@ -13,7 +13,8 @@ const ONLINE_SHELL = new Set([
 ])
 const WRAPPERS = new Set(['sudo', 'command', 'env', 'npx', 'pnpx', 'bunx', 'exec'])
 const GIT_VALUE_FLAGS = new Set(['-C', '-c', '--git-dir', '--work-tree', '--namespace', '--exec-path', '--super-prefix', '--config-env'])
-const MCP_ONLINE = /browser|playwright|puppeteer|fetch|http/i
+const MCP_ONLINE = /fetch|http/i
+const MCP_BROWSER = /browser|chrome|playwright|puppeteer/i
 const LOCAL_HOST = /(?:^|[^\w.-])(localhost|127\.0\.0\.1|\[::1\]|::1)(?![\w.-])/i
 const REMOTE_URL = /[a-z][a-z0-9+.-]*:\/\/[^\s"'<>]+/gi
 
@@ -158,15 +159,30 @@ function segmentOnline(tokens) {
   return !onlyLocalAddress(text)
 }
 
-function mcpOnline(tokens) {
-  const name = tokens
-    .filter((token) => !token.quoted)
-    .map((token) => token.value)
-    .join(' ')
-    .replace(/^mcp\s*/i, '')
-  if (!MCP_ONLINE.test(name)) return false
-  const text = tokens.map((token) => token.value).join(' ')
-  return !onlyLocalAddress(text)
+function mcpParts(call) {
+  const label = typeof call?.label === 'string' ? call.label.trim() : ''
+  if (/^mcp\s+/i.test(label)) {
+    const rest = label.replace(/^mcp\s+/i, '').trim()
+    if (/^list\s+tools(?:\s+|$)/i.test(rest)) {
+      const after = rest.replace(/^list\s+tools\s*/i, '').trim()
+      const parts = after === '' ? [] : after.split(/\s+/)
+      return { server: parts[0] ?? '', tool: '' }
+    }
+    const parts = rest.split(/\s+/)
+    return { server: parts[0] ?? '', tool: parts[1] ?? '' }
+  }
+  const server = typeof call?.server === 'string' ? call.server.trim() : ''
+  const tool = typeof call?.toolName === 'string' ? call.toolName.trim() : ''
+  return { server, tool }
+}
+
+function mcpPlace(call) {
+  const { server, tool } = mcpParts(call)
+  if (MCP_BROWSER.test(server) || MCP_BROWSER.test(tool)) return { kind: 'browser' }
+  if ((MCP_ONLINE.test(server) || MCP_ONLINE.test(tool)) && !onlyLocalAddress(String(call?.label ?? ''))) {
+    return { kind: 'internet' }
+  }
+  return server !== '' ? { kind: 'mcp', server } : null
 }
 
 function webOnline(label) {
@@ -175,16 +191,19 @@ function webOnline(label) {
   return !urls.every((url) => localHost(hostOf(url)))
 }
 
+export function callPlace(call = {}) {
+  if (!call || typeof call !== 'object') return null
+  const tool = call.tool
+  const label = call.label
+  if (tool === 'mcp') return mcpPlace(call)
+  if (tool === 'web') return typeof label === 'string' && webOnline(label) ? { kind: 'internet' } : null
+  if (typeof label !== 'string' || label === '') return null
+  if (tool !== 'shell') return null
+  return segmentsOf(label).some((tokens) => segmentOnline(tokens)) ? { kind: 'internet' } : null
+}
+
 export function isOnlineCall(call = {}) {
-  const tool = call?.tool
-  const label = call?.label
-  if (tool === 'web') return webOnline(label)
-  if (tool !== 'shell' && tool !== 'mcp') return false
-  const segments = segmentsOf(label)
-  if (tool === 'mcp') {
-    return segments.some((tokens) => mcpOnline(tokens))
-  }
-  return segments.some((tokens) => segmentOnline(tokens))
+  return callPlace(call)?.kind === 'internet'
 }
 
 function localEndpoint(value) {

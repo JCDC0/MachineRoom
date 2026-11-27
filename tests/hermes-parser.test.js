@@ -136,6 +136,38 @@ describe('the Hermes parser and its JSON call lines', () => {
     expect(ended[0]).toMatchObject({ type: 'tool.end', agent: 'hermes~1' })
   })
 
+  it('reports mcp_ tool calls as mcp with the mcp SERVER TOOL label', () => {
+    const parser = createHermesParser(ctx)
+    const browser = parser.push(
+      line({ hermes: 'call', id: 'm1', name: 'mcp_playwright_browser_navigate', args: { url: 'https://example.com' } }),
+      1000
+    )
+    expect(browser[0]).toMatchObject({ type: 'tool.start', id: 'm1', tool: 'mcp', label: 'mcp playwright browser_navigate', touches: [] })
+    const browserEnd = parser.push(line({ hermes: 'result', id: 'm1', ok: true }), 1500)
+    expect(browserEnd[0]).toMatchObject({ type: 'tool.end', id: 'm1', ok: true })
+
+    const github = parser.push(line({ hermes: 'call', id: 'm2', name: 'mcp_github_list_issues', args: { repo: 'demo' } }), 2000)
+    expect(github[0]).toMatchObject({ type: 'tool.start', id: 'm2', tool: 'mcp', label: 'mcp github list_issues', touches: [] })
+
+    const doubleUnder = parser.push(line({ hermes: 'call', id: 'm3', name: 'mcp__node_repl__js', args: { code: '1+1' } }), 3000)
+    expect(doubleUnder[0]).toMatchObject({ type: 'tool.start', id: 'm3', tool: 'mcp', label: 'mcp node_repl js', touches: [] })
+
+    const withPath = parser.push(
+      line({ hermes: 'call', id: 'm4', name: 'mcp_filesystem_read_file', args: { path: 'src/math.js' } }),
+      4000
+    )
+    expect(withPath[0]).toMatchObject({
+      type: 'tool.start',
+      id: 'm4',
+      tool: 'mcp',
+      label: 'mcp filesystem read_file src/math.js',
+      touches: [{ path: 'src/math.js', mode: 'read', kind: 'file' }],
+    })
+
+    const incomplete = parser.push(line({ hermes: 'call', id: 'm5', name: 'mcp_only', args: {} }), 5000)
+    expect(incomplete[0]).toMatchObject({ type: 'tool.start', id: 'm5', tool: 'other', label: 'mcp_only' })
+  })
+
   it('keeps reading the boxed lines it read before', () => {
     const parser = createHermesParser(ctx)
     const out = parser.push('  \u250a \ud83d\udcd6 read      strings.js  1.2s\n', 10000)

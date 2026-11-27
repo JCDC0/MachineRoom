@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 import { CSS3DRenderer } from 'three/addons/renderers/CSS3DRenderer.js'
 import { basename, dirname } from '../model/paths.js'
-import { isOnlineCall } from '../model/online.js'
+import { callPlace } from '../model/online.js'
 import { isDeleteCommand, touchSoundKind } from '../ui/sound.js'
 import { CALLOUT_CROWD_LIMIT, createAgents, litChain, starOriginKey, thinkingLoopPhase, tunnelRoute, webTunnelEnd } from './agents.js'
 import { BLOOM_STRENGTH_DEFAULT, createBloomLayer } from './bloom.js'
@@ -13,8 +13,9 @@ import { GIT_FOCUS_DIST, createGitTree } from './gitTree.js'
 import { INTERNET_RADIUS, createInternet } from './internet.js'
 import { createLabels } from './labels.js'
 import { SMALL_TOP } from './ring.js'
+import { BROWSER_RADIUS, BROWSER_TRACE_SECONDS, MCP_NODE_RADIUS, MCP_TRACE_SECONDS, createSatellites } from './satellites.js'
 import { agentStar, createStars, speedRate, starRoute, touchLabelPoint } from './stars.js'
-import { GREEN, RED, WHITE, cssColor, disposeStill, glowTexture, still } from './sprites.js'
+import { GREEN, RED, WEB, WHITE, cssColor, disposeStill, glowTexture, still } from './sprites.js'
 import { createStrings } from './strings.js'
 import { CHIP_REACH, chipSideFromScreen, createTerminals } from './terminals.js'
 import { FILE_TRACE_SECONDS, FOLDER_TRACE_SECONDS, TRACE_FADE_SECONDS, TRACE_HOLD_SECONDS, createTraces } from './trace.js'
@@ -310,6 +311,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, sound
     calloutScene,
     onRemove: (key) => {
       stopWhir(key)
+      dropAgentSatellites(key)
       dropFlyingTouches((item) => item.agent === key)
       stars.cancel((star) => star.agent === key || star.to === key)
       dropPendingTouches((item) => item.agent === key, false)
@@ -325,6 +327,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, sound
     onStop: (id) => sound.stopVoice(`star:${id}`),
   } : undefined)
   const internet = createInternet(scene, texture)
+  const satellites = createSatellites(scene)
   const gitTree = createGitTree(scene)
   const terminals = createTerminals(cssScene, roster, { onPick })
   const board = createCostBoard(surface, { onPick })
@@ -558,6 +561,9 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, sound
     timers.clear()
     terminals.clearNotes()
     webCalls.clear()
+    satelliteCalls.clear()
+    pendingSatelliteTraces.clear()
+    satellites.reset()
     touchLog.clear()
     labels.clear()
     traces.clear()
@@ -857,25 +863,91 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, sound
   }
 
   const webCalls = new Map()
+  const satelliteCalls = new Map()
+  const pendingSatelliteTraces = new Map()
+
+  function revealPendingSatellite(item) {
+    if (!item) return
+    if (item.kind === 'browser') satellites.revealBrowser(1)
+    else if (item.kind === 'mcp') satellites.revealMcp(item.server, 1)
+  }
+
+  function hasAgentBeam(agentKey) {
+    for (const storedAgent of webCalls.values()) {
+      if (storedAgent === agentKey) return true
+    }
+    for (const item of satelliteCalls.values()) {
+      if (item.agent === agentKey) return true
+    }
+    return false
+  }
+
+  function dropAgentSatellites(agentKey) {
+    for (const [storedKey, storedAgent] of webCalls) {
+      if (storedAgent !== agentKey) continue
+      webCalls.delete(storedKey)
+    }
+    for (const [storedKey, item] of satelliteCalls) {
+      if (item.agent !== agentKey) continue
+      satelliteCalls.delete(storedKey)
+      satellites.endCall(storedKey)
+    }
+    for (const [storedKey, item] of pendingSatelliteTraces) {
+      if (item.agent !== agentKey) continue
+      pendingSatelliteTraces.delete(storedKey)
+      revealPendingSatellite(item)
+    }
+    agentSet.webEnd(agentKey)
+  }
 
   function trackWeb(activity) {
     const callKey = `${activity.agent}:${activity.id}`
-    if (activity.type === 'tool.start' && isOnlineCall(activity)) {
-      if (typeof activity.id === 'string') webCalls.set(callKey, activity.agent)
-      agentSet.webStart(activity.agent, internet.position)
+    if (activity.type === 'tool.start') {
+      const place = callPlace(activity)
+      if (!place) return
+      if (place.kind === 'internet') {
+        if (typeof activity.id === 'string') webCalls.set(callKey, activity.agent)
+        agentSet.webStart(activity.agent, internet.position, { kind: 'internet', radius: INTERNET_RADIUS, color: WEB })
+        return
+      }
+      if (place.kind === 'browser') {
+        if (typeof activity.id === 'string') satelliteCalls.set(callKey, { agent: activity.agent, kind: 'browser' })
+        satellites.prepareBrowser(callKey)
+        const target = satellites.browserAnchor(starEnd)
+        agentSet.webStart(activity.agent, target, {
+          kind: 'browser',
+          radius: BROWSER_RADIUS,
+          color: WEB,
+          follow: (out) => satellites.browserAnchor(out),
+        })
+        return
+      }
+      if (place.kind === 'mcp') {
+        if (typeof activity.id === 'string') satelliteCalls.set(callKey, { agent: activity.agent, kind: 'mcp', server: place.server })
+        satellites.useMcp(place.server, callKey)
+        const target = satellites.mcpAnchor(place.server, starEnd)
+        if (target) {
+          agentSet.webStart(activity.agent, target, {
+            kind: 'mcp',
+            radius: MCP_NODE_RADIUS,
+            color: WHITE,
+            follow: (out) => satellites.mcpAnchor(place.server, out),
+          })
+        }
+      }
       return
     }
-    if (activity.type === 'tool.end' && webCalls.has(callKey)) {
-      webCalls.delete(callKey)
-      agentSet.webEnd(activity.agent)
+    if (activity.type === 'tool.end') {
+      const hadWeb = webCalls.delete(callKey)
+      const hadSatellite = satelliteCalls.delete(callKey)
+      if (hadSatellite) satellites.endCall(callKey)
+      if ((hadWeb || hadSatellite) && !hasAgentBeam(activity.agent)) {
+        agentSet.webEnd(activity.agent)
+      }
       return
     }
     if (activity.type !== 'run.end' && activity.type !== 'agent.end') return
-    for (const [storedKey, agentKey] of webCalls) {
-      if (agentKey !== activity.agent) continue
-      webCalls.delete(storedKey)
-      agentSet.webEnd(agentKey)
-    }
+    dropAgentSatellites(activity.agent)
   }
 
   function touchLabel(dir, out) {
@@ -1139,10 +1211,115 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, sound
     launchStarPath(useHub ? from.home : from.group.position, to.group.position, from.color, fromKey, null, pair.to)
   }
 
-  function launchWebStar(view, activity) {
-    if (!internet.online()) return
-    webTunnelEnd(view.group.position, internet.position, INTERNET_RADIUS, starEnd)
-    launchStarPath(view.group.position, starEnd, view.color, activity.agent, callOf(activity))
+  function startBrowserTrace(color) {
+    const points = satellites.browserOutline([])
+    if (!points || still()) {
+      satellites.revealBrowser(1)
+      return
+    }
+    traces.start({
+      points,
+      color,
+      duration: BROWSER_TRACE_SECONDS,
+      hold: TRACE_HOLD_SECONDS,
+      fade: TRACE_FADE_SECONDS,
+      follow: (out) => satellites.browserOutline(out),
+      onProgress: (share) => satellites.revealBrowser(share),
+      onDone: () => satellites.revealBrowser(1),
+    })
+  }
+
+  function startMcpTrace(server, color) {
+    const points = satellites.mcpOutline(server, [])
+    if (!points || still()) {
+      satellites.revealMcp(server, 1)
+      return
+    }
+    traces.start({
+      points,
+      color,
+      duration: MCP_TRACE_SECONDS,
+      hold: TRACE_HOLD_SECONDS,
+      fade: TRACE_FADE_SECONDS,
+      follow: (out) => satellites.mcpOutline(server, out),
+      onProgress: (share) => satellites.revealMcp(server, share),
+      onDone: () => satellites.revealMcp(server, 1),
+    })
+  }
+
+  function launchWebStar(view, activity, place = callPlace(activity)) {
+    if (!place) return
+    if (place.kind === 'internet') {
+      if (!internet.online()) return
+      webTunnelEnd(view.group.position, internet.position, INTERNET_RADIUS, starEnd)
+      launchStarPath(view.group.position, starEnd, view.color, activity.agent, callOf(activity))
+      return
+    }
+    const callId = callOf(activity)
+    const callKey = `${activity.agent}:${activity.id}`
+    if (place.kind === 'browser') {
+      const tracePending = satellites.claimBrowserTrace()
+      if (!view || still()) {
+        if (tracePending) satellites.revealBrowser(1)
+        return
+      }
+      if (tracePending && callId !== null) pendingSatelliteTraces.set(callKey, { agent: activity.agent, kind: 'browser' })
+      const anchor = satellites.browserAnchor(starEnd)
+      webTunnelEnd(view.group.position, anchor, BROWSER_RADIUS, starEnd)
+      const points = starRoute(view.group.position, null, cardAnchorOf, starEnd, starPath)
+      const launched = stars.launch({
+        points,
+        color: view.color,
+        agent: activity.agent,
+        call: callId,
+        speed: replaySpeed,
+        follow: (end) => {
+          const next = satellites.browserAnchor(traceEnd)
+          return next ? webTunnelEnd(view.group.position, next, BROWSER_RADIUS, end) : null
+        },
+        onLand: () => {
+          pendingSatelliteTraces.delete(callKey)
+          if (tracePending) startBrowserTrace(view.color)
+        },
+      })
+      if (!launched && tracePending) {
+        pendingSatelliteTraces.delete(callKey)
+        satellites.revealBrowser(1)
+      }
+      return
+    }
+    if (place.kind === 'mcp') {
+      const server = place.server
+      const anchor = satellites.mcpAnchor(server, starEnd)
+      if (!anchor) return
+      const tracePending = satellites.claimMcpTrace(server)
+      if (!view || still()) {
+        if (tracePending) satellites.revealMcp(server, 1)
+        return
+      }
+      if (tracePending && callId !== null) pendingSatelliteTraces.set(callKey, { agent: activity.agent, kind: 'mcp', server })
+      webTunnelEnd(view.group.position, anchor, MCP_NODE_RADIUS, starEnd)
+      const points = starRoute(view.group.position, null, cardAnchorOf, starEnd, starPath)
+      const launched = stars.launch({
+        points,
+        color: view.color,
+        agent: activity.agent,
+        call: callId,
+        speed: replaySpeed,
+        follow: (end) => {
+          const next = satellites.mcpAnchor(server, traceEnd)
+          return next ? webTunnelEnd(view.group.position, next, MCP_NODE_RADIUS, end) : null
+        },
+        onLand: () => {
+          pendingSatelliteTraces.delete(callKey)
+          if (tracePending) startMcpTrace(server, view.color)
+        },
+      })
+      if (!launched && tracePending) {
+        pendingSatelliteTraces.delete(callKey)
+        satellites.revealMcp(server, 1)
+      }
+    }
   }
 
   function flushSpawnStars() {
@@ -1177,11 +1354,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, sound
           if (finished.has(spawn.agent) || finished.has(spawn.child)) pendingSpawns.splice(index, 1)
         }
         for (const key of finished) {
-          agentSet.webEnd(key)
-          for (const [storedKey, agentKey] of webCalls) {
-            if (agentKey !== key) continue
-            webCalls.delete(storedKey)
-          }
+          dropAgentSatellites(key)
         }
       }
       if (activity.type === 'run.end') {
@@ -1210,11 +1383,22 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, sound
         queueTouchStar(activity, soundKind ? { ...touch, soundKind } : touch, removes)
       }
       soundFileVersion = state.fileVersion
-      if (view && isOnlineCall(activity) && !still()) launchWebStar(view, activity)
+      const place = callPlace(activity)
+      if (place) {
+        if (view && !still()) launchWebStar(view, activity, place)
+        else if (place.kind === 'browser') satellites.revealBrowser(1)
+        else if (place.kind === 'mcp') satellites.revealMcp(place.server, 1)
+      }
       return
     }
 
     if (activity.type === 'tool.end' && !activity.ok) {
+      const callKey = `${activity.agent}:${activity.id}`
+      if (pendingSatelliteTraces.has(callKey)) {
+        const pending = pendingSatelliteTraces.get(callKey)
+        pendingSatelliteTraces.delete(callKey)
+        revealPendingSatellite(pending)
+      }
       const call = callOf(activity)
       if (call !== null) {
         dropFlyingTouches((item) => item.agent === activity.agent && item.call === call)
@@ -1319,7 +1503,8 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, sound
     }
     space.update(delta)
     hub.update(now / 1000, delta, camera, height)
-    internet.update(delta, agentSet.webActive() > 0)
+    internet.update(delta, agentSet.webActive('internet') > 0)
+    satellites.update(delta)
     if (gitTree.setTop(cards.bottom(''))) space.setLevels(gitTree.bottom())
     gitTree.update(delta)
     if (cards.update(state, delta, camera, mask, replaySpeed, now / 1000)) {
@@ -1609,6 +1794,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, sound
       stars.dispose()
       terminals.dispose()
       internet.dispose()
+      satellites.dispose()
       gitTree.dispose()
       board.dispose()
       labels.dispose()

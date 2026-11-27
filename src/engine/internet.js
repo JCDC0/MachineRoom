@@ -69,6 +69,7 @@ export function createInternet(scene, texture = null) {
     halo = new THREE.Sprite(
       new THREE.SpriteMaterial({ map: texture, color: WEB, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending })
     )
+    halo.raycast = () => {}
     halo.scale.set(INTERNET_RADIUS * 4.2, INTERNET_RADIUS * 4.2, 1)
     group.add(halo)
   }
