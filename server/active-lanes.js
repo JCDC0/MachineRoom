@@ -122,9 +122,9 @@ export function writeActiveLanes(file, lanes, { rename = renameSync } = {}) {
 
 export const ROOM_LANE_LINGER_MS = 5 * 60 * 1000
 
-export function roomLaneAgents(agents, { isHidden = () => false, running = new Set(), recent = new Set(), hideOrchestrator = false } = {}) {
+export function roomLaneAgents(agents, { isHidden = () => false, running = new Set(), recent = new Set() } = {}) {
   return (Array.isArray(agents) ? agents : []).filter((agent) => {
-    if (agent.key === 'orchestrator') return !hideOrchestrator
+    if (agent.key === 'orchestrator') return true
     if (String(agent.key ?? '').startsWith('sub-')) return true
     if (isHidden(agent.key)) return false
     return running.has(agent.key) || recent.has(agent.key)

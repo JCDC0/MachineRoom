@@ -321,7 +321,7 @@ describe('health and agents', () => {
     ])
   })
 
-  it('leaves out the idle orchestrator under a session top and lists it under the orchestrator top', async () => {
+  it('lists Main under either pin and leaves out the idle lane', async () => {
     const lanes = {
       orchestrator: { name: 'Orchestrator', cli: { harness: 'claude', model: 'opus' } },
       opencode: { name: 'OpenCode', cli: { harness: 'opencode', model: 'opencode-go/deepseek-v4.1-flash' } },
@@ -332,12 +332,12 @@ describe('health and agents', () => {
     saveLabels(topFile, { top: 'claude-session' })
     const sessionTop = await getJson(`${url}/api/agents`)
     expect(sessionTop.status).toBe(200)
-    expect(sessionTop.body.map((agent) => agent.key)).not.toContain('orchestrator')
+    expect(sessionTop.body.map((agent) => agent.key)).toEqual(['orchestrator'])
 
     saveLabels(topFile, { top: 'orchestrator' })
     const orchestratorTop = await getJson(`${url}/api/agents`)
     expect(orchestratorTop.status).toBe(200)
-    expect(orchestratorTop.body.map((agent) => agent.key)).toContain('orchestrator')
+    expect(orchestratorTop.body.map((agent) => agent.key)).toEqual(['orchestrator'])
   })
 
   it('answers an empty agent list when no lane has a cli block', async () => {
