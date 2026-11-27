@@ -1,5 +1,7 @@
+import { writeFileSync } from 'node:fs'
 import * as THREE from 'three'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
+import { chatFileFor } from '../server/orchestrator.js'
 import {
   ORCHESTRATOR_LINK_OPACITY,
   SUB_ORCHESTRATOR_LINK_OPACITY,
@@ -9,8 +11,11 @@ import {
 } from '../src/engine/agents.js'
 import { HUB_RADIUS, HUB_Y, ORCHESTRATOR_HOME, PARK_LIFT, READER_RADIUS, RING_LEVEL_MAX, SUB_STAND_LIFT, ringDrop } from '../src/engine/hub.js'
 import { createLivePlayer } from '../src/live/livePlayer.js'
+import { loadAgents } from '../src/live/source.js'
 import { LANE_START_TOP_MS } from '../src/model/laneStarter.js'
 import { apply, createState } from '../src/model/state.js'
+import { getJson, startLaneBridge } from './helpers/bridge.js'
+import { makeTempDir, removeTempDir } from './helpers/tempRoot.js'
 
 const LADDER = {
   subs: [
@@ -198,6 +203,50 @@ describe('the lane line with a ladder', () => {
 
 describe('the chosen top', () => {
   const ROSTER_WITH_SESSION = [...ROSTER, { key: 'claude-session', name: 'Claude Code session', parser: 'claude' }]
+
+  it('draws idle Main with saved chat on reload under a pinned outside session', async () => {
+    const projectRoot = makeTempDir('mr-main-room-')
+    const runsDir = makeTempDir('mr-main-runs-')
+    const session = { id: 'agent-claude-session', key: 'claude-session', name: 'Claude Code session', parser: 'claude' }
+    try {
+      writeFileSync(chatFileFor(projectRoot, runsDir), JSON.stringify({
+        messages: [{ from: 'owner', text: 'A saved conversation' }],
+      }))
+      const { url, stop } = await startLaneBridge({
+        projectRoot,
+        runsDir,
+        lanes: { orchestrator: { name: 'Main', cli: { harness: 'claude' } } },
+        bridge: { sessionsSource: { readers: [{ agent: session, tick() {} }] } },
+      })
+      try {
+        const pin = await getJson(`${url}/api/family/top`, {
+          method: 'POST',
+          headers: { Origin: url, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ top: session.key, confirmed: true }),
+        })
+        expect(pin.status).toBe(200)
+        const { body: family } = await getJson(`${url}/api/family`)
+        expect(family).toMatchObject({ top: session.key, pinned: true, mainHasConversation: true })
+
+        const roster = await loadAgents(url)
+        expect(roster.map((agent) => agent.key)).toContain('orchestrator')
+        const { agents, state, terminals, world } = harness(roster)
+        try {
+          agents.setChosenTop(family.top, family)
+          agents.update(state, 0.016, 0, world, terminals)
+          expect(agents.topKey()).toBe(session.key)
+          expect(agents.views.get('orchestrator').group.visible).toBe(true)
+        } finally {
+          agents.dispose()
+        }
+      } finally {
+        await stop()
+      }
+    } finally {
+      removeTempDir(runsDir)
+      removeTempDir(projectRoot)
+    }
+  })
 
   it('hides a never-run main and seats the outside session at the top', () => {
     const { agents, terminals, state, world } = harness(ROSTER_WITH_SESSION)
@@ -532,6 +581,46 @@ describe('an outside session that leads subagents takes the top', () => {
 
 describe('the session that starts a lane sits at the top', () => {
   const ROSTER_WITH_SESSION = [...ROSTER, { key: 'claude-session', name: 'Claude Code session', parser: 'claude' }]
+
+  it('hands the top from a finished lane starter to Hermes after ten quiet minutes', () => {
+    const roster = [
+      ...ROSTER,
+      { key: 'antigravity-session', name: 'Antigravity session', parser: 'agy' },
+      { key: 'hermes-session', name: 'Hermes session', parser: 'hermes' },
+    ]
+    const { agents, terminals, world } = harness(roster)
+    const clock = vi.spyOn(performance, 'now').mockReturnValue(0)
+    try {
+      const player = createLivePlayer({ tree: { files: [], dirs: [], created: [] }, agents: roster })
+      const laneEndedAt = 2000
+      const lastFrameAt = 3000
+      const tenMinutesAfterLaneEnd = LANE_START_TOP_MS - (lastFrameAt - laneEndedAt)
+      player.push([
+        { type: 'run.start', agent: 'antigravity-session', runId: 'a1', session: 'a1', time: 1000 },
+        {
+          type: 'run.start',
+          agent: 'opencode',
+          runId: 'lane',
+          time: 1500,
+          startedBy: { harness: 'agy', session: 'a1' },
+        },
+        { type: 'run.end', agent: 'opencode', runId: 'lane', ok: true, time: laneEndedAt },
+        { type: 'run.start', agent: 'hermes-session', runId: 'h1', time: lastFrameAt },
+      ])
+
+      clock.mockReturnValue(tenMinutesAfterLaneEnd)
+      agents.update(player.state, 0.016, 0, world, terminals)
+      expect(agents.topKey()).toBe('antigravity-session')
+
+      clock.mockReturnValue(tenMinutesAfterLaneEnd + 1)
+      agents.update(player.state, 0.016, 0, world, terminals)
+      expect(player.state.latest).toBe(lastFrameAt)
+      expect(agents.topKey()).toBe('hermes-session')
+    } finally {
+      clock.mockRestore()
+      agents.dispose()
+    }
+  })
 
   it('moves the session to the orchestrator place and gives it back on a turn', () => {
     const { agents, state, terminals, world } = harness(ROSTER_WITH_SESSION)

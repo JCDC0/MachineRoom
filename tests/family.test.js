@@ -39,7 +39,7 @@ import { readSeats, seatCheck, seatsFileFor } from '../server/seats.js'
 import { createClient } from '../src/control/client.js'
 import { createMockClient } from '../src/control/mock.js'
 import { childFormProblem } from '../src/ui/family.js'
-import { waitFor } from './helpers/bridge.js'
+import { readFrames, waitFor } from './helpers/bridge.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 
 const REPO_ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)))
@@ -1470,7 +1470,7 @@ describe('the chosen top and nested subs', () => {
     expect(await read()).toBe(true)
   })
 
-  it('keeps orchestrator in GET /api/agents under a session top while an orchestrator lane run is open', async () => {
+  it('keeps Main in the roster before and during its run under a session pin', async () => {
     const { url, projectRoot, runsFolder } = await startBridge()
     await request(`${url}/api/family/top`, {
       method: 'POST',
@@ -1478,24 +1478,19 @@ describe('the chosen top and nested subs', () => {
     })
 
     const before = await request(`${url}/api/agents`, { origin: '' })
-    expect(before.body.some((agent) => agent.key === 'orchestrator')).toBe(false)
+    expect(before.body.some((agent) => agent.key === 'orchestrator')).toBe(true)
 
     writeFileSync(
       join(runsFolder, 'orchestrator-P661-20261121-010000.meta.json'),
       JSON.stringify({ project: projectRoot })
     )
     writeFileSync(join(runsFolder, 'orchestrator-P661-20261121-010000.log'), '{"type":"system","subtype":"init"}\n')
-    let found = false
-    const deadline = Date.now() + 2000
-    while (!found && Date.now() < deadline) {
-      const agents = await request(`${url}/api/agents`, { origin: '' })
-      if (agents.body.some((agent) => agent.key === 'orchestrator')) {
-        found = true
-        break
-      }
-      await new Promise((resolve) => setTimeout(resolve, 25))
-    }
-    expect(found).toBe(true)
+    await readFrames(url, (frames) => frames.some((frame) =>
+      frame.type === 'heartbeat.run.status' &&
+      frame.payload?.agentId === 'agent-orchestrator' &&
+      frame.payload?.status === 'running'))
+    const during = await request(`${url}/api/agents`, { origin: '' })
+    expect(during.body.some((agent) => agent.key === 'orchestrator')).toBe(true)
   })
 
   it.each([
