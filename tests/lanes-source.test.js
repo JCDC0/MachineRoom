@@ -1517,6 +1517,33 @@ describe('the lane source carries the session that started a run', () => {
     expect(source.starterFor('opencode')).toBeNull()
   })
 
+  it('keeps a current shell starter for the live run when a fresh ended log is already on disk', async () => {
+    const runs = tempDir()
+    const lanes = { opencode: realLanes.opencode }
+    const now = Date.now()
+    const startedAt = new Date(now - 30000).toISOString()
+    const finishedAt = new Date(now - 20000).toISOString()
+    const oldName = 'opencode-P1-20261127-120000'
+    const oldLog = join(runs, `${oldName}.log`)
+    writeFileSync(oldLog, `${toolLine('src/old.js', { at: now - 25000 })}\n`)
+    writeFileSync(join(runs, 'runs.jsonl'), `${JSON.stringify({ log: oldLog, startedAt, finishedAt, exitCode: 0 })}\n`)
+
+    const starter = { harness: 'hermes', session: 'current-shell' }
+    const takeLaneStarter = vi.fn().mockReturnValueOnce(starter)
+    const { source, frames } = startSource({ runs, lanes, repoRoot: runs, now: () => now, takeLaneStarter })
+    const newName = 'opencode-P2-20261127-120100'
+    writeFileSync(join(runs, `${newName}.log`), `${toolLine('src/new.js', { at: now })}\n`)
+    await waitFor(() => source.openRuns().some((run) => run.name === newName), { what: 'the live run' })
+
+    expect(takeLaneStarter.mock.calls).toEqual([['opencode', now]])
+    expect(source.openRuns()).toMatchObject([{ name: newName, startedBy: starter }])
+    const old = frames.filter((frame) => frame.payload.runId === `run-${oldName}`)
+    expect(old.every((frame) => frame.payload.startedBy === undefined)).toBe(true)
+    expect(old[0]).toMatchObject({ type: 'heartbeat.run.queued', createdAt: startedAt })
+    expect(old[1]).toMatchObject({ createdAt: startedAt, payload: { status: 'running', startedAt } })
+    expect(endFrame(old)).toMatchObject({ createdAt: finishedAt, payload: { status: 'succeeded', startedAt, finishedAt } })
+  })
+
   it('reads startedBy from a brief run meta and sends it on the first frame', async () => {
     const base = tempDir()
     const runs = join(base, 'runs')

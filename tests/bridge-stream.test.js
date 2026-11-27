@@ -181,6 +181,36 @@ async function sourceBridge(agent = SESSION_AGENT) {
 }
 
 describe('frames over SSE', () => {
+  it('applies the first frames of a discovered lane before the roster refresh', async () => {
+    const projectRoot = tempDir()
+    const runsDir = tempDir()
+    const started = await laneBridge({ projectRoot, runsDir, lanes: {} })
+    const { body: agents } = await getJson(`${started.url}/api/agents`)
+    const tree = { files: ['src/a.js'], dirs: ['src'], created: [] }
+    const pipeline = createPipeline({ agents, tree })
+    const state = createState(tree, agents)
+    const name = 'opencode2-project-20261127-120000'
+    const key = 'opencode2'
+    expect(state.agents.has(key)).toBe(false)
+
+    const frames = await readFrames(started.url, (list) => list.some((frame) => frame.type === 'heartbeat.run.log'), {
+      history: false,
+      onOpen() {
+        writeFileSync(join(runsDir, `${name}.meta.json`), JSON.stringify({
+          lane: key, project: projectRoot, harness: 'opencode', model: 'example-model',
+        }))
+        started.writeLog(name, `${toolLine('src/a.js')}\n`)
+      },
+    })
+    const activities = frames.flatMap((frame) => pipeline.push(frame))
+    expect(activities.map((activity) => activity.type)).toEqual(['run.queued', 'run.start', 'tool.start', 'tool.end'])
+    for (const activity of activities) apply(state, activity)
+    expect(state.agents.get(key)).toMatchObject({
+      name: 'OpenCode (opencode2)', model: 'example-model', status: 'working', runs: 1, runId: `run-${name}`,
+    })
+    expect(state.files.get('src/a.js').reads).toBe(1)
+  })
+
   it('streams frames over SSE and replays missed frames after Last-Event-ID', async () => {
     const runs = tempDir()
     const name = 'opencode-Y1c-20261024-130000'
