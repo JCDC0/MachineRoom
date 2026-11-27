@@ -582,7 +582,7 @@ describe('the room, played from a recorded lane run', () => {
       const off = shotgunOffset(index, overflow.length, undefined, radius)
       const spot = ringOf(layout.placed.get(entry.path))
       expect(spot.radius, entry.path).toBeCloseTo(radius + off.radiusStep, 6)
-      expect(turn(spot.angle, off.angleOffset), entry.path).toBeCloseTo(0, 6)
+      expect(turn(spot.angle, (RING_MAX_TOP - 1.5) / RING_MAX_TOP * Math.PI * 2 + off.angleOffset), entry.path).toBeCloseTo(0, 6)
     })
     const parent = ringOf(layout.placed.get('wide'))
     const kids = ['wide/kid-0', 'wide/kid-1', 'wide/kid-2', 'wide/kid-3']

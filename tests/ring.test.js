@@ -4,6 +4,7 @@ import { fitView } from '../src/engine/camera.js'
 import { HUB_CENTER, HUB_RADIUS } from '../src/engine/hub.js'
 import {
   FAN_LIMIT,
+  FOLDER_DRIFT_RADIUS,
   FOLDER_SPACING_MIN,
   FOLDER_SPACING_MAX,
   FOLDER_SPACING_DEFAULT,
@@ -108,10 +109,22 @@ describe('the flat ring', () => {
       const off = shotgunOffset(index, overflow.length, undefined, radius)
       const spot = ringOf(placeOf(placed, entry.path))
       expect(spot.radius, entry.path).toBeCloseTo(radius + off.radiusStep, 6)
-      expect(turn(spot.angle, off.angleOffset), entry.path).toBeCloseTo(0, 6)
+      expect(turn(spot.angle, (RING_MAX_TOP - 1.5) / RING_MAX_TOP * Math.PI * 2 + off.angleOffset), entry.path).toBeCloseTo(0, 6)
     })
     const nearest = Math.min(...overflow.map((entry) => ringOf(placeOf(placed, entry.path)).radius))
     expect(nearest).toBeGreaterThan(radius)
+  })
+
+  it('keeps the first overflow card apart from the first top child', () => {
+    const size = cardSize({ ...filesView(6), maxFiles: 6 })
+    const entries = [...topTree(RING_MAX_TOP + 1), { path: 'top-000/only', ...size }]
+    for (const spacing of [600, 1200, 2000]) {
+      const placed = layoutRing(entries, { spacing })
+      const child = placed.get('top-000/only')
+      const overflow = placed.get(topEntry(RING_MAX_TOP).path)
+      const distance = Math.hypot(child.x - overflow.x, child.z - overflow.z)
+      expect(distance).toBeGreaterThanOrEqual(Math.hypot(size.width, size.height) + 2 * FOLDER_DRIFT_RADIUS - EPS)
+    }
   })
 
   it('keeps the base ring still when the overflow grows', () => {
@@ -132,6 +145,21 @@ describe('the flat ring', () => {
       expect(ringRadius(30, spacing)).toBeGreaterThan(ringRadius(12, spacing))
     }
     expect(ringRadius(12, 2000)).toBeGreaterThan(ringRadius(12, 600))
+  })
+
+  it('keeps default top siblings apart through their drift', () => {
+    const size = cardSize({ ...filesView(6), maxFiles: 6 })
+    const entries = topTree(RING_MAX_TOP).map((entry) => ({ ...entry, ...size }))
+    for (const spacing of [600, 1200, 2000]) {
+      const placed = layoutRing(entries, { spacing })
+      const tops = entries.slice(1).map((entry) => placed.get(entry.path))
+      for (let i = 0; i < tops.length; i += 1) {
+        for (let j = i + 1; j < tops.length; j += 1) {
+          const distance = Math.hypot(tops[i].x - tops[j].x, tops[i].z - tops[j].z)
+          expect(distance - 2 * FOLDER_DRIFT_RADIUS).toBeGreaterThanOrEqual(Math.hypot(size.width, size.height) - EPS)
+        }
+      }
+    }
   })
 
   it('keeps every pair of top-level cards apart', () => {
@@ -270,7 +298,7 @@ describe('the shotgun spray', () => {
         for (let j = i + 1; j < children.length; j += 1) {
           const other = children[j]
           const distance = Math.hypot(child.at.x - other.at.x, child.at.z - other.at.z)
-          expect(distance).toBeGreaterThanOrEqual(Math.hypot(size.width, size.height) - EPS)
+          expect(distance - 2 * FOLDER_DRIFT_RADIUS).toBeGreaterThanOrEqual(Math.hypot(size.width, size.height) - EPS)
           if (child.off.row === other.off.row && other.off.col === child.off.col + 1) expect(child.radius * Math.abs(turn(child.angle, other.angle))).toBeGreaterThanOrEqual(0.6 * spacing - EPS)
           if (other.off.row === child.off.row + 1) expect(other.radius - child.radius).toBeGreaterThanOrEqual(0.6 * spacing - EPS)
         }
