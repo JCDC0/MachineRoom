@@ -1762,7 +1762,8 @@ async function main() {
         }
       }
     }
-    finish(true, lastText !== '' ? lastText : `Stopped after ${stepLimit} steps.`)
+    const result = lastText !== '' ? lastText : `Stopped after ${stepLimit} steps.`
+    finish(true, heldLines.length > 0 ? `${result}\nPending inbox messages:\n${heldLines.join('\n')}` : result)
   } catch (error) {
     if (error?.isCostLimit) {
       const sentence = error.message
