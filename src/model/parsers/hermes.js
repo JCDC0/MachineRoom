@@ -177,7 +177,7 @@ export function createHermesParser(ctx) {
     if (!found) return
     const [, verb, detail, seconds, mark, exit] = found
     const firstDetail = detail.trim().split(/\s+/)[0] ?? ''
-    const mcpLabel = mcpLabelFor(firstDetail) || (verb.length > 9 ? mcpLabelFor(verb) : '')
+    const mcpLabel = Object.hasOwn(VERBS, verb) ? '' : mcpLabelFor(firstDetail) || mcpLabelFor(verb)
     const tool = mcpLabel !== '' ? 'mcp' : Object.hasOwn(VERBS, verb) ? VERBS[verb] : 'other'
     const id = `hermes-${(counter += 1)}`
     const startTime = time - Math.round(Number(seconds) * 1000)

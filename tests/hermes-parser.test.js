@@ -174,4 +174,10 @@ describe('the Hermes parser and its JSON call lines', () => {
     expect(summary(out)).toEqual(['start read src/strings.js', 'end true'])
     expect(unreadableLines('hermes', '  \u250a \ud83d\udcd6 read      strings.js  1.2s\n')).toEqual([])
   })
+
+  it('keeps a boxed read of a file named like an MCP tool a read', () => {
+    const parser = createHermesParser(ctx)
+    const out = parser.push('  \u250a \ud83d\udcd6 read      mcp_server_config.json  0.4s\n', 10000)
+    expect(out[0]).toMatchObject({ type: 'tool.start', tool: 'read' })
+  })
 })
