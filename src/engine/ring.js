@@ -1,4 +1,4 @@
-import { CARD_W, CARD_SCALES, FILE_LIMIT_MAX, cardHeight } from './cards.js'
+import { CARD_W, CARD_SCALES, FILE_LIMIT_DEFAULT, cardHeight } from './cards.js'
 import { dirname } from '../model/paths.js'
 import { OVERVIEW } from './camera.js'
 import { HUB_Y } from './hub.js'
@@ -158,7 +158,7 @@ export function orbitPlace(place, rotation, drift, seconds) {
 }
 
 function cardGapFloor() {
-  return Math.hypot(CARD_W, cardHeight(FILE_LIMIT_MAX)) * CARD_SCALES.files
+  return Math.hypot(CARD_W, cardHeight(FILE_LIMIT_DEFAULT)) * CARD_SCALES.files
 }
 
 export function ringRadius(count, spacing = FOLDER_SPACING_DEFAULT) {

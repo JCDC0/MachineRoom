@@ -254,11 +254,11 @@ describe('the shotgun spray', () => {
     expect([FOLDER_SPACING_MIN, FOLDER_SPACING_MAX, FOLDER_SPACING_DEFAULT]).toEqual([600, 2000, 1200])
     expect([clampFolderSpacing(1), clampFolderSpacing(9999), clampFolderSpacing('bad'), clampFolderSpacing(1349)]).toEqual([600, 2000, 1200, 1300])
   })
-  it('spreads inner siblings and rows without overlapping maximum cards', () => {
-    const size = cardSize({ ...filesView(20), maxFiles: 20 })
+  it('spreads inner siblings and rows with the slider, without overlapping open cards of the default size', () => {
+    const size = cardSize({ ...filesView(6), maxFiles: 6 })
     const entries = [rootEntry(), { path: 'src', ...size }, ...Array.from({ length: 20 }, (_, i) => ({ path: 'src/c' + String(i).padStart(2, '0'), ...size }))]
     const gaps = []
-    for (const spacing of [600, 2000]) {
+    for (const spacing of [600, 1200, 2000]) {
       const placed = layoutRing(entries, { spacing })
       const parent = ringOf(placed.get('src'))
       const children = entries.slice(2).map((entry, i) => ({ ...ringOf(placed.get(entry.path)), off: shotgunOffset(i, 20, spacing, parent.radius), at: placed.get(entry.path) }))
@@ -280,6 +280,7 @@ describe('the shotgun spray', () => {
       expect(ringOf(lone.get('src/c00')).radius - ringOf(lone.get('src')).radius).toBeGreaterThanOrEqual(0.6 * spacing - EPS)
     }
     expect(gaps[1]).toBeGreaterThan(gaps[0])
+    expect(gaps[2]).toBeGreaterThan(gaps[1])
   })
   it('keeps every other place when an inner folder grows', () => {
     const entries = [rootEntry(), { path: 'src', ...FILES }, ...['a', 'b', 'c'].map((name) => ({ path: 'src/' + name, ...FILES }))]
