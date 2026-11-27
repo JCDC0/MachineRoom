@@ -1863,5 +1863,20 @@ describe('trace outlines and holds', () => {
     expect(cards.cards.get('src').drawn.get('src/a.js').row.style.opacity).toBe('')
     cards.dispose()
   })
+
+  it('reveals held cards and rows on sync', () => {
+    const state = createState(makeTree({ root: 'demo', files: ['src/a.js'] }), [])
+    const cards = createCards(fakeScene(), { glScene: fakeScene(), alwaysDepth: 2 })
+    cards.holdCard('src')
+    cards.holdRow('src/a.js')
+    cards.update(state, 0.05, camera())
+    const card = cards.cards.get('src')
+    expect(card.opacity).toBe(0)
+    expect(card.drawn.get('src/a.js').row.style.opacity).toBe('0')
+    cards.sync(state)
+    expect(card.opacity).toBe(1)
+    expect(card.drawn.get('src/a.js').row.style.opacity).toBe('')
+    cards.dispose()
+  })
 })
 

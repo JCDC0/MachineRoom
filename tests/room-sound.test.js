@@ -97,7 +97,7 @@ describe('room sound cues', () => {
       observe() {}
       disconnect() {}
     })
-    sound = { play: vi.fn(), voice: vi.fn(), stopVoice: vi.fn() }
+    sound = { play: vi.fn(), voice: vi.fn(), stopVoice: vi.fn(), stopRoom: vi.fn() }
     state = createState(tree, roster)
     room = createRoom({
       surface: dom.document.createElement('div'),
@@ -231,5 +231,30 @@ describe('room sound cues', () => {
     const total = calls.length
     tick(10)
     expect(calls).toHaveLength(total)
+  })
+
+  it('stops room sounds on reset and starts no whir while a replay is paused', () => {
+    activity({ type: 'run.start', runId: 'run' })
+    tick(60)
+    expect(sound.voice).toHaveBeenCalled()
+    room.setSpeed(0)
+    room.reset(state)
+    expect(sound.stopRoom).toHaveBeenCalled()
+    sound.voice.mockClear()
+    tick(20)
+    expect(sound.voice).not.toHaveBeenCalled()
+    room.setSpeed(1)
+    tick()
+    expect(sound.voice).toHaveBeenCalled()
+  })
+
+  it('keeps a live whir going between frames while the clock stands still', () => {
+    activity({ type: 'run.start', runId: 'run' })
+    const clock = state.now
+    tick(60)
+    sound.voice.mockClear()
+    tick(30)
+    expect(state.now).toBe(clock)
+    expect(sound.voice).toHaveBeenCalled()
   })
 })

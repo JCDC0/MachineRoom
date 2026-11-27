@@ -4,6 +4,27 @@ import { apply, createState } from '../src/model/state.js'
 
 const fakeStars = vi.hoisted(() => ({ launches: [], cancels: [], lands: [], resets: 0 }))
 const fakeLabels = vi.hoisted(() => ({ shows: [] }))
+const traceProbe = vi.hoisted(() => ({ blocked: false, starts: 0 }))
+
+vi.mock('../src/engine/cards.js', async (importOriginal) => {
+  const actual = await importOriginal()
+  return { ...actual, createCards(...args) {
+    const cards = actual.createCards(...args)
+    const rowOutline = cards.rowOutline
+    cards.rowOutline = (...values) => traceProbe.blocked ? null : rowOutline(...values)
+    return cards
+  } }
+})
+
+vi.mock('../src/engine/trace.js', async (importOriginal) => {
+  const actual = await importOriginal()
+  return { ...actual, createTraces(...args) {
+    const traces = actual.createTraces(...args)
+    const start = traces.start
+    traces.start = (...values) => { traceProbe.starts += 1; return start(...values) }
+    return traces
+  } }
+})
 
 vi.mock('../src/engine/stars.js', async (importOriginal) => {
   const actual = await importOriginal()
@@ -257,15 +278,17 @@ beforeEach(() => {
   fakeStars.lands.length = 0
   fakeStars.resets = 0
   fakeLabels.shows.length = 0
+  traceProbe.blocked = false
+  traceProbe.starts = 0
   createdNodes.length = 0
   motionMatches = false
   clock = performance.now()
 })
 
-async function makeRoom(files = ['src/a.js'], agents = ['claude']) {
+async function makeRoom(files = ['src/a.js'], agents = ['claude'], created = []) {
   const { createRoom } = await import('../src/engine/room.js')
   const roster = agents.map((key) => ({ key, name: key }))
-  const state = createState(makeTree({ root: 'demo', files }), roster)
+  const state = createState(makeTree({ root: 'demo', files, created }), roster)
   let current = state
   const room = createRoom({
     surface: roomSurface,
@@ -316,6 +339,42 @@ function touchCall(state, room, id = 't1', time = 2000, mode = 'write', path = '
 }
 
 describe('a touch star on the frame it belongs to', () => {
+  it('waits for a created row before drawing its trace', async () => {
+    const { room, state } = await makeRoom(['src/a.js', 'src/new.js'], ['claude'], ['src/new.js'])
+    try {
+      tickRoom(2)
+      startRun(state, room)
+      touchCall(state, room, 'new', 2000, 'write', 'src/new.js')
+      tickRoom()
+      const flight = fakeStars.launches.find((item) => item.call === 'new')
+      traceProbe.blocked = true
+      flight.onLand()
+      tickRoom()
+      expect(traceProbe.starts).toBe(0)
+      traceProbe.blocked = false
+      tickRoom(10)
+      expect(traceProbe.starts).toBe(1)
+    } finally {
+      room.dispose()
+    }
+  })
+
+  it('draws a ready creation when its successful run ends before the star lands', async () => {
+    const { room, state } = await makeRoom(['src/a.js', 'src/new.js'], ['claude'], ['src/new.js'])
+    try {
+      tickRoom(2)
+      startRun(state, room)
+      touchCall(state, room, 'new', 2000, 'write', 'src/new.js')
+      tickRoom(10)
+      expect(fakeStars.launches.some((item) => item.call === 'new')).toBe(true)
+      const end = { type: 'run.end', agent: 'claude', runId: 'r-claude', ok: true, time: 2200 }
+      apply(state, end)
+      room.onActivity(end)
+      expect(traceProbe.starts).toBe(1)
+    } finally {
+      room.dispose()
+    }
+  })
   it('waits for the frame and follows the current chain', async () => {
     const { room, state } = await makeRoom()
     try {

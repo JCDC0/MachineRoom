@@ -412,7 +412,6 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, sound
   const pendingFolderTraces = new Set()
   const flyingTouches = new Set()
   const waitingTraces = new Set()
-  let soundClock = null
   const starChain = []
   const starRoutePoints = []
   const starPath = []
@@ -562,7 +561,6 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, sound
   function sync(state) {
     timers.clear()
     sound?.stopRoom?.()
-    soundClock = state.now
     waitingTraces.clear()
     terminals.clearNotes()
     webCalls.clear()
@@ -1577,13 +1575,11 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, sound
 
     rig.update(delta)
     if (sound) {
-      const moving = soundClock === null || state.now > soundClock
-      if (moving) {
+      if (replaySpeed > 0) {
         for (const view of agentSet.views.values()) moveWhir(view, now)
       } else {
         for (const key of whirs) stopWhir(key)
       }
-      soundClock = state.now
     }
     soundFileVersion = state.fileVersion
     const hubPoint = projectPoint(camera, HUB_CENTER, width, height)
