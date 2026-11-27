@@ -63,7 +63,7 @@ it('refuses an off backup before its lock or start and records the refusal', asy
   try {
     process.env.MACHINEROOM_RUNS = runs
     saveHarnessSettings(runs, { programs: {}, off: ['claude'] })
-    harnessByKey.opencode.command = () => ({ file: process.execPath, args: ['-e', "console.log(JSON.stringify({ type: 'error', error: { type: 'provider.rate_limit', message: '429 Too Many Requests' } })); process.exit(1)"], cwd: folder })
+    harnessByKey.opencode.command = () => ({ file: process.execPath, args: ['-e', "console.log(JSON.stringify({ type: 'error', error: { type: 'provider.rate_limit', message: '429 Too Many Requests' } })); process.exitCode = 1"], cwd: folder })
     const lanes = { primary: { name: 'Primary', fallback: 'backup', cli: { harness: 'opencode', bin: process.execPath } }, backup: { name: 'Backup', cli: { harness: 'claude', bin: process.execPath } } }
     const result = await startLane({ options: { lane: 'primary', minutes: 1 }, lane: lanes.primary, lanes, wanted: [], prompt: 'Task', logPath: join(runs, 'primary.log'), usageFile: join(runs, 'usage.json'), name: 'primary', project: folder, projectBranch: 'main' })
     expect(result.code).not.toBe(0)

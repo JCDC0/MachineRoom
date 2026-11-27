@@ -337,7 +337,7 @@ describe('runCandidate', () => {
   it('builds the lane without the keys in the owner shell', async () => {
     const { base, worktree } = makeLaneRepo()
     writeLanes(base, worktree)
-    const script = "console.log('key ' + (process.env.OPENROUTER_API_KEY ?? 'none') + ' token ' + (process.env.GITHUB_TOKEN ?? 'none')); process.exit(1)"
+    const script = "console.log('key ' + (process.env.OPENROUTER_API_KEY ?? 'none') + ' token ' + (process.env.GITHUB_TOKEN ?? 'none')); process.exitCode = 1"
     const errors = []
     const code = await runCandidate({
       argv: ['lane', '--port', String(SPARE_PORT)],
@@ -354,7 +354,7 @@ describe('runCandidate', () => {
   it('prints the last 20 build lines and exits 1', async () => {
     const { base, worktree } = makeLaneRepo()
     writeLanes(base, worktree)
-    const script = "for (let i = 1; i <= 25; i += 1) console.log('build line ' + i); process.exit(1)"
+    const script = "for (let i = 1; i <= 25; i += 1) console.log('build line ' + i); process.exitCode = 1"
     const errors = []
     const code = await runCandidate({
       argv: ['lane', '--port', String(SPARE_PORT)],
