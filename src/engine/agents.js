@@ -1942,8 +1942,9 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
 
   function updateTop(state) {
     rememberMainWork(state)
-    lastLaneTop = laneStarterTop({ agents: state.agents, at: state.latest })
-    lastDelegatingTop = delegatingSessionTop({ agents: state.agents, at: state.liveNow ?? state.latest })
+    const at = state.liveNow ?? state.latest
+    lastLaneTop = laneStarterTop({ agents: state.agents, at })
+    lastDelegatingTop = delegatingSessionTop({ agents: state.agents, at })
     lastSessionTop = latestSessionTop(state.agents, views)
     const ranNow = []
     for (const view of views.values()) {

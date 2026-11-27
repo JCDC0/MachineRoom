@@ -15,7 +15,7 @@ import { createAssistantApi } from './assistant.js'
 import { createBriefsApi } from './briefs.js'
 import { changeEvents, createControlApi } from './control.js'
 import { createDecideApi } from './decide.js'
-import { createFamilyApi, readTop, topFileFor } from './family.js'
+import { createFamilyApi } from './family.js'
 import { createAgentDepthApi } from './agent-depth.js'
 import { createEndpointsApi, createModelPinsApi } from './endpoints.js'
 import { createFilesApi } from './files.js'
@@ -1912,10 +1912,6 @@ export function createBridge(options = {}) {
         isHidden: (key) => activeLanes.isLaneHidden(key),
         running,
         recent: lanesSource?.recentLanes?.(ROOM_LANE_LINGER_MS) ?? new Set(),
-        hideOrchestrator:
-          readTop(topFileFor(projectRoot, bridgeRunsFolder)) !== 'orchestrator' &&
-          orchestrators?.find?.('orchestrator')?.answer?.()?.state !== 'working' &&
-          !running.has('orchestrator'),
       })
       const sessionAgents = sessionsSource ? [...sessionsSource.agents] : []
       sendJson(req, res, 200, [...laneAgents, ...sessionAgents])
