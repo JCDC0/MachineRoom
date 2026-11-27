@@ -261,6 +261,16 @@ describe('hermes parser', () => {
     ])
     expect(out.filter((a) => a.type === 'agent.end')).toEqual([{ time: 10000, type: 'agent.end', agent: 'hermes~1', ok: true }])
   })
+
+  it('reports boxed mcp_ lines as mcp calls when the line names the server and tool', () => {
+    const parser = createHermesParser(ctx)
+    const clicked = parser.push('  \u250a \u26a1 mcp_playw mcp_playwright_click  1.2s\n', 5000)
+    expect(clicked[0]).toMatchObject({ tool: 'mcp', label: 'mcp playwright click', touches: [] })
+    expect(clicked[1]).toMatchObject({ type: 'tool.end', ok: true })
+    const failed = parser.push('  \u250a \u26a1 mcp_githu mcp_github_list_issues  0.8s [error]\n', 6000)
+    expect(failed[0]).toMatchObject({ tool: 'mcp', label: 'mcp github list_issues', touches: [] })
+    expect(failed[1]).toMatchObject({ type: 'tool.end', ok: false })
+  })
 })
 
 describe('codex parser', () => {
@@ -287,6 +297,19 @@ describe('codex parser', () => {
     const parser = createCodexParser(ctx)
     const out = parser.push(lines(mcpItem('item.completed', 'completed')), 3000)
     expect(summary(out)).toEqual(['start mcp node_repl js', 'end true'])
+  })
+
+  it('reports a browser mcp_tool_call with its server and tool', () => {
+    const parser = createCodexParser(ctx)
+    const out = parser.push(
+      lines(
+        mcpItem('item.started', 'in_progress', { server: 'playwright', tool: 'browser_navigate' }),
+        mcpItem('item.completed', 'completed', { server: 'playwright', tool: 'browser_navigate' })
+      ),
+      4000
+    )
+    expect(out[0]).toMatchObject({ tool: 'mcp', label: 'mcp playwright browser_navigate', touches: [] })
+    expect(out[1]).toMatchObject({ type: 'tool.end', ok: true })
   })
 })
 

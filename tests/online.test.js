@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { isLocalAddress, isOnlineCall, laneNeedsNetwork } from '../src/model/online.js'
+import { callPlace, isLocalAddress, isOnlineCall, laneNeedsNetwork } from '../src/model/online.js'
 
 const TRUE_CASES = [
   ['a web tool call', { tool: 'web', label: 'web search deepseek' }],
@@ -23,12 +23,8 @@ const TRUE_CASES = [
   ['lt --port', { tool: 'shell', label: '$ lt --port 3000' }],
   ['a git push with -C', { tool: 'shell', label: '$ git -C src push' }],
   ['a wrapped curl', { tool: 'shell', label: '$ npx curl https://example.com' }],
-  ['an MCP browser tool', { tool: 'mcp', label: 'mcp playwright browser_navigate https://example.com' }],
-  ['an MCP playwright tool', { tool: 'mcp', label: 'mcp playwright click' }],
-  ['an MCP puppeteer tool', { tool: 'mcp', label: 'mcp puppeteer open' }],
   ['an MCP fetch tool', { tool: 'mcp', label: 'mcp fetch get https://example.com' }],
   ['an MCP http tool', { tool: 'mcp', label: 'mcp http request https://example.com' }],
-  ['an MCP browser tool with no address', { tool: 'mcp', label: 'mcp browser snapshot' }],
 ]
 
 const FALSE_CASES = [
@@ -41,7 +37,12 @@ const FALSE_CASES = [
   ['a localhost address', { tool: 'shell', label: '$ curl http://localhost:3000' }],
   ['a 127.0.0.1 address', { tool: 'shell', label: '$ wget http://127.0.0.1:8080/file' }],
   ['a [::1] address', { tool: 'shell', label: '$ curl "http://[::1]:5173"' }],
+  ['an MCP browser tool on a remote address', { tool: 'mcp', label: 'mcp playwright browser_navigate https://example.com' }],
+  ['an MCP playwright tool', { tool: 'mcp', label: 'mcp playwright click' }],
+  ['an MCP puppeteer tool', { tool: 'mcp', label: 'mcp puppeteer open' }],
+  ['an MCP browser tool with no address', { tool: 'mcp', label: 'mcp browser snapshot' }],
   ['a localhost address in an MCP browser call', { tool: 'mcp', label: 'mcp browser navigate http://localhost:3000' }],
+  ['a localhost address in an MCP fetch call', { tool: 'mcp', label: 'mcp fetch get http://localhost:3000' }],
   ['a localhost address in a web call', { tool: 'web', label: 'web fetch http://127.0.0.1:5173' }],
   ['a file read', { tool: 'read', label: 'read curl.md' }],
   ['a file write', { tool: 'write', label: 'write gh' }],
@@ -71,6 +72,44 @@ describe('isOnlineCall', () => {
     expect(isOnlineCall(null)).toBe(false)
     expect(isOnlineCall({ tool: 'shell', label: null })).toBe(false)
     expect(isOnlineCall({ tool: 'shell', label: 42 })).toBe(false)
+  })
+})
+
+describe('callPlace', () => {
+  it('places browser MCP servers on the browser for remote and local addresses', () => {
+    expect(callPlace({ tool: 'mcp', label: 'mcp playwright browser_navigate https://example.com' })).toEqual({ kind: 'browser' })
+    expect(callPlace({ tool: 'mcp', label: 'mcp browser navigate http://localhost:3000' })).toEqual({ kind: 'browser' })
+    expect(callPlace({ tool: 'mcp', label: 'mcp chrome_devtools take_screenshot' })).toEqual({ kind: 'browser' })
+    expect(callPlace({ tool: 'mcp', label: 'mcp puppeteer goto http://127.0.0.1:5173' })).toEqual({ kind: 'browser' })
+    expect(callPlace({ tool: 'mcp', label: 'mcp custom browser_open https://example.com' })).toEqual({ kind: 'browser' })
+  })
+
+  it('places other MCP servers on their named server node', () => {
+    expect(callPlace({ tool: 'mcp', label: 'mcp node_repl js' })).toEqual({ kind: 'mcp', server: 'node_repl' })
+    expect(callPlace({ tool: 'mcp', label: 'mcp github list_issues' })).toEqual({ kind: 'mcp', server: 'github' })
+    expect(callPlace({ tool: 'mcp', label: 'mcp filesystem read_file src/browser.js' })).toEqual({ kind: 'mcp', server: 'filesystem' })
+    expect(callPlace({ tool: 'mcp', label: 'mcp fetch get http://localhost:3000' })).toEqual({ kind: 'mcp', server: 'fetch' })
+    expect(callPlace({ tool: 'mcp', label: 'mcp http request http://127.0.0.1:8080' })).toEqual({ kind: 'mcp', server: 'http' })
+    expect(callPlace({ tool: 'mcp', label: 'mcp list tools github' })).toEqual({ kind: 'mcp', server: 'github' })
+    expect(callPlace({ tool: 'mcp', label: 'mcp list tools' })).toBeNull()
+  })
+
+  it('places web tools, remote shell calls and remote fetch or http MCP calls on the internet', () => {
+    expect(callPlace({ tool: 'web', label: 'web search deepseek' })).toEqual({ kind: 'internet' })
+    expect(callPlace({ tool: 'web', label: 'web fetch https://example.com/docs' })).toEqual({ kind: 'internet' })
+    expect(callPlace({ tool: 'web', label: 'web fetch http://127.0.0.1:5173' })).toBeNull()
+    expect(callPlace({ tool: 'shell', label: '$ git push' })).toEqual({ kind: 'internet' })
+    expect(callPlace({ tool: 'shell', label: '$ curl https://example.com' })).toEqual({ kind: 'internet' })
+    expect(callPlace({ tool: 'shell', label: '$ curl http://localhost:3000' })).toBeNull()
+    expect(callPlace({ tool: 'shell', label: '$ npm test' })).toBeNull()
+    expect(callPlace({ tool: 'mcp', label: 'mcp fetch get https://example.com' })).toEqual({ kind: 'internet' })
+    expect(callPlace({ tool: 'mcp', label: 'mcp http request https://example.com' })).toEqual({ kind: 'internet' })
+  })
+
+  it('returns null for file tools and missing inputs', () => {
+    expect(callPlace({ tool: 'read', label: 'read src/a.js' })).toBeNull()
+    expect(callPlace(null)).toBeNull()
+    expect(callPlace()).toBeNull()
   })
 })
 

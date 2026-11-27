@@ -27,7 +27,7 @@ A touch is `{path, mode, kind}`. `kind` is `file` or `dir`. `mode` is `read`, `w
 | Agent | Adapter | Signal in `payload.chunk` |
 | --- | --- | --- |
 | Claude Code | `claude_local` | The older `acpx.tool_call` JSON lines, where the call name carries the path ("Read C:\...", "Edit src\math.js") or the command text for Terminal; or Claude Code's own stream-json `assistant` and `user` lines, where a `tool_use` item starts a call and a `tool_result` item ends it |
-| Hermes | `hermes_local` | Plain lines such as `┊ 📖 read  strings.js  1.2s`; shown after the call finishes; reads show only the file name |
+| Hermes | `hermes_local` | Plain lines such as `┊ 📖 read  strings.js  1.2s` and JSON `hermes: 'call'` / `'result'` lines from `state.db`; `mcp_` tool names that name a server and tool report as tool `mcp` with the label `mcp SERVER TOOL` (P746) |
 | OpenCode | `opencode_local` | JSON lines `tool_use` with `part.tool` and `part.state.input` |
 | agy | `process` | JSON lines `step_update`; `ACTIVE` starts a tool, `DONE` ends it |
 | Codex | `codex_local` | JSON lines `item.started` and `item.completed`; `command_execution` runs a shell command, `file_change` touches a file, `web_search` reaches the web and `mcp_tool_call` is an MCP call, tool `mcp` with the label `mcp SERVER TOOL` (P746a) |

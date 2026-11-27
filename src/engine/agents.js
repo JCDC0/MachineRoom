@@ -1283,17 +1283,25 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
     online = next !== false
     if (!online) {
       for (const view of views.values()) {
-        view.web = false
-        hideBeam(view)
+        if (view.web && view.webKind === 'internet') {
+          view.web = false
+          view.webFollow = null
+          hideBeam(view)
+        }
       }
     }
     return online
   }
 
-  function webStart(key, place) {
+  function webStart(key, place, options = {}) {
     const view = views.get(key)
-    if (!view || !online) return false
+    const kind = options.kind ?? 'internet'
+    if (!view || (kind === 'internet' && !online)) return false
     view.web = true
+    view.webKind = kind
+    view.webRadius = Number.isFinite(Number(options.radius)) ? Math.max(0, Number(options.radius)) : INTERNET_RADIUS
+    view.webColor = Number.isFinite(Number(options.color)) ? Number(options.color) : WEB
+    view.webFollow = typeof options.follow === 'function' ? options.follow : null
     if (place) view.webPlace.set(place.x, place.y, place.z)
     return true
   }
@@ -1302,15 +1310,21 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
     const view = views.get(key)
     if (!view || !view.web) return false
     view.web = false
+    view.webKind = 'internet'
+    view.webRadius = INTERNET_RADIUS
+    view.webColor = WEB
+    view.webFollow = null
     view.beam.visible = false
     view.beamSheath.visible = false
     return true
   }
 
-  function webActive() {
+  function webActive(kind = null) {
     let count = 0
     for (const view of views.values()) {
-      if (view.web) count += 1
+      if (!view.web) continue
+      if (kind !== null && view.webKind !== kind) continue
+      count += 1
     }
     return count
   }
@@ -1427,6 +1441,10 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
       color,
       tunnel: 0,
       web: false,
+      webKind: 'internet',
+      webRadius: INTERNET_RADIUS,
+      webColor: WEB,
+      webFollow: null,
       webPlace: new THREE.Vector3(),
       beam,
       beamSheath,
@@ -2254,8 +2272,11 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
         writeOpacity(view.orchestratorLink.material, view.subOrchestrator ? SUB_ORCHESTRATOR_LINK_OPACITY : ORCHESTRATOR_LINK_OPACITY)
       }
 
-      if (view.web && (!online || (status !== 'working' && status !== 'queued'))) view.web = false
-      const webOn = view.web && online && (status === 'working' || status === 'queued')
+      if (view.web && ((view.webKind === 'internet' && !online) || (status !== 'working' && status !== 'queued'))) {
+        view.web = false
+        view.webFollow = null
+      }
+      const webOn = view.web && (view.webKind !== 'internet' || online) && (status === 'working' || status === 'queued')
       const pointer = working ? focusPointer(state, entry, focusScratch) : view.pointer
       if (working && pointer) {
         if (view.pointer) {
@@ -2302,9 +2323,16 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
         trailOpacity(view.trail, view.stripOpacity * fade)
       }
       if (webOn) {
-        webTunnelEnd(view.group.position, view.webPlace, INTERNET_RADIUS, webEdgePoint)
+        if (view.webFollow) {
+          const moved = view.webFollow(view.webPlace)
+          if (!moved) {
+            view.web = false
+            view.webFollow = null
+          }
+        }
+        if (view.web) webTunnelEnd(view.group.position, view.webPlace, view.webRadius, webEdgePoint)
       }
-      const beamVisible = webOn && fade > 0.01
+      const beamVisible = webOn && view.web && fade > 0.01
       setTrailVisible(view.beamTrail, beamVisible)
       if (beamVisible) {
         view.beamPath[0].x = view.group.position.x
@@ -2314,7 +2342,7 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
         view.beamPath[1].y = webEdgePoint.y
         view.beamPath[1].z = webEdgePoint.z
         setTrailPath(view.beamTrail, view.beamPath)
-        trailColor(view.beamTrail, WEB)
+        trailColor(view.beamTrail, view.webColor)
         trailOpacity(view.beamTrail, BEAM_OPACITY * fade)
       }
     }
@@ -2339,6 +2367,10 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
       view.tunnel = 0
       setTrailVisible(view.trail, false)
       view.web = false
+      view.webKind = 'internet'
+      view.webRadius = INTERNET_RADIUS
+      view.webColor = WEB
+      view.webFollow = null
       hideBeam(view)
       view.group.position.copy(view.home)
       view.touch.copy(view.home)

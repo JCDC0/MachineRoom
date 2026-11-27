@@ -1,6 +1,6 @@
 import { indexFor } from '../fileIndex.js'
 import { basename, dirname, resolveKnown } from '../paths.js'
-import { commandTouch, createLineReader, fileTouch, labelFor, parseJson, shorten, toolEnd, toolStart } from './common.js'
+import { commandTouch, createLineReader, fileTouch, labelFor, mcpLabelOf, mcpPathOf, parseJson, shorten, toolEnd, toolStart } from './common.js'
 
 export const LINE = /^\s*┊\s+\S+\s+(\$|[a-z_]+)\s+(.+?)\s+(\d+(?:\.\d+)?)s(?:\s+\[(exit (\d+)|error)\])?\s*$/u
 const VERBS = { read: 'read', write: 'write', patch: 'edit', find: 'search', search: 'web', grep: 'search', fetch: 'web', $: 'shell' }
@@ -12,6 +12,22 @@ function toolFor(name) {
   if (Object.hasOwn(TOOLS, name)) return TOOLS[name]
   if (Object.hasOwn(WEB_TOOLS, name) || WEB.test(name)) return 'web'
   return 'other'
+}
+
+function mcpLabelFor(name, args = {}) {
+  if (typeof name !== 'string' || name === '') return ''
+  if (name === 'mcp_list_tools' || name === 'mcp_call_tool' || name.startsWith('mcp__')) {
+    return mcpLabelOf(name, args)
+  }
+  if (!name.startsWith('mcp_')) return ''
+  const hasServer =
+    (typeof args?.server === 'string' && args.server.trim() !== '') ||
+    (typeof args?.ServerName === 'string' && args.ServerName.trim() !== '')
+  if (hasServer) return mcpLabelOf(name, args)
+  const rest = name.slice(4)
+  const sep = rest.indexOf('_')
+  if (sep <= 0 || sep >= rest.length - 1) return ''
+  return mcpLabelOf('mcp_call_tool', { server: rest.slice(0, sep), tool: rest.slice(sep + 1) })
 }
 
 function argObject(raw) {
@@ -82,11 +98,20 @@ export function createHermesParser(ctx) {
     const args = argObject(json.args)
     const id = typeof json.id === 'string' && json.id !== '' ? json.id : `hermes-${(counter += 1)}`
     const owner = childFor(json, time)
-    const tool = toolFor(name)
+    const mcpLabel = mcpLabelFor(name, args)
+    const tool = mcpLabel !== '' ? 'mcp' : toolFor(name)
     let touches = []
     let outsidePath
     let label = name || 'tool'
-    if (tool === 'read' || tool === 'write' || tool === 'edit') {
+    if (tool === 'mcp') {
+      label = mcpLabel
+      const raw = mcpPathOf(args)
+      if (raw !== '') {
+        const touched = fileTouch(ctx, raw, 'read')
+        touches = touched.touches
+        label = `${mcpLabel} ${touched.relative === null ? basename(raw) : touched.relative}`
+      }
+    } else if (tool === 'read' || tool === 'write' || tool === 'edit') {
       const raw = typeof args.path === 'string' ? args.path : ''
       if (raw !== '') {
         const touched = fileTouch(ctx, raw, tool)
@@ -151,14 +176,18 @@ export function createHermesParser(ctx) {
     const found = LINE.exec(line)
     if (!found) return
     const [, verb, detail, seconds, mark, exit] = found
-    const tool = Object.hasOwn(VERBS, verb) ? VERBS[verb] : 'other'
+    const firstDetail = detail.trim().split(/\s+/)[0] ?? ''
+    const mcpLabel = Object.hasOwn(VERBS, verb) ? '' : mcpLabelFor(firstDetail) || mcpLabelFor(verb)
+    const tool = mcpLabel !== '' ? 'mcp' : Object.hasOwn(VERBS, verb) ? VERBS[verb] : 'other'
     const id = `hermes-${(counter += 1)}`
     const startTime = time - Math.round(Number(seconds) * 1000)
     const ok = !mark || (exit !== undefined && Number(exit) === 0)
     let touches = []
     let outsidePath
     let label = `${verb} ${shorten(detail)}`
-    if (tool === 'read' || tool === 'write' || tool === 'edit') {
+    if (tool === 'mcp') {
+      label = mcpLabel
+    } else if (tool === 'read' || tool === 'write' || tool === 'edit') {
       const bare = !/[\\/]/.test(detail)
       const named = resolveKnown(detail, ctx.files, bare ? near : undefined)
       const touched = fileTouch(ctx, named, tool)
