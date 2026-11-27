@@ -1,15 +1,18 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { Scene, Vector3 } from 'three'
 import { makeTree } from '../src/model/paths.js'
 import { apply, createState } from '../src/model/state.js'
 
 const fakeStars = vi.hoisted(() => ({ launches: [], cancels: [], lands: [], resets: 0 }))
 const fakeLabels = vi.hoisted(() => ({ shows: [] }))
+const cardProbe = vi.hoisted(() => ({ current: null }))
 const traceProbe = vi.hoisted(() => ({ blocked: false, starts: 0 }))
 
 vi.mock('../src/engine/cards.js', async (importOriginal) => {
   const actual = await importOriginal()
   return { ...actual, createCards(...args) {
     const cards = actual.createCards(...args)
+    cardProbe.current = cards
     const rowOutline = cards.rowOutline
     cards.rowOutline = (...values) => traceProbe.blocked ? null : rowOutline(...values)
     return cards
@@ -54,8 +57,8 @@ vi.mock('../src/engine/stars.js', async (importOriginal) => {
 
 vi.mock('../src/engine/labels.js', () => ({
   createLabels: () => ({
-    show(text, point, color = '#ffffff') {
-      fakeLabels.shows.push({ text, point: { x: point.x, y: point.y, z: point.z }, color })
+    show(text, point, color = '#ffffff', follow) {
+      fakeLabels.shows.push({ text, point: { x: point.x, y: point.y, z: point.z }, color, follow })
     },
     update() {},
     clear() {},
@@ -278,6 +281,7 @@ beforeEach(() => {
   fakeStars.lands.length = 0
   fakeStars.resets = 0
   fakeLabels.shows.length = 0
+  cardProbe.current = null
   traceProbe.blocked = false
   traceProbe.starts = 0
   createdNodes.length = 0
@@ -407,6 +411,39 @@ describe('a touch star on the frame it belongs to', () => {
       expect(Number.isFinite(end.y)).toBe(true)
       expect(Number.isFinite(end.z)).toBe(true)
     } finally {
+      room.dispose()
+    }
+  })
+
+  it('passes through a moving ancestor card at its new tab position', async () => {
+    const { createStars, starDuration } = await vi.importActual('../src/engine/stars.js')
+    const { room, state } = await makeRoom(['src/model/a.js'], ['claude'])
+    const position = new Vector3()
+    const stars = createStars(new Scene(), { onFlight: (_id, point) => position.copy(point) })
+    try {
+      startRun(state, room)
+      touchCall(state, room, 'nested', 2000, 'read', 'src/model/a.js')
+      tickRoom()
+      const flight = fakeStars.launches.find((launch) => launch.call === 'nested')
+      const { anchor } = cardProbe.current
+      const [start, root, middle, end] = flight.points.map((point) => new Vector3().copy(point))
+      expect(flight.points).toHaveLength(4)
+      expect(root).toEqual(new Vector3().copy(anchor('')))
+      expect(middle).toEqual(new Vector3().copy(anchor('src')))
+      stars.launch(flight)
+
+      tickRoom(5)
+      const newRoot = new Vector3().copy(anchor(''))
+      const newMiddle = new Vector3().copy(anchor('src'))
+      flight.follow(end)
+      expect(newMiddle.distanceTo(middle)).toBeGreaterThan(0.1)
+      const toMiddle = start.distanceTo(newRoot) + newRoot.distanceTo(newMiddle)
+      const total = toMiddle + newMiddle.distanceTo(end)
+      const arrival = starDuration(total) * (1 - Math.cbrt(1 - toMiddle / total))
+      stars.update(arrival)
+      expect(position.distanceTo(newMiddle)).toBeLessThan(0.001)
+    } finally {
+      stars.dispose()
       room.dispose()
     }
   })
@@ -868,6 +905,9 @@ describe('a touch under reduced motion', () => {
       tickRoom(1)
       expect(fakeLabels.shows).toHaveLength(1)
       expect(fakeLabels.shows[0].text).toBe('write a.js')
+      const { point, follow } = fakeLabels.shows[0]
+      const anchor = follow(new Vector3())
+      expect(anchor.toArray()).toEqual([point.x, point.y, point.z])
       expect(fakeStars.launches).toHaveLength(0)
       expect(createdNodes.some((node) => node.dataset?.path === 'src/model/deep')).toBe(true)
     } finally {

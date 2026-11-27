@@ -12,6 +12,7 @@ const NEAR = 260
 const STACK = 78
 
 export function createLabels(scene, count = 16) {
+  const nextAnchor = new THREE.Vector3()
   const items = Array.from({ length: count }, () => {
     const canvas = document.createElement('canvas')
     canvas.width = WIDTH
@@ -24,10 +25,10 @@ export function createLabels(scene, count = 16) {
     sprite.visible = false
     sprite.renderOrder = 10
     scene.add(sprite)
-    return { sprite, canvas, texture, life: 0 }
+    return { sprite, canvas, texture, life: 0, anchor: new THREE.Vector3(), lift: 0, follow: null }
   })
 
-  function show(text, position, color = '#ffffff') {
+  function show(text, position, color = '#ffffff', follow = null) {
     const item = items.find((entry) => entry.life <= 0) ?? items.reduce((a, b) => (a.life < b.life ? a : b))
     const shown = text.length > LIMIT ? `${text.slice(0, LIMIT - 1)}~` : text
     const context = item.canvas.getContext('2d')
@@ -48,8 +49,11 @@ export function createLabels(scene, count = 16) {
     const crowd = items.filter(
       (entry) => entry !== item && entry.life > 0 && entry.sprite.position.distanceTo(position) < NEAR
     ).length
-    item.sprite.position.copy(position)
-    item.sprite.position.y += 80 + crowd * STACK
+    item.anchor.copy(position)
+    item.lift = 80 + crowd * STACK
+    item.follow = follow
+    item.sprite.position.copy(item.anchor)
+    item.sprite.position.y += item.lift
     item.sprite.material.opacity = 1
     item.sprite.visible = true
     item.life = LIFE
@@ -64,11 +68,17 @@ export function createLabels(scene, count = 16) {
       item.life -= step
       if (item.life <= 0) {
         item.sprite.visible = false
+        item.follow = null
         continue
       }
-      if (!isStill) {
-        item.sprite.position.y += step * RISE
+      if (item.follow) {
+        const anchor = item.follow(nextAnchor)
+        if (anchor) item.anchor.copy(anchor)
+        else item.follow = null
       }
+      if (!isStill) item.lift += step * RISE
+      item.sprite.position.copy(item.anchor)
+      item.sprite.position.y += item.lift
       item.sprite.material.opacity = Math.min(1, item.life / FADE)
     }
   }
@@ -76,6 +86,7 @@ export function createLabels(scene, count = 16) {
   function clear() {
     for (const item of items) {
       item.life = 0
+      item.follow = null
       item.sprite.visible = false
     }
   }

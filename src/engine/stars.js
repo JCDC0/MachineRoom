@@ -131,6 +131,12 @@ function starTexture() {
   return new THREE.CanvasTexture(canvas)
 }
 
+function copyPoint(point, source) {
+  point.x = source.x
+  point.y = source.y
+  point.z = source.z
+}
+
 export function createStars(scene, { onFlight, onStop } = {}) {
   const coreTexture = starTexture()
   const haloTexture = glowTexture()
@@ -187,6 +193,7 @@ export function createStars(scene, { onFlight, onStop } = {}) {
     to: null,
     call: null,
     follow: null,
+    followWaypoint: null,
     point: { x: 0, y: 0, z: 0 },
   }))
   const tint = new THREE.Color()
@@ -201,6 +208,7 @@ export function createStars(scene, { onFlight, onStop } = {}) {
     star.to = null
     star.call = null
     star.follow = null
+    star.followWaypoint = null
   }
 
   function landAt(star) {
@@ -209,7 +217,7 @@ export function createStars(scene, { onFlight, onStop } = {}) {
     if (onLand) onLand()
   }
 
-  function launch({ points, color = WHITE, onLand = null, agent = null, to = null, call = null, follow = null, speed = 1 } = {}) {
+  function launch({ points, color = WHITE, onLand = null, agent = null, to = null, call = null, follow = null, followWaypoint = null, speed = 1 } = {}) {
     const list = Array.isArray(points) ? points : []
     if (list.length === 0) return false
     const index = starSlot(pool)
@@ -218,11 +226,8 @@ export function createStars(scene, { onFlight, onStop } = {}) {
     if (star.active) landAt(star)
     star.points.length = list.length
     for (let at = 0; at < list.length; at += 1) {
-      const source = list[at]
       const point = star.points[at] ?? (star.points[at] = { x: 0, y: 0, z: 0 })
-      point.x = source.x
-      point.y = source.y
-      point.z = source.z
+      copyPoint(point, list[at])
     }
     polylineLengths(star.points, star.lengths)
     const total = star.lengths[star.lengths.length - 1] ?? 0
@@ -238,6 +243,7 @@ export function createStars(scene, { onFlight, onStop } = {}) {
     star.to = typeof to === 'string' ? to : null
     star.call = typeof call === 'string' ? call : null
     star.follow = typeof follow === 'function' ? follow : null
+    star.followWaypoint = typeof followWaypoint === 'function' ? followWaypoint : null
     star.active = true
     onFlight?.(star.start, star.points[0], star.duration / speedRate(speed))
     return true
@@ -276,11 +282,15 @@ export function createStars(scene, { onFlight, onStop } = {}) {
           dropAt(star)
           continue
         }
-        if (next && next !== end) {
-          end.x = next.x
-          end.y = next.y
-          end.z = next.z
+        if (next && next !== end) copyPoint(end, next)
+      }
+      if (star.followWaypoint) {
+        for (let index = 1; index < star.points.length - 1; index += 1) {
+          const next = star.followWaypoint(index - 1)
+          if (next) copyPoint(star.points[index], next)
         }
+      }
+      if (star.follow || star.followWaypoint) {
         polylineLengths(star.points, star.lengths)
         const total = star.lengths[star.lengths.length - 1] ?? 0
         star.duration = starDuration(total)

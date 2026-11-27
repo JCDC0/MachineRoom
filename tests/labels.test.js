@@ -56,6 +56,30 @@ describe('a label on replay time', () => {
     labels.dispose()
   })
 
+  it('moves 100 units with its card and fades at the last anchor when it disappears', () => {
+    const scene = new THREE.Scene()
+    const labels = createLabels(scene, 1)
+    const card = new THREE.Vector3(10, 20, 30)
+    let present = true
+    labels.show('write test.js', card, '#ffffff', (out) => present ? out.copy(card) : null)
+    const label = scene.children[0]
+    const start = label.position.clone()
+
+    card.addScalar(100)
+    labels.update(0.5)
+    expect(label.position.toArray()).toEqual([start.x + 100, start.y + 108, start.z + 100])
+
+    present = false
+    card.addScalar(100)
+    labels.update(1.7)
+    expect(label.position.x).toBe(start.x + 100)
+    expect(label.position.z).toBe(start.z + 100)
+    expect(label.material.opacity).toBeCloseTo(0.5)
+    labels.update(0.5)
+    expect(label.visible).toBe(false)
+    labels.dispose()
+  })
+
   it('treats a speed that is not a finite number at or above zero as one', () => {
     for (const speed of [null, '', false, -2, Number.NaN]) {
       const scene = new THREE.Scene()
