@@ -543,11 +543,17 @@ export function createLanesSource(options = {}) {
     return Date.parse(laneLockStartedAt(text))
   }
 
-  function beginRun(name, path, agent, keepPaths = false, project = '', startedBy = null) {
-    const locked = lockStartedAt(agent?.key, basename(path))
+  function beginRun(name, path, agent, { keepPaths, project, startedBy, record }) {
+    const recordedStart = Date.parse(record?.startedAt)
     const current = now()
-    const startedAt = Number.isFinite(locked) && locked <= current ? locked : current
-    startedBy ??= options.takeLaneStarter?.(agent.key, startedAt) ?? null
+    let startedAt = recordedStart
+    if (!Number.isFinite(startedAt)) {
+      const locked = lockStartedAt(agent.key, basename(path))
+      const recordedEnd = Date.parse(record?.finishedAt)
+      const latestStart = Number.isFinite(recordedEnd) ? Math.min(recordedEnd, current) : current
+      startedAt = Number.isFinite(locked) && locked <= latestStart ? locked : latestStart
+    }
+    if (!record) startedBy ??= options.takeLaneStarter?.(agent.key, startedAt) ?? null
     const run = {
       name,
       path,
@@ -555,7 +561,11 @@ export function createLanesSource(options = {}) {
       agent,
       project,
       startedBy,
-      base: { runId: `run-${name}`, agentId: agent.id, issueId: `issue-${name}`, ...(startedBy ? { startedBy } : {}) },
+      base: {
+        runId: `run-${name}`, agentId: agent.id, issueId: `issue-${name}`,
+        ...(startedBy ? { startedBy } : {}),
+        ...(agent.discovered ? { agent } : {}),
+      },
       companyId: `company-${name}`,
       seq: 0,
       offset: 0,
@@ -585,7 +595,8 @@ export function createLanesSource(options = {}) {
       createdAt: iso(startedAt),
       payload: { ...run.base, status: 'running', error: null, errorCode: null, startedAt: iso(startedAt), finishedAt: null },
     })
-    readNew(run)
+    if (record) finishRecord(run, record)
+    else readNew(run)
   }
 
   function runsFolderStamp() {
@@ -597,7 +608,7 @@ export function createLanesSource(options = {}) {
     }
   }
 
-  function adoptLog(name, path, getAgentMap) {
+  function adoptLog(name, path, getAgentMap, getRecords) {
     const key = pathKey(path)
     if (seen.has(key)) return
     const meta = metaFor(path)
@@ -635,18 +646,27 @@ export function createLanesSource(options = {}) {
     }
     waitingMeta.delete(key)
     seen.add(key)
-    if (agent) beginRun(name.slice(0, -4), path, agent, Boolean(ownProject), metaProject, meta?.startedBy ?? null)
+    if (agent) {
+      beginRun(name.slice(0, -4), path, agent, {
+        keepPaths: ownProject,
+        project: metaProject,
+        startedBy: meta?.startedBy ?? null,
+        record: getRecords().get(key),
+      })
+    }
   }
 
   function scan() {
     const current = now()
     const stamp = runsFolderStamp()
+    let records = null
+    const getRecords = () => (records ??= recordsCache.read())
     if (hasListed && !listWanted && stamp !== null && stamp === lastFolderStamp && current - lastListAt < fullListMs) {
       if (waitingMeta.size > 0) {
         let agentMap = null
         const getAgentMap = () => (agentMap ??= new Map(configuredAgents().map((agent) => [agent.key, agent])))
         for (const info of [...waitingMeta.values()]) {
-          adoptLog(info.name, info.path, getAgentMap)
+          adoptLog(info.name, info.path, getAgentMap, getRecords)
         }
       }
       return
@@ -664,8 +684,6 @@ export function createLanesSource(options = {}) {
     const present = new Set()
     let agentMap = null
     const getAgentMap = () => (agentMap ??= new Map(configuredAgents().map((agent) => [agent.key, agent])))
-    let records = null
-    const getRecords = () => (records ??= recordsCache.read())
     for (const entry of entries) {
       if (!entry.isFile() || !entry.name.endsWith('.log')) continue
       const path = join(folder, entry.name)
@@ -707,7 +725,7 @@ export function createLanesSource(options = {}) {
           }
         }
       }
-      adoptLog(entry.name, path, getAgentMap)
+      adoptLog(entry.name, path, getAgentMap, getRecords)
     }
     for (const key of dropped.keys()) {
       if (!present.has(key)) dropped.delete(key)
@@ -739,7 +757,7 @@ export function createLanesSource(options = {}) {
       }
       if (size > info.size) {
         lagging.delete(key)
-        adoptLog(info.name, info.path, getAgentMap)
+        adoptLog(info.name, info.path, getAgentMap, getRecords)
         continue
       }
       if (current - info.lastGrowth >= laggingDropMs && getRecords().has(key)) {
@@ -759,7 +777,7 @@ export function createLanesSource(options = {}) {
     run.plainLines = []
   }
 
-  function readNew(run) {
+  function readNew(run, at = null) {
     let size
     try {
       size = statSync(run.path).size
@@ -782,16 +800,16 @@ export function createLanesSource(options = {}) {
         if (read <= 0) break
         run.offset += read
         run.buffer += run.decoder.write(buffer.subarray(0, read))
-        if (run.buffer.length > MAX_PARTIAL) emitLines(run)
+        if (run.buffer.length > MAX_PARTIAL) emitLines(run, false, at)
       }
     } finally {
       closeSync(fd)
     }
     run.lastGrowth = now()
-    emitLines(run)
+    emitLines(run, false, at)
   }
 
-  function emitLines(run, final = false) {
+  function emitLines(run, final, recordedAt) {
     if (run.skipLine) {
       const cut = run.buffer.indexOf('\n')
       if (cut === -1) {
@@ -833,11 +851,12 @@ export function createLanesSource(options = {}) {
       }
       run.readLines += 1
       run.seq += 1
-      const at = Number.isFinite(entry.at) ? entry.at : now()
+      const receivedAt = recordedAt ?? now()
+      const at = Number.isFinite(entry.at) ? entry.at : receivedAt
       emit({
         type: 'heartbeat.run.log',
         companyId: run.companyId,
-        createdAt: iso(now()),
+        createdAt: iso(receivedAt),
         payload: {
           ...run.base,
           ts: iso(at),
@@ -854,26 +873,28 @@ export function createLanesSource(options = {}) {
     }
   }
 
-  function flushRun(run) {
+  function flushRun(run, at) {
     run.buffer += run.decoder.end()
-    emitLines(run, true)
+    emitLines(run, true, at)
     run.decoder = new StringDecoder('utf8')
   }
 
-  function finish(run, status, error, { reopen = false } = {}) {
+  function finish(run, status, error, { reopen = false, at = now() } = {}) {
     if (!active.has(run.key)) return
-    flushRun(run)
+    flushRun(run, at)
     active.delete(run.key)
-    const at = now()
-    ended.set(run.agent.key, { at, agent: run.agent, startedBy: run.startedBy })
-    if (onNotice && Number.isFinite(lingerMs) && lingerMs > 0) {
+    if (at >= (ended.get(run.agent.key)?.at ?? -Infinity)) {
+      ended.set(run.agent.key, { at, agent: run.agent, startedBy: run.startedBy })
+    }
+    const lingerLeft = at + lingerMs - now()
+    if (onNotice && Number.isFinite(lingerLeft) && lingerLeft > 0) {
       const lingerTimer = setTimeout(() => {
         lingerTimers.delete(lingerTimer)
         if (stopped) return
         try {
           onNotice({ topic: 'agents' })
         } catch {}
-      }, lingerMs + 1000)
+      }, lingerLeft + 1000)
       if (typeof lingerTimer?.unref === 'function') lingerTimer.unref()
       lingerTimers.add(lingerTimer)
     }
@@ -931,8 +952,11 @@ export function createLanesSource(options = {}) {
   }
 
   function finishRecord(run, record) {
+    const recordedEnd = Date.parse(record.finishedAt)
+    const at = Number.isFinite(recordedEnd) ? recordedEnd : now()
+    readNew(run, at)
     const ok = record.exitCode === 0 && record.killed !== true
-    finish(run, ok ? 'succeeded' : 'failed', ok ? null : failureText(record))
+    finish(run, ok ? 'succeeded' : 'failed', ok ? null : failureText(record), { at })
   }
 
   function scanDue() {
@@ -973,12 +997,12 @@ export function createLanesSource(options = {}) {
       const records = recordsCache.read()
       let checkLock = null
       for (const run of [...active.values()]) {
-        readNew(run)
         const record = records.get(run.key)
         if (record) {
           finishRecord(run, record)
           continue
         }
+        readNew(run)
         if (now() - run.lastGrowth >= quietMs) {
           checkLock ??= createLaneLockCheck({ platform: lockPlatform, list: listRunningProcesses, stat: statLock })
           if (!checkLock(folder, run.agent.key)) {

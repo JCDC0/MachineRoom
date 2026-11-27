@@ -247,6 +247,8 @@ function focusFromOpenCalls(agent) {
 export function apply(state, activity) {
   if (Number.isFinite(activity.time) && activity.time > (state.latest ?? 0)) state.latest = activity.time
   pruneChildren(state)
+  const descriptor = activity.agentDescriptor
+  if (descriptor && !state.agents.has(descriptor.key)) addAgents(state, [descriptor])
   const agent = state.agents.get(activity.agent)
   if (!agent) return
   switch (activity.type) {

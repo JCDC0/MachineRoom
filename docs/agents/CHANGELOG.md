@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Discovered lanes keep their first frames, and finished logs leave current shell matches for live runs (P748).
 - Touch labels and star waypoints follow moving cards (review 77, finding 13).
 - Default cards leave room for drift, and overflow folders fan out between ring slots (review 77, finding 14).
 
