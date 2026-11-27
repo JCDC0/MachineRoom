@@ -46,9 +46,9 @@ function startBridge(handler) {
   })
 }
 
-function runAgent(folder, bridge) {
+function runAgent(folder, bridge, maxSteps = 2) {
   return new Promise((done, fail) => {
-    const env = { ...process.env, MACHINEROOM_API_URL: `${bridge.url}/v1`, MACHINEROOM_API_KEY: 'test-key', MACHINEROOM_BRIDGE: bridge.url, MACHINEROOM_LANE_TICKET: 'ticket-1', MACHINEROOM_LANE_REPLIES: 'interrupt' }
+    const env = { ...process.env, MACHINEROOM_API_URL: `${bridge.url}/v1`, MACHINEROOM_API_KEY: 'test-key', MACHINEROOM_BRIDGE: bridge.url, MACHINEROOM_LANE_TICKET: 'ticket-1', MACHINEROOM_LANE_REPLIES: 'interrupt', MR_AGENT_MAX_STEPS: String(maxSteps) }
     const child = spawn(process.execPath, [SCRIPT, '--model', 'test/model', '--cwd', folder, 'Do the task.'], { cwd: folder, env, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true })
     let stdout = ''
     const timer = setTimeout(() => {
@@ -66,7 +66,7 @@ function runAgent(folder, bridge) {
 }
 
 describe('a native final answer and a reply read at the same time', () => {
-  it('delivers the reply and makes one more model call', async () => {
+  it.each([2, 1])('handles a reply with a limit of %i steps', async (maxSteps) => {
     const folder = mkdtempSync(join(tmpdir(), 'mr-native-final-'))
     dirs.push(folder)
     let inboxStarted
@@ -88,12 +88,17 @@ describe('a native final answer and a reply read at the same time', () => {
       return answer('Second answer.')
     })
 
-    const result = await runAgent(folder, bridge)
+    const result = await runAgent(folder, bridge, maxSteps)
 
-    expect(result.code).toBe(0)
+    expect(result.code).toBe(maxSteps === 2 ? 0 : 1)
     const calls = bridge.requests.filter((r) => r.url === '/v1/chat/completions')
-    expect(calls).toHaveLength(2)
-    expect(JSON.stringify(calls[1].body.messages)).toContain('Also check the docs.')
-    expect(result.stdout).toContain('"result":"Second answer."')
+    expect(calls).toHaveLength(maxSteps)
+    if (maxSteps === 2) {
+      expect(JSON.stringify(calls[1].body.messages)).toContain('Also check the docs.')
+      expect(result.stdout).toContain('"result":"Second answer."')
+    } else {
+      expect(result.stdout).toContain('Pending inbox messages:')
+      expect(result.stdout).toContain('Also check the docs.')
+    }
   }, 30000)
 })

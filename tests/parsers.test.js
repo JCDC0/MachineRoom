@@ -299,6 +299,21 @@ describe('codex parser', () => {
     expect(summary(out)).toEqual(['start mcp node_repl js', 'end true'])
   })
 
+  it('ends failed and id-less MCP calls and uses the known turn outcome at flush', () => {
+    const parser = createCodexParser(ctx)
+    const out = parser.push(lines(
+      mcpItem('item.started', 'in_progress', { id: undefined }),
+      mcpItem('item.failed', 'in_progress', { id: undefined })
+    ), 1000)
+    expect(out).toHaveLength(2)
+    expect(out[1]).toMatchObject({ type: 'tool.end', id: out[0].id, ok: false })
+    parser.push(lines(mcpItem('item.started', 'in_progress'), { type: 'turn.failed' }), 2000)
+    expect(parser.flush(3000)).toMatchObject([{ type: 'tool.end', id: 'item_26', ok: false }])
+    const unknown = createCodexParser(ctx)
+    unknown.push(lines(mcpItem('item.started', 'in_progress')), 1000)
+    expect(unknown.flush(2000)[0].ok).toBe(true)
+  })
+
   it('reports a browser mcp_tool_call with its server and tool', () => {
     const parser = createCodexParser(ctx)
     const out = parser.push(
