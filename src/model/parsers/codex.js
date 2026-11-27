@@ -1,4 +1,4 @@
-import { commandTouch, createLineReader, fileTouch, labelFor, looksFailed, parseJson, shorten, toolEnd, toolStart } from './common.js'
+import { commandTouch, createLineReader, fileTouch, labelFor, looksFailed, mcpLabelOf, parseJson, shorten, toolEnd, toolStart } from './common.js'
 
 function isWrite(kind) {
   return /^(add|create|new|write)/i.test(String(kind ?? ''))
@@ -86,6 +86,18 @@ export function createCodexParser(ctx) {
     }
   }
 
+  function handleMcp(item, isComplete, time) {
+    const id = String(item.id ?? `mcp-${(counter += 1)}`)
+    if (!calls.has(id)) {
+      const label = mcpLabelOf('mcp_call_tool', { server: item.server, tool: item.tool })
+      startCall(id, 'mcp', label, [], time, undefined, JSON.stringify([item.type, item.server ?? '', item.tool ?? '']), item.type)
+    }
+    if (isComplete) {
+      const ok = item.status !== 'failed' && item.status !== 'error' && !item.error
+      endCall(id, ok, time)
+    }
+  }
+
   const reader = createLineReader((line, time) => {
     const json = parseJson(line)
     if (!json || typeof json !== 'object') return
@@ -104,6 +116,8 @@ export function createCodexParser(ctx) {
       handleFileChange(item, isComplete, time)
     } else if (itemType === 'web_search') {
       handleWebSearch(item, isComplete, time)
+    } else if (itemType === 'mcp_tool_call') {
+      handleMcp(item, isComplete, time)
     }
   })
 
