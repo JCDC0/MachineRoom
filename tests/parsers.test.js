@@ -691,6 +691,31 @@ describe('agy parser', () => {
     expect(out[1]).toMatchObject({ tool: 'wait', label: 'wait 30s' })
   })
 
+  it('ends a child again after new work and ignores repeated idle listings', () => {
+    const parser = createAgyParser({ ...ctx, agentKey: 'agy' })
+    const work = (index) => ({
+      event: 'step_update',
+      step_update: {
+        root_conversation_id: 'top', conversation_id: 'child', step_index: index, state: 'DONE',
+        step_type: 'tool', tool_name: 'read_file', tool_info: { parameters: { Path: 'src/strings.js' } },
+      },
+    })
+    const idle = {
+      event: 'step_update',
+      step_update: {
+        root_conversation_id: 'top', conversation_id: 'top', step_index: 'end.child', state: 'DONE',
+        step_type: 'tool', tool_name: 'manage_subagents',
+        tool_info: { parameters: { Action: 'list' }, output: JSON.stringify([{ conversationId: 'child', state: 'idle' }]) },
+      },
+    }
+    const child = parser.push(lines(work(1)), 100).find((activity) => activity.type === 'agent.spawn').child
+    expect(parser.push(lines(idle), 200)).toMatchObject([{ type: 'agent.end', agent: child }])
+    expect(parser.push(lines(idle), 210)).toEqual([])
+    expect(parser.push(lines(work(2)), 300).find((activity) => activity.type === 'tool.start').agent).toBe(child)
+    expect(parser.push(lines(idle), 400)).toMatchObject([{ type: 'agent.end', agent: child }])
+    expect(parser.push(lines(idle), 410)).toEqual([])
+  })
+
   it('spawns an invoked subagent and ends it when a listing shows it idle', () => {
     const parser = createAgyParser({ ...ctx, agentKey: 'agy' })
     const active = {

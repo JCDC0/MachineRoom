@@ -3,6 +3,8 @@
 ## Unreleased
 
 - Touch labels and star waypoints follow moving cards (review 77, finding 13).
+- A resumed Antigravity child ends again when it next goes idle (review 77, finding 11).
+
 - Default cards leave room for drift, and overflow folders fan out between ring slots (review 77, finding 14).
 
 - A reset stops room sounds and reveals held cards and rows, and creation traces wait for their rows (review 77, findings 12, 15 and 18).
