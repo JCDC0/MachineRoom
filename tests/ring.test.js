@@ -3,9 +3,11 @@ import { cardSize, overviewSpheres } from '../src/engine/cards.js'
 import { fitView } from '../src/engine/camera.js'
 import { HUB_CENTER, HUB_RADIUS } from '../src/engine/hub.js'
 import {
-  CHILD_STEP,
   FAN_LIMIT,
-  FAN_STEP,
+  FOLDER_SPACING_MIN,
+  FOLDER_SPACING_MAX,
+  FOLDER_SPACING_DEFAULT,
+  clampFolderSpacing,
   RING_BACK,
   RING_CENTER,
   RING_FRONT,
@@ -14,7 +16,6 @@ import {
   ROOT_AHEAD,
   ROOT_DROP,
   ROOT_PLACE,
-  SHOTGUN_ROW_STEP,
   SPRAY_LIFT,
   TOP_MIN_RADIUS,
   folderDrift,
@@ -27,7 +28,6 @@ import {
 } from '../src/engine/ring.js'
 
 const EPS = 1e-6
-const stepFor = (count) => Math.min(0.38, FAN_STEP * (1 + Math.min(count, 20) * 0.035))
 const filesView = (items = 0) => ({
   path: 'card',
   state: 'files',
@@ -105,7 +105,7 @@ describe('the flat ring', () => {
       expect(turn(spot.angle, (index / RING_MAX_TOP) * Math.PI * 2), entry.path).toBeCloseTo(0, 6)
     })
     overflow.forEach((entry, index) => {
-      const off = shotgunOffset(index, overflow.length)
+      const off = shotgunOffset(index, overflow.length, undefined, radius)
       const spot = ringOf(placeOf(placed, entry.path))
       expect(spot.radius, entry.path).toBeCloseTo(radius + off.radiusStep, 6)
       expect(turn(spot.angle, off.angleOffset), entry.path).toBeCloseTo(0, 6)
@@ -125,13 +125,13 @@ describe('the flat ring', () => {
   })
 
   it('grows its radius with the count and spacing', () => {
-    for (const spacing of [800, 1600, 3200]) {
-      expect(ringRadius(0, spacing)).toBe(TOP_MIN_RADIUS * spacing / 1600)
-      expect(ringRadius(1, spacing)).toBe(TOP_MIN_RADIUS * spacing / 1600)
-      expect(ringRadius(12, spacing) * Math.PI * 2 / 12).toBeCloseTo(spacing, 6)
+    for (const spacing of [600, 1200, 2000]) {
+      expect(ringRadius(0, spacing)).toBe(TOP_MIN_RADIUS * spacing / 1200)
+      expect(ringRadius(1, spacing)).toBe(TOP_MIN_RADIUS * spacing / 1200)
+      expect(ringRadius(12, spacing) * Math.PI * 2 / 12).toBeGreaterThanOrEqual(spacing - EPS)
       expect(ringRadius(30, spacing)).toBeGreaterThan(ringRadius(12, spacing))
     }
-    expect(ringRadius(12, 3200)).toBeGreaterThan(ringRadius(12, 800))
+    expect(ringRadius(12, 2000)).toBeGreaterThan(ringRadius(12, 600))
   })
 
   it('keeps every pair of top-level cards apart', () => {
@@ -250,75 +250,45 @@ describe('folder orbit', () => {
 })
 
 describe('the shotgun spray', () => {
-  it('scales the lone child and each shotgun row with spacing', () => {
-    const entries = [rootEntry(), { path: 'src/only', ...FILES }, ...topTree(18).slice(1)]
-    for (const path of ['src', 'src/a', 'src/b', 'src/c']) entries.push({ path, ...FILES })
-    const before = layoutRing(entries)
-    const minimum = layoutRing(entries, { previous: before, spacing: 800 })
-    const maximum = layoutRing(entries, { previous: minimum, spacing: 3200 })
-    for (const path of ['src/a', 'src/only', topEntry(17).path]) {
-      const radius = ringOf(placeOf(before, path)).radius
-      expect(ringOf(placeOf(minimum, path)).radius, path).toBeCloseTo(radius / 2, 6)
-      expect(ringOf(placeOf(maximum, path)).radius, path).toBeCloseTo(radius * 2, 6)
+  it('clamps the spacing and uses the new default', () => {
+    expect([FOLDER_SPACING_MIN, FOLDER_SPACING_MAX, FOLDER_SPACING_DEFAULT]).toEqual([600, 2000, 1200])
+    expect([clampFolderSpacing(1), clampFolderSpacing(9999), clampFolderSpacing('bad'), clampFolderSpacing(1349)]).toEqual([600, 2000, 1200, 1300])
+  })
+  it('spreads inner siblings and rows without overlapping maximum cards', () => {
+    const size = cardSize({ ...filesView(20), maxFiles: 20 })
+    const entries = [rootEntry(), { path: 'src', ...size }, ...Array.from({ length: 20 }, (_, i) => ({ path: 'src/c' + String(i).padStart(2, '0'), ...size }))]
+    const gaps = []
+    for (const spacing of [600, 2000]) {
+      const placed = layoutRing(entries, { spacing })
+      const parent = ringOf(placed.get('src'))
+      const children = entries.slice(2).map((entry, i) => ({ ...ringOf(placed.get(entry.path)), off: shotgunOffset(i, 20, spacing, parent.radius), at: placed.get(entry.path) }))
+      expect(new Set(children.map((child) => child.off.row)).size).toBeGreaterThan(1)
+      for (let i = 0; i < children.length; i += 1) {
+        const child = children[i]
+        expect(Math.abs(turn(child.angle, parent.angle))).toBeLessThanOrEqual(FAN_LIMIT + EPS)
+        expect(child.radius - parent.radius).toBeGreaterThanOrEqual(0.6 * spacing - EPS)
+        for (let j = i + 1; j < children.length; j += 1) {
+          const other = children[j]
+          const distance = Math.hypot(child.at.x - other.at.x, child.at.z - other.at.z)
+          expect(distance).toBeGreaterThanOrEqual(Math.hypot(size.width, size.height) - EPS)
+          if (child.off.row === other.off.row && other.off.col === child.off.col + 1) expect(child.radius * Math.abs(turn(child.angle, other.angle))).toBeGreaterThanOrEqual(0.6 * spacing - EPS)
+          if (other.off.row === child.off.row + 1) expect(other.radius - child.radius).toBeGreaterThanOrEqual(0.6 * spacing - EPS)
+        }
+      }
+      gaps.push(children[0].radius * Math.abs(turn(children[0].angle, children[1].angle)))
+      const lone = layoutRing(entries.slice(0, 3), { spacing })
+      expect(ringOf(lone.get('src/c00')).radius - ringOf(lone.get('src')).radius).toBeGreaterThanOrEqual(0.6 * spacing - EPS)
     }
-    expect(shotgunOffset(0, 1, 800).radiusStep).toBe(CHILD_STEP / 2)
-    expect(shotgunOffset(3, 4, 3200).radiusStep).toBe(2 * (CHILD_STEP + SHOTGUN_ROW_STEP))
+    expect(gaps[1]).toBeGreaterThan(gaps[0])
   })
-
-  it('steps a lone folder outward on the parent line', () => {
-    for (const count of [0, 1]) {
-      expect(shotgunOffset(0, count)).toEqual({ angleOffset: 0, radiusStep: CHILD_STEP, row: 0, col: 0, cols: 1, rows: 1 })
+  it('keeps every other place when an inner folder grows', () => {
+    const entries = [rootEntry(), { path: 'src', ...FILES }, ...['a', 'b', 'c'].map((name) => ({ path: 'src/' + name, ...FILES }))]
+    const grown = entries.map((entry) => entry.path === 'src/a' ? { ...entry, ...cardSize({ ...filesView(20), maxFiles: 20 }) } : entry)
+    for (const spacing of [600, 2000]) {
+      const before = layoutRing(entries, { spacing })
+      const after = layoutRing(grown, { spacing })
+      for (const { path } of entries) expect(spotOf(after.get(path))).toEqual(spotOf(before.get(path)))
     }
-  })
-
-  it('arranges four folders in a two by two grid', () => {
-    const four = [0, 1, 2, 3].map((index) => shotgunOffset(index, 4))
-    const step = stepFor(4)
-    expect(four.map((off) => [off.row, off.col])).toEqual([
-      [0, 0],
-      [0, 1],
-      [1, 0],
-      [1, 1],
-    ])
-    expect(four.map((off) => off.cols)).toEqual([2, 2, 2, 2])
-    expect(four.map((off) => off.rows)).toEqual([2, 2, 2, 2])
-    expect(four.map((off) => off.angleOffset)).toEqual([-step / 2, step / 2, -step / 2, step / 2])
-    expect(four.map((off) => off.radiusStep)).toEqual([
-      CHILD_STEP,
-      CHILD_STEP,
-      CHILD_STEP + SHOTGUN_ROW_STEP,
-      CHILD_STEP + SHOTGUN_ROW_STEP,
-    ])
-  })
-
-  it('spreads wider and deeper as the folder count grows', () => {
-    expect(SHOTGUN_ROW_STEP).toBe(380)
-    const nine = shotgunOffset(8, 9)
-    expect([nine.cols, nine.rows, nine.row, nine.col]).toEqual([3, 3, 2, 2])
-    expect(nine.radiusStep).toBe(CHILD_STEP + 2 * SHOTGUN_ROW_STEP)
-    const twenty = shotgunOffset(19, 20)
-    expect([twenty.cols, twenty.rows, twenty.row, twenty.col]).toEqual([5, 4, 3, 4])
-    expect(twenty.radiusStep).toBe(CHILD_STEP + 3 * SHOTGUN_ROW_STEP)
-    expect(Math.abs(shotgunOffset(1, 20).angleOffset)).toBeGreaterThan(Math.abs(shotgunOffset(1, 2).angleOffset) / 2)
-    const step = shotgunOffset(1, 20).angleOffset - shotgunOffset(0, 20).angleOffset
-    expect(step).toBeCloseTo(Math.min(0.38, FAN_STEP * 1.7), 6)
-  })
-
-  it('places four child folders in a two by two grid', () => {
-    const entries = [rootEntry(), { path: 'src', ...FILES }]
-    for (const name of ['a', 'b', 'c', 'd']) entries.push({ path: `src/${name}`, ...FILES })
-    const placed = layoutRing(entries)
-    const parent = ringOf(placeOf(placed, 'src'))
-    const step = stepFor(4)
-    ;['a', 'b', 'c', 'd'].forEach((name, index) => {
-      const off = shotgunOffset(index, 4)
-      const spot = ringOf(placeOf(placed, `src/${name}`))
-      expect(spot.radius, name).toBeCloseTo(parent.radius + off.radiusStep, 6)
-      expect(turn(spot.angle, parent.angle + off.angleOffset), name).toBeCloseTo(0, 6)
-      expect(placeOf(placed, `src/${name}`).y, name).toBe(HUB_CENTER.y)
-    })
-    expect(turn(ringOf(placeOf(placed, 'src/a')).angle, parent.angle)).toBeCloseTo(-step / 2, 6)
-    expect(turn(ringOf(placeOf(placed, 'src/d')).angle, parent.angle)).toBeCloseTo(step / 2, 6)
   })
 })
 
@@ -336,7 +306,7 @@ describe('the folder levels', () => {
     const placed = layoutRing(entries)
     const parent = ringOf(placeOf(placed, 'src'))
     const child = ringOf(placeOf(placed, 'src/only'))
-    expect(child.radius).toBeCloseTo(parent.radius + CHILD_STEP, 6)
+    expect(child.radius).toBeCloseTo(parent.radius + shotgunOffset(0, 1).radiusStep, 6)
     expect(child.angle).toBeCloseTo(parent.angle, 6)
     expect(placeOf(placed, 'src/only').y).toBe(HUB_CENTER.y)
   })
@@ -346,7 +316,7 @@ describe('the folder levels', () => {
     const parent = ringOf(placeOf(placed, 'src'))
     const kids = ['src/a', 'src/b', 'src/c'].map((path, index) => ({ path, index, spot: ringOf(placeOf(placed, path)) }))
     for (const kid of kids) {
-      const off = shotgunOffset(kid.index, 3)
+      const off = shotgunOffset(kid.index, 3, undefined, parent.radius)
       expect(kid.spot.radius, kid.path).toBeCloseTo(parent.radius + off.radiusStep, 6)
       expect(turn(kid.spot.angle, parent.angle), kid.path).toBeCloseTo(off.angleOffset, 6)
       expect(placeOf(placed, kid.path).y, kid.path).toBe(HUB_CENTER.y)
@@ -368,7 +338,7 @@ describe('the folder levels', () => {
     expect(new Set(kids.map((kid) => `${kid.radius.toFixed(6)}:${kid.turn.toFixed(6)}`)).size).toBe(12)
     const radii = [...new Set(kids.map((kid) => kid.radius.toFixed(6)))].map(Number).sort((a, b) => a - b)
     expect(radii).toHaveLength(3)
-    for (let index = 1; index < radii.length; index += 1) expect(radii[index] - radii[index - 1]).toBeCloseTo(SHOTGUN_ROW_STEP, 6)
+    for (let index = 1; index < radii.length; index += 1) expect(radii[index] - radii[index - 1]).toBeCloseTo(shotgunOffset(0, 1).radiusStep, 5)
     for (const radius of radii) {
       const turns = kids
         .filter((kid) => kid.radius.toFixed(6) === radius.toFixed(6))
@@ -388,9 +358,9 @@ describe('the folder levels', () => {
     const b = ringOf(placeOf(placed, 'src/b'))
     const deep = ringOf(placeOf(placed, 'src/b/deep'))
     const more = ringOf(placeOf(placed, 'src/b/deep/more'))
-    expect(b.radius).toBeCloseTo(src.radius + CHILD_STEP, 6)
-    expect(deep.radius).toBeCloseTo(b.radius + CHILD_STEP, 6)
-    expect(more.radius).toBeCloseTo(deep.radius + CHILD_STEP, 6)
+    expect(b.radius).toBeCloseTo(src.radius + shotgunOffset(0, 1).radiusStep, 6)
+    expect(deep.radius).toBeCloseTo(b.radius + shotgunOffset(0, 1).radiusStep, 6)
+    expect(more.radius).toBeCloseTo(deep.radius + shotgunOffset(0, 1).radiusStep, 6)
     expect(deep.angle).toBeCloseTo(b.angle, 6)
     expect(more.angle).toBeCloseTo(deep.angle, 6)
   })
@@ -418,7 +388,7 @@ describe('the folder levels', () => {
     const grown = [...entries, { path: 'src/b', ...FILES }]
     const after = layoutRing(grown, { previous: before })
     expect(spotOf(placeOf(after, 'src/a'))).not.toEqual(spotOf(placeOf(before, 'src/a')))
-    expect(ringOf(placeOf(after, 'src/a')).radius).toBeCloseTo(ringOf(placeOf(after, 'src')).radius + CHILD_STEP, 6)
+    expect(ringOf(placeOf(after, 'src/a')).radius).toBeCloseTo(ringOf(placeOf(after, 'src')).radius + shotgunOffset(0, 1).radiusStep, 6)
   })
 
   it('places every card of a long folder chain in one pass', () => {
@@ -454,7 +424,7 @@ describe('the click spray', () => {
     const parent = ringOf(placeOf(flat, 'src'))
     for (const path of ['src/a', 'src/b']) {
       const child = ringOf(placeOf(sprayed, path))
-      expect(child.radius).toBeCloseTo(parent.radius + CHILD_STEP, 6)
+      expect(child.radius).toBeCloseTo(parent.radius + shotgunOffset(0, 2).radiusStep, 6)
     }
     const folded = layoutRing(entries, { previous: sprayed, sprayed: new Set() })
     expect(placeOf(folded, 'src').y).toBe(HUB_CENTER.y)
